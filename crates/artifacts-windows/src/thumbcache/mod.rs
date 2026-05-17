@@ -1,0 +1,1 @@
+//! Thumbcache (.db) artifact parser.

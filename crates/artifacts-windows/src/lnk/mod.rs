@@ -1,0 +1,1 @@
+//! LNK shortcut artifact parser.

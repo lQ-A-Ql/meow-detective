@@ -66,7 +66,7 @@ Backend → Frontend via Tauri `emit`. Topics defined as constants in `crates/tr
 
 | Crate | Role |
 |-------|------|
-| `domain` | Core entities: Case, DataSource, FileEntry, Artifact, Timeline, Report, Job, Tag |
+| `domain` | Core entities defined: CaseId/CaseMeta/CaseSession, DataSource, FileEntry, Artifact, TimelineEvent, Job, Report, Tag |
 | `app-services` | Application-layer orchestration per domain entity |
 | `transport` | Shared DTOs, commands, events, errors, paging — the contract between frontend and backend |
 | `persistence-sqlite` | SQLite repositories and migrations |
@@ -86,8 +86,9 @@ Backend → Frontend via Tauri `emit`. Topics defined as constants in `crates/tr
 
 ### Rust
 
-- All DTOs live in `crates/transport` — never define serializable API types in other crates.
+- All DTOs live in `crates/transport/src/dto/` — split into per-domain files (case.rs, files.rs, search.rs, etc.), re-exported from mod.rs. Never define serializable API types in other crates.
 - DTOs use `#[serde(rename_all = "camelCase")]` — frontend receives camelCase JSON.
+- `app-services` depends on both `domain` (entity types) and `transport` (DTO conversion).
 - Optional fields use `#[serde(skip_serializing_if = "Option::is_none")]`.
 - Tauri commands return `Result<T, String>` (Tauri 2 convention for serializable errors).
 - Error type for cross-crate use: `transport::errors::ApiErrorDto`.
@@ -96,7 +97,8 @@ Backend → Frontend via Tauri `emit`. Topics defined as constants in `crates/tr
 
 ### Frontend
 
-- Path alias: `@/` → `frontend/src/` (configured in `vite.config.ts`).
+- Path alias: `@/` → `frontend/src/` (configured in `vite.config.ts` and `tsconfig.json`).
+- `tsconfig.json` enables `strict: true` and path alias for IDE support.
 - UI components: `src/app/components/ui/` (shadcn/radix-based primitives).
 - Feature hooks: `src/features/<domain>/hooks.ts` — each wraps TanStack Query with `useQuery`/`useMutation`.
 - API layer: `src/lib/api/<domain>.ts` — thin functions calling `apiClient.request(...)`.
@@ -112,15 +114,19 @@ Backend → Frontend via Tauri `emit`. Topics defined as constants in `crates/tr
 - Frontend files: PascalCase for components (`FileBrowser.tsx`), camelCase for hooks/utils (`hooks.ts`).
 - DTO suffix: Rust types end in `Dto` (`CaseSummaryDto`); frontend interfaces drop the suffix (`CaseSummary`) except `TimelineEventDto` which kept it.
 
+### Layout Components
+
+All app-shell layout components live in `src/components/layout/`: AppShell, Layout, TopBar, BottomDrawer, InspectorPane, PageSubbar. UI primitives (shadcn) stay in `src/app/components/ui/`. Do not create new layout components under `src/app/components/`.
+
 ## Gotchas
 
 1. **Mock vs Tauri mode**: The frontend runs standalone with mock data by default (`pnpm dev`). Set `VITE_API_MODE=tauri` to hit real Rust commands. The `ApiClient` class switches behavior based on this env var at build time.
 
 2. **Frontend dist path**: Tauri expects the built frontend at `frontend/dist` (relative from `src-tauri/`). The path is hardcoded in `tauri.conf.json` as `"../../../frontend/dist"`.
 
-3. **Transport crate is the contract**: Any change to DTOs, commands, or events must happen in `crates/transport` first. Both the Tauri command layer and the frontend `types/models.ts` must stay in sync manually — there is no codegen yet.
+3. **Transport crate is the contract**: DTOs are in per-domain files under `crates/transport/src/dto/` (case.rs, files.rs, search.rs, timeline.rs, artifacts.rs, jobs.rs, viewer.rs, reports.rs). Any change must happen here first. Both the Tauri command layer and the frontend `types/models.ts` must stay in sync manually — there is no codegen yet.
 
-4. **Many core crates are stubs**: Most crates outside `transport`, `app-services`, and the Tauri shell currently only export a `crate_name()` placeholder. Implementation is incremental per the design doc's MVP phases.
+4. **domain crate is implemented**: Core types (CaseMeta, FileEntry, Artifact, TimelineEvent, Job, Report, Tag, DataSource) are defined with serde support. Other crates (fs-*, image-*, search, timeline, etc.) are still stubs with mod.rs placeholders for future implementation.
 
 5. **No test framework in frontend yet**: `package.json` has no test runner configured. Backend tests run via `cargo test --workspace`.
 
@@ -141,7 +147,7 @@ Backend → Frontend via Tauri `emit`. Topics defined as constants in `crates/tr
 
 ## Adding a New Feature (typical flow)
 
-1. Define/extend DTOs in `crates/transport/src/dto/mod.rs`
+1. Define/extend DTOs in `crates/transport/src/dto/<domain>.rs` (then re-export in mod.rs)
 2. Add command request types in `crates/transport/src/commands/mod.rs` if needed
 3. Implement service logic in `crates/app-services/src/<domain>_service.rs`
 4. Wire Tauri command in `apps/desktop/src-tauri/src/commands/<domain>_commands.rs`

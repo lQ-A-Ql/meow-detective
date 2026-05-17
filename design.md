@@ -55,18 +55,18 @@
 
 ```text
 forensics/
+  .gitignore
+  AGENTS.md
   PRD.md
   spec.md
   design.md
+  ci.md
+  test-plan.md
+  frontend-ui-ux.md
+  autopsy-borrowings.md
   Cargo.toml
   Cargo.lock
   rust-toolchain.toml
-  package.json
-  pnpm-workspace.yaml
-  .gitignore
-  .editorconfig
-  .cargo/
-    config.toml
   apps/
     desktop/
       src-tauri/
@@ -79,7 +79,6 @@ forensics/
           commands/
             mod.rs
             case_commands.rs
-            datasource_commands.rs
             file_commands.rs
             job_commands.rs
             search_commands.rs
@@ -92,46 +91,93 @@ forensics/
           state/
             mod.rs
             app_state.rs
-      src/
-        main.tsx
-        app/
-          App.tsx
-          router.tsx
-          providers.tsx
+  frontend/
+    package.json
+    tsconfig.json
+    vite.config.ts
+    index.html
+    src/
+      main.tsx
+      app/
+        App.tsx
+        routes.tsx
+        providers.tsx
         pages/
-          case-home/
-          import-datasource/
-          file-browser/
-          search/
-          timeline/
-          artifacts/
-          reports/
-          settings/
-        features/
-          case/
-          datasource/
-          files/
-          jobs/
-          search/
-          timeline/
-          artifacts/
-          reports/
-          tags/
+          CaseHome.tsx
+          FileBrowser.tsx
+          Search.tsx
+          Timeline.tsx
+          Artifacts.tsx
+          Reports.tsx
         components/
-          layout/
-          tables/
-          panels/
-          viewers/
-          status/
-        hooks/
-        stores/
-        lib/
-          api/
-          events/
-          formatters/
-          schemas/
-        styles/
-        types/
+          BottomDrawer.tsx (→ moved to src/components/layout/)
+          figma/
+          ui/           (shadcn/radix primitives)
+      features/
+        case/hooks.ts
+        files/hooks.ts
+        jobs/hooks.ts
+        search/hooks.ts
+        timeline/hooks.ts
+        artifacts/hooks.ts
+        reports/hooks.ts
+      components/
+        layout/
+          AppShell.tsx
+          Layout.tsx
+          TopBar.tsx
+          BottomDrawer.tsx
+          InspectorPane.tsx
+          PageSubbar.tsx
+        tables/
+          DenseDataTable.tsx
+        viewers/
+          ViewerTabs.tsx
+        status/
+          InlineProgressRow.tsx
+      lib/
+        api/
+          client.ts
+          provider.ts
+          mock-data.ts
+          case.ts / files.ts / search.ts / timeline.ts / artifacts.ts / jobs.ts / reports.ts
+        events/
+          bus.ts
+          subscribers.ts
+      stores/
+        ui-store.ts
+        selection-store.ts
+      types/
+        models.ts
+      styles/
+  crates/
+    domain/
+      src/
+        lib.rs
+        case/mod.rs          (CaseId, CaseMeta, CaseSession)
+        datasource/mod.rs    (DataSourceId, DataSource, DataSourceKind)
+        file_entry/mod.rs    (FileEntryId, FileEntry, EntryType)
+        artifact/mod.rs      (ArtifactId, Artifact, ArtifactFamily)
+        timeline/mod.rs      (TimelineEventId, TimelineEvent)
+        job/mod.rs           (JobId, Job, JobStatus, JobScope)
+        report/mod.rs        (ReportId, ReportTemplate, ReportHistoryItem, ReportStatus)
+        tag/mod.rs           (TagId, Tag)
+    app-services/
+      src/                   (depends on domain + transport)
+        ...
+    transport/
+      src/
+        dto/
+          mod.rs             (re-exports from per-domain files)
+          case.rs / files.rs / search.rs / timeline.rs
+          artifacts.rs / jobs.rs / viewer.rs / reports.rs
+        commands/mod.rs
+        events/mod.rs
+        paging.rs
+        errors.rs
+    ...
+  docs/
+    prototype/               (archived static prototype)
   crates/
     domain/
       src/
@@ -313,6 +359,8 @@ search/timeline/artifacts/reports/evidence -> domain + infrastructure
 persistence -> domain
 transport -> domain(只允许共享少量 ID/枚举) 或独立 DTO
 ```
+
+当前实施状态：`app-services` 已添加 `domain` 依赖，`domain` crate 已定义核心领域模型（Case, FileEntry, Artifact, TimelineEvent, Job, Report, Tag, DataSource），`transport` DTO 已按 domain 拆分为独立文件。
 
 禁止：
 - `domain` 依赖 `tauri`

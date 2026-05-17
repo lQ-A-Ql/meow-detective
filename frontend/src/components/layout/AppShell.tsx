@@ -1,6 +1,6 @@
 import { PropsWithChildren } from 'react';
-import { TopBar } from '@/app/components/TopBar';
-import { BottomDrawer } from '@/app/components/BottomDrawer';
+import { TopBar } from './TopBar';
+import { BottomDrawer } from './BottomDrawer';
 
 export function AppShell({ children }: PropsWithChildren) {
   return (

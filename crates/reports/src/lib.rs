@@ -1,3 +1,4 @@
-pub fn crate_name() -> &'static str {
-    "reports"
-}
+mod csv;
+mod evidence_bundle;
+mod html;
+mod json;

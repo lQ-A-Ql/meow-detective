@@ -1,3 +1,5 @@
-pub fn crate_name() -> &'static str {
-    "search"
-}
+mod extractor;
+mod highlighter;
+mod indexer;
+mod query;
+mod repository;

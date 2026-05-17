@@ -1,5 +1,5 @@
 import { createBrowserRouter } from "react-router";
-import { Layout } from "./components/Layout";
+import { Layout } from "@/components/layout/Layout";
 import { CaseHome } from "./pages/CaseHome";
 import { FileBrowser } from "./pages/FileBrowser";
 import { Search } from "./pages/Search";
