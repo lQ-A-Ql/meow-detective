@@ -29,7 +29,7 @@ fn run_post_import_pipeline(
 
     // Timeline projection
     let tl_count = timeline_service::project_and_store_macb(conn, &all_files)
-        .map_err(|e| persistence_sqlite::DbError::System(e))?;
+        .map_err(persistence_sqlite::DbError::System)?;
 
     // Text indexing (first 1000 files only, MVP)
     let to_index: Vec<domain::FileEntryId> = all_files.iter().take(1000).map(|f| f.id.clone()).collect();

@@ -6,18 +6,31 @@ fn mini_prefetch() -> Vec<u8> {
     let mut data = Vec::new();
     // SCCA magic
     data.extend_from_slice(b"SCCA");
-    // version
+    // format version (v30 = 0x1E)
     data.extend_from_slice(&0x1Eu32.to_le_bytes());
-    // executable name "cmd.exe" in UTF-16LE
-    for c in "cmd.exe".encode_utf16() {
-        data.extend_from_slice(&c.to_le_bytes());
+    // signature
+    data.extend_from_slice(&0u32.to_le_bytes());
+    // unused
+    data.extend_from_slice(&0u32.to_le_bytes());
+    // file_size
+    data.extend_from_slice(&1024u32.to_le_bytes());
+    // executable name "cmd.exe" in UTF-16LE (60 bytes / 30 chars)
+    let mut name_buf = vec![0u8; 60];
+    for (i, c) in "cmd.exe".encode_utf16().enumerate() {
+        let bytes = c.to_le_bytes();
+        name_buf[i*2] = bytes[0];
+        name_buf[i*2+1] = bytes[1];
     }
-    data.extend_from_slice(&[0, 0]);
+    data.extend_from_slice(&name_buf);
+    // hash
+    data.extend_from_slice(&0xA1B2C3D4u32.to_le_bytes());
+    // flags
+    data.extend_from_slice(&0u32.to_le_bytes());
+    // skip 12 bytes before run count (v30)
+    data.extend_from_slice(&[0u8; 12]);
     // run count
     data.extend_from_slice(&5u32.to_le_bytes());
-    // skip 4 bytes (reserved)
-    data.extend_from_slice(&[0u8; 4]);
-    // 8 FILETIME slots (first one = 2024-01-15T12:00:00Z)
+    // 8 FILETIME slots (first one ≈ 2024-01-15)
     let ft = (133700000000000000u64).to_le_bytes();
     data.extend_from_slice(&ft);
     for _ in 1..8 {
