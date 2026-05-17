@@ -48,6 +48,7 @@ fn probe_identifies_logical_directory() {
     let tmp = TempDir::new().unwrap();
     let result = probe::probe(tmp.path()).unwrap();
     assert!(result.candidates.contains(&"logical_directory".to_string()));
+    assert!(!result.can_read_sectors);
 }
 
 #[test]

@@ -37,7 +37,12 @@ export interface ApiProvider {
   getCurrentCase(): Promise<CaseSummary>;
   getCaseMetrics(): Promise<CaseMetrics>;
   getRecentObjects(): Promise<RecentObject[]>;
+  createCase(caseRoot: string, name: string, examiner?: string): Promise<CaseSummary>;
+  openCase(caseRoot: string): Promise<CaseSummary>;
+  closeCase(): Promise<void>;
+  importDataSource(sourcePath: string): Promise<string>;
   getFileTree(): Promise<FileTreeNode[]>;
+  getFileChildren(parentId: string): Promise<FileTreeNode[]>;
   getFileRows(): Promise<FileEntryRow[]>;
   openFileHandle(fileId: string): Promise<ViewerHandle>;
   readFileRange(request: ViewerRangeRequest): Promise<ViewerRangeResponse>;
@@ -116,5 +121,18 @@ export const mockProvider: ApiProvider = {
   },
   async getTraceItems() {
     return traces;
+  },
+  async createCase(_caseRoot: string, name: string, examiner?: string) {
+    return { ...currentCase, name, number: 'MOCK-001', examiner: examiner ?? null };
+  },
+  async openCase(_caseRoot: string) {
+    return currentCase;
+  },
+  async closeCase() {},
+  async importDataSource(_sourcePath: string) {
+    return 'Mock import: 42 files, 3 dirs';
+  },
+  async getFileChildren(_parentId: string) {
+    return [];
   },
 };

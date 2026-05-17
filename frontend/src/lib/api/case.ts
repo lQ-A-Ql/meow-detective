@@ -13,19 +13,14 @@ export async function getRecentObjects() {
 }
 
 export async function createCase(caseRoot: string, name: string, examiner?: string) {
-  return apiClient.request('create_case', () => apiClient.getMockProvider().getCurrentCase(), {
-    caseRoot,
-    name,
-    examiner: examiner ?? null,
-  });
+  return apiClient.request('create_case', () =>
+    apiClient.getMockProvider().createCase(caseRoot, name, examiner), { caseRoot, name, examiner: examiner ?? null });
 }
 
 export async function openCase(caseRoot: string) {
-  return apiClient.request('open_case', () => apiClient.getMockProvider().getCurrentCase(), {
-    caseRoot,
-  });
+  return apiClient.request('open_case', () => apiClient.getMockProvider().openCase(caseRoot), { caseRoot });
 }
 
 export async function closeCase() {
-  return apiClient.request('close_case', async () => ({}));
+  return apiClient.request('close_case', () => apiClient.getMockProvider().closeCase());
 }

@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
-import { getFileRows, getFileTree, openFileHandle, readFileRange } from '@/lib/api/files';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getFileChildren, getFileRows, getFileTree, importDataSource, openFileHandle, readFileRange } from '@/lib/api/files';
 
 export function useFileTree() {
   return useQuery({ queryKey: ['files', 'tree'], queryFn: getFileTree });
@@ -7,6 +7,26 @@ export function useFileTree() {
 
 export function useFileRows() {
   return useQuery({ queryKey: ['files', 'rows'], queryFn: getFileRows });
+}
+
+export function useFileChildren(parentId?: string) {
+  return useQuery({
+    queryKey: ['files', 'children', parentId],
+    queryFn: () => getFileChildren(parentId!),
+    enabled: Boolean(parentId),
+  });
+}
+
+export function useImportDataSource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sourcePath: string) => importDataSource(sourcePath),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['files'] });
+      qc.invalidateQueries({ queryKey: ['case'] });
+      qc.invalidateQueries({ queryKey: ['timeline'] });
+    },
+  });
 }
 
 export function useFileViewer(fileId?: string) {

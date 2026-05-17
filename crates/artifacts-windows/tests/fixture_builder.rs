@@ -72,8 +72,8 @@ pub fn build_lnk(
 
     // Link CLSID: {00021401-0000-0000-C000-000000000046} (16 bytes)
     let clsid: [u8; 16] = [
-        0x01, 0x14, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46,
+        0x01, 0x14, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x46,
     ];
     data.extend_from_slice(&clsid);
 
@@ -125,8 +125,7 @@ pub fn build_lnk(
         // We'll embed the path as local_base_path
 
         let volume_id_offset = 16u32; // 4 fields × 4 bytes = 16
-        let local_base_path_offset =
-            volume_id_offset + 16; // 16 bytes for VolumeID placeholder
+        let local_base_path_offset = volume_id_offset + 16; // 16 bytes for VolumeID placeholder
 
         let linkinfo_size = local_base_path_offset + path_bytes.len() as u32 + 1;
 

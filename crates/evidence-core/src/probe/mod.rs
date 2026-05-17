@@ -4,6 +4,7 @@ use std::path::Path;
 pub struct ProbeResult {
     pub candidates: Vec<String>,
     pub size: u64,
+    pub can_read_sectors: bool,
 }
 
 pub fn probe(path: &Path) -> ProberResult {
@@ -15,10 +16,11 @@ pub fn probe(path: &Path) -> ProberResult {
     let size = metadata.len();
 
     let mut candidates = Vec::new();
+    let mut can_read_sectors = false;
 
     if path.is_dir() {
         candidates.push("logical_directory".to_string());
-        return Ok(ProbeResult { candidates, size });
+        return Ok(ProbeResult { candidates, size, can_read_sectors: false });
     }
 
     let ext = path
@@ -27,10 +29,13 @@ pub fn probe(path: &Path) -> ProberResult {
         .unwrap_or("")
         .to_lowercase();
 
-    match ext.as_str() {
-        "e01" | "ewf" => candidates.push("e01".to_string()),
-        "dd" | "raw" | "img" | "bin" | "001" => candidates.push("raw".to_string()),
-        _ => {}
+    if ext == "e01" || ext == "ewf" {
+        candidates.push("e01".to_string());
+        can_read_sectors = true;
+    }
+    if matches!(ext.as_str(), "dd" | "raw" | "img" | "bin" | "001") {
+        candidates.push("raw".to_string());
+        can_read_sectors = true;
     }
 
     if candidates.is_empty() {
@@ -41,13 +46,15 @@ pub fn probe(path: &Path) -> ProberResult {
             && (&magic[0..8] == b"EVF\x09\x0d\x0a\xff\x00" || &magic[0..3] == b"EVF")
         {
             candidates.push("e01".to_string());
+            can_read_sectors = true;
         }
         if candidates.is_empty() {
             candidates.push("raw".to_string());
+            can_read_sectors = true;
         }
     }
 
-    Ok(ProbeResult { candidates, size })
+    Ok(ProbeResult { candidates, size, can_read_sectors })
 }
 
 pub type ProberResult = Result<ProbeResult, ProbeError>;

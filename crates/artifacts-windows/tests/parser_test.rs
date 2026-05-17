@@ -76,7 +76,12 @@ fn prefetch_fixture_extracts_exe_and_runs() {
 fn lnk_fixture_extracts_target_path() {
     let ct = Utc.with_ymd_and_hms(2024, 1, 15, 12, 0, 0).unwrap();
     let wt = Utc.with_ymd_and_hms(2024, 1, 16, 8, 0, 0).unwrap();
-    let data = build_lnk(Some("C:\\Windows\\System32\\cmd.exe"), Some(ct), Some(wt), 1024);
+    let data = build_lnk(
+        Some("C:\\Windows\\System32\\cmd.exe"),
+        Some(ct),
+        Some(wt),
+        1024,
+    );
 
     let extractor = LnkExtractor;
     assert!(extractor.supports_path("shortcut.lnk"));
@@ -89,7 +94,10 @@ fn lnk_fixture_extracts_target_path() {
     let report = extractor.run(ctx, &mut sink).unwrap();
     assert!(report.artifacts_found > 0);
     let attrs = &sink.artifacts[0].attrs;
-    let tp = attrs.get("target_path").map(|v| v.as_str().unwrap_or("")).unwrap_or("");
+    let tp = attrs
+        .get("target_path")
+        .map(|v| v.as_str().unwrap_or(""))
+        .unwrap_or("");
     assert!(
         tp.contains("cmd.exe"),
         "Expected cmd.exe in target_path, got: '{}', attrs: {:?}",
@@ -119,10 +127,18 @@ fn recycle_bin_fixture_extracts_path_and_time() {
         "Expected original_path in attrs"
     );
     assert!(
-        attrs.get("original_path").unwrap().as_str().unwrap().contains("secret"),
+        attrs
+            .get("original_path")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .contains("secret"),
         "Expected path to contain 'secret'"
     );
-    assert!(!sink.timeline_events.is_empty(), "Expected FILE_DELETED event");
+    assert!(
+        !sink.timeline_events.is_empty(),
+        "Expected FILE_DELETED event"
+    );
 }
 
 #[test]
@@ -145,7 +161,10 @@ fn registry_hive_fixture_parses_name() {
         "Expected hive_name in attrs: {:?}",
         attrs
     );
-    assert!(!sink.timeline_events.is_empty(), "Expected REGISTRY_MODIFIED event");
+    assert!(
+        !sink.timeline_events.is_empty(),
+        "Expected REGISTRY_MODIFIED event"
+    );
 }
 
 #[test]

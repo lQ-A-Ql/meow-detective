@@ -146,15 +146,19 @@ impl ArtifactExtractor for LnkExtractor {
                 let _link_info_flags = reader.read_u32::<LittleEndian>().unwrap_or(0);
                 let _volume_id_offset = reader.read_u32::<LittleEndian>().unwrap_or(0);
                 let local_base_path_offset = reader.read_u32::<LittleEndian>().unwrap_or(0);
-                if local_base_path_offset >= 16 && (local_base_path_offset as u64) < link_info_size as u64 {
+                if local_base_path_offset >= 16
+                    && (local_base_path_offset as u64) < link_info_size as u64
+                {
                     // Skip bytes from current position (16) to local_base_path_offset
                     let skip = local_base_path_offset.saturating_sub(16) as usize;
                     if skip > 0 {
                         let mut _drain = vec![0u8; skip.min(256)];
                         reader.read_exact(&mut _drain).ok();
                     }
-                    let remaining = (link_info_size as usize).saturating_sub(local_base_path_offset as usize);
-                    target_path = Self::read_null_string(&mut reader, remaining.min(520)).unwrap_or_default();
+                    let remaining =
+                        (link_info_size as usize).saturating_sub(local_base_path_offset as usize);
+                    target_path =
+                        Self::read_null_string(&mut reader, remaining.min(520)).unwrap_or_default();
                 }
             }
         }

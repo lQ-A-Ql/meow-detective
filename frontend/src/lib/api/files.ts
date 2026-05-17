@@ -10,11 +10,13 @@ export async function getFileRows() {
 }
 
 export async function importDataSource(sourcePath: string) {
-  return apiClient.request('import_data_source', async () => 'Mock import: 42 files', { sourcePath });
+  return apiClient.request('import_data_source', () =>
+    apiClient.getMockProvider().importDataSource(sourcePath), { sourcePath });
 }
 
 export async function getFileChildren(parentId: string): Promise<FileTreeNode[]> {
-  return apiClient.request('get_file_children', async () => [], { parentId });
+  return apiClient.request('get_file_children', () =>
+    apiClient.getMockProvider().getFileChildren(parentId), { parentId });
 }
 
 export async function openFileHandle(fileId: string) {
