@@ -75,6 +75,7 @@
     "@tailwindcss/vite": "4.1.12",
     "@vitejs/plugin-react": "4.7.0",
     "tailwindcss": "4.1.12",
+    "typescript": "^5.5",
     "vite": "6.3.5"
   },
   "peerDependencies": {

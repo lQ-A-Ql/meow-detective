@@ -41,14 +41,15 @@ impl RecycleBinExtractor {
             .map_err(|e| e.to_string())?;
         let deletion_time = Self::filetime_to_dt(deletion_ft);
 
-        let name_bytes_remaining = if header_size >= 28 {
-            header_size.saturating_sub(28) as usize
-        } else {
-            0
-        };
-
-        let path = if name_bytes_remaining > 0 {
-            let mut raw = vec![0u8; name_bytes_remaining.min(520)];
+        let path = if header_size > 24 {
+            // Skip padding bytes between field data and the path
+            let padding = (header_size - 24) as usize;
+            if padding > 0 {
+                let mut _skip = vec![0u8; padding.min(256)];
+                reader.read_exact(&mut _skip).map_err(|e| e.to_string())?;
+            }
+            // Now read path (up to 520 bytes, UTF-16LE null-terminated)
+            let mut raw = vec![0u8; 520];
             let n = reader.read(&mut raw).map_err(|e| e.to_string())?;
             raw.truncate(n);
             let chars: Vec<u16> = raw

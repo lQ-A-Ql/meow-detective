@@ -1,165 +1,162 @@
+mod fixture_builder;
+
 use artifacts_core::{ArtifactContext, ArtifactExtractor, ExtractorRegistry, VecSink};
-use artifacts_windows::{LnkExtractor, PrefetchExtractor, RecycleBinExtractor};
+use artifacts_windows::{LnkExtractor, PrefetchExtractor, RecycleBinExtractor, RegistryExtractor};
+use chrono::{TimeZone, Utc};
 use domain::FileEntryId;
+use fixture_builder::*;
 
-fn mini_prefetch() -> Vec<u8> {
-    let mut data = Vec::new();
-    // SCCA magic
-    data.extend_from_slice(b"SCCA");
-    // format version (v30 = 0x1E)
-    data.extend_from_slice(&0x1Eu32.to_le_bytes());
-    // signature
-    data.extend_from_slice(&0u32.to_le_bytes());
-    // unused
-    data.extend_from_slice(&0u32.to_le_bytes());
-    // file_size
-    data.extend_from_slice(&1024u32.to_le_bytes());
-    // executable name "cmd.exe" in UTF-16LE (60 bytes / 30 chars)
-    let mut name_buf = vec![0u8; 60];
-    for (i, c) in "cmd.exe".encode_utf16().enumerate() {
-        let bytes = c.to_le_bytes();
-        name_buf[i * 2] = bytes[0];
-        name_buf[i * 2 + 1] = bytes[1];
-    }
-    data.extend_from_slice(&name_buf);
-    // hash
-    data.extend_from_slice(&0xA1B2C3D4u32.to_le_bytes());
-    // flags
-    data.extend_from_slice(&0u32.to_le_bytes());
-    // skip 12 bytes before run count (v30)
-    data.extend_from_slice(&[0u8; 12]);
-    // run count
-    data.extend_from_slice(&5u32.to_le_bytes());
-    // 8 FILETIME slots (first one ≈ 2024-01-15)
-    let ft = (133700000000000000u64).to_le_bytes();
-    data.extend_from_slice(&ft);
-    for _ in 1..8 {
-        data.extend_from_slice(&[0u8; 8]);
-    }
-    data
+fn t(s: &str) -> FileEntryId {
+    FileEntryId(s.to_string())
 }
 
-fn mini_lnk() -> Vec<u8> {
-    let mut data = Vec::new();
-    // Header size (0x4C) + LNK magic
-    data.extend_from_slice(&0x4Cu32.to_le_bytes());
-    data.extend_from_slice(b"L\x00\x00\x00");
-    // CLSID (16 zero bytes)
-    data.extend_from_slice(&[0u8; 16]);
-    // flags
-    data.extend_from_slice(&0u32.to_le_bytes());
-    // file attributes
-    data.extend_from_slice(&0x20u32.to_le_bytes());
-    // creation time
-    let ft = (133700000000000000u64).to_le_bytes();
-    data.extend_from_slice(&ft);
-    // access time
-    data.extend_from_slice(&ft);
-    // write time
-    data.extend_from_slice(&ft);
-    // file size
-    data.extend_from_slice(&1024u32.to_le_bytes());
-    // icon index
-    data.extend_from_slice(&0i32.to_le_bytes());
-    // show command
-    data.extend_from_slice(&1u32.to_le_bytes());
-    // hotkey
-    data.extend_from_slice(&[0u8; 2]);
-    // reserved
-    data.extend_from_slice(&[0u8; 10]);
-    data
-}
-
-#[test]
-fn prefetch_parser_produces_artifact() {
-    let extractor = PrefetchExtractor;
-    let ctx = ArtifactContext {
-        file_id: FileEntryId("pf-001".into()),
-        file_path: "cmd.exe-A1B2C3D4.pf".into(),
-        reader: Box::new(std::io::Cursor::new(mini_prefetch())),
-    };
-    assert!(extractor.supports_path("cmd.exe-A1B2C3D4.pf"));
-
-    let mut sink = VecSink::new();
-    let report = extractor.run(ctx, &mut sink).unwrap();
-    assert!(report.artifacts_found > 0);
-    assert!(!sink.artifacts.is_empty());
-}
-
-#[test]
-fn lnk_parser_produces_artifact() {
-    let extractor = LnkExtractor;
-    assert!(extractor.supports_path("shortcut.lnk"));
-
-    let ctx = ArtifactContext {
-        file_id: FileEntryId("lnk-001".into()),
-        file_path: "shortcut.lnk".into(),
-        reader: Box::new(std::io::Cursor::new(mini_lnk())),
-    };
-    let mut sink = VecSink::new();
-    let report = extractor.run(ctx, &mut sink).unwrap();
-    assert!(report.artifacts_found > 0);
-    assert!(!sink.artifacts.is_empty());
-}
-
-#[test]
-fn extractor_registry_works() {
-    let mut registry = ExtractorRegistry::new();
-    registry.register(Box::new(PrefetchExtractor));
-    registry.register(Box::new(LnkExtractor));
-    registry.register(Box::new(RecycleBinExtractor));
-
-    let matches = registry.find_for_path("cmd.exe-A1B2C3D4.pf");
-    assert_eq!(matches.len(), 1);
-    assert_eq!(matches[0].id(), "prefetch");
-}
-
-#[test]
-fn unsupported_file_returns_empty() {
-    let mut registry = ExtractorRegistry::new();
-    registry.register(Box::new(PrefetchExtractor));
-    registry.register(Box::new(LnkExtractor));
-
-    let matches = registry.find_for_path("notes.txt");
-    assert!(matches.is_empty());
-}
+// --- Robustness tests ---
 
 #[test]
 fn prefetch_truncated_no_panic() {
     let extractor = PrefetchExtractor;
     let ctx = ArtifactContext {
-        file_id: FileEntryId("trunc".into()),
+        file_id: t("trunc"),
         file_path: "bad.pf".into(),
         reader: Box::new(std::io::Cursor::new(vec![0xAB, 0xCD])),
     };
     let mut sink = VecSink::new();
-    let result = extractor.run(ctx, &mut sink);
-    assert!(result.is_ok() || result.is_err());
+    let _ = extractor.run(ctx, &mut sink);
 }
 
 #[test]
 fn lnk_truncated_no_panic() {
     let extractor = LnkExtractor;
     let ctx = ArtifactContext {
-        file_id: FileEntryId("trunc".into()),
+        file_id: t("trunc"),
         file_path: "bad.lnk".into(),
         reader: Box::new(std::io::Cursor::new(vec![0u8; 10])),
     };
     let mut sink = VecSink::new();
-    let result = extractor.run(ctx, &mut sink);
-    assert!(result.is_ok() || result.is_err());
+    let _ = extractor.run(ctx, &mut sink);
 }
 
 #[test]
 fn registry_random_bytes_no_panic() {
-    let extractor = artifacts_windows::RegistryExtractor;
+    let extractor = RegistryExtractor;
     let data: Vec<u8> = (0..1024).map(|i| (i % 256) as u8).collect();
     let ctx = ArtifactContext {
-        file_id: FileEntryId("rand".into()),
+        file_id: t("rand"),
         file_path: "C:/Windows/System32/config/SYSTEM.dat".into(),
         reader: Box::new(std::io::Cursor::new(data)),
     };
     let mut sink = VecSink::new();
-    let result = extractor.run(ctx, &mut sink);
-    assert!(result.is_ok() || result.is_err());
+    let _ = extractor.run(ctx, &mut sink);
+}
+
+// --- Format-correct fixture tests ---
+
+#[test]
+fn prefetch_fixture_extracts_exe_and_runs() {
+    let t1 = Utc.with_ymd_and_hms(2024, 1, 15, 12, 0, 0).unwrap();
+    let t2 = Utc.with_ymd_and_hms(2024, 1, 16, 8, 30, 0).unwrap();
+    let data = build_prefetch_v30("CMD.EXE", 5, &[t1, t2]);
+
+    let extractor = PrefetchExtractor;
+    assert!(extractor.supports_path("CMD.EXE-DEADBEEF.pf"));
+    let ctx = ArtifactContext {
+        file_id: t("pf-001"),
+        file_path: "CMD.EXE-DEADBEEF.pf".into(),
+        reader: Box::new(std::io::Cursor::new(data)),
+    };
+    let mut sink = VecSink::new();
+    let report = extractor.run(ctx, &mut sink).unwrap();
+    assert!(report.artifacts_found > 0);
+    assert!(!sink.timeline_events.is_empty(), "Expected timeline events");
+    assert_eq!(sink.artifacts[0].family, "Prefetch");
+    assert!(sink.artifacts[0].title.contains("CMD.EXE"));
+}
+
+#[test]
+fn lnk_fixture_extracts_target_path() {
+    let ct = Utc.with_ymd_and_hms(2024, 1, 15, 12, 0, 0).unwrap();
+    let wt = Utc.with_ymd_and_hms(2024, 1, 16, 8, 0, 0).unwrap();
+    let data = build_lnk(Some("C:\\Windows\\System32\\cmd.exe"), Some(ct), Some(wt), 1024);
+
+    let extractor = LnkExtractor;
+    assert!(extractor.supports_path("shortcut.lnk"));
+    let ctx = ArtifactContext {
+        file_id: t("lnk-001"),
+        file_path: "shortcut.lnk".into(),
+        reader: Box::new(std::io::Cursor::new(data)),
+    };
+    let mut sink = VecSink::new();
+    let report = extractor.run(ctx, &mut sink).unwrap();
+    assert!(report.artifacts_found > 0);
+    let attrs = &sink.artifacts[0].attrs;
+    let tp = attrs.get("target_path").map(|v| v.as_str().unwrap_or("")).unwrap_or("");
+    assert!(
+        tp.contains("cmd.exe"),
+        "Expected cmd.exe in target_path, got: '{}', attrs: {:?}",
+        tp,
+        attrs
+    );
+}
+
+#[test]
+fn recycle_bin_fixture_extracts_path_and_time() {
+    let dt = Utc.with_ymd_and_hms(2024, 6, 15, 10, 30, 0).unwrap();
+    let data = build_recycle_bin_i("C:\\Users\\alice\\Documents\\secret.docx", 65536, dt);
+
+    let extractor = RecycleBinExtractor;
+    assert!(extractor.supports_path("$Recycle.Bin/$IA1B2C3D4E5.exe"));
+    let ctx = ArtifactContext {
+        file_id: t("rb-001"),
+        file_path: "$Recycle.Bin/$IA1B2C3D4E5.exe".into(),
+        reader: Box::new(std::io::Cursor::new(data)),
+    };
+    let mut sink = VecSink::new();
+    let report = extractor.run(ctx, &mut sink).unwrap();
+    assert!(report.artifacts_found > 0);
+    let attrs = &sink.artifacts[0].attrs;
+    assert!(
+        attrs.contains_key("original_path"),
+        "Expected original_path in attrs"
+    );
+    assert!(
+        attrs.get("original_path").unwrap().as_str().unwrap().contains("secret"),
+        "Expected path to contain 'secret'"
+    );
+    assert!(!sink.timeline_events.is_empty(), "Expected FILE_DELETED event");
+}
+
+#[test]
+fn registry_hive_fixture_parses_name() {
+    let lw = Utc.with_ymd_and_hms(2025, 3, 1, 18, 0, 0).unwrap();
+    let data = build_registry_hive("SYSTEM", lw);
+
+    let extractor = RegistryExtractor;
+    let ctx = ArtifactContext {
+        file_id: t("reg-001"),
+        file_path: "C:/Windows/System32/config/SYSTEM.dat".into(),
+        reader: Box::new(std::io::Cursor::new(data)),
+    };
+    let mut sink = VecSink::new();
+    let report = extractor.run(ctx, &mut sink).unwrap();
+    assert!(report.artifacts_found > 0);
+    let attrs = &sink.artifacts[0].attrs;
+    assert!(
+        attrs.contains_key("hive_name"),
+        "Expected hive_name in attrs: {:?}",
+        attrs
+    );
+    assert!(!sink.timeline_events.is_empty(), "Expected REGISTRY_MODIFIED event");
+}
+
+#[test]
+fn extractor_registry_matches_by_path() {
+    let mut reg = ExtractorRegistry::new();
+    reg.register(Box::new(PrefetchExtractor));
+    reg.register(Box::new(LnkExtractor));
+    reg.register(Box::new(RecycleBinExtractor));
+
+    assert_eq!(reg.find_for_path("CMD.EXE-1234.pf").len(), 1);
+    assert_eq!(reg.find_for_path("shortcut.lnk").len(), 1);
+    assert_eq!(reg.find_for_path("$Recycle.Bin/$Iabc.exe").len(), 1);
+    assert_eq!(reg.find_for_path("notes.txt").len(), 0);
 }
