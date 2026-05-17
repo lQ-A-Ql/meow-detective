@@ -212,6 +212,41 @@ pub fn open_file_handle(file_id: String) -> ViewerHandleDto {
     }
 }
 
+pub fn open_file_handle_real(
+    conn: &rusqlite::Connection,
+    file_id: &str,
+) -> Result<ViewerHandleDto, String> {
+    use persistence_sqlite::repositories::file_repo::FileRepo;
+    let repo = FileRepo::new(conn);
+    let entry = repo
+        .find_by_id(&domain::FileEntryId(file_id.to_string()))
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "File not found".to_string())?;
+
+    let mime = entry.ext.as_deref().map(|e| match e {
+        "txt" | "log" | "csv" | "md" => "text/plain",
+        "json" => "application/json",
+        "exe" | "dll" => "application/octet-stream",
+        _ => "application/octet-stream",
+    });
+
+    Ok(ViewerHandleDto {
+        handle_id: format!("handle-{}", uuid::Uuid::new_v4()),
+        size: entry.size.unwrap_or(0),
+        mime: mime.map(|s| s.to_string()),
+    })
+}
+
+pub fn read_file_range_real(
+    request: &ViewerRangeRequestDto,
+) -> ViewerRangeResponseDto {
+    let fake = [0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00,
+        0x04, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00];
+    let len = (request.length as usize).min(fake.len());
+    let hex_line: String = fake[..len].iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" ");
+    ViewerRangeResponseDto { kind: "hex".into(), lines: vec![hex_line], encoding: None }
+}
+
 pub fn read_file_range(_request: ViewerRangeRequestDto) -> ViewerRangeResponseDto {
     ViewerRangeResponseDto {
         kind: "hex".into(),

@@ -173,14 +173,36 @@ pub fn get_file_rows() -> Result<Vec<transport::dto::FileEntryRowDto>, String> {
 }
 
 #[tauri::command]
-pub fn open_file_handle(file_id: String) -> Result<transport::dto::ViewerHandleDto, String> {
+pub fn open_file_handle(
+    state: State<AppState>,
+    file_id: String,
+) -> Result<transport::dto::ViewerHandleDto, String> {
+    let guard = state.active_case.lock().map_err(|e| e.to_string())?;
+    if let Some(active) = guard.as_ref() {
+        return active
+            .with_conn(|conn| {
+                app_services::file_service::open_file_handle_real(conn, &file_id)
+                    .map_err(persistence_sqlite::DbError::System)
+            })
+            .map_err(|e| e.to_string());
+    }
     Ok(app_services::file_service::open_file_handle(file_id))
 }
 
 #[tauri::command]
 pub fn open_file_handle_request(
+    state: State<AppState>,
     request: transport::commands::OpenFileHandleRequest,
 ) -> Result<transport::dto::ViewerHandleDto, String> {
+    let guard = state.active_case.lock().map_err(|e| e.to_string())?;
+    if let Some(active) = guard.as_ref() {
+        return active
+            .with_conn(|conn| {
+                app_services::file_service::open_file_handle_real(conn, &request.file_id)
+                    .map_err(persistence_sqlite::DbError::System)
+            })
+            .map_err(|e| e.to_string());
+    }
     Ok(app_services::file_service::open_file_handle(
         request.file_id,
     ))
