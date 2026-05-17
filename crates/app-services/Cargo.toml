@@ -1,0 +1,10 @@
+[package]
+name = "app-services"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+transport.workspace = true

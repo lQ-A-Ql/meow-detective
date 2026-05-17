@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Forensics Workbench",
+  "version": "0.1.0",
+  "identifier": "com.lqaq.forensics",
+  "build": {
+    "frontendDist": "../../../frontend/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Forensics Workbench",
+        "width": 1440,
+        "height": 960
+      }
+    ]
+  },
+  "bundle": {
+    "active": false
+  }
+}

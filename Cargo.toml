@@ -1,0 +1,58 @@
+[workspace]
+resolver = "2"
+members = [
+  "apps/desktop/src-tauri",
+  "crates/domain",
+  "crates/app-services",
+  "crates/infrastructure",
+  "crates/persistence-sqlite",
+  "crates/evidence-core",
+  "crates/fs-ntfs",
+  "crates/fs-fat",
+  "crates/fs-exfat",
+  "crates/image-raw",
+  "crates/image-e01",
+  "crates/catalog",
+  "crates/ingest",
+  "crates/search",
+  "crates/timeline",
+  "crates/artifacts-core",
+  "crates/artifacts-windows",
+  "crates/reports",
+  "crates/transport",
+  "crates/testing",
+]
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+authors = ["lQ-A-Ql"]
+license = "MIT"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+chrono = { version = "0.4", features = ["serde"] }
+anyhow = "1"
+tauri = { version = "2", features = [] }
+tauri-build = { version = "2", features = [] }
+transport = { path = "crates/transport" }
+app-services = { path = "crates/app-services" }
+domain = { path = "crates/domain" }
+infrastructure = { path = "crates/infrastructure" }
+persistence-sqlite = { path = "crates/persistence-sqlite" }
+evidence-core = { path = "crates/evidence-core" }
+fs-ntfs = { path = "crates/fs-ntfs" }
+fs-fat = { path = "crates/fs-fat" }
+fs-exfat = { path = "crates/fs-exfat" }
+image-raw = { path = "crates/image-raw" }
+image-e01 = { path = "crates/image-e01" }
+catalog = { path = "crates/catalog" }
+ingest = { path = "crates/ingest" }
+search = { path = "crates/search" }
+timeline = { path = "crates/timeline" }
+artifacts-core = { path = "crates/artifacts-core" }
+artifacts-windows = { path = "crates/artifacts-windows" }
+reports = { path = "crates/reports" }
+testing = { path = "crates/testing" }

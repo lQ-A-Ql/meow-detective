@@ -1,0 +1,29 @@
+# Rust
+target/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/node_modules/
+package-lock.json
+
+# Tauri (auto-generated)
+apps/desktop/src-tauri/gen/
+*.wasm
+
+# IDE
+.idea/
+*.sw[a-zA-Z]
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor / AI config (personal)
+.obsidian/
+.claude/
+
+# Build output
+*.o
+*.exe
