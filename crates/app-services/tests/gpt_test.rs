@@ -25,14 +25,14 @@ fn parse_entries_finds_partition() {
 
     let e1 = 1 * 128;
     // MS Basic Data GUID
-    data[e1..e1+16].copy_from_slice(&[
-        0xA2, 0xA0, 0xD0, 0xEB, 0xE5, 0xB9, 0x33, 0x44,
-        0x87, 0xC0, 0x68, 0xB6, 0xB7, 0x26, 0x99, 0xC7,
+    data[e1..e1 + 16].copy_from_slice(&[
+        0xA2, 0xA0, 0xD0, 0xEB, 0xE5, 0xB9, 0x33, 0x44, 0x87, 0xC0, 0x68, 0xB6, 0xB7, 0x26, 0x99,
+        0xC7,
     ]);
-    data[e1+32..e1+40].copy_from_slice(&2048u64.to_le_bytes());
-    data[e1+40..e1+48].copy_from_slice(&100000u64.to_le_bytes());
+    data[e1 + 32..e1 + 40].copy_from_slice(&2048u64.to_le_bytes());
+    data[e1 + 40..e1 + 48].copy_from_slice(&100000u64.to_le_bytes());
     for (i, c) in "Windows".encode_utf16().enumerate() {
-        data[e1+56+i*2..e1+56+i*2+2].copy_from_slice(&c.to_le_bytes());
+        data[e1 + 56 + i * 2..e1 + 56 + i * 2 + 2].copy_from_slice(&c.to_le_bytes());
     }
 
     let parts = gpt::parse_gpt_entries(&data, esz, count);

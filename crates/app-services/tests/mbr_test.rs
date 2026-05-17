@@ -30,9 +30,24 @@ fn parse_partition_table() {
 #[test]
 fn find_first_ntfs() {
     let entries = vec![
-        mbr::PartitionEntry { bootable: false, partition_type: 0x0B, lba_start: 100, sector_count: 500 },
-        mbr::PartitionEntry { bootable: true, partition_type: 0x07, lba_start: 2048, sector_count: 100000 },
-        mbr::PartitionEntry { bootable: false, partition_type: 0x07, lba_start: 0, sector_count: 0 },
+        mbr::PartitionEntry {
+            bootable: false,
+            partition_type: 0x0B,
+            lba_start: 100,
+            sector_count: 500,
+        },
+        mbr::PartitionEntry {
+            bootable: true,
+            partition_type: 0x07,
+            lba_start: 2048,
+            sector_count: 100000,
+        },
+        mbr::PartitionEntry {
+            bootable: false,
+            partition_type: 0x07,
+            lba_start: 0,
+            sector_count: 0,
+        },
     ];
     let ntfs = mbr::find_first_ntfs(&entries).unwrap();
     assert_eq!(ntfs.lba_start, 2048);

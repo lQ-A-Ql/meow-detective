@@ -68,19 +68,26 @@ impl NtfsReader {
 
     fn parse_index_root(record: &[u8]) -> Vec<FsNode> {
         let mut nodes = Vec::new();
-        if record.len() < 0x18 || &record[0..4] != b"FILE" { return nodes; }
+        if record.len() < 0x18 || &record[0..4] != b"FILE" {
+            return nodes;
+        }
         let attr_off = u16::from_le_bytes([record[0x14], record[0x15]]) as usize;
         let mut pos = attr_off;
         while pos + 8 < record.len() {
-            let typ = u32::from_le_bytes(record[pos..pos+4].try_into().unwrap());
-            if typ == 0xFFFFFFFF { break; }
-            let len = u32::from_le_bytes(record[pos+4..pos+8].try_into().unwrap()) as usize;
-            if len == 0 || pos + len > record.len() { break; }
+            let typ = u32::from_le_bytes(record[pos..pos + 4].try_into().unwrap());
+            if typ == 0xFFFFFFFF {
+                break;
+            }
+            let len = u32::from_le_bytes(record[pos + 4..pos + 8].try_into().unwrap()) as usize;
+            if len == 0 || pos + len > record.len() {
+                break;
+            }
             if typ == 0x90 && pos + 0x18 <= record.len() {
-                let entries_off = u32::from_le_bytes(record[pos+0x10..pos+0x14].try_into().unwrap()) as usize;
+                let entries_off =
+                    u32::from_le_bytes(record[pos + 0x10..pos + 0x14].try_into().unwrap()) as usize;
                 let ents_start = pos + 0x10 + entries_off;
                 if ents_start < pos + len {
-                    nodes = parse_indx_entries(&record[ents_start..pos+len]);
+                    nodes = parse_indx_entries(&record[ents_start..pos + len]);
                 }
             }
             pos += len;
@@ -96,41 +103,74 @@ impl NtfsReader {
 
 impl FileSystemReader for NtfsReader {
     fn root(&self) -> io::Result<FsNode> {
-        Ok(FsNode { name: "\\".into(), path: String::new(), is_dir: true, size: 0,
-            created_at: None, modified_at: None, accessed_at: None })
+        Ok(FsNode {
+            name: "\\".into(),
+            path: String::new(),
+            is_dir: true,
+            size: 0,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+        })
     }
 
     fn list_children(&self, path: &str) -> io::Result<Vec<FsNode>> {
         if path.is_empty() {
             return self.list_root_children();
         }
-        Err(io::Error::new(io::ErrorKind::Unsupported, "NTFS subdirectory enum not yet implemented"))
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "NTFS subdirectory enum not yet implemented",
+        ))
     }
 
     fn open_file(&self, _path: &str) -> io::Result<Box<dyn Read>> {
-        Err(io::Error::new(io::ErrorKind::Unsupported, "NTFS file read not yet implemented"))
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "NTFS file read not yet implemented",
+        ))
     }
 
-    fn data_source_name(&self) -> &str { "NTFS" }
+    fn data_source_name(&self) -> &str {
+        "NTFS"
+    }
 }
 
 fn parse_indx_entries(data: &[u8]) -> Vec<FsNode> {
     let mut nodes = Vec::new();
     let mut off = 0usize;
     while off + 0x52 < data.len() {
-        let _mft_ref = u64::from_le_bytes(data[off..off+8].try_into().unwrap_or([0;8]));
-        let entry_size = u16::from_le_bytes([data[off+8], data[off+9]]) as usize;
-        if entry_size < 0x52 || off + entry_size > data.len() { break; }
+        let _mft_ref = u64::from_le_bytes(data[off..off + 8].try_into().unwrap_or([0; 8]));
+        let entry_size = u16::from_le_bytes([data[off + 8], data[off + 9]]) as usize;
+        if entry_size < 0x52 || off + entry_size > data.len() {
+            break;
+        }
         let name_len = data[off + 0x50] as usize;
         let name_start = off + 0x52;
-        if name_len > 0 && name_start + name_len * 2 <= data.len() && name_start + name_len * 2 <= off + entry_size {
+        if name_len > 0
+            && name_start + name_len * 2 <= data.len()
+            && name_start + name_len * 2 <= off + entry_size
+        {
             let chars: Vec<u16> = data[name_start..name_start + name_len * 2]
-                .chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+                .chunks_exact(2)
+                .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                .collect();
             let name = String::from_utf16_lossy(&chars);
-            let flags = if off + 0x4C < data.len() { u32::from_le_bytes(data[off+0x48..off+0x4C].try_into().unwrap_or([0;4])) } else { 0 };
+            let flags = if off + 0x4C < data.len() {
+                u32::from_le_bytes(data[off + 0x48..off + 0x4C].try_into().unwrap_or([0; 4]))
+            } else {
+                0
+            };
             let is_dir = flags & 0x10000000 != 0;
-            nodes.push(FsNode { name, path: String::new(), is_dir, size: 0,
-                created_at: None, modified_at: None, accessed_at: None });
+            nodes.push(FsNode {
+                name,
+                path: String::new(),
+                is_dir,
+                size: 0,
+                created_at: None,
+                modified_at: None,
+                accessed_at: None,
+            });
         }
         off += entry_size;
     }

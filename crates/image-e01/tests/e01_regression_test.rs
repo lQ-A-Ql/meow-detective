@@ -2,15 +2,32 @@ use evidence_core::EvidenceReader;
 use image_e01::E01Reader;
 use std::io::{Read, Seek, SeekFrom};
 
-fn p() -> std::path::PathBuf { "E:/pangushi/刘洋/liuyang_pc.E01".into() }
-fn skip() -> bool { if !p().exists() { eprintln!("SKIP"); true } else { false } }
+fn p() -> std::path::PathBuf {
+    "E:/pangushi/刘洋/liuyang_pc.E01".into()
+}
+fn skip() -> bool {
+    if !p().exists() {
+        eprintln!("SKIP");
+        true
+    } else {
+        false
+    }
+}
 
 #[test]
-fn open_real_file() { if skip() { return; } let r = E01Reader::open(&p()).unwrap(); assert!(r.info().size > 0); }
+fn open_real_file() {
+    if skip() {
+        return;
+    }
+    let r = E01Reader::open(&p()).unwrap();
+    assert!(r.info().size > 0);
+}
 
 #[test]
 fn read_first_sector() {
-    if skip() { return; }
+    if skip() {
+        return;
+    }
     let mut r = E01Reader::open(&p()).unwrap();
     let mut buf = [0u8; 512];
     r.read_exact(&mut buf).unwrap();
@@ -21,7 +38,9 @@ fn read_first_sector() {
 
 #[test]
 fn cross_chunk_4k() {
-    if skip() { return; }
+    if skip() {
+        return;
+    }
     let mut r = E01Reader::open(&p()).unwrap();
     let mut s0 = [0u8; 512];
     r.read_exact(&mut s0).unwrap();
@@ -34,7 +53,9 @@ fn cross_chunk_4k() {
 
 #[test]
 fn seek_end_read_last() {
-    if skip() { return; }
+    if skip() {
+        return;
+    }
     let mut r = E01Reader::open(&p()).unwrap();
     r.seek(SeekFrom::End(-512)).unwrap();
     let mut buf = [0u8; 512];

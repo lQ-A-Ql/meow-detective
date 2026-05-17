@@ -1,7 +1,10 @@
 #[test]
 fn dump_section_walk() {
     let p = std::path::Path::new("E:/pangushi/刘洋/liuyang_pc.E01");
-    if !p.exists() { eprintln!("SKIP"); return; }
+    if !p.exists() {
+        eprintln!("SKIP");
+        return;
+    }
     use std::io::{Read, Seek, SeekFrom};
     let mut f = std::fs::File::open(p).unwrap();
     let flen = f.seek(SeekFrom::End(0)).unwrap();
@@ -14,16 +17,26 @@ fn dump_section_walk() {
     for _ in 0..20 {
         f.seek(SeekFrom::Start(off)).unwrap();
         let mut desc = [0u8; 76];
-        if f.read_exact(&mut desc).is_err() { eprintln!("read error at {}", off); break; }
+        if f.read_exact(&mut desc).is_err() {
+            eprintln!("read error at {}", off);
+            break;
+        }
 
-        let stype = String::from_utf8_lossy(&desc[0..16]).trim_end_matches('\0').to_string();
+        let stype = String::from_utf8_lossy(&desc[0..16])
+            .trim_end_matches('\0')
+            .to_string();
         let next = u64::from_le_bytes(desc[16..24].try_into().unwrap());
         let ssize = u64::from_le_bytes(desc[24..32].try_into().unwrap());
 
-        eprintln!("section '{}' at {}: next={}, size={}", stype, off, next, ssize);
+        eprintln!(
+            "section '{}' at {}: next={}, size={}",
+            stype, off, next, ssize
+        );
         eprintln!("  desc[0..32]: {:02X?}", &desc[0..32]);
 
-        if stype == "done" || next == 0 || next >= flen || next == off { break; }
+        if stype == "done" || next == 0 || next >= flen || next == off {
+            break;
+        }
         off = next;
     }
 }

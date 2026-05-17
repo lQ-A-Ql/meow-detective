@@ -95,7 +95,8 @@ pub fn import_data_source(state: State<AppState>, source_path: String) -> Result
                 let mut img_reader = image_e01::E01Reader::open(&path)
                     .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
                 let mut sector0 = [0u8; 512];
-                img_reader.read_exact(&mut sector0)
+                img_reader
+                    .read_exact(&mut sector0)
                     .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
                 // Try MBR first
@@ -105,38 +106,62 @@ pub fn import_data_source(state: State<AppState>, source_path: String) -> Result
                 } else if mbr_entries.iter().any(|e| e.partition_type == 0xEE) {
                     // Protective MBR → GPT
                     let mut hdr_buf = [0u8; 512];
-                    img_reader.read_exact(&mut hdr_buf)
+                    img_reader
+                        .read_exact(&mut hdr_buf)
                         .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
                     if let Some(hdr) = gpt::parse_gpt_header(&hdr_buf) {
                         let entry_bytes = hdr.entry_size * hdr.partition_count;
                         let entry_lba = hdr.partition_entry_lba;
-                        img_reader.seek(SeekFrom::Start(entry_lba * 512))
+                        img_reader
+                            .seek(SeekFrom::Start(entry_lba * 512))
                             .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
                         let mut entry_data = vec![0u8; entry_bytes.min(16384) as usize];
-                        img_reader.read_exact(&mut entry_data)
+                        img_reader
+                            .read_exact(&mut entry_data)
                             .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-                        let gpt_parts = gpt::parse_gpt_entries(&entry_data, hdr.entry_size, hdr.partition_count);
+                        let gpt_parts = gpt::parse_gpt_entries(
+                            &entry_data,
+                            hdr.entry_size,
+                            hdr.partition_count,
+                        );
                         gpt::find_first_data_partition(&gpt_parts).map(|p| p.start_lba * 512)
-                    } else { None }
-                } else { None };
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
 
                 if let Some(off) = ntfs_offset {
-                    img_reader.seek(SeekFrom::Start(0))
+                    img_reader
+                        .seek(SeekFrom::Start(0))
                         .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
                     let ntfs_reader = fs_ntfs::NtfsReader::open(Box::new(img_reader), off)
                         .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
                     file_service::enumerate_filesystem(conn, &ds.id, &ntfs_reader)?
                 } else {
-                    file_service::EnumerationStats { file_count: 0, dir_count: 0, total_size: 0,
-                        warnings: vec!["No NTFS partition found (GPT or MBR)".into()] }
+                    file_service::EnumerationStats {
+                        file_count: 0,
+                        dir_count: 0,
+                        total_size: 0,
+                        warnings: vec!["No NTFS partition found (GPT or MBR)".into()],
+                    }
                 }
-            } else if probe_result.candidates.contains(&"logical_directory".to_string()) {
+            } else if probe_result
+                .candidates
+                .contains(&"logical_directory".to_string())
+            {
                 let fs = LogicalFsReader::open(&path, &ds.name)
                     .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
                 file_service::enumerate_filesystem(conn, &ds.id, &fs)?
             } else {
                 // RAW image without filesystem support: just create empty entry
-                file_service::EnumerationStats { file_count: 0, dir_count: 0, total_size: 0, warnings: vec!["RAW image — no FS reader".into()] }
+                file_service::EnumerationStats {
+                    file_count: 0,
+                    dir_count: 0,
+                    total_size: 0,
+                    warnings: vec!["RAW image — no FS reader".into()],
+                }
             };
             job_repo.update_progress(&job_id, 50, "Projecting timeline...")?;
             let mut msg = format!(

@@ -18,13 +18,26 @@ pub fn parse_partition_table(mbr: &[u8]) -> Vec<PartitionEntry> {
         let base = 446 + i * 16;
         let bootable = mbr[base] == 0x80;
         let partition_type = mbr[base + 4];
-        let lba_start = u32::from_le_bytes([mbr[base+8], mbr[base+9], mbr[base+10], mbr[base+11]]);
-        let sector_count = u32::from_le_bytes([mbr[base+12], mbr[base+13], mbr[base+14], mbr[base+15]]);
-        entries.push(PartitionEntry { bootable, partition_type, lba_start, sector_count });
+        let lba_start =
+            u32::from_le_bytes([mbr[base + 8], mbr[base + 9], mbr[base + 10], mbr[base + 11]]);
+        let sector_count = u32::from_le_bytes([
+            mbr[base + 12],
+            mbr[base + 13],
+            mbr[base + 14],
+            mbr[base + 15],
+        ]);
+        entries.push(PartitionEntry {
+            bootable,
+            partition_type,
+            lba_start,
+            sector_count,
+        });
     }
     entries
 }
 
 pub fn find_first_ntfs(entries: &[PartitionEntry]) -> Option<&PartitionEntry> {
-    entries.iter().find(|e| e.partition_type == 0x07 && e.lba_start > 0)
+    entries
+        .iter()
+        .find(|e| e.partition_type == 0x07 && e.lba_start > 0)
 }

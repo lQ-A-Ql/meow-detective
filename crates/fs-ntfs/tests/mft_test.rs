@@ -1,6 +1,6 @@
 //! NTFS synthetic fixture test — list_root_children with correct INDX offsets.
-use evidence_core::EvidenceReader;
 use evidence_core::filesystem::FileSystemReader;
+use evidence_core::EvidenceReader;
 use fs_ntfs::NtfsReader;
 use std::io;
 
@@ -20,7 +20,9 @@ fn build_fixture() -> Vec<u8> {
 
     // Boot sector
     let boot = &mut data[0..512];
-    boot[0] = 0xEB; boot[1] = 0x52; boot[2] = 0x90;
+    boot[0] = 0xEB;
+    boot[1] = 0x52;
+    boot[2] = 0x90;
     boot[3..11].copy_from_slice(b"NTFS    ");
     boot[11..13].copy_from_slice(&bps.to_le_bytes());
     boot[13] = spc;
@@ -39,9 +41,9 @@ fn build_fixture() -> Vec<u8> {
 
     // $INDEX_ROOT (0x90) at offset 0x68 + 0x10 for attribute header
     let iro = 0x68usize; // position 0x68 within record
-    rec5[iro..iro+4].copy_from_slice(&0x90u32.to_le_bytes()); // type
-    rec5[iro+4..iro+8].copy_from_slice(&0u32.to_le_bytes()); // len placeholder
-    rec5[iro+0x10..iro+0x14].copy_from_slice(&0x10u32.to_le_bytes()); // entries offset = 16
+    rec5[iro..iro + 4].copy_from_slice(&0x90u32.to_le_bytes()); // type
+    rec5[iro + 4..iro + 8].copy_from_slice(&0u32.to_le_bytes()); // len placeholder
+    rec5[iro + 0x10..iro + 0x14].copy_from_slice(&0x10u32.to_le_bytes()); // entries offset = 16
 
     // INDX entries start at iro + 0x20
     let entries_start = iro + 0x20;
@@ -57,24 +59,28 @@ fn build_fixture() -> Vec<u8> {
         let name_bytes = utf16.len() * 2;
         let entry_size = 0x52 + name_bytes; // 0x52 header + name
 
-        rec5[off..off+8].copy_from_slice(&(100u64 + off as u64).to_le_bytes()); // MFT ref
-        rec5[off+8..off+10].copy_from_slice(&(entry_size as u16).to_le_bytes());
-        rec5[off+0x50] = utf16.len() as u8; // name_len @ +0x50
+        rec5[off..off + 8].copy_from_slice(&(100u64 + off as u64).to_le_bytes()); // MFT ref
+        rec5[off + 8..off + 10].copy_from_slice(&(entry_size as u16).to_le_bytes());
+        rec5[off + 0x50] = utf16.len() as u8; // name_len @ +0x50
         if is_dir {
-            rec5[off+0x48..off+0x4C].copy_from_slice(&0x10000000u32.to_le_bytes()); // flags @ +0x48
+            rec5[off + 0x48..off + 0x4C].copy_from_slice(&0x10000000u32.to_le_bytes());
+            // flags @ +0x48
         }
         for (i, c) in utf16.iter().enumerate() {
-            rec5[off+0x52 + i*2..off+0x52 + i*2 + 2].copy_from_slice(&c.to_le_bytes());
+            rec5[off + 0x52 + i * 2..off + 0x52 + i * 2 + 2].copy_from_slice(&c.to_le_bytes());
         }
         off += entry_size;
     }
-    rec5[off..off+4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
-    rec5[iro+4..iro+8].copy_from_slice(&((off - iro) as u32).to_le_bytes()); // fix length
+    rec5[off..off + 4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+    rec5[iro + 4..iro + 8].copy_from_slice(&((off - iro) as u32).to_le_bytes()); // fix length
 
     data
 }
 
-struct FakeReader { data: Vec<u8>, pos: u64 }
+struct FakeReader {
+    data: Vec<u8>,
+    pos: u64,
+}
 impl io::Read for FakeReader {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let start = self.pos.min(self.data.len() as u64) as usize;
@@ -96,7 +102,9 @@ impl io::Seek for FakeReader {
     }
 }
 impl EvidenceReader for FakeReader {
-    fn info(&self) -> &evidence_core::ReaderInfo { unimplemented!() }
+    fn info(&self) -> &evidence_core::ReaderInfo {
+        unimplemented!()
+    }
 }
 
 #[test]
@@ -105,10 +113,25 @@ fn list_root_children_returns_3_nodes() {
     let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
     let ntfs = NtfsReader::open(reader, 0).expect("open NTFS");
     let nodes = ntfs.list_root_children().expect("list_root_children");
-    assert_eq!(nodes.len(), 3, "expected 3 nodes, got {}: {:?}", nodes.len(), nodes.iter().map(|n| &n.name).collect::<Vec<_>>());
-    assert!(nodes.iter().any(|n| n.is_dir && n.name == "$AttrDef"), "missing $AttrDef dir");
-    assert!(nodes.iter().any(|n| n.is_dir && n.name == "$BadClus"), "missing $BadClus dir");
-    assert!(nodes.iter().any(|n| !n.is_dir && n.name == "README.TXT"), "missing README.TXT file");
+    assert_eq!(
+        nodes.len(),
+        3,
+        "expected 3 nodes, got {}: {:?}",
+        nodes.len(),
+        nodes.iter().map(|n| &n.name).collect::<Vec<_>>()
+    );
+    assert!(
+        nodes.iter().any(|n| n.is_dir && n.name == "$AttrDef"),
+        "missing $AttrDef dir"
+    );
+    assert!(
+        nodes.iter().any(|n| n.is_dir && n.name == "$BadClus"),
+        "missing $BadClus dir"
+    );
+    assert!(
+        nodes.iter().any(|n| !n.is_dir && n.name == "README.TXT"),
+        "missing README.TXT file"
+    );
 }
 
 #[test]
