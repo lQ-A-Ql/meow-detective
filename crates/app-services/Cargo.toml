@@ -7,5 +7,16 @@ license.workspace = true
 
 [dependencies]
 serde_json.workspace = true
+serde.workspace = true
+chrono.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
 domain.workspace = true
 transport.workspace = true
+persistence-sqlite.workspace = true
+evidence-core.workspace = true
+rusqlite = { version = "0.31", features = ["bundled"] }
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "3"

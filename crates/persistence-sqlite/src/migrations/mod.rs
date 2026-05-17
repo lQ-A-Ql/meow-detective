@@ -1,1 +1,1 @@
-//! SQL migration scripts.
+pub mod runner;

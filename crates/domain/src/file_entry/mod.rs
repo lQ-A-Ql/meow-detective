@@ -1,3 +1,4 @@
+use crate::DataSourceId;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -14,6 +15,7 @@ pub enum EntryType {
 pub struct FileEntry {
     pub id: FileEntryId,
     pub parent_id: Option<FileEntryId>,
+    pub data_source_id: DataSourceId,
     pub path: String,
     pub name: String,
     pub entry_type: EntryType,

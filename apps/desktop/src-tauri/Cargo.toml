@@ -19,3 +19,6 @@ serde_json.workspace = true
 chrono.workspace = true
 transport.workspace = true
 app-services.workspace = true
+domain.workspace = true
+persistence-sqlite.workspace = true
+evidence-core.workspace = true

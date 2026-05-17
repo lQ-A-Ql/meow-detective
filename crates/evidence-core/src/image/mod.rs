@@ -1,1 +1,1 @@
-//! Disk image format abstraction layer.
+pub mod raw_reader;
