@@ -41,9 +41,9 @@ impl E01Reader {
         let (sectors_count, chunk_size_raw) = if fields.len() >= 2 {
             (fields[fields.len() - 1], fields[0] as u32)
         } else {
-            // Binary header: search for sector count in header section
-            match find_sector_count(&data) {
-                Some(sc) => (sc, 32768),
+            // Binary header: find "header" section, read version, use known offsets
+            match find_sectors_from_header(&data) {
+                Some((sc, cs)) => (sc, cs),
                 None => return Err(io::Error::new(io::ErrorKind::InvalidData, "cannot determine sector count")),
             }
         };
@@ -137,14 +137,17 @@ impl EvidenceReader for E01Reader {
     fn info(&self) -> &ReaderInfo { &self.info }
 }
 
-fn find_sector_count(data: &[u8]) -> Option<u64> {
-    // Search for a plausible sector count: 64-bit LE value where value * 512 ≈ known file size
-    // Range check: 1M to 1B sectors (512MB to 512GB disk)
-    for w in data.windows(8) {
-        let val = u64::from_le_bytes(w.try_into().ok()?);
-        if val > 1_000_000 && val < 1_000_000_000 {
-            return Some(val);
-        }
-    }
-    None
+fn find_sectors_from_header(data: &[u8]) -> Option<(u64, u32)> {
+    let hpos = data.windows(7).position(|w| w == b"header\x00")?;
+    let sec = &data[hpos + 7..];
+    if sec.len() < 256 { return None; }
+    let version = u32::from_le_bytes(sec[0..4].try_into().ok()?);
+    let (sc_off, cs_off) = match version {
+        1 => (24, 76),
+        _ => (248, 80),
+    };
+    if sc_off + 8 > sec.len() || cs_off + 4 > sec.len() { return None; }
+    let sc = u64::from_le_bytes(sec[sc_off..sc_off+8].try_into().ok()?);
+    let cs = u32::from_le_bytes(sec[cs_off..cs_off+4].try_into().ok()?);
+    if sc == 0 { None } else { Some((sc, cs)) }
 }

@@ -58,8 +58,7 @@ impl NtfsReader {
         self.mft_cluster * self.cluster_size + record_number * self.mft_record_size as u64
     }
 
-    #[allow(dead_code)]
-    fn read_file_record(&mut self, record_number: u64) -> io::Result<Vec<u8>> {
+    fn read_mft_record(&mut self, record_number: u64) -> io::Result<Vec<u8>> {
         let off = self.mft_offset(record_number);
         self.reader.seek(SeekFrom::Start(off))?;
         let mut rec = vec![0u8; self.mft_record_size as usize];
@@ -67,70 +66,72 @@ impl NtfsReader {
         Ok(rec)
     }
 
-    #[allow(dead_code)]
-    fn parse_file_names(record: &[u8]) -> Vec<String> {
-        if record.len() < 4 || &record[0..4] != b"FILE" {
-            return vec![];
-        }
+    fn parse_index_root(record: &[u8]) -> Vec<FsNode> {
+        let mut nodes = Vec::new();
+        if record.len() < 0x18 || &record[0..4] != b"FILE" { return nodes; }
         let attr_off = u16::from_le_bytes([record[0x14], record[0x15]]) as usize;
         let mut pos = attr_off;
-        let mut names = Vec::new();
         while pos + 8 < record.len() {
-            let typ = u32::from_le_bytes(record[pos..pos + 4].try_into().unwrap());
-            if typ == 0xFFFFFFFF {
-                break;
-            }
-            let len = u32::from_le_bytes(record[pos + 4..pos + 8].try_into().unwrap()) as usize;
-            if len == 0 || pos + len > record.len() {
-                break;
-            }
-            if typ == 0x30 && pos + 0x5A < record.len() {
-                let name_chars = record[pos + 0x40] as usize;
-                if name_chars > 0 && pos + 0x5A + name_chars * 2 <= record.len() {
-                    let name_bytes = &record[pos + 0x5A..pos + 0x5A + name_chars * 2];
-                    let chars: Vec<u16> = name_bytes
-                        .chunks_exact(2)
-                        .map(|c| u16::from_le_bytes([c[0], c[1]]))
-                        .collect();
-                    names.push(String::from_utf16_lossy(&chars));
+            let typ = u32::from_le_bytes(record[pos..pos+4].try_into().unwrap());
+            if typ == 0xFFFFFFFF { break; }
+            let len = u32::from_le_bytes(record[pos+4..pos+8].try_into().unwrap()) as usize;
+            if len == 0 || pos + len > record.len() { break; }
+            if typ == 0x90 && pos + 0x18 <= record.len() {
+                let entries_off = u32::from_le_bytes(record[pos+0x10..pos+0x14].try_into().unwrap()) as usize;
+                let ents_start = pos + 0x10 + entries_off;
+                if ents_start < pos + len {
+                    nodes = parse_indx_entries(&record[ents_start..pos+len]);
                 }
             }
             pos += len;
         }
-        names
+        nodes
+    }
+
+    pub fn list_root_children(&mut self) -> io::Result<Vec<FsNode>> {
+        let rec = self.read_mft_record(5)?;
+        Ok(Self::parse_index_root(&rec))
     }
 }
 
 impl FileSystemReader for NtfsReader {
     fn root(&self) -> io::Result<FsNode> {
-        Ok(FsNode {
-            name: "\\".into(),
-            path: String::new(),
-            is_dir: true,
-            size: 0,
-            created_at: None,
-            modified_at: None,
-            accessed_at: None,
-        })
+        Ok(FsNode { name: "\\".into(), path: String::new(), is_dir: true, size: 0,
+            created_at: None, modified_at: None, accessed_at: None })
     }
 
     fn list_children(&self, _path: &str) -> io::Result<Vec<FsNode>> {
-        Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "NTFS directory indexing not yet implemented",
-        ))
+        Err(io::Error::new(io::ErrorKind::Unsupported, "NTFS dir enum not yet implemented"))
     }
 
     fn open_file(&self, _path: &str) -> io::Result<Box<dyn Read>> {
-        Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "NTFS file reading not yet implemented",
-        ))
+        Err(io::Error::new(io::ErrorKind::Unsupported, "NTFS file read not yet implemented"))
     }
 
-    fn data_source_name(&self) -> &str {
-        "NTFS"
+    fn data_source_name(&self) -> &str { "NTFS" }
+}
+
+fn parse_indx_entries(data: &[u8]) -> Vec<FsNode> {
+    let mut nodes = Vec::new();
+    let mut off = 0usize;
+    while off + 0x10 < data.len() {
+        let _mft_ref = u64::from_le_bytes(data[off..off+8].try_into().unwrap_or([0;8]));
+        let entry_size = u16::from_le_bytes([data[off+8], data[off+9]]) as usize;
+        if entry_size < 0x10 || off + entry_size > data.len() { break; }
+        let name_len = data[off + 0x10] as usize;
+        let name_start = off + 0x52;
+        if name_len > 0 && name_start + name_len * 2 <= data.len() && name_start + name_len * 2 <= off + entry_size {
+            let chars: Vec<u16> = data[name_start..name_start + name_len * 2]
+                .chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+            let name = String::from_utf16_lossy(&chars);
+            let flags = if off + 0x3C < data.len() { u32::from_le_bytes(data[off+0x38..off+0x3C].try_into().unwrap_or([0;4])) } else { 0 };
+            let is_dir = flags & 0x10000000 != 0;
+            nodes.push(FsNode { name, path: String::new(), is_dir, size: 0,
+                created_at: None, modified_at: None, accessed_at: None });
+        }
+        off += entry_size;
     }
+    nodes
 }
 
 // --- Boot sector parsing helpers ---
