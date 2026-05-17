@@ -7,6 +7,12 @@ use evidence_core::EvidenceReader;
 use std::cell::RefCell;
 use std::io::{self, Read, Seek, SeekFrom};
 
+/// Internal entry with MFT reference for path resolution.
+struct DirEntry {
+    node: FsNode,
+    mft_ref: u64,
+}
+
 #[allow(dead_code)]
 pub struct NtfsReader {
     reader: RefCell<Box<dyn EvidenceReader>>,
@@ -66,10 +72,12 @@ impl NtfsReader {
         Ok(rec)
     }
 
-    fn parse_index_root(record: &[u8]) -> Vec<FsNode> {
-        let mut nodes = Vec::new();
+    /// Parse $INDEX_ROOT attribute from an MFT record, returning children
+    /// with their MFT references for path resolution.
+    fn parse_index_root(record: &[u8]) -> Vec<DirEntry> {
+        let mut entries = Vec::new();
         if record.len() < 0x18 || &record[0..4] != b"FILE" {
-            return nodes;
+            return entries;
         }
         let attr_off = u16::from_le_bytes([record[0x14], record[0x15]]) as usize;
         let mut pos = attr_off;
@@ -87,72 +95,61 @@ impl NtfsReader {
                     u32::from_le_bytes(record[pos + 0x10..pos + 0x14].try_into().unwrap()) as usize;
                 let ents_start = pos + 0x10 + entries_off;
                 if ents_start < pos + len {
-                    nodes = parse_indx_entries(&record[ents_start..pos + len]);
+                    entries = parse_indx_entries(&record[ents_start..pos + len]);
                 }
             }
             pos += len;
         }
-        nodes
+        entries
     }
 
-    pub fn list_root_children(&self) -> io::Result<Vec<FsNode>> {
-        let rec = self.read_mft_record(5)?;
+    /// List children of any directory by MFT inode number.
+    fn list_dir_by_inode(&self, inode: u64) -> io::Result<Vec<DirEntry>> {
+        let rec = self.read_mft_record(inode)?;
         Ok(Self::parse_index_root(&rec))
     }
 
-    /// Find a directory record by name via global MFT scan (not tree-walk).
-    /// Scans first 1024 records. Same-name dirs under different parents
-    /// may collide — full path traversal is future work.
-    fn find_dir_record(&self, name: &str) -> io::Result<Option<u64>> {
-        let name_lower = name.to_lowercase();
-        // Scan first 1024 MFT records looking for matching directory
-        for rec_num in 0..1024u64 {
-            let rec = match self.read_mft_record(rec_num) {
-                Ok(r) => r,
-                Err(_) => continue,
-            };
-            if rec.len() < 4 || &rec[0..4] != b"FILE" { continue; }
-            // Check record flags: bit 0x0002 = directory
-            let flags = u16::from_le_bytes([rec[0x16], rec[0x17]]);
-            if flags & 0x0002 == 0 { continue; } // not a directory
+    pub fn list_root_children(&self) -> io::Result<Vec<FsNode>> {
+        Ok(self.list_dir_by_inode(5)?.into_iter().map(|e| e.node).collect())
+    }
 
-            // Look for $FILE_NAME (0x30) attribute with matching name
-            let attr_off = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
-            let mut pos = attr_off;
-            while pos + 8 < rec.len() {
-                let typ = u32::from_le_bytes(rec[pos..pos+4].try_into().unwrap_or([0;4]));
-                if typ == 0xFFFFFFFF { break; }
-                let len = u32::from_le_bytes(rec[pos+4..pos+8].try_into().unwrap_or([0;4])) as usize;
-                if len == 0 || pos + len > rec.len() { break; }
-                if typ == 0x30 && pos + 0x5A < rec.len() {
-                    let name_chars = rec[pos + 0x40] as usize;
-                    if name_chars > 0 && pos + 0x5A + name_chars * 2 <= rec.len() {
-                        let name_bytes = &rec[pos + 0x5A..pos + 0x5A + name_chars * 2];
-                        let chars: Vec<u16> = name_bytes.chunks_exact(2)
-                            .map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
-                        let fname = String::from_utf16_lossy(&chars);
-                        if fname.to_lowercase() == name_lower {
-                            return Ok(Some(rec_num));
-                        }
-                    }
+    /// Resolve a path from root, walking top-down through directory INDX entries.
+    /// Returns the MFT inode of the final component, or None if not found.
+    fn resolve_path(&self, path: &str) -> io::Result<Option<u64>> {
+        let components: Vec<&str> = path
+            .trim_start_matches('\\')
+            .split('\\')
+            .filter(|c| !c.is_empty())
+            .collect();
+        if components.is_empty() {
+            return Ok(Some(5));
+        }
+        let mut current_inode = 5u64;
+        let mut remaining = &components[..];
+        while let Some((target, rest)) = remaining.split_first() {
+            let children = self.list_dir_by_inode(current_inode)?;
+            let found = children
+                .iter()
+                .find(|e| e.node.name.eq_ignore_ascii_case(target) && e.node.is_dir);
+            match found {
+                Some(entry) => {
+                    current_inode = entry.mft_ref;
+                    remaining = rest;
                 }
-                pos += len;
+                None => return Ok(None),
             }
         }
-        Ok(None)
+        Ok(Some(current_inode))
     }
 
     pub fn list_subdir_children(&self, path: &str) -> io::Result<Vec<FsNode>> {
-        // Extract the last component of the path as the directory name
-        let dir_name = path.rsplit('\\').next().unwrap_or(path);
-        if dir_name.is_empty() {
-            return self.list_root_children();
-        }
-        if let Some(rec_num) = self.find_dir_record(dir_name)? {
-            let rec = self.read_mft_record(rec_num)?;
-            Ok(Self::parse_index_root(&rec))
-        } else {
-            Ok(Vec::new())
+        match self.resolve_path(path)? {
+            Some(inode) => Ok(self
+                .list_dir_by_inode(inode)?
+                .into_iter()
+                .map(|e| e.node)
+                .collect()),
+            None => Ok(Vec::new()),
         }
     }
 }
@@ -189,11 +186,14 @@ impl FileSystemReader for NtfsReader {
     }
 }
 
-fn parse_indx_entries(data: &[u8]) -> Vec<FsNode> {
-    let mut nodes = Vec::new();
+/// Parse INDX entries from $INDEX_ROOT buffer. Returns DirEntry with
+/// both the FsNode and the child MFT reference (lower 48 bits of file_ref).
+fn parse_indx_entries(data: &[u8]) -> Vec<DirEntry> {
+    let mut entries = Vec::new();
     let mut off = 0usize;
     while off + 0x52 < data.len() {
-        let _mft_ref = u64::from_le_bytes(data[off..off + 8].try_into().unwrap_or([0; 8]));
+        let mft_ref = u64::from_le_bytes(data[off..off + 8].try_into().unwrap_or([0; 8]))
+            & 0x0000_FFFF_FFFF_FFFF;
         let entry_size = u16::from_le_bytes([data[off + 8], data[off + 9]]) as usize;
         if entry_size < 0x52 || off + entry_size > data.len() {
             break;
@@ -215,19 +215,22 @@ fn parse_indx_entries(data: &[u8]) -> Vec<FsNode> {
                 0
             };
             let is_dir = flags & 0x10000000 != 0;
-            nodes.push(FsNode {
-                name,
-                path: String::new(),
-                is_dir,
-                size: 0,
-                created_at: None,
-                modified_at: None,
-                accessed_at: None,
+            entries.push(DirEntry {
+                node: FsNode {
+                    name,
+                    path: String::new(),
+                    is_dir,
+                    size: 0,
+                    created_at: None,
+                    modified_at: None,
+                    accessed_at: None,
+                },
+                mft_ref,
             });
         }
         off += entry_size;
     }
-    nodes
+    entries
 }
 
 // --- Boot sector parsing helpers ---
