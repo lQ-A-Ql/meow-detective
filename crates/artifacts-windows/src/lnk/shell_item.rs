@@ -73,12 +73,17 @@ fn read_name(data: &[u8], offset: usize, is_unicode: bool) -> Option<String> {
         let mut chars = Vec::new();
         for chunk in remainder.chunks_exact(2) {
             let c = u16::from_le_bytes([chunk[0], chunk[1]]);
-            if c == 0 { break; }
+            if c == 0 {
+                break;
+            }
             chars.push(c);
         }
         Some(String::from_utf16_lossy(&chars))
     } else {
-        let end = remainder.iter().position(|&b| b == 0).unwrap_or(remainder.len());
+        let end = remainder
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(remainder.len());
         Some(String::from_utf8_lossy(&remainder[..end]).into_owned())
     }
 }

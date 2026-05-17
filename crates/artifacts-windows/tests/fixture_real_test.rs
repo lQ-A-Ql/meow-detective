@@ -30,8 +30,7 @@ fn load_expected(kind: &str) -> Vec<Expected> {
 }
 
 fn read_artifact_file(kind: &str, filename: &str) -> Vec<u8> {
-    fs::read(testdata_dir().join(kind).join(filename))
-        .unwrap_or_default()
+    fs::read(testdata_dir().join(kind).join(filename)).unwrap_or_default()
 }
 
 #[test]
@@ -39,7 +38,9 @@ fn read_artifact_file(kind: &str, filename: &str) -> Vec<u8> {
 fn prefetch_real_fixtures() {
     for exp in load_expected("prefetch") {
         let data = read_artifact_file("prefetch", &exp.file);
-        if data.is_empty() { continue; }
+        if data.is_empty() {
+            continue;
+        }
         let extractor = PrefetchExtractor;
         let ctx = ArtifactContext {
             file_id: FileEntryId(format!("real-{}", exp.file)),
@@ -54,7 +55,8 @@ fn prefetch_real_fixtures() {
             assert!(
                 title.to_lowercase().contains(&exe_str.to_lowercase()),
                 "Expected executable '{}' in title '{}'",
-                exe_str, title
+                exe_str,
+                title
             );
         }
         if let Some(run_count_gt) = exp.expected.get("run_count_gt") {
@@ -74,7 +76,9 @@ fn prefetch_real_fixtures() {
 fn lnk_real_fixtures() {
     for exp in load_expected("lnk") {
         let data = read_artifact_file("lnk", &exp.file);
-        if data.is_empty() { continue; }
+        if data.is_empty() {
+            continue;
+        }
         let extractor = LnkExtractor;
         let ctx = ArtifactContext {
             file_id: FileEntryId(format!("real-{}", exp.file)),
@@ -92,11 +96,14 @@ fn lnk_real_fixtures() {
             }
         }
         if let Some(contains) = exp.expected.get("target_contains") {
-            let tp = sink.artifacts[0].attrs["target_path"].as_str().unwrap_or("");
+            let tp = sink.artifacts[0].attrs["target_path"]
+                .as_str()
+                .unwrap_or("");
             assert!(
                 tp.contains(contains.as_str().unwrap()),
                 "Expected '{}' in target_path, got '{}'",
-                contains.as_str().unwrap(), tp
+                contains.as_str().unwrap(),
+                tp
             );
         }
     }
@@ -107,7 +114,9 @@ fn lnk_real_fixtures() {
 fn recycle_bin_real_fixtures() {
     for exp in load_expected("recycle-bin") {
         let data = read_artifact_file("recycle-bin", &exp.file);
-        if data.is_empty() { continue; }
+        if data.is_empty() {
+            continue;
+        }
         let extractor = RecycleBinExtractor;
         let ctx = ArtifactContext {
             file_id: FileEntryId(format!("real-{}", exp.file)),
@@ -125,7 +134,9 @@ fn recycle_bin_real_fixtures() {
 fn registry_real_fixtures() {
     for exp in load_expected("registry") {
         let data = read_artifact_file("registry", &exp.file);
-        if data.is_empty() { continue; }
+        if data.is_empty() {
+            continue;
+        }
         let extractor = RegistryExtractor;
         let ctx = ArtifactContext {
             file_id: FileEntryId(format!("real-{}", exp.file)),

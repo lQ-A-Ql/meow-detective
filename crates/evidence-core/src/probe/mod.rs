@@ -20,7 +20,11 @@ pub fn probe(path: &Path) -> ProberResult {
 
     if path.is_dir() {
         candidates.push("logical_directory".to_string());
-        return Ok(ProbeResult { candidates, size, can_read_sectors: false });
+        return Ok(ProbeResult {
+            candidates,
+            size,
+            can_read_sectors: false,
+        });
     }
 
     let ext = path
@@ -54,7 +58,11 @@ pub fn probe(path: &Path) -> ProberResult {
         }
     }
 
-    Ok(ProbeResult { candidates, size, can_read_sectors })
+    Ok(ProbeResult {
+        candidates,
+        size,
+        can_read_sectors,
+    })
 }
 
 pub type ProberResult = Result<ProbeResult, ProbeError>;

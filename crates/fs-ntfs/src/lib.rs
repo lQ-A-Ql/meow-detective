@@ -25,13 +25,19 @@ impl NtfsReader {
         reader.read_exact(&mut boot)?;
 
         if &boot[3..11] != b"NTFS    " {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "not a valid NTFS volume"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "not a valid NTFS volume",
+            ));
         }
 
         let bytes_per_sector = u16::from_le_bytes([boot[11], boot[12]]);
         let sectors_per_cluster = boot[13];
         if bytes_per_sector == 0 || sectors_per_cluster == 0 {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid NTFS geometry"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid NTFS geometry",
+            ));
         }
         let cluster_size = bytes_per_sector as u64 * sectors_per_cluster as u64;
         let mft_cluster = u64::from_le_bytes(boot[0x30..0x38].try_into().unwrap());
@@ -71,9 +77,13 @@ impl NtfsReader {
         let mut names = Vec::new();
         while pos + 8 < record.len() {
             let typ = u32::from_le_bytes(record[pos..pos + 4].try_into().unwrap());
-            if typ == 0xFFFFFFFF { break; }
+            if typ == 0xFFFFFFFF {
+                break;
+            }
             let len = u32::from_le_bytes(record[pos + 4..pos + 8].try_into().unwrap()) as usize;
-            if len == 0 || pos + len > record.len() { break; }
+            if len == 0 || pos + len > record.len() {
+                break;
+            }
             if typ == 0x30 && pos + 0x5A < record.len() {
                 let name_chars = record[pos + 0x40] as usize;
                 if name_chars > 0 && pos + 0x5A + name_chars * 2 <= record.len() {
@@ -132,7 +142,11 @@ fn root_dir_frn(boot: &[u8]) -> u64 {
 
 fn mft_record_bytes(boot: &[u8]) -> u32 {
     let raw = i32::from_le_bytes(boot[0x40..0x44].try_into().unwrap());
-    if raw > 0 { 1024 }
-    else if raw < 0 && (-raw) < 32 { (1u32 << (-raw as u32)).max(512) }
-    else { 1024 }
+    if raw > 0 {
+        1024
+    } else if raw < 0 && (-raw) < 32 {
+        (1u32 << (-raw as u32)).max(512)
+    } else {
+        1024
+    }
 }

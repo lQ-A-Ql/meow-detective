@@ -237,14 +237,22 @@ pub fn open_file_handle_real(
     })
 }
 
-pub fn read_file_range_real(
-    request: &ViewerRangeRequestDto,
-) -> ViewerRangeResponseDto {
-    let fake = [0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00,
-        0x04, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00];
+pub fn read_file_range_real(request: &ViewerRangeRequestDto) -> ViewerRangeResponseDto {
+    let fake = [
+        0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00,
+        0x00,
+    ];
     let len = (request.length as usize).min(fake.len());
-    let hex_line: String = fake[..len].iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" ");
-    ViewerRangeResponseDto { kind: "hex".into(), lines: vec![hex_line], encoding: None }
+    let hex_line: String = fake[..len]
+        .iter()
+        .map(|b| format!("{:02X}", b))
+        .collect::<Vec<_>>()
+        .join(" ");
+    ViewerRangeResponseDto {
+        kind: "hex".into(),
+        lines: vec![hex_line],
+        encoding: None,
+    }
 }
 
 pub fn read_file_range(_request: ViewerRangeRequestDto) -> ViewerRangeResponseDto {
