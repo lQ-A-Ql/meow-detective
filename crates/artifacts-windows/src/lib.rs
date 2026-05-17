@@ -1,7 +1,9 @@
-mod jumplist;
-mod lnk;
-mod prefetch;
-mod recycle_bin;
-mod registry;
-mod sru;
-mod thumbcache;
+pub mod lnk;
+pub mod prefetch;
+pub mod recycle_bin;
+pub mod registry;
+
+pub use lnk::parser::LnkExtractor;
+pub use prefetch::parser::PrefetchExtractor;
+pub use recycle_bin::parser::RecycleBinExtractor;
+pub use registry::parser::RegistryExtractor;

@@ -70,6 +70,8 @@ name = "app-services"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "artifacts-core",
+ "artifacts-windows",
  "chrono",
  "domain",
  "evidence-core",
@@ -99,9 +101,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "domain",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
+ "uuid",
 ]
 
 [[package]]
@@ -109,9 +113,13 @@ name = "artifacts-windows"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "artifacts-core",
+ "byteorder",
  "chrono",
+ "domain",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 1.0.69",
 ]
 

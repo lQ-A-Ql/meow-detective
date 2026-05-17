@@ -1,1 +1,1 @@
-//! Windows Registry artifact parser.
+pub mod parser;

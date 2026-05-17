@@ -16,6 +16,8 @@ transport.workspace = true
 persistence-sqlite.workspace = true
 evidence-core.workspace = true
 search.workspace = true
+artifacts-core.workspace = true
+artifacts-windows.workspace = true
 rusqlite = { version = "0.31", features = ["bundled"] }
 uuid = { version = "1", features = ["v4"] }
 

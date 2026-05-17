@@ -1,1 +1,1 @@
-//! LNK shortcut artifact parser.
+pub mod parser;

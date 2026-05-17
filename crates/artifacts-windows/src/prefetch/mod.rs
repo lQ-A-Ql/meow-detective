@@ -1,1 +1,1 @@
-//! Prefetch (.pf) artifact parser.
+pub mod parser;

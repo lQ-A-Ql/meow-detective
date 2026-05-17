@@ -1,1 +1,1 @@
-//! Recycle Bin ($I/$R) artifact parser.
+pub mod parser;

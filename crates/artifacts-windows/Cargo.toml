@@ -11,3 +11,9 @@ serde_json.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
+domain.workspace = true
+artifacts-core.workspace = true
+byteorder = "1"
+
+[dev-dependencies]
+tempfile = "3"
