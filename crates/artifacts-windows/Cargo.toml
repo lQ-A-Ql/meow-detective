@@ -17,3 +17,5 @@ byteorder = "1"
 
 [dev-dependencies]
 tempfile = "3"
+serde = { workspace = true }
+serde_json = { workspace = true }

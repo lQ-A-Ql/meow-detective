@@ -1,7 +1,8 @@
 //! Windows Shell Link (.lnk) parser.
-//! Parses ShellLinkHeader + LinkInfo for target path extraction.
-//! Does not yet parse StringData or ExtraData sections.
+//! Parses ShellLinkHeader + LinkInfo for target path. Falls back to
+//! LinkTargetIDList shell item parsing when LinkInfo is absent.
 
+use super::shell_item;
 use artifacts_core::{
     new_artifact, new_timeline_event, ArtifactContext, ArtifactExtractor, ArtifactSink,
     ExtractorReport,
@@ -129,13 +130,15 @@ impl ArtifactExtractor for LnkExtractor {
         timelines += add_time("access_time", "LINK_ACCESSED", access_time);
         timelines += add_time("write_time", "LINK_MODIFIED", write_time);
 
-        // LinkTargetIDList
+        // LinkTargetIDList (fallback path source)
         let mut target_path = String::new();
+        let mut idlist_path = String::new();
         if flags & HAS_LINK_TARGET_ID_LIST != 0 {
             let id_list_size = reader.read_u16::<LittleEndian>().unwrap_or(0) as usize;
             if id_list_size > 2 {
-                let mut skip = vec![0u8; id_list_size - 2];
-                reader.read_exact(&mut skip).ok();
+                let mut idlist_buf = vec![0u8; id_list_size - 2];
+                reader.read_exact(&mut idlist_buf).ok();
+                idlist_path = shell_item::parse_shell_items(&idlist_buf);
             }
         }
 
@@ -164,6 +167,9 @@ impl ArtifactExtractor for LnkExtractor {
         }
 
         if !target_path.is_empty() {
+            attrs.insert("target_path".into(), target_path.clone().into());
+        } else if !idlist_path.is_empty() {
+            target_path = idlist_path;
             attrs.insert("target_path".into(), target_path.clone().into());
         }
 
