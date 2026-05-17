@@ -18,8 +18,8 @@ fn mini_prefetch() -> Vec<u8> {
     let mut name_buf = vec![0u8; 60];
     for (i, c) in "cmd.exe".encode_utf16().enumerate() {
         let bytes = c.to_le_bytes();
-        name_buf[i*2] = bytes[0];
-        name_buf[i*2+1] = bytes[1];
+        name_buf[i * 2] = bytes[0];
+        name_buf[i * 2 + 1] = bytes[1];
     }
     data.extend_from_slice(&name_buf);
     // hash

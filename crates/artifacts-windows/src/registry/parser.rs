@@ -22,9 +22,12 @@ struct RegistryHive {
 
 impl RegistryExtractor {
     fn filetime_to_dt(ft: u64) -> Option<DateTime<Utc>> {
-        if ft == 0 { return None; }
+        if ft == 0 {
+            return None;
+        }
         let secs = (ft / 10_000_000) as i64 - 11_644_473_600;
-        Utc.timestamp_opt(secs, ((ft % 10_000_000) * 100) as u32).single()
+        Utc.timestamp_opt(secs, ((ft % 10_000_000) * 100) as u32)
+            .single()
     }
 
     fn parse_base_block(reader: &mut (impl Read + Seek)) -> Result<RegistryHive, String> {
@@ -47,15 +50,27 @@ impl RegistryExtractor {
         let _hbin_data_size = reader.read_u32::<LittleEndian>().unwrap_or(0);
 
         let mut _name_buf = [0u8; 64];
-        reader.read_exact(&mut _name_buf).map_err(|e| e.to_string())?;
+        reader
+            .read_exact(&mut _name_buf)
+            .map_err(|e| e.to_string())?;
 
-        Ok(RegistryHive { last_written, root_cell_offset: root_cell_offset + 0x1000 })
+        Ok(RegistryHive {
+            last_written,
+            root_cell_offset: root_cell_offset + 0x1000,
+        })
     }
 
-    fn read_hive_name(reader: &mut (impl Read + Seek), hive: &RegistryHive) -> Result<String, String> {
-        reader.seek(SeekFrom::Start(hive.root_cell_offset)).map_err(|e| e.to_string())?;
+    fn read_hive_name(
+        reader: &mut (impl Read + Seek),
+        hive: &RegistryHive,
+    ) -> Result<String, String> {
+        reader
+            .seek(SeekFrom::Start(hive.root_cell_offset))
+            .map_err(|e| e.to_string())?;
 
-        let _size = reader.read_i32::<LittleEndian>().map_err(|e| e.to_string())?;
+        let _size = reader
+            .read_i32::<LittleEndian>()
+            .map_err(|e| e.to_string())?;
         let signature = {
             let mut sig = [0u8; 2];
             reader.read_exact(&mut sig).map_err(|e| e.to_string())?;
@@ -75,7 +90,10 @@ impl RegistryExtractor {
         let _security = reader.read_u32::<LittleEndian>().unwrap_or(0);
         let _classname = reader.read_u32::<LittleEndian>().unwrap_or(0);
 
-        let _max_name_bytes = std::cmp::min(reader.read_u32::<LittleEndian>().unwrap_or(64) as usize, 256);
+        let _max_name_bytes = std::cmp::min(
+            reader.read_u32::<LittleEndian>().unwrap_or(64) as usize,
+            256,
+        );
         let _max_class_bytes = reader.read_u32::<LittleEndian>().unwrap_or(0) as usize;
         let _mod_subkeys = reader.read_u32::<LittleEndian>().unwrap_or(0);
         let _mod_values = reader.read_u32::<LittleEndian>().unwrap_or(0);
@@ -83,10 +101,15 @@ impl RegistryExtractor {
 
         let name_len = name_len.min(128);
         let mut name_bytes = vec![0u8; name_len];
-        reader.read_exact(&mut name_bytes).map_err(|e| e.to_string())?;
+        reader
+            .read_exact(&mut name_bytes)
+            .map_err(|e| e.to_string())?;
 
         if name_bytes.len() >= 2 {
-            let chars: Vec<u16> = name_bytes.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+            let chars: Vec<u16> = name_bytes
+                .chunks_exact(2)
+                .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                .collect();
             String::from_utf16(&chars).map_err(|e| e.to_string())
         } else {
             Ok(String::new())
@@ -95,42 +118,77 @@ impl RegistryExtractor {
 }
 
 impl ArtifactExtractor for RegistryExtractor {
-    fn id(&self) -> &'static str { "registry" }
-    fn display_name(&self) -> &'static str { "Windows Registry Hive Parser" }
+    fn id(&self) -> &'static str {
+        "registry"
+    }
+    fn display_name(&self) -> &'static str {
+        "Windows Registry Hive Parser"
+    }
     fn family(&self) -> ArtifactFamily {
-        ArtifactFamily { name: "Registry".into(), description: Some("Windows Registry hives".into()) }
+        ArtifactFamily {
+            name: "Registry".into(),
+            description: Some("Windows Registry hives".into()),
+        }
     }
     fn supports_path(&self, file_path: &str) -> bool {
         let name = file_path.to_lowercase();
         name.ends_with(".dat")
-            && (name.contains("ntuser") || name.contains("system") || name.contains("software")
-                || name.contains("sam") || name.contains("security"))
+            && (name.contains("ntuser")
+                || name.contains("system")
+                || name.contains("software")
+                || name.contains("sam")
+                || name.contains("security"))
     }
 
-    fn run(&self, ctx: ArtifactContext, sink: &mut dyn ArtifactSink) -> Result<ExtractorReport, String> {
+    fn run(
+        &self,
+        ctx: ArtifactContext,
+        sink: &mut dyn ArtifactSink,
+    ) -> Result<ExtractorReport, String> {
         let mut buf = Vec::new();
-        ctx.reader.take(20 * 1024 * 1024).read_to_end(&mut buf).map_err(|e| e.to_string())?;
+        ctx.reader
+            .take(20 * 1024 * 1024)
+            .read_to_end(&mut buf)
+            .map_err(|e| e.to_string())?;
         let mut reader = std::io::BufReader::new(std::io::Cursor::new(buf));
         let hive = Self::parse_base_block(&mut reader)?;
-        let name = Self::read_hive_name(&mut reader, &hive).unwrap_or_else(|_| "unknown".to_string());
+        let name =
+            Self::read_hive_name(&mut reader, &hive).unwrap_or_else(|_| "unknown".to_string());
 
         let mut attrs = BTreeMap::new();
         attrs.insert("hive_name".into(), serde_json::Value::String(name.clone()));
 
         if let Some(dt) = Self::filetime_to_dt(hive.last_written) {
             if dt.year() > 2000 {
-                attrs.insert("last_written".into(), serde_json::Value::String(dt.to_rfc3339()));
-                let ev = new_timeline_event(&ctx.file_id, "REGISTRY_MODIFIED", dt,
+                attrs.insert(
+                    "last_written".into(),
+                    serde_json::Value::String(dt.to_rfc3339()),
+                );
+                let ev = new_timeline_event(
+                    &ctx.file_id,
+                    "REGISTRY_MODIFIED",
+                    dt,
                     format!("Registry hive modified: {}", name),
-                    format!("Hive last written at {}", dt.to_rfc3339()), BTreeMap::new());
+                    format!("Hive last written at {}", dt.to_rfc3339()),
+                    BTreeMap::new(),
+                );
                 sink.write_timeline_event(ev);
             }
         }
 
-        let artifact = new_artifact("Registry", format!("Registry Hive: {}", name),
-            format!("Windows registry hive '{}'", name), Some(&ctx.file_id), attrs);
+        let artifact = new_artifact(
+            "Registry",
+            format!("Registry Hive: {}", name),
+            format!("Windows registry hive '{}'", name),
+            Some(&ctx.file_id),
+            attrs,
+        );
         sink.write_artifact(artifact);
 
-        Ok(ExtractorReport { artifacts_found: 1, timeline_events: 1, errors: vec![] })
+        Ok(ExtractorReport {
+            artifacts_found: 1,
+            timeline_events: 1,
+            errors: vec![],
+        })
     }
 }

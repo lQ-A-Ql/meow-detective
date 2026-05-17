@@ -73,7 +73,10 @@ fn list_all_cases() {
 #[test]
 fn find_nonexistent_returns_none() {
     let ctx = setup();
-    let result = ctx.repo().find_by_id(&CaseId("does-not-exist".to_string())).unwrap();
+    let result = ctx
+        .repo()
+        .find_by_id(&CaseId("does-not-exist".to_string()))
+        .unwrap();
     assert!(result.is_none());
 }
 

@@ -7,10 +7,12 @@ use crate::state::AppState;
 pub fn get_jobs_snapshot(state: State<AppState>) -> Result<Vec<JobSnapshotDto>, String> {
     let guard = state.active_case.lock().map_err(|e| e.to_string())?;
     if let Some(active) = guard.as_ref() {
-        let jobs = active.with_conn(|conn| {
-            app_services::job_service::get_jobs_from_db(conn)
-                .map_err(persistence_sqlite::DbError::System)
-        }).map_err(|e| e.to_string())?;
+        let jobs = active
+            .with_conn(|conn| {
+                app_services::job_service::get_jobs_from_db(conn)
+                    .map_err(persistence_sqlite::DbError::System)
+            })
+            .map_err(|e| e.to_string())?;
         if !jobs.is_empty() {
             return Ok(jobs);
         }

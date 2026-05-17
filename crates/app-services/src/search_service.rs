@@ -47,9 +47,13 @@ pub fn index_files(
     }
 
     let index = SearchIndex::create(index_dir).map_err(|e| e.to_string())?;
-    let count = index.index_documents(&texts, &paths).map_err(|e| e.to_string())?;
+    let count = index
+        .index_documents(&texts, &paths)
+        .map_err(|e| e.to_string())?;
 
-    Ok(IndexStats { indexed_count: count })
+    Ok(IndexStats {
+        indexed_count: count,
+    })
 }
 
 pub fn search_files_real(index_dir: &Path, query: &str) -> Result<SearchResultPageDto, String> {
@@ -59,19 +63,30 @@ pub fn search_files_real(index_dir: &Path, query: &str) -> Result<SearchResultPa
     let items: Vec<SearchHitDto> = hits
         .into_iter()
         .map(|h| {
-            let snippets: Vec<SearchSnippetDto> = h.snippets.into_iter().map(|s| SearchSnippetDto {
-                text: s.text,
-                highlights: s.highlights.into_iter().map(|hl| SearchHighlightDto {
-                    start: hl.start,
-                    end: hl.end,
-                }).collect(),
-            }).collect();
+            let snippets: Vec<SearchSnippetDto> = h
+                .snippets
+                .into_iter()
+                .map(|s| SearchSnippetDto {
+                    text: s.text,
+                    highlights: s
+                        .highlights
+                        .into_iter()
+                        .map(|hl| SearchHighlightDto {
+                            start: hl.start,
+                            end: hl.end,
+                        })
+                        .collect(),
+                })
+                .collect();
             SearchHitDto {
                 file_id: h.file_id,
                 path: h.path,
                 score: h.score,
                 snippets: if snippets.is_empty() {
-                    vec![SearchSnippetDto { text: String::new(), highlights: vec![] }]
+                    vec![SearchSnippetDto {
+                        text: String::new(),
+                        highlights: vec![],
+                    }]
                 } else {
                     snippets
                 },
@@ -91,8 +106,24 @@ pub fn search_files(_query: String) -> SearchResultPageDto {
         total: 2,
         took_ms: 45,
         items: vec![
-            SearchHitDto { file_id: "file-001".into(), path: "C:/.../AnyDesk.exe".into(), score: 0.96, snippets: vec![SearchSnippetDto { text: "AnyDesk.exe downloaded...".into(), highlights: vec![SearchHighlightDto { start: 0, end: 7 }] }] },
-            SearchHitDto { file_id: "file-002".into(), path: "C:/.../history.txt".into(), score: 0.88, snippets: vec![SearchSnippetDto { text: "powershell Invoke-WebRequest...".into(), highlights: vec![SearchHighlightDto { start: 11, end: 28 }] }] },
+            SearchHitDto {
+                file_id: "file-001".into(),
+                path: "C:/.../AnyDesk.exe".into(),
+                score: 0.96,
+                snippets: vec![SearchSnippetDto {
+                    text: "AnyDesk.exe downloaded...".into(),
+                    highlights: vec![SearchHighlightDto { start: 0, end: 7 }],
+                }],
+            },
+            SearchHitDto {
+                file_id: "file-002".into(),
+                path: "C:/.../history.txt".into(),
+                score: 0.88,
+                snippets: vec![SearchSnippetDto {
+                    text: "powershell Invoke-WebRequest...".into(),
+                    highlights: vec![SearchHighlightDto { start: 11, end: 28 }],
+                }],
+            },
         ],
     }
 }

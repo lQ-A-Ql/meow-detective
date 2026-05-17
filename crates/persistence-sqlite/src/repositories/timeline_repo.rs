@@ -35,11 +35,7 @@ impl<'a> TimelineRepo<'a> {
         Ok(())
     }
 
-    pub fn query(
-        &self,
-        offset: u64,
-        limit: u32,
-    ) -> DbResult<Vec<TimelineEvent>> {
+    pub fn query(&self, offset: u64, limit: u32) -> DbResult<Vec<TimelineEvent>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, source_object_id, event_type, ts, title, description, attrs
              FROM timeline_events ORDER BY ts DESC LIMIT ?1 OFFSET ?2",
@@ -64,9 +60,9 @@ impl<'a> TimelineRepo<'a> {
     }
 
     pub fn count(&self) -> DbResult<u64> {
-        let n: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM timeline_events", [], |r| r.get(0),
-        )?;
+        let n: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM timeline_events", [], |r| r.get(0))?;
         Ok(n as u64)
     }
 }

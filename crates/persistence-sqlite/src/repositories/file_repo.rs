@@ -63,7 +63,11 @@ impl<'a> FileRepo<'a> {
         collect_entries(rows)
     }
 
-    pub fn find_by_path_prefix(&self, data_source_id: &DataSourceId, prefix: &str) -> DbResult<Vec<FileEntry>> {
+    pub fn find_by_path_prefix(
+        &self,
+        data_source_id: &DataSourceId,
+        prefix: &str,
+    ) -> DbResult<Vec<FileEntry>> {
         let pattern = format!("{}%", prefix);
         let mut stmt = self.conn.prepare(
             "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
@@ -112,10 +116,18 @@ fn row_to_file_entry(row: &rusqlite::Row) -> rusqlite::Result<FileEntry> {
         size: row.get(6)?,
         ext: row.get(7)?,
         deleted: row.get::<_, i32>(8)? != 0,
-        created_at: row.get::<_, Option<String>>(9)?.and_then(|s| parse_opt_datetime(&s)),
-        modified_at: row.get::<_, Option<String>>(10)?.and_then(|s| parse_opt_datetime(&s)),
-        accessed_at: row.get::<_, Option<String>>(11)?.and_then(|s| parse_opt_datetime(&s)),
-        changed_at: row.get::<_, Option<String>>(12)?.and_then(|s| parse_opt_datetime(&s)),
+        created_at: row
+            .get::<_, Option<String>>(9)?
+            .and_then(|s| parse_opt_datetime(&s)),
+        modified_at: row
+            .get::<_, Option<String>>(10)?
+            .and_then(|s| parse_opt_datetime(&s)),
+        accessed_at: row
+            .get::<_, Option<String>>(11)?
+            .and_then(|s| parse_opt_datetime(&s)),
+        changed_at: row
+            .get::<_, Option<String>>(12)?
+            .and_then(|s| parse_opt_datetime(&s)),
         hash_sha256: row.get(13)?,
     })
 }

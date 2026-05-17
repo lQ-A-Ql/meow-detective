@@ -49,7 +49,11 @@ impl SearchIndex {
         Ok(Self { index, schema })
     }
 
-    pub fn index_documents(&self, texts: &[ExtractedText], paths: &[(String, String)]) -> Result<u64> {
+    pub fn index_documents(
+        &self,
+        texts: &[ExtractedText],
+        paths: &[(String, String)],
+    ) -> Result<u64> {
         let mut writer: IndexWriter = self.index.writer(15_000_000)?;
 
         let file_id_field = self.schema.get_field("file_id").unwrap();
@@ -91,7 +95,11 @@ impl SearchIndex {
     }
 
     pub fn search(&self, query_str: &str, limit: usize) -> Result<Vec<SearchHit>> {
-        let reader = self.index.reader_builder().reload_policy(ReloadPolicy::OnCommitWithDelay).try_into()?;
+        let reader = self
+            .index
+            .reader_builder()
+            .reload_policy(ReloadPolicy::OnCommitWithDelay)
+            .try_into()?;
         let searcher = reader.searcher();
 
         let content_field = self.schema.get_field("content").unwrap();
@@ -100,7 +108,8 @@ impl SearchIndex {
 
         let query_parser = QueryParser::for_index(&self.index, vec![content_field]);
 
-        let query = query_parser.parse_query(query_str)
+        let query = query_parser
+            .parse_query(query_str)
             .or_else(|_| {
                 let escaped = query_str.replace('"', "\\\"");
                 let phrase = format!("\"{}\"", escaped);
@@ -113,9 +122,20 @@ impl SearchIndex {
         let mut hits = Vec::new();
         for (score, doc_addr) in top_docs {
             let doc: TantivyDocument = searcher.doc(doc_addr)?;
-            let file_id = doc.get_first(file_id_field).and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let path = doc.get_first(path_field).and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let content = doc.get_first(content_field).and_then(|v| v.as_str()).unwrap_or("");
+            let file_id = doc
+                .get_first(file_id_field)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let path = doc
+                .get_first(path_field)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let content = doc
+                .get_first(content_field)
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
 
             let snippets = crate::highlighter::highlight(content, query_str);
 

@@ -77,10 +77,12 @@ fn active_case_connection_works() {
     let tmp = TempDir::new().unwrap();
     let active = case_service::create_case(tmp.path(), "conn-test", None).unwrap();
 
-    let count = active.with_conn(|conn| {
-        let n: i64 = conn.query_row("SELECT COUNT(*) FROM cases", [], |r| r.get(0))?;
-        Ok(n)
-    }).unwrap();
+    let count = active
+        .with_conn(|conn| {
+            let n: i64 = conn.query_row("SELECT COUNT(*) FROM cases", [], |r| r.get(0))?;
+            Ok(n)
+        })
+        .unwrap();
     assert_eq!(count, 1);
 }
 

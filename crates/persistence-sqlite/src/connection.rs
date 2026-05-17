@@ -28,8 +28,6 @@ pub fn open_or_create(path: &Path) -> DbResult<Connection> {
 
 pub fn open_in_memory() -> DbResult<Connection> {
     let conn = Connection::open_in_memory()?;
-    conn.execute_batch(
-        "PRAGMA foreign_keys=ON;",
-    )?;
+    conn.execute_batch("PRAGMA foreign_keys=ON;")?;
     Ok(conn)
 }

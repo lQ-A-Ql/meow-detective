@@ -11,6 +11,10 @@ pub fn get_artifact_rows(family: Option<String>) -> Result<Vec<ArtifactRowDto>, 
 }
 
 #[tauri::command]
-pub fn get_artifact_rows_request(request: GetArtifactRowsRequest) -> Result<Vec<ArtifactRowDto>, String> {
-    Ok(app_services::artifact_service::get_artifact_rows(request.family))
+pub fn get_artifact_rows_request(
+    request: GetArtifactRowsRequest,
+) -> Result<Vec<ArtifactRowDto>, String> {
+    Ok(app_services::artifact_service::get_artifact_rows(
+        request.family,
+    ))
 }

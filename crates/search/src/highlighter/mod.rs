@@ -28,16 +28,31 @@ pub fn highlight(content: &str, query: &str) -> Vec<SearchSnippet> {
 
     for i in 1..positions.len() {
         if positions[i] - positions[i - 1] > SNIPPET_RADIUS * 2 {
-            snippets.push(build_snippet(content, cluster_start, positions[i - 1], &terms));
+            snippets.push(build_snippet(
+                content,
+                cluster_start,
+                positions[i - 1],
+                &terms,
+            ));
             cluster_start = positions[i];
         }
     }
-    snippets.push(build_snippet(content, cluster_start, *positions.last().unwrap(), &terms));
+    snippets.push(build_snippet(
+        content,
+        cluster_start,
+        *positions.last().unwrap(),
+        &terms,
+    ));
 
     snippets
 }
 
-fn build_snippet(content: &str, first_hit: usize, last_hit: usize, terms: &[&str]) -> SearchSnippet {
+fn build_snippet(
+    content: &str,
+    first_hit: usize,
+    last_hit: usize,
+    terms: &[&str],
+) -> SearchSnippet {
     let start = first_hit.saturating_sub(SNIPPET_RADIUS);
     let end = (last_hit + terms.iter().map(|t| t.len()).max().unwrap_or(0) + SNIPPET_RADIUS)
         .min(content.len());

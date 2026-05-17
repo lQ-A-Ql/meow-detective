@@ -26,9 +26,10 @@ impl ActiveCase {
     where
         F: FnOnce(&Connection) -> DbResult<T>,
     {
-        let conn = self.conn.lock().map_err(|e| {
-            persistence_sqlite::DbError::Migration(format!("Lock poisoned: {}", e))
-        })?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| persistence_sqlite::DbError::Migration(format!("Lock poisoned: {}", e)))?;
         f(&conn)
     }
 

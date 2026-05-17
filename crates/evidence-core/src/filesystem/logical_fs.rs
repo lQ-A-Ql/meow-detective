@@ -93,9 +93,9 @@ impl FileSystemReader for LogicalFsReader {
 
 fn system_time_to_utc(st: Option<std::time::SystemTime>) -> Option<chrono::DateTime<chrono::Utc>> {
     st.and_then(|t| {
-        t.duration_since(UNIX_EPOCH)
-            .ok()
-            .map(|d| chrono::DateTime::from_timestamp(d.as_secs() as i64, d.subsec_nanos())
-                .unwrap_or_default())
+        t.duration_since(UNIX_EPOCH).ok().map(|d| {
+            chrono::DateTime::from_timestamp(d.as_secs() as i64, d.subsec_nanos())
+                .unwrap_or_default()
+        })
     })
 }

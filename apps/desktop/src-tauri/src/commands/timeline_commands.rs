@@ -7,10 +7,11 @@ use crate::state::AppState;
 pub fn get_timeline_events(state: State<AppState>) -> Result<Vec<TimelineEventDto>, String> {
     let guard = state.active_case.lock().map_err(|e| e.to_string())?;
     if let Some(active) = guard.as_ref() {
-        let events = active.with_conn(|conn| {
-            app_services::timeline_service::query_timeline(conn, 0, 100)
-                .map_err(persistence_sqlite::DbError::System)
-        })
+        let events = active
+            .with_conn(|conn| {
+                app_services::timeline_service::query_timeline(conn, 0, 100)
+                    .map_err(persistence_sqlite::DbError::System)
+            })
             .map_err(|e| e.to_string())?;
         if !events.is_empty() {
             return Ok(events);

@@ -19,39 +19,63 @@ const HAS_LINK_INFO: u32 = 0x00000002;
 
 impl LnkExtractor {
     fn filetime_to_dt(ft: u64) -> Option<DateTime<Utc>> {
-        if ft == 0 || ft >= 0x8000000000000000 { return None; }
+        if ft == 0 || ft >= 0x8000000000000000 {
+            return None;
+        }
         let secs = (ft / 10_000_000) as i64 - 11_644_473_600;
-        Utc.timestamp_opt(secs, ((ft % 10_000_000) * 100) as u32).single()
+        Utc.timestamp_opt(secs, ((ft % 10_000_000) * 100) as u32)
+            .single()
     }
 
     fn read_null_string(reader: &mut impl Read, max_bytes: usize) -> Option<String> {
         let mut buf = Vec::new();
         let mut b = [0u8; 1];
         for _ in 0..max_bytes {
-            if reader.read_exact(&mut b).is_err() { break; }
-            if b[0] == 0 { break; }
+            if reader.read_exact(&mut b).is_err() {
+                break;
+            }
+            if b[0] == 0 {
+                break;
+            }
             buf.push(b[0]);
         }
-        if buf.is_empty() { None } else { String::from_utf8(buf).ok() }
+        if buf.is_empty() {
+            None
+        } else {
+            String::from_utf8(buf).ok()
+        }
     }
 }
 
 impl ArtifactExtractor for LnkExtractor {
-    fn id(&self) -> &'static str { "lnk" }
-    fn display_name(&self) -> &'static str { "Windows LNK Shortcut Parser" }
+    fn id(&self) -> &'static str {
+        "lnk"
+    }
+    fn display_name(&self) -> &'static str {
+        "Windows LNK Shortcut Parser"
+    }
     fn family(&self) -> ArtifactFamily {
-        ArtifactFamily { name: "LNK".into(), description: Some("Windows Shell Link (.lnk)".into()) }
+        ArtifactFamily {
+            name: "LNK".into(),
+            description: Some("Windows Shell Link (.lnk)".into()),
+        }
     }
     fn supports_path(&self, file_path: &str) -> bool {
         file_path.to_lowercase().ends_with(".lnk")
     }
 
-    fn run(&self, ctx: ArtifactContext, sink: &mut dyn ArtifactSink) -> Result<ExtractorReport, String> {
+    fn run(
+        &self,
+        ctx: ArtifactContext,
+        sink: &mut dyn ArtifactSink,
+    ) -> Result<ExtractorReport, String> {
         let mut reader = ctx.reader;
 
         // Header size
         let header_size = reader.read_u32::<LittleEndian>().unwrap_or(0x4C);
-        if header_size < 0x4C { return Err("LNK header too small".to_string()); }
+        if header_size < 0x4C {
+            return Err("LNK header too small".to_string());
+        }
 
         // Link CLSID
         let mut clsid = [0u8; 16];
@@ -87,9 +111,14 @@ impl ArtifactExtractor for LnkExtractor {
             if let Some(dt) = LnkExtractor::filetime_to_dt(ft) {
                 if dt.year() > 2000 && dt.year() < 2100 {
                     attrs.insert(field.into(), dt.to_rfc3339().into());
-                    let ev = new_timeline_event(&ctx.file_id, event_type, dt,
+                    let ev = new_timeline_event(
+                        &ctx.file_id,
+                        event_type,
+                        dt,
                         format!("LNK time: {}", ctx.file_path),
-                        format!("{} at {}", event_type, dt.to_rfc3339()), BTreeMap::new());
+                        format!("{} at {}", event_type, dt.to_rfc3339()),
+                        BTreeMap::new(),
+                    );
                     sink.write_timeline_event(ev);
                     return 1;
                 }
@@ -118,10 +147,13 @@ impl ArtifactExtractor for LnkExtractor {
                 let _volume_id_offset = reader.read_u32::<LittleEndian>().unwrap_or(0);
                 let local_base_path_offset = reader.read_u32::<LittleEndian>().unwrap_or(0);
 
-                if local_base_path_offset > 0 && (local_base_path_offset as u64) < link_info_size as u64 {
+                if local_base_path_offset > 0
+                    && (local_base_path_offset as u64) < link_info_size as u64
+                {
                     // Read local base path
                     let remaining = link_info_size as usize - local_base_path_offset as usize;
-                    target_path = Self::read_null_string(&mut reader, remaining.min(520)).unwrap_or_default();
+                    target_path =
+                        Self::read_null_string(&mut reader, remaining.min(520)).unwrap_or_default();
                 }
             }
         }
@@ -136,10 +168,19 @@ impl ArtifactExtractor for LnkExtractor {
             format!("Shell link, {} bytes", file_size)
         };
 
-        let artifact = new_artifact("LNK", format!("LNK: {}", ctx.file_path),
-            summary, Some(&ctx.file_id), attrs);
+        let artifact = new_artifact(
+            "LNK",
+            format!("LNK: {}", ctx.file_path),
+            summary,
+            Some(&ctx.file_id),
+            attrs,
+        );
         sink.write_artifact(artifact);
 
-        Ok(ExtractorReport { artifacts_found: 1, timeline_events: timelines, errors: vec![] })
+        Ok(ExtractorReport {
+            artifacts_found: 1,
+            timeline_events: timelines,
+            errors: vec![],
+        })
     }
 }

@@ -1,5 +1,5 @@
-use evidence_core::filesystem::FileSystemReader;
 use evidence_core::filesystem::logical_fs::LogicalFsReader;
+use evidence_core::filesystem::FileSystemReader;
 use std::io::Read;
 use tempfile::TempDir;
 

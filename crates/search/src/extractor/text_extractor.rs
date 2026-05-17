@@ -72,7 +72,13 @@ fn extract_utf16_le(file_id: &str, buf: &[u8], byte_count: u64) -> ExtractedText
         .collect();
     let content = String::from_utf16(&chars).unwrap_or_default();
     let extractable = !content.is_empty();
-    ExtractedText { file_id: file_id.to_string(), content, encoding: "utf-16le".to_string(), extractable, byte_count }
+    ExtractedText {
+        file_id: file_id.to_string(),
+        content,
+        encoding: "utf-16le".to_string(),
+        extractable,
+        byte_count,
+    }
 }
 
 fn extract_utf16_be(file_id: &str, buf: &[u8], byte_count: u64) -> ExtractedText {
@@ -82,5 +88,11 @@ fn extract_utf16_be(file_id: &str, buf: &[u8], byte_count: u64) -> ExtractedText
         .collect();
     let content = String::from_utf16(&chars).unwrap_or_default();
     let extractable = !content.is_empty();
-    ExtractedText { file_id: file_id.to_string(), content, encoding: "utf-16be".to_string(), extractable, byte_count }
+    ExtractedText {
+        file_id: file_id.to_string(),
+        content,
+        encoding: "utf-16be".to_string(),
+        extractable,
+        byte_count,
+    }
 }

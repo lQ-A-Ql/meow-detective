@@ -3,10 +3,19 @@ use rusqlite::Connection;
 
 const MIGRATIONS: &[(&str, &str)] = &[
     ("0001_cases", include_str!("scripts/0001_cases.sql")),
-    ("0002_data_sources", include_str!("scripts/0002_data_sources.sql")),
-    ("0003_file_entries", include_str!("scripts/0003_file_entries.sql")),
+    (
+        "0002_data_sources",
+        include_str!("scripts/0002_data_sources.sql"),
+    ),
+    (
+        "0003_file_entries",
+        include_str!("scripts/0003_file_entries.sql"),
+    ),
     ("0004_artifacts", include_str!("scripts/0004_artifacts.sql")),
-    ("0005_timeline_events", include_str!("scripts/0005_timeline_events.sql")),
+    (
+        "0005_timeline_events",
+        include_str!("scripts/0005_timeline_events.sql"),
+    ),
     ("0006_jobs", include_str!("scripts/0006_jobs.sql")),
     ("0007_reports", include_str!("scripts/0007_reports.sql")),
     ("0008_tags", include_str!("scripts/0008_tags.sql")),
@@ -34,13 +43,9 @@ pub fn run_all(conn: &Connection) -> DbResult<u32> {
         };
 
         if !already_applied {
-            conn.execute_batch(sql).map_err(|e| {
-                DbError::Migration(format!("Failed to apply {}: {}", name, e))
-            })?;
-            conn.execute(
-                "INSERT INTO schema_migrations (name) VALUES (?1)",
-                [name],
-            )?;
+            conn.execute_batch(sql)
+                .map_err(|e| DbError::Migration(format!("Failed to apply {}: {}", name, e)))?;
+            conn.execute("INSERT INTO schema_migrations (name) VALUES (?1)", [name])?;
             count += 1;
         }
     }

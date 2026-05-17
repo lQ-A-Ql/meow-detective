@@ -89,7 +89,8 @@ impl<'a> CaseRepo<'a> {
     }
 
     pub fn delete(&self, id: &CaseId) -> DbResult<()> {
-        self.conn.execute("DELETE FROM cases WHERE id = ?1", params![id.0])?;
+        self.conn
+            .execute("DELETE FROM cases WHERE id = ?1", params![id.0])?;
         Ok(())
     }
 }

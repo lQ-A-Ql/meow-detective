@@ -24,8 +24,8 @@ pub fn create_case(
     examiner: Option<String>,
 ) -> Result<CaseSummaryDto, String> {
     let root = PathBuf::from(&case_root);
-    let active = case_service::create_case(&root, &name, examiner.as_deref())
-        .map_err(|e| e.to_string())?;
+    let active =
+        case_service::create_case(&root, &name, examiner.as_deref()).map_err(|e| e.to_string())?;
 
     let dto = meta_to_dto(&active.meta);
     let mut guard = state.active_case.lock().map_err(|e| e.to_string())?;
@@ -34,10 +34,7 @@ pub fn create_case(
 }
 
 #[tauri::command]
-pub fn open_case(
-    state: State<AppState>,
-    case_root: String,
-) -> Result<CaseSummaryDto, String> {
+pub fn open_case(state: State<AppState>, case_root: String) -> Result<CaseSummaryDto, String> {
     let root = PathBuf::from(&case_root);
     let active = case_service::open_case(&root).map_err(|e| e.to_string())?;
 
@@ -74,26 +71,28 @@ pub fn close_case(state: State<AppState>) -> Result<(), String> {
 pub fn get_case_metrics(state: State<AppState>) -> Result<CaseMetricsDto, String> {
     let guard = state.active_case.lock().map_err(|e| e.to_string())?;
     if let Some(active) = guard.as_ref() {
-        let metrics = active.with_conn(|conn| {
-            let file_count: i64 = conn
-                .query_row("SELECT COUNT(*) FROM file_entries", [], |r| r.get(0))
-                .unwrap_or(0);
-            let artifact_count: i64 = conn
-                .query_row("SELECT COUNT(*) FROM artifacts", [], |r| r.get(0))
-                .unwrap_or(0);
-            let timeline_count: i64 = conn
-                .query_row("SELECT COUNT(*) FROM timeline_events", [], |r| r.get(0))
-                .unwrap_or(0);
-            let ds_count: i64 = conn
-                .query_row("SELECT COUNT(*) FROM data_sources", [], |r| r.get(0))
-                .unwrap_or(0);
-            Ok(CaseMetricsDto {
-                data_source_count: ds_count as u64,
-                indexed_file_count: file_count as u64,
-                timeline_event_count: timeline_count as u64,
-                artifact_count: artifact_count as u64,
+        let metrics = active
+            .with_conn(|conn| {
+                let file_count: i64 = conn
+                    .query_row("SELECT COUNT(*) FROM file_entries", [], |r| r.get(0))
+                    .unwrap_or(0);
+                let artifact_count: i64 = conn
+                    .query_row("SELECT COUNT(*) FROM artifacts", [], |r| r.get(0))
+                    .unwrap_or(0);
+                let timeline_count: i64 = conn
+                    .query_row("SELECT COUNT(*) FROM timeline_events", [], |r| r.get(0))
+                    .unwrap_or(0);
+                let ds_count: i64 = conn
+                    .query_row("SELECT COUNT(*) FROM data_sources", [], |r| r.get(0))
+                    .unwrap_or(0);
+                Ok(CaseMetricsDto {
+                    data_source_count: ds_count as u64,
+                    indexed_file_count: file_count as u64,
+                    timeline_event_count: timeline_count as u64,
+                    artifact_count: artifact_count as u64,
+                })
             })
-        }).map_err(|e| e.to_string())?;
+            .map_err(|e| e.to_string())?;
         Ok(metrics)
     } else {
         Ok(CaseMetricsDto {

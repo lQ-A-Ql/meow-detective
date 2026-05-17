@@ -33,7 +33,16 @@ fn run_all_migrations() {
     let count = runner::run_all(&conn).unwrap();
     assert_eq!(count, 8, "Expected 8 migrations to run");
 
-    let tables = ["cases", "data_sources", "file_entries", "artifacts", "timeline_events", "jobs", "reports", "tags"];
+    let tables = [
+        "cases",
+        "data_sources",
+        "file_entries",
+        "artifacts",
+        "timeline_events",
+        "jobs",
+        "reports",
+        "tags",
+    ];
     for table in &tables {
         let has_table: bool = conn
             .query_row(
@@ -70,8 +79,12 @@ fn tables_exist_after_migration() {
     let conn = open_in_memory().unwrap();
     runner::run_all(&conn).unwrap();
 
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='file_entries'",
-        [], |r| r.get(0)).unwrap();
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='file_entries'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
     assert!(count > 0, "file_entries table should exist");
 }

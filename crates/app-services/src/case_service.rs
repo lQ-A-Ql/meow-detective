@@ -30,11 +30,7 @@ pub type Result<T> = std::result::Result<T, CaseServiceError>;
 
 const DIRS: &[&str] = &["evidence", "exports", "reports", "indexes", "cache", "logs"];
 
-pub fn create_case(
-    root: &Path,
-    name: &str,
-    examiner: Option<&str>,
-) -> Result<ActiveCase> {
+pub fn create_case(root: &Path, name: &str, examiner: Option<&str>) -> Result<ActiveCase> {
     let case_root = root.join(name);
     if case_root.exists() {
         return Err(CaseServiceError::AlreadyExists(case_root));

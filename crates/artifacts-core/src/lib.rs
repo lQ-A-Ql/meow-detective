@@ -1,5 +1,5 @@
-use domain::{Artifact, ArtifactId, ArtifactFamily, FileEntryId, TimelineEvent, TimelineEventId};
 use chrono::Utc;
+use domain::{Artifact, ArtifactFamily, ArtifactId, FileEntryId, TimelineEvent, TimelineEventId};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::io;
@@ -26,9 +26,15 @@ pub trait ArtifactExtractor {
     fn id(&self) -> &'static str;
     fn display_name(&self) -> &'static str;
     fn family(&self) -> ArtifactFamily;
-    fn dependencies(&self) -> &'static [&'static str] { &[] }
+    fn dependencies(&self) -> &'static [&'static str] {
+        &[]
+    }
     fn supports_path(&self, file_path: &str) -> bool;
-    fn run(&self, ctx: ArtifactContext, sink: &mut dyn ArtifactSink) -> Result<ExtractorReport, String>;
+    fn run(
+        &self,
+        ctx: ArtifactContext,
+        sink: &mut dyn ArtifactSink,
+    ) -> Result<ExtractorReport, String>;
 }
 
 pub struct VecSink {
@@ -38,7 +44,10 @@ pub struct VecSink {
 
 impl VecSink {
     pub fn new() -> Self {
-        Self { artifacts: Vec::new(), timeline_events: Vec::new() }
+        Self {
+            artifacts: Vec::new(),
+            timeline_events: Vec::new(),
+        }
     }
 }
 
@@ -63,7 +72,9 @@ pub struct ExtractorRegistry {
 
 impl ExtractorRegistry {
     pub fn new() -> Self {
-        Self { extractors: Vec::new() }
+        Self {
+            extractors: Vec::new(),
+        }
     }
 
     pub fn register(&mut self, extractor: Box<dyn ArtifactExtractor>) {
@@ -71,7 +82,11 @@ impl ExtractorRegistry {
     }
 
     pub fn find_for_path(&self, file_path: &str) -> Vec<&dyn ArtifactExtractor> {
-        self.extractors.iter().filter(|e| e.supports_path(file_path)).map(|e| e.as_ref()).collect()
+        self.extractors
+            .iter()
+            .filter(|e| e.supports_path(file_path))
+            .map(|e| e.as_ref())
+            .collect()
     }
 
     pub fn families(&self) -> Vec<ArtifactFamily> {
@@ -89,7 +104,13 @@ impl Default for ExtractorRegistry {
     }
 }
 
-pub fn new_artifact(family: &str, title: String, summary: String, source_id: Option<&FileEntryId>, attrs: BTreeMap<String, Value>) -> Artifact {
+pub fn new_artifact(
+    family: &str,
+    title: String,
+    summary: String,
+    source_id: Option<&FileEntryId>,
+    attrs: BTreeMap<String, Value>,
+) -> Artifact {
     Artifact {
         id: ArtifactId(Uuid::new_v4().to_string()),
         family: family.to_string(),
@@ -101,7 +122,14 @@ pub fn new_artifact(family: &str, title: String, summary: String, source_id: Opt
     }
 }
 
-pub fn new_timeline_event(source_id: &FileEntryId, event_type: &str, ts: chrono::DateTime<Utc>, title: String, description: String, attrs: BTreeMap<String, Value>) -> TimelineEvent {
+pub fn new_timeline_event(
+    source_id: &FileEntryId,
+    event_type: &str,
+    ts: chrono::DateTime<Utc>,
+    title: String,
+    description: String,
+    attrs: BTreeMap<String, Value>,
+) -> TimelineEvent {
     TimelineEvent {
         id: TimelineEventId(Uuid::new_v4().to_string()),
         source_object_id: source_id.0.clone(),
