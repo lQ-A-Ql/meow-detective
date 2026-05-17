@@ -10,6 +10,12 @@ use std::io::Read;
 
 pub struct RecycleBinExtractor;
 
+struct ParsedRecycleInfo {
+    file_size: u64,
+    deletion_time: Option<DateTime<Utc>>,
+    original_path: Option<String>,
+}
+
 impl RecycleBinExtractor {
     fn filetime_to_dt(ft: u64) -> Option<DateTime<Utc>> {
         if ft == 0 || ft >= 0x8000000000000000 { return None; }
@@ -17,7 +23,7 @@ impl RecycleBinExtractor {
         Utc.timestamp_opt(secs, ((ft % 10_000_000) * 100) as u32).single()
     }
 
-    fn parse_i_file<R: Read>(reader: &mut R) -> Result<(u64, Option<DateTime<Utc>>, Option<String>), String> {
+    fn parse_i_file<R: Read>(reader: &mut R) -> Result<ParsedRecycleInfo, String> {
         let header_size = reader.read_u64::<LittleEndian>().map_err(|e| e.to_string())?;
         let file_size = reader.read_u64::<LittleEndian>().map_err(|e| e.to_string())?;
         let deletion_ft = reader.read_u64::<LittleEndian>().map_err(|e| e.to_string())?;
@@ -41,7 +47,7 @@ impl RecycleBinExtractor {
             None
         };
 
-        Ok((file_size, deletion_time, path))
+        Ok(ParsedRecycleInfo { file_size, deletion_time, original_path: path })
     }
 }
 
@@ -57,7 +63,10 @@ impl ArtifactExtractor for RecycleBinExtractor {
 
     fn run(&self, ctx: ArtifactContext, sink: &mut dyn ArtifactSink) -> Result<ExtractorReport, String> {
         let mut reader = ctx.reader;
-        let (file_size, deletion_time, original_path) = Self::parse_i_file(&mut reader)?;
+        let parsed = Self::parse_i_file(&mut reader)?;
+        let file_size = parsed.file_size;
+        let deletion_time = parsed.deletion_time;
+        let original_path = parsed.original_path;
 
         let mut attrs = BTreeMap::new();
         attrs.insert("recovered_file_size".into(), serde_json::Value::Number(file_size.into()));
@@ -71,7 +80,7 @@ impl ArtifactExtractor for RecycleBinExtractor {
             (None, _) => format!("Recycled file, {} bytes", file_size),
         };
 
-        let artifact = new_artifact("RecycleBin", format!("Recycle Bin: deleted file"),
+        let artifact = new_artifact("RecycleBin", "Recycle Bin: deleted file".to_string(),
             summary, Some(&ctx.file_id), attrs);
         sink.write_artifact(artifact);
 

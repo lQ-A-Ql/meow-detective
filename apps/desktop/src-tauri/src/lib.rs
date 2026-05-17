@@ -7,7 +7,7 @@ use commands::{
     case_commands::{close_case, create_case, get_case_metrics, get_current_case, get_recent_objects, open_case},
     file_commands::{get_file_rows, get_file_tree, import_data_source, open_file_handle, open_file_handle_request, read_file_range},
     job_commands::{get_jobs_snapshot, get_trace_items, get_warnings},
-    report_commands::{get_report_history, get_report_templates},
+    report_commands::{export_csv_report, export_html_report, export_json_report, get_report_history, get_report_templates},
     search_commands::{search_files, search_files_request},
     timeline_commands::get_timeline_events,
 };
@@ -37,6 +37,9 @@ pub fn run() {
             get_artifact_rows_request,
             get_report_templates,
             get_report_history,
+            export_html_report,
+            export_csv_report,
+            export_json_report,
             get_jobs_snapshot,
             get_warnings,
             get_trace_items,

@@ -11,3 +11,4 @@ serde_json.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
+domain.workspace = true

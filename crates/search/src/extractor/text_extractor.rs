@@ -12,7 +12,7 @@ pub struct ExtractedText {
 const MAX_TEXT_BYTES: u64 = 10 * 1024 * 1024;
 
 pub fn extract_text(reader: impl Read, file_id: &str, mime_hint: Option<&str>) -> ExtractedText {
-    let is_binary = mime_hint.map_or(false, |m| {
+    let is_binary = mime_hint.is_some_and(|m| {
         !m.starts_with("text/")
             && m != "application/json"
             && m != "application/xml"

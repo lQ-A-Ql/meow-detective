@@ -42,6 +42,12 @@ impl VecSink {
     }
 }
 
+impl Default for VecSink {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ArtifactSink for VecSink {
     fn write_artifact(&mut self, artifact: Artifact) {
         self.artifacts.push(artifact);
@@ -74,6 +80,12 @@ impl ExtractorRegistry {
 
     pub fn all(&self) -> &[Box<dyn ArtifactExtractor>] {
         &self.extractors
+    }
+}
+
+impl Default for ExtractorRegistry {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
