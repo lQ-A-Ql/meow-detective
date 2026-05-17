@@ -100,6 +100,9 @@ impl NtfsReader {
         Ok(Self::parse_index_root(&rec))
     }
 
+    /// Find a directory record by name via global MFT scan (not tree-walk).
+    /// Scans first 1024 records. Same-name dirs under different parents
+    /// may collide — full path traversal is future work.
     fn find_dir_record(&self, name: &str) -> io::Result<Option<u64>> {
         let name_lower = name.to_lowercase();
         // Scan first 1024 MFT records looking for matching directory

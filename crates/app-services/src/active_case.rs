@@ -38,8 +38,9 @@ impl ActiveCase {
     }
 }
 
-// SAFETY: ActiveCase owns the Connection through a Mutex, guaranteeing
-// exclusive access for the single-connection desktop app case.
-// For multi-threaded access, replace with r2d2-sqlite connection pool.
+// SAFETY: rusqlite::Connection is !Send, but we wrap it in a Mutex
+// which guarantees exclusive access. Only one thread can hold the lock.
+// This is sound for single-connection desktop usage.
+// Upgrade path: r2d2-sqlite connection pool for multi-threaded access.
 unsafe impl Send for ActiveCase {}
 unsafe impl Sync for ActiveCase {}
