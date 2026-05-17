@@ -1,4 +1,4 @@
-use app_services::{datasource_service, file_service, mbr, search_service, timeline_service};
+use app_services::{datasource_service, file_service, gpt, mbr, search_service, timeline_service};
 use domain::DataSourceKind;
 use evidence_core::{probe, LogicalFsReader};
 use std::io::{Read, Seek, SeekFrom};
@@ -88,21 +88,48 @@ pub fn import_data_source(state: State<AppState>, source_path: String) -> Result
                     .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             job_repo.update_progress(&job_id, 20, "Enumerating filesystem...")?;
 
-            // E01 path: open image reader, parse MBR, find NTFS, enumerate
-            let stats = if probe_result.candidates.contains(&"e01".to_string()) {
-                let mut e01_reader = image_e01::E01Reader::open(&path)
+            // E01/RAW image path: detect partition table (MBR or GPT), find NTFS
+            let stats = if probe_result.candidates.contains(&"e01".to_string())
+                || probe_result.candidates.contains(&"raw".to_string())
+            {
+                let mut img_reader = image_e01::E01Reader::open(&path)
                     .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-                let mut mbr_buf = [0u8; 512];
-                e01_reader.read_exact(&mut mbr_buf)
+                let mut sector0 = [0u8; 512];
+                img_reader.read_exact(&mut sector0)
                     .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-                let partitions = mbr::parse_partition_table(&mbr_buf);
-                let ntfs_part = mbr::find_first_ntfs(&partitions)
-                    .ok_or_else(|| persistence_sqlite::DbError::System("no NTFS partition found".into()))?;
-                e01_reader.seek(SeekFrom::Start(0))
-                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-                let ntfs_reader = fs_ntfs::NtfsReader::open(Box::new(e01_reader), ntfs_part.lba_start as u64 * 512)
-                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-                file_service::enumerate_filesystem(conn, &ds.id, &ntfs_reader)?
+
+                // Try MBR first
+                let mbr_entries = mbr::parse_partition_table(&sector0);
+                let ntfs_offset = if let Some(ntfs) = mbr::find_first_ntfs(&mbr_entries) {
+                    Some(ntfs.lba_start as u64 * 512)
+                } else if mbr_entries.iter().any(|e| e.partition_type == 0xEE) {
+                    // Protective MBR → GPT
+                    let mut hdr_buf = [0u8; 512];
+                    img_reader.read_exact(&mut hdr_buf)
+                        .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+                    if let Some(hdr) = gpt::parse_gpt_header(&hdr_buf) {
+                        let entry_bytes = hdr.entry_size * hdr.partition_count;
+                        let entry_lba = hdr.partition_entry_lba;
+                        img_reader.seek(SeekFrom::Start(entry_lba * 512))
+                            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+                        let mut entry_data = vec![0u8; entry_bytes.min(16384) as usize];
+                        img_reader.read_exact(&mut entry_data)
+                            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+                        let gpt_parts = gpt::parse_gpt_entries(&entry_data, hdr.entry_size, hdr.partition_count);
+                        gpt::find_first_data_partition(&gpt_parts).map(|p| p.start_lba * 512)
+                    } else { None }
+                } else { None };
+
+                if let Some(off) = ntfs_offset {
+                    img_reader.seek(SeekFrom::Start(0))
+                        .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+                    let ntfs_reader = fs_ntfs::NtfsReader::open(Box::new(img_reader), off)
+                        .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+                    file_service::enumerate_filesystem(conn, &ds.id, &ntfs_reader)?
+                } else {
+                    file_service::EnumerationStats { file_count: 0, dir_count: 0, total_size: 0,
+                        warnings: vec!["No NTFS partition found (GPT or MBR)".into()] }
+                }
             } else if probe_result.candidates.contains(&"logical_directory".to_string()) {
                 let fs = LogicalFsReader::open(&path, &ds.name)
                     .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
