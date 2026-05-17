@@ -1,4 +1,4 @@
-import { ViewerRangeRequest } from '@/types/models';
+import { FileTreeNode, ViewerRangeRequest } from '@/types/models';
 import { apiClient } from './client';
 
 export async function getFileTree() {
@@ -7,6 +7,14 @@ export async function getFileTree() {
 
 export async function getFileRows() {
   return apiClient.request('get_file_rows', () => apiClient.getMockProvider().getFileRows());
+}
+
+export async function importDataSource(sourcePath: string) {
+  return apiClient.request('import_data_source', async () => 'Mock import: 42 files', { sourcePath });
+}
+
+export async function getFileChildren(parentId: string): Promise<FileTreeNode[]> {
+  return apiClient.request('get_file_children', async () => [], { parentId });
 }
 
 export async function openFileHandle(fileId: string) {

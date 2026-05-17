@@ -1,6 +1,6 @@
 CREATE TABLE timeline_events (
     id TEXT PRIMARY KEY NOT NULL,
-    case_id TEXT NOT NULL REFERENCES cases(id),
+    case_id TEXT NOT NULL DEFAULT '',
     source_object_id TEXT NOT NULL,
     event_type TEXT NOT NULL,
     ts TEXT NOT NULL,

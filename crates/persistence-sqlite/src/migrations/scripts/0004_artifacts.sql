@@ -1,7 +1,7 @@
 CREATE TABLE artifacts (
     id TEXT PRIMARY KEY NOT NULL,
-    case_id TEXT NOT NULL REFERENCES cases(id),
-    data_source_id TEXT NOT NULL REFERENCES data_sources(id),
+    case_id TEXT NOT NULL DEFAULT '',
+    data_source_id TEXT NOT NULL DEFAULT '',
     artifact_type TEXT NOT NULL,
     source_object_id TEXT,
     title TEXT NOT NULL,

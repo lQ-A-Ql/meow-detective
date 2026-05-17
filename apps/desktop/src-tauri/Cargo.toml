@@ -22,3 +22,4 @@ app-services.workspace = true
 domain.workspace = true
 persistence-sqlite.workspace = true
 evidence-core.workspace = true
+rusqlite = { version = "0.31", features = ["bundled"] }

@@ -1,7 +1,7 @@
 CREATE TABLE file_entries (
     id TEXT PRIMARY KEY NOT NULL,
     parent_id TEXT REFERENCES file_entries(id),
-    data_source_id TEXT NOT NULL REFERENCES data_sources(id),
+    data_source_id TEXT NOT NULL,
     path TEXT NOT NULL,
     name TEXT NOT NULL,
     entry_type TEXT NOT NULL,

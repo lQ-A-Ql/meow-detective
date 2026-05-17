@@ -1021,6 +1021,7 @@ dependencies = [
  "domain",
  "evidence-core",
  "persistence-sqlite",
+ "rusqlite",
  "serde",
  "serde_json",
  "tauri",
@@ -2603,6 +2604,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 1.0.69",
+ "uuid",
 ]
 
 [[package]]
