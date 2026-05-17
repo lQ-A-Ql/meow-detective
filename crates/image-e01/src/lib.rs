@@ -1,98 +1,105 @@
 use evidence_core::{EvidenceReader, ReaderInfo};
-use std::collections::HashMap;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
 
-/// E01 (EWF) image reader. Section-based parser (reads metadata from first 2MB).
-/// Supports uncompressed chunks with cross-chunk reads. Compressed = Unsupported.
+/// E01 reader. Walks 76-byte section descriptor linked list.
+/// Supports both ASCII-header and EWF-L01 binary-header formats.
 pub struct E01Reader {
     info: ReaderInfo,
     total_bytes: u64,
-    pub sectors_per_chunk: u64,
-    chunk_table: HashMap<u64, ChunkEntry>,
+    chunk_size_sectors: u32,
+    /// chunk_index -> (segment_file_offset, compressed)
+    chunk_table: Vec<(u64, bool)>,
     file: std::fs::File,
     cursor: u64,
-}
-
-struct ChunkEntry {
-    file_offset: u64,
-    compressed: bool,
-    data_size: u32,
 }
 
 impl E01Reader {
     pub fn open(path: &Path) -> io::Result<Self> {
         let mut file = std::fs::File::open(path)?;
-        let file_len = file.seek(SeekFrom::End(0))? as usize;
+        let file_len = file.seek(SeekFrom::End(0))?;
         file.seek(SeekFrom::Start(0))?;
-        let read_limit = 2_097_152usize.min(file_len);
-        let mut data = vec![0u8; read_limit];
-        file.read_exact(&mut data)?;
 
-        if data.len() < 3 || &data[0..3] != b"EVF" {
+        // File header: magic[3] + tab[1] + crlf[2] + media[1] + reserved[2]
+        // + seg_n[2] + seg_total[2] = 13 bytes
+        let mut fhdr = [0u8; 13];
+        file.read_exact(&mut fhdr)?;
+        if &fhdr[0..3] != b"EVF" {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "not EWF"));
         }
 
-        // Try ASCII header first (tab-separated fields ending with LF)
-        let lf_pos = data[3..].iter().position(|&b| b == 0x0A);
-        let hdr_end = lf_pos.map(|p| (3 + p).min(data.len())).unwrap_or(data.len());
-        let hdr = String::from_utf8_lossy(&data[3..hdr_end]);
-        let fields: Vec<u64> = hdr.split('\t').filter_map(|p| p.parse::<u64>().ok()).collect();
+        // First section descriptor at offset 13
+        let mut next_off = 13u64;
+        let mut sections: Vec<(String, Vec<u8>)> = Vec::new();
 
-        let (sectors_count, chunk_size_raw) = if fields.len() >= 2 {
-            (fields[fields.len() - 1], fields[0] as u32)
-        } else {
-            // Binary header: find "header" section, read version, use known offsets
-            match find_sectors_from_header(&data) {
-                Some((sc, cs)) => (sc, cs),
-                None => return Err(io::Error::new(io::ErrorKind::InvalidData, "cannot determine sector count")),
+        while next_off > 0 && next_off < file_len {
+            file.seek(SeekFrom::Start(next_off))?;
+            let mut desc = [0u8; 76];
+            if file.read_exact(&mut desc).is_err() { break; }
+
+            // section_type: 16 bytes NUL-padded ASCII
+            let stype = String::from_utf8_lossy(&desc[0..16])
+                .trim_end_matches('\0').to_string();
+
+            let next = u64::from_le_bytes(desc[16..24].try_into().unwrap());
+            let section_size = u64::from_le_bytes(desc[24..32].try_into().unwrap());
+
+            // Read section content (limit to 10MB per section, respect file_len)
+            let read_size = section_size.min(10_000_000).min(file_len.saturating_sub(next_off + 76));
+            let mut content = vec![0u8; read_size as usize];
+            if read_size > 0 {
+                file.seek(SeekFrom::Start(next_off + 76))?;
+                file.read_exact(&mut content)?;
             }
-        };
 
-        if sectors_count == 0 { return Err(io::Error::new(io::ErrorKind::InvalidData, "zero sectors")); }
+            sections.push((stype.clone(), content));
+
+            if stype == "done" { break; }
+            next_off = if next > 0 && next < file_len { next } else { 0 };
+        }
+
+        // Find volume section to get geometry
+        let (sectors_count, chunk_size_sectors) = find_geometry(&sections, file_len)?;
+
         let total_bytes = sectors_count * 512;
-        let spc = if chunk_size_raw > 0 { chunk_size_raw as u64 / 512 } else { 64 };
+        let chunk_size_sectors = if chunk_size_sectors > 0 { chunk_size_sectors } else { 64 };
 
-        // Parse "table" sections
-        let mut chunk_table = HashMap::new();
-        let mut chunk_base = 0u64;
-        let mut sp = 0usize;
-        while let Some(tpos) = data[sp..].windows(6).position(|w| w == b"table\x00") {
-            let abs = sp + tpos + 6;
-            if abs + 12 > data.len() { break; }
-            let n = u32::from_le_bytes(data[abs+8..abs+12].try_into().unwrap()) as usize;
-            if n == 0 || abs + 12 + n * 12 > data.len() { sp = abs + 12; continue; }
-            let mut offs = Vec::with_capacity(n);
-            for i in 0..n {
-                let o = abs + 12 + i * 12;
-                let fo = u64::from_le_bytes(data[o..o+8].try_into().unwrap());
-                let comp = u32::from_le_bytes(data[o+8..o+12].try_into().unwrap()) != 0;
-                offs.push((fo, comp));
+        // Build chunk table from "table" section(s)
+        let mut chunk_table: Vec<(u64, bool)> = Vec::new();
+        for (stype, content) in &sections {
+            if stype.starts_with("table") && content.len() >= 12 {
+                let table_base = if content.len() >= 16 {
+                    u64::from_le_bytes(content[8..16].try_into().unwrap_or([0;8]))
+                } else { 0 };
+
+                let entry_count = content.len().saturating_sub(12) / 4;
+                for i in 0..entry_count {
+                    let off = 12 + i * 4;
+                    let raw = u32::from_le_bytes(content[off..off+4].try_into().unwrap_or([0;4]));
+                    let compressed = raw & 0x8000_0000 != 0;
+                    let rel = (raw & 0x7FFF_FFFF) as u64;
+                    let abs_off = if table_base > 0 { table_base + rel } else { rel };
+                    chunk_table.push((abs_off, compressed));
+                }
             }
-            let sb = abs + 12 + n * 12;
-            if sb + n * 8 > data.len() { sp = sb; continue; }
-            for (i, (fo, comp)) in offs.iter().enumerate() {
-                let so = sb + i * 4;
-                let sz = u32::from_le_bytes(data[so..so+4].try_into().unwrap());
-                chunk_table.insert(chunk_base + i as u64, ChunkEntry { file_offset: *fo, compressed: *comp, data_size: sz });
-            }
-            chunk_base += n as u64;
-            sp = sb + n * 4 + n * 4;
         }
 
         Ok(Self {
             info: ReaderInfo { path: path.to_path_buf(), size: total_bytes, kind: "e01".into() },
-            total_bytes, sectors_per_chunk: spc, chunk_table, file, cursor: 0,
+            total_bytes, chunk_size_sectors, chunk_table, file, cursor: 0,
         })
     }
 
     fn read_chunk(&mut self, idx: u64) -> io::Result<Vec<u8>> {
-        let e = self.chunk_table.get(&idx)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "chunk not found"))?;
-        if e.compressed { return Err(io::Error::new(io::ErrorKind::Unsupported, "compressed chunk")); }
-        self.file.seek(SeekFrom::Start(e.file_offset))?;
-        let mut buf = vec![0u8; e.data_size as usize];
+        let (offset, compressed) = chunk_entry(&self.chunk_table, idx)?;
+        if compressed {
+            return Err(io::Error::new(io::ErrorKind::Unsupported, "compressed E01 chunk"));
+        }
+        self.file.seek(SeekFrom::Start(offset))?;
+        let chunk_bytes = self.chunk_size_sectors as usize * 512;
+        let mut buf = vec![0u8; chunk_bytes];
         self.file.read_exact(&mut buf)?;
+        // Skip 4-byte Adler-32 checksum after uncompressed chunk data
         Ok(buf)
     }
 
@@ -100,14 +107,13 @@ impl E01Reader {
         if offset >= self.total_bytes { return Ok(0); }
         let mut total = 0usize;
         let mut off = offset;
+        let csize = self.chunk_size_sectors as u64 * 512;
         while total < buf.len() && off < self.total_bytes {
-            let csize = self.sectors_per_chunk * 512;
             let chunk_idx = off / csize;
             let intra = (off % csize) as usize;
             let data = self.read_chunk(chunk_idx)?;
-            if intra >= data.len() { break; }
             let avail = (data.len() - intra).min(buf.len() - total);
-            buf[total..total + avail].copy_from_slice(&data[intra..intra + avail]);
+            buf[total..total+avail].copy_from_slice(&data[intra..intra+avail]);
             total += avail;
             off += avail as u64;
         }
@@ -127,8 +133,8 @@ impl Seek for E01Reader {
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         self.cursor = match pos {
             SeekFrom::Start(p) => p.min(self.total_bytes),
-            SeekFrom::End(p) => ((self.total_bytes as i64) + p).max(0) as u64,
-            SeekFrom::Current(p) => ((self.cursor as i64) + p).max(0) as u64,
+            SeekFrom::End(p) => ((self.total_bytes as i64)+p).max(0) as u64,
+            SeekFrom::Current(p) => ((self.cursor as i64)+p).max(0) as u64,
         }.min(self.total_bytes);
         Ok(self.cursor)
     }
@@ -138,17 +144,30 @@ impl EvidenceReader for E01Reader {
     fn info(&self) -> &ReaderInfo { &self.info }
 }
 
-fn find_sectors_from_header(data: &[u8]) -> Option<(u64, u32)> {
-    let hpos = data.windows(7).position(|w| w == b"header\x00")?;
-    let sec = &data[hpos + 7..];
-    if sec.len() < 256 { return None; }
-    let version = u32::from_le_bytes(sec[0..4].try_into().ok()?);
-    let (sc_off, cs_off) = match version {
-        1 => (24, 76),
-        _ => (248, 80),
-    };
-    if sc_off + 8 > sec.len() || cs_off + 4 > sec.len() { return None; }
-    let sc = u64::from_le_bytes(sec[sc_off..sc_off+8].try_into().ok()?);
-    let cs = u32::from_le_bytes(sec[cs_off..cs_off+4].try_into().ok()?);
-    if sc == 0 { None } else { Some((sc, cs)) }
+fn chunk_entry(table: &[(u64, bool)], idx: u64) -> io::Result<(u64, bool)> {
+    table.get(idx as usize)
+        .copied()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "chunk not found"))
+}
+
+fn find_geometry(sections: &[(String, Vec<u8>)], file_len: u64) -> io::Result<(u64, u32)> {
+    for (stype, content) in sections {
+        if (stype == "volume" || stype.starts_with("disk")) && content.len() >= 24 {
+            let sc = u64::from_le_bytes(content[16..24].try_into().unwrap_or([0;8]));
+            let cks = u32::from_le_bytes(content[12..16].try_into().unwrap_or([0;4]));
+            if sc > 0 && sc * 512 < file_len * 10 {
+                return Ok((sc, cks.clamp(1, 64)));
+            }
+        }
+    }
+    // Fallback: scan any section that might contain geometry
+    for (_stype, content) in sections {
+        if content.len() >= 24 {
+            let sc = u64::from_le_bytes(content[16..24].try_into().unwrap_or([0;8]));
+            if sc > 1_000_000 && sc < 100_000_000 && sc * 512 < file_len * 2 {
+                return Ok((sc, 64));
+            }
+        }
+    }
+    Err(io::Error::new(io::ErrorKind::InvalidData, "no geometry found"))
 }
