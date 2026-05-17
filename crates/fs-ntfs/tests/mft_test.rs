@@ -135,9 +135,10 @@ fn list_root_children_returns_3_nodes() {
 }
 
 #[test]
-fn non_root_path_unsupported() {
+fn list_children_subdir_returns_empty() {
     let img = build_fixture();
     let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
     let ntfs = NtfsReader::open(reader, 0).unwrap();
-    assert!(ntfs.list_children("subdir").is_err());
+    let result = ntfs.list_subdir_children("subdir").unwrap();
+    assert!(result.is_empty());
 }

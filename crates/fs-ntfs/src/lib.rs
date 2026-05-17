@@ -99,6 +99,59 @@ impl NtfsReader {
         let rec = self.read_mft_record(5)?;
         Ok(Self::parse_index_root(&rec))
     }
+
+    fn find_dir_record(&self, name: &str) -> io::Result<Option<u64>> {
+        let name_lower = name.to_lowercase();
+        // Scan first 1024 MFT records looking for matching directory
+        for rec_num in 0..1024u64 {
+            let rec = match self.read_mft_record(rec_num) {
+                Ok(r) => r,
+                Err(_) => continue,
+            };
+            if rec.len() < 4 || &rec[0..4] != b"FILE" { continue; }
+            // Check record flags: bit 0x0002 = directory
+            let flags = u16::from_le_bytes([rec[0x16], rec[0x17]]);
+            if flags & 0x0002 == 0 { continue; } // not a directory
+
+            // Look for $FILE_NAME (0x30) attribute with matching name
+            let attr_off = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
+            let mut pos = attr_off;
+            while pos + 8 < rec.len() {
+                let typ = u32::from_le_bytes(rec[pos..pos+4].try_into().unwrap_or([0;4]));
+                if typ == 0xFFFFFFFF { break; }
+                let len = u32::from_le_bytes(rec[pos+4..pos+8].try_into().unwrap_or([0;4])) as usize;
+                if len == 0 || pos + len > rec.len() { break; }
+                if typ == 0x30 && pos + 0x5A < rec.len() {
+                    let name_chars = rec[pos + 0x40] as usize;
+                    if name_chars > 0 && pos + 0x5A + name_chars * 2 <= rec.len() {
+                        let name_bytes = &rec[pos + 0x5A..pos + 0x5A + name_chars * 2];
+                        let chars: Vec<u16> = name_bytes.chunks_exact(2)
+                            .map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+                        let fname = String::from_utf16_lossy(&chars);
+                        if fname.to_lowercase() == name_lower {
+                            return Ok(Some(rec_num));
+                        }
+                    }
+                }
+                pos += len;
+            }
+        }
+        Ok(None)
+    }
+
+    pub fn list_subdir_children(&self, path: &str) -> io::Result<Vec<FsNode>> {
+        // Extract the last component of the path as the directory name
+        let dir_name = path.rsplit('\\').next().unwrap_or(path);
+        if dir_name.is_empty() {
+            return self.list_root_children();
+        }
+        if let Some(rec_num) = self.find_dir_record(dir_name)? {
+            let rec = self.read_mft_record(rec_num)?;
+            Ok(Self::parse_index_root(&rec))
+        } else {
+            Ok(Vec::new())
+        }
+    }
 }
 
 impl FileSystemReader for NtfsReader {
@@ -118,10 +171,7 @@ impl FileSystemReader for NtfsReader {
         if path.is_empty() {
             return self.list_root_children();
         }
-        Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "NTFS subdirectory enum not yet implemented",
-        ))
+        self.list_subdir_children(path)
     }
 
     fn open_file(&self, _path: &str) -> io::Result<Box<dyn Read>> {

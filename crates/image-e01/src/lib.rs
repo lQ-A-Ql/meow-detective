@@ -118,18 +118,25 @@ impl E01Reader {
 
     fn read_chunk(&mut self, idx: u64) -> io::Result<Vec<u8>> {
         let (offset, compressed) = chunk_entry(&self.chunk_table, idx)?;
-        if compressed {
-            return Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "compressed E01 chunk",
-            ));
-        }
         self.file.seek(SeekFrom::Start(offset))?;
         let chunk_bytes = self.chunk_size_sectors as usize * 512;
-        let mut buf = vec![0u8; chunk_bytes];
-        self.file.read_exact(&mut buf)?;
-        // Skip 4-byte Adler-32 checksum after uncompressed chunk data
-        Ok(buf)
+
+        if compressed {
+            // zlib-compressed: read up to chunk_bytes*2 bytes (compressed usually smaller)
+            let max_raw = chunk_bytes.saturating_mul(2).max(4096);
+            let mut raw = vec![0u8; max_raw];
+            let n = self.file.read(&mut raw)?;
+            raw.truncate(n);
+            let mut decoder = flate2::read::ZlibDecoder::new(&raw[..]);
+            let mut buf = vec![0u8; chunk_bytes];
+            decoder.read_exact(&mut buf)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("zlib: {}", e)))?;
+            Ok(buf)
+        } else {
+            let mut buf = vec![0u8; chunk_bytes];
+            self.file.read_exact(&mut buf)?;
+            Ok(buf)
+        }
     }
 
     fn read_bytes(&mut self, buf: &mut [u8], offset: u64) -> io::Result<usize> {

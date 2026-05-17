@@ -12,3 +12,4 @@ chrono.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
 evidence-core.workspace = true
+flate2 = "1"
