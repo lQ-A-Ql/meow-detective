@@ -34,8 +34,9 @@ impl E01Reader {
         }
 
         // Try ASCII header first (tab-separated fields ending with LF)
-        let lf_pos = data[3..].iter().position(|&b| b == 0x0A).unwrap_or(10);
-        let hdr = String::from_utf8_lossy(&data[3..3 + lf_pos]);
+        let lf_pos = data[3..].iter().position(|&b| b == 0x0A);
+        let hdr_end = lf_pos.map(|p| (3 + p).min(data.len())).unwrap_or(data.len());
+        let hdr = String::from_utf8_lossy(&data[3..hdr_end]);
         let fields: Vec<u64> = hdr.split('\t').filter_map(|p| p.parse::<u64>().ok()).collect();
 
         let (sectors_count, chunk_size_raw) = if fields.len() >= 2 {

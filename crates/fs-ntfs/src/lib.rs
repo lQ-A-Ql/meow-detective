@@ -114,17 +114,17 @@ impl FileSystemReader for NtfsReader {
 fn parse_indx_entries(data: &[u8]) -> Vec<FsNode> {
     let mut nodes = Vec::new();
     let mut off = 0usize;
-    while off + 0x10 < data.len() {
+    while off + 0x52 < data.len() {
         let _mft_ref = u64::from_le_bytes(data[off..off+8].try_into().unwrap_or([0;8]));
         let entry_size = u16::from_le_bytes([data[off+8], data[off+9]]) as usize;
-        if entry_size < 0x10 || off + entry_size > data.len() { break; }
-        let name_len = data[off + 0x10] as usize;
+        if entry_size < 0x52 || off + entry_size > data.len() { break; }
+        let name_len = data[off + 0x50] as usize;
         let name_start = off + 0x52;
         if name_len > 0 && name_start + name_len * 2 <= data.len() && name_start + name_len * 2 <= off + entry_size {
             let chars: Vec<u16> = data[name_start..name_start + name_len * 2]
                 .chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
             let name = String::from_utf16_lossy(&chars);
-            let flags = if off + 0x3C < data.len() { u32::from_le_bytes(data[off+0x38..off+0x3C].try_into().unwrap_or([0;4])) } else { 0 };
+            let flags = if off + 0x4C < data.len() { u32::from_le_bytes(data[off+0x48..off+0x4C].try_into().unwrap_or([0;4])) } else { 0 };
             let is_dir = flags & 0x10000000 != 0;
             nodes.push(FsNode { name, path: String::new(), is_dir, size: 0,
                 created_at: None, modified_at: None, accessed_at: None });
