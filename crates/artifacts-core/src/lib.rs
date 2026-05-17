@@ -27,7 +27,7 @@ pub trait ArtifactExtractor {
     fn display_name(&self) -> &'static str;
     fn family(&self) -> ArtifactFamily;
     fn dependencies(&self) -> &'static [&'static str] { &[] }
-    fn supports(&self, ctx: &ArtifactContext) -> bool;
+    fn supports_path(&self, file_path: &str) -> bool;
     fn run(&self, ctx: ArtifactContext, sink: &mut dyn ArtifactSink) -> Result<ExtractorReport, String>;
 }
 
@@ -70,8 +70,8 @@ impl ExtractorRegistry {
         self.extractors.push(extractor);
     }
 
-    pub fn find_for(&self, ctx: &ArtifactContext) -> Vec<&dyn ArtifactExtractor> {
-        self.extractors.iter().filter(|e| e.supports(ctx)).map(|e| e.as_ref()).collect()
+    pub fn find_for_path(&self, file_path: &str) -> Vec<&dyn ArtifactExtractor> {
+        self.extractors.iter().filter(|e| e.supports_path(file_path)).map(|e| e.as_ref()).collect()
     }
 
     pub fn families(&self) -> Vec<ArtifactFamily> {

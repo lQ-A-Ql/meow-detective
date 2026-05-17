@@ -55,3 +55,42 @@ fn reopen_index() {
     let hits = index.search("evidence", 10).unwrap();
     assert_eq!(hits.len(), 1);
 }
+
+#[test]
+fn search_returns_highlights() {
+    let tmp = TempDir::new().unwrap();
+    let index_dir = tmp.path().join("highlight-index");
+
+    let text = extract_text(
+        b"The forensic examiner found credential data in the registry".as_slice(),
+        "f1", Some("text/plain"),
+    );
+    let index = SearchIndex::create(&index_dir).unwrap();
+    index.index_documents(&[text], &[("f1".to_string(), "/evidence/reg.txt".to_string())]).unwrap();
+
+    let hits = index.search("credential", 10).unwrap();
+    assert_eq!(hits.len(), 1);
+    assert!(!hits[0].snippets.is_empty());
+    let snippet = &hits[0].snippets[0];
+    assert!(!snippet.text.is_empty(), "snippet text should not be empty");
+    assert!(!snippet.highlights.is_empty(), "highlights should not be empty");
+    assert!(snippet.text.to_lowercase().contains("credential"));
+}
+
+#[test]
+fn search_multi_term_query() {
+    let tmp = TempDir::new().unwrap();
+    let index_dir = tmp.path().join("multi-term");
+
+    let text1 = extract_text(b"forensics analysis tool for windows".as_slice(), "f1", Some("text/plain"));
+    let text2 = extract_text(b"simple text editor".as_slice(), "f2", Some("text/plain"));
+    let index = SearchIndex::create(&index_dir).unwrap();
+    index.index_documents(&[text1, text2], &[
+        ("f1".to_string(), "/f1.txt".to_string()),
+        ("f2".to_string(), "/f2.txt".to_string()),
+    ]).unwrap();
+
+    let hits = index.search("forensics windows", 10).unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].file_id, "f1");
+}

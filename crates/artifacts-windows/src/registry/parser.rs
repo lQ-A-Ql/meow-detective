@@ -1,3 +1,8 @@
+//! Simplified Windows Registry hive reader.
+//! Extracts base block metadata (last_written timestamp) and attempts to read
+//! the root NK cell key name. Field offsets for NK cells are approximate;
+//! full hive traversal requires proper cell/bin parsing (python-registry reference).
+
 use artifacts_core::{
     new_artifact, new_timeline_event, ArtifactContext, ArtifactExtractor, ArtifactSink,
     ExtractorReport,
@@ -95,8 +100,8 @@ impl ArtifactExtractor for RegistryExtractor {
     fn family(&self) -> ArtifactFamily {
         ArtifactFamily { name: "Registry".into(), description: Some("Windows Registry hives".into()) }
     }
-    fn supports(&self, ctx: &ArtifactContext) -> bool {
-        let name = ctx.file_path.to_lowercase();
+    fn supports_path(&self, file_path: &str) -> bool {
+        let name = file_path.to_lowercase();
         name.ends_with(".dat")
             && (name.contains("ntuser") || name.contains("system") || name.contains("software")
                 || name.contains("sam") || name.contains("security"))

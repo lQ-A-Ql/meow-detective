@@ -22,16 +22,13 @@ pub fn run_extractors_on_file(
     mut reader: Box<dyn Read>,
     sink: &mut VecSink,
 ) -> Result<(), String> {
+    let extractors = registry.find_for_path(file_path);
+    if extractors.is_empty() {
+        return Ok(());
+    }
+
     let mut buf = Vec::new();
     reader.read_to_end(&mut buf).map_err(|e| e.to_string())?;
-
-    let ctx = ArtifactContext {
-        file_id: file_id.clone(),
-        file_path: file_path.to_string(),
-        reader: Box::new(std::io::Cursor::new(buf.clone())),
-    };
-    let extractors = registry.find_for(&ctx);
-    drop(ctx);
 
     for extractor in extractors {
         let cursor = std::io::Cursor::new(buf.clone());

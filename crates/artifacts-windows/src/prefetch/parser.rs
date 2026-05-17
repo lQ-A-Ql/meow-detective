@@ -1,3 +1,8 @@
+//! Simplified MVP Prefetch parser.
+//! Field offsets are approximate and designed for hand-crafted test fixtures.
+//! For production use with real .pf files, offsets must be aligned to the
+//! actual v17/v23/v26/v30 format specifications (libscca reference).
+
 use artifacts_core::{
     new_artifact, new_timeline_event, ArtifactContext, ArtifactExtractor, ArtifactSink,
     ExtractorReport,
@@ -40,8 +45,8 @@ impl ArtifactExtractor for PrefetchExtractor {
         ArtifactFamily { name: "Prefetch".into(), description: Some("Windows Prefetch files (.pf)".into()) }
     }
 
-    fn supports(&self, ctx: &ArtifactContext) -> bool {
-        ctx.file_path.to_lowercase().ends_with(".pf")
+    fn supports_path(&self, file_path: &str) -> bool {
+        file_path.to_lowercase().ends_with(".pf")
     }
 
     fn run(&self, ctx: ArtifactContext, sink: &mut dyn ArtifactSink) -> Result<ExtractorReport, String> {

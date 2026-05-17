@@ -1,3 +1,7 @@
+//! Windows Shell Link (.lnk) parser.
+//! Parses the ShellLinkHeader (76 bytes) to extract timestamps and file size.
+//! Does not yet parse LinkTargetIDList or StringData sections.
+
 use artifacts_core::{
     new_artifact, new_timeline_event, ArtifactContext, ArtifactExtractor, ArtifactSink,
     ExtractorReport,
@@ -62,8 +66,8 @@ impl ArtifactExtractor for LnkExtractor {
     fn family(&self) -> ArtifactFamily {
         ArtifactFamily { name: "LNK".into(), description: Some("Windows Shell Link (.lnk)".into()) }
     }
-    fn supports(&self, ctx: &ArtifactContext) -> bool {
-        ctx.file_path.to_lowercase().ends_with(".lnk")
+    fn supports_path(&self, file_path: &str) -> bool {
+        file_path.to_lowercase().ends_with(".lnk")
     }
 
     fn run(&self, ctx: ArtifactContext, sink: &mut dyn ArtifactSink) -> Result<ExtractorReport, String> {

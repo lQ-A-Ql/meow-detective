@@ -33,7 +33,7 @@ impl SearchIndex {
         let mut schema_builder = Schema::builder();
         schema_builder.add_text_field("file_id", STRING | STORED);
         schema_builder.add_text_field("path", TEXT | STORED);
-        schema_builder.add_text_field("content", TEXT);
+        schema_builder.add_text_field("content", TEXT | STORED);
         schema_builder.add_text_field("name", TEXT | STORED);
         let schema = schema_builder.build();
 
@@ -50,7 +50,7 @@ impl SearchIndex {
     }
 
     pub fn index_documents(&self, texts: &[ExtractedText], paths: &[(String, String)]) -> Result<u64> {
-        let mut writer: IndexWriter = self.index.writer(50_000_000)?;
+        let mut writer: IndexWriter = self.index.writer(15_000_000)?;
 
         let file_id_field = self.schema.get_field("file_id").unwrap();
         let path_field = self.schema.get_field("path").unwrap();
@@ -98,11 +98,14 @@ impl SearchIndex {
         let file_id_field = self.schema.get_field("file_id").unwrap();
         let path_field = self.schema.get_field("path").unwrap();
 
-        let escaped = query_str.replace('"', "\\\"");
-        let query_str = format!("content:\"{}\"", escaped);
         let query_parser = QueryParser::for_index(&self.index, vec![content_field]);
-        let query = query_parser
-            .parse_query(&query_str)
+
+        let query = query_parser.parse_query(query_str)
+            .or_else(|_| {
+                let escaped = query_str.replace('"', "\\\"");
+                let phrase = format!("\"{}\"", escaped);
+                query_parser.parse_query(&phrase)
+            })
             .map_err(|e| IndexError::Query(e.to_string()))?;
 
         let top_docs = searcher.search(&query, &TopDocs::with_limit(limit))?;
@@ -112,15 +115,15 @@ impl SearchIndex {
             let doc: TantivyDocument = searcher.doc(doc_addr)?;
             let file_id = doc.get_first(file_id_field).and_then(|v| v.as_str()).unwrap_or("").to_string();
             let path = doc.get_first(path_field).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let content = doc.get_first(content_field).and_then(|v| v.as_str()).unwrap_or("");
+
+            let snippets = crate::highlighter::highlight(content, query_str);
 
             hits.push(SearchHit {
                 file_id,
                 path,
                 score: score as f64,
-                snippets: vec![SearchSnippet {
-                    text: String::new(),
-                    highlights: vec![],
-                }],
+                snippets,
             });
         }
 

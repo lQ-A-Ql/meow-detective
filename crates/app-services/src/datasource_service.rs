@@ -1,4 +1,5 @@
 use domain::{CaseId, DataSource, DataSourceId, DataSourceKind};
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use std::path::Path;
 use thiserror::Error;
 
@@ -8,8 +9,6 @@ pub enum DataSourceError {
     Io(#[from] std::io::Error),
     #[error("Database error: {0}")]
     Db(#[from] persistence_sqlite::DbError),
-    #[error("SQLite error: {0}")]
-    Sqlite(#[from] rusqlite::Error),
     #[error("Evidence error: {0}")]
     Evidence(String),
 }
@@ -32,18 +31,6 @@ pub fn attach_data_source(
         imported_at: chrono::Utc::now(),
     };
 
-    conn.execute(
-        "INSERT INTO data_sources (id, case_id, name, kind, source_path) VALUES (?1, ?2, ?3, ?4, ?5)",
-        rusqlite::params![ds.id.0, case_id.0, ds.name, format_ds_kind(&ds.kind), ds.source_path.display().to_string()],
-    )?;
-
+    DataSourceRepo::new(conn).insert(case_id, &ds)?;
     Ok(ds)
-}
-
-fn format_ds_kind(kind: &DataSourceKind) -> &'static str {
-    match kind {
-        DataSourceKind::Raw => "raw",
-        DataSourceKind::E01 => "e01",
-        DataSourceKind::LogicalDirectory => "logical_directory",
-    }
 }

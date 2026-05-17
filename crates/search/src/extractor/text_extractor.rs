@@ -54,8 +54,7 @@ pub fn extract_text(reader: impl Read, file_id: &str, mime_hint: Option<&str>) -
         }
     }
 
-    let content = String::from_utf8(buf)
-        .unwrap_or_else(|_| String::new());
+    let content = String::from_utf8_lossy(&buf).into_owned();
 
     ExtractedText {
         file_id: file_id.to_string(),

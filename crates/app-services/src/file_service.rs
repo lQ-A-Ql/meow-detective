@@ -55,13 +55,12 @@ pub fn enumerate_filesystem(
 
     let batch_size = 500;
     let mut batch: Vec<FileEntry> = Vec::with_capacity(batch_size);
-    let mut warnings: Vec<String> = Vec::new();
 
     while let Some((parent_id, dir_path)) = queue.pop_front() {
         let children = match fs.list_children(&dir_path) {
             Ok(c) => c,
             Err(e) => {
-                warnings.push(format!("Cannot read '{}': {}", dir_path, e));
+                stats.warnings.push(format!("Cannot read '{}': {}", dir_path, e));
                 continue;
             }
         };

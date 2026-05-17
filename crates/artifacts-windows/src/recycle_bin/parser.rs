@@ -1,3 +1,6 @@
+//! Windows Recycle Bin ($I file) parser.
+//! Parses v2 format: header_size, file_size, deletion FILETIME, original path (UTF-16LE).
+
 use artifacts_core::{
     new_artifact, new_timeline_event, ArtifactContext, ArtifactExtractor, ArtifactSink,
     ExtractorReport,
@@ -57,8 +60,8 @@ impl ArtifactExtractor for RecycleBinExtractor {
     fn family(&self) -> ArtifactFamily {
         ArtifactFamily { name: "RecycleBin".into(), description: Some("Windows Recycle Bin ($I/$R)".into()) }
     }
-    fn supports(&self, ctx: &ArtifactContext) -> bool {
-        ctx.file_path.contains("$Recycle.Bin") && ctx.file_path.contains("$I")
+    fn supports_path(&self, file_path: &str) -> bool {
+        file_path.contains("$Recycle.Bin") && file_path.contains("$I")
     }
 
     fn run(&self, ctx: ArtifactContext, sink: &mut dyn ArtifactSink) -> Result<ExtractorReport, String> {

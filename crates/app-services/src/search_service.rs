@@ -58,14 +58,24 @@ pub fn search_files_real(index_dir: &Path, query: &str) -> Result<SearchResultPa
 
     let items: Vec<SearchHitDto> = hits
         .into_iter()
-        .map(|h| SearchHitDto {
-            file_id: h.file_id,
-            path: h.path,
-            score: h.score,
-            snippets: vec![SearchSnippetDto {
-                text: String::new(),
-                highlights: vec![],
-            }],
+        .map(|h| {
+            let snippets: Vec<SearchSnippetDto> = h.snippets.into_iter().map(|s| SearchSnippetDto {
+                text: s.text,
+                highlights: s.highlights.into_iter().map(|hl| SearchHighlightDto {
+                    start: hl.start,
+                    end: hl.end,
+                }).collect(),
+            }).collect();
+            SearchHitDto {
+                file_id: h.file_id,
+                path: h.path,
+                score: h.score,
+                snippets: if snippets.is_empty() {
+                    vec![SearchSnippetDto { text: String::new(), highlights: vec![] }]
+                } else {
+                    snippets
+                },
+            }
         })
         .collect();
 
