@@ -1,6 +1,7 @@
-use app_services::{datasource_service, file_service, search_service, timeline_service};
+use app_services::{datasource_service, file_service, mbr, search_service, timeline_service};
 use domain::DataSourceKind;
 use evidence_core::{probe, LogicalFsReader};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use tauri::State;
 use transport::dto::FileTreeNodeDto;
@@ -86,9 +87,30 @@ pub fn import_data_source(state: State<AppState>, source_path: String) -> Result
                 datasource_service::attach_data_source(conn, &case_id, &source_name, &path, kind)
                     .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             job_repo.update_progress(&job_id, 20, "Enumerating filesystem...")?;
-            let fs = LogicalFsReader::open(&path, &ds.name)
-                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-            let stats = file_service::enumerate_filesystem(conn, &ds.id, &fs)?;
+
+            // E01 path: open image reader, parse MBR, find NTFS, enumerate
+            let stats = if probe_result.candidates.contains(&"e01".to_string()) {
+                let mut e01_reader = image_e01::E01Reader::open(&path)
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+                let mut mbr_buf = [0u8; 512];
+                e01_reader.read_exact(&mut mbr_buf)
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+                let partitions = mbr::parse_partition_table(&mbr_buf);
+                let ntfs_part = mbr::find_first_ntfs(&partitions)
+                    .ok_or_else(|| persistence_sqlite::DbError::System("no NTFS partition found".into()))?;
+                e01_reader.seek(SeekFrom::Start(0))
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+                let ntfs_reader = fs_ntfs::NtfsReader::open(Box::new(e01_reader), ntfs_part.lba_start as u64 * 512)
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+                file_service::enumerate_filesystem(conn, &ds.id, &ntfs_reader)?
+            } else if probe_result.candidates.contains(&"logical_directory".to_string()) {
+                let fs = LogicalFsReader::open(&path, &ds.name)
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+                file_service::enumerate_filesystem(conn, &ds.id, &fs)?
+            } else {
+                // RAW image without filesystem support: just create empty entry
+                file_service::EnumerationStats { file_count: 0, dir_count: 0, total_size: 0, warnings: vec!["RAW image — no FS reader".into()] }
+            };
             job_repo.update_progress(&job_id, 50, "Projecting timeline...")?;
             let mut msg = format!(
                 "Imported: {} files, {} dirs, {} bytes. ",

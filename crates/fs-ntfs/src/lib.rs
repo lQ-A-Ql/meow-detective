@@ -4,11 +4,12 @@
 
 use evidence_core::filesystem::{FileSystemReader, FsNode};
 use evidence_core::EvidenceReader;
+use std::cell::RefCell;
 use std::io::{self, Read, Seek, SeekFrom};
 
 #[allow(dead_code)]
 pub struct NtfsReader {
-    reader: Box<dyn EvidenceReader>,
+    reader: RefCell<Box<dyn EvidenceReader>>,
     bytes_per_sector: u16,
     sectors_per_cluster: u8,
     mft_cluster: u64,
@@ -17,8 +18,6 @@ pub struct NtfsReader {
 }
 
 impl NtfsReader {
-    /// Open NTFS from an EvidenceReader at the given partition offset
-    #[allow(dead_code)]
     pub fn open(mut reader: Box<dyn EvidenceReader>, offset: u64) -> io::Result<Self> {
         reader.seek(SeekFrom::Start(offset))?;
         let mut boot = [0u8; 512];
@@ -45,7 +44,7 @@ impl NtfsReader {
         let mft_record_size = mft_record_bytes(&boot);
 
         Ok(Self {
-            reader,
+            reader: RefCell::new(reader),
             bytes_per_sector,
             sectors_per_cluster,
             mft_cluster,
@@ -58,11 +57,12 @@ impl NtfsReader {
         self.mft_cluster * self.cluster_size + record_number * self.mft_record_size as u64
     }
 
-    fn read_mft_record(&mut self, record_number: u64) -> io::Result<Vec<u8>> {
+    fn read_mft_record(&self, record_number: u64) -> io::Result<Vec<u8>> {
         let off = self.mft_offset(record_number);
-        self.reader.seek(SeekFrom::Start(off))?;
+        let mut reader = self.reader.borrow_mut();
+        reader.seek(SeekFrom::Start(off))?;
         let mut rec = vec![0u8; self.mft_record_size as usize];
-        self.reader.read_exact(&mut rec)?;
+        reader.read_exact(&mut rec)?;
         Ok(rec)
     }
 
@@ -88,7 +88,7 @@ impl NtfsReader {
         nodes
     }
 
-    pub fn list_root_children(&mut self) -> io::Result<Vec<FsNode>> {
+    pub fn list_root_children(&self) -> io::Result<Vec<FsNode>> {
         let rec = self.read_mft_record(5)?;
         Ok(Self::parse_index_root(&rec))
     }
@@ -100,8 +100,11 @@ impl FileSystemReader for NtfsReader {
             created_at: None, modified_at: None, accessed_at: None })
     }
 
-    fn list_children(&self, _path: &str) -> io::Result<Vec<FsNode>> {
-        Err(io::Error::new(io::ErrorKind::Unsupported, "NTFS dir enum not yet implemented"))
+    fn list_children(&self, path: &str) -> io::Result<Vec<FsNode>> {
+        if path.is_empty() {
+            return self.list_root_children();
+        }
+        Err(io::Error::new(io::ErrorKind::Unsupported, "NTFS subdirectory enum not yet implemented"))
     }
 
     fn open_file(&self, _path: &str) -> io::Result<Box<dyn Read>> {
