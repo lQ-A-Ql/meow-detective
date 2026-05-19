@@ -1,9 +1,11 @@
 import { Activity, AlertTriangle, Clock, Database, FileText, CheckCircle2, Upload, FolderOpen } from 'lucide-react';
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { useCaseMetrics, useCurrentCase, useRecentObjects } from '@/features/case/hooks';
 import { useJobsSnapshot, useWarnings } from '@/features/jobs/hooks';
 import { useImportDataSource } from '@/features/files/hooks';
+import { useCreateCase, useOpenCase } from '@/features/case/hooks';
 import { InlineProgressRow } from '@/components/status/InlineProgressRow';
+import { open } from '@tauri-apps/plugin-dialog';
 
 export function CaseHome() {
   const { data: currentCase } = useCurrentCase();
@@ -12,14 +14,79 @@ export function CaseHome() {
   const { data: jobs } = useJobsSnapshot();
   const { data: warnings } = useWarnings();
   const importMutation = useImportDataSource();
+  const createCaseMutation = useCreateCase();
+  const openCaseMutation = useOpenCase();
   const [importPath, setImportPath] = useState('');
   const [showImport, setShowImport] = useState(false);
+  const [showNewCase, setShowNewCase] = useState(false);
+  const [caseRoot, setCaseRoot] = useState('C:\\Cases');
+  const [caseName, setCaseName] = useState('');
+  const [openCasePath, setOpenCasePath] = useState('C:\\Cases\\case-001');
 
   const runningJob = jobs?.find((job) => job.status === 'running');
   const completedJobs = jobs?.filter((job) => job.status === 'completed') ?? [];
 
   return (
     <div className="flex-1 flex flex-col w-full h-full bg-white overflow-auto">
+      {!currentCase && (
+        <div className="border-b border-[#e0e0e0] bg-[#fafafa] p-6 shrink-0">
+          <div className="font-serif text-xl text-[#111] mb-4 tracking-tight">案件管理</div>
+          <div className="flex gap-6">
+            <div className="flex-1 border border-[#e0e0e0] bg-white p-4">
+              <div className="text-[13px] font-semibold text-[#333] mb-3">新建案件</div>
+              <div className="space-y-2 mb-3">
+                <input
+                  type="text"
+                  value={caseRoot}
+                  onChange={(e) => setCaseRoot(e.target.value)}
+                  placeholder="案件根目录"
+                  className="w-full border border-[#ccc] px-2 py-1 text-[12px] font-mono"
+                />
+                <input
+                  type="text"
+                  value={caseName}
+                  onChange={(e) => setCaseName(e.target.value)}
+                  placeholder="案件名称"
+                  className="w-full border border-[#ccc] px-2 py-1 text-[12px]"
+                />
+              </div>
+              <button
+                onClick={() => createCaseMutation.mutate({ caseRoot, name: caseName })}
+                disabled={createCaseMutation.isPending || !caseRoot || !caseName}
+                className="bg-[#111] text-white px-4 py-1.5 text-[12px] hover:bg-[#333] disabled:opacity-50"
+              >
+                {createCaseMutation.isPending ? '创建中...' : '创建案件'}
+              </button>
+              {createCaseMutation.isError && (
+                <div className="mt-2 text-[11px] text-red-600">{(createCaseMutation.error as Error)?.message}</div>
+              )}
+            </div>
+            <div className="flex-1 border border-[#e0e0e0] bg-white p-4">
+              <div className="text-[13px] font-semibold text-[#333] mb-3">打开已有案件</div>
+              <div className="space-y-2 mb-3">
+                <input
+                  type="text"
+                  value={openCasePath}
+                  onChange={(e) => setOpenCasePath(e.target.value)}
+                  placeholder="案件路径"
+                  className="w-full border border-[#ccc] px-2 py-1 text-[12px] font-mono"
+                />
+              </div>
+              <button
+                onClick={() => openCaseMutation.mutate(openCasePath)}
+                disabled={openCaseMutation.isPending || !openCasePath}
+                className="bg-[#111] text-white px-4 py-1.5 text-[12px] hover:bg-[#333] disabled:opacity-50"
+              >
+                {openCaseMutation.isPending ? '打开中...' : '打开案件'}
+              </button>
+              {openCaseMutation.isError && (
+                <div className="mt-2 text-[11px] text-red-600">{(openCaseMutation.error as Error)?.message}</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="border-b border-[#e0e0e0] bg-[#fafafa] p-6 shrink-0">
         <div className="flex items-start justify-between gap-6">
           <div>
@@ -66,17 +133,21 @@ export function CaseHome() {
               placeholder="镜像路径 (例: E:\cases\image.E01) 或点击浏览..."
               className="flex-1 border border-[#ccc] px-3 py-1.5 text-[12px] font-mono"
             />
-            <label className="border border-[#ccc] px-3 py-1.5 text-[12px] hover:bg-[#eee] cursor-pointer flex items-center gap-1">
+            <button
+              onClick={async () => {
+                try {
+                  const path = await open({
+                    filters: [{ name: 'Disk Images', extensions: ['e01', 'E01', 'dd', 'raw', 'img', 'vmdk', '*'] }],
+                  });
+                  if (path) setImportPath(path as string);
+                } catch {
+                  // mock/dev mode — dialog not available
+                }
+              }}
+              className="border border-[#ccc] px-3 py-1.5 text-[12px] hover:bg-[#eee] flex items-center gap-1"
+            >
               <FolderOpen size={12} /> 浏览
-              <input
-                type="file"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) setImportPath(file.path || file.name);
-                }}
-              />
-            </label>
+            </button>
             <button
               onClick={() => {
                 if (importPath.trim()) {
