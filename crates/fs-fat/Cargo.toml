@@ -6,6 +6,7 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+evidence-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
