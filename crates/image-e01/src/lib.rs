@@ -113,14 +113,13 @@ impl E01Reader {
                     }
                     s
                 };
-                let seg_size = segment_sizes.get(segment).copied().unwrap_or(file_len);
+                let _seg_size = segment_sizes.get(segment).copied().unwrap_or(file_len);
 
                 let table_base = if content.len() >= 16 {
                     u64::from_le_bytes(content[8..16].try_into().unwrap_or([0; 8]))
                 } else {
                     0
                 };
-
                 let entry_count = content.len().saturating_sub(12) / 4;
                 for i in 0..entry_count {
                     let off = 12 + i * 4;
@@ -128,11 +127,11 @@ impl E01Reader {
                         u32::from_le_bytes(content[off..off + 4].try_into().unwrap_or([0; 4]));
                     let compressed = raw & 0x8000_0000 != 0;
                     let rel = (raw & 0x7FFF_FFFF) as u64;
-                    let abs_off = if table_base > 0 {
-                        (table_base + rel).min(seg_size.saturating_sub(chunk_size_sectors as u64 * 512))
-                    } else {
-                        rel
-                    };
+                let abs_off = if table_base > 0 {
+                    table_base + rel
+                } else {
+                    continue; // skip table sections without base offset
+                };
                     chunk_table.push((segment, abs_off, compressed));
                 }
             }
