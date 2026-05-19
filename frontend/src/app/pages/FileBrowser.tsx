@@ -25,11 +25,19 @@ export function FileBrowser() {
         <div className="h-10 flex items-center px-4 gap-4 text-xs shrink-0">
           <div className="flex items-center gap-1.5 text-[#666] font-mono text-[11px] min-w-0">
             <HardDrive size={12} />
-            <span className="hover:text-black cursor-pointer">Vol_1</span>
-            <ChevronRight size={12} className="text-[#aaa]" />
-            <span className="hover:text-black cursor-pointer">Windows</span>
-            <ChevronRight size={12} className="text-[#aaa]" />
-            <span className="text-[#111] font-semibold">System32</span>
+            {tree && tree.length > 0 ? (
+              <>
+                <span className="text-[#111] font-semibold">{tree[0]?.name || '/'}</span>
+                {selectedFile && (
+                  <>
+                    <ChevronRight size={12} className="text-[#aaa]" />
+                    <span className="text-[#111] font-semibold">{selectedFile.name}</span>
+                  </>
+                )}
+              </>
+            ) : (
+              <span className="text-[#aaa]">无数据源</span>
+            )}
           </div>
           <div className="h-4 border-l border-[#e0e0e0]" />
           <div className="text-[#666] flex items-center gap-2">

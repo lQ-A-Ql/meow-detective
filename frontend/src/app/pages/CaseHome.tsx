@@ -1,5 +1,5 @@
-import { Activity, AlertTriangle, Clock, Database, FileText, CheckCircle2, Upload } from 'lucide-react';
-import { useState } from 'react';
+import { Activity, AlertTriangle, Clock, Database, FileText, CheckCircle2, Upload, FolderOpen } from 'lucide-react';
+import { useState, useRef } from 'react';
 import { useCaseMetrics, useCurrentCase, useRecentObjects } from '@/features/case/hooks';
 import { useJobsSnapshot, useWarnings } from '@/features/jobs/hooks';
 import { useImportDataSource } from '@/features/files/hooks';
@@ -63,15 +63,24 @@ export function CaseHome() {
               type="text"
               value={importPath}
               onChange={(e) => setImportPath(e.target.value)}
-              placeholder="镜像路径 (例: E:\cases\image.E01)"
+              placeholder="镜像路径 (例: E:\cases\image.E01) 或点击浏览..."
               className="flex-1 border border-[#ccc] px-3 py-1.5 text-[12px] font-mono"
             />
+            <label className="border border-[#ccc] px-3 py-1.5 text-[12px] hover:bg-[#eee] cursor-pointer flex items-center gap-1">
+              <FolderOpen size={12} /> 浏览
+              <input
+                type="file"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) setImportPath(file.path || file.name);
+                }}
+              />
+            </label>
             <button
               onClick={() => {
                 if (importPath.trim()) {
                   importMutation.mutate(importPath.trim());
-                  setShowImport(false);
-                  setImportPath('');
                 }
               }}
               disabled={importMutation.isPending}
@@ -79,25 +88,35 @@ export function CaseHome() {
             >
               {importMutation.isPending ? '导入中...' : '导入'}
             </button>
-            <button onClick={() => setShowImport(false)} className="text-[#888] text-[12px] hover:text-[#111]">
+            <button onClick={() => { setShowImport(false); setImportPath(''); }} className="text-[#888] text-[12px] hover:text-[#111]">
               取消
             </button>
           </div>
+          {importMutation.isPending && (
+            <div className="mt-2 flex items-center gap-2 text-[11px] text-[#666]">
+              <div className="w-3 h-3 border-2 border-[#666] border-t-transparent rounded-full animate-spin" />
+              正在导入数据源，请等待...
+            </div>
+          )}
           {importMutation.isSuccess && (
-            <div className="mt-2 text-[11px] text-green-700 font-mono">{importMutation.data}</div>
+            <div className="mt-2 text-[11px] text-green-700 font-mono bg-green-50 border border-green-200 p-2">
+              {importMutation.data}
+            </div>
           )}
           {importMutation.isError && (
-            <div className="mt-2 text-[11px] text-red-600 font-mono">{(importMutation.error as Error)?.message || '导入失败'}</div>
+            <div className="mt-2 text-[11px] text-red-600 font-mono bg-red-50 border border-red-200 p-2">
+              导入失败: {(importMutation.error as Error)?.message || '未知错误'}
+            </div>
           )}
         </div>
       )}
 
       <div className="border-b border-[#e0e0e0] shrink-0">
         <div className="grid grid-cols-4 divide-x divide-[#e0e0e0]">
-          <MetricBlock icon={<Database size={12} />} title="数据源" value={metrics?.dataSourceCount ?? 0} lines={[['Win10_C.E01', '120 GB'], ['MemDump.raw', '16 GB']]} />
-          <MetricBlock icon={<FileText size={12} />} title="已索引文件" value={metrics?.indexedFileCount ?? 0} lines={[['可执行文件', '12,401'], ['文档', '45,190']]} />
-          <MetricBlock icon={<Clock size={12} />} title="时间线事件" value={metrics?.timelineEventCount ?? 0} lines={[['文件系统', '6.2M'], ['事件日志', '1.1M']]} />
-          <MetricBlock icon={<AlertTriangle size={12} />} title="提取痕迹" value={metrics?.artifactCount ?? 0} lines={[['Prefetch', '1,042'], ['Amcache', '14,200']]} />
+          <MetricBlock icon={<Database size={12} />} title="数据源" value={metrics?.dataSourceCount ?? 0} />
+          <MetricBlock icon={<FileText size={12} />} title="已索引文件" value={metrics?.indexedFileCount ?? 0} />
+          <MetricBlock icon={<Clock size={12} />} title="时间线事件" value={metrics?.timelineEventCount ?? 0} />
+          <MetricBlock icon={<AlertTriangle size={12} />} title="提取痕迹" value={metrics?.artifactCount ?? 0} />
         </div>
       </div>
 
@@ -162,12 +181,12 @@ function MetricBlock({
   icon,
   title,
   value,
-  lines,
+  lines = [],
 }: {
   icon: React.ReactNode;
   title: string;
   value: number;
-  lines: Array<[string, string]>;
+  lines?: Array<[string, string]>;
 }) {
   return (
     <div className="p-4 flex flex-col gap-3 bg-white">
