@@ -1,34 +1,47 @@
 use evidence_core::{EvidenceReader, ReaderInfo};
 use std::io::{self, Read, Seek, SeekFrom};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-/// E01 reader. Walks 76-byte section descriptor linked list.
-/// Supports both ASCII-header and EWF-L01 binary-header formats.
+/// E01 reader with multi-segment support.
+/// Opens .E01 and auto-detects .E02, .E03... files.
+/// Chunk table maps each entry to (segment_index, file_offset, compressed).
 pub struct E01Reader {
     info: ReaderInfo,
     total_bytes: u64,
     chunk_size_sectors: u32,
-    /// chunk_index -> (segment_file_offset, compressed)
-    chunk_table: Vec<(u64, bool)>,
-    file: std::fs::File,
+    chunk_table: Vec<(usize, u64, bool)>, // (segment, offset, compressed)
+    segment_files: Vec<std::fs::File>,
     cursor: u64,
 }
 
 impl E01Reader {
     pub fn open(path: &Path) -> io::Result<Self> {
-        let mut file = std::fs::File::open(path)?;
+        let base = path.with_extension("");
+        let _stem = base.file_stem().unwrap_or_default().to_string_lossy();
+
+        let mut segment_files: Vec<std::fs::File> = Vec::new();
+        // Open .E01, .E02, ... until file not found
+        for seg_num in 1u32.. {
+            let seg_path = build_segment_path(path, seg_num);
+            match std::fs::File::open(&seg_path) {
+                Ok(f) => segment_files.push(f),
+                Err(e) if e.kind() == io::ErrorKind::NotFound => break,
+                Err(e) => return Err(e),
+            }
+        }
+
+        let mut file = &segment_files[0];
         let file_len = file.seek(SeekFrom::End(0))?;
         file.seek(SeekFrom::Start(0))?;
 
-        // File header: magic[3] + tab[1] + crlf[2] + media[1] + reserved[2]
-        // + seg_n[2] + seg_total[2] = 13 bytes
+        // File header: 13 bytes
         let mut fhdr = [0u8; 13];
         file.read_exact(&mut fhdr)?;
         if &fhdr[0..3] != b"EVF" {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "not EWF"));
         }
 
-        // First section descriptor at offset 13
+        // Walk section descriptor linked list
         let mut next_off = 13u64;
         let mut sections: Vec<(String, Vec<u8>)> = Vec::new();
 
@@ -39,7 +52,6 @@ impl E01Reader {
                 break;
             }
 
-            // section_type: 16 bytes NUL-padded ASCII
             let stype = String::from_utf8_lossy(&desc[0..16])
                 .trim_end_matches('\0')
                 .to_string();
@@ -47,7 +59,6 @@ impl E01Reader {
             let next = u64::from_le_bytes(desc[16..24].try_into().unwrap());
             let section_size = u64::from_le_bytes(desc[24..32].try_into().unwrap());
 
-            // Read section content (limit to 10MB per section, respect file_len)
             let read_size = section_size
                 .min(10_000_000)
                 .min(file_len.saturating_sub(next_off + 76));
@@ -65,20 +76,45 @@ impl E01Reader {
             next_off = if next > 0 && next < file_len { next } else { 0 };
         }
 
-        // Find volume section to get geometry
         let (sectors_count, chunk_size_sectors) = find_geometry(&sections, file_len)?;
-
         let total_bytes = sectors_count * 512;
-        let chunk_size_sectors = if chunk_size_sectors > 0 {
-            chunk_size_sectors
-        } else {
-            64
-        };
+        let cks = if chunk_size_sectors > 0 { chunk_size_sectors } else { 64 };
 
-        // Build chunk table from "table" section(s)
-        let mut chunk_table: Vec<(u64, bool)> = Vec::new();
+        // Build chunk table covering all segments.
+        let mut chunk_table: Vec<(usize, u64, bool)> = Vec::new();
+        // Pre-fetch segment sizes
+        let segment_sizes: Vec<u64> = segment_files
+            .iter()
+            .map(|f| f.metadata().map(|m| m.len()).unwrap_or(0))
+            .collect();
+
         for (stype, content) in &sections {
             if stype.starts_with("table") && content.len() >= 12 {
+                let table_base = if content.len() >= 16 {
+                    u64::from_le_bytes(content[8..16].try_into().unwrap_or([0; 8]))
+                } else {
+                    0
+                };
+                // Determine segment: table_base is cumulative across files.
+                // Single-segment → segment 0 always.
+                // Multi-segment → find the segment whose cumulative size > table_base.
+                let segment = if segment_sizes.len() <= 1 {
+                    0
+                } else {
+                    let mut cum = 0u64;
+                    let mut s = 0usize;
+                    for (i, &sz) in segment_sizes.iter().enumerate() {
+                        if table_base < cum + sz {
+                            s = i;
+                            break;
+                        }
+                        cum += sz;
+                        s = i;
+                    }
+                    s
+                };
+                let seg_size = segment_sizes.get(segment).copied().unwrap_or(file_len);
+
                 let table_base = if content.len() >= 16 {
                     u64::from_le_bytes(content[8..16].try_into().unwrap_or([0; 8]))
                 } else {
@@ -93,11 +129,11 @@ impl E01Reader {
                     let compressed = raw & 0x8000_0000 != 0;
                     let rel = (raw & 0x7FFF_FFFF) as u64;
                     let abs_off = if table_base > 0 {
-                        table_base + rel
+                        (table_base + rel).min(seg_size.saturating_sub(chunk_size_sectors as u64 * 512))
                     } else {
                         rel
                     };
-                    chunk_table.push((abs_off, compressed));
+                    chunk_table.push((segment, abs_off, compressed));
                 }
             }
         }
@@ -109,23 +145,31 @@ impl E01Reader {
                 kind: "e01".into(),
             },
             total_bytes,
-            chunk_size_sectors,
+            chunk_size_sectors: cks,
             chunk_table,
-            file,
+            segment_files,
             cursor: 0,
         })
     }
 
     fn read_chunk(&mut self, idx: u64) -> io::Result<Vec<u8>> {
-        let (offset, compressed) = chunk_entry(&self.chunk_table, idx)?;
-        self.file.seek(SeekFrom::Start(offset))?;
+        let (seg_idx, offset, compressed) = chunk_entry(&self.chunk_table, idx)?;
         let chunk_bytes = self.chunk_size_sectors as usize * 512;
 
+        if seg_idx >= self.segment_files.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("chunk references segment {} but only {} available", seg_idx, self.segment_files.len()),
+            ));
+        }
+
+        let file = &mut self.segment_files[seg_idx];
+        file.seek(SeekFrom::Start(offset))?;
+
         if compressed {
-            // zlib-compressed: read up to chunk_bytes*2 bytes (compressed usually smaller)
             let max_raw = chunk_bytes.saturating_mul(2).max(4096);
             let mut raw = vec![0u8; max_raw];
-            let n = self.file.read(&mut raw)?;
+            let n = file.read(&mut raw)?;
             raw.truncate(n);
             let mut decoder = flate2::read::ZlibDecoder::new(&raw[..]);
             let mut buf = vec![0u8; chunk_bytes];
@@ -134,7 +178,7 @@ impl E01Reader {
             Ok(buf)
         } else {
             let mut buf = vec![0u8; chunk_bytes];
-            self.file.read_exact(&mut buf)?;
+            file.read_exact(&mut buf)?;
             Ok(buf)
         }
     }
@@ -185,7 +229,7 @@ impl EvidenceReader for E01Reader {
     }
 }
 
-fn chunk_entry(table: &[(u64, bool)], idx: u64) -> io::Result<(u64, bool)> {
+fn chunk_entry(table: &[(usize, u64, bool)], idx: u64) -> io::Result<(usize, u64, bool)> {
     table
         .get(idx as usize)
         .copied()
@@ -202,7 +246,6 @@ fn find_geometry(sections: &[(String, Vec<u8>)], file_len: u64) -> io::Result<(u
             }
         }
     }
-    // Fallback: scan any section that might contain geometry
     for (_stype, content) in sections {
         if content.len() >= 24 {
             let sc = u64::from_le_bytes(content[16..24].try_into().unwrap_or([0; 8]));
@@ -215,4 +258,32 @@ fn find_geometry(sections: &[(String, Vec<u8>)], file_len: u64) -> io::Result<(u
         io::ErrorKind::InvalidData,
         "no geometry found",
     ))
+}
+
+/// Build the path for segment N of an E01 image.
+/// E.g., "image.E01" → segment 1, "image.E02" → segment 2, etc.
+fn build_segment_path(first_segment: &Path, seg_num: u32) -> PathBuf {
+    let ext = first_segment.extension().unwrap_or_default().to_string_lossy();
+    let stem_with_ext = first_segment.file_name().unwrap_or_default().to_string_lossy();
+
+    // E01 → E02, e01 → e02, E01 → E02 etc.
+    // Handle extensions like ".E01", ".e01", ".E01.001"
+    let _base_ext = if ext.len() == 3 && ext.starts_with(['E', 'e']) {
+        ext.to_uppercase()
+    } else {
+        ext.to_string()
+    };
+
+    if seg_num == 1 {
+        return first_segment.to_path_buf();
+    }
+
+    // Determine the extension format: E01 → EXX
+    let parent = first_segment.parent().unwrap_or_else(|| Path::new("."));
+    let base_name = stem_with_ext.trim_end_matches(&ext.to_string());
+    // Remove trailing dot
+    let base_name = base_name.trim_end_matches('.');
+
+    let new_ext = format!("E{:02}", seg_num);
+    parent.join(format!("{}.{}", base_name, new_ext))
 }
