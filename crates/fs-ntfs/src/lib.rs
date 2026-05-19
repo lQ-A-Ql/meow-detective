@@ -491,7 +491,6 @@ impl FileSystemReader for NtfsReader {
             .resolve_file_path(path)?
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "file not found"))?;
         let data = self.read_file_data(inode)?;
-        // Guard against OOM on large files (128 MB limit)
         if data.len() > 128 * 1024 * 1024 {
             return Err(io::Error::new(
                 io::ErrorKind::OutOfMemory,
