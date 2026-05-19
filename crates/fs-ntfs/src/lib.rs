@@ -172,15 +172,15 @@ impl NtfsReader {
             data = &data[size_bytes..];
             let lcn_offset = read_sized_le_signed(&data[..offset_bytes]);
             data = &data[offset_bytes..];
-            if cluster_count == 0 {
-                continue; // sparse run, LCN already advanced
-            }
             let lcn = if runs.is_empty() {
                 lcn_offset
             } else {
                 prev_lcn + lcn_offset
             };
             prev_lcn = lcn;
+            if cluster_count == 0 {
+                continue; // sparse run: LCN gap without data
+            }
             runs.push((lcn, cluster_count));
         }
         Ok(runs)
@@ -209,7 +209,7 @@ impl NtfsReader {
         if alloc_size > 128 * 1024 * 1024 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("$INDEX_ALLOCATION too large: {} bytes", alloc_size),
+                format!("attribute allocation too large: {} bytes", alloc_size),
             ));
         }
 
@@ -305,6 +305,88 @@ impl NtfsReader {
         Ok(self.list_dir_by_inode(5)?.into_iter().map(|e| e.node).collect())
     }
 
+    /// Read the $DATA attribute of a file by MFT inode.
+    /// Handles both resident (inline) and non-resident (data run chain) $DATA.
+    fn read_file_data(&self, inode: u64) -> io::Result<Vec<u8>> {
+        let rec = self.read_mft_record(inode)?;
+        if rec.len() < 0x18 || &rec[0..4] != b"FILE" {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("inode {} is not a valid FILE record", inode),
+            ));
+        }
+        let attr_off = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
+        let mut pos = attr_off;
+        while pos + 8 < rec.len() {
+            let typ = u32::from_le_bytes(rec[pos..pos + 4].try_into().unwrap());
+            if typ == 0xFFFFFFFF {
+                break;
+            }
+            let len = u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap()) as usize;
+            if len == 0 || pos + len > rec.len() {
+                break;
+            }
+            if typ == 0x80 {
+                let is_nonresident = pos + 9 <= rec.len() && (rec[pos + 8] & 1) != 0;
+                if is_nonresident {
+                    if pos + 0x40 > rec.len() {
+                        return Ok(Vec::new());
+                    }
+                    return self.read_attr_nonresident(pos, &rec);
+                } else {
+                    if pos + 0x16 > rec.len() {
+                        return Ok(Vec::new());
+                    }
+                    let content_size =
+                        u32::from_le_bytes(rec[pos + 0x10..pos + 0x14].try_into().unwrap())
+                            as usize;
+                    let content_off = pos
+                        + u16::from_le_bytes(rec[pos + 0x14..pos + 0x16].try_into().unwrap())
+                            as usize;
+                    let end = content_off.saturating_add(content_size).min(rec.len());
+                    if content_off < end {
+                        return Ok(rec[content_off..end].to_vec());
+                    }
+                    return Ok(Vec::new());
+                }
+            }
+            pos += len;
+        }
+        Ok(Vec::new())
+    }
+
+    /// Resolve a file path: walk parent directories, then find the file
+    /// in the final directory. Returns file MFT inode, or None if not found.
+    fn resolve_file_path(&self, path: &str) -> io::Result<Option<u64>> {
+        let components: Vec<&str> = path
+            .trim_start_matches('\\')
+            .split('\\')
+            .filter(|c| !c.is_empty())
+            .collect();
+        let (parent_dirs, file_name) = match components.split_last() {
+            Some((file, dirs)) => (dirs, *file),
+            None => return Ok(None),
+        };
+
+        let mut current_inode = 5u64;
+        for dir in parent_dirs {
+            let children = self.list_dir_by_inode(current_inode)?;
+            let found = children
+                .iter()
+                .find(|e| e.node.name.eq_ignore_ascii_case(dir) && e.node.is_dir);
+            match found {
+                Some(entry) => current_inode = entry.mft_ref,
+                None => return Ok(None),
+            }
+        }
+
+        let children = self.list_dir_by_inode(current_inode)?;
+        Ok(children
+            .iter()
+            .find(|e| e.node.name.eq_ignore_ascii_case(file_name) && !e.node.is_dir)
+            .map(|e| e.mft_ref))
+    }
+
     /// Resolve a path from root, walking top-down through directory INDX entries.
     /// Returns the MFT inode of the final component, or None if not found.
     fn resolve_path(&self, path: &str) -> io::Result<Option<u64>> {
@@ -366,11 +448,19 @@ impl FileSystemReader for NtfsReader {
         self.list_subdir_children(path)
     }
 
-    fn open_file(&self, _path: &str) -> io::Result<Box<dyn Read>> {
-        Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "NTFS file read not yet implemented",
-        ))
+    fn open_file(&self, path: &str) -> io::Result<Box<dyn Read>> {
+        let inode = self
+            .resolve_file_path(path)?
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "file not found"))?;
+        let data = self.read_file_data(inode)?;
+        // Guard against OOM on large files (128 MB limit)
+        if data.len() > 128 * 1024 * 1024 {
+            return Err(io::Error::new(
+                io::ErrorKind::OutOfMemory,
+                format!("file too large to buffer: {} bytes", data.len()),
+            ));
+        }
+        Ok(Box::new(io::Cursor::new(data)))
     }
 
     fn data_source_name(&self) -> &str {

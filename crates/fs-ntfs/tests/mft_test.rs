@@ -233,23 +233,21 @@ fn wrong_path_returns_empty() {
 // --- Phase 16: $INDEX_ALLOCATION tests ---
 
 /// Build INDX entries as bytes. Returns (data, entry_count).
-fn build_indx_entries(names: &[&str], base_mft_ref: u64) -> (Vec<u8>, usize) {
+/// If `is_dir` is true, sets the directory flag (0x10000000).
+fn build_indx_entries(names: &[&str], base_mft_ref: u64, is_dir: bool) -> (Vec<u8>, usize) {
     let mut data = Vec::new();
     for (i, &name) in names.iter().enumerate() {
         let utf16: Vec<u16> = name.encode_utf16().collect();
         let name_bytes = utf16.len() * 2;
         let entry_size = 0x52 + name_bytes;
         let mut entry = vec![0u8; entry_size];
-        // MFT ref: lower 48 bits
         let mft_ref = base_mft_ref + i as u64;
         entry[0..8].copy_from_slice(&mft_ref.to_le_bytes());
-        // entry size @ +0x08
         entry[8..10].copy_from_slice(&(entry_size as u16).to_le_bytes());
-        // flags @ +0x48 (directory)
-        entry[0x48..0x4C].copy_from_slice(&0x10000000u32.to_le_bytes());
-        // name_len @ +0x50
+        if is_dir {
+            entry[0x48..0x4C].copy_from_slice(&0x10000000u32.to_le_bytes());
+        }
         entry[0x50] = utf16.len() as u8;
-        // name @ +0x52
         for (j, c) in utf16.iter().enumerate() {
             entry[0x52 + j * 2..0x52 + j * 2 + 2].copy_from_slice(&c.to_le_bytes());
         }
@@ -322,10 +320,10 @@ fn build_index_alloc_fixture() -> Vec<u8> {
     let indx_cluster = 32u64;
     let indx_offset = indx_cluster as usize * cluster_size; // 16384
 
-    let (root_ent_data, _) = build_indx_entries(&["Alpha", "Beta", "Gamma"], 10);
+    let (root_ent_data, _) = build_indx_entries(&["Alpha", "Beta", "Gamma"], 10, true);
     let (alloc_ent_data, _) = build_indx_entries(
         &["One", "Two", "Three", "Four", "Five"],
-        100,
+        100, true,
     );
     let indx_rec = build_indx_record(&alloc_ent_data, 3); // 3 sectors = 1536 bytes
 
@@ -448,7 +446,7 @@ fn data_run_parse_zero_length_runs_skipped() {
     // INDX data at cluster 32
     let indx_cluster = 32u64;
     let indx_offset = indx_cluster as usize * cluster_size;
-    let (entries_data, _) = build_indx_entries(&["FileA"], 1);
+    let (entries_data, _) = build_indx_entries(&["FileA"], 1, true);
     let indx_rec = build_indx_record(&entries_data, 1);
 
     let mut data = vec![0u8; indx_offset + 1024];
@@ -500,4 +498,356 @@ fn data_run_parse_zero_length_runs_skipped() {
     let nodes = ntfs.list_root_children().unwrap();
     assert_eq!(nodes.len(), 1);
     assert_eq!(nodes[0].name, "FileA");
+}
+
+// --- Phase 17: $DATA attribute + open_file tests ---
+
+/// Build a resident $DATA attribute for a file record.
+fn write_resident_data(rec: &mut [u8], offset: usize, content: &[u8]) -> usize {
+    rec[offset..offset + 4].copy_from_slice(&0x80u32.to_le_bytes()); // type $DATA
+    let content_off = 0x18u16; // content starts at attr + 0x18
+    let attr_len = 0x18 + content.len() as u32;
+    rec[offset + 4..offset + 8].copy_from_slice(&attr_len.to_le_bytes());
+    rec[offset + 8] = 0; // resident flag
+    // content_size @ +0x10
+    rec[offset + 0x10..offset + 0x14]
+        .copy_from_slice(&(content.len() as u32).to_le_bytes());
+    // content_offset @ +0x14
+    rec[offset + 0x14..offset + 0x16].copy_from_slice(&content_off.to_le_bytes());
+    // Copy content
+    let data_start = offset + content_off as usize;
+    rec[data_start..data_start + content.len()].copy_from_slice(content);
+    offset + attr_len as usize
+}
+
+/// Build a fixture with a root directory containing a file "README.TXT"
+/// that has resident $DATA with the string "Hello NTFS!".
+fn build_resident_data_fixture() -> Vec<u8> {
+    let mft_cluster = 2u64;
+    let mft_record_size = 1024usize;
+    let rec5_off = mft_cluster as usize * 512 + 5 * mft_record_size;
+    let rec6_off = mft_cluster as usize * 512 + 6 * mft_record_size;
+    let total = rec6_off + mft_record_size + 512;
+    let mut data = vec![0u8; total];
+
+    // Boot
+    make_boot(&mut data[0..512]);
+
+    // Root directory (inode 5) — one child: README.TXT (inode 6)
+    let rec5 = &mut data[rec5_off..rec5_off + mft_record_size];
+    rec5[0..4].copy_from_slice(b"FILE");
+    rec5[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+    rec5[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+    rec5[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+
+    let iro = 0x68usize;
+    rec5[iro..iro + 4].copy_from_slice(&0x90u32.to_le_bytes());
+    rec5[iro + 0x10..iro + 0x14].copy_from_slice(&0x10u32.to_le_bytes());
+    let (ent, _) = build_indx_entries(&["README.TXT"], 6, false);
+    let mut off = iro + 0x20;
+    rec5[off..off + ent.len()].copy_from_slice(&ent);
+    off += ent.len();
+    rec5[off..off + 4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+    off += 4;
+    rec5[iro + 4..iro + 8].copy_from_slice(&((off - iro) as u32).to_le_bytes());
+
+    // File record (inode 6) — with resident $DATA
+    let rec6 = &mut data[rec6_off..rec6_off + mft_record_size];
+    rec6[0..4].copy_from_slice(b"FILE");
+    rec6[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+    rec6[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+    rec6[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+    write_resident_data(rec6, 0x68, b"Hello NTFS!");
+
+    data
+}
+
+/// Build a fixture with a non-resident $DATA attribute for "large.bin".
+fn build_nonresident_data_fixture() -> Vec<u8> {
+    let cluster_size = 512usize;
+    let mft_cluster = 2u64;
+    let mft_record_size = 1024usize;
+    let rec5_off = mft_cluster as usize * 512 + 5 * mft_record_size;
+    let rec6_off = mft_cluster as usize * 512 + 6 * mft_record_size;
+
+    // File data at cluster 32
+    let data_cluster = 32u64;
+    let data_offset = data_cluster as usize * cluster_size;
+    let file_content = b"This is non-resident data spanning one cluster.";
+    let total = (data_offset + cluster_size).max(rec6_off + mft_record_size + 512);
+    let mut data = vec![0u8; total];
+
+    make_boot(&mut data[0..512]);
+
+    // Root → large.bin (inode 6)
+    let rec5 = &mut data[rec5_off..rec5_off + mft_record_size];
+    rec5[0..4].copy_from_slice(b"FILE");
+    rec5[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+    rec5[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+    rec5[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+    let iro = 0x68usize;
+    rec5[iro..iro + 4].copy_from_slice(&0x90u32.to_le_bytes());
+    rec5[iro + 0x10..iro + 0x14].copy_from_slice(&0x10u32.to_le_bytes());
+    let (ent, _) = build_indx_entries(&["large.bin"], 6, false);
+    let mut off = iro + 0x20;
+    rec5[off..off + ent.len()].copy_from_slice(&ent);
+    off += ent.len();
+    rec5[off..off + 4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+    off += 4;
+    rec5[iro + 4..iro + 8].copy_from_slice(&((off - iro) as u32).to_le_bytes());
+
+    // File record (inode 6) with non-resident $DATA
+    let rec6 = &mut data[rec6_off..rec6_off + mft_record_size];
+    rec6[0..4].copy_from_slice(b"FILE");
+    rec6[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+    rec6[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+    rec6[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+
+    let idxa = 0x68usize;
+    rec6[idxa..idxa + 4].copy_from_slice(&0x80u32.to_le_bytes()); // $DATA
+    rec6[idxa + 8] = 1; // non-resident
+    rec6[idxa + 0x20..idxa + 0x22].copy_from_slice(&0x40u16.to_le_bytes());
+    rec6[idxa + 0x28..idxa + 0x30].copy_from_slice(&(cluster_size as u64).to_le_bytes());
+    rec6[idxa + 0x30..idxa + 0x38]
+        .copy_from_slice(&(file_content.len() as u64).to_le_bytes());
+    // Data run: 1 cluster at LCN 32
+    let run = idxa + 0x40;
+    rec6[run] = 0x31; // size=1, offset=3
+    rec6[run + 1] = 1; // 1 cluster
+    rec6[run + 2..run + 5].copy_from_slice(&32u64.to_le_bytes()[..3]);
+    rec6[run + 5] = 0x00;
+    let idxa_len = (run + 6 - idxa) as u32;
+    rec6[idxa + 4..idxa + 8].copy_from_slice(&idxa_len.to_le_bytes());
+
+    // Write file content at the data cluster
+    data[data_offset..data_offset + file_content.len()].copy_from_slice(file_content);
+
+    data
+}
+
+/// Boot sector helper for Phase 17 fixtures.
+fn make_boot(boot: &mut [u8]) {
+    boot[0] = 0xEB; boot[1] = 0x52; boot[2] = 0x90;
+    boot[3..11].copy_from_slice(b"NTFS    ");
+    boot[11..13].copy_from_slice(&512u16.to_le_bytes());
+    boot[13] = 1; // 1 sector per cluster
+    boot[0x30..0x38].copy_from_slice(&2u64.to_le_bytes()); // MFT at cluster 2
+    boot[0x40..0x44].copy_from_slice(&(-10i32).to_le_bytes()); // 1024-byte records
+}
+
+#[test]
+fn read_resident_file_data() {
+    let img = build_resident_data_fixture();
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let ntfs = NtfsReader::open(reader, 0).unwrap();
+    let mut file = ntfs.open_file("README.TXT").unwrap();
+    let mut buf = String::new();
+    file.read_to_string(&mut buf).unwrap();
+    assert_eq!(buf, "Hello NTFS!");
+}
+
+#[test]
+fn read_nonresident_file_data() {
+    let img = build_nonresident_data_fixture();
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let ntfs = NtfsReader::open(reader, 0).unwrap();
+    let mut file = ntfs.open_file("large.bin").unwrap();
+    let mut buf = Vec::new();
+    file.read_to_end(&mut buf).unwrap();
+    assert_eq!(buf, b"This is non-resident data spanning one cluster.");
+}
+
+#[test]
+fn open_file_nested_path() {
+    // Build: root → Windows (6) → System32 (7) → ntdll.dll (8)
+    let _cluster_size = 512;
+    let mft_record_size = 1024usize;
+    let mft_cluster = 2u64;
+    let rec5_off = mft_cluster as usize * 512 + 5 * mft_record_size;
+    let rec6_off = mft_cluster as usize * 512 + 6 * mft_record_size;
+    let rec7_off = mft_cluster as usize * 512 + 7 * mft_record_size;
+    let rec8_off = mft_cluster as usize * 512 + 8 * mft_record_size;
+    let total = rec8_off + mft_record_size + 1024;
+    let mut data = vec![0u8; total];
+
+    make_boot(&mut data[0..512]);
+
+    // Helper: directory record
+    let mut write_dir = |rec_off: usize, children: &[(&str, u64)]| {
+        let rec = &mut data[rec_off..rec_off + mft_record_size];
+        rec[0..4].copy_from_slice(b"FILE");
+        rec[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+        rec[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+        rec[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+        let iro = 0x68usize;
+        rec[iro..iro+4].copy_from_slice(&0x90u32.to_le_bytes());
+        rec[iro+0x10..iro+0x14].copy_from_slice(&0x10u32.to_le_bytes());
+        let mut off = iro + 0x20;
+        for &(name, mft_ref) in children {
+            let utf16: Vec<u16> = name.encode_utf16().collect();
+            let name_bytes = utf16.len() * 2;
+            let entry_size = 0x52 + name_bytes;
+            rec[off..off+8].copy_from_slice(&mft_ref.to_le_bytes());
+            rec[off+8..off+10].copy_from_slice(&(entry_size as u16).to_le_bytes());
+            rec[off+0x48..off+0x4C].copy_from_slice(&0x10000000u32.to_le_bytes());
+            rec[off+0x50] = utf16.len() as u8;
+            for (i, c) in utf16.iter().enumerate() {
+                rec[off+0x52+i*2..off+0x52+i*2+2].copy_from_slice(&c.to_le_bytes());
+            }
+            off += entry_size;
+        }
+        rec[off..off+4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+        off += 4;
+        rec[iro+4..iro+8].copy_from_slice(&((off-iro) as u32).to_le_bytes());
+    };
+
+    write_dir(rec5_off, &[("Windows", 6)]);
+    write_dir(rec6_off, &[("System32", 7)]);
+    // System32 dir → ntdll.dll (file, not dir)
+    {
+        let rec7 = &mut data[rec7_off..rec7_off + mft_record_size];
+        rec7[0..4].copy_from_slice(b"FILE");
+        rec7[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+        rec7[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+        rec7[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+        let iro = 0x68usize;
+        rec7[iro..iro+4].copy_from_slice(&0x90u32.to_le_bytes());
+        rec7[iro+0x10..iro+0x14].copy_from_slice(&0x10u32.to_le_bytes());
+        // file entry: no directory flag
+        let utf16: Vec<u16> = "ntdll.dll".encode_utf16().collect();
+        let name_bytes = utf16.len() * 2;
+        let entry_size = 0x52 + name_bytes;
+        let mut off = iro + 0x20;
+        rec7[off..off+8].copy_from_slice(&8u64.to_le_bytes()); // mft_ref
+        rec7[off+8..off+10].copy_from_slice(&(entry_size as u16).to_le_bytes());
+        rec7[off+0x50] = utf16.len() as u8;
+        for (i, c) in utf16.iter().enumerate() {
+            rec7[off+0x52+i*2..off+0x52+i*2+2].copy_from_slice(&c.to_le_bytes());
+        }
+        off += entry_size;
+        rec7[off..off+4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+        off += 4;
+        rec7[iro+4..iro+8].copy_from_slice(&((off-iro) as u32).to_le_bytes());
+    }
+
+    // File record (inode 8) with resident $DATA
+    let rec8 = &mut data[rec8_off..rec8_off + mft_record_size];
+    rec8[0..4].copy_from_slice(b"FILE");
+    rec8[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+    rec8[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+    rec8[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+    write_resident_data(rec8, 0x68, b"MZ\x90\x00");
+
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data, pos: 0 });
+    let ntfs = NtfsReader::open(reader, 0).unwrap();
+    let mut file = ntfs.open_file("\\Windows\\System32\\ntdll.dll").unwrap();
+    let mut buf = Vec::new();
+    file.read_to_end(&mut buf).unwrap();
+    assert_eq!(buf, b"MZ\x90\x00");
+}
+
+#[test]
+fn open_nonexistent_file_errors() {
+    let img = build_resident_data_fixture();
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let ntfs = NtfsReader::open(reader, 0).unwrap();
+    let result = ntfs.open_file("NONEXIST.TXT");
+    assert!(result.is_err());
+}
+
+#[test]
+fn list_children_returns_files_and_dirs() {
+    // Root with one file and one subdirectory
+    let mft_record_size = 1024usize;
+    let mft_cluster = 2u64;
+    let _cluster_size = 512usize;
+    let rec5_off = mft_cluster as usize * 512 + 5 * mft_record_size;
+    let rec6_off = mft_cluster as usize * 512 + 6 * mft_record_size;
+    let rec7_off = mft_cluster as usize * 512 + 7 * mft_record_size;
+    let total = rec7_off + mft_record_size + 1024;
+    let mut data = vec![0u8; total];
+
+    make_boot(&mut data[0..512]);
+
+    // Write directory with one file entry (not is_dir)
+    let write_entry = |rec: &mut [u8], name: &str, mft_ref: u64, is_dir: bool| {
+        let utf16: Vec<u16> = name.encode_utf16().collect();
+        let name_bytes = utf16.len() * 2;
+        let entry_size = 0x52 + name_bytes;
+        rec[0..8].copy_from_slice(&mft_ref.to_le_bytes());
+        rec[8..10].copy_from_slice(&(entry_size as u16).to_le_bytes());
+        if is_dir {
+            rec[0x48..0x4C].copy_from_slice(&0x10000000u32.to_le_bytes());
+        }
+        rec[0x50] = utf16.len() as u8;
+        for (i, c) in utf16.iter().enumerate() {
+            rec[0x52 + i * 2..0x52 + i * 2 + 2].copy_from_slice(&c.to_le_bytes());
+        }
+    };
+
+    // Root directory: "SubDir" (dir, inode 6) + "notes.txt" (file, inode 7)
+    let rec5 = &mut data[rec5_off..rec5_off + mft_record_size];
+    rec5[0..4].copy_from_slice(b"FILE");
+    rec5[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+    rec5[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+    rec5[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+    let iro = 0x68usize;
+    rec5[iro..iro+4].copy_from_slice(&0x90u32.to_le_bytes());
+    rec5[iro+0x10..iro+0x14].copy_from_slice(&0x10u32.to_le_bytes());
+    let mut off = iro + 0x20;
+    write_entry(&mut rec5[off..], "SubDir", 6, true);
+    off += 0x52 + "SubDir".encode_utf16().count() * 2;
+    write_entry(&mut rec5[off..], "notes.txt", 7, false);
+    off += 0x52 + "notes.txt".encode_utf16().count() * 2;
+    rec5[off..off+4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+    off += 4;
+    rec5[iro+4..iro+8].copy_from_slice(&((off-iro) as u32).to_le_bytes());
+
+    // SubDir record (inode 6) — with one child file
+    let rec6 = &mut data[rec6_off..rec6_off + mft_record_size];
+    rec6[0..4].copy_from_slice(b"FILE");
+    rec6[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+    rec6[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+    rec6[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+    let iro6 = 0x68usize;
+    rec6[iro6..iro6+4].copy_from_slice(&0x90u32.to_le_bytes());
+    rec6[iro6+0x10..iro6+0x14].copy_from_slice(&0x10u32.to_le_bytes());
+    let (ent, _) = build_indx_entries(&["deep.txt"], 100, true);
+    off = iro6 + 0x20;
+    rec6[off..off+ent.len()].copy_from_slice(&ent);
+    off += ent.len();
+    rec6[off..off+4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+    off += 4;
+    rec6[iro6+4..iro6+8].copy_from_slice(&((off-iro6) as u32).to_le_bytes());
+
+    // notes.txt record (inode 7) with resident $DATA
+    let rec7 = &mut data[rec7_off..rec7_off + mft_record_size];
+    rec7[0..4].copy_from_slice(b"FILE");
+    rec7[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+    rec7[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+    rec7[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+    write_resident_data(rec7, 0x68, b"file content here");
+
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data, pos: 0 });
+    let ntfs = NtfsReader::open(reader, 0).unwrap();
+
+    // List root: should have 2 children (SubDir + notes.txt)
+    let root_children = ntfs.list_children("").unwrap();
+    assert_eq!(root_children.len(), 2);
+    let subdir = root_children.iter().find(|n| n.name == "SubDir").unwrap();
+    assert!(subdir.is_dir);
+    let notes = root_children.iter().find(|n| n.name == "notes.txt").unwrap();
+    assert!(!notes.is_dir);
+
+    // Open notes.txt
+    let mut file = ntfs.open_file("notes.txt").unwrap();
+    let mut content = String::new();
+    file.read_to_string(&mut content).unwrap();
+    assert_eq!(content, "file content here");
+
+    // List SubDir children
+    let sub_children = ntfs.list_children("SubDir").unwrap();
+    assert_eq!(sub_children.len(), 1);
+    assert_eq!(sub_children[0].name, "deep.txt");
+    assert!(sub_children[0].is_dir);
 }
