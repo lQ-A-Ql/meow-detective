@@ -49,14 +49,7 @@ pub fn get_current_case(state: State<AppState>) -> Result<CaseSummaryDto, String
     let guard = state.active_case.lock().map_err(|e| e.to_string())?;
     match guard.as_ref() {
         Some(active) => Ok(meta_to_dto(&active.meta)),
-        None => Ok(CaseSummaryDto {
-            id: "case-2025-001".into(),
-            name: "Windows 11 工作站镜像".into(),
-            number: Some("LAB-2025-001".into()),
-            examiner: Some("取证分析员 A".into()),
-            created_at: "2025-02-14T09:30:00Z".into(),
-            updated_at: "2025-02-16T18:42:00Z".into(),
-        }),
+        None => Err("No active case".into()),
     }
 }
 
@@ -105,28 +98,9 @@ pub fn get_case_metrics(state: State<AppState>) -> Result<CaseMetricsDto, String
 }
 
 #[tauri::command]
-pub fn get_recent_objects() -> Result<Vec<RecentObjectDto>, String> {
-    Ok(vec![
-        RecentObjectDto {
-            id: "file-001".into(),
-            title: "Downloads/AnyDesk.exe".into(),
-            detail: "可执行文件，命中近期访问".into(),
-            time: "2025-02-16T16:02:12Z".into(),
-            kind: "file".into(),
-        },
-        RecentObjectDto {
-            id: "reg-001".into(),
-            title: "RunMRU".into(),
-            detail: "最近运行项包含 powershell".into(),
-            time: "2025-02-16T15:48:09Z".into(),
-            kind: "registry".into(),
-        },
-        RecentObjectDto {
-            id: "net-001".into(),
-            title: "10.10.20.15:443".into(),
-            detail: "可疑外联目的地址".into(),
-            time: "2025-02-16T14:13:55Z".into(),
-            kind: "network".into(),
-        },
-    ])
+pub fn get_recent_objects(state: State<AppState>) -> Result<Vec<RecentObjectDto>, String> {
+    let guard = state.active_case.lock().map_err(|e| e.to_string())?;
+    let _active = guard.as_ref().ok_or("No active case")?;
+    // TODO: query recent objects from DB
+    Ok(vec![])
 }

@@ -169,39 +169,30 @@ pub fn get_file_tree() -> Vec<FileTreeNodeDto> {
     ]
 }
 
-pub fn get_file_rows() -> Vec<FileEntryRowDto> {
-    vec![
-        FileEntryRowDto {
-            id: "file-001".into(),
-            parent_id: Some("downloads".into()),
-            path: "C:/Users/Alice/Downloads/AnyDesk.exe".into(),
-            name: "AnyDesk.exe".into(),
-            entry_type: "file".into(),
-            size: Some(289_000),
-            ext: Some("exe".into()),
-            deleted: false,
-            created_at: Some("2025-02-16T10:00:00Z".into()),
-            modified_at: Some("2025-02-16T10:00:00Z".into()),
-            accessed_at: Some("2025-02-16T16:02:12Z".into()),
-            changed_at: Some("2025-02-16T10:00:00Z".into()),
-            hash_sha256: Some("87b1d5...".into()),
-        },
-        FileEntryRowDto {
-            id: "dir-001".into(),
-            parent_id: Some("users".into()),
-            path: "C:/Users/Alice/Desktop".into(),
-            name: "Desktop".into(),
-            entry_type: "directory".into(),
-            size: None,
-            ext: None,
-            deleted: false,
-            created_at: Some("2025-02-01T09:00:00Z".into()),
-            modified_at: Some("2025-02-15T12:12:12Z".into()),
-            accessed_at: Some("2025-02-16T08:20:01Z".into()),
-            changed_at: Some("2025-02-15T12:12:12Z".into()),
-            hash_sha256: None,
-        },
-    ]
+pub fn get_file_rows_real(conn: &rusqlite::Connection) -> Result<Vec<FileEntryRowDto>, String> {
+    let repo = FileRepo::new(conn);
+    let data_source_id: String = conn
+        .query_row("SELECT id FROM data_sources LIMIT 1", [], |r| r.get(0))
+        .map_err(|e| e.to_string())?;
+    let roots = repo
+        .find_roots(&DataSourceId(data_source_id))
+        .map_err(|e| e.to_string())?;
+
+    let mut all = Vec::new();
+    let mut queue: VecDeque<domain::FileEntry> = VecDeque::from(roots);
+    while let Some(entry) = queue.pop_front() {
+        if entry.entry_type != domain::EntryType::Directory {
+            all.push(file_entry_to_dto(&entry));
+        } else {
+            let children = repo
+                .find_children(&entry.id)
+                .map_err(|e| e.to_string())?;
+            for child in children {
+                queue.push_back(child);
+            }
+        }
+    }
+    Ok(all)
 }
 
 pub fn open_file_handle(file_id: String) -> ViewerHandleDto {

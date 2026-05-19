@@ -238,12 +238,22 @@ pub fn get_file_tree(state: State<AppState>) -> Result<Vec<FileTreeNodeDto>, Str
             return Ok(items);
         }
     }
-    Ok(app_services::file_service::get_file_tree())
+    // Return empty when no data sources exist yet
+    Ok(vec![])
 }
 
 #[tauri::command]
-pub fn get_file_rows() -> Result<Vec<transport::dto::FileEntryRowDto>, String> {
-    Ok(app_services::file_service::get_file_rows())
+pub fn get_file_rows(state: State<AppState>) -> Result<Vec<transport::dto::FileEntryRowDto>, String> {
+    let guard = state.active_case.lock().map_err(|e| e.to_string())?;
+    if let Some(active) = guard.as_ref() {
+        return active
+            .with_conn(|conn| {
+                app_services::file_service::get_file_rows_real(conn)
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))
+            })
+            .map_err(|e| e.to_string());
+    }
+    Err("No active case".into())
 }
 
 #[tauri::command]
@@ -252,15 +262,13 @@ pub fn open_file_handle(
     file_id: String,
 ) -> Result<transport::dto::ViewerHandleDto, String> {
     let guard = state.active_case.lock().map_err(|e| e.to_string())?;
-    if let Some(active) = guard.as_ref() {
-        return active
-            .with_conn(|conn| {
-                app_services::file_service::open_file_handle_real(conn, &file_id)
-                    .map_err(persistence_sqlite::DbError::System)
-            })
-            .map_err(|e| e.to_string());
-    }
-    Ok(app_services::file_service::open_file_handle(file_id))
+    let active = guard.as_ref().ok_or("No active case")?;
+    active
+        .with_conn(|conn| {
+            app_services::file_service::open_file_handle_real(conn, &file_id)
+                .map_err(persistence_sqlite::DbError::System)
+        })
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -269,22 +277,21 @@ pub fn open_file_handle_request(
     request: transport::commands::OpenFileHandleRequest,
 ) -> Result<transport::dto::ViewerHandleDto, String> {
     let guard = state.active_case.lock().map_err(|e| e.to_string())?;
-    if let Some(active) = guard.as_ref() {
-        return active
-            .with_conn(|conn| {
-                app_services::file_service::open_file_handle_real(conn, &request.file_id)
-                    .map_err(persistence_sqlite::DbError::System)
-            })
-            .map_err(|e| e.to_string());
-    }
-    Ok(app_services::file_service::open_file_handle(
-        request.file_id,
-    ))
+    let active = guard.as_ref().ok_or("No active case")?;
+    active
+        .with_conn(|conn| {
+            app_services::file_service::open_file_handle_real(conn, &request.file_id)
+                .map_err(persistence_sqlite::DbError::System)
+        })
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn read_file_range(
+    state: State<AppState>,
     request: transport::dto::ViewerRangeRequestDto,
 ) -> Result<transport::dto::ViewerRangeResponseDto, String> {
-    Ok(app_services::file_service::read_file_range(request))
+    let guard = state.active_case.lock().map_err(|e| e.to_string())?;
+    let _active = guard.as_ref().ok_or("No active case")?;
+    Ok(app_services::file_service::read_file_range_real(&request))
 }
