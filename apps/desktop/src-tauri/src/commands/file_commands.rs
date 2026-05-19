@@ -89,9 +89,10 @@ pub fn import_data_source(state: State<AppState>, source_path: String) -> Result
             job_repo.update_progress(&job_id, 20, "Enumerating filesystem...")?;
 
             // E01/RAW image path: detect partition table (MBR or GPT), find NTFS
-            let stats = if probe_result.candidates.contains(&"e01".to_string())
+            let is_e01 = probe_result.candidates.contains(&"e01".to_string())
                 || probe_result.candidates.contains(&"raw".to_string())
-            {
+                || path.extension().map(|e| e.to_ascii_uppercase() == "E01").unwrap_or(false);
+            let stats = if is_e01 {
                 let mut img_reader = image_e01::E01Reader::open(&path)
                     .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
                 let mut sector0 = [0u8; 512];
@@ -99,8 +100,10 @@ pub fn import_data_source(state: State<AppState>, source_path: String) -> Result
                     .read_exact(&mut sector0)
                     .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
-                // Try MBR first
                 let mbr_entries = mbr::parse_partition_table(&sector0);
+                let mbr_types: Vec<String> = mbr_entries.iter().map(|e| format!("{:02X}", e.partition_type)).collect();
+                let is_ntfs_boot = &sector0[3..11] == b"NTFS    ";
+
                 let ntfs_offset = if let Some(ntfs) = mbr::find_first_ntfs(&mbr_entries) {
                     Some(ntfs.lba_start as u64 * 512)
                 } else if let Some(fat) = mbr_entries.iter().find(|e| matches!(e.partition_type, 0x0B | 0x0C | 0x0E)) {
@@ -151,7 +154,10 @@ pub fn import_data_source(state: State<AppState>, source_path: String) -> Result
                         file_count: 0,
                         dir_count: 0,
                         total_size: 0,
-                        warnings: vec!["No NTFS partition found (GPT or MBR)".into()],
+                        warnings: vec![format!(
+                            "No NTFS partition. MBR types: [{}], is_ntfs_boot: {}",
+                            mbr_types.join(", "), is_ntfs_boot
+                        )],
                     }
                 }
             } else if probe_result
