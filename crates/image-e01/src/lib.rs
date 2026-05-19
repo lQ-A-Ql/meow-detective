@@ -56,8 +56,8 @@ impl E01Reader {
                 .trim_end_matches('\0')
                 .to_string();
 
-            let next = u64::from_le_bytes(desc[16..24].try_into().unwrap());
-            let section_size = u64::from_le_bytes(desc[24..32].try_into().unwrap());
+            let next = u64::from_le_bytes(desc[16..24].try_into().unwrap_or([0; 8]));
+            let section_size = u64::from_le_bytes(desc[24..32].try_into().unwrap_or([0; 8]));
 
             let read_size = section_size
                 .min(10_000_000)

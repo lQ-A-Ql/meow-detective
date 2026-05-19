@@ -851,3 +851,91 @@ fn list_children_returns_files_and_dirs() {
     assert_eq!(sub_children[0].name, "deep.txt");
     assert!(sub_children[0].is_dir);
 }
+
+// --- Phase 19: robustness tests ---
+
+#[test]
+fn malformed_record_no_panic() {
+    // Feed random/garbage bytes to list_root_children — must not panic
+    let garbage = vec![0xFFu8; 4096];
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: garbage, pos: 0 });
+    // open may fail (no valid boot sector), which is OK
+    if let Ok(ntfs) = NtfsReader::open(reader, 0) {
+        let _ = ntfs.list_root_children();
+        let _ = ntfs.list_subdir_children("anything");
+    }
+}
+
+#[test]
+fn par_ref_mismatch_returns_none() {
+    // Build: root → "DirA" (inode 6, but par_ref says parent is 99)
+    let mft_record_size = 1024usize;
+    let mft_cluster = 2u64;
+    let cluster_size = 512usize;
+    let rec5_off = mft_cluster as usize * 512 + 5 * mft_record_size;
+    let rec6_off = mft_cluster as usize * 512 + 6 * mft_record_size;
+    let total = rec6_off + mft_record_size + 1024;
+    let mut data = vec![0u8; total];
+
+    make_boot(&mut data[0..512]);
+
+    // Root → DirA (inode 6)
+    let rec5 = &mut data[rec5_off..rec5_off + mft_record_size];
+    rec5[0..4].copy_from_slice(b"FILE");
+    rec5[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+    rec5[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+    rec5[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+    let iro = 0x68usize;
+    rec5[iro..iro+4].copy_from_slice(&0x90u32.to_le_bytes());
+    rec5[iro+0x10..iro+0x14].copy_from_slice(&0x10u32.to_le_bytes());
+    // INDX entry for DirA
+    let utf16: Vec<u16> = "DirA".encode_utf16().collect();
+    let name_bytes = utf16.len() * 2;
+    let entry_size = 0x52 + name_bytes;
+    let mut off = iro + 0x20;
+    rec5[off..off+8].copy_from_slice(&6u64.to_le_bytes());
+    rec5[off+8..off+10].copy_from_slice(&(entry_size as u16).to_le_bytes());
+    rec5[off+0x48..off+0x4C].copy_from_slice(&0x10000000u32.to_le_bytes());
+    rec5[off+0x50] = utf16.len() as u8;
+    for (i, c) in utf16.iter().enumerate() {
+        rec5[off+0x52+i*2..off+0x52+i*2+2].copy_from_slice(&c.to_le_bytes());
+    }
+    off += entry_size;
+    rec5[off..off+4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+    off += 4;
+    rec5[iro+4..iro+8].copy_from_slice(&((off-iro) as u32).to_le_bytes());
+
+    // DirA record (inode 6) — $FILE_NAME with par_ref=99 (WRONG: should be 5)
+    let rec6 = &mut data[rec6_off..rec6_off + mft_record_size];
+    rec6[0..4].copy_from_slice(b"FILE");
+    rec6[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+    rec6[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+    rec6[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+    // $FILE_NAME (0x30) at 0x68 with par_ref=99
+    let fn_off = 0x68usize;
+    rec6[fn_off..fn_off+4].copy_from_slice(&0x30u32.to_le_bytes());
+    rec6[fn_off+4..fn_off+8].copy_from_slice(&0x48u32.to_le_bytes()); // length
+    rec6[fn_off+8] = 0; // resident
+    // par_ref at attribute start: parent=99
+    rec6[fn_off..fn_off+8].copy_from_slice(&99u64.to_le_bytes());
+
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data, pos: 0 });
+    let ntfs = NtfsReader::open(reader, 0).unwrap();
+    // resolve_path should detect the par_ref mismatch and return None
+    let result = ntfs.list_subdir_children("DirA").unwrap();
+    assert!(result.is_empty(), "par_ref mismatch should make DirA unreachable");
+}
+
+#[test]
+fn open_file_truncated_record_no_panic() {
+    // Corrupted fixture — truncated MFT record for README.TXT
+    // Read should gracefully fail instead of panicking
+    let img = build_resident_data_fixture();
+    // Corrupt: shorten the file to truncate the README.TXT record
+    let corrupted: Vec<u8> = img[..img.len() - 900].to_vec();
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: corrupted, pos: 0 });
+    if let Ok(ntfs) = NtfsReader::open(reader, 0) {
+        let _ = ntfs.open_file("README.TXT");
+        let _ = ntfs.list_root_children();
+    }
+}

@@ -48,7 +48,7 @@ impl NtfsReader {
             ));
         }
         let cluster_size = bytes_per_sector as u64 * sectors_per_cluster as u64;
-        let mft_cluster = u64::from_le_bytes(boot[0x30..0x38].try_into().unwrap());
+        let mft_cluster = u64::from_le_bytes(boot[0x30..0x38].try_into().unwrap_or([0; 8]));
         let _root_dir = root_dir_frn(&boot);
         let mft_record_size = mft_record_bytes(&boot);
 
@@ -103,11 +103,11 @@ impl NtfsReader {
         let mut index_alloc_entries: Option<Vec<DirEntry>> = None;
 
         while pos + 8 < rec.len() {
-            let typ = u32::from_le_bytes(rec[pos..pos + 4].try_into().unwrap());
+            let typ = u32::from_le_bytes(rec[pos..pos + 4].try_into().unwrap_or([0; 4]));
             if typ == 0xFFFFFFFF {
                 break;
             }
-            let len = u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap()) as usize;
+            let len = u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
             if len == 0 || pos + len > rec.len() {
                 break;
             }
@@ -115,7 +115,7 @@ impl NtfsReader {
             if typ == 0x90 && pos + 0x18 <= rec.len() {
                 // $INDEX_ROOT — resident entries
                 let entries_off =
-                    u32::from_le_bytes(rec[pos + 0x10..pos + 0x14].try_into().unwrap()) as usize;
+                    u32::from_le_bytes(rec[pos + 0x10..pos + 0x14].try_into().unwrap_or([0; 4])) as usize;
                 let ents_start = pos + 0x10 + entries_off;
                 if ents_start < pos + len {
                     index_root_entries = Some(parse_indx_entries(&rec[ents_start..pos + len]));
@@ -318,11 +318,11 @@ impl NtfsReader {
         let attr_off = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
         let mut pos = attr_off;
         while pos + 8 < rec.len() {
-            let typ = u32::from_le_bytes(rec[pos..pos + 4].try_into().unwrap());
+            let typ = u32::from_le_bytes(rec[pos..pos + 4].try_into().unwrap_or([0; 4]));
             if typ == 0xFFFFFFFF {
                 break;
             }
-            let len = u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap()) as usize;
+            let len = u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
             if len == 0 || pos + len > rec.len() {
                 break;
             }
@@ -338,10 +338,10 @@ impl NtfsReader {
                         return Ok(Vec::new());
                     }
                     let content_size =
-                        u32::from_le_bytes(rec[pos + 0x10..pos + 0x14].try_into().unwrap())
+                        u32::from_le_bytes(rec[pos + 0x10..pos + 0x14].try_into().unwrap_or([0; 4]))
                             as usize;
                     let content_off = pos
-                        + u16::from_le_bytes(rec[pos + 0x14..pos + 0x16].try_into().unwrap())
+                        + u16::from_le_bytes(rec[pos + 0x14..pos + 0x16].try_into().unwrap_or([0; 2]))
                             as usize;
                     let end = content_off.saturating_add(content_size).min(rec.len());
                     if content_off < end {
@@ -389,6 +389,7 @@ impl NtfsReader {
 
     /// Resolve a path from root, walking top-down through directory INDX entries.
     /// Returns the MFT inode of the final component, or None if not found.
+    /// Validates $FILE_NAME.par_ref consistency at each step.
     fn resolve_path(&self, path: &str) -> io::Result<Option<u64>> {
         let components: Vec<&str> = path
             .trim_start_matches('\\')
@@ -407,6 +408,10 @@ impl NtfsReader {
                 .find(|e| e.node.name.eq_ignore_ascii_case(target) && e.node.is_dir);
             match found {
                 Some(entry) => {
+                    // Verify the child directory's $FILE_NAME points back to us
+                    if !self.verify_parent(entry.mft_ref, current_inode)? {
+                        return Ok(None);
+                    }
                     current_inode = entry.mft_ref;
                     remaining = rest;
                 }
@@ -414,6 +419,39 @@ impl NtfsReader {
             }
         }
         Ok(Some(current_inode))
+    }
+
+    /// Verify that the $FILE_NAME attribute of `child_inode` has
+    /// `par_ref` == `expected_parent`. Returns false on mismatch or IO error.
+    fn verify_parent(&self, child_inode: u64, expected_parent: u64) -> io::Result<bool> {
+        let rec = match self.read_mft_record(child_inode) {
+            Ok(r) => r,
+            Err(_) => return Ok(false),
+        };
+        let attr_off = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
+        let mut pos = attr_off;
+        while pos + 8 < rec.len() {
+            let typ = u32::from_le_bytes(
+                rec[pos..pos + 4].try_into().unwrap_or([0xFF, 0xFF, 0xFF, 0xFF]),
+            );
+            if typ == 0xFFFFFFFF {
+                break;
+            }
+            let len =
+                u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
+            if len == 0 || pos + len > rec.len() {
+                break;
+            }
+            if typ == 0x30 && pos + 8 <= rec.len() {
+                // $FILE_NAME: par_ref is a 48-bit value at attribute + 0x00
+                let par_ref = u64::from_le_bytes(
+                    rec[pos..pos + 8].try_into().unwrap_or([0; 8]),
+                ) & 0x0000_FFFF_FFFF_FFFF;
+                return Ok(par_ref == expected_parent);
+            }
+            pos += len;
+        }
+        Ok(true) // no $FILE_NAME found — can't verify, allow
     }
 
     pub fn list_subdir_children(&self, path: &str) -> io::Result<Vec<FsNode>> {
@@ -518,12 +556,12 @@ fn parse_indx_entries(data: &[u8]) -> Vec<DirEntry> {
 // --- Boot sector parsing helpers ---
 
 fn root_dir_frn(boot: &[u8]) -> u64 {
-    let mft_ref = u64::from_le_bytes(boot[0x2C..0x34].try_into().unwrap());
+    let mft_ref = u64::from_le_bytes(boot[0x2C..0x34].try_into().unwrap_or([0; 8]));
     mft_ref & 0x0000_FFFF_FFFF_FFFF
 }
 
 fn mft_record_bytes(boot: &[u8]) -> u32 {
-    let raw = i32::from_le_bytes(boot[0x40..0x44].try_into().unwrap());
+    let raw = i32::from_le_bytes(boot[0x40..0x44].try_into().unwrap_or([0; 4]));
     if raw > 0 {
         1024
     } else if raw < 0 && (-raw) < 32 {
