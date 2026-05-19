@@ -871,7 +871,7 @@ fn par_ref_mismatch_returns_none() {
     // Build: root → "DirA" (inode 6, but par_ref says parent is 99)
     let mft_record_size = 1024usize;
     let mft_cluster = 2u64;
-    let cluster_size = 512usize;
+    let _cluster_size = 512usize;
     let rec5_off = mft_cluster as usize * 512 + 5 * mft_record_size;
     let rec6_off = mft_cluster as usize * 512 + 6 * mft_record_size;
     let total = rec6_off + mft_record_size + 1024;
