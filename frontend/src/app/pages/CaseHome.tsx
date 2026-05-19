@@ -1,6 +1,8 @@
-import { Activity, AlertTriangle, Clock, Database, FileText, CheckCircle2 } from 'lucide-react';
+import { Activity, AlertTriangle, Clock, Database, FileText, CheckCircle2, Upload } from 'lucide-react';
+import { useState } from 'react';
 import { useCaseMetrics, useCurrentCase, useRecentObjects } from '@/features/case/hooks';
 import { useJobsSnapshot, useWarnings } from '@/features/jobs/hooks';
+import { useImportDataSource } from '@/features/files/hooks';
 import { InlineProgressRow } from '@/components/status/InlineProgressRow';
 
 export function CaseHome() {
@@ -9,6 +11,9 @@ export function CaseHome() {
   const { data: recentObjects } = useRecentObjects();
   const { data: jobs } = useJobsSnapshot();
   const { data: warnings } = useWarnings();
+  const importMutation = useImportDataSource();
+  const [importPath, setImportPath] = useState('');
+  const [showImport, setShowImport] = useState(false);
 
   const runningJob = jobs?.find((job) => job.status === 'running');
   const completedJobs = jobs?.filter((job) => job.status === 'completed') ?? [];
@@ -41,9 +46,51 @@ export function CaseHome() {
               <div className="text-[#888] text-[10px] uppercase tracking-wider mb-1">检验人</div>
               <div className="text-[#111] text-[13px]">{currentCase?.examiner}</div>
             </div>
+            <button
+              onClick={() => setShowImport(!showImport)}
+              className="flex items-center gap-1.5 border border-[#111] px-3 py-1.5 text-[12px] hover:bg-[#111] hover:text-white transition-colors"
+            >
+              <Upload size={12} /> 导入数据源
+            </button>
           </div>
         </div>
       </div>
+
+      {showImport && (
+        <div className="border-b border-[#e0e0e0] bg-[#fafafa] p-4 shrink-0">
+          <div className="flex items-center gap-3">
+            <input
+              type="text"
+              value={importPath}
+              onChange={(e) => setImportPath(e.target.value)}
+              placeholder="镜像路径 (例: E:\cases\image.E01)"
+              className="flex-1 border border-[#ccc] px-3 py-1.5 text-[12px] font-mono"
+            />
+            <button
+              onClick={() => {
+                if (importPath.trim()) {
+                  importMutation.mutate(importPath.trim());
+                  setShowImport(false);
+                  setImportPath('');
+                }
+              }}
+              disabled={importMutation.isPending}
+              className="bg-[#111] text-white px-4 py-1.5 text-[12px] hover:bg-[#333] disabled:opacity-50"
+            >
+              {importMutation.isPending ? '导入中...' : '导入'}
+            </button>
+            <button onClick={() => setShowImport(false)} className="text-[#888] text-[12px] hover:text-[#111]">
+              取消
+            </button>
+          </div>
+          {importMutation.isSuccess && (
+            <div className="mt-2 text-[11px] text-green-700 font-mono">{importMutation.data}</div>
+          )}
+          {importMutation.isError && (
+            <div className="mt-2 text-[11px] text-red-600 font-mono">{(importMutation.error as Error)?.message || '导入失败'}</div>
+          )}
+        </div>
+      )}
 
       <div className="border-b border-[#e0e0e0] shrink-0">
         <div className="grid grid-cols-4 divide-x divide-[#e0e0e0]">

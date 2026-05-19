@@ -1,10 +1,35 @@
 import { Clock, ZoomIn, ZoomOut, ChevronRight } from 'lucide-react';
+import { useMemo } from 'react';
 import { PageSubbar } from '@/components/layout/PageSubbar';
 import { DenseDataTable } from '@/components/tables/DenseDataTable';
 import { InspectorPane, InspectorSection, InspectorValue } from '@/components/layout/InspectorPane';
 import { useTimelineEvents } from '@/features/timeline/hooks';
 import { useSelectionStore } from '@/stores/selection-store';
 import { TimelineEventDto } from '@/types/models';
+
+function buildTimelineBars(events: TimelineEventDto[], bucketCount: number): number[] {
+  if (!events || events.length === 0) return Array(bucketCount).fill(0);
+  const timestamps = events
+    .map((e) => Date.parse(e.ts))
+    .filter((t) => !isNaN(t));
+  if (timestamps.length === 0) return Array(bucketCount).fill(0);
+  const min = Math.min(...timestamps);
+  const max = Math.max(...timestamps);
+  const range = max - min || 1;
+  const buckets = Array(bucketCount).fill(0);
+  for (const ts of timestamps) {
+    const idx = Math.min(Math.floor(((ts - min) / range) * bucketCount), bucketCount - 1);
+    buckets[idx]++;
+  }
+  const maxCount = Math.max(...buckets, 1);
+  return buckets.map((c) => (c / maxCount) * 100);
+}
+
+function formatTs(ts: string): string {
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return ts.slice(0, 16);
+  return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
 
 export function Timeline() {
   const { data: events } = useTimelineEvents();
@@ -13,6 +38,17 @@ export function Timeline() {
   const selectedEvent = events?.find((event) => event.id === selectedTimelineId) ?? events?.[0];
   const sourceCount = new Set((events ?? []).map((event) => String(event.attrs.source ?? '-'))).size;
 
+  const bars = useMemo(() => buildTimelineBars(events ?? [], 60), [events]);
+
+  const timeRange = useMemo(() => {
+    if (!events || events.length === 0) return { start: '-', end: '-' };
+    const timestamps = events.map((e) => Date.parse(e.ts)).filter((t) => !isNaN(t));
+    if (timestamps.length === 0) return { start: '-', end: '-' };
+    const min = new Date(Math.min(...timestamps));
+    const max = new Date(Math.max(...timestamps));
+    return { start: formatTs(min.toISOString()), end: formatTs(max.toISOString()) };
+  }, [events]);
+
   return (
     <div className="flex-1 flex flex-col w-full h-full bg-white min-w-0">
       <PageSubbar title="时间线控制带" meta={`事件 ${events?.length ?? 0} 条 / 数据源 ${sourceCount} 个`}>
@@ -20,22 +56,14 @@ export function Timeline() {
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-2 text-[#666] text-[11px] font-mono">
               <Clock size={12} className="text-[#888]" />
-              <span className="text-[#111]">2026-05-10 00:00:00</span>
+              <span className="text-[#111]">{timeRange.start}</span>
               <span className="text-[#aaa]">至</span>
-              <span className="text-[#111]">2026-05-12 23:59:59</span>
+              <span className="text-[#111]">{timeRange.end}</span>
             </div>
             <div className="border-l border-[#e0e0e0] h-4"></div>
             <div className="flex items-center gap-2 text-[#888] text-[11px]">
               粒度:
-              <span className="text-[#111] bg-white px-1.5 py-0.5 border border-[#ccc]">小时</span>
-            </div>
-            <div className="flex items-center gap-2 text-[#888] text-[11px]">
-              类型:
-              <span className="text-[#111] bg-white px-1.5 py-0.5 border border-[#ccc]">全部事件</span>
-            </div>
-            <div className="flex items-center gap-2 text-[#888] text-[11px]">
-              来源:
-              <span className="text-[#111] bg-white px-1.5 py-0.5 border border-[#ccc]">文件系统 + 事件日志</span>
+              <span className="text-[#111] bg-white px-1.5 py-0.5 border border-[#ccc]">自适应</span>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -47,23 +75,21 @@ export function Timeline() {
 
       <div className="h-24 border-b border-[#e0e0e0] bg-[#fcfcfc] shrink-0 flex flex-col p-2">
         <div className="flex-1 flex items-end gap-[1px] px-2">
-          {Array.from({ length: 60 }).map((_, i) => {
-            const height = i === 45 ? 100 : i === 46 ? 80 : 8 + ((i * 17) % 26);
-            const isHighlight = i === 45 || i === 46;
-            return (
-              <div
-                key={i}
-                className={`flex-1 ${isHighlight ? 'bg-[#111]' : 'bg-[#e0e0e0] hover:bg-[#ccc]'}`}
-                style={{ height: `${height}%` }}
-              />
-            );
-          })}
+          {bars.map((height, i) => (
+            <div
+              key={i}
+              className={`flex-1 transition-colors ${height > 0 ? 'bg-[#111]' : 'bg-[#e8e8e8]'}`}
+              style={{ height: `${Math.max(height, 4)}%` }}
+              title={`${Math.round(height)}%`}
+            />
+          ))}
         </div>
         <div className="flex justify-between px-2 pt-1 text-[9px] font-mono text-[#888] mt-1">
-          <span>05-10 00:00</span>
-          <span>05-11 00:00</span>
-          <span className="text-[#333] font-medium">05-11 14:00</span>
-          <span>05-12 00:00</span>
+          <span>{timeRange.start}</span>
+          <span className="text-[#333] font-medium">
+            {events && events.length > 0 ? formatTs(events[Math.floor(events.length / 2)].ts) : ''}
+          </span>
+          <span>{timeRange.end}</span>
         </div>
       </div>
 
@@ -110,7 +136,7 @@ export function Timeline() {
             <InspectorSection title="时间上下文">
               <div className="text-[10px] font-mono text-[#666] space-y-1">
                 <div>source: {String(selectedEvent?.attrs.source ?? '-')}</div>
-                <div>window: 2026-05-11 14:00 ± 10m</div>
+                <div>window: {selectedEvent?.ts ?? '-'} ± 10m</div>
               </div>
             </InspectorSection>
 

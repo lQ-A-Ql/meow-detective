@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router';
+import { NavLink, useNavigate } from 'react-router';
 import { Search, Activity, Settings, AlertTriangle } from 'lucide-react';
 import { useCurrentCase } from '@/features/case/hooks';
 import { useJobsSnapshot, useWarnings } from '@/features/jobs/hooks';
@@ -14,6 +14,7 @@ const links = [
 ];
 
 export function TopBar() {
+  const navigate = useNavigate();
   const { data: currentCase } = useCurrentCase();
   const { data: jobs } = useJobsSnapshot();
   const { data: warnings } = useWarnings();
@@ -83,7 +84,7 @@ export function TopBar() {
             ) : null}
           </button>
           <div className="h-4 border-l border-[#e0e0e0]" />
-          <Settings size={14} className="cursor-pointer hover:text-black" />
+          <Settings size={14} className="cursor-pointer hover:text-black" onClick={() => navigate('/settings')} />
         </div>
       </div>
     </div>

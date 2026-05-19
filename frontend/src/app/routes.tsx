@@ -7,6 +7,8 @@ import { Timeline } from "./pages/Timeline";
 import { Artifacts } from "./pages/Artifacts";
 import { Reports } from "./pages/Reports";
 
+import { Settings } from "./pages/Settings";
+
 export const router = createBrowserRouter([
   {
     path: "/",
@@ -18,6 +20,7 @@ export const router = createBrowserRouter([
       { path: "timeline", Component: Timeline },
       { path: "artifacts", Component: Artifacts },
       { path: "reports", Component: Reports },
+      { path: "settings", Component: Settings },
     ],
   },
 ]);
