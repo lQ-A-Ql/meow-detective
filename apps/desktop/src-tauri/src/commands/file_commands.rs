@@ -103,6 +103,8 @@ pub fn import_data_source(state: State<AppState>, source_path: String) -> Result
                 let mbr_entries = mbr::parse_partition_table(&sector0);
                 let ntfs_offset = if let Some(ntfs) = mbr::find_first_ntfs(&mbr_entries) {
                     Some(ntfs.lba_start as u64 * 512)
+                } else if let Some(fat) = mbr_entries.iter().find(|e| matches!(e.partition_type, 0x0B | 0x0C | 0x0E)) {
+                    Some(fat.lba_start as u64 * 512)
                 } else if mbr_entries.iter().any(|e| e.partition_type == 0xEE) {
                     // Protective MBR → GPT
                     let mut hdr_buf = [0u8; 512];
@@ -129,7 +131,12 @@ pub fn import_data_source(state: State<AppState>, source_path: String) -> Result
                         None
                     }
                 } else {
-                    None
+                    // No valid partition found — try sector 0 directly as NTFS
+                    if &sector0[3..11] == b"NTFS    " {
+                        Some(0)
+                    } else {
+                        None
+                    }
                 };
 
                 if let Some(off) = ntfs_offset {
