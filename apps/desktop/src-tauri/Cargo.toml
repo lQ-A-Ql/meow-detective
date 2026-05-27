@@ -25,4 +25,8 @@ persistence-sqlite.workspace = true
 evidence-core.workspace = true
 image-e01 = { path = "../../../crates/image-e01" }
 fs-ntfs = { path = "../../../crates/fs-ntfs" }
+fs-fat = { path = "../../../crates/fs-fat" }
 rusqlite = { version = "0.31", features = ["bundled"] }
+
+[dev-dependencies]
+tempfile = "3"

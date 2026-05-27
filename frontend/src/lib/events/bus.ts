@@ -14,7 +14,11 @@ class EventBus {
   private eventListeners: Partial<Record<EventTopic, Set<EventListener>>> = {};
 
   subscribe<K extends keyof EventMap>(topic: K, listener: Listener<K>) {
-    const set = (this.listeners[topic] ??= new Set()) as Set<Listener<K>>;
+    let set = this.listeners[topic] as Set<Listener<K>> | undefined;
+    if (!set) {
+      set = new Set<Listener<K>>();
+      this.listeners[topic] = set as { [P in keyof EventMap]?: Set<Listener<P>> }[K];
+    }
     set.add(listener);
     return () => set.delete(listener);
   }

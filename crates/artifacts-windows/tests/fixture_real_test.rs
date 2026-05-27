@@ -48,7 +48,7 @@ fn prefetch_real_fixtures() {
             reader: Box::new(std::io::Cursor::new(data)),
         };
         let mut sink = VecSink::new();
-        let report = extractor.run(ctx, &mut sink).unwrap();
+        let _report = extractor.run(ctx, &mut sink).unwrap();
         if let Some(exe) = exp.expected.get("executable") {
             let exe_str = exe.as_str().unwrap();
             let title = &sink.artifacts[0].title;
@@ -86,7 +86,7 @@ fn lnk_real_fixtures() {
             reader: Box::new(std::io::Cursor::new(data)),
         };
         let mut sink = VecSink::new();
-        let report = extractor.run(ctx, &mut sink).unwrap();
+        let _report = extractor.run(ctx, &mut sink).unwrap();
         if let Some(has_target) = exp.expected.get("has_target_path") {
             if has_target.as_bool().unwrap() {
                 assert!(

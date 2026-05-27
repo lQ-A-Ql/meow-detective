@@ -21,6 +21,7 @@ pub struct NtfsReader {
     sectors_per_cluster: u8,
     mft_cluster: u64,
     mft_record_size: u32,
+    index_record_size: u32,
     cluster_size: u64,
     /// Absolute offset of NTFS volume start in evidence.
     volume_offset: u64,
@@ -51,6 +52,7 @@ impl NtfsReader {
         let mft_cluster = u64::from_le_bytes(boot[0x30..0x38].try_into().unwrap_or([0; 8]));
         let _root_dir = root_dir_frn(&boot);
         let mft_record_size = mft_record_bytes(&boot);
+        let index_record_size = index_record_bytes(&boot, cluster_size as u32, mft_record_size);
 
         Ok(Self {
             reader: RefCell::new(reader),
@@ -58,13 +60,15 @@ impl NtfsReader {
             sectors_per_cluster,
             mft_cluster,
             mft_record_size,
+            index_record_size,
             cluster_size,
             volume_offset: offset,
         })
     }
 
     fn mft_offset(&self, record_number: u64) -> u64 {
-        self.volume_offset + self.mft_cluster * self.cluster_size
+        self.volume_offset
+            + self.mft_cluster * self.cluster_size
             + record_number * self.mft_record_size as u64
     }
 
@@ -85,6 +89,7 @@ impl NtfsReader {
         reader.seek(SeekFrom::Start(off))?;
         let mut rec = vec![0u8; self.mft_record_size as usize];
         reader.read_exact(&mut rec)?;
+        apply_record_fixup(&mut rec, self.bytes_per_sector as usize)?;
         Ok(rec)
     }
 
@@ -107,25 +112,33 @@ impl NtfsReader {
             if typ == 0xFFFFFFFF {
                 break;
             }
-            let len = u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
+            let len =
+                u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
             if len == 0 || pos + len > rec.len() {
                 break;
             }
 
             if typ == 0x90 && pos + 0x18 <= rec.len() {
-                // $INDEX_ROOT — resident entries
-                let entries_off =
-                    u32::from_le_bytes(rec[pos + 0x10..pos + 0x14].try_into().unwrap_or([0; 4])) as usize;
-                let ents_start = pos + 0x10 + entries_off;
-                if ents_start < pos + len {
-                    index_root_entries = Some(parse_indx_entries(&rec[ents_start..pos + len]));
+                // $INDEX_ROOT is a resident attribute. On real disks, the index
+                // header lives inside the resident content, not directly in the
+                // attribute header. Keep a legacy fallback for older synthetic tests.
+                if let Some(entries) = self.parse_index_root_entries(&rec, pos, len) {
+                    index_root_entries = Some(entries);
+                } else {
+                    let entries_off = u32::from_le_bytes(
+                        rec[pos + 0x10..pos + 0x14].try_into().unwrap_or([0; 4]),
+                    ) as usize;
+                    let ents_start = pos + 0x10 + entries_off;
+                    if ents_start < pos + len {
+                        index_root_entries = Some(parse_indx_entries(&rec[ents_start..pos + len]));
+                    }
                 }
             }
 
             if typ == 0xA0 && pos + 0x40 <= rec.len() {
                 // $INDEX_ALLOCATION — non-resident B-Tree INDX records
                 if let Ok(data) = self.read_attr_nonresident(pos, &rec) {
-                    index_alloc_entries = Some(Self::parse_indx_buffer(&data));
+                    index_alloc_entries = Some(self.parse_indx_buffer(&data));
                 }
             }
 
@@ -149,6 +162,32 @@ impl NtfsReader {
         }
 
         Ok(entries)
+    }
+
+    fn parse_index_root_entries(
+        &self,
+        record: &[u8],
+        attr_pos: usize,
+        attr_len: usize,
+    ) -> Option<Vec<DirEntry>> {
+        let content = resident_attr_content(record, attr_pos, attr_len)?;
+        if content.len() < 0x20 {
+            return None;
+        }
+
+        let entries_off = u32::from_le_bytes(content[0x10..0x14].try_into().ok()?) as usize;
+        let entries_end_off = u32::from_le_bytes(content[0x14..0x18].try_into().ok()?) as usize;
+        let buffer_end_off = u32::from_le_bytes(content[0x18..0x1C].try_into().ok()?) as usize;
+        let entries_start = 0x10usize.saturating_add(entries_off);
+        let entries_end = 0x10usize
+            .saturating_add(entries_end_off)
+            .min(0x10usize.saturating_add(buffer_end_off))
+            .min(content.len());
+        if entries_start >= entries_end {
+            return None;
+        }
+
+        Some(parse_indx_entries(&content[entries_start..entries_end]))
     }
 
     // --- Non-resident attribute & INDX record helpers ---
@@ -193,13 +232,13 @@ impl NtfsReader {
             return Ok(Vec::new());
         }
         // data_run_offset is at +0x20 in the non-resident header
-        let run_off = u16::from_le_bytes([
-            record[attr_pos + 0x20],
-            record[attr_pos + 0x21],
-        ]) as usize;
+        let run_off =
+            u16::from_le_bytes([record[attr_pos + 0x20], record[attr_pos + 0x21]]) as usize;
         // allocated size at +0x28
         let alloc_size = u64::from_le_bytes(
-            record[attr_pos + 0x28..attr_pos + 0x30].try_into().unwrap_or([0; 8]),
+            record[attr_pos + 0x28..attr_pos + 0x30]
+                .try_into()
+                .unwrap_or([0; 8]),
         );
         if run_off == 0 || alloc_size == 0 || attr_pos + run_off >= record.len() {
             return Ok(Vec::new());
@@ -228,7 +267,9 @@ impl NtfsReader {
 
         // Trim to actual data (last cluster may be partial)
         let real_size = u64::from_le_bytes(
-            record[attr_pos + 0x30..attr_pos + 0x38].try_into().unwrap_or([0; 8]),
+            record[attr_pos + 0x30..attr_pos + 0x38]
+                .try_into()
+                .unwrap_or([0; 8]),
         );
         if (real_size as usize) < buf.len() {
             buf.truncate(real_size as usize);
@@ -237,7 +278,7 @@ impl NtfsReader {
     }
 
     /// Scan INDX buffer for INDX records, apply fixup, extract entries.
-    fn parse_indx_buffer(data: &[u8]) -> Vec<DirEntry> {
+    fn parse_indx_buffer(&self, data: &[u8]) -> Vec<DirEntry> {
         let mut entries = Vec::new();
         let mut off = 0usize;
         while off + 0x18 < data.len() {
@@ -254,14 +295,18 @@ impl NtfsReader {
                 continue;
             }
 
-            // Apply update sequence fixup
-            // Copy only the sectors we need for fixup
-            let copy_len = (upd_cnt * 512).min(data.len() - off);
+            // Apply update sequence fixup. Some synthetic fixtures encode a record
+            // larger than the boot-sector index_record_size, so honor whichever is larger:
+            // the advertised record size or the size implied by the USA count.
+            let record_bytes_from_fixup =
+                upd_cnt.saturating_sub(1) * self.bytes_per_sector as usize;
+            let record_len = (self.index_record_size as usize).max(record_bytes_from_fixup);
+            let copy_len = record_len.min(data.len() - off);
             let mut rec = data[off..off + copy_len].to_vec();
             if upd_off + upd_cnt * 2 <= rec.len() {
                 let orig = u16::from_le_bytes([rec[upd_off], rec[upd_off + 1]]);
                 for i in 1..upd_cnt {
-                    let fix_off = i * 512 - 2;
+                    let fix_off = i * self.bytes_per_sector as usize - 2;
                     if fix_off + 2 > rec.len() {
                         break;
                     }
@@ -279,30 +324,42 @@ impl NtfsReader {
             // Parse entries from the fixed-up record
             // Index entry list starts at +0x18
             let list_start = 0x18usize;
-            if list_start + 4 <= rec.len() {
+            if list_start + 12 <= rec.len() {
                 let ent_off = u32::from_le_bytes(
                     rec[list_start..list_start + 4].try_into().unwrap_or([0; 4]),
                 ) as usize;
-                let ent_total = u32::from_le_bytes(
-                    rec[list_start + 4..list_start + 8].try_into().unwrap_or([0; 4]),
+                let ent_end_off = u32::from_le_bytes(
+                    rec[list_start + 4..list_start + 8]
+                        .try_into()
+                        .unwrap_or([0; 4]),
+                ) as usize;
+                let buf_end_off = u32::from_le_bytes(
+                    rec[list_start + 8..list_start + 12]
+                        .try_into()
+                        .unwrap_or([0; 4]),
                 ) as usize;
                 let idxe_start = list_start + ent_off;
-                let idxe_end = (list_start + ent_off + ent_total).min(rec.len());
+                let idxe_end = (list_start + ent_end_off)
+                    .min(list_start + buf_end_off)
+                    .min(rec.len());
                 if idxe_start < idxe_end {
-                    let mut indx_entries =
-                        parse_indx_entries(&rec[idxe_start..idxe_end]);
+                    let mut indx_entries = parse_indx_entries(&rec[idxe_start..idxe_end]);
                     entries.append(&mut indx_entries);
                 }
             }
 
-            // Move ahead one sector (512 bytes) after processing a valid INDX record.
-            off += 512;
+            // Move ahead by one index record after processing a valid INDX record.
+            off += record_len.max(self.bytes_per_sector as usize);
         }
         entries
     }
 
     pub fn list_root_children(&self) -> io::Result<Vec<FsNode>> {
-        Ok(self.list_dir_by_inode(5)?.into_iter().map(|e| e.node).collect())
+        Ok(self
+            .list_dir_by_inode(5)?
+            .into_iter()
+            .map(|e| node_with_parent_path(e.node, ""))
+            .collect())
     }
 
     /// Read the $DATA attribute of a file by MFT inode.
@@ -322,7 +379,8 @@ impl NtfsReader {
             if typ == 0xFFFFFFFF {
                 break;
             }
-            let len = u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
+            let len =
+                u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
             if len == 0 || pos + len > rec.len() {
                 break;
             }
@@ -337,12 +395,13 @@ impl NtfsReader {
                     if pos + 0x16 > rec.len() {
                         return Ok(Vec::new());
                     }
-                    let content_size =
-                        u32::from_le_bytes(rec[pos + 0x10..pos + 0x14].try_into().unwrap_or([0; 4]))
-                            as usize;
+                    let content_size = u32::from_le_bytes(
+                        rec[pos + 0x10..pos + 0x14].try_into().unwrap_or([0; 4]),
+                    ) as usize;
                     let content_off = pos
-                        + u16::from_le_bytes(rec[pos + 0x14..pos + 0x16].try_into().unwrap_or([0; 2]))
-                            as usize;
+                        + u16::from_le_bytes(
+                            rec[pos + 0x14..pos + 0x16].try_into().unwrap_or([0; 2]),
+                        ) as usize;
                     let end = content_off.saturating_add(content_size).min(rec.len());
                     if content_off < end {
                         return Ok(rec[content_off..end].to_vec());
@@ -359,8 +418,8 @@ impl NtfsReader {
     /// in the final directory. Returns file MFT inode, or None if not found.
     fn resolve_file_path(&self, path: &str) -> io::Result<Option<u64>> {
         let components: Vec<&str> = path
-            .trim_start_matches('\\')
-            .split('\\')
+            .trim_matches(|c| c == '\\' || c == '/')
+            .split(['\\', '/'])
             .filter(|c| !c.is_empty())
             .collect();
         let (parent_dirs, file_name) = match components.split_last() {
@@ -392,8 +451,8 @@ impl NtfsReader {
     /// Validates $FILE_NAME.par_ref consistency at each step.
     fn resolve_path(&self, path: &str) -> io::Result<Option<u64>> {
         let components: Vec<&str> = path
-            .trim_start_matches('\\')
-            .split('\\')
+            .trim_matches(|c| c == '\\' || c == '/')
+            .split(['\\', '/'])
             .filter(|c| !c.is_empty())
             .collect();
         if components.is_empty() {
@@ -432,7 +491,9 @@ impl NtfsReader {
         let mut pos = attr_off;
         while pos + 8 < rec.len() {
             let typ = u32::from_le_bytes(
-                rec[pos..pos + 4].try_into().unwrap_or([0xFF, 0xFF, 0xFF, 0xFF]),
+                rec[pos..pos + 4]
+                    .try_into()
+                    .unwrap_or([0xFF, 0xFF, 0xFF, 0xFF]),
             );
             if typ == 0xFFFFFFFF {
                 break;
@@ -443,10 +504,20 @@ impl NtfsReader {
                 break;
             }
             if typ == 0x30 && pos + 8 <= rec.len() {
-                // $FILE_NAME: par_ref is a 48-bit value at attribute + 0x00
-                let par_ref = u64::from_le_bytes(
-                    rec[pos..pos + 8].try_into().unwrap_or([0; 8]),
-                ) & 0x0000_FFFF_FFFF_FFFF;
+                // $FILE_NAME is resident on normal NTFS records. The parent
+                // reference lives at the start of the resident content.
+                if let Some(content) = resident_attr_content(&rec, pos, len) {
+                    if content.len() >= 8 {
+                        let par_ref =
+                            u64::from_le_bytes(content[0..8].try_into().unwrap_or([0; 8]))
+                                & 0x0000_FFFF_FFFF_FFFF;
+                        return Ok(par_ref == expected_parent);
+                    }
+                }
+
+                // Legacy fallback for older simplified fixtures.
+                let par_ref = u64::from_le_bytes(rec[pos..pos + 8].try_into().unwrap_or([0; 8]))
+                    & 0x0000_FFFF_FFFF_FFFF;
                 return Ok(par_ref == expected_parent);
             }
             pos += len;
@@ -459,11 +530,83 @@ impl NtfsReader {
             Some(inode) => Ok(self
                 .list_dir_by_inode(inode)?
                 .into_iter()
-                .map(|e| e.node)
+                .map(|e| node_with_parent_path(e.node, path))
                 .collect()),
             None => Ok(Vec::new()),
         }
     }
+}
+
+fn resident_attr_content(record: &[u8], attr_pos: usize, attr_len: usize) -> Option<&[u8]> {
+    if attr_pos + 0x16 > record.len() {
+        return None;
+    }
+    if (record[attr_pos + 8] & 1) != 0 {
+        return None;
+    }
+
+    let content_size =
+        u32::from_le_bytes(record[attr_pos + 0x10..attr_pos + 0x14].try_into().ok()?) as usize;
+    let content_off =
+        u16::from_le_bytes(record[attr_pos + 0x14..attr_pos + 0x16].try_into().ok()?) as usize;
+    let attr_end = attr_pos.checked_add(attr_len)?;
+    let content_start = attr_pos.checked_add(content_off)?;
+    let content_end = content_start.checked_add(content_size)?;
+
+    if content_off < 0x18 || content_start >= attr_end || content_end > attr_end {
+        return None;
+    }
+
+    record.get(content_start..content_end)
+}
+
+fn apply_record_fixup(record: &mut [u8], sector_size: usize) -> io::Result<()> {
+    if record.len() < 8 || sector_size < 2 {
+        return Ok(());
+    }
+
+    let usa_offset = u16::from_le_bytes([record[4], record[5]]) as usize;
+    let usa_count = u16::from_le_bytes([record[6], record[7]]) as usize;
+    if usa_offset == 0 || usa_count < 2 {
+        return Ok(());
+    }
+
+    let usa_bytes = usa_count
+        .checked_mul(2)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid update sequence"))?;
+    if usa_offset + usa_bytes > record.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "update sequence array exceeds record length",
+        ));
+    }
+
+    let expected = [record[usa_offset], record[usa_offset + 1]];
+    for i in 1..usa_count {
+        let fixup_pos = i
+            .checked_mul(sector_size)
+            .and_then(|v| v.checked_sub(2))
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid fixup position"))?;
+        if fixup_pos + 2 > record.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "record too short for update sequence fixup",
+            ));
+        }
+
+        if record[fixup_pos..fixup_pos + 2] != expected {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "update sequence signature mismatch",
+            ));
+        }
+
+        let replacement = usa_offset + i * 2;
+        record[fixup_pos] = record[replacement];
+        record[fixup_pos + 1] = record[replacement + 1];
+    }
+
+    Ok(())
 }
 
 impl FileSystemReader for NtfsReader {
@@ -570,6 +713,22 @@ fn mft_record_bytes(boot: &[u8]) -> u32 {
     }
 }
 
+fn index_record_bytes(boot: &[u8], cluster_size: u32, fallback: u32) -> u32 {
+    let raw = boot[0x44] as i8;
+    if raw > 0 {
+        let bytes = cluster_size.saturating_mul(raw as u32);
+        if bytes >= 512 {
+            bytes
+        } else {
+            fallback
+        }
+    } else if raw < 0 && (-raw as u32) < 32 {
+        (1u32 << (-raw as u32)).max(512)
+    } else {
+        fallback
+    }
+}
+
 // --- Data run parsing helpers ---
 
 /// Read a variable-width little-endian unsigned integer (1-8 bytes).
@@ -600,4 +759,19 @@ fn read_sized_le_signed(bytes: &[u8]) -> i64 {
         }
     }
     val as i64
+}
+
+fn node_with_parent_path(mut node: FsNode, parent_path: &str) -> FsNode {
+    node.path = join_child_path(parent_path, &node.name);
+    node
+}
+
+fn join_child_path(parent_path: &str, name: &str) -> String {
+    let parent = parent_path.replace('\\', "/");
+    let parent = parent.trim_matches('/');
+    if parent.is_empty() {
+        name.to_string()
+    } else {
+        format!("{}/{}", parent, name)
+    }
 }

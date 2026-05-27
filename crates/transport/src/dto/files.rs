@@ -7,6 +7,10 @@ pub struct FileTreeNodeDto {
     pub name: String,
     pub depth: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub node_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub expanded: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub active: Option<bool>,

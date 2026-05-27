@@ -21,7 +21,7 @@ impl<'a> DataSourceRepo<'a> {
 
     pub fn find_by_case(&self, case_id: &CaseId) -> DbResult<Vec<DataSource>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, kind, source_path, imported_at FROM data_sources WHERE case_id = ?1",
+            "SELECT id, name, kind, source_path, imported_at FROM data_sources WHERE case_id = ?1 ORDER BY imported_at DESC, name ASC",
         )?;
         let rows = stmt.query_map(params![case_id.0], |row| {
             Ok(DataSource {
@@ -37,6 +37,14 @@ impl<'a> DataSourceRepo<'a> {
             result.push(row?);
         }
         Ok(result)
+    }
+
+    pub fn rename(&self, data_source_id: &DataSourceId, name: &str) -> DbResult<()> {
+        self.conn.execute(
+            "UPDATE data_sources SET name = ?1 WHERE id = ?2",
+            params![name, data_source_id.0],
+        )?;
+        Ok(())
     }
 }
 

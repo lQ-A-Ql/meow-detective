@@ -20,7 +20,7 @@ impl LogicalFsReader {
 
     fn to_relative(&self, full: &Path) -> String {
         full.strip_prefix(&self.root)
-            .map(|p| p.display().to_string())
+            .map(path_to_relative_string)
             .unwrap_or_else(|_| full.display().to_string())
     }
 
@@ -98,4 +98,12 @@ fn system_time_to_utc(st: Option<std::time::SystemTime>) -> Option<chrono::DateT
                 .unwrap_or_default()
         })
     })
+}
+
+fn path_to_relative_string(path: &Path) -> String {
+    path.components()
+        .map(|component| component.as_os_str().to_string_lossy())
+        .filter(|component| !component.is_empty())
+        .collect::<Vec<_>>()
+        .join("/")
 }

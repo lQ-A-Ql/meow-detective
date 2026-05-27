@@ -6,7 +6,9 @@ use crate::state::AppState;
 #[tauri::command]
 pub fn get_timeline_events(state: State<AppState>) -> Result<Vec<TimelineEventDto>, String> {
     let guard = state.active_case.lock().map_err(|e| e.to_string())?;
-    let active = guard.as_ref().ok_or("No active case")?;
+    let Some(active) = guard.as_ref() else {
+        return Ok(vec![]);
+    };
     active
         .with_conn(|conn| {
             app_services::timeline_service::query_timeline(conn, 0, 100)

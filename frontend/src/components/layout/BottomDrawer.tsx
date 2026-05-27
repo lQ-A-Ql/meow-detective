@@ -1,5 +1,6 @@
 import { Terminal, AlertCircle, ChevronUp, ChevronDown, Clock3 } from 'lucide-react';
 import { useJobsSnapshot, useTraceItems, useWarnings } from '@/features/jobs/hooks';
+import { apiMode } from '@/lib/api/client';
 import { useUiStore } from '@/stores/ui-store';
 
 export function BottomDrawer() {
@@ -11,7 +12,14 @@ export function BottomDrawer() {
 
   const runningJobs = jobs?.filter((job) => job.status === 'running') ?? [];
   const completedJobs = jobs?.filter((job) => job.status === 'completed') ?? [];
+  const failedJobs = jobs?.filter((job) => job.status === 'failed') ?? [];
   const runningCount = runningJobs.length;
+  const currentApiMode = apiMode();
+  const headline =
+    runningJobs[0]?.detail ||
+    failedJobs[0]?.detail ||
+    completedJobs[0]?.detail ||
+    '等待任务执行';
 
   return (
     <div
@@ -21,7 +29,7 @@ export function BottomDrawer() {
         <div className="flex items-center gap-4 min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             <Terminal size={12} className="text-[#888]" />
-            <span className="truncate">[SYSTEM] 运行时缓存稳定，当前案件对象索引可用。</span>
+            <span className="truncate">[JOBS] {headline}</span>
           </div>
           <div className="px-3 border-l border-[#e0e0e0] flex items-center gap-3 text-[#555]">
             <span>
@@ -41,10 +49,10 @@ export function BottomDrawer() {
             {drawerOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
           </button>
           <div>
-            数据库大小: <span className="text-[#111]">1.2 GB</span>
+            API: <span className="text-[#111] uppercase">{currentApiMode}</span>
           </div>
           <div className="border-l border-[#e0e0e0] pl-4">
-            内存: <span className="text-[#111]">4.2GB</span> / CPU: <span className="text-[#111]">12%</span>
+            最近状态: <span className="text-[#111]">{runningJobs[0]?.scope || failedJobs[0]?.scope || completedJobs[0]?.scope || '空闲'}</span>
           </div>
         </div>
       </div>
@@ -53,7 +61,9 @@ export function BottomDrawer() {
           <div className="overflow-auto border-r border-[#e0e0e0] p-3">
             <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-[#555]">
               <span>JOBS</span>
-              <span className="font-mono text-[#888]">{runningCount} 运行 / {completedJobs.length} 完成</span>
+              <span className="font-mono text-[#888]">
+                {runningCount} 运行 / {completedJobs.length} 完成 / {failedJobs.length} 失败
+              </span>
             </div>
             <div className="space-y-3">
               {runningJobs.map((job) => (
@@ -63,6 +73,20 @@ export function BottomDrawer() {
                     <span className="text-[#888]">{job.detail}</span>
                   </div>
                   <div className="mt-1 text-[#666]">{job.scope}</div>
+                  {job.currentPartition ? (
+                    <div className="mt-2 border border-[#ececec] bg-[#fafafa] px-2 py-2">
+                      <div className="flex items-center justify-between gap-3 text-[10px] uppercase tracking-wider text-[#666]">
+                        <span>分区子进度</span>
+                        <span className="font-mono text-[#111]">
+                          {(job.completedPartitions ?? 0) + 1}/{job.totalPartitions ?? 1}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-[11px] text-[#222]">{job.currentPartition}</div>
+                      <div className="mt-1 h-1 overflow-hidden border border-[#e0e0e0] bg-white">
+                        <div className="h-full bg-[#666]" style={{ width: `${job.partitionProgress ?? 0}%` }} />
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="mt-2 h-1 overflow-hidden border border-[#e0e0e0] bg-[#eee]">
                     <div className="h-full bg-[#111]" style={{ width: `${job.progress}%` }} />
                   </div>
@@ -75,6 +99,15 @@ export function BottomDrawer() {
                     <span className="text-[#888]">{job.detail}</span>
                   </div>
                   <div className="mt-1 text-[#888]">{job.scope}</div>
+                </div>
+              ))}
+              {failedJobs.map((job) => (
+                <div key={job.id} className="border border-red-200 bg-red-50 p-3 text-[11px] text-red-700">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium">{job.name}</span>
+                    <span>{job.detail}</span>
+                  </div>
+                  <div className="mt-1 text-red-600/80">{job.scope || '任务执行失败'}</div>
                 </div>
               ))}
             </div>

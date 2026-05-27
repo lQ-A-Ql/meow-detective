@@ -6,7 +6,13 @@ use crate::state::AppState;
 #[tauri::command]
 pub fn search_files(state: State<AppState>, query: String) -> Result<SearchResultPageDto, String> {
     let guard = state.active_case.lock().map_err(|e| e.to_string())?;
-    let active = guard.as_ref().ok_or("No active case")?;
+    let Some(active) = guard.as_ref() else {
+        return Ok(SearchResultPageDto {
+            total: 0,
+            took_ms: 0,
+            items: vec![],
+        });
+    };
     let index_dir = active.case_root.join("indexes").join("tantivy");
     if !index_dir.exists() {
         return Ok(SearchResultPageDto {
@@ -24,7 +30,13 @@ pub fn search_files_request(
     request: SearchFilesRequest,
 ) -> Result<SearchResultPageDto, String> {
     let guard = state.active_case.lock().map_err(|e| e.to_string())?;
-    let active = guard.as_ref().ok_or("No active case")?;
+    let Some(active) = guard.as_ref() else {
+        return Ok(SearchResultPageDto {
+            total: 0,
+            took_ms: 0,
+            items: vec![],
+        });
+    };
     let index_dir = active.case_root.join("indexes").join("tantivy");
     if !index_dir.exists() {
         return Ok(SearchResultPageDto {

@@ -8,7 +8,10 @@ pub mod timeline;
 pub mod viewer;
 
 pub use artifacts::ArtifactRowDto;
-pub use case::{CaseMetricsDto, CaseSummaryDto, RecentObjectDto};
+pub use case::{
+    CaseMetricsDto, CaseSummaryDto, DataSourcePartitionDto, DataSourceSummaryDto, RecentCaseDto,
+    RecentObjectDto,
+};
 pub use files::{FileEntryRowDto, FileTreeNodeDto};
 pub use jobs::{JobSnapshotDto, TraceItemDto, WarningItemDto};
 pub use reports::{ReportHistoryItemDto, ReportTemplateDto};

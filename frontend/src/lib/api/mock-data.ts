@@ -1,8 +1,12 @@
 import {
   ArtifactRow,
+  CaseMetrics,
   CaseSummary,
+  DataSourceSummary,
   FileEntryRow,
   JobSnapshot,
+  RecentCase,
+  RecentObject,
   ReportHistoryItem,
   ReportTemplate,
   SearchHit,
@@ -20,14 +24,14 @@ export const currentCase: CaseSummary = {
   updatedAt: '2026-05-16T11:20:00Z',
 };
 
-export const caseMetrics = {
+export const caseMetrics: CaseMetrics = {
   dataSourceCount: 4,
   indexedFileCount: 1492033,
   timelineEventCount: 8401922,
   artifactCount: 45102,
 };
 
-export const recentObjects = [
+export const recentObjects: RecentObject[] = [
   {
     id: 'obj-1',
     title: 'tasksche.exe',
@@ -41,6 +45,81 @@ export const recentObjects = [
     detail: '注册表项已创建',
     time: '3 小时前',
     kind: 'registry',
+  },
+];
+
+export const recentCases: RecentCase[] = [
+  {
+    caseRoot: 'D:/Cases/WannaCry',
+    name: 'WannaCry 爆发溯源',
+    openedAt: '2026-05-16T11:20:00Z',
+  },
+  {
+    caseRoot: 'D:/Cases/RDP-Lateral',
+    name: 'RDP 横向移动排查',
+    openedAt: '2026-05-15T17:40:00Z',
+  },
+];
+
+export const dataSources: DataSourceSummary[] = [
+  {
+    id: 'ds-001',
+    name: 'FINCH-1.E01',
+    kind: 'e01',
+    sourcePath: 'E:/evidence/FINCH-1.E01',
+    importedAt: '2026-05-16T10:30:00Z',
+    fileCount: 12844,
+    partitions: [
+      {
+        index: 1,
+        name: 'EFI system partition',
+        kindLabel: 'FAT',
+        status: 'supported',
+        offset: 1048576,
+        length: 104857600,
+        filesystem: 'FAT',
+        typeGuid: 'C12A7328-F81F-11D2-BA4B-00A0C93EC93B',
+      },
+      {
+        index: 2,
+        name: 'Microsoft reserved partition',
+        kindLabel: 'Microsoft reserved',
+        status: 'unsupported',
+        offset: 105906176,
+        length: 16777216,
+        typeGuid: 'E3C9E316-0B5C-4DB8-817D-F92DF00215AE',
+      },
+      {
+        index: 3,
+        name: 'Basic data partition',
+        kindLabel: 'NTFS',
+        status: 'supported',
+        offset: 122683392,
+        length: 136575975424,
+        filesystem: 'NTFS',
+        typeGuid: 'EBD0A0A2-B9E5-4433-87C0-68B6B72699C7',
+      },
+      {
+        index: 5,
+        name: 'Basic data partition',
+        kindLabel: 'BitLocker',
+        status: 'locked',
+        offset: 137436856320,
+        length: 137438953472,
+        filesystem: 'BitLocker',
+        typeGuid: 'EBD0A0A2-B9E5-4433-87C0-68B6B72699C7',
+        unlockHint: 'BitLocker 分区需要先解锁后才能浏览文件内容。',
+      },
+    ],
+  },
+  {
+    id: 'ds-002',
+    name: 'System32 Snapshot',
+    kind: 'logical_directory',
+    sourcePath: 'E:/mounted/System32',
+    importedAt: '2026-05-16T12:05:00Z',
+    fileCount: 2801,
+    partitions: [],
   },
 ];
 
@@ -192,11 +271,15 @@ export const reportHistory: ReportHistoryItem[] = [
 export const jobs: JobSnapshot[] = [
   {
     id: 'job-1',
-    name: '解析 Amcache 注册表配置单元',
-    scope: 'Vol_1 / Windows / AppCompat / Programs / Amcache.hve',
+    name: '导入数据源',
+    scope: '分区 2/5',
     progress: 45,
     status: 'running',
-    detail: '进行中',
+    detail: 'Enumerating Partition 3 (NTFS) - Basic data partition',
+    currentPartition: 'Partition 3 (NTFS) - Basic data partition',
+    completedPartitions: 1,
+    totalPartitions: 5,
+    partitionProgress: 42,
   },
   {
     id: 'job-2',
@@ -205,6 +288,10 @@ export const jobs: JobSnapshot[] = [
     progress: 100,
     status: 'completed',
     detail: '完成 (2m 14s)',
+    currentPartition: undefined,
+    completedPartitions: undefined,
+    totalPartitions: undefined,
+    partitionProgress: undefined,
   },
   {
     id: 'job-3',
@@ -213,6 +300,10 @@ export const jobs: JobSnapshot[] = [
     progress: 100,
     status: 'completed',
     detail: '完成 (45m 10s)',
+    currentPartition: undefined,
+    completedPartitions: undefined,
+    totalPartitions: undefined,
+    partitionProgress: undefined,
   },
 ];
 

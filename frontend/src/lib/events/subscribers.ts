@@ -4,7 +4,7 @@ import { EventEnvelope, EventTopic } from '@/types/models';
 import { eventBus } from './bus';
 
 export function subscribeToEvent<T = unknown>(topic: EventTopic, listener: (event: EventEnvelope<T>) => void) {
-  if (apiMode === 'mock') {
+  if (apiMode() === 'mock') {
     return eventBus.subscribeEvent(topic, listener);
   }
 
@@ -31,7 +31,7 @@ export function subscribeToEvent<T = unknown>(topic: EventTopic, listener: (even
 }
 
 export function publishMockEvent<T>(event: EventEnvelope<T>) {
-  if (apiMode === 'mock') {
+  if (apiMode() === 'mock') {
     eventBus.publishEvent(event);
   }
 }

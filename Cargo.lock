@@ -75,6 +75,9 @@ dependencies = [
  "chrono",
  "domain",
  "evidence-core",
+ "fs-fat",
+ "fs-ntfs",
+ "image-e01",
  "persistence-sqlite",
  "reports",
  "rusqlite",
@@ -1020,6 +1023,7 @@ dependencies = [
  "chrono",
  "domain",
  "evidence-core",
+ "fs-fat",
  "fs-ntfs",
  "image-e01",
  "persistence-sqlite",
@@ -1029,6 +1033,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
+ "tempfile",
  "transport",
 ]
 

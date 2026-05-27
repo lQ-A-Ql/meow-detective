@@ -23,7 +23,7 @@ fn extract_utf16_le_text() {
 
 #[test]
 fn binary_file_not_extractable() {
-    let data = vec![0x00, 0x01, 0x02, 0xFF, 0xFE];
+    let data = [0x00, 0x01, 0x02, 0xFF, 0xFE];
     let result = extract_text(&data[..], "file-3", Some("application/octet-stream"));
     assert!(!result.extractable);
     assert_eq!(result.encoding, "binary");

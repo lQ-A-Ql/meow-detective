@@ -1,10 +1,12 @@
 import {
   ArtifactRow,
   CaseMetrics,
+  DataSourceSummary,
   CaseSummary,
   FileEntryRow,
   FileTreeNode,
   JobSnapshot,
+  RecentCase,
   RecentObject,
   ReportHistoryItem,
   ReportTemplate,
@@ -21,9 +23,11 @@ import {
   artifactRows,
   caseMetrics,
   currentCase,
+  dataSources,
   fileRows,
   filesTree,
   jobs,
+  recentCases,
   recentObjects,
   reportHistory,
   reportTemplates,
@@ -34,16 +38,19 @@ import {
 } from './mock-data';
 
 export interface ApiProvider {
-  getCurrentCase(): Promise<CaseSummary>;
+  getCurrentCase(): Promise<CaseSummary | null>;
   getCaseMetrics(): Promise<CaseMetrics>;
   getRecentObjects(): Promise<RecentObject[]>;
+  getRecentCases(): Promise<RecentCase[]>;
+  getDataSources(): Promise<DataSourceSummary[]>;
   createCase(caseRoot: string, name: string, examiner?: string): Promise<CaseSummary>;
   openCase(caseRoot: string): Promise<CaseSummary>;
   closeCase(): Promise<void>;
+  renameDataSource(dataSourceId: string, name: string): Promise<void>;
   importDataSource(sourcePath: string): Promise<string>;
   getFileTree(): Promise<FileTreeNode[]>;
   getFileChildren(parentId: string): Promise<FileTreeNode[]>;
-  getFileRows(): Promise<FileEntryRow[]>;
+  getFileRows(parentId?: string): Promise<FileEntryRow[]>;
   openFileHandle(fileId: string): Promise<ViewerHandle>;
   readFileRange(request: ViewerRangeRequest): Promise<ViewerRangeResponse>;
   searchFiles(query: string): Promise<SearchResultPage>;
@@ -67,16 +74,28 @@ export const mockProvider: ApiProvider = {
   async getRecentObjects() {
     return recentObjects;
   },
+  async getRecentCases() {
+    return recentCases;
+  },
+  async getDataSources() {
+    return dataSources;
+  },
   async getFileTree() {
     return filesTree;
   },
-  async getFileRows() {
-    return fileRows;
+  async getFileRows(parentId?: string) {
+    if (!parentId) {
+      return [];
+    }
+    if (parentId === 'tree-system32') {
+      return fileRows;
+    }
+    return [];
   },
   async openFileHandle(fileId: string) {
     const file = fileRows.find((item) => item.id === fileId);
     return {
-      handleId: `handle-${fileId}`,
+      handleId: `file:${fileId}`,
       size: file?.size ?? 289000,
       mime: 'application/x-msdownload',
     };
@@ -123,12 +142,13 @@ export const mockProvider: ApiProvider = {
     return traces;
   },
   async createCase(_caseRoot: string, name: string, examiner?: string) {
-    return { ...currentCase, name, number: 'MOCK-001', examiner: examiner ?? null };
+    return { ...currentCase, name, number: 'MOCK-001', examiner };
   },
   async openCase(_caseRoot: string) {
     return currentCase;
   },
   async closeCase() {},
+  async renameDataSource(_dataSourceId: string, _name: string) {},
   async importDataSource(_sourcePath: string) {
     return 'Mock import: 42 files, 3 dirs';
   },

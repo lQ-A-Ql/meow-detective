@@ -1,7 +1,7 @@
 //! FAT32 synthetic fixture tests.
 
-use evidence_core::EvidenceReader;
 use evidence_core::filesystem::FileSystemReader;
+use evidence_core::EvidenceReader;
 use fs_fat::FatReader;
 use std::io::{self, Read, Seek, SeekFrom};
 
@@ -70,12 +70,12 @@ fn build_fat32_fixture() -> Vec<u8> {
 
     // FAT table at sector 2: entries 0-5
     let fat_entries: &[(usize, &[u8])] = &[
-        (0, &[0xF8, 0xFF, 0xFF, 0x0F]),   // entry 0: media
-        (4, &[0xFF, 0xFF, 0xFF, 0x0F]),   // entry 1: EOC
-        (8, &[0xFF, 0xFF, 0xFF, 0x0F]),   // entry 2: EOC (root)
-        (12, &[0xFF, 0xFF, 0xFF, 0x0F]),  // entry 3: EOC (SUBDIR)
-        (16, &[0xFF, 0xFF, 0xFF, 0x0F]),  // entry 4: EOC (HELLO.TXT)
-        (20, &[0xFF, 0xFF, 0xFF, 0x0F]),  // entry 5: EOC (DEEP.TXT)
+        (0, &[0xF8, 0xFF, 0xFF, 0x0F]),  // entry 0: media
+        (4, &[0xFF, 0xFF, 0xFF, 0x0F]),  // entry 1: EOC
+        (8, &[0xFF, 0xFF, 0xFF, 0x0F]),  // entry 2: EOC (root)
+        (12, &[0xFF, 0xFF, 0xFF, 0x0F]), // entry 3: EOC (SUBDIR)
+        (16, &[0xFF, 0xFF, 0xFF, 0x0F]), // entry 4: EOC (HELLO.TXT)
+        (20, &[0xFF, 0xFF, 0xFF, 0x0F]), // entry 5: EOC (DEEP.TXT)
     ];
     for &(off, bytes) in fat_entries {
         data[1024 + off..1024 + off + bytes.len()].copy_from_slice(bytes);
@@ -89,7 +89,7 @@ fn build_fat32_fixture() -> Vec<u8> {
     e1[11] = 0x20;
     e1[26..28].copy_from_slice(&4u16.to_le_bytes()); // start cluster 4
     e1[28..32].copy_from_slice(&11u32.to_le_bytes()); // size 11
-    // Entry: "SUBDIR" — dir, cluster 3
+                                                      // Entry: "SUBDIR" — dir, cluster 3
     let e2 = &mut root[32..64];
     e2[0..8].copy_from_slice(b"SUBDIR  ");
     e2[8..11].copy_from_slice(b"   ");

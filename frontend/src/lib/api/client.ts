@@ -1,9 +1,15 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { ApiErrorDto, ApiMode } from '@/types/models';
 import { ApiProvider, mockProvider } from './provider';
 
-function getApiMode(): ApiMode {
-  return import.meta.env.VITE_API_MODE === 'tauri' ? 'tauri' : 'mock';
+export function getApiMode(): ApiMode {
+  if (import.meta.env.VITE_API_MODE === 'tauri') {
+    return 'tauri';
+  }
+
+  // Desktop builds must prefer the live Tauri bridge even if the env var
+  // was not injected into the prebuilt frontend bundle.
+  return isTauri() ? 'tauri' : 'mock';
 }
 
 function toApiError(error: unknown, fallbackCode: string): ApiErrorDto {
@@ -49,12 +55,14 @@ async function invokeTauriCommand<T>(command: string, payload?: Record<string, u
 }
 
 class ApiClient {
-  readonly mode = getApiMode();
-
   private provider: ApiProvider = mockProvider;
 
+  get mode() {
+    return getApiMode();
+  }
+
   async request<T>(command: string, mockCall: () => Promise<T>, payload?: Record<string, unknown>) {
-    if (this.mode === 'mock') {
+    if (getApiMode() === 'mock') {
       return mockCall();
     }
 
@@ -71,4 +79,4 @@ class ApiClient {
 }
 
 export const apiClient = new ApiClient();
-export const apiMode = apiClient.mode;
+export const apiMode = () => getApiMode();

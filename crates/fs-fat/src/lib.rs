@@ -14,6 +14,7 @@ pub struct FatReader {
     first_data_sector: u32,
     cluster_size: u64,
     fat_type: FatType,
+    root_cluster: u32,
     volume_offset: u64,
 }
 
@@ -54,8 +55,7 @@ impl FatReader {
             u32::from_le_bytes(boot[32..36].try_into().unwrap_or([0; 4]))
         };
 
-        let root_dir_sectors =
-            (root_entries as u32 * 32).div_ceil(bytes_per_sector as u32);
+        let root_dir_sectors = (root_entries as u32 * 32).div_ceil(bytes_per_sector as u32);
 
         let fat_size = fat_count as u32 * sectors_per_fat;
         let first_data_sector = reserved_sectors as u32 + fat_size + root_dir_sectors;
@@ -76,6 +76,11 @@ impl FatReader {
         };
 
         let cluster_size = bytes_per_sector as u64 * sectors_per_cluster as u64;
+        let root_cluster = if fat_type == FatType::Fat32 {
+            u32::from_le_bytes(boot[44..48].try_into().unwrap_or([2, 0, 0, 0])).max(2)
+        } else {
+            0
+        };
 
         Ok(Self {
             reader: RefCell::new(reader),
@@ -88,6 +93,7 @@ impl FatReader {
             first_data_sector,
             cluster_size,
             fat_type,
+            root_cluster,
             volume_offset: offset,
         })
     }
@@ -176,8 +182,7 @@ impl FatReader {
     /// Read root directory data (for FAT12/16) or cluster chain (FAT32).
     fn read_root_data(&self) -> io::Result<Vec<u8>> {
         if self.fat_type == FatType::Fat32 {
-            let root_cluster = self.first_data_sector.saturating_sub(2);
-            self.walk_cluster_chain(root_cluster)
+            self.walk_cluster_chain(self.root_cluster)
         } else {
             let offset = self.volume_offset
                 + (self.reserved_sectors as u64
@@ -264,8 +269,8 @@ impl FatReader {
     /// Returns (cluster, is_dir, file_size). Root returns (0, true, 0).
     fn resolve_path_cluster(&self, path: &str) -> io::Result<Option<(u32, bool, u64)>> {
         let components: Vec<&str> = path
-            .trim_start_matches('\\')
-            .split('\\')
+            .trim_matches(|c| c == '\\' || c == '/')
+            .split(['\\', '/'])
             .filter(|c| !c.is_empty())
             .collect();
         if components.is_empty() {
@@ -295,7 +300,7 @@ impl FatReader {
         Ok(Self::find_entry_in_data(&data, last).map(|(_, c, d, s)| (c, d, s)))
     }
 
-    fn parse_directory_entries(data: &[u8]) -> Vec<FsNode> {
+    fn parse_directory_entries(data: &[u8], parent_path: &str) -> Vec<FsNode> {
         let mut nodes = Vec::new();
         let mut lfn_buf = String::new();
         let mut i = 0usize;
@@ -362,8 +367,8 @@ impl FatReader {
             let size = u32::from_le_bytes(entry[28..32].try_into().unwrap_or([0; 4])) as u64;
 
             nodes.push(FsNode {
+                path: join_child_path(parent_path, &name),
                 name,
-                path: String::new(),
                 is_dir,
                 size,
                 created_at: None,
@@ -399,7 +404,7 @@ impl FileSystemReader for FatReader {
                 } else {
                     self.walk_cluster_chain(cluster)?
                 };
-                Ok(Self::parse_directory_entries(&data))
+                Ok(Self::parse_directory_entries(&data, path))
             }
             _ => Ok(Vec::new()),
         }
@@ -416,10 +421,7 @@ impl FileSystemReader for FatReader {
                 io::ErrorKind::InvalidInput,
                 "path is a directory",
             )),
-            None => Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                "file not found",
-            )),
+            None => Err(io::Error::new(io::ErrorKind::NotFound, "file not found")),
         }
     }
 
@@ -434,10 +436,22 @@ impl FileSystemReader for FatReader {
 
 fn read_sfn_name(entry: &[u8]) -> String {
     let name = String::from_utf8_lossy(&entry[0..8]).trim_end().to_string();
-    let ext = String::from_utf8_lossy(&entry[8..11]).trim_end().to_string();
+    let ext = String::from_utf8_lossy(&entry[8..11])
+        .trim_end()
+        .to_string();
     if ext.is_empty() {
         name
     } else {
         format!("{}.{}", name, ext)
+    }
+}
+
+fn join_child_path(parent_path: &str, name: &str) -> String {
+    let parent = parent_path.replace('\\', "/");
+    let parent = parent.trim_matches('/');
+    if parent.is_empty() {
+        name.to_string()
+    } else {
+        format!("{}/{}", parent, name)
     }
 }

@@ -33,7 +33,7 @@ fn list_children_of_subdir() {
     let children = fs.list_children("sub").unwrap();
     assert_eq!(children.len(), 1);
     assert_eq!(children[0].name, "inner.txt");
-    assert!(children[0].path.ends_with("inner.txt"));
+    assert_eq!(children[0].path, "sub/inner.txt");
 }
 
 #[test]

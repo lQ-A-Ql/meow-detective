@@ -63,7 +63,7 @@ fn full_case_lifecycle() {
 
             // Timeline
             let tl_count = timeline_service::project_and_store_macb(conn, &all_files)
-                .map_err(|e| persistence_sqlite::DbError::System(e))?;
+                .map_err(persistence_sqlite::DbError::System)?;
             assert!(tl_count > 0, "Expected timeline events");
 
             // Search indexing: build a map of entry paths, then provide readers
@@ -82,12 +82,12 @@ fn full_case_lifecycle() {
                         .ok()
                         .map(|r| Box::new(r) as Box<dyn std::io::Read>)
                 })
-                .map_err(|e| persistence_sqlite::DbError::System(e))?;
+                .map_err(persistence_sqlite::DbError::System)?;
             assert!(idx_result.indexed_count > 0, "Expected indexed files");
 
             // Search query
             let results = search_service::search_files_real(&index_dir, "forensics")
-                .map_err(|e| persistence_sqlite::DbError::System(e))?;
+                .map_err(persistence_sqlite::DbError::System)?;
             assert!(results.total > 0, "Expected search results for 'forensics'");
             assert!(!results.items.is_empty());
             assert!(!results.items[0].snippets.is_empty());
@@ -96,7 +96,7 @@ fn full_case_lifecycle() {
             let output_dir = active.case_root.join("reports");
             let report_file =
                 app_services::report_service::generate_html_report(conn, &active.meta, &output_dir)
-                    .map_err(|e| persistence_sqlite::DbError::System(e))?;
+                    .map_err(persistence_sqlite::DbError::System)?;
             assert!(output_dir.join(&report_file).exists());
 
             // Job tracking

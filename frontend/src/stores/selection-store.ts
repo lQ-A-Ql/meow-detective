@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 
 type SelectionState = {
+  selectedDirectoryId?: string;
   selectedFileId?: string;
   selectedSearchHitId?: string;
   selectedTimelineId?: string;
   selectedArtifactFamily: string;
   selectedArtifactId?: string;
+  setSelectedDirectoryId: (id?: string) => void;
   setSelectedFileId: (id?: string) => void;
   setSelectedSearchHitId: (id?: string) => void;
   setSelectedTimelineId: (id?: string) => void;
@@ -14,11 +16,13 @@ type SelectionState = {
 };
 
 export const useSelectionStore = create<SelectionState>((set) => ({
-  selectedFileId: 'file-cmd-exe',
+  selectedDirectoryId: undefined,
+  selectedFileId: undefined,
   selectedSearchHitId: 'search-hit-1',
   selectedTimelineId: 'timeline-2',
   selectedArtifactFamily: 'LNK',
   selectedArtifactId: 'artifact-2',
+  setSelectedDirectoryId: (id) => set({ selectedDirectoryId: id }),
   setSelectedFileId: (id) => set({ selectedFileId: id }),
   setSelectedSearchHitId: (id) => set({ selectedSearchHitId: id }),
   setSelectedTimelineId: (id) => set({ selectedTimelineId: id }),

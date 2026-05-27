@@ -9,6 +9,14 @@ pub struct JobSnapshotDto {
     pub progress: u32,
     pub status: String,
     pub detail: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_partition: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_partitions: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_partitions: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub partition_progress: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

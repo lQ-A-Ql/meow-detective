@@ -50,10 +50,40 @@ export interface RecentObject {
   kind: 'file' | 'registry' | 'process' | 'network';
 }
 
+export interface DataSourceSummary {
+  id: string;
+  name: string;
+  kind: 'e01' | 'raw' | 'logical_directory' | string;
+  sourcePath: string;
+  importedAt: string;
+  fileCount?: number;
+  partitions: DataSourcePartition[];
+}
+
+export interface DataSourcePartition {
+  index: number;
+  name: string;
+  kindLabel: string;
+  status: string;
+  offset: number;
+  length: number;
+  typeGuid?: string;
+  filesystem?: string;
+  unlockHint?: string;
+}
+
+export interface RecentCase {
+  caseRoot: string;
+  name: string;
+  openedAt: string;
+}
+
 export interface FileTreeNode {
   id: string;
   name: string;
   depth: number;
+  nodeType?: string;
+  status?: string;
   expanded?: boolean;
   active?: boolean;
 }
@@ -117,8 +147,12 @@ export interface JobSnapshot {
   name: string;
   scope: string;
   progress: number;
-  status: 'running' | 'completed' | 'warning';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'warning';
   detail: string;
+  currentPartition?: string;
+  completedPartitions?: number;
+  totalPartitions?: number;
+  partitionProgress?: number;
 }
 
 export interface WarningItem {

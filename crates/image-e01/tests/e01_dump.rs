@@ -40,3 +40,24 @@ fn dump_section_walk() {
         off = next;
     }
 }
+
+#[test]
+fn dump_first_table_bytes() {
+    let p = std::path::Path::new("E:/pangushi/刘洋/liuyang_pc.E01");
+    if !p.exists() {
+        eprintln!("SKIP");
+        return;
+    }
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = std::fs::File::open(p).unwrap();
+    let table_off = 258681683u64;
+    f.seek(SeekFrom::Start(table_off)).unwrap();
+
+    let mut desc = [0u8; 76];
+    f.read_exact(&mut desc).unwrap();
+    let mut content = [0u8; 64];
+    f.read_exact(&mut content).unwrap();
+
+    eprintln!("table desc[0..32]: {:02X?}", &desc[0..32]);
+    eprintln!("table content[0..64]: {:02X?}", &content);
+}

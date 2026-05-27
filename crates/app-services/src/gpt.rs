@@ -15,10 +15,20 @@ pub struct GptHeader {
 /// GPT Partition Entry (128 bytes): type GUID, unique GUID, start/end LBA, name.
 #[derive(Debug, Clone)]
 pub struct GptPartition {
+    pub index: usize,
     pub type_guid: [u8; 16],
     pub start_lba: u64,
     pub end_lba: u64,
     pub name: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GptPartitionType {
+    EfiSystem,
+    MicrosoftReserved,
+    MicrosoftBasicData,
+    WindowsRecovery,
+    Unknown,
 }
 
 /// Read GPT header from sector 1 (offset 512)
@@ -67,6 +77,7 @@ pub fn parse_gpt_entries(data: &[u8], entry_size: u32, count: u32) -> Vec<GptPar
             .collect();
         let name = String::from_utf16_lossy(&chars);
         parts.push(GptPartition {
+            index: i as usize + 1,
             type_guid,
             start_lba: start,
             end_lba: end,
@@ -80,6 +91,52 @@ pub fn parse_gpt_entries(data: &[u8], entry_size: u32, count: u32) -> Vec<GptPar
 const MS_BASIC_DATA: [u8; 16] = [
     0xA2, 0xA0, 0xD0, 0xEB, 0xE5, 0xB9, 0x33, 0x44, 0x87, 0xC0, 0x68, 0xB6, 0xB7, 0x26, 0x99, 0xC7,
 ];
+const EFI_SYSTEM: [u8; 16] = [
+    0x28, 0x73, 0x2A, 0xC1, 0x1F, 0xF8, 0xD2, 0x11, 0xBA, 0x4B, 0x00, 0xA0, 0xC9, 0x3E, 0xC9, 0x3B,
+];
+const MS_RESERVED: [u8; 16] = [
+    0x16, 0xE3, 0xC9, 0xE3, 0x5C, 0x0B, 0xB8, 0x4D, 0x81, 0x7D, 0xF9, 0x2D, 0xF0, 0x02, 0x15, 0xAE,
+];
+const WINDOWS_RECOVERY: [u8; 16] = [
+    0xA4, 0xBB, 0x94, 0xDE, 0xD1, 0x06, 0x40, 0x4D, 0xA1, 0x6A, 0xBF, 0xD5, 0x01, 0x79, 0xD6, 0xAC,
+];
+
+pub fn classify_partition_type(type_guid: &[u8; 16]) -> GptPartitionType {
+    match *type_guid {
+        EFI_SYSTEM => GptPartitionType::EfiSystem,
+        MS_RESERVED => GptPartitionType::MicrosoftReserved,
+        MS_BASIC_DATA => GptPartitionType::MicrosoftBasicData,
+        WINDOWS_RECOVERY => GptPartitionType::WindowsRecovery,
+        _ => GptPartitionType::Unknown,
+    }
+}
+
+pub fn partition_type_name(partition_type: GptPartitionType) -> &'static str {
+    match partition_type {
+        GptPartitionType::EfiSystem => "EFI system",
+        GptPartitionType::MicrosoftReserved => "Microsoft reserved",
+        GptPartitionType::MicrosoftBasicData => "Microsoft basic data",
+        GptPartitionType::WindowsRecovery => "Windows recovery",
+        GptPartitionType::Unknown => "Unknown",
+    }
+}
+
+pub fn format_guid(type_guid: &[u8; 16]) -> String {
+    let d1 = u32::from_le_bytes([type_guid[0], type_guid[1], type_guid[2], type_guid[3]]);
+    let d2 = u16::from_le_bytes([type_guid[4], type_guid[5]]);
+    let d3 = u16::from_le_bytes([type_guid[6], type_guid[7]]);
+    format!(
+        "{d1:08X}-{d2:04X}-{d3:04X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
+        type_guid[8],
+        type_guid[9],
+        type_guid[10],
+        type_guid[11],
+        type_guid[12],
+        type_guid[13],
+        type_guid[14],
+        type_guid[15]
+    )
+}
 
 /// Find first partition that looks like a Windows data partition (NTFS/FAT)
 pub fn find_first_data_partition(parts: &[GptPartition]) -> Option<&GptPartition> {

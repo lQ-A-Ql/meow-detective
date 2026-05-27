@@ -9,7 +9,7 @@ fn create_new_db() {
     assert!(db_path.exists());
 
     let count = runner::run_all(&conn).unwrap();
-    assert!(count >= 8, "Expected at least 8 migrations, got {}", count);
+    assert!(count >= 9, "Expected at least 9 migrations, got {}", count);
 }
 
 #[test]
@@ -31,7 +31,7 @@ fn open_existing_db() {
 fn run_all_migrations() {
     let conn = open_in_memory().unwrap();
     let count = runner::run_all(&conn).unwrap();
-    assert_eq!(count, 8, "Expected 8 migrations to run");
+    assert_eq!(count, 9, "Expected 9 migrations to run");
 
     let tables = [
         "cases",
@@ -42,6 +42,7 @@ fn run_all_migrations() {
         "jobs",
         "reports",
         "tags",
+        "data_source_partitions",
     ];
     for table in &tables {
         let has_table: bool = conn
@@ -71,7 +72,7 @@ fn version_query() {
 
     runner::run_all(&conn).unwrap();
     let version = runner::current_version(&conn).unwrap();
-    assert_eq!(version, Some("0008_tags".to_string()));
+    assert_eq!(version, Some("0009_data_source_partitions".to_string()));
 }
 
 #[test]

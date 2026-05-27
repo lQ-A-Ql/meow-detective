@@ -1,8 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createCase, closeCase, getCaseMetrics, getCurrentCase, getRecentObjects, openCase } from '@/lib/api/case';
+import {
+  createCase,
+  closeCase,
+  getCaseMetrics,
+  getCurrentCase,
+  getDataSources,
+  getRecentCases,
+  getRecentObjects,
+  openCase,
+  renameDataSource,
+} from '@/lib/api/case';
 
 export function useCurrentCase() {
-  return useQuery({ queryKey: ['case', 'current'], queryFn: getCurrentCase });
+  return useQuery({ queryKey: ['case', 'current'], queryFn: getCurrentCase, retry: false });
 }
 
 export function useCaseMetrics() {
@@ -11,6 +21,14 @@ export function useCaseMetrics() {
 
 export function useRecentObjects() {
   return useQuery({ queryKey: ['case', 'recent-objects'], queryFn: getRecentObjects });
+}
+
+export function useRecentCases() {
+  return useQuery({ queryKey: ['case', 'recent-cases'], queryFn: getRecentCases });
+}
+
+export function useDataSources() {
+  return useQuery({ queryKey: ['case', 'data-sources'], queryFn: getDataSources });
 }
 
 export function useCreateCase() {
@@ -30,6 +48,20 @@ export function useOpenCase() {
     mutationFn: (caseRoot: string) => openCase(caseRoot),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['case'] });
+      qc.invalidateQueries({ queryKey: ['files'] });
+      qc.invalidateQueries({ queryKey: ['jobs'] });
+    },
+  });
+}
+
+export function useRenameDataSource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { dataSourceId: string; name: string }) =>
+      renameDataSource(params.dataSourceId, params.name),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['case', 'data-sources'] });
+      qc.invalidateQueries({ queryKey: ['files'] });
     },
   });
 }

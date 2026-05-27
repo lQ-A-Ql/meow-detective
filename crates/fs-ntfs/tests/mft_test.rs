@@ -159,7 +159,9 @@ fn build_nested_fixture() -> Vec<u8> {
 
     // Boot sector
     let boot = &mut data[0..512];
-    boot[0] = 0xEB; boot[1] = 0x52; boot[2] = 0x90;
+    boot[0] = 0xEB;
+    boot[1] = 0x52;
+    boot[2] = 0x90;
     boot[3..11].copy_from_slice(b"NTFS    ");
     boot[11..13].copy_from_slice(&bps.to_le_bytes());
     boot[13] = spc;
@@ -176,34 +178,43 @@ fn build_nested_fixture() -> Vec<u8> {
 
         // $INDEX_ROOT (0x90) at offset 0x68
         let iro = 0x68usize;
-        rec[iro..iro+4].copy_from_slice(&0x90u32.to_le_bytes());
-        rec[iro+4..iro+8].copy_from_slice(&0u32.to_le_bytes()); // patched later
-        rec[iro+0x10..iro+0x14].copy_from_slice(&0x10u32.to_le_bytes());
+        rec[iro..iro + 4].copy_from_slice(&0x90u32.to_le_bytes());
+        rec[iro + 4..iro + 8].copy_from_slice(&0u32.to_le_bytes()); // patched later
+        rec[iro + 0x10..iro + 0x14].copy_from_slice(&0x10u32.to_le_bytes());
 
         let mut off = iro + 0x20;
         for &(name, mft_ref) in children {
             let utf16: Vec<u16> = name.encode_utf16().collect();
             let name_bytes = utf16.len() * 2;
             let entry_size = 0x52 + name_bytes;
-            rec[off..off+8].copy_from_slice(&mft_ref.to_le_bytes());
-            rec[off+8..off+10].copy_from_slice(&(entry_size as u16).to_le_bytes());
-            rec[off+0x50] = utf16.len() as u8;
-            rec[off+0x48..off+0x4C].copy_from_slice(&0x10000000u32.to_le_bytes());
+            rec[off..off + 8].copy_from_slice(&mft_ref.to_le_bytes());
+            rec[off + 8..off + 10].copy_from_slice(&(entry_size as u16).to_le_bytes());
+            rec[off + 0x50] = utf16.len() as u8;
+            rec[off + 0x48..off + 0x4C].copy_from_slice(&0x10000000u32.to_le_bytes());
             for (i, c) in utf16.iter().enumerate() {
-                rec[off+0x52+i*2..off+0x52+i*2+2].copy_from_slice(&c.to_le_bytes());
+                rec[off + 0x52 + i * 2..off + 0x52 + i * 2 + 2].copy_from_slice(&c.to_le_bytes());
             }
             off += entry_size;
         }
-        rec[off..off+4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
-        rec[iro+4..iro+8].copy_from_slice(&((off - iro) as u32).to_le_bytes());
+        rec[off..off + 4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+        rec[iro + 4..iro + 8].copy_from_slice(&((off - iro) as u32).to_le_bytes());
     }
 
     // Root → [Windows (inode 6)]
-    write_dir_record(&mut data[rec5_off..rec5_off+mft_record_size], &[("Windows", 6)]);
+    write_dir_record(
+        &mut data[rec5_off..rec5_off + mft_record_size],
+        &[("Windows", 6)],
+    );
     // Windows → [System32 (inode 7)]
-    write_dir_record(&mut data[rec6_off..rec6_off+mft_record_size], &[("System32", 7)]);
+    write_dir_record(
+        &mut data[rec6_off..rec6_off + mft_record_size],
+        &[("System32", 7)],
+    );
     // System32 → [ntdll.dll]
-    write_dir_record(&mut data[rec7_off..rec7_off+mft_record_size], &[("ntdll.dll", 100)]);
+    write_dir_record(
+        &mut data[rec7_off..rec7_off + mft_record_size],
+        &[("ntdll.dll", 100)],
+    );
 
     data
 }
@@ -273,7 +284,7 @@ fn build_indx_record(entries_data: &[u8], sectors: usize) -> Vec<u8> {
     // Index entry list header at +0x18
     let list_off = 0x18usize;
     let ent_start = 0x18u32; // entries start at list + 0x18
-    let ent_total = entries_data.len() as u32;
+    let ent_total = ent_start + entries_data.len() as u32;
     rec[list_off..list_off + 4].copy_from_slice(&ent_start.to_le_bytes());
     rec[list_off + 4..list_off + 8].copy_from_slice(&ent_total.to_le_bytes());
     rec[list_off + 8..list_off + 12].copy_from_slice(&ent_total.to_le_bytes());
@@ -321,10 +332,8 @@ fn build_index_alloc_fixture() -> Vec<u8> {
     let indx_offset = indx_cluster as usize * cluster_size; // 16384
 
     let (root_ent_data, _) = build_indx_entries(&["Alpha", "Beta", "Gamma"], 10, true);
-    let (alloc_ent_data, _) = build_indx_entries(
-        &["One", "Two", "Three", "Four", "Five"],
-        100, true,
-    );
+    let (alloc_ent_data, _) =
+        build_indx_entries(&["One", "Two", "Three", "Four", "Five"], 100, true);
     let indx_rec = build_indx_record(&alloc_ent_data, 3); // 3 sectors = 1536 bytes
 
     let total = indx_offset + indx_rec.len().max(2048);
@@ -332,7 +341,9 @@ fn build_index_alloc_fixture() -> Vec<u8> {
 
     // Boot sector
     let boot = &mut data[0..512];
-    boot[0] = 0xEB; boot[1] = 0x52; boot[2] = 0x90;
+    boot[0] = 0xEB;
+    boot[1] = 0x52;
+    boot[2] = 0x90;
     boot[3..11].copy_from_slice(b"NTFS    ");
     boot[11..13].copy_from_slice(&bps.to_le_bytes());
     boot[13] = spc;
@@ -355,7 +366,7 @@ fn build_index_alloc_fixture() -> Vec<u8> {
     let iro_len_pos = iro + 4;
 
     rec5[iro + 0x10..iro + 0x14].copy_from_slice(&0x10u32.to_le_bytes()); // entries_off
-    // Copy root entries
+                                                                          // Copy root entries
     let mut off = iro + 0x20;
     rec5[off..off + root_ent_data.len()].copy_from_slice(&root_ent_data);
     off += root_ent_data.len();
@@ -368,10 +379,10 @@ fn build_index_alloc_fixture() -> Vec<u8> {
     // $INDEX_ALLOCATION (0xA0) — non-resident
     let idxa = off;
     rec5[idxa..idxa + 4].copy_from_slice(&0xA0u32.to_le_bytes()); // type
-    // length placeholder
+                                                                  // length placeholder
     let idxa_len_pos = idxa + 4;
     rec5[idxa + 8] = 1; // non-resident flag
-    // data_run_offset = 0x40
+                        // data_run_offset = 0x40
     rec5[idxa + 0x20..idxa + 0x22].copy_from_slice(&0x40u16.to_le_bytes());
     // allocated_size = 1536
     rec5[idxa + 0x28..idxa + 0x30].copy_from_slice(&1536u64.to_le_bytes());
@@ -451,7 +462,9 @@ fn data_run_parse_zero_length_runs_skipped() {
 
     let mut data = vec![0u8; indx_offset + 1024];
     let boot = &mut data[0..512];
-    boot[0] = 0xEB; boot[1] = 0x52; boot[2] = 0x90;
+    boot[0] = 0xEB;
+    boot[1] = 0x52;
+    boot[2] = 0x90;
     boot[3..11].copy_from_slice(b"NTFS    ");
     boot[11..13].copy_from_slice(&bps.to_le_bytes());
     boot[13] = spc;
@@ -509,9 +522,8 @@ fn write_resident_data(rec: &mut [u8], offset: usize, content: &[u8]) -> usize {
     let attr_len = 0x18 + content.len() as u32;
     rec[offset + 4..offset + 8].copy_from_slice(&attr_len.to_le_bytes());
     rec[offset + 8] = 0; // resident flag
-    // content_size @ +0x10
-    rec[offset + 0x10..offset + 0x14]
-        .copy_from_slice(&(content.len() as u32).to_le_bytes());
+                         // content_size @ +0x10
+    rec[offset + 0x10..offset + 0x14].copy_from_slice(&(content.len() as u32).to_le_bytes());
     // content_offset @ +0x14
     rec[offset + 0x14..offset + 0x16].copy_from_slice(&content_off.to_le_bytes());
     // Copy content
@@ -608,8 +620,7 @@ fn build_nonresident_data_fixture() -> Vec<u8> {
     rec6[idxa + 8] = 1; // non-resident
     rec6[idxa + 0x20..idxa + 0x22].copy_from_slice(&0x40u16.to_le_bytes());
     rec6[idxa + 0x28..idxa + 0x30].copy_from_slice(&(cluster_size as u64).to_le_bytes());
-    rec6[idxa + 0x30..idxa + 0x38]
-        .copy_from_slice(&(file_content.len() as u64).to_le_bytes());
+    rec6[idxa + 0x30..idxa + 0x38].copy_from_slice(&(file_content.len() as u64).to_le_bytes());
     // Data run: 1 cluster at LCN 32
     let run = idxa + 0x40;
     rec6[run] = 0x31; // size=1, offset=3
@@ -627,7 +638,9 @@ fn build_nonresident_data_fixture() -> Vec<u8> {
 
 /// Boot sector helper for Phase 17 fixtures.
 fn make_boot(boot: &mut [u8]) {
-    boot[0] = 0xEB; boot[1] = 0x52; boot[2] = 0x90;
+    boot[0] = 0xEB;
+    boot[1] = 0x52;
+    boot[2] = 0x90;
     boot[3..11].copy_from_slice(b"NTFS    ");
     boot[11..13].copy_from_slice(&512u16.to_le_bytes());
     boot[13] = 1; // 1 sector per cluster
@@ -680,25 +693,25 @@ fn open_file_nested_path() {
         rec[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
         rec[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
         let iro = 0x68usize;
-        rec[iro..iro+4].copy_from_slice(&0x90u32.to_le_bytes());
-        rec[iro+0x10..iro+0x14].copy_from_slice(&0x10u32.to_le_bytes());
+        rec[iro..iro + 4].copy_from_slice(&0x90u32.to_le_bytes());
+        rec[iro + 0x10..iro + 0x14].copy_from_slice(&0x10u32.to_le_bytes());
         let mut off = iro + 0x20;
         for &(name, mft_ref) in children {
             let utf16: Vec<u16> = name.encode_utf16().collect();
             let name_bytes = utf16.len() * 2;
             let entry_size = 0x52 + name_bytes;
-            rec[off..off+8].copy_from_slice(&mft_ref.to_le_bytes());
-            rec[off+8..off+10].copy_from_slice(&(entry_size as u16).to_le_bytes());
-            rec[off+0x48..off+0x4C].copy_from_slice(&0x10000000u32.to_le_bytes());
-            rec[off+0x50] = utf16.len() as u8;
+            rec[off..off + 8].copy_from_slice(&mft_ref.to_le_bytes());
+            rec[off + 8..off + 10].copy_from_slice(&(entry_size as u16).to_le_bytes());
+            rec[off + 0x48..off + 0x4C].copy_from_slice(&0x10000000u32.to_le_bytes());
+            rec[off + 0x50] = utf16.len() as u8;
             for (i, c) in utf16.iter().enumerate() {
-                rec[off+0x52+i*2..off+0x52+i*2+2].copy_from_slice(&c.to_le_bytes());
+                rec[off + 0x52 + i * 2..off + 0x52 + i * 2 + 2].copy_from_slice(&c.to_le_bytes());
             }
             off += entry_size;
         }
-        rec[off..off+4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+        rec[off..off + 4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
         off += 4;
-        rec[iro+4..iro+8].copy_from_slice(&((off-iro) as u32).to_le_bytes());
+        rec[iro + 4..iro + 8].copy_from_slice(&((off - iro) as u32).to_le_bytes());
     };
 
     write_dir(rec5_off, &[("Windows", 6)]);
@@ -711,23 +724,23 @@ fn open_file_nested_path() {
         rec7[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
         rec7[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
         let iro = 0x68usize;
-        rec7[iro..iro+4].copy_from_slice(&0x90u32.to_le_bytes());
-        rec7[iro+0x10..iro+0x14].copy_from_slice(&0x10u32.to_le_bytes());
+        rec7[iro..iro + 4].copy_from_slice(&0x90u32.to_le_bytes());
+        rec7[iro + 0x10..iro + 0x14].copy_from_slice(&0x10u32.to_le_bytes());
         // file entry: no directory flag
         let utf16: Vec<u16> = "ntdll.dll".encode_utf16().collect();
         let name_bytes = utf16.len() * 2;
         let entry_size = 0x52 + name_bytes;
         let mut off = iro + 0x20;
-        rec7[off..off+8].copy_from_slice(&8u64.to_le_bytes()); // mft_ref
-        rec7[off+8..off+10].copy_from_slice(&(entry_size as u16).to_le_bytes());
-        rec7[off+0x50] = utf16.len() as u8;
+        rec7[off..off + 8].copy_from_slice(&8u64.to_le_bytes()); // mft_ref
+        rec7[off + 8..off + 10].copy_from_slice(&(entry_size as u16).to_le_bytes());
+        rec7[off + 0x50] = utf16.len() as u8;
         for (i, c) in utf16.iter().enumerate() {
-            rec7[off+0x52+i*2..off+0x52+i*2+2].copy_from_slice(&c.to_le_bytes());
+            rec7[off + 0x52 + i * 2..off + 0x52 + i * 2 + 2].copy_from_slice(&c.to_le_bytes());
         }
         off += entry_size;
-        rec7[off..off+4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+        rec7[off..off + 4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
         off += 4;
-        rec7[iro+4..iro+8].copy_from_slice(&((off-iro) as u32).to_le_bytes());
+        rec7[iro + 4..iro + 8].copy_from_slice(&((off - iro) as u32).to_le_bytes());
     }
 
     // File record (inode 8) with resident $DATA
@@ -792,16 +805,16 @@ fn list_children_returns_files_and_dirs() {
     rec5[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
     rec5[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
     let iro = 0x68usize;
-    rec5[iro..iro+4].copy_from_slice(&0x90u32.to_le_bytes());
-    rec5[iro+0x10..iro+0x14].copy_from_slice(&0x10u32.to_le_bytes());
+    rec5[iro..iro + 4].copy_from_slice(&0x90u32.to_le_bytes());
+    rec5[iro + 0x10..iro + 0x14].copy_from_slice(&0x10u32.to_le_bytes());
     let mut off = iro + 0x20;
     write_entry(&mut rec5[off..], "SubDir", 6, true);
     off += 0x52 + "SubDir".encode_utf16().count() * 2;
     write_entry(&mut rec5[off..], "notes.txt", 7, false);
     off += 0x52 + "notes.txt".encode_utf16().count() * 2;
-    rec5[off..off+4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+    rec5[off..off + 4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
     off += 4;
-    rec5[iro+4..iro+8].copy_from_slice(&((off-iro) as u32).to_le_bytes());
+    rec5[iro + 4..iro + 8].copy_from_slice(&((off - iro) as u32).to_le_bytes());
 
     // SubDir record (inode 6) — with one child file
     let rec6 = &mut data[rec6_off..rec6_off + mft_record_size];
@@ -810,15 +823,15 @@ fn list_children_returns_files_and_dirs() {
     rec6[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
     rec6[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
     let iro6 = 0x68usize;
-    rec6[iro6..iro6+4].copy_from_slice(&0x90u32.to_le_bytes());
-    rec6[iro6+0x10..iro6+0x14].copy_from_slice(&0x10u32.to_le_bytes());
+    rec6[iro6..iro6 + 4].copy_from_slice(&0x90u32.to_le_bytes());
+    rec6[iro6 + 0x10..iro6 + 0x14].copy_from_slice(&0x10u32.to_le_bytes());
     let (ent, _) = build_indx_entries(&["deep.txt"], 100, true);
     off = iro6 + 0x20;
-    rec6[off..off+ent.len()].copy_from_slice(&ent);
+    rec6[off..off + ent.len()].copy_from_slice(&ent);
     off += ent.len();
-    rec6[off..off+4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+    rec6[off..off + 4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
     off += 4;
-    rec6[iro6+4..iro6+8].copy_from_slice(&((off-iro6) as u32).to_le_bytes());
+    rec6[iro6 + 4..iro6 + 8].copy_from_slice(&((off - iro6) as u32).to_le_bytes());
 
     // notes.txt record (inode 7) with resident $DATA
     let rec7 = &mut data[rec7_off..rec7_off + mft_record_size];
@@ -836,7 +849,10 @@ fn list_children_returns_files_and_dirs() {
     assert_eq!(root_children.len(), 2);
     let subdir = root_children.iter().find(|n| n.name == "SubDir").unwrap();
     assert!(subdir.is_dir);
-    let notes = root_children.iter().find(|n| n.name == "notes.txt").unwrap();
+    let notes = root_children
+        .iter()
+        .find(|n| n.name == "notes.txt")
+        .unwrap();
     assert!(!notes.is_dir);
 
     // Open notes.txt
@@ -858,7 +874,10 @@ fn list_children_returns_files_and_dirs() {
 fn malformed_record_no_panic() {
     // Feed random/garbage bytes to list_root_children — must not panic
     let garbage = vec![0xFFu8; 4096];
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: garbage, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader {
+        data: garbage,
+        pos: 0,
+    });
     // open may fail (no valid boot sector), which is OK
     if let Ok(ntfs) = NtfsReader::open(reader, 0) {
         let _ = ntfs.list_root_children();
@@ -886,24 +905,24 @@ fn par_ref_mismatch_returns_none() {
     rec5[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
     rec5[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
     let iro = 0x68usize;
-    rec5[iro..iro+4].copy_from_slice(&0x90u32.to_le_bytes());
-    rec5[iro+0x10..iro+0x14].copy_from_slice(&0x10u32.to_le_bytes());
+    rec5[iro..iro + 4].copy_from_slice(&0x90u32.to_le_bytes());
+    rec5[iro + 0x10..iro + 0x14].copy_from_slice(&0x10u32.to_le_bytes());
     // INDX entry for DirA
     let utf16: Vec<u16> = "DirA".encode_utf16().collect();
     let name_bytes = utf16.len() * 2;
     let entry_size = 0x52 + name_bytes;
     let mut off = iro + 0x20;
-    rec5[off..off+8].copy_from_slice(&6u64.to_le_bytes());
-    rec5[off+8..off+10].copy_from_slice(&(entry_size as u16).to_le_bytes());
-    rec5[off+0x48..off+0x4C].copy_from_slice(&0x10000000u32.to_le_bytes());
-    rec5[off+0x50] = utf16.len() as u8;
+    rec5[off..off + 8].copy_from_slice(&6u64.to_le_bytes());
+    rec5[off + 8..off + 10].copy_from_slice(&(entry_size as u16).to_le_bytes());
+    rec5[off + 0x48..off + 0x4C].copy_from_slice(&0x10000000u32.to_le_bytes());
+    rec5[off + 0x50] = utf16.len() as u8;
     for (i, c) in utf16.iter().enumerate() {
-        rec5[off+0x52+i*2..off+0x52+i*2+2].copy_from_slice(&c.to_le_bytes());
+        rec5[off + 0x52 + i * 2..off + 0x52 + i * 2 + 2].copy_from_slice(&c.to_le_bytes());
     }
     off += entry_size;
-    rec5[off..off+4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+    rec5[off..off + 4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
     off += 4;
-    rec5[iro+4..iro+8].copy_from_slice(&((off-iro) as u32).to_le_bytes());
+    rec5[iro + 4..iro + 8].copy_from_slice(&((off - iro) as u32).to_le_bytes());
 
     // DirA record (inode 6) — $FILE_NAME with par_ref=99 (WRONG: should be 5)
     let rec6 = &mut data[rec6_off..rec6_off + mft_record_size];
@@ -913,17 +932,20 @@ fn par_ref_mismatch_returns_none() {
     rec6[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
     // $FILE_NAME (0x30) at 0x68 with par_ref=99
     let fn_off = 0x68usize;
-    rec6[fn_off..fn_off+4].copy_from_slice(&0x30u32.to_le_bytes());
-    rec6[fn_off+4..fn_off+8].copy_from_slice(&0x48u32.to_le_bytes()); // length
-    rec6[fn_off+8] = 0; // resident
-    // par_ref at attribute start: parent=99
-    rec6[fn_off..fn_off+8].copy_from_slice(&99u64.to_le_bytes());
+    rec6[fn_off..fn_off + 4].copy_from_slice(&0x30u32.to_le_bytes());
+    rec6[fn_off + 4..fn_off + 8].copy_from_slice(&0x48u32.to_le_bytes()); // length
+    rec6[fn_off + 8] = 0; // resident
+                          // par_ref at attribute start: parent=99
+    rec6[fn_off..fn_off + 8].copy_from_slice(&99u64.to_le_bytes());
 
     let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data, pos: 0 });
     let ntfs = NtfsReader::open(reader, 0).unwrap();
     // resolve_path should detect the par_ref mismatch and return None
     let result = ntfs.list_subdir_children("DirA").unwrap();
-    assert!(result.is_empty(), "par_ref mismatch should make DirA unreachable");
+    assert!(
+        result.is_empty(),
+        "par_ref mismatch should make DirA unreachable"
+    );
 }
 
 #[test]
@@ -933,7 +955,10 @@ fn open_file_truncated_record_no_panic() {
     let img = build_resident_data_fixture();
     // Corrupt: shorten the file to truncate the README.TXT record
     let corrupted: Vec<u8> = img[..img.len() - 900].to_vec();
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: corrupted, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader {
+        data: corrupted,
+        pos: 0,
+    });
     if let Ok(ntfs) = NtfsReader::open(reader, 0) {
         let _ = ntfs.open_file("README.TXT");
         let _ = ntfs.list_root_children();

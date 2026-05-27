@@ -10,7 +10,7 @@ pub fn get_artifact_families(state: State<AppState>) -> Result<Vec<String>, Stri
         // TODO: query artifact families from DB
         return Ok(vec![]);
     }
-    Err("No active case".into())
+    Ok(vec![])
 }
 
 #[tauri::command]
@@ -23,7 +23,7 @@ pub fn get_artifact_rows(
         // TODO: query artifact rows from DB
         return Ok(vec![]);
     }
-    Err("No active case".into())
+    Ok(vec![])
 }
 
 #[tauri::command]
@@ -35,5 +35,5 @@ pub fn get_artifact_rows_request(
     if guard.is_some() {
         return Ok(vec![]);
     }
-    Err("No active case".into())
+    Ok(vec![])
 }

@@ -19,6 +19,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
     ("0006_jobs", include_str!("scripts/0006_jobs.sql")),
     ("0007_reports", include_str!("scripts/0007_reports.sql")),
     ("0008_tags", include_str!("scripts/0008_tags.sql")),
+    (
+        "0009_data_source_partitions",
+        include_str!("scripts/0009_data_source_partitions.sql"),
+    ),
 ];
 
 pub fn run_all(conn: &Connection) -> DbResult<u32> {

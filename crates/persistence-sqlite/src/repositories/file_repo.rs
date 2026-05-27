@@ -54,6 +54,24 @@ impl<'a> FileRepo<'a> {
         collect_entries(rows)
     }
 
+    pub fn find_root_entries(&self) -> DbResult<Vec<FileEntry>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
+             FROM file_entries WHERE parent_id IS NULL ORDER BY entry_type ASC, name ASC",
+        )?;
+        let rows = stmt.query_map([], row_to_file_entry)?;
+        collect_entries(rows)
+    }
+
+    pub fn find_child_directories(&self, parent_id: &FileEntryId) -> DbResult<Vec<FileEntry>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
+             FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory' ORDER BY name ASC",
+        )?;
+        let rows = stmt.query_map(params![parent_id.0], row_to_file_entry)?;
+        collect_entries(rows)
+    }
+
     pub fn find_roots(&self, data_source_id: &DataSourceId) -> DbResult<Vec<FileEntry>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
@@ -61,6 +79,24 @@ impl<'a> FileRepo<'a> {
         )?;
         let rows = stmt.query_map(params![data_source_id.0], row_to_file_entry)?;
         collect_entries(rows)
+    }
+
+    pub fn find_root_directories(&self) -> DbResult<Vec<FileEntry>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
+             FROM file_entries WHERE parent_id IS NULL AND entry_type = 'directory' ORDER BY name ASC",
+        )?;
+        let rows = stmt.query_map([], row_to_file_entry)?;
+        collect_entries(rows)
+    }
+
+    pub fn has_child_directories(&self, parent_id: &FileEntryId) -> DbResult<bool> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory'",
+            params![parent_id.0],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
     }
 
     pub fn find_by_path_prefix(
@@ -94,6 +130,22 @@ impl<'a> FileRepo<'a> {
         let result = stmt.query_row(params![id.0], row_to_file_entry);
         match result {
             Ok(entry) => Ok(Some(entry)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub fn find_data_source_location(
+        &self,
+        data_source_id: &DataSourceId,
+    ) -> DbResult<Option<(String, String)>> {
+        let result = self.conn.query_row(
+            "SELECT kind, source_path FROM data_sources WHERE id = ?1",
+            params![data_source_id.0],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        );
+        match result {
+            Ok(location) => Ok(Some(location)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e.into()),
         }

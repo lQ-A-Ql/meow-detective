@@ -7,6 +7,15 @@ pub struct JobRepo<'a> {
     conn: &'a Connection,
 }
 
+#[derive(Debug, Clone)]
+pub struct JobSummaryRow {
+    pub id: JobId,
+    pub kind: String,
+    pub status: String,
+    pub progress: u32,
+    pub detail: String,
+}
+
 impl<'a> JobRepo<'a> {
     pub fn new(conn: &'a Connection) -> Self {
         Self { conn }
@@ -45,12 +54,28 @@ impl<'a> JobRepo<'a> {
         Ok(())
     }
 
-    pub fn list_active(&self) -> DbResult<Vec<(JobId, String, String, u32)>> {
+    pub fn list_recent(&self, limit: usize) -> DbResult<Vec<JobSummaryRow>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, kind, status, progress FROM jobs WHERE status IN ('running','pending') ORDER BY created_at DESC",
+            "SELECT id, kind, status, progress, detail
+             FROM jobs
+             ORDER BY
+                 CASE
+                     WHEN status IN ('running', 'pending') THEN 0
+                     WHEN status = 'failed' THEN 1
+                     ELSE 2
+                 END,
+                 COALESCE(finished_at, created_at) DESC,
+                 created_at DESC
+             LIMIT ?1",
         )?;
-        let rows = stmt.query_map([], |row| {
-            Ok((JobId(row.get(0)?), row.get(1)?, row.get(2)?, row.get(3)?))
+        let rows = stmt.query_map(params![limit as i64], |row| {
+            Ok(JobSummaryRow {
+                id: JobId(row.get(0)?),
+                kind: row.get(1)?,
+                status: row.get(2)?,
+                progress: row.get(3)?,
+                detail: row.get(4)?,
+            })
         })?;
         let mut result = Vec::new();
         for r in rows {
