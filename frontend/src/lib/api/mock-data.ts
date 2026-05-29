@@ -36,14 +36,14 @@ export const recentObjects: RecentObject[] = [
     id: 'obj-1',
     title: 'tasksche.exe',
     detail: '匹配 Yara 规则: WannaCry_Payload',
-    time: '2 小时前',
+    time: '2026-05-16T09:20:00Z',
     kind: 'file',
   },
   {
     id: 'obj-2',
     title: 'HKLM\\SOFTWARE\\WanaCrypt0r',
     detail: '注册表项已创建',
-    time: '3 小时前',
+    time: '2026-05-16T08:20:00Z',
     kind: 'registry',
   },
 ];
@@ -124,11 +124,11 @@ export const dataSources: DataSourceSummary[] = [
 ];
 
 export const filesTree = [
-  { id: 'tree-system32', name: 'System32', depth: 0, expanded: true },
-  { id: 'tree-config', name: 'config', depth: 1 },
-  { id: 'tree-drivers', name: 'drivers', depth: 1 },
-  { id: 'tree-winevt', name: 'winevt', depth: 1, expanded: true, active: true },
-  { id: 'tree-logs', name: 'Logs', depth: 2 },
+  { id: 'tree-system32', name: 'System32', depth: 0, hasChildren: true, expanded: true },
+  { id: 'tree-config', name: 'config', depth: 1, hasChildren: false },
+  { id: 'tree-drivers', name: 'drivers', depth: 1, hasChildren: false },
+  { id: 'tree-winevt', name: 'winevt', depth: 1, hasChildren: true, expanded: true, active: true },
+  { id: 'tree-logs', name: 'Logs', depth: 2, hasChildren: false },
 ];
 
 export const fileRows: FileEntryRow[] = [
@@ -139,7 +139,7 @@ export const fileRows: FileEntryRow[] = [
     entryType: 'file',
     size: 10200000,
     deleted: false,
-    modifiedAt: '2026-05-10 14:23:01',
+    modifiedAt: '2026-05-10T14:23:01Z',
     hashSha256: '7e1d6a0d9e8d7a2fd2814b2ef06cfd8d3b0b789f7c44a11c03f47005d82fa4e0',
   },
   {
@@ -149,10 +149,10 @@ export const fileRows: FileEntryRow[] = [
     entryType: 'file',
     size: 289000,
     deleted: false,
-    modifiedAt: '2025-11-20 09:11:00',
-    accessedAt: '2026-05-15 10:02:11',
-    changedAt: '2025-11-20 09:11:00',
-    createdAt: '2024-03-01 12:00:00',
+    modifiedAt: '2025-11-20T09:11:00Z',
+    accessedAt: '2026-05-15T10:02:11Z',
+    changedAt: '2025-11-20T09:11:00Z',
+    createdAt: '2024-03-01T12:00:00Z',
     hashSha256: '2d7c4fd1ab783f91688fc2cdbf951a94544d45ef09c9cf63365b4de6b9f10d52',
   },
   {
@@ -162,7 +162,7 @@ export const fileRows: FileEntryRow[] = [
     entryType: 'file',
     size: 1100000,
     deleted: false,
-    modifiedAt: '2026-02-15 11:44:22',
+    modifiedAt: '2026-02-15T11:44:22Z',
     hashSha256: '9c62cd5f0a36e9385331d562d3e0e0518ed27af0d22e09b0586d2d9b4c48de8a',
   },
 ];
@@ -192,7 +192,7 @@ export const timelineEvents: TimelineEventDto[] = [
     id: 'timeline-1',
     sourceObjectId: 'evtx-security-4624',
     eventType: 'Logon 4624',
-    ts: '2026-05-11 14:01:12',
+    ts: '2026-05-11T14:01:12Z',
     title: 'Successful logon for user SYSTEM',
     description: '检测到成功登录事件。',
     attrs: { source: 'Security.evtx' },
@@ -201,7 +201,7 @@ export const timelineEvents: TimelineEventDto[] = [
     id: 'timeline-2',
     sourceObjectId: 'file-cmd-exe',
     eventType: 'File Created',
-    ts: '2026-05-11 14:02:45',
+    ts: '2026-05-11T14:02:45Z',
     title: 'C:/Windows/tasksche.exe',
     description: '在卷根目录检测到文件创建。疑似有效载荷投放。',
     attrs: { source: 'File System' },
@@ -210,7 +210,7 @@ export const timelineEvents: TimelineEventDto[] = [
     id: 'timeline-3',
     sourceObjectId: 'evtx-system-7045',
     eventType: 'Service 7045',
-    ts: '2026-05-11 14:03:10',
+    ts: '2026-05-11T14:03:10Z',
     title: 'New service installed: mssecsvc2.0',
     description: '检测到新服务安装。',
     attrs: { source: 'System.evtx' },
@@ -225,7 +225,7 @@ export const artifactRows: ArtifactRow[] = [
     artifactType: 'LNK',
     title: 'C:/Users/Admin/Desktop/cmd.lnk',
     summary: '目标路径: C:/Windows/System32/cmd.exe',
-    createdAt: '2026-01-10 09:12:00',
+    createdAt: '2026-01-10T09:12:00Z',
     attrs: { targetPath: 'C:/Windows/System32/cmd.exe', arguments: '-' },
   },
   {
@@ -233,7 +233,7 @@ export const artifactRows: ArtifactRow[] = [
     artifactType: 'LNK',
     title: 'C:/Users/Admin/Recent/payload.lnk',
     summary: '目标路径: C:/Temp/payload.exe',
-    createdAt: '2026-05-11 14:05:22',
+    createdAt: '2026-05-11T14:05:22Z',
     attrs: {
       targetPath: 'C:/Temp/payload.exe',
       arguments: '-hidden -execute',
@@ -255,14 +255,14 @@ export const reportHistory: ReportHistoryItem[] = [
     id: 'report-1',
     fileName: 'Executive_Summ_v1.pdf',
     createdBy: 'Qin Ao',
-    createdAt: '2026-05-14 10:00Z',
+    createdAt: '2026-05-14T10:00:00Z',
     status: 'completed',
   },
   {
     id: 'report-2',
     fileName: 'IOC_List_Final.csv',
     createdBy: 'Qin Ao',
-    createdAt: '2026-05-15 11:30Z',
+    createdAt: '2026-05-15T11:30:00Z',
     status: 'running',
     progress: 60,
   },
@@ -316,15 +316,9 @@ export const warnings: WarningItem[] = [
 ];
 
 export const traces: TraceItem[] = [
-  { id: 'trace-1', ts: '14:08:11', message: 'job.started artifacts-lnk-scan' },
-  { id: 'trace-2', ts: '14:09:02', message: 'artifact.added payload.lnk' },
-  { id: 'trace-3', ts: '14:09:11', message: 'timeline.updated file-created' },
+  { id: 'trace-1', ts: '2026-05-16T14:08:11Z', message: 'job.started artifacts-lnk-scan' },
+  { id: 'trace-2', ts: '2026-05-16T14:09:02Z', message: 'artifact.added payload.lnk' },
+  { id: 'trace-3', ts: '2026-05-16T14:09:11Z', message: 'timeline.updated file-created' },
 ];
 
-export const hexPreview = [
-  '4D 5A 90 00 03 00 00 00 04 00 00 00 FF FF 00 00',
-  'B8 00 00 00 00 00 00 00 40 00 00 00 00 00 00 00',
-  '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00',
-  '00 00 00 00 00 00 00 00 00 00 00 00 80 00 00 00',
-  '0E 1F BA 0E 00 B4 09 CD 21 B8 01 4C CD 21 54 68',
-];
+

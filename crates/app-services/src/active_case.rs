@@ -37,10 +37,3 @@ impl ActiveCase {
         self.case_root.join("app.db")
     }
 }
-
-// SAFETY: rusqlite::Connection is !Send, but we wrap it in a Mutex
-// which guarantees exclusive access. Only one thread can hold the lock.
-// This is sound for single-connection desktop usage.
-// Upgrade path: r2d2-sqlite connection pool for multi-threaded access.
-unsafe impl Send for ActiveCase {}
-unsafe impl Sync for ActiveCase {}

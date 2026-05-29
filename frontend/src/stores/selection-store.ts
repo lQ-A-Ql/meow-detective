@@ -18,10 +18,10 @@ type SelectionState = {
 export const useSelectionStore = create<SelectionState>((set) => ({
   selectedDirectoryId: undefined,
   selectedFileId: undefined,
-  selectedSearchHitId: 'search-hit-1',
-  selectedTimelineId: 'timeline-2',
+  selectedSearchHitId: undefined,
+  selectedTimelineId: undefined,
   selectedArtifactFamily: 'LNK',
-  selectedArtifactId: 'artifact-2',
+  selectedArtifactId: undefined,
   setSelectedDirectoryId: (id) => set({ selectedDirectoryId: id }),
   setSelectedFileId: (id) => set({ selectedFileId: id }),
   setSelectedSearchHitId: (id) => set({ selectedSearchHitId: id }),

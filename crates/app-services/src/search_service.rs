@@ -1,7 +1,7 @@
 use domain::{EntryType, FileEntryId};
 use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
-use search::{extract_text, SearchIndex};
+use search::{extract_text, SearchIndex, SearchResult};
 use std::path::Path;
 use transport::dto::{SearchHighlightDto, SearchHitDto, SearchResultPageDto, SearchSnippetDto};
 
@@ -56,9 +56,22 @@ pub fn index_files(
     })
 }
 
-pub fn search_files_real(index_dir: &Path, query: &str) -> Result<SearchResultPageDto, String> {
+pub fn search_files_real(
+    index_dir: &Path,
+    query: &str,
+    offset: u64,
+    limit: u32,
+) -> Result<SearchResultPageDto, String> {
     let index = SearchIndex::open(index_dir).map_err(|e| e.to_string())?;
-    let hits = index.search(query, 50).map_err(|e| e.to_string())?;
+    let start = std::time::Instant::now();
+    // Request more results than needed to support offset
+    let search_limit = (offset + limit as u64).min(1000) as usize;
+    let SearchResult { hits, total_count } =
+        index.search(query, search_limit).map_err(|e| e.to_string())?;
+    let took_ms = start.elapsed().as_millis() as u64;
+
+    // Apply offset
+    let hits: Vec<_> = hits.into_iter().skip(offset as usize).collect();
 
     let items: Vec<SearchHitDto> = hits
         .into_iter()
@@ -95,35 +108,8 @@ pub fn search_files_real(index_dir: &Path, query: &str) -> Result<SearchResultPa
         .collect();
 
     Ok(SearchResultPageDto {
-        total: items.len() as u64,
-        took_ms: 0,
+        total: total_count,
+        took_ms,
         items,
     })
-}
-
-pub fn search_files(_query: String) -> SearchResultPageDto {
-    SearchResultPageDto {
-        total: 2,
-        took_ms: 45,
-        items: vec![
-            SearchHitDto {
-                file_id: "file-001".into(),
-                path: "C:/.../AnyDesk.exe".into(),
-                score: 0.96,
-                snippets: vec![SearchSnippetDto {
-                    text: "AnyDesk.exe downloaded...".into(),
-                    highlights: vec![SearchHighlightDto { start: 0, end: 7 }],
-                }],
-            },
-            SearchHitDto {
-                file_id: "file-002".into(),
-                path: "C:/.../history.txt".into(),
-                score: 0.88,
-                snippets: vec![SearchSnippetDto {
-                    text: "powershell Invoke-WebRequest...".into(),
-                    highlights: vec![SearchHighlightDto { start: 11, end: 28 }],
-                }],
-            },
-        ],
-    }
 }

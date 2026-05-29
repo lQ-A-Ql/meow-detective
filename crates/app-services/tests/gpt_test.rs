@@ -1,4 +1,4 @@
-use app_services::gpt;
+use evidence_core::volume::gpt;
 
 #[test]
 fn parse_header_valid() {

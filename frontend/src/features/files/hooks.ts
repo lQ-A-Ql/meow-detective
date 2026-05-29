@@ -14,8 +14,7 @@ export function useFileTree() {
   return useQuery({
     queryKey: ['files', 'tree'],
     queryFn: getFileTree,
-    refetchInterval: 1500,
-    staleTime: 0,
+    staleTime: Infinity,
   });
 }
 
@@ -32,6 +31,7 @@ export function useFileChildren(parentId?: string) {
     queryKey: ['files', 'children', parentId],
     queryFn: () => getFileChildren(parentId!),
     enabled: Boolean(parentId),
+    staleTime: 60_000,
   });
 }
 

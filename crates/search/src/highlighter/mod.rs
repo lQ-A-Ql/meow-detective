@@ -37,12 +37,10 @@ pub fn highlight(content: &str, query: &str) -> Vec<SearchSnippet> {
             cluster_start = positions[i];
         }
     }
-    snippets.push(build_snippet(
-        content,
-        cluster_start,
-        *positions.last().unwrap(),
-        &terms,
-    ));
+    // Safety: positions is non-empty (checked above)
+    if let Some(&last_pos) = positions.last() {
+        snippets.push(build_snippet(content, cluster_start, last_pos, &terms));
+    }
 
     snippets
 }

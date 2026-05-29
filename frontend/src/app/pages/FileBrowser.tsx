@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { ChevronDown, ChevronRight, File, Folder, HardDrive } from 'lucide-react';
 import { PageSubbar } from '@/components/layout/PageSubbar';
 import { InspectorPane, InspectorSection, InspectorValue } from '@/components/layout/InspectorPane';
@@ -19,6 +20,7 @@ export function FileBrowser() {
   const setSelectedFileId = useSelectionStore((state) => state.setSelectedFileId);
   const viewerTab = useUiStore((state) => state.viewerTab);
   const setViewerTab = useUiStore((state) => state.setViewerTab);
+  const navigate = useNavigate();
   const [expandedDirectoryIds, setExpandedDirectoryIds] = useState<string[]>([]);
   const [treeChildren, setTreeChildren] = useState<Record<string, FileTreeNode[]>>({});
 
@@ -64,16 +66,6 @@ export function FileBrowser() {
       setSelectedFileId(undefined);
     }
   }, [rootTree, selectedDirectoryId, setSelectedDirectoryId, setSelectedFileId, treeChildren]);
-
-  useEffect(() => {
-    setTreeChildren((current) => {
-      const rootIds = new Set((rootTree ?? []).map((node) => node.id));
-      const next = Object.fromEntries(
-        Object.entries(current).filter(([key]) => rootIds.has(key) || key === activeDirectoryId),
-      );
-      return Object.keys(next).length === Object.keys(current).length ? current : next;
-    });
-  }, [activeDirectoryId, rootTree]);
 
   useEffect(() => {
     if (selectedFileId && (!rows || !rows.some((row) => row.id === selectedFileId))) {
@@ -389,7 +381,15 @@ export function FileBrowser() {
                 <button className="w-full border border-[#ccc] bg-white text-[#111] hover:bg-[#f0f0f0] py-1.5 text-center text-[11px] rounded-[2px] cursor-pointer font-medium">
                   提取文件
                 </button>
-                <button className="w-full border border-transparent text-[#666] hover:text-[#111] py-1.5 text-center text-[11px] cursor-pointer underline hover:no-underline">
+                <button
+                  onClick={() => {
+                    if (selectedFile) {
+                      useSelectionStore.getState().setSelectedTimelineId(selectedFile.id);
+                      navigate("/timeline");
+                    }
+                  }}
+                  className="w-full border border-transparent text-[#666] hover:text-[#111] py-1.5 text-center text-[11px] cursor-pointer underline hover:no-underline"
+                >
                   在时间线中查看
                 </button>
               </div>

@@ -12,7 +12,7 @@ pub use case::{
     CaseMetricsDto, CaseSummaryDto, DataSourcePartitionDto, DataSourceSummaryDto, RecentCaseDto,
     RecentObjectDto,
 };
-pub use files::{FileEntryRowDto, FileTreeNodeDto};
+pub use files::{FileChildrenDto, FileEntryRowDto, FileTreeNodeDto};
 pub use jobs::{JobSnapshotDto, TraceItemDto, WarningItemDto};
 pub use reports::{ReportHistoryItemDto, ReportTemplateDto};
 pub use search::{SearchHighlightDto, SearchHitDto, SearchResultPageDto, SearchSnippetDto};

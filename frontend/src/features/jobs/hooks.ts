@@ -12,7 +12,6 @@ let pollJobsUntil = 0;
 
 const postJobRefreshKeys = [
   ['case'],
-  ['files'],
   ['timeline'],
   ['artifacts'],
   ['search'],

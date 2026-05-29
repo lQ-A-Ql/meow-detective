@@ -1,4 +1,4 @@
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags};
 use std::path::Path;
 use thiserror::Error;
 
@@ -18,6 +18,23 @@ pub type DbResult<T> = Result<T, DbError>;
 
 pub fn open_or_create(path: &Path) -> DbResult<Connection> {
     let conn = Connection::open(path)?;
+    conn.execute_batch(
+        "PRAGMA journal_mode=WAL;
+         PRAGMA foreign_keys=ON;
+         PRAGMA busy_timeout=5000;",
+    )?;
+    Ok(conn)
+}
+
+/// Open an existing database file. Returns an error if the file does not exist.
+pub fn open_existing(path: &Path) -> DbResult<Connection> {
+    if !path.exists() {
+        return Err(DbError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Database file not found: {}", path.display()),
+        )));
+    }
+    let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
     conn.execute_batch(
         "PRAGMA journal_mode=WAL;
          PRAGMA foreign_keys=ON;

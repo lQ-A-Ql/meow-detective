@@ -1,7 +1,7 @@
 use crate::extractor::ExtractedText;
 use std::path::Path;
 use tantivy::{
-    collector::TopDocs,
+    collector::{Count, TopDocs},
     doc,
     query::QueryParser,
     schema::{Schema, Value, STORED, STRING, TEXT},
@@ -94,7 +94,7 @@ impl SearchIndex {
         Ok(count)
     }
 
-    pub fn search(&self, query_str: &str, limit: usize) -> Result<Vec<SearchHit>> {
+    pub fn search(&self, query_str: &str, limit: usize) -> Result<SearchResult> {
         let reader = self
             .index
             .reader_builder()
@@ -117,7 +117,8 @@ impl SearchIndex {
             })
             .map_err(|e| IndexError::Query(e.to_string()))?;
 
-        let top_docs = searcher.search(&query, &TopDocs::with_limit(limit))?;
+        let (top_docs, total_count) =
+            searcher.search(&query, &(TopDocs::with_limit(limit), Count))?;
 
         let mut hits = Vec::new();
         for (score, doc_addr) in top_docs {
@@ -147,8 +148,17 @@ impl SearchIndex {
             });
         }
 
-        Ok(hits)
+        Ok(SearchResult {
+            hits,
+            total_count: total_count as u64,
+        })
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct SearchResult {
+    pub hits: Vec<SearchHit>,
+    pub total_count: u64,
 }
 
 #[derive(Debug, Clone)]

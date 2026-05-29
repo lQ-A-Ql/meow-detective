@@ -6,6 +6,7 @@ members = [
   "crates/app-services",
   "crates/infrastructure",
   "crates/persistence-sqlite",
+  "crates/runtime-cache",
   "crates/evidence-core",
   "crates/fs-ntfs",
   "crates/fs-fat",
@@ -30,13 +31,17 @@ authors = ["lQ-A-Ql"]
 license = "MIT"
 
 [workspace.dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-thiserror = "1"
-chrono = { version = "0.4", features = ["serde"] }
-anyhow = "1"
-tauri = { version = "2", features = [] }
-tauri-build = { version = "2", features = [] }
+serde = { version = "~1.0", features = ["derive"] }
+serde_json = "~1.0"
+thiserror = "~2.0"
+chrono = { version = "~0.4", features = ["serde"] }
+anyhow = "~1.0"
+crossbeam-channel = "~0.5"
+num_cpus = "~1"
+tracing = "~0.1"
+tracing-subscriber = { version = "~0.3", features = ["env-filter", "fmt", "json"] }
+tauri = { version = "~2", features = [] }
+tauri-build = { version = "~2", features = [] }
 transport = { path = "crates/transport" }
 app-services = { path = "crates/app-services" }
 domain = { path = "crates/domain" }
@@ -56,3 +61,4 @@ artifacts-core = { path = "crates/artifacts-core" }
 artifacts-windows = { path = "crates/artifacts-windows" }
 reports = { path = "crates/reports" }
 testing = { path = "crates/testing" }
+runtime-cache = { path = "crates/runtime-cache" }

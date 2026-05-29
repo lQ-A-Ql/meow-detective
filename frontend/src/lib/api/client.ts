@@ -41,13 +41,14 @@ function toApiError(error: unknown, fallbackCode: string): ApiErrorDto {
   };
 }
 
-function isApiErrorDto(value: unknown): value is ApiErrorDto {
+export function isApiErrorDto(value: unknown): value is ApiErrorDto {
   if (!value || typeof value !== 'object') {
     return false;
   }
 
   const candidate = value as Partial<ApiErrorDto>;
-  return typeof candidate.code === 'string' && typeof candidate.message === 'string' && typeof candidate.recoverable === 'boolean';
+  return typeof candidate.code === 'string' && typeof candidate.message === 'string'
+    && (candidate.recoverable === undefined || typeof candidate.recoverable === 'boolean');
 }
 
 async function invokeTauriCommand<T>(command: string, payload?: Record<string, unknown>): Promise<T> {

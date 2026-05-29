@@ -1,5 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
-import { PropsWithChildren, ReactNode } from 'react';
+import { ReactNode } from 'react';
 
 interface ViewerTabsProps {
   value: string;

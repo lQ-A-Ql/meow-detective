@@ -55,11 +55,15 @@ fn directory_tree_and_children_return_only_directories() {
             assert_eq!(tree.len(), 1);
             assert_eq!(tree[0].depth, 0);
 
-            let children = file_service::get_file_children_real(conn, &tree[0].id)
+            let children_result = file_service::get_file_children_lazy(conn, &tree[0].id)
                 .map_err(persistence_sqlite::DbError::System)?;
-            let child_names: Vec<&str> = children.iter().map(|node| node.name.as_str()).collect();
+            let child_names: Vec<&str> = children_result
+                .children
+                .iter()
+                .map(|node| node.name.as_str())
+                .collect();
             assert_eq!(child_names, vec!["emptydir", "subdir"]);
-            assert!(children.iter().all(|node| node.depth == 1));
+            assert!(children_result.children.iter().all(|node| node.depth == 1));
 
             let rows = file_service::get_file_rows_for_request(
                 conn,
@@ -76,9 +80,9 @@ fn directory_tree_and_children_return_only_directories() {
                 .find(|row| row.name == "root.txt")
                 .map(|row| row.id.clone())
                 .unwrap();
-            let no_directory_children = file_service::get_file_children_real(conn, &file_id)
+            let no_directory_children = file_service::get_file_children_lazy(conn, &file_id)
                 .map_err(persistence_sqlite::DbError::System)?;
-            assert!(no_directory_children.is_empty());
+            assert!(no_directory_children.children.is_empty());
 
             Ok(())
         })
@@ -100,12 +104,19 @@ fn file_tree_real_contains_nested_directories_for_navigation() {
             assert_eq!(tree[0].depth, 0);
             assert_eq!(tree[0].expanded, Some(true));
 
-            let children = file_service::get_file_children_real(conn, &tree[0].id)
+            let children_result = file_service::get_file_children_lazy(conn, &tree[0].id)
                 .map_err(persistence_sqlite::DbError::System)?;
-            let child_names: Vec<&str> = children.iter().map(|node| node.name.as_str()).collect();
+            let child_names: Vec<&str> = children_result
+                .children
+                .iter()
+                .map(|node| node.name.as_str())
+                .collect();
             assert_eq!(child_names, vec!["emptydir", "subdir"]);
-            assert!(children.iter().all(|node| node.depth == 1));
-            assert!(children.iter().all(|node| node.expanded == Some(false)));
+            assert!(children_result.children.iter().all(|node| node.depth == 1));
+            assert!(children_result
+                .children
+                .iter()
+                .all(|node| node.expanded == Some(false)));
 
             Ok(())
         })

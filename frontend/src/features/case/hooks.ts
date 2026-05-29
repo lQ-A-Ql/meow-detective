@@ -1,13 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  createCase,
   closeCase,
+  createCase,
+  deleteCase,
+  deleteDataSource,
   getCaseMetrics,
   getCurrentCase,
   getDataSources,
   getRecentCases,
   getRecentObjects,
   openCase,
+  removeCaseFromList,
   renameDataSource,
 } from '@/lib/api/case';
 
@@ -61,7 +64,6 @@ export function useRenameDataSource() {
       renameDataSource(params.dataSourceId, params.name),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['case', 'data-sources'] });
-      qc.invalidateQueries({ queryKey: ['files'] });
     },
   });
 }
@@ -72,6 +74,49 @@ export function useCloseCase() {
     mutationFn: () => closeCase(),
     onSuccess: () => {
       qc.invalidateQueries();
+    },
+  });
+}
+
+export function useDeleteCase() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (caseRoot: string) => deleteCase(caseRoot),
+    onSuccess: () => {
+      qc.invalidateQueries();
+    },
+    onError: (error: Error) => {
+      alert(`删除案件失败: ${error.message}`);
+    },
+  });
+}
+
+export function useDeleteDataSource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dataSourceId: string) => deleteDataSource(dataSourceId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['case'] });
+      qc.invalidateQueries({ queryKey: ['files', 'tree'] });
+      qc.invalidateQueries({ queryKey: ['files', 'rows'] });
+      qc.invalidateQueries({ queryKey: ['files', 'children'] });
+      qc.invalidateQueries({ queryKey: ['files', 'viewer'] });
+      qc.invalidateQueries({ queryKey: ['timeline'] });
+      qc.invalidateQueries({ queryKey: ['artifacts'] });
+      qc.invalidateQueries({ queryKey: ['search'] });
+    },
+    onError: (error: Error) => {
+      alert(`删除数据源失败: ${error.message}`);
+    },
+  });
+}
+
+export function useRemoveCaseFromList() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (caseRoot: string) => removeCaseFromList(caseRoot),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['case', 'recent-cases'] });
     },
   });
 }

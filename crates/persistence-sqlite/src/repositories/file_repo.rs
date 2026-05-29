@@ -2,6 +2,7 @@ use crate::connection::DbResult;
 use crate::util::parse_opt_datetime;
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
 use rusqlite::{params, Connection};
+use std::collections::HashMap;
 
 pub struct FileRepo<'a> {
     conn: &'a Connection,
@@ -81,6 +82,15 @@ impl<'a> FileRepo<'a> {
         collect_entries(rows)
     }
 
+    pub fn find_by_data_source(&self, data_source_id: &DataSourceId) -> DbResult<Vec<FileEntry>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
+             FROM file_entries WHERE data_source_id = ?1 ORDER BY entry_type ASC, name ASC",
+        )?;
+        let rows = stmt.query_map(params![data_source_id.0], row_to_file_entry)?;
+        collect_entries(rows)
+    }
+
     pub fn find_root_directories(&self) -> DbResult<Vec<FileEntry>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
@@ -97,6 +107,33 @@ impl<'a> FileRepo<'a> {
             |row| row.get(0),
         )?;
         Ok(count > 0)
+    }
+
+    pub fn count_child_directories_batch(
+        &self,
+        parent_ids: &[&FileEntryId],
+    ) -> DbResult<HashMap<String, i64>> {
+        if parent_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let placeholders: Vec<String> = (1..=parent_ids.len()).map(|i| format!("?{i}")).collect();
+        let sql = format!(
+            "SELECT parent_id, COUNT(*) FROM file_entries
+             WHERE parent_id IN ({}) AND entry_type = 'directory'
+             GROUP BY parent_id",
+            placeholders.join(", ")
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let params: Vec<&str> = parent_ids.iter().map(|id| id.0.as_str()).collect();
+        let rows = stmt.query_map(rusqlite::params_from_iter(params.iter()), |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })?;
+        let mut result = HashMap::new();
+        for row in rows {
+            let (pid, count) = row?;
+            result.insert(pid, count);
+        }
+        Ok(result)
     }
 
     pub fn find_by_path_prefix(
@@ -119,6 +156,13 @@ impl<'a> FileRepo<'a> {
             params![data_source_id.0],
             |row| row.get(0),
         )?;
+        Ok(count as u64)
+    }
+
+    pub fn count_all(&self) -> DbResult<u64> {
+        let count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))?;
         Ok(count as u64)
     }
 

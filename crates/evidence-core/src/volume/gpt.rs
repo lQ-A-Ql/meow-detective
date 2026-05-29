@@ -55,6 +55,11 @@ pub fn parse_gpt_header(data: &[u8]) -> Option<GptHeader> {
 /// Read partition entries from a buffer containing all entries.
 /// `data` should be entry_count * entry_size bytes.
 pub fn parse_gpt_entries(data: &[u8], entry_size: u32, count: u32) -> Vec<GptPartition> {
+    // Guard against malformed GPT headers: the minimum useful entry is 128 bytes
+    // (enough to hold type GUID, unique GUID, start/end LBA, and name fields).
+    if (entry_size as usize) < 128 {
+        return Vec::new();
+    }
     let mut parts = Vec::new();
     for i in 0..count {
         let off = i as usize * entry_size as usize;

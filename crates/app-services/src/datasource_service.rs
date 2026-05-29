@@ -138,7 +138,7 @@ where
         });
     }
 
-    let mbr_entries = crate::mbr::parse_partition_table(&sector0);
+    let mbr_entries = evidence_core::volume::mbr::parse_partition_table(&sector0);
     let mbr_types: Vec<String> = mbr_entries
         .iter()
         .filter(|entry| entry.partition_type != 0)
@@ -255,7 +255,7 @@ where
     R: Read + Seek,
 {
     let header_sector = read_sector(reader, SECTOR_SIZE)?;
-    let Some(header) = crate::gpt::parse_gpt_header(&header_sector) else {
+    let Some(header) = evidence_core::volume::gpt::parse_gpt_header(&header_sector) else {
         return Ok(ImageFilesystemProbe {
             candidates: Vec::new(),
             partitions: Vec::new(),
@@ -275,8 +275,11 @@ where
     reader.seek(SeekFrom::Start(header.partition_entry_lba * SECTOR_SIZE))?;
     let mut entry_data = vec![0u8; entry_bytes as usize];
     reader.read_exact(&mut entry_data)?;
-    let partitions =
-        crate::gpt::parse_gpt_entries(&entry_data, header.entry_size, header.partition_count);
+    let partitions = evidence_core::volume::gpt::parse_gpt_entries(
+        &entry_data,
+        header.entry_size,
+        header.partition_count,
+    );
 
     let mut candidates = Vec::new();
     let mut records = Vec::new();
@@ -292,8 +295,9 @@ where
             .saturating_sub(partition.start_lba)
             .saturating_add(1)
             * SECTOR_SIZE;
-        let partition_type = crate::gpt::classify_partition_type(&partition.type_guid);
-        let type_name = crate::gpt::partition_type_name(partition_type);
+        let partition_type =
+            evidence_core::volume::gpt::classify_partition_type(&partition.type_guid);
+        let type_name = evidence_core::volume::gpt::partition_type_name(partition_type);
         let fs_kind = read_boot_filesystem(reader, offset)?;
         let kind_label = fs_kind
             .map(kind_label)
@@ -336,7 +340,7 @@ where
                 partition.index,
                 display_name,
                 type_name,
-                crate::gpt::format_guid(&partition.type_guid)
+                evidence_core::volume::gpt::format_guid(&partition.type_guid)
             ));
         }
 
@@ -344,7 +348,9 @@ where
             index: partition.index,
             name: display_name,
             kind_label,
-            type_guid: Some(crate::gpt::format_guid(&partition.type_guid)),
+            type_guid: Some(evidence_core::volume::gpt::format_guid(
+                &partition.type_guid,
+            )),
             offset,
             length,
             status,

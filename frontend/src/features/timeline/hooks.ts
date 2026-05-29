@@ -1,6 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { getTimelineEvents } from '@/lib/api/timeline';
+import { getTimelineEvents, TimelineRequest } from '@/lib/api/timeline';
 
-export function useTimelineEvents() {
-  return useQuery({ queryKey: ['timeline', 'events'], queryFn: getTimelineEvents });
+export function useTimelineEvents(request?: TimelineRequest) {
+  return useQuery({
+    queryKey: ['timeline', 'events', request?.offset ?? 0, request?.limit ?? 100],
+    queryFn: () => getTimelineEvents(request),
+  });
 }

@@ -1,4 +1,6 @@
 import { Filter, ChevronRight } from 'lucide-react';
+import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { PageSubbar } from '@/components/layout/PageSubbar';
 import { DenseDataTable } from '@/components/tables/DenseDataTable';
 import { InspectorPane, InspectorSection, InspectorValue } from '@/components/layout/InspectorPane';
@@ -9,9 +11,12 @@ import { SearchHit } from '@/types/models';
 const defaultQuery = "files WHERE extension IN ('.doc', '.xls') AND size > 10MB";
 
 export function Search() {
-  const { data } = useSearchResults(defaultQuery);
+  const [queryInput, setQueryInput] = useState(defaultQuery);
+  const [activeQuery, setActiveQuery] = useState(defaultQuery);
+  const { data } = useSearchResults(activeQuery);
   const selectedSearchHitId = useSelectionStore((state) => state.selectedSearchHitId);
   const setSelectedSearchHitId = useSelectionStore((state) => state.setSelectedSearchHitId);
+  const navigate = useNavigate();
   const selectedHit = data?.items.find((item) => item.fileId === selectedSearchHitId) ?? data?.items[0];
   const highScoreHits = data?.items.filter((item) => item.score >= 0.8).length ?? 0;
 
@@ -25,9 +30,14 @@ export function Search() {
               <input
                 type="text"
                 className="bg-transparent border-none outline-none text-[#111] font-mono text-[13px] w-full placeholder-[#aaa]"
-                defaultValue={defaultQuery}
+                value={queryInput}
+                onChange={(e) => setQueryInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') setActiveQuery(queryInput); }}
               />
-              <button className="bg-[#111] text-white font-semibold text-[11px] px-3 py-0.5 ml-2 uppercase tracking-wider shrink-0 hover:bg-[#333]">
+              <button
+                onClick={() => setActiveQuery(queryInput)}
+                className="bg-[#111] text-white font-semibold text-[11px] px-3 py-0.5 ml-2 uppercase tracking-wider shrink-0 hover:bg-[#333]"
+              >
                 执行
               </button>
             </div>
@@ -125,7 +135,15 @@ export function Search() {
             </InspectorSection>
 
             <InspectorSection title="关联动作">
-              <button className="w-full border border-[#ccc] bg-white text-[#111] hover:bg-[#f0f0f0] py-1.5 text-center font-sans text-[11px] transition-colors rounded-[2px] cursor-pointer shadow-sm flex items-center justify-center gap-1.5">
+              <button
+                onClick={() => {
+                  if (selectedHit) {
+                    useSelectionStore.getState().setSelectedFileId(selectedHit.fileId);
+                    navigate("/files");
+                  }
+                }}
+                className="w-full border border-[#ccc] bg-white text-[#111] hover:bg-[#f0f0f0] py-1.5 text-center font-sans text-[11px] transition-colors rounded-[2px] cursor-pointer shadow-sm flex items-center justify-center gap-1.5"
+              >
                 在文件浏览中打开 <ChevronRight size={12} />
               </button>
             </InspectorSection>

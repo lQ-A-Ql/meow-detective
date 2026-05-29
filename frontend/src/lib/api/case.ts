@@ -22,11 +22,11 @@ export async function getDataSources() {
 
 export async function createCase(caseRoot: string, name: string, examiner?: string) {
   return apiClient.request('create_case', () =>
-    apiClient.getMockProvider().createCase(caseRoot, name, examiner), { caseRoot, name, examiner: examiner ?? null });
+    apiClient.getMockProvider().createCase(caseRoot, name, examiner), { request: { caseRoot, name, examiner: examiner ?? null } });
 }
 
 export async function openCase(caseRoot: string) {
-  return apiClient.request('open_case', () => apiClient.getMockProvider().openCase(caseRoot), { caseRoot });
+  return apiClient.request('open_case', () => apiClient.getMockProvider().openCase(caseRoot), { request: { caseRoot } });
 }
 
 export async function closeCase() {
@@ -38,5 +38,29 @@ export async function renameDataSource(dataSourceId: string, name: string) {
     'rename_data_source',
     () => apiClient.getMockProvider().renameDataSource(dataSourceId, name),
     { request: { dataSourceId, name } },
+  );
+}
+
+export async function deleteCase(caseRoot: string) {
+  return apiClient.request(
+    'delete_case',
+    () => Promise.resolve(`Case deleted: ${caseRoot}`),
+    { request: { caseRoot } },
+  );
+}
+
+export async function removeCaseFromList(caseRoot: string) {
+  return apiClient.request(
+    'remove_case_from_list',
+    () => Promise.resolve(`Removed from list: ${caseRoot}`),
+    { request: { caseRoot } },
+  );
+}
+
+export async function deleteDataSource(dataSourceId: string) {
+  return apiClient.request(
+    'delete_data_source',
+    () => Promise.resolve(`Data source deleted: ${dataSourceId}`),
+    { request: { dataSourceId } },
   );
 }

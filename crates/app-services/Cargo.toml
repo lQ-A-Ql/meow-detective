@@ -6,13 +6,16 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-serde_json.workspace = true
-serde.workspace = true
 chrono.workspace = true
-anyhow.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
+crossbeam-channel.workspace = true
+num_cpus.workspace = true
+
 domain.workspace = true
 transport.workspace = true
+infrastructure.workspace = true
 persistence-sqlite.workspace = true
 evidence-core.workspace = true
 fs-ntfs.workspace = true

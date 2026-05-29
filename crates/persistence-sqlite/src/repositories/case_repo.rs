@@ -3,6 +3,13 @@ use crate::util::parse_datetime;
 use domain::{CaseId, CaseMeta};
 use rusqlite::{params, Connection};
 
+pub struct CaseMetrics {
+    pub data_source_count: u64,
+    pub indexed_file_count: u64,
+    pub timeline_event_count: u64,
+    pub artifact_count: u64,
+}
+
 pub struct CaseRepo<'a> {
     conn: &'a Connection,
 }
@@ -91,6 +98,81 @@ impl<'a> CaseRepo<'a> {
     pub fn delete(&self, id: &CaseId) -> DbResult<()> {
         self.conn
             .execute("DELETE FROM cases WHERE id = ?1", params![id.0])?;
+        Ok(())
+    }
+
+    pub fn get_metrics(&self) -> DbResult<CaseMetrics> {
+        let file_count: i64 =
+            self.conn
+                .query_row("SELECT COUNT(*) FROM file_entries", [], |r| r.get(0))?;
+        let artifact_count: i64 =
+            self.conn
+                .query_row("SELECT COUNT(*) FROM artifacts", [], |r| r.get(0))?;
+        let timeline_count: i64 =
+            self.conn
+                .query_row("SELECT COUNT(*) FROM timeline_events", [], |r| r.get(0))?;
+        let ds_count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM data_sources", [], |r| r.get(0))?;
+        Ok(CaseMetrics {
+            data_source_count: ds_count as u64,
+            indexed_file_count: file_count as u64,
+            timeline_event_count: timeline_count as u64,
+            artifact_count: artifact_count as u64,
+        })
+    }
+
+    pub fn delete_cascade(&self, id: &CaseId) -> DbResult<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        // Delete artifacts whose source_object_id belongs to this case's files
+        tx.execute(
+            "DELETE FROM artifacts WHERE source_object_id IN (
+                SELECT fe.id FROM file_entries fe
+                JOIN data_sources ds ON fe.data_source_id = ds.id
+                WHERE ds.case_id = ?1
+            ) OR case_id = ?1",
+            params![id.0],
+        )?;
+        // Delete timeline events for this case's files
+        tx.execute(
+            "DELETE FROM timeline_events WHERE source_object_id IN (
+                SELECT fe.id FROM file_entries fe
+                JOIN data_sources ds ON fe.data_source_id = ds.id
+                WHERE ds.case_id = ?1
+            )",
+            params![id.0],
+        )?;
+        // Delete file entries
+        tx.execute(
+            "DELETE FROM file_entries WHERE data_source_id IN (
+                SELECT id FROM data_sources WHERE case_id = ?1
+            )",
+            params![id.0],
+        )?;
+        // Delete partitions (has ON DELETE CASCADE but be explicit)
+        tx.execute(
+            "DELETE FROM data_source_partitions WHERE data_source_id IN (
+                SELECT id FROM data_sources WHERE case_id = ?1
+            )",
+            params![id.0],
+        )?;
+        // Delete data sources
+        tx.execute("DELETE FROM data_sources WHERE case_id = ?1", params![id.0])?;
+        // Delete tag bindings for this case's tags
+        tx.execute(
+            "DELETE FROM tag_bindings WHERE tag_id IN (
+                SELECT id FROM tags WHERE case_id = ?1
+            )",
+            params![id.0],
+        )?;
+        tx.execute("DELETE FROM tags WHERE case_id = ?1", params![id.0])?;
+        // Delete jobs
+        tx.execute("DELETE FROM jobs WHERE case_id = ?1", params![id.0])?;
+        // Delete reports
+        tx.execute("DELETE FROM reports WHERE case_id = ?1", params![id.0])?;
+        // Delete case
+        tx.execute("DELETE FROM cases WHERE id = ?1", params![id.0])?;
+        tx.commit()?;
         Ok(())
     }
 }

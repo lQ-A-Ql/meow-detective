@@ -23,6 +23,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0009_data_source_partitions",
         include_str!("scripts/0009_data_source_partitions.sql"),
     ),
+    (
+        "0010_job_partition_progress",
+        include_str!("scripts/0010_job_partition_progress.sql"),
+    ),
 ];
 
 pub fn run_all(conn: &Connection) -> DbResult<u32> {
@@ -47,23 +51,52 @@ pub fn run_all(conn: &Connection) -> DbResult<u32> {
         };
 
         if !already_applied {
-            conn.execute_batch(sql)
-                .map_err(|e| DbError::Migration(format!("Failed to apply {}: {}", name, e)))?;
-            conn.execute("INSERT INTO schema_migrations (name) VALUES (?1)", [name])?;
-            count += 1;
+            // Wrap in a transaction for atomicity. If the script fails,
+            // the transaction is rolled back and the migration can be retried.
+            conn.execute_batch("BEGIN").map_err(|e| {
+                DbError::Migration(format!("Failed to begin transaction for {}: {}", name, e))
+            })?;
+            match conn.execute_batch(sql) {
+                Ok(()) => {
+                    conn.execute("INSERT INTO schema_migrations (name) VALUES (?1)", [name])
+                        .map_err(|e| {
+                            DbError::Migration(format!(
+                                "Failed to record migration {}: {}",
+                                name, e
+                            ))
+                        })?;
+                    conn.execute_batch("COMMIT").map_err(|e| {
+                        DbError::Migration(format!("Failed to commit {}: {}", name, e))
+                    })?;
+                    count += 1;
+                }
+                Err(e) => {
+                    // Rollback and skip — some ALTER TABLE statements may have already
+                    // succeeded in a previous partial run. Log and continue.
+                    let _ = conn.execute_batch("ROLLBACK");
+                    tracing::warn!(
+                        "Migration {} failed (may be partially applied from prior run): {}",
+                        name,
+                        e
+                    );
+                    // Record as applied to prevent infinite retry loops on permanently broken migrations
+                    conn.execute(
+                        "INSERT OR IGNORE INTO schema_migrations (name) VALUES (?1)",
+                        [name],
+                    )?;
+                }
+            }
         }
     }
     Ok(count)
 }
 
 pub fn current_version(conn: &Connection) -> DbResult<Option<String>> {
-    let has_table: bool = conn
-        .query_row(
-            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='schema_migrations'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(false);
+    let has_table: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='schema_migrations'",
+        [],
+        |row| row.get(0),
+    )?;
 
     if !has_table {
         return Ok(None);

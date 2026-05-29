@@ -26,13 +26,15 @@ fn create_and_search_index() {
     let count = index.index_documents(&texts, &paths).unwrap();
     assert_eq!(count, 2);
 
-    let hits = index.search("forensics", 10).unwrap();
-    assert_eq!(hits.len(), 1);
-    assert_eq!(hits[0].file_id, "f1");
+    let result = index.search("forensics", 10).unwrap();
+    assert_eq!(result.hits.len(), 1);
+    assert_eq!(result.total_count, 1);
+    assert_eq!(result.hits[0].file_id, "f1");
 
-    let hits = index.search("registry", 10).unwrap();
-    assert_eq!(hits.len(), 1);
-    assert_eq!(hits[0].file_id, "f2");
+    let result = index.search("registry", 10).unwrap();
+    assert_eq!(result.hits.len(), 1);
+    assert_eq!(result.total_count, 1);
+    assert_eq!(result.hits[0].file_id, "f2");
 }
 
 #[test]
@@ -46,8 +48,9 @@ fn search_no_results() {
         .index_documents(&[text], &[("f1".to_string(), "/f".to_string())])
         .unwrap();
 
-    let hits = index.search("nonexistent", 10).unwrap();
-    assert!(hits.is_empty());
+    let result = index.search("nonexistent", 10).unwrap();
+    assert!(result.hits.is_empty());
+    assert_eq!(result.total_count, 0);
 }
 
 #[test]
@@ -64,8 +67,8 @@ fn reopen_index() {
     }
 
     let index = SearchIndex::open(&index_dir).unwrap();
-    let hits = index.search("evidence", 10).unwrap();
-    assert_eq!(hits.len(), 1);
+    let result = index.search("evidence", 10).unwrap();
+    assert_eq!(result.hits.len(), 1);
 }
 
 #[test]
@@ -86,10 +89,10 @@ fn search_returns_highlights() {
         )
         .unwrap();
 
-    let hits = index.search("credential", 10).unwrap();
-    assert_eq!(hits.len(), 1);
-    assert!(!hits[0].snippets.is_empty());
-    let snippet = &hits[0].snippets[0];
+    let result = index.search("credential", 10).unwrap();
+    assert_eq!(result.hits.len(), 1);
+    assert!(!result.hits[0].snippets.is_empty());
+    let snippet = &result.hits[0].snippets[0];
     assert!(!snippet.text.is_empty(), "snippet text should not be empty");
     assert!(
         !snippet.highlights.is_empty(),
@@ -120,7 +123,7 @@ fn search_multi_term_query() {
         )
         .unwrap();
 
-    let hits = index.search("forensics windows", 10).unwrap();
-    assert_eq!(hits.len(), 1);
-    assert_eq!(hits[0].file_id, "f1");
+    let result = index.search("forensics windows", 10).unwrap();
+    assert_eq!(result.hits.len(), 1);
+    assert_eq!(result.hits[0].file_id, "f1");
 }

@@ -5,14 +5,15 @@ pub mod state;
 use commands::{
     artifact_commands::{get_artifact_families, get_artifact_rows, get_artifact_rows_request},
     case_commands::{
-        close_case, create_case, get_case_metrics, get_current_case, get_data_sources,
-        get_recent_cases, get_recent_objects, open_case, rename_data_source,
+        close_case, create_case, delete_case, delete_data_source, get_case_metrics,
+        get_current_case, get_data_sources, get_recent_cases, get_recent_objects, open_case,
+        remove_case_from_list, rename_data_source,
     },
     file_commands::{
         get_file_children, get_file_children_request, get_file_rows, get_file_rows_request,
-        get_file_tree, import_data_source, open_file_handle, open_file_handle_request,
-        read_file_range,
+        get_file_tree, open_file_handle, open_file_handle_request, read_file_range,
     },
+    import::pipeline::{cancel_import, import_data_source},
     job_commands::{get_jobs_snapshot, get_trace_items, get_warnings},
     report_commands::{
         export_csv_report, export_html_report, export_json_report, get_report_history,
@@ -37,7 +38,11 @@ pub fn run() {
             get_recent_cases,
             get_data_sources,
             rename_data_source,
+            delete_case,
+            delete_data_source,
+            remove_case_from_list,
             import_data_source,
+            cancel_import,
             get_file_children,
             get_file_children_request,
             get_file_tree,

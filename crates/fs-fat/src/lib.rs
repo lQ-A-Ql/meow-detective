@@ -291,7 +291,11 @@ impl FatReader {
         }
 
         // Last component: find the target (file or dir)
-        let last = components.last().unwrap();
+        // Safety: components is non-empty (checked above)
+        let last = match components.last() {
+            Some(l) => l,
+            None => return Ok(None),
+        };
         let data = if current_cluster == 0 {
             self.read_root_data()?
         } else {

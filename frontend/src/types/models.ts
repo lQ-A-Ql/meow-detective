@@ -8,16 +8,17 @@ export interface ApiErrorDto {
 }
 
 export type EventTopic =
-  | 'case.opened'
-  | 'case.closed'
-  | 'job.created'
-  | 'job.started'
-  | 'job.progress'
-  | 'job.completed'
-  | 'job.failed'
-  | 'artifact.added'
-  | 'timeline.updated'
-  | 'search.index_progress';
+  | 'case-opened'
+  | 'case-closed'
+  | 'job-created'
+  | 'job-started'
+  | 'job-progress'
+  | 'job-completed'
+  | 'job-failed'
+  | 'artifact-added'
+  | 'timeline-updated'
+  | 'search-index_progress'
+  | 'partition-progress';
 
 export interface EventEnvelope<T = unknown> {
   eventId: string;
@@ -47,7 +48,7 @@ export interface RecentObject {
   title: string;
   detail: string;
   time: string;
-  kind: 'file' | 'registry' | 'process' | 'network';
+  kind: string;
 }
 
 export interface DataSourceSummary {
@@ -82,6 +83,9 @@ export interface FileTreeNode {
   id: string;
   name: string;
   depth: number;
+  hasChildren: boolean;
+  entryType?: 'file' | 'directory';
+  size?: number;
   nodeType?: string;
   status?: string;
   expanded?: boolean;

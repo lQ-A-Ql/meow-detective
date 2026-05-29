@@ -1,0 +1,358 @@
+use app_services::{case_service, datasource_service, file_service, timeline_service};
+use evidence_core::{EvidenceReader, FileSystemReader};
+use image_e01::E01Reader;
+use persistence_sqlite::repositories::{
+    datasource_repo::DataSourceRepo, file_repo::FileRepo, job_repo::JobRepo,
+    timeline_repo::TimelineRepo,
+};
+use tempfile::TempDir;
+
+fn sample_path() -> std::path::PathBuf {
+    "E:/pangushi/刘洋/liuyang_pc.E01".into()
+}
+
+fn skip() -> bool {
+    if !sample_path().exists() {
+        eprintln!("SKIP");
+        true
+    } else {
+        false
+    }
+}
+
+#[test]
+fn e01_probe_and_partition_detection() {
+    if skip() {
+        return;
+    }
+
+    let mut reader = E01Reader::open(&sample_path()).unwrap();
+    let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
+
+    assert!(!probe.partitions.is_empty(), "Should detect partitions");
+    assert!(!probe.candidates.is_empty(), "Should have candidates");
+
+    // Verify partition metadata
+    for p in &probe.partitions {
+        assert!(!p.name.is_empty());
+        assert!(p.offset > 0 || p.index == 0);
+        eprintln!(
+            "Partition {}: {} ({}) offset={}",
+            p.index, p.name, p.kind_label, p.offset
+        );
+    }
+
+    // Verify at least one NTFS and one FAT
+    let has_ntfs = probe
+        .candidates
+        .iter()
+        .any(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs));
+    let has_fat = probe
+        .candidates
+        .iter()
+        .any(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Fat));
+    assert!(has_ntfs, "Should detect NTFS");
+    assert!(has_fat, "Should detect FAT");
+
+    // Verify BitLocker detection
+    let bitlocker = probe
+        .partitions
+        .iter()
+        .find(|p| p.kind_label.contains("BitLocker"));
+    assert!(bitlocker.is_some(), "Should detect BitLocker partition");
+
+    eprintln!(
+        "Probe: {} partitions, {} candidates",
+        probe.partitions.len(),
+        probe.candidates.len()
+    );
+}
+
+#[test]
+fn e01_ntfs_root_listing() {
+    if skip() {
+        return;
+    }
+
+    let mut reader = E01Reader::open(&sample_path()).unwrap();
+    let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
+    let ntfs = probe
+        .candidates
+        .iter()
+        .find(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
+        .unwrap();
+
+    let boxed: Box<dyn EvidenceReader> = Box::new(E01Reader::open(&sample_path()).unwrap());
+    let fs = fs_ntfs::NtfsReader::open(boxed, ntfs.offset).unwrap();
+
+    let root = fs.root().unwrap();
+    assert!(root.is_dir);
+    assert_eq!(root.name, "\\");
+
+    let children = fs.list_children("").unwrap();
+    assert!(
+        children.len() > 10,
+        "NTFS root should have many children, got {}",
+        children.len()
+    );
+
+    // Verify Windows directory exists
+    let windows = children
+        .iter()
+        .find(|c| c.name.eq_ignore_ascii_case("Windows"));
+    assert!(windows.is_some(), "Should find Windows directory");
+
+    // Verify common NTFS directories
+    let has_users = children
+        .iter()
+        .any(|c| c.name.eq_ignore_ascii_case("Users"));
+    let has_program_files = children
+        .iter()
+        .any(|c| c.name.eq_ignore_ascii_case("Program Files"));
+    assert!(
+        has_users || has_program_files,
+        "Should have Users or Program Files"
+    );
+
+    eprintln!("NTFS root: {} children", children.len());
+    for c in children.iter().take(20) {
+        eprintln!("  {} {}", if c.is_dir { "D" } else { "F" }, c.name);
+    }
+}
+
+#[test]
+fn e01_fat_root_listing() {
+    if skip() {
+        return;
+    }
+
+    let mut reader = E01Reader::open(&sample_path()).unwrap();
+    let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
+    let fat = probe
+        .candidates
+        .iter()
+        .find(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Fat))
+        .unwrap();
+
+    let boxed: Box<dyn EvidenceReader> = Box::new(E01Reader::open(&sample_path()).unwrap());
+    let fs = fs_fat::FatReader::open(boxed, fat.offset).unwrap();
+
+    let root = fs.root().unwrap();
+    assert!(root.is_dir);
+
+    let children = fs.list_children("").unwrap();
+    assert!(!children.is_empty(), "FAT root should have children");
+
+    eprintln!("FAT root: {} children", children.len());
+    for c in children.iter().take(10) {
+        eprintln!("  {} {}", if c.is_dir { "D" } else { "F" }, c.name);
+    }
+}
+
+#[test]
+fn e01_ntfs_enumerate_limited() {
+    if skip() {
+        return;
+    }
+
+    let tmp = TempDir::new().unwrap();
+    let active =
+        case_service::create_case(&tmp.path().join("cases"), "e01-lim", Some("tester")).unwrap();
+    let case_id = active.meta.id.clone();
+
+    active
+        .with_conn(|conn| {
+            let mut reader = E01Reader::open(&sample_path())
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let probe = datasource_service::detect_image_filesystem(&mut reader)
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let ntfs = probe
+                .candidates
+                .iter()
+                .find(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
+                .unwrap();
+
+            let ds_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
+            DataSourceRepo::new(conn).insert(
+                &case_id,
+                &domain::DataSource {
+                    id: ds_id.clone(),
+                    name: "test".into(),
+                    kind: domain::DataSourceKind::E01,
+                    source_path: sample_path(),
+                    imported_at: chrono::Utc::now(),
+                },
+            )?;
+
+            let boxed: Box<dyn EvidenceReader> = Box::new(
+                E01Reader::open(&sample_path())
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?,
+            );
+            let fs = fs_ntfs::NtfsReader::open(boxed, ntfs.offset)
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+
+            // Enumerate just the filesystem (full BFS)
+            let stats = file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
+            assert!(stats.file_count > 0, "Should enumerate files");
+            eprintln!(
+                "Enumerated: {} files, {} dirs, {} bytes",
+                stats.file_count, stats.dir_count, stats.total_size
+            );
+
+            // Verify tree
+            let tree = file_service::get_file_tree_real(conn)
+                .map_err(persistence_sqlite::DbError::System)?;
+            assert!(!tree.is_empty());
+
+            let children = file_service::get_file_children_lazy(conn, &tree[0].id)
+                .map_err(persistence_sqlite::DbError::System)?;
+            assert!(!children.children.is_empty());
+            eprintln!(
+                "Tree: {} roots, {} children",
+                tree.len(),
+                children.children.len()
+            );
+
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn e01_timeline_projection() {
+    if skip() {
+        return;
+    }
+
+    let tmp = TempDir::new().unwrap();
+    let active =
+        case_service::create_case(&tmp.path().join("cases"), "e01-tl", Some("tester")).unwrap();
+    let case_id = active.meta.id.clone();
+
+    active
+        .with_conn(|conn| {
+            let mut reader = E01Reader::open(&sample_path())
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let probe = datasource_service::detect_image_filesystem(&mut reader)
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let fat = probe
+                .candidates
+                .iter()
+                .find(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Fat))
+                .unwrap();
+
+            let ds_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
+            DataSourceRepo::new(conn).insert(
+                &case_id,
+                &domain::DataSource {
+                    id: ds_id.clone(),
+                    name: "tl-test".into(),
+                    kind: domain::DataSourceKind::E01,
+                    source_path: sample_path(),
+                    imported_at: chrono::Utc::now(),
+                },
+            )?;
+
+            // Use FAT for faster enumeration
+            let boxed: Box<dyn EvidenceReader> = Box::new(
+                E01Reader::open(&sample_path())
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?,
+            );
+            let fs = fs_fat::FatReader::open(boxed, fat.offset)
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let _stats = file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
+
+            // Collect files for timeline
+            let file_repo = FileRepo::new(conn);
+            let roots = file_repo.find_roots(&ds_id)?;
+            let mut all_files = Vec::new();
+            let mut queue = roots;
+            while let Some(f) = queue.pop() {
+                if f.entry_type != domain::EntryType::Directory {
+                    all_files.push(f);
+                } else {
+                    queue.extend(file_repo.find_children(&f.id)?);
+                }
+            }
+
+            // Project timeline
+            let tl_count = timeline_service::project_and_store_macb(conn, &all_files)
+                .map_err(persistence_sqlite::DbError::System)?;
+
+            // Query and verify pagination
+            let timeline_repo = TimelineRepo::new(conn);
+            let total = timeline_repo.count()?;
+
+            let page1 = timeline_service::query_timeline(conn, 0, 10)
+                .map_err(persistence_sqlite::DbError::System)?;
+            assert_eq!(page1.total, total);
+            assert_eq!(page1.items.len(), 10.min(total as usize));
+
+            if total > 10 {
+                let page2 = timeline_service::query_timeline(conn, 10, 10)
+                    .map_err(persistence_sqlite::DbError::System)?;
+                assert_eq!(page2.total, total);
+                // No overlap
+                let ids1: Vec<&str> = page1.items.iter().map(|e| e.id.as_str()).collect();
+                for id in page2.items.iter().map(|e| e.id.as_str()) {
+                    assert!(!ids1.contains(&id), "Pages should not overlap");
+                }
+            }
+
+            eprintln!(
+                "Timeline: {} projected, {} total, page1={}",
+                tl_count,
+                total,
+                page1.items.len()
+            );
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn e01_job_tracking() {
+    if skip() {
+        return;
+    }
+
+    let tmp = TempDir::new().unwrap();
+    let active =
+        case_service::create_case(&tmp.path().join("cases"), "e01-job", Some("tester")).unwrap();
+    let case_id = active.meta.id.clone();
+
+    active
+        .with_conn(|conn| {
+            let repo = JobRepo::new(conn);
+
+            // Create job
+            let job_id = repo.create(&case_id.0, "E01 import")?;
+            repo.update_progress(&job_id, 25, "Enumerating...")?;
+            repo.update_progress(&job_id, 50, "Indexing...")?;
+            repo.update_progress(&job_id, 100, "Done")?;
+            repo.complete(&job_id, "Success")?;
+
+            // Verify
+            let jobs = repo.list_recent(10)?;
+            assert_eq!(jobs.len(), 1);
+            assert_eq!(jobs[0].status, "completed");
+            assert_eq!(jobs[0].progress, 100);
+
+            // Create a failed job
+            let fail_id = repo.create(&case_id.0, "Bad import")?;
+            repo.fail(&fail_id, "File not found")?;
+
+            let jobs = repo.list_recent(10)?;
+            assert_eq!(jobs.len(), 2);
+            let failed = jobs.iter().find(|j| j.status == "failed").unwrap();
+            assert!(failed.detail.contains("File not found"));
+
+            eprintln!(
+                "Jobs: {} total, statuses: {:?}",
+                jobs.len(),
+                jobs.iter().map(|j| &j.status).collect::<Vec<_>>()
+            );
+            Ok(())
+        })
+        .unwrap();
+}

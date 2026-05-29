@@ -26,7 +26,7 @@ fn create_case_initializes_db() {
 
     let metrics = active.with_conn(|conn| {
         let version = persistence_sqlite::runner::current_version(conn)?;
-        assert_eq!(version, Some("0009_data_source_partitions".to_string()));
+        assert_eq!(version, Some("0010_job_partition_progress".to_string()));
 
         let repo = persistence_sqlite::repositories::case_repo::CaseRepo::new(conn);
         let found = repo.find_by_id(&active.meta.id)?;

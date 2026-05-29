@@ -6,6 +6,11 @@ pub struct FileTreeNodeDto {
     pub id: String,
     pub name: String,
     pub depth: u32,
+    pub has_children: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entry_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub node_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -14,6 +19,13 @@ pub struct FileTreeNodeDto {
     pub expanded: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub active: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileChildrenDto {
+    pub children: Vec<FileTreeNodeDto>,
+    pub total_count: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

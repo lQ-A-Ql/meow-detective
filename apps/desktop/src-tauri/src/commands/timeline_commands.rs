@@ -1,18 +1,56 @@
 use tauri::State;
-use transport::dto::TimelineEventDto;
+use transport::{
+    commands::GetTimelineRequest, dto::TimelineEventDto, paging::PageResponse, CommandError,
+};
 
 use crate::state::AppState;
 
+/// Get timeline events with optional filtering.
 #[tauri::command]
-pub fn get_timeline_events(state: State<AppState>) -> Result<Vec<TimelineEventDto>, String> {
-    let guard = state.active_case.lock().map_err(|e| e.to_string())?;
-    let Some(active) = guard.as_ref() else {
-        return Ok(vec![]);
-    };
-    active
-        .with_conn(|conn| {
-            app_services::timeline_service::query_timeline(conn, 0, 100)
-                .map_err(persistence_sqlite::DbError::System)
-        })
-        .map_err(|e| e.to_string())
+pub async fn get_timeline_events(
+    state: State<'_, AppState>,
+    request: Option<GetTimelineRequest>,
+) -> Result<PageResponse<TimelineEventDto>, CommandError> {
+    let app_state = state.inner().clone();
+    let req = request.unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || {
+        // Short lock: extract db_path, then release
+        let db_path = {
+            let guard = app_state
+                .active_case
+                .lock()
+                .map_err(|e| CommandError::from_lock_error("Case", e))?;
+            match guard.as_ref() {
+                Some(active) => active.db_path(),
+                None => {
+                    return Ok(PageResponse {
+                        total: 0,
+                        items: vec![],
+                    })
+                }
+            }
+        };
+        // Guard is now dropped — query with released lock
+        let conn = persistence_sqlite::open_or_create(&db_path)
+            .map_err(CommandError::from_service_error)?;
+
+        // Use filtered query if any filters are provided
+        let has_filters = req.time_start.is_some() || req.time_end.is_some() || req.event_type.is_some();
+        if has_filters {
+            app_services::timeline_service::query_timeline_filtered(
+                &conn,
+                req.offset,
+                req.limit,
+                req.time_start.as_deref(),
+                req.time_end.as_deref(),
+                req.event_type.as_deref(),
+            )
+            .map_err(CommandError::from_service_error)
+        } else {
+            app_services::timeline_service::query_timeline(&conn, req.offset, req.limit)
+                .map_err(CommandError::from_service_error)
+        }
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
 }

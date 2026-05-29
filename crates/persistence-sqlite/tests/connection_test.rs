@@ -31,7 +31,7 @@ fn open_existing_db() {
 fn run_all_migrations() {
     let conn = open_in_memory().unwrap();
     let count = runner::run_all(&conn).unwrap();
-    assert_eq!(count, 9, "Expected 9 migrations to run");
+    assert_eq!(count, 10, "Expected 10 migrations to run");
 
     let tables = [
         "cases",
@@ -72,7 +72,7 @@ fn version_query() {
 
     runner::run_all(&conn).unwrap();
     let version = runner::current_version(&conn).unwrap();
-    assert_eq!(version, Some("0009_data_source_partitions".to_string()));
+    assert_eq!(version, Some("0010_job_partition_progress".to_string()));
 }
 
 #[test]

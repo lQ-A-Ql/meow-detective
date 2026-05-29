@@ -156,7 +156,7 @@ fn dump_probe_context_for_real_e01() {
     eprintln!("sector0[3..11]={:02X?}", &sector0[3..11]);
     eprintln!("mbr_sig={:02X}{:02X}", sector0[510], sector0[511]);
 
-    let entries = app_services::mbr::parse_partition_table(&sector0);
+    let entries = evidence_core::volume::mbr::parse_partition_table(&sector0);
     for (idx, entry) in entries.iter().enumerate() {
         eprintln!(
             "mbr[{}]: type={:02X} lba_start={} sectors={}",
@@ -171,7 +171,7 @@ fn dump_probe_context_for_real_e01() {
             eprintln!("sector1[0..8]={:02X?}", &sector1[0..8]);
             eprintln!(
                 "gpt_header={}",
-                app_services::gpt::parse_gpt_header(&sector1).is_some()
+                evidence_core::volume::gpt::parse_gpt_header(&sector1).is_some()
             );
         }
         Err(error) => {

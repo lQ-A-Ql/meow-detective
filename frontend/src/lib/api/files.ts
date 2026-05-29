@@ -15,7 +15,7 @@ export async function getFileRows(parentId?: string) {
 
 export async function importDataSource(sourcePath: string) {
   return apiClient.request('import_data_source', () =>
-    apiClient.getMockProvider().importDataSource(sourcePath), { sourcePath });
+    apiClient.getMockProvider().importDataSource(sourcePath), { request: { sourcePath } });
 }
 
 export async function getFileChildren(parentId: string): Promise<FileTreeNode[]> {
@@ -37,4 +37,8 @@ export async function readFileRange(request: ViewerRangeRequest) {
     () => apiClient.getMockProvider().readFileRange(request),
     { request },
   );
+}
+
+export async function cancelImport(jobId: string) {
+  return apiClient.request('cancel_import', () => Promise.resolve('Cancel not available in mock mode'), { jobId });
 }

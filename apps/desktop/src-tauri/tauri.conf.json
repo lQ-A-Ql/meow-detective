@@ -13,7 +13,10 @@
         "width": 1440,
         "height": 960
       }
-    ]
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost; font-src 'self'"
+    }
   },
   "bundle": {
     "active": false

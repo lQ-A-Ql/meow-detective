@@ -14,6 +14,10 @@ pub struct JobSummaryRow {
     pub status: String,
     pub progress: u32,
     pub detail: String,
+    pub current_partition: Option<String>,
+    pub completed_partitions: u32,
+    pub total_partitions: u32,
+    pub partition_progress: u32,
 }
 
 impl<'a> JobRepo<'a> {
@@ -38,6 +42,21 @@ impl<'a> JobRepo<'a> {
         Ok(())
     }
 
+    pub fn update_partition_progress(
+        &self,
+        id: &JobId,
+        current_partition: &str,
+        completed: u32,
+        total: u32,
+        partition_pct: u32,
+    ) -> DbResult<()> {
+        self.conn.execute(
+            "UPDATE jobs SET current_partition = ?1, completed_partitions = ?2, total_partitions = ?3, partition_progress = ?4 WHERE id = ?5",
+            params![current_partition, completed, total, partition_pct, id.0],
+        )?;
+        Ok(())
+    }
+
     pub fn complete(&self, id: &JobId, detail: &str) -> DbResult<()> {
         self.conn.execute(
             "UPDATE jobs SET status = 'completed', progress = 100, detail = ?1, finished_at = datetime('now') WHERE id = ?2",
@@ -56,7 +75,8 @@ impl<'a> JobRepo<'a> {
 
     pub fn list_recent(&self, limit: usize) -> DbResult<Vec<JobSummaryRow>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, kind, status, progress, detail
+            "SELECT id, kind, status, progress, detail,
+                    current_partition, completed_partitions, total_partitions, partition_progress
              FROM jobs
              ORDER BY
                  CASE
@@ -75,6 +95,10 @@ impl<'a> JobRepo<'a> {
                 status: row.get(2)?,
                 progress: row.get(3)?,
                 detail: row.get(4)?,
+                current_partition: row.get(5)?,
+                completed_partitions: row.get::<_, Option<u32>>(6)?.unwrap_or(0),
+                total_partitions: row.get::<_, Option<u32>>(7)?.unwrap_or(0),
+                partition_progress: row.get::<_, Option<u32>>(8)?.unwrap_or(0),
             })
         })?;
         let mut result = Vec::new();

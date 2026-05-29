@@ -22,7 +22,7 @@ export const useUiStore = create<UiState>((set) => ({
   drawerOpen: false,
   viewerTab: 'hex',
   rightPanelTab: 'details',
-  globalSearchQuery: 'credential OR wallet OR exfil',
+  globalSearchQuery: '',
   setCurrentPage: (page) => set({ currentPage: page }),
   setDrawerOpen: (open) => set({ drawerOpen: open }),
   toggleDrawer: () => set((state) => ({ drawerOpen: !state.drawerOpen })),

@@ -1,6 +1,4 @@
-use serde_json::json;
-use std::collections::BTreeMap;
-use transport::dto::TimelineEventDto;
+use transport::{dto::TimelineEventDto, paging::PageResponse};
 
 use domain::FileEntry;
 use persistence_sqlite::repositories::timeline_repo::TimelineRepo;
@@ -20,14 +18,16 @@ pub fn project_and_store_macb(conn: &Connection, files: &[FileEntry]) -> Result<
     Ok(count)
 }
 
+/// Query timeline events without filtering.
 pub fn query_timeline(
     conn: &Connection,
     offset: u64,
     limit: u32,
-) -> Result<Vec<TimelineEventDto>, String> {
+) -> Result<PageResponse<TimelineEventDto>, String> {
     let repo = TimelineRepo::new(conn);
+    let total = repo.count().map_err(|e| e.to_string())?;
     let events = repo.query(offset, limit).map_err(|e| e.to_string())?;
-    let dtos: Vec<TimelineEventDto> = events
+    let items: Vec<TimelineEventDto> = events
         .into_iter()
         .map(|ev| TimelineEventDto {
             id: ev.id.0,
@@ -39,34 +39,36 @@ pub fn query_timeline(
             attrs: ev.attrs,
         })
         .collect();
-    Ok(dtos)
+    Ok(PageResponse { total, items })
 }
 
-pub fn get_timeline_events() -> Vec<TimelineEventDto> {
-    vec![
-        TimelineEventDto {
-            id: "evt-001".into(),
-            source_object_id: "file-001".into(),
-            event_type: "file.accessed".into(),
-            ts: "2025-02-16T16:02:12Z".into(),
-            title: "访问可执行文件".into(),
-            description: "用户访问了 Downloads/AnyDesk.exe".into(),
-            attrs: BTreeMap::from([
-                ("user".into(), json!("Alice")),
-                ("source".into(), json!("shellbags")),
-            ]),
-        },
-        TimelineEventDto {
-            id: "evt-002".into(),
-            source_object_id: "net-001".into(),
-            event_type: "network.connection".into(),
-            ts: "2025-02-16T14:13:55Z".into(),
-            title: "建立外联".into(),
-            description: "主机与 10.10.20.15:443 建立连接".into(),
-            attrs: BTreeMap::from([
-                ("protocol".into(), json!("tcp")),
-                ("destination".into(), json!("10.10.20.15:443")),
-            ]),
-        },
-    ]
+/// Query timeline events with optional filtering by time range and event type.
+pub fn query_timeline_filtered(
+    conn: &Connection,
+    offset: u64,
+    limit: u32,
+    time_start: Option<&str>,
+    time_end: Option<&str>,
+    event_type: Option<&str>,
+) -> Result<PageResponse<TimelineEventDto>, String> {
+    let repo = TimelineRepo::new(conn);
+    let total = repo
+        .count_filtered(time_start, time_end, event_type)
+        .map_err(|e| e.to_string())?;
+    let events = repo
+        .query_filtered(offset, limit, time_start, time_end, event_type)
+        .map_err(|e| e.to_string())?;
+    let items: Vec<TimelineEventDto> = events
+        .into_iter()
+        .map(|ev| TimelineEventDto {
+            id: ev.id.0,
+            source_object_id: ev.source_object_id,
+            event_type: ev.event_type,
+            ts: ev.timestamp.to_rfc3339(),
+            title: ev.title,
+            description: ev.description,
+            attrs: ev.attrs,
+        })
+        .collect();
+    Ok(PageResponse { total, items })
 }

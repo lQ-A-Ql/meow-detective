@@ -27,3 +27,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
         run: cargo test --workspace
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+      - name: Audit dependencies
+        run: cargo audit

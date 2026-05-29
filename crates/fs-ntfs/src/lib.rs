@@ -2,6 +2,8 @@
 //! Parses boot sector to locate $MFT, reads FILE records, enumerates file names.
 //! Supports resident and non-resident attributes via data run parsing.
 
+pub mod mft_scanner;
+
 use evidence_core::filesystem::{FileSystemReader, FsNode};
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
@@ -258,10 +260,30 @@ impl NtfsReader {
 
         for (lcn, count) in runs {
             let offset = self.cluster_to_offset(lcn)?;
-            let chunk = count * self.cluster_size;
-            reader.seek(SeekFrom::Start(offset))?;
+            let chunk = count.checked_mul(self.cluster_size).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "data run overflow: {} clusters × {} bytes/cluster",
+                        count, self.cluster_size
+                    ),
+                )
+            })?;
+            // Guard: prevent OOM from malicious data runs claiming huge clusters
+            const MAX_FILE_BUFFER: usize = 128 * 1024 * 1024; // 128 MB
             let start = buf.len();
-            buf.resize(start + chunk as usize, 0);
+            let new_size = start + chunk as usize;
+            if new_size > MAX_FILE_BUFFER {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "data run buffer exceeds 128 MB limit (would be {} bytes)",
+                        new_size
+                    ),
+                ));
+            }
+            reader.seek(SeekFrom::Start(offset))?;
+            buf.resize(new_size, 0);
             reader.read_exact(&mut buf[start..])?;
         }
 
@@ -703,11 +725,16 @@ fn root_dir_frn(boot: &[u8]) -> u64 {
 }
 
 fn mft_record_bytes(boot: &[u8]) -> u32 {
-    let raw = i32::from_le_bytes(boot[0x40..0x44].try_into().unwrap_or([0; 4]));
+    let raw = boot[0x40] as i8;
     if raw > 0 {
         1024
-    } else if raw < 0 && (-raw) < 32 {
-        (1u32 << (-raw as u32)).max(512)
+    } else if raw < 0 {
+        let shift = (raw as i16).unsigned_abs();
+        if shift < 32 {
+            (1u32 << shift).max(512)
+        } else {
+            1024
+        }
     } else {
         1024
     }
@@ -722,8 +749,13 @@ fn index_record_bytes(boot: &[u8], cluster_size: u32, fallback: u32) -> u32 {
         } else {
             fallback
         }
-    } else if raw < 0 && (-raw as u32) < 32 {
-        (1u32 << (-raw as u32)).max(512)
+    } else if raw < 0 {
+        let shift = (raw as i16).unsigned_abs();
+        if shift < 32 {
+            (1u32 << shift).max(512)
+        } else {
+            fallback
+        }
     } else {
         fallback
     }

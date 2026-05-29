@@ -76,19 +76,35 @@ export function BottomDrawer() {
                   {job.currentPartition ? (
                     <div className="mt-2 border border-[#ececec] bg-[#fafafa] px-2 py-2">
                       <div className="flex items-center justify-between gap-3 text-[10px] uppercase tracking-wider text-[#666]">
-                        <span>分区子进度</span>
+                        <span>分区进度</span>
                         <span className="font-mono text-[#111]">
-                          {(job.completedPartitions ?? 0) + 1}/{job.totalPartitions ?? 1}
+                          {(job.completedPartitions ?? 0)}/{job.totalPartitions ?? '?'} 完成
                         </span>
                       </div>
-                      <div className="mt-1 text-[11px] text-[#222]">{job.currentPartition}</div>
-                      <div className="mt-1 h-1 overflow-hidden border border-[#e0e0e0] bg-white">
-                        <div className="h-full bg-[#666]" style={{ width: `${job.partitionProgress ?? 0}%` }} />
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <div className="flex-1 h-1.5 overflow-hidden border border-[#e0e0e0] bg-white">
+                          <div
+                            className="h-full transition-all duration-300"
+                            style={{
+                              width: `${job.partitionProgress ?? 0}%`,
+                              backgroundColor: (job.partitionProgress ?? 0) >= 100 ? '#22c55e' : '#666',
+                            }}
+                          />
+                        </div>
+                        <span className="text-[10px] font-mono text-[#555] w-8 text-right">
+                          {job.partitionProgress ?? 0}%
+                        </span>
+                      </div>
+                      <div className="mt-1 text-[11px] text-[#333] font-medium">
+                        {job.currentPartition}
                       </div>
                     </div>
                   ) : null}
-                  <div className="mt-2 h-1 overflow-hidden border border-[#e0e0e0] bg-[#eee]">
-                    <div className="h-full bg-[#111]" style={{ width: `${job.progress}%` }} />
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="flex-1 h-1 overflow-hidden border border-[#e0e0e0] bg-[#eee]">
+                      <div className="h-full bg-[#111]" style={{ width: `${job.progress}%` }} />
+                    </div>
+                    <span className="text-[10px] font-mono text-[#888]">{job.progress}%</span>
                   </div>
                 </div>
               ))}

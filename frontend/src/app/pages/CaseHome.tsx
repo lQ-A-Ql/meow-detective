@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, CheckCircle2, Clock, Database, FileText, FolderOpen, PencilLine, Upload } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle2, Clock, Database, FileText, FolderOpen, PencilLine, Trash2, Upload } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { InlineProgressRow } from '@/components/status/InlineProgressRow';
@@ -8,13 +8,19 @@ import {
   useOpenCase,
   useCaseMetrics,
   useDataSources,
+  useDeleteCase,
+  useDeleteDataSource,
   useRecentCases,
   useRecentObjects,
+  useRemoveCaseFromList,
   useRenameDataSource,
 } from '@/features/case/hooks';
 import { useImportDataSource } from '@/features/files/hooks';
+import { cancelImport } from '@/lib/api/files';
 import { useJobsSnapshot, useWarnings } from '@/features/jobs/hooks';
 import type { JobSnapshot } from '@/types/models';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 const importJobPattern = /导入|加载|镜像|数据源|datasource|data source|import|ingest|image|e01|raw|dd|img/i;
 
@@ -34,10 +40,19 @@ export function CaseHome() {
   const { data: recentObjects } = useRecentObjects();
   const { data: jobs } = useJobsSnapshot();
   const { data: warnings } = useWarnings();
+  const qc = useQueryClient();
   const importMutation = useImportDataSource();
+  const cancelImportMutation = useMutation({
+    mutationFn: (jobId: string) => cancelImport(jobId),
+    onSuccess: () => { toast.success('导入已取消'); qc.invalidateQueries({ queryKey: ['jobs'] }); },
+    onError: (e: Error) => { toast.error('取消失败', { description: e.message }); },
+  });
   const createCaseMutation = useCreateCase();
   const openCaseMutation = useOpenCase();
   const renameDataSourceMutation = useRenameDataSource();
+  const deleteCaseMutation = useDeleteCase();
+  const deleteDataSourceMutation = useDeleteDataSource();
+  const removeCaseFromListMutation = useRemoveCaseFromList();
 
   const [importPath, setImportPath] = useState('');
   const [showImport, setShowImport] = useState(false);
@@ -128,20 +143,34 @@ export function CaseHome() {
             {sortedRecentCases.length ? (
               <div className="divide-y divide-[#eee]">
                 {sortedRecentCases.map((item) => (
-                  <button
+                  <div
                     key={`${item.caseRoot}-${item.openedAt}`}
-                    type="button"
+                    className="flex items-center px-5 py-3 text-left hover:bg-[#f7f7f7] cursor-pointer"
                     onClick={() => openCaseMutation.mutate(item.caseRoot)}
-                    className="w-full px-5 py-3 text-left hover:bg-[#f7f7f7]"
                   >
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="min-w-0">
-                        <div className="text-[13px] text-[#111] font-medium truncate">{item.name}</div>
-                        <div className="text-[11px] text-[#666] font-mono truncate mt-1">{item.caseRoot}</div>
-                      </div>
-                      <div className="text-[10px] text-[#888] font-mono shrink-0">{item.openedAt}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] text-[#111] font-medium truncate">{item.name}</div>
+                      <div className="text-[11px] text-[#666] font-mono truncate mt-1">{item.caseRoot}</div>
                     </div>
-                  </button>
+                    <div className="text-[10px] text-[#888] font-mono shrink-0 mr-3">{item.openedAt}</div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`确定删除案件 "${item.name}"？\n\n该操作将删除案件目录及其所有数据，且不可撤销。`)) {
+                          deleteCaseMutation.mutate(item.caseRoot, {
+                            onSuccess: () => {
+                              removeCaseFromListMutation.mutate(item.caseRoot);
+                            },
+                          });
+                        }
+                      }}
+                      className="text-[#999] hover:text-red-600 shrink-0"
+                      title="删除案件"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 ))}
               </div>
             ) : (
@@ -264,7 +293,14 @@ export function CaseHome() {
           ) : null}
           {importJob ? (
             <div className="mt-2 text-[11px] text-[#555] font-mono bg-white border border-[#ddd] p-2">
-              后台导入进行中: {importJob.name} · {importJob.progress}% · {importJob.detail}
+              <div>后台导入进行中: {importJob.name} · {importJob.progress}% · {importJob.detail}</div>
+              <button
+                onClick={() => cancelImportMutation.mutate(importJob.id)}
+                disabled={cancelImportMutation.isPending}
+                className="mt-1 text-red-600 hover:text-red-800 text-[10px] underline disabled:opacity-50"
+              >
+                {cancelImportMutation.isPending ? '取消中...' : '取消导入'}
+              </button>
             </div>
           ) : null}
           {importMutation.isSuccess ? (
@@ -384,6 +420,17 @@ export function CaseHome() {
                               className="text-[#777] hover:text-[#111]"
                             >
                               <PencilLine size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm(`确定删除数据源 "${source.name}"？\n\n该操作将级联删除其下的所有文件条目、时间线事件和提取痕迹，且不可撤销。`)) {
+                                  deleteDataSourceMutation.mutate(source.id);
+                                }
+                              }}
+                              className="text-[#999] hover:text-red-600"
+                            >
+                              <Trash2 size={12} />
                             </button>
                           </div>
                         )}

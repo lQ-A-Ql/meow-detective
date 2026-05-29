@@ -45,10 +45,19 @@ impl E01Reader {
         }
 
         // Walk section descriptor linked list
+        // Track visited offsets to detect cycles in malformed E01 files
+        let mut visited_offsets = std::collections::HashSet::<u64>::new();
         let mut next_off = 13u64;
         let mut sections: Vec<(String, u64, u64, Vec<u8>)> = Vec::new();
 
         while next_off > 0 && next_off < file_len {
+            if !visited_offsets.insert(next_off) {
+                tracing::warn!(
+                    "E01: cycle detected in section chain at offset 0x{:X}, stopping",
+                    next_off
+                );
+                break;
+            }
             file.seek(SeekFrom::Start(next_off))?;
             let mut desc = [0u8; 76];
             if file.read_exact(&mut desc).is_err() {

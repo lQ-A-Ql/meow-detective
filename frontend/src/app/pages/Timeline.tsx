@@ -32,7 +32,8 @@ function formatTs(ts: string): string {
 }
 
 export function Timeline() {
-  const { data: events } = useTimelineEvents();
+  const { data: timelineData } = useTimelineEvents();
+  const events = timelineData?.items;
   const selectedTimelineId = useSelectionStore((state) => state.selectedTimelineId);
   const setSelectedTimelineId = useSelectionStore((state) => state.setSelectedTimelineId);
   const selectedEvent = events?.find((event) => event.id === selectedTimelineId) ?? events?.[0];

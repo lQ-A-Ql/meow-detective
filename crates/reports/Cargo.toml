@@ -12,3 +12,5 @@ chrono.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
 domain.workspace = true
+infrastructure.workspace = true
+

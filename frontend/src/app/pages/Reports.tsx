@@ -1,9 +1,24 @@
 import { CheckCircle2, CircleDashed, Download, FileText } from 'lucide-react';
+import { useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useReportHistory, useReportTemplates } from '@/features/reports/hooks';
+import { exportHtmlReport, exportCsvReport, exportJsonReport } from '@/lib/api/reports';
+import { toast } from 'sonner';
 
 export function Reports() {
   const { data: templates } = useReportTemplates();
   const { data: history } = useReportHistory();
+  const [selectedFormat, setSelectedFormat] = useState('html');
+  const qc = useQueryClient();
+  const exportMutation = useMutation({
+    mutationFn: () => {
+      if (selectedFormat === 'csv') return exportCsvReport();
+      if (selectedFormat === 'json') return exportJsonReport();
+      return exportHtmlReport();
+    },
+    onSuccess: (r) => { toast.success('报告生成成功', { description: r }); qc.invalidateQueries({ queryKey: ['reports'] }); },
+    onError: (e: Error) => { toast.error('报告生成失败', { description: e.message }); },
+  });
   const runningCount = history?.filter((item) => item.status === 'running').length ?? 0;
   const completedCount = history?.filter((item) => item.status === 'completed').length ?? 0;
 
@@ -54,10 +69,10 @@ export function Reports() {
 
           <div>
             <div className="text-[#888] text-[10px] uppercase tracking-wider mb-3">格式</div>
-            <select className="bg-white border border-[#ccc] text-[#111] font-mono text-[11px] p-2 outline-none w-64 focus:border-[#111]">
-              <option>PDF (标准)</option>
-              <option>HTML</option>
-              <option>JSON</option>
+            <select value={selectedFormat} onChange={(e) => setSelectedFormat(e.target.value)} className="bg-white border border-[#ccc] text-[#111] font-mono text-[11px] p-2 outline-none w-64 focus:border-[#111]">
+              <option value="html">HTML</option>
+              <option value="csv">CSV</option>
+              <option value="json">JSON</option>
             </select>
           </div>
 
@@ -68,8 +83,8 @@ export function Reports() {
           </div>
 
           <div className="mt-4">
-            <button className="bg-[#111] text-white font-semibold text-[11px] px-6 py-2 uppercase tracking-wider hover:bg-[#333] flex items-center gap-2 transition-colors">
-              <Download size={14} /> 生成报告
+            <button onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending} className="bg-[#111] text-white font-semibold text-[11px] px-6 py-2 uppercase tracking-wider hover:bg-[#333] flex items-center gap-2 transition-colors disabled:opacity-50">
+              <Download size={14} /> {exportMutation.isPending ? "生成中..." : "生成报告"}
             </button>
           </div>
         </div>

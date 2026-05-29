@@ -86,7 +86,7 @@ fn full_case_lifecycle() {
             assert!(idx_result.indexed_count > 0, "Expected indexed files");
 
             // Search query
-            let results = search_service::search_files_real(&index_dir, "forensics")
+            let results = search_service::search_files_real(&index_dir, "forensics", 0, 50)
                 .map_err(persistence_sqlite::DbError::System)?;
             assert!(results.total > 0, "Expected search results for 'forensics'");
             assert!(!results.items.is_empty());

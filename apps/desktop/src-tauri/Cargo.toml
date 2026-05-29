@@ -21,12 +21,17 @@ chrono.workspace = true
 transport.workspace = true
 app-services.workspace = true
 domain.workspace = true
+infrastructure.workspace = true
 persistence-sqlite.workspace = true
 evidence-core.workspace = true
+artifacts-core.workspace = true
 image-e01 = { path = "../../../crates/image-e01" }
 fs-ntfs = { path = "../../../crates/fs-ntfs" }
 fs-fat = { path = "../../../crates/fs-fat" }
 rusqlite = { version = "0.31", features = ["bundled"] }
+uuid = { version = "1", features = ["v4"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
 
 [dev-dependencies]
 tempfile = "3"

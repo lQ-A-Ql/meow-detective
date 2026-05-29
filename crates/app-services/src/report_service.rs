@@ -15,9 +15,7 @@ pub fn generate_html_report(
     let file_repo = FileRepo::new(conn);
     let tl_repo = TimelineRepo::new(conn);
 
-    let file_count = file_repo
-        .count_by_data_source(&domain::DataSourceId("__all__".into()))
-        .unwrap_or(0);
+    let file_count = file_repo.count_all().unwrap_or(0);
 
     let tl_count = tl_repo.count().map_err(|e| e.to_string())?;
 
@@ -94,22 +92,6 @@ pub fn get_report_templates() -> Vec<ReportTemplateDto> {
 }
 
 pub fn get_report_history() -> Vec<ReportHistoryItemDto> {
-    vec![
-        ReportHistoryItemDto {
-            id: "report-job-001".into(),
-            file_name: "case-summary-2025-02-16.pdf".into(),
-            created_by: "取证分析员 A".into(),
-            created_at: "2025-02-16T19:00:00Z".into(),
-            status: "completed".into(),
-            progress: None,
-        },
-        ReportHistoryItemDto {
-            id: "report-job-002".into(),
-            file_name: "file-activity-2025-02-16.pdf".into(),
-            created_by: "取证分析员 A".into(),
-            created_at: "2025-02-16T19:12:00Z".into(),
-            status: "running".into(),
-            progress: Some(64),
-        },
-    ]
+    // TODO: implement real report history from database
+    Vec::new()
 }

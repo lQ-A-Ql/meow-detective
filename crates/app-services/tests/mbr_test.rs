@@ -1,4 +1,4 @@
-use app_services::mbr;
+use evidence_core::volume::mbr;
 
 #[test]
 fn parse_partition_table() {

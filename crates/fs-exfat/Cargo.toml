@@ -11,3 +11,9 @@ serde_json.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
+evidence-core.workspace = true
+byteorder = "1"
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
