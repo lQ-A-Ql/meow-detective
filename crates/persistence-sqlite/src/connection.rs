@@ -17,11 +17,15 @@ pub enum DbError {
 pub type DbResult<T> = Result<T, DbError>;
 
 pub fn open_or_create(path: &Path) -> DbResult<Connection> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
     let conn = Connection::open(path)?;
     conn.execute_batch(
         "PRAGMA journal_mode=WAL;
          PRAGMA foreign_keys=ON;
-         PRAGMA busy_timeout=5000;",
+         PRAGMA busy_timeout=5000;
+         PRAGMA synchronous=NORMAL;",
     )?;
     Ok(conn)
 }
@@ -38,7 +42,8 @@ pub fn open_existing(path: &Path) -> DbResult<Connection> {
     conn.execute_batch(
         "PRAGMA journal_mode=WAL;
          PRAGMA foreign_keys=ON;
-         PRAGMA busy_timeout=5000;",
+         PRAGMA busy_timeout=5000;
+         PRAGMA synchronous=NORMAL;",
     )?;
     Ok(conn)
 }

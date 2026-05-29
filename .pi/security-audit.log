@@ -1,0 +1,1 @@
+[2026-05-29T14:37:53.756Z] BLOCK blocked | remote_exec | write | Pipe to shell | matched: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"

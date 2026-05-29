@@ -165,49 +165,50 @@ pub fn run_post_import_pipeline(
 
 /// Tauri command: Import a data source into the current case.
 #[tauri::command]
-pub fn import_data_source(
-    state: State<AppState>,
+pub async fn import_data_source(
+    state: State<'_, AppState>,
     app: AppHandle,
     request: ImportDataSourceRequest,
 ) -> Result<String, CommandError> {
-    let guard = state
-        .active_case
-        .lock()
-        .map_err(|e| CommandError::from_lock_error("Case", e))?;
-    let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-    let cancel = Arc::new(AtomicBool::new(false));
-    let job_id_str = schedule_import_for_active_case(
-        active,
-        &request.source_path,
-        Some(&app),
-        Some(cancel.clone()),
-    )?;
-    // Store cancel token keyed by job_id
-    let mut tokens = state
-        .cancel_tokens
-        .lock()
-        .map_err(|e| CommandError::from_lock_error("Case", e))?;
-    tokens.insert(job_id_str, cancel);
-    Ok(format!(
-        "Import started for {}. Watch the Jobs panel for progress.",
-        request.source_path
-    ))
+    let app_state = state.inner().clone();
+    let source_path = request.source_path.clone();
+    let app_clone = app.clone();
+    
+    tauri::async_runtime::spawn_blocking(move || {
+        let guard = app_state
+            .active_case
+            .lock()
+            .map_err(|e| CommandError::from_lock_error("Case", e))?;
+        let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
+        let _job_id_str = schedule_import_for_active_case(
+            active,
+            &source_path,
+            Some(&app_clone),
+            &app_state.task_manager,
+        )?;
+        Ok(format!(
+            "Import started for {}. Watch the Jobs panel for progress.",
+            source_path
+        ))
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
 }
 
 /// Tauri command: Cancel an in-progress import job.
 #[tauri::command]
-pub fn cancel_import(state: State<AppState>, job_id: String) -> Result<String, CommandError> {
-    let tokens = state
-        .cancel_tokens
-        .lock()
-        .map_err(|e| CommandError::from_lock_error("Case", e))?;
-    if let Some(token) = tokens.get(&job_id) {
-        token.store(true, Ordering::Relaxed);
-        tracing::info!("Cancel requested for job {}", job_id);
-        Ok("Cancel requested".to_string())
-    } else {
-        Err(CommandError::not_found("Job"))
-    }
+pub async fn cancel_import(state: State<'_, AppState>, job_id: String) -> Result<String, CommandError> {
+    let app_state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        if app_state.task_manager.cancel(&job_id) {
+            tracing::info!("Cancel requested for job {}", job_id);
+            Ok("Cancel requested".to_string())
+        } else {
+            Err(CommandError::not_found("Job"))
+        }
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
 }
 
 /// Schedule an import job for the active case.
@@ -215,7 +216,7 @@ pub fn schedule_import_for_active_case(
     active: &app_services::active_case::ActiveCase,
     source_path: &str,
     app: Option<&AppHandle>,
-    cancel_token: Option<Arc<AtomicBool>>,
+    task_manager: &crate::state::TaskManager,
 ) -> Result<String, CommandError> {
     let case_id = active.meta.id.clone();
     let case_root = active.case_root.clone();
@@ -238,20 +239,25 @@ pub fn schedule_import_for_active_case(
 
     let source_path = source_path.to_string();
     let app_handle = app.cloned();
-    let cancel = cancel_token.unwrap_or_else(|| Arc::new(AtomicBool::new(false)));
-    std::thread::spawn(move || {
-        if let Err(error) = run_background_import_job(
+    let cancel_token = Arc::new(AtomicBool::new(false));
+    let cancel_token_clone = cancel_token.clone();
+
+    let _job_id_clone = job_id.clone();
+    let handle = std::thread::spawn(move || {
+        run_background_import_job(
             db_path,
             case_id,
             case_root,
             source_path,
             job_id,
             app_handle.as_ref(),
-            cancel,
-        ) {
-            tracing::error!("background import failed: {}", error);
-        }
+            &cancel_token_clone,
+        )
+        .map_err(|e| e.message)
     });
+
+    // Register with TaskManager using the cancel token
+    task_manager.register_with_token(job_id_str.clone(), handle, cancel_token);
 
     Ok(job_id_str)
 }
@@ -264,7 +270,7 @@ fn run_background_import_job(
     source_path: String,
     job_id: domain::JobId,
     app: Option<&AppHandle>,
-    cancel: Arc<AtomicBool>,
+    cancel_token: &AtomicBool,
 ) -> Result<(), CommandError> {
     let conn =
         persistence_sqlite::open_or_create(&db_path).map_err(CommandError::from_service_error)?;
@@ -274,7 +280,8 @@ fn run_background_import_job(
         event_bridge::emit_job_progress(app, &job_id.0, 5, "Import started");
     }
 
-    if cancel.load(Ordering::Relaxed) {
+    // Check for cancellation before starting
+    if cancel_token.load(Ordering::Relaxed) {
         let msg = "Import cancelled by user";
         if let Err(e) = job_repo.fail(&job_id, msg) {
             tracing::error!("Failed to mark job {} as cancelled: {}", job_id.0, e);
@@ -292,7 +299,7 @@ fn run_background_import_job(
         &source_path,
         &job_id,
         app,
-        &cancel,
+        cancel_token,
     ) {
         Ok(message) => {
             job_repo
@@ -323,7 +330,7 @@ pub fn execute_import_job(
     source_path: &str,
     job_id: &domain::JobId,
     app: Option<&AppHandle>,
-    cancel: &AtomicBool,
+    cancel_token: &AtomicBool,
 ) -> Result<String, CommandError> {
     let path = PathBuf::from(source_path);
     let kind = datasource_service::classify_data_source_path(&path)
@@ -345,15 +352,16 @@ pub fn execute_import_job(
         datasource_service::attach_data_source(conn, case_id, &source_name, &path, kind.clone())
             .map_err(CommandError::from_service_error)?;
 
+    // Check for cancellation
+    if cancel_token.load(Ordering::Relaxed) {
+        return Err(CommandError::internal("Import cancelled by user"));
+    }
+
     job_repo
         .update_progress(job_id, 25, "Enumerating filesystem...")
         .map_err(CommandError::from_service_error)?;
     if let Some(app) = app {
         event_bridge::emit_job_progress(app, &job_id.0, 25, "Enumerating filesystem...");
-    }
-
-    if cancel.load(Ordering::Relaxed) {
-        return Err(CommandError::internal("Import cancelled by user"));
     }
 
     let stats = match kind {
@@ -396,6 +404,11 @@ pub fn execute_import_job(
             .map_err(CommandError::from_service_error)?
         }
     };
+
+    // Check for cancellation
+    if cancel_token.load(Ordering::Relaxed) {
+        return Err(CommandError::internal("Import cancelled by user"));
+    }
 
     job_repo
         .update_progress(job_id, 70, "Running post-import pipeline...")

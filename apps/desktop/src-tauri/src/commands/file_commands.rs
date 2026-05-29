@@ -33,19 +33,22 @@ pub async fn get_file_children_request(
 ) -> Result<Vec<FileTreeNodeDto>, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let guard = app_state
-            .active_case
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("Case", e))?;
-        let Some(active) = guard.as_ref() else {
-            return Ok(vec![]);
+        // Short lock: extract db_path, then release
+        let db_path = {
+            let guard = app_state
+                .active_case
+                .lock()
+                .map_err(|e| CommandError::from_lock_error("Case", e))?;
+            match guard.as_ref() {
+                Some(active) => active.db_path(),
+                None => return Ok(vec![]),
+            }
         };
-        active
-            .with_conn(|conn| {
-                file_service::get_file_children_lazy(conn, &request.parent_id)
-                    .map(|result| result.children)
-                    .map_err(persistence_sqlite::DbError::System)
-            })
+        // Guard is now dropped — query with released lock
+        let conn = persistence_sqlite::open_or_create(&db_path)
+            .map_err(CommandError::from_service_error)?;
+        file_service::get_file_children_lazy(&conn, &request.parent_id)
+            .map(|result| result.children)
             .map_err(CommandError::from_service_error)
     })
     .await
@@ -59,18 +62,21 @@ pub async fn get_file_tree(
 ) -> Result<Vec<FileTreeNodeDto>, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let guard = app_state
-            .active_case
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("Case", e))?;
-        let Some(active) = guard.as_ref() else {
-            return Ok(vec![]);
+        // Short lock: extract db_path, then release
+        let db_path = {
+            let guard = app_state
+                .active_case
+                .lock()
+                .map_err(|e| CommandError::from_lock_error("Case", e))?;
+            match guard.as_ref() {
+                Some(active) => active.db_path(),
+                None => return Ok(vec![]),
+            }
         };
-        active
-            .with_conn(|conn| {
-                file_service::get_file_tree_real(conn).map_err(persistence_sqlite::DbError::System)
-            })
-            .map_err(CommandError::from_service_error)
+        // Guard is now dropped — query with released lock
+        let conn = persistence_sqlite::open_or_create(&db_path)
+            .map_err(CommandError::from_service_error)?;
+        file_service::get_file_tree_real(&conn).map_err(CommandError::from_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -92,18 +98,21 @@ pub async fn get_file_rows_request(
 ) -> Result<Vec<FileEntryRowDto>, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let guard = app_state
-            .active_case
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("Case", e))?;
-        let Some(active) = guard.as_ref() else {
-            return Ok(vec![]);
+        // Short lock: extract db_path, then release
+        let db_path = {
+            let guard = app_state
+                .active_case
+                .lock()
+                .map_err(|e| CommandError::from_lock_error("Case", e))?;
+            match guard.as_ref() {
+                Some(active) => active.db_path(),
+                None => return Ok(vec![]),
+            }
         };
-        active
-            .with_conn(|conn| {
-                file_service::get_file_rows_for_request(conn, &request)
-                    .map_err(persistence_sqlite::DbError::System)
-            })
+        // Guard is now dropped — query with released lock
+        let conn = persistence_sqlite::open_or_create(&db_path)
+            .map_err(CommandError::from_service_error)?;
+        file_service::get_file_rows_for_request(&conn, &request)
             .map_err(CommandError::from_service_error)
     })
     .await
@@ -118,16 +127,19 @@ pub async fn open_file_handle(
 ) -> Result<ViewerHandleDto, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let guard = app_state
-            .active_case
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("Case", e))?;
-        let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-        active
-            .with_conn(|conn| {
-                app_services::file_service::open_file_handle_real(conn, &file_id)
-                    .map_err(persistence_sqlite::DbError::System)
-            })
+        // Short lock: extract db_path, then release
+        let db_path = {
+            let guard = app_state
+                .active_case
+                .lock()
+                .map_err(|e| CommandError::from_lock_error("Case", e))?;
+            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
+            active.db_path()
+        };
+        // Guard is now dropped — query with released lock
+        let conn = persistence_sqlite::open_or_create(&db_path)
+            .map_err(CommandError::from_service_error)?;
+        file_service::open_file_handle_real(&conn, &file_id)
             .map_err(CommandError::from_service_error)
     })
     .await
@@ -142,16 +154,19 @@ pub async fn open_file_handle_request(
 ) -> Result<ViewerHandleDto, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let guard = app_state
-            .active_case
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("Case", e))?;
-        let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-        active
-            .with_conn(|conn| {
-                app_services::file_service::open_file_handle_real(conn, &request.file_id)
-                    .map_err(persistence_sqlite::DbError::System)
-            })
+        // Short lock: extract db_path, then release
+        let db_path = {
+            let guard = app_state
+                .active_case
+                .lock()
+                .map_err(|e| CommandError::from_lock_error("Case", e))?;
+            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
+            active.db_path()
+        };
+        // Guard is now dropped — query with released lock
+        let conn = persistence_sqlite::open_or_create(&db_path)
+            .map_err(CommandError::from_service_error)?;
+        file_service::open_file_handle_real(&conn, &request.file_id)
             .map_err(CommandError::from_service_error)
     })
     .await
@@ -166,18 +181,21 @@ pub async fn read_file_range(
 ) -> Result<ViewerRangeResponseDto, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let guard = app_state
-            .active_case
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("Case", e))?;
-        let Some(active) = guard.as_ref() else {
-            return Ok(file_service::read_file_range_real(&request));
+        // Short lock: extract db_path, then release
+        let db_path = {
+            let guard = app_state
+                .active_case
+                .lock()
+                .map_err(|e| CommandError::from_lock_error("Case", e))?;
+            match guard.as_ref() {
+                Some(active) => active.db_path(),
+                None => return Ok(file_service::read_file_range_real(&request)),
+            }
         };
-        active
-            .with_conn(|conn| {
-                file_service::read_file_range_for_case(conn, &request)
-                    .map_err(persistence_sqlite::DbError::System)
-            })
+        // Guard is now dropped — query with released lock
+        let conn = persistence_sqlite::open_or_create(&db_path)
+            .map_err(CommandError::from_service_error)?;
+        file_service::read_file_range_for_case(&conn, &request)
             .map_err(CommandError::from_service_error)
     })
     .await

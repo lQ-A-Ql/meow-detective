@@ -74,6 +74,13 @@ pub fn get_current_case(state: State<AppState>) -> Result<Option<CaseSummaryDto>
 
 #[tauri::command]
 pub fn close_case(state: State<AppState>) -> Result<(), CommandError> {
+    // 1. Cancel all background tasks
+    state.task_manager.cancel_all();
+    
+    // 2. Wait for tasks to complete (with timeout)
+    let _ = state.task_manager.wait_all(std::time::Duration::from_secs(5));
+    
+    // 3. Clear active case
     let mut guard = state
         .active_case
         .lock()
@@ -179,23 +186,24 @@ pub async fn rename_data_source(
 ) -> Result<(), CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let guard = app_state
-            .active_case
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("Case", e))?;
-        let Some(_active) = guard.as_ref() else {
-            return Err(CommandError::no_active_case());
+        // Short lock: extract db_path, then release
+        let db_path = {
+            let guard = app_state
+                .active_case
+                .lock()
+                .map_err(|e| CommandError::from_lock_error("Case", e))?;
+            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
+            active.db_path()
         };
-        _active
-            .with_conn(|conn| {
-                app_services::file_service::rename_data_source_real(
-                    conn,
-                    &request.data_source_id,
-                    &request.name,
-                )
-                .map_err(persistence_sqlite::DbError::System)
-            })
-            .map_err(CommandError::from_service_error)
+        // Guard is now dropped — query with released lock
+        let conn = persistence_sqlite::open_or_create(&db_path)
+            .map_err(CommandError::from_service_error)?;
+        app_services::file_service::rename_data_source_real(
+            &conn,
+            &request.data_source_id,
+            &request.name,
+        )
+        .map_err(CommandError::from_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -261,23 +269,24 @@ pub async fn delete_data_source(
     let app_state = state.inner().clone();
     let ds_id = request.data_source_id.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let guard = app_state
-            .active_case
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("Case", e))?;
-        let Some(active) = guard.as_ref() else {
-            return Err(CommandError::no_active_case());
+        // Short lock: extract db_path, then release
+        let db_path = {
+            let guard = app_state
+                .active_case
+                .lock()
+                .map_err(|e| CommandError::from_lock_error("Case", e))?;
+            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
+            active.db_path()
         };
-        active
-            .with_conn(|conn| {
-                case_service::delete_data_source(conn, &ds_id)
-                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))
-            })
-            .map_err(CommandError::from_service_error)
+        // Guard is now dropped — query with released lock
+        let conn = persistence_sqlite::open_or_create(&db_path)
+            .map_err(CommandError::from_service_error)?;
+        case_service::delete_data_source(&conn, &ds_id)
+            .map_err(CommandError::from_service_error)?;
+        Ok("Data source deleted".to_string())
     })
     .await
-    .map_err(CommandError::from_join_error)??;
-    Ok("Data source deleted".to_string())
+    .map_err(CommandError::from_join_error)?
 }
 
 const RECENT_CASES_FILE: &str = "forensics-recent-cases.json";
