@@ -408,19 +408,6 @@ mod tests {
         let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
         let fat = ExfatReader::open(reader, 0).unwrap();
 
-        // Debug: read the root directory data directly
-        let root_cluster = fat.boot.first_cluster_of_root;
-        let root_data = fat.read_cluster_chain_data(root_cluster).unwrap();
-        println!("Root cluster: {}, data len: {}", root_cluster, root_data.len());
-        println!("First 96 bytes: {:?}", &root_data[..96.min(root_data.len())]);
-
-        // Debug: parse directory entries
-        let entries = dir::parse_directory_entries(&root_data).unwrap();
-        println!("Parsed {} entries", entries.len());
-        for e in &entries {
-            println!("  Entry: name='{}', first_cluster={}, is_dir={}", e.name, e.first_cluster, e.is_directory());
-        }
-
         let children = fat.list_children("").unwrap();
         assert_eq!(children.len(), 1);
         assert_eq!(children[0].name, "TEST.TXT");
