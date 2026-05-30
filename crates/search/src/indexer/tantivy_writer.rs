@@ -19,6 +19,8 @@ pub enum IndexError {
     Query(String),
     #[error("Index not open")]
     NotOpen,
+    #[error("Schema error: {0}")]
+    Schema(String),
 }
 
 pub type Result<T> = std::result::Result<T, IndexError>;
@@ -56,10 +58,15 @@ impl SearchIndex {
     ) -> Result<u64> {
         let mut writer: IndexWriter = self.index.writer(15_000_000)?;
 
-        let file_id_field = self.schema.get_field("file_id").unwrap();
-        let path_field = self.schema.get_field("path").unwrap();
-        let content_field = self.schema.get_field("content").unwrap();
-        let name_field = self.schema.get_field("name").unwrap();
+        // Schema fields are defined in the constructor — these should never fail
+        let file_id_field = self.schema.get_field("file_id")
+            .map_err(|_| IndexError::Schema("missing file_id field".into()))?;
+        let path_field = self.schema.get_field("path")
+            .map_err(|_| IndexError::Schema("missing path field".into()))?;
+        let content_field = self.schema.get_field("content")
+            .map_err(|_| IndexError::Schema("missing content field".into()))?;
+        let name_field = self.schema.get_field("name")
+            .map_err(|_| IndexError::Schema("missing name field".into()))?;
 
         let path_map: std::collections::HashMap<&str, (&str, &str)> = paths
             .iter()
@@ -102,9 +109,12 @@ impl SearchIndex {
             .try_into()?;
         let searcher = reader.searcher();
 
-        let content_field = self.schema.get_field("content").unwrap();
-        let file_id_field = self.schema.get_field("file_id").unwrap();
-        let path_field = self.schema.get_field("path").unwrap();
+        let content_field = self.schema.get_field("content")
+            .map_err(|_| IndexError::Schema("missing content field".into()))?;
+        let file_id_field = self.schema.get_field("file_id")
+            .map_err(|_| IndexError::Schema("missing file_id field".into()))?;
+        let path_field = self.schema.get_field("path")
+            .map_err(|_| IndexError::Schema("missing path field".into()))?;
 
         let query_parser = QueryParser::for_index(&self.index, vec![content_field]);
 

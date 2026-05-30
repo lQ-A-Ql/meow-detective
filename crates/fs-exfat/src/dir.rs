@@ -85,34 +85,44 @@ impl DirectoryEntry {
     }
 
     fn parse_file_entry(data: &[u8]) -> io::Result<Self> {
+        // SAFETY: caller validated data.len() >= DIR_ENTRY_SIZE (32)
+        let create_ts = u32::from_le_bytes(
+            data[8..12].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid create timestamp"))?
+        );
+        let modified_ts = u32::from_le_bytes(
+            data[12..16].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid modified timestamp"))?
+        );
+        let accessed_ts = u32::from_le_bytes(
+            data[16..20].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid accessed timestamp"))?
+        );
+
         Ok(Self::File {
             secondary_count: data[1],
             file_attributes: u16::from_le_bytes([data[4], data[5]]),
-            create_timestamp: parse_exfat_timestamp(
-                u32::from_le_bytes(data[8..12].try_into().unwrap()),
-                data[20],
-                data[22],
-            ),
-            modified_timestamp: parse_exfat_timestamp(
-                u32::from_le_bytes(data[12..16].try_into().unwrap()),
-                data[21],
-                data[23],
-            ),
-            accessed_timestamp: parse_exfat_timestamp(
-                u32::from_le_bytes(data[16..20].try_into().unwrap()),
-                0,
-                data[24],
-            ),
+            create_timestamp: parse_exfat_timestamp(create_ts, data[20], data[22]),
+            modified_timestamp: parse_exfat_timestamp(modified_ts, data[21], data[23]),
+            accessed_timestamp: parse_exfat_timestamp(accessed_ts, 0, data[24]),
         })
     }
 
     fn parse_stream_entry(data: &[u8]) -> io::Result<Self> {
+        // SAFETY: caller validated data.len() >= DIR_ENTRY_SIZE (32)
+        let valid_data_length = u64::from_le_bytes(
+            data[8..16].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid valid data length"))?
+        );
+        let first_cluster = u32::from_le_bytes(
+            data[20..24].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid first cluster"))?
+        );
+        let data_length = u64::from_le_bytes(
+            data[24..32].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid data length"))?
+        );
+
         Ok(Self::Stream {
             name_length: data[3],
             name_hash: u16::from_le_bytes([data[4], data[5]]),
-            valid_data_length: u64::from_le_bytes(data[8..16].try_into().unwrap()),
-            first_cluster: u32::from_le_bytes(data[20..24].try_into().unwrap()),
-            data_length: u64::from_le_bytes(data[24..32].try_into().unwrap()),
+            valid_data_length,
+            first_cluster,
+            data_length,
             no_fat_chain: data[1] & NO_FAT_CHAIN != 0,
         })
     }
@@ -131,9 +141,17 @@ impl DirectoryEntry {
     }
 
     fn parse_upcase_entry(data: &[u8]) -> io::Result<Self> {
+        // SAFETY: caller validated data.len() >= DIR_ENTRY_SIZE (32)
+        let first_cluster = u32::from_le_bytes(
+            data[20..24].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid first cluster"))?
+        );
+        let data_length = u64::from_le_bytes(
+            data[24..32].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid data length"))?
+        );
+
         Ok(Self::UpcaseTable {
-            first_cluster: u32::from_le_bytes(data[20..24].try_into().unwrap()),
-            data_length: u64::from_le_bytes(data[24..32].try_into().unwrap()),
+            first_cluster,
+            data_length,
         })
     }
 
@@ -331,7 +349,7 @@ pub fn parse_directory_entries(data: &[u8]) -> io::Result<Vec<FileEntrySet>> {
 fn parse_exfat_timestamp(
     timestamp: u32,
     increment_10ms: u8,
-    _utc_offset: u8,
+    utc_offset: u8,
 ) -> Option<DateTime<Utc>> {
     if timestamp == 0 {
         return None;
@@ -353,9 +371,22 @@ fn parse_exfat_timestamp(
     let naive = chrono::NaiveDate::from_ymd_opt(year, month, day)?
         .and_hms_milli_opt(hour, minute, second, increment_10ms as u32 * 10)?;
 
-    // Convert to UTC (exFAT stores local time with optional UTC offset)
-    // For simplicity, we'll treat it as UTC since the offset handling is complex
-    Some(naive.and_utc())
+    // exFAT UTC offset: signed 15-minute increments
+    // 0x00 = UTC, 0xFF = unknown (treat as UTC)
+    // 0x01..0xDF = positive offset (+15 to +3435 minutes)
+    // 0xE0..0xFE = negative offset (-480 to -15 minutes)
+    let offset_minutes: i64 = if utc_offset == 0xFF {
+        // Unknown offset — treat as local time (best effort)
+        0
+    } else if utc_offset <= 0xDF {
+        (utc_offset as i64) * 15
+    } else {
+        ((utc_offset as i64) - 256) * 15
+    };
+
+    // Convert local time to UTC by subtracting the offset
+    let utc_naive = naive - chrono::Duration::minutes(offset_minutes);
+    Some(utc_naive.and_utc())
 }
 
 #[cfg(test)]
@@ -439,6 +470,44 @@ mod tests {
     #[test]
     fn parse_exfat_timestamp_zero() {
         assert!(parse_exfat_timestamp(0, 0, 0).is_none());
+    }
+
+    #[test]
+    fn parse_exfat_timestamp_with_positive_utc_offset() {
+        // 2024-01-15 12:30:00 UTC+8 (offset = 0x20 = 32 * 15 = 480 min = 8 hours)
+        let timestamp = (44 << 25) | (1 << 20) | (15 << 15) | (12 << 10) | (30 << 4) | 0;
+        let utc_offset = 0x20; // UTC+8
+
+        let dt = parse_exfat_timestamp(timestamp, 0, utc_offset).unwrap();
+        // Local 12:30 UTC+8 → UTC 04:30
+        assert_eq!(dt.year(), 2024);
+        assert_eq!(dt.month(), 1);
+        assert_eq!(dt.day(), 15);
+        assert_eq!(dt.hour(), 4);
+        assert_eq!(dt.minute(), 30);
+    }
+
+    #[test]
+    fn parse_exfat_timestamp_with_negative_utc_offset() {
+        // 2024-01-15 12:30:00 UTC-5 (offset = 0xE0 = -32 * 15 = -480 min)
+        let timestamp = (44 << 25) | (1 << 20) | (15 << 15) | (12 << 10) | (30 << 4) | 0;
+        let utc_offset = 0xE0; // -480 min ≈ UTC-8
+
+        let dt = parse_exfat_timestamp(timestamp, 0, utc_offset).unwrap();
+        // Local 12:30 UTC-8 → UTC 20:30
+        assert_eq!(dt.year(), 2024);
+        assert_eq!(dt.hour(), 20);
+        assert_eq!(dt.minute(), 30);
+    }
+
+    #[test]
+    fn parse_exfat_timestamp_unknown_offset_treated_as_utc() {
+        // 2024-01-15 12:30:00 with unknown offset (0xFF)
+        let timestamp = (44 << 25) | (1 << 20) | (15 << 15) | (12 << 10) | (30 << 4) | 0;
+        let dt = parse_exfat_timestamp(timestamp, 0, 0xFF).unwrap();
+        // Should be treated as UTC (no adjustment)
+        assert_eq!(dt.hour(), 12);
+        assert_eq!(dt.minute(), 30);
     }
 
     #[test]

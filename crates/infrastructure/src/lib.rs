@@ -2,6 +2,6 @@ mod clock;
 pub mod config;
 pub mod constants;
 mod fs;
-mod hashing;
+pub mod hashing;
 mod logging;
 pub mod text;

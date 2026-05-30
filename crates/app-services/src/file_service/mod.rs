@@ -673,6 +673,19 @@ fn open_logical_file(source_path: &str, entry: &FileEntry) -> Result<Box<dyn Rea
         .map_err(|e| format!("Cannot access data source root: {}", e))?;
     let relative_path = safe_relative_path(&entry.path)?;
     let full_path = root.join(relative_path);
+
+    // Check for symlinks in the path before canonicalizing
+    let mut check_path = PathBuf::new();
+    for component in full_path.components() {
+        check_path.push(component);
+        if check_path.is_symlink() {
+            return Err(format!(
+                "Symlink detected in path at '{}' — rejected for security",
+                check_path.display()
+            ));
+        }
+    }
+
     let canonical = full_path
         .canonicalize()
         .map_err(|e| format!("Cannot access file '{}': {}", entry.path, e))?;
@@ -789,17 +802,80 @@ fn root_partition_index_for_entry(repo: &FileRepo<'_>, entry: &FileEntry) -> Opt
 }
 
 pub fn safe_relative_path(path: &str) -> Result<PathBuf, String> {
+    // Reject empty paths
+    if path.is_empty() {
+        return Err("Empty file path".to_string());
+    }
+
+    // Reject URL-encoded traversal attempts
+    let decoded = urlencoding_decode(path);
+    if decoded != path {
+        // Check if decoded version contains traversal
+        if decoded.contains("..") || decoded.contains('/') || decoded.contains('\\') {
+            return Err("URL-encoded traversal detected".to_string());
+        }
+    }
+
     let mut safe = PathBuf::new();
     for component in Path::new(path).components() {
         match component {
-            Component::Normal(part) => safe.push(part),
+            Component::Normal(part) => {
+                let s = part.to_str().ok_or("Invalid UTF-8 in path")?;
+                // Reject null byte injection
+                if s.contains('\0') {
+                    return Err("Null byte in path".to_string());
+                }
+                // Reject Windows reserved names
+                if is_windows_reserved_name(s) {
+                    return Err(format!("Reserved name: {}", s));
+                }
+                safe.push(part);
+            }
             Component::CurDir => {}
             Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
                 return Err("Unsafe file path in catalog".to_string());
             }
         }
     }
+
+    // Reject excessively long paths
+    if safe.as_os_str().len() > infrastructure::constants::MAX_PATH_LENGTH {
+        return Err("Path too long".to_string());
+    }
+
     Ok(safe)
+}
+
+/// Decode URL-encoded characters in a path
+fn urlencoding_decode(path: &str) -> String {
+    let mut result = String::with_capacity(path.len());
+    let mut chars = path.chars();
+    while let Some(c) = chars.next() {
+        if c == '%' {
+            let hex: String = chars.by_ref().take(2).collect();
+            if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                result.push(byte as char);
+            } else {
+                result.push(c);
+                result.push_str(&hex);
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
+/// Check if a filename is a Windows reserved name
+fn is_windows_reserved_name(name: &str) -> bool {
+    const RESERVED: &[&str] = &[
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    ];
+    let upper = name.to_ascii_uppercase();
+    let stem = upper.split('.').next().unwrap_or(&upper);
+    RESERVED.contains(&stem)
 }
 
 fn skip_reader_bytes(reader: &mut dyn Read, mut remaining: u64) -> Result<(), String> {
@@ -1217,4 +1293,59 @@ fn update_entry_paths(
 
 fn errs_add(errors: &Arc<AtomicU64>) {
     errors.fetch_add(1, Ordering::Relaxed);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn safe_path_rejects_dot_dot_traversal() {
+        assert!(safe_relative_path("../etc/passwd").is_err());
+        assert!(safe_relative_path("foo/../../bar").is_err());
+        assert!(safe_relative_path("..\\windows\\system32").is_err());
+    }
+
+    #[test]
+    fn safe_path_rejects_url_encoded_traversal() {
+        assert!(safe_relative_path("%2e%2e%2fetc%2fpasswd").is_err());
+        assert!(safe_relative_path("foo%2f%2e%2e%2fbar").is_err());
+    }
+
+    #[test]
+    fn safe_path_rejects_null_byte() {
+        assert!(safe_relative_path("file.txt\0.jpg").is_err());
+    }
+
+    #[test]
+    fn safe_path_rejects_absolute_path() {
+        assert!(safe_relative_path("/etc/passwd").is_err());
+    }
+
+    #[test]
+    fn safe_path_accepts_valid_paths() {
+        assert!(safe_relative_path("documents/file.txt").is_ok());
+        assert!(safe_relative_path("a/b/c.txt").is_ok());
+        assert!(safe_relative_path("simple.txt").is_ok());
+    }
+
+    #[test]
+    fn safe_path_rejects_empty_path() {
+        assert!(safe_relative_path("").is_err());
+    }
+
+    #[test]
+    fn safe_path_rejects_windows_reserved_names() {
+        assert!(safe_relative_path("CON").is_err());
+        assert!(safe_relative_path("NUL.txt").is_err());
+        assert!(safe_relative_path("COM1").is_err());
+        assert!(safe_relative_path("LPT1.dat").is_err());
+    }
+
+    #[test]
+    fn safe_path_allows_normal_names() {
+        assert!(safe_relative_path("config.txt").is_ok());
+        assert!(safe_relative_path("data.json").is_ok());
+        assert!(safe_relative_path("folder/subfolder/file.log").is_ok());
+    }
 }
