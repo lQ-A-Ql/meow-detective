@@ -11,10 +11,15 @@ use commands::{
     },
     file_commands::{
         get_file_children, get_file_children_request, get_file_rows, get_file_rows_request,
-        get_file_tree, open_file_handle, open_file_handle_request, read_file_range,
+        get_file_tree, get_image_preview, get_media_url, get_text_preview, open_file_handle, open_file_handle_request, read_file_range,
     },
     import::pipeline::{cancel_import, import_data_source},
     job_commands::{get_jobs_snapshot, get_trace_items, get_warnings},
+    mcp_commands::{
+        add_mcp_server, call_mcp_tool, connect_mcp_server, disconnect_mcp_server,
+        get_mcp_config, get_mcp_prompt, list_mcp_prompts, list_mcp_resources, list_mcp_tools,
+        remove_mcp_server, save_mcp_config, test_mcp_connection,
+    },
     report_commands::{
         export_csv_report, export_html_report, export_json_report, get_report_history,
         get_report_templates,
@@ -51,6 +56,9 @@ pub fn run() {
             open_file_handle,
             open_file_handle_request,
             read_file_range,
+            get_text_preview,
+            get_image_preview,
+            get_media_url,
             search_files,
             search_files_request,
             get_timeline_events,
@@ -65,6 +73,19 @@ pub fn run() {
             get_jobs_snapshot,
             get_warnings,
             get_trace_items,
+            // MCP commands
+            get_mcp_config,
+            save_mcp_config,
+            add_mcp_server,
+            remove_mcp_server,
+            connect_mcp_server,
+            disconnect_mcp_server,
+            test_mcp_connection,
+            list_mcp_resources,
+            list_mcp_tools,
+            call_mcp_tool,
+            list_mcp_prompts,
+            get_mcp_prompt,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

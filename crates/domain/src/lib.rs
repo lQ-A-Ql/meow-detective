@@ -1,15 +1,18 @@
 pub mod artifact;
 pub mod case;
 pub mod datasource;
+pub mod error;
 pub mod file_entry;
 pub mod job;
 pub mod report;
 pub mod tag;
+pub mod timestamp;
 pub mod timeline;
 
 pub use artifact::{Artifact, ArtifactFamily, ArtifactId};
 pub use case::{CaseId, CaseMeta, CaseSession};
 pub use datasource::{DataSource, DataSourceId, DataSourceKind};
+pub use error::{ForensicsError, ForensicsResult};
 pub use file_entry::{EntryType, FileEntry, FileEntryId};
 pub use job::{Job, JobId, JobScope, JobStatus};
 pub use report::{ReportHistoryItem, ReportId, ReportStatus, ReportTemplate};

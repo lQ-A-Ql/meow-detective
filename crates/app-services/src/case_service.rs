@@ -1,7 +1,9 @@
 use chrono::Utc;
 use domain::{CaseId, CaseMeta};
 use persistence_sqlite::{
-    open_existing, open_or_create, repositories::case_repo::CaseRepo, runner,
+    open_existing, open_or_create,
+    repositories::{case_repo::CaseRepo, audit_repo::{AuditRepo, AuditAction}},
+    runner,
 };
 use rusqlite::Connection;
 use std::{
@@ -113,6 +115,16 @@ pub fn create_case(root: &Path, name: &str, examiner: Option<&str>) -> Result<Ac
 
     CaseRepo::new(&conn).create(&case)?;
 
+    // 记录审计日志
+    let audit = AuditRepo::new(&conn);
+    let _ = audit.log(
+        Some(&case.id.0),
+        "system",
+        &AuditAction::CaseCreate,
+        Some(&case.id.0),
+        &serde_json::json!({"name": name, "examiner": examiner}).to_string(),
+    );
+
     let case_json = serde_json::to_string_pretty(&case)?;
     fs::write(case_root.join("case.json"), case_json)?;
 
@@ -149,6 +161,14 @@ pub fn open_case(root: &Path) -> Result<ActiveCase> {
     let stored = CaseRepo::new(&conn)
         .find_by_id(&case_from_json.id)?
         .ok_or_else(|| CaseServiceError::InvalidCaseDir("Case not in database".to_string()))?;
+
+    // 记录审计日志
+    let audit = AuditRepo::new(&conn);
+    let _ = audit.log_simple(
+        Some(&stored.id.0),
+        &AuditAction::CaseOpen,
+        Some(&stored.id.0),
+    );
 
     Ok(ActiveCase::new(stored, root.to_path_buf(), conn))
 }

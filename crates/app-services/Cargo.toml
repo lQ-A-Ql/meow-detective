@@ -28,6 +28,7 @@ timeline.workspace = true
 reports.workspace = true
 rusqlite = { version = "0.31", features = ["bundled"] }
 uuid = { version = "1", features = ["v4"] }
+encoding_rs = "0.8"
 
 [dev-dependencies]
 tempfile = "3"

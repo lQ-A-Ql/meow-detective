@@ -1,0 +1,20 @@
+[package]
+name = "mcp-client"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
+uuid = { version = "1", features = ["v4"] }
+chrono.workspace = true
+async-trait = "0.1"
+
+[dev-dependencies]
+tokio-test = "0.4"

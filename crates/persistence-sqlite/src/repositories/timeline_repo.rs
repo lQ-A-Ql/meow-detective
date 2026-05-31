@@ -12,6 +12,11 @@ impl<'a> TimelineRepo<'a> {
     }
 
     pub fn insert_batch(&self, events: &[TimelineEvent]) -> DbResult<()> {
+        self.insert_batch_with_case(events, "")
+    }
+
+    /// 插入时间线事件（带 case_id）
+    pub fn insert_batch_with_case(&self, events: &[TimelineEvent], case_id: &str) -> DbResult<()> {
         let tx = self.conn.unchecked_transaction()?;
         {
             let mut stmt = tx.prepare_cached(
@@ -21,7 +26,7 @@ impl<'a> TimelineRepo<'a> {
             for ev in events {
                 stmt.execute(params![
                     ev.id.0,
-                    "",
+                    case_id,
                     ev.source_object_id,
                     ev.event_type,
                     ev.timestamp.to_rfc3339(),

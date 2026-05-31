@@ -667,6 +667,33 @@ fn file_id_from_handle(handle_id: &str) -> Result<&str, String> {
         .ok_or_else(|| "Invalid file handle".to_string())
 }
 
+/// Get the full file path for a file entry.
+pub fn get_file_path_for_entry(
+    conn: &Connection,
+    file_id: &str,
+) -> Result<PathBuf, String> {
+    let repo = FileRepo::new(conn);
+    let entry = repo
+        .find_by_id(&FileEntryId(file_id.to_string()))
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "File not found".to_string())?;
+
+    let (kind, source_path) = repo
+        .find_data_source_location(&entry.data_source_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Data source not found".to_string())?;
+
+    if kind == "logical_directory" {
+        let root = PathBuf::from(&source_path)
+            .canonicalize()
+            .map_err(|e| format!("Cannot access data source root: {}", e))?;
+        let relative_path = safe_relative_path(&entry.path)?;
+        Ok(root.join(relative_path))
+    } else {
+        Err("File path only available for logical directories".to_string())
+    }
+}
+
 fn open_logical_file(source_path: &str, entry: &FileEntry) -> Result<Box<dyn Read>, String> {
     let root = PathBuf::from(source_path)
         .canonicalize()

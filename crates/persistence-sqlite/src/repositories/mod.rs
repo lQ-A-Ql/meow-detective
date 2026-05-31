@@ -1,4 +1,5 @@
 pub mod artifact_repo;
+pub mod audit_repo;
 pub mod case_repo;
 pub mod datasource_repo;
 pub mod file_repo;

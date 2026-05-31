@@ -15,6 +15,7 @@ members = [
   "crates/image-e01",
   "crates/catalog",
   "crates/ingest",
+  "crates/mcp-client",
   "crates/search",
   "crates/timeline",
   "crates/artifacts-core",

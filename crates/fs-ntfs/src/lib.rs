@@ -195,10 +195,21 @@ impl NtfsReader {
     // --- Non-resident attribute & INDX record helpers ---
 
     /// Parse NTFS data run list. Returns Vec<(LCN, cluster_count)>.
+    ///
+    /// Limits the number of data runs to prevent excessive memory allocation
+    /// from malicious or corrupted NTFS metadata.
     fn parse_data_runs(&self, mut data: &[u8]) -> io::Result<Vec<(i64, u64)>> {
+        const MAX_DATA_RUNS: usize = 100_000;
+
         let mut runs = Vec::new();
         let mut prev_lcn: i64 = 0;
         while !data.is_empty() && data[0] != 0 {
+            if runs.len() >= MAX_DATA_RUNS {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("too many data runs (limit: {})", MAX_DATA_RUNS),
+                ));
+            }
             let header = data[0];
             let size_bytes = (header & 0x0F) as usize;
             let offset_bytes = ((header >> 4) & 0x0F) as usize;

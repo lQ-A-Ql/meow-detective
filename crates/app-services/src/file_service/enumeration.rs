@@ -2,12 +2,14 @@
 //!
 //! Handles walking filesystem trees and inserting FileEntry records into SQLite.
 
+use crate::hash_service::HashService;
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
 use evidence_core::FileSystemReader;
 use infrastructure::constants::FILE_INSERT_BATCH_SIZE;
 use persistence_sqlite::{repositories::file_repo::FileRepo, DbResult};
 use rusqlite::Connection;
 use std::collections::VecDeque;
+use std::path::Path;
 use uuid::Uuid;
 
 /// Statistics collected during filesystem enumeration.
@@ -169,4 +171,60 @@ fn walk_and_insert_children(
     }
 
     Ok(stats)
+}
+
+/// 为数据源中的文件计算 SHA-256 哈希
+///
+/// 遍历所有文件条目，计算哈希并更新数据库。
+/// 仅对逻辑目录类型的数据源有效。
+pub fn compute_hashes_for_data_source(
+    conn: &Connection,
+    data_source_id: &DataSourceId,
+    source_root: &Path,
+    progress_fn: Option<&dyn Fn(u32)>,
+) -> DbResult<u64> {
+    let repo = FileRepo::new(conn);
+    let entries = repo.find_by_data_source(data_source_id)?;
+
+    let file_entries: Vec<_> = entries
+        .iter()
+        .filter(|e| e.entry_type == EntryType::File && e.hash_sha256.is_none())
+        .collect();
+
+    let total = file_entries.len() as u64;
+    let mut processed = 0u64;
+    let mut computed = 0u64;
+
+    for entry in file_entries {
+        let file_path = source_root.join(&entry.path);
+        match HashService::sha256_file(&file_path) {
+            Ok(hash) => {
+                // 更新数据库中的哈希值
+                conn.execute(
+                    "UPDATE file_entries SET hash_sha256 = ?1 WHERE id = ?2",
+                    rusqlite::params![hash, entry.id.0],
+                )?;
+                computed += 1;
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to compute hash for {}: {}",
+                    entry.path,
+                    e
+                );
+            }
+        }
+
+        processed += 1;
+        if let Some(ref pf) = progress_fn {
+            let pct = if total > 0 {
+                (processed * 100 / total) as u32
+            } else {
+                100
+            };
+            pf(pct);
+        }
+    }
+
+    Ok(computed)
 }

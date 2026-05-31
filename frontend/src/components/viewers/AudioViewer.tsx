@@ -1,0 +1,233 @@
+/**
+ * AudioViewer - 音频预览组件
+ *
+ * 功能：
+ * - 播放/暂停
+ * - 进度条拖拽
+ * - 音量控制
+ * - 音频信息显示
+ */
+
+import { useRef, useState, useEffect, useCallback } from 'react';
+import { Play, Pause, Volume2, VolumeX, Music, SkipBack, SkipForward } from 'lucide-react';
+
+interface AudioViewerProps {
+  /** 音频 URL */
+  src: string;
+  /** MIME 类型 */
+  mimeType?: string;
+  /** 文件名 */
+  fileName?: string;
+}
+
+export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // 播放/暂停
+  const togglePlay = useCallback(() => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play().catch((e) => {
+          setError(`播放失败: ${e.message}`);
+        });
+      }
+      setIsPlaying(!isPlaying);
+    }
+  }, [isPlaying]);
+
+  // 快进/快退
+  const skip = useCallback((seconds: number) => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = Math.max(
+        0,
+        Math.min(duration, audioRef.current.currentTime + seconds)
+      );
+    }
+  }, [duration]);
+
+  // 切换静音
+  const toggleMute = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.muted = !isMuted;
+      setIsMuted(!isMuted);
+    }
+  }, [isMuted]);
+
+  // 音频事件监听
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const handleLoadedMetadata = () => {
+      setDuration(audio.duration);
+      setIsLoading(false);
+    };
+    const handleEnded = () => setIsPlaying(false);
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
+    const handleError = () => {
+      setError('音频加载失败');
+      setIsLoading(false);
+    };
+
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('play', handlePlay);
+    audio.addEventListener('pause', handlePause);
+    audio.addEventListener('error', handleError);
+
+    return () => {
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('play', handlePlay);
+      audio.removeEventListener('pause', handlePause);
+      audio.removeEventListener('error', handleError);
+    };
+  }, []);
+
+  // 格式化时间
+  const formatTime = (seconds: number) => {
+    if (!isFinite(seconds)) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // 计算进度百分比
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  return (
+    <div className="flex flex-col h-full bg-[#1a1a1a] text-white p-6">
+      {/* 音频图标 */}
+      <div className="flex items-center justify-center mb-6">
+        <div className="w-24 h-24 rounded-full bg-[#2a2a2a] flex items-center justify-center">
+          <Music size={48} className="text-[#666]" />
+        </div>
+      </div>
+
+      {/* 文件名 */}
+      {fileName && (
+        <div className="text-[14px] font-medium mb-2 text-center truncate">
+          {fileName}
+        </div>
+      )}
+
+      {/* 加载/错误状态 */}
+      {isLoading && (
+        <div className="text-center text-[#999] text-[12px] mb-4">加载中...</div>
+      )}
+      {error && (
+        <div className="text-center text-red-400 text-[12px] mb-4">{error}</div>
+      )}
+
+      {/* 进度条 */}
+      <div className="w-full mb-4">
+        <div className="relative h-1.5 bg-[#333] rounded-full overflow-hidden">
+          <div
+            className="absolute left-0 top-0 h-full bg-white rounded-full transition-all duration-100"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={duration || 0}
+          step={0.1}
+          value={currentTime}
+          onChange={(e) => {
+            const time = parseFloat(e.target.value);
+            if (audioRef.current) {
+              audioRef.current.currentTime = time;
+            }
+            setCurrentTime(time);
+          }}
+          className="w-full h-1 opacity-0 absolute top-0 cursor-pointer"
+          style={{ marginTop: '-2px' }}
+        />
+      </div>
+
+      {/* 时间显示 */}
+      <div className="flex justify-between text-[11px] text-[#999] mb-6 font-mono">
+        <span>{formatTime(currentTime)}</span>
+        <span>{formatTime(duration)}</span>
+      </div>
+
+      {/* 控制按钮 */}
+      <div className="flex items-center justify-center gap-6">
+        {/* 快退 */}
+        <button
+          onClick={() => skip(-10)}
+          className="text-[#999] hover:text-white transition-colors"
+        >
+          <SkipBack size={20} />
+        </button>
+
+        {/* 播放/暂停 */}
+        <button
+          onClick={togglePlay}
+          className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center hover:bg-gray-200 transition-colors"
+        >
+          {isPlaying ? <Pause size={24} /> : <Play size={24} className="ml-1" />}
+        </button>
+
+        {/* 快进 */}
+        <button
+          onClick={() => skip(10)}
+          className="text-[#999] hover:text-white transition-colors"
+        >
+          <SkipForward size={20} />
+        </button>
+      </div>
+
+      {/* 音量控制 */}
+      <div className="flex items-center justify-center gap-3 mt-6">
+        <button
+          onClick={toggleMute}
+          className="text-[#999] hover:text-white transition-colors"
+        >
+          {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+        </button>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={isMuted ? 0 : volume}
+          onChange={(e) => {
+            const vol = parseFloat(e.target.value);
+            setVolume(vol);
+            setIsMuted(vol === 0);
+            if (audioRef.current) {
+              audioRef.current.volume = vol;
+            }
+          }}
+          className="w-24 h-1 bg-[#333] rounded-lg appearance-none cursor-pointer"
+        />
+        <span className="text-[10px] text-[#666] w-8">
+          {Math.round((isMuted ? 0 : volume) * 100)}%
+        </span>
+      </div>
+
+      {/* 文件信息 */}
+      <div className="mt-6 text-center text-[10px] text-[#666]">
+        <span>{mimeType || 'audio'}</span>
+      </div>
+
+      {/* 隐藏的音频元素 */}
+      <audio ref={audioRef} src={src} preload="metadata" />
+    </div>
+  );
+}
