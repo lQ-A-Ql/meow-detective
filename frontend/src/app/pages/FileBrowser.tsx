@@ -10,6 +10,10 @@ import {
 } from '@/components/layout/InspectorPane';
 import { DenseDataTable } from '@/components/tables/DenseDataTable';
 import { ViewerTabs } from '@/components/viewers/ViewerTabs';
+import { TextViewer } from '@/components/viewers/TextViewer';
+import { ImageViewer } from '@/components/viewers/ImageViewer';
+import { VideoViewer } from '@/components/viewers/VideoViewer';
+import { AudioViewer } from '@/components/viewers/AudioViewer';
 import { TreeConnector } from '@/components/tree/TreeConnector';
 import { TreeSearch } from '@/components/tree/TreeSearch';
 import { useFileTreeKeyboard } from '@/hooks/use-file-tree-keyboard';
@@ -19,6 +23,9 @@ import {
   useFileRows,
   useFileTree,
   useFileViewer,
+  useTextPreview,
+  useImagePreview,
+  useMediaUrl,
 } from '@/features/files/hooks';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useUiStore } from '@/stores/ui-store';
@@ -134,6 +141,9 @@ export function FileBrowser() {
 
   const selectedFile = rows?.find((row) => row.id === selectedFileId);
   const { data: viewer } = useFileViewer(selectedFile?.id);
+  const { data: textPreview } = useTextPreview(selectedFile?.id);
+  const { data: imagePreview } = useImagePreview(selectedFile?.id);
+  const { data: mediaUrl } = useMediaUrl(selectedFile?.id);
 
   const flatTree = useMemo(() => {
     const visible: FileTreeNode[] = [];
@@ -539,32 +549,74 @@ export function FileBrowser() {
                 {
                   value: 'text',
                   label: '文本',
-                  content: (
-                    <div className="space-y-2 font-mono text-[11px] text-[#444]">
-                      <div className="text-[#888]">
-                        文本预览尚未实现，当前 demo 只保证 metadata 与 hex
-                        可用。
-                      </div>
-                      <div className="border border-[#e0e0e0] bg-white p-3 text-[#666]">
-                        选择文本文件后可继续扩展编码识别与字符串提取。
-                      </div>
+                  content: textPreview && !textPreview.isBinary ? (
+                    <TextViewer
+                      content={textPreview.content}
+                      encoding={textPreview.encoding}
+                      extension={selectedFile?.ext}
+                      isTruncated={textPreview.isTruncated}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-[#888]">
+                      {textPreview?.isBinary ? '二进制文件，无法预览文本' : '选择文本文件后显示预览'}
                     </div>
                   ),
                 },
                 {
                   value: 'preview',
                   label: '预览',
-                  content: (
-                    <div className="space-y-2 text-[11px] text-[#555]">
-                      <div className="text-[#888] font-mono">
-                        预览状态: 降级模式
+                  content: (() => {
+                    const mime = viewer?.handle.mime || selectedFile?.ext || '';
+                    
+                    // 图片预览
+                    if (mime.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(mime)) {
+                      if (imagePreview?.dataUrl) {
+                        return (
+                          <ImageViewer
+                            src={imagePreview.dataUrl}
+                            mimeType={imagePreview.mimeType}
+                            fileName={selectedFile?.name}
+                          />
+                        );
+                      }
+                      return <div className="flex items-center justify-center h-full text-[#888]">加载图片预览...</div>;
+                    }
+                    
+                    // 视频预览
+                    if (mime.startsWith('video/') || ['mp4', 'webm', 'avi', 'mkv'].includes(mime)) {
+                      if (mediaUrl?.url) {
+                        return (
+                          <VideoViewer
+                            src={mediaUrl.url}
+                            mimeType={mediaUrl.mimeType}
+                            fileName={selectedFile?.name}
+                          />
+                        );
+                      }
+                      return <div className="flex items-center justify-center h-full text-[#888]">加载视频预览...</div>;
+                    }
+                    
+                    // 音频预览
+                    if (mime.startsWith('audio/') || ['mp3', 'wav', 'flac', 'aac', 'ogg'].includes(mime)) {
+                      if (mediaUrl?.url) {
+                        return (
+                          <AudioViewer
+                            src={mediaUrl.url}
+                            mimeType={mediaUrl.mimeType}
+                            fileName={selectedFile?.name}
+                          />
+                        );
+                      }
+                      return <div className="flex items-center justify-center h-full text-[#888]">加载音频预览...</div>;
+                    }
+                    
+                    // 默认
+                    return (
+                      <div className="flex items-center justify-center h-full text-[#888]">
+                        选择图片、视频或音频文件后显示预览
                       </div>
-                      <div className="border border-dashed border-[#d7d7d7] bg-white p-4">
-                        当前 demo 暂未生成媒体预览，但不会影响文件浏览与
-                        hex 查看。
-                      </div>
-                    </div>
-                  ),
+                    );
+                  })(),
                 },
                 {
                   value: 'metadata',

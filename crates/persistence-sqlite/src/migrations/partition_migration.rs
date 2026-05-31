@@ -169,7 +169,7 @@ mod tests {
         let conn = crate::connection::open_in_memory().unwrap();
         conn.execute_batch(
             "CREATE TABLE data_sources (id TEXT PRIMARY KEY, case_id TEXT, name TEXT, kind TEXT, source_path TEXT, imported_at TEXT);
-             CREATE TABLE partitions (id TEXT PRIMARY KEY, data_source_id TEXT REFERENCES data_sources(id), partition_index INTEGER, name TEXT, kind_label TEXT, status TEXT, type_guid TEXT, offset INTEGER, length INTEGER, filesystem TEXT, unlock_hint TEXT, created_at TEXT DEFAULT (datetime('now')));"
+             CREATE TABLE data_source_partitions (id TEXT PRIMARY KEY, data_source_id TEXT REFERENCES data_sources(id), partition_index INTEGER, name TEXT, kind_label TEXT, status TEXT, type_guid TEXT, offset INTEGER, length INTEGER, filesystem TEXT, unlock_hint TEXT);"
         ).unwrap();
 
         conn.execute(

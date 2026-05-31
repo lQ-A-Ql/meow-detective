@@ -27,6 +27,26 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0010_job_partition_progress",
         include_str!("scripts/0010_job_partition_progress.sql"),
     ),
+    (
+        "0011_fix_timeline_case_id",
+        include_str!("scripts/0011_fix_timeline_case_id.sql"),
+    ),
+    (
+        "0012_add_indexes",
+        include_str!("scripts/0012_add_indexes.sql"),
+    ),
+    (
+        "0013_create_partitions",
+        include_str!("scripts/0013_create_partitions.sql"),
+    ),
+    (
+        "0014_migrate_partitions",
+        include_str!("scripts/0014_migrate_partitions.sql"),
+    ),
+    (
+        "0015_create_audit_log",
+        include_str!("scripts/0015_create_audit_log.sql"),
+    ),
 ];
 
 pub fn run_all(conn: &Connection) -> DbResult<u32> {

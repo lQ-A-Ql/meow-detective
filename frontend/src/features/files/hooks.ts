@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getFileChildren, getFileRows, getFileTree, importDataSource, openFileHandle, readFileRange } from '@/lib/api/files';
+import { getFileChildren, getFileRows, getFileTree, getTextPreview, getImagePreview, getMediaUrl, importDataSource, openFileHandle, readFileRange } from '@/lib/api/files';
 import { expectJobsSnapshotActivity } from '@/features/jobs/hooks';
 
 const importRefreshKeys = [['case'], ['files'], ['timeline'], ['artifacts'], ['search']] as const;
@@ -60,6 +60,54 @@ export function useFileViewer(fileId?: string) {
       const handle = await openFileHandle(fileId!);
       const range = await readFileRange({ handleId: handle.handleId, offset: 0, length: 96 });
       return { handle, range };
+    },
+  });
+}
+
+/**
+ * Hook to get text preview for a file.
+ * Returns text content with encoding detection.
+ */
+export function useTextPreview(fileId?: string) {
+  return useQuery({
+    queryKey: ['files', 'text', fileId],
+    enabled: Boolean(fileId),
+    retry: false,
+    queryFn: async () => {
+      if (!fileId) return null;
+      return await getTextPreview(fileId, 1024 * 1024); // 1MB limit
+    },
+  });
+}
+
+/**
+ * Hook to get image preview for a file.
+ * Returns base64-encoded image data.
+ */
+export function useImagePreview(fileId?: string) {
+  return useQuery({
+    queryKey: ['files', 'image', fileId],
+    enabled: Boolean(fileId),
+    retry: false,
+    queryFn: async () => {
+      if (!fileId) return null;
+      return await getImagePreview(fileId);
+    },
+  });
+}
+
+/**
+ * Hook to get media URL for video/audio playback.
+ * Returns a local file URL.
+ */
+export function useMediaUrl(fileId?: string) {
+  return useQuery({
+    queryKey: ['files', 'media', fileId],
+    enabled: Boolean(fileId),
+    retry: false,
+    queryFn: async () => {
+      if (!fileId) return null;
+      return await getMediaUrl(fileId);
     },
   });
 }
