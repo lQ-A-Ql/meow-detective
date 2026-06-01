@@ -1,6 +1,6 @@
 # Forensics Workbench 剩余 v2.1 Backlog 状态与修补方案
 
-**更新时间**: 2026-06-02 03:05:16 +08:00
+**更新时间**: 2026-06-02 03:10:13 +08:00
 **署名**: Codex  
 **基线**: `e7ffa35` -> `codex/beta-forensics-backlog`；本文件记录 v2.1 backlog 在可信 beta 收口实现后的当前状态、验收命令和剩余修补方案。
 
@@ -86,7 +86,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 | Task | 状态 | 当前结果 / 剩余动作 |
 |---|---|---|
 | 6.1 FS enum 去重 | Remaining | NTFS/FAT/exFAT 共用枚举/错误转换仍可抽出，需保持 public API 不破坏 |
-| 6.2 SQL 下沉 repo | Partial | 新增命令遵守 validate -> service/helper -> DTO；既有 command layer 残留 SQL 仍需逐步下沉 |
+| 6.2 SQL 下沉 repo | Completed / guarded | 复核 `apps/desktop/src-tauri/src/commands` 无原始 SQL 语句或 `rusqlite::params!/prepare/execute` 低层调用；新增 `scripts/check-command-sql-boundary.ps1` 并接入 backend CI，防止后续把业务 SQL 写回 command layer。Command layer 允许打开连接并调用 repository/service/helper，保持 validate -> service/helper -> DTO 边界 |
 | 6.3 常量集中 | Completed | preview max、artifact max、pagination max、analysis sample max 等关键限制已集中到 transport/infrastructure 常量 |
 | 6.4 Public docs | Completed | `cargo doc --workspace --no-deps` 已通过；同时修复 rustdoc bare URL / invalid intra-doc link warnings |
 | 6.5 开发记录与修复计划更新 | Completed | 本文件、`docs/开发记录.md` 和 `development-reports/sessions/` 记录 subagent 分工、主线程统一复核、验证命令与剩余风险 |
@@ -109,6 +109,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 - `cargo test -p transport events`: 通过。
 - `cargo clippy -p forensics-desktop --all-targets -- -D warnings`: 通过。
 - `pnpm --dir frontend test -- events`: 通过，1 file / 1 test。
+- `powershell -ExecutionPolicy Bypass -File scripts\check-command-sql-boundary.ps1`: 通过。
 - `cargo test -p reports`: 通过。
 - `cargo test -p testing`: 通过。
 - `pnpm --dir frontend test -- Settings`: 通过，3 files / 11 tests。
@@ -133,6 +134,7 @@ pnpm --dir frontend test                           # 通过；13 files / 53 test
 pnpm --dir frontend build                          # 通过；Vite chunk size warning
 cargo build -p forensics-desktop                   # 通过
 powershell -ExecutionPolicy Bypass -File scripts\check-release-guard.ps1 # 通过
+powershell -ExecutionPolicy Bypass -File scripts\check-command-sql-boundary.ps1 # 通过
 cargo doc --workspace --no-deps                    # 通过
 powershell -ExecutionPolicy Bypass -File scripts\check-deny-exceptions.ps1 # 通过
 cargo deny check advisories bans licenses sources  # 通过；duplicate dependency warnings
