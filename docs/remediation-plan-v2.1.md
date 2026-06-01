@@ -1,6 +1,6 @@
 # Forensics Workbench 剩余 v2.1 Backlog 状态与修补方案
 
-**更新时间**: 2026-06-02 03:10:13 +08:00
+**更新时间**: 2026-06-02 03:19:24 +08:00
 **署名**: Codex  
 **基线**: `e7ffa35` -> `codex/beta-forensics-backlog`；本文件记录 v2.1 backlog 在可信 beta 收口实现后的当前状态、验收命令和剩余修补方案。
 
@@ -8,7 +8,7 @@
 
 v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis provenance 契约、Reports analysis provenance、Job partial/warning/skipped/failed 语义、媒体 scoped handle + bounded range command、`evidence-media` Tauri protocol、Registry 定向字段 parser、EVTX boot/shutdown candidate adapter、`cargo deny`/`cargo audit`/`pnpm audit` 依赖门禁、CycloneDX SBOM CI artifact、tiny logical/RAW fixtures 和前端 Vite/Vitest 安全升级。
 
-剩余风险集中在解析覆盖和架构债：Registry parser 是定向字段解析器，不是完整 hive browser；EVTX adapter 已接入 `evtx` crate 并解析 6005/6006/6008/1074 候选事件，但仓库内尚无合法 tiny real `.evtx` fixture。补充复核确认 `evtx 0.11.2` crates.io 发布包通过 `exclude = ["**/*.evtx", "**/*.dat"]` 排除了真实 EVTX 样本，且 `encoding = "0.2.33"` 是直接非可选依赖，不能通过关闭 feature 消除 `RUSTSEC-2021-0153`；当前通过 `deny.toml` 临时例外跟踪。tiny E01 fixture 尚未入库；FS enum 去重和 command layer SQL 下沉仍是后续质量项。
+剩余风险集中在解析覆盖和架构债：Registry parser 是定向字段解析器，不是完整 hive browser；EVTX adapter 已接入 `evtx` crate 并解析 6005/6006/6008/1074 候选事件，但仓库内尚无合法 tiny real `.evtx` fixture。补充复核确认 `evtx 0.11.2` crates.io 发布包通过 `exclude = ["**/*.evtx", "**/*.dat"]` 排除了真实 EVTX 样本，且 `encoding = "0.2.33"` 是直接非可选依赖，不能通过关闭 feature 消除 `RUSTSEC-2021-0153`；当前通过 `deny.toml` 临时例外跟踪。tiny E01 fixture 尚未入库；FS enum 去重仍是后续质量项，command layer SQL 已通过 CI guard 防回退。
 
 默认产品决策保持不变：`/analysis` 是正式页面；无法真实解析的取证字段必须显示 `notParsed/unavailable + warnings`；证据读取必须走 `FileEntryId + DataSourceKind` reader helper；mock 模式必须可用。
 
@@ -117,8 +117,10 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 - `pnpm --dir frontend lint`: 通过，0 error / 7 existing warnings。
 - `cargo deny check advisories bans licenses sources`: 通过。
 - `powershell -ExecutionPolicy Bypass -File scripts\check-deny-exceptions.ps1`: 通过。
-- `cargo audit`: 通过，仍报告 warning-class transitive advisories，短期由 `deny.toml` 例外追踪。
+- `cargo audit`: 通过，仍报告 20 个 warning-class transitive advisories，短期由 `deny.toml` 例外追踪。
 - `pnpm --dir frontend audit --audit-level high`: 通过；Vite/Vitest 安全升级后无 high/critical 漏洞。
+- Final gate 复核 `pnpm --dir frontend test`: 通过，15 个测试文件 / 58 个测试；ErrorBoundary 用例打印预期 jsdom stack，退出码为 0。
+- Final gate 统一 grep 复核：伪取证事实命中仅存在于审计文档或负向测试；页面/feature 无 direct Tauri `invoke`；新增事件 payload 不含裸 evidence host path。
 
 ## Final Gate 结果
 
@@ -130,15 +132,15 @@ cargo clippy --workspace --all-targets -- -D warnings # 通过
 cargo test --workspace                             # 通过；真实 E01 tests ignored
 pnpm --dir frontend typecheck                      # 通过
 pnpm --dir frontend lint                           # 通过；0 error / 7 existing warnings
-pnpm --dir frontend test                           # 通过；13 files / 53 tests
-pnpm --dir frontend build                          # 通过；Vite chunk size warning
+pnpm --dir frontend test                           # 通过；15 files / 58 tests
+pnpm --dir frontend build                          # 通过；Vite chunk size warning，主 chunk 约 520KB
 cargo build -p forensics-desktop                   # 通过
 powershell -ExecutionPolicy Bypass -File scripts\check-release-guard.ps1 # 通过
 powershell -ExecutionPolicy Bypass -File scripts\check-command-sql-boundary.ps1 # 通过
 cargo doc --workspace --no-deps                    # 通过
 powershell -ExecutionPolicy Bypass -File scripts\check-deny-exceptions.ps1 # 通过
 cargo deny check advisories bans licenses sources  # 通过；duplicate dependency warnings
-cargo audit                                        # 通过；warning-class advisories reported
+cargo audit                                        # 通过；20 个 warning-class advisories reported
 pnpm --dir frontend audit --audit-level high       # 通过；No known vulnerabilities
 ```
 
@@ -156,4 +158,4 @@ cargo test -p app-services --test e01_mft_scan_test -- --ignored --nocapture
 3. 做 Tauri 桌面 smoke，确认 `evidence-media://` 在 Windows WebView2 中对 `<video>/<audio>` seek 行为稳定；fallback command 已保留。
 4. 引入合法 tiny E01 fixture 或可生成 fixture，替代私有样本慢测依赖。
 5. 逐步消除 `cargo audit` warning-class transitive advisories，尤其是本轮 `evtx -> encoding` 临时例外；`encoding` 是 `evtx 0.11.2` 的直接非可选依赖，需替换 parser、vendor/patch parser 或在 2026-09-01 前重新评审例外。
-6. 收口 FS enum 去重与 command layer 残留业务 SQL 下沉。
+6. 收口 FS enum 去重；command layer SQL 已通过 guard 防回退，后续若有 repository/service SQL 行为变更仍需补 targeted tests。
