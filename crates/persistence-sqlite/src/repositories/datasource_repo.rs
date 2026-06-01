@@ -48,34 +48,58 @@ impl<'a> DataSourceRepo<'a> {
     }
 
     pub fn delete_cascade(&self, data_source_id: &DataSourceId) -> DbResult<()> {
+        self.delete_cascade_with_progress(data_source_id, None::<&dyn Fn(u32, &str)>)
+    }
+
+    /// Delete data source with cascade and progress callback.
+    pub fn delete_cascade_with_progress(
+        &self,
+        data_source_id: &DataSourceId,
+        progress: Option<&dyn Fn(u32, &str)>,
+    ) -> DbResult<()> {
         let tx = self.conn.unchecked_transaction()?;
-        // Get all file entry IDs for this data source to clean up related data
+
+        // Step 1: Delete artifacts (10%)
+        if let Some(cb) = progress { cb(0, "Deleting artifacts..."); }
         tx.execute(
             "DELETE FROM artifacts WHERE source_object_id IN (
                 SELECT id FROM file_entries WHERE data_source_id = ?1
             )",
             params![data_source_id.0],
         )?;
+
+        // Step 2: Delete timeline events (30%)
+        if let Some(cb) = progress { cb(10, "Deleting timeline events..."); }
         tx.execute(
             "DELETE FROM timeline_events WHERE source_object_id IN (
                 SELECT id FROM file_entries WHERE data_source_id = ?1
             )",
             params![data_source_id.0],
         )?;
+
+        // Step 3: Delete file entries (70%)
+        if let Some(cb) = progress { cb(30, "Deleting file entries..."); }
         tx.execute(
             "DELETE FROM file_entries WHERE data_source_id = ?1",
             params![data_source_id.0],
         )?;
-        // Partitions have ON DELETE CASCADE, but be explicit
+
+        // Step 4: Delete partitions (90%)
+        if let Some(cb) = progress { cb(70, "Deleting partitions..."); }
         tx.execute(
             "DELETE FROM data_source_partitions WHERE data_source_id = ?1",
             params![data_source_id.0],
         )?;
+
+        // Step 5: Delete data source (100%)
+        if let Some(cb) = progress { cb(90, "Deleting data source..."); }
         tx.execute(
             "DELETE FROM data_sources WHERE id = ?1",
             params![data_source_id.0],
         )?;
+
         tx.commit()?;
+        if let Some(cb) = progress { cb(100, "Deletion complete"); }
         Ok(())
     }
 }

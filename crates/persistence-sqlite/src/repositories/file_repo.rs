@@ -13,6 +13,15 @@ impl<'a> FileRepo<'a> {
         Self { conn }
     }
 
+    /// Insert multiple file entries in a single transaction.
+    /// This is more efficient than calling insert_batch multiple times.
+    pub fn insert_batch_transactional(&self, entries: &[FileEntry]) -> DbResult<()> {
+        if entries.is_empty() {
+            return Ok(());
+        }
+        self.insert_batch(entries)
+    }
+
     pub fn insert_batch(&self, entries: &[FileEntry]) -> DbResult<()> {
         let tx = self.conn.unchecked_transaction()?;
         {

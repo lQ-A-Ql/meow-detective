@@ -47,6 +47,14 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0015_create_audit_log",
         include_str!("scripts/0015_create_audit_log.sql"),
     ),
+    (
+        "0016_add_cascade_delete",
+        include_str!("scripts/0016_add_cascade_delete.sql"),
+    ),
+    (
+        "0017_add_missing_indexes",
+        include_str!("scripts/0017_add_missing_indexes.sql"),
+    ),
 ];
 
 pub fn run_all(conn: &Connection) -> DbResult<u32> {

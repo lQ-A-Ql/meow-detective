@@ -219,6 +219,14 @@ pub fn delete_case(root: &Path) -> Result<()> {
 }
 
 pub fn delete_data_source(conn: &Connection, data_source_id: &str) -> Result<()> {
+    // Record audit log before deletion
+    let audit = persistence_sqlite::repositories::audit_repo::AuditRepo::new(conn);
+    let _ = audit.log_simple(
+        None,
+        &persistence_sqlite::repositories::audit_repo::AuditAction::DataSourceDelete,
+        Some(data_source_id),
+    );
+
     let ds_repo = persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn);
     ds_repo
         .delete_cascade(&domain::DataSourceId(data_source_id.to_string()))

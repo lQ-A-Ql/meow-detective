@@ -60,8 +60,13 @@ pub fn enumerate_filesystem_with_root_name(
         hash_sha256: None,
     };
 
+    // Use a single transaction for the entire enumeration
+    let tx = conn.unchecked_transaction()?;
+    let repo = FileRepo::new(&tx);
     repo.insert_batch(&[root_entry])?;
-    walk_and_insert_children(&repo, fs, data_source_id, root_id, progress_fn)
+    let result = walk_and_insert_children(&repo, fs, data_source_id, root_id, progress_fn);
+    tx.commit()?;
+    result
 }
 
 pub(crate) fn compute_enumeration_progress(processed: u64) -> u64 {
