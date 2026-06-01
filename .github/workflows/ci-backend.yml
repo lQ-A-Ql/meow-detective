@@ -8,6 +8,8 @@ on:
       - 'apps/desktop/src-tauri/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - 'deny.toml'
+      - 'scripts/**'
       - '.github/workflows/ci-backend.yml'
   pull_request:
     branches: [master]
@@ -32,6 +34,9 @@ jobs:
       - name: Release guard
         shell: pwsh
         run: ./scripts/check-release-guard.ps1
+      - name: Dependency exception guard
+        shell: pwsh
+        run: ./scripts/check-deny-exceptions.ps1
       - name: Install cargo-deny
         run: cargo install cargo-deny --locked
       - name: Dependency policy

@@ -1,6 +1,6 @@
 # Forensics Workbench 剩余 v2.1 Backlog 状态与修补方案
 
-**更新时间**: 2026-06-02 02:47:09 +08:00
+**更新时间**: 2026-06-02 02:52:17 +08:00
 **署名**: Codex  
 **基线**: `e7ffa35` -> `codex/beta-forensics-backlog`；本文件记录 v2.1 backlog 在可信 beta 收口实现后的当前状态、验收命令和剩余修补方案。
 
@@ -75,7 +75,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 | Task | 状态 | 当前结果 / 剩余动作 |
 |---|---|---|
 | 5.1 Workflow 去重 | Completed | 保留 `ci-backend.yml`、`ci-frontend.yml`；旧重复 workflow 删除；frontend workflow 已修正为 `pnpm --dir frontend ...` |
-| 5.2 Dependency gate | Completed | 后端 CI 保留 `cargo audit` 并新增 `cargo deny check advisories bans licenses sources`；`deny.toml` 对短期 transitive advisories 带 reason/owner/expiry，本轮新增 `RUSTSEC-2021-0153` 例外用于 `evtx -> encoding` transitive unmaintained advisory，expires 2026-09-01；前端 CI 执行 `pnpm --dir frontend audit --audit-level high` |
+| 5.2 Dependency gate | Completed | 后端 CI 保留 `cargo audit` 并新增 `cargo deny check advisories bans licenses sources`；`deny.toml` 对短期 transitive advisories 带 reason/owner/expiry，本轮新增 `scripts/check-deny-exceptions.ps1` 并接入 backend CI，强制 advisory 例外必须包含 owner、expires 和说明文本且不得过期；`RUSTSEC-2021-0153` 例外用于 `evtx -> encoding` transitive unmaintained advisory，expires 2026-09-01；前端 CI 执行 `pnpm --dir frontend audit --audit-level high` |
 | 5.3 DevTools guard | Completed | 新增 `scripts/check-release-guard.ps1`，CI backend 执行 release guard |
 | 5.4 SBOM | Completed | 后端 CI 使用 `cargo-cyclonedx` 生成 `backend-sbom` artifact；前端 CI 使用 `@cyclonedx/cyclonedx-npm` 生成 `frontend-sbom` artifact，并验证 `bomFormat=CycloneDX` |
 | 5.5 Fixture 策略 | Partial | 新增仓库内 tiny logical directory 和 1024-byte tiny RAW fixture、生成脚本与 `crates/testing` helper；真实 E01 测试改为 `FORENSICS_E01_FIXTURE` opt-in ignored slow tests。tiny E01 fixture 尚未入库 |
@@ -109,6 +109,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 - `cargo test -p reports`: 通过。
 - `cargo test -p testing`: 通过。
 - `cargo deny check advisories bans licenses sources`: 通过。
+- `powershell -ExecutionPolicy Bypass -File scripts\check-deny-exceptions.ps1`: 通过。
 - `cargo audit`: 通过，仍报告 warning-class transitive advisories，短期由 `deny.toml` 例外追踪。
 - `pnpm --dir frontend audit --audit-level high`: 通过；Vite/Vitest 安全升级后无 high/critical 漏洞。
 
@@ -127,6 +128,7 @@ pnpm --dir frontend build                          # 通过；Vite chunk size wa
 cargo build -p forensics-desktop                   # 通过
 powershell -ExecutionPolicy Bypass -File scripts\check-release-guard.ps1 # 通过
 cargo doc --workspace --no-deps                    # 通过
+powershell -ExecutionPolicy Bypass -File scripts\check-deny-exceptions.ps1 # 通过
 cargo deny check advisories bans licenses sources  # 通过；duplicate dependency warnings
 cargo audit                                        # 通过；warning-class advisories reported
 pnpm --dir frontend audit --audit-level high       # 通过；No known vulnerabilities
