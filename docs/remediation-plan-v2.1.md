@@ -1,14 +1,14 @@
 # Forensics Workbench 剩余 v2.1 Backlog 状态与修补方案
 
-**更新时间**: 2026-06-02 01:32:00 +08:00
+**更新时间**: 2026-06-02 02:35:01 +08:00
 **署名**: Codex  
-**基线**: `30d67bf`；本文件记录 v2.1 backlog 经多 agent 实施和主线程统一复核后的当前状态、验收命令和剩余修补方案。
+**基线**: `e7ffa35` -> `codex/beta-forensics-backlog`；本文件记录 v2.1 backlog 在可信 beta 收口实现后的当前状态、验收命令和剩余修补方案。
 
 ## Summary
 
-v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis provenance 契约、Reports analysis provenance、Job partial/warning/skipped/failed 语义、媒体 scoped handle + bounded range command、`cargo deny`/`cargo audit`/`pnpm audit` 依赖门禁、CycloneDX SBOM CI artifact、tiny logical/RAW fixtures 和前端 Vite/Vitest 安全升级。
+v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis provenance 契约、Reports analysis provenance、Job partial/warning/skipped/failed 语义、媒体 scoped handle + bounded range command、`evidence-media` Tauri protocol、Registry 定向字段 parser、EVTX boot/shutdown candidate adapter、`cargo deny`/`cargo audit`/`pnpm audit` 依赖门禁、CycloneDX SBOM CI artifact、tiny logical/RAW fixtures 和前端 Vite/Vitest 安全升级。
 
-剩余风险集中在真实解析和架构债：Registry 目前只发现 hive 并验证 `regf` header，不解析 key/value；EVTX boot/shutdown 仍是正式 `notParsed/unavailable` adapter，不解析事件；大媒体仍是受控首 chunk/range fallback，不是连续 streaming protocol；tiny E01 fixture 尚未入库；FS enum 去重和 command layer SQL 下沉仍是后续质量项。
+剩余风险集中在解析覆盖和架构债：Registry parser 是定向字段解析器，不是完整 hive browser；EVTX adapter 已接入 `evtx` crate 并解析 6005/6006/6008/1074 候选事件，但仓库内尚无合法 tiny real `.evtx` fixture；`evtx -> encoding` unmaintained advisory 通过 `deny.toml` 临时例外跟踪；tiny E01 fixture 尚未入库；FS enum 去重和 command layer SQL 下沉仍是后续质量项。
 
 默认产品决策保持不变：`/analysis` 是正式页面；无法真实解析的取证字段必须显示 `notParsed/unavailable + warnings`；证据读取必须走 `FileEntryId + DataSourceKind` reader helper；mock 模式必须可用。
 
@@ -39,8 +39,8 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 
 | Task | 状态 | 当前结果 / 剩余动作 |
 |---|---|---|
-| 2.1 Registry parser 接入 | Partial | Analysis 会从 catalog 查找 `Windows/System32/config/SYSTEM` / `SOFTWARE`，通过 `FileEntryId` reader 读取 bounded header 并验证 `regf`；每个候选都会生成 provenance/warnings。真实 hostname/version/timezone key/value 遍历仍未实现，因此系统字段保持 `notParsed`，不生成默认 Windows 文案 |
-| 2.2 EVTX parser 策略 | Partial | Analysis 会查找 `Windows/System32/winevt/Logs/System.evtx` 并输出 `evtx.boot_shutdown` provenance；`artifacts-windows` 暂无 EVTX parser，因此返回 `notParsed/unavailable + warning`，不生成 boot/shutdown 时间戳 |
+| 2.1 Registry parser 接入 | Completed / targeted | Analysis 会从 catalog 查找 `Windows/System32/config/SYSTEM` / `SOFTWARE`，通过 `FileEntryId` reader bounded 读取最多 64MB hive；`artifacts-windows::registry::lookup` 支持 `regf` base block、NK/VK、`lf/lh/li/ri` 子键列表和常用值类型，并提取 `ComputerName`、timezone、ProductName、CurrentBuild、InstallDate、RegisteredOwner、Organization、ProductId。字段带 `fieldProvenance`；缺失/损坏/超限为 warning，不生成默认 Windows 文案。剩余：不是完整 Registry browser |
+| 2.2 EVTX parser 策略 | Completed / fixture gap | Analysis 查找 `Windows/System32/winevt/Logs/System.evtx`，通过 `evtx.boot_shutdown` adapter bounded 读取最多 64MB，解析 6005、6006、6008、1074 为候选事件，boot record 带 `eventId`、`recordId`、note 和 provenance。无 EVTX、损坏或超限时保持 `notParsed/unavailable + warnings`。剩余：仓库内尚无合法 tiny real EVTX fixture，当前单测覆盖 JSON 记录提取、malformed/oversized 路径 |
 | 2.3 Analysis provenance | Completed | 新增 `AnalysisProvenanceDto { dataSourceId, artifactPath, parser, parsedAt, status, warnings }`；system info、boot records、file classification 和 classified file 均可携带 provenance |
 | 2.4 Analysis 分类读取一致性 | Completed | classify 走 `FileEntryId + DataSourceKind` helper，仅读取 bounded header |
 | 2.5 Markdown summary 修正 | Completed | summary 只基于 parsed/unknown 状态，不输出 `FORENSICS-PC`、`Windows 10` 等伪值 |
@@ -50,7 +50,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 
 | Task | 状态 | 当前结果 / 剩余动作 |
 |---|---|---|
-| 3.1 大媒体 scoped streaming | Partial | 本轮 `get_media_url` 对大媒体返回 opaque `handleId + canReadRanges`，新增 `read_media_range` bounded command；前端用 handle 读取首个 chunk 生成 blob 预览。完整 HTTP/Tauri protocol style continuous streaming 仍是后续增强 |
+| 3.1 大媒体 scoped streaming | Completed / smoke pending | `get_media_url` 对大媒体返回 `mode=protocol`、opaque `handleId` 和 `evidence-media://handle/<encoded>` URL；Tauri protocol handler 解析 Range、每次最多读取 1MB、返回 206/416 等标准状态，读取仍走 `open_file_content_by_id`。`read_media_range` command 保留为 mock/unsupported fallback；CSP 只给 `media-src` 增加 `evidence-media:`，不暴露 evidence 宿主绝对路径。剩余：尚未做真实桌面播放器 smoke |
 | 3.2 Image preview 限制 | Completed | 小图 data URL，超限 typed error/fallback；不再经 hex lines 反解大图 |
 | 3.3 Extract file | Completed | 新增 `extract_file` command + save dialog wrapper，后端通过 reader helper 写出，destination 拒绝 device path/目录 |
 | 3.4 FileBrowser -> Timeline | Completed | “在时间线中查看”设置 selection 并导航 `/timeline` |
@@ -75,7 +75,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 | Task | 状态 | 当前结果 / 剩余动作 |
 |---|---|---|
 | 5.1 Workflow 去重 | Completed | 保留 `ci-backend.yml`、`ci-frontend.yml`；旧重复 workflow 删除；frontend workflow 已修正为 `pnpm --dir frontend ...` |
-| 5.2 Dependency gate | Completed | 后端 CI 保留 `cargo audit` 并新增 `cargo deny check advisories bans licenses sources`；`deny.toml` 对短期 transitive advisories 带 reason/owner/expiry；前端 CI 执行 `pnpm --dir frontend audit --audit-level high` |
+| 5.2 Dependency gate | Completed | 后端 CI 保留 `cargo audit` 并新增 `cargo deny check advisories bans licenses sources`；`deny.toml` 对短期 transitive advisories 带 reason/owner/expiry，本轮新增 `RUSTSEC-2021-0153` 例外用于 `evtx -> encoding` transitive unmaintained advisory，expires 2026-09-01；前端 CI 执行 `pnpm --dir frontend audit --audit-level high` |
 | 5.3 DevTools guard | Completed | 新增 `scripts/check-release-guard.ps1`，CI backend 执行 release guard |
 | 5.4 SBOM | Completed | 后端 CI 使用 `cargo-cyclonedx` 生成 `backend-sbom` artifact；前端 CI 使用 `@cyclonedx/cyclonedx-npm` 生成 `frontend-sbom` artifact，并验证 `bomFormat=CycloneDX` |
 | 5.5 Fixture 策略 | Partial | 新增仓库内 tiny logical directory 和 1024-byte tiny RAW fixture、生成脚本与 `crates/testing` helper；真实 E01 测试改为 `FORENSICS_E01_FIXTURE` opt-in ignored slow tests。tiny E01 fixture 尚未入库 |
@@ -102,25 +102,34 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 - `cargo test -p transport analysis jobs viewer`: 通过。
 - `cargo test -p app-services --lib analysis_service`: 通过。
 - `cargo test -p app-services report_service`: 通过。
+- `cargo test -p artifacts-windows registry`: 通过。
+- `cargo test -p artifacts-windows evtx`: 通过。
+- `cargo test -p transport analysis`: 通过。
+- `cargo test -p forensics-desktop media_protocol`: 通过。
 - `cargo test -p reports`: 通过。
 - `cargo test -p testing`: 通过。
 - `cargo deny check advisories bans licenses sources`: 通过。
 - `cargo audit`: 通过，仍报告 warning-class transitive advisories，短期由 `deny.toml` 例外追踪。
 - `pnpm --dir frontend audit --audit-level high`: 通过；Vite/Vitest 安全升级后无 high/critical 漏洞。
 
-## Final Gate 待跑
+## Final Gate 结果
 
-完整默认门禁仍需在本轮收尾执行并记录：
+可信 beta 收口后默认门禁已执行：
 
 ```bash
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-pnpm --dir frontend typecheck
-pnpm --dir frontend lint
-pnpm --dir frontend test
-pnpm --dir frontend build
-cargo build -p forensics-desktop
+cargo fmt --all -- --check                         # 通过
+cargo clippy --workspace --all-targets -- -D warnings # 通过
+cargo test --workspace                             # 通过；真实 E01 tests ignored
+pnpm --dir frontend typecheck                      # 通过
+pnpm --dir frontend lint                           # 通过；0 error / 7 existing warnings
+pnpm --dir frontend test                           # 通过；13 files / 53 tests
+pnpm --dir frontend build                          # 通过；Vite chunk size warning
+cargo build -p forensics-desktop                   # 通过
+powershell -ExecutionPolicy Bypass -File scripts\check-release-guard.ps1 # 通过
+cargo doc --workspace --no-deps                    # 通过
+cargo deny check advisories bans licenses sources  # 通过；duplicate dependency warnings
+cargo audit                                        # 通过；warning-class advisories reported
+pnpm --dir frontend audit --audit-level high       # 通过；No known vulnerabilities
 ```
 
 Slow E01 保持手动验收，且现在都需要 `--ignored` 和 `FORENSICS_E01_FIXTURE`：
@@ -132,9 +141,9 @@ cargo test -p app-services --test e01_mft_scan_test -- --ignored --nocapture
 
 ## 后续优先级
 
-1. 接真实 Registry hive key/value parser，输出 hostname、Windows version/build、install date、timezone 等可验证字段及字段级 provenance。
-2. 接真实 EVTX boot/shutdown parser，或继续保持显式 `notParsed/unavailable` 状态，绝不补默认事件事实。
-3. 将大媒体预览升级为真正 continuous streaming protocol；当前 bounded range command 只作为安全 fallback。
+1. 为 EVTX adapter 增加合法 tiny real `.evtx` fixture，覆盖真实 parser path，不只覆盖 JSON extraction helper。
+2. 深化 Registry parser 覆盖更多 hive cell/list 变体，并补真实 fixture；当前只承诺 Analysis 所需定向字段。
+3. 做 Tauri 桌面 smoke，确认 `evidence-media://` 在 Windows WebView2 中对 `<video>/<audio>` seek 行为稳定；fallback command 已保留。
 4. 引入合法 tiny E01 fixture 或可生成 fixture，替代私有样本慢测依赖。
-5. 逐步消除 `cargo audit` warning-class transitive advisories，减少 `deny.toml` 临时例外。
+5. 逐步消除 `cargo audit` warning-class transitive advisories，尤其是本轮 `evtx -> encoding` 临时例外，减少 `deny.toml` 到期风险。
 6. 收口 FS enum 去重与 command layer 残留业务 SQL 下沉。

@@ -142,12 +142,62 @@ fn analysis_rows(
         status_str(&system_info.status),
         system_info.warnings.join(" | ")
     ));
+    push_optional_analysis_value(
+        &mut rows,
+        "system_info.computerName",
+        &system_info.computer_name,
+    );
+    push_optional_analysis_value(&mut rows, "system_info.osVersion", &system_info.os_version);
+    push_optional_analysis_value(
+        &mut rows,
+        "system_info.buildNumber",
+        &system_info.build_number,
+    );
+    push_optional_analysis_value(
+        &mut rows,
+        "system_info.installDate",
+        &system_info.install_date,
+    );
+    push_optional_analysis_value(
+        &mut rows,
+        "system_info.registeredOwner",
+        &system_info.registered_owner,
+    );
+    push_optional_analysis_value(
+        &mut rows,
+        "system_info.organization",
+        &system_info.organization,
+    );
+    push_optional_analysis_value(&mut rows, "system_info.productId", &system_info.product_id);
+    push_optional_analysis_value(&mut rows, "system_info.timezone", &system_info.timezone);
     rows.extend(
         system_info
             .provenance
             .iter()
             .map(|item| format_provenance("system_info", item)),
     );
+    rows.extend(system_info.field_provenance.iter().map(|item| {
+        format!(
+            "system_info field={} parser={} hive={} key={} valueName={}",
+            item.field, item.parser, item.hive_path, item.key_path, item.value_name
+        )
+    }));
+    rows.extend(system_info.boot_history.iter().map(|boot| {
+        format!(
+            "boot_candidate timestamp={} type={} eventId={} recordId={} source={} note={} provenance={}",
+            boot.timestamp,
+            boot.boot_type,
+            boot.event_id
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "-".to_string()),
+            boot.record_id
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "-".to_string()),
+            boot.source,
+            boot.note.as_deref().unwrap_or("-"),
+            format_provenance("boot_candidate", &boot.provenance),
+        )
+    }));
 
     for classification in classifications {
         rows.push(format!(
@@ -165,6 +215,12 @@ fn analysis_rows(
     }
 
     rows
+}
+
+fn push_optional_analysis_value(rows: &mut Vec<String>, field: &str, value: &Option<String>) {
+    if let Some(value) = value {
+        rows.push(format!("{field}={value}"));
+    }
 }
 
 fn format_provenance(scope: &str, item: &AnalysisProvenanceDto) -> String {
@@ -220,6 +276,9 @@ mod tests {
     };
     use persistence_sqlite::{open_in_memory, runner};
     use tempfile::TempDir;
+    use transport::dto::{
+        AnalysisBootRecordDto, AnalysisFieldProvenanceDto, AnalysisParseStatusDto,
+    };
 
     fn setup_report_case() -> (rusqlite::Connection, TempDir, CaseMeta, DataSourceId) {
         let conn = open_in_memory().unwrap();
@@ -333,5 +392,68 @@ mod tests {
         assert!(csv.contains("\"analysis\""));
         assert!(csv.contains("provenance"));
         assert!(csv.contains("\"\t=SUM(A1:A2)\""));
+    }
+
+    #[test]
+    fn analysis_rows_include_field_and_boot_provenance() {
+        let parsed_at = "2026-06-01T10:00:00Z".to_string();
+        let system_info = AnalysisSystemInfoDto {
+            computer_name: Some("BETA-LAB".to_string()),
+            os_version: Some("Windows Evidence Edition 24H2".to_string()),
+            build_number: Some("26000".to_string()),
+            install_date: None,
+            registered_owner: None,
+            organization: None,
+            product_id: None,
+            network_adapters: Vec::new(),
+            boot_history: vec![AnalysisBootRecordDto {
+                timestamp: "2026-06-01T08:15:00Z".to_string(),
+                boot_type: "eventLogStarted".to_string(),
+                source: "Windows/System32/winevt/Logs/System.evtx".to_string(),
+                event_id: Some(6005),
+                record_id: Some(42),
+                note: Some("EventLog 6005 candidate".to_string()),
+                provenance: AnalysisProvenanceDto {
+                    data_source_id: "ds-report".to_string(),
+                    artifact_path: "Windows/System32/winevt/Logs/System.evtx".to_string(),
+                    parser: "evtx.boot_shutdown".to_string(),
+                    parsed_at: parsed_at.clone(),
+                    status: AnalysisParseStatusDto::Parsed,
+                    warnings: Vec::new(),
+                },
+            }],
+            timezone: Some("China Standard Time".to_string()),
+            language: None,
+            status: AnalysisParseStatusDto::Parsed,
+            warnings: Vec::new(),
+            provenance: vec![AnalysisProvenanceDto {
+                data_source_id: "ds-report".to_string(),
+                artifact_path: "Windows/System32/config/SYSTEM".to_string(),
+                parser: "registry.system".to_string(),
+                parsed_at,
+                status: AnalysisParseStatusDto::Parsed,
+                warnings: Vec::new(),
+            }],
+            field_provenance: vec![AnalysisFieldProvenanceDto {
+                field: "computerName".to_string(),
+                value_name: "ComputerName".to_string(),
+                key_path: "ControlSet001\\Control\\ComputerName\\ComputerName".to_string(),
+                hive_path: "Windows/System32/config/SYSTEM".to_string(),
+                parser: "registry.system".to_string(),
+            }],
+        };
+
+        let rows = analysis_rows(&system_info, &[]);
+        let joined = rows.join("\n");
+
+        assert!(joined.contains("system_info.computerName=BETA-LAB"));
+        assert!(joined.contains("system_info.osVersion=Windows Evidence Edition 24H2"));
+        assert!(joined.contains("field=computerName"));
+        assert!(joined.contains("key=ControlSet001\\Control\\ComputerName\\ComputerName"));
+        assert!(joined.contains("boot_candidate timestamp=2026-06-01T08:15:00Z"));
+        assert!(joined.contains("eventId=6005"));
+        assert!(joined.contains("recordId=42"));
+        assert!(joined.contains("evtx.boot_shutdown"));
+        assert!(!joined.contains("FORENSICS-PC"));
     }
 }

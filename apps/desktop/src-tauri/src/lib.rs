@@ -1,5 +1,6 @@
 mod commands;
 pub mod events;
+mod media_protocol;
 pub mod state;
 
 use commands::{
@@ -33,7 +34,8 @@ use commands::{
 use state::AppState;
 
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    media_protocol::register(builder)
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![

@@ -123,8 +123,17 @@ export function useMediaUrl(fileId?: string) {
     queryFn: async () => {
       if (!fileId) return null;
       const media = await getMediaUrl(fileId);
+      if (media.url && media.mode === 'protocol') {
+        return {
+          ...media,
+          previewMode: 'protocol' as const,
+        };
+      }
       if (media.url || !media.handleId || !media.canReadRanges) {
-        return media;
+        return {
+          ...media,
+          previewMode: media.mode ?? media.previewMode ?? 'inline',
+        };
       }
 
       const range = await readMediaRange({
@@ -135,7 +144,7 @@ export function useMediaUrl(fileId?: string) {
       if (!range.bytesRead) {
         return {
           ...media,
-          previewMode: 'range' as const,
+          previewMode: 'rangeFallback' as const,
           previewBytes: 0,
         };
       }
@@ -147,7 +156,8 @@ export function useMediaUrl(fileId?: string) {
       const blob = new Blob([new Uint8Array(byteNumbers)], { type: media.mimeType });
       return {
         ...media,
-        previewMode: 'range' as const,
+        mode: media.mode ?? 'rangeFallback',
+        previewMode: 'rangeFallback' as const,
         previewBytes: range.bytesRead,
         url: URL.createObjectURL(blob),
       };

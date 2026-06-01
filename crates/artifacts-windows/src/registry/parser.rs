@@ -131,13 +131,30 @@ impl ArtifactExtractor for RegistryExtractor {
         }
     }
     fn supports_path(&self, file_path: &str) -> bool {
-        let name = file_path.to_lowercase();
-        name.ends_with(".dat")
-            && (name.contains("ntuser")
+        let normalized = file_path.replace('\\', "/").to_ascii_lowercase();
+        let name = normalized.rsplit('/').next().unwrap_or(&normalized);
+        if name.ends_with(".dat") {
+            return name.contains("ntuser")
+                || name.contains("usrclass")
                 || name.contains("system")
                 || name.contains("software")
                 || name.contains("sam")
-                || name.contains("security"))
+                || name.contains("security");
+        }
+        let components: Vec<_> = normalized
+            .split('/')
+            .filter(|part| !part.is_empty())
+            .collect();
+        if components.len() < 4 {
+            return false;
+        }
+        let expected = ["windows", "system32", "config"];
+        let last_four = &components[components.len() - 4..];
+        last_four[..3] == expected
+            && matches!(
+                last_four[3],
+                "system" | "software" | "sam" | "security" | "default"
+            )
     }
 
     fn run(

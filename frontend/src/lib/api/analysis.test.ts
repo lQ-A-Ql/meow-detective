@@ -6,15 +6,19 @@ import {
 } from '@/lib/api/analysis';
 
 describe('analysis API (mock mode)', () => {
-  it('getSystemInfo returns explicit notParsed status without fake facts', async () => {
+  it('getSystemInfo returns parsed registry status without fake facts', async () => {
     const result = await getSystemInfo();
 
-    expect(result.status).toBe('notParsed');
-    expect(result.computerName).toBeUndefined();
-    expect(result.osVersion).toBeUndefined();
+    expect(result.status).toBe('parsed');
+    expect(result.computerName).toBe('BETA-LAB');
+    expect(result.osVersion).toContain('Windows Evidence Edition');
     expect(result.warnings.length).toBeGreaterThan(0);
     expect(result.provenance.length).toBeGreaterThan(0);
     expect(result.provenance[0].parser).toBeDefined();
+    expect(result.fieldProvenance.length).toBeGreaterThan(0);
+    expect(result.fieldProvenance[0].field).toBe('computerName');
+    expect(result.computerName).not.toBe('FORENSICS-PC');
+    expect(result.osVersion).not.toBe('Windows 10');
   });
 
   it('classifyFiles returns camelCase classification fields', async () => {
@@ -32,7 +36,7 @@ describe('analysis API (mock mode)', () => {
     const result = await generateAnalysisSummary();
 
     expect(result).toContain('# 数据源分析报告');
-    expect(result).toContain('未解析');
+    expect(result).toContain('Windows Evidence Edition');
     expect(result).not.toContain('FORENSICS-PC');
     expect(result).not.toContain('Windows 10');
   });

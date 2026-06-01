@@ -53,19 +53,25 @@ function LargeMediaFallback({
   mediaType,
   previewBytes,
   totalBytes,
+  protocol,
 }: {
   mediaType: '视频' | '音频';
   previewBytes?: number;
   totalBytes?: number;
+  protocol?: boolean;
 }) {
+  const title = protocol ? `大${mediaType}使用受控流式预览` : `大${mediaType}使用受控分块预览`;
+  const detail = protocol
+    ? '当前通过 evidence-media 受控协议提供按需 Range 读取；若播放器不支持该协议，可提取文件后在本机播放器查看。'
+    : `当前只读取首个 ${formatBytes(previewBytes)} 片段进行安全预览；完整播放需要先使用右侧“提取文件”导出后在本机播放器查看。`;
   return (
     <div className="flex h-full items-center justify-center px-6 text-center text-[#555]">
       <div className="max-w-md space-y-2">
         <div className="text-[12px] font-semibold text-[#222]">
-          大{mediaType}使用受控分块预览
+          {title}
         </div>
         <div className="text-[11px] leading-5">
-          当前只读取首个 {formatBytes(previewBytes)} 片段进行安全预览；完整播放需要先使用右侧“提取文件”导出后在本机播放器查看。
+          {detail}
         </div>
         <div className="font-mono text-[10px] text-[#888]">
           total={formatBytes(totalBytes)} / source=opaque handle
@@ -624,7 +630,7 @@ export function FileBrowser() {
                     // 视频预览
                     if (mime.startsWith('video/') || ['mp4', 'webm', 'avi', 'mkv'].includes(mime)) {
                       if (mediaUrl?.url) {
-                        return mediaUrl.previewMode === 'range' ? (
+                        return mediaUrl.previewMode === 'rangeFallback' || mediaUrl.previewMode === 'range' ? (
                           <div className="h-full flex flex-col">
                             <div className="flex-1 min-h-0">
                               <VideoViewer
@@ -635,6 +641,19 @@ export function FileBrowser() {
                             </div>
                             <div className="border-t border-[#e0e0e0] bg-[#f8f8f8] px-3 py-1 text-[10px] text-[#666]">
                               受控分块预览: 已读取 {formatBytes(mediaUrl.previewBytes)}，完整播放请提取文件后查看。
+                            </div>
+                          </div>
+                        ) : mediaUrl.previewMode === 'protocol' ? (
+                          <div className="h-full flex flex-col">
+                            <div className="flex-1 min-h-0">
+                              <VideoViewer
+                                src={mediaUrl.url}
+                                mimeType={mediaUrl.mimeType}
+                                fileName={selectedFile?.name}
+                              />
+                            </div>
+                            <div className="border-t border-[#e0e0e0] bg-[#f8f8f8] px-3 py-1 text-[10px] text-[#666]">
+                              受控流式预览: evidence-media range 读取，不暴露宿主证据路径。
                             </div>
                           </div>
                         ) : (
@@ -651,6 +670,7 @@ export function FileBrowser() {
                             mediaType="视频"
                             previewBytes={mediaUrl.previewBytes}
                             totalBytes={mediaUrl.size}
+                            protocol={mediaUrl.previewMode === 'protocol'}
                           />
                         );
                       }
@@ -660,7 +680,7 @@ export function FileBrowser() {
                     // 音频预览
                     if (mime.startsWith('audio/') || ['mp3', 'wav', 'flac', 'aac', 'ogg'].includes(mime)) {
                       if (mediaUrl?.url) {
-                        return mediaUrl.previewMode === 'range' ? (
+                        return mediaUrl.previewMode === 'rangeFallback' || mediaUrl.previewMode === 'range' ? (
                           <div className="h-full flex flex-col">
                             <div className="flex-1 min-h-0">
                               <AudioViewer
@@ -671,6 +691,19 @@ export function FileBrowser() {
                             </div>
                             <div className="border-t border-[#333] bg-[#111] px-3 py-1 text-[10px] text-[#aaa]">
                               受控分块预览: 已读取 {formatBytes(mediaUrl.previewBytes)}，完整播放请提取文件后查看。
+                            </div>
+                          </div>
+                        ) : mediaUrl.previewMode === 'protocol' ? (
+                          <div className="h-full flex flex-col">
+                            <div className="flex-1 min-h-0">
+                              <AudioViewer
+                                src={mediaUrl.url}
+                                mimeType={mediaUrl.mimeType}
+                                fileName={selectedFile?.name}
+                              />
+                            </div>
+                            <div className="border-t border-[#333] bg-[#111] px-3 py-1 text-[10px] text-[#aaa]">
+                              受控流式预览: evidence-media range 读取，不暴露宿主证据路径。
                             </div>
                           </div>
                         ) : (
@@ -687,6 +720,7 @@ export function FileBrowser() {
                             mediaType="音频"
                             previewBytes={mediaUrl.previewBytes}
                             totalBytes={mediaUrl.size}
+                            protocol={mediaUrl.previewMode === 'protocol'}
                           />
                         );
                       }

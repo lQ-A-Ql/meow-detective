@@ -10,9 +10,9 @@ pub mod timeline;
 pub mod viewer;
 
 pub use analysis::{
-    AnalysisBootRecordDto, AnalysisClassifiedFileDto, AnalysisFileClassificationDto,
-    AnalysisNetworkAdapterDto, AnalysisParseStatusDto, AnalysisProvenanceDto,
-    AnalysisSystemInfoDto,
+    AnalysisBootRecordDto, AnalysisClassifiedFileDto, AnalysisFieldProvenanceDto,
+    AnalysisFileClassificationDto, AnalysisNetworkAdapterDto, AnalysisParseStatusDto,
+    AnalysisProvenanceDto, AnalysisSystemInfoDto,
 };
 pub use artifacts::ArtifactRowDto;
 pub use case::{
@@ -30,6 +30,7 @@ pub use reports::{ReportHistoryItemDto, ReportTemplateDto};
 pub use search::{SearchHighlightDto, SearchHitDto, SearchResultPageDto, SearchSnippetDto};
 pub use timeline::TimelineEventDto;
 pub use viewer::{
-    ImagePreviewDto, MediaRangeRequestDto, MediaRangeResponseDto, MediaUrlDto, TextPreviewDto,
-    ViewerHandleDto, ViewerRangeRequestDto, ViewerRangeResponseDto, MAX_VIEWER_RANGE_LENGTH,
+    ImagePreviewDto, MediaPreviewModeDto, MediaRangeRequestDto, MediaRangeResponseDto, MediaUrlDto,
+    TextPreviewDto, ViewerHandleDto, ViewerRangeRequestDto, ViewerRangeResponseDto,
+    MAX_VIEWER_RANGE_LENGTH,
 };

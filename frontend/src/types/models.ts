@@ -84,6 +84,14 @@ export interface AnalysisProvenance {
   warnings: string[];
 }
 
+export interface AnalysisFieldProvenance {
+  field: string;
+  valueName: string;
+  keyPath: string;
+  hivePath: string;
+  parser: string;
+}
+
 export interface AnalysisSystemInfo {
   computerName?: string;
   osVersion?: string;
@@ -99,6 +107,7 @@ export interface AnalysisSystemInfo {
   status: AnalysisParseStatus;
   warnings: string[];
   provenance: AnalysisProvenance[];
+  fieldProvenance: AnalysisFieldProvenance[];
 }
 
 export interface AnalysisNetworkAdapter {
@@ -113,6 +122,9 @@ export interface AnalysisBootRecord {
   timestamp: string;
   bootType: string;
   source: string;
+  eventId?: number;
+  recordId?: number;
+  note?: string;
   provenance: AnalysisProvenance;
 }
 
@@ -261,7 +273,8 @@ export interface MediaUrl {
   mimeType: string;
   size: number;
   canReadRanges: boolean;
-  previewMode?: 'inline' | 'range';
+  mode?: 'inline' | 'protocol' | 'rangeFallback';
+  previewMode?: 'inline' | 'protocol' | 'rangeFallback' | 'range';
   previewBytes?: number;
 }
 

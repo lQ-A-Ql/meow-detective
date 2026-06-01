@@ -13,8 +13,8 @@ use tauri::State;
 use transport::{
     commands::{ExtractFileRequest, GetFileChildrenRequest, GetFileRowsRequest},
     dto::{
-        FileEntryRowDto, FileTreeNodeDto, ImagePreviewDto, MediaRangeRequestDto,
-        MediaRangeResponseDto, MediaUrlDto, TextPreviewDto, ViewerHandleDto,
+        FileEntryRowDto, FileTreeNodeDto, ImagePreviewDto, MediaPreviewModeDto,
+        MediaRangeRequestDto, MediaRangeResponseDto, MediaUrlDto, TextPreviewDto, ViewerHandleDto,
         ViewerRangeResponseDto,
     },
     CommandError,
@@ -457,7 +457,8 @@ fn media_data_url_for_file(
         .unwrap_or_else(|| "application/octet-stream".to_string());
     if handle.size > infrastructure::constants::MAX_INLINE_MEDIA_PREVIEW_BYTES {
         return Ok(MediaUrlDto {
-            url: None,
+            mode: MediaPreviewModeDto::Protocol,
+            url: Some(crate::media_protocol::media_protocol_url(&handle.handle_id)),
             handle_id: Some(handle.handle_id),
             mime_type: mime,
             size: handle.size,
@@ -475,6 +476,7 @@ fn media_data_url_for_file(
     let base64 = base64::engine::general_purpose::STANDARD.encode(&content_bytes);
 
     Ok(MediaUrlDto {
+        mode: MediaPreviewModeDto::Inline,
         url: Some(format!("data:{};base64,{}", mime, base64)),
         handle_id: Some(handle.handle_id),
         mime_type: mime,
@@ -670,7 +672,16 @@ mod tests {
             |conn, file_id, _| {
                 let media = media_data_url_for_file(conn, &file_id)
                     .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
-                assert!(media.url.is_none());
+                assert_eq!(media.mode, MediaPreviewModeDto::Protocol);
+                assert!(media
+                    .url
+                    .as_deref()
+                    .is_some_and(|url| url.starts_with("evidence-media://handle/")));
+                assert!(!media.url.as_deref().unwrap_or_default().contains(&file_id));
+                assert!(!media.url.as_deref().unwrap_or_default().contains("file:"));
+                let media_json = serde_json::to_string(&media)
+                    .map_err(|err| persistence_sqlite::DbError::System(err.to_string()))?;
+                assert!(!media_json.contains("large.mp4"));
                 assert!(media.can_read_ranges);
                 assert_eq!(
                     media.handle_id.as_deref(),

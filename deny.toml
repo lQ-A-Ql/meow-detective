@@ -23,6 +23,7 @@ ignore = [
     { id = "RUSTSEC-2024-0415", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; Tauri 2 linux stack pulls gtk3 bindings transitively via wry/tao and no direct safe upgrade is available in this repo." },
     { id = "RUSTSEC-2024-0420", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; Tauri 2 linux stack pulls gtk3 bindings transitively via wry/tao and no direct safe upgrade is available in this repo." },
     { id = "RUSTSEC-2024-0384", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; tantivy 0.22 pulls measure_time/instant transitively; replace when search stack is upgraded." },
+    { id = "RUSTSEC-2021-0153", reason = "owner: Main Agent beta backlog; expires: 2026-09-01; evtx 0.11.2 pulls encoding transitively for bounded System.evtx candidate parsing; replace with a maintained EVTX parser path or vendor a minimal parser before expiry." },
     { id = "RUSTSEC-2024-0370", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; gtk/glib transitive proc-macro-error path from Tauri linux dependencies; blocked on upstream." },
     { id = "RUSTSEC-2025-0075", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; urlpattern through tauri-utils pulls rust-unic transitive crates; blocked on upstream Tauri dependency refresh." },
     { id = "RUSTSEC-2025-0080", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; urlpattern through tauri-utils pulls rust-unic transitive crates; blocked on upstream Tauri dependency refresh." },

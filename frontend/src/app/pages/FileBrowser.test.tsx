@@ -177,7 +177,8 @@ describe('FileBrowser media preview', () => {
       mimeType: 'video/mp4',
       size: 8_000_000,
       canReadRanges: true,
-      previewMode: 'range',
+      mode: 'rangeFallback',
+      previewMode: 'rangeFallback',
       previewBytes: 0,
     }));
 
@@ -198,6 +199,7 @@ describe('FileBrowser media preview', () => {
       mimeType: 'video/mp4',
       size: 1024,
       canReadRanges: true,
+      mode: 'inline',
       previewMode: 'inline',
     }));
 
@@ -218,5 +220,24 @@ describe('FileBrowser media preview', () => {
 
     expect(screen.getByText('加载视频预览...')).toBeDefined();
     expect(screen.getByRole('button', { name: '提取文件' })).toBeDefined();
+  });
+
+  it('renders protocol media preview with scoped evidence URL', () => {
+    mocks.mediaUrl.mockReturnValue(queryState({
+      url: 'evidence-media://handle/ZmlsZTp2aWRlby0x',
+      handleId: 'file:video-1',
+      mimeType: 'video/mp4',
+      size: 8_000_000,
+      canReadRanges: true,
+      mode: 'protocol',
+      previewMode: 'protocol',
+    }));
+
+    renderPage();
+
+    expect(screen.getByTestId('video-viewer').textContent).toContain('evidence-media://handle/ZmlsZTp2aWRlby0x');
+    expect(screen.getByText(/受控流式预览/)).toBeDefined();
+    expect(screen.getByTestId('video-viewer').textContent).not.toContain('C:\\');
+    expect(screen.getByTestId('video-viewer').textContent).not.toContain('D:\\');
   });
 });

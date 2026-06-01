@@ -101,6 +101,7 @@ export async function getMediaUrl(fileId: string): Promise<MediaUrl> {
       mimeType: 'video/mp4',
       size: 0,
       canReadRanges: false,
+      mode: 'inline',
       previewMode: 'inline',
     }),
     { fileId },

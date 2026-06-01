@@ -126,11 +126,34 @@ export const dataSources: DataSourceSummary[] = [
 ];
 
 export const analysisSystemInfo: AnalysisSystemInfo = {
+  computerName: 'BETA-LAB',
+  osVersion: 'Windows Evidence Edition 24H2',
+  buildNumber: '26000',
+  registeredOwner: 'DFIR Team',
+  productId: '00330-80000',
+  timezone: 'China Standard Time',
   networkAdapters: [],
-  bootHistory: [],
-  status: 'notParsed',
+  bootHistory: [
+    {
+      timestamp: '2026-06-01T08:15:00Z',
+      bootType: 'eventLogStarted',
+      source: 'Windows/System32/winevt/Logs/System.evtx',
+      eventId: 6005,
+      recordId: 42,
+      note: 'EventLog 6005 candidate; indicates the Event Log service started, not a direct boot assertion.',
+      provenance: {
+        dataSourceId: 'ds-001',
+        artifactPath: 'Windows/System32/winevt/Logs/System.evtx',
+        parser: 'evtx.boot_shutdown',
+        parsedAt: '2026-06-01T10:00:00Z',
+        status: 'parsed',
+        warnings: [],
+      },
+    },
+  ],
+  status: 'parsed',
   warnings: [
-    '系统信息解析器尚未接入 Registry/EVTX；当前不会输出未验证主机事实。',
+    '开关机历史来自 EVTX EventLog/User32 candidate events，不等同于直接系统启动断言。',
   ],
   provenance: [
     {
@@ -138,16 +161,47 @@ export const analysisSystemInfo: AnalysisSystemInfo = {
       artifactPath: 'Windows/System32/config/SYSTEM',
       parser: 'registry.system',
       parsedAt: '2026-06-01T10:00:00Z',
-      status: 'notParsed',
-      warnings: ['已发现 Registry hive，但 key/value 遍历尚未实现。'],
+      status: 'parsed',
+      warnings: [],
+    },
+    {
+      dataSourceId: 'ds-001',
+      artifactPath: 'Windows/System32/config/SOFTWARE',
+      parser: 'registry.software',
+      parsedAt: '2026-06-01T10:00:00Z',
+      status: 'parsed',
+      warnings: [],
     },
     {
       dataSourceId: 'ds-001',
       artifactPath: 'Windows/System32/winevt/Logs/System.evtx',
       parser: 'evtx.boot_shutdown',
       parsedAt: '2026-06-01T10:00:00Z',
-      status: 'unavailable',
-      warnings: ['EVTX parser not implemented'],
+      status: 'parsed',
+      warnings: [],
+    },
+  ],
+  fieldProvenance: [
+    {
+      field: 'computerName',
+      valueName: 'ComputerName',
+      keyPath: 'ControlSet001\\Control\\ComputerName\\ComputerName',
+      hivePath: 'Windows/System32/config/SYSTEM',
+      parser: 'registry.system',
+    },
+    {
+      field: 'osVersion',
+      valueName: 'ProductName',
+      keyPath: 'Microsoft\\Windows NT\\CurrentVersion',
+      hivePath: 'Windows/System32/config/SOFTWARE',
+      parser: 'registry.software',
+    },
+    {
+      field: 'timezone',
+      valueName: 'TimeZoneKeyName',
+      keyPath: 'ControlSet001\\Control\\TimeZoneInformation',
+      hivePath: 'Windows/System32/config/SYSTEM',
+      parser: 'registry.system',
     },
   ],
 };
@@ -261,11 +315,24 @@ export const analysisSummary = `# 数据源分析报告
 
 ## 系统信息
 
-- **状态**: 未解析
+- **计算机名**: BETA-LAB
+- **操作系统**: Windows Evidence Edition 24H2
+- **Build 号**: 26000
+- **注册用户**: DFIR Team
+- **时区**: China Standard Time
 
 ### 系统信息告警
 
-- 系统信息解析器尚未接入 Registry/EVTX；当前不会输出未验证主机事实。
+- 开关机历史来自 EVTX EventLog/User32 candidate events，不等同于直接系统启动断言。
+
+### 系统信息来源
+
+- registry.system: Windows/System32/config/SYSTEM
+- registry.software: Windows/System32/config/SOFTWARE
+
+## 开关机历史
+
+- 2026-06-01T08:15:00Z (eventLogStarted, EventID 6005) - EventLog 6005 candidate
 
 ## 文件分类
 

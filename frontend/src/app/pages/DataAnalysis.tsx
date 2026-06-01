@@ -18,6 +18,7 @@ import {
   useGenerateAnalysisSummary,
 } from '@/features/analysis/hooks';
 import {
+  AnalysisFieldProvenance,
   AnalysisFileClassification,
   AnalysisProvenance,
   AnalysisSystemInfo,
@@ -211,6 +212,7 @@ function SystemInfoTab({ systemInfo }: { systemInfo?: AnalysisSystemInfo }) {
     status: 'unavailable' as const,
     warnings: ['系统信息暂不可用。'],
     provenance: [],
+    fieldProvenance: [],
   };
 
   return (
@@ -241,6 +243,8 @@ function SystemInfoTab({ systemInfo }: { systemInfo?: AnalysisSystemInfo }) {
         provenance={info.provenance}
         fallback="Registry/EVTX 解析来源暂不可用。"
       />
+
+      <FieldProvenancePanel fieldProvenance={info.fieldProvenance} />
 
       <section>
         <h3 className="mb-3 flex items-center gap-2 text-[14px] font-semibold text-[#111]">
@@ -280,8 +284,16 @@ function SystemInfoTab({ systemInfo }: { systemInfo?: AnalysisSystemInfo }) {
                   <span className="rounded bg-[#f0f0f0] px-2 py-0.5 text-[10px]">
                     {boot.bootType}
                   </span>
+                  {boot.eventId ? (
+                    <span className="rounded bg-[#f0f0f0] px-2 py-0.5 font-mono text-[10px]">
+                      EventID {boot.eventId}
+                    </span>
+                  ) : null}
                   <span className="text-[#999]">{boot.source}</span>
                 </div>
+                {boot.note ? (
+                  <div className="mt-2 text-[11px] text-[#666]">{boot.note}</div>
+                ) : null}
                 <div className="mt-2 text-[11px] text-[#777]">
                   {formatProvenanceSummary(boot.provenance)}
                 </div>
@@ -293,6 +305,58 @@ function SystemInfoTab({ systemInfo }: { systemInfo?: AnalysisSystemInfo }) {
         )}
       </section>
     </div>
+  );
+}
+
+function FieldProvenancePanel({
+  fieldProvenance,
+}: {
+  fieldProvenance: AnalysisFieldProvenance[];
+}) {
+  return (
+    <section>
+      <h3 className="mb-3 flex items-center gap-2 text-[14px] font-semibold text-[#111]">
+        <Database size={16} />
+        字段级来源
+      </h3>
+      {fieldProvenance.length > 0 ? (
+        <div className="overflow-hidden rounded border border-[#e0e0e0] bg-[#f8f8f8]">
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="bg-[#f0f0f0]">
+                <th className="px-3 py-2 text-left font-medium">字段</th>
+                <th className="px-3 py-2 text-left font-medium">Hive</th>
+                <th className="px-3 py-2 text-left font-medium">Key</th>
+                <th className="px-3 py-2 text-left font-medium">Value</th>
+                <th className="px-3 py-2 text-left font-medium">Parser</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fieldProvenance.map((item) => (
+                <tr
+                  key={`${item.field}-${item.hivePath}-${item.keyPath}-${item.valueName}`}
+                  className="border-t border-[#e0e0e0]"
+                >
+                  <td className="px-3 py-1.5 font-mono text-[#333]">{item.field}</td>
+                  <td className="max-w-[240px] truncate px-3 py-1.5 font-mono text-[#666]">
+                    {item.hivePath || '-'}
+                  </td>
+                  <td className="max-w-[360px] truncate px-3 py-1.5 font-mono text-[#666]">
+                    {item.keyPath || '-'}
+                  </td>
+                  <td className="px-3 py-1.5 font-mono text-[#666]">
+                    {item.valueName || '-'}
+                  </td>
+                  <td className="px-3 py-1.5 font-mono text-[#666]">{item.parser || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <EmptyLine text="字段级 Registry provenance 暂不可用。" />
+      )}
+    </section>
   );
 }
 

@@ -19,6 +19,16 @@ pub struct AnalysisProvenanceDto {
     pub warnings: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AnalysisFieldProvenanceDto {
+    pub field: String,
+    pub value_name: String,
+    pub key_path: String,
+    pub hive_path: String,
+    pub parser: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AnalysisSystemInfoDto {
@@ -45,6 +55,7 @@ pub struct AnalysisSystemInfoDto {
     pub status: AnalysisParseStatusDto,
     pub warnings: Vec<String>,
     pub provenance: Vec<AnalysisProvenanceDto>,
+    pub field_provenance: Vec<AnalysisFieldProvenanceDto>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,6 +77,12 @@ pub struct AnalysisBootRecordDto {
     pub timestamp: String,
     pub boot_type: String,
     pub source: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_id: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub record_id: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
     pub provenance: AnalysisProvenanceDto,
 }
 
@@ -115,8 +132,11 @@ mod tests {
             }],
             boot_history: vec![AnalysisBootRecordDto {
                 timestamp: "2026-01-01T00:00:00Z".to_string(),
-                boot_type: "normal".to_string(),
-                source: "fixture".to_string(),
+                boot_type: "eventLogStarted".to_string(),
+                source: "Windows/System32/winevt/Logs/System.evtx".to_string(),
+                event_id: Some(6005),
+                record_id: Some(42),
+                note: Some("EventLog 6005 candidate, not a direct boot assertion".to_string()),
                 provenance: AnalysisProvenanceDto {
                     data_source_id: "ds-1".to_string(),
                     artifact_path: "Windows/System32/winevt/Logs/System.evtx".to_string(),
@@ -138,6 +158,13 @@ mod tests {
                 status: AnalysisParseStatusDto::NotParsed,
                 warnings: vec!["value traversal unavailable".to_string()],
             }],
+            field_provenance: vec![AnalysisFieldProvenanceDto {
+                field: "computerName".to_string(),
+                value_name: "ComputerName".to_string(),
+                key_path: "ControlSet001\\Control\\ComputerName\\ComputerName".to_string(),
+                hive_path: "Windows/System32/config/SYSTEM".to_string(),
+                parser: "registry.system".to_string(),
+            }],
         };
 
         let json = serde_json::to_value(dto).unwrap();
@@ -146,7 +173,13 @@ mod tests {
             json["networkAdapters"][0]["macAddress"],
             "00:11:22:33:44:55"
         );
-        assert_eq!(json["bootHistory"][0]["bootType"], "normal");
+        assert_eq!(json["bootHistory"][0]["bootType"], "eventLogStarted");
+        assert_eq!(json["bootHistory"][0]["eventId"], 6005);
+        assert_eq!(json["bootHistory"][0]["recordId"], 42);
+        assert_eq!(
+            json["bootHistory"][0]["note"],
+            "EventLog 6005 candidate, not a direct boot assertion"
+        );
         assert_eq!(json["status"], "notParsed");
         assert_eq!(json["provenance"][0]["dataSourceId"], "ds-1");
         assert_eq!(
@@ -157,6 +190,8 @@ mod tests {
             json["provenance"][0]["parsedAt"],
             "2026-01-01T00:00:00+00:00"
         );
+        assert_eq!(json["fieldProvenance"][0]["field"], "computerName");
+        assert_eq!(json["fieldProvenance"][0]["valueName"], "ComputerName");
         assert!(json.get("computer_name").is_none());
     }
 

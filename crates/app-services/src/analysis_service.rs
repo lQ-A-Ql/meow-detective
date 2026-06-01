@@ -7,7 +7,9 @@ use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 use std::collections::HashMap;
 use std::path::Path;
-use transport::dto::analysis::AnalysisProvenanceDto;
+use transport::dto::analysis::{
+    AnalysisBootRecordDto, AnalysisFieldProvenanceDto, AnalysisProvenanceDto,
+};
 use transport::dto::{
     AnalysisClassifiedFileDto, AnalysisFileClassificationDto, AnalysisParseStatusDto,
     AnalysisSystemInfoDto,
@@ -16,6 +18,7 @@ use transport::dto::{
 pub const DEFAULT_SAMPLE_SIZE: u32 = 1000;
 pub const MAX_SAMPLE_SIZE: u32 = 5000;
 pub const MAGIC_HEADER_LIMIT: usize = 8 * 1024;
+pub const MAX_REGISTRY_ANALYSIS_BYTES: usize = 64 * 1024 * 1024;
 
 /// Magic bytes signature.
 struct MagicSignature {
@@ -149,15 +152,43 @@ const MAGIC_SIGNATURES: &[MagicSignature] = &[
     },
 ];
 
-const REGISTRY_HEADER_LIMIT: usize = 4096;
 const REGISTRY_SYSTEM_PARSER: &str = "registry.system";
 const REGISTRY_SOFTWARE_PARSER: &str = "registry.software";
 const EVTX_BOOT_SHUTDOWN_PARSER: &str = "evtx.boot_shutdown";
 const MAGIC_CLASSIFICATION_PARSER: &str = "analysis.magic";
 
-/// Registry and EVTX value parsers are not fully wired yet. This analyzer only
-/// verifies catalog presence/readability and preserves parser state as
-/// provenance; it does not manufacture host facts from file presence.
+#[derive(Default)]
+struct SystemInfoExtraction {
+    computer_name: Option<String>,
+    os_version: Option<String>,
+    build_number: Option<String>,
+    install_date: Option<String>,
+    registered_owner: Option<String>,
+    organization: Option<String>,
+    product_id: Option<String>,
+    timezone: Option<String>,
+    boot_history: Vec<AnalysisBootRecordDto>,
+    field_provenance: Vec<AnalysisFieldProvenanceDto>,
+}
+
+impl SystemInfoExtraction {
+    fn has_registry_field(&self) -> bool {
+        self.computer_name.is_some()
+            || self.os_version.is_some()
+            || self.build_number.is_some()
+            || self.install_date.is_some()
+            || self.registered_owner.is_some()
+            || self.organization.is_some()
+            || self.product_id.is_some()
+            || self.timezone.is_some()
+    }
+}
+
+/// Extracts bounded system analysis facts from evidence-backed Registry hives.
+///
+/// EVTX boot/shutdown records are reported as EventLog/User32 candidates, not as
+/// direct boot assertions. This service never manufactures host facts from file
+/// presence alone.
 pub fn extract_system_info_for_case(
     conn: &Connection,
     mut read_header_fn: impl FnMut(&FileEntryId, usize) -> Result<Vec<u8>, String>,
@@ -165,6 +196,7 @@ pub fn extract_system_info_for_case(
     let parsed_at = chrono::Utc::now().to_rfc3339();
     let mut warnings = Vec::new();
     let mut provenance = Vec::new();
+    let mut extraction = SystemInfoExtraction::default();
 
     match collect_file_entries(conn) {
         Ok(files) => {
@@ -185,6 +217,7 @@ pub fn extract_system_info_for_case(
                 &mut read_header_fn,
                 &mut warnings,
                 &mut provenance,
+                &mut extraction,
             );
             inspect_registry_hive(
                 software_hive,
@@ -193,6 +226,7 @@ pub fn extract_system_info_for_case(
                 &mut read_header_fn,
                 &mut warnings,
                 &mut provenance,
+                &mut extraction,
             );
             inspect_evtx_boot_source(
                 system_evtx,
@@ -200,6 +234,7 @@ pub fn extract_system_info_for_case(
                 &mut read_header_fn,
                 &mut warnings,
                 &mut provenance,
+                &mut extraction.boot_history,
             );
         }
         Err(err) => {
@@ -214,25 +249,27 @@ pub fn extract_system_info_for_case(
         }
     }
 
-    warnings.push(
-        "Registry 值遍历与 EVTX 事件解析尚未接入；系统字段和开关机时间保持为空。".to_string(),
-    );
-
+    let status = if extraction.has_registry_field() {
+        AnalysisParseStatusDto::Parsed
+    } else {
+        AnalysisParseStatusDto::NotParsed
+    };
     AnalysisSystemInfoDto {
-        computer_name: None,
-        os_version: None,
-        build_number: None,
-        install_date: None,
-        registered_owner: None,
-        organization: None,
-        product_id: None,
+        computer_name: extraction.computer_name,
+        os_version: extraction.os_version,
+        build_number: extraction.build_number,
+        install_date: extraction.install_date,
+        registered_owner: extraction.registered_owner,
+        organization: extraction.organization,
+        product_id: extraction.product_id,
         network_adapters: Vec::new(),
-        boot_history: Vec::new(),
-        timezone: None,
+        boot_history: extraction.boot_history,
+        timezone: extraction.timezone,
         language: None,
-        status: AnalysisParseStatusDto::NotParsed,
+        status,
         warnings,
         provenance,
+        field_provenance: extraction.field_provenance,
     }
 }
 
@@ -364,18 +401,114 @@ fn inspect_registry_hive(
     read_header_fn: &mut impl FnMut(&FileEntryId, usize) -> Result<Vec<u8>, String>,
     warnings: &mut Vec<String>,
     provenance: &mut Vec<AnalysisProvenanceDto>,
+    extraction: &mut SystemInfoExtraction,
 ) {
     match entry {
         Some(entry) => {
-            let read_result = read_header_fn(&entry.id, REGISTRY_HEADER_LIMIT);
+            let read_result = read_header_fn(&entry.id, MAX_REGISTRY_ANALYSIS_BYTES);
             let mut parser_warnings = Vec::new();
+            let mut parsed_any = false;
             match read_result {
-                Ok(bytes) if bytes.starts_with(b"regf") => {
+                Ok(bytes) if bytes.len() >= MAX_REGISTRY_ANALYSIS_BYTES => {
                     parser_warnings.push(format!(
-                        "{} 已发现并验证 regf 头，但当前尚未实现 registry key/value 遍历。",
-                        entry.path
+                        "{} 超过 bounded Registry parser 限制 {} bytes。",
+                        entry.path, MAX_REGISTRY_ANALYSIS_BYTES
                     ));
                 }
+                Ok(bytes) if bytes.starts_with(b"regf") => match parser {
+                    REGISTRY_SYSTEM_PARSER => {
+                        match artifacts_windows::extract_system_hive_fields(&bytes, &entry.path) {
+                            Ok(info) => {
+                                parsed_any |= assign_registry_field(
+                                    "computerName",
+                                    info.computer_name,
+                                    &mut extraction.computer_name,
+                                    &mut extraction.field_provenance,
+                                );
+                                parsed_any |= assign_registry_field(
+                                    "timezone",
+                                    info.timezone,
+                                    &mut extraction.timezone,
+                                    &mut extraction.field_provenance,
+                                );
+                                parser_warnings.extend(info.warnings);
+                            }
+                            Err(err) => {
+                                parser_warnings.push(format!("{} 解析失败: {}", entry.path, err))
+                            }
+                        }
+                    }
+                    REGISTRY_SOFTWARE_PARSER => {
+                        match artifacts_windows::extract_software_hive_fields(&bytes, &entry.path) {
+                            Ok(info) => {
+                                parsed_any |= assign_registry_field(
+                                    "osVersion",
+                                    info.product_name,
+                                    &mut extraction.os_version,
+                                    &mut extraction.field_provenance,
+                                );
+                                parsed_any |= assign_registry_field(
+                                    "buildNumber",
+                                    info.current_build,
+                                    &mut extraction.build_number,
+                                    &mut extraction.field_provenance,
+                                );
+                                parsed_any |= assign_registry_field(
+                                    "installDate",
+                                    info.install_date,
+                                    &mut extraction.install_date,
+                                    &mut extraction.field_provenance,
+                                );
+                                parsed_any |= assign_registry_field(
+                                    "registeredOwner",
+                                    info.registered_owner,
+                                    &mut extraction.registered_owner,
+                                    &mut extraction.field_provenance,
+                                );
+                                parsed_any |= assign_registry_field(
+                                    "organization",
+                                    info.registered_organization,
+                                    &mut extraction.organization,
+                                    &mut extraction.field_provenance,
+                                );
+                                parsed_any |= assign_registry_field(
+                                    "productId",
+                                    info.product_id,
+                                    &mut extraction.product_id,
+                                    &mut extraction.field_provenance,
+                                );
+                                if let Some(display_version) = info.display_version {
+                                    let value = display_version.value.clone();
+                                    extraction.field_provenance.push(registry_field_provenance(
+                                        "osDisplayVersion",
+                                        display_version,
+                                    ));
+                                    match &mut extraction.os_version {
+                                        Some(os) if !os.contains(&value) => {
+                                            os.push(' ');
+                                            os.push_str(&value);
+                                        }
+                                        None => extraction.os_version = Some(value),
+                                        _ => {}
+                                    }
+                                    parsed_any = true;
+                                }
+                                if let Some(current_version) = info.current_version {
+                                    extraction.field_provenance.push(registry_field_provenance(
+                                        "osCurrentVersion",
+                                        current_version,
+                                    ));
+                                    parsed_any = true;
+                                }
+                                parser_warnings.extend(info.warnings);
+                            }
+                            Err(err) => {
+                                parser_warnings.push(format!("{} 解析失败: {}", entry.path, err))
+                            }
+                        }
+                    }
+                    _ => parser_warnings.push(format!("{} parser unsupported", parser)),
+                },
                 Ok(_) => {
                     parser_warnings.push(format!(
                         "{} 不含 regf 头，无法作为 Registry hive 解析。",
@@ -391,7 +524,11 @@ fn inspect_registry_hive(
                 entry,
                 parser,
                 parsed_at,
-                AnalysisParseStatusDto::NotParsed,
+                if parsed_any {
+                    AnalysisParseStatusDto::Parsed
+                } else {
+                    AnalysisParseStatusDto::NotParsed
+                },
                 parser_warnings,
             ));
         }
@@ -415,29 +552,84 @@ fn inspect_registry_hive(
     }
 }
 
+fn assign_registry_field(
+    field: &str,
+    parsed: Option<artifacts_windows::ParsedRegistryField>,
+    target: &mut Option<String>,
+    field_provenance: &mut Vec<AnalysisFieldProvenanceDto>,
+) -> bool {
+    let Some(parsed) = parsed else {
+        return false;
+    };
+    *target = Some(parsed.value.clone());
+    field_provenance.push(registry_field_provenance(field, parsed));
+    true
+}
+
+fn registry_field_provenance(
+    field: &str,
+    parsed: artifacts_windows::ParsedRegistryField,
+) -> AnalysisFieldProvenanceDto {
+    AnalysisFieldProvenanceDto {
+        field: field.to_string(),
+        value_name: parsed.value_name,
+        key_path: parsed.key_path,
+        hive_path: parsed.hive_path,
+        parser: parsed.parser,
+    }
+}
+
 fn inspect_evtx_boot_source(
     entry: Option<&FileEntry>,
     parsed_at: &str,
     read_header_fn: &mut impl FnMut(&FileEntryId, usize) -> Result<Vec<u8>, String>,
     warnings: &mut Vec<String>,
     provenance: &mut Vec<AnalysisProvenanceDto>,
+    boot_history: &mut Vec<AnalysisBootRecordDto>,
 ) {
     match entry {
         Some(entry) => {
             let mut parser_warnings = Vec::new();
-            if let Err(err) = read_header_fn(&entry.id, 8) {
-                parser_warnings.push(format!("{} 读取失败: {}", entry.path, err));
+            let mut parsed_any = false;
+            match read_header_fn(&entry.id, artifacts_windows::MAX_EVTX_ANALYSIS_BYTES) {
+                Ok(bytes) => {
+                    let extraction =
+                        artifacts_windows::extract_boot_shutdown_events(&bytes, &entry.path);
+                    parser_warnings.extend(extraction.warnings);
+                    if !extraction.events.is_empty() {
+                        parsed_any = true;
+                    }
+                    let event_provenance = entry_provenance(
+                        entry,
+                        EVTX_BOOT_SHUTDOWN_PARSER,
+                        parsed_at,
+                        AnalysisParseStatusDto::Parsed,
+                        Vec::new(),
+                    );
+                    boot_history.extend(extraction.events.into_iter().map(|event| {
+                        AnalysisBootRecordDto {
+                            timestamp: event.timestamp,
+                            boot_type: event.kind.as_str().to_string(),
+                            source: event.source_path,
+                            event_id: Some(event.event_id),
+                            record_id: event.record_id,
+                            note: Some(event.note),
+                            provenance: event_provenance.clone(),
+                        }
+                    }));
+                }
+                Err(err) => parser_warnings.push(format!("{} 读取失败: {}", entry.path, err)),
             }
-            parser_warnings.push(
-                "artifacts-windows 当前未提供 EVTX parser；不生成 boot/shutdown 时间戳。"
-                    .to_string(),
-            );
             warnings.extend(parser_warnings.clone());
             provenance.push(entry_provenance(
                 entry,
                 EVTX_BOOT_SHUTDOWN_PARSER,
                 parsed_at,
-                AnalysisParseStatusDto::NotParsed,
+                if parsed_any {
+                    AnalysisParseStatusDto::Parsed
+                } else {
+                    AnalysisParseStatusDto::NotParsed
+                },
                 parser_warnings,
             ));
         }
@@ -721,6 +913,195 @@ mod tests {
         entry
     }
 
+    fn empty_registry_hive(root_name: &str) -> Vec<u8> {
+        let mut data = vec![0u8; 0x8000];
+        data[0..4].copy_from_slice(b"regf");
+        data[0x24..0x28].copy_from_slice(&0x20u32.to_le_bytes());
+        data[0x1000..0x1004].copy_from_slice(b"hbin");
+        data[0x1008..0x100c].copy_from_slice(&0x7000u32.to_le_bytes());
+        write_registry_nk(&mut data, 0x20, root_name, &[], &[]);
+        data
+    }
+
+    fn write_registry_nk(
+        data: &mut [u8],
+        offset: u32,
+        name: &str,
+        subkeys: &[(&str, u32)],
+        values: &[u32],
+    ) {
+        let abs = 0x1000 + offset as usize;
+        let name_bytes = name.as_bytes();
+        let subkey_list_offset = 0x2000 + offset;
+        let value_list_offset = 0x4000 + offset;
+        data[abs..abs + 4].copy_from_slice(&(-256i32).to_le_bytes());
+        data[abs + 4..abs + 6].copy_from_slice(b"nk");
+        data[abs + 6..abs + 8].copy_from_slice(&0x20u16.to_le_bytes());
+        data[abs + 0x18..abs + 0x1c].copy_from_slice(&(subkeys.len() as u32).to_le_bytes());
+        data[abs + 0x20..abs + 0x24].copy_from_slice(
+            &if subkeys.is_empty() {
+                0xFFFF_FFFF
+            } else {
+                subkey_list_offset
+            }
+            .to_le_bytes(),
+        );
+        data[abs + 0x28..abs + 0x2c].copy_from_slice(&(values.len() as u32).to_le_bytes());
+        data[abs + 0x2c..abs + 0x30].copy_from_slice(
+            &if values.is_empty() {
+                0xFFFF_FFFF
+            } else {
+                value_list_offset
+            }
+            .to_le_bytes(),
+        );
+        data[abs + 0x4c..abs + 0x4e].copy_from_slice(&(name_bytes.len() as u16).to_le_bytes());
+        data[abs + 0x50..abs + 0x50 + name_bytes.len()].copy_from_slice(name_bytes);
+
+        if !subkeys.is_empty() {
+            write_registry_lf(data, subkey_list_offset, subkeys);
+        }
+        if !values.is_empty() {
+            let list_abs = 0x1000 + value_list_offset as usize;
+            for (index, value_offset) in values.iter().enumerate() {
+                data[list_abs + index * 4..list_abs + index * 4 + 4]
+                    .copy_from_slice(&value_offset.to_le_bytes());
+            }
+        }
+    }
+
+    fn write_registry_lf(data: &mut [u8], offset: u32, subkeys: &[(&str, u32)]) {
+        let abs = 0x1000 + offset as usize;
+        data[abs..abs + 4].copy_from_slice(&(-256i32).to_le_bytes());
+        data[abs + 4..abs + 6].copy_from_slice(b"lf");
+        data[abs + 6..abs + 8].copy_from_slice(&(subkeys.len() as u16).to_le_bytes());
+        for (index, (name, child_offset)) in subkeys.iter().enumerate() {
+            let entry = abs + 8 + index * 8;
+            let mut hash = [0u8; 4];
+            for (idx, byte) in name.as_bytes().iter().take(4).enumerate() {
+                hash[idx] = *byte;
+            }
+            data[entry..entry + 4].copy_from_slice(&hash);
+            data[entry + 4..entry + 8].copy_from_slice(&child_offset.to_le_bytes());
+        }
+    }
+
+    fn write_registry_string_value(
+        data: &mut [u8],
+        offset: u32,
+        name: &str,
+        value: &str,
+        data_offset: u32,
+    ) {
+        let encoded: Vec<u8> = value.encode_utf16().flat_map(u16::to_le_bytes).collect();
+        let data_abs = 0x1000 + data_offset as usize;
+        data[data_abs..data_abs + 4].copy_from_slice(&(-128i32).to_le_bytes());
+        data[data_abs + 4..data_abs + 4 + encoded.len()].copy_from_slice(&encoded);
+        write_registry_vk(data, offset, name, 1, encoded.len() as u32, data_offset);
+    }
+
+    fn write_registry_dword_value(data: &mut [u8], offset: u32, name: &str, value: u32) {
+        write_registry_vk(data, offset, name, 4, 0x8000_0004, value);
+    }
+
+    fn write_registry_vk(
+        data: &mut [u8],
+        offset: u32,
+        name: &str,
+        value_type: u32,
+        data_len: u32,
+        data_offset: u32,
+    ) {
+        let abs = 0x1000 + offset as usize;
+        let name_bytes = name.as_bytes();
+        data[abs..abs + 4].copy_from_slice(&(-128i32).to_le_bytes());
+        data[abs + 4..abs + 6].copy_from_slice(b"vk");
+        data[abs + 6..abs + 8].copy_from_slice(&(name_bytes.len() as u16).to_le_bytes());
+        data[abs + 8..abs + 12].copy_from_slice(&data_len.to_le_bytes());
+        data[abs + 12..abs + 16].copy_from_slice(&data_offset.to_le_bytes());
+        data[abs + 16..abs + 20].copy_from_slice(&value_type.to_le_bytes());
+        data[abs + 20..abs + 22].copy_from_slice(&1u16.to_le_bytes());
+        data[abs + 0x18..abs + 0x18 + name_bytes.len()].copy_from_slice(name_bytes);
+    }
+
+    fn build_system_hive_fixture() -> Vec<u8> {
+        let mut data = empty_registry_hive("SYSTEM");
+        write_registry_nk(
+            &mut data,
+            0x20,
+            "SYSTEM",
+            &[("Select", 0x200), ("ControlSet001", 0x300)],
+            &[],
+        );
+        write_registry_nk(&mut data, 0x200, "Select", &[], &[0x1200]);
+        write_registry_dword_value(&mut data, 0x1200, "Current", 1);
+        write_registry_nk(
+            &mut data,
+            0x300,
+            "ControlSet001",
+            &[("Control", 0x400)],
+            &[],
+        );
+        write_registry_nk(
+            &mut data,
+            0x400,
+            "Control",
+            &[("ComputerName", 0x600), ("TimeZoneInformation", 0xa00)],
+            &[],
+        );
+        write_registry_nk(
+            &mut data,
+            0x600,
+            "ComputerName",
+            &[("ComputerName", 0x800)],
+            &[],
+        );
+        write_registry_nk(&mut data, 0x800, "ComputerName", &[], &[0xc00]);
+        write_registry_string_value(&mut data, 0xc00, "ComputerName", "BETA-LAB", 0x1800);
+        write_registry_nk(&mut data, 0xa00, "TimeZoneInformation", &[], &[0xd00]);
+        write_registry_string_value(
+            &mut data,
+            0xd00,
+            "TimeZoneKeyName",
+            "China Standard Time",
+            0x1900,
+        );
+        data
+    }
+
+    fn build_software_hive_fixture() -> Vec<u8> {
+        let mut data = empty_registry_hive("SOFTWARE");
+        write_registry_nk(&mut data, 0x20, "SOFTWARE", &[("Microsoft", 0x200)], &[]);
+        write_registry_nk(&mut data, 0x200, "Microsoft", &[("Windows NT", 0x300)], &[]);
+        write_registry_nk(
+            &mut data,
+            0x300,
+            "Windows NT",
+            &[("CurrentVersion", 0x400)],
+            &[],
+        );
+        write_registry_nk(
+            &mut data,
+            0x400,
+            "CurrentVersion",
+            &[],
+            &[0x600, 0x680, 0x700, 0x780, 0x800, 0x880],
+        );
+        write_registry_string_value(
+            &mut data,
+            0x600,
+            "ProductName",
+            "Windows Evidence Edition",
+            0x1800,
+        );
+        write_registry_string_value(&mut data, 0x680, "CurrentBuild", "26000", 0x1900);
+        write_registry_string_value(&mut data, 0x700, "DisplayVersion", "24H2", 0x1a00);
+        write_registry_string_value(&mut data, 0x780, "RegisteredOwner", "DFIR Team", 0x1b00);
+        write_registry_string_value(&mut data, 0x800, "ProductId", "00330-80000", 0x1c00);
+        write_registry_dword_value(&mut data, 0x880, "InstallDate", 1_700_000_000);
+        data
+    }
+
     fn setup_case_db() -> (Connection, TempDir, DataSourceId) {
         let conn = open_in_memory().unwrap();
         runner::run_all(&conn).unwrap();
@@ -824,7 +1205,7 @@ mod tests {
     }
 
     #[test]
-    fn registry_hive_presence_keeps_system_fields_empty_with_provenance() {
+    fn malformed_registry_hive_presence_keeps_system_fields_empty_with_provenance() {
         let (conn, _tmp, ds_id) = setup_case_db();
         FileRepo::new(&conn)
             .insert_batch(&[
@@ -851,8 +1232,77 @@ mod tests {
                 && item
                     .warnings
                     .iter()
-                    .any(|warning| warning.contains("尚未实现 registry key/value 遍历"))
+                    .any(|warning| warning.contains("registry hive shorter than base block"))
         }));
+    }
+
+    #[test]
+    fn registry_hive_fields_are_parsed_with_field_provenance() {
+        let (conn, _tmp, ds_id) = setup_case_db();
+        FileRepo::new(&conn)
+            .insert_batch(&[
+                file_with_ds("system", &ds_id, "Windows/System32/config/SYSTEM", 32_768),
+                file_with_ds(
+                    "software",
+                    &ds_id,
+                    "Windows/System32/config/SOFTWARE",
+                    32_768,
+                ),
+            ])
+            .unwrap();
+        let system_hive = build_system_hive_fixture();
+        let software_hive = build_software_hive_fixture();
+
+        let info =
+            extract_system_info_for_case(&conn, |file_id, max_bytes| match file_id.0.as_str() {
+                "system" => Ok(system_hive[..system_hive.len().min(max_bytes)].to_vec()),
+                "software" => Ok(software_hive[..software_hive.len().min(max_bytes)].to_vec()),
+                other => Err(format!("unexpected file id {other}")),
+            });
+
+        assert_eq!(info.status, AnalysisParseStatusDto::Parsed);
+        assert_eq!(info.computer_name.as_deref(), Some("BETA-LAB"));
+        assert_eq!(
+            info.os_version.as_deref(),
+            Some("Windows Evidence Edition 24H2")
+        );
+        assert_eq!(info.build_number.as_deref(), Some("26000"));
+        assert_eq!(info.registered_owner.as_deref(), Some("DFIR Team"));
+        assert_eq!(info.product_id.as_deref(), Some("00330-80000"));
+        assert_eq!(info.timezone.as_deref(), Some("China Standard Time"));
+        assert!(info
+            .install_date
+            .as_deref()
+            .is_some_and(|value| value.starts_with("2023-")));
+        assert!(info.field_provenance.iter().any(|field| {
+            field.field == "computerName"
+                && field.value_name == "ComputerName"
+                && field.key_path == "ControlSet001\\Control\\ComputerName\\ComputerName"
+                && field.hive_path == "Windows/System32/config/SYSTEM"
+                && field.parser == REGISTRY_SYSTEM_PARSER
+        }));
+        assert!(info.field_provenance.iter().any(|field| {
+            field.field == "osVersion"
+                && field.value_name == "ProductName"
+                && field.key_path == "Microsoft\\Windows NT\\CurrentVersion"
+                && field.hive_path == "Windows/System32/config/SOFTWARE"
+                && field.parser == REGISTRY_SOFTWARE_PARSER
+        }));
+        assert!(info.provenance.iter().any(|item| {
+            item.parser == REGISTRY_SYSTEM_PARSER
+                && item.status == AnalysisParseStatusDto::Parsed
+                && item.data_source_id == ds_id.0
+        }));
+        assert!(info.provenance.iter().any(|item| {
+            item.parser == REGISTRY_SOFTWARE_PARSER
+                && item.status == AnalysisParseStatusDto::Parsed
+                && item.data_source_id == ds_id.0
+        }));
+
+        let summary = generate_analysis_summary(&info, &[]);
+        assert!(summary.contains("BETA-LAB"));
+        assert!(summary.contains("Windows Evidence Edition 24H2"));
+        assert!(!summary.contains("FORENSICS-PC"));
     }
 
     #[test]
@@ -878,7 +1328,7 @@ mod tests {
     }
 
     #[test]
-    fn evtx_source_is_not_parsed_and_generates_no_boot_records() {
+    fn malformed_evtx_source_is_not_parsed_and_generates_no_boot_records() {
         let (conn, _tmp, ds_id) = setup_case_db();
         FileRepo::new(&conn)
             .insert_batch(&[file_with_ds(
@@ -900,7 +1350,7 @@ mod tests {
                 && item
                     .warnings
                     .iter()
-                    .any(|warning| warning.contains("未提供 EVTX parser"))
+                    .any(|warning| warning.contains("EVTX parser initialization failed"))
         }));
     }
 

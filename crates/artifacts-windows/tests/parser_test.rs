@@ -168,6 +168,19 @@ fn registry_hive_fixture_parses_name() {
 }
 
 #[test]
+fn registry_supports_standard_extensionless_hives_only_in_config_path() {
+    let extractor = RegistryExtractor;
+
+    assert!(extractor.supports_path("C:/Windows/System32/config/SYSTEM"));
+    assert!(extractor.supports_path("Windows\\System32\\config\\SOFTWARE"));
+    assert!(extractor.supports_path("C:/Users/alice/NTUSER.DAT"));
+    assert!(extractor.supports_path("C:/Users/alice/AppData/Local/Microsoft/Windows/UsrClass.dat"));
+    assert!(!extractor.supports_path("C:/Temp/SYSTEM"));
+    assert!(!extractor.supports_path("C:/Temp/software"));
+    assert!(!extractor.supports_path("notes.txt"));
+}
+
+#[test]
 fn extractor_registry_matches_by_path() {
     let mut reg = ExtractorRegistry::new();
     reg.register(Box::new(PrefetchExtractor));

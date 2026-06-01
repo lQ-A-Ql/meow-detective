@@ -81,7 +81,9 @@ pub struct ImagePreviewDto {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaUrlDto {
-    /// Media URL. Present only for bounded inline previews.
+    /// Preview delivery mode.
+    pub mode: MediaPreviewModeDto,
+    /// Media URL. Present for bounded inline previews and scoped protocol previews.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
     /// Opaque viewer handle for command-scoped range reads.
@@ -93,6 +95,14 @@ pub struct MediaUrlDto {
     pub size: u64,
     /// Whether the frontend can request bounded byte ranges for this media.
     pub can_read_ranges: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MediaPreviewModeDto {
+    Inline,
+    Protocol,
+    RangeFallback,
 }
 
 /// Raw media byte range request.
@@ -188,6 +198,7 @@ mod tests {
     #[test]
     fn test_media_url_dto_serialization() {
         let dto = MediaUrlDto {
+            mode: MediaPreviewModeDto::Inline,
             url: Some("data:video/mp4;base64,AAAA".to_string()),
             handle_id: None,
             mime_type: "video/mp4".to_string(),
@@ -197,6 +208,24 @@ mod tests {
         let json = serde_json::to_string(&dto).unwrap();
         assert!(json.contains("data:video/mp4"));
         assert!(json.contains("canReadRanges"));
+        assert!(json.contains("\"mode\":\"inline\""));
+    }
+
+    #[test]
+    fn test_media_url_protocol_serialization() {
+        let dto = MediaUrlDto {
+            mode: MediaPreviewModeDto::Protocol,
+            url: Some("evidence-media://handle/file%3Aabc".to_string()),
+            handle_id: Some("file:abc".to_string()),
+            mime_type: "video/mp4".to_string(),
+            size: 10240000,
+            can_read_ranges: true,
+        };
+        let json = serde_json::to_string(&dto).unwrap();
+
+        assert!(json.contains("\"mode\":\"protocol\""));
+        assert!(json.contains("evidence-media://handle/file%3Aabc"));
+        assert!(json.contains("handleId"));
     }
 
     #[test]

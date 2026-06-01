@@ -249,7 +249,7 @@
 
 - 预览读取必须通过 `FileEntryId` 和数据源类型分派到统一 reader helper，不允许用 `case_root.join(entry.path)` 拼接宿主路径读取证据内容。
 - `get_text_preview` 和 hex range 读取走真实 reader；`get_image_preview` 返回有大小上限的 data URL。
-- `get_media_url` 对小媒体返回 bounded data URL；对大媒体返回 opaque `handleId`、MIME、size 和 `canReadRanges`，前端再通过 `read_media_range` 读取固定窗口并构造 blob URL。当前实现不暴露 evidence 宿主绝对路径；完整连续 streaming/protocol 仍是后续增强。
+- `get_media_url` 对小媒体返回 bounded data URL；对大媒体返回 `mode=protocol`、opaque `handleId`、MIME、size 和 `evidence-media://handle/<encoded>` URL。Tauri `evidence-media` protocol handler 使用同一 evidence reader helper 按 Range 读取，每次最多 1MB，返回 206/416 等 bounded response；`read_media_range` command 继续作为 mock/unsupported fallback。当前实现不暴露 evidence 宿主绝对路径，CSP 只在 `media-src` 中允许 `evidence-media:`。
 
 ---
 
@@ -259,7 +259,7 @@ Analysis 功能的前后端契约以 `transport` crate 为唯一 Rust 源头，�
 
 | 层级 | 文件 / 类型 | 约定 |
 |------|-------------|------|
-| Transport DTO | `crates/transport/src/dto/analysis.rs` | `AnalysisSystemInfoDto`, `AnalysisNetworkAdapterDto`, `AnalysisBootRecordDto`, `AnalysisClassifiedFileDto`, `AnalysisFileClassificationDto`，全部 `#[serde(rename_all = "camelCase")]` |
+| Transport DTO | `crates/transport/src/dto/analysis.rs` | `AnalysisSystemInfoDto`, `AnalysisFieldProvenanceDto`, `AnalysisNetworkAdapterDto`, `AnalysisBootRecordDto`, `AnalysisClassifiedFileDto`, `AnalysisFileClassificationDto`，全部 `#[serde(rename_all = "camelCase")]` |
 | Transport request | `crates/transport/src/commands/mod.rs` | `ClassifyFilesRequest { sample_size: Option<u32> }`，JSON 字段为 `sampleSize` |
 | Tauri commands | `apps/desktop/src-tauri/src/commands/analysis_commands.rs` | `get_system_info`, `classify_files`, `generate_analysis_summary`；`sampleSize` 默认 1000，最大 5000，0 或超过最大值返回 invalid input |
 | App service | `crates/app-services/src/analysis_service.rs` | 负责取证状态表达、bounded header magic 分类、summary 文本生成；不得定义可泄露到 IPC 的响应 DTO |
@@ -270,9 +270,9 @@ Analysis 功能的前后端契约以 `transport` crate 为唯一 Rust 源头，�
 
 当前 parser 状态:
 
-- Analysis DTO 包含 `AnalysisProvenanceDto { dataSourceId, artifactPath, parser, parsedAt, status, warnings }`。系统信息、boot records、分类汇总和单文件分类均可携带来源说明。
-- Registry 当前只发现 `SYSTEM` / `SOFTWARE` hive 候选并验证 bounded `regf` header；尚未遍历 hive key/value，因此 hostname、Windows version/build、timezone 等字段仍保持未解析。
-- EVTX 当前只发现 `System.evtx` 并返回 `evtx.boot_shutdown` adapter provenance；`artifacts-windows` 尚无 EVTX event parser，因此不生成 boot/shutdown 时间戳。
+- Analysis DTO 包含 `AnalysisProvenanceDto { dataSourceId, artifactPath, parser, parsedAt, status, warnings }`。系统信息、boot records、分类汇总和单文件分类均可携带来源说明；系统字段另有 `fieldProvenance` 追踪 hive path、key path、value name 和 parser。
+- Registry 当前是定向字段 parser，不是完整 hive browser。`artifacts-windows::registry::lookup` bounded 读取最多 64MB，解析 `regf` base block、NK/VK、`lf/lh/li/ri` 子键列表和常用值类型；Analysis 从 `SYSTEM` / `SOFTWARE` 提取 `ComputerName`、timezone、ProductName、CurrentBuild、InstallDate、RegisteredOwner、Organization、ProductId。缺失、损坏或超限只产生 warnings，不补默认 Windows 文案。
+- EVTX 当前是 boot/shutdown candidate adapter。`artifacts-windows::evtx` 使用 `evtx` crate bounded 读取最多 64MB `System.evtx`，解析 6005、6006、6008、1074 为候选事件，并明确标注这些是 EventLog/User32 proxy，不是绝对开关机事实。仓库内尚无合法 tiny real `.evtx` fixture；现有测试覆盖 JSON 记录提取、malformed 和 oversized 路径。
 - 文件分类只读取每个文件有限 header（当前 8KB）并按 magic/ext 分类；读取入口为 `FileEntryId + DataSourceKind`，支持 logical directory、E01、RAW 的统一路径。
 - Summary 只基于真实 DTO 状态生成；未解析信息必须显示“未解析”或 warning，不允许生成伪造取证事实。
 
@@ -460,5 +460,5 @@ Settings 当前分两类持久化：
 
 ---
 
-**建模人**: MiMo AI Assistant；2026-06-02 由 Codex 更新 Analysis provenance、Reports、Job partial、CI/SBOM 与慢测状态
-**建模版本**: v1.2
+**建模人**: MiMo AI Assistant；2026-06-02 由 Codex 更新 Analysis provenance、Registry targeted parser、EVTX candidate adapter、evidence-media protocol、Reports、Job partial、CI/SBOM 与慢测状态
+**建模版本**: v1.3

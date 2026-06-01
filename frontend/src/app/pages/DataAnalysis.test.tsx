@@ -53,18 +53,62 @@ describe('DataAnalysis page', () => {
     }));
     mocks.systemInfo.mockReturnValue(queryState({
       data: {
+        computerName: 'BETA-LAB',
+        osVersion: 'Windows Evidence Edition 24H2',
+        buildNumber: '26000',
         networkAdapters: [],
-        bootHistory: [],
-        status: 'notParsed',
-        warnings: ['系统信息解析器尚未接入 Registry/EVTX；当前不会输出未验证主机事实。'],
+        bootHistory: [
+          {
+            timestamp: '2026-06-01T08:15:00Z',
+            bootType: 'eventLogStarted',
+            source: 'Windows/System32/winevt/Logs/System.evtx',
+            eventId: 6005,
+            recordId: 42,
+            note: 'EventLog 6005 candidate; indicates the Event Log service started, not a direct boot assertion.',
+            provenance: {
+              dataSourceId: 'ds-1',
+              artifactPath: 'Windows/System32/winevt/Logs/System.evtx',
+              parser: 'evtx.boot_shutdown',
+              parsedAt: '2026-06-01T10:00:00Z',
+              status: 'parsed',
+              warnings: [],
+            },
+          },
+        ],
+        status: 'parsed',
+        warnings: ['开关机历史来自 EVTX EventLog/User32 candidate events。'],
         provenance: [
           {
             dataSourceId: 'ds-1',
             artifactPath: 'Windows/System32/config/SYSTEM',
             parser: 'registry.system',
             parsedAt: '2026-06-01T10:00:00Z',
-            status: 'notParsed',
-            warnings: ['Registry parser not implemented'],
+            status: 'parsed',
+            warnings: [],
+          },
+          {
+            dataSourceId: 'ds-1',
+            artifactPath: 'Windows/System32/config/SOFTWARE',
+            parser: 'registry.software',
+            parsedAt: '2026-06-01T10:00:00Z',
+            status: 'parsed',
+            warnings: [],
+          },
+        ],
+        fieldProvenance: [
+          {
+            field: 'computerName',
+            valueName: 'ComputerName',
+            keyPath: 'ControlSet001\\Control\\ComputerName\\ComputerName',
+            hivePath: 'Windows/System32/config/SYSTEM',
+            parser: 'registry.system',
+          },
+          {
+            field: 'osVersion',
+            valueName: 'ProductName',
+            keyPath: 'Microsoft\\Windows NT\\CurrentVersion',
+            hivePath: 'Windows/System32/config/SOFTWARE',
+            parser: 'registry.software',
           },
         ],
       },
@@ -128,16 +172,55 @@ describe('DataAnalysis page', () => {
     expect(screen.queryByText('正在分析数据源...')).toBeNull();
   });
 
-  it('renders accessible tabs and notParsed system info without fake facts', () => {
+  it('renders accessible tabs and parsed registry facts with provenance', () => {
     renderPage();
 
     expect(screen.getByRole('tab', { name: /系统信息/ })).toBeDefined();
     expect(screen.getByRole('tab', { name: /文件分类/ })).toBeDefined();
     expect(screen.getByRole('tab', { name: /分析报告/ })).toBeDefined();
+    expect(screen.getAllByText('已解析').length).toBeGreaterThan(0);
+    expect(screen.getByText('BETA-LAB')).toBeDefined();
+    expect(screen.getByText('Windows Evidence Edition 24H2')).toBeDefined();
+    expect(screen.getAllByText('registry.system').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('registry.software').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Windows/System32/config/SYSTEM').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Windows/System32/config/SOFTWARE').length).toBeGreaterThan(0);
+    expect(screen.getByText('字段级来源')).toBeDefined();
+    expect(screen.getByText('computerName')).toBeDefined();
+    expect(screen.getByText('ProductName')).toBeDefined();
+    expect(screen.getByText('EventID 6005')).toBeDefined();
+    expect(screen.getByText(/EventLog 6005 candidate/)).toBeDefined();
+    expect(screen.getByText(/evtx\.boot_shutdown/)).toBeDefined();
+    expect(screen.queryByText('FORENSICS-PC')).toBeNull();
+    expect(screen.queryByText('Windows 10')).toBeNull();
+  });
+
+  it('renders notParsed system info without fake facts', () => {
+    mocks.systemInfo.mockReturnValue(queryState({
+      data: {
+        networkAdapters: [],
+        bootHistory: [],
+        status: 'notParsed',
+        warnings: ['Registry hive 缺失或损坏，系统字段未解析。'],
+        provenance: [
+          {
+            dataSourceId: 'ds-1',
+            artifactPath: 'Windows/System32/config/SYSTEM',
+            parser: 'registry.system',
+            parsedAt: '2026-06-01T10:00:00Z',
+            status: 'notParsed',
+            warnings: ['registry hive shorter than base block'],
+          },
+        ],
+        fieldProvenance: [],
+      },
+    }));
+
+    renderPage();
+
     expect(screen.getAllByText('未解析').length).toBeGreaterThan(0);
-    expect(screen.getByText('registry.system')).toBeDefined();
-    expect(screen.getByText('Windows/System32/config/SYSTEM')).toBeDefined();
-    expect(screen.getByText('Registry parser not implemented')).toBeDefined();
+    expect(screen.getByText('registry hive shorter than base block')).toBeDefined();
+    expect(screen.getByText('字段级 Registry provenance 暂不可用。')).toBeDefined();
     expect(screen.queryByText('FORENSICS-PC')).toBeNull();
     expect(screen.queryByText('Windows 10')).toBeNull();
   });

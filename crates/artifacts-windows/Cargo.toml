@@ -15,6 +15,7 @@ domain.workspace = true
 artifacts-core.workspace = true
 tracing.workspace = true
 byteorder = "1"
+evtx.workspace = true
 
 [dev-dependencies]
 tempfile = "3"
