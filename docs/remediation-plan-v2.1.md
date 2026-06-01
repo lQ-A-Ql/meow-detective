@@ -1,12 +1,14 @@
 # Forensics Workbench 剩余 v2.1 Backlog 状态与修补方案
 
-**更新时间**: 2026-06-01 23:23:29 +08:00  
+**更新时间**: 2026-06-02 01:32:00 +08:00
 **署名**: Codex  
-**基线**: v2 默认门禁已通过；本文件记录 v2.1 backlog 的当前实现状态、部分完成项和剩余修补方案。
+**基线**: `30d67bf`；本文件记录 v2.1 backlog 经多 agent 实施和主线程统一复核后的当前状态、验收命令和剩余修补方案。
 
 ## Summary
 
-v2.1 的目标是把内部 alpha 推进到可信 beta。当前本轮已继续补齐一批低风险剩余项：后端 Settings 配置 API、媒体 scoped handle + bounded range command、`artifact-added` 事件接线、frontend workflow 路径修正，并增加对应 targeted tests。真实 Registry/EVTX parser、完整媒体 streaming protocol、formal CycloneDX/SPDX SBOM、`cargo deny`、小型 E01 fixture 策略仍保留为后续工作。
+v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis provenance 契约、Reports analysis provenance、Job partial/warning/skipped/failed 语义、媒体 scoped handle + bounded range command、`cargo deny`/`cargo audit`/`pnpm audit` 依赖门禁、CycloneDX SBOM CI artifact、tiny logical/RAW fixtures 和前端 Vite/Vitest 安全升级。
+
+剩余风险集中在真实解析和架构债：Registry 目前只发现 hive 并验证 `regf` header，不解析 key/value；EVTX boot/shutdown 仍是正式 `notParsed/unavailable` adapter，不解析事件；大媒体仍是受控首 chunk/range fallback，不是连续 streaming protocol；tiny E01 fixture 尚未入库；FS enum 去重和 command layer SQL 下沉仍是后续质量项。
 
 默认产品决策保持不变：`/analysis` 是正式页面；无法真实解析的取证字段必须显示 `notParsed/unavailable + warnings`；证据读取必须走 `FileEntryId + DataSourceKind` reader helper；mock 模式必须可用。
 
@@ -37,9 +39,9 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前本轮已继续补
 
 | Task | 状态 | 当前结果 / 剩余动作 |
 |---|---|---|
-| 2.1 Registry parser 接入 | Remaining | 当前系统信息仍为 `notParsed`；下一步应在 `artifacts-windows` 或 analysis adapter 中读取 `SYSTEM` / `SOFTWARE` hive fixture，输出 hostname/version/timezone + provenance |
-| 2.2 EVTX parser 策略 | Remaining | 当前 boot/shutdown 不伪造；下一步接入 EVTX fixture 或保留明确 `notParsed` stub |
-| 2.3 Analysis provenance | Partial | DTO 已有 `status/warnings`；仍需按每组结果补 data source id、artifact path、parser 名称、解析时间等 provenance 字段 |
+| 2.1 Registry parser 接入 | Partial | Analysis 会从 catalog 查找 `Windows/System32/config/SYSTEM` / `SOFTWARE`，通过 `FileEntryId` reader 读取 bounded header 并验证 `regf`；每个候选都会生成 provenance/warnings。真实 hostname/version/timezone key/value 遍历仍未实现，因此系统字段保持 `notParsed`，不生成默认 Windows 文案 |
+| 2.2 EVTX parser 策略 | Partial | Analysis 会查找 `Windows/System32/winevt/Logs/System.evtx` 并输出 `evtx.boot_shutdown` provenance；`artifacts-windows` 暂无 EVTX parser，因此返回 `notParsed/unavailable + warning`，不生成 boot/shutdown 时间戳 |
+| 2.3 Analysis provenance | Completed | 新增 `AnalysisProvenanceDto { dataSourceId, artifactPath, parser, parsedAt, status, warnings }`；system info、boot records、file classification 和 classified file 均可携带 provenance |
 | 2.4 Analysis 分类读取一致性 | Completed | classify 走 `FileEntryId + DataSourceKind` helper，仅读取 bounded header |
 | 2.5 Markdown summary 修正 | Completed | summary 只基于 parsed/unknown 状态，不输出 `FORENSICS-PC`、`Windows 10` 等伪值 |
 | 2.6 UI parser 状态展示 | Completed | DataAnalysis 展示状态、warnings 和空字段“未解析”/`-`，无 active case 有空态 |
@@ -65,19 +67,19 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前本轮已继续补
 | 4.2 Event bridge 扩展 | Partial | 已有 case/job/artifact/timeline/search/partition emit helpers；本轮将 `artifact-added` 接入 post-import artifact store 后循环 emit。更多 artifact/search 细粒度进度仍可继续细化 |
 | 4.3 Targeted emit | Completed | event bridge 使用 `emit_to("main", ...)`，payload 不含裸证据绝对路径 |
 | 4.4 Capability 对齐 | Completed | `capabilities/default.json` 已包含 `core:event:default` 与保存对话框能力 |
-| 4.5 Job partial/warning 语义 | Partial | import/search/artifact 已有 warnings/skipped 基础记录，但 job 状态模型仍需统一 `warning/skipped/failed count` 并在 UI 展示 partial success |
-| 4.6 Reports provenance | Partial | v2 已保留 HTML/CSV escaping；报告中还需系统性加入 parser status、warnings、evidence provenance 与 analysis summary |
+| 4.5 Job partial/warning 语义 | Completed | `JobSnapshotDto`、SQLite `jobs` 表、JobRepo/JobService 和前端 Jobs panel 已同步 `warningCount/skippedCount/failedCount/partial`；import/search/artifact post-processing 会汇总 recoverable warnings/skips/failures |
+| 4.6 Reports provenance | Completed | HTML/CSV/JSON report 已接入当前 Analysis summary、parser status、warnings 和 evidence provenance；HTML escaping 与 CSV formula sanitization 回归保留 |
 
 ## Phase 5: CI、测试资产与依赖治理
 
 | Task | 状态 | 当前结果 / 剩余动作 |
 |---|---|---|
 | 5.1 Workflow 去重 | Completed | 保留 `ci-backend.yml`、`ci-frontend.yml`；旧重复 workflow 删除；frontend workflow 已修正为 `pnpm --dir frontend ...` |
-| 5.2 Dependency gate | Partial | backend 有 `cargo audit`，frontend 有 `pnpm audit --audit-level high`；仍需新增 `cargo deny` 配置和带到期日期的例外机制 |
+| 5.2 Dependency gate | Completed | 后端 CI 保留 `cargo audit` 并新增 `cargo deny check advisories bans licenses sources`；`deny.toml` 对短期 transitive advisories 带 reason/owner/expiry；前端 CI 执行 `pnpm --dir frontend audit --audit-level high` |
 | 5.3 DevTools guard | Completed | 新增 `scripts/check-release-guard.ps1`，CI backend 执行 release guard |
-| 5.4 SBOM | Partial | 当前生成 lightweight `cargo metadata` / `pnpm list` JSON artifacts；正式 CycloneDX/SPDX SBOM 仍需替换 |
-| 5.5 Fixture 策略 | Partial | 默认测试不依赖私有 E01；真实 E01 slow test ignored 并可手动运行。仍需仓库内 tiny logical/RAW/E01 或生成脚本 |
-| 5.6 覆盖率扩展 | Partial | 已补 transport/file/settings/search/timeline/analysis 等 targeted tests；仍未严格完成“后端 +20 / 前端 +15 全覆盖 backlog”的量化目标审计 |
+| 5.4 SBOM | Completed | 后端 CI 使用 `cargo-cyclonedx` 生成 `backend-sbom` artifact；前端 CI 使用 `@cyclonedx/cyclonedx-npm` 生成 `frontend-sbom` artifact，并验证 `bomFormat=CycloneDX` |
+| 5.5 Fixture 策略 | Partial | 新增仓库内 tiny logical directory 和 1024-byte tiny RAW fixture、生成脚本与 `crates/testing` helper；真实 E01 测试改为 `FORENSICS_E01_FIXTURE` opt-in ignored slow tests。tiny E01 fixture 尚未入库 |
+| 5.6 覆盖率扩展 | Partial | 已补 Analysis、Reports、Viewer、Jobs、Fixture、CI/dependency 相关 targeted tests；仍未建立自动覆盖率指标或严格计数门槛 |
 
 ## Phase 6: 代码质量与文档收尾
 
@@ -86,8 +88,8 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前本轮已继续补
 | 6.1 FS enum 去重 | Remaining | NTFS/FAT/exFAT 共用枚举/错误转换仍可抽出，需保持 public API 不破坏 |
 | 6.2 SQL 下沉 repo | Partial | 新增命令遵守 validate -> service/helper -> DTO；既有 command layer 残留 SQL 仍需逐步下沉 |
 | 6.3 常量集中 | Completed | preview max、artifact max、pagination max、analysis sample max 等关键限制已集中到 transport/infrastructure 常量 |
-| 6.4 Public docs | Partial | touched public DTO/commands 有基础注释；仍需跑 `cargo doc --workspace --no-deps` 并处理 warnings |
-| 6.5 开发记录与修复计划更新 | Completed | 本文件和 `development-reports/sessions/2026-06-01.md` 已更新；architecture/complexity 同步本轮状态 |
+| 6.4 Public docs | Completed | `cargo doc --workspace --no-deps` 已通过；同时修复 rustdoc bare URL / invalid intra-doc link warnings |
+| 6.5 开发记录与修复计划更新 | Completed | 本文件、`docs/开发记录.md` 和 `development-reports/sessions/` 记录 subagent 分工、主线程统一复核、验证命令与剩余风险 |
 
 ## 本轮新增验证
 
@@ -97,6 +99,14 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前本轮已继续补
 - `cargo test -p forensics-desktop commands::file_commands::tests::oversized_media_preview_returns_scoped_handle_and_range_reads`: 通过。
 - `cargo check -p forensics-desktop`: 通过。
 - `pnpm --dir frontend typecheck`: 通过。
+- `cargo test -p transport analysis jobs viewer`: 通过。
+- `cargo test -p app-services --lib analysis_service`: 通过。
+- `cargo test -p app-services report_service`: 通过。
+- `cargo test -p reports`: 通过。
+- `cargo test -p testing`: 通过。
+- `cargo deny check advisories bans licenses sources`: 通过。
+- `cargo audit`: 通过，仍报告 warning-class transitive advisories，短期由 `deny.toml` 例外追踪。
+- `pnpm --dir frontend audit --audit-level high`: 通过；Vite/Vitest 安全升级后无 high/critical 漏洞。
 
 ## Final Gate 待跑
 
@@ -113,18 +123,18 @@ pnpm --dir frontend build
 cargo build -p forensics-desktop
 ```
 
-Slow E01 仍保持手动验收：
+Slow E01 保持手动验收，且现在都需要 `--ignored` 和 `FORENSICS_E01_FIXTURE`：
 
 ```bash
 cargo test -p app-services --test e01_full_pipeline_test -- --ignored --nocapture
-cargo test -p app-services --test e01_mft_scan_test -- --nocapture
+cargo test -p app-services --test e01_mft_scan_test -- --ignored --nocapture
 ```
 
 ## 后续优先级
 
-1. 接 Registry hive fixture parser，给 Analysis system info 加字段级 provenance。
-2. 接 EVTX boot/shutdown parser 或正式 notParsed adapter，保留“不伪造事实”约束。
-3. 将大媒体预览升级为真正 continuous streaming protocol 或 seek-aware command abstraction。
-4. 引入 `cargo deny` 与 CycloneDX/SPDX SBOM。
-5. 建仓库内 tiny RAW/E01 fixture 或生成脚本，替代私有路径慢测依赖。
-6. 统一 job partial/warning 语义并让 Reports 输出 provenance。
+1. 接真实 Registry hive key/value parser，输出 hostname、Windows version/build、install date、timezone 等可验证字段及字段级 provenance。
+2. 接真实 EVTX boot/shutdown parser，或继续保持显式 `notParsed/unavailable` 状态，绝不补默认事件事实。
+3. 将大媒体预览升级为真正 continuous streaming protocol；当前 bounded range command 只作为安全 fallback。
+4. 引入合法 tiny E01 fixture 或可生成 fixture，替代私有样本慢测依赖。
+5. 逐步消除 `cargo audit` warning-class transitive advisories，减少 `deny.toml` 临时例外。
+6. 收口 FS enum 去重与 command layer 残留业务 SQL 下沉。

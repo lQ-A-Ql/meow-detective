@@ -400,6 +400,7 @@ pub fn enumerate_filesystem_mft(...) -> DbResult<EnumerationStats> {
 |------|------|------|
 | 编码检测多次扫描 | detect_encoding | 合并为单次扫描 |
 | 大媒体预览 | get_media_url/read_media_range | 小文件 data URL；大文件返回 scoped handle 并按 1MB 窗口读取。完整连续 streaming/protocol 仍待实现 |
+| Registry/EVTX 解析 | analysis_service adapters | 当前只做候选发现、bounded header/provenance 和 `notParsed/unavailable` 状态；真实 hive key/value 与 EVTX event parser 接入后需重新评估解析复杂度 |
 
 ### P2 (长期)
 
@@ -409,5 +410,5 @@ pub fn enumerate_filesystem_mft(...) -> DbResult<EnumerationStats> {
 
 ---
 
-**分析人**: MiMo AI Assistant；2026-06-01 由 Codex 按当前实现更新媒体 range、Analysis 和 bounded preview 状态
-**分析版本**: v1.1
+**分析人**: MiMo AI Assistant；2026-06-02 由 Codex 按当前实现更新 Analysis provenance、media range、CI fixture 与 bounded preview 状态
+**分析版本**: v1.2

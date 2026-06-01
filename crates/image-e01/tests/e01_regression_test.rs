@@ -1,34 +1,25 @@
 use evidence_core::EvidenceReader;
 use image_e01::E01Reader;
 use std::io::{Read, Seek, SeekFrom};
+use std::path::PathBuf;
 
-fn p() -> std::path::PathBuf {
-    "E:/pangushi/刘洋/liuyang_pc.E01".into()
-}
-fn skip() -> bool {
-    if !p().exists() {
-        eprintln!("SKIP");
-        true
-    } else {
-        false
-    }
+fn real_e01_path() -> PathBuf {
+    std::env::var_os("FORENSICS_E01_FIXTURE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| panic!("set FORENSICS_E01_FIXTURE to run ignored real E01 tests"))
 }
 
 #[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn open_real_file() {
-    if skip() {
-        return;
-    }
-    let r = E01Reader::open(&p()).unwrap();
+    let r = E01Reader::open(&real_e01_path()).unwrap();
     assert!(r.info().size > 0);
 }
 
 #[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn read_first_sector() {
-    if skip() {
-        return;
-    }
-    let mut r = E01Reader::open(&p()).unwrap();
+    let mut r = E01Reader::open(&real_e01_path()).unwrap();
     let mut buf = [0u8; 512];
     r.read_exact(&mut buf).unwrap();
     // Verify we got non-zero data (first 4 bytes not all zero)
@@ -37,11 +28,9 @@ fn read_first_sector() {
 }
 
 #[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn cross_chunk_4k() {
-    if skip() {
-        return;
-    }
-    let mut r = E01Reader::open(&p()).unwrap();
+    let mut r = E01Reader::open(&real_e01_path()).unwrap();
     let mut s0 = [0u8; 512];
     r.read_exact(&mut s0).unwrap();
     r.seek(SeekFrom::Start(0)).unwrap();
@@ -52,22 +41,18 @@ fn cross_chunk_4k() {
 }
 
 #[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn seek_end_read_last() {
-    if skip() {
-        return;
-    }
-    let mut r = E01Reader::open(&p()).unwrap();
+    let mut r = E01Reader::open(&real_e01_path()).unwrap();
     r.seek(SeekFrom::End(-512)).unwrap();
     let mut buf = [0u8; 512];
     r.read_exact(&mut buf).unwrap();
 }
 
 #[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn read_mid_image_block() {
-    if skip() {
-        return;
-    }
-    let mut r = E01Reader::open(&p()).unwrap();
+    let mut r = E01Reader::open(&real_e01_path()).unwrap();
     let target = 4u64 * 1024 * 1024 * 1024;
     r.seek(SeekFrom::Start(target)).unwrap();
     let mut buf = vec![0u8; 4096];

@@ -1,12 +1,11 @@
 #[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn dump_section_walk() {
-    let p = std::path::Path::new("E:/pangushi/刘洋/liuyang_pc.E01");
-    if !p.exists() {
-        eprintln!("SKIP");
-        return;
-    }
+    let p = std::env::var_os("FORENSICS_E01_FIXTURE")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| panic!("set FORENSICS_E01_FIXTURE to run ignored real E01 dump tests"));
     use std::io::{Read, Seek, SeekFrom};
-    let mut f = std::fs::File::open(p).unwrap();
+    let mut f = std::fs::File::open(&p).unwrap();
     let flen = f.seek(SeekFrom::End(0)).unwrap();
     f.seek(SeekFrom::Start(0)).unwrap();
 
@@ -42,14 +41,13 @@ fn dump_section_walk() {
 }
 
 #[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn dump_first_table_bytes() {
-    let p = std::path::Path::new("E:/pangushi/刘洋/liuyang_pc.E01");
-    if !p.exists() {
-        eprintln!("SKIP");
-        return;
-    }
+    let p = std::env::var_os("FORENSICS_E01_FIXTURE")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| panic!("set FORENSICS_E01_FIXTURE to run ignored real E01 dump tests"));
     use std::io::{Read, Seek, SeekFrom};
-    let mut f = std::fs::File::open(p).unwrap();
+    let mut f = std::fs::File::open(&p).unwrap();
     let table_off = 258681683u64;
     f.seek(SeekFrom::Start(table_off)).unwrap();
 

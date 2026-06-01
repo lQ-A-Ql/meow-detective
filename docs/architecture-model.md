@@ -266,10 +266,13 @@ Analysis 功能的前后端契约以 `transport` crate 为唯一 Rust 源头，�
 | Frontend API | `frontend/src/lib/api/analysis.ts` | 所有调用走 `apiClient.request(...)`，禁止页面直接 import Tauri `invoke` |
 | Frontend hooks | `frontend/src/features/analysis/hooks.ts` | React Query hooks 使用 active case enabled gate；无 active case 时不发 analysis IPC/mock 请求 |
 | Mock provider | `frontend/src/lib/api/provider.ts`, `frontend/src/lib/api/mock-data.ts` | mock 模式提供三类 analysis fallback，默认 `pnpm dev` 可访问 `/analysis` |
+| Reports | `crates/app-services/src/report_service.rs`, `crates/reports/src/html/exporter.rs` | HTML/CSV/JSON 输出当前 Analysis summary、parser status、warnings 与 evidence provenance；HTML escaping 和 CSV formula sanitization 必须保留 |
 
 当前 parser 状态:
 
-- 系统信息解析尚未接入 Registry/EVTX parser。`get_system_info` 返回 `status: "notParsed"`、空字段和 warning，不输出硬编码主机名、Windows 版本、注册用户或固定 boot 事实。
+- Analysis DTO 包含 `AnalysisProvenanceDto { dataSourceId, artifactPath, parser, parsedAt, status, warnings }`。系统信息、boot records、分类汇总和单文件分类均可携带来源说明。
+- Registry 当前只发现 `SYSTEM` / `SOFTWARE` hive 候选并验证 bounded `regf` header；尚未遍历 hive key/value，因此 hostname、Windows version/build、timezone 等字段仍保持未解析。
+- EVTX 当前只发现 `System.evtx` 并返回 `evtx.boot_shutdown` adapter provenance；`artifacts-windows` 尚无 EVTX event parser，因此不生成 boot/shutdown 时间戳。
 - 文件分类只读取每个文件有限 header（当前 8KB）并按 magic/ext 分类；读取入口为 `FileEntryId + DataSourceKind`，支持 logical directory、E01、RAW 的统一路径。
 - Summary 只基于真实 DTO 状态生成；未解析信息必须显示“未解析”或 warning，不允许生成伪造取证事实。
 
@@ -420,7 +423,13 @@ Settings 当前分两类持久化：
 │                                                                  │
 │  慢测/真实样本验收                                               │
 │  ├── e01_full_pipeline_test --ignored --nocapture                │
-│  └── e01_mft_scan_test --nocapture                              │
+│  └── e01_mft_scan_test --ignored --nocapture                    │
+│                                                                  │
+│  依赖治理 / 供应链                                               │
+│  ├── cargo deny check advisories bans licenses sources           │
+│  ├── cargo audit                                                 │
+│  ├── pnpm --dir frontend audit --audit-level high                │
+│  └── CycloneDX backend/frontend SBOM artifacts                   │
 │                                                                  │
 │  覆盖重点                                                       │
 │  ├── 编译检查                                                   │
@@ -451,5 +460,5 @@ Settings 当前分两类持久化：
 
 ---
 
-**建模人**: MiMo AI Assistant；2026-06-01 由 Codex 更新 Analysis contract、Settings/事件/媒体预览与验证状态
-**建模版本**: v1.1
+**建模人**: MiMo AI Assistant；2026-06-02 由 Codex 更新 Analysis provenance、Reports、Job partial、CI/SBOM 与慢测状态
+**建模版本**: v1.2
