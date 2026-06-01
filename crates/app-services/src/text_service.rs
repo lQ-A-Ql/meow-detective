@@ -2,7 +2,7 @@
 //!
 //! 提供文本编码检测、解码、语法高亮支持。
 
-use encoding_rs::{Encoding, UTF_8, GBK, UTF_16LE, UTF_16BE};
+use encoding_rs::{Encoding, GBK, UTF_16BE, UTF_16LE, UTF_8};
 use std::io::Read;
 
 /// 编码检测结果
@@ -75,10 +75,10 @@ impl TextService {
         let (decoded, _, errors) = GBK.decode(data);
         if !errors {
             let has_chinese = decoded.chars().any(|c| {
-                (c >= '\u{4E00}' && c <= '\u{9FFF}')
-                    || (c >= '\u{3400}' && c <= '\u{4DBF}')
-                    || (c >= '\u{3000}' && c <= '\u{303F}') // CJK Symbols
-                    || (c >= '\u{FF00}' && c <= '\u{FFEF}') // Fullwidth forms
+                ('\u{4E00}'..='\u{9FFF}').contains(&c)
+                    || ('\u{3400}'..='\u{4DBF}').contains(&c)
+                    || ('\u{3000}'..='\u{303F}').contains(&c) // CJK Symbols
+                    || ('\u{FF00}'..='\u{FFEF}').contains(&c) // Fullwidth forms
             });
 
             if has_chinese {
@@ -94,8 +94,8 @@ impl TextService {
         let (decoded_sjis, _, errors_sjis) = encoding_rs::SHIFT_JIS.decode(data);
         if !errors_sjis {
             let has_japanese = decoded_sjis.chars().any(|c| {
-                (c >= '\u{3040}' && c <= '\u{309F}') // Hiragana
-                    || (c >= '\u{30A0}' && c <= '\u{30FF}') // Katakana
+                ('\u{3040}'..='\u{309F}').contains(&c) // Hiragana
+                    || ('\u{30A0}'..='\u{30FF}').contains(&c) // Katakana
             });
             if has_japanese {
                 return EncodingInfo {
@@ -110,7 +110,7 @@ impl TextService {
         let (decoded_kr, _, errors_kr) = encoding_rs::EUC_KR.decode(data);
         if !errors_kr {
             let has_korean = decoded_kr.chars().any(|c| {
-                c >= '\u{AC00}' && c <= '\u{D7AF}' // Hangul syllables
+                ('\u{AC00}'..='\u{D7AF}').contains(&c) // Hangul syllables
             });
             if has_korean {
                 return EncodingInfo {
@@ -292,8 +292,14 @@ mod tests {
 
     #[test]
     fn get_language_from_extension_js() {
-        assert_eq!(TextService::get_language_from_extension("js"), Some("javascript"));
-        assert_eq!(TextService::get_language_from_extension("JS"), Some("javascript"));
+        assert_eq!(
+            TextService::get_language_from_extension("js"),
+            Some("javascript")
+        );
+        assert_eq!(
+            TextService::get_language_from_extension("JS"),
+            Some("javascript")
+        );
     }
 
     #[test]

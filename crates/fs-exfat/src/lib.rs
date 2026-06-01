@@ -133,9 +133,9 @@ impl ExfatReader {
             let entries = self.read_directory_entries(current_cluster)?;
             let lower_component = component.to_lowercase();
 
-            let found = entries.iter().find(|e| {
-                e.name.to_lowercase() == lower_component
-            });
+            let found = entries
+                .iter()
+                .find(|e| e.name.to_lowercase() == lower_component);
 
             match found {
                 Some(entry) => {
@@ -376,7 +376,7 @@ mod tests {
 
         // File Name entry
         root[pos] = 0xC1; // In-use, type 1 (FileName)
-        // "TEST.TXT" in UTF-16LE
+                          // "TEST.TXT" in UTF-16LE
         let name = "TEST.TXT";
         for (i, c) in name.encode_utf16().enumerate() {
             let offset = pos + 2 + i * 2;

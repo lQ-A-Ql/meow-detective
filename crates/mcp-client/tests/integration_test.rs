@@ -48,11 +48,15 @@ fn test_mcp_config_serialization_roundtrip() {
             ("cases".to_string(), true),
             ("files".to_string(), true),
             ("timeline".to_string(), false),
-        ].into_iter().collect(),
+        ]
+        .into_iter()
+        .collect(),
         tools: vec![
             ("search_files".to_string(), true),
             ("get_file_content".to_string(), true),
-        ].into_iter().collect(),
+        ]
+        .into_iter()
+        .collect(),
     };
 
     // Serialize
@@ -91,7 +95,7 @@ fn test_mcp_server_status() {
 
 #[test]
 fn test_mcp_resource_list() {
-    let resources = vec![
+    let resources = [
         McpResource {
             uri: "forensics://cases".to_string(),
             name: "Cases".to_string(),
@@ -113,7 +117,7 @@ fn test_mcp_resource_list() {
 
 #[test]
 fn test_mcp_tool_list() {
-    let tools = vec![
+    let tools = [
         McpTool {
             name: "search_files".to_string(),
             description: "Search files".to_string(),
@@ -202,12 +206,30 @@ async fn test_mcp_client_operations_when_not_connected() {
     let client = McpClient::new(config);
 
     // All operations should return NotConnected error
-    assert!(matches!(client.list_resources().await, Err(McpError::NotConnected)));
-    assert!(matches!(client.list_tools().await, Err(McpError::NotConnected)));
-    assert!(matches!(client.list_prompts().await, Err(McpError::NotConnected)));
-    assert!(matches!(client.read_resource("test").await, Err(McpError::NotConnected)));
-    assert!(matches!(client.call_tool("test", serde_json::json!({})).await, Err(McpError::NotConnected)));
-    assert!(matches!(client.get_prompt("test", None).await, Err(McpError::NotConnected)));
+    assert!(matches!(
+        client.list_resources().await,
+        Err(McpError::NotConnected)
+    ));
+    assert!(matches!(
+        client.list_tools().await,
+        Err(McpError::NotConnected)
+    ));
+    assert!(matches!(
+        client.list_prompts().await,
+        Err(McpError::NotConnected)
+    ));
+    assert!(matches!(
+        client.read_resource("test").await,
+        Err(McpError::NotConnected)
+    ));
+    assert!(matches!(
+        client.call_tool("test", serde_json::json!({})).await,
+        Err(McpError::NotConnected)
+    ));
+    assert!(matches!(
+        client.get_prompt("test", None).await,
+        Err(McpError::NotConnected)
+    ));
 }
 
 #[test]
@@ -222,7 +244,10 @@ fn test_mcp_error_types() {
         McpError::ToolNotFound("test".to_string()),
         McpError::ResourceNotFound("test".to_string()),
         McpError::PromptNotFound("test".to_string()),
-        McpError::Server { code: -1, message: "test".to_string() },
+        McpError::Server {
+            code: -1,
+            message: "test".to_string(),
+        },
     ];
 
     // All errors should have a display implementation

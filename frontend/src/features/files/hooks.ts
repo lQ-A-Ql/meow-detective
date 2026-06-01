@@ -1,5 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getFileChildren, getFileRows, getFileTree, getTextPreview, getImagePreview, getMediaUrl, importDataSource, openFileHandle, readFileRange } from '@/lib/api/files';
+import { useEffect } from 'react';
+import {
+  extractFile,
+  getFileChildren,
+  getFileRows,
+  getFileTree,
+  getTextPreview,
+  getImagePreview,
+  getMediaUrl,
+  readMediaRange,
+  importDataSource,
+  openFileHandle,
+  readFileRange,
+} from '@/lib/api/files';
+import { FileEntryRow } from '@/types/models';
 import { expectJobsSnapshotActivity } from '@/features/jobs/hooks';
 
 const importRefreshKeys = [['case'], ['files'], ['timeline'], ['artifacts'], ['search']] as const;
@@ -82,7 +96,7 @@ export function useTextPreview(fileId?: string) {
 
 /**
  * Hook to get image preview for a file.
- * Uses media URL for better performance (Tauri asset protocol).
+ * Returns an inline data URL for bounded image previews.
  */
 export function useImagePreview(fileId?: string) {
   return useQuery({
@@ -91,31 +105,59 @@ export function useImagePreview(fileId?: string) {
     retry: false,
     queryFn: async () => {
       if (!fileId) return null;
-      // Use media URL for better performance
-      const media = await getMediaUrl(fileId);
-      return {
-        dataUrl: media.url,
-        mimeType: media.mimeType,
-        width: 0,
-        height: 0,
-        size: media.size,
-      };
+      return await getImagePreview(fileId);
     },
   });
 }
 
 /**
  * Hook to get media URL for video/audio playback.
- * Returns a local file URL.
+ * Returns an inline data URL for bounded media previews.
  */
 export function useMediaUrl(fileId?: string) {
-  return useQuery({
+  const query = useQuery({
     queryKey: ['files', 'media', fileId],
     enabled: Boolean(fileId),
     retry: false,
     queryFn: async () => {
       if (!fileId) return null;
-      return await getMediaUrl(fileId);
+      const media = await getMediaUrl(fileId);
+      if (media.url || !media.handleId || !media.canReadRanges) {
+        return media;
+      }
+
+      const range = await readMediaRange({
+        handleId: media.handleId,
+        offset: 0,
+        length: Math.min(media.size, 1024 * 1024),
+      });
+      const byteCharacters = atob(range.bytesBase64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let index = 0; index < byteCharacters.length; index += 1) {
+        byteNumbers[index] = byteCharacters.charCodeAt(index);
+      }
+      const blob = new Blob([new Uint8Array(byteNumbers)], { type: media.mimeType });
+      return {
+        ...media,
+        url: URL.createObjectURL(blob),
+      };
     },
+  });
+
+  const blobUrl = query.data?.url?.startsWith('blob:') ? query.data.url : undefined;
+  useEffect(() => {
+    return () => {
+      if (blobUrl) {
+        URL.revokeObjectURL(blobUrl);
+      }
+    };
+  }, [blobUrl]);
+
+  return query;
+}
+
+export function useExtractFile() {
+  return useMutation({
+    mutationFn: (file: FileEntryRow) => extractFile(file),
   });
 }

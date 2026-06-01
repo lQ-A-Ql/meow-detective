@@ -134,37 +134,41 @@ impl ExfatBootSector {
 
         // Helper closure to safely extract fixed-size arrays
         // SAFETY: We already validated data.len() >= 512 at the top of parse()
-        let file_system_name: [u8; 8] = data[3..11]
-            .try_into()
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid filesystem name slice"))?;
+        let file_system_name: [u8; 8] = data[3..11].try_into().map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, "invalid filesystem name slice")
+        })?;
 
         Ok(Self {
             jump_boot: [data[0], data[1], data[2]],
             file_system_name,
-            partition_offset: u64::from_le_bytes(
-                data[64..72].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid partition offset"))?
-            ),
-            volume_length: u64::from_le_bytes(
-                data[72..80].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid volume length"))?
-            ),
+            partition_offset: u64::from_le_bytes(data[64..72].try_into().map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "invalid partition offset")
+            })?),
+            volume_length: u64::from_le_bytes(data[72..80].try_into().map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "invalid volume length")
+            })?),
             fat_offset: u32::from_le_bytes(
-                data[80..84].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid fat offset"))?
+                data[80..84].try_into().map_err(|_| {
+                    io::Error::new(io::ErrorKind::InvalidData, "invalid fat offset")
+                })?,
             ),
             fat_length: u32::from_le_bytes(
-                data[84..88].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid fat length"))?
+                data[84..88].try_into().map_err(|_| {
+                    io::Error::new(io::ErrorKind::InvalidData, "invalid fat length")
+                })?,
             ),
-            cluster_heap_offset: u32::from_le_bytes(
-                data[88..92].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid cluster heap offset"))?
-            ),
-            cluster_count: u32::from_le_bytes(
-                data[92..96].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid cluster count"))?
-            ),
-            first_cluster_of_root: u32::from_le_bytes(
-                data[96..100].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid first cluster of root"))?
-            ),
-            volume_serial_number: u32::from_le_bytes(
-                data[100..104].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid volume serial"))?
-            ),
+            cluster_heap_offset: u32::from_le_bytes(data[88..92].try_into().map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "invalid cluster heap offset")
+            })?),
+            cluster_count: u32::from_le_bytes(data[92..96].try_into().map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "invalid cluster count")
+            })?),
+            first_cluster_of_root: u32::from_le_bytes(data[96..100].try_into().map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "invalid first cluster of root")
+            })?),
+            volume_serial_number: u32::from_le_bytes(data[100..104].try_into().map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "invalid volume serial")
+            })?),
             file_system_revision: u16::from_le_bytes([data[104], data[105]]),
             volume_flags: u16::from_le_bytes([data[106], data[107]]),
             bytes_per_sector_shift,
@@ -207,8 +211,7 @@ impl ExfatBootSector {
         if cluster < MIN_CLUSTER {
             return 0;
         }
-        self.cluster_heap_byte_offset()
-            + (cluster - MIN_CLUSTER) as u64 * self.cluster_size()
+        self.cluster_heap_byte_offset() + (cluster - MIN_CLUSTER) as u64 * self.cluster_size()
     }
 
     /// Get the major revision number.

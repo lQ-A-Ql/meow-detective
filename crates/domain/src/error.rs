@@ -102,10 +102,7 @@ mod tests {
 
     #[test]
     fn error_from_boxed_error() {
-        let boxed_err: Box<dyn std::error::Error> = Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "test error",
-        ));
+        let boxed_err: Box<dyn std::error::Error> = Box::new(std::io::Error::other("test error"));
         let err = ForensicsError::from(boxed_err);
         assert!(err.to_string().contains("Internal error"));
     }

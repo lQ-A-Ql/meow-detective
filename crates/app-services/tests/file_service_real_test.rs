@@ -233,3 +233,74 @@ fn read_file_range_rejects_invalid_handles_instead_of_faking_bytes() {
         })
         .unwrap();
 }
+
+#[test]
+fn open_file_content_by_id_reads_uuid_backed_logical_file() {
+    let tmp = TempDir::new().unwrap();
+    let active = import_fixture_directory(&tmp);
+
+    active
+        .with_conn(|conn| {
+            let root = file_service::get_file_tree_real(conn)
+                .map_err(persistence_sqlite::DbError::System)?
+                .pop()
+                .unwrap();
+            let rows = file_service::get_file_rows_for_request(
+                conn,
+                &GetFileRowsRequest {
+                    parent_id: Some(root.id),
+                },
+            )
+            .map_err(persistence_sqlite::DbError::System)?;
+            let file_id = rows
+                .iter()
+                .find(|row| row.name == "root.txt")
+                .map(|row| domain::FileEntryId(row.id.clone()))
+                .unwrap();
+
+            let bytes = file_service::read_file_header_by_id(conn, &file_id, 4)
+                .map_err(persistence_sqlite::DbError::System)?;
+            assert_eq!(bytes, b"0123");
+
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn open_file_content_rejects_traversal_paths_from_database() {
+    let tmp = TempDir::new().unwrap();
+    let active = import_fixture_directory(&tmp);
+
+    active
+        .with_conn(|conn| {
+            let root = file_service::get_file_tree_real(conn)
+                .map_err(persistence_sqlite::DbError::System)?
+                .pop()
+                .unwrap();
+            let rows = file_service::get_file_rows_for_request(
+                conn,
+                &GetFileRowsRequest {
+                    parent_id: Some(root.id),
+                },
+            )
+            .map_err(persistence_sqlite::DbError::System)?;
+            let file_id = rows
+                .iter()
+                .find(|row| row.name == "root.txt")
+                .map(|row| row.id.clone())
+                .unwrap();
+
+            conn.execute(
+                "UPDATE file_entries SET path = '../outside.txt' WHERE id = ?1",
+                rusqlite::params![file_id],
+            )?;
+
+            let err = file_service::read_file_header_by_id(conn, &domain::FileEntryId(file_id), 16)
+                .unwrap_err();
+            assert!(err.contains("Unsafe file path"));
+
+            Ok(())
+        })
+        .unwrap();
+}

@@ -12,7 +12,8 @@ pub async fn get_timeline_events(
     request: Option<GetTimelineRequest>,
 ) -> Result<PageResponse<TimelineEventDto>, CommandError> {
     let app_state = state.inner().clone();
-    let req = request.unwrap_or_default();
+    let mut req = request.unwrap_or_default();
+    req.validate().map_err(CommandError::invalid_input)?;
     tauri::async_runtime::spawn_blocking(move || {
         // Short lock: extract db_path, then release
         let db_path = {
@@ -35,7 +36,8 @@ pub async fn get_timeline_events(
             .map_err(CommandError::from_service_error)?;
 
         // Use filtered query if any filters are provided
-        let has_filters = req.time_start.is_some() || req.time_end.is_some() || req.event_type.is_some();
+        let has_filters =
+            req.time_start.is_some() || req.time_end.is_some() || req.event_type.is_some();
         if has_filters {
             app_services::timeline_service::query_timeline_filtered(
                 &conn,

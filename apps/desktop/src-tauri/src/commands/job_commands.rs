@@ -26,8 +26,7 @@ pub async fn get_jobs_snapshot(
         // Guard is now dropped — query with released lock
         let conn = persistence_sqlite::open_or_create(&db_path)
             .map_err(CommandError::from_service_error)?;
-        app_services::job_service::get_jobs_from_db(&conn)
-            .map_err(CommandError::from_service_error)
+        app_services::job_service::get_jobs_from_db(&conn).map_err(CommandError::from_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?

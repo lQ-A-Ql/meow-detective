@@ -31,9 +31,7 @@ pub enum DirectoryEntry {
         no_fat_chain: bool,
     },
     /// File name fragment (15 UTF-16LE characters).
-    FileName {
-        name: String,
-    },
+    FileName { name: String },
     /// Allocation Bitmap.
     Bitmap {
         bitmap_flags: u8,
@@ -46,9 +44,7 @@ pub enum DirectoryEntry {
         data_length: u64,
     },
     /// Volume Label.
-    VolumeLabel {
-        label: String,
-    },
+    VolumeLabel { label: String },
     /// Deleted entry (not in use).
     Deleted,
     /// Unknown entry type.
@@ -86,15 +82,16 @@ impl DirectoryEntry {
 
     fn parse_file_entry(data: &[u8]) -> io::Result<Self> {
         // SAFETY: caller validated data.len() >= DIR_ENTRY_SIZE (32)
-        let create_ts = u32::from_le_bytes(
-            data[8..12].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid create timestamp"))?
-        );
-        let modified_ts = u32::from_le_bytes(
-            data[12..16].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid modified timestamp"))?
-        );
-        let accessed_ts = u32::from_le_bytes(
-            data[16..20].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid accessed timestamp"))?
-        );
+        let create_ts =
+            u32::from_le_bytes(data[8..12].try_into().map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "invalid create timestamp")
+            })?);
+        let modified_ts = u32::from_le_bytes(data[12..16].try_into().map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, "invalid modified timestamp")
+        })?);
+        let accessed_ts = u32::from_le_bytes(data[16..20].try_into().map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, "invalid accessed timestamp")
+        })?);
 
         Ok(Self::File {
             secondary_count: data[1],
@@ -107,14 +104,17 @@ impl DirectoryEntry {
 
     fn parse_stream_entry(data: &[u8]) -> io::Result<Self> {
         // SAFETY: caller validated data.len() >= DIR_ENTRY_SIZE (32)
-        let valid_data_length = u64::from_le_bytes(
-            data[8..16].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid valid data length"))?
-        );
-        let first_cluster = u32::from_le_bytes(
-            data[20..24].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid first cluster"))?
-        );
+        let valid_data_length = u64::from_le_bytes(data[8..16].try_into().map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, "invalid valid data length")
+        })?);
+        let first_cluster =
+            u32::from_le_bytes(data[20..24].try_into().map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "invalid first cluster")
+            })?);
         let data_length = u64::from_le_bytes(
-            data[24..32].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid data length"))?
+            data[24..32]
+                .try_into()
+                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid data length"))?,
         );
 
         Ok(Self::Stream {
@@ -142,11 +142,14 @@ impl DirectoryEntry {
 
     fn parse_upcase_entry(data: &[u8]) -> io::Result<Self> {
         // SAFETY: caller validated data.len() >= DIR_ENTRY_SIZE (32)
-        let first_cluster = u32::from_le_bytes(
-            data[20..24].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid first cluster"))?
-        );
+        let first_cluster =
+            u32::from_le_bytes(data[20..24].try_into().map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "invalid first cluster")
+            })?);
         let data_length = u64::from_le_bytes(
-            data[24..32].try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid data length"))?
+            data[24..32]
+                .try_into()
+                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid data length"))?,
         );
 
         Ok(Self::UpcaseTable {
@@ -190,7 +193,9 @@ impl DirectoryEntry {
     /// Get the file attributes if this is a File entry.
     pub fn file_attributes(&self) -> Option<u16> {
         match self {
-            Self::File { file_attributes, .. } => Some(*file_attributes),
+            Self::File {
+                file_attributes, ..
+            } => Some(*file_attributes),
             _ => None,
         }
     }
@@ -198,7 +203,9 @@ impl DirectoryEntry {
     /// Check if this represents a directory.
     pub fn is_directory(&self) -> bool {
         match self {
-            Self::File { file_attributes, .. } => file_attributes & ATTR_DIRECTORY != 0,
+            Self::File {
+                file_attributes, ..
+            } => file_attributes & ATTR_DIRECTORY != 0,
             _ => false,
         }
     }
@@ -363,13 +370,22 @@ fn parse_exfat_timestamp(
     let second = (timestamp & 0x0F) * 2;
 
     // Validate ranges
-    if !(1..=12).contains(&month) || !(1..=31).contains(&day) || hour > 23 || minute > 59 || second > 59 {
+    if !(1..=12).contains(&month)
+        || !(1..=31).contains(&day)
+        || hour > 23
+        || minute > 59
+        || second > 59
+    {
         return None;
     }
 
     // Create NaiveDateTime
-    let naive = chrono::NaiveDate::from_ymd_opt(year, month, day)?
-        .and_hms_milli_opt(hour, minute, second, increment_10ms as u32 * 10)?;
+    let naive = chrono::NaiveDate::from_ymd_opt(year, month, day)?.and_hms_milli_opt(
+        hour,
+        minute,
+        second,
+        increment_10ms as u32 * 10,
+    )?;
 
     // exFAT UTC offset: signed 15-minute increments
     // 0x00 = UTC, 0xFF = unknown (treat as UTC)
@@ -411,8 +427,8 @@ mod tests {
     fn parse_stream_entry() {
         let mut data = [0u8; 32];
         data[0] = 0xC0; // In-use, type 0 (Stream)
-        data[3] = 10;   // NameLength = 10
-        data[20] = 5;   // FirstCluster = 5
+        data[3] = 10; // NameLength = 10
+        data[20] = 5; // FirstCluster = 5
         data[21] = 0;
         data[22] = 0;
         data[23] = 0;
@@ -425,7 +441,7 @@ mod tests {
     fn parse_filename_entry() {
         let mut data = [0u8; 32];
         data[0] = 0xC1; // In-use, type 1 (FileName)
-        // "TEST" in UTF-16LE
+                        // "TEST" in UTF-16LE
         data[2] = b'T';
         data[4] = b'E';
         data[6] = b'S';
@@ -475,7 +491,7 @@ mod tests {
     #[test]
     fn parse_exfat_timestamp_with_positive_utc_offset() {
         // 2024-01-15 12:30:00 UTC+8 (offset = 0x20 = 32 * 15 = 480 min = 8 hours)
-        let timestamp = (44 << 25) | (1 << 20) | (15 << 15) | (12 << 10) | (30 << 4) | 0;
+        let timestamp = (44 << 25) | (1 << 20) | (15 << 15) | (12 << 10) | (30 << 4);
         let utc_offset = 0x20; // UTC+8
 
         let dt = parse_exfat_timestamp(timestamp, 0, utc_offset).unwrap();
@@ -490,7 +506,7 @@ mod tests {
     #[test]
     fn parse_exfat_timestamp_with_negative_utc_offset() {
         // 2024-01-15 12:30:00 UTC-5 (offset = 0xE0 = -32 * 15 = -480 min)
-        let timestamp = (44 << 25) | (1 << 20) | (15 << 15) | (12 << 10) | (30 << 4) | 0;
+        let timestamp = (44 << 25) | (1 << 20) | (15 << 15) | (12 << 10) | (30 << 4);
         let utc_offset = 0xE0; // -480 min ≈ UTC-8
 
         let dt = parse_exfat_timestamp(timestamp, 0, utc_offset).unwrap();
@@ -503,7 +519,7 @@ mod tests {
     #[test]
     fn parse_exfat_timestamp_unknown_offset_treated_as_utc() {
         // 2024-01-15 12:30:00 with unknown offset (0xFF)
-        let timestamp = (44 << 25) | (1 << 20) | (15 << 15) | (12 << 10) | (30 << 4) | 0;
+        let timestamp = (44 << 25) | (1 << 20) | (15 << 15) | (12 << 10) | (30 << 4);
         let dt = parse_exfat_timestamp(timestamp, 0, 0xFF).unwrap();
         // Should be treated as UTC (no adjustment)
         assert_eq!(dt.hour(), 12);
@@ -524,8 +540,8 @@ mod tests {
         // Stream entry
         let mut stream = [0u8; 32];
         stream[0] = 0xC0; // In-use, type 0
-        stream[3] = 4;    // NameLength = 4
-        stream[20] = 10;  // FirstCluster = 10
+        stream[3] = 4; // NameLength = 4
+        stream[20] = 10; // FirstCluster = 10
         stream[24] = 100; // DataLength = 100
         data.extend_from_slice(&stream);
 

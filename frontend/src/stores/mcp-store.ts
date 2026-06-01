@@ -483,7 +483,7 @@ export const useMcpStore = create<McpState>((set, get) => ({
       });
       return result;
     } catch (err) {
-      throw new Error(formatError(err));
+      throw Object.assign(new Error(formatError(err)), { cause: err });
     }
   },
 }));

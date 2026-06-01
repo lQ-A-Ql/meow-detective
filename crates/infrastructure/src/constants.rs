@@ -7,6 +7,21 @@ pub const TEXT_INDEX_LIMIT: usize = 1000;
 /// Maximum number of bytes to read in a single file range request.
 pub const MAX_RANGE_LENGTH: usize = 1024 * 1024;
 
+/// Maximum number of rows returned by a single paginated command.
+pub const MAX_PAGE_LIMIT: u32 = 500;
+
+/// Default number of rows returned by paginated commands.
+pub const DEFAULT_PAGE_LIMIT: u32 = 100;
+
+/// Maximum inline image preview size.
+pub const MAX_INLINE_IMAGE_PREVIEW_BYTES: u64 = 5 * 1024 * 1024;
+
+/// Maximum inline media preview size before scoped range streaming is required.
+pub const MAX_INLINE_MEDIA_PREVIEW_BYTES: u64 = 20 * 1024 * 1024;
+
+/// Maximum bytes artifact extractors may read from one file.
+pub const ARTIFACT_FILE_LIMIT_BYTES: u64 = 50 * 1024 * 1024;
+
 /// Maximum number of recent jobs to display.
 pub const JOB_LIST_LIMIT: usize = 12;
 

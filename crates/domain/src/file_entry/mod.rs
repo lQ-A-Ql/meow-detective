@@ -68,9 +68,7 @@ impl FileEntry {
 
     /// Get the most relevant timestamp (modified > created > accessed).
     pub fn best_timestamp(&self) -> Option<DateTime<Utc>> {
-        self.modified_at
-            .or(self.created_at)
-            .or(self.accessed_at)
+        self.modified_at.or(self.created_at).or(self.accessed_at)
     }
 
     /// Check if this file has been deleted (marked as deleted in filesystem).

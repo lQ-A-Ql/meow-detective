@@ -20,6 +20,7 @@ import { TreeSearch } from '@/components/tree/TreeSearch';
 import { useFileTreeKeyboard } from '@/hooks/use-file-tree-keyboard';
 import { useCurrentCase } from '@/features/case/hooks';
 import {
+  useExtractFile,
   useFileChildren,
   useFileRows,
   useFileTree,
@@ -145,6 +146,7 @@ export function FileBrowser() {
   const { data: textPreview } = useTextPreview(selectedFile?.id);
   const { data: imagePreview } = useImagePreview(selectedFile?.id);
   const { data: mediaUrl } = useMediaUrl(selectedFile?.id);
+  const extractFile = useExtractFile();
 
   const flatTree = useMemo(() => {
     const visible: FileTreeNode[] = [];
@@ -694,8 +696,17 @@ export function FileBrowser() {
 
             <InspectorSection title="操作">
               <div className="flex flex-col gap-2">
-                <button className="w-full border border-[#ccc] bg-white text-[#111] hover:bg-[#f0f0f0] py-1.5 text-center text-[11px] rounded-[2px] cursor-pointer font-medium">
-                  提取文件
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedFile) {
+                      extractFile.mutate(selectedFile);
+                    }
+                  }}
+                  disabled={!selectedFile || extractFile.isPending}
+                  className="w-full border border-[#ccc] bg-white text-[#111] hover:bg-[#f0f0f0] py-1.5 text-center text-[11px] rounded-[2px] cursor-pointer font-medium disabled:opacity-50"
+                >
+                  {extractFile.isPending ? '提取中...' : '提取文件'}
                 </button>
                 <button
                   onClick={() => {

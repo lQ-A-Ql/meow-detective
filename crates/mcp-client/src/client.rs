@@ -37,14 +37,13 @@ impl McpClient {
         info!("Connecting to MCP server: {}", self.config.name);
 
         let mut transport: Box<dyn McpTransportTrait> = match &self.config.transport {
-            McpTransport::Sse { url } => {
-                Box::new(SseTransport::new(url))
-            }
+            McpTransport::Sse { url } => Box::new(SseTransport::new(url)),
             McpTransport::Stdio { command, args } => {
                 // TODO: Implement Stdio transport
-                return Err(McpError::Transport(
-                    format!("Stdio transport not yet implemented: {} {:?}", command, args)
-                ));
+                return Err(McpError::Transport(format!(
+                    "Stdio transport not yet implemented: {} {:?}",
+                    command, args
+                )));
             }
         };
 
@@ -96,7 +95,11 @@ impl McpClient {
     }
 
     /// Call a tool
-    pub async fn call_tool(&self, name: &str, arguments: serde_json::Value) -> McpResult<serde_json::Value> {
+    pub async fn call_tool(
+        &self,
+        name: &str,
+        arguments: serde_json::Value,
+    ) -> McpResult<serde_json::Value> {
         let transport = self.transport.as_ref().ok_or(McpError::NotConnected)?;
         transport.call_tool(name, arguments).await
     }
@@ -108,7 +111,11 @@ impl McpClient {
     }
 
     /// Get a prompt
-    pub async fn get_prompt(&self, name: &str, arguments: Option<HashMap<String, String>>) -> McpResult<String> {
+    pub async fn get_prompt(
+        &self,
+        name: &str,
+        arguments: Option<HashMap<String, String>>,
+    ) -> McpResult<String> {
         let transport = self.transport.as_ref().ok_or(McpError::NotConnected)?;
         transport.get_prompt(name, arguments).await
     }

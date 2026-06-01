@@ -73,6 +73,55 @@ export interface DataSourcePartition {
   unlockHint?: string;
 }
 
+export type AnalysisParseStatus = 'parsed' | 'notParsed' | 'unavailable';
+
+export interface AnalysisSystemInfo {
+  computerName?: string;
+  osVersion?: string;
+  buildNumber?: string;
+  installDate?: string;
+  registeredOwner?: string;
+  organization?: string;
+  productId?: string;
+  networkAdapters: AnalysisNetworkAdapter[];
+  bootHistory: AnalysisBootRecord[];
+  timezone?: string;
+  language?: string;
+  status: AnalysisParseStatus;
+  warnings: string[];
+}
+
+export interface AnalysisNetworkAdapter {
+  name: string;
+  macAddress?: string;
+  ipAddresses: string[];
+  dhcpEnabled?: boolean;
+  dhcpServer?: string;
+}
+
+export interface AnalysisBootRecord {
+  timestamp: string;
+  bootType: string;
+  source: string;
+}
+
+export interface AnalysisFileClassification {
+  category: string;
+  files: AnalysisClassifiedFile[];
+  totalSize: number;
+  status: AnalysisParseStatus;
+  warnings: string[];
+}
+
+export interface AnalysisClassifiedFile {
+  fileId: string;
+  path: string;
+  name: string;
+  size: number;
+  fileType: string;
+  magicDescription: string;
+}
+
 export interface RecentCase {
   caseRoot: string;
   name: string;
@@ -187,6 +236,34 @@ export interface ViewerRangeResponse {
   kind: 'hex' | 'text';
   lines: string[];
   encoding?: string;
+}
+
+export interface MediaUrl {
+  url?: string;
+  handleId?: string;
+  mimeType: string;
+  size: number;
+  canReadRanges: boolean;
+}
+
+export interface MediaRangeRequest {
+  handleId: string;
+  offset: number;
+  length: number;
+}
+
+export interface MediaRangeResponse {
+  offset: number;
+  bytesBase64: string;
+  bytesRead: number;
+  eof: boolean;
+}
+
+export interface AppSettings {
+  caseRoot: string;
+  imageSearchPaths: string[];
+  theme: 'light' | 'dark';
+  devEventTrace: boolean;
 }
 
 export interface ReportTemplate {

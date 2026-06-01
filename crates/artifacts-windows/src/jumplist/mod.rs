@@ -8,8 +8,7 @@
 //! the LnkExtractor for detailed parsing.
 
 use artifacts_core::{
-    new_artifact, ArtifactContext, ArtifactExtractor, ArtifactSink,
-    ExtractorReport,
+    new_artifact, ArtifactContext, ArtifactExtractor, ArtifactSink, ExtractorReport,
 };
 use domain::ArtifactFamily;
 use std::collections::BTreeMap;
@@ -31,15 +30,22 @@ impl JumpListExtractor {
         // Shell Link CLSID first 4 bytes: 0x00021401
         while i + 4 < data.len() {
             // Look for the Shell Link CLSID pattern
-            if data[i] == 0x01 && data[i + 1] == 0x14 && data[i + 2] == 0x02 && data[i + 3] == 0x00 {
+            if data[i] == 0x01 && data[i + 1] == 0x14 && data[i + 2] == 0x02 && data[i + 3] == 0x00
+            {
                 // Check if this looks like a valid LNK header
                 if i + 76 <= data.len() {
-                    let header_size = u32::from_le_bytes([data[i], data[i + 1], data[i + 2], data[i + 3]]);
+                    let header_size =
+                        u32::from_le_bytes([data[i], data[i + 1], data[i + 2], data[i + 3]]);
                     if header_size == 0x4C {
                         // Found a potential LNK block
                         // Read the link flags to determine total size
                         let flags = if i + 20 <= data.len() {
-                            u32::from_le_bytes([data[i + 20], data[i + 21], data[i + 22], data[i + 23]])
+                            u32::from_le_bytes([
+                                data[i + 20],
+                                data[i + 21],
+                                data[i + 22],
+                                data[i + 23],
+                            ])
                         } else {
                             0
                         };
@@ -49,7 +55,10 @@ impl JumpListExtractor {
 
                         // Add LinkTargetIDList size if present
                         if flags & 0x00000001 != 0 && i + block_size + 2 <= data.len() {
-                            let id_list_size = u16::from_le_bytes([data[i + block_size], data[i + block_size + 1]]) as usize;
+                            let id_list_size = u16::from_le_bytes([
+                                data[i + block_size],
+                                data[i + block_size + 1],
+                            ]) as usize;
                             block_size += 2 + id_list_size;
                         }
 
@@ -90,7 +99,9 @@ impl ArtifactExtractor for JumpListExtractor {
     fn family(&self) -> ArtifactFamily {
         ArtifactFamily {
             name: "JumpList".into(),
-            description: Some("Windows Jump List entries (.ms-* and .customDestinations-ms)".into()),
+            description: Some(
+                "Windows Jump List entries (.ms-* and .customDestinations-ms)".into(),
+            ),
         }
     }
 
@@ -180,10 +191,7 @@ impl ArtifactExtractor for JumpListExtractor {
         let artifact = new_artifact(
             "JumpList",
             format!("JumpList: {}", ctx.file_path),
-            format!(
-                "Jump List with {} embedded shortcuts",
-                lnk_blocks.len()
-            ),
+            format!("Jump List with {} embedded shortcuts", lnk_blocks.len()),
             Some(&ctx.file_id),
             attrs,
         );
@@ -206,7 +214,9 @@ mod tests {
     #[test]
     fn jump_list_supports_path() {
         let extractor = JumpListExtractor;
-        assert!(extractor.supports_path("C:/Users/test/AppData/Roaming/Microsoft/Windows/Recent/5f7b5f7e3243a7b8.ms-abc"));
+        assert!(extractor.supports_path(
+            "C:/Users/test/AppData/Roaming/Microsoft/Windows/Recent/5f7b5f7e3243a7b8.ms-abc"
+        ));
         assert!(extractor.supports_path("C:/Users/test/AppData/Roaming/Microsoft/Windows/Recent/Custom/custom.customDestinations-ms"));
         assert!(!extractor.supports_path("C:/Users/test/file.txt"));
         assert!(!extractor.supports_path("C:/Users/test/file.lnk"));

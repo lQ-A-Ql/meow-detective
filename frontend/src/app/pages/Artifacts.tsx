@@ -1,4 +1,5 @@
 import { PageSubbar } from '@/components/layout/PageSubbar';
+import { useNavigate } from 'react-router';
 import { DenseDataTable } from '@/components/tables/DenseDataTable';
 import { InspectorPane, InspectorSection, InspectorValue } from '@/components/layout/InspectorPane';
 import { useArtifactFamilies, useArtifactRows } from '@/features/artifacts/hooks';
@@ -6,6 +7,7 @@ import { useSelectionStore } from '@/stores/selection-store';
 import { ArtifactRow } from '@/types/models';
 
 export function Artifacts() {
+  const navigate = useNavigate();
   const selectedArtifactFamily = useSelectionStore((state) => state.selectedArtifactFamily);
   const setSelectedArtifactFamily = useSelectionStore((state) => state.setSelectedArtifactFamily);
   const selectedArtifactId = useSelectionStore((state) => state.selectedArtifactId);
@@ -77,10 +79,33 @@ export function Artifacts() {
 
             <InspectorSection title="关联动作">
               <div className="space-y-2">
-                <button className="w-full border border-[#ccc] bg-white text-[#111] hover:bg-[#f0f0f0] py-1.5 text-center text-[11px] rounded-[2px] cursor-pointer font-medium">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sourceObjectId = selectedArtifact?.sourceObjectId;
+                    if (sourceObjectId) {
+                      useSelectionStore.getState().setSelectedFileId(sourceObjectId);
+                      navigate('/files');
+                    }
+                  }}
+                  disabled={!selectedArtifact?.sourceObjectId}
+                  className="w-full border border-[#ccc] bg-white text-[#111] hover:bg-[#f0f0f0] py-1.5 text-center text-[11px] rounded-[2px] cursor-pointer font-medium disabled:opacity-50"
+                >
                   在文件浏览中定位目标
                 </button>
-                <button className="w-full border border-transparent text-[#666] hover:text-[#111] py-1.5 text-center text-[11px] cursor-pointer underline hover:no-underline">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedArtifact) {
+                      useSelectionStore
+                        .getState()
+                        .setSelectedTimelineId(`artifact:${selectedArtifact.id}`);
+                      navigate('/timeline');
+                    }
+                  }}
+                  disabled={!selectedArtifact}
+                  className="w-full border border-transparent text-[#666] hover:text-[#111] py-1.5 text-center text-[11px] cursor-pointer underline hover:no-underline disabled:opacity-50"
+                >
                   查看关联时间线事件
                 </button>
               </div>

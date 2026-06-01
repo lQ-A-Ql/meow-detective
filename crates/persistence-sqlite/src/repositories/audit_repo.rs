@@ -75,7 +75,9 @@ impl AuditAction {
     pub fn resource_type(&self) -> &'static str {
         match self {
             Self::CaseCreate | Self::CaseOpen | Self::CaseClose | Self::CaseDelete => "case",
-            Self::DataSourceImport | Self::DataSourceDelete | Self::DataSourceRename => "datasource",
+            Self::DataSourceImport | Self::DataSourceDelete | Self::DataSourceRename => {
+                "datasource"
+            }
             Self::FileView | Self::FileExtract => "file",
             Self::SearchExecute => "search",
             Self::ReportGenerate | Self::ReportExport => "report",
@@ -197,10 +199,7 @@ impl<'a> AuditRepo<'a> {
                 "SELECT COUNT(*) FROM audit_log WHERE case_id = ?1".to_string(),
                 vec![Box::new(cid.to_string()) as Box<dyn rusqlite::types::ToSql>],
             ),
-            None => (
-                "SELECT COUNT(*) FROM audit_log".to_string(),
-                vec![],
-            ),
+            None => ("SELECT COUNT(*) FROM audit_log".to_string(), vec![]),
         };
 
         let mut stmt = self.conn.prepare(&sql)?;
@@ -273,10 +272,22 @@ mod tests {
         assert_eq!(repo.count(None).unwrap(), 0);
 
         // 使用 log 而不是 log_simple，以便设置 case_id
-        repo.log(Some("case-1"), "system", &AuditAction::CaseCreate, Some("case-1"), "{}")
-            .unwrap();
-        repo.log(Some("case-1"), "system", &AuditAction::CaseOpen, Some("case-1"), "{}")
-            .unwrap();
+        repo.log(
+            Some("case-1"),
+            "system",
+            &AuditAction::CaseCreate,
+            Some("case-1"),
+            "{}",
+        )
+        .unwrap();
+        repo.log(
+            Some("case-1"),
+            "system",
+            &AuditAction::CaseOpen,
+            Some("case-1"),
+            "{}",
+        )
+        .unwrap();
 
         assert_eq!(repo.count(None).unwrap(), 2);
         assert_eq!(repo.count(Some("case-1")).unwrap(), 2);

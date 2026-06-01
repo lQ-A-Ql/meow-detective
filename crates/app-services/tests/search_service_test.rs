@@ -16,7 +16,11 @@ fn create_test_files(dir: &std::path::Path) {
     std::fs::create_dir_all(dir).unwrap();
     std::fs::write(dir.join("readme.txt"), b"forensics analysis test document").unwrap();
     std::fs::write(dir.join("config.json"), b"{\"key\": \"forensics value\"}").unwrap();
-    std::fs::write(dir.join("notes.md"), b"# Investigation notes\nFind evidence here").unwrap();
+    std::fs::write(
+        dir.join("notes.md"),
+        b"# Investigation notes\nFind evidence here",
+    )
+    .unwrap();
     std::fs::write(dir.join("binary.dat"), vec![0u8; 100]).unwrap(); // Non-text file
 }
 

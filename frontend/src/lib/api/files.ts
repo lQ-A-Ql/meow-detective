@@ -1,4 +1,12 @@
-import { FileTreeNode, ViewerRangeRequest } from '@/types/models';
+import { save } from '@tauri-apps/plugin-dialog';
+import {
+  FileEntryRow,
+  FileTreeNode,
+  MediaRangeRequest,
+  MediaRangeResponse,
+  MediaUrl,
+  ViewerRangeRequest,
+} from '@/types/models';
 import { apiClient } from './client';
 
 export async function getFileTree() {
@@ -84,14 +92,63 @@ export async function getImagePreview(fileId: string) {
  * Get media URL for video/audio playback.
  * Returns a local file URL.
  */
-export async function getMediaUrl(fileId: string) {
+export async function getMediaUrl(fileId: string): Promise<MediaUrl> {
   return apiClient.request(
     'get_media_url',
     () => Promise.resolve({
       url: '',
+      handleId: `file:${fileId}`,
       mimeType: 'video/mp4',
       size: 0,
+      canReadRanges: false,
     }),
     { fileId },
+  );
+}
+
+export async function readMediaRange(request: MediaRangeRequest): Promise<MediaRangeResponse> {
+  return apiClient.request(
+    'read_media_range',
+    () => Promise.resolve({
+      offset: request.offset,
+      bytesBase64: '',
+      bytesRead: 0,
+      eof: true,
+    }),
+    { request },
+  );
+}
+
+export async function extractFile(file: FileEntryRow) {
+  if (apiClient.mode === 'mock') {
+    const content = [
+      'Forensics Workbench mock export',
+      `fileId: ${file.id}`,
+      `path: ${file.path}`,
+      `name: ${file.name}`,
+    ].join('\n');
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    try {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = file.name || `${file.id}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+    return 'Mock file exported';
+  }
+
+  const destinationPath = await save({ defaultPath: file.name || file.id });
+  if (!destinationPath) {
+    return 'Export cancelled';
+  }
+  return apiClient.request(
+    'extract_file',
+    () => Promise.resolve('Mock file exported'),
+    { request: { fileId: file.id, destinationPath } },
   );
 }

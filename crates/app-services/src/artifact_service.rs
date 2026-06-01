@@ -31,13 +31,11 @@ pub fn run_extractors_on_file(
     }
 
     let mut buf = Vec::new();
-    // Guard: limit artifact extraction to 50 MB per file to prevent OOM
-    const ARTIFACT_FILE_LIMIT: u64 = 50 * 1024 * 1024;
     let bytes_read = reader
-        .take(ARTIFACT_FILE_LIMIT)
+        .take(infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES)
         .read_to_end(&mut buf)
         .map_err(|e| e.to_string())?;
-    if bytes_read as u64 >= ARTIFACT_FILE_LIMIT {
+    if bytes_read as u64 >= infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES {
         tracing::warn!(
             "Artifact extraction truncated at {} bytes for file: {}",
             bytes_read,

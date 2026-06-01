@@ -1,5 +1,13 @@
-import { describe, it, expect } from 'vitest';
-import { getFileTree, getFileRows, openFileHandle, readFileRange } from '@/lib/api/files';
+import { describe, it, expect, vi } from 'vitest';
+import {
+  extractFile,
+  getFileRows,
+  getFileTree,
+  getMediaUrl,
+  openFileHandle,
+  readMediaRange,
+  readFileRange,
+} from '@/lib/api/files';
 
 describe('files API (mock mode)', () => {
   it('getFileTree returns tree nodes', async () => {
@@ -37,5 +45,51 @@ describe('files API (mock mode)', () => {
     });
     expect(result.kind).toBe('hex');
     expect(result.lines.length).toBeGreaterThan(0);
+  });
+
+  it('media preview API returns a scoped mock handle shape', async () => {
+    const media = await getMediaUrl('file-video');
+    expect(media.url).toBe('');
+    expect(media.handleId).toBe('file:file-video');
+    expect(media.canReadRanges).toBe(false);
+  });
+
+  it('readMediaRange uses the API wrapper in mock mode', async () => {
+    const range = await readMediaRange({
+      handleId: 'file:file-video',
+      offset: 0,
+      length: 16,
+    });
+
+    expect(range.offset).toBe(0);
+    expect(range.eof).toBe(true);
+  });
+
+  it('extractFile exports a mock file without Tauri IPC in mock mode', async () => {
+    const click = vi.fn();
+    const originalCreateElement = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation((tagName) => {
+      const element = originalCreateElement(tagName);
+      if (tagName === 'a') {
+        element.click = click;
+      }
+      return element;
+    });
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => 'blob:file-export'),
+      revokeObjectURL: vi.fn(),
+    });
+
+    const result = await extractFile({
+      id: 'file-cmd-exe',
+      path: 'C:/Windows/System32/cmd.exe',
+      name: 'cmd.exe',
+      entryType: 'file',
+      deleted: false,
+    });
+
+    expect(result).toBe('Mock file exported');
+    expect(URL.createObjectURL).toHaveBeenCalled();
+    expect(click).toHaveBeenCalledTimes(1);
   });
 });

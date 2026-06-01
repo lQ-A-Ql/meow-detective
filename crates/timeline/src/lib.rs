@@ -92,10 +92,10 @@ mod tests {
     fn test_project_file_macb_all_timestamps() {
         let file = make_file_entry("test.txt", "/test/test.txt");
         let events = project_file_macb(&file);
-        
+
         // 应该生成 4 个事件 (MACB)
         assert_eq!(events.len(), 4);
-        
+
         // 验证事件类型
         let event_types: Vec<&str> = events.iter().map(|e| e.event_type.as_str()).collect();
         assert!(event_types.contains(&"FILE_CREATED"));
@@ -111,7 +111,7 @@ mod tests {
         file.modified_at = None;
         file.accessed_at = None;
         file.changed_at = None;
-        
+
         let events = project_file_macb(&file);
         assert_eq!(events.len(), 0);
     }
@@ -121,7 +121,7 @@ mod tests {
         let mut file = make_file_entry("test.txt", "/test/test.txt");
         file.created_at = None;
         file.changed_at = None;
-        
+
         let events = project_file_macb(&file);
         assert_eq!(events.len(), 2); // only modified and accessed
     }
@@ -130,7 +130,7 @@ mod tests {
     fn test_event_source_id() {
         let file = make_file_entry("test.txt", "/test/test.txt");
         let events = project_file_macb(&file);
-        
+
         for event in &events {
             assert_eq!(event.source_object_id, "test-id");
         }
@@ -140,7 +140,7 @@ mod tests {
     fn test_event_timestamps() {
         let file = make_file_entry("test.txt", "/test/test.txt");
         let events = project_file_macb(&file);
-        
+
         for event in &events {
             // 验证时间戳在合理范围内
             assert!(event.timestamp.year() >= 2024);
@@ -151,7 +151,7 @@ mod tests {
     fn test_directory_no_events() {
         let mut file = make_file_entry("test_dir", "/test");
         file.entry_type = EntryType::Directory;
-        
+
         // 目录也应该生成事件
         let events = project_file_macb(&file);
         assert_eq!(events.len(), 4); // MACB

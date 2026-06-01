@@ -42,6 +42,12 @@ impl StreamingHasher {
     }
 }
 
+impl Default for StreamingHasher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StreamingProcessor for StreamingHasher {
     fn process_chunk(&mut self, data: &[u8]) -> io::Result<()> {
         use sha2::Digest;

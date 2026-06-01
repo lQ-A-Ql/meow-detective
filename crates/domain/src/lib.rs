@@ -6,8 +6,8 @@ pub mod file_entry;
 pub mod job;
 pub mod report;
 pub mod tag;
-pub mod timestamp;
 pub mod timeline;
+pub mod timestamp;
 
 pub use artifact::{Artifact, ArtifactFamily, ArtifactId};
 pub use case::{CaseId, CaseMeta, CaseSession};

@@ -1,5 +1,7 @@
 import {
   ArtifactRow,
+  AnalysisFileClassification,
+  AnalysisSystemInfo,
   CaseMetrics,
   DataSourceSummary,
   CaseSummary,
@@ -21,6 +23,9 @@ import {
 import {
   artifactFamilies,
   artifactRows,
+  analysisClassifications,
+  analysisSummary,
+  analysisSystemInfo,
   caseMetrics,
   currentCase,
   dataSources,
@@ -62,6 +67,9 @@ export interface ApiProvider {
   getJobsSnapshot(): Promise<JobSnapshot[]>;
   getWarnings(): Promise<WarningItem[]>;
   getTraceItems(): Promise<TraceItem[]>;
+  getSystemInfo(): Promise<AnalysisSystemInfo>;
+  classifyFiles(sampleSize?: number): Promise<AnalysisFileClassification[]>;
+  generateAnalysisSummary(): Promise<string>;
 }
 
 export const mockProvider: ApiProvider = {
@@ -140,6 +148,27 @@ export const mockProvider: ApiProvider = {
   },
   async getTraceItems() {
     return traces;
+  },
+  async getSystemInfo() {
+    return analysisSystemInfo;
+  },
+  async classifyFiles(sampleSize?: number) {
+    const limit = sampleSize ?? analysisClassifications.length;
+    let remaining = limit;
+    return analysisClassifications
+      .map((classification) => {
+        const files = classification.files.slice(0, remaining);
+        remaining = Math.max(remaining - files.length, 0);
+        return {
+          ...classification,
+          files,
+          totalSize: files.reduce((sum, file) => sum + file.size, 0),
+        };
+      })
+      .filter((classification) => classification.files.length > 0);
+  },
+  async generateAnalysisSummary() {
+    return analysisSummary;
   },
   async createCase(_caseRoot: string, name: string, examiner?: string) {
     return { ...currentCase, name, number: 'MOCK-001', examiner };

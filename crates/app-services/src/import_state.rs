@@ -146,8 +146,7 @@ impl ImportState {
     pub fn save(&self, path: &Path) -> Result<(), String> {
         let json = serde_json::to_string_pretty(self)
             .map_err(|e| format!("Failed to serialize state: {}", e))?;
-        std::fs::write(path, json)
-            .map_err(|e| format!("Failed to write state file: {}", e))?;
+        std::fs::write(path, json).map_err(|e| format!("Failed to write state file: {}", e))?;
         Ok(())
     }
 
@@ -155,8 +154,7 @@ impl ImportState {
     pub fn load(path: &Path) -> Result<Self, String> {
         let json = std::fs::read_to_string(path)
             .map_err(|e| format!("Failed to read state file: {}", e))?;
-        serde_json::from_str(&json)
-            .map_err(|e| format!("Failed to parse state file: {}", e))
+        serde_json::from_str(&json).map_err(|e| format!("Failed to parse state file: {}", e))
     }
 }
 
@@ -195,10 +193,10 @@ impl ImportPlan {
     /// Estimate memory usage
     fn estimate_memory(strategy: &ImportStrategy, _size: u64) -> u64 {
         match strategy {
-            ImportStrategy::Sequential => 100 * 1024 * 1024,      // 100MB
+            ImportStrategy::Sequential => 100 * 1024 * 1024, // 100MB
             ImportStrategy::Parallel { workers } => 100 * 1024 * 1024 * (*workers as u64),
-            ImportStrategy::Streaming => 64 * 1024 * 1024,        // 64MB
-            ImportStrategy::Adaptive => 200 * 1024 * 1024,        // 200MB
+            ImportStrategy::Streaming => 64 * 1024 * 1024, // 64MB
+            ImportStrategy::Adaptive => 200 * 1024 * 1024, // 200MB
         }
     }
 }

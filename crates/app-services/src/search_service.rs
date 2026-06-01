@@ -66,8 +66,9 @@ pub fn search_files_real(
     let start = std::time::Instant::now();
     // Request more results than needed to support offset
     let search_limit = (offset + limit as u64).min(1000) as usize;
-    let SearchResult { hits, total_count } =
-        index.search(query, search_limit).map_err(|e| e.to_string())?;
+    let SearchResult { hits, total_count } = index
+        .search(query, search_limit)
+        .map_err(|e| e.to_string())?;
     let took_ms = start.elapsed().as_millis() as u64;
 
     // Apply offset

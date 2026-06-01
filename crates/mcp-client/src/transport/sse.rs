@@ -4,14 +4,14 @@
 
 use async_trait::async_trait;
 use reqwest::Client;
-use std::sync::atomic::{AtomicU64, AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{debug, info};
 
+use super::McpTransportTrait;
 use crate::error::{McpError, McpResult};
 use crate::types::*;
-use super::McpTransportTrait;
 
 /// SSE Transport
 ///
@@ -49,7 +49,11 @@ impl SseTransport {
     }
 
     /// Send a JSON-RPC request
-    async fn send_request(&self, method: &str, params: Option<serde_json::Value>) -> McpResult<serde_json::Value> {
+    async fn send_request(
+        &self,
+        method: &str,
+        params: Option<serde_json::Value>,
+    ) -> McpResult<serde_json::Value> {
         let id = self.request_id.fetch_add(1, Ordering::SeqCst);
 
         let request = JsonRpcRequest {
@@ -61,7 +65,8 @@ impl SseTransport {
 
         debug!("Sending JSON-RPC request: {:?}", request);
 
-        let response = self.client
+        let response = self
+            .client
             .post(&self.url)
             .json(&request)
             .send()
@@ -87,7 +92,9 @@ impl SseTransport {
             });
         }
 
-        rpc_response.result.ok_or_else(|| McpError::InvalidResponse("No result in response".to_string()))
+        rpc_response
+            .result
+            .ok_or_else(|| McpError::InvalidResponse("No result in response".to_string()))
     }
 }
 
@@ -109,20 +116,25 @@ impl McpTransportTrait for SseTransport {
             },
         };
 
-        let result = self.send_request(
-            "initialize",
-            Some(serde_json::to_value(params).map_err(McpError::Json)?),
-        ).await?;
+        let result = self
+            .send_request(
+                "initialize",
+                Some(serde_json::to_value(params).map_err(McpError::Json)?),
+            )
+            .await?;
 
         // Parse capabilities from response
         let capabilities = McpCapabilities {
-            resources: result.get("capabilities")
+            resources: result
+                .get("capabilities")
                 .and_then(|c| c.get("resources"))
                 .is_some(),
-            tools: result.get("capabilities")
+            tools: result
+                .get("capabilities")
                 .and_then(|c| c.get("tools"))
                 .is_some(),
-            prompts: result.get("capabilities")
+            prompts: result
+                .get("capabilities")
                 .and_then(|c| c.get("prompts"))
                 .is_some(),
         };
@@ -142,10 +154,12 @@ impl McpTransportTrait for SseTransport {
         let result = self.send_request("resources/list", None).await?;
 
         let resources: Vec<McpResource> = serde_json::from_value(
-            result.get("resources")
+            result
+                .get("resources")
                 .cloned()
-                .unwrap_or(serde_json::Value::Array(vec![]))
-        ).map_err(|e| McpError::InvalidResponse(format!("Failed to parse resources: {}", e)))?;
+                .unwrap_or(serde_json::Value::Array(vec![])),
+        )
+        .map_err(|e| McpError::InvalidResponse(format!("Failed to parse resources: {}", e)))?;
 
         Ok(resources)
     }
@@ -159,13 +173,16 @@ impl McpTransportTrait for SseTransport {
             uri: uri.to_string(),
         };
 
-        let result = self.send_request(
-            "resources/read",
-            Some(serde_json::to_value(params).map_err(McpError::Json)?),
-        ).await?;
+        let result = self
+            .send_request(
+                "resources/read",
+                Some(serde_json::to_value(params).map_err(McpError::Json)?),
+            )
+            .await?;
 
         // Extract content from response
-        let content = result.get("contents")
+        let content = result
+            .get("contents")
             .and_then(|c| c.as_array())
             .and_then(|arr| arr.first())
             .and_then(|item| item.get("text"))
@@ -183,15 +200,21 @@ impl McpTransportTrait for SseTransport {
         let result = self.send_request("tools/list", None).await?;
 
         let tools: Vec<McpTool> = serde_json::from_value(
-            result.get("tools")
+            result
+                .get("tools")
                 .cloned()
-                .unwrap_or(serde_json::Value::Array(vec![]))
-        ).map_err(|e| McpError::InvalidResponse(format!("Failed to parse tools: {}", e)))?;
+                .unwrap_or(serde_json::Value::Array(vec![])),
+        )
+        .map_err(|e| McpError::InvalidResponse(format!("Failed to parse tools: {}", e)))?;
 
         Ok(tools)
     }
 
-    async fn call_tool(&self, name: &str, arguments: serde_json::Value) -> McpResult<serde_json::Value> {
+    async fn call_tool(
+        &self,
+        name: &str,
+        arguments: serde_json::Value,
+    ) -> McpResult<serde_json::Value> {
         if !self.connected.load(Ordering::SeqCst) {
             return Err(McpError::NotConnected);
         }
@@ -201,10 +224,12 @@ impl McpTransportTrait for SseTransport {
             arguments,
         };
 
-        let result = self.send_request(
-            "tools/call",
-            Some(serde_json::to_value(params).map_err(McpError::Json)?),
-        ).await?;
+        let result = self
+            .send_request(
+                "tools/call",
+                Some(serde_json::to_value(params).map_err(McpError::Json)?),
+            )
+            .await?;
 
         Ok(result)
     }
@@ -217,15 +242,21 @@ impl McpTransportTrait for SseTransport {
         let result = self.send_request("prompts/list", None).await?;
 
         let prompts: Vec<McpPrompt> = serde_json::from_value(
-            result.get("prompts")
+            result
+                .get("prompts")
                 .cloned()
-                .unwrap_or(serde_json::Value::Array(vec![]))
-        ).map_err(|e| McpError::InvalidResponse(format!("Failed to parse prompts: {}", e)))?;
+                .unwrap_or(serde_json::Value::Array(vec![])),
+        )
+        .map_err(|e| McpError::InvalidResponse(format!("Failed to parse prompts: {}", e)))?;
 
         Ok(prompts)
     }
 
-    async fn get_prompt(&self, name: &str, arguments: Option<std::collections::HashMap<String, String>>) -> McpResult<String> {
+    async fn get_prompt(
+        &self,
+        name: &str,
+        arguments: Option<std::collections::HashMap<String, String>>,
+    ) -> McpResult<String> {
         if !self.connected.load(Ordering::SeqCst) {
             return Err(McpError::NotConnected);
         }
@@ -235,13 +266,16 @@ impl McpTransportTrait for SseTransport {
             arguments,
         };
 
-        let result = self.send_request(
-            "prompts/get",
-            Some(serde_json::to_value(params).map_err(McpError::Json)?),
-        ).await?;
+        let result = self
+            .send_request(
+                "prompts/get",
+                Some(serde_json::to_value(params).map_err(McpError::Json)?),
+            )
+            .await?;
 
         // Extract prompt content
-        let content = result.get("messages")
+        let content = result
+            .get("messages")
             .and_then(|m| m.as_array())
             .and_then(|arr| arr.first())
             .and_then(|msg| msg.get("content"))

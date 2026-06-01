@@ -1,5 +1,7 @@
 import {
   ArtifactRow,
+  AnalysisFileClassification,
+  AnalysisSystemInfo,
   CaseMetrics,
   CaseSummary,
   DataSourceSummary,
@@ -122,6 +124,85 @@ export const dataSources: DataSourceSummary[] = [
     partitions: [],
   },
 ];
+
+export const analysisSystemInfo: AnalysisSystemInfo = {
+  networkAdapters: [],
+  bootHistory: [],
+  status: 'notParsed',
+  warnings: [
+    '系统信息解析器尚未接入 Registry/EVTX；当前不会输出未验证主机事实。',
+  ],
+};
+
+export const analysisClassifications: AnalysisFileClassification[] = [
+  {
+    category: 'Executables',
+    totalSize: 10200000,
+    status: 'parsed',
+    warnings: [],
+    files: [
+      {
+        fileId: 'file-ntoskrnl',
+        path: 'C:/Windows/System32/ntoskrnl.exe',
+        name: 'ntoskrnl.exe',
+        size: 10200000,
+        fileType: 'PE',
+        magicDescription: 'Windows Executable',
+      },
+    ],
+  },
+  {
+    category: 'Documents',
+    totalSize: 4096,
+    status: 'parsed',
+    warnings: [],
+    files: [
+      {
+        fileId: 'file-doc-1',
+        path: 'C:/Users/Admin/Documents/Project_Alpha.doc',
+        name: 'Project_Alpha.doc',
+        size: 4096,
+        fileType: 'Office',
+        magicDescription: 'Office Document',
+      },
+    ],
+  },
+  {
+    category: 'Other',
+    totalSize: 1100000,
+    status: 'parsed',
+    warnings: ['仅分析前 1000 个文件；数据源包含 12844 个文件。'],
+    files: [
+      {
+        fileId: 'file-hal-dll',
+        path: 'C:/Windows/System32/hal.dll',
+        name: 'hal.dll',
+        size: 1100000,
+        fileType: 'Unknown',
+        magicDescription: 'Unknown file type',
+      },
+    ],
+  },
+];
+
+export const analysisSummary = `# 数据源分析报告
+
+## 系统信息
+
+- **状态**: 未解析
+
+### 系统信息告警
+
+- 系统信息解析器尚未接入 Registry/EVTX；当前不会输出未验证主机事实。
+
+## 文件分类
+
+| 类别 | 文件数 | 总大小 | 状态 |
+|------|--------|--------|------|
+| Executables | 1 | 9.7 MB | 已解析 |
+| Documents | 1 | 0.0 MB | 已解析 |
+| Other | 1 | 1.0 MB | 已解析 |
+`;
 
 export const filesTree = [
   { id: 'tree-system32', name: 'System32', depth: 0, hasChildren: true, expanded: true },
@@ -320,5 +401,4 @@ export const traces: TraceItem[] = [
   { id: 'trace-2', ts: '2026-05-16T14:09:02Z', message: 'artifact.added payload.lnk' },
   { id: 'trace-3', ts: '2026-05-16T14:09:11Z', message: 'timeline.updated file-created' },
 ];
-
 

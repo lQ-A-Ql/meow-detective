@@ -2,7 +2,7 @@
 //!
 //! Provides parallel enumeration of multiple partitions for faster imports.
 
-use crate::file_service::{EnumerationStats, enumerate_filesystem_with_root_name};
+use crate::file_service::{enumerate_filesystem_with_root_name, EnumerationStats};
 use crossbeam_channel::{bounded, Receiver, Sender};
 use domain::DataSourceId;
 use evidence_core::FileSystemReader;

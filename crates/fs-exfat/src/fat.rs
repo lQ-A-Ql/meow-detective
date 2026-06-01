@@ -79,10 +79,7 @@ impl FatReader {
 ///
 /// Returns a vector of all cluster indices in the chain (including the start cluster).
 /// Stops at end-of-chain, bad cluster, free cluster, or cycle detection.
-pub fn walk_cluster_chain<F>(
-    start_cluster: u32,
-    read_fat_entry: F,
-) -> io::Result<Vec<u32>>
+pub fn walk_cluster_chain<F>(start_cluster: u32, read_fat_entry: F) -> io::Result<Vec<u32>>
 where
     F: Fn(u32) -> io::Result<FatEntry>,
 {
@@ -203,9 +200,7 @@ mod tests {
 
     #[test]
     fn walk_empty_chain() {
-        let fat = |_cluster: u32| -> io::Result<FatEntry> {
-            Ok(FatEntry::Free)
-        };
+        let fat = |_cluster: u32| -> io::Result<FatEntry> { Ok(FatEntry::Free) };
 
         let chain = walk_cluster_chain(0, fat).unwrap();
         assert!(chain.is_empty());

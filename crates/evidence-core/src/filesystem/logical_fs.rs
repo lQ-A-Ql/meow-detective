@@ -33,12 +33,12 @@ impl LogicalFsReader {
     }
 
     fn node_from_entry(&self, entry: &fs::DirEntry) -> io::Result<FsNode> {
-        let metadata = entry.metadata()?;
         let full = entry.path();
+        let metadata = fs::symlink_metadata(&full)?;
         Ok(FsNode {
             name: entry.file_name().to_string_lossy().into_owned(),
             path: self.to_relative(&full),
-            is_dir: metadata.is_dir(),
+            is_dir: metadata.is_dir() && !metadata.file_type().is_symlink(),
             size: metadata.len(),
             created_at: system_time_to_utc(metadata.created().ok()),
             modified_at: system_time_to_utc(metadata.modified().ok()),
@@ -106,4 +106,46 @@ fn path_to_relative_string(path: &Path) -> String {
         .filter(|component| !component.is_empty())
         .collect::<Vec<_>>()
         .join("/")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::filesystem::FileSystemReader;
+
+    #[cfg(unix)]
+    #[test]
+    fn list_children_does_not_descend_into_symlinked_directories() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let outside = tempfile::TempDir::new().unwrap();
+        std::fs::write(outside.path().join("outside.txt"), b"outside").unwrap();
+        std::os::unix::fs::symlink(outside.path(), tmp.path().join("linked")).unwrap();
+
+        let reader = LogicalFsReader::open(tmp.path(), "fixture").unwrap();
+        let children = reader.list_children("").unwrap();
+        let linked = children
+            .iter()
+            .find(|child| child.name == "linked")
+            .unwrap();
+
+        assert!(!linked.is_dir);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn list_children_does_not_descend_into_symlinked_directories() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let outside = tempfile::TempDir::new().unwrap();
+        std::fs::write(outside.path().join("outside.txt"), b"outside").unwrap();
+        std::os::windows::fs::symlink_dir(outside.path(), tmp.path().join("linked")).unwrap();
+
+        let reader = LogicalFsReader::open(tmp.path(), "fixture").unwrap();
+        let children = reader.list_children("").unwrap();
+        let linked = children
+            .iter()
+            .find(|child| child.name == "linked")
+            .unwrap();
+
+        assert!(!linked.is_dir);
+    }
 }

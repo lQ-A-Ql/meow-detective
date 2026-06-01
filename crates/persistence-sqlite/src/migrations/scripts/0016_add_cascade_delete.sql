@@ -12,11 +12,16 @@ CREATE TABLE data_sources_new (
     imported_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-INSERT INTO data_sources_new SELECT * FROM data_sources;
+INSERT INTO data_sources_new (
+    id, case_id, name, kind, source_path, imported_at
+)
+SELECT
+    id, case_id, name, kind, source_path, imported_at
+FROM data_sources;
 DROP TABLE data_sources;
 ALTER TABLE data_sources_new RENAME TO data_sources;
 
-CREATE INDEX idx_data_sources_case_id ON data_sources(case_id);
+CREATE INDEX IF NOT EXISTS idx_data_sources_case_id ON data_sources(case_id);
 
 -- 2. 重建 file_entries 表
 CREATE TABLE file_entries_new (
@@ -36,13 +41,20 @@ CREATE TABLE file_entries_new (
     hash_sha256 TEXT
 );
 
-INSERT INTO file_entries_new SELECT * FROM file_entries;
+INSERT INTO file_entries_new (
+    id, parent_id, data_source_id, path, name, entry_type, size, ext,
+    deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
+)
+SELECT
+    id, parent_id, data_source_id, path, name, entry_type, size, ext,
+    deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
+FROM file_entries;
 DROP TABLE file_entries;
 ALTER TABLE file_entries_new RENAME TO file_entries;
 
-CREATE INDEX idx_file_entries_parent ON file_entries(parent_id);
-CREATE INDEX idx_file_entries_data_source ON file_entries(data_source_id);
-CREATE INDEX idx_file_entries_path ON file_entries(path);
+CREATE INDEX IF NOT EXISTS idx_file_entries_parent ON file_entries(parent_id);
+CREATE INDEX IF NOT EXISTS idx_file_entries_data_source ON file_entries(data_source_id);
+CREATE INDEX IF NOT EXISTS idx_file_entries_path ON file_entries(path);
 
 -- 3. 重建 jobs 表
 CREATE TABLE jobs_new (
@@ -54,15 +66,28 @@ CREATE TABLE jobs_new (
     detail TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     started_at TEXT,
-    finished_at TEXT
+    finished_at TEXT,
+    current_partition TEXT DEFAULT NULL,
+    completed_partitions INTEGER DEFAULT 0,
+    total_partitions INTEGER DEFAULT 0,
+    partition_progress INTEGER DEFAULT 0
 );
 
-INSERT INTO jobs_new SELECT * FROM jobs;
+INSERT INTO jobs_new (
+    id, case_id, kind, status, progress, detail, created_at, started_at,
+    finished_at, current_partition, completed_partitions, total_partitions,
+    partition_progress
+)
+SELECT
+    id, case_id, kind, status, progress, detail, created_at, started_at,
+    finished_at, current_partition, completed_partitions, total_partitions,
+    partition_progress
+FROM jobs;
 DROP TABLE jobs;
 ALTER TABLE jobs_new RENAME TO jobs;
 
-CREATE INDEX idx_jobs_case ON jobs(case_id);
-CREATE INDEX idx_jobs_status ON jobs(status);
+CREATE INDEX IF NOT EXISTS idx_jobs_case ON jobs(case_id);
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 
 -- 4. 重建 reports 表
 CREATE TABLE reports_new (
@@ -76,8 +101,13 @@ CREATE TABLE reports_new (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-INSERT INTO reports_new SELECT * FROM reports;
+INSERT INTO reports_new (
+    id, case_id, template_id, file_name, created_by, status, progress, created_at
+)
+SELECT
+    id, case_id, template_id, file_name, created_by, status, progress, created_at
+FROM reports;
 DROP TABLE reports;
 ALTER TABLE reports_new RENAME TO reports;
 
-CREATE INDEX idx_reports_case ON reports(case_id);
+CREATE INDEX IF NOT EXISTS idx_reports_case ON reports(case_id);

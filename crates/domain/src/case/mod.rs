@@ -171,7 +171,10 @@ mod tests {
             case_root: PathBuf::from("/tmp/test-case"),
             opened_at: Utc::now(),
         };
-        assert_eq!(session.db_path(), PathBuf::from("/tmp/test-case/forensics.db"));
+        assert_eq!(
+            session.db_path(),
+            PathBuf::from("/tmp/test-case/forensics.db")
+        );
     }
 
     #[test]
@@ -181,6 +184,9 @@ mod tests {
             case_root: PathBuf::from("/tmp/test-case"),
             opened_at: Utc::now(),
         };
-        assert_eq!(session.indexes_path(), PathBuf::from("/tmp/test-case/indexes"));
+        assert_eq!(
+            session.indexes_path(),
+            PathBuf::from("/tmp/test-case/indexes")
+        );
     }
 }

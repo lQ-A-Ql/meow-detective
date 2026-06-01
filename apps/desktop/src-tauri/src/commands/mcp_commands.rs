@@ -12,32 +12,38 @@ use crate::state::AppState;
 /// Get current MCP configuration.
 #[tauri::command]
 pub async fn get_mcp_config(state: State<'_, AppState>) -> Result<McpConfigDto, CommandError> {
-    let guard = state.mcp_config.lock()
+    let guard = state
+        .mcp_config
+        .lock()
         .map_err(|e| CommandError::from_service_error(e.to_string()))?;
 
     Ok(McpConfigDto {
-        servers: guard.servers.iter().map(|s| McpServerConfigDto {
-            id: s.id.clone(),
-            name: s.name.clone(),
-            transport_type: match &s.transport {
-                McpTransport::Sse { .. } => "sse".to_string(),
-                McpTransport::Stdio { .. } => "stdio".to_string(),
-            },
-            url: match &s.transport {
-                McpTransport::Sse { url } => Some(url.clone()),
-                _ => None,
-            },
-            command: match &s.transport {
-                McpTransport::Stdio { command, .. } => Some(command.clone()),
-                _ => None,
-            },
-            args: match &s.transport {
-                McpTransport::Stdio { args, .. } => Some(args.clone()),
-                _ => None,
-            },
-            enabled: s.enabled,
-            auto_connect: s.auto_connect,
-        }).collect(),
+        servers: guard
+            .servers
+            .iter()
+            .map(|s| McpServerConfigDto {
+                id: s.id.clone(),
+                name: s.name.clone(),
+                transport_type: match &s.transport {
+                    McpTransport::Sse { .. } => "sse".to_string(),
+                    McpTransport::Stdio { .. } => "stdio".to_string(),
+                },
+                url: match &s.transport {
+                    McpTransport::Sse { url } => Some(url.clone()),
+                    _ => None,
+                },
+                command: match &s.transport {
+                    McpTransport::Stdio { command, .. } => Some(command.clone()),
+                    _ => None,
+                },
+                args: match &s.transport {
+                    McpTransport::Stdio { args, .. } => Some(args.clone()),
+                    _ => None,
+                },
+                enabled: s.enabled,
+                auto_connect: s.auto_connect,
+            })
+            .collect(),
         resources: guard.resources.clone(),
         tools: guard.tools.clone(),
     })
@@ -50,37 +56,42 @@ pub async fn save_mcp_config(
     config: McpConfigDto,
 ) -> Result<(), CommandError> {
     let mcp_config = McpConfig {
-        servers: config.servers.iter().map(|s| {
-            let transport = match s.transport_type.as_str() {
-                "sse" => McpTransport::Sse {
-                    url: s.url.clone().unwrap_or_default(),
-                },
-                "stdio" => McpTransport::Stdio {
-                    command: s.command.clone().unwrap_or_default(),
-                    args: s.args.clone().unwrap_or_default(),
-                },
-                _ => McpTransport::Sse {
-                    url: String::new(),
-                },
-            };
-            McpServerConfig {
-                id: s.id.clone(),
-                name: s.name.clone(),
-                transport,
-                enabled: s.enabled,
-                auto_connect: s.auto_connect,
-            }
-        }).collect(),
+        servers: config
+            .servers
+            .iter()
+            .map(|s| {
+                let transport = match s.transport_type.as_str() {
+                    "sse" => McpTransport::Sse {
+                        url: s.url.clone().unwrap_or_default(),
+                    },
+                    "stdio" => McpTransport::Stdio {
+                        command: s.command.clone().unwrap_or_default(),
+                        args: s.args.clone().unwrap_or_default(),
+                    },
+                    _ => McpTransport::Sse { url: String::new() },
+                };
+                McpServerConfig {
+                    id: s.id.clone(),
+                    name: s.name.clone(),
+                    transport,
+                    enabled: s.enabled,
+                    auto_connect: s.auto_connect,
+                }
+            })
+            .collect(),
         resources: config.resources,
         tools: config.tools,
     };
 
-    let mut guard = state.mcp_config.lock()
+    let mut guard = state
+        .mcp_config
+        .lock()
         .map_err(|e| CommandError::from_service_error(e.to_string()))?;
     *guard = mcp_config;
     drop(guard);
 
-    state.save_mcp_config()
+    state
+        .save_mcp_config()
         .map_err(CommandError::from_service_error)
 }
 
@@ -98,7 +109,11 @@ pub async fn add_mcp_server(
             command: server.command.clone().unwrap_or_default(),
             args: server.args.clone().unwrap_or_default(),
         },
-        _ => return Err(CommandError::from_service_error("Invalid transport type".to_string())),
+        _ => {
+            return Err(CommandError::from_service_error(
+                "Invalid transport type".to_string(),
+            ))
+        }
     };
 
     let config = McpServerConfig {
@@ -109,7 +124,8 @@ pub async fn add_mcp_server(
         auto_connect: server.auto_connect,
     };
 
-    state.add_mcp_server(config)
+    state
+        .add_mcp_server(config)
         .map_err(CommandError::from_service_error)?;
 
     Ok(McpServerStatusDto {
@@ -129,7 +145,8 @@ pub async fn remove_mcp_server(
     state: State<'_, AppState>,
     server_id: String,
 ) -> Result<(), CommandError> {
-    state.remove_mcp_server(&server_id)
+    state
+        .remove_mcp_server(&server_id)
         .map_err(CommandError::from_service_error)
 }
 
@@ -146,9 +163,15 @@ pub async fn connect_mcp_server(
     let result = tauri::async_runtime::spawn_blocking(move || {
         // Get config first
         let config = {
-            let guard = app_state.mcp_config.lock()
+            let guard = app_state
+                .mcp_config
+                .lock()
                 .map_err(|e| CommandError::from_service_error(e.to_string()))?;
-            guard.servers.iter().find(|s| s.id == server_id_clone).cloned()
+            guard
+                .servers
+                .iter()
+                .find(|s| s.id == server_id_clone)
+                .cloned()
                 .ok_or_else(|| CommandError::not_found("Server"))?
         };
 
@@ -161,17 +184,22 @@ pub async fn connect_mcp_server(
             .map_err(|e| CommandError::from_service_error(e.to_string()))?;
 
         // Store the connected client
-        let mut clients = app_state.mcp_clients.lock()
+        let mut clients = app_state
+            .mcp_clients
+            .lock()
             .map_err(|e| CommandError::from_service_error(e.to_string()))?;
         clients.insert(server_id_clone.clone(), client);
 
         Ok::<(), CommandError>(())
-    }).await.map_err(CommandError::from_join_error)?;
+    })
+    .await
+    .map_err(CommandError::from_join_error)?;
 
     result?;
 
     // Get the status after connecting
-    let status = state.get_mcp_server_status(&server_id)
+    let status = state
+        .get_mcp_server_status(&server_id)
         .ok_or_else(|| CommandError::not_found("Server"))?;
 
     Ok(McpServerStatusDto {
@@ -197,7 +225,9 @@ pub async fn disconnect_mcp_server(
         let rt = tokio::runtime::Runtime::new()
             .map_err(|e| CommandError::from_service_error(e.to_string()))?;
 
-        let mut clients = app_state.mcp_clients.lock()
+        let mut clients = app_state
+            .mcp_clients
+            .lock()
             .map_err(|e| CommandError::from_service_error(e.to_string()))?;
 
         if let Some(client) = clients.get_mut(&server_id) {
@@ -206,7 +236,9 @@ pub async fn disconnect_mcp_server(
         }
 
         Ok::<(), CommandError>(())
-    }).await.map_err(CommandError::from_join_error)?
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
 }
 
 /// Test MCP connection.
@@ -273,22 +305,31 @@ pub async fn list_mcp_resources(
         let rt = tokio::runtime::Runtime::new()
             .map_err(|e| CommandError::from_service_error(e.to_string()))?;
 
-        let clients = app_state.mcp_clients.lock()
+        let clients = app_state
+            .mcp_clients
+            .lock()
             .map_err(|e| CommandError::from_service_error(e.to_string()))?;
 
-        let client = clients.get(&server_id)
+        let client = clients
+            .get(&server_id)
             .ok_or_else(|| CommandError::not_found("Server"))?;
 
-        let resources = rt.block_on(client.list_resources())
+        let resources = rt
+            .block_on(client.list_resources())
             .map_err(|e| CommandError::from_service_error(e.to_string()))?;
 
-        Ok(resources.into_iter().map(|r| McpResourceDto {
-            uri: r.uri,
-            name: r.name,
-            description: r.description,
-            mime_type: r.mime_type,
-        }).collect())
-    }).await.map_err(CommandError::from_join_error)?
+        Ok(resources
+            .into_iter()
+            .map(|r| McpResourceDto {
+                uri: r.uri,
+                name: r.name,
+                description: r.description,
+                mime_type: r.mime_type,
+            })
+            .collect())
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
 }
 
 /// List MCP tools from a server.
@@ -303,21 +344,30 @@ pub async fn list_mcp_tools(
         let rt = tokio::runtime::Runtime::new()
             .map_err(|e| CommandError::from_service_error(e.to_string()))?;
 
-        let clients = app_state.mcp_clients.lock()
+        let clients = app_state
+            .mcp_clients
+            .lock()
             .map_err(|e| CommandError::from_service_error(e.to_string()))?;
 
-        let client = clients.get(&server_id)
+        let client = clients
+            .get(&server_id)
             .ok_or_else(|| CommandError::not_found("Server"))?;
 
-        let tools = rt.block_on(client.list_tools())
+        let tools = rt
+            .block_on(client.list_tools())
             .map_err(|e| CommandError::from_service_error(e.to_string()))?;
 
-        Ok(tools.into_iter().map(|t| McpToolDto {
-            name: t.name,
-            description: t.description,
-            input_schema: t.input_schema,
-        }).collect())
-    }).await.map_err(CommandError::from_join_error)?
+        Ok(tools
+            .into_iter()
+            .map(|t| McpToolDto {
+                name: t.name,
+                description: t.description,
+                input_schema: t.input_schema,
+            })
+            .collect())
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
 }
 
 /// Call an MCP tool.
@@ -332,10 +382,13 @@ pub async fn call_mcp_tool(
         let rt = tokio::runtime::Runtime::new()
             .map_err(|e| CommandError::from_service_error(e.to_string()))?;
 
-        let clients = app_state.mcp_clients.lock()
+        let clients = app_state
+            .mcp_clients
+            .lock()
             .map_err(|e| CommandError::from_service_error(e.to_string()))?;
 
-        let client = clients.get(&request.server_id)
+        let client = clients
+            .get(&request.server_id)
             .ok_or_else(|| CommandError::not_found("Server"))?;
 
         match rt.block_on(client.call_tool(&request.tool_name, request.arguments)) {
@@ -350,7 +403,9 @@ pub async fn call_mcp_tool(
                 error: Some(e.to_string()),
             }),
         }
-    }).await.map_err(CommandError::from_join_error)?
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
 }
 
 /// List MCP prompts from a server.
@@ -365,25 +420,38 @@ pub async fn list_mcp_prompts(
         let rt = tokio::runtime::Runtime::new()
             .map_err(|e| CommandError::from_service_error(e.to_string()))?;
 
-        let clients = app_state.mcp_clients.lock()
+        let clients = app_state
+            .mcp_clients
+            .lock()
             .map_err(|e| CommandError::from_service_error(e.to_string()))?;
 
-        let client = clients.get(&server_id)
+        let client = clients
+            .get(&server_id)
             .ok_or_else(|| CommandError::not_found("Server"))?;
 
-        let prompts = rt.block_on(client.list_prompts())
+        let prompts = rt
+            .block_on(client.list_prompts())
             .map_err(|e| CommandError::from_service_error(e.to_string()))?;
 
-        Ok(prompts.into_iter().map(|p| McpPromptDto {
-            name: p.name,
-            description: p.description,
-            arguments: p.arguments.into_iter().map(|a| McpPromptArgumentDto {
-                name: a.name,
-                description: a.description,
-                required: a.required,
-            }).collect(),
-        }).collect())
-    }).await.map_err(CommandError::from_join_error)?
+        Ok(prompts
+            .into_iter()
+            .map(|p| McpPromptDto {
+                name: p.name,
+                description: p.description,
+                arguments: p
+                    .arguments
+                    .into_iter()
+                    .map(|a| McpPromptArgumentDto {
+                        name: a.name,
+                        description: a.description,
+                        required: a.required,
+                    })
+                    .collect(),
+            })
+            .collect())
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
 }
 
 /// Get an MCP prompt.
@@ -400,13 +468,18 @@ pub async fn get_mcp_prompt(
         let rt = tokio::runtime::Runtime::new()
             .map_err(|e| CommandError::from_service_error(e.to_string()))?;
 
-        let clients = app_state.mcp_clients.lock()
+        let clients = app_state
+            .mcp_clients
+            .lock()
             .map_err(|e| CommandError::from_service_error(e.to_string()))?;
 
-        let client = clients.get(&server_id)
+        let client = clients
+            .get(&server_id)
             .ok_or_else(|| CommandError::not_found("Server"))?;
 
         rt.block_on(client.get_prompt(&prompt_name, arguments))
             .map_err(|e| CommandError::from_service_error(e.to_string()))
-    }).await.map_err(CommandError::from_join_error)?
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
 }

@@ -7,8 +7,7 @@
 //! displayed in Windows Explorer.
 
 use artifacts_core::{
-    new_artifact, ArtifactContext, ArtifactExtractor, ArtifactSink,
-    ExtractorReport,
+    new_artifact, ArtifactContext, ArtifactExtractor, ArtifactSink, ExtractorReport,
 };
 use byteorder::{LittleEndian, ReadBytesExt};
 use domain::ArtifactFamily;

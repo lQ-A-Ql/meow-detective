@@ -27,7 +27,21 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
         run: cargo test --workspace
+      - name: Desktop build
+        run: cargo build -p forensics-desktop
+      - name: Release guard
+        shell: pwsh
+        run: ./scripts/check-release-guard.ps1
       - name: Install cargo-audit
         run: cargo install cargo-audit
       - name: Audit dependencies
         run: cargo audit
+      - name: Generate backend SBOM
+        shell: pwsh
+        run: |
+          cargo metadata --format-version 1 > backend-sbom.json
+      - name: Upload backend SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-sbom
+          path: backend-sbom.json

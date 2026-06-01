@@ -59,13 +59,21 @@ impl SearchIndex {
         let mut writer: IndexWriter = self.index.writer(15_000_000)?;
 
         // Schema fields are defined in the constructor — these should never fail
-        let file_id_field = self.schema.get_field("file_id")
+        let file_id_field = self
+            .schema
+            .get_field("file_id")
             .map_err(|_| IndexError::Schema("missing file_id field".into()))?;
-        let path_field = self.schema.get_field("path")
+        let path_field = self
+            .schema
+            .get_field("path")
             .map_err(|_| IndexError::Schema("missing path field".into()))?;
-        let content_field = self.schema.get_field("content")
+        let content_field = self
+            .schema
+            .get_field("content")
             .map_err(|_| IndexError::Schema("missing content field".into()))?;
-        let name_field = self.schema.get_field("name")
+        let name_field = self
+            .schema
+            .get_field("name")
             .map_err(|_| IndexError::Schema("missing name field".into()))?;
 
         let path_map: std::collections::HashMap<&str, (&str, &str)> = paths
@@ -109,11 +117,17 @@ impl SearchIndex {
             .try_into()?;
         let searcher = reader.searcher();
 
-        let content_field = self.schema.get_field("content")
+        let content_field = self
+            .schema
+            .get_field("content")
             .map_err(|_| IndexError::Schema("missing content field".into()))?;
-        let file_id_field = self.schema.get_field("file_id")
+        let file_id_field = self
+            .schema
+            .get_field("file_id")
             .map_err(|_| IndexError::Schema("missing file_id field".into()))?;
-        let path_field = self.schema.get_field("path")
+        let path_field = self
+            .schema
+            .get_field("path")
             .map_err(|_| IndexError::Schema("missing path field".into()))?;
 
         let query_parser = QueryParser::for_index(&self.index, vec![content_field]);

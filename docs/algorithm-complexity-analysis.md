@@ -1,6 +1,6 @@
 # 算法性能静态分析报告
 
-**分析日期**: 2026-05-31  
+**分析日期**: 2026-06-01
 **分析范围**: 核心算法时间/空间复杂度  
 **分析方法**: 代码审查 + 复杂度推导  
 
@@ -15,10 +15,10 @@
 | SHA-256 哈希 | O(n) | O(1) | ✅ 最优 |
 | Hex 格式化 | O(n) | O(n) | ✅ 最优 |
 | 编码检测 | O(n) | O(1) | ✅ 最优 |
-| Magic 检测 | O(m·k) | O(1) | ✅ 最优 |
-| 路径重建 | O(n²) | O(n) | 🟡 可优化 |
-| MFT 批量扫描 | O(n) | O(p) | ✅ 最优 |
-| 并行枚举 | O(n/p) | O(p) | ✅ 最优 |
+| Magic 分类 | O(s·(h + m·k)) | O(h) | ✅ bounded header |
+| 路径重建 | O(n) | O(n) | ✅ 已优化 |
+| MFT 批量扫描 | O(n) | O(p·b) | ✅ 可并行降低 wall time |
+| 并行枚举 | O(n) | O(p) | ✅ 可并行降低 wall time |
 
 ---
 
@@ -168,7 +168,7 @@ pub fn sha256_reader(reader: &mut dyn Read) -> io::Result<String> {
 ```rust
 // crates/app-services/src/file_service/mod.rs
 fn format_hex_lines(base_offset: u64, bytes: &[u8]) -> Vec<String> {
-    let line_count = (bytes.len() + 15) / 16;
+    let line_count = bytes.len().div_ceil(16);
     let mut result = Vec::with_capacity(line_count);
     
     for (line_idx, chunk) in bytes.chunks(16).enumerate() {
@@ -237,17 +237,30 @@ pub fn detect_encoding(data: &[u8]) -> EncodingInfo {
 
 ---
 
-## 六、Magic 检测算法
+## 六、Magic 分类算法
 
 ### 算法描述
 
 ```rust
 // crates/app-services/src/analysis_service.rs
-fn detect_file_type(path: &str, size: u64, read_fn: &impl Fn(&str) -> Option<Vec<u8>>) -> Option<...> {
-    // 1. Magic 字节检测
-    if let Some(data) = read_fn(path) {
+const MAGIC_HEADER_LIMIT: usize = 8 * 1024;
+
+fn classify_files_by_magic(
+    files: &[FileEntry],
+    sample_size: u32,
+    mut read_header_fn: impl FnMut(&FileEntryId) -> Result<Vec<u8>, String>,
+) -> Vec<AnalysisFileClassificationDto> {
+    for entry in files.iter().take(sample_size as usize) {
+        let header = read_header_fn(&entry.id); // bounded header read
+        let file_type = detect_file_type(&entry.path, header.as_deref().ok());
+        // ...
+    }
+}
+
+fn detect_file_type(path: &str, header: Option<&[u8]>) -> Option<...> {
+    if let Some(data) = header {
         for sig in MAGIC_SIGNATURES {
-            if data.len() > sig.offset + sig.bytes.len() {
+            if data.len() >= sig.offset + sig.bytes.len() {
                 if &data[sig.offset..sig.offset + sig.bytes.len()] == sig.bytes {
                     return Some(...);
                 }
@@ -265,10 +278,15 @@ fn detect_file_type(path: &str, size: u64, read_fn: &impl Fn(&str) -> Option<Vec
 
 | 指标 | 复杂度 | 说明 |
 |------|--------|------|
-| 时间 | O(m·k) | m = 签名数, k = 签名长度 |
-| 空间 | O(1) | 固定变量 |
+| 时间 | O(s·(h + m·k)) | s = 样本数；h = header 上限；m = 签名数；k = 签名长度 |
+| 空间 | O(h) | 单文件 bounded header buffer |
 
-**当前**: m = 18, k ≤ 8，实际 O(1)
+**当前**:
+
+- `sampleSize` 默认 1000，命令层最大 5000。
+- header 上限 8KB，不读取整文件。
+- exact-length magic 已用 `>=` 判断，`%PDF`、`PK\x03\x04`、`regf` 等刚好等长样本可识别。
+- 文件内容读取通过 `FileEntryId + DataSourceKind` helper，避免拼接宿主路径。
 
 ---
 
@@ -283,24 +301,23 @@ fn update_entry_paths(
     data_source_id: &DataSourceId,
     path_map: &HashMap<String, (Option<String>, String, bool)>,
 ) -> DbResult<()> {
-    let mut resolved: HashMap<String, String> = HashMap::new();
+    let mut resolved: HashMap<String, String> = HashMap::with_capacity(path_map.len());
+    let mut visiting: HashSet<String> = HashSet::new();
     
-    // 迭代解析路径
-    let mut changed = true;
-    let mut iterations = 0;
-    while changed && iterations < 1000 {
-        changed = false;
-        iterations += 1;
-        for (record_num, (parent, name, _)) in path_map {
-            if resolved.contains_key(record_num) { continue; }
-            if let Some(parent_num) = parent {
-                if let Some(parent_path) = resolved.get(parent_num) {
-                    let full_path = format!("{}/{}", parent_path, name);
-                    resolved.insert(record_num.clone(), full_path);
-                    changed = true;
-                }
-            }
+    fn resolve_path(
+        record: &str,
+        path_map: &HashMap<String, (Option<String>, String, bool)>,
+        resolved: &mut HashMap<String, String>,
+        visiting: &mut HashSet<String>,
+    ) -> String {
+        if let Some(path) = resolved.get(record) {
+            return path.clone();
         }
+        if !visiting.insert(record.to_string()) {
+            return String::new();
+        }
+        // parent recursion + cache
+        // ...
     }
 }
 ```
@@ -309,37 +326,10 @@ fn update_entry_paths(
 
 | 指标 | 复杂度 | 说明 |
 |------|--------|------|
-| 时间 | O(n²) | 最坏情况每轮解析一个 |
+| 时间 | O(n) | 每个 record 最多解析并缓存一次 |
 | 空间 | O(n) | resolved HashMap |
 
-**问题**: 
-- 最坏情况 O(n²)
-- 迭代上限 1000 可能不足
-
-**优化建议**:
-```rust
-// 使用递归 + 缓存
-fn resolve_path(
-    record: &str,
-    path_map: &HashMap<String, (Option<String>, String, bool)>,
-    cache: &mut HashMap<String, String>,
-) -> String {
-    if let Some(path) = cache.get(record) {
-        return path.clone();
-    }
-    
-    let (parent, name, _) = &path_map[record];
-    let path = match parent {
-        Some(p) => format!("{}/{}", resolve_path(p, path_map, cache), name),
-        None => name.clone(),
-    };
-    
-    cache.insert(record.to_string(), path.clone());
-    path
-}
-```
-
-**优化后复杂度**: O(n)
+**当前**: 已采用递归 + 缓存 + `visiting` cycle detection，移除了原先最坏 O(n²) 的迭代收敛模型。
 
 ---
 
@@ -377,7 +367,7 @@ pub fn enumerate_filesystem_mft(...) -> DbResult<EnumerationStats> {
 
 | 指标 | 复杂度 | 说明 |
 |------|--------|------|
-| 时间 | O(n/p) | p = 线程数 |
+| 时间 | O(n)；wall time 约 O(n/p) | p = parser 线程数；最终受 E01/RAW I/O 与 SQLite writer 约束 |
 | 空间 | O(p·b) | p = 线程数, b = 缓冲区 |
 
 **优化点**:
@@ -396,25 +386,20 @@ pub fn enumerate_filesystem_mft(...) -> DbResult<EnumerationStats> {
 | SHA-256 | O(n) | O(1) | ❌ | 最优 |
 | Hex 格式化 | O(n) | O(n) | ❌ | 最优 |
 | 编码检测 | O(n) | O(1) | ❌ | 可优化 |
-| Magic 检测 | O(1) | O(1) | ❌ | 最优 |
-| 路径重建 | O(n²) | O(n) | ❌ | 需优化 |
-| MFT 扫描 | O(n/p) | O(p) | ✅ | 最优 |
+| Magic 分类 | O(s·(h + m·k)) | O(h) | ❌ | bounded |
+| 路径重建 | O(n) | O(n) | ❌ | 已优化 |
+| MFT 扫描 | O(n) | O(p·b) | ✅ | 可并行降低 wall time |
 
 ---
 
 ## 🎯 优化建议
-
-### P0 (立即)
-
-| 问题 | 算法 | 建议 |
-|------|------|------|
-| 路径重建 O(n²) | update_entry_paths | 递归 + 缓存 → O(n) |
 
 ### P1 (短期)
 
 | 问题 | 算法 | 建议 |
 |------|------|------|
 | 编码检测多次扫描 | detect_encoding | 合并为单次扫描 |
+| 大媒体预览 | get_media_url/read_media_range | 小文件 data URL；大文件返回 scoped handle 并按 1MB 窗口读取。完整连续 streaming/protocol 仍待实现 |
 
 ### P2 (长期)
 
@@ -424,5 +409,5 @@ pub fn enumerate_filesystem_mft(...) -> DbResult<EnumerationStats> {
 
 ---
 
-**分析人**: MiMo AI Assistant  
-**分析版本**: v1.0
+**分析人**: MiMo AI Assistant；2026-06-01 由 Codex 按当前实现更新媒体 range、Analysis 和 bounded preview 状态
+**分析版本**: v1.1

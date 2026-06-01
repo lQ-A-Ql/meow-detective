@@ -24,42 +24,6 @@ use transport::{commands::ImportDataSourceRequest, CommandError};
 use crate::events::event_bridge;
 use crate::state::AppState;
 
-/// Create a file reader function for the given data source type.
-///
-/// Returns a closure that can read files by their FileEntryId.
-/// For logical directories, validates path safety to prevent traversal attacks.
-pub fn create_file_reader_fn<'a>(
-    source_path: &'a std::path::Path,
-    kind: &'a domain::DataSourceKind,
-) -> impl Fn(&domain::FileEntryId) -> Option<Box<dyn std::io::Read>> + 'a {
-    move |file_id: &domain::FileEntryId| -> Option<Box<dyn std::io::Read>> {
-        match kind {
-            domain::DataSourceKind::LogicalDirectory => {
-                let safe_path = match file_service::safe_relative_path(&file_id.0) {
-                    Ok(p) => p,
-                    Err(_) => return None,
-                };
-                let root = match source_path.canonicalize() {
-                    Ok(r) => r,
-                    Err(_) => return None,
-                };
-                let full = root.join(safe_path);
-                let canonical = match full.canonicalize() {
-                    Ok(c) => c,
-                    Err(_) => return None,
-                };
-                if !canonical.starts_with(&root) {
-                    return None;
-                }
-                std::fs::File::open(canonical)
-                    .ok()
-                    .map(|f| Box::new(f) as Box<dyn std::io::Read>)
-            }
-            _ => None,
-        }
-    }
-}
-
 /// Enumerate a filesystem within a partition, handling placeholder root replacement.
 fn enumerate_partition_with_fs(
     conn: &rusqlite::Connection,
@@ -96,7 +60,7 @@ pub fn run_post_import_pipeline(
     case_id: &domain::CaseId,
     ds_id: &domain::DataSourceId,
     index_dir: &std::path::Path,
-    reader_fn: impl Fn(&domain::FileEntryId) -> Option<Box<dyn std::io::Read>>,
+    app: Option<&AppHandle>,
 ) -> persistence_sqlite::DbResult<String> {
     let file_repo = persistence_sqlite::repositories::file_repo::FileRepo::new(conn);
 
@@ -125,7 +89,7 @@ pub fn run_post_import_pipeline(
         .iter()
         .take(infrastructure::constants::ARTIFACT_EXTRACTION_LIMIT)
     {
-        if let Some(reader) = reader_fn(&file.id) {
+        if let Ok(reader) = file_service::open_file_content_by_id(conn, &file.id) {
             if let Err(e) = app_services::artifact_service::run_extractors_on_file(
                 &registry, &file.id, &file.path, reader, &mut sink,
             ) {
@@ -142,6 +106,11 @@ pub fn run_post_import_pipeline(
             &ds_id.0,
         )
         .map_err(persistence_sqlite::DbError::System)?;
+        if let Some(app) = app {
+            for artifact in &sink.artifacts {
+                event_bridge::emit_artifact_added(app, &artifact.id.0, &artifact.family);
+            }
+        }
     }
 
     // Text indexing (limited by config)
@@ -150,7 +119,9 @@ pub fn run_post_import_pipeline(
         .take(infrastructure::constants::TEXT_INDEX_LIMIT)
         .map(|f| f.id.clone())
         .collect();
-    let index_result = search_service::index_files(conn, index_dir, &to_index, &reader_fn);
+    let index_result = search_service::index_files(conn, index_dir, &to_index, |file_id| {
+        file_service::open_file_content_by_id(conn, file_id).ok()
+    });
 
     let index_msg = match index_result {
         Ok(stats) => format!("{} indexed", stats.indexed_count),
@@ -170,10 +141,11 @@ pub async fn import_data_source(
     app: AppHandle,
     request: ImportDataSourceRequest,
 ) -> Result<String, CommandError> {
+    request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
     let source_path = request.source_path.clone();
     let app_clone = app.clone();
-    
+
     tauri::async_runtime::spawn_blocking(move || {
         let guard = app_state
             .active_case
@@ -197,7 +169,10 @@ pub async fn import_data_source(
 
 /// Tauri command: Cancel an in-progress import job.
 #[tauri::command]
-pub async fn cancel_import(state: State<'_, AppState>, job_id: String) -> Result<String, CommandError> {
+pub async fn cancel_import(
+    state: State<'_, AppState>,
+    job_id: String,
+) -> Result<String, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         if app_state.task_manager.cancel(&job_id) {
@@ -225,6 +200,7 @@ pub fn schedule_import_for_active_case(
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_else(|| "data_source".to_string());
+    validate_import_source_for_filesystem(source_path)?;
 
     let conn =
         persistence_sqlite::open_or_create(&db_path).map_err(CommandError::from_service_error)?;
@@ -233,6 +209,9 @@ pub fn schedule_import_for_active_case(
         .create(&case_id.0, "Import data source")
         .map_err(CommandError::from_service_error)?;
     let job_id_str = job_id.0.clone();
+    if let Some(app) = app {
+        event_bridge::emit_job_created(app, &job_id_str, "Import data source");
+    }
     job_repo
         .update_progress(&job_id, 1, &format!("Queued import for {source_name}"))
         .map_err(CommandError::from_service_error)?;
@@ -277,6 +256,7 @@ fn run_background_import_job(
     let job_repo = JobRepo::new(&conn);
 
     if let Some(app) = app {
+        event_bridge::emit_job_started(app, &job_id.0, "Import started");
         event_bridge::emit_job_progress(app, &job_id.0, 5, "Import started");
     }
 
@@ -333,6 +313,7 @@ pub fn execute_import_job(
     cancel_token: &AtomicBool,
 ) -> Result<String, CommandError> {
     let path = PathBuf::from(source_path);
+    validate_import_source_for_filesystem(source_path)?;
     let kind = datasource_service::classify_data_source_path(&path)
         .map_err(CommandError::from_service_error)?;
     let source_name = path
@@ -417,10 +398,12 @@ pub fn execute_import_job(
         event_bridge::emit_job_progress(app, &job_id.0, 70, "Running post-import pipeline...");
     }
 
-    let reader_fn = create_file_reader_fn(&path, &kind);
-    let pipeline_msg =
-        run_post_import_pipeline(conn, case_id, &ds.id, &index_dir, reader_fn)
-            .map_err(CommandError::from_service_error)?;
+    let pipeline_msg = run_post_import_pipeline(conn, case_id, &ds.id, &index_dir, app)
+        .map_err(CommandError::from_service_error)?;
+    if let Some(app) = app {
+        event_bridge::emit_timeline_updated(app, stats.file_count + stats.dir_count);
+        event_bridge::emit_search_index_progress(app, 100, "Post-import indexing completed");
+    }
 
     job_repo
         .update_progress(job_id, 95, "Finalizing...")
@@ -439,6 +422,20 @@ pub fn execute_import_job(
     }
 
     Ok(msg)
+}
+
+fn validate_import_source_for_filesystem(source_path: &str) -> Result<(), CommandError> {
+    let path = PathBuf::from(source_path);
+    let metadata = std::fs::metadata(&path).map_err(|_| {
+        CommandError::invalid_input("sourcePath must exist and be accessible before import")
+    })?;
+    if metadata.is_dir() || metadata.is_file() {
+        Ok(())
+    } else {
+        Err(CommandError::invalid_input(
+            "sourcePath must point to a directory or regular image file",
+        ))
+    }
 }
 
 /// Enumerate an image data source (E01/RAW) with partition detection.
@@ -760,4 +757,100 @@ fn format_partition_progress_detail(
         current_partition,
         detail
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use app_services::{case_service, search_service};
+    use chrono::{DateTime, Utc};
+    use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, job_repo::JobRepo};
+    use tempfile::TempDir;
+
+    fn filetime(dt: DateTime<Utc>) -> u64 {
+        ((dt.timestamp() + 11_644_473_600) as u64 * 10_000_000)
+            + (dt.timestamp_subsec_nanos() as u64 / 100)
+    }
+
+    fn prefetch_fixture(exe_name: &str, run_count: u32, last_run: DateTime<Utc>) -> Vec<u8> {
+        let mut data = Vec::new();
+        data.extend_from_slice(b"SCCA");
+        data.extend_from_slice(&0x1Eu32.to_le_bytes());
+        data.extend_from_slice(&0u32.to_le_bytes());
+        data.extend_from_slice(&0u32.to_le_bytes());
+        data.extend_from_slice(&0x0000A000u32.to_le_bytes());
+
+        let mut name_buf = vec![0u8; 60];
+        for (index, ch) in exe_name.encode_utf16().enumerate() {
+            let offset = index * 2;
+            if offset + 1 < name_buf.len() {
+                name_buf[offset] = (ch & 0xFF) as u8;
+                name_buf[offset + 1] = (ch >> 8) as u8;
+            }
+        }
+        data.extend_from_slice(&name_buf);
+        data.extend_from_slice(&0xDEADBEEFu32.to_le_bytes());
+        data.extend_from_slice(&0u32.to_le_bytes());
+        data.extend_from_slice(&[0u8; 12]);
+        data.extend_from_slice(&run_count.to_le_bytes());
+        data.extend_from_slice(&filetime(last_run).to_le_bytes());
+        data.extend_from_slice(&[0u8; 7 * 8]);
+        data.resize(4096, 0);
+        data
+    }
+
+    #[test]
+    fn logical_import_post_pipeline_indexes_marker_and_extracts_artifact() {
+        let tmp = TempDir::new().unwrap();
+        let evidence_dir = tmp.path().join("evidence");
+        std::fs::create_dir_all(&evidence_dir).unwrap();
+
+        let marker = "fw_marker_8f15d3f2c9e64b51";
+        std::fs::write(
+            evidence_dir.join("notes.txt"),
+            format!("Forensics import marker: {marker}"),
+        )
+        .unwrap();
+        std::fs::write(
+            evidence_dir.join("CMD.EXE-DEADBEEF.pf"),
+            prefetch_fixture("CMD.EXE", 3, Utc::now()),
+        )
+        .unwrap();
+
+        let active =
+            case_service::create_case(&tmp.path().join("cases"), "post-import", Some("tester"))
+                .unwrap();
+        let cancel = AtomicBool::new(false);
+
+        active
+            .with_conn(|conn| {
+                let job_id = JobRepo::new(conn).create(&active.meta.id.0, "Import test")?;
+                let message = execute_import_job(
+                    conn,
+                    &active.meta.id,
+                    &active.case_root,
+                    &evidence_dir.to_string_lossy(),
+                    &job_id,
+                    None,
+                    &cancel,
+                )
+                .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
+
+                assert!(message.contains("Index:"));
+
+                let index_dir = active.case_root.join("indexes").join("tantivy");
+                let results = search_service::search_files_real(&index_dir, marker, 0, 10)
+                    .map_err(persistence_sqlite::DbError::System)?;
+                assert_eq!(results.total, 1);
+                assert!(results.items[0].path.ends_with("notes.txt"));
+
+                let artifact_repo = ArtifactRepo::new(conn);
+                assert!(artifact_repo.count()? > 0);
+                let families = artifact_repo.families()?;
+                assert!(families.iter().any(|family| family == "Prefetch"));
+
+                Ok(())
+            })
+            .unwrap();
+    }
 }

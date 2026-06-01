@@ -44,7 +44,9 @@ pub fn migrate_partitions(conn: &Connection) -> DbResult<MigrationResult> {
             }
             Err(e) => {
                 result.error_count += 1;
-                result.errors.push(format!("Error migrating {}: {}", ds_id, e));
+                result
+                    .errors
+                    .push(format!("Error migrating {}: {}", ds_id, e));
             }
         }
     }

@@ -1,6 +1,6 @@
 use app_services::case_service;
 use std::path::PathBuf;
-use tauri::State;
+use tauri::{AppHandle, State};
 use transport::{
     commands::{
         CreateCaseRequest, DeleteCaseRequest, DeleteDataSourceRequest, OpenCaseRequest,
@@ -10,7 +10,7 @@ use transport::{
     CommandError,
 };
 
-use crate::state::AppState;
+use crate::{events::event_bridge, state::AppState};
 
 fn meta_to_dto(meta: &domain::CaseMeta) -> CaseSummaryDto {
     CaseSummaryDto {
@@ -26,8 +26,10 @@ fn meta_to_dto(meta: &domain::CaseMeta) -> CaseSummaryDto {
 #[tauri::command]
 pub fn create_case(
     state: State<AppState>,
+    app: AppHandle,
     request: CreateCaseRequest,
 ) -> Result<CaseSummaryDto, CommandError> {
+    request.validate().map_err(CommandError::invalid_input)?;
     let root = PathBuf::from(&request.case_root);
     let active = case_service::create_case(&root, &request.name, request.examiner.as_deref())
         .map_err(CommandError::from_service_error)?;
@@ -39,14 +41,17 @@ pub fn create_case(
         .map_err(|e| CommandError::from_lock_error("Case", e))?;
     *guard = Some(active);
     remember_recent_case(&root, &dto)?;
+    event_bridge::emit_case_opened(&app, &dto.id, &dto.name);
     Ok(dto)
 }
 
 #[tauri::command]
 pub fn open_case(
     state: State<AppState>,
+    app: AppHandle,
     request: OpenCaseRequest,
 ) -> Result<CaseSummaryDto, CommandError> {
+    request.validate().map_err(CommandError::invalid_input)?;
     let root = PathBuf::from(&request.case_root);
     let active = case_service::open_case(&root).map_err(CommandError::from_service_error)?;
 
@@ -57,6 +62,7 @@ pub fn open_case(
         .map_err(|e| CommandError::from_lock_error("Case", e))?;
     *guard = Some(active);
     remember_recent_case(&root, &dto)?;
+    event_bridge::emit_case_opened(&app, &dto.id, &dto.name);
     Ok(dto)
 }
 
@@ -73,19 +79,25 @@ pub fn get_current_case(state: State<AppState>) -> Result<Option<CaseSummaryDto>
 }
 
 #[tauri::command]
-pub fn close_case(state: State<AppState>) -> Result<(), CommandError> {
+pub fn close_case(state: State<AppState>, app: AppHandle) -> Result<(), CommandError> {
     // 1. Cancel all background tasks
     state.task_manager.cancel_all();
-    
+
     // 2. Wait for tasks to complete (with timeout)
-    let _ = state.task_manager.wait_all(std::time::Duration::from_secs(5));
-    
+    let _ = state
+        .task_manager
+        .wait_all(std::time::Duration::from_secs(5));
+
     // 3. Clear active case
     let mut guard = state
         .active_case
         .lock()
         .map_err(|e| CommandError::from_lock_error("Case", e))?;
+    let closed_case_id = guard.as_ref().map(|active| active.meta.id.0.clone());
     *guard = None;
+    if let Some(case_id) = closed_case_id {
+        event_bridge::emit_case_closed(&app, &case_id);
+    }
     Ok(())
 }
 
@@ -184,6 +196,7 @@ pub async fn rename_data_source(
     state: State<'_, AppState>,
     request: RenameDataSourceRequest,
 ) -> Result<(), CommandError> {
+    request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         // Short lock: extract db_path, then release
@@ -216,6 +229,7 @@ pub fn get_recent_cases() -> Result<Vec<RecentCaseDto>, CommandError> {
 
 #[tauri::command]
 pub fn remove_case_from_list(request: DeleteCaseRequest) -> Result<String, CommandError> {
+    request.validate().map_err(CommandError::invalid_input)?;
     let mut recent = read_recent_cases().unwrap_or_else(|e| {
         tracing::warn!("Failed to read recent cases, starting fresh: {}", e);
         Vec::new()
@@ -230,6 +244,7 @@ pub async fn delete_case(
     state: State<'_, AppState>,
     request: DeleteCaseRequest,
 ) -> Result<String, CommandError> {
+    request.validate().map_err(CommandError::invalid_input)?;
     let root = PathBuf::from(&request.case_root);
 
     {
@@ -266,6 +281,7 @@ pub async fn delete_data_source(
     state: State<'_, AppState>,
     request: DeleteDataSourceRequest,
 ) -> Result<String, CommandError> {
+    request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
     let ds_id = request.data_source_id.clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -330,7 +346,10 @@ fn save_recent_cases(recent: &[RecentCaseDto]) -> Result<(), CommandError> {
     {
         use std::os::unix::fs::PermissionsExt;
         if let Err(e) = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)) {
-            tracing::warn!("Failed to set restrictive permissions on recent cases file: {}", e);
+            tracing::warn!(
+                "Failed to set restrictive permissions on recent cases file: {}",
+                e
+            );
         }
     }
 
@@ -368,8 +387,21 @@ fn read_recent_cases() -> Result<Vec<RecentCaseDto>, CommandError> {
         tracing::error!("Failed to read recent cases file: {}", e);
         CommandError::internal("Failed to read recent cases")
     })?;
-    serde_json::from_str(&content).map_err(|e| {
+    let parsed: Vec<RecentCaseDto> = serde_json::from_str(&content).map_err(|e| {
         tracing::error!("Failed to parse recent cases JSON: {}", e);
         CommandError::internal("Failed to read recent cases")
-    })
+    })?;
+    Ok(parsed
+        .into_iter()
+        .filter(|item| valid_recent_case_root(&item.case_root))
+        .take(MAX_RECENT_CASES)
+        .collect())
+}
+
+fn valid_recent_case_root(case_root: &str) -> bool {
+    if case_root.trim().is_empty() || case_root.contains('\0') {
+        return false;
+    }
+    let root = PathBuf::from(case_root);
+    root.is_dir() && root.join("case.json").is_file() && root.join("app.db").is_file()
 }

@@ -18,12 +18,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir frontend install --frozen-lockfile
       - name: Typecheck
-        run: pnpm typecheck
+        run: pnpm --dir frontend typecheck
       - name: Lint
-        run: pnpm lint
+        run: pnpm --dir frontend lint
       - name: Build
-        run: pnpm build
+        run: pnpm --dir frontend build
       - name: Test
-        run: pnpm test
+        run: pnpm --dir frontend test
+      - name: Audit dependencies
+        run: pnpm --dir frontend audit --audit-level high
+      - name: Generate frontend SBOM
+        run: pnpm --dir frontend list --json --prod > frontend/frontend-sbom.json
+      - name: Upload frontend SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-sbom
+          path: frontend/frontend-sbom.json

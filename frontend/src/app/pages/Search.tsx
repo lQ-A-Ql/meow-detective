@@ -1,10 +1,16 @@
-import { Filter, ChevronRight } from 'lucide-react';
+import { Filter, ChevronRight, Save, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { PageSubbar } from '@/components/layout/PageSubbar';
 import { DenseDataTable } from '@/components/tables/DenseDataTable';
 import { InspectorPane, InspectorSection, InspectorValue } from '@/components/layout/InspectorPane';
 import { useSearchResults } from '@/features/search/hooks';
+import {
+  readSavedSearchQueries,
+  removeSavedSearchQuery,
+  upsertSavedSearchQuery,
+  writeSavedSearchQueries,
+} from '@/lib/saved-queries';
 import { useSelectionStore } from '@/stores/selection-store';
 import { SearchHit } from '@/types/models';
 
@@ -13,12 +19,34 @@ const defaultQuery = "files WHERE extension IN ('.doc', '.xls') AND size > 10MB"
 export function Search() {
   const [queryInput, setQueryInput] = useState(defaultQuery);
   const [activeQuery, setActiveQuery] = useState(defaultQuery);
+  const [savedOpen, setSavedOpen] = useState(false);
+  const [savedName, setSavedName] = useState('');
+  const [savedQueries, setSavedQueries] = useState(() => readSavedSearchQueries());
   const { data } = useSearchResults(activeQuery);
   const selectedSearchHitId = useSelectionStore((state) => state.selectedSearchHitId);
   const setSelectedSearchHitId = useSelectionStore((state) => state.setSelectedSearchHitId);
   const navigate = useNavigate();
   const selectedHit = data?.items.find((item) => item.fileId === selectedSearchHitId) ?? data?.items[0];
   const highScoreHits = data?.items.filter((item) => item.score >= 0.8).length ?? 0;
+
+  function persistSavedQueries(next: typeof savedQueries) {
+    setSavedQueries(next);
+    writeSavedSearchQueries(next);
+  }
+
+  function saveCurrentQuery() {
+    const name = savedName.trim() || queryInput.slice(0, 48);
+    const next = upsertSavedSearchQuery(savedQueries, name, queryInput);
+    persistSavedQueries(next);
+    setSavedName('');
+    setSavedOpen(true);
+  }
+
+  function runSavedQuery(query: string) {
+    setQueryInput(query);
+    setActiveQuery(query);
+    setSavedOpen(false);
+  }
 
   return (
     <div className="flex-1 flex flex-col w-full h-full bg-white min-w-0">
@@ -41,9 +69,70 @@ export function Search() {
                 执行
               </button>
             </div>
-            <div className="flex items-center gap-2 border border-[#e0e0e0] bg-white px-3 py-1.5 text-[11px] text-[#666] cursor-pointer hover:text-[#111]">
-              <Filter size={12} />
-              <span>已保存查询</span>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setSavedOpen((open) => !open)}
+                className="flex items-center gap-2 border border-[#e0e0e0] bg-white px-3 py-1.5 text-[11px] text-[#666] cursor-pointer hover:text-[#111]"
+              >
+                <Filter size={12} />
+                <span>已保存查询</span>
+              </button>
+              {savedOpen ? (
+                <div className="absolute right-0 top-8 z-20 w-80 border border-[#ccc] bg-white shadow-lg">
+                  <div className="border-b border-[#e0e0e0] p-2">
+                    <input
+                      value={savedName}
+                      onChange={(event) => setSavedName(event.target.value)}
+                      placeholder="查询名称"
+                      className="mb-2 w-full border border-[#ccc] px-2 py-1 text-[11px] font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={saveCurrentQuery}
+                      className="flex w-full items-center justify-center gap-1 border border-[#111] bg-[#111] px-2 py-1 text-[11px] text-white hover:bg-[#333]"
+                    >
+                      <Save size={12} />
+                      保存当前查询
+                    </button>
+                  </div>
+                  <div className="max-h-64 overflow-auto">
+                    {savedQueries.length ? (
+                      savedQueries.map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex items-start gap-2 border-b border-[#eee] p-2 last:border-b-0"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => runSavedQuery(item.query)}
+                            className="min-w-0 flex-1 text-left hover:text-[#111]"
+                          >
+                            <div className="truncate text-[12px] font-medium text-[#222]">
+                              {item.name}
+                            </div>
+                            <div className="mt-0.5 line-clamp-2 font-mono text-[10px] text-[#777]">
+                              {item.query}
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              persistSavedQueries(removeSavedSearchQuery(savedQueries, item.id))
+                            }
+                            className="p-1 text-[#888] hover:text-red-600"
+                            title="删除保存的查询"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-3 text-[11px] text-[#888]">暂无保存的查询。</div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
           <div className="flex items-center gap-4 text-[11px] text-[#888] font-mono flex-wrap">

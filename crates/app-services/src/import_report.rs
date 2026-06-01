@@ -33,7 +33,7 @@ pub struct DataSourceSummary {
 }
 
 /// Import statistics
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ImportStatistics {
     pub total_files: u64,
     pub total_directories: u64,
@@ -120,10 +120,8 @@ impl ImportReport {
         // Calculate throughput
         if self.performance.total_duration_ms > 0 {
             let seconds = self.performance.total_duration_ms as f64 / 1000.0;
-            self.performance.files_per_second =
-                self.statistics.imported_files as f64 / seconds;
-            self.performance.bytes_per_second =
-                self.statistics.total_size as f64 / seconds;
+            self.performance.files_per_second = self.statistics.imported_files as f64 / seconds;
+            self.performance.bytes_per_second = self.statistics.total_size as f64 / seconds;
         }
     }
 
@@ -147,20 +145,23 @@ impl ImportReport {
         md.push_str(&format!("# 导入报告: {}\n\n", self.data_source.name));
         md.push_str(&format!("**数据源**: {}\n", self.data_source.source_path));
         md.push_str(&format!("**类型**: {}\n", self.data_source.kind));
-        md.push_str(&format!("**导入时间**: {}\n\n", self.data_source.imported_at));
+        md.push_str(&format!(
+            "**导入时间**: {}\n\n",
+            self.data_source.imported_at
+        ));
 
         // Statistics
         md.push_str("## 统计\n\n");
         md.push_str(&format!("- 文件数: {}\n", self.statistics.imported_files));
-        md.push_str(&format!("- 目录数: {}\n", self.statistics.total_directories));
+        md.push_str(&format!(
+            "- 目录数: {}\n",
+            self.statistics.total_directories
+        ));
         md.push_str(&format!(
             "- 总大小: {:.1} MB\n",
             self.statistics.total_size as f64 / (1024.0 * 1024.0)
         ));
-        md.push_str(&format!(
-            "- 哈希计算: {}\n",
-            self.statistics.hash_computed
-        ));
+        md.push_str(&format!("- 哈希计算: {}\n", self.statistics.hash_computed));
         md.push_str(&format!(
             "- 工件提取: {}\n",
             self.statistics.artifacts_extracted
@@ -209,23 +210,6 @@ impl ImportReport {
         }
 
         md
-    }
-}
-
-impl Default for ImportStatistics {
-    fn default() -> Self {
-        Self {
-            total_files: 0,
-            total_directories: 0,
-            total_size: 0,
-            imported_files: 0,
-            skipped_files: 0,
-            error_files: 0,
-            hash_computed: 0,
-            artifacts_extracted: 0,
-            timeline_events: 0,
-            text_indexed: 0,
-        }
     }
 }
 

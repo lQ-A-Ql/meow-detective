@@ -8,10 +8,15 @@
 
 use app_services::{file_service, text_service::TextService};
 use base64::Engine;
+use std::io::Read;
 use tauri::State;
 use transport::{
-    commands::{GetFileChildrenRequest, GetFileRowsRequest},
-    dto::{FileEntryRowDto, FileTreeNodeDto, ImagePreviewDto, MediaUrlDto, TextPreviewDto, ViewerHandleDto, ViewerRangeResponseDto},
+    commands::{ExtractFileRequest, GetFileChildrenRequest, GetFileRowsRequest},
+    dto::{
+        FileEntryRowDto, FileTreeNodeDto, ImagePreviewDto, MediaRangeRequestDto,
+        MediaRangeResponseDto, MediaUrlDto, TextPreviewDto, ViewerHandleDto,
+        ViewerRangeResponseDto,
+    },
     CommandError,
 };
 
@@ -32,6 +37,7 @@ pub async fn get_file_children_request(
     state: State<'_, AppState>,
     request: GetFileChildrenRequest,
 ) -> Result<Vec<FileTreeNodeDto>, CommandError> {
+    request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         // Short lock: extract db_path, then release
@@ -153,6 +159,7 @@ pub async fn open_file_handle_request(
     state: State<'_, AppState>,
     request: transport::commands::OpenFileHandleRequest,
 ) -> Result<ViewerHandleDto, CommandError> {
+    request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         // Short lock: extract db_path, then release
@@ -178,8 +185,9 @@ pub async fn open_file_handle_request(
 #[tauri::command]
 pub async fn read_file_range(
     state: State<'_, AppState>,
-    request: transport::dto::ViewerRangeRequestDto,
+    mut request: transport::dto::ViewerRangeRequestDto,
 ) -> Result<ViewerRangeResponseDto, CommandError> {
+    request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         // Short lock: extract db_path, then release
@@ -232,35 +240,12 @@ pub async fn get_text_preview(
         let conn = persistence_sqlite::open_or_create(&db_path)
             .map_err(CommandError::from_service_error)?;
 
-        // Get file handle
-        let handle = file_service::open_file_handle_real(&conn, &file_id)
-            .map_err(CommandError::from_service_error)?;
-
-        // Read file content
-        let range = file_service::read_file_range_for_case(
+        let content_bytes = file_service::read_file_header_by_id(
             &conn,
-            &transport::dto::ViewerRangeRequestDto {
-                handle_id: handle.handle_id.clone(),
-                offset: 0,
-                length: max,
-            },
+            &domain::FileEntryId(file_id.clone()),
+            max as usize,
         )
         .map_err(CommandError::from_service_error)?;
-
-        // Decode hex lines to bytes
-        // Format: "00000000  48 65 6C 6C 6F  ..."
-        let content_bytes: Vec<u8> = range
-            .lines
-            .iter()
-            .filter(|line| !line.trim().is_empty()) // Skip empty lines
-            .flat_map(|line| {
-                line.split_whitespace()
-                    .skip(1) // Skip offset
-                    .take_while(|hex| hex.len() <= 2) // Stop at non-hex tokens
-                    .filter_map(|hex| u8::from_str_radix(hex, 16).ok())
-                    .collect::<Vec<u8>>()
-            })
-            .collect();
 
         // Detect encoding and extract text
         let preview = TextService::extract_text_preview(
@@ -317,31 +302,20 @@ pub async fn get_image_preview(
             return Err(CommandError::from_service_error("Not an image file"));
         }
 
-        // Read file content
-        let range = file_service::read_file_range_for_case(
-            &conn,
-            &transport::dto::ViewerRangeRequestDto {
-                handle_id: handle.handle_id.clone(),
-                offset: 0,
-                length: handle.size as u32,
-            },
-        )
-        .map_err(CommandError::from_service_error)?;
+        if handle.size > infrastructure::constants::MAX_INLINE_IMAGE_PREVIEW_BYTES {
+            return Err(CommandError::invalid_input(format!(
+                "Image preview is limited to {} MB",
+                infrastructure::constants::MAX_INLINE_IMAGE_PREVIEW_BYTES / (1024 * 1024)
+            )));
+        }
 
-        // Decode hex lines to bytes
-        // Format: "00000000  48 65 6C 6C 6F  ..."
-        let content_bytes: Vec<u8> = range
-            .lines
-            .iter()
-            .filter(|line| !line.trim().is_empty()) // Skip empty lines
-            .flat_map(|line| {
-                line.split_whitespace()
-                    .skip(1) // Skip offset
-                    .take_while(|hex| hex.len() <= 2) // Stop at non-hex tokens
-                    .filter_map(|hex| u8::from_str_radix(hex, 16).ok())
-                    .collect::<Vec<u8>>()
-            })
-            .collect();
+        let mut reader =
+            file_service::open_file_content_by_id(&conn, &domain::FileEntryId(file_id.clone()))
+                .map_err(CommandError::from_service_error)?;
+        let mut content_bytes = Vec::with_capacity(handle.size as usize);
+        reader
+            .read_to_end(&mut content_bytes)
+            .map_err(CommandError::from_service_error)?;
 
         // Base64 encode
         let base64 = base64::engine::general_purpose::STANDARD.encode(&content_bytes);
@@ -360,7 +334,7 @@ pub async fn get_image_preview(
 
 /// Get media URL for video/audio playback.
 ///
-/// Returns a local file URL that can be used by the browser's media player.
+/// Returns a bounded inline data URL instead of exposing host filesystem paths.
 #[tauri::command]
 pub async fn get_media_url(
     state: State<'_, AppState>,
@@ -383,24 +357,345 @@ pub async fn get_media_url(
         let conn = persistence_sqlite::open_or_create(&db_path)
             .map_err(CommandError::from_service_error)?;
 
-        // Get file handle
-        let handle = file_service::open_file_handle_real(&conn, &file_id)
-            .map_err(CommandError::from_service_error)?;
-
-        // Get file path
-        let file_path = file_service::get_file_path_for_entry(&conn, &file_id)
-            .map_err(CommandError::from_service_error)?;
-
-        // Create asset URL for Tauri with proper encoding
-        let path_str = file_path.to_string_lossy();
-        let url = format!("asset://localhost/{}", path_str.replace(' ', "%20"));
-
-        Ok(MediaUrlDto {
-            url,
-            mime_type: handle.mime.unwrap_or_else(|| "application/octet-stream".to_string()),
-            size: handle.size,
-        })
+        media_data_url_for_file(&conn, &file_id)
     })
     .await
     .map_err(CommandError::from_join_error)?
+}
+
+/// Read a bounded raw byte range for media preview.
+#[tauri::command]
+pub async fn read_media_range(
+    state: State<'_, AppState>,
+    mut request: MediaRangeRequestDto,
+) -> Result<MediaRangeResponseDto, CommandError> {
+    request.validate().map_err(CommandError::invalid_input)?;
+    let app_state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let db_path = {
+            let guard = app_state
+                .active_case
+                .lock()
+                .map_err(|e| CommandError::from_lock_error("Case", e))?;
+            match guard.as_ref() {
+                Some(active) => active.db_path(),
+                None => return Err(CommandError::no_active_case()),
+            }
+        };
+
+        let conn = persistence_sqlite::open_or_create(&db_path)
+            .map_err(CommandError::from_service_error)?;
+
+        media_range_for_file(&conn, &request)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+/// Extract a file from evidence to a user-selected destination path.
+#[tauri::command]
+pub async fn extract_file(
+    state: State<'_, AppState>,
+    request: ExtractFileRequest,
+) -> Result<String, CommandError> {
+    request.validate().map_err(CommandError::invalid_input)?;
+    let app_state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let db_path = {
+            let guard = app_state
+                .active_case
+                .lock()
+                .map_err(|e| CommandError::from_lock_error("Case", e))?;
+            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
+            active.db_path()
+        };
+        let conn = persistence_sqlite::open_or_create(&db_path)
+            .map_err(CommandError::from_service_error)?;
+        extract_file_for_case(&conn, &request)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+fn extract_file_for_case(
+    conn: &rusqlite::Connection,
+    request: &ExtractFileRequest,
+) -> Result<String, CommandError> {
+    let mut reader =
+        file_service::open_file_content_by_id(conn, &domain::FileEntryId(request.file_id.clone()))
+            .map_err(CommandError::from_service_error)?;
+    let destination = std::path::PathBuf::from(&request.destination_path);
+    if destination.exists() && destination.is_dir() {
+        return Err(CommandError::invalid_input(
+            "destinationPath must point to a file, not a directory",
+        ));
+    }
+    if let Some(parent) = destination.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent).map_err(CommandError::from_service_error)?;
+        }
+    }
+    let mut output =
+        std::fs::File::create(&destination).map_err(CommandError::from_service_error)?;
+    let bytes =
+        std::io::copy(&mut reader, &mut output).map_err(CommandError::from_service_error)?;
+    Ok(format!("Extracted {} bytes", bytes))
+}
+
+fn media_data_url_for_file(
+    conn: &rusqlite::Connection,
+    file_id: &str,
+) -> Result<MediaUrlDto, CommandError> {
+    let handle = file_service::open_file_handle_real(conn, file_id)
+        .map_err(CommandError::from_service_error)?;
+    let mime = handle
+        .mime
+        .clone()
+        .unwrap_or_else(|| "application/octet-stream".to_string());
+    if handle.size > infrastructure::constants::MAX_INLINE_MEDIA_PREVIEW_BYTES {
+        return Ok(MediaUrlDto {
+            url: None,
+            handle_id: Some(handle.handle_id),
+            mime_type: mime,
+            size: handle.size,
+            can_read_ranges: true,
+        });
+    }
+
+    let mut reader =
+        file_service::open_file_content_by_id(conn, &domain::FileEntryId(file_id.to_string()))
+            .map_err(CommandError::from_service_error)?;
+    let mut content_bytes = Vec::with_capacity(handle.size as usize);
+    reader
+        .read_to_end(&mut content_bytes)
+        .map_err(CommandError::from_service_error)?;
+    let base64 = base64::engine::general_purpose::STANDARD.encode(&content_bytes);
+
+    Ok(MediaUrlDto {
+        url: Some(format!("data:{};base64,{}", mime, base64)),
+        handle_id: Some(handle.handle_id),
+        mime_type: mime,
+        size: handle.size,
+        can_read_ranges: true,
+    })
+}
+
+fn media_range_for_file(
+    conn: &rusqlite::Connection,
+    request: &MediaRangeRequestDto,
+) -> Result<MediaRangeResponseDto, CommandError> {
+    let file_id = request
+        .handle_id
+        .strip_prefix("file:")
+        .ok_or_else(|| CommandError::invalid_input("unsupported media handle"))?;
+    let handle = file_service::open_file_handle_real(conn, file_id)
+        .map_err(CommandError::from_service_error)?;
+    if request.offset >= handle.size {
+        return Ok(MediaRangeResponseDto {
+            offset: request.offset,
+            bytes_base64: String::new(),
+            bytes_read: 0,
+            eof: true,
+        });
+    }
+    let mut reader =
+        file_service::open_file_content_by_id(conn, &domain::FileEntryId(file_id.to_string()))
+            .map_err(CommandError::from_service_error)?;
+
+    file_service::skip_reader_bytes(reader.as_mut(), request.offset)
+        .map_err(CommandError::from_service_error)?;
+    let mut bytes = vec![0u8; request.length as usize];
+    let bytes_read = reader
+        .read(&mut bytes)
+        .map_err(CommandError::from_service_error)?;
+    bytes.truncate(bytes_read);
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    let end_offset = request.offset.saturating_add(bytes_read as u64);
+
+    Ok(MediaRangeResponseDto {
+        offset: request.offset,
+        bytes_base64: encoded,
+        bytes_read: bytes_read as u32,
+        eof: end_offset >= handle.size,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use app_services::{case_service, file_service};
+    use evidence_core::LogicalFsReader;
+    use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
+    use tempfile::TempDir;
+
+    #[test]
+    fn media_preview_returns_data_url_without_host_path() {
+        let tmp = TempDir::new().unwrap();
+        let evidence_dir = tmp.path().join("evidence");
+        std::fs::create_dir_all(&evidence_dir).unwrap();
+        std::fs::write(evidence_dir.join("clip.mp4"), b"tiny media bytes").unwrap();
+
+        let active =
+            case_service::create_case(&tmp.path().join("cases"), "media", Some("tester")).unwrap();
+        let case_id = active.meta.id.clone();
+
+        active
+            .with_conn(|conn| {
+                let ds_id = domain::DataSourceId("ds-media".to_string());
+                DataSourceRepo::new(conn).insert(
+                    &case_id,
+                    &domain::DataSource {
+                        id: ds_id.clone(),
+                        name: "evidence".to_string(),
+                        kind: domain::DataSourceKind::LogicalDirectory,
+                        source_path: evidence_dir.clone(),
+                        imported_at: chrono::Utc::now(),
+                    },
+                )?;
+
+                let fs = LogicalFsReader::open(&evidence_dir, "evidence")
+                    .map_err(|err| persistence_sqlite::DbError::System(err.to_string()))?;
+                file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
+
+                let file_id = persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
+                    .find_by_data_source(&ds_id)?
+                    .into_iter()
+                    .find(|entry| entry.name == "clip.mp4")
+                    .map(|entry| entry.id.0)
+                    .expect("clip.mp4 should be enumerated");
+
+                let media = media_data_url_for_file(conn, &file_id)
+                    .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
+                let url = media.url.expect("small media should return inline URL");
+                assert!(url.starts_with("data:"));
+                assert!(!url.starts_with("file:"));
+                assert!(!url.starts_with("asset://"));
+                assert!(!url.contains(&evidence_dir.to_string_lossy().to_string()));
+                assert!(media.can_read_ranges);
+
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn extract_file_uses_entry_reader_and_writes_destination() {
+        let tmp = TempDir::new().unwrap();
+        let evidence_dir = tmp.path().join("evidence");
+        std::fs::create_dir_all(&evidence_dir).unwrap();
+        std::fs::write(evidence_dir.join("note.txt"), b"extract me").unwrap();
+
+        let active =
+            case_service::create_case(&tmp.path().join("cases"), "extract", Some("tester"))
+                .unwrap();
+        let case_id = active.meta.id.clone();
+
+        active
+            .with_conn(|conn| {
+                let ds_id = domain::DataSourceId("ds-extract".to_string());
+                DataSourceRepo::new(conn).insert(
+                    &case_id,
+                    &domain::DataSource {
+                        id: ds_id.clone(),
+                        name: "evidence".to_string(),
+                        kind: domain::DataSourceKind::LogicalDirectory,
+                        source_path: evidence_dir.clone(),
+                        imported_at: chrono::Utc::now(),
+                    },
+                )?;
+
+                let fs = LogicalFsReader::open(&evidence_dir, "evidence")
+                    .map_err(|err| persistence_sqlite::DbError::System(err.to_string()))?;
+                file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
+
+                let file_id = persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
+                    .find_by_data_source(&ds_id)?
+                    .into_iter()
+                    .find(|entry| entry.name == "note.txt")
+                    .map(|entry| entry.id.0)
+                    .expect("note.txt should be enumerated");
+                let destination = tmp.path().join("exports").join("note-copy.txt");
+
+                let result = extract_file_for_case(
+                    conn,
+                    &transport::commands::ExtractFileRequest {
+                        file_id,
+                        destination_path: destination.display().to_string(),
+                    },
+                )
+                .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
+
+                assert!(result.contains("10 bytes"));
+                assert_eq!(std::fs::read(&destination).unwrap(), b"extract me");
+
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn oversized_media_preview_returns_scoped_handle_and_range_reads() {
+        let tmp = TempDir::new().unwrap();
+        let evidence_dir = tmp.path().join("evidence");
+        std::fs::create_dir_all(&evidence_dir).unwrap();
+        let oversized =
+            vec![b'A'; infrastructure::constants::MAX_INLINE_MEDIA_PREVIEW_BYTES as usize + 1];
+        std::fs::write(evidence_dir.join("large.mp4"), oversized).unwrap();
+
+        let active =
+            case_service::create_case(&tmp.path().join("cases"), "large-media", Some("tester"))
+                .unwrap();
+        let case_id = active.meta.id.clone();
+
+        active
+            .with_conn(|conn| {
+                let ds_id = domain::DataSourceId("ds-large-media".to_string());
+                DataSourceRepo::new(conn).insert(
+                    &case_id,
+                    &domain::DataSource {
+                        id: ds_id.clone(),
+                        name: "evidence".to_string(),
+                        kind: domain::DataSourceKind::LogicalDirectory,
+                        source_path: evidence_dir.clone(),
+                        imported_at: chrono::Utc::now(),
+                    },
+                )?;
+
+                let fs = LogicalFsReader::open(&evidence_dir, "evidence")
+                    .map_err(|err| persistence_sqlite::DbError::System(err.to_string()))?;
+                file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
+
+                let file_id = persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
+                    .find_by_data_source(&ds_id)?
+                    .into_iter()
+                    .find(|entry| entry.name == "large.mp4")
+                    .map(|entry| entry.id.0)
+                    .expect("large.mp4 should be enumerated");
+
+                let media = media_data_url_for_file(conn, &file_id)
+                    .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
+                assert!(media.url.is_none());
+                assert!(media.can_read_ranges);
+                assert_eq!(
+                    media.handle_id.as_deref(),
+                    Some(format!("file:{file_id}").as_str())
+                );
+
+                let range = media_range_for_file(
+                    conn,
+                    &MediaRangeRequestDto {
+                        handle_id: media.handle_id.expect("handle"),
+                        offset: 0,
+                        length: 4,
+                    },
+                )
+                .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
+                assert_eq!(range.bytes_read, 4);
+                assert_eq!(range.bytes_base64, "QUFBQQ==");
+                assert!(!range.eof);
+
+                Ok(())
+            })
+            .unwrap();
+    }
 }

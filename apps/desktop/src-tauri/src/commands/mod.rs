@@ -7,4 +7,5 @@ pub mod job_commands;
 pub mod mcp_commands;
 pub mod report_commands;
 pub mod search_commands;
+pub mod settings_commands;
 pub mod timeline_commands;

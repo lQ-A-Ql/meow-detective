@@ -494,34 +494,10 @@ pub fn read_file_range_for_case(
     conn: &Connection,
     request: &ViewerRangeRequestDto,
 ) -> Result<ViewerRangeResponseDto, String> {
+    let mut request = request.clone();
+    request.validate()?;
     let file_id = file_id_from_handle(&request.handle_id)?;
-    let repo = FileRepo::new(conn);
-    let entry = repo
-        .find_by_id(&FileEntryId(file_id.to_string()))
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "File not found".to_string())?;
-
-    if entry.entry_type != EntryType::File {
-        return Err("Cannot read a directory as a file".to_string());
-    }
-
-    let (kind, source_path) = repo
-        .find_data_source_location(&entry.data_source_id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "Data source not found".to_string())?;
-    let expected_partition_index = root_partition_index_for_entry(&repo, &entry);
-
-    let mut file = match kind.as_str() {
-        "logical_directory" => open_logical_file(&source_path, &entry)?,
-        "e01" => open_e01_file(&source_path, &entry, expected_partition_index)?,
-        "raw" => open_raw_file(&source_path, &entry, expected_partition_index)?,
-        other => {
-            return Err(format!(
-                "Range reading is not yet wired for data source kind '{}'",
-                other
-            ));
-        }
-    };
+    let mut file = open_file_content_by_id(conn, &FileEntryId(file_id.to_string()))?;
 
     skip_reader_bytes(file.as_mut(), request.offset)?;
     let length = (request.length as usize).min(infrastructure::constants::MAX_RANGE_LENGTH);
@@ -538,6 +514,61 @@ pub fn read_file_range_for_case(
 
 pub fn read_file_range_real(_request: &ViewerRangeRequestDto) -> ViewerRangeResponseDto {
     empty_hex_response()
+}
+
+/// Open real evidence content for a file entry.
+///
+/// The caller provides a `FileEntryId`; this helper resolves the backing data
+/// source and applies the same logical-directory and image-backed safety checks
+/// used by preview reads.
+pub fn open_file_content_by_id(
+    conn: &Connection,
+    file_id: &FileEntryId,
+) -> Result<Box<dyn Read>, String> {
+    let repo = FileRepo::new(conn);
+    let entry = repo
+        .find_by_id(file_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "File not found".to_string())?;
+
+    open_file_content_for_entry(&repo, &entry)
+}
+
+pub fn read_file_header_by_id(
+    conn: &Connection,
+    file_id: &FileEntryId,
+    max_bytes: usize,
+) -> Result<Vec<u8>, String> {
+    let mut reader = open_file_content_by_id(conn, file_id)?;
+    let mut limited = reader.by_ref().take(max_bytes as u64);
+    let mut bytes = Vec::new();
+    limited.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+    Ok(bytes)
+}
+
+fn open_file_content_for_entry(
+    repo: &FileRepo<'_>,
+    entry: &FileEntry,
+) -> Result<Box<dyn Read>, String> {
+    if entry.entry_type != EntryType::File {
+        return Err("Cannot read a directory as a file".to_string());
+    }
+
+    let (kind, source_path) = repo
+        .find_data_source_location(&entry.data_source_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Data source not found".to_string())?;
+    let expected_partition_index = root_partition_index_for_entry(repo, entry);
+
+    match kind.as_str() {
+        "logical_directory" => open_logical_file(&source_path, entry),
+        "e01" => open_e01_file(&source_path, entry, expected_partition_index),
+        "raw" => open_raw_file(&source_path, entry, expected_partition_index),
+        other => Err(format!(
+            "Range reading is not yet wired for data source kind '{}'",
+            other
+        )),
+    }
 }
 
 fn file_entry_to_tree_node(
@@ -668,10 +699,7 @@ fn file_id_from_handle(handle_id: &str) -> Result<&str, String> {
 }
 
 /// Get the full file path for a file entry.
-pub fn get_file_path_for_entry(
-    conn: &Connection,
-    file_id: &str,
-) -> Result<PathBuf, String> {
+pub fn get_file_path_for_entry(conn: &Connection, file_id: &str) -> Result<PathBuf, String> {
     let repo = FileRepo::new(conn);
     let entry = repo
         .find_by_id(&FileEntryId(file_id.to_string()))
@@ -896,16 +924,15 @@ fn urlencoding_decode(path: &str) -> String {
 /// Check if a filename is a Windows reserved name
 fn is_windows_reserved_name(name: &str) -> bool {
     const RESERVED: &[&str] = &[
-        "CON", "PRN", "AUX", "NUL",
-        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+        "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
     ];
     let upper = name.to_ascii_uppercase();
     let stem = upper.split('.').next().unwrap_or(&upper);
     RESERVED.contains(&stem)
 }
 
-fn skip_reader_bytes(reader: &mut dyn Read, mut remaining: u64) -> Result<(), String> {
+pub fn skip_reader_bytes(reader: &mut dyn Read, mut remaining: u64) -> Result<(), String> {
     // 使用更大的缓冲区减少系统调用次数
     let mut buffer = vec![0u8; 65536]; // 64KB buffer
     while remaining > 0 {
@@ -923,7 +950,7 @@ fn skip_reader_bytes(reader: &mut dyn Read, mut remaining: u64) -> Result<(), St
 
 fn format_hex_lines(base_offset: u64, bytes: &[u8]) -> Vec<String> {
     // 预计算容量：每行最多 8(offset) + 2(spaces) + 16*3(hex) + 16(space) = 74 字符
-    let line_count = (bytes.len() + 15) / 16;
+    let line_count = bytes.len().div_ceil(16);
     let mut result = Vec::with_capacity(line_count);
 
     for (line_idx, chunk) in bytes.chunks(16).enumerate() {
@@ -1127,11 +1154,10 @@ pub fn enumerate_filesystem_mft(
     let mut total_size = 0u64;
     let mut warnings = Vec::new();
     let mut batch: Vec<FileEntry> = Vec::with_capacity(MFT_DB_BATCH_SIZE);
+    let mut path_map: HashMap<String, (Option<String>, String, bool)> = HashMap::new();
 
-    // We need to collect all records for path reconstruction later
-    // For now, insert entries with placeholder paths
     for entry_batch in entry_rx.iter() {
-        for entry in entry_batch {
+        for mut entry in entry_batch {
             match entry.entry_type {
                 EntryType::File => {
                     total_files += 1;
@@ -1139,6 +1165,13 @@ pub fn enumerate_filesystem_mft(
                 }
                 EntryType::Directory => total_dirs += 1,
             }
+
+            add_entry_to_path_map(&mut path_map, &entry);
+
+            // MFT parents can appear later than their children. Insert with a
+            // temporary null parent, then restore parent links after all rows
+            // exist so SQLite self-referential foreign keys are satisfied.
+            entry.parent_id = None;
             batch.push(entry);
 
             if batch.len() >= MFT_DB_BATCH_SIZE {
@@ -1184,11 +1217,8 @@ pub fn enumerate_filesystem_mft(
         pf(95, "Reconstructing paths...");
     }
 
-    // --- Path reconstruction ---
-    // Read all entries back and build path map
-    let all_entries = repo.find_by_data_source(data_source_id)?;
-    let path_map = build_path_map_from_entries(&all_entries);
     update_entry_paths(conn, data_source_id, &path_map)?;
+    update_entry_parent_ids(conn, data_source_id, &path_map)?;
 
     if let Some(pf) = progress_fn {
         pf(100, "MFT scan complete");
@@ -1213,8 +1243,13 @@ struct MftChunk {
 fn records_to_file_entries(records: &[MftRecord], data_source_id: &DataSourceId) -> Vec<FileEntry> {
     records
         .iter()
-        .filter(|r| r.is_valid && !r.name.is_empty())
+        .filter(|r| r.is_valid && (!r.name.is_empty() || r.record_number == 5))
         .map(|r| {
+            let name = if r.record_number == 5 && (r.name.is_empty() || r.name == ".") {
+                "\\".to_string()
+            } else {
+                r.name.clone()
+            };
             let entry_type = if r.is_dir {
                 EntryType::Directory
             } else {
@@ -1231,10 +1266,14 @@ fn records_to_file_entries(records: &[MftRecord], data_source_id: &DataSourceId)
             };
             FileEntry {
                 id: FileEntryId(format!("mft:{}", r.record_number)),
-                parent_id: Some(FileEntryId(format!("mft:{}", r.parent_ref))),
+                parent_id: if r.record_number == 5 {
+                    None
+                } else {
+                    Some(FileEntryId(format!("mft:{}", r.parent_ref)))
+                },
                 data_source_id: data_source_id.clone(),
                 path: String::new(), // filled in during path reconstruction
-                name: r.name.clone(),
+                name,
                 entry_type,
                 size: if r.is_dir { None } else { Some(r.size) },
                 ext,
@@ -1249,27 +1288,23 @@ fn records_to_file_entries(records: &[MftRecord], data_source_id: &DataSourceId)
         .collect()
 }
 
-/// Build a map from record_number → (parent_ref, name, is_dir) for path reconstruction.
-fn build_path_map_from_entries(
-    entries: &[FileEntry],
-) -> HashMap<String, (Option<String>, String, bool)> {
-    let mut map = HashMap::with_capacity(entries.len());
-    for entry in entries {
-        let record_num = entry.id.0.strip_prefix("mft:").unwrap_or(&entry.id.0);
-        let parent_num = entry
-            .parent_id
-            .as_ref()
-            .and_then(|p| p.0.strip_prefix("mft:").map(|s| s.to_string()));
-        map.insert(
-            record_num.to_string(),
-            (
-                parent_num,
-                entry.name.clone(),
-                entry.entry_type == EntryType::Directory,
-            ),
-        );
-    }
-    map
+fn add_entry_to_path_map(
+    path_map: &mut HashMap<String, (Option<String>, String, bool)>,
+    entry: &FileEntry,
+) {
+    let record_num = entry.id.0.strip_prefix("mft:").unwrap_or(&entry.id.0);
+    let parent_num = entry
+        .parent_id
+        .as_ref()
+        .and_then(|p| p.0.strip_prefix("mft:").map(|s| s.to_string()));
+    path_map.insert(
+        record_num.to_string(),
+        (
+            parent_num,
+            entry.name.clone(),
+            entry.entry_type == EntryType::Directory,
+        ),
+    );
 }
 
 /// Reconstruct full paths from parent_ref chains and update DB entries.
@@ -1346,6 +1381,44 @@ fn update_entry_paths(
     Ok(())
 }
 
+fn update_entry_parent_ids(
+    conn: &Connection,
+    data_source_id: &DataSourceId,
+    path_map: &HashMap<String, (Option<String>, String, bool)>,
+) -> DbResult<()> {
+    let tx = conn.unchecked_transaction()?;
+    {
+        let mut stmt = tx.prepare(
+            "UPDATE file_entries SET parent_id = ?1 WHERE id = ?2 AND data_source_id = ?3",
+        )?;
+        for (record_num, (parent, _, _)) in path_map {
+            let entry_id = format!("mft:{}", record_num);
+            let parent_id = mft_parent_entry_id(record_num, parent.as_deref(), path_map);
+            stmt.execute(rusqlite::params![parent_id, entry_id, data_source_id.0])?;
+        }
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+fn mft_parent_entry_id(
+    record_num: &str,
+    parent_num: Option<&str>,
+    path_map: &HashMap<String, (Option<String>, String, bool)>,
+) -> Option<String> {
+    if record_num == "5" {
+        return None;
+    }
+
+    match parent_num {
+        Some(parent) if parent != record_num && path_map.contains_key(parent) => {
+            Some(format!("mft:{}", parent))
+        }
+        _ if path_map.contains_key("5") => Some("mft:5".to_string()),
+        _ => None,
+    }
+}
+
 fn errs_add(errors: &Arc<AtomicU64>) {
     errors.fetch_add(1, Ordering::Relaxed);
 }
@@ -1395,6 +1468,70 @@ mod tests {
         assert!(safe_relative_path("NUL.txt").is_err());
         assert!(safe_relative_path("COM1").is_err());
         assert!(safe_relative_path("LPT1.dat").is_err());
+    }
+
+    #[test]
+    fn mft_root_record_becomes_tree_root() {
+        let records = vec![
+            MftRecord {
+                record_number: 5,
+                name: ".".to_string(),
+                parent_ref: 5,
+                is_dir: true,
+                size: 0,
+                created_at: None,
+                modified_at: None,
+                accessed_at: None,
+                changed_at: None,
+                is_valid: true,
+            },
+            MftRecord {
+                record_number: 42,
+                name: "Windows".to_string(),
+                parent_ref: 5,
+                is_dir: true,
+                size: 0,
+                created_at: None,
+                modified_at: None,
+                accessed_at: None,
+                changed_at: None,
+                is_valid: true,
+            },
+        ];
+
+        let entries = records_to_file_entries(&records, &DataSourceId("ds".to_string()));
+
+        let root = entries
+            .iter()
+            .find(|entry| entry.id.0 == "mft:5")
+            .expect("root MFT record should be retained");
+        assert_eq!(root.name, "\\");
+        assert!(root.parent_id.is_none());
+
+        let child = entries
+            .iter()
+            .find(|entry| entry.id.0 == "mft:42")
+            .expect("child MFT record should be retained");
+        assert_eq!(
+            child.parent_id.as_ref().map(|id| id.0.as_str()),
+            Some("mft:5")
+        );
+    }
+
+    #[test]
+    fn mft_orphan_records_are_anchored_to_root() {
+        let mut path_map = HashMap::new();
+        path_map.insert("5".to_string(), (None, "\\".to_string(), true));
+        path_map.insert(
+            "42".to_string(),
+            (Some("999".to_string()), "Orphan".to_string(), true),
+        );
+
+        assert_eq!(
+            mft_parent_entry_id("42", Some("999"), &path_map),
+            Some("mft:5".to_string())
+        );
+        assert_eq!(mft_parent_entry_id("5", None, &path_map), None);
     }
 
     #[test]

@@ -10,8 +10,7 @@
 //! - Push notification data
 
 use artifacts_core::{
-    new_artifact, ArtifactContext, ArtifactExtractor, ArtifactSink,
-    ExtractorReport,
+    new_artifact, ArtifactContext, ArtifactExtractor, ArtifactSink, ExtractorReport,
 };
 use domain::ArtifactFamily;
 use std::collections::BTreeMap;
@@ -71,14 +70,21 @@ impl ArtifactExtractor for SruExtractor {
         if data.len() >= 100 {
             // SQLite page size is at offset 16-17
             let page_size = u16::from_be_bytes([data[16], data[17]]);
-            let effective_page_size = if page_size == 1 { 65536u32 } else { page_size as u32 };
+            let effective_page_size = if page_size == 1 {
+                65536u32
+            } else {
+                page_size as u32
+            };
             attrs.insert("page_size".into(), effective_page_size.into());
         }
 
         let artifact = new_artifact(
             "SRU",
             format!("SRU Database: {}", ctx.file_path),
-            format!("Windows System Resource Usage database, {} bytes", data.len()),
+            format!(
+                "Windows System Resource Usage database, {} bytes",
+                data.len()
+            ),
             Some(&ctx.file_id),
             attrs,
         );

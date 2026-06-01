@@ -1,5 +1,6 @@
 import { Clock, ZoomIn, ZoomOut, ChevronRight } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { PageSubbar } from '@/components/layout/PageSubbar';
 import { DenseDataTable } from '@/components/tables/DenseDataTable';
 import { InspectorPane, InspectorSection, InspectorValue } from '@/components/layout/InspectorPane';
@@ -32,12 +33,36 @@ function formatTs(ts: string): string {
 }
 
 export function Timeline() {
-  const { data: timelineData } = useTimelineEvents();
+  const navigate = useNavigate();
+  const [timeStart, setTimeStart] = useState('');
+  const [timeEnd, setTimeEnd] = useState('');
+  const [eventType, setEventType] = useState('');
+  const normalizedTimeStart = useMemo(
+    () => (timeStart ? new Date(timeStart).toISOString() : undefined),
+    [timeStart],
+  );
+  const normalizedTimeEnd = useMemo(
+    () => (timeEnd ? new Date(timeEnd).toISOString() : undefined),
+    [timeEnd],
+  );
+  const { data: timelineData } = useTimelineEvents({
+    offset: 0,
+    limit: 100,
+    timeStart: normalizedTimeStart,
+    timeEnd: normalizedTimeEnd,
+    eventType: eventType || undefined,
+  });
   const events = timelineData?.items;
   const selectedTimelineId = useSelectionStore((state) => state.selectedTimelineId);
   const setSelectedTimelineId = useSelectionStore((state) => state.setSelectedTimelineId);
+  const setSelectedFileId = useSelectionStore((state) => state.setSelectedFileId);
+  const setSelectedArtifactId = useSelectionStore((state) => state.setSelectedArtifactId);
   const selectedEvent = events?.find((event) => event.id === selectedTimelineId) ?? events?.[0];
   const sourceCount = new Set((events ?? []).map((event) => String(event.attrs.source ?? '-'))).size;
+  const eventTypes = useMemo(
+    () => Array.from(new Set((events ?? []).map((event) => event.eventType))).sort(),
+    [events],
+  );
 
   const bars = useMemo(() => buildTimelineBars(events ?? [], 60), [events]);
 
@@ -49,6 +74,18 @@ export function Timeline() {
     const max = new Date(Math.max(...timestamps));
     return { start: formatTs(min.toISOString()), end: formatTs(max.toISOString()) };
   }, [events]);
+
+  function jumpToSource() {
+    if (!selectedEvent) return;
+    const sourceId = selectedEvent.sourceObjectId;
+    if (sourceId.startsWith('artifact:')) {
+      setSelectedArtifactId(sourceId.replace(/^artifact:/, ''));
+      navigate('/artifacts');
+      return;
+    }
+    setSelectedFileId(sourceId);
+    navigate('/files');
+  }
 
   return (
     <div className="flex-1 flex flex-col w-full h-full bg-white min-w-0">
@@ -66,6 +103,51 @@ export function Timeline() {
               粒度:
               <span className="text-[#111] bg-white px-1.5 py-0.5 border border-[#ccc]">自适应</span>
             </div>
+            <div className="border-l border-[#e0e0e0] h-4"></div>
+            <label className="flex items-center gap-1.5 text-[#888] text-[11px]">
+              起始
+              <input
+                type="datetime-local"
+                value={timeStart}
+                onChange={(event) => setTimeStart(event.target.value)}
+                className="border border-[#ccc] bg-white px-1.5 py-0.5 text-[#111] font-mono"
+              />
+            </label>
+            <label className="flex items-center gap-1.5 text-[#888] text-[11px]">
+              结束
+              <input
+                type="datetime-local"
+                value={timeEnd}
+                onChange={(event) => setTimeEnd(event.target.value)}
+                className="border border-[#ccc] bg-white px-1.5 py-0.5 text-[#111] font-mono"
+              />
+            </label>
+            <label className="flex items-center gap-1.5 text-[#888] text-[11px]">
+              类型
+              <select
+                value={eventType}
+                onChange={(event) => setEventType(event.target.value)}
+                className="border border-[#ccc] bg-white px-1.5 py-0.5 text-[#111]"
+              >
+                <option value="">全部</option>
+                {eventTypes.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                setTimeStart('');
+                setTimeEnd('');
+                setEventType('');
+              }}
+              className="border border-[#ccc] bg-white px-2 py-0.5 text-[11px] text-[#666] hover:text-[#111] hover:bg-[#f0f0f0]"
+            >
+              清除
+            </button>
           </div>
           <div className="flex items-center gap-2">
             <button className="p-1 hover:bg-[#f0f0f0] text-[#666] hover:text-[#111] rounded"><ZoomOut size={14} /></button>
@@ -142,10 +224,15 @@ export function Timeline() {
             </InspectorSection>
 
             <InspectorSection title="关联动作">
-              <div className="font-mono text-[#555] text-[11px] break-all border border-[#ccc] p-2 flex items-center justify-between hover:bg-[#f0f0f0] bg-white cursor-pointer transition-colors">
+              <button
+                type="button"
+                onClick={jumpToSource}
+                disabled={!selectedEvent}
+                className="w-full font-mono text-[#555] text-[11px] break-all border border-[#ccc] p-2 flex items-center justify-between hover:bg-[#f0f0f0] bg-white cursor-pointer transition-colors disabled:opacity-50"
+              >
                 <span className="font-medium">跳转到来源对象</span>
                 <ChevronRight size={12} className="text-[#888]" />
-              </div>
+              </button>
             </InspectorSection>
           </div>
         </InspectorPane>

@@ -18,7 +18,7 @@ const MAX_YEAR: i32 = 2100;
 ///
 /// # Example
 /// ```
-/// use chrono::{TimeZone, Utc};
+/// use chrono::{Datelike, TimeZone, Utc};
 /// use domain::timestamp::validate_timestamp;
 ///
 /// let valid = Utc.timestamp_opt(1609459200, 0).single().unwrap(); // 2021-01-01
@@ -26,7 +26,7 @@ const MAX_YEAR: i32 = 2100;
 /// ```
 pub fn validate_timestamp(dt: DateTime<Utc>) -> Option<DateTime<Utc>> {
     let year = dt.year();
-    if year >= MIN_YEAR && year <= MAX_YEAR {
+    if (MIN_YEAR..=MAX_YEAR).contains(&year) {
         Some(dt)
     } else {
         None
@@ -45,6 +45,7 @@ pub fn validate_timestamp(dt: DateTime<Utc>) -> Option<DateTime<Utc>> {
 ///
 /// # Example
 /// ```
+/// use chrono::Datelike;
 /// use domain::timestamp::filetime_to_datetime;
 ///
 /// // FILETIME for 2021-01-01 00:00:00 UTC
@@ -84,6 +85,7 @@ pub fn ntfs_time_to_datetime(ntfs_time: u64) -> Option<DateTime<Utc>> {
 ///
 /// # Example
 /// ```
+/// use chrono::Datelike;
 /// use domain::timestamp::unix_to_datetime;
 ///
 /// let dt = unix_to_datetime(1609459200).unwrap(); // 2021-01-01 00:00:00
@@ -133,8 +135,12 @@ pub fn exfat_to_datetime(
         return None;
     }
 
-    let naive = NaiveDate::from_ymd_opt(year, month, day)?
-        .and_hms_milli_opt(hour, minute, second, increment_10ms as u32 * 10)?;
+    let naive = NaiveDate::from_ymd_opt(year, month, day)?.and_hms_milli_opt(
+        hour,
+        minute,
+        second,
+        increment_10ms as u32 * 10,
+    )?;
 
     // Apply UTC offset
     // 0xFF = unknown (treat as UTC)
@@ -205,7 +211,11 @@ mod tests {
         // NTFS time (same as FILETIME) for 2021-01-01 00:00:00 UTC
         let ntfs_time: u64 = 132_539_328_000_000_000;
         let dt = ntfs_time_to_datetime(ntfs_time);
-        assert!(dt.is_some(), "NTFS time {} should convert successfully", ntfs_time);
+        assert!(
+            dt.is_some(),
+            "NTFS time {} should convert successfully",
+            ntfs_time
+        );
         let dt = dt.unwrap();
         assert_eq!(dt.year(), 2021);
     }
@@ -237,7 +247,7 @@ mod tests {
     #[test]
     fn exfat_to_datetime_with_positive_offset() {
         // 2024-01-15 12:30:00 UTC+8
-        let timestamp = (44 << 25) | (1 << 20) | (15 << 15) | (12 << 10) | (30 << 4) | 0;
+        let timestamp = (44 << 25) | (1 << 20) | (15 << 15) | (12 << 10) | (30 << 4);
         let dt = exfat_to_datetime(timestamp, 0, 0x20).unwrap(); // 0x20 = 32 * 15 = 480 min = 8h
         assert_eq!(dt.hour(), 4); // 12:30 - 8h = 04:30
         assert_eq!(dt.minute(), 30);
@@ -246,7 +256,7 @@ mod tests {
     #[test]
     fn exfat_to_datetime_with_negative_offset() {
         // 2024-01-15 12:30:00 UTC-8
-        let timestamp = (44 << 25) | (1 << 20) | (15 << 15) | (12 << 10) | (30 << 4) | 0;
+        let timestamp = (44 << 25) | (1 << 20) | (15 << 15) | (12 << 10) | (30 << 4);
         let dt = exfat_to_datetime(timestamp, 0, 0xE0).unwrap(); // 0xE0 = -32 * 15 = -480 min = -8h
         assert_eq!(dt.hour(), 20); // 12:30 + 8h = 20:30
         assert_eq!(dt.minute(), 30);
@@ -254,7 +264,7 @@ mod tests {
 
     #[test]
     fn exfat_to_datetime_unknown_offset() {
-        let timestamp = (44 << 25) | (1 << 20) | (15 << 15) | (12 << 10) | (30 << 4) | 0;
+        let timestamp = (44 << 25) | (1 << 20) | (15 << 15) | (12 << 10) | (30 << 4);
         let dt = exfat_to_datetime(timestamp, 0, 0xFF).unwrap();
         assert_eq!(dt.hour(), 12); // treated as UTC
     }

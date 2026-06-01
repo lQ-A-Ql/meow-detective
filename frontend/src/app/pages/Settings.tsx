@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react';
 import { HardDrive, FolderOpen, Bot, ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { useMcpStore } from '@/stores/mcp-store';
+import {
+  applyTheme,
+  formatPathList,
+  parsePathList,
+  readLocalSettings,
+  validatePathList,
+  writeLocalSettings,
+} from '@/lib/settings';
+import { getAppSettings, saveAppSettings } from '@/lib/api/settings';
 import { McpServerItem } from '@/components/mcp/McpServerItem';
 import { McpServerDialog } from '@/components/mcp/McpServerDialog';
 import { McpResourceList } from '@/components/mcp/McpResourceList';
@@ -9,6 +18,9 @@ import { McpToolList } from '@/components/mcp/McpToolList';
 export function Settings() {
   const [mcpExpanded, setMcpExpanded] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [settings, setSettings] = useState(() => readLocalSettings());
+  const [settingsMessage, setSettingsMessage] = useState('');
+  const [savingSettings, setSavingSettings] = useState(false);
 
   const {
     servers,
@@ -29,7 +41,68 @@ export function Settings() {
     loadConfig();
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    getAppSettings()
+      .then((remote) => {
+        if (cancelled) {
+          return;
+        }
+        setSettings((current) => ({
+          ...current,
+          caseRoot: remote.caseRoot,
+          imageSearchPaths: formatPathList(remote.imageSearchPaths),
+          theme: remote.theme,
+          devEventTrace: remote.devEventTrace,
+        }));
+      })
+      .catch(() => {
+        // Standalone mock/dev mode keeps local settings as the fallback.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    applyTheme(settings.theme);
+  }, [settings.theme]);
+
   const selectedServer = servers.find((s) => s.id === selectedServerId);
+
+  async function saveSettings() {
+    if (!settings.caseRoot.trim()) {
+      setSettingsMessage('案件目录不能为空。');
+      return;
+    }
+    if (!validatePathList(settings.imageSearchPaths)) {
+      setSettingsMessage('镜像搜索路径包含非法字符。');
+      return;
+    }
+    setSavingSettings(true);
+    setSettingsMessage('');
+    try {
+      const saved = await saveAppSettings({
+        caseRoot: settings.caseRoot,
+        imageSearchPaths: parsePathList(settings.imageSearchPaths),
+        theme: settings.theme,
+        devEventTrace: settings.devEventTrace,
+      });
+      const normalized = writeLocalSettings({
+        caseRoot: saved.caseRoot,
+        imageSearchPaths: formatPathList(saved.imageSearchPaths),
+        theme: saved.theme,
+        devEventTrace: saved.devEventTrace,
+      });
+      setSettings(normalized);
+      setSettingsMessage('设置已保存。');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '设置保存失败。';
+      setSettingsMessage(message);
+    } finally {
+      setSavingSettings(false);
+    }
+  }
 
   return (
     <div className="flex-1 flex flex-col w-full h-full bg-white overflow-auto">
@@ -45,9 +118,13 @@ export function Settings() {
             <FolderOpen size={14} className="text-[#888]" />
             <span className="text-[13px] font-semibold text-[#333]">案件目录</span>
           </div>
-          <div className="bg-[#f8f8f8] border border-[#e0e0e0] p-3 font-mono text-[12px] text-[#555]">
-            C:\Cases
-          </div>
+          <input
+            value={settings.caseRoot}
+            onChange={(event) =>
+              setSettings((current) => ({ ...current, caseRoot: event.target.value }))
+            }
+            className="w-full bg-[#f8f8f8] border border-[#e0e0e0] p-3 font-mono text-[12px] text-[#111]"
+          />
           <div className="mt-1 text-[10px] text-[#999]">所有案件数据将存储在此目录下</div>
         </section>
 
@@ -57,10 +134,62 @@ export function Settings() {
             <HardDrive size={14} className="text-[#888]" />
             <span className="text-[13px] font-semibold text-[#333]">镜像搜索路径</span>
           </div>
-          <div className="bg-[#f8f8f8] border border-[#e0e0e0] p-3 font-mono text-[12px] text-[#555]">
-            E:\cases\; D:\images\
-          </div>
+          <input
+            value={settings.imageSearchPaths}
+            onChange={(event) =>
+              setSettings((current) => ({ ...current, imageSearchPaths: event.target.value }))
+            }
+            className="w-full bg-[#f8f8f8] border border-[#e0e0e0] p-3 font-mono text-[12px] text-[#111]"
+          />
           <div className="mt-1 text-[10px] text-[#999]">导入数据源时自动搜索的镜像目录（分号分隔）</div>
+        </section>
+
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-[13px] font-semibold text-[#333]">界面与调试</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 text-[12px]">
+            <label className="flex items-center gap-2 border border-[#e0e0e0] bg-[#f8f8f8] px-3 py-2">
+              主题
+              <select
+                value={settings.theme}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    theme: event.target.value === 'dark' ? 'dark' : 'light',
+                  }))
+                }
+                className="border border-[#ccc] bg-white px-2 py-1"
+              >
+                <option value="light">浅色</option>
+                <option value="dark">深色</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2 border border-[#e0e0e0] bg-[#f8f8f8] px-3 py-2">
+              <input
+                type="checkbox"
+                checked={settings.devEventTrace}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    devEventTrace: event.target.checked,
+                  }))
+                }
+              />
+              事件调试日志
+            </label>
+            <button
+              type="button"
+              onClick={saveSettings}
+              disabled={savingSettings}
+              className="border border-[#111] bg-[#111] px-4 py-2 text-[12px] text-white hover:bg-[#333]"
+            >
+              {savingSettings ? '保存中...' : '保存设置'}
+            </button>
+            {settingsMessage ? (
+              <span className="text-[11px] text-[#666]">{settingsMessage}</span>
+            ) : null}
+          </div>
         </section>
 
         {/* MCP 配置 */}

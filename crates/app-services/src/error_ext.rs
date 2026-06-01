@@ -54,8 +54,10 @@ mod tests {
 
     #[test]
     fn test_to_string_err_with_io_error() {
-        let result: Result<i32, std::io::Error> =
-            Err(std::io::Error::new(std::io::ErrorKind::NotFound, "file not found"));
+        let result: Result<i32, std::io::Error> = Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "file not found",
+        ));
         let err = result.to_string_err().unwrap_err();
         assert!(err.contains("file not found"));
     }

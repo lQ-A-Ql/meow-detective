@@ -60,7 +60,7 @@ pub const ATTR_ARCHIVE: u16 = 0x0020;
 pub const DIR_ENTRY_SIZE: usize = 32;
 
 /// Maximum number of File Name entries per file (NameLength / 15, rounded up)
-pub const MAX_FILENAME_ENTRIES: usize = 17;  // 255 / 15 = 17
+pub const MAX_FILENAME_ENTRIES: usize = 17; // 255 / 15 = 17
 
 /// Characters per File Name entry
 pub const CHARS_PER_FILENAME_ENTRY: usize = 15;

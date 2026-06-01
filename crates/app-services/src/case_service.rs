@@ -2,7 +2,10 @@ use chrono::Utc;
 use domain::{CaseId, CaseMeta};
 use persistence_sqlite::{
     open_existing, open_or_create,
-    repositories::{case_repo::CaseRepo, audit_repo::{AuditRepo, AuditAction}},
+    repositories::{
+        audit_repo::{AuditAction, AuditRepo},
+        case_repo::CaseRepo,
+    },
     runner,
 };
 use rusqlite::Connection;
@@ -37,9 +40,8 @@ const DIRS: &[&str] = &["evidence", "exports", "reports", "indexes", "cache", "l
 
 /// Windows reserved device names that cannot be used as case names.
 const RESERVED_NAMES: &[&str] = &[
-    "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7",
-    "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8",
-    "LPT9",
+    "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+    "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
 ];
 
 /// Validate a case name to prevent path traversal and injection.

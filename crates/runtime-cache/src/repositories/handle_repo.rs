@@ -127,7 +127,9 @@ mod tests {
         let conn = crate::connection::open_in_memory().unwrap();
         let repo = HandleRepo::new(&conn);
 
-        let handle_id = repo.create("case-1", "obj-1", Duration::minutes(30)).unwrap();
+        let handle_id = repo
+            .create("case-1", "obj-1", Duration::minutes(30))
+            .unwrap();
         assert!(!handle_id.is_empty());
 
         let handle = repo.get(&handle_id).unwrap().unwrap();
@@ -144,7 +146,9 @@ mod tests {
         let conn = crate::connection::open_in_memory().unwrap();
         let repo = HandleRepo::new(&conn);
 
-        let handle_id = repo.create("case-1", "obj-1", Duration::seconds(-1)).unwrap();
+        let handle_id = repo
+            .create("case-1", "obj-1", Duration::seconds(-1))
+            .unwrap();
         assert!(repo.get(&handle_id).unwrap().is_none());
     }
 
@@ -153,9 +157,12 @@ mod tests {
         let conn = crate::connection::open_in_memory().unwrap();
         let repo = HandleRepo::new(&conn);
 
-        repo.create("case-1", "obj-1", Duration::seconds(-1)).unwrap();
-        repo.create("case-1", "obj-2", Duration::seconds(-1)).unwrap();
-        repo.create("case-1", "obj-3", Duration::minutes(30)).unwrap();
+        repo.create("case-1", "obj-1", Duration::seconds(-1))
+            .unwrap();
+        repo.create("case-1", "obj-2", Duration::seconds(-1))
+            .unwrap();
+        repo.create("case-1", "obj-3", Duration::minutes(30))
+            .unwrap();
 
         let cleaned = repo.cleanup_expired().unwrap();
         assert_eq!(cleaned, 2);

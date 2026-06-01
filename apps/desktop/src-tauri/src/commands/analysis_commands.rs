@@ -1,14 +1,33 @@
 //! Data source analysis commands.
 
-use app_services::analysis_service::{self, FileClassification, SystemInfo};
+use app_services::{analysis_service, file_service};
 use tauri::State;
-use transport::CommandError;
+use transport::{
+    commands::ClassifyFilesRequest,
+    dto::{AnalysisFileClassificationDto, AnalysisSystemInfoDto},
+    CommandError,
+};
 
 use crate::state::AppState;
 
+fn resolve_sample_size(request: &ClassifyFilesRequest) -> Result<u32, CommandError> {
+    let sample_size = request
+        .sample_size
+        .unwrap_or(analysis_service::DEFAULT_SAMPLE_SIZE);
+    if sample_size == 0 || sample_size > analysis_service::MAX_SAMPLE_SIZE {
+        return Err(CommandError::invalid_input(format!(
+            "sampleSize must be between 1 and {}",
+            analysis_service::MAX_SAMPLE_SIZE
+        )));
+    }
+    Ok(sample_size)
+}
+
 /// Get system information from the current case.
 #[tauri::command]
-pub async fn get_system_info(state: State<'_, AppState>) -> Result<SystemInfo, CommandError> {
+pub async fn get_system_info(
+    state: State<'_, AppState>,
+) -> Result<AnalysisSystemInfoDto, CommandError> {
     let app_state = state.inner().clone();
 
     tauri::async_runtime::spawn_blocking(move || {
@@ -16,11 +35,9 @@ pub async fn get_system_info(state: State<'_, AppState>) -> Result<SystemInfo, C
             .active_case
             .lock()
             .map_err(|e| CommandError::from_lock_error("Case", e))?;
+        let _active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
 
-        let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-        let case_root = active.case_root.clone();
-
-        Ok(analysis_service::extract_system_info(&case_root))
+        Ok(analysis_service::extract_system_info())
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -30,10 +47,10 @@ pub async fn get_system_info(state: State<'_, AppState>) -> Result<SystemInfo, C
 #[tauri::command]
 pub async fn classify_files(
     state: State<'_, AppState>,
-    sample_size: Option<usize>,
-) -> Result<Vec<FileClassification>, CommandError> {
+    request: ClassifyFilesRequest,
+) -> Result<Vec<AnalysisFileClassificationDto>, CommandError> {
+    let sample_size = resolve_sample_size(&request)?;
     let app_state = state.inner().clone();
-    let sample = sample_size.unwrap_or(1000);
 
     tauri::async_runtime::spawn_blocking(move || {
         let db_path = {
@@ -41,58 +58,26 @@ pub async fn classify_files(
                 .active_case
                 .lock()
                 .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            match guard.as_ref() {
-                Some(active) => active.db_path(),
-                None => return Ok(Vec::new()),
-            }
+            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
+            active.db_path()
         };
 
         let conn = persistence_sqlite::open_or_create(&db_path)
             .map_err(CommandError::from_service_error)?;
-
-        // Get all files from database
-        let file_repo = persistence_sqlite::repositories::file_repo::FileRepo::new(&conn);
-        let roots = file_repo
-            .find_root_entries()
+        let files = analysis_service::collect_file_entries(&conn)
             .map_err(CommandError::from_service_error)?;
 
-        let mut all_files = Vec::new();
-        let mut queue: Vec<domain::FileEntry> = roots;
-
-        while let Some(entry) = queue.pop() {
-            if entry.entry_type == domain::EntryType::Directory {
-                let children = file_repo
-                    .find_children(&entry.id)
-                    .map_err(CommandError::from_service_error)?;
-                queue.extend(children);
-            } else {
-                all_files.push((entry.path.clone(), entry.size.unwrap_or(0)));
-            }
-        }
-
-        // Get data source path for file reading
-        let case_root = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            guard
-                .as_ref()
-                .map(|a| a.case_root.clone())
-                .unwrap_or_default()
-        };
-
-        // Classify files
-        let classifications = analysis_service::classify_files_by_magic(
-            &all_files,
-            sample,
-            |path| {
-                let full_path = case_root.join(path);
-                std::fs::read(&full_path).ok()
+        Ok(analysis_service::classify_files_by_magic(
+            &files,
+            sample_size,
+            |file_id| {
+                file_service::read_file_header_by_id(
+                    &conn,
+                    file_id,
+                    analysis_service::MAGIC_HEADER_LIMIT,
+                )
             },
-        );
-
-        Ok(classifications)
+        ))
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -100,52 +85,33 @@ pub async fn classify_files(
 
 /// Generate analysis summary report.
 #[tauri::command]
-pub async fn generate_analysis_summary(
-    state: State<'_, AppState>,
-) -> Result<String, CommandError> {
+pub async fn generate_analysis_summary(state: State<'_, AppState>) -> Result<String, CommandError> {
     let app_state = state.inner().clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        let guard = app_state
-            .active_case
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("Case", e))?;
+        let db_path = {
+            let guard = app_state
+                .active_case
+                .lock()
+                .map_err(|e| CommandError::from_lock_error("Case", e))?;
+            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
+            active.db_path()
+        };
 
-        let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-        let case_root = active.case_root.clone();
-
-        let system_info = analysis_service::extract_system_info(&case_root);
-
-        // Get classifications
-        let db_path = active.db_path();
+        let system_info = analysis_service::extract_system_info();
         let conn = persistence_sqlite::open_or_create(&db_path)
             .map_err(CommandError::from_service_error)?;
-
-        let file_repo = persistence_sqlite::repositories::file_repo::FileRepo::new(&conn);
-        let roots = file_repo
-            .find_root_entries()
+        let files = analysis_service::collect_file_entries(&conn)
             .map_err(CommandError::from_service_error)?;
-
-        let mut all_files = Vec::new();
-        let mut queue: Vec<domain::FileEntry> = roots;
-
-        while let Some(entry) = queue.pop() {
-            if entry.entry_type == domain::EntryType::Directory {
-                let children = file_repo
-                    .find_children(&entry.id)
-                    .map_err(CommandError::from_service_error)?;
-                queue.extend(children);
-            } else {
-                all_files.push((entry.path.clone(), entry.size.unwrap_or(0)));
-            }
-        }
-
         let classifications = analysis_service::classify_files_by_magic(
-            &all_files,
-            1000,
-            |path| {
-                let full_path = case_root.join(path);
-                std::fs::read(&full_path).ok()
+            &files,
+            analysis_service::DEFAULT_SAMPLE_SIZE,
+            |file_id| {
+                file_service::read_file_header_by_id(
+                    &conn,
+                    file_id,
+                    analysis_service::MAGIC_HEADER_LIMIT,
+                )
             },
         );
 
@@ -156,4 +122,32 @@ pub async fn generate_analysis_summary(
     })
     .await
     .map_err(CommandError::from_join_error)?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sample_size_defaults_and_validates_bounds() {
+        assert_eq!(
+            resolve_sample_size(&ClassifyFilesRequest { sample_size: None }).unwrap(),
+            analysis_service::DEFAULT_SAMPLE_SIZE
+        );
+        assert_eq!(
+            resolve_sample_size(&ClassifyFilesRequest {
+                sample_size: Some(1)
+            })
+            .unwrap(),
+            1
+        );
+        assert!(resolve_sample_size(&ClassifyFilesRequest {
+            sample_size: Some(0)
+        })
+        .is_err());
+        assert!(resolve_sample_size(&ClassifyFilesRequest {
+            sample_size: Some(analysis_service::MAX_SAMPLE_SIZE + 1)
+        })
+        .is_err());
+    }
 }

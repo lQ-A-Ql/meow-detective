@@ -76,8 +76,10 @@ impl<'a> CacheRepo<'a> {
 
     /// Delete a cache entry by key.
     pub fn delete(&self, key: &str) -> Result<()> {
-        self.conn
-            .execute("DELETE FROM cache_entries WHERE cache_key = ?1", params![key])?;
+        self.conn.execute(
+            "DELETE FROM cache_entries WHERE cache_key = ?1",
+            params![key],
+        )?;
         Ok(())
     }
 
@@ -85,7 +87,13 @@ impl<'a> CacheRepo<'a> {
     ///
     /// If the entry exists and is not expired, returns it.
     /// Otherwise, calls the factory, stores the result, and returns it.
-    pub fn get_or_insert<F>(&self, key: &str, namespace: &str, ttl: Duration, factory: F) -> Result<CacheEntry>
+    pub fn get_or_insert<F>(
+        &self,
+        key: &str,
+        namespace: &str,
+        ttl: Duration,
+        factory: F,
+    ) -> Result<CacheEntry>
     where
         F: FnOnce() -> Result<serde_json::Value>,
     {
@@ -202,10 +210,11 @@ mod tests {
         assert_eq!(entry.value_json, serde_json::json!({"computed": 42}));
 
         // Second call should return cached
-        let entry2 = repo.get_or_insert("key1", "ns", Duration::seconds(60), || {
-            panic!("Should not be called");
-        })
-        .unwrap();
+        let entry2 = repo
+            .get_or_insert("key1", "ns", Duration::seconds(60), || {
+                panic!("Should not be called");
+            })
+            .unwrap();
 
         assert_eq!(entry2.value_json, serde_json::json!({"computed": 42}));
     }

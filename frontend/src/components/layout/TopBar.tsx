@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router';
+import { NavLink, useLocation, useNavigate } from 'react-router';
 import { Search, Activity, Settings, AlertTriangle } from 'lucide-react';
 import { useCurrentCase } from '@/features/case/hooks';
 import { useJobsSnapshot, useWarnings } from '@/features/jobs/hooks';
@@ -7,6 +7,7 @@ import { useUiStore } from '@/stores/ui-store';
 const links = [
   { to: '/', label: '案件概览', page: 'home' as const, context: '案件状态、指标与近期对象' },
   { to: '/files', label: '文件浏览', page: 'files' as const, context: '目录树、文件表与取证查看器' },
+  { to: '/analysis', label: '数据源分析', page: 'analysis' as const, context: '系统信息、文件分类与分析报告' },
   { to: '/search', label: '全局搜索', page: 'search' as const, context: '关键字、结构化查询与命中详情' },
   { to: '/timeline', label: '时间线', page: 'timeline' as const, context: '事件聚合、筛选与时序检视' },
   { to: '/artifacts', label: '痕迹分析', page: 'artifacts' as const, context: 'Windows 痕迹家族与解析字段' },
@@ -15,6 +16,7 @@ const links = [
 
 export function TopBar() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { data: currentCase } = useCurrentCase();
   const { data: jobs } = useJobsSnapshot();
   const { data: warnings } = useWarnings();
@@ -26,7 +28,10 @@ export function TopBar() {
 
   const runningCount = jobs?.filter((job) => job.status === 'running').length ?? 0;
   const warningCount = warnings?.length ?? 0;
-  const currentLink = links.find((link) => link.page === currentPage) ?? links[0];
+  const activeLink =
+    links.find((link) => link.to === location.pathname)
+    ?? links.find((link) => link.page === currentPage)
+    ?? links[0];
 
   return (
     <div className="shrink-0 border-b border-[#e0e0e0] bg-[#fafafa] px-4 py-2 text-xs">
@@ -48,7 +53,7 @@ export function TopBar() {
           </div>
           <div className="hidden xl:flex items-center gap-2 min-w-0 border-l border-[#e0e0e0] pl-4">
             <span className="text-[10px] uppercase tracking-wider text-[#888]">当前页</span>
-            <span className="text-[11px] text-[#111] font-medium">{currentLink.context}</span>
+            <span className="text-[11px] text-[#111] font-medium">{activeLink.context}</span>
           </div>
         </div>
 

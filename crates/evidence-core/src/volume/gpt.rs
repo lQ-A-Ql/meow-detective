@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn parse_gpt_entries_skips_empty_partitions() {
-        let mut entry = vec![0u8; 128];
+        let entry = vec![0u8; 128];
         // start=0, end=0 means empty partition
         let parts = parse_gpt_entries(&entry, 128, 1);
         assert!(parts.is_empty());

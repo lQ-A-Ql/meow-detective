@@ -103,12 +103,17 @@ impl<'a> TimelineRepo<'a> {
             param_index += 1;
         }
 
-        sql.push_str(&format!(" ORDER BY ts DESC LIMIT ?{} OFFSET ?{}", param_index, param_index + 1));
+        sql.push_str(&format!(
+            " ORDER BY ts DESC LIMIT ?{} OFFSET ?{}",
+            param_index,
+            param_index + 1
+        ));
         param_values.push(Box::new(limit));
         param_values.push(Box::new(offset));
 
         let mut stmt = self.conn.prepare(&sql)?;
-        let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> =
+            param_values.iter().map(|p| p.as_ref()).collect();
         let rows = stmt.query_map(params_refs.as_slice(), |row| {
             let attrs_str: String = row.get(6)?;
             Ok(TimelineEvent {
@@ -155,7 +160,8 @@ impl<'a> TimelineRepo<'a> {
         }
 
         let mut stmt = self.conn.prepare(&sql)?;
-        let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> =
+            param_values.iter().map(|p| p.as_ref()).collect();
         let n: i64 = stmt.query_row(params_refs.as_slice(), |r| r.get(0))?;
         Ok(n as u64)
     }

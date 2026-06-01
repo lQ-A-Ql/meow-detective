@@ -110,7 +110,7 @@ pub struct McpPromptArgument {
 }
 
 /// MCP 配置
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct McpConfig {
     /// 服务器列表
     pub servers: Vec<McpServerConfig>,
@@ -118,16 +118,6 @@ pub struct McpConfig {
     pub resources: HashMap<String, bool>,
     /// 工具启用配置
     pub tools: HashMap<String, bool>,
-}
-
-impl Default for McpConfig {
-    fn default() -> Self {
-        Self {
-            servers: Vec::new(),
-            resources: HashMap::new(),
-            tools: HashMap::new(),
-        }
-    }
 }
 
 /// MCP JSON-RPC Request

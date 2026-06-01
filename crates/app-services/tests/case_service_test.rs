@@ -1,4 +1,11 @@
 use app_services::case_service;
+use domain::{Artifact, ArtifactId, DataSource, DataSourceId, EntryType, FileEntry, FileEntryId};
+use persistence_sqlite::repositories::{
+    artifact_repo::ArtifactRepo, audit_repo::AuditRepo, datasource_repo::DataSourceRepo,
+    file_repo::FileRepo, job_repo::JobRepo, timeline_repo::TimelineRepo,
+};
+use serde_json::Value;
+use std::collections::BTreeMap;
 use tempfile::TempDir;
 
 #[test]
@@ -26,7 +33,10 @@ fn create_case_initializes_db() {
 
     let metrics = active.with_conn(|conn| {
         let version = persistence_sqlite::runner::current_version(conn)?;
-        assert_eq!(version, Some("0010_job_partition_progress".to_string()));
+        assert_eq!(
+            version,
+            Some(persistence_sqlite::runner::latest_version().to_string())
+        );
 
         let repo = persistence_sqlite::repositories::case_repo::CaseRepo::new(conn);
         let found = repo.find_by_id(&active.meta.id)?;
@@ -95,4 +105,103 @@ fn reopen_case_shares_no_state() {
 
     let active2 = case_service::open_case(&tmp.path().join("reopen")).unwrap();
     assert_eq!(active2.meta.id, case_id);
+}
+
+#[test]
+fn delete_data_source_cascades_rows_and_writes_audit_log() {
+    let tmp = TempDir::new().unwrap();
+    let active =
+        case_service::create_case(&tmp.path().join("cases"), "delete-ds", Some("tester")).unwrap();
+    let case_id = active.meta.id.clone();
+
+    active
+        .with_conn(|conn| {
+            let ds_id = DataSourceId("ds-delete".to_string());
+            DataSourceRepo::new(conn).insert(
+                &case_id,
+                &DataSource {
+                    id: ds_id.clone(),
+                    name: "delete-me".to_string(),
+                    kind: domain::DataSourceKind::LogicalDirectory,
+                    source_path: tmp.path().join("evidence"),
+                    imported_at: chrono::Utc::now(),
+                },
+            )?;
+
+            let file_id = FileEntryId("file-delete".to_string());
+            FileRepo::new(conn).insert_batch(&[FileEntry {
+                id: file_id.clone(),
+                parent_id: None,
+                data_source_id: ds_id.clone(),
+                path: "note.txt".to_string(),
+                name: "note.txt".to_string(),
+                entry_type: EntryType::File,
+                size: Some(4),
+                ext: Some("txt".to_string()),
+                deleted: false,
+                created_at: None,
+                modified_at: Some(chrono::Utc::now()),
+                accessed_at: None,
+                changed_at: None,
+                hash_sha256: None,
+            }])?;
+
+            TimelineRepo::new(conn).insert_batch_with_case(
+                &[domain::TimelineEvent {
+                    id: domain::TimelineEventId("tl-delete".to_string()),
+                    source_object_id: file_id.0.clone(),
+                    event_type: "FILE_MODIFIED".to_string(),
+                    timestamp: chrono::Utc::now(),
+                    title: "Modified".to_string(),
+                    description: String::new(),
+                    attrs: BTreeMap::new(),
+                }],
+                &case_id.0,
+            )?;
+
+            ArtifactRepo::new(conn).insert_batch(
+                &[Artifact {
+                    id: ArtifactId("artifact-delete".to_string()),
+                    family: "Test".to_string(),
+                    title: "Test artifact".to_string(),
+                    summary: String::new(),
+                    source_object_id: Some(file_id.clone()),
+                    created_at: chrono::Utc::now(),
+                    attrs: BTreeMap::<String, Value>::new(),
+                }],
+                &case_id.0,
+                &ds_id.0,
+            )?;
+
+            let job_id = JobRepo::new(conn).create(&case_id.0, "Import")?;
+            assert!(!job_id.0.is_empty());
+
+            case_service::delete_data_source(conn, &ds_id.0).unwrap();
+
+            for (table, column) in [
+                ("data_sources", "id"),
+                ("file_entries", "data_source_id"),
+                ("artifacts", "data_source_id"),
+            ] {
+                let count: i64 = conn.query_row(
+                    &format!("SELECT COUNT(*) FROM {table} WHERE {column} = ?1"),
+                    [ds_id.0.as_str()],
+                    |row| row.get(0),
+                )?;
+                assert_eq!(count, 0, "{table} should not retain deleted data source");
+            }
+
+            let timeline_count: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM timeline_events WHERE source_object_id = ?1",
+                [file_id.0.as_str()],
+                |row| row.get(0),
+            )?;
+            assert_eq!(timeline_count, 0);
+
+            let audit_count = AuditRepo::new(conn).count_by_action("datasource.delete")?;
+            assert_eq!(audit_count, 1);
+
+            Ok(())
+        })
+        .unwrap();
 }

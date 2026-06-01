@@ -9,11 +9,14 @@ pub async fn search_files(
     state: State<'_, AppState>,
     query: String,
 ) -> Result<SearchResultPageDto, CommandError> {
-    search_files_request(state, SearchFilesRequest {
-        query,
-        offset: 0,
-        limit: 50,
-    })
+    search_files_request(
+        state,
+        SearchFilesRequest {
+            query,
+            offset: 0,
+            limit: 50,
+        },
+    )
     .await
 }
 
@@ -21,8 +24,9 @@ pub async fn search_files(
 #[tauri::command]
 pub async fn search_files_request(
     state: State<'_, AppState>,
-    request: SearchFilesRequest,
+    mut request: SearchFilesRequest,
 ) -> Result<SearchResultPageDto, CommandError> {
+    request.validate().map_err(CommandError::invalid_input)?;
     // Validate query length
     if request.query.len() > infrastructure::constants::MAX_QUERY_LENGTH {
         return Err(CommandError::invalid_input(format!(
@@ -30,10 +34,6 @@ pub async fn search_files_request(
             infrastructure::constants::MAX_QUERY_LENGTH
         )));
     }
-    // Validate pagination parameters
-    let limit = request.limit.clamp(1, 1000);
-    let request = SearchFilesRequest { limit, ..request };
-
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         // Short lock: extract index_dir, then release

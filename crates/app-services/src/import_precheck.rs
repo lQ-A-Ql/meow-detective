@@ -170,10 +170,7 @@ mod tests {
 
     #[test]
     fn test_select_strategy_large_file() {
-        assert_eq!(
-            select_strategy(100, 500_000_000),
-            ImportStrategy::Streaming
-        );
+        assert_eq!(select_strategy(100, 500_000_000), ImportStrategy::Streaming);
     }
 
     #[test]
@@ -184,10 +181,7 @@ mod tests {
 
     #[test]
     fn test_pre_check_nonexistent() {
-        let result = pre_import_check(
-            Path::new("/nonexistent"),
-            &DataSourceKind::LogicalDirectory,
-        );
+        let result = pre_import_check(Path::new("/nonexistent"), &DataSourceKind::LogicalDirectory);
         assert!(!result.errors.is_empty());
     }
 

@@ -3,7 +3,7 @@ use mcp_client::{McpClient, McpConfig, McpServerConfig};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tracing::info;
 
@@ -27,6 +27,8 @@ pub struct AppState {
     pub mcp_config: Arc<Mutex<McpConfig>>,
     /// MCP config file path
     pub mcp_config_path: PathBuf,
+    /// Application settings file path
+    pub app_settings_path: PathBuf,
 }
 
 impl Default for AppState {
@@ -35,6 +37,7 @@ impl Default for AppState {
             .unwrap_or_else(|| PathBuf::from("."))
             .join("forensics");
         let mcp_config_path = config_dir.join("mcp-config.json");
+        let app_settings_path = config_dir.join("app-settings.json");
 
         Self {
             active_case: Arc::new(Mutex::new(None)),
@@ -43,14 +46,15 @@ impl Default for AppState {
             mcp_clients: Arc::new(Mutex::new(HashMap::new())),
             mcp_config: Arc::new(Mutex::new(McpConfig::default())),
             mcp_config_path,
+            app_settings_path,
         }
     }
 }
 
 impl AppState {
     /// Initialize the database connection pool for the given database path.
-    pub fn init_db_pool(&self, db_path: &PathBuf) -> Result<(), String> {
-        let manager = SqliteConnectionManager::file(db_path.as_path());
+    pub fn init_db_pool(&self, db_path: &Path) -> Result<(), String> {
+        let manager = SqliteConnectionManager::file(db_path);
         let pool = Pool::builder()
             .max_size(10)
             .min_idle(Some(2))
@@ -58,33 +62,46 @@ impl AppState {
             .map_err(|e| format!("Failed to create connection pool: {}", e))?;
 
         {
-            let conn = pool.get().map_err(|e| format!("Failed to get connection: {}", e))?;
+            let conn = pool
+                .get()
+                .map_err(|e| format!("Failed to get connection: {}", e))?;
             conn.execute_batch(
                 "PRAGMA journal_mode=WAL;
                  PRAGMA foreign_keys=ON;
                  PRAGMA busy_timeout=5000;
                  PRAGMA synchronous=NORMAL;",
-            ).map_err(|e| format!("Failed to set pragmas: {}", e))?;
+            )
+            .map_err(|e| format!("Failed to set pragmas: {}", e))?;
         }
 
-        let mut guard = self.db_pool.lock()
+        let mut guard = self
+            .db_pool
+            .lock()
             .map_err(|e| format!("Lock poisoned: {}", e))?;
         *guard = Some(pool);
         Ok(())
     }
 
     /// Get a connection from the pool.
-    pub fn get_connection(&self) -> Result<r2d2::PooledConnection<SqliteConnectionManager>, String> {
-        let guard = self.db_pool.lock()
+    pub fn get_connection(
+        &self,
+    ) -> Result<r2d2::PooledConnection<SqliteConnectionManager>, String> {
+        let guard = self
+            .db_pool
+            .lock()
             .map_err(|e| format!("Lock poisoned: {}", e))?;
-        let pool = guard.as_ref()
+        let pool = guard
+            .as_ref()
             .ok_or("No database pool initialized — is a case open?")?;
-        pool.get().map_err(|e| format!("Failed to get connection from pool: {}", e))
+        pool.get()
+            .map_err(|e| format!("Failed to get connection from pool: {}", e))
     }
 
     /// Clear the connection pool.
     pub fn clear_db_pool(&self) -> Result<(), String> {
-        let mut guard = self.db_pool.lock()
+        let mut guard = self
+            .db_pool
+            .lock()
             .map_err(|e| format!("Lock poisoned: {}", e))?;
         *guard = None;
         Ok(())
@@ -103,7 +120,9 @@ impl AppState {
         let config: McpConfig = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse MCP config: {}", e))?;
 
-        let mut guard = self.mcp_config.lock()
+        let mut guard = self
+            .mcp_config
+            .lock()
             .map_err(|e| format!("Lock poisoned: {}", e))?;
         *guard = config;
 
@@ -113,7 +132,9 @@ impl AppState {
 
     /// Save MCP configuration to file.
     pub fn save_mcp_config(&self) -> Result<(), String> {
-        let guard = self.mcp_config.lock()
+        let guard = self
+            .mcp_config
+            .lock()
             .map_err(|e| format!("Lock poisoned: {}", e))?;
 
         // Create config directory if it doesn't exist
@@ -134,7 +155,9 @@ impl AppState {
 
     /// Add an MCP server.
     pub fn add_mcp_server(&self, config: McpServerConfig) -> Result<(), String> {
-        let mut guard = self.mcp_config.lock()
+        let mut guard = self
+            .mcp_config
+            .lock()
             .map_err(|e| format!("Lock poisoned: {}", e))?;
 
         // Check for duplicate ID
@@ -151,14 +174,18 @@ impl AppState {
     /// Remove an MCP server.
     pub fn remove_mcp_server(&self, server_id: &str) -> Result<(), String> {
         {
-            let mut guard = self.mcp_config.lock()
+            let mut guard = self
+                .mcp_config
+                .lock()
                 .map_err(|e| format!("Lock poisoned: {}", e))?;
             guard.servers.retain(|s| s.id != server_id);
         }
 
         // Also disconnect and remove the client
         {
-            let mut clients = self.mcp_clients.lock()
+            let mut clients = self
+                .mcp_clients
+                .lock()
                 .map_err(|e| format!("Lock poisoned: {}", e))?;
             clients.remove(server_id);
         }
@@ -183,17 +210,27 @@ impl AppState {
     /// Connect to an MCP server.
     pub async fn connect_mcp_server(&self, server_id: &str) -> Result<(), String> {
         let config = {
-            let guard = self.mcp_config.lock()
+            let guard = self
+                .mcp_config
+                .lock()
                 .map_err(|e| format!("Lock poisoned: {}", e))?;
-            guard.servers.iter().find(|s| s.id == server_id).cloned()
+            guard
+                .servers
+                .iter()
+                .find(|s| s.id == server_id)
+                .cloned()
                 .ok_or_else(|| format!("Server {} not found", server_id))?
         };
 
         let mut client = McpClient::new(config);
-        client.connect().await
+        client
+            .connect()
+            .await
             .map_err(|e| format!("Failed to connect: {}", e))?;
 
-        let mut clients = self.mcp_clients.lock()
+        let mut clients = self
+            .mcp_clients
+            .lock()
             .map_err(|e| format!("Lock poisoned: {}", e))?;
         clients.insert(server_id.to_string(), client);
 
@@ -202,12 +239,27 @@ impl AppState {
 
     /// Disconnect from an MCP server.
     pub async fn disconnect_mcp_server(&self, server_id: &str) -> Result<(), String> {
-        let mut clients = self.mcp_clients.lock()
-            .map_err(|e| format!("Lock poisoned: {}", e))?;
+        let client = {
+            let mut clients = self
+                .mcp_clients
+                .lock()
+                .map_err(|e| format!("Lock poisoned: {}", e))?;
+            clients.remove(server_id)
+        };
 
-        if let Some(client) = clients.get_mut(server_id) {
-            client.disconnect().await
-                .map_err(|e| format!("Failed to disconnect: {}", e))?;
+        if let Some(mut client) = client {
+            let result = client
+                .disconnect()
+                .await
+                .map_err(|e| format!("Failed to disconnect: {}", e));
+
+            let mut clients = self
+                .mcp_clients
+                .lock()
+                .map_err(|e| format!("Lock poisoned: {}", e))?;
+            clients.insert(server_id.to_string(), client);
+
+            result?;
         }
 
         Ok(())

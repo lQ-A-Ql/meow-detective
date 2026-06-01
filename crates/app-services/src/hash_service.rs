@@ -64,7 +64,10 @@ mod tests {
 
     #[test]
     fn verify_sha256_incorrect() {
-        assert!(!HashService::verify_sha256(b"hello", &HashService::sha256_bytes(b"world")));
+        assert!(!HashService::verify_sha256(
+            b"hello",
+            &HashService::sha256_bytes(b"world")
+        ));
     }
 
     #[test]

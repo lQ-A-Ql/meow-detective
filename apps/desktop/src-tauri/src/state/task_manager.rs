@@ -38,11 +38,7 @@ impl TaskManager {
     /// Register a new background task.
     ///
     /// Returns the cancel token for the task.
-    pub fn register(
-        &self,
-        task_id: String,
-        handle: JoinHandle<TaskResult>,
-    ) -> Arc<AtomicBool> {
+    pub fn register(&self, task_id: String, handle: JoinHandle<TaskResult>) -> Arc<AtomicBool> {
         let cancel_token = Arc::new(AtomicBool::new(false));
         let entry = TaskEntry {
             handle,

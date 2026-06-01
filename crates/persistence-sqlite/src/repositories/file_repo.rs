@@ -150,10 +150,10 @@ impl<'a> FileRepo<'a> {
         data_source_id: &DataSourceId,
         prefix: &str,
     ) -> DbResult<Vec<FileEntry>> {
-        let pattern = format!("{}%", prefix);
+        let pattern = format!("{}%", escape_like_literal(prefix));
         let mut stmt = self.conn.prepare(
             "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
-             FROM file_entries WHERE data_source_id = ?1 AND path LIKE ?2 ORDER BY path ASC",
+             FROM file_entries WHERE data_source_id = ?1 AND path LIKE ?2 ESCAPE '\\' ORDER BY path ASC",
         )?;
         let rows = stmt.query_map(params![data_source_id.0, pattern], row_to_file_entry)?;
         collect_entries(rows)
@@ -205,6 +205,17 @@ impl<'a> FileRepo<'a> {
     }
 }
 
+fn escape_like_literal(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for ch in value.chars() {
+        if matches!(ch, '\\' | '%' | '_') {
+            escaped.push('\\');
+        }
+        escaped.push(ch);
+    }
+    escaped
+}
+
 fn row_to_file_entry(row: &rusqlite::Row) -> rusqlite::Result<FileEntry> {
     let entry_type_str: String = row.get(5)?;
     Ok(FileEntry {
@@ -245,4 +256,69 @@ fn collect_entries(
         entries.push(row?);
     }
     Ok(entries)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{open_or_create, runner};
+    use domain::{DataSourceKind, EntryType};
+    use tempfile::TempDir;
+
+    fn insert_data_source(conn: &Connection, id: &DataSourceId) {
+        conn.execute(
+            "INSERT INTO cases (id, name, created_at, updated_at) VALUES ('case-1', 'Case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO data_sources (id, case_id, name, kind, source_path, imported_at) VALUES (?1, 'case-1', 'ds', ?2, 'C:/evidence', '2026-01-01T00:00:00Z')",
+            params![id.0, DataSourceKind::LogicalDirectory.to_string()],
+        )
+        .unwrap();
+    }
+
+    fn entry(id: &str, ds_id: &DataSourceId, path: &str) -> FileEntry {
+        FileEntry {
+            id: FileEntryId(id.to_string()),
+            parent_id: None,
+            data_source_id: ds_id.clone(),
+            path: path.to_string(),
+            name: path.to_string(),
+            entry_type: EntryType::File,
+            size: Some(1),
+            ext: None,
+            deleted: false,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        }
+    }
+
+    #[test]
+    fn find_by_path_prefix_escapes_like_wildcards() {
+        let tmp = TempDir::new().unwrap();
+        let conn = open_or_create(&tmp.path().join("case.db")).unwrap();
+        runner::run_all(&conn).unwrap();
+        let ds_id = DataSourceId("ds-like".to_string());
+        insert_data_source(&conn, &ds_id);
+        let repo = FileRepo::new(&conn);
+        repo.insert_batch(&[
+            entry("literal", &ds_id, "root/test%file/a.txt"),
+            entry("wildcard", &ds_id, "root/testXfile/a.txt"),
+            entry("underscore-literal", &ds_id, "root/test_file/a.txt"),
+            entry("underscore-wildcard", &ds_id, "root/testZfile/a.txt"),
+        ])
+        .unwrap();
+
+        let percent = repo.find_by_path_prefix(&ds_id, "root/test%file").unwrap();
+        assert_eq!(percent.len(), 1);
+        assert_eq!(percent[0].id.0, "literal");
+
+        let underscore = repo.find_by_path_prefix(&ds_id, "root/test_file").unwrap();
+        assert_eq!(underscore.len(), 1);
+        assert_eq!(underscore[0].id.0, "underscore-literal");
+    }
 }

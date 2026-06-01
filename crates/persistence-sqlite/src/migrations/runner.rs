@@ -57,6 +57,17 @@ const MIGRATIONS: &[(&str, &str)] = &[
     ),
 ];
 
+pub fn latest_version() -> &'static str {
+    MIGRATIONS
+        .last()
+        .map(|(name, _)| *name)
+        .expect("migration registry must not be empty")
+}
+
+pub fn migration_count() -> usize {
+    MIGRATIONS.len()
+}
+
 pub fn run_all(conn: &Connection) -> DbResult<u32> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -99,19 +110,11 @@ pub fn run_all(conn: &Connection) -> DbResult<u32> {
                     count += 1;
                 }
                 Err(e) => {
-                    // Rollback and skip — some ALTER TABLE statements may have already
-                    // succeeded in a previous partial run. Log and continue.
                     let _ = conn.execute_batch("ROLLBACK");
-                    tracing::warn!(
-                        "Migration {} failed (may be partially applied from prior run): {}",
-                        name,
-                        e
-                    );
-                    // Record as applied to prevent infinite retry loops on permanently broken migrations
-                    conn.execute(
-                        "INSERT OR IGNORE INTO schema_migrations (name) VALUES (?1)",
-                        [name],
-                    )?;
+                    return Err(DbError::Migration(format!(
+                        "Migration {} failed: {}",
+                        name, e
+                    )));
                 }
             }
         }

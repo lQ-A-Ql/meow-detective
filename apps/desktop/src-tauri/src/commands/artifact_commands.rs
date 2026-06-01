@@ -62,11 +62,8 @@ pub async fn get_artifact_rows_request(
         // Guard is now dropped — query with released lock
         let conn = persistence_sqlite::open_or_create(&db_path)
             .map_err(CommandError::from_service_error)?;
-        app_services::artifact_service::get_artifact_rows_from_db(
-            &conn,
-            request.family.as_deref(),
-        )
-        .map_err(CommandError::from_service_error)
+        app_services::artifact_service::get_artifact_rows_from_db(&conn, request.family.as_deref())
+            .map_err(CommandError::from_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?

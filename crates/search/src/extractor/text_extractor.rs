@@ -114,7 +114,11 @@ mod tests {
     #[test]
     fn test_extract_text_binary() {
         let data = b"Hello";
-        let result = extract_text(Cursor::new(data), "file-1", Some("application/octet-stream"));
+        let result = extract_text(
+            Cursor::new(data),
+            "file-1",
+            Some("application/octet-stream"),
+        );
         assert!(!result.extractable);
         assert_eq!(result.encoding, "binary");
     }

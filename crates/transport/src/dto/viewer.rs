@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+const MAX_RANGE_LENGTH: u32 = 1024 * 1024;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ViewerHandleDto {
@@ -15,6 +17,20 @@ pub struct ViewerRangeRequestDto {
     pub handle_id: String,
     pub offset: u64,
     pub length: u32,
+}
+
+impl ViewerRangeRequestDto {
+    /// Validate and normalize a range request before it reaches evidence readers.
+    pub fn validate(&mut self) -> Result<(), String> {
+        if self.handle_id.trim().is_empty() {
+            return Err("handleId is required".to_string());
+        }
+        if self.length == 0 {
+            return Err("length must be greater than zero".to_string());
+        }
+        self.length = self.length.min(MAX_RANGE_LENGTH);
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,12 +81,51 @@ pub struct ImagePreviewDto {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaUrlDto {
-    /// Media URL
-    pub url: String,
+    /// Media URL. Present only for bounded inline previews.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    /// Opaque viewer handle for command-scoped range reads.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub handle_id: Option<String>,
     /// MIME type
     pub mime_type: String,
     /// File size in bytes
     pub size: u64,
+    /// Whether the frontend can request bounded byte ranges for this media.
+    pub can_read_ranges: bool,
+}
+
+/// Raw media byte range request.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaRangeRequestDto {
+    pub handle_id: String,
+    pub offset: u64,
+    pub length: u32,
+}
+
+impl MediaRangeRequestDto {
+    /// Validate and normalize a media byte range request.
+    pub fn validate(&mut self) -> Result<(), String> {
+        if self.handle_id.trim().is_empty() {
+            return Err("handleId is required".to_string());
+        }
+        if self.length == 0 {
+            return Err("length must be greater than zero".to_string());
+        }
+        self.length = self.length.min(MAX_RANGE_LENGTH);
+        Ok(())
+    }
+}
+
+/// Raw media byte range response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaRangeResponseDto {
+    pub offset: u64,
+    pub bytes_base64: String,
+    pub bytes_read: u32,
+    pub eof: bool,
 }
 
 #[cfg(test)]
@@ -133,12 +188,15 @@ mod tests {
     #[test]
     fn test_media_url_dto_serialization() {
         let dto = MediaUrlDto {
-            url: "asset://localhost/path".to_string(),
+            url: Some("data:video/mp4;base64,AAAA".to_string()),
+            handle_id: None,
             mime_type: "video/mp4".to_string(),
             size: 10240000,
+            can_read_ranges: false,
         };
         let json = serde_json::to_string(&dto).unwrap();
-        assert!(json.contains("asset://localhost"));
+        assert!(json.contains("data:video/mp4"));
+        assert!(json.contains("canReadRanges"));
     }
 
     #[test]
@@ -148,5 +206,64 @@ mod tests {
         assert_eq!(dto.handle_id, "file:123");
         assert_eq!(dto.offset, 0);
         assert_eq!(dto.length, 1024);
+    }
+
+    #[test]
+    fn viewer_range_request_clamps_oversized_length() {
+        let mut dto = ViewerRangeRequestDto {
+            handle_id: "file:123".to_string(),
+            offset: 0,
+            length: u32::MAX,
+        };
+
+        dto.validate().unwrap();
+
+        assert_eq!(dto.length, MAX_RANGE_LENGTH);
+    }
+
+    #[test]
+    fn viewer_range_request_rejects_empty_handle() {
+        let mut dto = ViewerRangeRequestDto {
+            handle_id: " ".to_string(),
+            offset: 0,
+            length: 1024,
+        };
+
+        assert!(dto.validate().is_err());
+    }
+
+    #[test]
+    fn viewer_range_request_rejects_zero_length() {
+        let mut dto = ViewerRangeRequestDto {
+            handle_id: "file:123".to_string(),
+            offset: 0,
+            length: 0,
+        };
+
+        assert!(dto.validate().is_err());
+    }
+
+    #[test]
+    fn media_range_request_clamps_oversized_length() {
+        let mut dto = MediaRangeRequestDto {
+            handle_id: "file:123".to_string(),
+            offset: 0,
+            length: u32::MAX,
+        };
+
+        dto.validate().unwrap();
+
+        assert_eq!(dto.length, MAX_RANGE_LENGTH);
+    }
+
+    #[test]
+    fn media_range_request_rejects_zero_length() {
+        let mut dto = MediaRangeRequestDto {
+            handle_id: "file:123".to_string(),
+            offset: 0,
+            length: 0,
+        };
+
+        assert!(dto.validate().is_err());
     }
 }
