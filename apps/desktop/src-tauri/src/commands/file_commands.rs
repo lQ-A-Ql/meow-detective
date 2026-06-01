@@ -248,13 +248,15 @@ pub async fn get_text_preview(
         .map_err(CommandError::from_service_error)?;
 
         // Decode hex lines to bytes
+        // Format: "00000000  48 65 6C 6C 6F  ..."
         let content_bytes: Vec<u8> = range
             .lines
             .iter()
+            .filter(|line| !line.trim().is_empty()) // Skip empty lines
             .flat_map(|line| {
-                // Parse hex line: "00000000  48 65 6C 6C 6F  ..."
                 line.split_whitespace()
                     .skip(1) // Skip offset
+                    .take_while(|hex| hex.len() <= 2) // Stop at non-hex tokens
                     .filter_map(|hex| u8::from_str_radix(hex, 16).ok())
                     .collect::<Vec<u8>>()
             })
@@ -327,12 +329,15 @@ pub async fn get_image_preview(
         .map_err(CommandError::from_service_error)?;
 
         // Decode hex lines to bytes
+        // Format: "00000000  48 65 6C 6C 6F  ..."
         let content_bytes: Vec<u8> = range
             .lines
             .iter()
+            .filter(|line| !line.trim().is_empty()) // Skip empty lines
             .flat_map(|line| {
                 line.split_whitespace()
                     .skip(1) // Skip offset
+                    .take_while(|hex| hex.len() <= 2) // Stop at non-hex tokens
                     .filter_map(|hex| u8::from_str_radix(hex, 16).ok())
                     .collect::<Vec<u8>>()
             })
@@ -386,8 +391,9 @@ pub async fn get_media_url(
         let file_path = file_service::get_file_path_for_entry(&conn, &file_id)
             .map_err(CommandError::from_service_error)?;
 
-        // Create asset URL for Tauri
-        let url = format!("asset://localhost/{}", file_path.display());
+        // Create asset URL for Tauri with proper encoding
+        let path_str = file_path.to_string_lossy();
+        let url = format!("asset://localhost/{}", path_str.replace(' ', "%20"));
 
         Ok(MediaUrlDto {
             url,

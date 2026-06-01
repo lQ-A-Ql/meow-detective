@@ -72,3 +72,81 @@ pub struct MediaUrlDto {
     /// File size in bytes
     pub size: u64,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_viewer_handle_dto_serialization() {
+        let dto = ViewerHandleDto {
+            handle_id: "file:123".to_string(),
+            size: 1024,
+            mime: Some("text/plain".to_string()),
+        };
+        let json = serde_json::to_string(&dto).unwrap();
+        assert!(json.contains("handleId"));
+        assert!(json.contains("file:123"));
+        assert!(json.contains("1024"));
+    }
+
+    #[test]
+    fn test_viewer_handle_dto_no_mime() {
+        let dto = ViewerHandleDto {
+            handle_id: "file:123".to_string(),
+            size: 1024,
+            mime: None,
+        };
+        let json = serde_json::to_string(&dto).unwrap();
+        assert!(!json.contains("mime"));
+    }
+
+    #[test]
+    fn test_text_preview_dto_serialization() {
+        let dto = TextPreviewDto {
+            content: "Hello World".to_string(),
+            encoding: "UTF-8".to_string(),
+            is_truncated: false,
+            line_count: 1,
+            is_binary: false,
+            language: Some("plaintext".to_string()),
+        };
+        let json = serde_json::to_string(&dto).unwrap();
+        assert!(json.contains("Hello World"));
+        assert!(json.contains("UTF-8"));
+    }
+
+    #[test]
+    fn test_image_preview_dto_serialization() {
+        let dto = ImagePreviewDto {
+            data_url: "data:image/png;base64,...".to_string(),
+            mime_type: "image/png".to_string(),
+            width: 1920,
+            height: 1080,
+            size: 1024000,
+        };
+        let json = serde_json::to_string(&dto).unwrap();
+        assert!(json.contains("data:image/png"));
+        assert!(json.contains("1920"));
+    }
+
+    #[test]
+    fn test_media_url_dto_serialization() {
+        let dto = MediaUrlDto {
+            url: "asset://localhost/path".to_string(),
+            mime_type: "video/mp4".to_string(),
+            size: 10240000,
+        };
+        let json = serde_json::to_string(&dto).unwrap();
+        assert!(json.contains("asset://localhost"));
+    }
+
+    #[test]
+    fn test_viewer_range_request_deserialization() {
+        let json = r#"{"handleId":"file:123","offset":0,"length":1024}"#;
+        let dto: ViewerRangeRequestDto = serde_json::from_str(json).unwrap();
+        assert_eq!(dto.handle_id, "file:123");
+        assert_eq!(dto.offset, 0);
+        assert_eq!(dto.length, 1024);
+    }
+}

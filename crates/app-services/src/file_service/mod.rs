@@ -906,7 +906,8 @@ fn is_windows_reserved_name(name: &str) -> bool {
 }
 
 fn skip_reader_bytes(reader: &mut dyn Read, mut remaining: u64) -> Result<(), String> {
-    let mut buffer = [0u8; 8192];
+    // 使用更大的缓冲区减少系统调用次数
+    let mut buffer = vec![0u8; 65536]; // 64KB buffer
     while remaining > 0 {
         let chunk_len = remaining.min(buffer.len() as u64) as usize;
         let read = reader
@@ -921,19 +922,31 @@ fn skip_reader_bytes(reader: &mut dyn Read, mut remaining: u64) -> Result<(), St
 }
 
 fn format_hex_lines(base_offset: u64, bytes: &[u8]) -> Vec<String> {
-    bytes
-        .chunks(16)
-        .enumerate()
-        .map(|(line_idx, chunk)| {
-            let offset = base_offset + (line_idx * 16) as u64;
-            let hex = chunk
-                .iter()
-                .map(|byte| format!("{:02X}", byte))
-                .collect::<Vec<_>>()
-                .join(" ");
-            format!("{offset:08X}  {hex}")
-        })
-        .collect()
+    // 预计算容量：每行最多 8(offset) + 2(spaces) + 16*3(hex) + 16(space) = 74 字符
+    let line_count = (bytes.len() + 15) / 16;
+    let mut result = Vec::with_capacity(line_count);
+
+    for (line_idx, chunk) in bytes.chunks(16).enumerate() {
+        let offset = base_offset + (line_idx * 16) as u64;
+        // 预分配：8(offset) + 2(spaces) + chunk.len()*3(hex) + chunk.len()-1(spaces)
+        let mut line = String::with_capacity(8 + 2 + chunk.len() * 4);
+
+        // 写入偏移量
+        use std::fmt::Write;
+        let _ = write!(line, "{offset:08X}");
+        line.push_str("  ");
+
+        // 写入 hex 字节
+        for (i, byte) in chunk.iter().enumerate() {
+            if i > 0 {
+                line.push(' ');
+            }
+            let _ = write!(line, "{byte:02X}");
+        }
+
+        result.push(line);
+    }
+    result
 }
 
 fn empty_hex_response() -> ViewerRangeResponseDto {

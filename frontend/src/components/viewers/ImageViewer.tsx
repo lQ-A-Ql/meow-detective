@@ -54,9 +54,18 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
   }, []);
 
   // 图片加载错误
-  const handleError = useCallback(() => {
+  const handleError = useCallback((e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     setIsLoading(false);
-    setError('图片加载失败');
+    const target = e.target as HTMLImageElement;
+    
+    // 提供更详细的错误信息
+    if (!target.src || target.src === 'about:blank') {
+      setError('图片源无效');
+    } else if (target.src.startsWith('asset://') && !target.complete) {
+      setError('图片加载超时，请检查文件是否存在');
+    } else {
+      setError('图片格式不支持或文件损坏');
+    }
   }, []);
 
   // 鼠标滚轮缩放

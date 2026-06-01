@@ -35,3 +35,36 @@ impl CsvExporter {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sanitize_csv_cell_normal() {
+        assert_eq!(sanitize_csv_cell("hello"), "hello");
+    }
+
+    #[test]
+    fn test_sanitize_csv_cell_formula() {
+        assert_eq!(sanitize_csv_cell("=SUM(A1:A2)"), "\t=SUM(A1:A2)");
+        assert_eq!(sanitize_csv_cell("+cmd"), "\t+cmd");
+        assert_eq!(sanitize_csv_cell("-DANGEROUS"), "\t-DANGEROUS");
+        assert_eq!(sanitize_csv_cell("@SUM"), "\t@SUM");
+    }
+
+    #[test]
+    fn test_export_artifacts() {
+        let mut output = Vec::new();
+        let headers = vec!["Name", "Value"];
+        let rows = vec![
+            vec!["test".to_string(), "123".to_string()],
+            vec!["hello".to_string(), "world".to_string()],
+        ];
+
+        CsvExporter::export_artifacts(&mut output, &headers, &rows).unwrap();
+        let result = String::from_utf8(output).unwrap();
+        assert!(result.contains("Name,Value"));
+        assert!(result.contains("\"test\""));
+    }
+}

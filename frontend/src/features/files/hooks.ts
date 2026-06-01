@@ -82,7 +82,7 @@ export function useTextPreview(fileId?: string) {
 
 /**
  * Hook to get image preview for a file.
- * Returns base64-encoded image data.
+ * Uses media URL for better performance (Tauri asset protocol).
  */
 export function useImagePreview(fileId?: string) {
   return useQuery({
@@ -91,7 +91,15 @@ export function useImagePreview(fileId?: string) {
     retry: false,
     queryFn: async () => {
       if (!fileId) return null;
-      return await getImagePreview(fileId);
+      // Use media URL for better performance
+      const media = await getMediaUrl(fileId);
+      return {
+        dataUrl: media.url,
+        mimeType: media.mimeType,
+        width: 0,
+        height: 0,
+        size: media.size,
+      };
     },
   });
 }

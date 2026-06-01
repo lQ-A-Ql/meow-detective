@@ -77,7 +77,27 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
     const handleError = () => {
-      setError('音频加载失败');
+      const mediaError = audio.error;
+      let errorMsg = '音频加载失败';
+      
+      if (mediaError) {
+        switch (mediaError.code) {
+          case MediaError.MEDIA_ERR_ABORTED:
+            errorMsg = '音频加载被中止';
+            break;
+          case MediaError.MEDIA_ERR_NETWORK:
+            errorMsg = '网络错误，请检查文件路径';
+            break;
+          case MediaError.MEDIA_ERR_DECODE:
+            errorMsg = '音频解码失败，格式可能不支持';
+            break;
+          case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+            errorMsg = '音频格式不支持或文件损坏';
+            break;
+        }
+      }
+      
+      setError(errorMsg);
       setIsLoading(false);
     };
 

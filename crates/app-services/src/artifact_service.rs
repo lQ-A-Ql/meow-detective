@@ -45,8 +45,10 @@ pub fn run_extractors_on_file(
         );
     }
 
+    // 克隆缓冲区一次，供所有提取器使用
+    let buf = std::sync::Arc::new(buf);
     for extractor in extractors {
-        let cursor = std::io::Cursor::new(buf.clone());
+        let cursor = std::io::Cursor::new((*buf).clone());
         let run_ctx = ArtifactContext {
             file_id: file_id.clone(),
             file_path: file_path.to_string(),

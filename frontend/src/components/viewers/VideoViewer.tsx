@@ -102,7 +102,27 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
     const handleError = () => {
-      setError('视频加载失败');
+      const mediaError = video.error;
+      let errorMsg = '视频加载失败';
+      
+      if (mediaError) {
+        switch (mediaError.code) {
+          case MediaError.MEDIA_ERR_ABORTED:
+            errorMsg = '视频加载被中止';
+            break;
+          case MediaError.MEDIA_ERR_NETWORK:
+            errorMsg = '网络错误，请检查文件路径';
+            break;
+          case MediaError.MEDIA_ERR_DECODE:
+            errorMsg = '视频解码失败，格式可能不支持';
+            break;
+          case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+            errorMsg = '视频格式不支持或文件损坏';
+            break;
+        }
+      }
+      
+      setError(errorMsg);
       setIsLoading(false);
     };
 

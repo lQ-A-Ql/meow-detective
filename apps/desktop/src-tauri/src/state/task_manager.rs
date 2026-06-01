@@ -50,7 +50,7 @@ impl TaskManager {
             started_at: Instant::now(),
         };
 
-        let mut tasks = self.tasks.lock().unwrap();
+        let mut tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
         tasks.insert(task_id, entry);
 
         cancel_token
@@ -72,7 +72,7 @@ impl TaskManager {
             started_at: Instant::now(),
         };
 
-        let mut tasks = self.tasks.lock().unwrap();
+        let mut tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
         tasks.insert(task_id, entry);
     }
 
@@ -80,7 +80,7 @@ impl TaskManager {
     ///
     /// Returns true if the task was found and cancelled.
     pub fn cancel(&self, task_id: &str) -> bool {
-        let tasks = self.tasks.lock().unwrap();
+        let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(entry) = tasks.get(task_id) {
             entry.cancel_token.store(true, Ordering::Relaxed);
             true
@@ -91,7 +91,7 @@ impl TaskManager {
 
     /// Cancel all running tasks.
     pub fn cancel_all(&self) {
-        let tasks = self.tasks.lock().unwrap();
+        let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
         for (_, entry) in tasks.iter() {
             entry.cancel_token.store(true, Ordering::Relaxed);
         }
@@ -102,7 +102,7 @@ impl TaskManager {
     /// This will block until all tasks finish or the timeout is reached.
     pub fn wait_all(&self, timeout: Duration) -> Vec<(String, TaskResult)> {
         let task_ids: Vec<String> = {
-            let tasks = self.tasks.lock().unwrap();
+            let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
             tasks.keys().cloned().collect()
         };
 
@@ -126,7 +126,7 @@ impl TaskManager {
     /// Wait for a specific task to complete.
     pub fn wait_task(&self, task_id: &str, timeout: Duration) -> Option<TaskResult> {
         let entry = {
-            let mut tasks = self.tasks.lock().unwrap();
+            let mut tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
             tasks.remove(task_id)?
         };
 
@@ -138,7 +138,7 @@ impl TaskManager {
             }
             if start.elapsed() >= timeout {
                 // Re-insert the task if it didn't finish
-                let mut tasks = self.tasks.lock().unwrap();
+                let mut tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
                 tasks.insert(task_id.to_string(), entry);
                 return None;
             }
@@ -155,7 +155,7 @@ impl TaskManager {
     ///
     /// Returns the number of tasks removed.
     pub fn cleanup_finished(&self) -> usize {
-        let mut tasks = self.tasks.lock().unwrap();
+        let mut tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
         let initial_count = tasks.len();
         tasks.retain(|_, entry| !entry.handle.is_finished());
         initial_count - tasks.len()
@@ -163,31 +163,31 @@ impl TaskManager {
 
     /// Get a list of running task IDs.
     pub fn running_tasks(&self) -> Vec<String> {
-        let tasks = self.tasks.lock().unwrap();
+        let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
         tasks.keys().cloned().collect()
     }
 
     /// Get the number of running tasks.
     pub fn task_count(&self) -> usize {
-        let tasks = self.tasks.lock().unwrap();
+        let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
         tasks.len()
     }
 
     /// Check if a specific task is running.
     pub fn is_running(&self, task_id: &str) -> bool {
-        let tasks = self.tasks.lock().unwrap();
+        let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
         tasks.contains_key(task_id)
     }
 
     /// Get the elapsed time for a task.
     pub fn task_elapsed(&self, task_id: &str) -> Option<Duration> {
-        let tasks = self.tasks.lock().unwrap();
+        let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
         tasks.get(task_id).map(|entry| entry.started_at.elapsed())
     }
 
     /// Check if a task has been cancelled.
     pub fn is_cancelled(&self, task_id: &str) -> bool {
-        let tasks = self.tasks.lock().unwrap();
+        let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
         tasks
             .get(task_id)
             .map(|entry| entry.cancel_token.load(Ordering::Relaxed))
@@ -198,7 +198,7 @@ impl TaskManager {
     ///
     /// Returns None if the task doesn't exist.
     pub fn get_cancel_token(&self, task_id: &str) -> Option<Arc<AtomicBool>> {
-        let tasks = self.tasks.lock().unwrap();
+        let tasks = self.tasks.lock().unwrap_or_else(|e| e.into_inner());
         tasks.get(task_id).map(|entry| entry.cancel_token.clone())
     }
 }

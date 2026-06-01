@@ -55,11 +55,19 @@ impl TextService {
         }
 
         // 尝试 UTF-8
-        if std::str::from_utf8(data).is_ok() {
+        if let Ok(text) = std::str::from_utf8(data) {
+            // 计算 UTF-8 置信度
+            let valid_chars = text.chars().count();
+            let total_bytes = data.len();
+            let confidence = if total_bytes > 0 {
+                0.9 + (valid_chars as f32 / total_bytes as f32 * 0.1).min(0.1)
+            } else {
+                0.95
+            };
             return EncodingInfo {
                 encoding: UTF_8,
                 name: "UTF-8".to_string(),
-                confidence: 0.95,
+                confidence,
             };
         }
 
@@ -70,12 +78,44 @@ impl TextService {
                 (c >= '\u{4E00}' && c <= '\u{9FFF}')
                     || (c >= '\u{3400}' && c <= '\u{4DBF}')
                     || (c >= '\u{3000}' && c <= '\u{303F}') // CJK Symbols
+                    || (c >= '\u{FF00}' && c <= '\u{FFEF}') // Fullwidth forms
             });
 
             if has_chinese {
                 return EncodingInfo {
                     encoding: GBK,
                     name: "GBK".to_string(),
+                    confidence: 0.85,
+                };
+            }
+        }
+
+        // 尝试 Shift-JIS (日文)
+        let (decoded_sjis, _, errors_sjis) = encoding_rs::SHIFT_JIS.decode(data);
+        if !errors_sjis {
+            let has_japanese = decoded_sjis.chars().any(|c| {
+                (c >= '\u{3040}' && c <= '\u{309F}') // Hiragana
+                    || (c >= '\u{30A0}' && c <= '\u{30FF}') // Katakana
+            });
+            if has_japanese {
+                return EncodingInfo {
+                    encoding: encoding_rs::SHIFT_JIS,
+                    name: "Shift-JIS".to_string(),
+                    confidence: 0.8,
+                };
+            }
+        }
+
+        // 尝试 EUC-KR (韩文)
+        let (decoded_kr, _, errors_kr) = encoding_rs::EUC_KR.decode(data);
+        if !errors_kr {
+            let has_korean = decoded_kr.chars().any(|c| {
+                c >= '\u{AC00}' && c <= '\u{D7AF}' // Hangul syllables
+            });
+            if has_korean {
+                return EncodingInfo {
+                    encoding: encoding_rs::EUC_KR,
+                    name: "EUC-KR".to_string(),
                     confidence: 0.8,
                 };
             }

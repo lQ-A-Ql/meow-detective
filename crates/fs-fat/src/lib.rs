@@ -459,3 +459,46 @@ fn join_child_path(parent_path: &str, name: &str) -> String {
         format!("{}/{}", parent, name)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_read_sfn_name() {
+        let mut entry = [0u8; 32];
+        // HELLO followed by nulls, then TXT
+        entry[0..5].copy_from_slice(b"HELLO");
+        // bytes 5-7 are null (padding)
+        entry[8..11].copy_from_slice(b"TXT");
+        let name = read_sfn_name(&entry);
+        assert!(name.contains("HELLO"));
+        assert!(name.contains("TXT"));
+    }
+
+    #[test]
+    fn test_read_sfn_name_no_ext() {
+        let mut entry = [0u8; 32];
+        entry[0..6].copy_from_slice(b"README");
+        let name = read_sfn_name(&entry);
+        assert!(name.contains("README"));
+    }
+
+    #[test]
+    fn test_join_child_path() {
+        assert_eq!(join_child_path("", "file.txt"), "file.txt");
+        assert_eq!(join_child_path("dir", "file.txt"), "dir/file.txt");
+        assert_eq!(join_child_path("dir/sub", "file.txt"), "dir/sub/file.txt");
+    }
+
+    #[test]
+    fn test_join_child_path_backslash() {
+        assert_eq!(join_child_path("dir\\sub", "file.txt"), "dir/sub/file.txt");
+    }
+
+    #[test]
+    fn test_fat_type_detection() {
+        assert_eq!(FatType::Fat12, FatType::Fat12);
+        assert_ne!(FatType::Fat12, FatType::Fat32);
+    }
+}

@@ -10,6 +10,7 @@ import {
 } from '@/components/layout/InspectorPane';
 import { DenseDataTable } from '@/components/tables/DenseDataTable';
 import { ViewerTabs } from '@/components/viewers/ViewerTabs';
+import { HexViewer } from '@/components/viewers/HexViewer';
 import { TextViewer } from '@/components/viewers/TextViewer';
 import { ImageViewer } from '@/components/viewers/ImageViewer';
 import { VideoViewer } from '@/components/viewers/VideoViewer';
@@ -535,11 +536,7 @@ export function FileBrowser() {
                   value: 'hex',
                   label: '十六进制',
                   content: viewer?.range.lines?.length ? (
-                    <div className="font-mono text-[11px] text-[#333] whitespace-pre-wrap">
-                      {viewer.range.lines.map((line, index) => (
-                        <div key={index}>{line}</div>
-                      ))}
-                    </div>
+                    <HexViewer lines={viewer.range.lines} />
                   ) : (
                     <div className="text-[#666]">
                       选择文件后显示十六进制预览。
