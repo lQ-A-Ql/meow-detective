@@ -1,3 +1,4 @@
+pub mod analysis_commands;
 pub mod artifact_commands;
 pub mod case_commands;
 pub mod file_commands;

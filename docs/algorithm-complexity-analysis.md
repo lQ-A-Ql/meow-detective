@@ -1,0 +1,428 @@
+# 算法性能静态分析报告
+
+**分析日期**: 2026-05-31  
+**分析范围**: 核心算法时间/空间复杂度  
+**分析方法**: 代码审查 + 复杂度推导  
+
+---
+
+## 📊 复杂度总览
+
+| 算法 | 时间复杂度 | 空间复杂度 | 评价 |
+|------|------------|------------|------|
+| 文件枚举 (BFS) | O(n) | O(w) | ✅ 最优 |
+| 文件排序 | O(n log n) | O(n) | ✅ 最优 |
+| SHA-256 哈希 | O(n) | O(1) | ✅ 最优 |
+| Hex 格式化 | O(n) | O(n) | ✅ 最优 |
+| 编码检测 | O(n) | O(1) | ✅ 最优 |
+| Magic 检测 | O(m·k) | O(1) | ✅ 最优 |
+| 路径重建 | O(n²) | O(n) | 🟡 可优化 |
+| MFT 批量扫描 | O(n) | O(p) | ✅ 最优 |
+| 并行枚举 | O(n/p) | O(p) | ✅ 最优 |
+
+---
+
+## 一、文件枚举算法
+
+### 算法描述
+
+```rust
+// crates/app-services/src/file_service/enumeration.rs
+fn walk_and_insert_children(
+    repo: &FileRepo<'_>,
+    fs: &dyn FileSystemReader,
+    data_source_id: &DataSourceId,
+    root_id: FileEntryId,
+    progress_fn: Option<&dyn Fn(u32)>,
+) -> DbResult<EnumerationStats> {
+    let mut queue: VecDeque<(FileEntryId, String)> = VecDeque::new();
+    queue.push_back((root_id, String::new()));
+    
+    while let Some((parent_id, dir_path)) = queue.pop_front() {
+        let children = fs.list_children(&dir_path)?;
+        for child in children {
+            // 插入数据库
+            batch.push(entry);
+            if child.is_dir {
+                queue.push_back((id, child.path));
+            }
+        }
+        // 批量插入
+        if batch.len() >= batch_size {
+            repo.insert_batch(&batch)?;
+        }
+    }
+}
+```
+
+### 复杂度分析
+
+| 指标 | 复杂度 | 说明 |
+|------|--------|------|
+| 时间 | O(n) | 每个文件/目录访问一次 |
+| 空间 | O(w) | w = 最大宽度（队列大小） |
+
+**最佳情况**: O(n) - 平衡树  
+**最坏情况**: O(n) - 链表结构  
+**平均情况**: O(n)
+
+### 优化空间
+
+| 优化 | 效果 | 难度 |
+|------|------|------|
+| 批量插入 | 减少 IO 次数 | ✅ 已实现 |
+| 并行枚举 | 多核加速 | ✅ 已实现 |
+
+---
+
+## 二、文件排序算法
+
+### 算法描述
+
+```typescript
+// frontend/src/lib/file-sort.ts
+export function sortFileEntries(
+  rows: FileEntryRow[],
+  sortKey: FileSortKey = 'name',
+  direction: FileSortDirection = 'asc'
+): FileEntryRow[] {
+  // 预计算排序键
+  const keysArray: SortKeys[] = new Array(len);
+  for (let i = 0; i < len; i++) {
+    keysArray[i] = computeSortKeys(rows[i]);
+  }
+  
+  // 索引排序
+  indices.sort((a, b) => {
+    const ka = keysArray[a];
+    const kb = keysArray[b];
+    // 目录优先
+    const fileDiff = ka.isFile - kb.isFile;
+    if (fileDiff !== 0) return fileDiff * dirMul;
+    // 按字段排序
+    let cmp = 0;
+    switch (sortKey) {
+      case 'name':
+        cmp = fastCompare(ka.nameLower, kb.nameLower);
+        break;
+      // ...
+    }
+    return cmp * dirMul;
+  });
+}
+```
+
+### 复杂度分析
+
+| 指标 | 复杂度 | 说明 |
+|------|--------|------|
+| 时间 | O(n log n) | 排序算法 |
+| 空间 | O(n) | 索引数组 + 预计算 |
+
+**优化点**:
+- ✅ 预计算排序键，避免重复提取
+- ✅ 使用索引排序，减少大对象移动
+- ✅ 使用 `fastCompare` 替代 `localeCompare`
+
+---
+
+## 三、SHA-256 哈希算法
+
+### 算法描述
+
+```rust
+// crates/infrastructure/src/hashing/mod.rs
+pub fn sha256_reader(reader: &mut dyn Read) -> io::Result<String> {
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 8192];
+    
+    loop {
+        let bytes_read = reader.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes_read]);
+    }
+    
+    Ok(hex::encode(hasher.finalize()))
+}
+```
+
+### 复杂度分析
+
+| 指标 | 复杂度 | 说明 |
+|------|--------|------|
+| 时间 | O(n) | n = 数据大小 |
+| 空间 | O(1) | 固定缓冲区 |
+
+**优化点**:
+- ✅ 流式处理，不加载全部数据
+- ✅ 8KB 缓冲区平衡 IO 和内存
+
+---
+
+## 四、Hex 格式化算法
+
+### 算法描述
+
+```rust
+// crates/app-services/src/file_service/mod.rs
+fn format_hex_lines(base_offset: u64, bytes: &[u8]) -> Vec<String> {
+    let line_count = (bytes.len() + 15) / 16;
+    let mut result = Vec::with_capacity(line_count);
+    
+    for (line_idx, chunk) in bytes.chunks(16).enumerate() {
+        let offset = base_offset + (line_idx * 16) as u64;
+        let mut line = String::with_capacity(8 + 2 + chunk.len() * 4);
+        
+        write!(line, "{offset:08X}");
+        line.push_str("  ");
+        
+        for (i, byte) in chunk.iter().enumerate() {
+            if i > 0 { line.push(' '); }
+            write!(line, "{byte:02X}");
+        }
+        
+        result.push(line);
+    }
+    result
+}
+```
+
+### 复杂度分析
+
+| 指标 | 复杂度 | 说明 |
+|------|--------|------|
+| 时间 | O(n) | n = 字节数 |
+| 空间 | O(n) | 输出字符串 |
+
+**优化点**:
+- ✅ 预分配容量
+- ✅ 使用 `write!` 宏减少分配
+
+---
+
+## 五、编码检测算法
+
+### 算法描述
+
+```rust
+// crates/app-services/src/text_service.rs
+pub fn detect_encoding(data: &[u8]) -> EncodingInfo {
+    // 1. BOM 检测 O(3)
+    if data.starts_with(&[0xEF, 0xBB, 0xBF]) { ... }
+    
+    // 2. UTF-8 验证 O(n)
+    if std::str::from_utf8(data).is_ok() { ... }
+    
+    // 3. GBK 检测 O(n)
+    let (decoded, _, errors) = GBK.decode(data);
+    
+    // 4. Shift-JIS 检测 O(n)
+    let (decoded_sjis, _, errors_sjis) = SHIFT_JIS.decode(data);
+    
+    // 5. EUC-KR 检测 O(n)
+    let (decoded_kr, _, errors_kr) = EUC_KR.decode(data);
+}
+```
+
+### 复杂度分析
+
+| 指标 | 复杂度 | 说明 |
+|------|--------|------|
+| 时间 | O(n) | 最多扫描 5 次 |
+| 空间 | O(1) | 固定变量 |
+
+**优化建议**: 可以合并为单次扫描
+
+---
+
+## 六、Magic 检测算法
+
+### 算法描述
+
+```rust
+// crates/app-services/src/analysis_service.rs
+fn detect_file_type(path: &str, size: u64, read_fn: &impl Fn(&str) -> Option<Vec<u8>>) -> Option<...> {
+    // 1. Magic 字节检测
+    if let Some(data) = read_fn(path) {
+        for sig in MAGIC_SIGNATURES {
+            if data.len() > sig.offset + sig.bytes.len() {
+                if &data[sig.offset..sig.offset + sig.bytes.len()] == sig.bytes {
+                    return Some(...);
+                }
+            }
+        }
+    }
+    
+    // 2. 扩展名回退
+    let ext = Path::new(path).extension();
+    // ...
+}
+```
+
+### 复杂度分析
+
+| 指标 | 复杂度 | 说明 |
+|------|--------|------|
+| 时间 | O(m·k) | m = 签名数, k = 签名长度 |
+| 空间 | O(1) | 固定变量 |
+
+**当前**: m = 18, k ≤ 8，实际 O(1)
+
+---
+
+## 七、MFT 路径重建算法
+
+### 算法描述
+
+```rust
+// crates/app-services/src/file_service/mod.rs
+fn update_entry_paths(
+    conn: &Connection,
+    data_source_id: &DataSourceId,
+    path_map: &HashMap<String, (Option<String>, String, bool)>,
+) -> DbResult<()> {
+    let mut resolved: HashMap<String, String> = HashMap::new();
+    
+    // 迭代解析路径
+    let mut changed = true;
+    let mut iterations = 0;
+    while changed && iterations < 1000 {
+        changed = false;
+        iterations += 1;
+        for (record_num, (parent, name, _)) in path_map {
+            if resolved.contains_key(record_num) { continue; }
+            if let Some(parent_num) = parent {
+                if let Some(parent_path) = resolved.get(parent_num) {
+                    let full_path = format!("{}/{}", parent_path, name);
+                    resolved.insert(record_num.clone(), full_path);
+                    changed = true;
+                }
+            }
+        }
+    }
+}
+```
+
+### 复杂度分析
+
+| 指标 | 复杂度 | 说明 |
+|------|--------|------|
+| 时间 | O(n²) | 最坏情况每轮解析一个 |
+| 空间 | O(n) | resolved HashMap |
+
+**问题**: 
+- 最坏情况 O(n²)
+- 迭代上限 1000 可能不足
+
+**优化建议**:
+```rust
+// 使用递归 + 缓存
+fn resolve_path(
+    record: &str,
+    path_map: &HashMap<String, (Option<String>, String, bool)>,
+    cache: &mut HashMap<String, String>,
+) -> String {
+    if let Some(path) = cache.get(record) {
+        return path.clone();
+    }
+    
+    let (parent, name, _) = &path_map[record];
+    let path = match parent {
+        Some(p) => format!("{}/{}", resolve_path(p, path_map, cache), name),
+        None => name.clone(),
+    };
+    
+    cache.insert(record.to_string(), path.clone());
+    path
+}
+```
+
+**优化后复杂度**: O(n)
+
+---
+
+## 八、MFT 批量扫描算法
+
+### 算法描述
+
+```rust
+// crates/app-services/src/file_service/mod.rs
+pub fn enumerate_filesystem_mft(...) -> DbResult<EnumerationStats> {
+    // Reader Thread → channel → Parser Thread Pool → channel → DB Writer Thread
+    
+    let num_parsers = num_cpus::get().clamp(2, 8);
+    
+    // 读取线程
+    let reader_handle = thread::spawn(move || {
+        for chunk in chunks {
+            chunk_tx.send(chunk);
+        }
+    });
+    
+    // 解析线程池
+    for parser_id in 0..num_parsers {
+        thread::spawn(move || {
+            for chunk in rx.iter() {
+                let records = scanner.parse_chunk(&chunk.data, ...);
+                tx.send(records);
+            }
+        });
+    }
+}
+```
+
+### 复杂度分析
+
+| 指标 | 复杂度 | 说明 |
+|------|--------|------|
+| 时间 | O(n/p) | p = 线程数 |
+| 空间 | O(p·b) | p = 线程数, b = 缓冲区 |
+
+**优化点**:
+- ✅ 多线程并行解析
+- ✅ 通道缓冲减少等待
+- ✅ 批量插入数据库
+
+---
+
+## 📊 复杂度汇总表
+
+| 算法 | 时间 | 空间 | 并行 | 评价 |
+|------|------|------|------|------|
+| 文件枚举 | O(n) | O(w) | ✅ | 最优 |
+| 文件排序 | O(n log n) | O(n) | ❌ | 最优 |
+| SHA-256 | O(n) | O(1) | ❌ | 最优 |
+| Hex 格式化 | O(n) | O(n) | ❌ | 最优 |
+| 编码检测 | O(n) | O(1) | ❌ | 可优化 |
+| Magic 检测 | O(1) | O(1) | ❌ | 最优 |
+| 路径重建 | O(n²) | O(n) | ❌ | 需优化 |
+| MFT 扫描 | O(n/p) | O(p) | ✅ | 最优 |
+
+---
+
+## 🎯 优化建议
+
+### P0 (立即)
+
+| 问题 | 算法 | 建议 |
+|------|------|------|
+| 路径重建 O(n²) | update_entry_paths | 递归 + 缓存 → O(n) |
+
+### P1 (短期)
+
+| 问题 | 算法 | 建议 |
+|------|------|------|
+| 编码检测多次扫描 | detect_encoding | 合并为单次扫描 |
+
+### P2 (长期)
+
+| 问题 | 算法 | 建议 |
+|------|------|------|
+| 排序不支持并行 | sortFileEntries | 分块并行排序 |
+
+---
+
+**分析人**: MiMo AI Assistant  
+**分析版本**: v1.0

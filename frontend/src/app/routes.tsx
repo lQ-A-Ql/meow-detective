@@ -1,6 +1,7 @@
 import { createBrowserRouter } from "react-router";
 import { Layout } from "@/components/layout/Layout";
 import { CaseHome } from "./pages/CaseHome";
+import { DataAnalysis } from "./pages/DataAnalysis";
 import { FileBrowser } from "./pages/FileBrowser";
 import { Search } from "./pages/Search";
 import { Timeline } from "./pages/Timeline";
@@ -15,6 +16,7 @@ export const router = createBrowserRouter([
     Component: Layout,
     children: [
       { index: true, Component: CaseHome },
+      { path: "analysis", Component: DataAnalysis },
       { path: "files", Component: FileBrowser },
       { path: "search", Component: Search },
       { path: "timeline", Component: Timeline },

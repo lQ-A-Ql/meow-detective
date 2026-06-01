@@ -3,6 +3,7 @@ pub mod events;
 pub mod state;
 
 use commands::{
+    analysis_commands::{classify_files, generate_analysis_summary, get_system_info},
     artifact_commands::{get_artifact_families, get_artifact_rows, get_artifact_rows_request},
     case_commands::{
         close_case, create_case, delete_case, delete_data_source, get_case_metrics,
@@ -71,6 +72,9 @@ pub fn run() {
             export_csv_report,
             export_json_report,
             get_jobs_snapshot,
+            get_system_info,
+            classify_files,
+            generate_analysis_summary,
             get_warnings,
             get_trace_items,
             // MCP commands

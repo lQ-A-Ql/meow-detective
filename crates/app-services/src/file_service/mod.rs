@@ -963,7 +963,7 @@ fn empty_hex_response() -> ViewerRangeResponseDto {
 
 use crossbeam_channel::{bounded, Receiver, Sender};
 use fs_ntfs::mft_scanner::{MftRecord, MftScanner};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -1273,48 +1273,63 @@ fn build_path_map_from_entries(
 }
 
 /// Reconstruct full paths from parent_ref chains and update DB entries.
+///
+/// Uses recursive resolution with caching for O(n) complexity.
 fn update_entry_paths(
     conn: &Connection,
     data_source_id: &DataSourceId,
     path_map: &HashMap<String, (Option<String>, String, bool)>,
 ) -> DbResult<()> {
-    let mut resolved: HashMap<String, String> = HashMap::new();
+    let mut resolved: HashMap<String, String> = HashMap::with_capacity(path_map.len());
+    let mut visiting: HashSet<String> = HashSet::new(); // Cycle detection
 
-    // Pre-resolve root entries (parent_ref == 5 or parent_ref not in map)
-    for (record_num, (parent, name, _)) in path_map {
-        if parent.as_deref() == Some("5") || parent.is_none() {
-            resolved.insert(record_num.clone(), name.clone());
+    // Recursive path resolution with caching
+    fn resolve_path(
+        record: &str,
+        path_map: &HashMap<String, (Option<String>, String, bool)>,
+        resolved: &mut HashMap<String, String>,
+        visiting: &mut HashSet<String>,
+    ) -> String {
+        // Already resolved
+        if let Some(path) = resolved.get(record) {
+            return path.clone();
         }
-    }
 
-    // Iteratively resolve paths
-    let mut changed = true;
-    let mut iterations = 0;
-    while changed && iterations < 1000 {
-        changed = false;
-        iterations += 1;
-        for (record_num, (parent, name, _)) in path_map {
-            if resolved.contains_key(record_num) {
-                continue;
+        // Cycle detection
+        if !visiting.insert(record.to_string()) {
+            tracing::warn!("Cycle detected in path chain at record {}", record);
+            return String::new();
+        }
+
+        let (parent, name, _) = match path_map.get(record) {
+            Some(entry) => entry,
+            None => {
+                visiting.remove(record);
+                return String::new();
             }
-            if let Some(parent_num) = parent {
-                if let Some(parent_path) = resolved.get(parent_num) {
-                    let full_path = if parent_path.is_empty() {
-                        name.clone()
-                    } else {
-                        format!("{}/{}", parent_path, name)
-                    };
-                    resolved.insert(record_num.clone(), full_path);
-                    changed = true;
+        };
+
+        let path = match parent {
+            Some(p) if p != "5" && path_map.contains_key(p) => {
+                let parent_path = resolve_path(p, path_map, resolved, visiting);
+                if parent_path.is_empty() {
+                    name.clone()
+                } else {
+                    format!("{}/{}", parent_path, name)
                 }
             }
-        }
+            _ => name.clone(), // Root entry
+        };
+
+        resolved.insert(record.to_string(), path.clone());
+        visiting.remove(record);
+        path
     }
-    if iterations >= 1000 {
-        tracing::warn!(
-            "Path reconstruction hit iteration cap (1000); {} entries may have unresolved paths",
-            path_map.len() - resolved.len()
-        );
+
+    // Resolve all entries
+    let records: Vec<String> = path_map.keys().cloned().collect();
+    for record in &records {
+        resolve_path(record, path_map, &mut resolved, &mut visiting);
     }
 
     // Update DB in batches

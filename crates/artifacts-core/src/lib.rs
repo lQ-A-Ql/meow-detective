@@ -140,3 +140,84 @@ pub fn new_timeline_event(
         attrs,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    #[test]
+    fn test_vec_sink_new() {
+        let sink = VecSink::new();
+        assert!(sink.artifacts.is_empty());
+        assert!(sink.timeline_events.is_empty());
+    }
+
+    #[test]
+    fn test_vec_sink_default() {
+        let sink = VecSink::default();
+        assert!(sink.artifacts.is_empty());
+    }
+
+    #[test]
+    fn test_extractor_registry_new() {
+        let registry = ExtractorRegistry::new();
+        assert!(registry.extractors.is_empty());
+    }
+
+    #[test]
+    fn test_extractor_registry_default() {
+        let registry = ExtractorRegistry::default();
+        assert!(registry.extractors.is_empty());
+    }
+
+    #[test]
+    fn test_new_artifact() {
+        let source_id = FileEntryId("file-1".to_string());
+        let mut attrs = BTreeMap::new();
+        attrs.insert("key".to_string(), serde_json::json!("value"));
+
+        let artifact = new_artifact(
+            "LNK",
+            "Test Artifact".to_string(),
+            "Test Summary".to_string(),
+            Some(&source_id),
+            attrs,
+        );
+
+        assert_eq!(artifact.family, "LNK");
+        assert_eq!(artifact.title, "Test Artifact");
+        assert!(artifact.source_object_id.is_some());
+    }
+
+    #[test]
+    fn test_new_artifact_no_source() {
+        let artifact = new_artifact(
+            "LNK",
+            "Test".to_string(),
+            "Summary".to_string(),
+            None,
+            BTreeMap::new(),
+        );
+
+        assert!(artifact.source_object_id.is_none());
+    }
+
+    #[test]
+    fn test_new_timeline_event() {
+        let source_id = FileEntryId("file-1".to_string());
+        let ts = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+
+        let event = new_timeline_event(
+            &source_id,
+            "FILE_CREATED",
+            ts,
+            "File created".to_string(),
+            "test.txt created".to_string(),
+            BTreeMap::new(),
+        );
+
+        assert_eq!(event.event_type, "FILE_CREATED");
+        assert_eq!(event.source_object_id, "file-1");
+    }
+}

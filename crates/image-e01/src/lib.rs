@@ -392,3 +392,46 @@ fn build_segment_path(first_segment: &Path, seg_num: u32) -> PathBuf {
     let new_ext = format!("E{:02}", seg_num);
     parent.join(format!("{}.{}", base_name, new_ext))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_segment_path_first() {
+        let path = Path::new("/data/image.E01");
+        let seg = build_segment_path(path, 1);
+        assert_eq!(seg, Path::new("/data/image.E01"));
+    }
+
+    #[test]
+    fn test_build_segment_path_second() {
+        let path = Path::new("/data/image.E01");
+        let seg = build_segment_path(path, 2);
+        assert_eq!(seg, Path::new("/data/image.E02"));
+    }
+
+    #[test]
+    fn test_build_segment_path_third() {
+        let path = Path::new("/data/image.E01");
+        let seg = build_segment_path(path, 3);
+        assert_eq!(seg, Path::new("/data/image.E03"));
+    }
+
+    #[test]
+    fn test_build_segment_path_lowercase() {
+        let path = Path::new("/data/image.e01");
+        let seg = build_segment_path(path, 2);
+        assert_eq!(seg, Path::new("/data/image.E02"));
+    }
+
+    #[test]
+    fn test_section_descriptor_size() {
+        assert_eq!(SECTION_DESCRIPTOR_SIZE, 76);
+    }
+
+    #[test]
+    fn test_v1_table_header_size() {
+        assert_eq!(V1_TABLE_HEADER_SIZE, 24);
+    }
+}
