@@ -4,24 +4,13 @@ use image_e01::E01Reader;
 use std::io::{Read, Seek, SeekFrom};
 
 fn sample_path() -> std::path::PathBuf {
-    "E:/pangushi/刘洋/liuyang_pc.E01".into()
-}
-
-fn skip() -> bool {
-    if !sample_path().exists() {
-        eprintln!("SKIP");
-        true
-    } else {
-        false
-    }
+    testing::fixtures::local_e01_fixture()
+        .unwrap_or_else(|| panic!("set FORENSICS_E01_FIXTURE to run ignored real E01 probe tests"))
 }
 
 #[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn detects_supported_filesystem_in_real_e01() {
-    if skip() {
-        return;
-    }
-
     let mut reader = E01Reader::open(&sample_path()).unwrap();
     let probe = detect_image_filesystem(&mut reader).unwrap();
     eprintln!("probe_warnings={:?}", probe.warnings);
@@ -59,11 +48,8 @@ fn detects_supported_filesystem_in_real_e01() {
 }
 
 #[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn opens_detected_filesystem_from_real_e01() {
-    if skip() {
-        return;
-    }
-
     let mut reader = E01Reader::open(&sample_path()).unwrap();
     let probe = detect_image_filesystem(&mut reader).unwrap();
     let candidate = probe
@@ -90,11 +76,8 @@ fn opens_detected_filesystem_from_real_e01() {
 }
 
 #[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn dumps_real_e01_partition_accessibility() {
-    if skip() {
-        return;
-    }
-
     let mut reader = E01Reader::open(&sample_path()).unwrap();
     let probe = detect_image_filesystem(&mut reader).unwrap();
 
@@ -141,11 +124,8 @@ fn dumps_real_e01_partition_accessibility() {
 }
 
 #[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn dump_probe_context_for_real_e01() {
-    if skip() {
-        return;
-    }
-
     let mut reader = E01Reader::open(&sample_path()).unwrap();
     eprintln!("reader_size={}", reader.info().size);
 
@@ -181,11 +161,8 @@ fn dump_probe_context_for_real_e01() {
 }
 
 #[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn dump_real_e01_ntfs_root_record_details() {
-    if skip() {
-        return;
-    }
-
     let mut reader = E01Reader::open(&sample_path()).unwrap();
     let probe = detect_image_filesystem(&mut reader).unwrap();
     let candidate = probe

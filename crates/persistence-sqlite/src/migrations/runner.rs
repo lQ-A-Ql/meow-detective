@@ -55,6 +55,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0017_add_missing_indexes",
         include_str!("scripts/0017_add_missing_indexes.sql"),
     ),
+    (
+        "0018_job_partial_counts",
+        include_str!("scripts/0018_job_partial_counts.sql"),
+    ),
 ];
 
 pub fn latest_version() -> &'static str {

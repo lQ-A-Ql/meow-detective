@@ -43,6 +43,7 @@ describe('analysis hooks', () => {
       bootHistory: [],
       status: 'notParsed',
       warnings: [],
+      provenance: [],
     });
     mocks.classifyFiles.mockResolvedValue([]);
     mocks.generateAnalysisSummary.mockResolvedValue('# 数据源分析报告');

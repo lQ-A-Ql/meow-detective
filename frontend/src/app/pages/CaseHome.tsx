@@ -66,6 +66,7 @@ export function CaseHome() {
   const runningJob = runningJobs[0];
   const importJob = runningJobs.find(isImportJob);
   const completedJobs = jobs?.filter((job) => job.status === 'completed') ?? [];
+  const partialJobCount = jobs?.filter((job) => job.partial).length ?? 0;
   const failedImportJob = jobs?.find((job) => job.status === 'failed' && isImportRelatedJob(job));
   const sortedRecentCases = useMemo(() => recentCases ?? [], [recentCases]);
 
@@ -193,6 +194,7 @@ export function CaseHome() {
               <span className="border border-[#d9d9d9] bg-white px-2 py-1">当前状态: 活跃</span>
               <span className="border border-[#d9d9d9] bg-white px-2 py-1">数据源: {metrics?.dataSourceCount ?? 0}</span>
               <span className="border border-[#e7d9b4] bg-white px-2 py-1">告警: {warnings?.length ?? 0}</span>
+              <span className="border border-[#e7d9b4] bg-white px-2 py-1">部分完成任务: {partialJobCount}</span>
             </div>
           </div>
           <div className="flex gap-8 text-right">
@@ -334,7 +336,9 @@ export function CaseHome() {
         <div className="w-1/2 border-r border-[#e0e0e0] flex flex-col min-h-0 bg-white">
           <div className="h-8 border-b border-[#e0e0e0] bg-[#fafafa] flex items-center justify-between px-4 text-[11px] font-semibold uppercase text-[#555] tracking-wider shrink-0">
             <span>最近任务</span>
-            <span className="font-mono text-[10px] text-[#888]">完成 {completedJobs.length} / 运行 {runningJob ? 1 : 0}</span>
+            <span className="font-mono text-[10px] text-[#888]">
+              完成 {completedJobs.length} / 部分 {partialJobCount} / 运行 {runningJob ? 1 : 0}
+            </span>
           </div>
           <div className="flex-1 overflow-auto p-4 space-y-3">
             {runningJob ? (
@@ -354,6 +358,22 @@ export function CaseHome() {
                     <div className="text-[#888] font-mono text-[10px]">{job.detail}</div>
                   </div>
                   <div className="text-[#666] text-[11px] mt-0.5">{job.scope}</div>
+                  {job.partial ? (
+                    <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-mono">
+                      <span className="border border-[#e7d9b4] bg-[#fff9ec] px-1.5 py-0.5 text-[#8a5a00]">
+                        PARTIAL
+                      </span>
+                      <span className="border border-[#e7d9b4] bg-white px-1.5 py-0.5 text-[#6f4d00]">
+                        warnings {job.warningCount}
+                      </span>
+                      <span className="border border-[#d9d9d9] bg-white px-1.5 py-0.5 text-[#555]">
+                        skipped {job.skippedCount}
+                      </span>
+                      <span className="border border-red-200 bg-white px-1.5 py-0.5 text-red-700">
+                        failed {job.failedCount}
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ))}

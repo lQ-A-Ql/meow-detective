@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-const MAX_RANGE_LENGTH: u32 = 1024 * 1024;
+pub const MAX_VIEWER_RANGE_LENGTH: u32 = 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,7 +28,7 @@ impl ViewerRangeRequestDto {
         if self.length == 0 {
             return Err("length must be greater than zero".to_string());
         }
-        self.length = self.length.min(MAX_RANGE_LENGTH);
+        self.length = self.length.min(MAX_VIEWER_RANGE_LENGTH);
         Ok(())
     }
 }
@@ -113,7 +113,7 @@ impl MediaRangeRequestDto {
         if self.length == 0 {
             return Err("length must be greater than zero".to_string());
         }
-        self.length = self.length.min(MAX_RANGE_LENGTH);
+        self.length = self.length.min(MAX_VIEWER_RANGE_LENGTH);
         Ok(())
     }
 }
@@ -218,7 +218,7 @@ mod tests {
 
         dto.validate().unwrap();
 
-        assert_eq!(dto.length, MAX_RANGE_LENGTH);
+        assert_eq!(dto.length, MAX_VIEWER_RANGE_LENGTH);
     }
 
     #[test]
@@ -253,7 +253,7 @@ mod tests {
 
         dto.validate().unwrap();
 
-        assert_eq!(dto.length, MAX_RANGE_LENGTH);
+        assert_eq!(dto.length, MAX_VIEWER_RANGE_LENGTH);
     }
 
     #[test]

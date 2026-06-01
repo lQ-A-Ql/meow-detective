@@ -1,0 +1,4 @@
+Investigator note:
+- tiny logical fixture
+- no private evidence
+- safe for default cargo test

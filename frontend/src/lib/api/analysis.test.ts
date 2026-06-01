@@ -13,6 +13,8 @@ describe('analysis API (mock mode)', () => {
     expect(result.computerName).toBeUndefined();
     expect(result.osVersion).toBeUndefined();
     expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.provenance.length).toBeGreaterThan(0);
+    expect(result.provenance[0].parser).toBeDefined();
   });
 
   it('classifyFiles returns camelCase classification fields', async () => {
@@ -20,8 +22,10 @@ describe('analysis API (mock mode)', () => {
 
     expect(result.length).toBeGreaterThan(0);
     expect(result[0].totalSize).toBeGreaterThan(0);
+    expect(result[0].provenance.length).toBeGreaterThan(0);
     expect(result[0].files[0].fileId).toBeDefined();
     expect(result[0].files[0].magicDescription).toBeDefined();
+    expect(result[0].files[0].provenance.parser).toBe('analysis.magic');
   });
 
   it('generateAnalysisSummary returns markdown without hardcoded fake system facts', async () => {

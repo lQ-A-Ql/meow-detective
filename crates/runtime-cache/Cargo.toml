@@ -2,6 +2,8 @@
 name = "runtime-cache"
 version.workspace = true
 edition.workspace = true
+authors.workspace = true
+license.workspace = true
 
 [dependencies]
 rusqlite = { version = "0.31", features = ["bundled", "chrono"] }

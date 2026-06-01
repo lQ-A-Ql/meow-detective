@@ -31,13 +31,21 @@ pub async fn get_system_info(
     let app_state = state.inner().clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        let guard = app_state
-            .active_case
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("Case", e))?;
-        let _active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
+        let db_path = {
+            let guard = app_state
+                .active_case
+                .lock()
+                .map_err(|e| CommandError::from_lock_error("Case", e))?;
+            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
+            active.db_path()
+        };
 
-        Ok(analysis_service::extract_system_info())
+        let conn = persistence_sqlite::open_or_create(&db_path)
+            .map_err(CommandError::from_service_error)?;
+        Ok(analysis_service::extract_system_info_for_case(
+            &conn,
+            |file_id, max_bytes| file_service::read_file_header_by_id(&conn, file_id, max_bytes),
+        ))
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -98,9 +106,12 @@ pub async fn generate_analysis_summary(state: State<'_, AppState>) -> Result<Str
             active.db_path()
         };
 
-        let system_info = analysis_service::extract_system_info();
         let conn = persistence_sqlite::open_or_create(&db_path)
             .map_err(CommandError::from_service_error)?;
+        let system_info =
+            analysis_service::extract_system_info_for_case(&conn, |file_id, max_bytes| {
+                file_service::read_file_header_by_id(&conn, file_id, max_bytes)
+            });
         let files = analysis_service::collect_file_entries(&conn)
             .map_err(CommandError::from_service_error)?;
         let classifications = analysis_service::classify_files_by_magic(

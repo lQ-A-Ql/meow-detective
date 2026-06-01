@@ -2,6 +2,7 @@ import { Terminal, AlertCircle, ChevronUp, ChevronDown, Clock3 } from 'lucide-re
 import { useJobsSnapshot, useTraceItems, useWarnings } from '@/features/jobs/hooks';
 import { apiMode } from '@/lib/api/client';
 import { useUiStore } from '@/stores/ui-store';
+import type { JobSnapshot } from '@/types/models';
 
 export function BottomDrawer() {
   const { data: jobs } = useJobsSnapshot();
@@ -13,6 +14,9 @@ export function BottomDrawer() {
   const runningJobs = jobs?.filter((job) => job.status === 'running') ?? [];
   const completedJobs = jobs?.filter((job) => job.status === 'completed') ?? [];
   const failedJobs = jobs?.filter((job) => job.status === 'failed') ?? [];
+  const partialJobs = jobs?.filter((job) => job.partial) ?? [];
+  const jobWarningCount = jobs?.reduce((sum, job) => sum + job.warningCount, 0) ?? 0;
+  const jobSkippedCount = jobs?.reduce((sum, job) => sum + job.skippedCount, 0) ?? 0;
   const runningCount = runningJobs.length;
   const currentApiMode = apiMode();
   const headline =
@@ -36,7 +40,10 @@ export function BottomDrawer() {
               <span className="text-[#111]">{runningCount}</span> 运行中
             </span>
             <span>
-              <span className="text-[#111]">{warnings?.length ?? 0}</span> 警告
+              <span className="text-[#111]">{(warnings?.length ?? 0) + jobWarningCount}</span> 警告
+            </span>
+            <span>
+              <span className="text-[#111]">{jobSkippedCount}</span> 跳过
             </span>
             <span>
               <span className="text-[#111]">{trace?.length ?? 0}</span> Trace
@@ -62,7 +69,7 @@ export function BottomDrawer() {
             <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-[#555]">
               <span>JOBS</span>
               <span className="font-mono text-[#888]">
-                {runningCount} 运行 / {completedJobs.length} 完成 / {failedJobs.length} 失败
+                {runningCount} 运行 / {completedJobs.length} 完成 / {partialJobs.length} 部分 / {failedJobs.length} 失败
               </span>
             </div>
             <div className="space-y-3">
@@ -73,6 +80,7 @@ export function BottomDrawer() {
                     <span className="text-[#888]">{job.detail}</span>
                   </div>
                   <div className="mt-1 text-[#666]">{job.scope}</div>
+                  <JobOutcomeBadges job={job} />
                   {job.currentPartition ? (
                     <div className="mt-2 border border-[#ececec] bg-[#fafafa] px-2 py-2">
                       <div className="flex items-center justify-between gap-3 text-[10px] uppercase tracking-wider text-[#666]">
@@ -111,10 +119,18 @@ export function BottomDrawer() {
               {completedJobs.map((job) => (
                 <div key={job.id} className="border-b border-[#ececec] pb-2 text-[11px] text-[#555]">
                   <div className="flex items-center justify-between gap-3">
-                    <span>{job.name}</span>
+                    <span className="flex items-center gap-2">
+                      {job.name}
+                      {job.partial ? (
+                        <span className="border border-[#e7d9b4] bg-[#fff9ec] px-1.5 py-0.5 text-[9px] font-semibold text-[#8a5a00]">
+                          PARTIAL
+                        </span>
+                      ) : null}
+                    </span>
                     <span className="text-[#888]">{job.detail}</span>
                   </div>
                   <div className="mt-1 text-[#888]">{job.scope}</div>
+                  <JobOutcomeBadges job={job} />
                 </div>
               ))}
               {failedJobs.map((job) => (
@@ -124,6 +140,7 @@ export function BottomDrawer() {
                     <span>{job.detail}</span>
                   </div>
                   <div className="mt-1 text-red-600/80">{job.scope || '任务执行失败'}</div>
+                  <JobOutcomeBadges job={job} />
                 </div>
               ))}
             </div>
@@ -166,6 +183,31 @@ export function BottomDrawer() {
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function JobOutcomeBadges({ job }: { job: JobSnapshot }) {
+  if (!job.partial && job.warningCount === 0 && job.skippedCount === 0 && job.failedCount === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
+      {job.partial ? (
+        <span className="border border-[#e7d9b4] bg-[#fff9ec] px-1.5 py-0.5 font-semibold text-[#8a5a00]">
+          PARTIAL
+        </span>
+      ) : null}
+      <span className="border border-[#e7d9b4] bg-white px-1.5 py-0.5 text-[#6f4d00]">
+        warnings {job.warningCount}
+      </span>
+      <span className="border border-[#d9d9d9] bg-white px-1.5 py-0.5 text-[#555]">
+        skipped {job.skippedCount}
+      </span>
+      <span className="border border-red-200 bg-white px-1.5 py-0.5 text-red-700">
+        failed {job.failedCount}
+      </span>
     </div>
   );
 }

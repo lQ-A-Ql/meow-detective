@@ -17,6 +17,7 @@ import { FileEntryRow } from '@/types/models';
 import { expectJobsSnapshotActivity } from '@/features/jobs/hooks';
 
 const importRefreshKeys = [['case'], ['files'], ['timeline'], ['artifacts'], ['search']] as const;
+const MEDIA_CHUNK_PREVIEW_BYTES = 1024 * 1024;
 
 function invalidateImportQueries(qc: ReturnType<typeof useQueryClient>) {
   importRefreshKeys.forEach((queryKey) => {
@@ -129,8 +130,15 @@ export function useMediaUrl(fileId?: string) {
       const range = await readMediaRange({
         handleId: media.handleId,
         offset: 0,
-        length: Math.min(media.size, 1024 * 1024),
+        length: MEDIA_CHUNK_PREVIEW_BYTES,
       });
+      if (!range.bytesRead) {
+        return {
+          ...media,
+          previewMode: 'range' as const,
+          previewBytes: 0,
+        };
+      }
       const byteCharacters = atob(range.bytesBase64);
       const byteNumbers = new Array(byteCharacters.length);
       for (let index = 0; index < byteCharacters.length; index += 1) {
@@ -139,6 +147,8 @@ export function useMediaUrl(fileId?: string) {
       const blob = new Blob([new Uint8Array(byteNumbers)], { type: media.mimeType });
       return {
         ...media,
+        previewMode: 'range' as const,
+        previewBytes: range.bytesRead,
         url: URL.createObjectURL(blob),
       };
     },

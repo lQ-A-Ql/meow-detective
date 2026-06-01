@@ -14,6 +14,10 @@ pub struct JobSummaryRow {
     pub status: String,
     pub progress: u32,
     pub detail: String,
+    pub warning_count: u32,
+    pub skipped_count: u32,
+    pub failed_count: u32,
+    pub partial: bool,
     pub current_partition: Option<String>,
     pub completed_partitions: u32,
     pub total_partitions: u32,
@@ -38,6 +42,27 @@ impl<'a> JobRepo<'a> {
         self.conn.execute(
             "UPDATE jobs SET progress = ?1, detail = ?2 WHERE id = ?3",
             params![progress, detail, id.0],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_outcome_counts(
+        &self,
+        id: &JobId,
+        warning_count: u32,
+        skipped_count: u32,
+        failed_count: u32,
+        partial: bool,
+    ) -> DbResult<()> {
+        self.conn.execute(
+            "UPDATE jobs SET warning_count = ?1, skipped_count = ?2, failed_count = ?3, partial = ?4 WHERE id = ?5",
+            params![
+                warning_count,
+                skipped_count,
+                failed_count,
+                if partial { 1 } else { 0 },
+                id.0
+            ],
         )?;
         Ok(())
     }
@@ -76,6 +101,7 @@ impl<'a> JobRepo<'a> {
     pub fn list_recent(&self, limit: usize) -> DbResult<Vec<JobSummaryRow>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, kind, status, progress, detail,
+                    warning_count, skipped_count, failed_count, partial,
                     current_partition, completed_partitions, total_partitions, partition_progress
              FROM jobs
              ORDER BY
@@ -95,10 +121,14 @@ impl<'a> JobRepo<'a> {
                 status: row.get(2)?,
                 progress: row.get(3)?,
                 detail: row.get(4)?,
-                current_partition: row.get(5)?,
-                completed_partitions: row.get::<_, Option<u32>>(6)?.unwrap_or(0),
-                total_partitions: row.get::<_, Option<u32>>(7)?.unwrap_or(0),
-                partition_progress: row.get::<_, Option<u32>>(8)?.unwrap_or(0),
+                warning_count: row.get::<_, Option<u32>>(5)?.unwrap_or(0),
+                skipped_count: row.get::<_, Option<u32>>(6)?.unwrap_or(0),
+                failed_count: row.get::<_, Option<u32>>(7)?.unwrap_or(0),
+                partial: row.get::<_, Option<bool>>(8)?.unwrap_or(false),
+                current_partition: row.get(9)?,
+                completed_partitions: row.get::<_, Option<u32>>(10)?.unwrap_or(0),
+                total_partitions: row.get::<_, Option<u32>>(11)?.unwrap_or(0),
+                partition_progress: row.get::<_, Option<u32>>(12)?.unwrap_or(0),
             })
         })?;
         let mut result = Vec::new();

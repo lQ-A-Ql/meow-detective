@@ -30,7 +30,9 @@ jobs:
       - name: Audit dependencies
         run: pnpm --dir frontend audit --audit-level high
       - name: Generate frontend SBOM
-        run: pnpm --dir frontend list --json --prod > frontend/frontend-sbom.json
+        run: pnpm dlx @cyclonedx/cyclonedx-npm --output-file frontend/frontend-sbom.json --spec-version 1.6 --output-format JSON --validate frontend/package.json
+      - name: Verify frontend SBOM
+        run: node -e "const fs=require('fs'); const bom=JSON.parse(fs.readFileSync('frontend/frontend-sbom.json','utf8')); if (bom.bomFormat !== 'CycloneDX') throw new Error('frontend SBOM is not CycloneDX');"
       - name: Upload frontend SBOM
         uses: actions/upload-artifact@v4
         with:

@@ -32,14 +32,23 @@ jobs:
       - name: Release guard
         shell: pwsh
         run: ./scripts/check-release-guard.ps1
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+      - name: Dependency policy
+        run: cargo deny check advisories bans licenses sources
       - name: Install cargo-audit
-        run: cargo install cargo-audit
+        run: cargo install cargo-audit --locked
       - name: Audit dependencies
         run: cargo audit
+      - name: Install cargo-cyclonedx
+        run: cargo install cargo-cyclonedx --locked
       - name: Generate backend SBOM
         shell: pwsh
         run: |
-          cargo metadata --format-version 1 > backend-sbom.json
+          cargo cyclonedx --manifest-path apps/desktop/src-tauri/Cargo.toml --format json --spec-version 1.5 --override-filename backend-sbom
+          Move-Item -LiteralPath apps/desktop/src-tauri/backend-sbom.json -Destination backend-sbom.json -Force
+          $sbom = Get-Content backend-sbom.json -Raw | ConvertFrom-Json
+          if ($sbom.bomFormat -ne 'CycloneDX') { throw 'backend SBOM is not CycloneDX' }
       - name: Upload backend SBOM
         uses: actions/upload-artifact@v4
         with:

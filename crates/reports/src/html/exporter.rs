@@ -11,6 +11,16 @@ impl HtmlReportExporter {
         files: &[String],
         artifacts: &[String],
     ) -> io::Result<()> {
+        Self::export_with_analysis(writer, case, files, artifacts, &[])
+    }
+
+    pub fn export_with_analysis(
+        writer: &mut impl Write,
+        case: &CaseMeta,
+        files: &[String],
+        artifacts: &[String],
+        analysis: &[String],
+    ) -> io::Result<()> {
         writeln!(writer, "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Forensic Report - {}</title>", html_escape(&case.name))?;
         writeln!(writer, "<style>body{{font-family:sans-serif;margin:20px;}}h1{{color:#333;}}table{{border-collapse:collapse;width:100%%;}}th,td{{border:1px solid #ccc;padding:6px;text-align:left;}}th{{background:#eee;}}</style>")?;
         writeln!(writer, "</head><body>")?;
@@ -43,7 +53,49 @@ impl HtmlReportExporter {
         for a in artifacts {
             writeln!(writer, "<tr><td>{}</td></tr>", html_escape(a))?;
         }
+
+        writeln!(
+            writer,
+            "</table><h2>Analysis Provenance</h2><table><tr><th>Status</th></tr>"
+        )?;
+        for item in analysis {
+            writeln!(writer, "<tr><td>{}</td></tr>", html_escape(item))?;
+        }
         writeln!(writer, "</table></body></html>")?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use domain::{CaseId, CaseMeta};
+
+    #[test]
+    fn analysis_provenance_is_html_escaped() {
+        let case = CaseMeta {
+            id: CaseId("case".to_string()),
+            name: "<case>".to_string(),
+            number: None,
+            examiner: None,
+            notes: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+        let mut output = Vec::new();
+
+        HtmlReportExporter::export_with_analysis(
+            &mut output,
+            &case,
+            &[],
+            &[],
+            &["registry.system <script>alert(1)</script>".to_string()],
+        )
+        .unwrap();
+
+        let html = String::from_utf8(output).unwrap();
+        assert!(html.contains("Analysis Provenance"));
+        assert!(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
+        assert!(!html.contains("<script>alert(1)</script>"));
     }
 }

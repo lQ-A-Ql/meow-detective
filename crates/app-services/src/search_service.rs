@@ -7,6 +7,9 @@ use transport::dto::{SearchHighlightDto, SearchHitDto, SearchResultPageDto, Sear
 
 pub struct IndexStats {
     pub indexed_count: u64,
+    pub warning_count: u32,
+    pub skipped_count: u32,
+    pub failed_count: u32,
 }
 
 pub fn index_files(
@@ -18,9 +21,15 @@ pub fn index_files(
     let repo = FileRepo::new(conn);
     let mut texts = Vec::new();
     let mut paths = Vec::new();
+    let mut warning_count = 0u32;
+    let mut skipped_count = 0u32;
+    let failed_count = 0u32;
 
     for file_id in file_ids {
-        let entry = repo.find_by_id(file_id).map_err(|e| e.to_string())?;
+        let entry = match repo.find_by_id(file_id) {
+            Ok(entry) => entry,
+            Err(e) => return Err(e.to_string()),
+        };
         if let Some(entry) = entry {
             if entry.entry_type == EntryType::Directory {
                 continue;
@@ -38,12 +47,20 @@ pub fn index_files(
                     texts.push(text);
                     paths.push((entry.id.0.clone(), entry.path.clone()));
                 }
+            } else {
+                warning_count += 1;
+                skipped_count += 1;
             }
         }
     }
 
     if texts.is_empty() {
-        return Ok(IndexStats { indexed_count: 0 });
+        return Ok(IndexStats {
+            indexed_count: 0,
+            warning_count,
+            skipped_count,
+            failed_count,
+        });
     }
 
     let index = SearchIndex::create(index_dir).map_err(|e| e.to_string())?;
@@ -53,6 +70,9 @@ pub fn index_files(
 
     Ok(IndexStats {
         indexed_count: count,
+        warning_count,
+        skipped_count,
+        failed_count,
     })
 }
 

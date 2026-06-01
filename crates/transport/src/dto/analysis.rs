@@ -8,6 +8,17 @@ pub enum AnalysisParseStatusDto {
     Unavailable,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AnalysisProvenanceDto {
+    pub data_source_id: String,
+    pub artifact_path: String,
+    pub parser: String,
+    pub parsed_at: String,
+    pub status: AnalysisParseStatusDto,
+    pub warnings: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AnalysisSystemInfoDto {
@@ -33,6 +44,7 @@ pub struct AnalysisSystemInfoDto {
     pub language: Option<String>,
     pub status: AnalysisParseStatusDto,
     pub warnings: Vec<String>,
+    pub provenance: Vec<AnalysisProvenanceDto>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,6 +66,7 @@ pub struct AnalysisBootRecordDto {
     pub timestamp: String,
     pub boot_type: String,
     pub source: String,
+    pub provenance: AnalysisProvenanceDto,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,6 +77,7 @@ pub struct AnalysisFileClassificationDto {
     pub total_size: u64,
     pub status: AnalysisParseStatusDto,
     pub warnings: Vec<String>,
+    pub provenance: Vec<AnalysisProvenanceDto>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,6 +89,7 @@ pub struct AnalysisClassifiedFileDto {
     pub size: u64,
     pub file_type: String,
     pub magic_description: String,
+    pub provenance: AnalysisProvenanceDto,
 }
 
 #[cfg(test)]
@@ -102,11 +117,27 @@ mod tests {
                 timestamp: "2026-01-01T00:00:00Z".to_string(),
                 boot_type: "normal".to_string(),
                 source: "fixture".to_string(),
+                provenance: AnalysisProvenanceDto {
+                    data_source_id: "ds-1".to_string(),
+                    artifact_path: "Windows/System32/winevt/Logs/System.evtx".to_string(),
+                    parser: "evtx.boot_shutdown".to_string(),
+                    parsed_at: "2026-01-01T00:00:00+00:00".to_string(),
+                    status: AnalysisParseStatusDto::Parsed,
+                    warnings: Vec::new(),
+                },
             }],
             timezone: None,
             language: None,
             status: AnalysisParseStatusDto::NotParsed,
             warnings: vec!["parser unavailable".to_string()],
+            provenance: vec![AnalysisProvenanceDto {
+                data_source_id: "ds-1".to_string(),
+                artifact_path: "Windows/System32/config/SYSTEM".to_string(),
+                parser: "registry.system".to_string(),
+                parsed_at: "2026-01-01T00:00:00+00:00".to_string(),
+                status: AnalysisParseStatusDto::NotParsed,
+                warnings: vec!["value traversal unavailable".to_string()],
+            }],
         };
 
         let json = serde_json::to_value(dto).unwrap();
@@ -117,7 +148,40 @@ mod tests {
         );
         assert_eq!(json["bootHistory"][0]["bootType"], "normal");
         assert_eq!(json["status"], "notParsed");
+        assert_eq!(json["provenance"][0]["dataSourceId"], "ds-1");
+        assert_eq!(
+            json["provenance"][0]["artifactPath"],
+            "Windows/System32/config/SYSTEM"
+        );
+        assert_eq!(
+            json["provenance"][0]["parsedAt"],
+            "2026-01-01T00:00:00+00:00"
+        );
         assert!(json.get("computer_name").is_none());
+    }
+
+    #[test]
+    fn provenance_serializes_required_camel_case_fields() {
+        let dto = AnalysisProvenanceDto {
+            data_source_id: "ds".to_string(),
+            artifact_path: "Windows/System32/winevt/Logs/System.evtx".to_string(),
+            parser: "evtx.boot_shutdown".to_string(),
+            parsed_at: "2026-01-01T00:00:00+00:00".to_string(),
+            status: AnalysisParseStatusDto::Unavailable,
+            warnings: vec!["EVTX parser is unavailable".to_string()],
+        };
+
+        let json = serde_json::to_value(dto).unwrap();
+        assert_eq!(json["dataSourceId"], "ds");
+        assert_eq!(
+            json["artifactPath"],
+            "Windows/System32/winevt/Logs/System.evtx"
+        );
+        assert_eq!(json["parser"], "evtx.boot_shutdown");
+        assert_eq!(json["parsedAt"], "2026-01-01T00:00:00+00:00");
+        assert_eq!(json["status"], "unavailable");
+        assert_eq!(json["warnings"][0], "EVTX parser is unavailable");
+        assert!(json.get("data_source_id").is_none());
     }
 
     #[test]
@@ -131,10 +195,26 @@ mod tests {
                 size: 4,
                 file_type: "PDF".to_string(),
                 magic_description: "PDF Document".to_string(),
+                provenance: AnalysisProvenanceDto {
+                    data_source_id: "ds-1".to_string(),
+                    artifact_path: "doc.pdf".to_string(),
+                    parser: "analysis.magic".to_string(),
+                    parsed_at: "2026-01-01T00:00:00+00:00".to_string(),
+                    status: AnalysisParseStatusDto::Parsed,
+                    warnings: Vec::new(),
+                },
             }],
             total_size: 4,
             status: AnalysisParseStatusDto::Parsed,
             warnings: Vec::new(),
+            provenance: vec![AnalysisProvenanceDto {
+                data_source_id: "ds-1".to_string(),
+                artifact_path: "doc.pdf".to_string(),
+                parser: "analysis.magic".to_string(),
+                parsed_at: "2026-01-01T00:00:00+00:00".to_string(),
+                status: AnalysisParseStatusDto::Parsed,
+                warnings: Vec::new(),
+            }],
         };
 
         let json = serde_json::to_value(dto).unwrap();
@@ -142,5 +222,7 @@ mod tests {
         assert_eq!(json["totalSize"], 4);
         assert_eq!(json["files"][0]["fileType"], "PDF");
         assert_eq!(json["files"][0]["magicDescription"], "PDF Document");
+        assert_eq!(json["files"][0]["provenance"]["dataSourceId"], "ds-1");
+        assert_eq!(json["provenance"][0]["artifactPath"], "doc.pdf");
     }
 }

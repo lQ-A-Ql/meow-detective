@@ -36,3 +36,4 @@ hex = "0.4"
 [dev-dependencies]
 tempfile = "3"
 sha2 = "0.10"
+testing.workspace = true

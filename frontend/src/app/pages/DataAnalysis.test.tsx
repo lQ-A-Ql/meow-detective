@@ -57,6 +57,16 @@ describe('DataAnalysis page', () => {
         bootHistory: [],
         status: 'notParsed',
         warnings: ['系统信息解析器尚未接入 Registry/EVTX；当前不会输出未验证主机事实。'],
+        provenance: [
+          {
+            dataSourceId: 'ds-1',
+            artifactPath: 'Windows/System32/config/SYSTEM',
+            parser: 'registry.system',
+            parsedAt: '2026-06-01T10:00:00Z',
+            status: 'notParsed',
+            warnings: ['Registry parser not implemented'],
+          },
+        ],
       },
     }));
     mocks.classifications.mockReturnValue(queryState({
@@ -74,6 +84,24 @@ describe('DataAnalysis page', () => {
               size: 4,
               fileType: 'PDF',
               magicDescription: 'PDF Document',
+              provenance: {
+                dataSourceId: 'ds-1',
+                artifactPath: 'doc.pdf',
+                parser: 'analysis.magic',
+                parsedAt: '2026-06-01T10:00:00Z',
+                status: 'parsed',
+                warnings: [],
+              },
+            },
+          ],
+          provenance: [
+            {
+              dataSourceId: 'ds-1',
+              artifactPath: 'doc.pdf',
+              parser: 'analysis.magic',
+              parsedAt: '2026-06-01T10:00:00Z',
+              status: 'parsed',
+              warnings: [],
             },
           ],
         },
@@ -107,6 +135,9 @@ describe('DataAnalysis page', () => {
     expect(screen.getByRole('tab', { name: /文件分类/ })).toBeDefined();
     expect(screen.getByRole('tab', { name: /分析报告/ })).toBeDefined();
     expect(screen.getAllByText('未解析').length).toBeGreaterThan(0);
+    expect(screen.getByText('registry.system')).toBeDefined();
+    expect(screen.getByText('Windows/System32/config/SYSTEM')).toBeDefined();
+    expect(screen.getByText('Registry parser not implemented')).toBeDefined();
     expect(screen.queryByText('FORENSICS-PC')).toBeNull();
     expect(screen.queryByText('Windows 10')).toBeNull();
   });
@@ -116,8 +147,9 @@ describe('DataAnalysis page', () => {
     fireEvent.click(screen.getByRole('tab', { name: /文件分类/ }));
 
     expect(screen.getByText('Documents')).toBeDefined();
-    expect(screen.getByText('doc.pdf')).toBeDefined();
+    expect(screen.getAllByText('doc.pdf').length).toBeGreaterThan(0);
     expect(screen.getByText('PDF Document')).toBeDefined();
+    expect(screen.getAllByText(/analysis.magic/).length).toBeGreaterThan(0);
   });
 
   it('downloads markdown report through summary mutation', async () => {

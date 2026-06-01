@@ -19,6 +19,7 @@ import {
 } from '@/features/analysis/hooks';
 import {
   AnalysisFileClassification,
+  AnalysisProvenance,
   AnalysisSystemInfo,
 } from '@/types/models';
 import {
@@ -209,6 +210,7 @@ function SystemInfoTab({ systemInfo }: { systemInfo?: AnalysisSystemInfo }) {
     bootHistory: [],
     status: 'unavailable' as const,
     warnings: ['系统信息暂不可用。'],
+    provenance: [],
   };
 
   return (
@@ -233,6 +235,12 @@ function SystemInfoTab({ systemInfo }: { systemInfo?: AnalysisSystemInfo }) {
           <InfoCard label="安装日期" value={info.installDate} />
         </div>
       </section>
+
+      <ProvenancePanel
+        title="解析来源"
+        provenance={info.provenance}
+        fallback="Registry/EVTX 解析来源暂不可用。"
+      />
 
       <section>
         <h3 className="mb-3 flex items-center gap-2 text-[14px] font-semibold text-[#111]">
@@ -266,12 +274,17 @@ function SystemInfoTab({ systemInfo }: { systemInfo?: AnalysisSystemInfo }) {
         {info.bootHistory.length > 0 ? (
           <div className="space-y-1">
             {info.bootHistory.map((boot) => (
-              <div key={`${boot.timestamp}-${boot.source}`} className="flex items-center gap-3 p-2 text-[12px]">
-                <span className="font-mono text-[#666]">{boot.timestamp}</span>
-                <span className="rounded bg-[#f0f0f0] px-2 py-0.5 text-[10px]">
-                  {boot.bootType}
-                </span>
-                <span className="text-[#999]">{boot.source}</span>
+              <div key={`${boot.timestamp}-${boot.source}`} className="rounded border border-[#e0e0e0] bg-[#f8f8f8] p-3 text-[12px]">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-[#666]">{boot.timestamp}</span>
+                  <span className="rounded bg-[#f0f0f0] px-2 py-0.5 text-[10px]">
+                    {boot.bootType}
+                  </span>
+                  <span className="text-[#999]">{boot.source}</span>
+                </div>
+                <div className="mt-2 text-[11px] text-[#777]">
+                  {formatProvenanceSummary(boot.provenance)}
+                </div>
               </div>
             ))}
           </div>
@@ -322,12 +335,19 @@ function FileClassificationTab({
                     {category.warnings.join('；')}
                   </div>
                 ) : null}
+                <ProvenancePanel
+                  title="分类来源"
+                  provenance={category.provenance}
+                  compact
+                  fallback="分类来源暂不可用。"
+                />
                 <div className="overflow-hidden rounded border border-[#e0e0e0] bg-[#f8f8f8]">
                   <table className="w-full text-[11px]">
                     <thead>
                       <tr className="bg-[#f0f0f0]">
                         <th className="px-3 py-2 text-left font-medium">文件名</th>
                         <th className="px-3 py-2 text-left font-medium">类型</th>
+                        <th className="px-3 py-2 text-left font-medium">来源</th>
                         <th className="px-3 py-2 text-right font-medium">大小</th>
                       </tr>
                     </thead>
@@ -338,6 +358,9 @@ function FileClassificationTab({
                             {file.name}
                           </td>
                           <td className="px-3 py-1.5 text-[#666]">{file.magicDescription}</td>
+                          <td className="max-w-[260px] truncate px-3 py-1.5 text-[#666]">
+                            {formatProvenanceSummary(file.provenance)}
+                          </td>
                           <td className="px-3 py-1.5 text-right text-[#666]">
                             {formatSize(file.size)}
                           </td>
@@ -345,7 +368,7 @@ function FileClassificationTab({
                       ))}
                       {category.files.length > 20 ? (
                         <tr className="border-t border-[#e0e0e0]">
-                          <td colSpan={3} className="px-3 py-1.5 text-center text-[#999]">
+                          <td colSpan={4} className="px-3 py-1.5 text-center text-[#999]">
                             还有 {category.files.length - 20} 个文件...
                           </td>
                         </tr>
@@ -410,6 +433,56 @@ function EmptyLine({ text }: { text: string }) {
       {text}
     </div>
   );
+}
+
+function ProvenancePanel({
+  title,
+  provenance,
+  fallback,
+  compact = false,
+}: {
+  title: string;
+  provenance: AnalysisProvenance[];
+  fallback: string;
+  compact?: boolean;
+}) {
+  return (
+    <div className={compact ? 'mb-2' : 'space-y-2'}>
+      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#777]">
+        {title}
+      </div>
+      {provenance.length > 0 ? (
+        <div className="space-y-2">
+          {provenance.map((item, index) => (
+            <div
+              key={`${item.parser}-${item.artifactPath}-${index}`}
+              className="rounded border border-[#e0e0e0] bg-[#fcfcfc] px-3 py-2 text-[11px] text-[#666]"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded bg-[#f0f0f0] px-2 py-0.5 font-mono text-[10px]">
+                  {statusLabel(item.status)}
+                </span>
+                <span className="font-mono text-[#333]">{item.parser || '-'}</span>
+                <span className="font-mono text-[#777]">{item.artifactPath || '-'}</span>
+              </div>
+              <div className="mt-1 font-mono text-[10px] text-[#888]">
+                dataSource={item.dataSourceId || '-'} · parsedAt={item.parsedAt || '-'}
+              </div>
+              {item.warnings.length > 0 ? (
+                <div className="mt-1 text-amber-800">{item.warnings.join('；')}</div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyLine text={fallback} />
+      )}
+    </div>
+  );
+}
+
+function formatProvenanceSummary(provenance: AnalysisProvenance) {
+  return `${provenance.parser || '-'} · ${provenance.artifactPath || '-'} · ${statusLabel(provenance.status)}`;
 }
 
 function statusLabel(status: string) {

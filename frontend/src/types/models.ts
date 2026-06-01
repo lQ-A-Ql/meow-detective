@@ -75,6 +75,15 @@ export interface DataSourcePartition {
 
 export type AnalysisParseStatus = 'parsed' | 'notParsed' | 'unavailable';
 
+export interface AnalysisProvenance {
+  dataSourceId: string;
+  artifactPath: string;
+  parser: string;
+  parsedAt: string;
+  status: AnalysisParseStatus;
+  warnings: string[];
+}
+
 export interface AnalysisSystemInfo {
   computerName?: string;
   osVersion?: string;
@@ -89,6 +98,7 @@ export interface AnalysisSystemInfo {
   language?: string;
   status: AnalysisParseStatus;
   warnings: string[];
+  provenance: AnalysisProvenance[];
 }
 
 export interface AnalysisNetworkAdapter {
@@ -103,6 +113,7 @@ export interface AnalysisBootRecord {
   timestamp: string;
   bootType: string;
   source: string;
+  provenance: AnalysisProvenance;
 }
 
 export interface AnalysisFileClassification {
@@ -111,6 +122,7 @@ export interface AnalysisFileClassification {
   totalSize: number;
   status: AnalysisParseStatus;
   warnings: string[];
+  provenance: AnalysisProvenance[];
 }
 
 export interface AnalysisClassifiedFile {
@@ -120,6 +132,7 @@ export interface AnalysisClassifiedFile {
   size: number;
   fileType: string;
   magicDescription: string;
+  provenance: AnalysisProvenance;
 }
 
 export interface RecentCase {
@@ -202,6 +215,10 @@ export interface JobSnapshot {
   progress: number;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'warning';
   detail: string;
+  warningCount: number;
+  skippedCount: number;
+  failedCount: number;
+  partial: boolean;
   currentPartition?: string;
   completedPartitions?: number;
   totalPartitions?: number;
@@ -244,6 +261,8 @@ export interface MediaUrl {
   mimeType: string;
   size: number;
   canReadRanges: boolean;
+  previewMode?: 'inline' | 'range';
+  previewBytes?: number;
 }
 
 export interface MediaRangeRequest {

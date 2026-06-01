@@ -4,24 +4,14 @@ use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use tempfile::TempDir;
 
 fn sample_path() -> std::path::PathBuf {
-    "E:/pangushi/刘洋/liuyang_pc.E01".into()
-}
-
-fn skip() -> bool {
-    if !sample_path().exists() {
-        eprintln!("SKIP");
-        true
-    } else {
-        false
-    }
+    testing::fixtures::local_e01_fixture().unwrap_or_else(|| {
+        panic!("set FORENSICS_E01_FIXTURE to run ignored real E01 MFT scan tests")
+    })
 }
 
 #[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn mft_scanner_reads_real_e01_records() {
-    if skip() {
-        return;
-    }
-
     let mut reader = E01Reader::open(&sample_path()).unwrap();
     let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
 
@@ -95,11 +85,8 @@ fn mft_scanner_reads_real_e01_records() {
 }
 
 #[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn mft_full_enumeration_via_multithread() {
-    if skip() {
-        return;
-    }
-
     let mut reader = E01Reader::open(&sample_path()).unwrap();
     let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
     let ntfs = probe

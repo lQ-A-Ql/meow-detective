@@ -59,6 +59,13 @@ pub fn get_jobs_from_db(conn: &Connection) -> Result<Vec<JobSnapshotDto>, String
                     .as_ref()
                     .map(|item| item.detail.clone())
                     .unwrap_or(job.detail),
+                warning_count: job.warning_count,
+                skipped_count: job.skipped_count,
+                failed_count: job.failed_count,
+                partial: job.partial
+                    || job.warning_count > 0
+                    || job.skipped_count > 0
+                    || job.failed_count > 0,
                 current_partition,
                 completed_partitions,
                 total_partitions,
@@ -104,7 +111,8 @@ fn parse_partition_progress(detail: &str) -> Option<PartitionProgressMeta> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_partition_progress;
+    use super::{get_jobs_from_db, parse_partition_progress};
+    use persistence_sqlite::repositories::job_repo::JobRepo;
 
     #[test]
     fn parses_partition_progress_payload() {
@@ -125,5 +133,53 @@ mod tests {
             meta.detail,
             "Enumerating Partition 3 (NTFS) - Basic data partition"
         );
+    }
+
+    #[test]
+    fn maps_job_partial_counts_from_repository() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        persistence_sqlite::runner::run_all(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO cases (id, name, number, examiner) VALUES ('case-1', 'Case', '1', 'qa')",
+            [],
+        )
+        .unwrap();
+
+        let repo = JobRepo::new(&conn);
+        let job_id = repo.create("case-1", "Import data source").unwrap();
+        repo.update_outcome_counts(&job_id, 2, 3, 0, true).unwrap();
+        repo.complete(&job_id, "Completed with warnings").unwrap();
+
+        let jobs = get_jobs_from_db(&conn).unwrap();
+        let snapshot = jobs.iter().find(|job| job.id == job_id.0).unwrap();
+
+        assert_eq!(snapshot.warning_count, 2);
+        assert_eq!(snapshot.skipped_count, 3);
+        assert_eq!(snapshot.failed_count, 0);
+        assert!(snapshot.partial);
+        assert_eq!(snapshot.status, "completed");
+    }
+
+    #[test]
+    fn derives_partial_when_counts_are_non_zero() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        persistence_sqlite::runner::run_all(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO cases (id, name, number, examiner) VALUES ('case-1', 'Case', '1', 'qa')",
+            [],
+        )
+        .unwrap();
+
+        let repo = JobRepo::new(&conn);
+        let job_id = repo.create("case-1", "Search index").unwrap();
+        repo.update_outcome_counts(&job_id, 1, 0, 0, false).unwrap();
+        repo.complete(&job_id, "Completed with one warning")
+            .unwrap();
+
+        let jobs = get_jobs_from_db(&conn).unwrap();
+        let snapshot = jobs.iter().find(|job| job.id == job_id.0).unwrap();
+
+        assert!(snapshot.partial);
+        assert_eq!(snapshot.warning_count, 1);
     }
 }

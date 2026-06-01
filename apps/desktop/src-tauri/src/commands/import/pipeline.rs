@@ -24,6 +24,31 @@ use transport::{commands::ImportDataSourceRequest, CommandError};
 use crate::events::event_bridge;
 use crate::state::AppState;
 
+#[derive(Debug, Clone, Default)]
+pub struct JobOutcomeCounts {
+    pub warning_count: u32,
+    pub skipped_count: u32,
+    pub failed_count: u32,
+}
+
+impl JobOutcomeCounts {
+    fn add_warnings(&mut self, count: usize) {
+        self.warning_count = self.warning_count.saturating_add(count as u32);
+    }
+
+    fn add_skipped(&mut self, count: u32) {
+        self.skipped_count = self.skipped_count.saturating_add(count);
+    }
+
+    fn add_failed(&mut self, count: u32) {
+        self.failed_count = self.failed_count.saturating_add(count);
+    }
+
+    fn is_partial(&self) -> bool {
+        self.warning_count > 0 || self.skipped_count > 0 || self.failed_count > 0
+    }
+}
+
 /// Enumerate a filesystem within a partition, handling placeholder root replacement.
 fn enumerate_partition_with_fs(
     conn: &rusqlite::Connection,
@@ -54,15 +79,15 @@ fn enumerate_partition_with_fs(
     )
 }
 
-/// Run post-import pipeline: timeline projection, artifact extraction, text indexing.
-pub fn run_post_import_pipeline(
+fn run_post_import_pipeline_with_counts(
     conn: &rusqlite::Connection,
     case_id: &domain::CaseId,
     ds_id: &domain::DataSourceId,
     index_dir: &std::path::Path,
     app: Option<&AppHandle>,
-) -> persistence_sqlite::DbResult<String> {
+) -> persistence_sqlite::DbResult<(String, JobOutcomeCounts)> {
     let file_repo = persistence_sqlite::repositories::file_repo::FileRepo::new(conn);
+    let mut counts = JobOutcomeCounts::default();
 
     // Read all files for timeline projection
     let roots = file_repo.find_roots(ds_id)?;
@@ -90,11 +115,23 @@ pub fn run_post_import_pipeline(
         .take(infrastructure::constants::ARTIFACT_EXTRACTION_LIMIT)
     {
         if let Ok(reader) = file_service::open_file_content_by_id(conn, &file.id) {
-            if let Err(e) = app_services::artifact_service::run_extractors_on_file(
+            match app_services::artifact_service::run_extractors_on_file(
                 &registry, &file.id, &file.path, reader, &mut sink,
             ) {
-                tracing::warn!("artifact extraction error for {}: {}", file.path, e);
+                Ok(stats) => {
+                    counts.warning_count = counts.warning_count.saturating_add(stats.warning_count);
+                    counts.skipped_count = counts.skipped_count.saturating_add(stats.skipped_count);
+                    counts.failed_count = counts.failed_count.saturating_add(stats.failed_count);
+                }
+                Err(e) => {
+                    counts.add_warnings(1);
+                    counts.add_skipped(1);
+                    tracing::warn!("artifact extraction error for {}: {}", file.path, e);
+                }
             }
+        } else {
+            counts.add_warnings(1);
+            counts.add_skipped(1);
         }
     }
     if !sink.artifacts.is_empty() {
@@ -124,14 +161,31 @@ pub fn run_post_import_pipeline(
     });
 
     let index_msg = match index_result {
-        Ok(stats) => format!("{} indexed", stats.indexed_count),
-        Err(e) => format!("index error: {}", e),
+        Ok(stats) => {
+            counts.warning_count = counts.warning_count.saturating_add(stats.warning_count);
+            counts.skipped_count = counts.skipped_count.saturating_add(stats.skipped_count);
+            counts.failed_count = counts.failed_count.saturating_add(stats.failed_count);
+            format!("{} indexed", stats.indexed_count)
+        }
+        Err(e) => {
+            counts.add_warnings(1);
+            counts.add_failed(1);
+            format!("index error: {}", e)
+        }
     };
 
-    Ok(format!(
+    let mut message = format!(
         "Timeline: {} events. Artifacts: {}. Index: {}",
         tl_count, artifact_count, index_msg
-    ))
+    );
+    if counts.is_partial() {
+        message.push_str(&format!(
+            ". Partial: {} warnings, {} skipped, {} failed",
+            counts.warning_count, counts.skipped_count, counts.failed_count
+        ));
+    }
+
+    Ok((message, counts))
 }
 
 /// Tauri command: Import a data source into the current case.
@@ -312,6 +366,27 @@ pub fn execute_import_job(
     app: Option<&AppHandle>,
     cancel_token: &AtomicBool,
 ) -> Result<String, CommandError> {
+    let (message, _counts) = execute_import_job_with_counts(
+        conn,
+        case_id,
+        case_root,
+        source_path,
+        job_id,
+        app,
+        cancel_token,
+    )?;
+    Ok(message)
+}
+
+fn execute_import_job_with_counts(
+    conn: &rusqlite::Connection,
+    case_id: &domain::CaseId,
+    case_root: &std::path::Path,
+    source_path: &str,
+    job_id: &domain::JobId,
+    app: Option<&AppHandle>,
+    cancel_token: &AtomicBool,
+) -> Result<(String, JobOutcomeCounts), CommandError> {
     let path = PathBuf::from(source_path);
     validate_import_source_for_filesystem(source_path)?;
     let kind = datasource_service::classify_data_source_path(&path)
@@ -322,6 +397,7 @@ pub fn execute_import_job(
         .unwrap_or_else(|| "data_source".to_string());
     let index_dir = case_root.join("indexes").join("tantivy");
     let job_repo = JobRepo::new(conn);
+    let mut counts = JobOutcomeCounts::default();
 
     job_repo
         .update_progress(job_id, 10, &format!("Attaching data source {source_name}"))
@@ -385,6 +461,7 @@ pub fn execute_import_job(
             .map_err(CommandError::from_service_error)?
         }
     };
+    counts.add_warnings(stats.warnings.len());
 
     // Check for cancellation
     if cancel_token.load(Ordering::Relaxed) {
@@ -398,7 +475,26 @@ pub fn execute_import_job(
         event_bridge::emit_job_progress(app, &job_id.0, 70, "Running post-import pipeline...");
     }
 
-    let pipeline_msg = run_post_import_pipeline(conn, case_id, &ds.id, &index_dir, app)
+    let (pipeline_msg, pipeline_counts) =
+        run_post_import_pipeline_with_counts(conn, case_id, &ds.id, &index_dir, app)
+            .map_err(CommandError::from_service_error)?;
+    counts.warning_count = counts
+        .warning_count
+        .saturating_add(pipeline_counts.warning_count);
+    counts.skipped_count = counts
+        .skipped_count
+        .saturating_add(pipeline_counts.skipped_count);
+    counts.failed_count = counts
+        .failed_count
+        .saturating_add(pipeline_counts.failed_count);
+    job_repo
+        .update_outcome_counts(
+            job_id,
+            counts.warning_count,
+            counts.skipped_count,
+            counts.failed_count,
+            counts.is_partial(),
+        )
         .map_err(CommandError::from_service_error)?;
     if let Some(app) = app {
         event_bridge::emit_timeline_updated(app, stats.file_count + stats.dir_count);
@@ -421,7 +517,7 @@ pub fn execute_import_job(
         msg.push_str(&pipeline_msg);
     }
 
-    Ok(msg)
+    Ok((msg, counts))
 }
 
 fn validate_import_source_for_filesystem(source_path: &str) -> Result<(), CommandError> {

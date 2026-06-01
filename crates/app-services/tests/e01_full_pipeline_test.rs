@@ -9,24 +9,14 @@ use std::io::{Read, Seek, SeekFrom};
 use tempfile::TempDir;
 
 fn sample_path() -> std::path::PathBuf {
-    "E:/pangushi/刘洋/liuyang_pc.E01".into()
-}
-
-fn skip() -> bool {
-    if !sample_path().exists() {
-        eprintln!("SKIP");
-        true
-    } else {
-        false
-    }
+    testing::fixtures::local_e01_fixture().unwrap_or_else(|| {
+        panic!("set FORENSICS_E01_FIXTURE to run ignored real E01 pipeline tests")
+    })
 }
 
 #[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn e01_probe_and_partition_detection() {
-    if skip() {
-        return;
-    }
-
     let mut reader = E01Reader::open(&sample_path()).unwrap();
     let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
 
@@ -70,11 +60,8 @@ fn e01_probe_and_partition_detection() {
 }
 
 #[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn e01_ntfs_root_listing() {
-    if skip() {
-        return;
-    }
-
     let mut reader = E01Reader::open(&sample_path()).unwrap();
     let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
     let ntfs = probe
@@ -122,11 +109,8 @@ fn e01_ntfs_root_listing() {
 }
 
 #[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn e01_fat_root_listing() {
-    if skip() {
-        return;
-    }
-
     let mut reader = E01Reader::open(&sample_path()).unwrap();
     let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
     let fat = probe
@@ -153,10 +137,6 @@ fn e01_fat_root_listing() {
 #[test]
 #[ignore = "requires local multi-GB E01 sample and is excluded from default gate"]
 fn e01_ntfs_mft_enumeration_builds_navigable_tree() {
-    if skip() {
-        return;
-    }
-
     let tmp = TempDir::new().unwrap();
     let active =
         case_service::create_case(&tmp.path().join("cases"), "e01-lim", Some("tester")).unwrap();
@@ -310,11 +290,8 @@ fn parse_mft_data_size(record: &[u8]) -> Option<u64> {
 }
 
 #[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn e01_timeline_projection() {
-    if skip() {
-        return;
-    }
-
     let tmp = TempDir::new().unwrap();
     let active =
         case_service::create_case(&tmp.path().join("cases"), "e01-tl", Some("tester")).unwrap();
@@ -402,11 +379,8 @@ fn e01_timeline_projection() {
 }
 
 #[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn e01_job_tracking() {
-    if skip() {
-        return;
-    }
-
     let tmp = TempDir::new().unwrap();
     let active =
         case_service::create_case(&tmp.path().join("cases"), "e01-job", Some("tester")).unwrap();

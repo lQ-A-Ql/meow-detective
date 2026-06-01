@@ -20,6 +20,9 @@ use transport::{
     CommandError,
 };
 
+#[cfg(test)]
+use transport::dto::MAX_VIEWER_RANGE_LENGTH;
+
 use crate::state::AppState;
 
 /// Get children of a file tree node (lazy loading).
@@ -504,7 +507,8 @@ fn media_range_for_file(
 
     file_service::skip_reader_bytes(reader.as_mut(), request.offset)
         .map_err(CommandError::from_service_error)?;
-    let mut bytes = vec![0u8; request.length as usize];
+    let readable_len = request.length.min((handle.size - request.offset) as u32);
+    let mut bytes = vec![0u8; readable_len as usize];
     let bytes_read = reader
         .read(&mut bytes)
         .map_err(CommandError::from_service_error)?;
@@ -528,15 +532,24 @@ mod tests {
     use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
     use tempfile::TempDir;
 
-    #[test]
-    fn media_preview_returns_data_url_without_host_path() {
+    fn with_logical_case_file(
+        case_name: &str,
+        file_name: &str,
+        content: &[u8],
+        test: impl FnOnce(
+            &rusqlite::Connection,
+            String,
+            std::path::PathBuf,
+        ) -> Result<(), persistence_sqlite::DbError>,
+    ) {
         let tmp = TempDir::new().unwrap();
         let evidence_dir = tmp.path().join("evidence");
         std::fs::create_dir_all(&evidence_dir).unwrap();
-        std::fs::write(evidence_dir.join("clip.mp4"), b"tiny media bytes").unwrap();
+        std::fs::write(evidence_dir.join(file_name), content).unwrap();
 
         let active =
-            case_service::create_case(&tmp.path().join("cases"), "media", Some("tester")).unwrap();
+            case_service::create_case(&tmp.path().join("cases"), case_name, Some("tester"))
+                .unwrap();
         let case_id = active.meta.id.clone();
 
         active
@@ -560,10 +573,23 @@ mod tests {
                 let file_id = persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
                     .find_by_data_source(&ds_id)?
                     .into_iter()
-                    .find(|entry| entry.name == "clip.mp4")
+                    .find(|entry| entry.name == file_name)
                     .map(|entry| entry.id.0)
-                    .expect("clip.mp4 should be enumerated");
+                    .expect("file should be enumerated");
 
+                test(conn, file_id, evidence_dir.clone())?;
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn media_preview_returns_data_url_without_host_path() {
+        with_logical_case_file(
+            "media",
+            "clip.mp4",
+            b"tiny media bytes",
+            |conn, file_id, evidence_dir| {
                 let media = media_data_url_for_file(conn, &file_id)
                     .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
                 let url = media.url.expect("small media should return inline URL");
@@ -574,8 +600,8 @@ mod tests {
                 assert!(media.can_read_ranges);
 
                 Ok(())
-            })
-            .unwrap();
+            },
+        );
     }
 
     #[test]
@@ -635,43 +661,13 @@ mod tests {
 
     #[test]
     fn oversized_media_preview_returns_scoped_handle_and_range_reads() {
-        let tmp = TempDir::new().unwrap();
-        let evidence_dir = tmp.path().join("evidence");
-        std::fs::create_dir_all(&evidence_dir).unwrap();
         let oversized =
             vec![b'A'; infrastructure::constants::MAX_INLINE_MEDIA_PREVIEW_BYTES as usize + 1];
-        std::fs::write(evidence_dir.join("large.mp4"), oversized).unwrap();
-
-        let active =
-            case_service::create_case(&tmp.path().join("cases"), "large-media", Some("tester"))
-                .unwrap();
-        let case_id = active.meta.id.clone();
-
-        active
-            .with_conn(|conn| {
-                let ds_id = domain::DataSourceId("ds-large-media".to_string());
-                DataSourceRepo::new(conn).insert(
-                    &case_id,
-                    &domain::DataSource {
-                        id: ds_id.clone(),
-                        name: "evidence".to_string(),
-                        kind: domain::DataSourceKind::LogicalDirectory,
-                        source_path: evidence_dir.clone(),
-                        imported_at: chrono::Utc::now(),
-                    },
-                )?;
-
-                let fs = LogicalFsReader::open(&evidence_dir, "evidence")
-                    .map_err(|err| persistence_sqlite::DbError::System(err.to_string()))?;
-                file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
-
-                let file_id = persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
-                    .find_by_data_source(&ds_id)?
-                    .into_iter()
-                    .find(|entry| entry.name == "large.mp4")
-                    .map(|entry| entry.id.0)
-                    .expect("large.mp4 should be enumerated");
-
+        with_logical_case_file(
+            "large-media",
+            "large.mp4",
+            &oversized,
+            |conn, file_id, _| {
                 let media = media_data_url_for_file(conn, &file_id)
                     .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
                 assert!(media.url.is_none());
@@ -695,7 +691,110 @@ mod tests {
                 assert!(!range.eof);
 
                 Ok(())
-            })
-            .unwrap();
+            },
+        );
+    }
+
+    #[test]
+    fn media_range_offset_at_size_returns_empty_eof() {
+        with_logical_case_file(
+            "media-eof",
+            "clip.mp4",
+            b"0123456789",
+            |conn, file_id, _| {
+                let range = media_range_for_file(
+                    conn,
+                    &MediaRangeRequestDto {
+                        handle_id: format!("file:{file_id}"),
+                        offset: 10,
+                        length: 8,
+                    },
+                )
+                .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
+
+                assert_eq!(range.offset, 10);
+                assert_eq!(range.bytes_base64, "");
+                assert_eq!(range.bytes_read, 0);
+                assert!(range.eof);
+
+                Ok(())
+            },
+        );
+    }
+
+    #[test]
+    fn media_range_rejects_invalid_handle() {
+        with_logical_case_file(
+            "media-invalid-handle",
+            "clip.mp4",
+            b"0123456789",
+            |conn, _, _| {
+                let err = media_range_for_file(
+                    conn,
+                    &MediaRangeRequestDto {
+                        handle_id: "C:/evidence/clip.mp4".to_string(),
+                        offset: 0,
+                        length: 8,
+                    },
+                )
+                .expect_err("host paths must not be valid media handles");
+
+                assert!(err.message.contains("unsupported media handle"));
+
+                Ok(())
+            },
+        );
+    }
+
+    #[test]
+    fn media_range_clamps_length_to_one_megabyte() {
+        let content = vec![b'B'; MAX_VIEWER_RANGE_LENGTH as usize + 16];
+        with_logical_case_file("media-clamp", "large.mp4", &content, |conn, file_id, _| {
+            let mut request = MediaRangeRequestDto {
+                handle_id: format!("file:{file_id}"),
+                offset: 0,
+                length: u32::MAX,
+            };
+            request
+                .validate()
+                .map_err(persistence_sqlite::DbError::System)?;
+
+            let range = media_range_for_file(conn, &request)
+                .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
+
+            assert_eq!(request.length, MAX_VIEWER_RANGE_LENGTH);
+            assert_eq!(range.bytes_read, MAX_VIEWER_RANGE_LENGTH);
+            assert!(!range.eof);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn media_range_response_does_not_leak_host_path() {
+        with_logical_case_file(
+            "media-no-leak",
+            "clip.mp4",
+            b"0123456789",
+            |conn, file_id, evidence_dir| {
+                let range = media_range_for_file(
+                    conn,
+                    &MediaRangeRequestDto {
+                        handle_id: format!("file:{file_id}"),
+                        offset: 2,
+                        length: 4,
+                    },
+                )
+                .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
+                let json = serde_json::to_string(&range)
+                    .map_err(|err| persistence_sqlite::DbError::System(err.to_string()))?;
+
+                assert!(!json.contains(&evidence_dir.to_string_lossy().to_string()));
+                assert!(!json.contains("clip.mp4"));
+                assert!(!json.contains("file:"));
+
+                Ok(())
+            },
+        );
     }
 }

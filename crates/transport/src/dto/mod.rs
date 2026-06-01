@@ -11,7 +11,8 @@ pub mod viewer;
 
 pub use analysis::{
     AnalysisBootRecordDto, AnalysisClassifiedFileDto, AnalysisFileClassificationDto,
-    AnalysisNetworkAdapterDto, AnalysisParseStatusDto, AnalysisSystemInfoDto,
+    AnalysisNetworkAdapterDto, AnalysisParseStatusDto, AnalysisProvenanceDto,
+    AnalysisSystemInfoDto,
 };
 pub use artifacts::ArtifactRowDto;
 pub use case::{
@@ -30,5 +31,5 @@ pub use search::{SearchHighlightDto, SearchHitDto, SearchResultPageDto, SearchSn
 pub use timeline::TimelineEventDto;
 pub use viewer::{
     ImagePreviewDto, MediaRangeRequestDto, MediaRangeResponseDto, MediaUrlDto, TextPreviewDto,
-    ViewerHandleDto, ViewerRangeRequestDto, ViewerRangeResponseDto,
+    ViewerHandleDto, ViewerRangeRequestDto, ViewerRangeResponseDto, MAX_VIEWER_RANGE_LENGTH,
 };

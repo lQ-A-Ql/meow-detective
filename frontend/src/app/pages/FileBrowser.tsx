@@ -35,6 +35,46 @@ import { getFileIcon } from '@/lib/file-icons';
 import { sortFileEntries } from '@/lib/file-sort';
 import { FileEntryRow, FileTreeNode } from '@/types/models';
 
+function formatBytes(bytes?: number) {
+  if (!bytes) {
+    return '0 B';
+  }
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value >= 10 || unitIndex === 0 ? Math.round(value) : value.toFixed(1)} ${units[unitIndex]}`;
+}
+
+function LargeMediaFallback({
+  mediaType,
+  previewBytes,
+  totalBytes,
+}: {
+  mediaType: '视频' | '音频';
+  previewBytes?: number;
+  totalBytes?: number;
+}) {
+  return (
+    <div className="flex h-full items-center justify-center px-6 text-center text-[#555]">
+      <div className="max-w-md space-y-2">
+        <div className="text-[12px] font-semibold text-[#222]">
+          大{mediaType}使用受控分块预览
+        </div>
+        <div className="text-[11px] leading-5">
+          当前只读取首个 {formatBytes(previewBytes)} 片段进行安全预览；完整播放需要先使用右侧“提取文件”导出后在本机播放器查看。
+        </div>
+        <div className="font-mono text-[10px] text-[#888]">
+          total={formatBytes(totalBytes)} / source=opaque handle
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function FileBrowser() {
   const { data: currentCase } = useCurrentCase();
   const { data: rootTree } = useFileTree();
@@ -584,11 +624,33 @@ export function FileBrowser() {
                     // 视频预览
                     if (mime.startsWith('video/') || ['mp4', 'webm', 'avi', 'mkv'].includes(mime)) {
                       if (mediaUrl?.url) {
-                        return (
+                        return mediaUrl.previewMode === 'range' ? (
+                          <div className="h-full flex flex-col">
+                            <div className="flex-1 min-h-0">
+                              <VideoViewer
+                                src={mediaUrl.url}
+                                mimeType={mediaUrl.mimeType}
+                                fileName={selectedFile?.name}
+                              />
+                            </div>
+                            <div className="border-t border-[#e0e0e0] bg-[#f8f8f8] px-3 py-1 text-[10px] text-[#666]">
+                              受控分块预览: 已读取 {formatBytes(mediaUrl.previewBytes)}，完整播放请提取文件后查看。
+                            </div>
+                          </div>
+                        ) : (
                           <VideoViewer
                             src={mediaUrl.url}
                             mimeType={mediaUrl.mimeType}
                             fileName={selectedFile?.name}
+                          />
+                        );
+                      }
+                      if (mediaUrl?.canReadRanges || mediaUrl?.handleId) {
+                        return (
+                          <LargeMediaFallback
+                            mediaType="视频"
+                            previewBytes={mediaUrl.previewBytes}
+                            totalBytes={mediaUrl.size}
                           />
                         );
                       }
@@ -598,11 +660,33 @@ export function FileBrowser() {
                     // 音频预览
                     if (mime.startsWith('audio/') || ['mp3', 'wav', 'flac', 'aac', 'ogg'].includes(mime)) {
                       if (mediaUrl?.url) {
-                        return (
+                        return mediaUrl.previewMode === 'range' ? (
+                          <div className="h-full flex flex-col">
+                            <div className="flex-1 min-h-0">
+                              <AudioViewer
+                                src={mediaUrl.url}
+                                mimeType={mediaUrl.mimeType}
+                                fileName={selectedFile?.name}
+                              />
+                            </div>
+                            <div className="border-t border-[#333] bg-[#111] px-3 py-1 text-[10px] text-[#aaa]">
+                              受控分块预览: 已读取 {formatBytes(mediaUrl.previewBytes)}，完整播放请提取文件后查看。
+                            </div>
+                          </div>
+                        ) : (
                           <AudioViewer
                             src={mediaUrl.url}
                             mimeType={mediaUrl.mimeType}
                             fileName={selectedFile?.name}
+                          />
+                        );
+                      }
+                      if (mediaUrl?.canReadRanges || mediaUrl?.handleId) {
+                        return (
+                          <LargeMediaFallback
+                            mediaType="音频"
+                            previewBytes={mediaUrl.previewBytes}
+                            totalBytes={mediaUrl.size}
                           />
                         );
                       }

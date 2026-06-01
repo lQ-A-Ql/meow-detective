@@ -90,7 +90,7 @@ export async function getImagePreview(fileId: string) {
 
 /**
  * Get media URL for video/audio playback.
- * Returns a local file URL.
+ * Returns an opaque media handle and, for small media only, an inline data URL.
  */
 export async function getMediaUrl(fileId: string): Promise<MediaUrl> {
   return apiClient.request(
@@ -101,6 +101,7 @@ export async function getMediaUrl(fileId: string): Promise<MediaUrl> {
       mimeType: 'video/mp4',
       size: 0,
       canReadRanges: false,
+      previewMode: 'inline',
     }),
     { fileId },
   );

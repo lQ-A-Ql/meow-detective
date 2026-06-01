@@ -6,6 +6,13 @@ use domain::FileEntryId;
 use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
 use rusqlite::Connection;
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ArtifactExtractionStats {
+    pub warning_count: u32,
+    pub skipped_count: u32,
+    pub failed_count: u32,
+}
+
 pub fn create_registry() -> ExtractorRegistry {
     let mut registry = ExtractorRegistry::new();
     registry.register(Box::new(artifacts_windows::PrefetchExtractor));
@@ -24,10 +31,11 @@ pub fn run_extractors_on_file(
     file_path: &str,
     reader: Box<dyn Read>,
     sink: &mut VecSink,
-) -> Result<(), String> {
+) -> Result<ArtifactExtractionStats, String> {
+    let mut stats = ArtifactExtractionStats::default();
     let extractors = registry.find_for_path(file_path);
     if extractors.is_empty() {
-        return Ok(());
+        return Ok(stats);
     }
 
     let mut buf = Vec::new();
@@ -36,6 +44,8 @@ pub fn run_extractors_on_file(
         .read_to_end(&mut buf)
         .map_err(|e| e.to_string())?;
     if bytes_read as u64 >= infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES {
+        stats.warning_count += 1;
+        stats.skipped_count += 1;
         tracing::warn!(
             "Artifact extraction truncated at {} bytes for file: {}",
             bytes_read,
@@ -53,10 +63,11 @@ pub fn run_extractors_on_file(
             reader: Box::new(cursor),
         };
         if let Err(e) = extractor.run(run_ctx, sink) {
+            stats.warning_count += 1;
             tracing::warn!("Extractor {} error: {}", extractor.id(), e);
         }
     }
-    Ok(())
+    Ok(stats)
 }
 
 pub fn store_artifacts(
