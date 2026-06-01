@@ -225,12 +225,14 @@ pub async fn import_data_source(
 #[tauri::command]
 pub async fn cancel_import(
     state: State<'_, AppState>,
+    app: AppHandle,
     job_id: String,
 ) -> Result<String, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         if app_state.task_manager.cancel(&job_id) {
             tracing::info!("Cancel requested for job {}", job_id);
+            event_bridge::emit_job_cancelled(&app, &job_id, "Cancel requested by user");
             Ok("Cancel requested".to_string())
         } else {
             Err(CommandError::not_found("Job"))
@@ -506,6 +508,20 @@ fn execute_import_job_with_counts(
         .map_err(CommandError::from_service_error)?;
     if let Some(app) = app {
         event_bridge::emit_job_progress(app, &job_id.0, 95, "Finalizing...");
+    }
+
+    if let Some(app) = app {
+        match app_services::file_service::get_data_sources_real(conn, case_id)
+            .map_err(CommandError::from_service_error)?
+            .into_iter()
+            .find(|source| source.id == ds.id.0)
+        {
+            Some(summary) => event_bridge::emit_data_source_imported(app, &summary, &job_id.0),
+            None => tracing::warn!(
+                "Imported data source {} was not found in summary list for event emission",
+                ds.id.0
+            ),
+        }
     }
 
     let mut msg = format!(

@@ -1,6 +1,6 @@
 # Forensics Workbench 剩余 v2.1 Backlog 状态与修补方案
 
-**更新时间**: 2026-06-02 02:58:33 +08:00
+**更新时间**: 2026-06-02 03:05:16 +08:00
 **署名**: Codex  
 **基线**: `e7ffa35` -> `codex/beta-forensics-backlog`；本文件记录 v2.1 backlog 在可信 beta 收口实现后的当前状态、验收命令和剩余修补方案。
 
@@ -64,7 +64,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 | Task | 状态 | 当前结果 / 剩余动作 |
 |---|---|---|
 | 4.1 Typed event contract | Completed | `EventTopic` enum 收口 topic，unknown topic serde 拒绝；前端 `EventTopic` 同步 |
-| 4.2 Event bridge 扩展 | Partial | 已有 case/job/artifact/timeline/search/partition emit helpers；本轮将 `artifact-added` 接入 post-import artifact store 后循环 emit。更多 artifact/search 细粒度进度仍可继续细化 |
+| 4.2 Event bridge 扩展 | Completed | 已有 case/job/artifact/timeline/search/partition emit helpers；本轮新增 typed `data-source-imported` 与 `job-cancelled` topic，同步 transport enum、frontend `EventTopic`、Tauri bridge 监听列表和 EventBus 测试。Import 完成时发 data source imported payload，仅包含 dataSourceId/name/kind/jobId，不暴露 sourcePath；cancel import 成功时发 job-cancelled |
 | 4.3 Targeted emit | Completed | event bridge 使用 `emit_to("main", ...)`，payload 不含裸证据绝对路径 |
 | 4.4 Capability 对齐 | Completed | `capabilities/default.json` 已包含 `core:event:default` 与保存对话框能力 |
 | 4.5 Job partial/warning 语义 | Completed | `JobSnapshotDto`、SQLite `jobs` 表、JobRepo/JobService 和前端 Jobs panel 已同步 `warningCount/skippedCount/failedCount/partial`；import/search/artifact post-processing 会汇总 recoverable warnings/skips/failures |
@@ -106,6 +106,9 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 - `cargo test -p artifacts-windows evtx`: 通过；新增 truncated EVTX magic warning/not-panic 回归。
 - `cargo test -p transport analysis`: 通过。
 - `cargo test -p forensics-desktop media_protocol`: 通过。
+- `cargo test -p transport events`: 通过。
+- `cargo clippy -p forensics-desktop --all-targets -- -D warnings`: 通过。
+- `pnpm --dir frontend test -- events`: 通过，1 file / 1 test。
 - `cargo test -p reports`: 通过。
 - `cargo test -p testing`: 通过。
 - `pnpm --dir frontend test -- Settings`: 通过，3 files / 11 tests。

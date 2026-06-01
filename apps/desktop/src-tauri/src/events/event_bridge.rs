@@ -1,9 +1,10 @@
 use tauri::{AppHandle, Emitter};
+use transport::dto::DataSourceSummaryDto;
 use transport::events::{
     EventEnvelope, EventTopic, TOPIC_ARTIFACT_ADDED, TOPIC_CASE_CLOSED, TOPIC_CASE_OPENED,
-    TOPIC_JOB_COMPLETED, TOPIC_JOB_CREATED, TOPIC_JOB_FAILED, TOPIC_JOB_PROGRESS,
-    TOPIC_JOB_STARTED, TOPIC_PARTITION_PROGRESS, TOPIC_SEARCH_INDEX_PROGRESS,
-    TOPIC_TIMELINE_UPDATED,
+    TOPIC_DATA_SOURCE_IMPORTED, TOPIC_JOB_CANCELLED, TOPIC_JOB_COMPLETED, TOPIC_JOB_CREATED,
+    TOPIC_JOB_FAILED, TOPIC_JOB_PROGRESS, TOPIC_JOB_STARTED, TOPIC_PARTITION_PROGRESS,
+    TOPIC_SEARCH_INDEX_PROGRESS, TOPIC_TIMELINE_UPDATED,
 };
 
 pub fn emit_event<T: serde::Serialize + Clone>(
@@ -115,6 +116,42 @@ pub fn emit_job_failed(app: &AppHandle, job_id: &str, error: &str) {
             job_id,
             e,
             error
+        );
+    }
+}
+
+pub fn emit_job_cancelled(app: &AppHandle, job_id: &str, reason: &str) {
+    let envelope = envelope(
+        EventTopic::JobCancelled,
+        serde_json::json!({
+            "jobId": job_id,
+            "reason": reason,
+        }),
+    );
+    if let Err(e) = emit_event(app, TOPIC_JOB_CANCELLED, &envelope) {
+        tracing::warn!("Failed to emit job cancelled event for {}: {}", job_id, e);
+    }
+}
+
+pub fn emit_data_source_imported(
+    app: &AppHandle,
+    data_source: &DataSourceSummaryDto,
+    job_id: &str,
+) {
+    let envelope = envelope(
+        EventTopic::DataSourceImported,
+        serde_json::json!({
+            "dataSourceId": data_source.id,
+            "name": data_source.name,
+            "kind": data_source.kind,
+            "jobId": job_id,
+        }),
+    );
+    if let Err(e) = emit_event(app, TOPIC_DATA_SOURCE_IMPORTED, &envelope) {
+        tracing::warn!(
+            "Failed to emit data source imported event for {}: {}",
+            data_source.id,
+            e
         );
     }
 }

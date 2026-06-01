@@ -24,6 +24,8 @@ export async function startTauriEventBridge(): Promise<void> {
     'job-progress',
     'job-completed',
     'job-failed',
+    'job-cancelled',
+    'data-source-imported',
     'artifact-added',
     'timeline-updated',
     'search-index_progress',

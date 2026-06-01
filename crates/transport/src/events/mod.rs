@@ -8,6 +8,8 @@ pub const TOPIC_JOB_STARTED: &str = "job-started";
 pub const TOPIC_JOB_PROGRESS: &str = "job-progress";
 pub const TOPIC_JOB_COMPLETED: &str = "job-completed";
 pub const TOPIC_JOB_FAILED: &str = "job-failed";
+pub const TOPIC_JOB_CANCELLED: &str = "job-cancelled";
+pub const TOPIC_DATA_SOURCE_IMPORTED: &str = "data-source-imported";
 pub const TOPIC_ARTIFACT_ADDED: &str = "artifact-added";
 pub const TOPIC_TIMELINE_UPDATED: &str = "timeline-updated";
 pub const TOPIC_SEARCH_INDEX_PROGRESS: &str = "search-index_progress";
@@ -23,6 +25,8 @@ pub enum EventTopic {
     JobProgress,
     JobCompleted,
     JobFailed,
+    JobCancelled,
+    DataSourceImported,
     ArtifactAdded,
     TimelineUpdated,
     #[serde(rename = "search-index_progress")]
@@ -40,6 +44,8 @@ impl EventTopic {
             Self::JobProgress => TOPIC_JOB_PROGRESS,
             Self::JobCompleted => TOPIC_JOB_COMPLETED,
             Self::JobFailed => TOPIC_JOB_FAILED,
+            Self::JobCancelled => TOPIC_JOB_CANCELLED,
+            Self::DataSourceImported => TOPIC_DATA_SOURCE_IMPORTED,
             Self::ArtifactAdded => TOPIC_ARTIFACT_ADDED,
             Self::TimelineUpdated => TOPIC_TIMELINE_UPDATED,
             Self::SearchIndexProgress => TOPIC_SEARCH_INDEX_PROGRESS,
@@ -68,6 +74,9 @@ mod tests {
 
         let search = serde_json::to_string(&EventTopic::SearchIndexProgress).unwrap();
         assert_eq!(search, "\"search-index_progress\"");
+
+        let imported = serde_json::to_string(&EventTopic::DataSourceImported).unwrap();
+        assert_eq!(imported, "\"data-source-imported\"");
     }
 
     #[test]
