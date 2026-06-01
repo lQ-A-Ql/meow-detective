@@ -4,7 +4,9 @@
 
 pub mod mft_scanner;
 
-use evidence_core::filesystem::{FileSystemReader, FsNode};
+use evidence_core::filesystem::{
+    file_not_found, join_child_path, root_node, FileSystemReader, FsNode,
+};
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -644,15 +646,7 @@ fn apply_record_fixup(record: &mut [u8], sector_size: usize) -> io::Result<()> {
 
 impl FileSystemReader for NtfsReader {
     fn root(&self) -> io::Result<FsNode> {
-        Ok(FsNode {
-            name: "\\".into(),
-            path: String::new(),
-            is_dir: true,
-            size: 0,
-            created_at: None,
-            modified_at: None,
-            accessed_at: None,
-        })
+        Ok(root_node())
     }
 
     fn list_children(&self, path: &str) -> io::Result<Vec<FsNode>> {
@@ -665,7 +659,7 @@ impl FileSystemReader for NtfsReader {
     fn open_file(&self, path: &str) -> io::Result<Box<dyn Read>> {
         let inode = self
             .resolve_file_path(path)?
-            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "file not found"))?;
+            .ok_or_else(|| file_not_found(path))?;
         let data = self.read_file_data(inode)?;
         if data.len() > 128 * 1024 * 1024 {
             return Err(io::Error::new(
@@ -807,14 +801,4 @@ fn read_sized_le_signed(bytes: &[u8]) -> i64 {
 fn node_with_parent_path(mut node: FsNode, parent_path: &str) -> FsNode {
     node.path = join_child_path(parent_path, &node.name);
     node
-}
-
-fn join_child_path(parent_path: &str, name: &str) -> String {
-    let parent = parent_path.replace('\\', "/");
-    let parent = parent.trim_matches('/');
-    if parent.is_empty() {
-        name.to_string()
-    } else {
-        format!("{}/{}", parent, name)
-    }
 }

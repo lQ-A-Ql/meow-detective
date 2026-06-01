@@ -10,7 +10,10 @@ pub mod types;
 
 use boot::ExfatBootSector;
 use dir::FileEntrySet;
-use evidence_core::filesystem::{FileSystemReader, FsNode};
+use evidence_core::filesystem::{
+    file_not_found, join_child_path_with_separator, path_is_directory, path_is_not_directory,
+    path_not_found, root_node, FileSystemReader, FsNode,
+};
 use evidence_core::EvidenceReader;
 use fat::FatEntry;
 use std::cell::RefCell;
@@ -158,27 +161,16 @@ impl ExfatReader {
 
 impl FileSystemReader for ExfatReader {
     fn root(&self) -> io::Result<FsNode> {
-        Ok(FsNode {
-            name: "\\".into(),
-            path: String::new(),
-            is_dir: true,
-            size: 0,
-            created_at: None,
-            modified_at: None,
-            accessed_at: None,
-        })
+        Ok(root_node())
     }
 
     fn list_children(&self, path: &str) -> io::Result<Vec<FsNode>> {
-        let (cluster, is_dir, _) = self.resolve_path(path)?.ok_or_else(|| {
-            io::Error::new(io::ErrorKind::NotFound, format!("path not found: {}", path))
-        })?;
+        let (cluster, is_dir, _) = self
+            .resolve_path(path)?
+            .ok_or_else(|| path_not_found(path))?;
 
         if !is_dir {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("{} is not a directory", path),
-            ));
+            return Err(path_is_not_directory(path));
         }
 
         let entries = self.read_directory_entries(cluster)?;
@@ -190,11 +182,7 @@ impl FileSystemReader for ExfatReader {
                 continue;
             }
 
-            let child_path = if path.is_empty() {
-                entry.name.clone()
-            } else {
-                format!("{}\\{}", path.trim_end_matches('\\'), entry.name)
-            };
+            let child_path = join_child_path_with_separator(path, &entry.name, '\\');
             let is_dir = entry.is_directory();
 
             nodes.push(FsNode {
@@ -212,15 +200,12 @@ impl FileSystemReader for ExfatReader {
     }
 
     fn open_file(&self, path: &str) -> io::Result<Box<dyn Read>> {
-        let (cluster, is_dir, size) = self.resolve_path(path)?.ok_or_else(|| {
-            io::Error::new(io::ErrorKind::NotFound, format!("file not found: {}", path))
-        })?;
+        let (cluster, is_dir, size) = self
+            .resolve_path(path)?
+            .ok_or_else(|| file_not_found(path))?;
 
         if is_dir {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("{} is a directory", path),
-            ));
+            return Err(path_is_directory(path));
         }
 
         let data = self.read_cluster_chain_data(cluster)?;

@@ -1,4 +1,6 @@
-use evidence_core::filesystem::{FileSystemReader, FsNode};
+use evidence_core::filesystem::{
+    file_not_found, join_child_path, path_is_directory, root_node, FileSystemReader, FsNode,
+};
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
 use std::io::{self, Read, Seek, SeekFrom};
@@ -389,15 +391,7 @@ impl FatReader {
 
 impl FileSystemReader for FatReader {
     fn root(&self) -> io::Result<FsNode> {
-        Ok(FsNode {
-            name: "\\".into(),
-            path: String::new(),
-            is_dir: true,
-            size: 0,
-            created_at: None,
-            modified_at: None,
-            accessed_at: None,
-        })
+        Ok(root_node())
     }
 
     fn list_children(&self, path: &str) -> io::Result<Vec<FsNode>> {
@@ -421,11 +415,8 @@ impl FileSystemReader for FatReader {
                 data.truncate(size as usize);
                 Ok(Box::new(io::Cursor::new(data)))
             }
-            Some((_, true, _)) => Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "path is a directory",
-            )),
-            None => Err(io::Error::new(io::ErrorKind::NotFound, "file not found")),
+            Some((_, true, _)) => Err(path_is_directory(path)),
+            None => Err(file_not_found(path)),
         }
     }
 
@@ -447,16 +438,6 @@ fn read_sfn_name(entry: &[u8]) -> String {
         name
     } else {
         format!("{}.{}", name, ext)
-    }
-}
-
-fn join_child_path(parent_path: &str, name: &str) -> String {
-    let parent = parent_path.replace('\\', "/");
-    let parent = parent.trim_matches('/');
-    if parent.is_empty() {
-        name.to_string()
-    } else {
-        format!("{}/{}", parent, name)
     }
 }
 
