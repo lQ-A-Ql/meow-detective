@@ -11,7 +11,7 @@ const MIN_YEAR: i32 = 1970;
 /// Maximum valid year for forensic timestamps (2100).
 const MAX_YEAR: i32 = 2100;
 
-/// Validate a DateTime<Utc> timestamp.
+/// Validate a `DateTime<Utc>` timestamp.
 ///
 /// Rejects timestamps outside the range [1970, 2100].
 /// Returns `Some(dt)` if valid, `None` if out of range.
@@ -33,7 +33,7 @@ pub fn validate_timestamp(dt: DateTime<Utc>) -> Option<DateTime<Utc>> {
     }
 }
 
-/// Convert a Windows FILETIME to DateTime<Utc>.
+/// Convert a Windows FILETIME to `DateTime<Utc>`.
 ///
 /// FILETIME is a 64-bit value representing the number of 100-nanosecond
 /// intervals since January 1, 1601 (UTC).
@@ -71,7 +71,7 @@ pub fn filetime_to_datetime(ft: u64) -> Option<DateTime<Utc>> {
     validate_timestamp(dt)
 }
 
-/// Convert an NTFS timestamp to DateTime<Utc>.
+/// Convert an NTFS timestamp to `DateTime<Utc>`.
 ///
 /// NTFS timestamps are identical to FILETIME (100-nanosecond intervals
 /// since 1601-01-01).
@@ -79,7 +79,7 @@ pub fn ntfs_time_to_datetime(ntfs_time: u64) -> Option<DateTime<Utc>> {
     filetime_to_datetime(ntfs_time)
 }
 
-/// Convert a Unix timestamp (seconds since 1970-01-01) to DateTime<Utc>.
+/// Convert a Unix timestamp (seconds since 1970-01-01) to `DateTime<Utc>`.
 ///
 /// Returns `None` if the timestamp is out of valid range.
 ///
@@ -96,7 +96,7 @@ pub fn unix_to_datetime(secs: i64) -> Option<DateTime<Utc>> {
     validate_timestamp(dt)
 }
 
-/// Convert an exFAT timestamp to DateTime<Utc>.
+/// Convert an exFAT timestamp to `DateTime<Utc>`.
 ///
 /// exFAT timestamps are 32-bit values with:
 /// - Bits 31-25: Year (0-127, add 1980)

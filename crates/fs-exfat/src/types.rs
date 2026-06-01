@@ -1,7 +1,7 @@
 //! exFAT constants and type definitions.
 //!
 //! Based on the exFAT specification from Microsoft:
-//! https://learn.microsoft.com/en-us/windows/win32/fileio/exfat-specification
+//! <https://learn.microsoft.com/en-us/windows/win32/fileio/exfat-specification>
 
 /// Boot sector magic: "EXFAT   " (8 bytes with trailing spaces)
 pub const EXFAT_MAGIC: &[u8; 8] = b"EXFAT   ";

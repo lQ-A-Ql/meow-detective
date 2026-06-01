@@ -25,7 +25,7 @@ impl CaseMeta {
 
     /// Get the display name for this case.
     ///
-    /// If a case number is set, returns "[number] name".
+    /// If a case number is set, returns `[number] name`.
     /// Otherwise, returns just the name.
     pub fn display_name(&self) -> String {
         match &self.number {
