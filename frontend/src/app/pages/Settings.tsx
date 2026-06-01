@@ -116,9 +116,12 @@ export function Settings() {
         <section>
           <div className="flex items-center gap-2 mb-3">
             <FolderOpen size={14} className="text-[#888]" />
-            <span className="text-[13px] font-semibold text-[#333]">案件目录</span>
+            <label htmlFor="settings-case-root" className="text-[13px] font-semibold text-[#333]">
+              案件目录
+            </label>
           </div>
           <input
+            id="settings-case-root"
             value={settings.caseRoot}
             onChange={(event) =>
               setSettings((current) => ({ ...current, caseRoot: event.target.value }))
@@ -132,9 +135,12 @@ export function Settings() {
         <section>
           <div className="flex items-center gap-2 mb-3">
             <HardDrive size={14} className="text-[#888]" />
-            <span className="text-[13px] font-semibold text-[#333]">镜像搜索路径</span>
+            <label htmlFor="settings-image-search-paths" className="text-[13px] font-semibold text-[#333]">
+              镜像搜索路径
+            </label>
           </div>
           <input
+            id="settings-image-search-paths"
             value={settings.imageSearchPaths}
             onChange={(event) =>
               setSettings((current) => ({ ...current, imageSearchPaths: event.target.value }))

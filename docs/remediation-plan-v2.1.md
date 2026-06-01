@@ -1,6 +1,6 @@
 # Forensics Workbench 剩余 v2.1 Backlog 状态与修补方案
 
-**更新时间**: 2026-06-02 02:52:17 +08:00
+**更新时间**: 2026-06-02 02:58:33 +08:00
 **署名**: Codex  
 **基线**: `e7ffa35` -> `codex/beta-forensics-backlog`；本文件记录 v2.1 backlog 在可信 beta 收口实现后的当前状态、验收命令和剩余修补方案。
 
@@ -57,7 +57,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 | 3.5 Timeline -> Source | Completed | Timeline 源对象按钮跳 Files/Artifacts 并设置 selection |
 | 3.6 Timeline filters UI | Completed | 增加 timeStart/timeEnd/eventType 控件，hook query key 包含 filters |
 | 3.7 Search saved queries | Completed | `localStorage` 保存/覆盖/删除/执行查询，新增 tests |
-| 3.8 Settings editable config | Partial | 本轮新增 `get_app_settings` / `save_app_settings` Tauri commands，路径类设置经后端验证后写入 config；theme/dev toggle 仍同步写 localStorage 以便 mock/dev 即时生效 |
+| 3.8 Settings editable config | Completed | `get_app_settings` / `save_app_settings` Tauri commands 持久化 `AppSettingsDto`；路径类设置经后端验证后写入 config，theme/dev event trace 同步写入后端 config，并镜像到 localStorage 以便 mock/dev 即时生效。Settings 页面补齐路径输入 label 和 render tests，覆盖远端加载、保存 API、localStorage fallback、主题应用和非法路径拒绝 |
 
 ## Phase 4: 事件、任务状态与报告可信度
 
@@ -108,6 +108,9 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 - `cargo test -p forensics-desktop media_protocol`: 通过。
 - `cargo test -p reports`: 通过。
 - `cargo test -p testing`: 通过。
+- `pnpm --dir frontend test -- Settings`: 通过，3 files / 11 tests。
+- `pnpm --dir frontend typecheck`: 通过。
+- `pnpm --dir frontend lint`: 通过，0 error / 7 existing warnings。
 - `cargo deny check advisories bans licenses sources`: 通过。
 - `powershell -ExecutionPolicy Bypass -File scripts\check-deny-exceptions.ps1`: 通过。
 - `cargo audit`: 通过，仍报告 warning-class transitive advisories，短期由 `deny.toml` 例外追踪。
