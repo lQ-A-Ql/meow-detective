@@ -302,6 +302,19 @@ mod tests {
     }
 
     #[test]
+    fn truncated_evtx_magic_returns_warning_not_panic() {
+        let extraction =
+            extract_boot_shutdown_events(b"ElfFile\0", "Windows/System32/winevt/Logs/System.evtx");
+
+        assert!(extraction.events.is_empty());
+        assert!(!extraction.warnings.is_empty());
+        assert!(extraction
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("parser") || warning.contains("parse")));
+    }
+
+    #[test]
     fn oversized_evtx_returns_not_parsed_warning() {
         let bytes = vec![0u8; MAX_EVTX_ANALYSIS_BYTES + 1];
         let extraction =
