@@ -36,7 +36,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 mcp-client = { path = "../../../crates/mcp-client" }
 tokio = { version = "1", features = ["full"] }
-dirs = "5"
+dirs = "6"
 base64 = "0.22"
 
 [dev-dependencies]
