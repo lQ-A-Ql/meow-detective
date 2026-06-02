@@ -43,6 +43,9 @@ jobs:
       - name: Release guard
         shell: pwsh
         run: ./scripts/check-release-guard.ps1
+      - name: Media protocol guard
+        shell: pwsh
+        run: ./scripts/check-media-protocol-guard.ps1
       - name: Command SQL boundary guard
         shell: pwsh
         run: ./scripts/check-command-sql-boundary.ps1

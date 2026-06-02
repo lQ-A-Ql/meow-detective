@@ -1,12 +1,12 @@
 # Forensics Workbench 剩余 v2.1 Backlog 状态与修补方案
 
-**更新时间**: 2026-06-02 11:28:11 +08:00
+**更新时间**: 2026-06-02 11:36:42 +08:00
 **署名**: Codex  
 **基线**: `e7ffa35` -> `codex/beta-forensics-backlog`；本文件记录 v2.1 backlog 在可信 beta 收口实现后的当前状态、验收命令和剩余修补方案。
 
 ## Summary
 
-v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis provenance 契约、Reports analysis provenance、Job partial/warning/skipped/failed 语义、媒体 scoped handle + bounded range command、`evidence-media` Tauri protocol、Registry 定向字段 parser、EVTX boot/shutdown candidate adapter、EVTX real fixture parser-path regression、`cargo deny`/`cargo audit`/`pnpm audit` 依赖门禁、CycloneDX SBOM CI artifact、coverage report CI artifact、frontend coverage baseline gate、tiny logical/RAW/E01/EVTX fixtures 和前端 Vite/Vitest 安全升级。
+v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis provenance 契约、Reports analysis provenance、Job partial/warning/skipped/failed 语义、媒体 scoped handle + bounded range command、`evidence-media` Tauri protocol 与 CI guard、Registry 定向字段 parser、EVTX boot/shutdown candidate adapter、EVTX real fixture parser-path regression、`cargo deny`/`cargo audit`/`pnpm audit` 依赖门禁、CycloneDX SBOM CI artifact、coverage report CI artifact、frontend coverage baseline gate、tiny logical/RAW/E01/EVTX fixtures 和前端 Vite/Vitest 安全升级。
 
 剩余风险集中在解析覆盖和架构债：Registry parser 是定向字段解析器，不是完整 hive browser；EVTX adapter 已接入 `evtx` crate 并解析 6005/6006/6008/1074 候选事件，且 `testdata/fixtures/tiny/evtx/system.evtx` 已覆盖真实 parser path。补充复核确认 `evtx 0.11.2` crates.io 发布包通过 `exclude = ["**/*.evtx", "**/*.dat"]` 排除了真实 EVTX 样本，`testdata` 中的 EVTX fixture 因此显式记录了上游仓库 commit、license、SHA-256 和大小；`encoding = "0.2.33"` 仍是 `evtx` 直接非可选依赖，不能通过关闭 feature 消除 `RUSTSEC-2021-0153`，当前通过 `deny.toml` 临时例外跟踪。tiny E01 reader fixture 已入库，用于默认 CI 覆盖 E01 section/table/read/seek 行为；真实 E01 分区/文件系统慢测仍依赖 `FORENSICS_E01_FIXTURE` opt-in。FS root/path/error 公共 helper 已抽出，完整枚举流程/错误转换进一步去重仍是后续质量项；command layer SQL 已通过 CI guard 防回退。
 
@@ -50,7 +50,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 
 | Task | 状态 | 当前结果 / 剩余动作 |
 |---|---|---|
-| 3.1 大媒体 scoped streaming | Completed / smoke pending | `get_media_url` 对大媒体返回 `mode=protocol`、opaque `handleId` 和 `evidence-media://handle/<encoded>` URL；Tauri protocol handler 解析 Range、每次最多读取 1MB、返回 206/416 等标准状态，读取仍走 `open_file_content_by_id`。`read_media_range` command 保留为 mock/unsupported fallback；CSP 只给 `media-src` 增加 `evidence-media:`，不暴露 evidence 宿主绝对路径。剩余：尚未做真实桌面播放器 smoke |
+| 3.1 大媒体 scoped streaming | Completed / CI guarded / manual smoke pending | `get_media_url` 对大媒体返回 `mode=protocol`、opaque `handleId` 和 `evidence-media://handle/<encoded>` URL；Tauri protocol handler 解析 Range、每次最多读取 1MB、返回 206/416 等标准状态，读取仍走 `open_file_content_by_id`。`read_media_range` command 保留为 mock/unsupported fallback；CSP 只给 `media-src` 增加 `evidence-media:`，不暴露 evidence 宿主绝对路径。新增 `scripts/check-media-protocol-guard.ps1` 并接入 backend CI，固定 CSP/protocol/fallback/host-path URL 边界。剩余：尚未做真实 Windows WebView2 播放器 seek smoke |
 | 3.2 Image preview 限制 | Completed | 小图 data URL，超限 typed error/fallback；不再经 hex lines 反解大图 |
 | 3.3 Extract file | Completed | 新增 `extract_file` command + save dialog wrapper，后端通过 reader helper 写出，destination 拒绝 device path/目录 |
 | 3.4 FileBrowser -> Timeline | Completed | “在时间线中查看”设置 selection 并导航 `/timeline` |
@@ -106,6 +106,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 - `cargo test -p artifacts-windows evtx`: 通过；7 个 EVTX targeted tests，包含 real `System.evtx` parser-path regression、JSON helper、malformed、oversized 和 truncated EVTX magic warning/not-panic 回归。
 - `cargo test -p transport analysis`: 通过。
 - `cargo test -p forensics-desktop media_protocol`: 通过。
+- `powershell -ExecutionPolicy Bypass -File scripts\check-media-protocol-guard.ps1`: 通过；验证 `evidence-media` CSP/protocol registration/range fallback wiring，扫描禁止 `asset://localhost` / `convertFileSrc` 回退。
 - `cargo test -p transport events`: 通过。
 - `cargo clippy -p forensics-desktop --all-targets -- -D warnings`: 通过。
 - `pnpm --dir frontend test -- events`: 通过，1 file / 1 test。
@@ -160,7 +161,7 @@ cargo test -p app-services --test e01_mft_scan_test -- --ignored --nocapture
 ## 后续优先级
 
 1. 深化 Registry parser 覆盖更多 hive cell/list 变体，并补真实 fixture；当前只承诺 Analysis 所需定向字段。
-2. 做 Tauri 桌面 smoke，确认 `evidence-media://` 在 Windows WebView2 中对 `<video>/<audio>` seek 行为稳定；fallback command 已保留。
+2. 做 Tauri 桌面 manual smoke，确认 `evidence-media://` 在 Windows WebView2 中对 `<video>/<audio>` seek 行为稳定；CI 已有 media protocol guard，但不替代真实播放器 seek 验证。
 3. 若需要真实 E01 分区/文件系统验收，继续使用 `FORENSICS_E01_FIXTURE` 手动慢测；当前提交的 tiny E01 只覆盖 reader 层 section/table/read/seek，不替代真实样本。
 4. 逐步消除 `cargo audit` warning-class transitive advisories，尤其是本轮 `evtx -> encoding` 临时例外；`encoding` 是 `evtx 0.11.2` 的直接非可选依赖，需替换 parser、vendor/patch parser 或在 2026-09-01 前重新评审例外。
 5. 继续积累 coverage baseline 并逐步抬高前端阈值；后端 coverage 目前仍只上传 LCOV artifact，不以百分比阻塞默认门禁。

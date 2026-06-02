@@ -93,6 +93,26 @@ powershell -ExecutionPolicy Bypass -File scripts\run-coverage.ps1 -Rust
 powershell -ExecutionPolicy Bypass -File scripts\run-coverage.ps1
 ```
 
+## Guard Scripts
+
+These scripts run in CI and can also be run locally before a release branch.
+
+```powershell
+# Release/debug string guard
+powershell -ExecutionPolicy Bypass -File scripts\check-release-guard.ps1
+
+# Evidence media protocol safety guard. This verifies CSP/protocol/fallback
+# wiring and rejects host-path asset URL regressions. It does not replace a
+# manual Windows WebView2 video/audio seek smoke.
+powershell -ExecutionPolicy Bypass -File scripts\check-media-protocol-guard.ps1
+
+# Tauri command layer SQL boundary guard
+powershell -ExecutionPolicy Bypass -File scripts\check-command-sql-boundary.ps1
+
+# Dependency exception metadata/expiry guard
+powershell -ExecutionPolicy Bypass -File scripts\check-deny-exceptions.ps1
+```
+
 ## Troubleshooting
 
 ### Frontend not loading

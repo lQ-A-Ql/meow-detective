@@ -249,7 +249,7 @@
 
 - 预览读取必须通过 `FileEntryId` 和数据源类型分派到统一 reader helper，不允许用 `case_root.join(entry.path)` 拼接宿主路径读取证据内容。
 - `get_text_preview` 和 hex range 读取走真实 reader；`get_image_preview` 返回有大小上限的 data URL。
-- `get_media_url` 对小媒体返回 bounded data URL；对大媒体返回 `mode=protocol`、opaque `handleId`、MIME、size 和 `evidence-media://handle/<encoded>` URL。Tauri `evidence-media` protocol handler 使用同一 evidence reader helper 按 Range 读取，每次最多 1MB，返回 206/416 等 bounded response；`read_media_range` command 继续作为 mock/unsupported fallback。当前实现不暴露 evidence 宿主绝对路径，CSP 只在 `media-src` 中允许 `evidence-media:`。
+- `get_media_url` 对小媒体返回 bounded data URL；对大媒体返回 `mode=protocol`、opaque `handleId`、MIME、size 和 `evidence-media://handle/<encoded>` URL。Tauri `evidence-media` protocol handler 使用同一 evidence reader helper 按 Range 读取，每次最多 1MB，返回 206/416 等 bounded response；`read_media_range` command 继续作为 mock/unsupported fallback。当前实现不暴露 evidence 宿主绝对路径，CSP 只在 `media-src` 中允许 `evidence-media:`；`scripts/check-media-protocol-guard.ps1` 在 CI 中固定协议注册、CSP、fallback command 和禁止 host-path asset URL 回退。真实 Windows WebView2 播放/seek 仍需 manual smoke。
 
 ### 测试 Fixture 策略
 
@@ -473,5 +473,5 @@ Settings 当前分两类持久化：
 
 ---
 
-**建模人**: MiMo AI Assistant；2026-06-02 由 Codex 更新 Analysis provenance、Registry targeted parser、EVTX candidate adapter、EVTX real fixture regression、evidence-media protocol、Reports、Job partial、CI/SBOM、coverage artifact/baseline gate、FS path helper 与慢测状态
+**建模人**: MiMo AI Assistant；2026-06-02 由 Codex 更新 Analysis provenance、Registry targeted parser、EVTX candidate adapter、EVTX real fixture regression、evidence-media protocol/CI guard、Reports、Job partial、CI/SBOM、coverage artifact/baseline gate、FS path helper 与慢测状态
 **建模版本**: v1.3
