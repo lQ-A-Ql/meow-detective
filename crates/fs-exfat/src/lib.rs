@@ -11,8 +11,9 @@ pub mod types;
 use boot::ExfatBootSector;
 use dir::FileEntrySet;
 use evidence_core::filesystem::{
-    file_not_found, node_with_parent_path_with_separator, path_components, path_is_directory,
-    path_is_not_directory, path_not_found, root_node, FileSystemReader, FsNode,
+    child_nodes_with_parent_path_with_separator, file_not_found, is_special_directory_name,
+    path_components, path_is_directory, path_is_not_directory, path_not_found, root_node,
+    FileSystemReader, FsNode,
 };
 use evidence_core::EvidenceReader;
 use fat::FatEntry;
@@ -174,28 +175,26 @@ impl FileSystemReader for ExfatReader {
 
         for entry in entries {
             // Skip special entries
-            if entry.name == "." || entry.name == ".." {
+            if is_special_directory_name(&entry.name) {
                 continue;
             }
 
             let is_dir = entry.is_directory();
 
-            nodes.push(node_with_parent_path_with_separator(
-                FsNode {
-                    name: entry.name,
-                    path: String::new(),
-                    is_dir,
-                    size: entry.valid_data_length,
-                    created_at: entry.created_at,
-                    modified_at: entry.modified_at,
-                    accessed_at: entry.accessed_at,
-                },
-                path,
-                '\\',
-            ));
+            nodes.push(FsNode {
+                name: entry.name,
+                path: String::new(),
+                is_dir,
+                size: entry.valid_data_length,
+                created_at: entry.created_at,
+                modified_at: entry.modified_at,
+                accessed_at: entry.accessed_at,
+            });
         }
 
-        Ok(nodes)
+        Ok(child_nodes_with_parent_path_with_separator(
+            nodes, path, '\\',
+        ))
     }
 
     fn open_file(&self, path: &str) -> io::Result<Box<dyn Read>> {

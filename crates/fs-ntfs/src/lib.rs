@@ -5,7 +5,8 @@
 pub mod mft_scanner;
 
 use evidence_core::filesystem::{
-    file_not_found, node_with_parent_path, path_components, root_node, FileSystemReader, FsNode,
+    child_nodes_with_parent_path, file_not_found, path_components, root_node, FileSystemReader,
+    FsNode,
 };
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
@@ -390,11 +391,10 @@ impl NtfsReader {
     }
 
     pub fn list_root_children(&self) -> io::Result<Vec<FsNode>> {
-        Ok(self
-            .list_dir_by_inode(5)?
-            .into_iter()
-            .map(|e| node_with_parent_path(e.node, ""))
-            .collect())
+        Ok(child_nodes_with_parent_path(
+            self.list_dir_by_inode(5)?.into_iter().map(|e| e.node),
+            "",
+        ))
     }
 
     /// Read the $DATA attribute of a file by MFT inode.
@@ -554,11 +554,10 @@ impl NtfsReader {
 
     pub fn list_subdir_children(&self, path: &str) -> io::Result<Vec<FsNode>> {
         match self.resolve_path(path)? {
-            Some(inode) => Ok(self
-                .list_dir_by_inode(inode)?
-                .into_iter()
-                .map(|e| node_with_parent_path(e.node, path))
-                .collect()),
+            Some(inode) => Ok(child_nodes_with_parent_path(
+                self.list_dir_by_inode(inode)?.into_iter().map(|e| e.node),
+                path,
+            )),
             None => Ok(Vec::new()),
         }
     }

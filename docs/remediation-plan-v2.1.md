@@ -1,6 +1,6 @@
 # Forensics Workbench 剩余 v2.1 Backlog 状态与修补方案
 
-**更新时间**: 2026-06-02 17:08:21 +08:00
+**更新时间**: 2026-06-02 17:25:35 +08:00
 **署名**: Codex  
 **基线**: `e7ffa35` -> `codex/beta-forensics-backlog`；本文件记录 v2.1 backlog 在可信 beta 收口实现后的当前状态、验收命令和剩余修补方案。
 
@@ -85,7 +85,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 
 | Task | 状态 | 当前结果 / 剩余动作 |
 |---|---|---|
-| 6.1 FS enum 去重 | Partial | 已在 `evidence-core::filesystem` 抽出 `root_node`、路径拼接、path component normalization、常见 path/file error helper，以及 `node_with_parent_path` / `node_with_parent_path_with_separator`，并让 FAT/NTFS/exFAT reader 复用；targeted tests 与 clippy 通过。剩余：更深层的枚举流程和 FS 特定错误转换仍可继续抽象，但需避免改变 public API、排序、root semantics 和 reader 行为 |
+| 6.1 FS enum 去重 | Partial / helper expanded | 已在 `evidence-core::filesystem` 抽出 `root_node`、路径拼接、path component normalization、常见 path/file error helper、单节点/批量 child path finalization，以及 dot/dotdot special-entry predicate，并让 FAT/NTFS/exFAT reader 复用；targeted tests 与 clippy 通过。剩余：更深层的枚举流程和 FS 特定错误转换仍可继续抽象，但需避免改变 public API、排序、root semantics 和 reader 行为 |
 | 6.2 SQL 下沉 repo | Completed / guarded | 复核 `apps/desktop/src-tauri/src/commands` 无原始 SQL 语句或 `rusqlite::params!/prepare/execute` 低层调用；新增 `scripts/check-command-sql-boundary.ps1` 并接入 backend CI，防止后续把业务 SQL 写回 command layer。Command layer 允许打开连接并调用 repository/service/helper，保持 validate -> service/helper -> DTO 边界 |
 | 6.3 常量集中 | Completed | preview max、artifact max、pagination max、analysis sample max 等关键限制已集中到 transport/infrastructure 常量 |
 | 6.4 Public docs | Completed | `cargo doc --workspace --no-deps` 已通过；同时修复 rustdoc bare URL / invalid intra-doc link warnings |
@@ -166,4 +166,4 @@ cargo test -p app-services --test e01_mft_scan_test -- --ignored --nocapture
 3. 若需要真实 E01 分区/文件系统验收，继续使用 `FORENSICS_E01_FIXTURE` 手动慢测；当前提交的 tiny E01 只覆盖 reader 层 section/table/read/seek，不替代真实样本。
 4. 逐步消除 `cargo audit` 剩余 19 个 warning-class transitive advisories；`evtx -> encoding` 已通过 `crates/evtx-patched` + `encoding_rs` 移除，后续只需维护 local fork、跟踪上游 maintained release，并继续防止 `encoding` 回归。
 5. 继续积累 coverage baseline 并逐步抬高前端阈值；后端 coverage 目前仍只上传 LCOV artifact，不以百分比阻塞默认门禁。
-6. 继续收口 FS 枚举流程和 FS 特定错误转换去重；当前公共 root/path/path-components/error helper 已落地。Command layer SQL 已通过 guard 防回退，后续若有 repository/service SQL 行为变更仍需补 targeted tests。
+6. 继续收口 FS 枚举流程和 FS 特定错误转换去重；当前公共 root/path/path-components/error helper、child list finalization helper 和 dot-entry predicate 已落地。Command layer SQL 已通过 guard 防回退，后续若有 repository/service SQL 行为变更仍需补 targeted tests。

@@ -70,12 +70,37 @@ pub fn node_with_parent_path(node: FsNode, parent_path: &str) -> FsNode {
     node_with_parent_path_with_separator(node, parent_path, '/')
 }
 
+/// Assign parent paths to a collection of child nodes using `separator`.
+pub fn child_nodes_with_parent_path_with_separator(
+    nodes: impl IntoIterator<Item = FsNode>,
+    parent_path: &str,
+    separator: char,
+) -> Vec<FsNode> {
+    nodes
+        .into_iter()
+        .map(|node| node_with_parent_path_with_separator(node, parent_path, separator))
+        .collect()
+}
+
+/// Assign slash-separated parent paths to a collection of child nodes.
+pub fn child_nodes_with_parent_path(
+    nodes: impl IntoIterator<Item = FsNode>,
+    parent_path: &str,
+) -> Vec<FsNode> {
+    child_nodes_with_parent_path_with_separator(nodes, parent_path, '/')
+}
+
 /// Split a filesystem path into non-empty components using slash or backslash.
 pub fn path_components(path: &str) -> Vec<&str> {
     path.trim_matches(['\\', '/'])
         .split(['\\', '/'])
         .filter(|component| !component.is_empty())
         .collect()
+}
+
+/// Return true for directory entries that should not be emitted as children.
+pub fn is_special_directory_name(name: &str) -> bool {
+    matches!(name, "." | "..")
 }
 
 /// Return a standard not-found error for a filesystem path.
@@ -159,6 +184,36 @@ mod tests {
     }
 
     #[test]
+    fn child_nodes_with_parent_path_assigns_paths_in_bulk() {
+        let nodes = vec![
+            FsNode {
+                name: "a.txt".to_string(),
+                path: String::new(),
+                is_dir: false,
+                size: 1,
+                created_at: None,
+                modified_at: None,
+                accessed_at: None,
+            },
+            FsNode {
+                name: "b".to_string(),
+                path: String::new(),
+                is_dir: true,
+                size: 0,
+                created_at: None,
+                modified_at: None,
+                accessed_at: None,
+            },
+        ];
+
+        let joined = child_nodes_with_parent_path(nodes, "dir");
+        assert_eq!(joined[0].path, "dir/a.txt");
+        assert_eq!(joined[1].path, "dir/b");
+        assert_eq!(joined[0].size, 1);
+        assert!(joined[1].is_dir);
+    }
+
+    #[test]
     fn path_components_splits_slash_and_backslash_paths() {
         assert_eq!(path_components(""), Vec::<&str>::new());
         assert_eq!(
@@ -169,6 +224,14 @@ mod tests {
             path_components("//dir///sub\\file.txt"),
             vec!["dir", "sub", "file.txt"]
         );
+    }
+
+    #[test]
+    fn special_directory_names_match_dot_entries_only() {
+        assert!(is_special_directory_name("."));
+        assert!(is_special_directory_name(".."));
+        assert!(!is_special_directory_name("..."));
+        assert!(!is_special_directory_name("file"));
     }
 
     #[test]

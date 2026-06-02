@@ -392,7 +392,7 @@ pub fn enumerate_filesystem_mft(...) -> DbResult<EnumerationStats> {
 | Tiny E01 reader fixture | O(c) | O(c) | ❌ | committed 4405-byte synthetic reader fixture |
 | 大媒体 protocol range | O(r) | O(r) | ❌ | r <= 1MB per request; CI guard covered |
 | 路径重建 | O(n) | O(n) | ❌ | 已优化 |
-| FS path component normalization | O(k) | O(c) | ❌ | k = path length, c = component count |
+| FS path component normalization / child finalization | O(k + n) | O(c + n) | ❌ | k = path length, c = component count, n = child count |
 | MFT 扫描 | O(n) | O(p·b) | ✅ | 可并行降低 wall time |
 
 ---
@@ -418,5 +418,5 @@ pub fn enumerate_filesystem_mft(...) -> DbResult<EnumerationStats> {
 
 ---
 
-**分析人**: MiMo AI Assistant；2026-06-02 由 Codex 按当前实现更新 Analysis provenance、Registry targeted parser、EVTX candidate adapter、EVTX real fixture regression、EVTX local patched dependency、evidence-media protocol/CI guard、CI fixture、coverage artifact/baseline gate、FS path helper、tiny E01 reader fixture 与 bounded preview 状态
+**分析人**: MiMo AI Assistant；2026-06-02 由 Codex 按当前实现更新 Analysis provenance、Registry targeted parser、Registry synthetic hive fixture、EVTX candidate adapter、EVTX real fixture regression、EVTX local patched dependency、evidence-media protocol/CI guard、CI fixture、coverage artifact/baseline gate、FS path/list helper、tiny E01 reader fixture 与 bounded preview 状态
 **分析版本**: v1.3

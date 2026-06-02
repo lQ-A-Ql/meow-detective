@@ -474,5 +474,5 @@ Settings 当前分两类持久化：
 
 ---
 
-**建模人**: MiMo AI Assistant；2026-06-02 由 Codex 更新 Analysis provenance、Registry targeted parser、EVTX candidate adapter、EVTX real fixture regression、EVTX local patched dependency、evidence-media protocol/CI guard、Reports、Job partial、CI/SBOM、coverage artifact/baseline gate、FS path helper 与慢测状态
+**建模人**: MiMo AI Assistant；2026-06-02 由 Codex 更新 Analysis provenance、Registry targeted parser、Registry synthetic hive fixture、EVTX candidate adapter、EVTX real fixture regression、EVTX local patched dependency、evidence-media protocol/CI guard、Reports、Job partial、CI/SBOM、coverage artifact/baseline gate、FS path/list helper 与慢测状态
 **建模版本**: v1.3
