@@ -13,7 +13,7 @@ use dir::FileEntrySet;
 use evidence_core::filesystem::{
     child_nodes_with_parent_path_with_separator, file_not_found, is_special_directory_name,
     path_components, path_is_directory, path_is_not_directory, path_not_found, root_node,
-    truncate_data_to_declared_size, FileSystemReader, FsNode,
+    truncate_data_to_declared_size, unsupported_fs, FileSystemReader, FsNode,
 };
 use evidence_core::EvidenceReader;
 use fat::FatEntry;
@@ -41,14 +41,11 @@ impl ExfatReader {
 
         // Validate revision (must be 1.xx)
         if boot.revision_major() != 1 {
-            return Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                format!(
-                    "unsupported exFAT revision {}.{}",
-                    boot.revision_major(),
-                    boot.revision_minor()
-                ),
-            ));
+            return Err(unsupported_fs(format!(
+                "unsupported exFAT revision {}.{}",
+                boot.revision_major(),
+                boot.revision_minor()
+            )));
         }
 
         Ok(Self {

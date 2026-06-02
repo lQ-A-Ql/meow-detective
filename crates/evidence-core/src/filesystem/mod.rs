@@ -143,6 +143,26 @@ pub fn path_is_not_directory(path: &str) -> io::Error {
     )
 }
 
+/// Return a standard invalid-data error for malformed filesystem structures.
+pub fn invalid_fs_data(message: impl Into<String>) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, message.into())
+}
+
+/// Return a standard unsupported error for filesystem features outside this reader.
+pub fn unsupported_fs(message: impl Into<String>) -> io::Error {
+    io::Error::new(io::ErrorKind::Unsupported, message.into())
+}
+
+/// Return a standard unexpected-EOF error for truncated filesystem structures.
+pub fn unexpected_fs_eof(message: impl Into<String>) -> io::Error {
+    io::Error::new(io::ErrorKind::UnexpectedEof, message.into())
+}
+
+/// Return a standard out-of-memory error for bounded filesystem reads.
+pub fn fs_out_of_memory(message: impl Into<String>) -> io::Error {
+    io::Error::new(io::ErrorKind::OutOfMemory, message.into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -282,5 +302,24 @@ mod tests {
             path_is_not_directory("file").kind(),
             io::ErrorKind::InvalidInput
         );
+    }
+
+    #[test]
+    fn filesystem_error_helpers_use_expected_kinds_and_messages() {
+        let invalid = invalid_fs_data("bad cluster");
+        assert_eq!(invalid.kind(), io::ErrorKind::InvalidData);
+        assert_eq!(invalid.to_string(), "bad cluster");
+
+        let unsupported = unsupported_fs("revision");
+        assert_eq!(unsupported.kind(), io::ErrorKind::Unsupported);
+        assert_eq!(unsupported.to_string(), "revision");
+
+        let eof = unexpected_fs_eof("short record");
+        assert_eq!(eof.kind(), io::ErrorKind::UnexpectedEof);
+        assert_eq!(eof.to_string(), "short record");
+
+        let oom = fs_out_of_memory("huge file");
+        assert_eq!(oom.kind(), io::ErrorKind::OutOfMemory);
+        assert_eq!(oom.to_string(), "huge file");
     }
 }

@@ -1,6 +1,7 @@
 use evidence_core::filesystem::{
-    child_nodes_with_parent_path, file_not_found, is_special_directory_name, path_components,
-    path_is_directory, root_node, truncate_data_to_declared_size, FileSystemReader, FsNode,
+    child_nodes_with_parent_path, file_not_found, invalid_fs_data, is_special_directory_name,
+    path_components, path_is_directory, root_node, truncate_data_to_declared_size,
+    FileSystemReader, FsNode,
 };
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
@@ -41,7 +42,7 @@ impl FatReader {
         let root_entries = u16::from_le_bytes([boot[17], boot[18]]);
 
         if bytes_per_sector == 0 || sectors_per_cluster == 0 {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid BPB"));
+            return Err(invalid_fs_data("invalid BPB"));
         }
 
         let fat16_sectors = u16::from_le_bytes([boot[22], boot[23]]) as u32;

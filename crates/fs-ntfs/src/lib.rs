@@ -5,8 +5,9 @@
 pub mod mft_scanner;
 
 use evidence_core::filesystem::{
-    child_nodes_with_parent_path, file_not_found, path_components, root_node,
-    truncate_data_to_declared_size, FileSystemReader, FsNode,
+    child_nodes_with_parent_path, file_not_found, fs_out_of_memory, invalid_fs_data,
+    path_components, root_node, truncate_data_to_declared_size, unexpected_fs_eof,
+    FileSystemReader, FsNode,
 };
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
@@ -39,19 +40,13 @@ impl NtfsReader {
         reader.read_exact(&mut boot)?;
 
         if &boot[3..11] != b"NTFS    " {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "not a valid NTFS volume",
-            ));
+            return Err(invalid_fs_data("not a valid NTFS volume"));
         }
 
         let bytes_per_sector = u16::from_le_bytes([boot[11], boot[12]]);
         let sectors_per_cluster = boot[13];
         if bytes_per_sector == 0 || sectors_per_cluster == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "invalid NTFS geometry",
-            ));
+            return Err(invalid_fs_data("invalid NTFS geometry"));
         }
         let cluster_size = bytes_per_sector as u64 * sectors_per_cluster as u64;
         let mft_cluster = u64::from_le_bytes(boot[0x30..0x38].try_into().unwrap_or([0; 8]));
@@ -80,10 +75,7 @@ impl NtfsReader {
     /// Convert volume-relative cluster number to absolute evidence offset.
     fn cluster_to_offset(&self, lcn: i64) -> io::Result<u64> {
         if lcn < 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("negative LCN {} in data run", lcn),
-            ));
+            return Err(invalid_fs_data(format!("negative LCN {} in data run", lcn)));
         }
         Ok(self.volume_offset + lcn as u64 * self.cluster_size)
     }
@@ -208,10 +200,10 @@ impl NtfsReader {
         let mut prev_lcn: i64 = 0;
         while !data.is_empty() && data[0] != 0 {
             if runs.len() >= MAX_DATA_RUNS {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("too many data runs (limit: {})", MAX_DATA_RUNS),
-                ));
+                return Err(invalid_fs_data(format!(
+                    "too many data runs (limit: {})",
+                    MAX_DATA_RUNS
+                )));
             }
             let header = data[0];
             let size_bytes = (header & 0x0F) as usize;
@@ -262,10 +254,10 @@ impl NtfsReader {
 
         // Upper bound to avoid OOM on corrupt data
         if alloc_size > 128 * 1024 * 1024 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("attribute allocation too large: {} bytes", alloc_size),
-            ));
+            return Err(invalid_fs_data(format!(
+                "attribute allocation too large: {} bytes",
+                alloc_size
+            )));
         }
 
         let runs = self.parse_data_runs(&record[attr_pos + run_off..])?;
@@ -275,26 +267,20 @@ impl NtfsReader {
         for (lcn, count) in runs {
             let offset = self.cluster_to_offset(lcn)?;
             let chunk = count.checked_mul(self.cluster_size).ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!(
-                        "data run overflow: {} clusters × {} bytes/cluster",
-                        count, self.cluster_size
-                    ),
-                )
+                invalid_fs_data(format!(
+                    "data run overflow: {} clusters × {} bytes/cluster",
+                    count, self.cluster_size
+                ))
             })?;
             // Guard: prevent OOM from malicious data runs claiming huge clusters
             const MAX_FILE_BUFFER: usize = 128 * 1024 * 1024; // 128 MB
             let start = buf.len();
             let new_size = start + chunk as usize;
             if new_size > MAX_FILE_BUFFER {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!(
-                        "data run buffer exceeds 128 MB limit (would be {} bytes)",
-                        new_size
-                    ),
-                ));
+                return Err(invalid_fs_data(format!(
+                    "data run buffer exceeds 128 MB limit (would be {} bytes)",
+                    new_size
+                )));
             }
             reader.seek(SeekFrom::Start(offset))?;
             buf.resize(new_size, 0);
@@ -399,10 +385,10 @@ impl NtfsReader {
     fn read_file_data(&self, inode: u64) -> io::Result<Vec<u8>> {
         let rec = self.read_mft_record(inode)?;
         if rec.len() < 0x18 || &rec[0..4] != b"FILE" {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("inode {} is not a valid FILE record", inode),
-            ));
+            return Err(invalid_fs_data(format!(
+                "inode {} is not a valid FILE record",
+                inode
+            )));
         }
         let attr_off = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
         let mut pos = attr_off;
@@ -596,10 +582,9 @@ fn apply_record_fixup(record: &mut [u8], sector_size: usize) -> io::Result<()> {
 
     let usa_bytes = usa_count
         .checked_mul(2)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid update sequence"))?;
+        .ok_or_else(|| invalid_fs_data("invalid update sequence"))?;
     if usa_offset + usa_bytes > record.len() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
+        return Err(invalid_fs_data(
             "update sequence array exceeds record length",
         ));
     }
@@ -609,19 +594,15 @@ fn apply_record_fixup(record: &mut [u8], sector_size: usize) -> io::Result<()> {
         let fixup_pos = i
             .checked_mul(sector_size)
             .and_then(|v| v.checked_sub(2))
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid fixup position"))?;
+            .ok_or_else(|| invalid_fs_data("invalid fixup position"))?;
         if fixup_pos + 2 > record.len() {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
+            return Err(unexpected_fs_eof(
                 "record too short for update sequence fixup",
             ));
         }
 
         if record[fixup_pos..fixup_pos + 2] != expected {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "update sequence signature mismatch",
-            ));
+            return Err(invalid_fs_data("update sequence signature mismatch"));
         }
 
         let replacement = usa_offset + i * 2;
@@ -650,10 +631,10 @@ impl FileSystemReader for NtfsReader {
             .ok_or_else(|| file_not_found(path))?;
         let data = self.read_file_data(inode)?;
         if data.len() > 128 * 1024 * 1024 {
-            return Err(io::Error::new(
-                io::ErrorKind::OutOfMemory,
-                format!("file too large to buffer: {} bytes", data.len()),
-            ));
+            return Err(fs_out_of_memory(format!(
+                "file too large to buffer: {} bytes",
+                data.len()
+            )));
         }
         Ok(Box::new(io::Cursor::new(data)))
     }

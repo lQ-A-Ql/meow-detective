@@ -4,6 +4,7 @@
 //! cluster chains in the Cluster Heap.
 
 use crate::types::*;
+use evidence_core::filesystem::invalid_fs_data;
 use std::io;
 
 /// Result of reading a FAT entry.
@@ -94,10 +95,10 @@ where
     loop {
         // Cycle detection
         if !visited.insert(current) {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("cycle detected in cluster chain at cluster {}", current),
-            ));
+            return Err(invalid_fs_data(format!(
+                "cycle detected in cluster chain at cluster {}",
+                current
+            )));
         }
 
         clusters.push(current);
@@ -107,24 +108,18 @@ where
         match entry {
             FatEntry::EndOfChain | FatEntry::BadCluster => break,
             FatEntry::Free => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!(
-                        "unexpected free cluster {} in chain starting at {}",
-                        current, start_cluster
-                    ),
-                ));
+                return Err(invalid_fs_data(format!(
+                    "unexpected free cluster {} in chain starting at {}",
+                    current, start_cluster
+                )));
             }
             FatEntry::Cluster(next) => {
                 // Cycle detection: if next is already visited, it's a cycle
                 if visited.contains(&next) {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!(
-                            "cycle detected in cluster chain: cluster {} points to already-visited cluster {}",
-                            current, next
-                        ),
-                    ));
+                    return Err(invalid_fs_data(format!(
+                        "cycle detected in cluster chain: cluster {} points to already-visited cluster {}",
+                        current, next
+                    )));
                 }
                 current = next;
             }
@@ -132,10 +127,7 @@ where
 
         // Sanity check: limit chain length to prevent infinite loops
         if clusters.len() > 100_000_000 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "cluster chain too long (>100M clusters)",
-            ));
+            return Err(invalid_fs_data("cluster chain too long (>100M clusters)"));
         }
     }
 

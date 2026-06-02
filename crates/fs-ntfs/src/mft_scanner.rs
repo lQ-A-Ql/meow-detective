@@ -1,4 +1,5 @@
 use chrono::{DateTime, TimeZone, Utc};
+use evidence_core::filesystem::invalid_fs_data;
 use std::io;
 
 /// Parsed MFT FILE record metadata.
@@ -284,8 +285,7 @@ fn apply_record_fixup(record: &mut [u8], sector_size: usize) -> io::Result<()> {
     }
     let usa_bytes = usa_count * 2;
     if usa_offset + usa_bytes > record.len() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
+        return Err(invalid_fs_data(
             "update sequence array exceeds record length",
         ));
     }
@@ -296,10 +296,7 @@ fn apply_record_fixup(record: &mut [u8], sector_size: usize) -> io::Result<()> {
             break;
         }
         if record[fixup_pos..fixup_pos + 2] != expected {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "update sequence signature mismatch",
-            ));
+            return Err(invalid_fs_data("update sequence signature mismatch"));
         }
         let replacement = usa_offset + i * 2;
         record[fixup_pos] = record[replacement];

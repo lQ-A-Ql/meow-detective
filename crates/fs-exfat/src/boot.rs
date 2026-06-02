@@ -4,6 +4,7 @@
 //! essential parameters for mounting and navigating the file system.
 
 use crate::types::*;
+use evidence_core::filesystem::invalid_fs_data;
 use std::io;
 
 /// Parsed exFAT Boot Sector.
@@ -51,36 +52,28 @@ impl ExfatBootSector {
     /// Validates magic bytes and signature before parsing.
     pub fn parse(data: &[u8]) -> io::Result<Self> {
         if data.len() < 512 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "boot sector too small (need 512 bytes)",
-            ));
+            return Err(invalid_fs_data("boot sector too small (need 512 bytes)"));
         }
 
         // Validate JumpBoot
         if data[0..3] != JUMP_BOOT {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "invalid jump boot: expected {:02X?}, got {:02X?}",
-                    JUMP_BOOT,
-                    &data[0..3]
-                ),
-            ));
+            return Err(invalid_fs_data(format!(
+                "invalid jump boot: expected {:02X?}, got {:02X?}",
+                JUMP_BOOT,
+                &data[0..3]
+            )));
         }
 
         // Validate FileSystemName
         if &data[3..11] != EXFAT_MAGIC {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
+            return Err(invalid_fs_data(
                 "not an exFAT volume (invalid file system name)",
             ));
         }
 
         // Validate MustBeZero field (bytes 11-63)
         if data[11..64].iter().any(|&b| b != 0) {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
+            return Err(invalid_fs_data(
                 "non-zero bytes in MustBeZero field (possible FAT12/16/32 volume)",
             ));
         }
@@ -88,13 +81,10 @@ impl ExfatBootSector {
         // Validate BootSignature
         let signature = u16::from_le_bytes([data[510], data[511]]);
         if signature != BOOT_SIGNATURE {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "invalid boot signature: expected {:04X}, got {:04X}",
-                    BOOT_SIGNATURE, signature
-                ),
-            ));
+            return Err(invalid_fs_data(format!(
+                "invalid boot signature: expected {:04X}, got {:04X}",
+                BOOT_SIGNATURE, signature
+            )));
         }
 
         // Parse fields
@@ -103,72 +93,78 @@ impl ExfatBootSector {
 
         // Validate shift values
         if !(9..=12).contains(&bytes_per_sector_shift) {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "invalid BytesPerSectorShift: {} (must be 9-12)",
-                    bytes_per_sector_shift
-                ),
-            ));
+            return Err(invalid_fs_data(format!(
+                "invalid BytesPerSectorShift: {} (must be 9-12)",
+                bytes_per_sector_shift
+            )));
         }
 
         if sectors_per_cluster_shift > 25 - bytes_per_sector_shift {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "invalid SectorsPerClusterShift: {} (max for {} byte sectors is {})",
-                    sectors_per_cluster_shift,
-                    1 << bytes_per_sector_shift,
-                    25 - bytes_per_sector_shift
-                ),
-            ));
+            return Err(invalid_fs_data(format!(
+                "invalid SectorsPerClusterShift: {} (max for {} byte sectors is {})",
+                sectors_per_cluster_shift,
+                1 << bytes_per_sector_shift,
+                25 - bytes_per_sector_shift
+            )));
         }
 
         let number_of_fats = data[110];
         if number_of_fats != 1 && number_of_fats != 2 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("invalid NumberOfFats: {} (must be 1 or 2)", number_of_fats),
-            ));
+            return Err(invalid_fs_data(format!(
+                "invalid NumberOfFats: {} (must be 1 or 2)",
+                number_of_fats
+            )));
         }
 
         // Helper closure to safely extract fixed-size arrays
         // SAFETY: We already validated data.len() >= 512 at the top of parse()
-        let file_system_name: [u8; 8] = data[3..11].try_into().map_err(|_| {
-            io::Error::new(io::ErrorKind::InvalidData, "invalid filesystem name slice")
-        })?;
+        let file_system_name: [u8; 8] = data[3..11]
+            .try_into()
+            .map_err(|_| invalid_fs_data("invalid filesystem name slice"))?;
 
         Ok(Self {
             jump_boot: [data[0], data[1], data[2]],
             file_system_name,
-            partition_offset: u64::from_le_bytes(data[64..72].try_into().map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData, "invalid partition offset")
-            })?),
-            volume_length: u64::from_le_bytes(data[72..80].try_into().map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData, "invalid volume length")
-            })?),
+            partition_offset: u64::from_le_bytes(
+                data[64..72]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("invalid partition offset"))?,
+            ),
+            volume_length: u64::from_le_bytes(
+                data[72..80]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("invalid volume length"))?,
+            ),
             fat_offset: u32::from_le_bytes(
-                data[80..84].try_into().map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidData, "invalid fat offset")
-                })?,
+                data[80..84]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("invalid fat offset"))?,
             ),
             fat_length: u32::from_le_bytes(
-                data[84..88].try_into().map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidData, "invalid fat length")
-                })?,
+                data[84..88]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("invalid fat length"))?,
             ),
-            cluster_heap_offset: u32::from_le_bytes(data[88..92].try_into().map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData, "invalid cluster heap offset")
-            })?),
-            cluster_count: u32::from_le_bytes(data[92..96].try_into().map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData, "invalid cluster count")
-            })?),
-            first_cluster_of_root: u32::from_le_bytes(data[96..100].try_into().map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData, "invalid first cluster of root")
-            })?),
-            volume_serial_number: u32::from_le_bytes(data[100..104].try_into().map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData, "invalid volume serial")
-            })?),
+            cluster_heap_offset: u32::from_le_bytes(
+                data[88..92]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("invalid cluster heap offset"))?,
+            ),
+            cluster_count: u32::from_le_bytes(
+                data[92..96]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("invalid cluster count"))?,
+            ),
+            first_cluster_of_root: u32::from_le_bytes(
+                data[96..100]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("invalid first cluster of root"))?,
+            ),
+            volume_serial_number: u32::from_le_bytes(
+                data[100..104]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("invalid volume serial"))?,
+            ),
             file_system_revision: u16::from_le_bytes([data[104], data[105]]),
             volume_flags: u16::from_le_bytes([data[106], data[107]]),
             bytes_per_sector_shift,

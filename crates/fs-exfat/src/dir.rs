@@ -8,6 +8,7 @@
 
 use crate::types::*;
 use chrono::{DateTime, Utc};
+use evidence_core::filesystem::{invalid_fs_data, unexpected_fs_eof};
 use std::io;
 
 /// Parsed directory entry types.
@@ -55,10 +56,7 @@ impl DirectoryEntry {
     /// Parse a 32-byte directory entry.
     pub fn parse(data: &[u8]) -> io::Result<Self> {
         if data.len() < DIR_ENTRY_SIZE {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "directory entry too short",
-            ));
+            return Err(unexpected_fs_eof("directory entry too short"));
         }
 
         let entry_type = data[0];
@@ -82,16 +80,21 @@ impl DirectoryEntry {
 
     fn parse_file_entry(data: &[u8]) -> io::Result<Self> {
         // SAFETY: caller validated data.len() >= DIR_ENTRY_SIZE (32)
-        let create_ts =
-            u32::from_le_bytes(data[8..12].try_into().map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData, "invalid create timestamp")
-            })?);
-        let modified_ts = u32::from_le_bytes(data[12..16].try_into().map_err(|_| {
-            io::Error::new(io::ErrorKind::InvalidData, "invalid modified timestamp")
-        })?);
-        let accessed_ts = u32::from_le_bytes(data[16..20].try_into().map_err(|_| {
-            io::Error::new(io::ErrorKind::InvalidData, "invalid accessed timestamp")
-        })?);
+        let create_ts = u32::from_le_bytes(
+            data[8..12]
+                .try_into()
+                .map_err(|_| invalid_fs_data("invalid create timestamp"))?,
+        );
+        let modified_ts = u32::from_le_bytes(
+            data[12..16]
+                .try_into()
+                .map_err(|_| invalid_fs_data("invalid modified timestamp"))?,
+        );
+        let accessed_ts = u32::from_le_bytes(
+            data[16..20]
+                .try_into()
+                .map_err(|_| invalid_fs_data("invalid accessed timestamp"))?,
+        );
 
         Ok(Self::File {
             secondary_count: data[1],
@@ -104,17 +107,20 @@ impl DirectoryEntry {
 
     fn parse_stream_entry(data: &[u8]) -> io::Result<Self> {
         // SAFETY: caller validated data.len() >= DIR_ENTRY_SIZE (32)
-        let valid_data_length = u64::from_le_bytes(data[8..16].try_into().map_err(|_| {
-            io::Error::new(io::ErrorKind::InvalidData, "invalid valid data length")
-        })?);
-        let first_cluster =
-            u32::from_le_bytes(data[20..24].try_into().map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData, "invalid first cluster")
-            })?);
+        let valid_data_length = u64::from_le_bytes(
+            data[8..16]
+                .try_into()
+                .map_err(|_| invalid_fs_data("invalid valid data length"))?,
+        );
+        let first_cluster = u32::from_le_bytes(
+            data[20..24]
+                .try_into()
+                .map_err(|_| invalid_fs_data("invalid first cluster"))?,
+        );
         let data_length = u64::from_le_bytes(
             data[24..32]
                 .try_into()
-                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid data length"))?,
+                .map_err(|_| invalid_fs_data("invalid data length"))?,
         );
 
         Ok(Self::Stream {
@@ -142,14 +148,15 @@ impl DirectoryEntry {
 
     fn parse_upcase_entry(data: &[u8]) -> io::Result<Self> {
         // SAFETY: caller validated data.len() >= DIR_ENTRY_SIZE (32)
-        let first_cluster =
-            u32::from_le_bytes(data[20..24].try_into().map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData, "invalid first cluster")
-            })?);
+        let first_cluster = u32::from_le_bytes(
+            data[20..24]
+                .try_into()
+                .map_err(|_| invalid_fs_data("invalid first cluster"))?,
+        );
         let data_length = u64::from_le_bytes(
             data[24..32]
                 .try_into()
-                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid data length"))?,
+                .map_err(|_| invalid_fs_data("invalid data length"))?,
         );
 
         Ok(Self::UpcaseTable {
@@ -160,7 +167,16 @@ impl DirectoryEntry {
 
     fn parse_label_entry(data: &[u8]) -> io::Result<Self> {
         let char_count = data[1] as usize;
-        let chars: Vec<u16> = data[2..2 + char_count * 2]
+        let byte_len = char_count
+            .checked_mul(2)
+            .ok_or_else(|| invalid_fs_data("invalid volume label length"))?;
+        let end = 2usize
+            .checked_add(byte_len)
+            .ok_or_else(|| invalid_fs_data("invalid volume label length"))?;
+        let label_bytes = data
+            .get(2..end)
+            .ok_or_else(|| invalid_fs_data("invalid volume label length"))?;
+        let chars: Vec<u16> = label_bytes
             .chunks_exact(2)
             .map(|c| u16::from_le_bytes([c[0], c[1]]))
             .collect();
@@ -461,6 +477,17 @@ mod tests {
 
         let entry = DirectoryEntry::parse(&data).unwrap();
         assert!(entry.is_deleted());
+    }
+
+    #[test]
+    fn reject_oversized_volume_label_without_panic() {
+        let mut data = [0u8; 32];
+        data[0] = 0x83; // In-use, type 3 (Volume Label)
+        data[1] = 16; // 16 UTF-16 chars would require 32 bytes after offset 2.
+
+        let err = DirectoryEntry::parse(&data).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        assert!(err.to_string().contains("volume label length"));
     }
 
     #[test]
