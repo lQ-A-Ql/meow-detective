@@ -52,6 +52,9 @@ jobs:
       - name: Dependency exception guard
         shell: pwsh
         run: ./scripts/check-deny-exceptions.ps1
+      - name: EVTX dependency decision guard
+        shell: pwsh
+        run: ./scripts/check-evtx-dependency-decision.ps1
       - name: Install cargo-deny
         run: cargo install cargo-deny --locked
       - name: Dependency policy

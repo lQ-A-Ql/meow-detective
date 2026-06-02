@@ -1,6 +1,6 @@
 # Forensics Workbench 剩余 v2.1 Backlog 状态与修补方案
 
-**更新时间**: 2026-06-02 11:36:42 +08:00
+**更新时间**: 2026-06-02 11:45:00 +08:00
 **署名**: Codex  
 **基线**: `e7ffa35` -> `codex/beta-forensics-backlog`；本文件记录 v2.1 backlog 在可信 beta 收口实现后的当前状态、验收命令和剩余修补方案。
 
@@ -8,7 +8,7 @@
 
 v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis provenance 契约、Reports analysis provenance、Job partial/warning/skipped/failed 语义、媒体 scoped handle + bounded range command、`evidence-media` Tauri protocol 与 CI guard、Registry 定向字段 parser、EVTX boot/shutdown candidate adapter、EVTX real fixture parser-path regression、`cargo deny`/`cargo audit`/`pnpm audit` 依赖门禁、CycloneDX SBOM CI artifact、coverage report CI artifact、frontend coverage baseline gate、tiny logical/RAW/E01/EVTX fixtures 和前端 Vite/Vitest 安全升级。
 
-剩余风险集中在解析覆盖和架构债：Registry parser 是定向字段解析器，不是完整 hive browser；EVTX adapter 已接入 `evtx` crate 并解析 6005/6006/6008/1074 候选事件，且 `testdata/fixtures/tiny/evtx/system.evtx` 已覆盖真实 parser path。补充复核确认 `evtx 0.11.2` crates.io 发布包通过 `exclude = ["**/*.evtx", "**/*.dat"]` 排除了真实 EVTX 样本，`testdata` 中的 EVTX fixture 因此显式记录了上游仓库 commit、license、SHA-256 和大小；`encoding = "0.2.33"` 仍是 `evtx` 直接非可选依赖，不能通过关闭 feature 消除 `RUSTSEC-2021-0153`，当前通过 `deny.toml` 临时例外跟踪。tiny E01 reader fixture 已入库，用于默认 CI 覆盖 E01 section/table/read/seek 行为；真实 E01 分区/文件系统慢测仍依赖 `FORENSICS_E01_FIXTURE` opt-in。FS root/path/error 公共 helper 已抽出，完整枚举流程/错误转换进一步去重仍是后续质量项；command layer SQL 已通过 CI guard 防回退。
+剩余风险集中在解析覆盖和架构债：Registry parser 是定向字段解析器，不是完整 hive browser；EVTX adapter 已接入 `evtx` crate 并解析 6005/6006/6008/1074 候选事件，且 `testdata/fixtures/tiny/evtx/system.evtx` 已覆盖真实 parser path。补充复核确认 `evtx 0.11.2` crates.io 发布包通过 `exclude = ["**/*.evtx", "**/*.dat"]` 排除了真实 EVTX 样本，`testdata` 中的 EVTX fixture 因此显式记录了上游仓库 commit、license、SHA-256 和大小；`encoding = "0.2.33"` 仍是 `evtx` 直接非可选依赖，不能通过关闭 feature 消除 `RUSTSEC-2021-0153`，当前通过 `deny.toml` 临时例外跟踪。本轮新增 `docs/evtx-dependency-decision.md` 与 `scripts/check-evtx-dependency-decision.ps1`，防止该例外与技术决策分叉；真实替换仍需在 2026-09-01 前完成或复审。tiny E01 reader fixture 已入库，用于默认 CI 覆盖 E01 section/table/read/seek 行为；真实 E01 分区/文件系统慢测仍依赖 `FORENSICS_E01_FIXTURE` opt-in。FS root/path/error 公共 helper 已抽出，完整枚举流程/错误转换进一步去重仍是后续质量项；command layer SQL 已通过 CI guard 防回退。
 
 默认产品决策保持不变：`/analysis` 是正式页面；无法真实解析的取证字段必须显示 `notParsed/unavailable + warnings`；证据读取必须走 `FileEntryId + DataSourceKind` reader helper；mock 模式必须可用。
 
@@ -75,7 +75,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 | Task | 状态 | 当前结果 / 剩余动作 |
 |---|---|---|
 | 5.1 Workflow 去重 | Completed | 保留 `ci-backend.yml`、`ci-frontend.yml`；旧重复 workflow 删除；frontend workflow 已修正为 `pnpm --dir frontend ...` |
-| 5.2 Dependency gate | Completed | 后端 CI 保留 `cargo audit` 并新增 `cargo deny check advisories bans licenses sources`；`deny.toml` 对短期 transitive advisories 带 reason/owner/expiry，本轮新增 `scripts/check-deny-exceptions.ps1` 并接入 backend CI，强制 advisory 例外必须包含 owner、expires 和说明文本且不得过期；`RUSTSEC-2021-0153` 例外用于 `evtx -> encoding` transitive unmaintained advisory，expires 2026-09-01；前端 CI 执行 `pnpm --dir frontend audit --audit-level high` |
+| 5.2 Dependency gate | Completed / EVTX exception guarded | 后端 CI 保留 `cargo audit` 并新增 `cargo deny check advisories bans licenses sources`；`deny.toml` 对短期 transitive advisories 带 reason/owner/expiry，本轮新增 `scripts/check-deny-exceptions.ps1` 并接入 backend CI，强制 advisory 例外必须包含 owner、expires 和说明文本且不得过期；`RUSTSEC-2021-0153` 例外用于 `evtx -> encoding` transitive unmaintained advisory，expires 2026-09-01；新增 `docs/evtx-dependency-decision.md` 和 `scripts/check-evtx-dependency-decision.ps1`，记录当前不可安全替换原因并保证策略/文档同步；前端 CI 执行 `pnpm --dir frontend audit --audit-level high` |
 | 5.3 DevTools guard | Completed | 新增 `scripts/check-release-guard.ps1`，CI backend 执行 release guard |
 | 5.4 SBOM | Completed | 后端 CI 使用 `cargo-cyclonedx` 生成 `backend-sbom` artifact；前端 CI 使用 `@cyclonedx/cyclonedx-npm` 生成 `frontend-sbom` artifact，并验证 `bomFormat=CycloneDX` |
 | 5.5 Fixture 策略 | Completed / real E01 manual | 新增仓库内 tiny logical directory、1024-byte tiny RAW fixture、4405-byte synthetic single-segment `testdata/fixtures/tiny/e01/tiny.E01` 和 1,118,208-byte real `testdata/fixtures/tiny/evtx/system.evtx`；`scripts/generate-tiny-fixtures.ps1` 可重建 RAW/E01 fixture，`crates/testing` 暴露 `tiny_logical_dir()`、`tiny_raw_image()`、`tiny_e01_image()`、`tiny_system_evtx()`。tiny E01 只证明 reader section/table/read/seek 行为，不代表真实文件系统镜像；EVTX fixture 覆盖 `evtx.boot_shutdown` parser path；真实 E01 分区/文件系统慢测仍为 `FORENSICS_E01_FIXTURE` opt-in ignored tests |
@@ -118,6 +118,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 - `pnpm --dir frontend lint`: 通过，0 error / 0 warnings；已清理 MCP、DenseDataTable、SyntaxHighlighter、tauri-bridge 的既有 lint warning。
 - `cargo deny check advisories bans licenses sources`: 通过。
 - `powershell -ExecutionPolicy Bypass -File scripts\check-deny-exceptions.ps1`: 通过。
+- `powershell -ExecutionPolicy Bypass -File scripts\check-evtx-dependency-decision.ps1`: 通过。
 - `cargo audit`: 通过，仍报告 20 个 warning-class transitive advisories，短期由 `deny.toml` 例外追踪。
 - `pnpm --dir frontend audit --audit-level high`: 通过；Vite/Vitest 安全升级后无 high/critical 漏洞。
 - Final gate 复核 `pnpm --dir frontend test`: 通过，16 个测试文件 / 59 个测试；新增 route lazy-split 防回退测试；ErrorBoundary 用例打印预期 jsdom stack，退出码为 0。
@@ -163,6 +164,6 @@ cargo test -p app-services --test e01_mft_scan_test -- --ignored --nocapture
 1. 深化 Registry parser 覆盖更多 hive cell/list 变体，并补真实 fixture；当前只承诺 Analysis 所需定向字段。
 2. 做 Tauri 桌面 manual smoke，确认 `evidence-media://` 在 Windows WebView2 中对 `<video>/<audio>` seek 行为稳定；CI 已有 media protocol guard，但不替代真实播放器 seek 验证。
 3. 若需要真实 E01 分区/文件系统验收，继续使用 `FORENSICS_E01_FIXTURE` 手动慢测；当前提交的 tiny E01 只覆盖 reader 层 section/table/read/seek，不替代真实样本。
-4. 逐步消除 `cargo audit` warning-class transitive advisories，尤其是本轮 `evtx -> encoding` 临时例外；`encoding` 是 `evtx 0.11.2` 的直接非可选依赖，需替换 parser、vendor/patch parser 或在 2026-09-01 前重新评审例外。
+4. 逐步消除 `cargo audit` warning-class transitive advisories，尤其是本轮 `evtx -> encoding` 临时例外；`encoding` 是 `evtx 0.11.2` 的直接非可选依赖，已通过 `docs/evtx-dependency-decision.md` 记录升级/替代/patch 评估，需替换 parser、vendor/patch parser 或在 2026-09-01 前重新评审例外。
 5. 继续积累 coverage baseline 并逐步抬高前端阈值；后端 coverage 目前仍只上传 LCOV artifact，不以百分比阻塞默认门禁。
 6. 继续收口 FS 枚举流程和 FS 特定错误转换去重；当前公共 root/path/path-components/error helper 已落地。Command layer SQL 已通过 guard 防回退，后续若有 repository/service SQL 行为变更仍需补 targeted tests。
