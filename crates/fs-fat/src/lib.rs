@@ -1,5 +1,5 @@
 use evidence_core::filesystem::{
-    file_not_found, join_child_path, path_components, path_is_directory, root_node,
+    file_not_found, node_with_parent_path, path_components, path_is_directory, root_node,
     FileSystemReader, FsNode,
 };
 use evidence_core::EvidenceReader;
@@ -369,15 +369,18 @@ impl FatReader {
             let is_dir = attr & 0x10 != 0;
             let size = u32::from_le_bytes(entry[28..32].try_into().unwrap_or([0; 4])) as u64;
 
-            nodes.push(FsNode {
-                path: join_child_path(parent_path, &name),
-                name,
-                is_dir,
-                size,
-                created_at: None,
-                modified_at: None,
-                accessed_at: None,
-            });
+            nodes.push(node_with_parent_path(
+                FsNode {
+                    name,
+                    path: String::new(),
+                    is_dir,
+                    size,
+                    created_at: None,
+                    modified_at: None,
+                    accessed_at: None,
+                },
+                parent_path,
+            ));
 
             i += 32;
         }
@@ -441,6 +444,7 @@ fn read_sfn_name(entry: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use evidence_core::filesystem::join_child_path;
 
     #[test]
     fn test_read_sfn_name() {

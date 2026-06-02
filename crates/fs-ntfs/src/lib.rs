@@ -5,7 +5,7 @@
 pub mod mft_scanner;
 
 use evidence_core::filesystem::{
-    file_not_found, join_child_path, path_components, root_node, FileSystemReader, FsNode,
+    file_not_found, node_with_parent_path, path_components, root_node, FileSystemReader, FsNode,
 };
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
@@ -788,9 +788,4 @@ fn read_sized_le_signed(bytes: &[u8]) -> i64 {
         }
     }
     val as i64
-}
-
-fn node_with_parent_path(mut node: FsNode, parent_path: &str) -> FsNode {
-    node.path = join_child_path(parent_path, &node.name);
-    node
 }

@@ -55,6 +55,21 @@ pub fn join_child_path(parent_path: &str, name: &str) -> String {
     join_child_path_with_separator(parent_path, name, '/')
 }
 
+/// Assign a child path to an existing node while preserving its metadata.
+pub fn node_with_parent_path_with_separator(
+    mut node: FsNode,
+    parent_path: &str,
+    separator: char,
+) -> FsNode {
+    node.path = join_child_path_with_separator(parent_path, &node.name, separator);
+    node
+}
+
+/// Assign a slash-separated child path to an existing node.
+pub fn node_with_parent_path(node: FsNode, parent_path: &str) -> FsNode {
+    node_with_parent_path_with_separator(node, parent_path, '/')
+}
+
 /// Split a filesystem path into non-empty components using slash or backslash.
 pub fn path_components(path: &str) -> Vec<&str> {
     path.trim_matches(['\\', '/'])
@@ -120,6 +135,27 @@ mod tests {
             join_child_path_with_separator("\\dir\\sub\\", "file.txt", '\\'),
             "dir\\sub\\file.txt"
         );
+    }
+
+    #[test]
+    fn node_with_parent_path_preserves_metadata() {
+        let node = FsNode {
+            name: "file.txt".to_string(),
+            path: String::new(),
+            is_dir: false,
+            size: 42,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+        };
+
+        let joined = node_with_parent_path(node.clone(), "dir");
+        assert_eq!(joined.path, "dir/file.txt");
+        assert_eq!(joined.size, 42);
+        assert!(!joined.is_dir);
+
+        let joined_backslash = node_with_parent_path_with_separator(node, "dir/sub", '\\');
+        assert_eq!(joined_backslash.path, "dir\\sub\\file.txt");
     }
 
     #[test]
