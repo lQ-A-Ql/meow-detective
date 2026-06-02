@@ -1,6 +1,6 @@
 # Forensics Workbench 剩余 v2.1 Backlog 状态与修补方案
 
-**更新时间**: 2026-06-02 18:25:36 +08:00
+**更新时间**: 2026-06-02 18:30:22 +08:00
 **署名**: Codex  
 **基线**: `e7ffa35` -> `codex/beta-forensics-backlog`；本文件记录 v2.1 backlog 在可信 beta 收口实现后的当前状态、验收命令和剩余修补方案。
 
@@ -134,6 +134,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 - FS declared-size truncation helper targeted tests：`cargo test -p evidence-core filesystem` 通过，12 个 filesystem/helper tests；`cargo test -p fs-fat -p fs-exfat -p fs-ntfs` 通过；`cargo test -p app-services file_service` 通过，10 个 filtered tests；`cargo test -p app-services --test file_service_real_test` 通过，7 个 tests；`cargo clippy -p evidence-core -p fs-fat -p fs-exfat -p fs-ntfs --all-targets -- -D warnings`、`cargo fmt --all -- --check`、`git diff --check` 均通过。
 - FS truncation checkpoint post-check：基于 `ea751fb refactor: share filesystem data truncation helper` 复跑 `cargo test --workspace` 通过；真实 E01 tests 仍 ignored / opt-in。`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo fmt --all -- --check` 通过。`powershell -ExecutionPolicy Bypass -File scripts\run-webview2-media-smoke.ps1` 通过并重新生成 media smoke fixture/checklist；`FORENSICS_E01_FIXTURE` 当前未设置，因此真实 E01 slow/manual gate 未执行。`cargo audit` 仍为 17 个 allowed warning-class advisories，来源集中在 Tauri Linux GTK/WebKit/urlpattern/glib 传递链。
 - Tauri patch dependency checkpoint：`cargo update -p tauri -p tauri-utils` 将 `tauri`/`tauri-runtime`/`tauri-runtime-wry` 升到 2.11.2，`tauri-build`/`tauri-codegen`/`tauri-macros` 升到 2.6.2，`tauri-utils` 升到 2.9.2。`cargo check -p forensics-desktop`、`cargo test -p forensics-desktop`、`cargo clippy -p forensics-desktop --all-targets -- -D warnings`、`cargo build -p forensics-desktop`、`cargo audit`、`cargo deny check advisories bans licenses sources`、`powershell -ExecutionPolicy Bypass -File scripts\check-release-guard.ps1`、`cargo fmt --all -- --check`、`git diff --check` 均通过；`cargo audit` 仍为 17 个 allowed warning-class advisories。
+- Frontend current-HEAD gate：基于 `679dd36 chore: update tauri patch stack` 复跑 `pnpm --dir frontend typecheck`、`pnpm --dir frontend lint`、`pnpm --dir frontend test`、`pnpm --dir frontend build` 均通过；Vitest 中 ErrorBoundary 的 jsdom stack 为预期测试输出，退出码为 0。`pnpm --dir frontend build` 未留下 tracked / untracked dist 变更。
 
 ## Final Gate 结果
 
