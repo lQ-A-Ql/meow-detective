@@ -1,14 +1,14 @@
 # Forensics Workbench 剩余 v2.1 Backlog 状态与修补方案
 
-**更新时间**: 2026-06-02 10:39:22 +08:00
+**更新时间**: 2026-06-02 11:28:11 +08:00
 **署名**: Codex  
 **基线**: `e7ffa35` -> `codex/beta-forensics-backlog`；本文件记录 v2.1 backlog 在可信 beta 收口实现后的当前状态、验收命令和剩余修补方案。
 
 ## Summary
 
-v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis provenance 契约、Reports analysis provenance、Job partial/warning/skipped/failed 语义、媒体 scoped handle + bounded range command、`evidence-media` Tauri protocol、Registry 定向字段 parser、EVTX boot/shutdown candidate adapter、`cargo deny`/`cargo audit`/`pnpm audit` 依赖门禁、CycloneDX SBOM CI artifact、coverage report CI artifact、frontend coverage baseline gate、tiny logical/RAW fixtures 和前端 Vite/Vitest 安全升级。
+v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis provenance 契约、Reports analysis provenance、Job partial/warning/skipped/failed 语义、媒体 scoped handle + bounded range command、`evidence-media` Tauri protocol、Registry 定向字段 parser、EVTX boot/shutdown candidate adapter、EVTX real fixture parser-path regression、`cargo deny`/`cargo audit`/`pnpm audit` 依赖门禁、CycloneDX SBOM CI artifact、coverage report CI artifact、frontend coverage baseline gate、tiny logical/RAW/E01/EVTX fixtures 和前端 Vite/Vitest 安全升级。
 
-剩余风险集中在解析覆盖和架构债：Registry parser 是定向字段解析器，不是完整 hive browser；EVTX adapter 已接入 `evtx` crate 并解析 6005/6006/6008/1074 候选事件，但仓库内尚无合法 tiny real `.evtx` fixture。补充复核确认 `evtx 0.11.2` crates.io 发布包通过 `exclude = ["**/*.evtx", "**/*.dat"]` 排除了真实 EVTX 样本，且 `encoding = "0.2.33"` 是直接非可选依赖，不能通过关闭 feature 消除 `RUSTSEC-2021-0153`；当前通过 `deny.toml` 临时例外跟踪。tiny E01 reader fixture 已入库，用于默认 CI 覆盖 E01 section/table/read/seek 行为；真实 E01 分区/文件系统慢测仍依赖 `FORENSICS_E01_FIXTURE` opt-in。FS root/path/error 公共 helper 已抽出，完整枚举流程/错误转换进一步去重仍是后续质量项；command layer SQL 已通过 CI guard 防回退。
+剩余风险集中在解析覆盖和架构债：Registry parser 是定向字段解析器，不是完整 hive browser；EVTX adapter 已接入 `evtx` crate 并解析 6005/6006/6008/1074 候选事件，且 `testdata/fixtures/tiny/evtx/system.evtx` 已覆盖真实 parser path。补充复核确认 `evtx 0.11.2` crates.io 发布包通过 `exclude = ["**/*.evtx", "**/*.dat"]` 排除了真实 EVTX 样本，`testdata` 中的 EVTX fixture 因此显式记录了上游仓库 commit、license、SHA-256 和大小；`encoding = "0.2.33"` 仍是 `evtx` 直接非可选依赖，不能通过关闭 feature 消除 `RUSTSEC-2021-0153`，当前通过 `deny.toml` 临时例外跟踪。tiny E01 reader fixture 已入库，用于默认 CI 覆盖 E01 section/table/read/seek 行为；真实 E01 分区/文件系统慢测仍依赖 `FORENSICS_E01_FIXTURE` opt-in。FS root/path/error 公共 helper 已抽出，完整枚举流程/错误转换进一步去重仍是后续质量项；command layer SQL 已通过 CI guard 防回退。
 
 默认产品决策保持不变：`/analysis` 是正式页面；无法真实解析的取证字段必须显示 `notParsed/unavailable + warnings`；证据读取必须走 `FileEntryId + DataSourceKind` reader helper；mock 模式必须可用。
 
@@ -40,7 +40,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 | Task | 状态 | 当前结果 / 剩余动作 |
 |---|---|---|
 | 2.1 Registry parser 接入 | Completed / targeted | Analysis 会从 catalog 查找 `Windows/System32/config/SYSTEM` / `SOFTWARE`，通过 `FileEntryId` reader bounded 读取最多 64MB hive；`artifacts-windows::registry::lookup` 支持 `regf` base block、NK/VK、`lf/lh/li/ri` 子键列表和常用值类型，并提取 `ComputerName`、timezone、ProductName、CurrentBuild、InstallDate、RegisteredOwner、Organization、ProductId。字段带 `fieldProvenance`；缺失/损坏/超限为 warning，不生成默认 Windows 文案。剩余：不是完整 Registry browser |
-| 2.2 EVTX parser 策略 | Completed / fixture gap | Analysis 查找 `Windows/System32/winevt/Logs/System.evtx`，通过 `evtx.boot_shutdown` adapter bounded 读取最多 64MB，解析 6005、6006、6008、1074 为候选事件，boot record 带 `eventId`、`recordId`、note 和 provenance。无 EVTX、损坏或超限时保持 `notParsed/unavailable + warnings`。剩余：仓库内尚无合法 tiny real EVTX fixture；当前单测覆盖 JSON 记录提取、malformed/oversized 路径，并新增 truncated EVTX magic 输入的 warning/not-panic 回归。复核确认 `evtx 0.11.2` crates.io 包排除 `*.evtx` fixture，不能直接复用其上游测试样本 |
+| 2.2 EVTX parser 策略 | Completed / real fixture | Analysis 查找 `Windows/System32/winevt/Logs/System.evtx`，通过 `evtx.boot_shutdown` adapter bounded 读取最多 64MB，解析 6005、6006、6008、1074 为候选事件，boot record 带 `eventId`、`recordId`、note 和 provenance。无 EVTX、损坏或超限时保持 `notParsed/unavailable + warnings`。当前单测覆盖 JSON 记录提取、malformed/oversized/truncated 路径，并新增 `testdata/fixtures/tiny/evtx/system.evtx` 真实 fixture 覆盖 parser path；fixture 来自 MIT/Apache-2.0 licensed upstream `evtx` repository commit `38a2d50b21629edb3dd77953a2c02a4b944badf1` |
 | 2.3 Analysis provenance | Completed | 新增 `AnalysisProvenanceDto { dataSourceId, artifactPath, parser, parsedAt, status, warnings }`；system info、boot records、file classification 和 classified file 均可携带 provenance |
 | 2.4 Analysis 分类读取一致性 | Completed | classify 走 `FileEntryId + DataSourceKind` helper，仅读取 bounded header |
 | 2.5 Markdown summary 修正 | Completed | summary 只基于 parsed/unknown 状态，不输出 `FORENSICS-PC`、`Windows 10` 等伪值 |
@@ -78,7 +78,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 | 5.2 Dependency gate | Completed | 后端 CI 保留 `cargo audit` 并新增 `cargo deny check advisories bans licenses sources`；`deny.toml` 对短期 transitive advisories 带 reason/owner/expiry，本轮新增 `scripts/check-deny-exceptions.ps1` 并接入 backend CI，强制 advisory 例外必须包含 owner、expires 和说明文本且不得过期；`RUSTSEC-2021-0153` 例外用于 `evtx -> encoding` transitive unmaintained advisory，expires 2026-09-01；前端 CI 执行 `pnpm --dir frontend audit --audit-level high` |
 | 5.3 DevTools guard | Completed | 新增 `scripts/check-release-guard.ps1`，CI backend 执行 release guard |
 | 5.4 SBOM | Completed | 后端 CI 使用 `cargo-cyclonedx` 生成 `backend-sbom` artifact；前端 CI 使用 `@cyclonedx/cyclonedx-npm` 生成 `frontend-sbom` artifact，并验证 `bomFormat=CycloneDX` |
-| 5.5 Fixture 策略 | Completed / real E01 manual | 新增仓库内 tiny logical directory、1024-byte tiny RAW fixture 和 4405-byte synthetic single-segment `testdata/fixtures/tiny/e01/tiny.E01`；`scripts/generate-tiny-fixtures.ps1` 可重建 RAW/E01 fixture，`crates/testing` 暴露 `tiny_logical_dir()`、`tiny_raw_image()`、`tiny_e01_image()`。tiny E01 只证明 reader section/table/read/seek 行为，不代表真实文件系统镜像；真实 E01 分区/文件系统慢测仍为 `FORENSICS_E01_FIXTURE` opt-in ignored tests |
+| 5.5 Fixture 策略 | Completed / real E01 manual | 新增仓库内 tiny logical directory、1024-byte tiny RAW fixture、4405-byte synthetic single-segment `testdata/fixtures/tiny/e01/tiny.E01` 和 1,118,208-byte real `testdata/fixtures/tiny/evtx/system.evtx`；`scripts/generate-tiny-fixtures.ps1` 可重建 RAW/E01 fixture，`crates/testing` 暴露 `tiny_logical_dir()`、`tiny_raw_image()`、`tiny_e01_image()`、`tiny_system_evtx()`。tiny E01 只证明 reader section/table/read/seek 行为，不代表真实文件系统镜像；EVTX fixture 覆盖 `evtx.boot_shutdown` parser path；真实 E01 分区/文件系统慢测仍为 `FORENSICS_E01_FIXTURE` opt-in ignored tests |
 | 5.6 覆盖率扩展 | Completed / frontend baseline gated | 已补 Analysis、Reports、Viewer、Jobs、Fixture、CI/dependency 相关 targeted tests；新增 `scripts/run-coverage.ps1`、前端 `test:coverage`、backend/frontend coverage CI artifacts。前端 coverage 现在以全局 lines/statements/functions 45%、branches 35% 作为初始防回退阈值；后端 coverage 仍只生成 LCOV artifact，不设置百分比阈值 |
 
 ## Phase 6: 代码质量与文档收尾
@@ -103,7 +103,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 - `cargo test -p app-services --lib analysis_service`: 通过。
 - `cargo test -p app-services report_service`: 通过。
 - `cargo test -p artifacts-windows registry`: 通过。
-- `cargo test -p artifacts-windows evtx`: 通过；新增 truncated EVTX magic warning/not-panic 回归。
+- `cargo test -p artifacts-windows evtx`: 通过；7 个 EVTX targeted tests，包含 real `System.evtx` parser-path regression、JSON helper、malformed、oversized 和 truncated EVTX magic warning/not-panic 回归。
 - `cargo test -p transport analysis`: 通过。
 - `cargo test -p forensics-desktop media_protocol`: 通过。
 - `cargo test -p transport events`: 通过。
@@ -123,6 +123,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 - Final gate 统一 grep 复核：伪取证事实命中仅存在于审计文档或负向测试；页面/feature 无 direct Tauri `invoke`；新增事件 payload 不含裸 evidence host path。
 - FS helper 去重 targeted tests：`cargo test -p evidence-core filesystem`、`cargo test -p fs-fat`、`cargo test -p fs-exfat`、`cargo test -p fs-ntfs`、`cargo test -p app-services file_service`、`cargo test -p app-services --test file_service_real_test` 均通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过。
 - Tiny E01 fixture targeted tests：`powershell -ExecutionPolicy Bypass -File scripts\generate-tiny-fixtures.ps1` 通过，生成 `testdata/fixtures/tiny/e01/tiny.E01` 4405 bytes；`cargo test -p image-e01` 通过，4 个默认 regression tests + 5 个 ignored real-E01 slow tests；`cargo test -p testing` 通过，4 个 fixture helper tests；`cargo clippy -p image-e01 --all-targets -- -D warnings` 通过。
+- Tiny EVTX fixture targeted tests：`cargo test -p artifacts-windows evtx` 通过，real `System.evtx` fixture 能解析出 6005/6006/6008/1074 boot/shutdown candidate；`cargo test -p testing tiny_system_evtx` 通过，验证 fixture 存在、大小小于 2MB 且 EVTX header 正确。
 - Coverage report targeted tests：`pnpm --dir frontend test:coverage` 通过，生成 `frontend/coverage/coverage-summary.json` 和 `lcov.info`，并通过前端初始 coverage 阈值；`powershell -ExecutionPolicy Bypass -File scripts\run-coverage.ps1 -Frontend` 通过，验证统一 coverage runner 的前端路径。
 - FS path component helper targeted tests：`cargo test -p evidence-core filesystem`、`cargo test -p fs-fat`、`cargo test -p fs-exfat`、`cargo test -p fs-ntfs`、`cargo test -p app-services file_service`、`cargo test -p app-services --test file_service_real_test`、`cargo clippy -p evidence-core -p fs-fat -p fs-exfat -p fs-ntfs --all-targets -- -D warnings`、`cargo fmt --all -- --check` 均通过。
 
@@ -158,10 +159,9 @@ cargo test -p app-services --test e01_mft_scan_test -- --ignored --nocapture
 
 ## 后续优先级
 
-1. 为 EVTX adapter 增加合法 tiny real `.evtx` fixture，覆盖真实 parser path，不只覆盖 JSON extraction helper。已确认 `evtx 0.11.2` crates.io 包排除 `*.evtx`，需要自行生成、引入可再分发 fixture，或改用/维护其他 parser 路径。
-2. 深化 Registry parser 覆盖更多 hive cell/list 变体，并补真实 fixture；当前只承诺 Analysis 所需定向字段。
-3. 做 Tauri 桌面 smoke，确认 `evidence-media://` 在 Windows WebView2 中对 `<video>/<audio>` seek 行为稳定；fallback command 已保留。
-4. 若需要真实 E01 分区/文件系统验收，继续使用 `FORENSICS_E01_FIXTURE` 手动慢测；当前提交的 tiny E01 只覆盖 reader 层 section/table/read/seek，不替代真实样本。
-5. 逐步消除 `cargo audit` warning-class transitive advisories，尤其是本轮 `evtx -> encoding` 临时例外；`encoding` 是 `evtx 0.11.2` 的直接非可选依赖，需替换 parser、vendor/patch parser 或在 2026-09-01 前重新评审例外。
-6. 继续积累 coverage baseline 并逐步抬高前端阈值；后端 coverage 目前仍只上传 LCOV artifact，不以百分比阻塞默认门禁。
-7. 继续收口 FS 枚举流程和 FS 特定错误转换去重；当前公共 root/path/path-components/error helper 已落地。Command layer SQL 已通过 guard 防回退，后续若有 repository/service SQL 行为变更仍需补 targeted tests。
+1. 深化 Registry parser 覆盖更多 hive cell/list 变体，并补真实 fixture；当前只承诺 Analysis 所需定向字段。
+2. 做 Tauri 桌面 smoke，确认 `evidence-media://` 在 Windows WebView2 中对 `<video>/<audio>` seek 行为稳定；fallback command 已保留。
+3. 若需要真实 E01 分区/文件系统验收，继续使用 `FORENSICS_E01_FIXTURE` 手动慢测；当前提交的 tiny E01 只覆盖 reader 层 section/table/read/seek，不替代真实样本。
+4. 逐步消除 `cargo audit` warning-class transitive advisories，尤其是本轮 `evtx -> encoding` 临时例外；`encoding` 是 `evtx 0.11.2` 的直接非可选依赖，需替换 parser、vendor/patch parser 或在 2026-09-01 前重新评审例外。
+5. 继续积累 coverage baseline 并逐步抬高前端阈值；后端 coverage 目前仍只上传 LCOV artifact，不以百分比阻塞默认门禁。
+6. 继续收口 FS 枚举流程和 FS 特定错误转换去重；当前公共 root/path/path-components/error helper 已落地。Command layer SQL 已通过 guard 防回退，后续若有 repository/service SQL 行为变更仍需补 targeted tests。

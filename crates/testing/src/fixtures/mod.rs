@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 const TINY_LOGICAL_REL: &str = "testdata/fixtures/tiny/logical";
 const TINY_RAW_REL: &str = "testdata/fixtures/tiny/raw/tiny.raw";
 const TINY_E01_REL: &str = "testdata/fixtures/tiny/e01/tiny.E01";
+const TINY_SYSTEM_EVTX_REL: &str = "testdata/fixtures/tiny/evtx/system.evtx";
 
 /// Returns the repository root as seen by the `testing` crate.
 pub fn repo_root() -> PathBuf {
@@ -30,6 +31,14 @@ pub fn tiny_raw_image() -> PathBuf {
 /// chunk. It is not intended to represent a real filesystem image.
 pub fn tiny_e01_image() -> PathBuf {
     repo_root().join(TINY_E01_REL)
+}
+
+/// Tiny real System.evtx fixture for parser-path tests.
+///
+/// This fixture is copied from the MIT/Apache-2.0 licensed upstream `evtx`
+/// repository sample set and is small enough for default CI.
+pub fn tiny_system_evtx() -> PathBuf {
+    repo_root().join(TINY_SYSTEM_EVTX_REL)
 }
 
 /// Optional local E01 fixture for manual slow tests.
@@ -80,6 +89,20 @@ mod tests {
         assert!(bytes
             .windows(b"FWB-TINY-E01".len())
             .any(|w| w == b"FWB-TINY-E01"));
+    }
+
+    #[test]
+    fn tiny_system_evtx_fixture_exists_and_has_evtx_header() {
+        let path = tiny_system_evtx();
+        assert!(
+            path.is_file(),
+            "missing System.evtx fixture: {}",
+            path.display()
+        );
+
+        let bytes = std::fs::read(&path).expect("read tiny System.evtx fixture");
+        assert!(bytes.len() < 2 * 1024 * 1024);
+        assert_eq!(&bytes[0..8], b"ElfFile\0");
     }
 
     #[test]

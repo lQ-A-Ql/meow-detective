@@ -323,4 +323,30 @@ mod tests {
         assert!(extraction.events.is_empty());
         assert!(extraction.warnings[0].contains("exceeds bounded EVTX parser limit"));
     }
+
+    #[test]
+    fn parses_real_system_evtx_fixture_boot_candidates() {
+        let path = testing::fixtures::tiny_system_evtx();
+        let bytes = std::fs::read(&path).expect("read tiny System.evtx fixture");
+        let extraction =
+            extract_boot_shutdown_events(&bytes, "Windows/System32/winevt/Logs/System.evtx");
+
+        assert!(
+            !extraction.events.is_empty(),
+            "expected at least one boot/shutdown candidate; warnings: {:?}",
+            extraction.warnings
+        );
+        assert!(
+            extraction
+                .events
+                .iter()
+                .any(|event| matches!(event.event_id, 6005 | 6006 | 6008 | 1074)),
+            "expected EventLog/User32 boot/shutdown candidate in fixture"
+        );
+        assert!(extraction.events.iter().all(|event| {
+            event.source_path == "Windows/System32/winevt/Logs/System.evtx"
+                && !event.timestamp.trim().is_empty()
+                && !event.note.trim().is_empty()
+        }));
+    }
 }
