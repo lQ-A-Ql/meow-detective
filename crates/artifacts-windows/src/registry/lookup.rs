@@ -683,14 +683,19 @@ mod tests {
         }
 
         if !subkeys.is_empty() {
-            write_lf(data, subkey_list_offset, subkeys);
+            write_hashed_subkey_list(data, subkey_list_offset, b"lf", subkeys);
         }
     }
 
-    fn write_lf(data: &mut [u8], offset: u32, subkeys: &[(&str, u32)]) {
+    fn write_hashed_subkey_list(
+        data: &mut [u8],
+        offset: u32,
+        signature: &[u8; 2],
+        subkeys: &[(&str, u32)],
+    ) {
         let abs = BASE_BLOCK_SIZE + offset as usize;
         data[abs..abs + 4].copy_from_slice(&(-256i32).to_le_bytes());
-        data[abs + 4..abs + 6].copy_from_slice(b"lf");
+        data[abs + 4..abs + 6].copy_from_slice(signature);
         data[abs + 6..abs + 8].copy_from_slice(&(subkeys.len() as u16).to_le_bytes());
         for (index, (name, child_offset)) in subkeys.iter().enumerate() {
             let entry = abs + 8 + index * 8;
@@ -701,6 +706,23 @@ mod tests {
             data[entry..entry + 4].copy_from_slice(&hash);
             data[entry + 4..entry + 8].copy_from_slice(&child_offset.to_le_bytes());
         }
+    }
+
+    fn write_flat_subkey_list(data: &mut [u8], offset: u32, signature: &[u8; 2], subkeys: &[u32]) {
+        let abs = BASE_BLOCK_SIZE + offset as usize;
+        data[abs..abs + 4].copy_from_slice(&(-256i32).to_le_bytes());
+        data[abs + 4..abs + 6].copy_from_slice(signature);
+        data[abs + 6..abs + 8].copy_from_slice(&(subkeys.len() as u16).to_le_bytes());
+        for (index, child_offset) in subkeys.iter().enumerate() {
+            let entry = abs + 8 + index * 4;
+            data[entry..entry + 4].copy_from_slice(&child_offset.to_le_bytes());
+        }
+    }
+
+    fn set_nk_subkey_list(data: &mut [u8], nk_offset: u32, list_offset: u32, count: u32) {
+        let abs = BASE_BLOCK_SIZE + nk_offset as usize;
+        data[abs + 0x18..abs + 0x1c].copy_from_slice(&count.to_le_bytes());
+        data[abs + 0x20..abs + 0x24].copy_from_slice(&list_offset.to_le_bytes());
     }
 
     fn write_string_value(data: &mut [u8], offset: u32, name: &str, value: &str, data_offset: u32) {
@@ -770,6 +792,55 @@ mod tests {
         write_nk(&mut data, 0x200, "Child", &[], &[0x400]);
         write_string_value(&mut data, 0x400, "Name", "Value", 0x700);
         let hive = RegistryHiveReader::new(&data).unwrap();
+        assert_eq!(
+            hive.lookup_value(&["Child"], "Name").unwrap(),
+            Some(RegistryValue::String("Value".to_string()))
+        );
+    }
+
+    #[test]
+    fn read_subkeys_lh_list() {
+        let mut data = empty_hive("ROOT");
+        write_nk(&mut data, 0x20, "ROOT", &[], &[]);
+        write_nk(&mut data, 0x200, "Child", &[], &[0x400]);
+        write_string_value(&mut data, 0x400, "Name", "Value", 0x700);
+        set_nk_subkey_list(&mut data, 0x20, 0x2020, 1);
+        write_hashed_subkey_list(&mut data, 0x2020, b"lh", &[("Child", 0x200)]);
+        let hive = RegistryHiveReader::new(&data).unwrap();
+
+        assert_eq!(
+            hive.lookup_value(&["Child"], "Name").unwrap(),
+            Some(RegistryValue::String("Value".to_string()))
+        );
+    }
+
+    #[test]
+    fn read_subkeys_li_list() {
+        let mut data = empty_hive("ROOT");
+        write_nk(&mut data, 0x20, "ROOT", &[], &[]);
+        write_nk(&mut data, 0x200, "Child", &[], &[0x400]);
+        write_string_value(&mut data, 0x400, "Name", "Value", 0x700);
+        set_nk_subkey_list(&mut data, 0x20, 0x2020, 1);
+        write_flat_subkey_list(&mut data, 0x2020, b"li", &[0x200]);
+        let hive = RegistryHiveReader::new(&data).unwrap();
+
+        assert_eq!(
+            hive.lookup_value(&["Child"], "Name").unwrap(),
+            Some(RegistryValue::String("Value".to_string()))
+        );
+    }
+
+    #[test]
+    fn read_subkeys_ri_list() {
+        let mut data = empty_hive("ROOT");
+        write_nk(&mut data, 0x20, "ROOT", &[], &[]);
+        write_nk(&mut data, 0x200, "Child", &[], &[0x400]);
+        write_string_value(&mut data, 0x400, "Name", "Value", 0x700);
+        set_nk_subkey_list(&mut data, 0x20, 0x2020, 1);
+        write_flat_subkey_list(&mut data, 0x2020, b"ri", &[0x2080]);
+        write_flat_subkey_list(&mut data, 0x2080, b"li", &[0x200]);
+        let hive = RegistryHiveReader::new(&data).unwrap();
+
         assert_eq!(
             hive.lookup_value(&["Child"], "Name").unwrap(),
             Some(RegistryValue::String("Value".to_string()))
