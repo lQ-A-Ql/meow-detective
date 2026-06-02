@@ -50,7 +50,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 
 | Task | 状态 | 当前结果 / 剩余动作 |
 |---|---|---|
-| 3.1 大媒体 scoped streaming | Completed / CI guarded / manual smoke pending | `get_media_url` 对大媒体返回 `mode=protocol`、opaque `handleId` 和 `evidence-media://handle/<encoded>` URL；Tauri protocol handler 解析 Range、每次最多读取 1MB、返回 206/416 等标准状态，读取仍走 `open_file_content_by_id`。`read_media_range` command 保留为 mock/unsupported fallback；CSP 只给 `media-src` 增加 `evidence-media:`，不暴露 evidence 宿主绝对路径。新增 `scripts/check-media-protocol-guard.ps1` 并接入 backend CI，固定 CSP/protocol/fallback/host-path URL 边界。剩余：尚未做真实 Windows WebView2 播放器 seek smoke |
+| 3.1 大媒体 scoped streaming | Completed / CI guarded / smoke harness ready | `get_media_url` 对大媒体返回 `mode=protocol`、opaque `handleId` 和 `evidence-media://handle/<encoded>` URL；Tauri protocol handler 解析 Range、每次最多读取 1MB、返回 206/416 等标准状态，读取仍走 `open_file_content_by_id`。`read_media_range` command 保留为 mock/unsupported fallback；CSP 只给 `media-src` 增加 `evidence-media:`，不暴露 evidence 宿主绝对路径。`scripts/check-media-protocol-guard.ps1` 接入 backend CI，固定 CSP/protocol/fallback/host-path URL 边界；新增 `scripts/run-webview2-media-smoke.ps1`，生成小 inline WAV 和 >20MB protocol WAV logical evidence fixture，并输出 Windows WebView2 播放/seek 手动验证清单。剩余：尚未记录真实人工 WebView2 seek 结果 |
 | 3.2 Image preview 限制 | Completed | 小图 data URL，超限 typed error/fallback；不再经 hex lines 反解大图 |
 | 3.3 Extract file | Completed | 新增 `extract_file` command + save dialog wrapper，后端通过 reader helper 写出，destination 拒绝 device path/目录 |
 | 3.4 FileBrowser -> Timeline | Completed | “在时间线中查看”设置 selection 并导航 `/timeline` |
@@ -162,7 +162,7 @@ cargo test -p app-services --test e01_mft_scan_test -- --ignored --nocapture
 ## 后续优先级
 
 1. 深化 Registry parser 覆盖更多 hive cell/list 变体，并补真实 fixture；当前已修正 value-list cell 语义和数值长度边界，但仍只承诺 Analysis 所需定向字段。
-2. 做 Tauri 桌面 manual smoke，确认 `evidence-media://` 在 Windows WebView2 中对 `<video>/<audio>` seek 行为稳定；CI 已有 media protocol guard，但不替代真实播放器 seek 验证。
+2. 执行 `scripts/run-webview2-media-smoke.ps1` 生成的 Tauri 桌面 manual smoke 清单，确认 `evidence-media://` 在 Windows WebView2 中对 `<video>/<audio>` seek 行为稳定；CI 已有 media protocol guard，harness 可准备 fixture 和 checklist，但不替代真实播放器 seek 结果记录。
 3. 若需要真实 E01 分区/文件系统验收，继续使用 `FORENSICS_E01_FIXTURE` 手动慢测；当前提交的 tiny E01 只覆盖 reader 层 section/table/read/seek，不替代真实样本。
 4. 逐步消除 `cargo audit` 剩余 19 个 warning-class transitive advisories；`evtx -> encoding` 已通过 `crates/evtx-patched` + `encoding_rs` 移除，后续只需维护 local fork、跟踪上游 maintained release，并继续防止 `encoding` 回归。
 5. 继续积累 coverage baseline 并逐步抬高前端阈值；后端 coverage 目前仍只上传 LCOV artifact，不以百分比阻塞默认门禁。

@@ -404,7 +404,7 @@ pub fn enumerate_filesystem_mft(...) -> DbResult<EnumerationStats> {
 | 问题 | 算法 | 建议 |
 |------|------|------|
 | 编码检测多次扫描 | detect_encoding | 合并为单次扫描 |
-| 大媒体预览 | evidence-media/read_media_range | 小文件 data URL；大文件返回 `evidence-media://handle/<encoded>` scoped protocol URL，Tauri protocol 按 Range 每次最多读取 1MB；`read_media_range` 保留为 mock/unsupported fallback。CI guard 已固定 CSP/protocol/fallback/host-path URL 边界；仍需 Windows WebView2 桌面 seek smoke |
+| 大媒体预览 | evidence-media/read_media_range | 小文件 data URL；大文件返回 `evidence-media://handle/<encoded>` scoped protocol URL，Tauri protocol 按 Range 每次最多读取 1MB；`read_media_range` 保留为 mock/unsupported fallback。CI guard 已固定 CSP/protocol/fallback/host-path URL 边界；`run-webview2-media-smoke.ps1` 可生成手动 smoke fixture/checklist，真实 Windows WebView2 seek 结果仍需人工记录 |
 | Registry 解析覆盖 | registry targeted lookup | 当前只承诺 Analysis 所需 SYSTEM/SOFTWARE 定向字段；不是完整 hive browser。后续若扩展全 hive traversal，需重新评估 cell graph 遍历复杂度 |
 | EVTX fixture 与依赖治理 | evtx.boot_shutdown | 已新增 tiny real `System.evtx` fixture，覆盖 6005/6006/6008/1074 candidate parser path；workspace `evtx` 已切到 `crates/evtx-patched`，local fork 使用 `encoding_rs`，`RUSTSEC-2021-0153` 不再是 deny/audit 剩余项；CI guard 防止 legacy `encoding` 链路回归 |
 | E01 真实样本慢测 | image-e01/app-services | 仓库内已有 tiny synthetic E01 reader fixture；真实分区/文件系统 E01 慢测仍需 `FORENSICS_E01_FIXTURE` opt-in |

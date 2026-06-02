@@ -106,6 +106,11 @@ powershell -ExecutionPolicy Bypass -File scripts\check-release-guard.ps1
 # manual Windows WebView2 video/audio seek smoke.
 powershell -ExecutionPolicy Bypass -File scripts\check-media-protocol-guard.ps1
 
+# WebView2 media smoke harness. This creates a temporary logical evidence
+# directory with small inline and >20 MiB protocol media fixtures, then writes a
+# checklist for manual playback/seek verification in the desktop WebView2 shell.
+powershell -ExecutionPolicy Bypass -File scripts\run-webview2-media-smoke.ps1
+
 # Tauri command layer SQL boundary guard
 powershell -ExecutionPolicy Bypass -File scripts\check-command-sql-boundary.ps1
 
