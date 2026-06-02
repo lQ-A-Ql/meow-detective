@@ -552,7 +552,7 @@ impl<'a> RegistryHiveReader<'a> {
 
 fn parse_value_data(data_type: u32, data: &[u8]) -> Result<RegistryValue, String> {
     match data_type {
-        REG_SZ | REG_EXPAND_SZ => Ok(RegistryValue::String(decode_utf16_lossy(data))),
+        REG_SZ | REG_EXPAND_SZ => Ok(RegistryValue::String(decode_utf16_until_nul(data)?)),
         REG_DWORD => Ok(RegistryValue::Dword(
             read_le_array::<4>(data)
                 .map(u32::from_le_bytes)
@@ -564,7 +564,7 @@ fn parse_value_data(data_type: u32, data: &[u8]) -> Result<RegistryValue, String
                 .ok_or_else(|| "REG_QWORD value shorter than 8 bytes".to_string())?,
         )),
         REG_MULTI_SZ => Ok(RegistryValue::MultiString(
-            decode_utf16_lossy(data)
+            decode_utf16_full(data)?
                 .split('\0')
                 .filter(|item| !item.is_empty())
                 .map(str::to_string)
@@ -578,21 +578,27 @@ fn decode_name(bytes: &[u8], compressed: bool) -> Result<String, String> {
     if compressed {
         return String::from_utf8(bytes.to_vec()).map_err(|err| err.to_string());
     }
-    Ok(decode_utf16_lossy(bytes))
+    decode_utf16_full(bytes)
 }
 
-fn decode_utf16_lossy(bytes: &[u8]) -> String {
+fn decode_utf16_until_nul(bytes: &[u8]) -> Result<String, String> {
+    let mut decoded = decode_utf16_full(bytes)?;
+    if let Some(index) = decoded.find('\0') {
+        decoded.truncate(index);
+    }
+    Ok(decoded)
+}
+
+fn decode_utf16_full(bytes: &[u8]) -> Result<String, String> {
+    if !bytes.len().is_multiple_of(2) {
+        return Err("UTF-16 data has odd byte length".to_string());
+    }
     let mut units = Vec::with_capacity(bytes.len() / 2);
-    for chunk in bytes.chunks_exact(2) {
+    for chunk in bytes.chunks(2) {
         let unit = u16::from_le_bytes([chunk[0], chunk[1]]);
-        if unit == 0 {
-            break;
-        }
         units.push(unit);
     }
-    String::from_utf16_lossy(&units)
-        .trim_end_matches('\0')
-        .to_string()
+    Ok(String::from_utf16_lossy(&units))
 }
 
 fn read_le_array<const N: usize>(bytes: &[u8]) -> Option<[u8; N]> {
@@ -687,6 +693,18 @@ mod tests {
         }
     }
 
+    fn write_nk_utf16_name(data: &mut [u8], offset: u32, name: &str) {
+        let abs = BASE_BLOCK_SIZE + offset as usize;
+        let name_bytes: Vec<u8> = name.encode_utf16().flat_map(u16::to_le_bytes).collect();
+        data[abs..abs + 4].copy_from_slice(&(-256i32).to_le_bytes());
+        data[abs + 4..abs + 6].copy_from_slice(b"nk");
+        data[abs + 6..abs + 8].copy_from_slice(&0u16.to_le_bytes());
+        data[abs + 0x20..abs + 0x24].copy_from_slice(&INVALID_OFFSET.to_le_bytes());
+        data[abs + 0x2c..abs + 0x30].copy_from_slice(&INVALID_OFFSET.to_le_bytes());
+        data[abs + 0x4c..abs + 0x4e].copy_from_slice(&(name_bytes.len() as u16).to_le_bytes());
+        data[abs + 0x50..abs + 0x50 + name_bytes.len()].copy_from_slice(&name_bytes);
+    }
+
     fn write_hashed_subkey_list(
         data: &mut [u8],
         offset: u32,
@@ -726,6 +744,17 @@ mod tests {
     }
 
     fn write_string_value(data: &mut [u8], offset: u32, name: &str, value: &str, data_offset: u32) {
+        write_typed_string_value(data, offset, name, REG_SZ, value, data_offset);
+    }
+
+    fn write_typed_string_value(
+        data: &mut [u8],
+        offset: u32,
+        name: &str,
+        value_type: u32,
+        value: &str,
+        data_offset: u32,
+    ) {
         let encoded: Vec<u8> = value.encode_utf16().flat_map(u16::to_le_bytes).collect();
         let data_abs = BASE_BLOCK_SIZE + data_offset as usize;
         data[data_abs..data_abs + 4].copy_from_slice(&(-128i32).to_le_bytes());
@@ -734,7 +763,33 @@ mod tests {
             data,
             offset,
             name,
-            REG_SZ,
+            value_type,
+            encoded.len() as u32,
+            data_offset,
+        );
+    }
+
+    fn write_multi_string_value(
+        data: &mut [u8],
+        offset: u32,
+        name: &str,
+        values: &[&str],
+        data_offset: u32,
+    ) {
+        let mut encoded = Vec::new();
+        for value in values {
+            encoded.extend(value.encode_utf16().flat_map(u16::to_le_bytes));
+            encoded.extend(0u16.to_le_bytes());
+        }
+        encoded.extend(0u16.to_le_bytes());
+        let data_abs = BASE_BLOCK_SIZE + data_offset as usize;
+        data[data_abs..data_abs + 4].copy_from_slice(&(-128i32).to_le_bytes());
+        data[data_abs + 4..data_abs + 4 + encoded.len()].copy_from_slice(&encoded);
+        write_vk(
+            data,
+            offset,
+            name,
+            REG_MULTI_SZ,
             encoded.len() as u32,
             data_offset,
         );
@@ -742,6 +797,13 @@ mod tests {
 
     fn write_dword_value(data: &mut [u8], offset: u32, name: &str, value: u32) {
         write_vk(data, offset, name, REG_DWORD, 0x8000_0004, value);
+    }
+
+    fn write_qword_value(data: &mut [u8], offset: u32, name: &str, value: u64, data_offset: u32) {
+        let data_abs = BASE_BLOCK_SIZE + data_offset as usize;
+        data[data_abs..data_abs + 4].copy_from_slice(&(-128i32).to_le_bytes());
+        data[data_abs + 4..data_abs + 12].copy_from_slice(&value.to_le_bytes());
+        write_vk(data, offset, name, REG_QWORD, 8, data_offset);
     }
 
     fn write_vk(
@@ -783,6 +845,15 @@ mod tests {
         let data = empty_hive("SYSTEM");
         let hive = RegistryHiveReader::new(&data).unwrap();
         assert_eq!(hive.parse_nk(0x20).unwrap().name, "SYSTEM");
+    }
+
+    #[test]
+    fn parse_nk_utf16_name() {
+        let mut data = empty_hive("ROOT");
+        write_nk_utf16_name(&mut data, 0x20, "SYST\u{00c8}M");
+        let hive = RegistryHiveReader::new(&data).unwrap();
+
+        assert_eq!(hive.parse_nk(0x20).unwrap().name, "SYST\u{00c8}M");
     }
 
     #[test]
@@ -857,6 +928,69 @@ mod tests {
             hive.lookup_value(&[], "Current").unwrap(),
             Some(RegistryValue::Dword(1))
         );
+    }
+
+    #[test]
+    fn read_vk_reg_expand_sz() {
+        let mut data = empty_hive("ROOT");
+        write_nk(&mut data, 0x20, "ROOT", &[], &[0x400]);
+        write_typed_string_value(
+            &mut data,
+            0x400,
+            "Path",
+            REG_EXPAND_SZ,
+            "%SystemRoot%\\System32",
+            0x700,
+        );
+        let hive = RegistryHiveReader::new(&data).unwrap();
+
+        assert_eq!(
+            hive.lookup_value(&[], "Path").unwrap(),
+            Some(RegistryValue::String("%SystemRoot%\\System32".to_string()))
+        );
+    }
+
+    #[test]
+    fn read_vk_reg_multi_sz_preserves_all_items() {
+        let mut data = empty_hive("ROOT");
+        write_nk(&mut data, 0x20, "ROOT", &[], &[0x400]);
+        write_multi_string_value(&mut data, 0x400, "Services", &["Tcpip", "Dnscache"], 0x700);
+        let hive = RegistryHiveReader::new(&data).unwrap();
+
+        assert_eq!(
+            hive.lookup_value(&[], "Services").unwrap(),
+            Some(RegistryValue::MultiString(vec![
+                "Tcpip".to_string(),
+                "Dnscache".to_string()
+            ]))
+        );
+    }
+
+    #[test]
+    fn read_vk_reg_qword_external() {
+        let mut data = empty_hive("ROOT");
+        write_nk(&mut data, 0x20, "ROOT", &[], &[0x400]);
+        write_qword_value(&mut data, 0x400, "Counter", 0x1122_3344_5566_7788, 0x700);
+        let hive = RegistryHiveReader::new(&data).unwrap();
+
+        assert_eq!(
+            hive.lookup_value(&[], "Counter").unwrap(),
+            Some(RegistryValue::Qword(0x1122_3344_5566_7788))
+        );
+    }
+
+    #[test]
+    fn odd_utf16_value_data_is_rejected() {
+        let mut data = empty_hive("ROOT");
+        write_nk(&mut data, 0x20, "ROOT", &[], &[0x400]);
+        let data_abs = BASE_BLOCK_SIZE + 0x700;
+        data[data_abs..data_abs + 4].copy_from_slice(&(-8i32).to_le_bytes());
+        data[data_abs + 4..data_abs + 7].copy_from_slice(b"A\0B");
+        write_vk(&mut data, 0x400, "Odd", REG_SZ, 3, 0x700);
+        let hive = RegistryHiveReader::new(&data).unwrap();
+
+        let err = hive.lookup_value(&[], "Odd").unwrap_err();
+        assert!(err.contains("UTF-16 data has odd byte length"));
     }
 
     #[test]

@@ -1,6 +1,6 @@
 # Forensics Workbench 剩余 v2.1 Backlog 状态与修补方案
 
-**更新时间**: 2026-06-02 11:45:00 +08:00
+**更新时间**: 2026-06-02 15:38:12 +08:00
 **署名**: Codex  
 **基线**: `e7ffa35` -> `codex/beta-forensics-backlog`；本文件记录 v2.1 backlog 在可信 beta 收口实现后的当前状态、验收命令和剩余修补方案。
 
@@ -39,7 +39,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 
 | Task | 状态 | 当前结果 / 剩余动作 |
 |---|---|---|
-| 2.1 Registry parser 接入 | Completed / targeted | Analysis 会从 catalog 查找 `Windows/System32/config/SYSTEM` / `SOFTWARE`，通过 `FileEntryId` reader bounded 读取最多 64MB hive；`artifacts-windows::registry::lookup` 支持 `regf` base block、NK/VK、带 cell header 的 value-list、`lf/lh/li/ri` 子键列表和常用值类型，并提取 `ComputerName`、timezone、ProductName、CurrentBuild、InstallDate、RegisteredOwner、Organization、ProductId。字段带 `fieldProvenance`；缺失/损坏/超限为 warning，不生成默认 Windows 文案。最新回归覆盖 value-list cell bounds、inline value 长度、短 `REG_DWORD` 和 `lh/li/ri` subkey list 导航。剩余：不是完整 Registry browser |
+| 2.1 Registry parser 接入 | Completed / targeted | Analysis 会从 catalog 查找 `Windows/System32/config/SYSTEM` / `SOFTWARE`，通过 `FileEntryId` reader bounded 读取最多 64MB hive；`artifacts-windows::registry::lookup` 支持 `regf` base block、NK/VK、带 cell header 的 value-list、`lf/lh/li/ri` 子键列表和常用值类型，并提取 `ComputerName`、timezone、ProductName、CurrentBuild、InstallDate、RegisteredOwner、Organization、ProductId。字段带 `fieldProvenance`；缺失/损坏/超限为 warning，不生成默认 Windows 文案。最新回归覆盖 value-list cell bounds、inline value 长度、短 `REG_DWORD`、`lh/li/ri` subkey list 导航、UTF-16 NK 名称、`REG_EXPAND_SZ`、`REG_MULTI_SZ` 和 `REG_QWORD`；`REG_MULTI_SZ` 已修正为保留完整 multi-string 列表，奇数长度 UTF-16 会返回 parse error。剩余：不是完整 Registry browser |
 | 2.2 EVTX parser 策略 | Completed / real fixture | Analysis 查找 `Windows/System32/winevt/Logs/System.evtx`，通过 `evtx.boot_shutdown` adapter bounded 读取最多 64MB，解析 6005、6006、6008、1074 为候选事件，boot record 带 `eventId`、`recordId`、note 和 provenance。无 EVTX、损坏或超限时保持 `notParsed/unavailable + warnings`。当前单测覆盖 JSON 记录提取、malformed/oversized/truncated 路径，并新增 `testdata/fixtures/tiny/evtx/system.evtx` 真实 fixture 覆盖 parser path；fixture 来自 MIT/Apache-2.0 licensed upstream `evtx` repository commit `38a2d50b21629edb3dd77953a2c02a4b944badf1` |
 | 2.3 Analysis provenance | Completed | 新增 `AnalysisProvenanceDto { dataSourceId, artifactPath, parser, parsedAt, status, warnings }`；system info、boot records、file classification 和 classified file 均可携带 provenance |
 | 2.4 Analysis 分类读取一致性 | Completed | classify 走 `FileEntryId + DataSourceKind` helper，仅读取 bounded header |
