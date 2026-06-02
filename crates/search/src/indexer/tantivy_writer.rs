@@ -141,8 +141,10 @@ impl SearchIndex {
             })
             .map_err(|e| IndexError::Query(e.to_string()))?;
 
-        let (top_docs, total_count) =
-            searcher.search(&query, &(TopDocs::with_limit(limit), Count))?;
+        let (top_docs, total_count) = searcher.search(
+            &query,
+            &(TopDocs::with_limit(limit).order_by_score(), Count),
+        )?;
 
         let mut hits = Vec::new();
         for (score, doc_addr) in top_docs {
