@@ -341,8 +341,31 @@ impl<'a> RegistryHiveReader<'a> {
             return Ok(None);
         }
         let list_abs = self.abs(nk.values_list_offset)?;
+        let cell_size = read_i32(self.bytes, list_abs)?;
+        if cell_size >= 0 {
+            return Err(format!(
+                "value list at {:#x} is free",
+                nk.values_list_offset
+            ));
+        }
+        let cell_len = cell_size
+            .checked_abs()
+            .ok_or_else(|| "invalid registry value list cell size".to_string())?
+            as usize;
+        self.require(list_abs, cell_len)?;
+        let list_len = (nk.num_values as usize)
+            .checked_mul(4)
+            .ok_or_else(|| "registry value list size overflow".to_string())?;
+        let list_start = list_abs + 4;
+        if list_len > cell_len.saturating_sub(4) {
+            return Err(format!(
+                "value list at {:#x} length {:#x} exceeds cell",
+                nk.values_list_offset, list_len
+            ));
+        }
+        self.require(list_start, list_len)?;
         for index in 0..nk.num_values as usize {
-            let value_offset = read_u32(self.bytes, list_abs + index * 4)?;
+            let value_offset = read_u32(self.bytes, list_start + index * 4)?;
             if value_offset == INVALID_OFFSET {
                 continue;
             }
@@ -418,8 +441,13 @@ impl<'a> RegistryHiveReader<'a> {
         )?;
         let data_len = (data_len_raw & 0x7fff_ffff) as usize;
         let data = if data_len_raw & 0x8000_0000 != 0 {
+            if data_len > 4 {
+                return Err(format!(
+                    "inline value at {cell_offset:#x} length {data_len:#x} exceeds 4 bytes"
+                ));
+            }
             let inline = data_offset.to_le_bytes();
-            inline[..data_len.min(inline.len())].to_vec()
+            inline[..data_len].to_vec()
         } else if data_len == 0 {
             Vec::new()
         } else {
@@ -442,7 +470,7 @@ impl<'a> RegistryHiveReader<'a> {
             }
             self.bytes[data_start..data_start + data_len].to_vec()
         };
-        Ok(Some((name, parse_value_data(data_type, &data))))
+        Ok(Some((name, parse_value_data(data_type, &data)?)))
     }
 
     fn read_subkey_offsets(&self, list_offset: u32, depth: u8) -> Result<Vec<u32>, String> {
@@ -522,27 +550,27 @@ impl<'a> RegistryHiveReader<'a> {
     }
 }
 
-fn parse_value_data(data_type: u32, data: &[u8]) -> RegistryValue {
+fn parse_value_data(data_type: u32, data: &[u8]) -> Result<RegistryValue, String> {
     match data_type {
-        REG_SZ | REG_EXPAND_SZ => RegistryValue::String(decode_utf16_lossy(data)),
-        REG_DWORD => RegistryValue::Dword(
+        REG_SZ | REG_EXPAND_SZ => Ok(RegistryValue::String(decode_utf16_lossy(data))),
+        REG_DWORD => Ok(RegistryValue::Dword(
             read_le_array::<4>(data)
                 .map(u32::from_le_bytes)
-                .unwrap_or(0),
-        ),
-        REG_QWORD => RegistryValue::Qword(
+                .ok_or_else(|| "REG_DWORD value shorter than 4 bytes".to_string())?,
+        )),
+        REG_QWORD => Ok(RegistryValue::Qword(
             read_le_array::<8>(data)
                 .map(u64::from_le_bytes)
-                .unwrap_or(0),
-        ),
-        REG_MULTI_SZ => RegistryValue::MultiString(
+                .ok_or_else(|| "REG_QWORD value shorter than 8 bytes".to_string())?,
+        )),
+        REG_MULTI_SZ => Ok(RegistryValue::MultiString(
             decode_utf16_lossy(data)
                 .split('\0')
                 .filter(|item| !item.is_empty())
                 .map(str::to_string)
                 .collect(),
-        ),
-        _ => RegistryValue::Binary(data.to_vec()),
+        )),
+        _ => Ok(RegistryValue::Binary(data.to_vec())),
     }
 }
 
@@ -646,9 +674,11 @@ mod tests {
 
         if !values.is_empty() {
             let list_abs = BASE_BLOCK_SIZE + value_list_offset as usize;
+            data[list_abs..list_abs + 4]
+                .copy_from_slice(&(-((values.len() as i32 * 4) + 4)).to_le_bytes());
             for (index, value_offset) in values.iter().enumerate() {
-                data[list_abs + index * 4..list_abs + index * 4 + 4]
-                    .copy_from_slice(&value_offset.to_le_bytes());
+                let entry = list_abs + 4 + index * 4;
+                data[entry..entry + 4].copy_from_slice(&value_offset.to_le_bytes());
             }
         }
 
@@ -756,6 +786,59 @@ mod tests {
             hive.lookup_value(&[], "Current").unwrap(),
             Some(RegistryValue::Dword(1))
         );
+    }
+
+    #[test]
+    fn read_value_list_uses_registry_cell_header() {
+        let mut data = empty_hive("ROOT");
+        write_nk(&mut data, 0x20, "ROOT", &[], &[0x400, 0x500]);
+        write_dword_value(&mut data, 0x400, "First", 1);
+        write_dword_value(&mut data, 0x500, "Second", 2);
+        let hive = RegistryHiveReader::new(&data).unwrap();
+
+        assert_eq!(
+            hive.lookup_value(&[], "Second").unwrap(),
+            Some(RegistryValue::Dword(2))
+        );
+    }
+
+    #[test]
+    fn bounds_rejects_truncated_value_list_cell() {
+        let mut data = empty_hive("ROOT");
+        write_nk(&mut data, 0x20, "ROOT", &[], &[0x400, 0x500]);
+        let list_abs = BASE_BLOCK_SIZE + 0x4020;
+        data[list_abs..list_abs + 4].copy_from_slice(&(-4i32).to_le_bytes());
+        let hive = RegistryHiveReader::new(&data).unwrap();
+
+        let err = hive.lookup_value(&[], "Second").unwrap_err();
+        assert!(err.contains("value list"));
+        assert!(err.contains("exceeds cell"));
+    }
+
+    #[test]
+    fn inline_value_longer_than_four_bytes_is_rejected() {
+        let mut data = empty_hive("ROOT");
+        write_nk(&mut data, 0x20, "ROOT", &[], &[0x400]);
+        write_vk(&mut data, 0x400, "TooLong", REG_DWORD, 0x8000_0005, 1);
+        let hive = RegistryHiveReader::new(&data).unwrap();
+
+        let err = hive.lookup_value(&[], "TooLong").unwrap_err();
+        assert!(err.contains("inline value"));
+        assert!(err.contains("exceeds 4 bytes"));
+    }
+
+    #[test]
+    fn short_external_dword_is_rejected_instead_of_zero_filled() {
+        let mut data = empty_hive("ROOT");
+        write_nk(&mut data, 0x20, "ROOT", &[], &[0x400]);
+        let data_abs = BASE_BLOCK_SIZE + 0x700;
+        data[data_abs..data_abs + 4].copy_from_slice(&(-8i32).to_le_bytes());
+        data[data_abs + 4..data_abs + 6].copy_from_slice(&1u16.to_le_bytes());
+        write_vk(&mut data, 0x400, "Short", REG_DWORD, 2, 0x700);
+        let hive = RegistryHiveReader::new(&data).unwrap();
+
+        let err = hive.lookup_value(&[], "Short").unwrap_err();
+        assert!(err.contains("REG_DWORD value shorter than 4 bytes"));
     }
 
     #[test]

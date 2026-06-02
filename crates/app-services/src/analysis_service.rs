@@ -963,9 +963,11 @@ mod tests {
         }
         if !values.is_empty() {
             let list_abs = 0x1000 + value_list_offset as usize;
+            data[list_abs..list_abs + 4]
+                .copy_from_slice(&(-((values.len() as i32 * 4) + 4)).to_le_bytes());
             for (index, value_offset) in values.iter().enumerate() {
-                data[list_abs + index * 4..list_abs + index * 4 + 4]
-                    .copy_from_slice(&value_offset.to_le_bytes());
+                let entry = list_abs + 4 + index * 4;
+                data[entry..entry + 4].copy_from_slice(&value_offset.to_le_bytes());
             }
         }
     }

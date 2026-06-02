@@ -39,7 +39,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 
 | Task | 状态 | 当前结果 / 剩余动作 |
 |---|---|---|
-| 2.1 Registry parser 接入 | Completed / targeted | Analysis 会从 catalog 查找 `Windows/System32/config/SYSTEM` / `SOFTWARE`，通过 `FileEntryId` reader bounded 读取最多 64MB hive；`artifacts-windows::registry::lookup` 支持 `regf` base block、NK/VK、`lf/lh/li/ri` 子键列表和常用值类型，并提取 `ComputerName`、timezone、ProductName、CurrentBuild、InstallDate、RegisteredOwner、Organization、ProductId。字段带 `fieldProvenance`；缺失/损坏/超限为 warning，不生成默认 Windows 文案。剩余：不是完整 Registry browser |
+| 2.1 Registry parser 接入 | Completed / targeted | Analysis 会从 catalog 查找 `Windows/System32/config/SYSTEM` / `SOFTWARE`，通过 `FileEntryId` reader bounded 读取最多 64MB hive；`artifacts-windows::registry::lookup` 支持 `regf` base block、NK/VK、带 cell header 的 value-list、`lf/lh/li/ri` 子键列表和常用值类型，并提取 `ComputerName`、timezone、ProductName、CurrentBuild、InstallDate、RegisteredOwner、Organization、ProductId。字段带 `fieldProvenance`；缺失/损坏/超限为 warning，不生成默认 Windows 文案。最新回归覆盖 value-list cell bounds、inline value 长度和短 `REG_DWORD`。剩余：不是完整 Registry browser |
 | 2.2 EVTX parser 策略 | Completed / real fixture | Analysis 查找 `Windows/System32/winevt/Logs/System.evtx`，通过 `evtx.boot_shutdown` adapter bounded 读取最多 64MB，解析 6005、6006、6008、1074 为候选事件，boot record 带 `eventId`、`recordId`、note 和 provenance。无 EVTX、损坏或超限时保持 `notParsed/unavailable + warnings`。当前单测覆盖 JSON 记录提取、malformed/oversized/truncated 路径，并新增 `testdata/fixtures/tiny/evtx/system.evtx` 真实 fixture 覆盖 parser path；fixture 来自 MIT/Apache-2.0 licensed upstream `evtx` repository commit `38a2d50b21629edb3dd77953a2c02a4b944badf1` |
 | 2.3 Analysis provenance | Completed | 新增 `AnalysisProvenanceDto { dataSourceId, artifactPath, parser, parsedAt, status, warnings }`；system info、boot records、file classification 和 classified file 均可携带 provenance |
 | 2.4 Analysis 分类读取一致性 | Completed | classify 走 `FileEntryId + DataSourceKind` helper，仅读取 bounded header |
@@ -161,7 +161,7 @@ cargo test -p app-services --test e01_mft_scan_test -- --ignored --nocapture
 
 ## 后续优先级
 
-1. 深化 Registry parser 覆盖更多 hive cell/list 变体，并补真实 fixture；当前只承诺 Analysis 所需定向字段。
+1. 深化 Registry parser 覆盖更多 hive cell/list 变体，并补真实 fixture；当前已修正 value-list cell 语义和数值长度边界，但仍只承诺 Analysis 所需定向字段。
 2. 做 Tauri 桌面 manual smoke，确认 `evidence-media://` 在 Windows WebView2 中对 `<video>/<audio>` seek 行为稳定；CI 已有 media protocol guard，但不替代真实播放器 seek 验证。
 3. 若需要真实 E01 分区/文件系统验收，继续使用 `FORENSICS_E01_FIXTURE` 手动慢测；当前提交的 tiny E01 只覆盖 reader 层 section/table/read/seek，不替代真实样本。
 4. 逐步消除 `cargo audit` warning-class transitive advisories，尤其是本轮 `evtx -> encoding` 临时例外；`encoding` 是 `evtx 0.11.2` 的直接非可选依赖，已通过 `docs/evtx-dependency-decision.md` 记录升级/替代/patch 评估，需替换 parser、vendor/patch parser 或在 2026-09-01 前重新评审例外。
