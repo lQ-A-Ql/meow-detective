@@ -1,6 +1,6 @@
 # Forensics Workbench 剩余 v2.1 Backlog 状态与修补方案
 
-**更新时间**: 2026-06-02 18:12:41 +08:00
+**更新时间**: 2026-06-02 18:19:06 +08:00
 **署名**: Codex  
 **基线**: `e7ffa35` -> `codex/beta-forensics-backlog`；本文件记录 v2.1 backlog 在可信 beta 收口实现后的当前状态、验收命令和剩余修补方案。
 
@@ -132,6 +132,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 - Dependency direct-dirs cleanup targeted tests：`cargo check -p forensics-desktop`、`cargo test -p forensics-desktop`、`cargo clippy -p forensics-desktop --all-targets -- -D warnings`、`cargo deny check bans`、`cargo fmt --all -- --check`、`git diff --check` 均通过；`cargo deny check bans` 仍报告其他传递依赖 duplicate warnings，但 `dirs` / `dirs-sys` 和 `windows-targets 0.48` 组已消除。
 - Dependency Tantivy cleanup targeted tests：`cargo test -p search`、`cargo check -p app-services`、`cargo clippy -p search -p app-services --all-targets -- -D warnings`、`cargo test -p app-services --test search_service_test`、`cargo test -p forensics-desktop`、`cargo check -p forensics-desktop`、`cargo audit`、`cargo deny check advisories bans licenses sources`、`cargo fmt --all -- --check`、`git diff --check` 均通过；`cargo audit` 当前为 17 个 allowed warnings，`instant` 和 `lru` advisories 已消除。
 - FS declared-size truncation helper targeted tests：`cargo test -p evidence-core filesystem` 通过，12 个 filesystem/helper tests；`cargo test -p fs-fat -p fs-exfat -p fs-ntfs` 通过；`cargo test -p app-services file_service` 通过，10 个 filtered tests；`cargo test -p app-services --test file_service_real_test` 通过，7 个 tests；`cargo clippy -p evidence-core -p fs-fat -p fs-exfat -p fs-ntfs --all-targets -- -D warnings`、`cargo fmt --all -- --check`、`git diff --check` 均通过。
+- FS truncation checkpoint post-check：基于 `ea751fb refactor: share filesystem data truncation helper` 复跑 `cargo test --workspace` 通过；真实 E01 tests 仍 ignored / opt-in。`cargo clippy --workspace --all-targets -- -D warnings` 通过；`cargo fmt --all -- --check` 通过。`powershell -ExecutionPolicy Bypass -File scripts\run-webview2-media-smoke.ps1` 通过并重新生成 media smoke fixture/checklist；`FORENSICS_E01_FIXTURE` 当前未设置，因此真实 E01 slow/manual gate 未执行。`cargo audit` 仍为 17 个 allowed warning-class advisories，来源集中在 Tauri Linux GTK/WebKit/urlpattern/glib 传递链。
 
 ## Final Gate 结果
 
