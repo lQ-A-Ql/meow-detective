@@ -11,9 +11,10 @@ pub mod types;
 use boot::ExfatBootSector;
 use dir::FileEntrySet;
 use evidence_core::filesystem::{
-    child_nodes_with_parent_path_with_separator, file_not_found, is_special_directory_name,
-    path_components, path_is_directory, path_is_not_directory, path_not_found, root_node,
-    truncate_data_to_declared_size, unsupported_fs, FileSystemReader, FsNode,
+    child_nodes_with_parent_path_with_separator, file_not_found, fs_node,
+    is_special_directory_name, path_components, path_is_directory, path_is_not_directory,
+    path_not_found, root_node, truncate_data_to_declared_size, unsupported_fs, FileSystemReader,
+    FsNode,
 };
 use evidence_core::EvidenceReader;
 use fat::FatEntry;
@@ -178,15 +179,14 @@ impl FileSystemReader for ExfatReader {
 
             let is_dir = entry.is_directory();
 
-            nodes.push(FsNode {
-                name: entry.name,
-                path: String::new(),
+            nodes.push(fs_node(
+                entry.name,
                 is_dir,
-                size: entry.valid_data_length,
-                created_at: entry.created_at,
-                modified_at: entry.modified_at,
-                accessed_at: entry.accessed_at,
-            });
+                entry.valid_data_length,
+                entry.created_at,
+                entry.modified_at,
+                entry.accessed_at,
+            ));
         }
 
         Ok(child_nodes_with_parent_path_with_separator(

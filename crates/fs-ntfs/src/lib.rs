@@ -5,8 +5,8 @@
 pub mod mft_scanner;
 
 use evidence_core::filesystem::{
-    child_nodes_with_parent_path, file_not_found, fs_out_of_memory, invalid_fs_data,
-    path_components, root_node, truncate_data_to_declared_size, unexpected_fs_eof,
+    child_nodes_with_parent_path, file_not_found, fs_node_without_timestamps, fs_out_of_memory,
+    invalid_fs_data, path_components, root_node, truncate_data_to_declared_size, unexpected_fs_eof,
     FileSystemReader, FsNode,
 };
 use evidence_core::EvidenceReader;
@@ -674,15 +674,7 @@ fn parse_indx_entries(data: &[u8]) -> Vec<DirEntry> {
             };
             let is_dir = flags & 0x10000000 != 0;
             entries.push(DirEntry {
-                node: FsNode {
-                    name,
-                    path: String::new(),
-                    is_dir,
-                    size: 0,
-                    created_at: None,
-                    modified_at: None,
-                    accessed_at: None,
-                },
+                node: fs_node_without_timestamps(name, is_dir, 0),
                 mft_ref,
             });
         }

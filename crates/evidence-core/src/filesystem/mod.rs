@@ -24,15 +24,32 @@ pub trait FileSystemReader {
 
 /// Build the canonical root node returned by filesystem readers.
 pub fn root_node() -> FsNode {
+    fs_node_without_timestamps(ROOT_NAME, true, 0)
+}
+
+/// Build a filesystem node with an empty path ready for parent-path assignment.
+pub fn fs_node(
+    name: impl Into<String>,
+    is_dir: bool,
+    size: u64,
+    created_at: Option<chrono::DateTime<chrono::Utc>>,
+    modified_at: Option<chrono::DateTime<chrono::Utc>>,
+    accessed_at: Option<chrono::DateTime<chrono::Utc>>,
+) -> FsNode {
     FsNode {
-        name: ROOT_NAME.into(),
+        name: name.into(),
         path: String::new(),
-        is_dir: true,
-        size: 0,
-        created_at: None,
-        modified_at: None,
-        accessed_at: None,
+        is_dir,
+        size,
+        created_at,
+        modified_at,
+        accessed_at,
     }
+}
+
+/// Build a filesystem node when the reader does not expose timestamps.
+pub fn fs_node_without_timestamps(name: impl Into<String>, is_dir: bool, size: u64) -> FsNode {
+    fs_node(name, is_dir, size, None, None, None)
 }
 
 /// Join a child name to a parent path while normalizing path separators.
@@ -174,6 +191,18 @@ mod tests {
         assert_eq!(root.path, "");
         assert!(root.is_dir);
         assert_eq!(root.size, 0);
+    }
+
+    #[test]
+    fn fs_node_builds_pathless_child_metadata() {
+        let node = fs_node_without_timestamps("file.txt", false, 42);
+        assert_eq!(node.name, "file.txt");
+        assert_eq!(node.path, "");
+        assert!(!node.is_dir);
+        assert_eq!(node.size, 42);
+        assert!(node.created_at.is_none());
+        assert!(node.modified_at.is_none());
+        assert!(node.accessed_at.is_none());
     }
 
     #[test]

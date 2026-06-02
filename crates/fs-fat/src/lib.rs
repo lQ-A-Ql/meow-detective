@@ -1,7 +1,7 @@
 use evidence_core::filesystem::{
-    child_nodes_with_parent_path, file_not_found, invalid_fs_data, is_special_directory_name,
-    path_components, path_is_directory, root_node, truncate_data_to_declared_size,
-    FileSystemReader, FsNode,
+    child_nodes_with_parent_path, file_not_found, fs_node_without_timestamps, invalid_fs_data,
+    is_special_directory_name, path_components, path_is_directory, root_node,
+    truncate_data_to_declared_size, FileSystemReader, FsNode,
 };
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
@@ -370,15 +370,7 @@ impl FatReader {
             let is_dir = attr & 0x10 != 0;
             let size = u32::from_le_bytes(entry[28..32].try_into().unwrap_or([0; 4])) as u64;
 
-            nodes.push(FsNode {
-                name,
-                path: String::new(),
-                is_dir,
-                size,
-                created_at: None,
-                modified_at: None,
-                accessed_at: None,
-            });
+            nodes.push(fs_node_without_timestamps(name, is_dir, size));
 
             i += 32;
         }
