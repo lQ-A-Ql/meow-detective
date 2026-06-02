@@ -1,6 +1,6 @@
 # Forensics Workbench 剩余 v2.1 Backlog 状态与修补方案
 
-**更新时间**: 2026-06-02 17:59:08 +08:00
+**更新时间**: 2026-06-02 18:12:41 +08:00
 **署名**: Codex  
 **基线**: `e7ffa35` -> `codex/beta-forensics-backlog`；本文件记录 v2.1 backlog 在可信 beta 收口实现后的当前状态、验收命令和剩余修补方案。
 
@@ -85,7 +85,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 
 | Task | 状态 | 当前结果 / 剩余动作 |
 |---|---|---|
-| 6.1 FS enum 去重 | Partial / helper expanded | 已在 `evidence-core::filesystem` 抽出 `root_node`、路径拼接、path component normalization、常见 path/file error helper、单节点/批量 child path finalization，以及 dot/dotdot special-entry predicate，并让 FAT/NTFS/exFAT reader 复用；targeted tests 与 clippy 通过。剩余：更深层的枚举流程和 FS 特定错误转换仍可继续抽象，但需避免改变 public API、排序、root semantics 和 reader 行为 |
+| 6.1 FS enum 去重 | Partial / helper expanded | 已在 `evidence-core::filesystem` 抽出 `root_node`、路径拼接、path component normalization、常见 path/file error helper、单节点/批量 child path finalization、dot/dotdot special-entry predicate，以及按 filesystem declared logical size 截断 cluster/data-run padding 的 `truncate_data_to_declared_size()` helper，并让 FAT/NTFS/exFAT reader 复用；targeted tests 与 clippy 通过。剩余：更深层的枚举流程和 FS 特定错误转换仍可继续抽象，但需避免改变 public API、排序、root semantics 和 reader 行为 |
 | 6.2 SQL 下沉 repo | Completed / guarded | 复核 `apps/desktop/src-tauri/src/commands` 无原始 SQL 语句或 `rusqlite::params!/prepare/execute` 低层调用；新增 `scripts/check-command-sql-boundary.ps1` 并接入 backend CI，防止后续把业务 SQL 写回 command layer。Command layer 允许打开连接并调用 repository/service/helper，保持 validate -> service/helper -> DTO 边界 |
 | 6.3 常量集中 | Completed | preview max、artifact max、pagination max、analysis sample max 等关键限制已集中到 transport/infrastructure 常量 |
 | 6.4 Public docs | Completed | `cargo doc --workspace --no-deps` 已通过；同时修复 rustdoc bare URL / invalid intra-doc link warnings |
@@ -131,6 +131,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 - Registry/FS post-check：`cargo test --workspace` 通过，真实 E01 slow/manual tests 保持 ignored / opt-in；`cargo clippy --workspace --all-targets -- -D warnings` 通过。
 - Dependency direct-dirs cleanup targeted tests：`cargo check -p forensics-desktop`、`cargo test -p forensics-desktop`、`cargo clippy -p forensics-desktop --all-targets -- -D warnings`、`cargo deny check bans`、`cargo fmt --all -- --check`、`git diff --check` 均通过；`cargo deny check bans` 仍报告其他传递依赖 duplicate warnings，但 `dirs` / `dirs-sys` 和 `windows-targets 0.48` 组已消除。
 - Dependency Tantivy cleanup targeted tests：`cargo test -p search`、`cargo check -p app-services`、`cargo clippy -p search -p app-services --all-targets -- -D warnings`、`cargo test -p app-services --test search_service_test`、`cargo test -p forensics-desktop`、`cargo check -p forensics-desktop`、`cargo audit`、`cargo deny check advisories bans licenses sources`、`cargo fmt --all -- --check`、`git diff --check` 均通过；`cargo audit` 当前为 17 个 allowed warnings，`instant` 和 `lru` advisories 已消除。
+- FS declared-size truncation helper targeted tests：`cargo test -p evidence-core filesystem` 通过，12 个 filesystem/helper tests；`cargo test -p fs-fat -p fs-exfat -p fs-ntfs` 通过；`cargo test -p app-services file_service` 通过，10 个 filtered tests；`cargo test -p app-services --test file_service_real_test` 通过，7 个 tests；`cargo clippy -p evidence-core -p fs-fat -p fs-exfat -p fs-ntfs --all-targets -- -D warnings`、`cargo fmt --all -- --check`、`git diff --check` 均通过。
 
 ## Final Gate 结果
 
@@ -169,4 +170,4 @@ cargo test -p app-services --test e01_mft_scan_test -- --ignored --nocapture
 3. 若需要真实 E01 分区/文件系统验收，继续使用 `FORENSICS_E01_FIXTURE` 手动慢测；当前提交的 tiny E01 只覆盖 reader 层 section/table/read/seek，不替代真实样本。
 4. 逐步消除 `cargo audit` 剩余 warning-class transitive advisories 和 `cargo deny` duplicate warnings；`evtx -> encoding` 已通过 `crates/evtx-patched` + `encoding_rs` 移除，desktop 直接 `dirs` 已对齐到 v6，Tantivy 已升级到 0.26 并移除 `instant` / old `lru` advisory path，后续重点是维护 local fork、跟踪上游 maintained release，并按 Tauri/GTK/urlpattern 上游升级节奏减少剩余风险。
 5. 继续积累 coverage baseline 并逐步抬高前端阈值；后端 coverage 目前仍只上传 LCOV artifact，不以百分比阻塞默认门禁。
-6. 继续收口 FS 枚举流程和 FS 特定错误转换去重；当前公共 root/path/path-components/error helper、child list finalization helper 和 dot-entry predicate 已落地。Command layer SQL 已通过 guard 防回退，后续若有 repository/service SQL 行为变更仍需补 targeted tests。
+6. 继续收口 FS 枚举流程和 FS 特定错误转换去重；当前公共 root/path/path-components/error helper、child list finalization helper、dot-entry predicate 和 declared-size data truncation helper 已落地。Command layer SQL 已通过 guard 防回退，后续若有 repository/service SQL 行为变更仍需补 targeted tests。

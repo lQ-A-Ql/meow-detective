@@ -103,6 +103,20 @@ pub fn is_special_directory_name(name: &str) -> bool {
     matches!(name, "." | "..")
 }
 
+/// Truncate file data to the filesystem's declared logical size.
+///
+/// Filesystem readers often read whole clusters and then trim the final buffer
+/// to the file's valid data length. If the declared size is larger than this
+/// platform can index, the buffer is left unchanged because it is necessarily
+/// already smaller than the declared logical size.
+pub fn truncate_data_to_declared_size(mut data: Vec<u8>, declared_size: u64) -> Vec<u8> {
+    let Ok(limit) = usize::try_from(declared_size) else {
+        return data;
+    };
+    data.truncate(data.len().min(limit));
+    data
+}
+
 /// Return a standard not-found error for a filesystem path.
 pub fn path_not_found(path: &str) -> io::Error {
     io::Error::new(io::ErrorKind::NotFound, format!("path not found: {path}"))
@@ -232,6 +246,28 @@ mod tests {
         assert!(is_special_directory_name(".."));
         assert!(!is_special_directory_name("..."));
         assert!(!is_special_directory_name("file"));
+    }
+
+    #[test]
+    fn truncate_data_to_declared_size_trims_cluster_padding() {
+        let data = b"content\0\0\0".to_vec();
+        assert_eq!(truncate_data_to_declared_size(data, 7), b"content".to_vec());
+    }
+
+    #[test]
+    fn truncate_data_to_declared_size_keeps_short_buffers() {
+        let data = b"short".to_vec();
+        assert_eq!(truncate_data_to_declared_size(data.clone(), 20), data);
+    }
+
+    #[test]
+    fn truncate_data_to_declared_size_keeps_buffers_for_extremely_large_size() {
+        let data = b"short".to_vec();
+        let declared_size = (usize::MAX as u64).saturating_add(1);
+        assert_eq!(
+            truncate_data_to_declared_size(data.clone(), declared_size),
+            data
+        );
     }
 
     #[test]

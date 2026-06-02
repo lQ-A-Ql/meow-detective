@@ -1,6 +1,6 @@
 use evidence_core::filesystem::{
     child_nodes_with_parent_path, file_not_found, is_special_directory_name, path_components,
-    path_is_directory, root_node, FileSystemReader, FsNode,
+    path_is_directory, root_node, truncate_data_to_declared_size, FileSystemReader, FsNode,
 };
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
@@ -408,8 +408,7 @@ impl FileSystemReader for FatReader {
     fn open_file(&self, path: &str) -> io::Result<Box<dyn Read>> {
         match self.resolve_path_cluster(path)? {
             Some((cluster, false, size)) => {
-                let mut data = self.walk_cluster_chain(cluster)?;
-                data.truncate(size as usize);
+                let data = truncate_data_to_declared_size(self.walk_cluster_chain(cluster)?, size);
                 Ok(Box::new(io::Cursor::new(data)))
             }
             Some((_, true, _)) => Err(path_is_directory(path)),

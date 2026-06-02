@@ -13,7 +13,7 @@ use dir::FileEntrySet;
 use evidence_core::filesystem::{
     child_nodes_with_parent_path_with_separator, file_not_found, is_special_directory_name,
     path_components, path_is_directory, path_is_not_directory, path_not_found, root_node,
-    FileSystemReader, FsNode,
+    truncate_data_to_declared_size, FileSystemReader, FsNode,
 };
 use evidence_core::EvidenceReader;
 use fat::FatEntry;
@@ -206,16 +206,9 @@ impl FileSystemReader for ExfatReader {
             return Err(path_is_directory(path));
         }
 
-        let data = self.read_cluster_chain_data(cluster)?;
+        let data = truncate_data_to_declared_size(self.read_cluster_chain_data(cluster)?, size);
 
-        // Truncate to valid data length
-        let truncated = if (size as usize) < data.len() {
-            data[..size as usize].to_vec()
-        } else {
-            data
-        };
-
-        Ok(Box::new(io::Cursor::new(truncated)))
+        Ok(Box::new(io::Cursor::new(data)))
     }
 
     fn data_source_name(&self) -> &str {

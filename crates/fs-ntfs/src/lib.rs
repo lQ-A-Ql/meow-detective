@@ -5,8 +5,8 @@
 pub mod mft_scanner;
 
 use evidence_core::filesystem::{
-    child_nodes_with_parent_path, file_not_found, path_components, root_node, FileSystemReader,
-    FsNode,
+    child_nodes_with_parent_path, file_not_found, path_components, root_node,
+    truncate_data_to_declared_size, FileSystemReader, FsNode,
 };
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
@@ -307,10 +307,7 @@ impl NtfsReader {
                 .try_into()
                 .unwrap_or([0; 8]),
         );
-        if (real_size as usize) < buf.len() {
-            buf.truncate(real_size as usize);
-        }
-        Ok(buf)
+        Ok(truncate_data_to_declared_size(buf, real_size))
     }
 
     /// Scan INDX buffer for INDX records, apply fixup, extract entries.
