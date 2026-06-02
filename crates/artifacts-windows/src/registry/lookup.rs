@@ -638,6 +638,7 @@ fn read_i32(bytes: &[u8], offset: usize) -> Result<i32, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use testing::{builders::registry as registry_fixture, fixtures};
 
     fn empty_hive(root_name: &str) -> Vec<u8> {
         let mut data = vec![0u8; 0x8000];
@@ -1145,5 +1146,55 @@ mod tests {
         assert_eq!(info.product_name.unwrap().value, "Windows Evidence Edition");
         assert_eq!(info.current_build.unwrap().value, "26000");
         assert!(info.install_date.unwrap().value.starts_with("2023-"));
+    }
+
+    #[test]
+    fn extract_system_fields_from_committed_tiny_fixture() {
+        let bytes = std::fs::read(fixtures::tiny_registry_system_hive())
+            .expect("read tiny SYSTEM registry fixture");
+
+        let info = extract_system_hive_fields(&bytes, "Windows/System32/config/SYSTEM").unwrap();
+
+        assert_eq!(
+            info.computer_name
+                .as_ref()
+                .map(|field| field.value.as_str()),
+            Some(registry_fixture::SYSTEM_COMPUTER_NAME)
+        );
+        assert_eq!(
+            info.timezone.as_ref().map(|field| field.value.as_str()),
+            Some(registry_fixture::SYSTEM_TIMEZONE)
+        );
+        assert!(info.warnings.is_empty());
+    }
+
+    #[test]
+    fn extract_software_fields_from_committed_tiny_fixture() {
+        let bytes = std::fs::read(fixtures::tiny_registry_software_hive())
+            .expect("read tiny SOFTWARE registry fixture");
+
+        let info =
+            extract_software_hive_fields(&bytes, "Windows/System32/config/SOFTWARE").unwrap();
+
+        assert_eq!(
+            info.product_name.as_ref().map(|field| field.value.as_str()),
+            Some(registry_fixture::SOFTWARE_PRODUCT_NAME)
+        );
+        assert_eq!(
+            info.current_build
+                .as_ref()
+                .map(|field| field.value.as_str()),
+            Some(registry_fixture::SOFTWARE_CURRENT_BUILD)
+        );
+        assert_eq!(
+            info.display_version
+                .as_ref()
+                .map(|field| field.value.as_str()),
+            Some(registry_fixture::SOFTWARE_DISPLAY_VERSION)
+        );
+        assert!(info
+            .install_date
+            .as_ref()
+            .is_some_and(|field| field.value.starts_with("2023-")));
     }
 }

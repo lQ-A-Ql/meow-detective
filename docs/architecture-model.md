@@ -256,8 +256,9 @@
 - `testdata/fixtures/tiny/logical/` 是默认 CI 可用的逻辑目录 fixture。
 - `testdata/fixtures/tiny/raw/tiny.raw` 是 1024-byte deterministic RAW fixture，含 MBR signature。
 - `testdata/fixtures/tiny/e01/tiny.E01` 是 4405-byte synthetic single-segment E01 fixture，用于 `image-e01` reader 的 section/table/read/seek 回归。它不是完整文件系统镜像，也不能替代真实 E01 分区/文件系统慢测。
+- `testdata/fixtures/tiny/logical/Windows/System32/config/SYSTEM` 和 `SOFTWARE` 是 deterministic synthetic registry hives，用于 Analysis Registry targeted parser path 回归；它们不是完整 Windows registry corpus。
 - `testdata/fixtures/tiny/evtx/system.evtx` 是 1,118,208-byte real System.evtx fixture，用于 `evtx.boot_shutdown` parser path 回归；fixture provenance 写在同目录 `README.md`。
-- `scripts/generate-tiny-fixtures.ps1` 可重建 RAW/E01 tiny fixtures。真实 E01 验收继续通过 `FORENSICS_E01_FIXTURE` opt-in ignored slow tests 执行，默认 CI 不依赖私有样本。
+- `scripts/generate-tiny-fixtures.ps1` 可重建 RAW/E01/Registry tiny fixtures。真实 E01 验收继续通过 `FORENSICS_E01_FIXTURE` opt-in ignored slow tests 执行，默认 CI 不依赖私有样本。
 
 ---
 
@@ -279,7 +280,7 @@ Analysis 功能的前后端契约以 `transport` crate 为唯一 Rust 源头，�
 当前 parser 状态:
 
 - Analysis DTO 包含 `AnalysisProvenanceDto { dataSourceId, artifactPath, parser, parsedAt, status, warnings }`。系统信息、boot records、分类汇总和单文件分类均可携带来源说明；系统字段另有 `fieldProvenance` 追踪 hive path、key path、value name 和 parser。
-- Registry 当前是定向字段 parser，不是完整 hive browser。`artifacts-windows::registry::lookup` bounded 读取最多 64MB，解析 `regf` base block、NK/VK、`lf/lh/li/ri` 子键列表和常用值类型；Analysis 从 `SYSTEM` / `SOFTWARE` 提取 `ComputerName`、timezone、ProductName、CurrentBuild、InstallDate、RegisteredOwner、Organization、ProductId。缺失、损坏或超限只产生 warnings，不补默认 Windows 文案。
+- Registry 当前是定向字段 parser，不是完整 hive browser。`artifacts-windows::registry::lookup` bounded 读取最多 64MB，解析 `regf` base block、NK/VK、`lf/lh/li/ri` 子键列表和常用值类型；Analysis 从 `SYSTEM` / `SOFTWARE` 提取 `ComputerName`、timezone、ProductName、CurrentBuild、InstallDate、RegisteredOwner、Organization、ProductId。仓库内 synthetic `SYSTEM` / `SOFTWARE` tiny hive fixture 覆盖该 targeted path；缺失、损坏或超限只产生 warnings，不补默认 Windows 文案。
 - EVTX 当前是 boot/shutdown candidate adapter。`artifacts-windows::evtx` 使用 workspace `evtx` dependency bounded 读取最多 64MB `System.evtx`，解析 6005、6006、6008、1074 为候选事件，并明确标注这些是 EventLog/User32 proxy，不是绝对开关机事实。仓库内已有 tiny real `System.evtx` fixture 覆盖 parser path；现有测试同时覆盖 JSON 记录提取、malformed、oversized 和 truncated magic 路径。workspace `evtx` 已切到 `crates/evtx-patched`，该 local fork 使用 `encoding_rs` 替代 legacy `encoding`，`RUSTSEC-2021-0153` 不再是 `deny.toml` 例外；`docs/evtx-dependency-decision.md` 记录 resolved decision，`scripts/check-evtx-dependency-decision.ps1` 在 CI 中防止重新引入 `evtx -> encoding` 链路。
 - 文件分类只读取每个文件有限 header（当前 8KB）并按 magic/ext 分类；读取入口为 `FileEntryId + DataSourceKind`，支持 logical directory、E01、RAW 的统一路径。
 - Summary 只基于真实 DTO 状态生成；未解析信息必须显示“未解析”或 warning，不允许生成伪造取证事实。

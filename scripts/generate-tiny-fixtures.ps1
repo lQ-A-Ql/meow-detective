@@ -82,3 +82,9 @@ try {
     $stream.Dispose()
 }
 Write-Host "Wrote $e01Path ($((Get-Item $e01Path).Length) bytes)"
+
+$cargo = if ($env:CARGO) { $env:CARGO } else { 'cargo' }
+& $cargo run --quiet -p testing --bin generate_tiny_registry_fixtures -- $repoRoot
+if ($LASTEXITCODE -ne 0) {
+    throw "Registry fixture generation failed with exit code $LASTEXITCODE"
+}

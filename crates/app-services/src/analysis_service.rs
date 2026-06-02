@@ -882,6 +882,7 @@ mod tests {
     };
     use persistence_sqlite::{open_in_memory, runner};
     use tempfile::TempDir;
+    use testing::{builders::registry, fixtures};
 
     fn file(id: &str, path: &str, size: u64) -> FileEntry {
         FileEntry {
@@ -911,197 +912,6 @@ mod tests {
         let mut entry = file(id, path, size);
         entry.data_source_id = data_source_id.clone();
         entry
-    }
-
-    fn empty_registry_hive(root_name: &str) -> Vec<u8> {
-        let mut data = vec![0u8; 0x8000];
-        data[0..4].copy_from_slice(b"regf");
-        data[0x24..0x28].copy_from_slice(&0x20u32.to_le_bytes());
-        data[0x1000..0x1004].copy_from_slice(b"hbin");
-        data[0x1008..0x100c].copy_from_slice(&0x7000u32.to_le_bytes());
-        write_registry_nk(&mut data, 0x20, root_name, &[], &[]);
-        data
-    }
-
-    fn write_registry_nk(
-        data: &mut [u8],
-        offset: u32,
-        name: &str,
-        subkeys: &[(&str, u32)],
-        values: &[u32],
-    ) {
-        let abs = 0x1000 + offset as usize;
-        let name_bytes = name.as_bytes();
-        let subkey_list_offset = 0x2000 + offset;
-        let value_list_offset = 0x4000 + offset;
-        data[abs..abs + 4].copy_from_slice(&(-256i32).to_le_bytes());
-        data[abs + 4..abs + 6].copy_from_slice(b"nk");
-        data[abs + 6..abs + 8].copy_from_slice(&0x20u16.to_le_bytes());
-        data[abs + 0x18..abs + 0x1c].copy_from_slice(&(subkeys.len() as u32).to_le_bytes());
-        data[abs + 0x20..abs + 0x24].copy_from_slice(
-            &if subkeys.is_empty() {
-                0xFFFF_FFFF
-            } else {
-                subkey_list_offset
-            }
-            .to_le_bytes(),
-        );
-        data[abs + 0x28..abs + 0x2c].copy_from_slice(&(values.len() as u32).to_le_bytes());
-        data[abs + 0x2c..abs + 0x30].copy_from_slice(
-            &if values.is_empty() {
-                0xFFFF_FFFF
-            } else {
-                value_list_offset
-            }
-            .to_le_bytes(),
-        );
-        data[abs + 0x4c..abs + 0x4e].copy_from_slice(&(name_bytes.len() as u16).to_le_bytes());
-        data[abs + 0x50..abs + 0x50 + name_bytes.len()].copy_from_slice(name_bytes);
-
-        if !subkeys.is_empty() {
-            write_registry_lf(data, subkey_list_offset, subkeys);
-        }
-        if !values.is_empty() {
-            let list_abs = 0x1000 + value_list_offset as usize;
-            data[list_abs..list_abs + 4]
-                .copy_from_slice(&(-((values.len() as i32 * 4) + 4)).to_le_bytes());
-            for (index, value_offset) in values.iter().enumerate() {
-                let entry = list_abs + 4 + index * 4;
-                data[entry..entry + 4].copy_from_slice(&value_offset.to_le_bytes());
-            }
-        }
-    }
-
-    fn write_registry_lf(data: &mut [u8], offset: u32, subkeys: &[(&str, u32)]) {
-        let abs = 0x1000 + offset as usize;
-        data[abs..abs + 4].copy_from_slice(&(-256i32).to_le_bytes());
-        data[abs + 4..abs + 6].copy_from_slice(b"lf");
-        data[abs + 6..abs + 8].copy_from_slice(&(subkeys.len() as u16).to_le_bytes());
-        for (index, (name, child_offset)) in subkeys.iter().enumerate() {
-            let entry = abs + 8 + index * 8;
-            let mut hash = [0u8; 4];
-            for (idx, byte) in name.as_bytes().iter().take(4).enumerate() {
-                hash[idx] = *byte;
-            }
-            data[entry..entry + 4].copy_from_slice(&hash);
-            data[entry + 4..entry + 8].copy_from_slice(&child_offset.to_le_bytes());
-        }
-    }
-
-    fn write_registry_string_value(
-        data: &mut [u8],
-        offset: u32,
-        name: &str,
-        value: &str,
-        data_offset: u32,
-    ) {
-        let encoded: Vec<u8> = value.encode_utf16().flat_map(u16::to_le_bytes).collect();
-        let data_abs = 0x1000 + data_offset as usize;
-        data[data_abs..data_abs + 4].copy_from_slice(&(-128i32).to_le_bytes());
-        data[data_abs + 4..data_abs + 4 + encoded.len()].copy_from_slice(&encoded);
-        write_registry_vk(data, offset, name, 1, encoded.len() as u32, data_offset);
-    }
-
-    fn write_registry_dword_value(data: &mut [u8], offset: u32, name: &str, value: u32) {
-        write_registry_vk(data, offset, name, 4, 0x8000_0004, value);
-    }
-
-    fn write_registry_vk(
-        data: &mut [u8],
-        offset: u32,
-        name: &str,
-        value_type: u32,
-        data_len: u32,
-        data_offset: u32,
-    ) {
-        let abs = 0x1000 + offset as usize;
-        let name_bytes = name.as_bytes();
-        data[abs..abs + 4].copy_from_slice(&(-128i32).to_le_bytes());
-        data[abs + 4..abs + 6].copy_from_slice(b"vk");
-        data[abs + 6..abs + 8].copy_from_slice(&(name_bytes.len() as u16).to_le_bytes());
-        data[abs + 8..abs + 12].copy_from_slice(&data_len.to_le_bytes());
-        data[abs + 12..abs + 16].copy_from_slice(&data_offset.to_le_bytes());
-        data[abs + 16..abs + 20].copy_from_slice(&value_type.to_le_bytes());
-        data[abs + 20..abs + 22].copy_from_slice(&1u16.to_le_bytes());
-        data[abs + 0x18..abs + 0x18 + name_bytes.len()].copy_from_slice(name_bytes);
-    }
-
-    fn build_system_hive_fixture() -> Vec<u8> {
-        let mut data = empty_registry_hive("SYSTEM");
-        write_registry_nk(
-            &mut data,
-            0x20,
-            "SYSTEM",
-            &[("Select", 0x200), ("ControlSet001", 0x300)],
-            &[],
-        );
-        write_registry_nk(&mut data, 0x200, "Select", &[], &[0x1200]);
-        write_registry_dword_value(&mut data, 0x1200, "Current", 1);
-        write_registry_nk(
-            &mut data,
-            0x300,
-            "ControlSet001",
-            &[("Control", 0x400)],
-            &[],
-        );
-        write_registry_nk(
-            &mut data,
-            0x400,
-            "Control",
-            &[("ComputerName", 0x600), ("TimeZoneInformation", 0xa00)],
-            &[],
-        );
-        write_registry_nk(
-            &mut data,
-            0x600,
-            "ComputerName",
-            &[("ComputerName", 0x800)],
-            &[],
-        );
-        write_registry_nk(&mut data, 0x800, "ComputerName", &[], &[0xc00]);
-        write_registry_string_value(&mut data, 0xc00, "ComputerName", "BETA-LAB", 0x1800);
-        write_registry_nk(&mut data, 0xa00, "TimeZoneInformation", &[], &[0xd00]);
-        write_registry_string_value(
-            &mut data,
-            0xd00,
-            "TimeZoneKeyName",
-            "China Standard Time",
-            0x1900,
-        );
-        data
-    }
-
-    fn build_software_hive_fixture() -> Vec<u8> {
-        let mut data = empty_registry_hive("SOFTWARE");
-        write_registry_nk(&mut data, 0x20, "SOFTWARE", &[("Microsoft", 0x200)], &[]);
-        write_registry_nk(&mut data, 0x200, "Microsoft", &[("Windows NT", 0x300)], &[]);
-        write_registry_nk(
-            &mut data,
-            0x300,
-            "Windows NT",
-            &[("CurrentVersion", 0x400)],
-            &[],
-        );
-        write_registry_nk(
-            &mut data,
-            0x400,
-            "CurrentVersion",
-            &[],
-            &[0x600, 0x680, 0x700, 0x780, 0x800, 0x880],
-        );
-        write_registry_string_value(
-            &mut data,
-            0x600,
-            "ProductName",
-            "Windows Evidence Edition",
-            0x1800,
-        );
-        write_registry_string_value(&mut data, 0x680, "CurrentBuild", "26000", 0x1900);
-        write_registry_string_value(&mut data, 0x700, "DisplayVersion", "24H2", 0x1a00);
-        write_registry_string_value(&mut data, 0x780, "RegisteredOwner", "DFIR Team", 0x1b00);
-        write_registry_string_value(&mut data, 0x800, "ProductId", "00330-80000", 0x1c00);
-        write_registry_dword_value(&mut data, 0x880, "InstallDate", 1_700_000_000);
-        data
     }
 
     fn setup_case_db() -> (Connection, TempDir, DataSourceId) {
@@ -1241,19 +1051,26 @@ mod tests {
     #[test]
     fn registry_hive_fields_are_parsed_with_field_provenance() {
         let (conn, _tmp, ds_id) = setup_case_db();
+        let system_hive = std::fs::read(fixtures::tiny_registry_system_hive())
+            .expect("read tiny SYSTEM registry fixture");
+        let software_hive = std::fs::read(fixtures::tiny_registry_software_hive())
+            .expect("read tiny SOFTWARE registry fixture");
         FileRepo::new(&conn)
             .insert_batch(&[
-                file_with_ds("system", &ds_id, "Windows/System32/config/SYSTEM", 32_768),
+                file_with_ds(
+                    "system",
+                    &ds_id,
+                    "Windows/System32/config/SYSTEM",
+                    system_hive.len() as u64,
+                ),
                 file_with_ds(
                     "software",
                     &ds_id,
                     "Windows/System32/config/SOFTWARE",
-                    32_768,
+                    software_hive.len() as u64,
                 ),
             ])
             .unwrap();
-        let system_hive = build_system_hive_fixture();
-        let software_hive = build_software_hive_fixture();
 
         let info =
             extract_system_info_for_case(&conn, |file_id, max_bytes| match file_id.0.as_str() {
@@ -1263,15 +1080,27 @@ mod tests {
             });
 
         assert_eq!(info.status, AnalysisParseStatusDto::Parsed);
-        assert_eq!(info.computer_name.as_deref(), Some("BETA-LAB"));
+        assert_eq!(
+            info.computer_name.as_deref(),
+            Some(registry::SYSTEM_COMPUTER_NAME)
+        );
         assert_eq!(
             info.os_version.as_deref(),
-            Some("Windows Evidence Edition 24H2")
+            Some("Forensics Fixture OS 24H2")
         );
-        assert_eq!(info.build_number.as_deref(), Some("26000"));
-        assert_eq!(info.registered_owner.as_deref(), Some("DFIR Team"));
-        assert_eq!(info.product_id.as_deref(), Some("00330-80000"));
-        assert_eq!(info.timezone.as_deref(), Some("China Standard Time"));
+        assert_eq!(
+            info.build_number.as_deref(),
+            Some(registry::SOFTWARE_CURRENT_BUILD)
+        );
+        assert_eq!(
+            info.registered_owner.as_deref(),
+            Some(registry::SOFTWARE_REGISTERED_OWNER)
+        );
+        assert_eq!(
+            info.product_id.as_deref(),
+            Some(registry::SOFTWARE_PRODUCT_ID)
+        );
+        assert_eq!(info.timezone.as_deref(), Some(registry::SYSTEM_TIMEZONE));
         assert!(info
             .install_date
             .as_deref()
@@ -1302,8 +1131,8 @@ mod tests {
         }));
 
         let summary = generate_analysis_summary(&info, &[]);
-        assert!(summary.contains("BETA-LAB"));
-        assert!(summary.contains("Windows Evidence Edition 24H2"));
+        assert!(summary.contains(registry::SYSTEM_COMPUTER_NAME));
+        assert!(summary.contains("Forensics Fixture OS 24H2"));
         assert!(!summary.contains("FORENSICS-PC"));
     }
 

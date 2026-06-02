@@ -387,7 +387,7 @@ pub fn enumerate_filesystem_mft(...) -> DbResult<EnumerationStats> {
 | Hex 格式化 | O(n) | O(n) | ❌ | 最优 |
 | 编码检测 | O(n) | O(1) | ❌ | 可优化 |
 | Magic 分类 | O(s·(h + m·k)) | O(h) | ❌ | bounded |
-| Registry 定向字段解析 | O(min(H, L) + q·d) | O(min(H, L)) | ❌ | bounded targeted parser |
+| Registry 定向字段解析 | O(min(H, L) + q·d) | O(min(H, L)) | ❌ | bounded targeted parser; synthetic SYSTEM/SOFTWARE fixture regression covered |
 | EVTX 候选事件解析 | O(min(E, L)) | O(min(E, L)) | ❌ | bounded candidate extraction; real fixture regression covered |
 | Tiny E01 reader fixture | O(c) | O(c) | ❌ | committed 4405-byte synthetic reader fixture |
 | 大媒体 protocol range | O(r) | O(r) | ❌ | r <= 1MB per request; CI guard covered |

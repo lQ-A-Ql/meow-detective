@@ -6,6 +6,10 @@ const TINY_LOGICAL_REL: &str = "testdata/fixtures/tiny/logical";
 const TINY_RAW_REL: &str = "testdata/fixtures/tiny/raw/tiny.raw";
 const TINY_E01_REL: &str = "testdata/fixtures/tiny/e01/tiny.E01";
 const TINY_SYSTEM_EVTX_REL: &str = "testdata/fixtures/tiny/evtx/system.evtx";
+const TINY_REGISTRY_SYSTEM_REL: &str =
+    "testdata/fixtures/tiny/logical/Windows/System32/config/SYSTEM";
+const TINY_REGISTRY_SOFTWARE_REL: &str =
+    "testdata/fixtures/tiny/logical/Windows/System32/config/SOFTWARE";
 
 /// Returns the repository root as seen by the `testing` crate.
 pub fn repo_root() -> PathBuf {
@@ -41,6 +45,22 @@ pub fn tiny_system_evtx() -> PathBuf {
     repo_root().join(TINY_SYSTEM_EVTX_REL)
 }
 
+/// Tiny synthetic SYSTEM registry hive in the logical fixture tree.
+///
+/// The hive only contains Analysis-targeted keys and is not a full Windows
+/// registry corpus.
+pub fn tiny_registry_system_hive() -> PathBuf {
+    repo_root().join(TINY_REGISTRY_SYSTEM_REL)
+}
+
+/// Tiny synthetic SOFTWARE registry hive in the logical fixture tree.
+///
+/// The hive only contains Analysis-targeted keys and is not a full Windows
+/// registry corpus.
+pub fn tiny_registry_software_hive() -> PathBuf {
+    repo_root().join(TINY_REGISTRY_SOFTWARE_REL)
+}
+
 /// Optional local E01 fixture for manual slow tests.
 ///
 /// This intentionally returns `None` unless `FORENSICS_E01_FIXTURE` points to
@@ -54,6 +74,7 @@ pub fn local_e01_fixture() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::builders::registry;
 
     #[test]
     fn tiny_logical_fixture_exists() {
@@ -103,6 +124,34 @@ mod tests {
         let bytes = std::fs::read(&path).expect("read tiny System.evtx fixture");
         assert!(bytes.len() < 2 * 1024 * 1024);
         assert_eq!(&bytes[0..8], b"ElfFile\0");
+    }
+
+    #[test]
+    fn tiny_registry_system_fixture_matches_builder() {
+        let path = tiny_registry_system_hive();
+        assert!(
+            path.is_file(),
+            "missing SYSTEM registry fixture: {}",
+            path.display()
+        );
+
+        let bytes = std::fs::read(&path).expect("read tiny SYSTEM hive fixture");
+        assert_eq!(&bytes[0..4], b"regf");
+        assert_eq!(bytes, registry::synthetic_system_hive());
+    }
+
+    #[test]
+    fn tiny_registry_software_fixture_matches_builder() {
+        let path = tiny_registry_software_hive();
+        assert!(
+            path.is_file(),
+            "missing SOFTWARE registry fixture: {}",
+            path.display()
+        );
+
+        let bytes = std::fs::read(&path).expect("read tiny SOFTWARE hive fixture");
+        assert_eq!(&bytes[0..4], b"regf");
+        assert_eq!(bytes, registry::synthetic_software_hive());
     }
 
     #[test]

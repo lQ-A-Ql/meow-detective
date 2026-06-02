@@ -93,6 +93,16 @@ powershell -ExecutionPolicy Bypass -File scripts\run-coverage.ps1 -Rust
 powershell -ExecutionPolicy Bypass -File scripts\run-coverage.ps1
 ```
 
+## Tiny Fixture Generation
+
+The tiny fixture generator rewrites deterministic RAW, E01, and synthetic
+Registry hives used by default CI. The registry hives are targeted Analysis
+fixtures only; they are not production Windows hive samples.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\generate-tiny-fixtures.ps1
+```
+
 ## Guard Scripts
 
 These scripts run in CI and can also be run locally before a release branch.
