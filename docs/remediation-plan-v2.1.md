@@ -134,7 +134,7 @@ cargo test --workspace                             # 通过；真实 E01 tests i
 pnpm --dir frontend typecheck                      # 通过
 pnpm --dir frontend lint                           # 通过；0 error / 0 warnings
 pnpm --dir frontend test                           # 通过；15 files / 58 tests
-pnpm --dir frontend build                          # 通过；Vite chunk size warning，主 chunk 约 520KB
+pnpm --dir frontend build                          # 通过；route-level lazy split 后无 chunk size warning，主 chunk 约 315KB
 cargo build -p forensics-desktop                   # 通过
 powershell -ExecutionPolicy Bypass -File scripts\check-release-guard.ps1 # 通过
 powershell -ExecutionPolicy Bypass -File scripts\check-command-sql-boundary.ps1 # 通过
