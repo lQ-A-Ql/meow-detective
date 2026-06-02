@@ -85,7 +85,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 
 | Task | 状态 | 当前结果 / 剩余动作 |
 |---|---|---|
-| 6.1 FS enum 去重 | Partial | 已在 `evidence-core::filesystem` 抽出 `root_node`、路径拼接和常见 path/file error helper，并让 FAT/NTFS/exFAT reader 复用；targeted tests 与 workspace clippy 通过。剩余：更深层的枚举流程和 FS 特定错误转换仍可继续抽象，但需避免改变 public API、排序、root semantics 和 reader 行为 |
+| 6.1 FS enum 去重 | Partial | 已在 `evidence-core::filesystem` 抽出 `root_node`、路径拼接、path component normalization 和常见 path/file error helper，并让 FAT/NTFS/exFAT reader 复用；targeted tests 与 clippy 通过。剩余：更深层的枚举流程和 FS 特定错误转换仍可继续抽象，但需避免改变 public API、排序、root semantics 和 reader 行为 |
 | 6.2 SQL 下沉 repo | Completed / guarded | 复核 `apps/desktop/src-tauri/src/commands` 无原始 SQL 语句或 `rusqlite::params!/prepare/execute` 低层调用；新增 `scripts/check-command-sql-boundary.ps1` 并接入 backend CI，防止后续把业务 SQL 写回 command layer。Command layer 允许打开连接并调用 repository/service/helper，保持 validate -> service/helper -> DTO 边界 |
 | 6.3 常量集中 | Completed | preview max、artifact max、pagination max、analysis sample max 等关键限制已集中到 transport/infrastructure 常量 |
 | 6.4 Public docs | Completed | `cargo doc --workspace --no-deps` 已通过；同时修复 rustdoc bare URL / invalid intra-doc link warnings |
@@ -124,6 +124,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 - FS helper 去重 targeted tests：`cargo test -p evidence-core filesystem`、`cargo test -p fs-fat`、`cargo test -p fs-exfat`、`cargo test -p fs-ntfs`、`cargo test -p app-services file_service`、`cargo test -p app-services --test file_service_real_test` 均通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过。
 - Tiny E01 fixture targeted tests：`powershell -ExecutionPolicy Bypass -File scripts\generate-tiny-fixtures.ps1` 通过，生成 `testdata/fixtures/tiny/e01/tiny.E01` 4405 bytes；`cargo test -p image-e01` 通过，4 个默认 regression tests + 5 个 ignored real-E01 slow tests；`cargo test -p testing` 通过，4 个 fixture helper tests；`cargo clippy -p image-e01 --all-targets -- -D warnings` 通过。
 - Coverage report targeted tests：`pnpm --dir frontend test:coverage` 通过，生成 `frontend/coverage/coverage-summary.json` 和 `lcov.info`，并通过前端初始 coverage 阈值；`powershell -ExecutionPolicy Bypass -File scripts\run-coverage.ps1 -Frontend` 通过，验证统一 coverage runner 的前端路径。
+- FS path component helper targeted tests：`cargo test -p evidence-core filesystem`、`cargo test -p fs-fat`、`cargo test -p fs-exfat`、`cargo test -p fs-ntfs`、`cargo test -p app-services file_service`、`cargo test -p app-services --test file_service_real_test`、`cargo clippy -p evidence-core -p fs-fat -p fs-exfat -p fs-ntfs --all-targets -- -D warnings`、`cargo fmt --all -- --check` 均通过。
 
 ## Final Gate 结果
 
@@ -163,4 +164,4 @@ cargo test -p app-services --test e01_mft_scan_test -- --ignored --nocapture
 4. 若需要真实 E01 分区/文件系统验收，继续使用 `FORENSICS_E01_FIXTURE` 手动慢测；当前提交的 tiny E01 只覆盖 reader 层 section/table/read/seek，不替代真实样本。
 5. 逐步消除 `cargo audit` warning-class transitive advisories，尤其是本轮 `evtx -> encoding` 临时例外；`encoding` 是 `evtx 0.11.2` 的直接非可选依赖，需替换 parser、vendor/patch parser 或在 2026-09-01 前重新评审例外。
 6. 继续积累 coverage baseline 并逐步抬高前端阈值；后端 coverage 目前仍只上传 LCOV artifact，不以百分比阻塞默认门禁。
-7. 继续收口 FS 枚举流程和 FS 特定错误转换去重；当前公共 root/path/error helper 已落地。Command layer SQL 已通过 guard 防回退，后续若有 repository/service SQL 行为变更仍需补 targeted tests。
+7. 继续收口 FS 枚举流程和 FS 特定错误转换去重；当前公共 root/path/path-components/error helper 已落地。Command layer SQL 已通过 guard 防回退，后续若有 repository/service SQL 行为变更仍需补 targeted tests。

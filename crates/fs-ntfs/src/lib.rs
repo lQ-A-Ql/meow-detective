@@ -5,7 +5,7 @@
 pub mod mft_scanner;
 
 use evidence_core::filesystem::{
-    file_not_found, join_child_path, root_node, FileSystemReader, FsNode,
+    file_not_found, join_child_path, path_components, root_node, FileSystemReader, FsNode,
 };
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
@@ -452,11 +452,7 @@ impl NtfsReader {
     /// Resolve a file path: walk parent directories, then find the file
     /// in the final directory. Returns file MFT inode, or None if not found.
     fn resolve_file_path(&self, path: &str) -> io::Result<Option<u64>> {
-        let components: Vec<&str> = path
-            .trim_matches(|c| c == '\\' || c == '/')
-            .split(['\\', '/'])
-            .filter(|c| !c.is_empty())
-            .collect();
+        let components = path_components(path);
         let (parent_dirs, file_name) = match components.split_last() {
             Some((file, dirs)) => (dirs, *file),
             None => return Ok(None),
@@ -485,11 +481,7 @@ impl NtfsReader {
     /// Returns the MFT inode of the final component, or None if not found.
     /// Validates $FILE_NAME.par_ref consistency at each step.
     fn resolve_path(&self, path: &str) -> io::Result<Option<u64>> {
-        let components: Vec<&str> = path
-            .trim_matches(|c| c == '\\' || c == '/')
-            .split(['\\', '/'])
-            .filter(|c| !c.is_empty())
-            .collect();
+        let components = path_components(path);
         if components.is_empty() {
             return Ok(Some(5));
         }

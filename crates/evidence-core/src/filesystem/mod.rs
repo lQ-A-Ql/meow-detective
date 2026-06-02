@@ -55,6 +55,14 @@ pub fn join_child_path(parent_path: &str, name: &str) -> String {
     join_child_path_with_separator(parent_path, name, '/')
 }
 
+/// Split a filesystem path into non-empty components using slash or backslash.
+pub fn path_components(path: &str) -> Vec<&str> {
+    path.trim_matches(['\\', '/'])
+        .split(['\\', '/'])
+        .filter(|component| !component.is_empty())
+        .collect()
+}
+
 /// Return a standard not-found error for a filesystem path.
 pub fn path_not_found(path: &str) -> io::Error {
     io::Error::new(io::ErrorKind::NotFound, format!("path not found: {path}"))
@@ -111,6 +119,19 @@ mod tests {
         assert_eq!(
             join_child_path_with_separator("\\dir\\sub\\", "file.txt", '\\'),
             "dir\\sub\\file.txt"
+        );
+    }
+
+    #[test]
+    fn path_components_splits_slash_and_backslash_paths() {
+        assert_eq!(path_components(""), Vec::<&str>::new());
+        assert_eq!(
+            path_components("\\Windows/System32\\"),
+            vec!["Windows", "System32"]
+        );
+        assert_eq!(
+            path_components("//dir///sub\\file.txt"),
+            vec!["dir", "sub", "file.txt"]
         );
     }
 

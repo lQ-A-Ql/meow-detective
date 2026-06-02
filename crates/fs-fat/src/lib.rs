@@ -1,5 +1,6 @@
 use evidence_core::filesystem::{
-    file_not_found, join_child_path, path_is_directory, root_node, FileSystemReader, FsNode,
+    file_not_found, join_child_path, path_components, path_is_directory, root_node,
+    FileSystemReader, FsNode,
 };
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
@@ -270,11 +271,7 @@ impl FatReader {
     /// Resolve a path to a cluster number by walking directories.
     /// Returns (cluster, is_dir, file_size). Root returns (0, true, 0).
     fn resolve_path_cluster(&self, path: &str) -> io::Result<Option<(u32, bool, u64)>> {
-        let components: Vec<&str> = path
-            .trim_matches(|c| c == '\\' || c == '/')
-            .split(['\\', '/'])
-            .filter(|c| !c.is_empty())
-            .collect();
+        let components = path_components(path);
         if components.is_empty() {
             return Ok(Some((0, true, 0))); // root
         }

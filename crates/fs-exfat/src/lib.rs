@@ -11,8 +11,8 @@ pub mod types;
 use boot::ExfatBootSector;
 use dir::FileEntrySet;
 use evidence_core::filesystem::{
-    file_not_found, join_child_path_with_separator, path_is_directory, path_is_not_directory,
-    path_not_found, root_node, FileSystemReader, FsNode,
+    file_not_found, join_child_path_with_separator, path_components, path_is_directory,
+    path_is_not_directory, path_not_found, root_node, FileSystemReader, FsNode,
 };
 use evidence_core::EvidenceReader;
 use fat::FatEntry;
@@ -113,11 +113,7 @@ impl ExfatReader {
     ///
     /// Returns None if the path doesn't exist.
     fn resolve_path(&self, path: &str) -> io::Result<Option<(u32, bool, u64)>> {
-        let components: Vec<&str> = path
-            .trim_matches(|c| c == '\\' || c == '/')
-            .split(['\\', '/'])
-            .filter(|c| !c.is_empty())
-            .collect();
+        let components = path_components(path);
 
         if components.is_empty() {
             // Root directory
