@@ -389,6 +389,7 @@ pub fn enumerate_filesystem_mft(...) -> DbResult<EnumerationStats> {
 | Magic 分类 | O(s·(h + m·k)) | O(h) | ❌ | bounded |
 | Registry 定向字段解析 | O(min(H, L) + q·d) | O(min(H, L)) | ❌ | bounded targeted parser |
 | EVTX 候选事件解析 | O(min(E, L)) | O(min(E, L)) | ❌ | bounded candidate extraction |
+| Tiny E01 reader fixture | O(c) | O(c) | ❌ | committed 4405-byte synthetic reader fixture |
 | 大媒体 protocol range | O(r) | O(r) | ❌ | r <= 1MB per request |
 | 路径重建 | O(n) | O(n) | ❌ | 已优化 |
 | MFT 扫描 | O(n) | O(p·b) | ✅ | 可并行降低 wall time |
@@ -405,6 +406,7 @@ pub fn enumerate_filesystem_mft(...) -> DbResult<EnumerationStats> {
 | 大媒体预览 | evidence-media/read_media_range | 小文件 data URL；大文件返回 `evidence-media://handle/<encoded>` scoped protocol URL，Tauri protocol 按 Range 每次最多读取 1MB；`read_media_range` 保留为 mock/unsupported fallback。仍需 Windows WebView2 桌面 seek smoke |
 | Registry 解析覆盖 | registry targeted lookup | 当前只承诺 Analysis 所需 SYSTEM/SOFTWARE 定向字段；不是完整 hive browser。后续若扩展全 hive traversal，需重新评估 cell graph 遍历复杂度 |
 | EVTX fixture 覆盖 | evtx.boot_shutdown | 当前 adapter 可解析 6005/6006/6008/1074 候选事件，但仓库内缺合法 tiny real `.evtx` fixture；需补真实 fixture 覆盖 parser path |
+| E01 真实样本慢测 | image-e01/app-services | 仓库内已有 tiny synthetic E01 reader fixture；真实分区/文件系统 E01 慢测仍需 `FORENSICS_E01_FIXTURE` opt-in |
 
 ### P2 (长期)
 
@@ -414,5 +416,5 @@ pub fn enumerate_filesystem_mft(...) -> DbResult<EnumerationStats> {
 
 ---
 
-**分析人**: MiMo AI Assistant；2026-06-02 由 Codex 按当前实现更新 Analysis provenance、Registry targeted parser、EVTX candidate adapter、evidence-media protocol、CI fixture 与 bounded preview 状态
+**分析人**: MiMo AI Assistant；2026-06-02 由 Codex 按当前实现更新 Analysis provenance、Registry targeted parser、EVTX candidate adapter、evidence-media protocol、CI fixture、tiny E01 reader fixture 与 bounded preview 状态
 **分析版本**: v1.3

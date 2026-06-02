@@ -15,3 +15,6 @@ evidence-core.workspace = true
 tracing.workspace = true
 flate2 = "1"
 
+[dev-dependencies]
+testing.workspace = true
+

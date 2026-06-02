@@ -2039,6 +2039,7 @@ dependencies = [
  "flate2",
  "serde",
  "serde_json",
+ "testing",
  "thiserror 2.0.18",
  "tracing",
 ]

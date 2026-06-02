@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 const TINY_LOGICAL_REL: &str = "testdata/fixtures/tiny/logical";
 const TINY_RAW_REL: &str = "testdata/fixtures/tiny/raw/tiny.raw";
+const TINY_E01_REL: &str = "testdata/fixtures/tiny/e01/tiny.E01";
 
 /// Returns the repository root as seen by the `testing` crate.
 pub fn repo_root() -> PathBuf {
@@ -21,6 +22,14 @@ pub fn tiny_logical_dir() -> PathBuf {
 /// Tiny RAW fixture with a valid MBR signature and deterministic payload.
 pub fn tiny_raw_image() -> PathBuf {
     repo_root().join(TINY_RAW_REL)
+}
+
+/// Tiny synthetic E01 fixture for default reader tests.
+///
+/// This is a deterministic single-segment EWF-like image with one uncompressed
+/// chunk. It is not intended to represent a real filesystem image.
+pub fn tiny_e01_image() -> PathBuf {
+    repo_root().join(TINY_E01_REL)
 }
 
 /// Optional local E01 fixture for manual slow tests.
@@ -58,6 +67,19 @@ mod tests {
         assert_eq!(bytes.len(), 1024);
         assert_eq!(&bytes[510..512], &[0x55, 0xAA]);
         assert_eq!(&bytes[512..520], b"FWB-TINY");
+    }
+
+    #[test]
+    fn tiny_e01_fixture_exists_and_has_evf_header() {
+        let path = tiny_e01_image();
+        assert!(path.is_file(), "missing E01 fixture: {}", path.display());
+
+        let bytes = std::fs::read(&path).expect("read tiny E01 fixture");
+        assert!(bytes.len() < 1024 * 1024);
+        assert_eq!(&bytes[0..3], b"EVF");
+        assert!(bytes
+            .windows(b"FWB-TINY-E01".len())
+            .any(|w| w == b"FWB-TINY-E01"));
     }
 
     #[test]

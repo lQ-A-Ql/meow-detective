@@ -60,6 +60,38 @@ fn read_mid_image_block() {
     assert!(buf.iter().any(|&byte| byte != 0));
 }
 
+#[test]
+fn opens_committed_tiny_e01_fixture() {
+    let mut reader = E01Reader::open(&testing::fixtures::tiny_e01_image()).unwrap();
+    assert_eq!(reader.info().kind, "e01");
+    assert_eq!(reader.info().size, 8 * 512);
+
+    let mut marker = [0u8; 12];
+    reader.read_exact(&mut marker).unwrap();
+    assert_eq!(&marker, b"FWB-TINY-E01");
+
+    reader.seek(SeekFrom::Start(510)).unwrap();
+    let mut signature = [0u8; 2];
+    reader.read_exact(&mut signature).unwrap();
+    assert_eq!(signature, [0x55, 0xAA]);
+}
+
+#[test]
+fn tiny_e01_fixture_supports_seek_and_eof() {
+    let mut reader = E01Reader::open(&testing::fixtures::tiny_e01_image()).unwrap();
+
+    reader.seek(SeekFrom::End(-4)).unwrap();
+    let mut tail = [0xFF; 4];
+    reader.read_exact(&mut tail).unwrap();
+    assert_eq!(tail, [0, 0, 0, 0]);
+
+    let pos = reader.seek(SeekFrom::End(10)).unwrap();
+    assert_eq!(pos, 8 * 512);
+    let mut byte = [0u8; 1];
+    let read = reader.read(&mut byte).unwrap();
+    assert_eq!(read, 0);
+}
+
 // --- Phase 18: multi-segment detection + regression ---
 
 #[test]

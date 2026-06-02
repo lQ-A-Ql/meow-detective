@@ -251,6 +251,13 @@
 - `get_text_preview` 和 hex range 读取走真实 reader；`get_image_preview` 返回有大小上限的 data URL。
 - `get_media_url` 对小媒体返回 bounded data URL；对大媒体返回 `mode=protocol`、opaque `handleId`、MIME、size 和 `evidence-media://handle/<encoded>` URL。Tauri `evidence-media` protocol handler 使用同一 evidence reader helper 按 Range 读取，每次最多 1MB，返回 206/416 等 bounded response；`read_media_range` command 继续作为 mock/unsupported fallback。当前实现不暴露 evidence 宿主绝对路径，CSP 只在 `media-src` 中允许 `evidence-media:`。
 
+### 测试 Fixture 策略
+
+- `testdata/fixtures/tiny/logical/` 是默认 CI 可用的逻辑目录 fixture。
+- `testdata/fixtures/tiny/raw/tiny.raw` 是 1024-byte deterministic RAW fixture，含 MBR signature。
+- `testdata/fixtures/tiny/e01/tiny.E01` 是 4405-byte synthetic single-segment E01 fixture，用于 `image-e01` reader 的 section/table/read/seek 回归。它不是完整文件系统镜像，也不能替代真实 E01 分区/文件系统慢测。
+- `scripts/generate-tiny-fixtures.ps1` 可重建 RAW/E01 tiny fixtures。真实 E01 验收继续通过 `FORENSICS_E01_FIXTURE` opt-in ignored slow tests 执行，默认 CI 不依赖私有样本。
+
 ---
 
 ## Analysis API Contract
