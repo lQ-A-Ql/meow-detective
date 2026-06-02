@@ -1,0 +1,47 @@
+[package]
+name = "evtx"
+version = "0.11.2"
+edition = "2024"
+authors = ["Omer Ben-Amram <omerbenamram@gmail.com>"]
+license = "MIT OR Apache-2.0"
+description = "Local patched EVTX parser fork without the unmaintained encoding crate"
+homepage = "https://github.com/omerbenamram/EVTX"
+repository = "https://github.com/omerbenamram/EVTX"
+readme = "README.md"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+
+[features]
+default = ["multithreading"]
+bench = []
+evtx_dump = []
+fast-alloc = []
+multithreading = ["rayon"]
+wevt_templates = ["glob", "goblin"]
+
+[lib]
+name = "evtx"
+path = "src/lib.rs"
+doctest = false
+
+[dependencies]
+ahash = "0.8"
+bitflags = "2"
+bumpalo = { version = "3.19.1", features = ["collections"] }
+byteorder = "1"
+crc32fast = "1"
+encoding_rs = "0.8"
+glob = { version = "0.3", optional = true }
+goblin = { version = "0.10", optional = true }
+jiff = { version = "0.2.17", features = ["logging", "serde"] }
+log = { version = "0.4.17", features = ["release_max_level_debug"] }
+rayon = { version = "1", optional = true }
+serde = "1"
+serde_json = { version = "1", features = ["preserve_order"] }
+sonic-rs = "0.5.6"
+thiserror = "2"
+utf16-simd = { version = "0.1.0", features = ["sonic-writeext"] }
+winstructs = "0.3.0"
+zmij = "1.0.1"

@@ -112,8 +112,8 @@ powershell -ExecutionPolicy Bypass -File scripts\check-command-sql-boundary.ps1
 # Dependency exception metadata/expiry guard
 powershell -ExecutionPolicy Bypass -File scripts\check-deny-exceptions.ps1
 
-# EVTX dependency decision guard. This keeps the temporary evtx -> encoding
-# advisory exception synchronized with docs/evtx-dependency-decision.md.
+# EVTX dependency decision guard. This prevents reintroducing the legacy
+# evtx -> encoding dependency path after the local encoding_rs patch.
 powershell -ExecutionPolicy Bypass -File scripts\check-evtx-dependency-decision.ps1
 ```
 

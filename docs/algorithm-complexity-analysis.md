@@ -406,7 +406,7 @@ pub fn enumerate_filesystem_mft(...) -> DbResult<EnumerationStats> {
 | 编码检测多次扫描 | detect_encoding | 合并为单次扫描 |
 | 大媒体预览 | evidence-media/read_media_range | 小文件 data URL；大文件返回 `evidence-media://handle/<encoded>` scoped protocol URL，Tauri protocol 按 Range 每次最多读取 1MB；`read_media_range` 保留为 mock/unsupported fallback。CI guard 已固定 CSP/protocol/fallback/host-path URL 边界；仍需 Windows WebView2 桌面 seek smoke |
 | Registry 解析覆盖 | registry targeted lookup | 当前只承诺 Analysis 所需 SYSTEM/SOFTWARE 定向字段；不是完整 hive browser。后续若扩展全 hive traversal，需重新评估 cell graph 遍历复杂度 |
-| EVTX fixture 覆盖 | evtx.boot_shutdown | 已新增 tiny real `System.evtx` fixture，覆盖 6005/6006/6008/1074 candidate parser path；`evtx -> encoding` advisory cleanup 已记录在 dependency decision 并由 CI guard 防分叉，真正替换仍需后续完成 |
+| EVTX fixture 与依赖治理 | evtx.boot_shutdown | 已新增 tiny real `System.evtx` fixture，覆盖 6005/6006/6008/1074 candidate parser path；workspace `evtx` 已切到 `crates/evtx-patched`，local fork 使用 `encoding_rs`，`RUSTSEC-2021-0153` 不再是 deny/audit 剩余项；CI guard 防止 legacy `encoding` 链路回归 |
 | E01 真实样本慢测 | image-e01/app-services | 仓库内已有 tiny synthetic E01 reader fixture；真实分区/文件系统 E01 慢测仍需 `FORENSICS_E01_FIXTURE` opt-in |
 | 覆盖率基线 | CI/test reporting | 已新增 backend/frontend coverage artifact 和 `scripts/run-coverage.ps1`；前端以全局 45% lines/statements/functions、35% branches 作为初始防回退阈值，后端暂只生成 LCOV artifact |
 
@@ -418,5 +418,5 @@ pub fn enumerate_filesystem_mft(...) -> DbResult<EnumerationStats> {
 
 ---
 
-**分析人**: MiMo AI Assistant；2026-06-02 由 Codex 按当前实现更新 Analysis provenance、Registry targeted parser、EVTX candidate adapter、EVTX real fixture regression、EVTX dependency decision guard、evidence-media protocol/CI guard、CI fixture、coverage artifact/baseline gate、FS path helper、tiny E01 reader fixture 与 bounded preview 状态
+**分析人**: MiMo AI Assistant；2026-06-02 由 Codex 按当前实现更新 Analysis provenance、Registry targeted parser、EVTX candidate adapter、EVTX real fixture regression、EVTX local patched dependency、evidence-media protocol/CI guard、CI fixture、coverage artifact/baseline gate、FS path helper、tiny E01 reader fixture 与 bounded preview 状态
 **分析版本**: v1.3

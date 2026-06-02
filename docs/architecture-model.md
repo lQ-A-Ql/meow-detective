@@ -280,7 +280,7 @@ Analysis 功能的前后端契约以 `transport` crate 为唯一 Rust 源头，�
 
 - Analysis DTO 包含 `AnalysisProvenanceDto { dataSourceId, artifactPath, parser, parsedAt, status, warnings }`。系统信息、boot records、分类汇总和单文件分类均可携带来源说明；系统字段另有 `fieldProvenance` 追踪 hive path、key path、value name 和 parser。
 - Registry 当前是定向字段 parser，不是完整 hive browser。`artifacts-windows::registry::lookup` bounded 读取最多 64MB，解析 `regf` base block、NK/VK、`lf/lh/li/ri` 子键列表和常用值类型；Analysis 从 `SYSTEM` / `SOFTWARE` 提取 `ComputerName`、timezone、ProductName、CurrentBuild、InstallDate、RegisteredOwner、Organization、ProductId。缺失、损坏或超限只产生 warnings，不补默认 Windows 文案。
-- EVTX 当前是 boot/shutdown candidate adapter。`artifacts-windows::evtx` 使用 `evtx` crate bounded 读取最多 64MB `System.evtx`，解析 6005、6006、6008、1074 为候选事件，并明确标注这些是 EventLog/User32 proxy，不是绝对开关机事实。仓库内已有 tiny real `System.evtx` fixture 覆盖 parser path；现有测试同时覆盖 JSON 记录提取、malformed、oversized 和 truncated magic 路径。`evtx -> encoding` 仍是到期 dependency exception，不代表依赖治理已永久完成；`docs/evtx-dependency-decision.md` 记录替换评估，`scripts/check-evtx-dependency-decision.ps1` 在 CI 中防止 `deny.toml` 例外和决策文档分叉。
+- EVTX 当前是 boot/shutdown candidate adapter。`artifacts-windows::evtx` 使用 workspace `evtx` dependency bounded 读取最多 64MB `System.evtx`，解析 6005、6006、6008、1074 为候选事件，并明确标注这些是 EventLog/User32 proxy，不是绝对开关机事实。仓库内已有 tiny real `System.evtx` fixture 覆盖 parser path；现有测试同时覆盖 JSON 记录提取、malformed、oversized 和 truncated magic 路径。workspace `evtx` 已切到 `crates/evtx-patched`，该 local fork 使用 `encoding_rs` 替代 legacy `encoding`，`RUSTSEC-2021-0153` 不再是 `deny.toml` 例外；`docs/evtx-dependency-decision.md` 记录 resolved decision，`scripts/check-evtx-dependency-decision.ps1` 在 CI 中防止重新引入 `evtx -> encoding` 链路。
 - 文件分类只读取每个文件有限 header（当前 8KB）并按 magic/ext 分类；读取入口为 `FileEntryId + DataSourceKind`，支持 logical directory、E01、RAW 的统一路径。
 - Summary 只基于真实 DTO 状态生成；未解析信息必须显示“未解析”或 warning，不允许生成伪造取证事实。
 
@@ -473,5 +473,5 @@ Settings 当前分两类持久化：
 
 ---
 
-**建模人**: MiMo AI Assistant；2026-06-02 由 Codex 更新 Analysis provenance、Registry targeted parser、EVTX candidate adapter、EVTX real fixture regression、EVTX dependency decision guard、evidence-media protocol/CI guard、Reports、Job partial、CI/SBOM、coverage artifact/baseline gate、FS path helper 与慢测状态
+**建模人**: MiMo AI Assistant；2026-06-02 由 Codex 更新 Analysis provenance、Registry targeted parser、EVTX candidate adapter、EVTX real fixture regression、EVTX local patched dependency、evidence-media protocol/CI guard、Reports、Job partial、CI/SBOM、coverage artifact/baseline gate、FS path helper 与慢测状态
 **建模版本**: v1.3

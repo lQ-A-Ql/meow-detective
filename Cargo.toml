@@ -23,6 +23,7 @@ members = [
   "crates/reports",
   "crates/transport",
   "crates/testing",
+  "crates/evtx-patched",
 ]
 
 [workspace.package]
@@ -63,4 +64,4 @@ artifacts-windows = { path = "crates/artifacts-windows" }
 reports = { path = "crates/reports" }
 testing = { path = "crates/testing" }
 runtime-cache = { path = "crates/runtime-cache" }
-evtx = { version = "0.11.2", default-features = false }
+evtx = { path = "crates/evtx-patched", default-features = false }
