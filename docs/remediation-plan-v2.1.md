@@ -119,7 +119,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 - `powershell -ExecutionPolicy Bypass -File scripts\check-deny-exceptions.ps1`: 通过。
 - `cargo audit`: 通过，仍报告 20 个 warning-class transitive advisories，短期由 `deny.toml` 例外追踪。
 - `pnpm --dir frontend audit --audit-level high`: 通过；Vite/Vitest 安全升级后无 high/critical 漏洞。
-- Final gate 复核 `pnpm --dir frontend test`: 通过，15 个测试文件 / 58 个测试；ErrorBoundary 用例打印预期 jsdom stack，退出码为 0。
+- Final gate 复核 `pnpm --dir frontend test`: 通过，16 个测试文件 / 59 个测试；新增 route lazy-split 防回退测试；ErrorBoundary 用例打印预期 jsdom stack，退出码为 0。
 - Final gate 统一 grep 复核：伪取证事实命中仅存在于审计文档或负向测试；页面/feature 无 direct Tauri `invoke`；新增事件 payload 不含裸 evidence host path。
 - FS helper 去重 targeted tests：`cargo test -p evidence-core filesystem`、`cargo test -p fs-fat`、`cargo test -p fs-exfat`、`cargo test -p fs-ntfs`、`cargo test -p app-services file_service`、`cargo test -p app-services --test file_service_real_test` 均通过；`cargo clippy --workspace --all-targets -- -D warnings` 通过。
 
@@ -133,7 +133,7 @@ cargo clippy --workspace --all-targets -- -D warnings # 通过
 cargo test --workspace                             # 通过；真实 E01 tests ignored
 pnpm --dir frontend typecheck                      # 通过
 pnpm --dir frontend lint                           # 通过；0 error / 0 warnings
-pnpm --dir frontend test                           # 通过；15 files / 58 tests
+pnpm --dir frontend test                           # 通过；16 files / 59 tests
 pnpm --dir frontend build                          # 通过；route-level lazy split 后无 chunk size warning，主 chunk 约 315KB
 cargo build -p forensics-desktop                   # 通过
 powershell -ExecutionPolicy Bypass -File scripts\check-release-guard.ps1 # 通过

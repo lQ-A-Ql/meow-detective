@@ -17,13 +17,33 @@ function isValidSortDirection(dir: string | null): dir is FileSortDirection {
   return dir !== null && VALID_SORT_DIRECTIONS.includes(dir as FileSortDirection);
 }
 
+function readStorageValue(key: string): string | null {
+  try {
+    const storage = globalThis.localStorage;
+    return typeof storage?.getItem === 'function' ? storage.getItem(key) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStorageValue(key: string, value: string): void {
+  try {
+    const storage = globalThis.localStorage;
+    if (typeof storage?.setItem === 'function') {
+      storage.setItem(key, value);
+    }
+  } catch {
+    // Ignore storage failures in test, SSR, or restricted browser contexts.
+  }
+}
+
 function getSavedSortKey(): FileSortKey {
-  const saved = localStorage.getItem('fileSortKey');
+  const saved = readStorageValue('fileSortKey');
   return isValidSortKey(saved) ? saved : 'name';
 }
 
 function getSavedSortDirection(): FileSortDirection {
-  const saved = localStorage.getItem('fileSortDirection');
+  const saved = readStorageValue('fileSortDirection');
   return isValidSortDirection(saved) ? saved : 'asc';
 }
 
@@ -64,13 +84,13 @@ export const useUiStore = create<UiState>((set) => ({
   fileSortKey: getSavedSortKey(),
   fileSortDirection: getSavedSortDirection(),
   setFileSortKey: (key) => {
-    localStorage.setItem('fileSortKey', key);
+    writeStorageValue('fileSortKey', key);
     set({ fileSortKey: key });
   },
   toggleFileSortDirection: () => {
     set((state) => {
       const newDirection = state.fileSortDirection === 'asc' ? 'desc' : 'asc';
-      localStorage.setItem('fileSortDirection', newDirection);
+      writeStorageValue('fileSortDirection', newDirection);
       return { fileSortDirection: newDirection };
     });
   },
