@@ -77,8 +77,9 @@ cargo tauri build
 
 ## Coverage Reports
 
-Coverage reports are generated explicitly; the project does not enforce a
-percentage threshold yet.
+Coverage reports are generated explicitly. Frontend coverage currently enforces
+an initial global baseline of 45% lines/statements/functions and 35% branches.
+Backend coverage is reported as an LCOV artifact without a percentage threshold.
 
 ```powershell
 # Frontend coverage, writes frontend/coverage
