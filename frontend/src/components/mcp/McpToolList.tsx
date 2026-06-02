@@ -12,7 +12,7 @@ export function McpToolList({ serverId }: McpToolListProps) {
   const [testResult, setTestResult] = useState<{
     toolName: string;
     success: boolean;
-    data?: any;
+    data?: unknown;
     error?: string;
   } | null>(null);
 
@@ -116,7 +116,7 @@ export function McpToolList({ serverId }: McpToolListProps) {
           {testResult.error && (
             <div className="text-[10px] text-red-600">{testResult.error}</div>
           )}
-          {testResult.data && (
+          {testResult.data !== undefined && testResult.data !== null && (
             <pre className="text-[10px] text-gray-600 mt-1 overflow-auto max-h-20">
               {JSON.stringify(testResult.data, null, 2)}
             </pre>

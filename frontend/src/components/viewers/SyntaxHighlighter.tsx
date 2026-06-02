@@ -52,8 +52,6 @@ interface SyntaxHighlighterProps {
   code: string;
   /** 语言 */
   language?: string;
-  /** 每行的额外渲染 */
-  lineRenderer?: (line: string, lineNumber: number) => React.ReactNode;
 }
 
 /** 根据扩展名获取语言 */
@@ -94,7 +92,6 @@ function getLanguageFromExtension(ext: string): string | undefined {
 export function SyntaxHighlighter({
   code,
   language,
-  lineRenderer,
 }: SyntaxHighlighterProps) {
   // 高亮代码
   const highlightedHtml = useMemo(() => {

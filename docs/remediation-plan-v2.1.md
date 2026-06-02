@@ -114,7 +114,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 - `cargo test -p testing`: 通过。
 - `pnpm --dir frontend test -- Settings`: 通过，3 files / 11 tests。
 - `pnpm --dir frontend typecheck`: 通过。
-- `pnpm --dir frontend lint`: 通过，0 error / 7 existing warnings。
+- `pnpm --dir frontend lint`: 通过，0 error / 0 warnings；已清理 MCP、DenseDataTable、SyntaxHighlighter、tauri-bridge 的既有 lint warning。
 - `cargo deny check advisories bans licenses sources`: 通过。
 - `powershell -ExecutionPolicy Bypass -File scripts\check-deny-exceptions.ps1`: 通过。
 - `cargo audit`: 通过，仍报告 20 个 warning-class transitive advisories，短期由 `deny.toml` 例外追踪。
@@ -132,7 +132,7 @@ cargo fmt --all -- --check                         # 通过
 cargo clippy --workspace --all-targets -- -D warnings # 通过
 cargo test --workspace                             # 通过；真实 E01 tests ignored
 pnpm --dir frontend typecheck                      # 通过
-pnpm --dir frontend lint                           # 通过；0 error / 7 existing warnings
+pnpm --dir frontend lint                           # 通过；0 error / 0 warnings
 pnpm --dir frontend test                           # 通过；15 files / 58 tests
 pnpm --dir frontend build                          # 通过；Vite chunk size warning，主 chunk 约 520KB
 cargo build -p forensics-desktop                   # 通过

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Wifi, WifiOff, Trash2, Settings, Loader2 } from 'lucide-react';
+import { Wifi, WifiOff, Trash2, Loader2 } from 'lucide-react';
 
 interface McpServer {
   id: string;

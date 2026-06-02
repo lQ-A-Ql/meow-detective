@@ -7,7 +7,7 @@
  * 3. 虚拟滚动支持大列表
  */
 
-import { ReactNode, memo, useCallback } from 'react';
+import { memo, useCallback, type ReactElement, type ReactNode } from 'react';
 import {
   Table,
   TableBody,
@@ -45,20 +45,22 @@ interface DenseDataTableProps<T> {
   onSort?: (key: string) => void;
 }
 
+interface TableRowMemoProps<T> {
+  row: T;
+  columns: DenseColumn<T>[];
+  selected: boolean;
+  onRowClick?: (row: T) => void;
+}
+
 /**
  * 表格行组件 (使用 memo 优化)
  */
-const TableRowMemo = memo(function TableRowMemo({
+function TableRowMemoBase<T>({
   row,
   columns,
   selected,
   onRowClick,
-}: {
-  row: any;
-  columns: DenseColumn<any>[];
-  selected: boolean;
-  onRowClick?: (row: any) => void;
-}) {
+}: TableRowMemoProps<T>) {
   return (
     <TableRow
       data-state={selected ? 'selected' : undefined}
@@ -83,7 +85,11 @@ const TableRowMemo = memo(function TableRowMemo({
       ))}
     </TableRow>
   );
-});
+}
+
+const TableRowMemo = memo(TableRowMemoBase) as <T>(
+  props: TableRowMemoProps<T>
+) => ReactElement;
 
 export function DenseDataTable<T>({
   columns,

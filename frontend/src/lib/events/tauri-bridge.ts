@@ -1,6 +1,6 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { eventBus } from './bus';
-import type { EventEnvelope, EventTopic, JobSnapshot } from '@/types/models';
+import type { EventEnvelope, EventTopic } from '@/types/models';
 import { getApiMode } from '@/lib/api/client';
 
 let unlisteners: UnlistenFn[] = [];
