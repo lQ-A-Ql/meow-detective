@@ -407,6 +407,7 @@ pub fn enumerate_filesystem_mft(...) -> DbResult<EnumerationStats> {
 | Registry 解析覆盖 | registry targeted lookup | 当前只承诺 Analysis 所需 SYSTEM/SOFTWARE 定向字段；不是完整 hive browser。后续若扩展全 hive traversal，需重新评估 cell graph 遍历复杂度 |
 | EVTX fixture 覆盖 | evtx.boot_shutdown | 当前 adapter 可解析 6005/6006/6008/1074 候选事件，但仓库内缺合法 tiny real `.evtx` fixture；需补真实 fixture 覆盖 parser path |
 | E01 真实样本慢测 | image-e01/app-services | 仓库内已有 tiny synthetic E01 reader fixture；真实分区/文件系统 E01 慢测仍需 `FORENSICS_E01_FIXTURE` opt-in |
+| 覆盖率基线 | CI/test reporting | 已新增 backend/frontend coverage artifact 和 `scripts/run-coverage.ps1`；当前不设置百分比阈值，待报告稳定后再设门槛 |
 
 ### P2 (长期)
 
@@ -416,5 +417,5 @@ pub fn enumerate_filesystem_mft(...) -> DbResult<EnumerationStats> {
 
 ---
 
-**分析人**: MiMo AI Assistant；2026-06-02 由 Codex 按当前实现更新 Analysis provenance、Registry targeted parser、EVTX candidate adapter、evidence-media protocol、CI fixture、tiny E01 reader fixture 与 bounded preview 状态
+**分析人**: MiMo AI Assistant；2026-06-02 由 Codex 按当前实现更新 Analysis provenance、Registry targeted parser、EVTX candidate adapter、evidence-media protocol、CI fixture、coverage artifact、tiny E01 reader fixture 与 bounded preview 状态
 **分析版本**: v1.3

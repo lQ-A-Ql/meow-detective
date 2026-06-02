@@ -438,6 +438,11 @@ Settings 当前分两类持久化：
 │  ├── pnpm --dir frontend audit --audit-level high                │
 │  └── CycloneDX backend/frontend SBOM artifacts                   │
 │                                                                  │
+│  覆盖率报告                                                       │
+│  ├── scripts/run-coverage.ps1                                    │
+│  ├── cargo llvm-cov backend LCOV artifact                         │
+│  └── pnpm --dir frontend test:coverage artifact                   │
+│                                                                  │
 │  覆盖重点                                                       │
 │  ├── 编译检查                                                   │
 │  ├── 单元测试                                                   │
@@ -467,5 +472,5 @@ Settings 当前分两类持久化：
 
 ---
 
-**建模人**: MiMo AI Assistant；2026-06-02 由 Codex 更新 Analysis provenance、Registry targeted parser、EVTX candidate adapter、evidence-media protocol、Reports、Job partial、CI/SBOM 与慢测状态
+**建模人**: MiMo AI Assistant；2026-06-02 由 Codex 更新 Analysis provenance、Registry targeted parser、EVTX candidate adapter、evidence-media protocol、Reports、Job partial、CI/SBOM、coverage artifact 与慢测状态
 **建模版本**: v1.3

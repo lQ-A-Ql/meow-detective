@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          components: rustfmt, clippy, llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
       - name: Format
         run: cargo fmt --all -- --check
@@ -29,6 +29,15 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
         run: cargo test --workspace
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked
+      - name: Rust coverage
+        run: cargo llvm-cov --workspace --all-targets --lcov --output-path rust-lcov.info
+      - name: Upload Rust coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: rust-lcov.info
       - name: Desktop build
         run: cargo build -p forensics-desktop
       - name: Release guard

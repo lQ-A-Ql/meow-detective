@@ -75,6 +75,23 @@ cargo tauri build
    - Generate HTML, JSON, or CSV reports
    - Export findings for documentation
 
+## Coverage Reports
+
+Coverage reports are generated explicitly; the project does not enforce a
+percentage threshold yet.
+
+```powershell
+# Frontend coverage, writes frontend/coverage
+powershell -ExecutionPolicy Bypass -File scripts\run-coverage.ps1 -Frontend
+
+# Rust coverage, requires cargo-llvm-cov and writes coverage/rust-lcov.info
+cargo install cargo-llvm-cov --locked
+powershell -ExecutionPolicy Bypass -File scripts\run-coverage.ps1 -Rust
+
+# Both, skipping Rust coverage with a warning if cargo-llvm-cov is unavailable
+powershell -ExecutionPolicy Bypass -File scripts\run-coverage.ps1
+```
+
 ## Troubleshooting
 
 ### Frontend not loading

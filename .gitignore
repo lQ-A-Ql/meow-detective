@@ -1,10 +1,12 @@
 # Rust
 target/
+coverage/
 
 # Node
 node_modules/
 frontend/dist/
 frontend/node_modules/
+frontend/coverage/
 package-lock.json
 
 # Tauri (auto-generated)
