@@ -128,6 +128,7 @@ v2.1 的目标是把内部 alpha 推进到可信 beta。当前已补齐 Analysis
 - Tiny EVTX fixture targeted tests：`cargo test -p artifacts-windows evtx` 通过，real `System.evtx` fixture 能解析出 6005/6006/6008/1074 boot/shutdown candidate；`cargo test -p testing tiny_system_evtx` 通过，验证 fixture 存在、大小小于 2MB 且 EVTX header 正确。
 - Coverage report targeted tests：`pnpm --dir frontend test:coverage` 通过，生成 `frontend/coverage/coverage-summary.json` 和 `lcov.info`，并通过前端初始 coverage 阈值；`powershell -ExecutionPolicy Bypass -File scripts\run-coverage.ps1 -Frontend` 通过，验证统一 coverage runner 的前端路径。
 - FS path component helper targeted tests：`cargo test -p evidence-core filesystem`、`cargo test -p fs-fat`、`cargo test -p fs-exfat`、`cargo test -p fs-ntfs`、`cargo test -p app-services file_service`、`cargo test -p app-services --test file_service_real_test`、`cargo clippy -p evidence-core -p fs-fat -p fs-exfat -p fs-ntfs --all-targets -- -D warnings`、`cargo fmt --all -- --check` 均通过。
+- Registry/FS post-check：`cargo test --workspace` 通过，真实 E01 slow/manual tests 保持 ignored / opt-in；`cargo clippy --workspace --all-targets -- -D warnings` 通过。
 
 ## Final Gate 结果
 
