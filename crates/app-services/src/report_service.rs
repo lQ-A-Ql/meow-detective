@@ -1,9 +1,12 @@
 use domain::CaseMeta;
-use persistence_sqlite::repositories::{file_repo::FileRepo, timeline_repo::TimelineRepo};
+use persistence_sqlite::repositories::{
+    file_repo::FileRepo, report_repo::ReportRepo, timeline_repo::TimelineRepo,
+};
 use reports::{CsvExporter, HtmlReportExporter, JsonExporter};
 use rusqlite::Connection;
 use std::fs;
 use std::path::Path;
+use transport::commands::ExportScopeDto;
 use transport::dto::{
     AnalysisFileClassificationDto, AnalysisProvenanceDto, AnalysisSystemInfoDto,
     ReportHistoryItemDto, ReportTemplateDto,
@@ -14,6 +17,7 @@ pub fn generate_html_report(
     conn: &Connection,
     case: &CaseMeta,
     output_dir: &Path,
+    scope: &ExportScopeDto,
 ) -> Result<String, String> {
     let file_repo = FileRepo::new(conn);
     let tl_repo = TimelineRepo::new(conn);
@@ -22,26 +26,35 @@ pub fn generate_html_report(
 
     let tl_count = tl_repo.count().map_err(|e| e.to_string())?;
 
-    let files = vec![format!("{} files indexed", file_count)];
-    let artifacts = vec![format!("{} timeline events", tl_count)];
+    let files = if scope.file_system_metadata {
+        vec![format!("{} files indexed", file_count)]
+    } else {
+        Vec::new()
+    };
+    let artifacts = if scope.full_timeline {
+        vec![format!("{} timeline events", tl_count)]
+    } else {
+        Vec::new()
+    };
     let analysis = current_analysis(conn)?;
+    let analysis_rows = scoped_analysis_rows(&analysis, scope);
 
     let file_name = format!("report-{}.html", Uuid::new_v4());
     let path = output_dir.join(&file_name);
     let mut f = fs::File::create(&path).map_err(|e| e.to_string())?;
-    HtmlReportExporter::export_with_analysis(
-        &mut f,
-        case,
-        &files,
-        &artifacts,
-        &analysis_rows(&analysis.system_info, &analysis.classifications),
-    )
-    .map_err(|e| e.to_string())?;
+    HtmlReportExporter::export_with_analysis(&mut f, case, &files, &artifacts, &analysis_rows)
+        .map_err(|e| e.to_string())?;
 
+    persist_report_record(conn, &case.id.0, "report-summary", &file_name, "completed")?;
     Ok(file_name)
 }
 
-pub fn generate_csv_artifacts(conn: &Connection, output_dir: &Path) -> Result<String, String> {
+pub fn generate_csv_artifacts(
+    conn: &Connection,
+    case_id: &str,
+    output_dir: &Path,
+    scope: &ExportScopeDto,
+) -> Result<String, String> {
     let mut stmt = conn.prepare(
         "SELECT artifact_type, title, summary FROM artifacts ORDER BY created_at DESC LIMIT 1000"
     ).map_err(|e| e.to_string())?;
@@ -59,7 +72,7 @@ pub fn generate_csv_artifacts(conn: &Connection, output_dir: &Path) -> Result<St
     let mut rows_data = rows_data;
     let analysis = current_analysis(conn)?;
     rows_data.extend(
-        analysis_rows(&analysis.system_info, &analysis.classifications)
+        scoped_analysis_rows(&analysis, scope)
             .into_iter()
             .map(|row| vec!["analysis".to_string(), "provenance".to_string(), row]),
     );
@@ -70,14 +83,39 @@ pub fn generate_csv_artifacts(conn: &Connection, output_dir: &Path) -> Result<St
     CsvExporter::export_artifacts(&mut f, &["type", "title", "summary"], &rows_data)
         .map_err(|e| e.to_string())?;
 
+    persist_report_record(conn, case_id, "report-files", &file_name, "completed")?;
     Ok(file_name)
 }
 
-pub fn generate_json_export(conn: &Connection, output_dir: &Path) -> Result<String, String> {
-    let events = TimelineRepo::new(conn)
-        .query(0, 500)
-        .map_err(|e| e.to_string())?;
+pub fn generate_json_export(
+    conn: &Connection,
+    case_id: &str,
+    output_dir: &Path,
+    scope: &ExportScopeDto,
+) -> Result<String, String> {
+    let events = if scope.full_timeline {
+        TimelineRepo::new(conn)
+            .query(0, 500)
+            .map_err(|e| e.to_string())?
+    } else {
+        Vec::new()
+    };
     let analysis = current_analysis(conn)?;
+    let warnings = report_scope_warnings(scope);
+    let summary = crate::analysis_service::generate_analysis_summary(
+        &analysis.system_info,
+        &analysis.classifications,
+    );
+    let system_info = if scope.registry {
+        Some(&analysis.system_info)
+    } else {
+        None
+    };
+    let classifications = if scope.file_system_metadata {
+        analysis.classifications.as_slice()
+    } else {
+        &[]
+    };
     let json_val = serde_json::json!({
         "timeline_events": events.iter().map(|e| serde_json::json!({
             "id": e.id.0,
@@ -85,13 +123,12 @@ pub fn generate_json_export(conn: &Connection, output_dir: &Path) -> Result<Stri
             "ts": e.timestamp.to_rfc3339(),
             "title": e.title,
         })).collect::<Vec<_>>(),
+        "scope": scope,
+        "warnings": warnings,
         "analysis": {
-            "systemInfo": analysis.system_info,
-            "classifications": analysis.classifications,
-            "summary": crate::analysis_service::generate_analysis_summary(
-                &analysis.system_info,
-                &analysis.classifications,
-            ),
+            "systemInfo": system_info,
+            "classifications": classifications,
+            "summary": summary,
         },
     });
 
@@ -100,6 +137,7 @@ pub fn generate_json_export(conn: &Connection, output_dir: &Path) -> Result<Stri
     let mut f = fs::File::create(&path).map_err(|e| e.to_string())?;
     JsonExporter::export(&mut f, &json_val).map_err(|e| e.to_string())?;
 
+    persist_report_record(conn, case_id, "report-summary", &file_name, "completed")?;
     Ok(file_name)
 }
 
@@ -217,6 +255,37 @@ fn analysis_rows(
     rows
 }
 
+fn scoped_analysis_rows(analysis: &ReportAnalysis, scope: &ExportScopeDto) -> Vec<String> {
+    let mut rows = Vec::new();
+    rows.extend(report_scope_warnings(scope));
+    if scope.registry {
+        rows.extend(analysis_rows(&analysis.system_info, &[]));
+    }
+    if scope.file_system_metadata {
+        for item in &analysis.classifications {
+            rows.push(format!(
+                "classification category={} files={} totalSize={} status={} warnings={}",
+                item.category,
+                item.files.len(),
+                item.total_size,
+                status_str(&item.status),
+                item.warnings.join(" | ")
+            ));
+        }
+    }
+    rows
+}
+
+fn report_scope_warnings(scope: &ExportScopeDto) -> Vec<String> {
+    let mut warnings = Vec::new();
+    if scope.raw_file_extraction {
+        warnings.push(
+            "rawFileExtraction unsupported: raw evidence files were not exported".to_string(),
+        );
+    }
+    warnings
+}
+
 fn push_optional_analysis_value(rows: &mut Vec<String>, field: &str, value: &Option<String>) {
     if let Some(value) = value {
         rows.push(format!("{field}={value}"));
@@ -259,9 +328,44 @@ pub fn get_report_templates() -> Vec<ReportTemplateDto> {
     ]
 }
 
-pub fn get_report_history() -> Vec<ReportHistoryItemDto> {
-    // TODO: implement real report history from database
-    Vec::new()
+pub fn get_report_history(conn: &Connection, case_id: &str) -> Vec<ReportHistoryItemDto> {
+    let repo = ReportRepo::new(conn);
+    let records = match repo.list_by_case(case_id) {
+        Ok(records) => records,
+        Err(_) => return Vec::new(),
+    };
+    records
+        .into_iter()
+        .map(|r| ReportHistoryItemDto {
+            id: r.id,
+            file_name: r.file_name,
+            created_by: r.created_by,
+            created_at: r.created_at,
+            status: r.status,
+            progress: r.progress,
+        })
+        .collect()
+}
+
+fn persist_report_record(
+    conn: &Connection,
+    case_id: &str,
+    template_id: &str,
+    file_name: &str,
+    status: &str,
+) -> Result<(), String> {
+    let repo = ReportRepo::new(conn);
+    let record = persistence_sqlite::repositories::report_repo::ReportRecord {
+        id: Uuid::new_v4().to_string(),
+        case_id: case_id.to_string(),
+        template_id: template_id.to_string(),
+        file_name: file_name.to_string(),
+        created_by: String::new(),
+        status: status.to_string(),
+        progress: None,
+        created_at: chrono::Utc::now().to_rfc3339(),
+    };
+    repo.insert(&record).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -269,10 +373,11 @@ mod tests {
     use super::*;
     use domain::{
         CaseId, CaseMeta, DataSource, DataSourceId, DataSourceKind, EntryType, FileEntry,
-        FileEntryId,
+        FileEntryId, TimelineEvent, TimelineEventId,
     };
     use persistence_sqlite::repositories::{
         case_repo::CaseRepo, datasource_repo::DataSourceRepo, file_repo::FileRepo,
+        timeline_repo::TimelineRepo,
     };
     use persistence_sqlite::{open_in_memory, runner};
     use tempfile::TempDir;
@@ -333,12 +438,31 @@ mod tests {
             .unwrap();
     }
 
+    fn insert_timeline_event(conn: &rusqlite::Connection, case_id: &str) {
+        TimelineRepo::new(conn)
+            .insert_batch_with_case(
+                &[TimelineEvent {
+                    id: TimelineEventId("timeline-1".to_string()),
+                    source_object_id: "file-1".to_string(),
+                    event_type: "file_modified".to_string(),
+                    timestamp: chrono::Utc::now(),
+                    title: "Timeline Scope Event".to_string(),
+                    description: "scope fixture".to_string(),
+                    attrs: std::collections::BTreeMap::new(),
+                }],
+                case_id,
+            )
+            .unwrap();
+    }
+
     #[test]
     fn json_export_includes_analysis_provenance_without_fake_facts() {
-        let (conn, tmp, _case, ds_id) = setup_report_case();
+        let (conn, tmp, case, ds_id) = setup_report_case();
         insert_file(&conn, &ds_id, "system", "Windows/System32/config/SYSTEM");
 
-        let file_name = generate_json_export(&conn, tmp.path()).unwrap();
+        let file_name =
+            generate_json_export(&conn, &case.id.0, tmp.path(), &ExportScopeDto::default())
+                .unwrap();
         let json = std::fs::read_to_string(tmp.path().join(file_name)).unwrap();
 
         assert!(json.contains("\"analysis\""));
@@ -358,7 +482,8 @@ mod tests {
             "Windows/System32/config/<script>alert(1)</script>",
         );
 
-        let file_name = generate_html_report(&conn, &case, tmp.path()).unwrap();
+        let file_name =
+            generate_html_report(&conn, &case, tmp.path(), &ExportScopeDto::default()).unwrap();
         let html = std::fs::read_to_string(tmp.path().join(file_name)).unwrap();
 
         assert!(html.contains("Analysis Provenance"));
@@ -368,7 +493,7 @@ mod tests {
 
     #[test]
     fn csv_report_keeps_formula_sanitization_for_analysis_rows() {
-        let (conn, tmp, _case, ds_id) = setup_report_case();
+        let (conn, tmp, case, ds_id) = setup_report_case();
         insert_file(&conn, &ds_id, "formula", "=SUM(A1:A2)");
         conn.execute(
             "INSERT INTO artifacts (id, case_id, data_source_id, artifact_type, title, summary, attrs, created_at)
@@ -386,12 +511,99 @@ mod tests {
         )
         .unwrap();
 
-        let file_name = generate_csv_artifacts(&conn, tmp.path()).unwrap();
+        let file_name =
+            generate_csv_artifacts(&conn, &case.id.0, tmp.path(), &ExportScopeDto::default())
+                .unwrap();
         let csv = std::fs::read_to_string(tmp.path().join(file_name)).unwrap();
 
         assert!(csv.contains("\"analysis\""));
         assert!(csv.contains("provenance"));
         assert!(csv.contains("\"\t=SUM(A1:A2)\""));
+    }
+
+    #[test]
+    fn report_exports_persist_history_for_active_case_only() {
+        let (conn, tmp, case, ds_id) = setup_report_case();
+        insert_file(&conn, &ds_id, "system", "Windows/System32/config/SYSTEM");
+
+        generate_html_report(&conn, &case, tmp.path(), &ExportScopeDto::default()).unwrap();
+        generate_csv_artifacts(&conn, &case.id.0, tmp.path(), &ExportScopeDto::default()).unwrap();
+        generate_json_export(&conn, &case.id.0, tmp.path(), &ExportScopeDto::default()).unwrap();
+
+        let history = get_report_history(&conn, &case.id.0);
+        assert_eq!(history.len(), 3);
+        assert!(history.iter().any(|item| item.file_name.ends_with(".html")));
+        assert!(history.iter().any(|item| item.file_name.ends_with(".csv")));
+        assert!(history.iter().any(|item| item.file_name.ends_with(".json")));
+        assert!(get_report_history(&conn, "case-other").is_empty());
+    }
+
+    #[test]
+    fn report_export_returns_error_when_history_insert_fails() {
+        let (conn, tmp, case, _ds_id) = setup_report_case();
+        conn.execute_batch("DROP TABLE reports").unwrap();
+
+        let error =
+            generate_html_report(&conn, &case, tmp.path(), &ExportScopeDto::default()).unwrap_err();
+
+        assert!(error.contains("reports"));
+    }
+
+    #[test]
+    fn json_export_scope_gates_registry_timeline_and_warns_raw_unsupported() {
+        let (conn, tmp, case, ds_id) = setup_report_case();
+        insert_file(&conn, &ds_id, "system", "Windows/System32/config/SYSTEM");
+        insert_timeline_event(&conn, &case.id.0);
+        let scope = ExportScopeDto {
+            file_system_metadata: true,
+            registry: false,
+            full_timeline: false,
+            raw_file_extraction: true,
+        };
+
+        let file_name = generate_json_export(&conn, &case.id.0, tmp.path(), &scope).unwrap();
+        let json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(tmp.path().join(file_name)).unwrap())
+                .unwrap();
+
+        assert!(json["timeline_events"].as_array().unwrap().is_empty());
+        assert!(json["analysis"]["systemInfo"].is_null());
+        assert!(!json["analysis"]["classifications"]
+            .as_array()
+            .unwrap()
+            .is_empty());
+        assert!(json["warnings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|warning| warning
+                .as_str()
+                .unwrap()
+                .contains("rawFileExtraction unsupported")));
+        assert!(!tmp.path().join("raw").exists());
+    }
+
+    #[test]
+    fn json_export_scope_can_hide_file_classifications() {
+        let (conn, tmp, case, ds_id) = setup_report_case();
+        insert_file(&conn, &ds_id, "system", "Windows/System32/config/SYSTEM");
+        let scope = ExportScopeDto {
+            file_system_metadata: false,
+            registry: true,
+            full_timeline: true,
+            raw_file_extraction: false,
+        };
+
+        let file_name = generate_json_export(&conn, &case.id.0, tmp.path(), &scope).unwrap();
+        let json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(tmp.path().join(file_name)).unwrap())
+                .unwrap();
+
+        assert!(json["analysis"]["classifications"]
+            .as_array()
+            .unwrap()
+            .is_empty());
+        assert!(!json["analysis"]["systemInfo"].is_null());
     }
 
     #[test]

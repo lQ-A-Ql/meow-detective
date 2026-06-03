@@ -14,7 +14,7 @@ pub use analysis::{
     AnalysisFileClassificationDto, AnalysisNetworkAdapterDto, AnalysisParseStatusDto,
     AnalysisProvenanceDto, AnalysisSystemInfoDto,
 };
-pub use artifacts::ArtifactRowDto;
+pub use artifacts::{ArtifactRowDto, FamilyCountDto};
 pub use case::{
     CaseMetricsDto, CaseSummaryDto, DataSourcePartitionDto, DataSourceSummaryDto, RecentCaseDto,
     RecentObjectDto,

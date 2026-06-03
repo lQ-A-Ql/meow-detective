@@ -7,6 +7,7 @@ use tracing::info;
 
 use crate::error::{McpError, McpResult};
 use crate::transport::sse::SseTransport;
+use crate::transport::stdio::StdioTransport;
 use crate::transport::McpTransportTrait;
 use crate::types::*;
 
@@ -38,13 +39,7 @@ impl McpClient {
 
         let mut transport: Box<dyn McpTransportTrait> = match &self.config.transport {
             McpTransport::Sse { url } => Box::new(SseTransport::new(url)),
-            McpTransport::Stdio { command, args } => {
-                // TODO: Implement Stdio transport
-                return Err(McpError::Transport(format!(
-                    "Stdio transport not yet implemented: {} {:?}",
-                    command, args
-                )));
-            }
+            McpTransport::Stdio { command, args } => Box::new(StdioTransport::new(command, args)),
         };
 
         let capabilities = transport.initialize().await?;

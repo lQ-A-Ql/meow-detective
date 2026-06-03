@@ -22,7 +22,7 @@ pub struct ExtractorReport {
     pub errors: Vec<String>,
 }
 
-pub trait ArtifactExtractor {
+pub trait ArtifactExtractor: Send + Sync {
     fn id(&self) -> &'static str;
     fn display_name(&self) -> &'static str;
     fn family(&self) -> ArtifactFamily;

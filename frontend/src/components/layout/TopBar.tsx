@@ -72,6 +72,11 @@ export function TopBar() {
             <input
               value={globalSearchQuery}
               onChange={(event) => setGlobalSearchQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && globalSearchQuery.trim()) {
+                  navigate(`/search?q=${encodeURIComponent(globalSearchQuery.trim())}`);
+                }
+              }}
               className="w-40 xl:w-56 bg-transparent border-none outline-none text-[#111] placeholder-[#aaa] text-xs font-mono"
               placeholder="输入全局检索语句或 IOC"
             />

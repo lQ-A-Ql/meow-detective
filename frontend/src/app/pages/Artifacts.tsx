@@ -2,7 +2,7 @@ import { PageSubbar } from '@/components/layout/PageSubbar';
 import { useNavigate } from 'react-router';
 import { DenseDataTable } from '@/components/tables/DenseDataTable';
 import { InspectorPane, InspectorSection, InspectorValue } from '@/components/layout/InspectorPane';
-import { useArtifactFamilies, useArtifactRows } from '@/features/artifacts/hooks';
+import { useArtifactFamilies, useArtifactFamilyCounts, useArtifactRows } from '@/features/artifacts/hooks';
 import { useSelectionStore } from '@/stores/selection-store';
 import { ArtifactRow } from '@/types/models';
 
@@ -13,6 +13,7 @@ export function Artifacts() {
   const selectedArtifactId = useSelectionStore((state) => state.selectedArtifactId);
   const setSelectedArtifactId = useSelectionStore((state) => state.setSelectedArtifactId);
   const { data: families } = useArtifactFamilies();
+  const { data: familyCounts } = useArtifactFamilyCounts();
   const { data: rows } = useArtifactRows(selectedArtifactFamily);
   const selectedArtifact = rows?.find((row) => row.id === selectedArtifactId) ?? rows?.[0];
 
@@ -22,7 +23,7 @@ export function Artifacts() {
         <div className="h-10 shrink-0 flex items-center px-2 gap-1 overflow-x-auto">
           {families?.map((family) => {
             const isSelected = selectedArtifactFamily === family;
-            const count = family === 'LNK' ? rows?.length ?? 0 : family === 'Prefetch' ? 12 : family === 'Amcache' ? 36 : 8;
+            const count = familyCounts?.find((c) => c.family === family)?.count ?? rows?.length ?? 0;
             return (
               <button
                 key={family}

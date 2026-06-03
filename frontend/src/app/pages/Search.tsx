@@ -1,6 +1,6 @@
 import { Filter, ChevronRight, Save, Trash2 } from 'lucide-react';
-import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
 import { PageSubbar } from '@/components/layout/PageSubbar';
 import { DenseDataTable } from '@/components/tables/DenseDataTable';
 import { InspectorPane, InspectorSection, InspectorValue } from '@/components/layout/InspectorPane';
@@ -17,8 +17,11 @@ import { SearchHit } from '@/types/models';
 const defaultQuery = "files WHERE extension IN ('.doc', '.xls') AND size > 10MB";
 
 export function Search() {
-  const [queryInput, setQueryInput] = useState(defaultQuery);
-  const [activeQuery, setActiveQuery] = useState(defaultQuery);
+  const [searchParams] = useSearchParams();
+  const urlQuery = searchParams.get('q');
+  const initialQuery = urlQuery?.trim() || defaultQuery;
+  const [queryInput, setQueryInput] = useState(initialQuery);
+  const [activeQuery, setActiveQuery] = useState(initialQuery);
   const [savedOpen, setSavedOpen] = useState(false);
   const [savedName, setSavedName] = useState('');
   const [savedQueries, setSavedQueries] = useState(() => readSavedSearchQueries());
@@ -28,6 +31,12 @@ export function Search() {
   const navigate = useNavigate();
   const selectedHit = data?.items.find((item) => item.fileId === selectedSearchHitId) ?? data?.items[0];
   const highScoreHits = data?.items.filter((item) => item.score >= 0.8).length ?? 0;
+
+  useEffect(() => {
+    const nextQuery = urlQuery?.trim() || defaultQuery;
+    setQueryInput(nextQuery);
+    setActiveQuery(nextQuery);
+  }, [urlQuery]);
 
   function persistSavedQueries(next: typeof savedQueries) {
     setSavedQueries(next);

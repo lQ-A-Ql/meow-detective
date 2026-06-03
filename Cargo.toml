@@ -40,6 +40,7 @@ chrono = { version = "~0.4", features = ["serde"] }
 anyhow = "~1.0"
 crossbeam-channel = "~0.5"
 num_cpus = "~1"
+rayon = "~1.10"
 tracing = "~0.1"
 tracing-subscriber = { version = "~0.3", features = ["env-filter", "fmt", "json"] }
 tauri = { version = "~2", features = [] }

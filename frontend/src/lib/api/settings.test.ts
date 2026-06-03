@@ -8,6 +8,7 @@ describe('settings API (mock mode)', () => {
     expect(settings.caseRoot).toBeDefined();
     expect(settings.theme).toBe('light');
     expect(settings.imageSearchPaths).toEqual([]);
+    expect(settings.importAnalysisMode).toBe('metadataOnly');
   });
 
   it('saves app settings through the API wrapper', async () => {
@@ -16,9 +17,11 @@ describe('settings API (mock mode)', () => {
       imageSearchPaths: ['D:\\Images'],
       theme: 'dark',
       devEventTrace: true,
+      importAnalysisMode: 'budgetedContent',
     });
 
     expect(saved.theme).toBe('dark');
     expect(saved.imageSearchPaths).toEqual(['D:\\Images']);
+    expect(saved.importAnalysisMode).toBe('budgetedContent');
   });
 });

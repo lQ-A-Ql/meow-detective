@@ -2,6 +2,7 @@ use app_services::{case_service, file_service, search_service, timeline_service}
 use evidence_core::LogicalFsReader;
 use persistence_sqlite::repositories::{file_repo::FileRepo, job_repo::JobRepo};
 use tempfile::TempDir;
+use transport::commands::ExportScopeDto;
 
 #[test]
 fn full_case_lifecycle() {
@@ -94,9 +95,13 @@ fn full_case_lifecycle() {
 
             // Report
             let output_dir = active.case_root.join("reports");
-            let report_file =
-                app_services::report_service::generate_html_report(conn, &active.meta, &output_dir)
-                    .map_err(persistence_sqlite::DbError::System)?;
+            let report_file = app_services::report_service::generate_html_report(
+                conn,
+                &active.meta,
+                &output_dir,
+                &ExportScopeDto::default(),
+            )
+            .map_err(persistence_sqlite::DbError::System)?;
             assert!(output_dir.join(&report_file).exists());
 
             // Job tracking

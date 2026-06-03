@@ -66,6 +66,9 @@ describe('Settings page', () => {
       imageSearchPaths: ['D:\\Images', 'E:\\Evidence'],
       theme: 'dark',
       devEventTrace: true,
+      maxImportWorkers: 1,
+      maxAnalysisWorkers: 4,
+      importAnalysisMode: 'budgetedContent',
     });
     mocks.saveAppSettings.mockImplementation(async (settings) => settings);
   });
@@ -77,7 +80,7 @@ describe('Settings page', () => {
     expect((screen.getByLabelText('镜像搜索路径') as HTMLInputElement).value).toBe(
       'D:\\Images; E:\\Evidence',
     );
-    const themeSelect = screen.getByRole('combobox') as HTMLSelectElement;
+    const themeSelect = screen.getByLabelText('主题') as HTMLSelectElement;
     expect(themeSelect.value).toBe('dark');
     expect((screen.getByLabelText('事件调试日志') as HTMLInputElement).checked).toBe(true);
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe('dark'));
@@ -90,7 +93,7 @@ describe('Settings page', () => {
     render(<Settings />);
 
     const caseRoot = await screen.findByLabelText('案件目录');
-    const themeSelect = screen.getByRole('combobox') as HTMLSelectElement;
+    const themeSelect = screen.getByLabelText('主题') as HTMLSelectElement;
     await waitFor(() => expect(themeSelect.value).toBe('dark'));
     fireEvent.change(caseRoot, { target: { value: 'C:\\Cases' } });
     fireEvent.change(screen.getByLabelText('镜像搜索路径'), {
@@ -106,6 +109,9 @@ describe('Settings page', () => {
         imageSearchPaths: ['D:\\Images', 'F:\\MoreImages'],
         theme: 'light',
         devEventTrace: false,
+        maxImportWorkers: 1,
+        maxAnalysisWorkers: 4,
+        importAnalysisMode: 'budgetedContent',
       });
     });
     expect(await screen.findByText('设置已保存。')).toBeTruthy();

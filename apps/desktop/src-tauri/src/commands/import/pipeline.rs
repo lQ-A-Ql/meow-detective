@@ -9,17 +9,20 @@
 
 use app_services::{
     datasource_service::{self, ImageFilesystemKind},
-    file_service, search_service, timeline_service,
+    file_service, import_analysis, staging,
 };
 use domain::DataSourceKind;
-use evidence_core::{EvidenceReader, LogicalFsReader, RawImageReader};
+use evidence_core::{EvidenceReader, FileSystemReader, LogicalFsReader, RawImageReader};
 use image_e01::E01Reader;
 use persistence_sqlite::repositories::job_repo::JobRepo;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
-use transport::{commands::ImportDataSourceRequest, CommandError};
+use transport::{
+    commands::{AppSettingsDto, ImportDataSourceRequest},
+    CommandError,
+};
 
 use crate::events::event_bridge;
 use crate::state::AppState;
@@ -31,11 +34,47 @@ pub struct JobOutcomeCounts {
     pub failed_count: u32,
 }
 
+#[derive(Clone, Copy)]
+pub struct ImportJobOptions<'a> {
+    pub app: Option<&'a AppHandle>,
+    pub cancel_token: &'a Arc<AtomicBool>,
+    pub max_import_workers: Option<usize>,
+    pub max_analysis_workers: Option<usize>,
+    pub analysis_mode: import_analysis::ImportAnalysisMode,
+}
+
+struct BackgroundImportJob {
+    db_path: PathBuf,
+    case_id: domain::CaseId,
+    case_root: PathBuf,
+    source_path: String,
+    job_id: domain::JobId,
+    max_import_workers: Option<usize>,
+    max_analysis_workers: Option<usize>,
+    analysis_mode: import_analysis::ImportAnalysisMode,
+}
+
+struct PostImportPipelineContext<'a> {
+    case_id: &'a domain::CaseId,
+    data_source_id: &'a domain::DataSourceId,
+    case_root: &'a std::path::Path,
+    db_path: &'a std::path::Path,
+    index_dir: &'a std::path::Path,
+    job_id: &'a domain::JobId,
+    app: Option<&'a AppHandle>,
+    cancel_token: Arc<AtomicBool>,
+    max_analysis_workers: Option<usize>,
+    enable_content_extraction: bool,
+    enable_text_indexing: bool,
+    analysis_mode: import_analysis::ImportAnalysisMode,
+}
+
 impl JobOutcomeCounts {
     fn add_warnings(&mut self, count: usize) {
         self.warning_count = self.warning_count.saturating_add(count as u32);
     }
 
+    #[allow(dead_code)]
     fn add_skipped(&mut self, count: u32) {
         self.skipped_count = self.skipped_count.saturating_add(count);
     }
@@ -50,6 +89,7 @@ impl JobOutcomeCounts {
 }
 
 /// Enumerate a filesystem within a partition, handling placeholder root replacement.
+#[allow(dead_code)]
 fn enumerate_partition_with_fs(
     conn: &rusqlite::Connection,
     data_source_id: &domain::DataSourceId,
@@ -80,103 +120,41 @@ fn enumerate_partition_with_fs(
 }
 
 fn run_post_import_pipeline_with_counts(
-    conn: &rusqlite::Connection,
-    case_id: &domain::CaseId,
-    ds_id: &domain::DataSourceId,
-    index_dir: &std::path::Path,
-    app: Option<&AppHandle>,
+    _conn: &rusqlite::Connection,
+    ctx: PostImportPipelineContext<'_>,
 ) -> persistence_sqlite::DbResult<(String, JobOutcomeCounts)> {
-    let file_repo = persistence_sqlite::repositories::file_repo::FileRepo::new(conn);
     let mut counts = JobOutcomeCounts::default();
-
-    // Read all files for timeline projection
-    let roots = file_repo.find_roots(ds_id)?;
-    let mut all_files = Vec::new();
-    let mut queue = roots;
-    while let Some(f) = queue.pop() {
-        if f.entry_type != domain::EntryType::Directory {
-            all_files.push(f);
-        } else {
-            let children = file_repo.find_children(&f.id)?;
-            queue.extend(children);
-        }
-    }
-
-    // Timeline projection
-    let tl_count = timeline_service::project_and_store_macb(conn, &all_files)
-        .map_err(persistence_sqlite::DbError::System)?;
-
-    // Artifact extraction (limited by config)
-    let registry = app_services::artifact_service::create_registry();
-    let mut sink = artifacts_core::VecSink::new();
-    let mut artifact_count = 0u64;
-    for file in all_files
-        .iter()
-        .take(infrastructure::constants::ARTIFACT_EXTRACTION_LIMIT)
-    {
-        if let Ok(reader) = file_service::open_file_content_by_id(conn, &file.id) {
-            match app_services::artifact_service::run_extractors_on_file(
-                &registry, &file.id, &file.path, reader, &mut sink,
-            ) {
-                Ok(stats) => {
-                    counts.warning_count = counts.warning_count.saturating_add(stats.warning_count);
-                    counts.skipped_count = counts.skipped_count.saturating_add(stats.skipped_count);
-                    counts.failed_count = counts.failed_count.saturating_add(stats.failed_count);
-                }
-                Err(e) => {
-                    counts.add_warnings(1);
-                    counts.add_skipped(1);
-                    tracing::warn!("artifact extraction error for {}: {}", file.path, e);
-                }
+    let stats = import_analysis::run_import_analysis_staging(
+        import_analysis::ImportAnalysisOptions {
+            case_root: ctx.case_root.to_path_buf(),
+            db_path: ctx.db_path.to_path_buf(),
+            case_id: ctx.case_id.0.clone(),
+            data_source_id: ctx.data_source_id.clone(),
+            index_dir: ctx.index_dir.to_path_buf(),
+            max_analysis_workers: ctx.max_analysis_workers,
+            cancel_token: ctx.cancel_token,
+            enable_content_extraction: ctx.enable_content_extraction,
+            enable_text_indexing: ctx.enable_text_indexing,
+            analysis_mode: ctx.analysis_mode,
+            content_budget: import_analysis::content_budget_for_mode(ctx.analysis_mode),
+            memory_soft_limit_mb: import_analysis::default_memory_soft_limit_mb(),
+            memory_hard_limit_mb: import_analysis::default_memory_hard_limit_mb(),
+        },
+        Some(&|pct, detail| {
+            if let Some(app) = ctx.app {
+                event_bridge::emit_job_progress(app, &ctx.job_id.0, pct, detail);
             }
-        } else {
-            counts.add_warnings(1);
-            counts.add_skipped(1);
-        }
-    }
-    if !sink.artifacts.is_empty() {
-        artifact_count = sink.artifacts.len() as u64;
-        app_services::artifact_service::store_artifacts(
-            conn,
-            &sink.artifacts,
-            &case_id.0,
-            &ds_id.0,
-        )
-        .map_err(persistence_sqlite::DbError::System)?;
-        if let Some(app) = app {
-            for artifact in &sink.artifacts {
-                event_bridge::emit_artifact_added(app, &artifact.id.0, &artifact.family);
-            }
-        }
-    }
+        }),
+    )
+    .map_err(persistence_sqlite::DbError::System)?;
 
-    // Text indexing (limited by config)
-    let to_index: Vec<domain::FileEntryId> = all_files
-        .iter()
-        .take(infrastructure::constants::TEXT_INDEX_LIMIT)
-        .map(|f| f.id.clone())
-        .collect();
-    let index_result = search_service::index_files(conn, index_dir, &to_index, |file_id| {
-        file_service::open_file_content_by_id(conn, file_id).ok()
-    });
-
-    let index_msg = match index_result {
-        Ok(stats) => {
-            counts.warning_count = counts.warning_count.saturating_add(stats.warning_count);
-            counts.skipped_count = counts.skipped_count.saturating_add(stats.skipped_count);
-            counts.failed_count = counts.failed_count.saturating_add(stats.failed_count);
-            format!("{} indexed", stats.indexed_count)
-        }
-        Err(e) => {
-            counts.add_warnings(1);
-            counts.add_failed(1);
-            format!("index error: {}", e)
-        }
-    };
+    counts.warning_count = counts.warning_count.saturating_add(stats.warning_count);
+    counts.skipped_count = counts.skipped_count.saturating_add(stats.skipped_count);
+    counts.failed_count = counts.failed_count.saturating_add(stats.failed_count);
 
     let mut message = format!(
-        "Timeline: {} events. Artifacts: {}. Index: {}",
-        tl_count, artifact_count, index_msg
+        "Timeline: {} events. Artifacts: {}. Index: {} indexed",
+        stats.timeline_count, stats.artifact_count, stats.indexed_count
     );
     if counts.is_partial() {
         message.push_str(&format!(
@@ -201,6 +179,7 @@ pub async fn import_data_source(
     let app_clone = app.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
+        let settings = load_import_settings(&app_state.app_settings_path);
         let guard = app_state
             .active_case
             .lock()
@@ -211,6 +190,9 @@ pub async fn import_data_source(
             &source_path,
             Some(&app_clone),
             &app_state.task_manager,
+            settings.max_import_workers,
+            settings.max_analysis_workers,
+            import_analysis_mode_from_settings(&settings.import_analysis_mode),
         )?;
         Ok(format!(
             "Import started for {}. Watch the Jobs panel for progress.",
@@ -219,6 +201,42 @@ pub async fn import_data_source(
     })
     .await
     .map_err(CommandError::from_join_error)?
+}
+
+fn load_import_settings(path: &std::path::Path) -> AppSettingsDto {
+    match std::fs::read_to_string(path) {
+        Ok(raw) => match serde_json::from_str::<AppSettingsDto>(&raw) {
+            Ok(settings) => {
+                if let Err(error) = settings.validate() {
+                    tracing::warn!(
+                        "Ignoring invalid app settings at {}: {}",
+                        path.display(),
+                        error
+                    );
+                    AppSettingsDto::default()
+                } else {
+                    settings
+                }
+            }
+            Err(error) => {
+                tracing::warn!(
+                    "Ignoring unreadable app settings at {}: {}",
+                    path.display(),
+                    error
+                );
+                AppSettingsDto::default()
+            }
+        },
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => AppSettingsDto::default(),
+        Err(error) => {
+            tracing::warn!(
+                "Ignoring app settings read error at {}: {}",
+                path.display(),
+                error
+            );
+            AppSettingsDto::default()
+        }
+    }
 }
 
 /// Tauri command: Cancel an in-progress import job.
@@ -248,6 +266,9 @@ pub fn schedule_import_for_active_case(
     source_path: &str,
     app: Option<&AppHandle>,
     task_manager: &crate::state::TaskManager,
+    max_import_workers: Option<usize>,
+    max_analysis_workers: Option<usize>,
+    analysis_mode: import_analysis::ImportAnalysisMode,
 ) -> Result<String, CommandError> {
     let case_id = active.meta.id.clone();
     let case_root = active.case_root.clone();
@@ -278,17 +299,19 @@ pub fn schedule_import_for_active_case(
     let cancel_token_clone = cancel_token.clone();
 
     let _job_id_clone = job_id.clone();
+    let background_job = BackgroundImportJob {
+        db_path,
+        case_id,
+        case_root,
+        source_path,
+        job_id,
+        max_import_workers,
+        max_analysis_workers,
+        analysis_mode,
+    };
     let handle = std::thread::spawn(move || {
-        run_background_import_job(
-            db_path,
-            case_id,
-            case_root,
-            source_path,
-            job_id,
-            app_handle.as_ref(),
-            &cancel_token_clone,
-        )
-        .map_err(|e| e.message)
+        run_background_import_job(background_job, app_handle.as_ref(), cancel_token_clone)
+            .map_err(|e| e.message)
     });
 
     // Register with TaskManager using the cancel token
@@ -299,59 +322,61 @@ pub fn schedule_import_for_active_case(
 
 /// Run the background import job in a separate thread.
 fn run_background_import_job(
-    db_path: PathBuf,
-    case_id: domain::CaseId,
-    case_root: PathBuf,
-    source_path: String,
-    job_id: domain::JobId,
+    job: BackgroundImportJob,
     app: Option<&AppHandle>,
-    cancel_token: &AtomicBool,
+    cancel_token: Arc<AtomicBool>,
 ) -> Result<(), CommandError> {
-    let conn =
-        persistence_sqlite::open_or_create(&db_path).map_err(CommandError::from_service_error)?;
+    let conn = persistence_sqlite::open_or_create(&job.db_path)
+        .map_err(CommandError::from_service_error)?;
     let job_repo = JobRepo::new(&conn);
 
     if let Some(app) = app {
-        event_bridge::emit_job_started(app, &job_id.0, "Import started");
-        event_bridge::emit_job_progress(app, &job_id.0, 5, "Import started");
+        event_bridge::emit_job_started(app, &job.job_id.0, "Import started");
+        event_bridge::emit_job_progress(app, &job.job_id.0, 5, "Import started");
     }
 
     // Check for cancellation before starting
     if cancel_token.load(Ordering::Relaxed) {
         let msg = "Import cancelled by user";
-        if let Err(e) = job_repo.fail(&job_id, msg) {
-            tracing::error!("Failed to mark job {} as cancelled: {}", job_id.0, e);
+        if let Err(e) = job_repo.fail(&job.job_id, msg) {
+            tracing::error!("Failed to mark job {} as cancelled: {}", job.job_id.0, e);
         }
         if let Some(app) = app {
-            event_bridge::emit_job_failed(app, &job_id.0, msg);
+            event_bridge::emit_job_failed(app, &job.job_id.0, msg);
         }
         return Ok(());
     }
 
+    let options = ImportJobOptions {
+        app,
+        cancel_token: &cancel_token,
+        max_import_workers: job.max_import_workers,
+        max_analysis_workers: job.max_analysis_workers,
+        analysis_mode: job.analysis_mode,
+    };
     match execute_import_job(
         &conn,
-        &case_id,
-        &case_root,
-        &source_path,
-        &job_id,
-        app,
-        cancel_token,
+        &job.case_id,
+        &job.case_root,
+        &job.source_path,
+        &job.job_id,
+        options,
     ) {
         Ok(message) => {
             job_repo
-                .complete(&job_id, &message)
+                .complete(&job.job_id, &message)
                 .map_err(CommandError::from_service_error)?;
             if let Some(app) = app {
-                event_bridge::emit_job_completed(app, &job_id.0, &message);
+                event_bridge::emit_job_completed(app, &job.job_id.0, &message);
             }
             Ok(())
         }
         Err(error) => {
-            if let Err(e) = job_repo.fail(&job_id, &error.message) {
-                tracing::error!("Failed to mark job {} as failed: {}", job_id.0, e);
+            if let Err(e) = job_repo.fail(&job.job_id, &error.message) {
+                tracing::error!("Failed to mark job {} as failed: {}", job.job_id.0, e);
             }
             if let Some(app) = app {
-                event_bridge::emit_job_failed(app, &job_id.0, &error.message);
+                event_bridge::emit_job_failed(app, &job.job_id.0, &error.message);
             }
             Err(error)
         }
@@ -365,18 +390,10 @@ pub fn execute_import_job(
     case_root: &std::path::Path,
     source_path: &str,
     job_id: &domain::JobId,
-    app: Option<&AppHandle>,
-    cancel_token: &AtomicBool,
+    options: ImportJobOptions<'_>,
 ) -> Result<String, CommandError> {
-    let (message, _counts) = execute_import_job_with_counts(
-        conn,
-        case_id,
-        case_root,
-        source_path,
-        job_id,
-        app,
-        cancel_token,
-    )?;
+    let (message, _counts) =
+        execute_import_job_with_counts(conn, case_id, case_root, source_path, job_id, options)?;
     Ok(message)
 }
 
@@ -386,8 +403,7 @@ fn execute_import_job_with_counts(
     case_root: &std::path::Path,
     source_path: &str,
     job_id: &domain::JobId,
-    app: Option<&AppHandle>,
-    cancel_token: &AtomicBool,
+    options: ImportJobOptions<'_>,
 ) -> Result<(String, JobOutcomeCounts), CommandError> {
     let path = PathBuf::from(source_path);
     validate_import_source_for_filesystem(source_path)?;
@@ -404,7 +420,7 @@ fn execute_import_job_with_counts(
     job_repo
         .update_progress(job_id, 10, &format!("Attaching data source {source_name}"))
         .map_err(CommandError::from_service_error)?;
-    if let Some(app) = app {
+    if let Some(app) = options.app {
         event_bridge::emit_job_progress(app, &job_id.0, 10, &format!("Attaching {source_name}"));
     }
     let ds =
@@ -412,14 +428,14 @@ fn execute_import_job_with_counts(
             .map_err(CommandError::from_service_error)?;
 
     // Check for cancellation
-    if cancel_token.load(Ordering::Relaxed) {
+    if options.cancel_token.load(Ordering::Relaxed) {
         return Err(CommandError::internal("Import cancelled by user"));
     }
 
     job_repo
         .update_progress(job_id, 25, "Enumerating filesystem...")
         .map_err(CommandError::from_service_error)?;
-    if let Some(app) = app {
+    if let Some(app) = options.app {
         event_bridge::emit_job_progress(app, &job_id.0, 25, "Enumerating filesystem...");
     }
 
@@ -430,56 +446,384 @@ fn execute_import_job_with_counts(
             file_service::enumerate_filesystem(conn, &ds.id, &fs)
                 .map_err(CommandError::from_service_error)?
         }
-        DataSourceKind::E01 => {
-            let reader = E01Reader::open(&path).map_err(CommandError::from_service_error)?;
-            enumerate_image_data_source(
-                conn,
-                &ds.id,
-                reader,
-                |progress, detail| {
-                    job_repo
-                        .update_progress(job_id, progress, detail)
-                        .map_err(|e| e.to_string())
-                },
-                app,
-                Some(job_id),
-            )
-            .map_err(CommandError::from_service_error)?
-        }
-        DataSourceKind::Raw => {
-            let reader = RawImageReader::open(&path).map_err(CommandError::from_service_error)?;
-            enumerate_image_data_source(
-                conn,
-                &ds.id,
-                reader,
-                |progress, detail| {
-                    job_repo
-                        .update_progress(job_id, progress, detail)
-                        .map_err(|e| e.to_string())
-                },
-                app,
-                Some(job_id),
-            )
-            .map_err(CommandError::from_service_error)?
+        DataSourceKind::E01 | DataSourceKind::Raw => {
+            // Load or create manifest for staging-based import
+            let mut manifest =
+                staging::StagingManifest::load(case_root, &ds.id.0).unwrap_or_else(|| {
+                    staging::StagingManifest::create(
+                        &ds.id.0,
+                        source_path,
+                        if kind == DataSourceKind::E01 {
+                            "E01"
+                        } else {
+                            "Raw"
+                        },
+                    )
+                });
+
+            // Probe once: detect partitions and filesystem candidates
+            let mut probe_candidates: Vec<datasource_service::ImageFilesystemCandidate> =
+                Vec::new();
+            if manifest.partitions.is_empty() {
+                let mut probe_reader: Box<dyn EvidenceReader> = if kind == DataSourceKind::E01 {
+                    Box::new(E01Reader::open(&path).map_err(CommandError::from_service_error)?)
+                } else {
+                    Box::new(RawImageReader::open(&path).map_err(CommandError::from_service_error)?)
+                };
+                let probe = datasource_service::detect_image_filesystem(&mut probe_reader)
+                    .map_err(CommandError::from_service_error)?;
+
+                // Store partition records in main DB
+                file_service::store_data_source_partitions(conn, &ds.id, &probe.partitions)
+                    .map_err(CommandError::from_service_error)?;
+
+                // Build manifest entries for supported partitions
+                for candidate in &probe.candidates {
+                    let name = format_partition_root_name(candidate);
+                    manifest.partitions.push(staging::PartitionEntry {
+                        index: candidate.partition_index.unwrap_or(0),
+                        name,
+                        fs_kind: format!("{:?}", candidate.kind),
+                        staging_db: format!(
+                            "enum_partition_{}.db",
+                            candidate.partition_index.unwrap_or(0)
+                        ),
+                        status: staging::PartitionStatus::Pending,
+                        file_count: 0,
+                        dir_count: 0,
+                        total_size: 0,
+                        last_path: None,
+                        completed_at: None,
+                        error: None,
+                    });
+                }
+                probe_candidates = probe.candidates;
+                manifest
+                    .save(case_root)
+                    .map_err(CommandError::from_service_error)?;
+            }
+
+            if manifest.partitions.is_empty() {
+                file_service::EnumerationStats {
+                    file_count: 0,
+                    dir_count: 0,
+                    total_size: 0,
+                    warnings: vec![],
+                }
+            } else {
+                // Update partition statuses from staging DBs (for resume)
+                for partition in &mut manifest.partitions {
+                    let staging_db_path =
+                        staging::staging_db_path(case_root, &ds.id.0, partition.index);
+                    if staging_db_path.exists() {
+                        if let Ok(staging_conn) =
+                            staging::open_partition_staging(case_root, &ds.id.0, partition.index)
+                        {
+                            if let Ok(Some(status)) =
+                                staging::get_staging_meta(&staging_conn, "status")
+                            {
+                                match status.as_str() {
+                                    "done" => {
+                                        partition.status = staging::PartitionStatus::Done;
+                                        partition.file_count =
+                                            staging::staging_db_row_count(&staging_conn)
+                                                .unwrap_or(0);
+                                    }
+                                    "failed" => {
+                                        partition.status = staging::PartitionStatus::Failed;
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                }
+                manifest
+                    .save(case_root)
+                    .map_err(CommandError::from_service_error)?;
+
+                if let Some(app) = options.app {
+                    event_bridge::emit_job_progress(
+                        app,
+                        &job_id.0,
+                        30,
+                        "Building filesystem readers...",
+                    );
+                }
+
+                // For resume: probe once to get candidates if we don't have them
+                if probe_candidates.is_empty() {
+                    let mut probe_reader: Box<dyn EvidenceReader> = if kind == DataSourceKind::E01 {
+                        Box::new(E01Reader::open(&path).map_err(CommandError::from_service_error)?)
+                    } else {
+                        Box::new(
+                            RawImageReader::open(&path)
+                                .map_err(CommandError::from_service_error)?,
+                        )
+                    };
+                    let probe = datasource_service::detect_image_filesystem(&mut probe_reader)
+                        .map_err(CommandError::from_service_error)?;
+                    probe_candidates = probe.candidates;
+                }
+
+                // Build work items for pending partitions — reuse probe results, no re-probe
+                let mut pending: Vec<app_services::parallel_enum::PartitionWork> = Vec::new();
+                let mut build_failures = Vec::new();
+                for p in manifest.partitions.iter() {
+                    if p.status == staging::PartitionStatus::Done {
+                        continue;
+                    }
+                    let work = build_partition_work(
+                        &path,
+                        &kind,
+                        p.index,
+                        &p.name,
+                        &p.fs_kind,
+                        &probe_candidates,
+                    );
+                    match work {
+                        Some(w) => pending.push(w),
+                        None => {
+                            let error = format!(
+                                "Partition {} ({}): could not build filesystem reader",
+                                p.index, p.name
+                            );
+                            tracing::warn!("{}", error);
+                            build_failures.push((p.index, error));
+                        }
+                    }
+                }
+                if !build_failures.is_empty() {
+                    counts.add_warnings(build_failures.len());
+                    counts.add_failed(build_failures.len() as u32);
+                    for (index, error) in &build_failures {
+                        if let Some(partition) =
+                            manifest.partitions.iter_mut().find(|p| p.index == *index)
+                        {
+                            partition.status = staging::PartitionStatus::Failed;
+                            partition.error = Some(error.clone());
+                        }
+                    }
+                    manifest
+                        .save(case_root)
+                        .map_err(CommandError::from_service_error)?;
+                }
+
+                if pending.is_empty() {
+                    let done_count = manifest
+                        .partitions
+                        .iter()
+                        .filter(|p| p.status == staging::PartitionStatus::Done)
+                        .count();
+                    if done_count == 0 && !build_failures.is_empty() {
+                        job_repo
+                            .update_outcome_counts(
+                                job_id,
+                                counts.warning_count,
+                                counts.skipped_count,
+                                counts.failed_count,
+                                counts.is_partial(),
+                            )
+                            .map_err(CommandError::from_service_error)?;
+                        return Err(CommandError::internal(
+                            "No supported partitions could be enumerated",
+                        ));
+                    }
+                    file_service::EnumerationStats {
+                        file_count: manifest.partitions.iter().map(|p| p.file_count).sum(),
+                        dir_count: manifest.partitions.iter().map(|p| p.dir_count).sum(),
+                        total_size: manifest.partitions.iter().map(|p| p.total_size).sum(),
+                        warnings: vec![],
+                    }
+                } else {
+                    let max_workers = app_services::parallel_enum::resolve_worker_count(
+                        options.max_import_workers,
+                    );
+                    let ds_id_clone = ds.id.clone();
+                    let app_ref = options.app;
+                    let job_ref = job_id;
+                    let case_root_clone = case_root.to_path_buf();
+                    let total_partitions = manifest.partitions.len() as u32;
+
+                    let results = app_services::parallel_enum::enumerate_partitions_parallel(
+                        &case_root_clone,
+                        &ds_id_clone,
+                        pending,
+                        max_workers,
+                        Arc::clone(options.cancel_token),
+                        &|partition_idx, pct, detail| {
+                            if let Some(a) = app_ref {
+                                let overall = 25 + (pct * 35 / 100);
+                                event_bridge::emit_job_progress(
+                                    a,
+                                    &job_ref.0,
+                                    overall.min(60),
+                                    detail,
+                                );
+                                event_bridge::emit_partition_progress(
+                                    a,
+                                    &job_ref.0,
+                                    &format!("Partition {}", partition_idx),
+                                    partition_idx as u32,
+                                    total_partitions,
+                                    pct,
+                                );
+                            }
+                        },
+                    )
+                    .map_err(CommandError::from_service_error)?;
+
+                    // Update manifest with results
+                    for result in &results {
+                        if let Some(p) = manifest
+                            .partitions
+                            .iter_mut()
+                            .find(|p| p.index == result.index)
+                        {
+                            if result.error.is_some() {
+                                p.status = staging::PartitionStatus::Failed;
+                                p.error = result.error.clone();
+                            } else {
+                                p.status = staging::PartitionStatus::Done;
+                                p.file_count = result.file_count;
+                                p.dir_count = result.dir_count;
+                                p.total_size = result.total_size;
+                                p.completed_at = Some(chrono::Utc::now().to_rfc3339());
+                            }
+                        }
+                    }
+                    let failed_results = results
+                        .iter()
+                        .filter(|result| result.error.is_some())
+                        .count();
+                    if failed_results > 0 {
+                        counts.add_failed(failed_results as u32);
+                    }
+                    manifest.phase = staging::ImportPhase::Enumerating;
+                    manifest
+                        .save(case_root)
+                        .map_err(CommandError::from_service_error)?;
+
+                    let success_results = results
+                        .iter()
+                        .filter(|result| result.error.is_none())
+                        .count();
+                    if success_results == 0 {
+                        counts.add_warnings(failed_results);
+                        job_repo
+                            .update_outcome_counts(
+                                job_id,
+                                counts.warning_count,
+                                counts.skipped_count,
+                                counts.failed_count,
+                                counts.is_partial(),
+                            )
+                            .map_err(CommandError::from_service_error)?;
+                        return Err(CommandError::internal(
+                            "No supported partitions could be enumerated",
+                        ));
+                    }
+
+                    // Merge staging → main DB
+                    if let Some(a) = options.app {
+                        event_bridge::emit_job_progress(a, &job_id.0, 62, "Merging partitions...");
+                    }
+                    manifest.phase = staging::ImportPhase::Merging;
+                    manifest
+                        .save(case_root)
+                        .map_err(CommandError::from_service_error)?;
+
+                    let _merged = staging::merge_all_staging_to_main(
+                        conn,
+                        case_root,
+                        &ds.id.0,
+                        &manifest,
+                        Some(&|completed, total| {
+                            if let Some(a) = options.app {
+                                let pct = 62 + (completed as u32 * 8 / total as u32);
+                                event_bridge::emit_job_progress(
+                                    a,
+                                    &job_id.0,
+                                    pct.min(70),
+                                    &format!("Merged {}/{} partitions", completed, total),
+                                );
+                            }
+                        }),
+                    )
+                    .map_err(CommandError::from_service_error)?;
+
+                    let total_files: u64 = results.iter().map(|r| r.file_count).sum();
+                    let total_dirs: u64 = results.iter().map(|r| r.dir_count).sum();
+                    let total_size: u64 = results.iter().map(|r| r.total_size).sum();
+                    let warnings: Vec<String> = results
+                        .iter()
+                        .flat_map(|r| {
+                            let mut warnings = r
+                                .warnings
+                                .iter()
+                                .map(|warning| format!("Partition {}: {}", r.index, warning))
+                                .collect::<Vec<_>>();
+                            if let Some(error) = &r.error {
+                                warnings.push(format!("Partition {}: {}", r.index, error));
+                            }
+                            warnings
+                        })
+                        .collect();
+
+                    file_service::EnumerationStats {
+                        file_count: total_files,
+                        dir_count: total_dirs,
+                        total_size,
+                        warnings,
+                    }
+                }
+            }
         }
     };
     counts.add_warnings(stats.warnings.len());
 
     // Check for cancellation
-    if cancel_token.load(Ordering::Relaxed) {
+    if options.cancel_token.load(Ordering::Relaxed) {
         return Err(CommandError::internal("Import cancelled by user"));
     }
 
     job_repo
         .update_progress(job_id, 70, "Running post-import pipeline...")
         .map_err(CommandError::from_service_error)?;
-    if let Some(app) = app {
+    if let Some(app) = options.app {
         event_bridge::emit_job_progress(app, &job_id.0, 70, "Running post-import pipeline...");
     }
 
-    let (pipeline_msg, pipeline_counts) =
-        run_post_import_pipeline_with_counts(conn, case_id, &ds.id, &index_dir, app)
-            .map_err(CommandError::from_service_error)?;
+    let post_import_db_path = case_root.join("app.db");
+    let image_backed_source = matches!(kind, DataSourceKind::E01 | DataSourceKind::Raw);
+    let analysis_mode = if image_backed_source {
+        options.analysis_mode
+    } else {
+        match options.analysis_mode {
+            import_analysis::ImportAnalysisMode::MetadataOnly => {
+                import_analysis::ImportAnalysisMode::BudgetedContent
+            }
+            mode => mode,
+        }
+    };
+    let (pipeline_msg, pipeline_counts) = run_post_import_pipeline_with_counts(
+        conn,
+        PostImportPipelineContext {
+            case_id,
+            data_source_id: &ds.id,
+            case_root,
+            db_path: &post_import_db_path,
+            index_dir: &index_dir,
+            job_id,
+            app: options.app,
+            cancel_token: Arc::clone(options.cancel_token),
+            max_analysis_workers: options.max_analysis_workers,
+            enable_content_extraction: analysis_mode.allows_content(),
+            enable_text_indexing: analysis_mode.allows_content(),
+            analysis_mode,
+        },
+    )
+    .map_err(CommandError::from_service_error)?;
     counts.warning_count = counts
         .warning_count
         .saturating_add(pipeline_counts.warning_count);
@@ -498,7 +842,7 @@ fn execute_import_job_with_counts(
             counts.is_partial(),
         )
         .map_err(CommandError::from_service_error)?;
-    if let Some(app) = app {
+    if let Some(app) = options.app {
         event_bridge::emit_timeline_updated(app, stats.file_count + stats.dir_count);
         event_bridge::emit_search_index_progress(app, 100, "Post-import indexing completed");
     }
@@ -506,11 +850,11 @@ fn execute_import_job_with_counts(
     job_repo
         .update_progress(job_id, 95, "Finalizing...")
         .map_err(CommandError::from_service_error)?;
-    if let Some(app) = app {
+    if let Some(app) = options.app {
         event_bridge::emit_job_progress(app, &job_id.0, 95, "Finalizing...");
     }
 
-    if let Some(app) = app {
+    if let Some(app) = options.app {
         match app_services::file_service::get_data_sources_real(conn, case_id)
             .map_err(CommandError::from_service_error)?
             .into_iter()
@@ -536,6 +880,14 @@ fn execute_import_job_with_counts(
     Ok((msg, counts))
 }
 
+fn import_analysis_mode_from_settings(value: &str) -> import_analysis::ImportAnalysisMode {
+    match value {
+        "budgetedContent" => import_analysis::ImportAnalysisMode::BudgetedContent,
+        "fullContent" => import_analysis::ImportAnalysisMode::FullContent,
+        _ => import_analysis::ImportAnalysisMode::MetadataOnly,
+    }
+}
+
 fn validate_import_source_for_filesystem(source_path: &str) -> Result<(), CommandError> {
     let path = PathBuf::from(source_path);
     let metadata = std::fs::metadata(&path).map_err(|_| {
@@ -551,6 +903,7 @@ fn validate_import_source_for_filesystem(source_path: &str) -> Result<(), Comman
 }
 
 /// Enumerate an image data source (E01/RAW) with partition detection.
+#[allow(dead_code)]
 fn enumerate_image_data_source<R>(
     conn: &rusqlite::Connection,
     data_source_id: &domain::DataSourceId,
@@ -821,6 +1174,51 @@ where
     Ok(total)
 }
 
+/// Build a PartitionWork item for a single partition using pre-computed probe results.
+/// Does NOT re-probe the image — uses candidates from the initial detect_image_filesystem call.
+fn build_partition_work(
+    source_path: &std::path::Path,
+    source_kind: &DataSourceKind,
+    partition_index: usize,
+    partition_name: &str,
+    fs_kind: &str,
+    probe_candidates: &[datasource_service::ImageFilesystemCandidate],
+) -> Option<app_services::parallel_enum::PartitionWork> {
+    let candidate = probe_candidates
+        .iter()
+        .find(|c| c.partition_index.unwrap_or(0) == partition_index)?;
+
+    let fs: Box<dyn FileSystemReader + Send> = match candidate.kind {
+        ImageFilesystemKind::Ntfs => {
+            let r: Box<dyn EvidenceReader> = if *source_kind == DataSourceKind::E01 {
+                Box::new(E01Reader::open(source_path).ok()?)
+            } else {
+                Box::new(RawImageReader::open(source_path).ok()?)
+            };
+            Box::new(fs_ntfs::NtfsReader::open(r, candidate.offset).ok()?)
+        }
+        ImageFilesystemKind::Fat => {
+            let r: Box<dyn EvidenceReader> = if *source_kind == DataSourceKind::E01 {
+                Box::new(E01Reader::open(source_path).ok()?)
+            } else {
+                Box::new(RawImageReader::open(source_path).ok()?)
+            };
+            Box::new(fs_fat::FatReader::open(r, candidate.offset).ok()?)
+        }
+        _ => return None,
+    };
+
+    Some(app_services::parallel_enum::PartitionWork {
+        index: partition_index,
+        name: partition_name.to_string(),
+        fs_kind: fs_kind.to_string(),
+        fs,
+        source_path: source_path.to_path_buf(),
+        source_kind: format!("{:?}", source_kind),
+        volume_offset: candidate.offset,
+    })
+}
+
 fn format_partition_root_name(candidate: &datasource_service::ImageFilesystemCandidate) -> String {
     let partition_label = candidate
         .partition_index
@@ -840,6 +1238,7 @@ fn format_partition_root_name(candidate: &datasource_service::ImageFilesystemCan
     }
 }
 
+#[allow(dead_code)]
 fn format_partition_record_root_name(partition: &datasource_service::PartitionRecord) -> String {
     let partition_label = format!("Partition {}", partition.index);
     let kind_label = partition.kind_label.trim();
@@ -854,6 +1253,7 @@ fn format_partition_record_root_name(partition: &datasource_service::PartitionRe
     }
 }
 
+#[allow(dead_code)]
 fn format_partition_progress_detail(
     completed_partitions: u32,
     total_partitions: u32,
@@ -932,7 +1332,7 @@ mod tests {
         let active =
             case_service::create_case(&tmp.path().join("cases"), "post-import", Some("tester"))
                 .unwrap();
-        let cancel = AtomicBool::new(false);
+        let cancel = Arc::new(AtomicBool::new(false));
 
         active
             .with_conn(|conn| {
@@ -943,8 +1343,13 @@ mod tests {
                     &active.case_root,
                     &evidence_dir.to_string_lossy(),
                     &job_id,
-                    None,
-                    &cancel,
+                    ImportJobOptions {
+                        app: None,
+                        cancel_token: &cancel,
+                        max_import_workers: None,
+                        max_analysis_workers: None,
+                        analysis_mode: import_analysis::ImportAnalysisMode::MetadataOnly,
+                    },
                 )
                 .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
 
@@ -960,6 +1365,116 @@ mod tests {
                 assert!(artifact_repo.count()? > 0);
                 let families = artifact_repo.families()?;
                 assert!(families.iter().any(|family| family == "Prefetch"));
+
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    #[ignore] // Run with: cargo test -p forensics-desktop -- e01_full_import --ignored --nocapture
+    fn e01_full_import() {
+        let e01_path = std::path::PathBuf::from(r"E:\pangushi\刘洋\liuyang_pc.E01");
+        if !e01_path.exists() {
+            eprintln!("E01 file not found, skipping");
+            return;
+        }
+
+        let tmp = tempfile::TempDir::new().unwrap();
+        let active =
+            case_service::create_case(&tmp.path().join("cases"), "regression", Some("tester"))
+                .unwrap();
+        let cancel = Arc::new(AtomicBool::new(false));
+
+        eprintln!("=== E01 Full Import Regression Test ===");
+        eprintln!("Source: {}", e01_path.display());
+        eprintln!("Case ID: {}", active.meta.id.0);
+
+        let t_total = std::time::Instant::now();
+
+        active
+            .with_conn(|conn| {
+                let job_id = JobRepo::new(conn).create(&active.meta.id.0, "Import regression")?;
+
+                eprintln!("\n[1/5] Starting import...");
+                let t_import = std::time::Instant::now();
+                let result = execute_import_job(
+                    conn,
+                    &active.meta.id,
+                    &active.case_root,
+                    e01_path.to_str().unwrap(),
+                    &job_id,
+                    ImportJobOptions {
+                        app: None,
+                        cancel_token: &cancel,
+                        max_import_workers: None,
+                        max_analysis_workers: None,
+                        analysis_mode: import_analysis::ImportAnalysisMode::MetadataOnly,
+                    },
+                );
+                match &result {
+                    Ok(msg) => eprintln!(
+                        "  Import completed in {:.1}s: {}",
+                        t_import.elapsed().as_secs_f64(),
+                        msg
+                    ),
+                    Err(e) => {
+                        eprintln!("  Import FAILED: {:?}", e);
+                        return Err(persistence_sqlite::DbError::System(format!(
+                            "Import failed: {:?}",
+                            e
+                        )));
+                    }
+                }
+
+                eprintln!("\n[2/5] Verifying file entries...");
+                let file_count: i64 =
+                    conn.query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))?;
+                eprintln!("  File entries: {}", file_count);
+                assert!(file_count > 0, "Expected file entries, got 0");
+
+                eprintln!("\n[3/5] Verifying timeline events...");
+                let tl_count: i64 =
+                    conn.query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row.get(0))?;
+                eprintln!("  Timeline events: {}", tl_count);
+                assert!(tl_count > 0, "Expected timeline events, got 0");
+
+                eprintln!("\n[4/5] Verifying optional post-import content outputs...");
+                let artifact_count: i64 =
+                    conn.query_row("SELECT COUNT(*) FROM artifacts", [], |row| row.get(0))?;
+                eprintln!("  Artifacts: {}", artifact_count);
+                let index_rows: i64 = staging::analysis_staging_db_path(
+                    &active.case_root,
+                    &{
+                        let ds_id: String = conn.query_row(
+                            "SELECT id FROM data_sources ORDER BY imported_at DESC LIMIT 1",
+                            [],
+                            |row| row.get(0),
+                        )?;
+                        ds_id
+                    },
+                    0,
+                )
+                .exists() as i64;
+                eprintln!("  Analysis staging exists: {}", index_rows > 0);
+
+                eprintln!("\n[5/5] Verifying job status...");
+                let job = JobRepo::new(conn)
+                    .list_recent(10)
+                    .unwrap()
+                    .into_iter()
+                    .find(|j| j.id.0 == job_id.0)
+                    .unwrap();
+                eprintln!("  Job status: {}", job.status);
+                assert_eq!(job.status, "running");
+
+                let total_time = t_total.elapsed().as_secs_f64();
+                eprintln!("\n=== Regression Test PASSED ===");
+                eprintln!("Total time: {:.1}s", total_time);
+                eprintln!(
+                    "Files: {}, Timeline: {}, Artifacts: {}",
+                    file_count, tl_count, artifact_count
+                );
 
                 Ok(())
             })

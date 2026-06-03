@@ -9,6 +9,9 @@ export async function getAppSettings(): Promise<AppSettings> {
       imageSearchPaths: [],
       theme: 'light',
       devEventTrace: false,
+      maxImportWorkers: undefined,
+      maxAnalysisWorkers: undefined,
+      importAnalysisMode: 'metadataOnly',
     }),
   );
 }

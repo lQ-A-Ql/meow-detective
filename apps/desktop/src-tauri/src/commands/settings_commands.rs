@@ -74,6 +74,9 @@ mod tests {
             image_search_paths: vec![search_root.display().to_string()],
             theme: "dark".to_string(),
             dev_event_trace: true,
+            max_import_workers: Some(4),
+            max_analysis_workers: Some(2),
+            import_analysis_mode: "budgetedContent".to_string(),
         };
 
         std::fs::write(&path, serde_json::to_string(&settings).unwrap()).unwrap();
@@ -83,5 +86,8 @@ mod tests {
         assert_eq!(loaded.image_search_paths, settings.image_search_paths);
         assert_eq!(loaded.theme, "dark");
         assert!(loaded.dev_event_trace);
+        assert_eq!(loaded.max_import_workers, Some(4));
+        assert_eq!(loaded.max_analysis_workers, Some(2));
+        assert_eq!(loaded.import_analysis_mode, "budgetedContent");
     }
 }

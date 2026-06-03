@@ -13,6 +13,7 @@ thiserror.workspace = true
 tracing.workspace = true
 crossbeam-channel.workspace = true
 num_cpus.workspace = true
+rayon.workspace = true
 
 domain.workspace = true
 transport.workspace = true

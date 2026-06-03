@@ -840,6 +840,10 @@ where
 }
 
 fn root_partition_index_for_entry(repo: &FileRepo<'_>, entry: &FileEntry) -> Option<usize> {
+    if let Some(index) = mft_partition_index_from_entry_id(&entry.id.0) {
+        return Some(index);
+    }
+
     let mut current = entry.clone();
     while let Some(parent_id) = &current.parent_id {
         let parent = repo.find_by_id(parent_id).ok()??;
@@ -854,6 +858,14 @@ fn root_partition_index_for_entry(repo: &FileRepo<'_>, entry: &FileEntry) -> Opt
         .collect::<String>()
         .parse()
         .ok()
+}
+
+fn mft_partition_index_from_entry_id(entry_id: &str) -> Option<usize> {
+    let mut parts = entry_id.split(':');
+    match (parts.next(), parts.next(), parts.next(), parts.next()) {
+        (Some("mft"), Some(partition), Some(_record), None) => partition.parse().ok(),
+        _ => None,
+    }
 }
 
 pub fn safe_relative_path(path: &str) -> Result<PathBuf, String> {
@@ -1532,6 +1544,13 @@ mod tests {
             Some("mft:5".to_string())
         );
         assert_eq!(mft_parent_entry_id("5", None, &path_map), None);
+    }
+
+    #[test]
+    fn mft_partition_prefixed_id_exposes_partition_index() {
+        assert_eq!(mft_partition_index_from_entry_id("mft:3:42"), Some(3));
+        assert_eq!(mft_partition_index_from_entry_id("mft:42"), None);
+        assert_eq!(mft_partition_index_from_entry_id("uuid"), None);
     }
 
     #[test]

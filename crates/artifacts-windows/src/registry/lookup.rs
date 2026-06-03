@@ -301,7 +301,26 @@ impl<'a> RegistryHiveReader<'a> {
         if bytes.get(0..4) != Some(b"regf") {
             return Err("not a valid registry hive".to_string());
         }
+        // Validate first hbin header at offset 0x1000 (Task 2.1.1)
+        if bytes.len() < BASE_BLOCK_SIZE + 32 {
+            return Err("registry hive too short for first hbin header".to_string());
+        }
+        if bytes.get(BASE_BLOCK_SIZE..BASE_BLOCK_SIZE + 4) != Some(HBIN_MAGIC) {
+            return Err("first hbin header missing 'hbin' magic".to_string());
+        }
+        let hbin_size = read_u32(bytes, BASE_BLOCK_SIZE + 8)? as usize;
+        if hbin_size == 0 || !hbin_size.is_multiple_of(4096) {
+            return Err(format!(
+                "first hbin size {hbin_size:#x} is not a valid page multiple"
+            ));
+        }
         let root_cell_offset = read_u32(bytes, 0x24)?;
+        // Validate root cell offset is within first hbin (Task 2.1.3)
+        if root_cell_offset >= hbin_size as u32 {
+            return Err(format!(
+                "root cell offset {root_cell_offset:#x} exceeds first hbin size {hbin_size:#x}"
+            ));
+        }
         Ok(Self {
             bytes,
             root_cell_offset,
@@ -313,6 +332,14 @@ impl<'a> RegistryHiveReader<'a> {
         key_path: &[&str],
         value_name: &str,
     ) -> Result<Option<RegistryValue>, String> {
+        // Task 2.1.2: bounded key path depth
+        if key_path.len() > MAX_KEY_LOOKUP_DEPTH {
+            return Err(format!(
+                "registry key path depth {} exceeds limit {}",
+                key_path.len(),
+                MAX_KEY_LOOKUP_DEPTH
+            ));
+        }
         let mut nk = self.parse_nk(self.root_cell_offset)?;
         for segment in key_path {
             let Some(next_offset) = self.find_subkey_offset(&nk, segment)? else {
@@ -635,6 +662,9 @@ fn read_i32(bytes: &[u8], offset: usize) -> Result<i32, String> {
     ))
 }
 
+const HBIN_MAGIC: &[u8; 4] = b"hbin";
+const MAX_KEY_LOOKUP_DEPTH: usize = 64;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -830,6 +860,68 @@ mod tests {
     #[test]
     fn reject_non_regf() {
         assert!(RegistryHiveReader::new(b"not-registry").is_err());
+    }
+
+    #[test]
+    fn reject_missing_hbin_magic() {
+        let mut data = empty_hive("ROOT");
+        // Corrupt the hbin magic at 0x1000
+        data[0x1000..0x1004].copy_from_slice(b"NOPE");
+        assert!(RegistryHiveReader::new(&data).is_err());
+    }
+
+    #[test]
+    fn reject_zero_hbin_size() {
+        let mut data = empty_hive("ROOT");
+        // Set hbin size to 0
+        data[0x1008..0x100c].copy_from_slice(&0u32.to_le_bytes());
+        assert!(RegistryHiveReader::new(&data).is_err());
+    }
+
+    #[test]
+    fn reject_non_page_aligned_hbin_size() {
+        let mut data = empty_hive("ROOT");
+        // Set hbin size to a non-page-aligned value
+        data[0x1008..0x100c].copy_from_slice(&0x1234u32.to_le_bytes());
+        assert!(RegistryHiveReader::new(&data).is_err());
+    }
+
+    #[test]
+    fn reject_truncated_before_hbin() {
+        // Hive with regf but truncated before hbin
+        let mut data = vec![0u8; 0x1010];
+        data[0..4].copy_from_slice(b"regf");
+        data[0x24..0x28].copy_from_slice(&0x20u32.to_le_bytes());
+        // No hbin at 0x1000 (all zeros)
+        assert!(RegistryHiveReader::new(&data).is_err());
+    }
+
+    #[test]
+    fn reject_root_cell_offset_exceeds_hbin() {
+        let mut data = empty_hive("ROOT");
+        // Set root cell offset beyond hbin size (0x2000)
+        data[0x24..0x28].copy_from_slice(&0x3000u32.to_le_bytes());
+        assert!(RegistryHiveReader::new(&data).is_err());
+    }
+
+    #[test]
+    fn key_path_depth_exceeds_limit() {
+        let data = empty_hive("ROOT");
+        let hive = RegistryHiveReader::new(&data).unwrap();
+        // Build a key path with 65 segments (exceeds MAX_KEY_LOOKUP_DEPTH = 64)
+        let deep_path: Vec<&str> = (0..65).map(|_| "x").collect();
+        let err = hive.lookup_value(&deep_path, "val").unwrap_err();
+        assert!(err.contains("depth"));
+    }
+
+    #[test]
+    fn key_path_depth_at_limit_is_allowed() {
+        let data = empty_hive("ROOT");
+        let hive = RegistryHiveReader::new(&data).unwrap();
+        // 64 segments should not be rejected by depth check (will fail on lookup)
+        let path: Vec<&str> = (0..64).map(|_| "x").collect();
+        // This returns Ok(None) because keys don't exist, but no depth error
+        assert!(hive.lookup_value(&path, "val").is_ok());
     }
 
     #[test]

@@ -3,6 +3,7 @@
 //! Transport implementations for connecting to MCP servers.
 
 pub mod sse;
+pub mod stdio;
 
 use crate::error::McpResult;
 use crate::types::*;

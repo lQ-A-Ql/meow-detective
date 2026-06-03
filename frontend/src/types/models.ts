@@ -222,6 +222,11 @@ export interface ArtifactRow {
   attrs: Record<string, unknown>;
 }
 
+export interface FamilyCount {
+  family: string;
+  count: number;
+}
+
 export interface JobSnapshot {
   id: string;
   name: string;
@@ -298,6 +303,9 @@ export interface AppSettings {
   imageSearchPaths: string[];
   theme: 'light' | 'dark';
   devEventTrace: boolean;
+  maxImportWorkers?: number;
+  maxAnalysisWorkers?: number;
+  importAnalysisMode?: 'metadataOnly' | 'budgetedContent' | 'fullContent';
 }
 
 export interface ReportTemplate {
@@ -313,4 +321,11 @@ export interface ReportHistoryItem {
   createdAt: string;
   status: 'completed' | 'running';
   progress?: number;
+}
+
+export interface ExportScope {
+  fileSystemMetadata: boolean;
+  registry: boolean;
+  fullTimeline: boolean;
+  rawFileExtraction: boolean;
 }

@@ -1,10 +1,14 @@
 export type ThemeMode = 'light' | 'dark';
+export type ImportAnalysisMode = 'metadataOnly' | 'budgetedContent' | 'fullContent';
 
 export interface LocalSettings {
   caseRoot: string;
   imageSearchPaths: string;
   theme: ThemeMode;
   devEventTrace: boolean;
+  maxImportWorkers: string;
+  maxAnalysisWorkers: string;
+  importAnalysisMode: ImportAnalysisMode;
 }
 
 const STORAGE_KEY = 'forensics.localSettings';
@@ -14,6 +18,9 @@ export const defaultSettings: LocalSettings = {
   imageSearchPaths: 'E:\\cases\\; D:\\images\\',
   theme: 'light',
   devEventTrace: false,
+  maxImportWorkers: '',
+  maxAnalysisWorkers: '',
+  importAnalysisMode: 'metadataOnly',
 };
 
 export function readLocalSettings(): LocalSettings {
@@ -70,5 +77,20 @@ function normalizeSettings(value: unknown): LocalSettings {
         : defaultSettings.imageSearchPaths,
     theme: candidate.theme === 'dark' ? 'dark' : 'light',
     devEventTrace: candidate.devEventTrace === true,
+    maxImportWorkers:
+      typeof candidate.maxImportWorkers === 'string'
+        ? candidate.maxImportWorkers
+        : defaultSettings.maxImportWorkers,
+    maxAnalysisWorkers:
+      typeof candidate.maxAnalysisWorkers === 'string'
+        ? candidate.maxAnalysisWorkers
+        : defaultSettings.maxAnalysisWorkers,
+    importAnalysisMode: isImportAnalysisMode(candidate.importAnalysisMode)
+      ? candidate.importAnalysisMode
+      : defaultSettings.importAnalysisMode,
   };
+}
+
+function isImportAnalysisMode(value: unknown): value is ImportAnalysisMode {
+  return value === 'metadataOnly' || value === 'budgetedContent' || value === 'fullContent';
 }

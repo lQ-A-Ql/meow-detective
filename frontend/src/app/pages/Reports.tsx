@@ -4,17 +4,24 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useReportHistory, useReportTemplates } from '@/features/reports/hooks';
 import { exportHtmlReport, exportCsvReport, exportJsonReport } from '@/lib/api/reports';
 import { toast } from 'sonner';
+import type { ExportScope } from '@/types/models';
 
 export function Reports() {
   const { data: templates } = useReportTemplates();
   const { data: history } = useReportHistory();
   const [selectedFormat, setSelectedFormat] = useState('html');
+  const [exportScope, setExportScope] = useState<ExportScope>({
+    fileSystemMetadata: true,
+    registry: true,
+    fullTimeline: true,
+    rawFileExtraction: false,
+  });
   const qc = useQueryClient();
   const exportMutation = useMutation({
     mutationFn: () => {
-      if (selectedFormat === 'csv') return exportCsvReport();
-      if (selectedFormat === 'json') return exportJsonReport();
-      return exportHtmlReport();
+      if (selectedFormat === 'csv') return exportCsvReport(exportScope);
+      if (selectedFormat === 'json') return exportJsonReport(exportScope);
+      return exportHtmlReport(exportScope);
     },
     onSuccess: (r) => { toast.success('报告生成成功', { description: r }); qc.invalidateQueries({ queryKey: ['reports'] }); },
     onError: (e: Error) => { toast.error('报告生成失败', { description: e.message }); },
@@ -53,16 +60,16 @@ export function Reports() {
             <div className="text-[#888] text-[10px] uppercase tracking-wider mb-3">导出范围</div>
             <div className="space-y-2 font-mono text-[11px] text-[#333]">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" defaultChecked className="accent-[#111]" /> 包含文件系统元数据
+                <input type="checkbox" checked={exportScope.fileSystemMetadata} onChange={(e) => setExportScope((s) => ({ ...s, fileSystemMetadata: e.target.checked }))} className="accent-[#111]" /> 包含文件系统元数据
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" defaultChecked className="accent-[#111]" /> 包含注册表项
+                <input type="checkbox" checked={exportScope.registry} onChange={(e) => setExportScope((s) => ({ ...s, registry: e.target.checked }))} className="accent-[#111]" /> 包含注册表项
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" defaultChecked className="accent-[#111]" /> 包含完整时间线
+                <input type="checkbox" checked={exportScope.fullTimeline} onChange={(e) => setExportScope((s) => ({ ...s, fullTimeline: e.target.checked }))} className="accent-[#111]" /> 包含完整时间线
               </label>
               <label className="flex items-center gap-2 cursor-pointer text-[#888]">
-                <input type="checkbox" className="accent-[#111]" /> 包含原始文件提取（会增加文件大小）
+                <input type="checkbox" checked={exportScope.rawFileExtraction} onChange={(e) => setExportScope((s) => ({ ...s, rawFileExtraction: e.target.checked }))} className="accent-[#111]" /> 包含原始文件提取（会增加文件大小）
               </label>
             </div>
           </div>

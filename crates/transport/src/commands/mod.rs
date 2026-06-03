@@ -96,6 +96,15 @@ pub struct AppSettingsDto {
     pub image_search_paths: Vec<String>,
     pub theme: String,
     pub dev_event_trace: bool,
+    /// Maximum parallel workers for import. None = use all available cores.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_import_workers: Option<usize>,
+    /// Maximum parallel workers for post-import analysis. None = use all available cores.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_analysis_workers: Option<usize>,
+    /// Default analysis depth for import-time post processing.
+    #[serde(default = "default_import_analysis_mode")]
+    pub import_analysis_mode: String,
 }
 
 impl Default for AppSettingsDto {
@@ -105,6 +114,9 @@ impl Default for AppSettingsDto {
             image_search_paths: Vec::new(),
             theme: "light".to_string(),
             dev_event_trace: false,
+            max_import_workers: None,
+            max_analysis_workers: None,
+            import_analysis_mode: default_import_analysis_mode(),
         }
     }
 }
@@ -118,8 +130,27 @@ impl AppSettingsDto {
         if self.theme != "light" && self.theme != "dark" {
             return Err("theme must be light or dark".to_string());
         }
+        if self.max_import_workers == Some(0) {
+            return Err("maxImportWorkers must be greater than zero".to_string());
+        }
+        if self.max_analysis_workers == Some(0) {
+            return Err("maxAnalysisWorkers must be greater than zero".to_string());
+        }
+        if !matches!(
+            self.import_analysis_mode.as_str(),
+            "metadataOnly" | "budgetedContent" | "fullContent"
+        ) {
+            return Err(
+                "importAnalysisMode must be metadataOnly, budgetedContent, or fullContent"
+                    .to_string(),
+            );
+        }
         Ok(())
     }
+}
+
+fn default_import_analysis_mode() -> String {
+    "metadataOnly".to_string()
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -352,6 +383,34 @@ fn default_case_root() -> String {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportScopeDto {
+    #[serde(default = "default_true")]
+    pub file_system_metadata: bool,
+    #[serde(default = "default_true")]
+    pub registry: bool,
+    #[serde(default = "default_true")]
+    pub full_timeline: bool,
+    #[serde(default)]
+    pub raw_file_extraction: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for ExportScopeDto {
+    fn default() -> Self {
+        Self {
+            file_system_metadata: true,
+            registry: true,
+            full_timeline: true,
+            raw_file_extraction: false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -441,5 +500,63 @@ mod tests {
         };
 
         assert!(settings.validate().is_err());
+    }
+
+    #[test]
+    fn app_settings_rejects_zero_import_workers() {
+        let settings = AppSettingsDto {
+            case_root: std::env::temp_dir().display().to_string(),
+            max_import_workers: Some(0),
+            ..Default::default()
+        };
+
+        assert!(settings.validate().is_err());
+    }
+
+    #[test]
+    fn app_settings_rejects_zero_analysis_workers() {
+        let settings = AppSettingsDto {
+            case_root: std::env::temp_dir().display().to_string(),
+            max_analysis_workers: Some(0),
+            ..Default::default()
+        };
+
+        assert!(settings.validate().is_err());
+    }
+
+    #[test]
+    fn app_settings_defaults_to_metadata_only_import_analysis() {
+        let settings: AppSettingsDto = serde_json::from_str(&format!(
+            r#"{{"caseRoot":"{}","imageSearchPaths":[],"theme":"light","devEventTrace":false}}"#,
+            std::env::temp_dir()
+                .display()
+                .to_string()
+                .replace('\\', "\\\\")
+        ))
+        .unwrap();
+
+        assert_eq!(settings.import_analysis_mode, "metadataOnly");
+        settings.validate().unwrap();
+    }
+
+    #[test]
+    fn app_settings_rejects_unknown_import_analysis_mode() {
+        let settings = AppSettingsDto {
+            case_root: std::env::temp_dir().display().to_string(),
+            import_analysis_mode: "deepMagic".to_string(),
+            ..Default::default()
+        };
+
+        assert!(settings.validate().is_err());
+    }
+
+    #[test]
+    fn export_scope_defaults_enable_existing_sections_only() {
+        let scope: ExportScopeDto = serde_json::from_str("{}").unwrap();
+
+        assert!(scope.file_system_metadata);
+        assert!(scope.registry);
+        assert!(scope.full_timeline);
+        assert!(!scope.raw_file_extraction);
     }
 }

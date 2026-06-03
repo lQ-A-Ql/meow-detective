@@ -325,4 +325,144 @@ mod tests {
         };
         assert_eq!(build_content_range(&range, 20), "bytes 5-9/20");
     }
+
+    // --- Task 1.2.1: Range boundary case hardening ---
+
+    #[test]
+    fn parse_range_single_byte_start_zero() {
+        let range = parse_media_range_header(Some("bytes=0-0"), 100, 1024).unwrap();
+        assert_eq!(range.start, 0);
+        assert_eq!(range.end, 0);
+        assert_eq!(range.length, 1);
+        assert_eq!(range.status, StatusCode::PARTIAL_CONTENT);
+    }
+
+    #[test]
+    fn parse_range_single_byte_suffix_one() {
+        let range = parse_media_range_header(Some("bytes=-1"), 100, 1024).unwrap();
+        assert_eq!(range.start, 99);
+        assert_eq!(range.end, 99);
+        assert_eq!(range.length, 1);
+        assert_eq!(range.status, StatusCode::PARTIAL_CONTENT);
+    }
+
+    #[test]
+    fn parse_range_oversized_end_clamped_to_max_chunk() {
+        let range =
+            parse_media_range_header(Some("bytes=0-999999999"), 1_000_000_000, 1024).unwrap();
+        assert_eq!(range.start, 0);
+        assert_eq!(range.end, 1023);
+        assert_eq!(range.length, 1024);
+    }
+
+    #[test]
+    fn parse_range_reverse_returns_error() {
+        let err = parse_media_range_header(Some("bytes=100-50"), 200, 1024).unwrap_err();
+        assert_eq!(err, RangeError::Invalid);
+    }
+
+    #[test]
+    fn parse_range_suffix_larger_than_file_returns_entire_file() {
+        let range = parse_media_range_header(Some("bytes=-999"), 100, 1024).unwrap();
+        assert_eq!(range.start, 0);
+        assert_eq!(range.end, 99);
+        assert_eq!(range.length, 100);
+    }
+
+    #[test]
+    fn parse_range_suffix_zero_returns_error() {
+        let err = parse_media_range_header(Some("bytes=-0"), 100, 1024).unwrap_err();
+        assert_eq!(err, RangeError::Invalid);
+    }
+
+    #[test]
+    fn parse_range_start_at_last_byte() {
+        let range = parse_media_range_header(Some("bytes=99-99"), 100, 1024).unwrap();
+        assert_eq!(range.start, 99);
+        assert_eq!(range.end, 99);
+        assert_eq!(range.length, 1);
+    }
+
+    #[test]
+    fn parse_range_start_exactly_at_total_size_is_unsatisfiable() {
+        let err = parse_media_range_header(Some("bytes=100-200"), 100, 1024).unwrap_err();
+        assert_eq!(err, RangeError::Unsatisfiable);
+    }
+
+    #[test]
+    fn parse_range_start_past_total_size_is_unsatisfiable() {
+        let err = parse_media_range_header(Some("bytes=999-1000"), 100, 1024).unwrap_err();
+        assert_eq!(err, RangeError::Unsatisfiable);
+    }
+
+    #[test]
+    fn parse_range_multiple_ranges_rejected() {
+        let err = parse_media_range_header(Some("bytes=0-10, 20-30"), 100, 1024).unwrap_err();
+        assert_eq!(err, RangeError::Invalid);
+    }
+
+    #[test]
+    fn parse_range_missing_dash_returns_error() {
+        let err = parse_media_range_header(Some("bytes=010"), 100, 1024).unwrap_err();
+        assert_eq!(err, RangeError::Invalid);
+    }
+
+    #[test]
+    fn parse_range_max_chunk_of_one() {
+        let range = parse_media_range_header(Some("bytes=0-99"), 100, 1).unwrap();
+        assert_eq!(range.start, 0);
+        assert_eq!(range.end, 0);
+        assert_eq!(range.length, 1);
+    }
+
+    #[test]
+    fn parse_range_file_size_one_byte() {
+        let range = parse_media_range_header(None, 1, 1024).unwrap();
+        assert_eq!(range.start, 0);
+        assert_eq!(range.end, 0);
+        assert_eq!(range.length, 1);
+
+        let range = parse_media_range_header(Some("bytes=0-0"), 1, 1024).unwrap();
+        assert_eq!(range.start, 0);
+        assert_eq!(range.end, 0);
+        assert_eq!(range.length, 1);
+
+        let err = parse_media_range_header(Some("bytes=1-1"), 1, 1024).unwrap_err();
+        assert_eq!(err, RangeError::Unsatisfiable);
+    }
+
+    // --- Task 1.2.2: Concurrency safety (structural proof) ---
+
+    #[test]
+    fn parse_range_concurrent_independent_calls() {
+        use std::thread;
+
+        let total: u64 = 10_000_000;
+        let max_chunk: u64 = 1024;
+        let iterations = 100;
+
+        let handles: Vec<_> = (0..10)
+            .map(|i| {
+                let start_offset = (i as u64) * (total / 10);
+                thread::spawn(move || {
+                    for j in 0..iterations {
+                        let offset = start_offset + j;
+                        if offset >= total {
+                            break;
+                        }
+                        let header = format!("bytes={}-", offset);
+                        let range =
+                            parse_media_range_header(Some(&header), total, max_chunk).unwrap();
+                        assert_eq!(range.start, offset);
+                        assert!(range.length <= max_chunk);
+                        assert!(range.end < total);
+                    }
+                })
+            })
+            .collect();
+
+        for h in handles {
+            h.join().expect("thread must not panic");
+        }
+    }
 }

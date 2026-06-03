@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect } from 'react';
 import { FileTreeNode } from '@/types/models';
+import { TREE_NODE_HEIGHT } from '@/lib/constants';
 
 interface UseFileTreeKeyboardOptions {
   /** 扁平化的节点列表 */
@@ -45,7 +46,7 @@ export function useFileTreeKeyboard({
       const container = scrollContainerRef.current;
       if (!container) return;
 
-      const nodeHeight = 28; // 每行高度
+      const nodeHeight = TREE_NODE_HEIGHT;
       const nodeTop = index * nodeHeight;
       const nodeBottom = nodeTop + nodeHeight;
       const containerTop = container.scrollTop;

@@ -14,3 +14,10 @@ pub struct ArtifactRowDto {
     pub created_at: String,
     pub attrs: BTreeMap<String, Value>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FamilyCountDto {
+    pub family: String,
+    pub count: u64,
+}

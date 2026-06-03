@@ -1,7 +1,12 @@
 //! Catalog indexing and projection for file catalog.
 //!
-//! TODO: Implement catalog projections (by extension, by path prefix,
-//! by timeline) and indexing strategies. Currently stubs.
+//! Provides in-memory projections for efficient file catalog queries:
+//! - `ExtensionProjection`: group files by extension
+//! - `PathPrefixProjection`: group files by path prefix
+//! - `CatalogIndex`: main index with materialized projections
 
-mod indexing;
-mod projection;
+pub mod indexing;
+pub mod projection;
+
+pub use indexing::CatalogIndex;
+pub use projection::{ExtensionProjection, PathPrefixProjection};

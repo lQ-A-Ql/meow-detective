@@ -8,6 +8,6 @@ pub struct ReaderInfo {
     pub kind: String,
 }
 
-pub trait EvidenceReader: Read + Seek {
+pub trait EvidenceReader: Read + Seek + Send {
     fn info(&self) -> &ReaderInfo;
 }

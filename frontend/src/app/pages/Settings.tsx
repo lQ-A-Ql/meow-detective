@@ -54,6 +54,9 @@ export function Settings() {
           imageSearchPaths: formatPathList(remote.imageSearchPaths),
           theme: remote.theme,
           devEventTrace: remote.devEventTrace,
+          maxImportWorkers: remote.maxImportWorkers?.toString() ?? '',
+          maxAnalysisWorkers: remote.maxAnalysisWorkers?.toString() ?? '',
+          importAnalysisMode: remote.importAnalysisMode ?? 'metadataOnly',
         }));
       })
       .catch(() => {
@@ -79,6 +82,12 @@ export function Settings() {
       setSettingsMessage('镜像搜索路径包含非法字符。');
       return;
     }
+    const maxImportWorkers = parseOptionalPositiveInt(settings.maxImportWorkers);
+    const maxAnalysisWorkers = parseOptionalPositiveInt(settings.maxAnalysisWorkers);
+    if (maxImportWorkers === 0 || maxAnalysisWorkers === 0) {
+      setSettingsMessage('Worker 数必须为空或大于 0。');
+      return;
+    }
     setSavingSettings(true);
     setSettingsMessage('');
     try {
@@ -87,12 +96,18 @@ export function Settings() {
         imageSearchPaths: parsePathList(settings.imageSearchPaths),
         theme: settings.theme,
         devEventTrace: settings.devEventTrace,
+        maxImportWorkers,
+        maxAnalysisWorkers,
+        importAnalysisMode: settings.importAnalysisMode,
       });
       const normalized = writeLocalSettings({
         caseRoot: saved.caseRoot,
         imageSearchPaths: formatPathList(saved.imageSearchPaths),
         theme: saved.theme,
         devEventTrace: saved.devEventTrace,
+        maxImportWorkers: saved.maxImportWorkers?.toString() ?? '',
+        maxAnalysisWorkers: saved.maxAnalysisWorkers?.toString() ?? '',
+        importAnalysisMode: saved.importAnalysisMode ?? 'metadataOnly',
       });
       setSettings(normalized);
       setSettingsMessage('设置已保存。');
@@ -152,12 +167,81 @@ export function Settings() {
 
         <section>
           <div className="flex items-center gap-2 mb-3">
+            <span className="text-[13px] font-semibold text-[#333]">导入性能</span>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="block border border-[#e0e0e0] bg-[#f8f8f8] p-3">
+              <span className="block text-[11px] font-semibold text-[#555]">枚举 Worker 上限</span>
+              <input
+                value={settings.maxImportWorkers}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    maxImportWorkers: event.target.value,
+                  }))
+                }
+                inputMode="numeric"
+                placeholder="自动"
+                className="mt-2 w-full border border-[#ccc] bg-white px-2 py-1 font-mono text-[12px]"
+              />
+              <span className="mt-1 block text-[10px] text-[#999]">E01/RAW 分区枚举，空值使用自动。</span>
+            </label>
+            <label className="block border border-[#e0e0e0] bg-[#f8f8f8] p-3">
+              <span className="block text-[11px] font-semibold text-[#555]">分析 Worker 上限</span>
+              <input
+                value={settings.maxAnalysisWorkers}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    maxAnalysisWorkers: event.target.value,
+                  }))
+                }
+                inputMode="numeric"
+                placeholder="自动"
+                className="mt-2 w-full border border-[#ccc] bg-white px-2 py-1 font-mono text-[12px]"
+              />
+              <span className="mt-1 block text-[10px] text-[#999]">artifact/timeline/text 分析池，空值使用逻辑核心。</span>
+            </label>
+          </div>
+          <label className="mt-3 block border border-[#e0e0e0] bg-[#f8f8f8] p-3">
+            <span className="block text-[11px] font-semibold text-[#555]">导入分析模式</span>
+            <select
+              value={settings.importAnalysisMode}
+              onChange={(event) =>
+                setSettings((current) => ({
+                  ...current,
+                  importAnalysisMode:
+                    event.target.value === 'fullContent'
+                      ? 'fullContent'
+                      : event.target.value === 'budgetedContent'
+                        ? 'budgetedContent'
+                        : 'metadataOnly',
+                }))
+              }
+              className="mt-2 w-full border border-[#ccc] bg-white px-2 py-1 text-[12px]"
+            >
+              <option value="metadataOnly">Metadata only (E01/RAW 推荐)</option>
+              <option value="budgetedContent">Budgeted content (目录导入推荐)</option>
+              <option value="fullContent">Full content (高内存风险)</option>
+            </select>
+            <span className="mt-1 block text-[10px] text-[#999]">
+              E01/RAW 默认只做元数据与时间线；内容读取和全文索引需显式开启预算模式。
+            </span>
+          </label>
+        </section>
+
+        <section>
+          <div className="flex items-center gap-2 mb-3">
             <span className="text-[13px] font-semibold text-[#333]">界面与调试</span>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-[12px]">
-            <label className="flex items-center gap-2 border border-[#e0e0e0] bg-[#f8f8f8] px-3 py-2">
+            <label
+              htmlFor="settings-theme"
+              className="flex items-center gap-2 border border-[#e0e0e0] bg-[#f8f8f8] px-3 py-2"
+            >
               主题
               <select
+                id="settings-theme"
                 value={settings.theme}
                 onChange={(event) =>
                   setSettings((current) => ({
@@ -316,4 +400,16 @@ export function Settings() {
       )}
     </div>
   );
+}
+
+function parseOptionalPositiveInt(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return 0;
+  }
+  return parsed;
 }

@@ -5,7 +5,10 @@ pub mod state;
 
 use commands::{
     analysis_commands::{classify_files, generate_analysis_summary, get_system_info},
-    artifact_commands::{get_artifact_families, get_artifact_rows, get_artifact_rows_request},
+    artifact_commands::{
+        get_artifact_families, get_artifact_family_counts, get_artifact_rows,
+        get_artifact_rows_request,
+    },
     case_commands::{
         close_case, create_case, delete_case, delete_data_source, get_case_metrics,
         get_current_case, get_data_sources, get_recent_cases, get_recent_objects, open_case,
@@ -74,6 +77,7 @@ pub fn run() {
             get_artifact_families,
             get_artifact_rows,
             get_artifact_rows_request,
+            get_artifact_family_counts,
             get_report_templates,
             get_report_history,
             export_html_report,
