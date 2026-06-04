@@ -5,10 +5,12 @@
 //! with provenance.
 
 use chrono::{DateTime, Utc};
-use evtx::EvtxParser;
+use evtx::{err::EvtxError, EvtxParser};
 use serde_json::Value;
 
-pub const MAX_EVTX_ANALYSIS_BYTES: usize = 64 * 1024 * 1024;
+pub const MAX_EVTX_ANALYSIS_BYTES: usize = 16 * 1024 * 1024;
+const EVTX_FILE_HEADER_SIZE: u64 = 4096;
+const EVTX_CHUNK_SIZE: u64 = 65536;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EvtxBootEventKind {
@@ -73,7 +75,8 @@ pub fn extract_boot_shutdown_events(bytes: &[u8], source_path: &str) -> EvtxBoot
         };
     }
 
-    let mut parser = match EvtxParser::from_buffer(bytes.to_vec()) {
+    let parser_bytes = bounded_clean_evtx_bytes(bytes);
+    let mut parser = match EvtxParser::from_buffer(parser_bytes.to_vec()) {
         Ok(parser) => parser,
         Err(err) => {
             return EvtxBootExtraction {
@@ -100,7 +103,7 @@ pub fn extract_boot_shutdown_events(bytes: &[u8], source_path: &str) -> EvtxBoot
             }
             Err(err) => extraction
                 .warnings
-                .push(format!("{source_path} EVTX record parse error: {err}")),
+                .push(format_evtx_warning(source_path, &err)),
         }
     }
 
@@ -110,6 +113,42 @@ pub fn extract_boot_shutdown_events(bytes: &[u8], source_path: &str) -> EvtxBoot
         ));
     }
     extraction
+}
+
+fn bounded_clean_evtx_bytes(bytes: &[u8]) -> &[u8] {
+    if bytes.len() < EVTX_FILE_HEADER_SIZE as usize + 128 || !bytes.starts_with(b"ElfFile\0") {
+        return bytes;
+    }
+
+    let chunk_count = u16::from_le_bytes(bytes[42..44].try_into().unwrap_or([0; 2])) as usize;
+    let flags = u32::from_le_bytes(bytes[120..124].try_into().unwrap_or([0; 4]));
+    let is_dirty = flags & 0x1 != 0;
+    if is_dirty || chunk_count == 0 {
+        return bytes;
+    }
+
+    let declared_len = (EVTX_FILE_HEADER_SIZE as usize)
+        .saturating_add(chunk_count.saturating_mul(EVTX_CHUNK_SIZE as usize));
+    if declared_len > EVTX_FILE_HEADER_SIZE as usize && declared_len < bytes.len() {
+        &bytes[..declared_len]
+    } else {
+        bytes
+    }
+}
+
+fn format_evtx_warning(source_path: &str, err: &EvtxError) -> String {
+    match err {
+        EvtxError::FailedToParseChunk { chunk_id, source } => {
+            let offset = EVTX_FILE_HEADER_SIZE + chunk_id.saturating_mul(EVTX_CHUNK_SIZE);
+            format!(
+                "{source_path} EVTX chunk parse warning: chunk={chunk_id} offset=0x{offset:08X} reason={source}"
+            )
+        }
+        EvtxError::FailedToParseRecord { record_id, source } => {
+            format!("{source_path} EVTX record parse warning: record={record_id} reason={source}")
+        }
+        other => format!("{source_path} EVTX record parse warning: {other}"),
+    }
 }
 
 pub fn extract_boot_shutdown_events_from_json_records(
@@ -312,6 +351,44 @@ mod tests {
             .warnings
             .iter()
             .any(|warning| warning.contains("parser") || warning.contains("parse")));
+    }
+
+    #[test]
+    fn chunk_warning_includes_chunk_id_offset_and_reason() {
+        let warning = format_evtx_warning(
+            "Windows/System32/winevt/Logs/System.evtx",
+            &EvtxError::FailedToParseChunk {
+                chunk_id: 29,
+                source: Box::new(evtx::err::ChunkError::IncompleteChunk),
+            },
+        );
+
+        assert!(warning.contains("chunk=29"));
+        assert!(warning.contains("offset=0x001D1000"));
+        assert!(warning.contains("Reached EOF"));
+    }
+
+    #[test]
+    fn clean_evtx_uses_declared_chunk_count_to_ignore_tail_slack() {
+        let declared_len = EVTX_FILE_HEADER_SIZE as usize + EVTX_CHUNK_SIZE as usize;
+        let mut bytes = vec![0u8; declared_len + EVTX_CHUNK_SIZE as usize];
+        bytes[0..8].copy_from_slice(b"ElfFile\0");
+        bytes[42..44].copy_from_slice(&1u16.to_le_bytes());
+        bytes[120..124].copy_from_slice(&0u32.to_le_bytes());
+
+        let bounded = bounded_clean_evtx_bytes(&bytes);
+        assert_eq!(bounded.len(), declared_len);
+    }
+
+    #[test]
+    fn dirty_evtx_keeps_tail_for_recovery_scan() {
+        let mut bytes = vec![0u8; EVTX_FILE_HEADER_SIZE as usize + EVTX_CHUNK_SIZE as usize * 2];
+        bytes[0..8].copy_from_slice(b"ElfFile\0");
+        bytes[42..44].copy_from_slice(&1u16.to_le_bytes());
+        bytes[120..124].copy_from_slice(&1u32.to_le_bytes());
+
+        let bounded = bounded_clean_evtx_bytes(&bytes);
+        assert_eq!(bounded.len(), bytes.len());
     }
 
     #[test]

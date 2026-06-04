@@ -1,6 +1,8 @@
 import { save } from '@tauri-apps/plugin-dialog';
 import {
+  FileChildrenPage,
   FileEntryRow,
+  FileRowsPage,
   FileTreeNode,
   MediaRangeRequest,
   MediaRangeResponse,
@@ -14,10 +16,28 @@ export async function getFileTree() {
 }
 
 export async function getFileRows(parentId?: string) {
+  const rows = await getFileRowsPage(parentId);
+  return rows.rows;
+}
+
+export async function getFileRowsPage(
+  parentId?: string,
+  offset = 0,
+  limit = 500,
+): Promise<FileRowsPage> {
   return apiClient.request(
     'get_file_rows_request',
-    () => apiClient.getMockProvider().getFileRows(parentId),
-    { request: { parentId: parentId ?? null } },
+    async () => {
+      const rows = await apiClient.getMockProvider().getFileRows(parentId);
+      return {
+        rows: rows.slice(offset, offset + limit),
+        totalCount: rows.length,
+        offset,
+        limit,
+        truncated: offset + limit < rows.length,
+      };
+    },
+    { request: { parentId: parentId ?? null, offset, limit } },
   );
 }
 
@@ -27,8 +47,23 @@ export async function importDataSource(sourcePath: string) {
 }
 
 export async function getFileChildren(parentId: string): Promise<FileTreeNode[]> {
+  const page = await getFileChildrenPage(parentId);
+  return page.children;
+}
+
+export async function getFileChildrenPage(
+  parentId: string,
+  offset = 0,
+  limit = 500,
+): Promise<FileChildrenPage> {
   return apiClient.request('get_file_children_request', () =>
-    apiClient.getMockProvider().getFileChildren(parentId), { request: { parentId } });
+    apiClient.getMockProvider().getFileChildren(parentId).then((children) => ({
+      children: children.slice(offset, offset + limit),
+      totalCount: children.length,
+      offset,
+      limit,
+      truncated: offset + limit < children.length,
+    })), { request: { parentId, offset, limit } });
 }
 
 export async function openFileHandle(fileId: string) {

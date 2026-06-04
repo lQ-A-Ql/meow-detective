@@ -13,9 +13,9 @@ use tauri::State;
 use transport::{
     commands::{ExtractFileRequest, GetFileChildrenRequest, GetFileRowsRequest},
     dto::{
-        FileEntryRowDto, FileTreeNodeDto, ImagePreviewDto, MediaPreviewModeDto,
-        MediaRangeRequestDto, MediaRangeResponseDto, MediaUrlDto, TextPreviewDto, ViewerHandleDto,
-        ViewerRangeResponseDto,
+        FileChildrenDto, FileEntryRowDto, FileRowsPageDto, FileTreeNodeDto, ImagePreviewDto,
+        MediaPreviewModeDto, MediaRangeRequestDto, MediaRangeResponseDto, MediaUrlDto,
+        TextPreviewDto, ViewerHandleDto, ViewerRangeResponseDto,
     },
     CommandError,
 };
@@ -31,15 +31,24 @@ pub async fn get_file_children(
     state: State<'_, AppState>,
     parent_id: String,
 ) -> Result<Vec<FileTreeNodeDto>, CommandError> {
-    get_file_children_request(state, GetFileChildrenRequest { parent_id }).await
+    let page = get_file_children_request(
+        state,
+        GetFileChildrenRequest {
+            parent_id,
+            offset: 0,
+            limit: 500,
+        },
+    )
+    .await?;
+    Ok(page.children)
 }
 
 /// Get children of a file tree node with explicit request.
 #[tauri::command]
 pub async fn get_file_children_request(
     state: State<'_, AppState>,
-    request: GetFileChildrenRequest,
-) -> Result<Vec<FileTreeNodeDto>, CommandError> {
+    mut request: GetFileChildrenRequest,
+) -> Result<FileChildrenDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -51,15 +60,27 @@ pub async fn get_file_children_request(
                 .map_err(|e| CommandError::from_lock_error("Case", e))?;
             match guard.as_ref() {
                 Some(active) => active.db_path(),
-                None => return Ok(vec![]),
+                None => {
+                    return Ok(FileChildrenDto {
+                        children: vec![],
+                        total_count: 0,
+                        offset: Some(request.offset),
+                        limit: Some(request.limit),
+                        truncated: Some(false),
+                    })
+                }
             }
         };
         // Guard is now dropped — query with released lock
         let conn = persistence_sqlite::open_or_create(&db_path)
             .map_err(CommandError::from_service_error)?;
-        file_service::get_file_children_lazy(&conn, &request.parent_id)
-            .map(|result| result.children)
-            .map_err(CommandError::from_service_error)
+        file_service::get_file_children_lazy(
+            &conn,
+            &request.parent_id,
+            request.offset,
+            request.limit,
+        )
+        .map_err(CommandError::from_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -97,15 +118,17 @@ pub async fn get_file_tree(
 pub async fn get_file_rows(
     state: State<'_, AppState>,
 ) -> Result<Vec<FileEntryRowDto>, CommandError> {
-    get_file_rows_request(state, GetFileRowsRequest::default()).await
+    let page = get_file_rows_request(state, GetFileRowsRequest::default()).await?;
+    Ok(page.rows)
 }
 
 /// Get file rows with explicit request parameters.
 #[tauri::command]
 pub async fn get_file_rows_request(
     state: State<'_, AppState>,
-    request: GetFileRowsRequest,
-) -> Result<Vec<FileEntryRowDto>, CommandError> {
+    mut request: GetFileRowsRequest,
+) -> Result<FileRowsPageDto, CommandError> {
+    request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         // Short lock: extract db_path, then release
@@ -116,7 +139,15 @@ pub async fn get_file_rows_request(
                 .map_err(|e| CommandError::from_lock_error("Case", e))?;
             match guard.as_ref() {
                 Some(active) => active.db_path(),
-                None => return Ok(vec![]),
+                None => {
+                    return Ok(FileRowsPageDto {
+                        rows: vec![],
+                        total_count: 0,
+                        offset: request.offset,
+                        limit: request.limit,
+                        truncated: false,
+                    })
+                }
             }
         };
         // Guard is now dropped — query with released lock

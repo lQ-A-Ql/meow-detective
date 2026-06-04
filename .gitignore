@@ -1,6 +1,7 @@
 # Rust
 target/
 coverage/
+artifacts/
 
 # Node
 node_modules/

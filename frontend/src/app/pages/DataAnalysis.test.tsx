@@ -6,17 +6,23 @@ import { DataAnalysis } from './DataAnalysis';
 
 const mocks = vi.hoisted(() => ({
   currentCase: vi.fn(),
+  demoCase: vi.fn(),
   systemInfo: vi.fn(),
+  evidenceSummary: vi.fn(),
+  evidenceScan: vi.fn(),
   classifications: vi.fn(),
   summaryMutation: vi.fn(),
 }));
 
 vi.mock('@/features/case/hooks', () => ({
   useCurrentCase: mocks.currentCase,
+  useCreateAnalysisDemoCase: mocks.demoCase,
 }));
 
 vi.mock('@/features/analysis/hooks', () => ({
   useAnalysisSystemInfo: mocks.systemInfo,
+  useEvidenceClassificationSummary: mocks.evidenceSummary,
+  useRunEvidenceClassification: mocks.evidenceScan,
   useAnalysisClassifications: mocks.classifications,
   useGenerateAnalysisSummary: mocks.summaryMutation,
 }));
@@ -51,6 +57,11 @@ describe('DataAnalysis page', () => {
     mocks.currentCase.mockReturnValue(queryState({
       data: { id: 'case-1', name: 'Case 1' },
     }));
+    mocks.demoCase.mockReturnValue({
+      error: null,
+      isPending: false,
+      mutateAsync: vi.fn().mockResolvedValue({ id: 'demo-case', name: 'Analysis Demo' }),
+    });
     mocks.systemInfo.mockReturnValue(queryState({
       data: {
         computerName: 'BETA-LAB',
@@ -113,10 +124,77 @@ describe('DataAnalysis page', () => {
         ],
       },
     }));
+    mocks.evidenceSummary.mockReturnValue(queryState({
+      data: {
+        status: 'candidateFound',
+        generatedAt: '2026-06-01T10:00:00Z',
+        warnings: [],
+        totals: {
+          categoryCount: 3,
+          candidateFileCount: 4,
+          totalSize: 8192,
+          artifactCount: 1,
+        },
+        categories: [
+          {
+            category: 'SystemInformation',
+            displayName: '系统信息',
+            status: 'parsed',
+            fileCount: 2,
+            totalSize: 4096,
+            artifactCount: 1,
+            confidence: 0.95,
+            warnings: [],
+            sources: [
+              {
+                fileId: 'system',
+                path: 'Windows/System32/config/SYSTEM',
+                size: 2048,
+                evidenceKind: 'registry_hive',
+                parser: 'registry.system_info',
+                status: 'parsed',
+                artifactCount: 1,
+                warnings: [],
+              },
+            ],
+            provenance: [],
+          },
+          {
+            category: 'EventLogs',
+            displayName: '事件日志',
+            status: 'candidateFound',
+            fileCount: 1,
+            totalSize: 4096,
+            artifactCount: 0,
+            confidence: 0.65,
+            warnings: ['已发现候选文件；尚未运行证据分类解析。'],
+            sources: [
+              {
+                fileId: 'evtx',
+                path: 'Windows/System32/winevt/Logs/System.evtx',
+                size: 4096,
+                evidenceKind: 'event_log',
+                parser: 'evtx.boot_shutdown',
+                status: 'candidateFound',
+                artifactCount: 0,
+                warnings: [],
+              },
+            ],
+            provenance: [],
+          },
+        ],
+      },
+    }));
+    mocks.evidenceScan.mockReturnValue({
+      error: null,
+      isPending: false,
+      mutateAsync: vi.fn().mockResolvedValue({}),
+    });
     mocks.classifications.mockReturnValue(queryState({
       data: [
         {
           category: 'Documents',
+          fileCount: 1,
           totalSize: 4,
           status: 'parsed',
           warnings: [],
@@ -131,7 +209,7 @@ describe('DataAnalysis page', () => {
               provenance: {
                 dataSourceId: 'ds-1',
                 artifactPath: 'doc.pdf',
-                parser: 'analysis.magic',
+                parser: 'metadata.extension_path',
                 parsedAt: '2026-06-01T10:00:00Z',
                 status: 'parsed',
                 warnings: [],
@@ -142,7 +220,7 @@ describe('DataAnalysis page', () => {
             {
               dataSourceId: 'ds-1',
               artifactPath: 'doc.pdf',
-              parser: 'analysis.magic',
+              parser: 'metadata.extension_path',
               parsedAt: '2026-06-01T10:00:00Z',
               status: 'parsed',
               warnings: [],
@@ -169,13 +247,30 @@ describe('DataAnalysis page', () => {
     renderPage();
 
     expect(screen.getByText('请先创建或打开案件')).toBeDefined();
+    expect(screen.getAllByRole('button', { name: /加载演示案件/ }).length).toBeGreaterThan(0);
     expect(screen.queryByText('正在分析数据源...')).toBeNull();
+  });
+
+  it('loads the demo case from the empty state', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ id: 'demo-case', name: 'Analysis Demo' });
+    mocks.currentCase.mockReturnValue(queryState({ data: null }));
+    mocks.demoCase.mockReturnValue({
+      error: null,
+      isPending: false,
+      mutateAsync,
+    });
+
+    renderPage();
+    fireEvent.click(screen.getAllByRole('button', { name: /加载演示案件/ })[0]);
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
   });
 
   it('renders accessible tabs and parsed registry facts with provenance', () => {
     renderPage();
 
     expect(screen.getByRole('tab', { name: /系统信息/ })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /证据分类/ })).toBeDefined();
     expect(screen.getByRole('tab', { name: /文件分类/ })).toBeDefined();
     expect(screen.getByRole('tab', { name: /分析报告/ })).toBeDefined();
     expect(screen.getAllByText('已解析').length).toBeGreaterThan(0);
@@ -190,9 +285,30 @@ describe('DataAnalysis page', () => {
     expect(screen.getByText('ProductName')).toBeDefined();
     expect(screen.getByText('EventID 6005')).toBeDefined();
     expect(screen.getByText(/EventLog 6005 candidate/)).toBeDefined();
-    expect(screen.getByText(/evtx\.boot_shutdown/)).toBeDefined();
+    expect(screen.getAllByText(/evtx\.boot_shutdown/).length).toBeGreaterThan(0);
     expect(screen.queryByText('FORENSICS-PC')).toBeNull();
     expect(screen.queryByText('Windows 10')).toBeNull();
+  });
+
+  it('renders evidence semantic classification and can start targeted scan', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    mocks.evidenceScan.mockReturnValue({
+      error: null,
+      isPending: false,
+      mutateAsync,
+    });
+
+    renderPage();
+    fireEvent.click(screen.getByRole('tab', { name: /证据分类/ }));
+
+    expect(screen.getByText('证据语义分类')).toBeDefined();
+    expect(screen.getAllByText('系统信息').length).toBeGreaterThan(0);
+    expect(screen.getByText('事件日志')).toBeDefined();
+    expect(screen.getAllByText('Windows/System32/winevt/Logs/System.evtx').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('已发现候选').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: /开始证据分类/ }));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith([]));
   });
 
   it('renders notParsed system info without fake facts', () => {
@@ -232,7 +348,7 @@ describe('DataAnalysis page', () => {
     expect(screen.getByText('Documents')).toBeDefined();
     expect(screen.getAllByText('doc.pdf').length).toBeGreaterThan(0);
     expect(screen.getByText('PDF Document')).toBeDefined();
-    expect(screen.getAllByText(/analysis.magic/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/metadata\.extension_path/).length).toBeGreaterThan(0);
   });
 
   it('downloads markdown report through summary mutation', async () => {

@@ -21,8 +21,8 @@ import { useFileTreeKeyboard } from '@/hooks/use-file-tree-keyboard';
 import { useCurrentCase } from '@/features/case/hooks';
 import {
   useExtractFile,
-  useFileChildren,
-  useFileRows,
+  useFileChildrenPage,
+  useFileRowsPage,
   useFileTree,
   useFileViewer,
   useTextPreview,
@@ -111,6 +111,7 @@ export function FileBrowser() {
   >({});
   const [filterQuery, setFilterQuery] = useState('');
   const treeContainerRef = useRef<HTMLDivElement>(null);
+  const FILE_BROWSER_PAGE_LIMIT = 500;
 
   // 可调整宽度的面板
   const { width: treeWidth, isResizing, onResizeStart } = useResizablePanel({
@@ -121,8 +122,17 @@ export function FileBrowser() {
   });
 
   const activeDirectoryId = selectedDirectoryId ?? rootTree?.[0]?.id;
-  const { data: rows } = useFileRows(activeDirectoryId);
-  const { data: activeChildren } = useFileChildren(activeDirectoryId);
+  const activeDirectoryExpanded = Boolean(
+    activeDirectoryId && expandedDirectoryIds.includes(activeDirectoryId)
+  );
+  const { data: rowsPage } = useFileRowsPage(activeDirectoryId, 0, FILE_BROWSER_PAGE_LIMIT);
+  const { data: activeChildrenPage } = useFileChildrenPage(
+    activeDirectoryExpanded ? activeDirectoryId : undefined,
+    0,
+    FILE_BROWSER_PAGE_LIMIT,
+  );
+  const rows = rowsPage?.rows;
+  const activeChildren = activeChildrenPage?.children;
 
   // 缓存限制常量
   const MAX_TREE_CACHE_SIZE = 100;
@@ -388,7 +398,8 @@ export function FileBrowser() {
             viewer: metadata / hex 已启用
           </div>
           <div className="ml-auto text-[#888] text-[11px]">
-            显示 {rows?.length ?? 0} 个项目
+            显示 {rows?.length ?? 0}
+            {rowsPage?.truncated ? ` / ${rowsPage.totalCount}` : ''} 个项目
           </div>
         </div>
       </PageSubbar>
@@ -419,6 +430,11 @@ export function FileBrowser() {
             {filteredTreeNodes.length === 0 ? (
               <div className="px-3 py-4 text-[#888]">
                 {filterQuery ? '没有匹配的目录。' : '导入数据源后显示目录树。'}
+              </div>
+            ) : null}
+            {activeChildrenPage?.truncated ? (
+              <div className="mx-2 mb-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] leading-4 text-amber-800">
+                当前目录子目录很多，仅加载前 {activeChildrenPage.limit ?? FILE_BROWSER_PAGE_LIMIT} 个；请用右侧列表或搜索继续定位。
               </div>
             ) : null}
             {filteredTreeNodes.map((node, index) => {
@@ -506,7 +522,11 @@ export function FileBrowser() {
                 setSelectedFileId(row.id);
               }}
               emptyTitle="当前目录为空"
-              emptyDescription="所选路径下没有可展示的文件对象。"
+              emptyDescription={
+                rowsPage?.truncated
+                  ? `当前仅加载前 ${rowsPage.limit} 项，共 ${rowsPage.totalCount} 项。`
+                  : '所选路径下没有可展示的文件对象。'
+              }
               sortKey={fileSortKey}
               sortDirection={fileSortDirection}
               onSort={handleSort}

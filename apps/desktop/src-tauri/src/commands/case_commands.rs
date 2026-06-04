@@ -1,4 +1,6 @@
 use app_services::case_service;
+use domain::{DataSource, DataSourceId, DataSourceKind, EntryType, FileEntry, FileEntryId};
+use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
 use std::path::PathBuf;
 use tauri::{AppHandle, State};
 use transport::{
@@ -9,6 +11,7 @@ use transport::{
     dto::{CaseMetricsDto, CaseSummaryDto, DataSourceSummaryDto, RecentCaseDto, RecentObjectDto},
     CommandError,
 };
+use uuid::Uuid;
 
 use crate::{events::event_bridge, state::AppState};
 
@@ -62,6 +65,35 @@ pub fn open_case(
         .map_err(|e| CommandError::from_lock_error("Case", e))?;
     *guard = Some(active);
     remember_recent_case(&root, &dto)?;
+    event_bridge::emit_case_opened(&app, &dto.id, &dto.name);
+    Ok(dto)
+}
+
+#[tauri::command]
+pub fn create_analysis_demo_case(
+    state: State<AppState>,
+    app: AppHandle,
+) -> Result<CaseSummaryDto, CommandError> {
+    let case_root = std::env::temp_dir().join("forensics-workbench-analysis-demo");
+    if case_root.exists() {
+        std::fs::remove_dir_all(&case_root).map_err(|e| {
+            CommandError::internal(format!("Failed to reset analysis demo case: {e}"))
+        })?;
+    }
+    std::fs::create_dir_all(&case_root)
+        .map_err(|e| CommandError::internal(format!("Failed to create analysis demo root: {e}")))?;
+
+    let active = case_service::create_case(&case_root, "Analysis Demo", Some("Codex Demo"))
+        .map_err(CommandError::from_service_error)?;
+    seed_analysis_demo(&active).map_err(CommandError::from_service_error)?;
+
+    let dto = meta_to_dto(&active.meta);
+    let mut guard = state
+        .active_case
+        .lock()
+        .map_err(|e| CommandError::from_lock_error("Case", e))?;
+    *guard = Some(active);
+    remember_recent_case(&case_root.join("Analysis Demo"), &dto)?;
     event_bridge::emit_case_opened(&app, &dto.id, &dto.name);
     Ok(dto)
 }
@@ -398,10 +430,227 @@ fn read_recent_cases() -> Result<Vec<RecentCaseDto>, CommandError> {
         .collect())
 }
 
+fn seed_analysis_demo(active: &app_services::active_case::ActiveCase) -> Result<(), String> {
+    let evidence_root = active.case_root.join("evidence").join("analysis-demo");
+    if evidence_root.exists() {
+        std::fs::remove_dir_all(&evidence_root).map_err(|e| e.to_string())?;
+    }
+    std::fs::create_dir_all(&evidence_root).map_err(|e| e.to_string())?;
+
+    let fixture_root = repo_root().join("testdata").join("fixtures").join("tiny");
+    copy_dir_all(&fixture_root.join("logical"), &evidence_root)?;
+    let evtx_src = fixture_root.join("evtx").join("system.evtx");
+    let evtx_dest = evidence_root
+        .join("Windows")
+        .join("System32")
+        .join("winevt")
+        .join("Logs")
+        .join("System.evtx");
+    if let Some(parent) = evtx_dest.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::copy(&evtx_src, &evtx_dest)
+        .map_err(|e| format!("copy tiny System.evtx fixture: {e}"))?;
+
+    write_demo_file(
+        &evidence_root.join("Users").join("alice").join("report.pdf"),
+        b"%PDF-1.7\n% demo forensic report\n",
+    )?;
+    write_demo_file(
+        &evidence_root
+            .join("Users")
+            .join("alice")
+            .join("Downloads")
+            .join("tool.exe"),
+        b"MZdemo executable header",
+    )?;
+    write_demo_file(
+        &evidence_root
+            .join("Users")
+            .join("alice")
+            .join("Archive")
+            .join("case-notes.zip"),
+        b"PK\x03\x04demo zip payload",
+    )?;
+
+    let ds_id = DataSourceId(format!("demo-ds-{}", Uuid::new_v4()));
+    let data_source = DataSource {
+        id: ds_id.clone(),
+        name: "Analysis Demo Logical Evidence".to_string(),
+        kind: DataSourceKind::LogicalDirectory,
+        source_path: evidence_root.clone(),
+        imported_at: chrono::Utc::now(),
+    };
+    let mut entries = Vec::new();
+    collect_demo_entries(&evidence_root, &evidence_root, &ds_id, None, &mut entries)?;
+    active
+        .with_conn(|conn| {
+            DataSourceRepo::new(conn).insert(&active.meta.id, &data_source)?;
+            FileRepo::new(conn).insert_batch(&entries)?;
+            Ok(())
+        })
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn repo_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../..")
+        .canonicalize()
+        .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.."))
+}
+
+fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> Result<(), String> {
+    if !src.is_dir() {
+        return Err(format!("analysis demo fixture missing: {}", src.display()));
+    }
+    std::fs::create_dir_all(dst).map_err(|e| e.to_string())?;
+    for entry in std::fs::read_dir(src).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let file_type = entry.file_type().map_err(|e| e.to_string())?;
+        let target = dst.join(entry.file_name());
+        if file_type.is_dir() {
+            copy_dir_all(&entry.path(), &target)?;
+        } else if file_type.is_file() {
+            std::fs::copy(entry.path(), target).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+fn write_demo_file(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(path, bytes).map_err(|e| e.to_string())
+}
+
+fn collect_demo_entries(
+    root: &std::path::Path,
+    path: &std::path::Path,
+    data_source_id: &DataSourceId,
+    parent_id: Option<FileEntryId>,
+    entries: &mut Vec<FileEntry>,
+) -> Result<(), String> {
+    let mut children = std::fs::read_dir(path)
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    children.sort_by_key(|entry| entry.path());
+
+    for child in children {
+        let child_path = child.path();
+        let metadata = child.metadata().map_err(|e| e.to_string())?;
+        let relative = child_path
+            .strip_prefix(root)
+            .map_err(|e| e.to_string())?
+            .to_string_lossy()
+            .replace('\\', "/");
+        let id = FileEntryId(format!("demo-file-{}", Uuid::new_v4()));
+        let entry_type = if metadata.is_dir() {
+            EntryType::Directory
+        } else {
+            EntryType::File
+        };
+        entries.push(FileEntry {
+            id: id.clone(),
+            parent_id: parent_id.clone(),
+            data_source_id: data_source_id.clone(),
+            path: relative,
+            name: child.file_name().to_string_lossy().to_string(),
+            entry_type: entry_type.clone(),
+            size: if metadata.is_file() {
+                Some(metadata.len())
+            } else {
+                None
+            },
+            ext: child_path
+                .extension()
+                .map(|ext| ext.to_string_lossy().to_string()),
+            deleted: false,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        });
+        if entry_type == EntryType::Directory {
+            collect_demo_entries(root, &child_path, data_source_id, Some(id), entries)?;
+        }
+    }
+    Ok(())
+}
+
 fn valid_recent_case_root(case_root: &str) -> bool {
     if case_root.trim().is_empty() || case_root.contains('\0') {
         return false;
     }
     let root = PathBuf::from(case_root);
     root.is_dir() && root.join("case.json").is_file() && root.join("app.db").is_file()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use app_services::{analysis_service, file_service};
+
+    #[test]
+    fn analysis_demo_seed_supports_real_analysis_flow() {
+        let root = std::env::temp_dir().join(format!(
+            "forensics-workbench-analysis-demo-test-{}",
+            Uuid::new_v4()
+        ));
+        let active = case_service::create_case(&root, "Analysis Demo", Some("Codex Demo"))
+            .expect("create demo case");
+        seed_analysis_demo(&active).expect("seed demo case");
+
+        active
+            .with_conn(|conn| {
+                let info =
+                    analysis_service::extract_system_info_for_case(conn, |file_id, max_bytes| {
+                        file_service::read_file_header_by_id(conn, file_id, max_bytes)
+                    });
+                assert!(
+                    matches!(
+                        info.status,
+                        transport::dto::AnalysisParseStatusDto::Parsed
+                            | transport::dto::AnalysisParseStatusDto::Partial
+                    ),
+                    "expected parsed or partial system info, got {:?}",
+                    info.status
+                );
+                assert!(info.computer_name.is_some());
+                assert!(info.os_version.is_some());
+                assert!(info
+                    .provenance
+                    .iter()
+                    .any(|item| item.parser == "registry.system"));
+                assert!(info
+                    .provenance
+                    .iter()
+                    .any(|item| item.parser == "evtx.boot_shutdown"));
+
+                let files = analysis_service::collect_file_entries(conn).expect("collect files");
+                let classifications =
+                    analysis_service::classify_files_by_magic(&files, 5000, |file_id| {
+                        file_service::read_file_header_by_id(
+                            conn,
+                            file_id,
+                            analysis_service::MAGIC_HEADER_LIMIT,
+                        )
+                    });
+                let detected = classifications
+                    .iter()
+                    .flat_map(|category| category.files.iter())
+                    .map(|file| file.file_type.as_str())
+                    .collect::<Vec<_>>();
+                assert!(detected.contains(&"PDF"));
+                assert!(detected.contains(&"PE"));
+                assert!(detected.contains(&"ZIP"));
+                Ok(())
+            })
+            .expect("verify demo analysis");
+
+        std::fs::remove_dir_all(root).ok();
+    }
 }

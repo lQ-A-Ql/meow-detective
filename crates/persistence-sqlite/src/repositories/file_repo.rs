@@ -64,6 +64,32 @@ impl<'a> FileRepo<'a> {
         collect_entries(rows)
     }
 
+    pub fn find_children_page(
+        &self,
+        parent_id: &FileEntryId,
+        offset: u64,
+        limit: u32,
+    ) -> DbResult<Vec<FileEntry>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
+             FROM file_entries WHERE parent_id = ?1 ORDER BY entry_type ASC, name ASC LIMIT ?2 OFFSET ?3",
+        )?;
+        let rows = stmt.query_map(
+            params![parent_id.0, limit as i64, offset as i64],
+            row_to_file_entry,
+        )?;
+        collect_entries(rows)
+    }
+
+    pub fn count_children(&self, parent_id: &FileEntryId) -> DbResult<u64> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM file_entries WHERE parent_id = ?1",
+            params![parent_id.0],
+            |row| row.get(0),
+        )?;
+        Ok(count as u64)
+    }
+
     pub fn find_root_entries(&self) -> DbResult<Vec<FileEntry>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
@@ -73,13 +99,57 @@ impl<'a> FileRepo<'a> {
         collect_entries(rows)
     }
 
+    pub fn find_root_entries_page(&self, offset: u64, limit: u32) -> DbResult<Vec<FileEntry>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
+             FROM file_entries WHERE parent_id IS NULL ORDER BY entry_type ASC, name ASC LIMIT ?1 OFFSET ?2",
+        )?;
+        let rows = stmt.query_map(params![limit as i64, offset as i64], row_to_file_entry)?;
+        collect_entries(rows)
+    }
+
+    pub fn count_root_entries(&self) -> DbResult<u64> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM file_entries WHERE parent_id IS NULL",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(count as u64)
+    }
+
     pub fn find_child_directories(&self, parent_id: &FileEntryId) -> DbResult<Vec<FileEntry>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
-             FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory' ORDER BY name ASC",
+             FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE ORDER BY name ASC",
         )?;
         let rows = stmt.query_map(params![parent_id.0], row_to_file_entry)?;
         collect_entries(rows)
+    }
+
+    pub fn find_child_directories_page(
+        &self,
+        parent_id: &FileEntryId,
+        offset: u64,
+        limit: u32,
+    ) -> DbResult<Vec<FileEntry>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
+             FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE ORDER BY name ASC LIMIT ?2 OFFSET ?3",
+        )?;
+        let rows = stmt.query_map(
+            params![parent_id.0, limit as i64, offset as i64],
+            row_to_file_entry,
+        )?;
+        collect_entries(rows)
+    }
+
+    pub fn count_child_directories(&self, parent_id: &FileEntryId) -> DbResult<u64> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE",
+            params![parent_id.0],
+            |row| row.get(0),
+        )?;
+        Ok(count as u64)
     }
 
     pub fn find_roots(&self, data_source_id: &DataSourceId) -> DbResult<Vec<FileEntry>> {
@@ -103,7 +173,7 @@ impl<'a> FileRepo<'a> {
     pub fn find_root_directories(&self) -> DbResult<Vec<FileEntry>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
-             FROM file_entries WHERE parent_id IS NULL AND entry_type = 'directory' ORDER BY name ASC",
+             FROM file_entries WHERE parent_id IS NULL AND entry_type = 'directory' COLLATE NOCASE ORDER BY name ASC",
         )?;
         let rows = stmt.query_map([], row_to_file_entry)?;
         collect_entries(rows)
@@ -111,7 +181,7 @@ impl<'a> FileRepo<'a> {
 
     pub fn has_child_directories(&self, parent_id: &FileEntryId) -> DbResult<bool> {
         let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory'",
+            "SELECT COUNT(*) FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE",
             params![parent_id.0],
             |row| row.get(0),
         )?;
@@ -128,7 +198,7 @@ impl<'a> FileRepo<'a> {
         let placeholders: Vec<String> = (1..=parent_ids.len()).map(|i| format!("?{i}")).collect();
         let sql = format!(
             "SELECT parent_id, COUNT(*) FROM file_entries
-             WHERE parent_id IN ({}) AND entry_type = 'directory'
+             WHERE parent_id IN ({}) AND entry_type = 'directory' COLLATE NOCASE
              GROUP BY parent_id",
             placeholders.join(", ")
         );
@@ -224,7 +294,7 @@ fn row_to_file_entry(row: &rusqlite::Row) -> rusqlite::Result<FileEntry> {
         data_source_id: DataSourceId(row.get::<_, String>(2)?),
         path: row.get(3)?,
         name: row.get(4)?,
-        entry_type: if entry_type_str == "directory" {
+        entry_type: if entry_type_str.eq_ignore_ascii_case("directory") {
             EntryType::Directory
         } else {
             EntryType::File
@@ -320,5 +390,47 @@ mod tests {
         let underscore = repo.find_by_path_prefix(&ds_id, "root/test_file").unwrap();
         assert_eq!(underscore.len(), 1);
         assert_eq!(underscore[0].id.0, "underscore-literal");
+    }
+
+    #[test]
+    fn legacy_capitalized_entry_type_is_treated_as_directory() {
+        let tmp = TempDir::new().unwrap();
+        let conn = open_or_create(&tmp.path().join("case.db")).unwrap();
+        runner::run_all(&conn).unwrap();
+        let ds_id = DataSourceId("ds-legacy-entry-type".to_string());
+        insert_data_source(&conn, &ds_id);
+        conn.execute(
+            "INSERT INTO file_entries (id, parent_id, data_source_id, path, name, entry_type, size)
+             VALUES ('root-dir', NULL, ?1, 'EFI', 'EFI', 'Directory', 0)",
+            params![ds_id.0],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO file_entries (id, parent_id, data_source_id, path, name, entry_type, size)
+             VALUES ('child-dir', 'root-dir', ?1, 'EFI/Boot', 'Boot', 'Directory', 0)",
+            params![ds_id.0],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO file_entries (id, parent_id, data_source_id, path, name, entry_type, size)
+             VALUES ('child-file', 'root-dir', ?1, 'EFI/bootx64.efi', 'bootx64.efi', 'File', 4096)",
+            params![ds_id.0],
+        )
+        .unwrap();
+
+        let repo = FileRepo::new(&conn);
+        let root_id = FileEntryId("root-dir".to_string());
+        let roots = repo.find_root_directories().unwrap();
+        assert_eq!(roots.len(), 1);
+        assert_eq!(roots[0].entry_type, EntryType::Directory);
+        assert_eq!(roots[0].id.0, root_id.0);
+
+        assert!(repo.has_child_directories(&root_id).unwrap());
+        let child_dirs = repo.find_child_directories(&root_id).unwrap();
+        assert_eq!(child_dirs.len(), 1);
+        assert_eq!(child_dirs[0].entry_type, EntryType::Directory);
+
+        let counts = repo.count_child_directories_batch(&[&root_id]).unwrap();
+        assert_eq!(counts.get("root-dir"), Some(&1));
     }
 }

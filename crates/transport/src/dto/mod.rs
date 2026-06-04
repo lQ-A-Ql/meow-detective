@@ -12,14 +12,15 @@ pub mod viewer;
 pub use analysis::{
     AnalysisBootRecordDto, AnalysisClassifiedFileDto, AnalysisFieldProvenanceDto,
     AnalysisFileClassificationDto, AnalysisNetworkAdapterDto, AnalysisParseStatusDto,
-    AnalysisProvenanceDto, AnalysisSystemInfoDto,
+    AnalysisProvenanceDto, AnalysisSystemInfoDto, EvidenceCategoryDto,
+    EvidenceClassificationSummaryDto, EvidenceClassificationTotalsDto, EvidenceSourceDto,
 };
 pub use artifacts::{ArtifactRowDto, FamilyCountDto};
 pub use case::{
     CaseMetricsDto, CaseSummaryDto, DataSourcePartitionDto, DataSourceSummaryDto, RecentCaseDto,
     RecentObjectDto,
 };
-pub use files::{FileChildrenDto, FileEntryRowDto, FileTreeNodeDto};
+pub use files::{FileChildrenDto, FileEntryRowDto, FileRowsPageDto, FileTreeNodeDto};
 pub use jobs::{JobSnapshotDto, TraceItemDto, WarningItemDto};
 pub use mcp::{
     McpCapabilitiesDto, McpConfigDto, McpPromptArgumentDto, McpPromptDto, McpResourceDto,

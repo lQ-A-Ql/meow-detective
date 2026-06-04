@@ -62,6 +62,8 @@ impl MftRecordParser {
         let mut fn_modified: Option<DateTime<Utc>> = None;
         let mut fn_accessed: Option<DateTime<Utc>> = None;
         let mut fn_changed: Option<DateTime<Utc>> = None;
+        let mut fn_real_size: Option<u64> = None;
+        let mut selected_name_rank: Option<u8> = None;
 
         let mut pos = attr_off;
         while pos + 8 < rec.len() {
@@ -88,14 +90,6 @@ impl MftRecordParser {
                 0x30 => {
                     if let Some(content) = resident_content(&rec, pos, len) {
                         if content.len() >= 0x52 {
-                            parent_ref = u64::from_le_bytes(content[0..8].try_into().ok()?)
-                                & 0x0000_FFFF_FFFF_FFFF;
-
-                            fn_created = ntfs_to_datetime(read_ntfs_time(content, 0x08));
-                            fn_modified = ntfs_to_datetime(read_ntfs_time(content, 0x10));
-                            fn_changed = ntfs_to_datetime(read_ntfs_time(content, 0x18));
-                            fn_accessed = ntfs_to_datetime(read_ntfs_time(content, 0x20));
-
                             let name_len = content[0x40] as usize;
                             let name_ns = content[0x41]; // namespace: 0=POSIX, 1=Win32, 2=DOS, 3=Win32+DOS
                             let name_start = 0x42;
@@ -107,9 +101,25 @@ impl MftRecordParser {
                                     .collect();
                                 let parsed_name = String::from_utf16_lossy(&chars);
 
-                                // Prefer Win32 namespace (1) or Win32+DOS (3) over POSIX (0) and DOS (2)
-                                if name.is_empty() || name_ns == 1 || name_ns == 3 {
+                                // Keep name, parent ref, and timestamps from the same
+                                // $FILE_NAME attribute. Real NTFS records often contain
+                                // both DOS 8.3 and Win32 names; mixing name from one
+                                // attribute with parent_ref from another corrupts paths.
+                                let rank = file_name_namespace_rank(name_ns);
+                                if selected_name_rank.is_none_or(|current| rank > current) {
                                     name = parsed_name;
+                                    parent_ref = u64::from_le_bytes(content[0..8].try_into().ok()?)
+                                        & 0x0000_FFFF_FFFF_FFFF;
+                                    fn_created = ntfs_to_datetime(read_ntfs_time(content, 0x08));
+                                    fn_modified = ntfs_to_datetime(read_ntfs_time(content, 0x10));
+                                    fn_changed = ntfs_to_datetime(read_ntfs_time(content, 0x18));
+                                    fn_accessed = ntfs_to_datetime(read_ntfs_time(content, 0x20));
+                                    if !is_dir && content.len() >= 0x38 {
+                                        fn_real_size = Some(u64::from_le_bytes(
+                                            content[0x30..0x38].try_into().ok()?,
+                                        ));
+                                    }
+                                    selected_name_rank = Some(rank);
                                 }
                             }
                         }
@@ -117,6 +127,10 @@ impl MftRecordParser {
                 }
                 0x80 => {
                     // $DATA — file size
+                    if !is_unnamed_attribute(&rec, pos) {
+                        pos += len;
+                        continue;
+                    }
                     let is_nonresident = pos + 9 <= rec.len() && (rec[pos + 8] & 1) != 0;
                     if is_nonresident {
                         if pos + 0x38 <= rec.len() {
@@ -143,6 +157,12 @@ impl MftRecordParser {
 
         let is_valid = !name.is_empty() || record_number < 24;
 
+        let size = if !is_dir && size == 0 {
+            fn_real_size.unwrap_or(size)
+        } else {
+            size
+        };
+
         Some(MftRecord {
             record_number,
             name,
@@ -155,6 +175,16 @@ impl MftRecordParser {
             changed_at: final_changed,
             is_valid,
         })
+    }
+}
+
+fn file_name_namespace_rank(namespace: u8) -> u8 {
+    match namespace {
+        1 => 4, // Win32
+        3 => 3, // Win32 + DOS
+        0 => 2, // POSIX
+        2 => 1, // DOS 8.3
+        _ => 0,
     }
 }
 
@@ -246,6 +276,10 @@ fn resident_content(record: &[u8], attr_pos: usize, attr_len: usize) -> Option<&
         return None;
     }
     record.get(content_start..content_end.min(record.len()))
+}
+
+fn is_unnamed_attribute(record: &[u8], attr_pos: usize) -> bool {
+    attr_pos + 0x0a <= record.len() && record[attr_pos + 0x09] == 0
 }
 
 /// Read NTFS timestamp (100-nanosecond intervals since 1601-01-01).
@@ -360,6 +394,7 @@ mod tests {
         rec[fn_content + 16..fn_content + 24].copy_from_slice(&test_time.to_le_bytes());
         rec[fn_content + 24..fn_content + 32].copy_from_slice(&test_time.to_le_bytes());
         rec[fn_content + 32..fn_content + 40].copy_from_slice(&test_time.to_le_bytes());
+        rec[fn_content + 0x30..fn_content + 0x38].copy_from_slice(&1234u64.to_le_bytes());
         // name_len
         rec[fn_content + 0x40] = name_bytes.len() as u8;
         // name_namespace: 1 = Win32
@@ -384,6 +419,119 @@ mod tests {
         rec
     }
 
+    fn append_file_name_attr(rec: &mut [u8], name: &str, parent: u64, namespace: u8) {
+        let mut pos = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
+        while pos + 8 < rec.len() {
+            let typ = u32::from_le_bytes(rec[pos..pos + 4].try_into().unwrap_or([0; 4]));
+            if typ == 0xFFFFFFFF || typ == 0 {
+                break;
+            }
+            let len =
+                u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
+            if len == 0 || pos + len > rec.len() {
+                break;
+            }
+            pos += len;
+        }
+
+        let name_bytes: Vec<u16> = name.encode_utf16().collect();
+        let fn_content_size = 0x52usize + name_bytes.len() * 2;
+        let fn_attr_len = 0x18usize + fn_content_size;
+        assert!(pos + fn_attr_len + 4 <= rec.len());
+        rec[pos..pos + 4].copy_from_slice(&0x30u32.to_le_bytes());
+        rec[pos + 4..pos + 8].copy_from_slice(&(fn_attr_len as u32).to_le_bytes());
+        rec[pos + 8] = 0;
+        rec[pos + 0x10..pos + 0x14].copy_from_slice(&(fn_content_size as u32).to_le_bytes());
+        rec[pos + 0x14..pos + 0x16].copy_from_slice(&0x18u16.to_le_bytes());
+        let content = pos + 0x18;
+        rec[content..content + 8].copy_from_slice(&parent.to_le_bytes());
+        rec[content + 0x40] = name_bytes.len() as u8;
+        rec[content + 0x41] = namespace;
+        for (index, ch) in name_bytes.iter().enumerate() {
+            let off = content + 0x42 + index * 2;
+            rec[off..off + 2].copy_from_slice(&ch.to_le_bytes());
+        }
+        let end = pos + fn_attr_len;
+        rec[end..end + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+    }
+
+    fn set_first_file_name_namespace(rec: &mut [u8], namespace: u8) {
+        let mut pos = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
+        while pos + 8 < rec.len() {
+            let typ = u32::from_le_bytes(rec[pos..pos + 4].try_into().unwrap_or([0; 4]));
+            let len =
+                u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
+            if typ == 0x30 {
+                if let Some(content) = resident_content(rec, pos, len) {
+                    let namespace_offset = content.as_ptr() as usize - rec.as_ptr() as usize + 0x41;
+                    rec[namespace_offset] = namespace;
+                }
+                return;
+            }
+            if typ == 0xFFFFFFFF || len == 0 || pos + len > rec.len() {
+                return;
+            }
+            pos += len;
+        }
+    }
+
+    fn append_named_resident_data_attr(rec: &mut [u8], name: &str, size: u32) {
+        let mut pos = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
+        while pos + 8 < rec.len() {
+            let typ = u32::from_le_bytes(rec[pos..pos + 4].try_into().unwrap_or([0; 4]));
+            if typ == 0xFFFF_FFFF || typ == 0 {
+                break;
+            }
+            let len =
+                u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
+            if len == 0 || pos + len > rec.len() {
+                break;
+            }
+            pos += len;
+        }
+
+        let name_bytes: Vec<u16> = name.encode_utf16().collect();
+        let name_bytes_len = name_bytes.len() * 2;
+        let content_size = size as usize;
+        let name_offset = 0x18usize;
+        let content_offset = name_offset + name_bytes_len;
+        let attr_len = content_offset + content_size;
+        assert!(pos + attr_len + 4 <= rec.len());
+        rec[pos..pos + 4].copy_from_slice(&0x80u32.to_le_bytes());
+        rec[pos + 4..pos + 8].copy_from_slice(&(attr_len as u32).to_le_bytes());
+        rec[pos + 8] = 0;
+        rec[pos + 9] = name_bytes.len() as u8;
+        rec[pos + 0x0a..pos + 0x0c].copy_from_slice(&(name_offset as u16).to_le_bytes());
+        rec[pos + 0x10..pos + 0x14].copy_from_slice(&size.to_le_bytes());
+        rec[pos + 0x14..pos + 0x16].copy_from_slice(&(content_offset as u16).to_le_bytes());
+        for (index, ch) in name_bytes.iter().enumerate() {
+            let off = pos + name_offset + index * 2;
+            rec[off..off + 2].copy_from_slice(&ch.to_le_bytes());
+        }
+        let end = pos + attr_len;
+        rec[end..end + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+    }
+
+    fn remove_data_attrs(rec: &mut [u8]) {
+        let mut pos = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
+        while pos + 8 < rec.len() {
+            let typ = u32::from_le_bytes(rec[pos..pos + 4].try_into().unwrap_or([0; 4]));
+            if typ == 0xFFFF_FFFF || typ == 0 {
+                break;
+            }
+            let len =
+                u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
+            if len == 0 || pos + len > rec.len() {
+                break;
+            }
+            if typ == 0x80 {
+                rec[pos..pos + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+                break;
+            }
+            pos += len;
+        }
+    }
+
     #[test]
     fn parse_valid_file_record() {
         let parser = MftRecordParser::new(1024, 512);
@@ -403,6 +551,35 @@ mod tests {
         let result = parser.parse(&rec, 200).unwrap();
         assert_eq!(result.name, "Users");
         assert!(result.is_dir);
+    }
+
+    #[test]
+    fn parse_multiple_file_name_attrs_keeps_selected_parent_ref() {
+        let parser = MftRecordParser::new(1024, 512);
+        let mut rec = make_test_record(300, "WINDOW~1", 5, true);
+        set_first_file_name_namespace(&mut rec, 2);
+        append_file_name_attr(&mut rec, "Windows", 42, 1);
+        let result = parser.parse(&rec, 300).unwrap();
+        assert_eq!(result.name, "Windows");
+        assert_eq!(result.parent_ref, 42);
+    }
+
+    #[test]
+    fn named_data_stream_does_not_override_primary_file_size() {
+        let parser = MftRecordParser::new(1024, 512);
+        let mut rec = make_test_record(301, "System.evtx", 5, false);
+        append_named_resident_data_attr(&mut rec, "Zone.Identifier", 0);
+        let result = parser.parse(&rec, 301).unwrap();
+        assert_eq!(result.size, 1234);
+    }
+
+    #[test]
+    fn file_name_real_size_is_fallback_when_data_attr_unavailable() {
+        let parser = MftRecordParser::new(1024, 512);
+        let mut rec = make_test_record(302, "SOFTWARE", 5, false);
+        remove_data_attrs(&mut rec);
+        let result = parser.parse(&rec, 302).unwrap();
+        assert_eq!(result.size, 1234);
     }
 
     #[test]

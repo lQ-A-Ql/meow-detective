@@ -29,7 +29,7 @@ describe('analysis API (mock mode)', () => {
     expect(result[0].provenance.length).toBeGreaterThan(0);
     expect(result[0].files[0].fileId).toBeDefined();
     expect(result[0].files[0].magicDescription).toBeDefined();
-    expect(result[0].files[0].provenance.parser).toBe('analysis.magic');
+    expect(result[0].files[0].provenance.parser).toBe('metadata.extension_path');
   });
 
   it('generateAnalysisSummary returns markdown without hardcoded fake system facts', async () => {

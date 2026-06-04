@@ -6,6 +6,7 @@ import {
   DataSourceSummary,
   CaseSummary,
   FileEntryRow,
+  EvidenceClassificationSummary,
   FileTreeNode,
   JobSnapshot,
   RecentCase,
@@ -24,6 +25,7 @@ import {
   artifactFamilies,
   artifactRows,
   analysisClassifications,
+  evidenceClassificationSummary,
   analysisSummary,
   analysisSystemInfo,
   caseMetrics,
@@ -69,6 +71,8 @@ export interface ApiProvider {
   getTraceItems(): Promise<TraceItem[]>;
   getSystemInfo(): Promise<AnalysisSystemInfo>;
   classifyFiles(sampleSize?: number): Promise<AnalysisFileClassification[]>;
+  getEvidenceClassificationSummary(): Promise<EvidenceClassificationSummary>;
+  runEvidenceClassification(categories?: string[]): Promise<EvidenceClassificationSummary>;
   generateAnalysisSummary(): Promise<string>;
 }
 
@@ -166,6 +170,20 @@ export const mockProvider: ApiProvider = {
         };
       })
       .filter((classification) => classification.files.length > 0);
+  },
+  async getEvidenceClassificationSummary() {
+    return evidenceClassificationSummary;
+  },
+  async runEvidenceClassification(_categories?: string[]) {
+    return {
+      ...evidenceClassificationSummary,
+      status: 'parsed',
+      categories: evidenceClassificationSummary.categories.map((category) => (
+        category.status === 'candidateFound'
+          ? { ...category, status: 'parsed', artifactCount: Math.max(category.artifactCount, 1) }
+          : category
+      )),
+    };
   },
   async generateAnalysisSummary() {
     return analysisSummary;

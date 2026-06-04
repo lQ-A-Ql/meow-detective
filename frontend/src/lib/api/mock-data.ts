@@ -5,6 +5,7 @@ import {
   CaseMetrics,
   CaseSummary,
   DataSourceSummary,
+  EvidenceClassificationSummary,
   FileEntryRow,
   JobSnapshot,
   RecentCase,
@@ -209,6 +210,7 @@ export const analysisSystemInfo: AnalysisSystemInfo = {
 export const analysisClassifications: AnalysisFileClassification[] = [
   {
     category: 'Executables',
+    fileCount: 1,
     totalSize: 10200000,
     status: 'parsed',
     warnings: [],
@@ -223,7 +225,7 @@ export const analysisClassifications: AnalysisFileClassification[] = [
         provenance: {
           dataSourceId: 'ds-001',
           artifactPath: 'C:/Windows/System32/ntoskrnl.exe',
-          parser: 'analysis.magic',
+          parser: 'metadata.extension_path',
           parsedAt: '2026-06-01T10:00:00Z',
           status: 'parsed',
           warnings: [],
@@ -234,7 +236,7 @@ export const analysisClassifications: AnalysisFileClassification[] = [
       {
         dataSourceId: 'ds-001',
         artifactPath: 'C:/Windows/System32/ntoskrnl.exe',
-        parser: 'analysis.magic',
+        parser: 'metadata.extension_path',
         parsedAt: '2026-06-01T10:00:00Z',
         status: 'parsed',
         warnings: [],
@@ -243,6 +245,7 @@ export const analysisClassifications: AnalysisFileClassification[] = [
   },
   {
     category: 'Documents',
+    fileCount: 1,
     totalSize: 4096,
     status: 'parsed',
     warnings: [],
@@ -257,7 +260,7 @@ export const analysisClassifications: AnalysisFileClassification[] = [
         provenance: {
           dataSourceId: 'ds-001',
           artifactPath: 'C:/Users/Admin/Documents/Project_Alpha.doc',
-          parser: 'analysis.magic',
+          parser: 'metadata.extension_path',
           parsedAt: '2026-06-01T10:00:00Z',
           status: 'parsed',
           warnings: [],
@@ -268,7 +271,7 @@ export const analysisClassifications: AnalysisFileClassification[] = [
       {
         dataSourceId: 'ds-001',
         artifactPath: 'C:/Users/Admin/Documents/Project_Alpha.doc',
-        parser: 'analysis.magic',
+        parser: 'metadata.extension_path',
         parsedAt: '2026-06-01T10:00:00Z',
         status: 'parsed',
         warnings: [],
@@ -277,6 +280,7 @@ export const analysisClassifications: AnalysisFileClassification[] = [
   },
   {
     category: 'Other',
+    fileCount: 1,
     totalSize: 1100000,
     status: 'parsed',
     warnings: ['仅分析前 1000 个文件；数据源包含 12844 个文件。'],
@@ -291,7 +295,7 @@ export const analysisClassifications: AnalysisFileClassification[] = [
         provenance: {
           dataSourceId: 'ds-001',
           artifactPath: 'C:/Windows/System32/hal.dll',
-          parser: 'analysis.magic',
+          parser: 'metadata.extension_path',
           parsedAt: '2026-06-01T10:00:00Z',
           status: 'parsed',
           warnings: [],
@@ -302,7 +306,7 @@ export const analysisClassifications: AnalysisFileClassification[] = [
       {
         dataSourceId: 'ds-001',
         artifactPath: 'C:/Windows/System32/hal.dll',
-        parser: 'analysis.magic',
+        parser: 'metadata.extension_path',
         parsedAt: '2026-06-01T10:00:00Z',
         status: 'parsed',
         warnings: [],
@@ -310,6 +314,161 @@ export const analysisClassifications: AnalysisFileClassification[] = [
     ],
   },
 ];
+
+export const evidenceClassificationSummary: EvidenceClassificationSummary = {
+  status: 'candidateFound',
+  generatedAt: '2026-06-01T10:00:00Z',
+  warnings: [],
+  totals: {
+    categoryCount: 9,
+    candidateFileCount: 8,
+    totalSize: 92819456,
+    artifactCount: 3,
+  },
+  categories: [
+    {
+      category: 'SystemInformation',
+      displayName: '系统信息',
+      status: 'parsed',
+      fileCount: 2,
+      totalSize: 9306112,
+      artifactCount: 1,
+      confidence: 0.95,
+      warnings: [],
+      sources: [
+        {
+          fileId: 'file-system',
+          path: 'Windows/System32/config/SYSTEM',
+          size: 4096,
+          evidenceKind: 'registry_hive',
+          parser: 'registry.system_info',
+          status: 'parsed',
+          artifactCount: 1,
+          warnings: [],
+        },
+        {
+          fileId: 'file-software',
+          path: 'Windows/System32/config/SOFTWARE',
+          size: 9302016,
+          evidenceKind: 'registry_hive',
+          parser: 'registry.system_info',
+          status: 'candidateFound',
+          artifactCount: 0,
+          warnings: [],
+        },
+      ],
+      provenance: [
+        {
+          dataSourceId: 'ds-001',
+          artifactPath: 'Windows/System32/config/SYSTEM',
+          parser: 'registry.system_info',
+          parsedAt: '2026-06-01T10:00:00Z',
+          status: 'parsed',
+          warnings: [],
+        },
+      ],
+    },
+    {
+      category: 'EventLogs',
+      displayName: '事件日志',
+      status: 'candidateFound',
+      fileCount: 1,
+      totalSize: 2166784,
+      artifactCount: 0,
+      confidence: 0.65,
+      warnings: ['已发现候选文件；EVTX 全量事件解析不在 v1 默认任务内。'],
+      sources: [
+        {
+          fileId: 'file-system-evtx',
+          path: 'Windows/System32/winevt/Logs/System.evtx',
+          size: 2166784,
+          evidenceKind: 'event_log',
+          parser: 'evtx.boot_shutdown',
+          status: 'candidateFound',
+          artifactCount: 0,
+          warnings: [],
+        },
+      ],
+      provenance: [],
+    },
+    {
+      category: 'ProgramExecution',
+      displayName: '程序执行',
+      status: 'parsed',
+      fileCount: 1,
+      totalSize: 98304,
+      artifactCount: 2,
+      confidence: 0.95,
+      warnings: [],
+      sources: [
+        {
+          fileId: 'file-prefetch',
+          path: 'Windows/Prefetch/CMD.EXE-12345678.pf',
+          size: 98304,
+          evidenceKind: 'execution_artifact',
+          parser: 'prefetch.amcache.shimcache',
+          status: 'parsed',
+          artifactCount: 2,
+          warnings: [],
+        },
+      ],
+      provenance: [
+        {
+          dataSourceId: 'ds-001',
+          artifactPath: 'Windows/Prefetch/CMD.EXE-12345678.pf',
+          parser: 'prefetch.amcache.shimcache',
+          parsedAt: '2026-06-01T10:00:00Z',
+          status: 'parsed',
+          warnings: [],
+        },
+      ],
+    },
+    {
+      category: 'UserActivity',
+      displayName: '用户活动',
+      status: 'candidateFound',
+      fileCount: 1,
+      totalSize: 4096,
+      artifactCount: 0,
+      confidence: 0.65,
+      warnings: [],
+      sources: [
+        {
+          fileId: 'file-lnk',
+          path: 'Users/Admin/AppData/Roaming/Microsoft/Windows/Recent/demo.lnk',
+          size: 4096,
+          evidenceKind: 'user_activity',
+          parser: 'lnk.jumplist.shellbags',
+          status: 'candidateFound',
+          artifactCount: 0,
+          warnings: [],
+        },
+      ],
+      provenance: [],
+    },
+    {
+      category: 'FileTypeInventory',
+      displayName: '文件类型清单',
+      status: 'parsed',
+      fileCount: 3,
+      totalSize: 11304096,
+      artifactCount: 0,
+      confidence: 0.75,
+      warnings: ['文件类型清单来自 metadata-only 分类；未读取文件正文。'],
+      sources: [],
+      provenance: [
+        {
+          dataSourceId: '',
+          artifactPath: '',
+          parser: 'metadata.extension_path',
+          parsedAt: '2026-06-01T10:00:00Z',
+          status: 'parsed',
+          warnings: ['metadata aggregate from file_entries'],
+        },
+      ],
+    },
+  ],
+};
 
 export const analysisSummary = `# 数据源分析报告
 

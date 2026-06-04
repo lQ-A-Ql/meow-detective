@@ -3,7 +3,9 @@ import { useEffect } from 'react';
 import {
   extractFile,
   getFileChildren,
+  getFileChildrenPage,
   getFileRows,
+  getFileRowsPage,
   getFileTree,
   getTextPreview,
   getImagePreview,
@@ -41,10 +43,27 @@ export function useFileRows(parentId?: string) {
   });
 }
 
+export function useFileRowsPage(parentId?: string, offset = 0, limit = 500) {
+  return useQuery({
+    queryKey: ['files', 'rows-page', parentId ?? null, offset, limit],
+    queryFn: () => getFileRowsPage(parentId, offset, limit),
+    enabled: parentId !== undefined,
+  });
+}
+
 export function useFileChildren(parentId?: string) {
   return useQuery({
     queryKey: ['files', 'children', parentId],
     queryFn: () => getFileChildren(parentId!),
+    enabled: Boolean(parentId),
+    staleTime: 60_000,
+  });
+}
+
+export function useFileChildrenPage(parentId?: string, offset = 0, limit = 500) {
+  return useQuery({
+    queryKey: ['files', 'children-page', parentId, offset, limit],
+    queryFn: () => getFileChildrenPage(parentId!, offset, limit),
     enabled: Boolean(parentId),
     staleTime: 60_000,
   });

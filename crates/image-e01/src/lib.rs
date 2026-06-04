@@ -1,9 +1,18 @@
 use evidence_core::{EvidenceReader, ReaderInfo};
+use std::collections::VecDeque;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 const SECTION_DESCRIPTOR_SIZE: u64 = 76;
 const V1_TABLE_HEADER_SIZE: usize = 24;
+const SEQUENTIAL_PREFETCH_CHUNKS: u64 = 3;
+const SEQUENTIAL_CACHE_MAX_BYTES: usize = 16 * 1024 * 1024;
+
+struct CachedChunk {
+    idx: u64,
+    data: Arc<[u8]>,
+}
 
 /// E01 reader with multi-segment support.
 /// Opens .E01 and auto-detects .E02, .E03... files.
@@ -15,6 +24,9 @@ pub struct E01Reader {
     chunk_table: Vec<(usize, u64, bool, u64)>, // (segment, offset, compressed, stored_size)
     segment_files: Vec<std::fs::File>,
     cursor: u64,
+    chunk_cache: VecDeque<CachedChunk>,
+    chunk_cache_bytes: usize,
+    last_chunk_read: Option<u64>,
 }
 
 impl E01Reader {
@@ -152,10 +164,13 @@ impl E01Reader {
             chunk_table,
             segment_files,
             cursor: 0,
+            chunk_cache: VecDeque::new(),
+            chunk_cache_bytes: 0,
+            last_chunk_read: None,
         })
     }
 
-    fn read_chunk(&mut self, idx: u64) -> io::Result<Vec<u8>> {
+    fn read_chunk_uncached(&mut self, idx: u64) -> io::Result<Vec<u8>> {
         let (seg_idx, offset, compressed, stored_size) = chunk_entry(&self.chunk_table, idx)?;
         let chunk_bytes = self.chunk_size_sectors as usize * 512;
 
@@ -212,6 +227,75 @@ impl E01Reader {
         }
     }
 
+    fn read_chunk_cached(&mut self, idx: u64, sequential: bool) -> io::Result<Arc<[u8]>> {
+        if let Some(data) = self.cached_chunk(idx) {
+            if sequential {
+                self.prefetch_chunks_after(idx);
+            }
+            return Ok(data);
+        }
+
+        let data = Arc::<[u8]>::from(self.read_chunk_uncached(idx)?.into_boxed_slice());
+        self.insert_cached_chunk(idx, Arc::clone(&data));
+        if sequential {
+            self.prefetch_chunks_after(idx);
+        }
+        Ok(data)
+    }
+
+    fn cached_chunk(&self, idx: u64) -> Option<Arc<[u8]>> {
+        self.chunk_cache
+            .iter()
+            .find(|chunk| chunk.idx == idx)
+            .map(|chunk| Arc::clone(&chunk.data))
+    }
+
+    fn insert_cached_chunk(&mut self, idx: u64, data: Arc<[u8]>) {
+        if data.len() > SEQUENTIAL_CACHE_MAX_BYTES {
+            return;
+        }
+        if self.chunk_cache.iter().any(|chunk| chunk.idx == idx) {
+            return;
+        }
+
+        self.chunk_cache_bytes = self.chunk_cache_bytes.saturating_add(data.len());
+        self.chunk_cache.push_back(CachedChunk { idx, data });
+        while self.chunk_cache_bytes > SEQUENTIAL_CACHE_MAX_BYTES && self.chunk_cache.len() > 1 {
+            if let Some(old) = self.chunk_cache.pop_front() {
+                self.chunk_cache_bytes = self.chunk_cache_bytes.saturating_sub(old.data.len());
+            }
+        }
+    }
+
+    fn prefetch_chunks_after(&mut self, idx: u64) {
+        let Some(start_idx) = idx.checked_add(1) else {
+            return;
+        };
+        let end_idx = idx.saturating_add(SEQUENTIAL_PREFETCH_CHUNKS);
+        for next_idx in start_idx..=end_idx {
+            if next_idx as usize >= self.chunk_table.len() {
+                break;
+            }
+            if self.cached_chunk(next_idx).is_some() {
+                continue;
+            }
+
+            match self.read_chunk_uncached(next_idx) {
+                Ok(data) => {
+                    self.insert_cached_chunk(next_idx, Arc::<[u8]>::from(data.into_boxed_slice()))
+                }
+                Err(err) => {
+                    tracing::debug!(
+                        "E01 sequential prefetch stopped at chunk {}: {}",
+                        next_idx,
+                        err
+                    );
+                    break;
+                }
+            }
+        }
+    }
+
     fn read_bytes(&mut self, buf: &mut [u8], offset: u64) -> io::Result<usize> {
         if offset >= self.total_bytes {
             return Ok(0);
@@ -222,13 +306,27 @@ impl E01Reader {
         while total < buf.len() && off < self.total_bytes {
             let chunk_idx = off / csize;
             let intra = (off % csize) as usize;
-            let data = self.read_chunk(chunk_idx)?;
+            let sequential = self
+                .last_chunk_read
+                .is_some_and(|last| chunk_idx == last || chunk_idx == last + 1);
+            let data = self.read_chunk_cached(chunk_idx, sequential)?;
             let avail = (data.len() - intra).min(buf.len() - total);
             buf[total..total + avail].copy_from_slice(&data[intra..intra + avail]);
             total += avail;
             off += avail as u64;
+            self.last_chunk_read = Some(chunk_idx);
         }
         Ok(total)
+    }
+
+    #[cfg(test)]
+    fn cached_chunk_indices_for_test(&self) -> Vec<u64> {
+        self.chunk_cache.iter().map(|chunk| chunk.idx).collect()
+    }
+
+    #[cfg(test)]
+    fn cache_bytes_for_test(&self) -> usize {
+        self.chunk_cache_bytes
     }
 }
 
@@ -248,6 +346,7 @@ impl Seek for E01Reader {
             SeekFrom::Current(p) => ((self.cursor as i64) + p).max(0) as u64,
         }
         .min(self.total_bytes);
+        self.last_chunk_read = None;
         Ok(self.cursor)
     }
 }
@@ -396,6 +495,7 @@ fn build_segment_path(first_segment: &Path, seg_num: u32) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
 
     #[test]
     fn test_build_segment_path_first() {
@@ -433,5 +533,110 @@ mod tests {
     #[test]
     fn test_v1_table_header_size() {
         assert_eq!(V1_TABLE_HEADER_SIZE, 24);
+    }
+
+    #[test]
+    fn sequential_reads_populate_bounded_neighbor_cache() {
+        let dir = std::env::temp_dir().join("e01_cache_prefetch");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("cache.E01");
+        write_multichunk_e01(&path, 6).unwrap();
+
+        let mut reader = E01Reader::open(&path).unwrap();
+        let chunk_bytes = reader.chunk_size_sectors as usize * 512;
+        let mut buf = vec![0u8; chunk_bytes + 1];
+        reader.read_exact(&mut buf).unwrap();
+
+        let cached = reader.cached_chunk_indices_for_test();
+        assert!(cached.contains(&0));
+        assert!(cached.contains(&1));
+        assert!(cached.contains(&2));
+        assert!(cached.contains(&3));
+        assert!(reader.cache_bytes_for_test() <= SEQUENTIAL_CACHE_MAX_BYTES);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn seek_resets_sequential_prefetch_hint() {
+        let dir = std::env::temp_dir().join("e01_cache_seek_reset");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("cache.E01");
+        write_multichunk_e01(&path, 6).unwrap();
+
+        let mut reader = E01Reader::open(&path).unwrap();
+        let chunk_bytes = reader.chunk_size_sectors as u64 * 512;
+        let mut byte = [0u8; 1];
+        reader.read_exact(&mut byte).unwrap();
+        reader.seek(SeekFrom::Start(chunk_bytes * 4)).unwrap();
+        reader.read_exact(&mut byte).unwrap();
+
+        let cached = reader.cached_chunk_indices_for_test();
+        assert!(cached.contains(&0));
+        assert!(cached.contains(&4));
+        assert!(!cached.contains(&5));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn write_multichunk_e01(path: &Path, chunk_count: u32) -> io::Result<()> {
+        let chunk_sectors: u32 = 8;
+        let sectors = chunk_count as u64 * chunk_sectors as u64;
+        let chunk_bytes = (chunk_sectors * 512) as usize;
+
+        let mut f = std::fs::File::create(path)?;
+        f.write_all(b"EVF\t\r\n\x01\x00\x00\x01\x00\x01\x00")?;
+
+        let mut vol = vec![0u8; 36];
+        vol[12..16].copy_from_slice(&chunk_sectors.to_le_bytes());
+        vol[16..24].copy_from_slice(&sectors.to_le_bytes());
+
+        let volume_desc_offset = 13u64;
+        let table_desc_offset = volume_desc_offset + SECTION_DESCRIPTOR_SIZE + vol.len() as u64;
+        let table_len = V1_TABLE_HEADER_SIZE + chunk_count as usize * 4 + 4;
+        let done_desc_offset = table_desc_offset + SECTION_DESCRIPTOR_SIZE + table_len as u64;
+        let chunk0_offset = done_desc_offset + SECTION_DESCRIPTOR_SIZE;
+
+        f.write_all(&test_section_desc(
+            "volume",
+            table_desc_offset,
+            SECTION_DESCRIPTOR_SIZE + vol.len() as u64,
+        ))?;
+        f.write_all(&vol)?;
+
+        let mut table = vec![0u8; table_len];
+        table[0..4].copy_from_slice(&chunk_count.to_le_bytes());
+        table[8..16].copy_from_slice(&chunk0_offset.to_le_bytes());
+        for idx in 0..chunk_count as usize {
+            let rel = (idx * chunk_bytes) as u32;
+            let pos = V1_TABLE_HEADER_SIZE + idx * 4;
+            table[pos..pos + 4].copy_from_slice(&rel.to_le_bytes());
+        }
+        f.write_all(&test_section_desc(
+            "table",
+            done_desc_offset,
+            SECTION_DESCRIPTOR_SIZE + table.len() as u64,
+        ))?;
+        f.write_all(&table)?;
+
+        f.write_all(&test_section_desc("done", 0, 0))?;
+
+        for idx in 0..chunk_count {
+            let mut chunk = vec![idx as u8; chunk_bytes];
+            chunk[0..4].copy_from_slice(&idx.to_le_bytes());
+            f.write_all(&chunk)?;
+        }
+        f.flush()
+    }
+
+    fn test_section_desc(stype: &str, next: u64, size: u64) -> [u8; 76] {
+        let mut desc = [0u8; 76];
+        let bytes = stype.as_bytes();
+        desc[0..bytes.len().min(16)].copy_from_slice(&bytes[..bytes.len().min(16)]);
+        desc[16..24].copy_from_slice(&next.to_le_bytes());
+        desc[24..32].copy_from_slice(&size.to_le_bytes());
+        desc
     }
 }

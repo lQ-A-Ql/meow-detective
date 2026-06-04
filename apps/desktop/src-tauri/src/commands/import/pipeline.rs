@@ -18,6 +18,7 @@ use persistence_sqlite::repositories::job_repo::JobRepo;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, State};
 use transport::{
     commands::{AppSettingsDto, ImportDataSourceRequest},
@@ -64,6 +65,7 @@ struct PostImportPipelineContext<'a> {
     app: Option<&'a AppHandle>,
     cancel_token: Arc<AtomicBool>,
     max_analysis_workers: Option<usize>,
+    enable_timeline_projection: bool,
     enable_content_extraction: bool,
     enable_text_indexing: bool,
     analysis_mode: import_analysis::ImportAnalysisMode,
@@ -124,6 +126,22 @@ fn run_post_import_pipeline_with_counts(
     ctx: PostImportPipelineContext<'_>,
 ) -> persistence_sqlite::DbResult<(String, JobOutcomeCounts)> {
     let mut counts = JobOutcomeCounts::default();
+    if !ctx.enable_timeline_projection
+        && !ctx.enable_content_extraction
+        && !ctx.enable_text_indexing
+    {
+        emit_import_profile_progress(
+            ctx.app,
+            ctx.job_id,
+            84,
+            "Post-import skipped: phase=post-import-skip timeline=deferred content=disabled text=disabled",
+        );
+        return Ok((
+            "Timeline: deferred until Timeline page. Artifacts: 0. Index: 0 indexed".to_string(),
+            counts,
+        ));
+    }
+
     let stats = import_analysis::run_import_analysis_staging(
         import_analysis::ImportAnalysisOptions {
             case_root: ctx.case_root.to_path_buf(),
@@ -133,6 +151,7 @@ fn run_post_import_pipeline_with_counts(
             index_dir: ctx.index_dir.to_path_buf(),
             max_analysis_workers: ctx.max_analysis_workers,
             cancel_token: ctx.cancel_token,
+            enable_timeline_projection: ctx.enable_timeline_projection,
             enable_content_extraction: ctx.enable_content_extraction,
             enable_text_indexing: ctx.enable_text_indexing,
             analysis_mode: ctx.analysis_mode,
@@ -141,9 +160,7 @@ fn run_post_import_pipeline_with_counts(
             memory_hard_limit_mb: import_analysis::default_memory_hard_limit_mb(),
         },
         Some(&|pct, detail| {
-            if let Some(app) = ctx.app {
-                event_bridge::emit_job_progress(app, &ctx.job_id.0, pct, detail);
-            }
+            emit_import_profile_progress(ctx.app, ctx.job_id, pct, detail);
         }),
     )
     .map_err(persistence_sqlite::DbError::System)?;
@@ -416,6 +433,7 @@ fn execute_import_job_with_counts(
     let index_dir = case_root.join("indexes").join("tantivy");
     let job_repo = JobRepo::new(conn);
     let mut counts = JobOutcomeCounts::default();
+    let import_started = Instant::now();
 
     job_repo
         .update_progress(job_id, 10, &format!("Attaching data source {source_name}"))
@@ -423,9 +441,20 @@ fn execute_import_job_with_counts(
     if let Some(app) = options.app {
         event_bridge::emit_job_progress(app, &job_id.0, 10, &format!("Attaching {source_name}"));
     }
+    let attach_started = Instant::now();
     let ds =
         datasource_service::attach_data_source(conn, case_id, &source_name, &path, kind.clone())
             .map_err(CommandError::from_service_error)?;
+    emit_phase_profile(
+        options.app,
+        job_id,
+        12,
+        format!(
+            "Attach complete: phase=attach elapsedMs={} rssMb={}",
+            elapsed_ms(attach_started.elapsed()),
+            import_analysis::current_rss_mb()
+        ),
+    );
 
     // Check for cancellation
     if options.cancel_token.load(Ordering::Relaxed) {
@@ -465,6 +494,7 @@ fn execute_import_job_with_counts(
             let mut probe_candidates: Vec<datasource_service::ImageFilesystemCandidate> =
                 Vec::new();
             if manifest.partitions.is_empty() {
+                let probe_started = Instant::now();
                 let mut probe_reader: Box<dyn EvidenceReader> = if kind == DataSourceKind::E01 {
                     Box::new(E01Reader::open(&path).map_err(CommandError::from_service_error)?)
                 } else {
@@ -472,6 +502,18 @@ fn execute_import_job_with_counts(
                 };
                 let probe = datasource_service::detect_image_filesystem(&mut probe_reader)
                     .map_err(CommandError::from_service_error)?;
+                emit_phase_profile(
+                    options.app,
+                    job_id,
+                    28,
+                    format!(
+                        "Probe complete: phase=probe elapsedMs={} partitions={} candidates={} rssMb={}",
+                        elapsed_ms(probe_started.elapsed()),
+                        probe.partitions.len(),
+                        probe.candidates.len(),
+                        import_analysis::current_rss_mb()
+                    ),
+                );
 
                 // Store partition records in main DB
                 file_service::store_data_source_partitions(conn, &ds.id, &probe.partitions)
@@ -553,6 +595,7 @@ fn execute_import_job_with_counts(
 
                 // For resume: probe once to get candidates if we don't have them
                 if probe_candidates.is_empty() {
+                    let probe_started = Instant::now();
                     let mut probe_reader: Box<dyn EvidenceReader> = if kind == DataSourceKind::E01 {
                         Box::new(E01Reader::open(&path).map_err(CommandError::from_service_error)?)
                     } else {
@@ -563,10 +606,22 @@ fn execute_import_job_with_counts(
                     };
                     let probe = datasource_service::detect_image_filesystem(&mut probe_reader)
                         .map_err(CommandError::from_service_error)?;
+                    emit_phase_profile(
+                        options.app,
+                        job_id,
+                        30,
+                        format!(
+                            "Probe complete: phase=probe-resume elapsedMs={} candidates={} rssMb={}",
+                            elapsed_ms(probe_started.elapsed()),
+                            probe.candidates.len(),
+                            import_analysis::current_rss_mb()
+                        ),
+                    );
                     probe_candidates = probe.candidates;
                 }
 
                 // Build work items for pending partitions — reuse probe results, no re-probe
+                let build_started = Instant::now();
                 let mut pending: Vec<app_services::parallel_enum::PartitionWork> = Vec::new();
                 let mut build_failures = Vec::new();
                 for p in manifest.partitions.iter() {
@@ -593,6 +648,18 @@ fn execute_import_job_with_counts(
                         }
                     }
                 }
+                emit_phase_profile(
+                    options.app,
+                    job_id,
+                    31,
+                    format!(
+                        "Reader build complete: phase=reader-build elapsedMs={} pending={} failures={} rssMb={}",
+                        elapsed_ms(build_started.elapsed()),
+                        pending.len(),
+                        build_failures.len(),
+                        import_analysis::current_rss_mb()
+                    ),
+                );
                 if !build_failures.is_empty() {
                     counts.add_warnings(build_failures.len());
                     counts.add_failed(build_failures.len() as u32);
@@ -645,6 +712,7 @@ fn execute_import_job_with_counts(
                     let case_root_clone = case_root.to_path_buf();
                     let total_partitions = manifest.partitions.len() as u32;
 
+                    let enum_started = Instant::now();
                     let results = app_services::parallel_enum::enumerate_partitions_parallel(
                         &case_root_clone,
                         &ds_id_clone,
@@ -672,6 +740,25 @@ fn execute_import_job_with_counts(
                         },
                     )
                     .map_err(CommandError::from_service_error)?;
+                    let enum_elapsed = enum_started.elapsed();
+                    let enum_files: u64 = results.iter().map(|result| result.file_count).sum();
+                    let enum_dirs: u64 = results.iter().map(|result| result.dir_count).sum();
+                    let enum_size: u64 = results.iter().map(|result| result.total_size).sum();
+                    emit_phase_profile(
+                        options.app,
+                        job_id,
+                        60,
+                        format!(
+                            "Enumeration complete: phase=enumeration elapsedMs={} rows={} rowsPerSec={} dataMb={} mbPerSec={} workers={} rssMb={}",
+                            elapsed_ms(enum_elapsed),
+                            enum_files + enum_dirs,
+                            rows_per_sec(enum_files + enum_dirs, enum_elapsed),
+                            bytes_to_mb(enum_size),
+                            mb_per_sec(enum_size, enum_elapsed),
+                            max_workers,
+                            import_analysis::current_rss_mb()
+                        ),
+                    );
 
                     // Update manifest with results
                     for result in &results {
@@ -733,7 +820,8 @@ fn execute_import_job_with_counts(
                         .save(case_root)
                         .map_err(CommandError::from_service_error)?;
 
-                    let _merged = staging::merge_all_staging_to_main(
+                    let enum_merge_started = Instant::now();
+                    let merged = staging::merge_all_staging_to_main(
                         conn,
                         case_root,
                         &ds.id.0,
@@ -751,6 +839,19 @@ fn execute_import_job_with_counts(
                         }),
                     )
                     .map_err(CommandError::from_service_error)?;
+                    let enum_merge_elapsed = enum_merge_started.elapsed();
+                    emit_phase_profile(
+                        options.app,
+                        job_id,
+                        70,
+                        format!(
+                            "Partition merge complete: phase=enum-merge elapsedMs={} rows={} rowsPerSec={} rssMb={}",
+                            elapsed_ms(enum_merge_elapsed),
+                            merged,
+                            rows_per_sec(merged, enum_merge_elapsed),
+                            import_analysis::current_rss_mb()
+                        ),
+                    );
 
                     let total_files: u64 = results.iter().map(|r| r.file_count).sum();
                     let total_dirs: u64 = results.iter().map(|r| r.dir_count).sum();
@@ -806,6 +907,7 @@ fn execute_import_job_with_counts(
             mode => mode,
         }
     };
+    let post_import_started = Instant::now();
     let (pipeline_msg, pipeline_counts) = run_post_import_pipeline_with_counts(
         conn,
         PostImportPipelineContext {
@@ -818,12 +920,23 @@ fn execute_import_job_with_counts(
             app: options.app,
             cancel_token: Arc::clone(options.cancel_token),
             max_analysis_workers: options.max_analysis_workers,
+            enable_timeline_projection: !image_backed_source,
             enable_content_extraction: analysis_mode.allows_content(),
             enable_text_indexing: analysis_mode.allows_content(),
             analysis_mode,
         },
     )
     .map_err(CommandError::from_service_error)?;
+    emit_phase_profile(
+        options.app,
+        job_id,
+        94,
+        format!(
+            "Post-import complete: phase=post-import elapsedMs={} rssMb={}",
+            elapsed_ms(post_import_started.elapsed()),
+            import_analysis::current_rss_mb()
+        ),
+    );
     counts.warning_count = counts
         .warning_count
         .saturating_add(pipeline_counts.warning_count);
@@ -867,6 +980,16 @@ fn execute_import_job_with_counts(
             ),
         }
     }
+    emit_phase_profile(
+        options.app,
+        job_id,
+        99,
+        format!(
+            "Import profile complete: phase=total elapsedMs={} rssMb={}",
+            elapsed_ms(import_started.elapsed()),
+            import_analysis::current_rss_mb()
+        ),
+    );
 
     let mut msg = format!(
         "Imported {}: {} files, {} dirs",
@@ -878,6 +1001,55 @@ fn execute_import_job_with_counts(
     }
 
     Ok((msg, counts))
+}
+
+fn emit_phase_profile(
+    app: Option<&AppHandle>,
+    job_id: &domain::JobId,
+    progress: u32,
+    detail: String,
+) {
+    emit_import_profile_progress(app, job_id, progress, &detail);
+}
+
+fn emit_import_profile_progress(
+    app: Option<&AppHandle>,
+    job_id: &domain::JobId,
+    progress: u32,
+    detail: &str,
+) {
+    tracing::info!("Import profile for {}: {}", job_id.0, detail);
+    #[cfg(test)]
+    eprintln!("[import-profile] {}% {}", progress.min(99), detail);
+    if let Some(app) = app {
+        event_bridge::emit_job_progress(app, &job_id.0, progress.min(99), detail);
+    }
+}
+
+fn elapsed_ms(duration: Duration) -> u128 {
+    duration.as_millis()
+}
+
+fn rows_per_sec(rows: u64, duration: Duration) -> u64 {
+    let secs = duration.as_secs_f64();
+    if secs <= 0.0 {
+        rows
+    } else {
+        (rows as f64 / secs).round() as u64
+    }
+}
+
+fn bytes_to_mb(bytes: u64) -> u64 {
+    bytes / (1024 * 1024)
+}
+
+fn mb_per_sec(bytes: u64, duration: Duration) -> u64 {
+    let secs = duration.as_secs_f64();
+    if secs <= 0.0 {
+        bytes_to_mb(bytes)
+    } else {
+        ((bytes as f64 / (1024.0 * 1024.0)) / secs).round() as u64
+    }
 }
 
 fn import_analysis_mode_from_settings(value: &str) -> import_analysis::ImportAnalysisMode {
@@ -1372,13 +1544,16 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Run with: cargo test -p forensics-desktop -- e01_full_import --ignored --nocapture
+    #[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
     fn e01_full_import() {
-        let e01_path = std::path::PathBuf::from(r"E:\pangushi\刘洋\liuyang_pc.E01");
-        if !e01_path.exists() {
-            eprintln!("E01 file not found, skipping");
-            return;
-        }
+        let e01_path = std::env::var_os("FORENSICS_E01_FIXTURE")
+            .map(std::path::PathBuf::from)
+            .expect("set FORENSICS_E01_FIXTURE to run real E01 import profile test");
+        assert!(
+            e01_path.exists(),
+            "FORENSICS_E01_FIXTURE does not exist: {}",
+            e01_path.display()
+        );
 
         let tmp = tempfile::TempDir::new().unwrap();
         let active =
@@ -1432,14 +1607,151 @@ mod tests {
                     conn.query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))?;
                 eprintln!("  File entries: {}", file_count);
                 assert!(file_count > 0, "Expected file entries, got 0");
+                let root_system32: i64 = conn.query_row(
+                    "SELECT COUNT(*) FROM file_entries
+                     WHERE parent_id = 'mft:3:5' AND name = 'System32' COLLATE NOCASE",
+                    [],
+                    |row| row.get(0),
+                )?;
+                let root_windows: i64 = conn.query_row(
+                    "SELECT COUNT(*) FROM file_entries
+                     WHERE parent_id = 'mft:3:5'
+                       AND entry_type = 'directory' COLLATE NOCASE
+                       AND name = 'Windows' COLLATE NOCASE",
+                    [],
+                    |row| row.get(0),
+                )?;
+                let system_hives: i64 = conn.query_row(
+                    "SELECT COUNT(*) FROM file_entries
+                     WHERE LOWER(REPLACE(path, '\\', '/')) IN (
+                       'windows/system32/config/system',
+                       'windows/system32/config/software',
+                       'windows/system32/winevt/logs/system.evtx'
+                     )",
+                    [],
+                    |row| row.get(0),
+                )?;
+                eprintln!(
+                    "  NTFS shape: root Windows={}, root System32={}, key hives/logs={}",
+                    root_windows, root_system32, system_hives
+                );
+                assert_eq!(
+                    root_system32, 0,
+                    "System32 must not be flattened under NTFS root"
+                );
+                assert!(
+                    root_windows > 0,
+                    "Expected Windows directory under NTFS root"
+                );
+                assert!(
+                    system_hives >= 2,
+                    "Expected Windows registry/event-log paths after NTFS import"
+                );
 
-                eprintln!("\n[3/5] Verifying timeline events...");
-                let tl_count: i64 =
+                eprintln!("\n[3/5] Verifying timeline lazy projection...");
+                let tl_count_before: i64 =
                     conn.query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row.get(0))?;
-                eprintln!("  Timeline events: {}", tl_count);
-                assert!(tl_count > 0, "Expected timeline events, got 0");
+                eprintln!("  Timeline events before page query: {}", tl_count_before);
+                assert_eq!(
+                    tl_count_before, 0,
+                    "metadata-only import should defer MACB timeline projection"
+                );
+                let timeline_page = app_services::timeline_service::query_timeline(conn, 0, 10)
+                    .map_err(persistence_sqlite::DbError::System)?;
+                let tl_count = timeline_page.total as i64;
+                eprintln!("  Timeline events after lazy query: {}", tl_count);
+                assert!(tl_count > 0, "Expected lazy timeline events, got 0");
 
-                eprintln!("\n[4/5] Verifying optional post-import content outputs...");
+                eprintln!("\n[4/6] Verifying system information analysis...");
+                let system_info =
+                    app_services::analysis_service::extract_system_info_for_case(
+                        conn,
+                        |file_id, max_bytes| {
+                            app_services::file_service::read_file_header_by_id(
+                                conn, file_id, max_bytes,
+                            )
+                        },
+                    );
+                eprintln!(
+                    "  System info: status={:?}, computer={:?}, os={:?}, build={:?}, timezone={:?}, bootRecords={}, warnings={}",
+                    system_info.status,
+                    system_info.computer_name,
+                    system_info.os_version,
+                    system_info.build_number,
+                    system_info.timezone,
+                    system_info.boot_history.len(),
+                    system_info.warnings.len()
+                );
+                for warning in &system_info.warnings {
+                    eprintln!("  System info warning: {warning}");
+                }
+                if system_info.status == transport::dto::AnalysisParseStatusDto::NotParsed
+                    || system_info.status == transport::dto::AnalysisParseStatusDto::Unavailable
+                {
+                    eprintln!(
+                        "  System info not parsed for this sample; NTFS import is valid but artifact parsers need follow-up."
+                    );
+                } else if system_info.status == transport::dto::AnalysisParseStatusDto::Partial {
+                    eprintln!(
+                        "  System info partially parsed; remaining parser warnings are listed above."
+                    );
+                }
+
+                eprintln!("\n[5/7] Verifying evidence semantic classification...");
+                let evidence_summary =
+                    app_services::analysis_service::get_evidence_classification_summary(conn)
+                        .map_err(persistence_sqlite::DbError::System)?;
+                eprintln!(
+                    "  Evidence summary: status={:?}, categories={}, candidates={}, artifacts={}, totalSizeMb={}",
+                    evidence_summary.status,
+                    evidence_summary.totals.category_count,
+                    evidence_summary.totals.candidate_file_count,
+                    evidence_summary.totals.artifact_count,
+                    evidence_summary.totals.total_size / (1024 * 1024)
+                );
+                for category in &evidence_summary.categories {
+                    if category.file_count > 0 || category.artifact_count > 0 {
+                        eprintln!(
+                            "    {} status={:?} files={} artifacts={} sources={}",
+                            category.category,
+                            category.status,
+                            category.file_count,
+                            category.artifact_count,
+                            category.sources.len()
+                        );
+                    }
+                }
+                let evidence_category = |name: &str| {
+                    evidence_summary
+                        .categories
+                        .iter()
+                        .find(|category| category.category == name)
+                        .expect("evidence category should exist")
+                };
+                assert!(
+                    matches!(
+                        evidence_category("SystemInformation").status,
+                        transport::dto::AnalysisParseStatusDto::CandidateFound
+                            | transport::dto::AnalysisParseStatusDto::Parsed
+                            | transport::dto::AnalysisParseStatusDto::Partial
+                    ),
+                    "SystemInformation should not be a fake empty category"
+                );
+                assert!(
+                    matches!(
+                        evidence_category("EventLogs").status,
+                        transport::dto::AnalysisParseStatusDto::CandidateFound
+                            | transport::dto::AnalysisParseStatusDto::Parsed
+                            | transport::dto::AnalysisParseStatusDto::Partial
+                    ),
+                    "EventLogs should not be a fake empty category"
+                );
+                assert!(
+                    evidence_summary.totals.candidate_file_count > 0,
+                    "Expected semantic evidence candidates after NTFS import"
+                );
+
+                eprintln!("\n[6/7] Verifying optional post-import content outputs...");
                 let artifact_count: i64 =
                     conn.query_row("SELECT COUNT(*) FROM artifacts", [], |row| row.get(0))?;
                 eprintln!("  Artifacts: {}", artifact_count);
@@ -1458,7 +1770,7 @@ mod tests {
                 .exists() as i64;
                 eprintln!("  Analysis staging exists: {}", index_rows > 0);
 
-                eprintln!("\n[5/5] Verifying job status...");
+                eprintln!("\n[7/7] Verifying job status...");
                 let job = JobRepo::new(conn)
                     .list_recent(10)
                     .unwrap()
@@ -1472,8 +1784,8 @@ mod tests {
                 eprintln!("\n=== Regression Test PASSED ===");
                 eprintln!("Total time: {:.1}s", total_time);
                 eprintln!(
-                    "Files: {}, Timeline: {}, Artifacts: {}",
-                    file_count, tl_count, artifact_count
+                    "Files: {}, Timeline: {}, Artifacts: {}, SystemInfo={:?}",
+                    file_count, tl_count, artifact_count, system_info.status
                 );
 
                 Ok(())

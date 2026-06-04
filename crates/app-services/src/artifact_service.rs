@@ -13,6 +13,17 @@ pub struct ArtifactExtractionStats {
     pub failed_count: u32,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct EvidenceScanStats {
+    pub candidate_count: u32,
+    pub scanned_count: u32,
+    pub artifact_count: u32,
+    pub warning_count: u32,
+    pub skipped_count: u32,
+    pub failed_count: u32,
+    pub warnings: Vec<String>,
+}
+
 pub fn create_registry() -> ExtractorRegistry {
     let mut registry = ExtractorRegistry::new();
     registry.register(Box::new(artifacts_windows::PrefetchExtractor));
@@ -82,6 +93,83 @@ pub fn store_artifacts(
     let repo = ArtifactRepo::new(conn);
     repo.insert_batch(artifacts, case_id, data_source_id)
         .map_err(|e| e.to_string())
+}
+
+pub fn run_targeted_evidence_scan(
+    conn: &Connection,
+    case_id: &str,
+    categories: &[&str],
+    file_reader: impl Fn(&FileEntryId) -> Result<Box<dyn Read>, String>,
+) -> Result<EvidenceScanStats, String> {
+    let registry = create_registry();
+    let selected_categories = if categories.is_empty() {
+        crate::analysis_service::evidence_category_defs()
+            .iter()
+            .filter(|def| !def.artifact_families.is_empty())
+            .map(|def| def.category)
+            .collect::<Vec<_>>()
+    } else {
+        categories.to_vec()
+    };
+    let candidates =
+        crate::analysis_service::evidence_candidates_for_categories(conn, &selected_categories)?;
+    let mut stats = EvidenceScanStats {
+        candidate_count: candidates.len() as u32,
+        ..EvidenceScanStats::default()
+    };
+
+    for candidate in candidates {
+        let extractors = registry.find_for_path(&candidate.path);
+        if extractors.is_empty() {
+            stats.skipped_count += 1;
+            continue;
+        }
+        if already_has_artifact_for_source(conn, &candidate.file_id.0)? {
+            stats.skipped_count += 1;
+            continue;
+        }
+        let reader = match file_reader(&candidate.file_id) {
+            Ok(reader) => reader,
+            Err(err) => {
+                stats.warning_count += 1;
+                stats.skipped_count += 1;
+                stats.warnings.push(format!("{}: {}", candidate.path, err));
+                continue;
+            }
+        };
+        let mut sink = VecSink::new();
+        let file_stats = run_extractors_on_file(
+            &registry,
+            &candidate.file_id,
+            &candidate.path,
+            reader,
+            &mut sink,
+        )?;
+        stats.warning_count += file_stats.warning_count;
+        stats.skipped_count += file_stats.skipped_count;
+        stats.failed_count += file_stats.failed_count;
+        if !sink.artifacts.is_empty() {
+            store_artifacts(conn, &sink.artifacts, case_id, &candidate.data_source_id)?;
+            stats.artifact_count += sink.artifacts.len() as u32;
+        }
+        stats.scanned_count += 1;
+    }
+
+    Ok(stats)
+}
+
+fn already_has_artifact_for_source(
+    conn: &Connection,
+    source_object_id: &str,
+) -> Result<bool, String> {
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM artifacts WHERE source_object_id = ?1",
+            [source_object_id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(count > 0)
 }
 
 /// Run artifact extraction on multiple files in parallel using rayon.
@@ -218,6 +306,34 @@ mod tests {
         conn
     }
 
+    fn in_memory_case_db() -> rusqlite::Connection {
+        let conn = persistence_sqlite::connection::open_in_memory().unwrap();
+        persistence_sqlite::runner::run_all(&conn).unwrap();
+        let case = domain::CaseMeta {
+            id: domain::CaseId("case-1".to_string()),
+            name: "case".to_string(),
+            number: None,
+            examiner: None,
+            notes: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        persistence_sqlite::repositories::case_repo::CaseRepo::new(&conn)
+            .create(&case)
+            .unwrap();
+        let ds = domain::DataSource {
+            id: DataSourceId("ds-1".to_string()),
+            name: "logical".to_string(),
+            kind: domain::DataSourceKind::LogicalDirectory,
+            source_path: std::path::PathBuf::from("C:/fixture"),
+            imported_at: Utc::now(),
+        };
+        persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&conn)
+            .insert(&domain::CaseId("case-1".to_string()), &ds)
+            .unwrap();
+        conn
+    }
+
     fn make_artifact(family: &str, title: &str) -> Artifact {
         Artifact {
             id: ArtifactId(uuid::Uuid::new_v4().to_string()),
@@ -247,6 +363,12 @@ mod tests {
             changed_at: None,
             hash_sha256: None,
         }
+    }
+
+    fn insert_files(conn: &rusqlite::Connection, files: &[FileEntry]) {
+        persistence_sqlite::repositories::file_repo::FileRepo::new(conn)
+            .insert_batch(files)
+            .unwrap();
     }
 
     #[test]
@@ -410,5 +532,82 @@ mod tests {
         );
 
         assert_eq!(reads.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn targeted_scan_skips_files_without_matching_extractor() {
+        let conn = in_memory_case_db();
+        insert_files(
+            &conn,
+            &[make_file(
+                "evtx-1",
+                "Windows/System32/winevt/Logs/System.evtx",
+            )],
+        );
+        let reads = AtomicUsize::new(0);
+
+        let stats = run_targeted_evidence_scan(&conn, "case-1", &["EventLogs"], |_| {
+            reads.fetch_add(1, Ordering::Relaxed);
+            Ok(Box::new(std::io::Cursor::new(Vec::<u8>::new())) as Box<dyn Read>)
+        })
+        .unwrap();
+
+        assert_eq!(stats.candidate_count, 1);
+        assert_eq!(stats.scanned_count, 0);
+        assert_eq!(stats.skipped_count, 1);
+        assert_eq!(reads.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn targeted_scan_records_warning_for_read_error() {
+        let conn = in_memory_case_db();
+        insert_files(
+            &conn,
+            &[make_file("pf-1", "Windows/Prefetch/CMD.EXE-12345678.pf")],
+        );
+
+        let stats = run_targeted_evidence_scan(&conn, "case-1", &["ProgramExecution"], |_| {
+            Err("reader unavailable".to_string())
+        })
+        .unwrap();
+
+        assert_eq!(stats.candidate_count, 1);
+        assert_eq!(stats.warning_count, 1);
+        assert_eq!(stats.skipped_count, 1);
+        assert!(stats.warnings[0].contains("reader unavailable"));
+    }
+
+    #[test]
+    fn targeted_scan_deduplicates_existing_artifacts() {
+        let conn = in_memory_case_db();
+        insert_files(
+            &conn,
+            &[make_file("pf-1", "Windows/Prefetch/CMD.EXE-12345678.pf")],
+        );
+        conn.execute(
+            "INSERT INTO artifacts
+             (id, case_id, data_source_id, artifact_type, source_object_id, title, summary, attrs, created_at)
+             VALUES ('artifact-1', 'case-1', 'ds-1', 'Prefetch', 'pf-1', 'Prefetch', 'summary', '{}', '2026-01-01T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+        let reads = AtomicUsize::new(0);
+
+        let stats = run_targeted_evidence_scan(&conn, "case-1", &["ProgramExecution"], |_| {
+            reads.fetch_add(1, Ordering::Relaxed);
+            Ok(Box::new(std::io::Cursor::new(Vec::<u8>::new())) as Box<dyn Read>)
+        })
+        .unwrap();
+
+        assert_eq!(stats.candidate_count, 1);
+        assert_eq!(stats.scanned_count, 0);
+        assert_eq!(stats.skipped_count, 1);
+        assert_eq!(reads.load(Ordering::Relaxed), 0);
+        assert_eq!(
+            get_artifact_rows_from_db(&conn, Some("Prefetch"))
+                .unwrap()
+                .len(),
+            1
+        );
     }
 }

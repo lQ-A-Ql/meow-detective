@@ -4,15 +4,18 @@ mod media_protocol;
 pub mod state;
 
 use commands::{
-    analysis_commands::{classify_files, generate_analysis_summary, get_system_info},
+    analysis_commands::{
+        classify_files, generate_analysis_summary, get_evidence_classification_summary,
+        get_system_info, run_evidence_classification,
+    },
     artifact_commands::{
         get_artifact_families, get_artifact_family_counts, get_artifact_rows,
         get_artifact_rows_request,
     },
     case_commands::{
-        close_case, create_case, delete_case, delete_data_source, get_case_metrics,
-        get_current_case, get_data_sources, get_recent_cases, get_recent_objects, open_case,
-        remove_case_from_list, rename_data_source,
+        close_case, create_analysis_demo_case, create_case, delete_case, delete_data_source,
+        get_case_metrics, get_current_case, get_data_sources, get_recent_cases, get_recent_objects,
+        open_case, remove_case_from_list, rename_data_source,
     },
     file_commands::{
         extract_file, get_file_children, get_file_children_request, get_file_rows,
@@ -43,6 +46,7 @@ pub fn run() {
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             create_case,
+            create_analysis_demo_case,
             open_case,
             close_case,
             get_current_case,
@@ -86,6 +90,8 @@ pub fn run() {
             get_jobs_snapshot,
             get_system_info,
             classify_files,
+            get_evidence_classification_summary,
+            run_evidence_classification,
             generate_analysis_summary,
             get_warnings,
             get_trace_items,

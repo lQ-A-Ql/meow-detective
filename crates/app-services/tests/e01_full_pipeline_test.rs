@@ -110,6 +110,123 @@ fn e01_ntfs_root_listing() {
 
 #[test]
 #[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
+fn e01_ntfs_windows_config_listing_and_hive_headers() {
+    let mut reader = E01Reader::open(&sample_path()).unwrap();
+    let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
+    let ntfs = probe
+        .candidates
+        .iter()
+        .find(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
+        .unwrap();
+
+    let boxed: Box<dyn EvidenceReader> = Box::new(E01Reader::open(&sample_path()).unwrap());
+    let fs = fs_ntfs::NtfsReader::open(boxed, ntfs.offset).unwrap();
+    let children = fs.list_children("Windows/System32/config").unwrap();
+
+    eprintln!(
+        "Windows/System32/config children: {} entries",
+        children.len()
+    );
+    for child in children.iter().filter(|child| {
+        child.name.eq_ignore_ascii_case("SYSTEM")
+            || child.name.eq_ignore_ascii_case("SOFTWARE")
+            || child.name.to_ascii_uppercase().starts_with("SYSTEM")
+            || child.name.to_ascii_uppercase().starts_with("SOFTWARE")
+    }) {
+        eprintln!(
+            "  {} {} size={} path={}",
+            if child.is_dir { "D" } else { "F" },
+            child.name,
+            child.size,
+            child.path
+        );
+    }
+
+    for hive in ["SYSTEM", "SOFTWARE"] {
+        let mut file = fs.open_file(&format!("Windows/System32/config/{hive}"));
+        match file.as_mut() {
+            Ok(reader) => {
+                let mut header = [0u8; 4];
+                reader.read_exact(&mut header).unwrap();
+                eprintln!("{hive} header={header:02X?}");
+            }
+            Err(error) => {
+                eprintln!("{hive} open error: {error}");
+            }
+        }
+    }
+
+    let log_children = fs
+        .list_children("Windows/System32/winevt/Logs")
+        .unwrap_or_default();
+    eprintln!(
+        "Windows/System32/winevt/Logs children: {} entries",
+        log_children.len()
+    );
+    if let Some(system_evtx) = log_children
+        .iter()
+        .find(|child| child.name.eq_ignore_ascii_case("System.evtx"))
+    {
+        eprintln!(
+            "  System.evtx listed size={} path={}",
+            system_evtx.size, system_evtx.path
+        );
+    }
+    match fs.open_file("Windows/System32/winevt/Logs/System.evtx") {
+        Ok(mut reader) => {
+            let mut bytes = Vec::new();
+            reader.read_to_end(&mut bytes).unwrap();
+            eprintln!(
+                "System.evtx read_len={} header={:02X?}",
+                bytes.len(),
+                &bytes[..bytes.len().min(16)]
+            );
+            if bytes.len() >= 128 {
+                let first_chunk = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
+                let current_chunk = u64::from_le_bytes(bytes[16..24].try_into().unwrap());
+                let next_record = u64::from_le_bytes(bytes[24..32].try_into().unwrap());
+                let header_size = u32::from_le_bytes(bytes[32..36].try_into().unwrap());
+                let chunk_count = u16::from_le_bytes(bytes[42..44].try_into().unwrap());
+                let flags = u32::from_le_bytes(bytes[120..124].try_into().unwrap());
+                eprintln!(
+                    "System.evtx header firstChunk={} currentChunk={} nextRecord={} headerSize={} chunkCount={} flags=0x{flags:X}",
+                    first_chunk, current_chunk, next_record, header_size, chunk_count
+                );
+            }
+            for chunk_id in 28usize..=33 {
+                let offset = 4096 + chunk_id * 65536;
+                if offset >= bytes.len() {
+                    eprintln!(
+                        "System.evtx chunk {chunk_id}: offset=0x{offset:08X} beyond EOF len={}",
+                        bytes.len()
+                    );
+                    continue;
+                }
+                let end = (offset + 65536).min(bytes.len());
+                let chunk = &bytes[offset..end];
+                let magic = &chunk[..chunk.len().min(8)];
+                let all_zero = chunk.iter().all(|byte| *byte == 0);
+                eprintln!(
+                    "System.evtx chunk {chunk_id}: offset=0x{offset:08X} len={} magic={magic:02X?} allZero={all_zero}",
+                    chunk.len()
+                );
+            }
+            let extraction = artifacts_windows::extract_boot_shutdown_events(
+                &bytes,
+                "Windows/System32/winevt/Logs/System.evtx",
+            );
+            eprintln!(
+                "System.evtx parser events={} warnings={:?}",
+                extraction.events.len(),
+                extraction.warnings
+            );
+        }
+        Err(error) => eprintln!("System.evtx open error: {error}"),
+    }
+}
+
+#[test]
+#[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
 fn e01_fat_root_listing() {
     let mut reader = E01Reader::open(&sample_path()).unwrap();
     let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
@@ -203,7 +320,7 @@ fn e01_ntfs_mft_enumeration_builds_navigable_tree() {
                 .find(|node| node.id == "mft:5")
                 .unwrap_or(&tree[0]);
             assert_eq!(root.id, "mft:5");
-            let children = file_service::get_file_children_lazy(conn, &root.id)
+            let children = file_service::get_file_children_lazy(conn, &root.id, 0, 500)
                 .map_err(persistence_sqlite::DbError::System)?;
             assert!(!children.children.is_empty());
             eprintln!(

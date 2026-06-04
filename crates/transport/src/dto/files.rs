@@ -26,6 +26,22 @@ pub struct FileTreeNodeDto {
 pub struct FileChildrenDto {
     pub children: Vec<FileTreeNodeDto>,
     pub total_count: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offset: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub truncated: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileRowsPageDto {
+    pub rows: Vec<FileEntryRowDto>,
+    pub total_count: u64,
+    pub offset: u64,
+    pub limit: u32,
+    pub truncated: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

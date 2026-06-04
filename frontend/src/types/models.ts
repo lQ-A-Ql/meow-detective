@@ -75,7 +75,14 @@ export interface DataSourcePartition {
   unlockHint?: string;
 }
 
-export type AnalysisParseStatus = 'parsed' | 'notParsed' | 'unavailable';
+export type AnalysisParseStatus =
+  | 'parsed'
+  | 'partial'
+  | 'notParsed'
+  | 'unavailable'
+  | 'candidateFound'
+  | 'notFound'
+  | 'failed';
 
 export interface AnalysisProvenance {
   dataSourceId: string;
@@ -133,6 +140,7 @@ export interface AnalysisBootRecord {
 export interface AnalysisFileClassification {
   category: string;
   files: AnalysisClassifiedFile[];
+  fileCount: number;
   totalSize: number;
   status: AnalysisParseStatus;
   warnings: string[];
@@ -147,6 +155,45 @@ export interface AnalysisClassifiedFile {
   fileType: string;
   magicDescription: string;
   provenance: AnalysisProvenance;
+}
+
+export interface EvidenceClassificationSummary {
+  status: AnalysisParseStatus;
+  categories: EvidenceCategory[];
+  totals: EvidenceClassificationTotals;
+  generatedAt: string;
+  warnings: string[];
+}
+
+export interface EvidenceClassificationTotals {
+  categoryCount: number;
+  candidateFileCount: number;
+  totalSize: number;
+  artifactCount: number;
+}
+
+export interface EvidenceCategory {
+  category: string;
+  displayName: string;
+  status: AnalysisParseStatus;
+  fileCount: number;
+  totalSize: number;
+  artifactCount: number;
+  confidence: number;
+  sources: EvidenceSource[];
+  warnings: string[];
+  provenance: AnalysisProvenance[];
+}
+
+export interface EvidenceSource {
+  fileId: string;
+  path: string;
+  size: number;
+  evidenceKind: string;
+  parser: string;
+  status: AnalysisParseStatus;
+  artifactCount: number;
+  warnings: string[];
 }
 
 export interface RecentCase {
@@ -168,6 +215,14 @@ export interface FileTreeNode {
   active?: boolean;
 }
 
+export interface FileChildrenPage {
+  children: FileTreeNode[];
+  totalCount: number;
+  offset?: number;
+  limit?: number;
+  truncated?: boolean;
+}
+
 export interface FileEntryRow {
   id: string;
   parentId?: string;
@@ -182,6 +237,14 @@ export interface FileEntryRow {
   accessedAt?: string;
   changedAt?: string;
   hashSha256?: string;
+}
+
+export interface FileRowsPage {
+  rows: FileEntryRow[];
+  totalCount: number;
+  offset: number;
+  limit: number;
+  truncated: boolean;
 }
 
 export interface SearchSnippet {

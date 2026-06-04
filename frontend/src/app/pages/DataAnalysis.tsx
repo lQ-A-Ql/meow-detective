@@ -11,17 +11,20 @@ import {
   RefreshCw,
   Shield,
 } from 'lucide-react';
-import { useCurrentCase } from '@/features/case/hooks';
+import { useCreateAnalysisDemoCase, useCurrentCase } from '@/features/case/hooks';
 import {
   useAnalysisClassifications,
+  useEvidenceClassificationSummary,
   useAnalysisSystemInfo,
   useGenerateAnalysisSummary,
+  useRunEvidenceClassification,
 } from '@/features/analysis/hooks';
 import {
   AnalysisFieldProvenance,
   AnalysisFileClassification,
   AnalysisProvenance,
   AnalysisSystemInfo,
+  EvidenceClassificationSummary,
 } from '@/types/models';
 import {
   Tabs,
@@ -43,6 +46,15 @@ const CATEGORY_ICONS: Record<string, typeof Monitor> = {
   Registry: Database,
   Prefetch: Clock,
   Shortcuts: FileText,
+  SystemInformation: Monitor,
+  EventLogs: FileText,
+  ProgramExecution: Shield,
+  UserActivity: Clock,
+  RecycleBin: Archive,
+  Thumbnails: Image,
+  ResourceUsage: Database,
+  BrowserData: Network,
+  FileTypeInventory: FileText,
   Other: FileText,
 };
 
@@ -58,11 +70,21 @@ const CATEGORY_COLORS: Record<string, string> = {
   Registry: '#7a5af8',
   Prefetch: '#9a6700',
   Shortcuts: '#026aa2',
+  SystemInformation: '#344054',
+  EventLogs: '#175cd3',
+  ProgramExecution: '#b42318',
+  UserActivity: '#9a6700',
+  RecycleBin: '#b54708',
+  Thumbnails: '#027a48',
+  ResourceUsage: '#6941c6',
+  BrowserData: '#026aa2',
+  FileTypeInventory: '#667085',
   Other: '#667085',
 };
 
 const tabs = [
   { value: 'system', label: '系统信息', icon: Monitor },
+  { value: 'evidence', label: '证据分类', icon: Shield },
   { value: 'files', label: '文件分类', icon: FileText },
   { value: 'report', label: '分析报告', icon: Download },
 ] as const;
@@ -86,19 +108,27 @@ function errorMessage(error: unknown) {
 
 export function DataAnalysis() {
   const currentCase = useCurrentCase();
+  const demoCase = useCreateAnalysisDemoCase();
   const systemInfo = useAnalysisSystemInfo();
+  const evidenceSummary = useEvidenceClassificationSummary();
+  const evidenceScan = useRunEvidenceClassification();
   const classifications = useAnalysisClassifications(1000);
   const summaryMutation = useGenerateAnalysisSummary();
 
   const hasCase = Boolean(currentCase.data);
-  const loading = currentCase.isLoading || systemInfo.isLoading || classifications.isLoading;
-  const error = currentCase.error ?? systemInfo.error ?? classifications.error ?? summaryMutation.error;
+  const loading = currentCase.isLoading || demoCase.isPending;
+  const error = currentCase.error ?? systemInfo.error ?? evidenceSummary.error ?? classifications.error ?? summaryMutation.error ?? evidenceScan.error ?? demoCase.error;
   const classes = classifications.data ?? [];
-  const totalFiles = classes.reduce((sum, category) => sum + category.files.length, 0);
+  const totalFiles = classes.reduce((sum, category) => sum + category.fileCount, 0);
   const totalSize = classes.reduce((sum, category) => sum + category.totalSize, 0);
 
   async function refresh() {
-    await Promise.all([systemInfo.refetch(), classifications.refetch()]);
+    await Promise.all([systemInfo.refetch(), evidenceSummary.refetch(), classifications.refetch()]);
+  }
+
+  async function runEvidenceScan() {
+    await evidenceScan.mutateAsync([]);
+    await evidenceSummary.refetch();
   }
 
   async function downloadSummary() {
@@ -112,6 +142,10 @@ export function DataAnalysis() {
     URL.revokeObjectURL(url);
   }
 
+  async function loadDemoCase() {
+    await demoCase.mutateAsync();
+  }
+
   return (
     <div className="flex h-full w-full flex-1 flex-col overflow-auto bg-white">
       <div className="shrink-0 border-b border-[#e0e0e0] bg-[#fafafa] p-6">
@@ -119,18 +153,33 @@ export function DataAnalysis() {
           <div>
             <div className="font-serif text-xl tracking-tight text-[#111]">数据源分析</div>
             <div className="mt-1 font-mono text-[11px] text-[#666]">
-              系统信息 · 文件分类 · 证据分析
+              Registry 定向字段 · EVTX 候选事件 · 元数据分类
             </div>
           </div>
-          <button
-            type="button"
-            onClick={refresh}
-            disabled={!hasCase || loading}
-            className="flex items-center gap-2 rounded border border-[#ddd] bg-white px-4 py-2 text-[12px] hover:bg-[#f5f5f5] disabled:opacity-50"
-          >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            刷新
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={loadDemoCase}
+              disabled={loading}
+              className="flex items-center gap-2 rounded border border-[#111] bg-[#111] px-4 py-2 text-[12px] text-white hover:bg-[#333] disabled:opacity-50"
+            >
+              {demoCase.isPending ? <RefreshCw size={14} className="animate-spin" /> : <Database size={14} />}
+              加载演示案件
+            </button>
+            <button
+              type="button"
+              onClick={refresh}
+              disabled={!hasCase || loading}
+              className="flex items-center gap-2 rounded border border-[#ddd] bg-white px-4 py-2 text-[12px] hover:bg-[#f5f5f5] disabled:opacity-50"
+            >
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              刷新
+            </button>
+          </div>
+        </div>
+        <div className="mt-4 rounded border border-[#e0e0e0] bg-white px-3 py-2 text-[11px] leading-5 text-[#666]">
+          Demo 会创建一个临时逻辑数据源，包含 tiny SYSTEM/SOFTWARE Registry hive、System.evtx
+          和少量 PDF/EXE/ZIP 样本，用于验证真实 reader + parser 链路；它不是完整系统画像。
         </div>
       </div>
 
@@ -142,6 +191,15 @@ export function DataAnalysis() {
             <div className="mt-2 text-[12px] leading-6 text-[#666]">
               数据源分析依赖当前案件中的文件目录和数据源记录。未选择案件时不会发起分析请求。
             </div>
+            <button
+              type="button"
+              onClick={loadDemoCase}
+              disabled={demoCase.isPending}
+              className="mt-5 inline-flex items-center gap-2 rounded bg-[#111] px-5 py-2 text-[12px] text-white hover:bg-[#333] disabled:opacity-50"
+            >
+              {demoCase.isPending ? <RefreshCw size={14} className="animate-spin" /> : <Database size={14} />}
+              加载演示案件
+            </button>
           </div>
         </div>
       ) : (
@@ -176,19 +234,38 @@ export function DataAnalysis() {
             {loading ? (
               <div className="flex h-64 items-center justify-center text-[#999]">
                 <RefreshCw size={24} className="mr-2 animate-spin" />
-                正在分析数据源...
+                正在加载案件...
               </div>
             ) : (
               <>
                 <TabsContent value="system" forceMount className="m-0 data-[state=inactive]:hidden">
-                  <SystemInfoTab systemInfo={systemInfo.data} />
+                  {systemInfo.isLoading ? (
+                    <LoadingPanel text="正在解析 Registry/EVTX 系统信息..." />
+                  ) : (
+                    <SystemInfoTab systemInfo={systemInfo.data} />
+                  )}
+                </TabsContent>
+                <TabsContent value="evidence" forceMount className="m-0 data-[state=inactive]:hidden">
+                  {evidenceSummary.isLoading ? (
+                    <LoadingPanel text="正在发现证据语义类别..." />
+                  ) : (
+                    <EvidenceClassificationTab
+                      summary={evidenceSummary.data}
+                      pending={evidenceScan.isPending}
+                      onRun={runEvidenceScan}
+                    />
+                  )}
                 </TabsContent>
                 <TabsContent value="files" forceMount className="m-0 data-[state=inactive]:hidden">
-                  <FileClassificationTab
-                    classifications={classes}
-                    totalFiles={totalFiles}
-                    totalSize={totalSize}
-                  />
+                  {classifications.isLoading ? (
+                    <LoadingPanel text="正在按元数据分类文件..." />
+                  ) : (
+                    <FileClassificationTab
+                      classifications={classes}
+                      totalFiles={totalFiles}
+                      totalSize={totalSize}
+                    />
+                  )}
                 </TabsContent>
                 <TabsContent value="report" forceMount className="m-0 data-[state=inactive]:hidden">
                   <ReportTab
@@ -214,6 +291,9 @@ function SystemInfoTab({ systemInfo }: { systemInfo?: AnalysisSystemInfo }) {
     provenance: [],
     fieldProvenance: [],
   };
+  const parserFailures = info.provenance.filter(
+    (item) => item.status !== 'parsed' && item.warnings.length > 0,
+  );
 
   return (
     <div className="space-y-6">
@@ -228,6 +308,19 @@ function SystemInfoTab({ systemInfo }: { systemInfo?: AnalysisSystemInfo }) {
           </span>
           {info.warnings[0] ? <span>{info.warnings[0]}</span> : null}
         </div>
+        {parserFailures.length > 0 ? (
+          <div className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-800">
+            已发现 Registry/EVTX 候选文件，但部分解析器失败；下方 provenance 已列出具体原因。
+          </div>
+        ) : null}
+        {info.warnings.length > 1 ? (
+          <div className="mb-3 rounded border border-[#e0e0e0] bg-[#fcfcfc] px-3 py-2 text-[11px] leading-5 text-[#666]">
+            {info.warnings.slice(0, 3).map((warning) => (
+              <div key={warning}>{warning}</div>
+            ))}
+            {info.warnings.length > 3 ? <div>还有 {info.warnings.length - 3} 条 warning...</div> : null}
+          </div>
+        ) : null}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <InfoCard label="计算机名" value={info.computerName} />
           <InfoCard label="操作系统" value={info.osVersion} />
@@ -360,6 +453,125 @@ function FieldProvenancePanel({
   );
 }
 
+function EvidenceClassificationTab({
+  summary,
+  pending,
+  onRun,
+}: {
+  summary?: EvidenceClassificationSummary;
+  pending: boolean;
+  onRun: () => void;
+}) {
+  const info = summary ?? {
+    status: 'unavailable' as const,
+    categories: [],
+    generatedAt: '',
+    warnings: ['证据分类摘要暂不可用。'],
+    totals: {
+      categoryCount: 0,
+      candidateFileCount: 0,
+      totalSize: 0,
+      artifactCount: 0,
+    },
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-[14px] font-semibold text-[#111]">证据语义分类</h3>
+          <div className="mt-1 text-[11px] leading-5 text-[#666]">
+            候选来自文件树 metadata；点击后只对 Registry、Prefetch、LNK、JumpList、RecycleBin、SRU、Thumbcache 等候选运行 targeted parser。
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onRun}
+          disabled={pending}
+          className="flex items-center gap-2 rounded border border-[#111] bg-[#111] px-4 py-2 text-[12px] text-white hover:bg-[#333] disabled:opacity-50"
+        >
+          {pending ? <RefreshCw size={14} className="animate-spin" /> : <Shield size={14} />}
+          {pending ? '分类中...' : '开始证据分类'}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <StatCard label="证据族" value={info.totals.categoryCount.toString()} />
+        <StatCard label="候选文件" value={info.totals.candidateFileCount.toString()} />
+        <StatCard label="候选总大小" value={formatSize(info.totals.totalSize)} />
+        <StatCard label="已解析 Artifact" value={info.totals.artifactCount.toString()} />
+      </div>
+
+      {info.warnings.length > 0 ? (
+        <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-800">
+          {info.warnings.join('；')}
+        </div>
+      ) : null}
+
+      {info.categories.length === 0 ? (
+        <EmptyLine text="未发现证据语义分类数据。" />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {info.categories.map((category) => {
+            const Icon = CATEGORY_ICONS[category.category] || Shield;
+            const color = CATEGORY_COLORS[category.category] || '#344054';
+            return (
+              <section key={category.category} className="rounded border border-[#e0e0e0] bg-[#fcfcfc] p-4">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Icon size={17} style={{ color }} />
+                    <div>
+                      <h4 className="text-[13px] font-semibold text-[#111]">{category.displayName}</h4>
+                      <div className="font-mono text-[10px] text-[#888]">{category.category}</div>
+                    </div>
+                  </div>
+                  <span className="rounded bg-[#f0f0f0] px-2 py-0.5 text-[10px] text-[#555]">
+                    {statusLabel(category.status)}
+                  </span>
+                </div>
+
+                <div className="mb-3 grid grid-cols-2 gap-2 text-[11px]">
+                  <Metric label="候选" value={`${category.fileCount} 个`} />
+                  <Metric label="大小" value={formatSize(category.totalSize)} />
+                  <Metric label="Artifact" value={`${category.artifactCount} 条`} />
+                  <Metric label="置信度" value={`${Math.round(category.confidence * 100)}%`} />
+                </div>
+
+                {category.warnings.length > 0 ? (
+                  <div className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-800">
+                    {category.warnings.slice(0, 2).join('；')}
+                  </div>
+                ) : null}
+
+                {category.sources.length > 0 ? (
+                  <div className="space-y-2">
+                    {category.sources.slice(0, 4).map((source) => (
+                      <div key={source.fileId} className="rounded border border-[#e5e5e5] bg-white px-3 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="truncate font-mono text-[11px] text-[#333]">{source.path}</div>
+                          <span className="shrink-0 text-[10px] text-[#777]">{statusLabel(source.status)}</span>
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-2 font-mono text-[10px] text-[#888]">
+                          <span>{source.evidenceKind}</span>
+                          <span>{source.parser}</span>
+                          <span>{formatSize(source.size)}</span>
+                          <span>artifacts={source.artifactCount}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyLine text="该证据族暂无代表来源文件。" />
+                )}
+              </section>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FileClassificationTab({
   classifications,
   totalFiles,
@@ -372,9 +584,12 @@ function FileClassificationTab({
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <StatCard label="样本文件数" value={totalFiles.toString()} />
-        <StatCard label="样本总大小" value={formatSize(totalSize)} />
+        <StatCard label="文件总数" value={totalFiles.toString()} />
+        <StatCard label="文件总大小" value={formatSize(totalSize)} />
         <StatCard label="分类数" value={classifications.length.toString()} />
+      </div>
+      <div className="rounded border border-[#e0e0e0] bg-[#fcfcfc] px-3 py-2 text-[11px] leading-5 text-[#666]">
+        当前为 metadata-only 分类：总数/大小来自数据库全量聚合，文件列表仅展示抽样；不读取 E01/RAW 文件正文，避免数据源分析页触发大内存内容扫描。
       </div>
 
       {classifications.length === 0 ? (
@@ -391,7 +606,7 @@ function FileClassificationTab({
                   <Icon size={16} style={{ color }} />
                   <h3 className="text-[14px] font-semibold text-[#111]">{category.category}</h3>
                   <span className="text-[11px] text-[#999]">
-                    {category.files.length} 个文件 · {formatSize(category.totalSize)} · {statusLabel(category.status)}
+                    总计 {category.fileCount} 个 · 抽样 {category.files.length} 个 · {formatSize(category.totalSize)} · {statusLabel(category.status)}
                   </span>
                 </div>
                 {category.warnings.length > 0 ? (
@@ -449,6 +664,15 @@ function FileClassificationTab({
   );
 }
 
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded border border-[#e8e8e8] bg-white px-2 py-1.5">
+      <div className="text-[10px] text-[#999]">{label}</div>
+      <div className="font-mono text-[11px] text-[#333]">{value}</div>
+    </div>
+  );
+}
+
 function ReportTab({
   pending,
   onDownload,
@@ -494,6 +718,15 @@ function StatCard({ label, value }: { label: string; value: string }) {
 function EmptyLine({ text }: { text: string }) {
   return (
     <div className="rounded border border-dashed border-[#d8d8d8] bg-[#fcfcfc] px-3 py-2 text-[12px] text-[#777]">
+      {text}
+    </div>
+  );
+}
+
+function LoadingPanel({ text }: { text: string }) {
+  return (
+    <div className="flex h-64 items-center justify-center text-[#999]">
+      <RefreshCw size={24} className="mr-2 animate-spin" />
       {text}
     </div>
   );
@@ -557,6 +790,14 @@ function statusLabel(status: string) {
       return '未解析';
     case 'unavailable':
       return '不可用';
+    case 'partial':
+      return '部分解析';
+    case 'candidateFound':
+      return '已发现候选';
+    case 'notFound':
+      return '未发现';
+    case 'failed':
+      return '解析失败';
     default:
       return status;
   }

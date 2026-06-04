@@ -266,7 +266,7 @@ fn scoped_analysis_rows(analysis: &ReportAnalysis, scope: &ExportScopeDto) -> Ve
             rows.push(format!(
                 "classification category={} files={} totalSize={} status={} warnings={}",
                 item.category,
-                item.files.len(),
+                item.file_count,
                 item.total_size,
                 status_str(&item.status),
                 item.warnings.join(" | ")
@@ -308,8 +308,12 @@ fn format_provenance(scope: &str, item: &AnalysisProvenanceDto) -> String {
 fn status_str(status: &transport::dto::AnalysisParseStatusDto) -> &'static str {
     match status {
         transport::dto::AnalysisParseStatusDto::Parsed => "parsed",
+        transport::dto::AnalysisParseStatusDto::Partial => "partial",
         transport::dto::AnalysisParseStatusDto::NotParsed => "notParsed",
         transport::dto::AnalysisParseStatusDto::Unavailable => "unavailable",
+        transport::dto::AnalysisParseStatusDto::CandidateFound => "candidateFound",
+        transport::dto::AnalysisParseStatusDto::NotFound => "notFound",
+        transport::dto::AnalysisParseStatusDto::Failed => "failed",
     }
 }
 

@@ -5,9 +5,10 @@ const DEFAULT_PAGE_LIMIT: u32 = 100;
 
 pub use crate::dto::{
     ArtifactRowDto, CaseMetricsDto, CaseSummaryDto, DataSourceSummaryDto, FileChildrenDto,
-    FileEntryRowDto, FileTreeNodeDto, JobSnapshotDto, RecentCaseDto, RecentObjectDto,
-    ReportHistoryItemDto, ReportTemplateDto, SearchResultPageDto, TimelineEventDto, TraceItemDto,
-    ViewerHandleDto, ViewerRangeRequestDto, ViewerRangeResponseDto, WarningItemDto,
+    FileEntryRowDto, FileRowsPageDto, FileTreeNodeDto, JobSnapshotDto, RecentCaseDto,
+    RecentObjectDto, ReportHistoryItemDto, ReportTemplateDto, SearchResultPageDto,
+    TimelineEventDto, TraceItemDto, ViewerHandleDto, ViewerRangeRequestDto, ViewerRangeResponseDto,
+    WarningItemDto,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -153,26 +154,66 @@ fn default_import_analysis_mode() -> String {
     "metadataOnly".to_string()
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetFileRowsRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<String>,
+    #[serde(default)]
+    pub offset: u64,
+    #[serde(default = "default_file_browser_limit")]
+    pub limit: u32,
+}
+
+impl Default for GetFileRowsRequest {
+    fn default() -> Self {
+        Self {
+            parent_id: None,
+            offset: 0,
+            limit: default_file_browser_limit(),
+        }
+    }
+}
+
+impl GetFileRowsRequest {
+    pub fn validate(&mut self) -> Result<(), String> {
+        if self.limit == 0 {
+            self.limit = default_file_browser_limit();
+        }
+        self.limit = self.limit.min(MAX_PAGE_LIMIT);
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetFileChildrenRequest {
     pub parent_id: String,
+    #[serde(default)]
+    pub offset: u64,
+    #[serde(default = "default_file_tree_limit")]
+    pub limit: u32,
 }
 
 impl GetFileChildrenRequest {
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&mut self) -> Result<(), String> {
         if self.parent_id.trim().is_empty() {
             return Err("parentId is required".to_string());
         }
+        if self.limit == 0 {
+            self.limit = default_file_tree_limit();
+        }
+        self.limit = self.limit.min(MAX_PAGE_LIMIT);
         Ok(())
     }
+}
+
+fn default_file_browser_limit() -> u32 {
+    500
+}
+
+fn default_file_tree_limit() -> u32 {
+    500
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -214,6 +255,13 @@ pub struct GetArtifactRowsRequest {
 pub struct ClassifyFilesRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sample_size: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RunEvidenceClassificationRequest {
+    #[serde(default)]
+    pub categories: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -60,59 +60,52 @@ struct NkRecord {
 pub fn extract_system_hive_fields(bytes: &[u8], hive_path: &str) -> Result<SystemHiveInfo, String> {
     let hive = RegistryHiveReader::new(bytes)?;
     let mut info = SystemHiveInfo::default();
-    let current = match hive.lookup_value(&["Select"], "Current") {
-        Ok(Some(RegistryValue::Dword(value))) => value,
-        Ok(Some(value)) => {
-            info.warnings
-                .push(format!("Select\\Current has unsupported type: {:?}", value));
-            return Ok(info);
+    let control_sets = hive.control_set_candidates(&mut info.warnings);
+
+    for control_set in control_sets {
+        let computer_key = [
+            control_set.as_str(),
+            "Control",
+            "ComputerName",
+            "ComputerName",
+        ];
+        if info.computer_name.is_none() {
+            info.computer_name = lookup_string_field(
+                &hive,
+                hive_path,
+                "registry.system",
+                &computer_key,
+                "ComputerName",
+                &mut info.warnings,
+            );
         }
-        Ok(None) => {
-            info.warnings.push("Select\\Current not found".to_string());
-            return Ok(info);
+
+        let timezone_key = [control_set.as_str(), "Control", "TimeZoneInformation"];
+        if info.timezone.is_none() {
+            info.timezone = lookup_string_field(
+                &hive,
+                hive_path,
+                "registry.system",
+                &timezone_key,
+                "TimeZoneKeyName",
+                &mut info.warnings,
+            )
+            .or_else(|| {
+                lookup_string_field(
+                    &hive,
+                    hive_path,
+                    "registry.system",
+                    &timezone_key,
+                    "StandardName",
+                    &mut info.warnings,
+                )
+            });
         }
-        Err(err) => {
-            info.warnings
-                .push(format!("Select\\Current parse error: {err}"));
-            return Ok(info);
+
+        if info.computer_name.is_some() && info.timezone.is_some() {
+            break;
         }
-    };
-    let control_set = format!("ControlSet{current:03}");
-    let computer_key = [
-        control_set.as_str(),
-        "Control",
-        "ComputerName",
-        "ComputerName",
-    ];
-    if let Some(field) = lookup_string_field(
-        &hive,
-        hive_path,
-        "registry.system",
-        &computer_key,
-        "ComputerName",
-        &mut info.warnings,
-    ) {
-        info.computer_name = Some(field);
     }
-    let timezone_key = [control_set.as_str(), "Control", "TimeZoneInformation"];
-    info.timezone = lookup_string_field(
-        &hive,
-        hive_path,
-        "registry.system",
-        &timezone_key,
-        "TimeZoneKeyName",
-        &mut info.warnings,
-    )
-    .or_else(|| {
-        lookup_string_field(
-            &hive,
-            hive_path,
-            "registry.system",
-            &timezone_key,
-            "StandardName",
-            &mut info.warnings,
-        )
-    });
     Ok(info)
 }
 
@@ -174,7 +167,7 @@ pub fn extract_software_hive_fields(
         "RegisteredOwner",
         &mut info.warnings,
     );
-    info.registered_organization = lookup_string_field(
+    info.registered_organization = lookup_optional_string_field(
         &hive,
         hive_path,
         "registry.software",
@@ -241,6 +234,20 @@ fn lookup_string_field(
             ));
             None
         }
+    }
+}
+
+fn lookup_optional_string_field(
+    hive: &RegistryHiveReader<'_>,
+    hive_path: &str,
+    parser: &str,
+    key_path: &[&str],
+    value_name: &str,
+    warnings: &mut Vec<String>,
+) -> Option<ParsedRegistryField> {
+    match hive.lookup_value(key_path, value_name) {
+        Ok(None) => None,
+        _ => lookup_string_field(hive, hive_path, parser, key_path, value_name, warnings),
     }
 }
 
@@ -355,12 +362,41 @@ impl<'a> RegistryHiveReader<'a> {
             return Ok(None);
         }
         for offset in self.read_subkey_offsets(nk.subkeys_list_offset, 0)? {
-            let child = self.parse_nk(offset)?;
-            if child.name.eq_ignore_ascii_case(wanted) {
-                return Ok(Some(offset));
+            match self.parse_nk(offset) {
+                Ok(child) if child.name.eq_ignore_ascii_case(wanted) => return Ok(Some(offset)),
+                Ok(_) => {}
+                Err(_) => continue,
             }
         }
         Ok(None)
+    }
+
+    fn control_set_candidates(&self, warnings: &mut Vec<String>) -> Vec<String> {
+        let mut candidates = Vec::new();
+        match self.lookup_value(&["Select"], "Current") {
+            Ok(Some(RegistryValue::Dword(value))) if (1..=999).contains(&value) => {
+                candidates.push(format!("ControlSet{value:03}"));
+            }
+            Ok(Some(value)) => warnings.push(format!(
+                "Select\\Current has unsupported type: {:?}; falling back to common ControlSet names",
+                value
+            )),
+            Ok(None) => warnings
+                .push("Select\\Current not found; falling back to common ControlSet names".to_string()),
+            Err(err) => warnings.push(format!(
+                "Select\\Current parse error: {err}; falling back to common ControlSet names"
+            )),
+        }
+
+        for fallback in ["ControlSet001", "ControlSet002", "CurrentControlSet"] {
+            if !candidates
+                .iter()
+                .any(|candidate| candidate.eq_ignore_ascii_case(fallback))
+            {
+                candidates.push(fallback.to_string());
+            }
+        }
+        candidates
     }
 
     fn read_value(&self, nk: &NkRecord, value_name: &str) -> Result<Option<RegistryValue>, String> {
@@ -525,7 +561,15 @@ impl<'a> RegistryHiveReader<'a> {
                 for index in 0..count {
                     let entry = abs + 8 + index * 8;
                     self.require(entry, 8)?;
-                    offsets.push(read_u32(self.bytes, entry + 4)?);
+                    let primary = read_u32(self.bytes, entry)?;
+                    let legacy_synthetic = read_u32(self.bytes, entry + 4)?;
+                    offsets.push(primary);
+                    if legacy_synthetic != primary {
+                        // Older synthetic fixtures in this repository wrote
+                        // the name hash before the child offset. Real Windows
+                        // hives store the child offset first.
+                        offsets.push(legacy_synthetic);
+                    }
                 }
             }
             b"li" => {
@@ -979,6 +1023,27 @@ mod tests {
     }
 
     #[test]
+    fn read_subkeys_lf_offset_first_real_layout() {
+        let mut data = empty_hive("ROOT");
+        write_nk(&mut data, 0x20, "ROOT", &[], &[]);
+        write_nk(&mut data, 0x200, "Child", &[], &[0x400]);
+        write_string_value(&mut data, 0x400, "Name", "Value", 0x700);
+        set_nk_subkey_list(&mut data, 0x20, 0x2020, 1);
+        let abs = BASE_BLOCK_SIZE + 0x2020;
+        data[abs..abs + 4].copy_from_slice(&(-256i32).to_le_bytes());
+        data[abs + 4..abs + 6].copy_from_slice(b"lf");
+        data[abs + 6..abs + 8].copy_from_slice(&1u16.to_le_bytes());
+        data[abs + 8..abs + 12].copy_from_slice(&0x200u32.to_le_bytes());
+        data[abs + 12..abs + 16].copy_from_slice(b"Chil");
+        let hive = RegistryHiveReader::new(&data).unwrap();
+
+        assert_eq!(
+            hive.lookup_value(&["Child"], "Name").unwrap(),
+            Some(RegistryValue::String("Value".to_string()))
+        );
+    }
+
+    #[test]
     fn read_subkeys_li_list() {
         let mut data = empty_hive("ROOT");
         write_nk(&mut data, 0x20, "ROOT", &[], &[]);
@@ -1202,6 +1267,52 @@ mod tests {
 
         assert_eq!(info.computer_name.unwrap().value, "LAB-PC");
         assert_eq!(info.timezone.unwrap().value, "China Standard Time");
+    }
+
+    #[test]
+    fn extract_system_fields_falls_back_when_select_is_corrupt() {
+        let mut data = empty_hive("SYSTEM");
+        write_nk(
+            &mut data,
+            0x20,
+            "SYSTEM",
+            &[("Select", 0x200), ("ControlSet001", 0x300)],
+            &[],
+        );
+        write_nk(&mut data, 0x200, "Select", &[], &[0x1200]);
+        write_vk(
+            &mut data,
+            0x1200,
+            "Current",
+            REG_DWORD,
+            0x8000_0004,
+            0x9530_7897,
+        );
+        write_nk(
+            &mut data,
+            0x300,
+            "ControlSet001",
+            &[("Control", 0x400)],
+            &[],
+        );
+        write_nk(&mut data, 0x400, "Control", &[("ComputerName", 0x600)], &[]);
+        write_nk(
+            &mut data,
+            0x600,
+            "ComputerName",
+            &[("ComputerName", 0x800)],
+            &[],
+        );
+        write_nk(&mut data, 0x800, "ComputerName", &[], &[0xc00]);
+        write_string_value(&mut data, 0xc00, "ComputerName", "LAB-PC", 0x1800);
+
+        let info = extract_system_hive_fields(&data, "Windows/System32/config/SYSTEM").unwrap();
+
+        assert_eq!(info.computer_name.unwrap().value, "LAB-PC");
+        assert!(info
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Select\\Current")));
     }
 
     #[test]

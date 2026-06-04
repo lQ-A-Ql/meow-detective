@@ -60,8 +60,8 @@ vi.mock('@/features/files/hooks', () => ({
     mutate: mocks.extractMutate,
     isPending: false,
   }),
-  useFileChildren: mocks.fileChildren,
-  useFileRows: mocks.fileRows,
+  useFileChildrenPage: mocks.fileChildren,
+  useFileRowsPage: mocks.fileRows,
   useFileTree: mocks.fileTree,
   useFileViewer: mocks.fileViewer,
   useTextPreview: mocks.textPreview,
@@ -160,8 +160,20 @@ describe('FileBrowser media preview', () => {
 
     mocks.currentCase.mockReturnValue(queryState({ id: 'case-1', name: 'Case 1' }));
     mocks.fileTree.mockReturnValue(queryState(rootTree));
-    mocks.fileRows.mockReturnValue(queryState([videoFile]));
-    mocks.fileChildren.mockReturnValue(queryState([]));
+    mocks.fileRows.mockReturnValue(queryState({
+      rows: [videoFile],
+      totalCount: 1,
+      offset: 0,
+      limit: 500,
+      truncated: false,
+    }));
+    mocks.fileChildren.mockReturnValue(queryState({
+      children: [],
+      totalCount: 0,
+      offset: 0,
+      limit: 500,
+      truncated: false,
+    }));
     mocks.fileViewer.mockReturnValue(queryState({
       handle: { handleId: 'file:video-1', size: videoFile.size, mime: 'video/mp4' },
       range: { kind: 'hex', lines: [] },

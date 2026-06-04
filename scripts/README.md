@@ -130,6 +130,36 @@ powershell -ExecutionPolicy Bypass -File scripts\check-deny-exceptions.ps1
 # EVTX dependency decision guard. This prevents reintroducing the legacy
 # evtx -> encoding dependency path after the local encoding_rs patch.
 powershell -ExecutionPolicy Bypass -File scripts\check-evtx-dependency-decision.ps1
+
+# Import optimization guard. This locks the E01/RAW beta-closeout decisions:
+# real samples use FORENSICS_E01_FIXTURE, Timeline stays deferred for image
+# imports, staging-only PRAGMAs stay aggressive, and app.db stays conservative.
+powershell -ExecutionPolicy Bypass -File scripts\check-import-optimization-guard.ps1
+```
+
+## Real E01 Import Profiling
+
+Real E01 profiling is opt-in because the fixture is private and multi-GB. The
+runner executes the ignored desktop import regression test repeatedly, parses
+`[import-profile]` phase lines, and writes Markdown/JSON summaries under
+`artifacts/import-profiles`.
+
+```powershell
+$env:FORENSICS_E01_FIXTURE = 'E:\path\to\sample.E01'
+powershell -ExecutionPolicy Bypass -File scripts\run-e01-import-profile.ps1 -Runs 3
+```
+
+## Real E01 Import Performance Gate
+
+The performance gate is also opt-in. It runs the profile harness, then fails if
+the median import phases, RSS peak, row count, throughput, NTFS shape, lazy
+Timeline projection, or system information parsing regress. Keep thresholds
+machine-specific and pass the real sample through `FORENSICS_E01_FIXTURE`; do
+not hard-code private paths in source.
+
+```powershell
+$env:FORENSICS_E01_FIXTURE = 'E:\path\to\sample.E01'
+powershell -ExecutionPolicy Bypass -File scripts\check-e01-import-performance.ps1 -Runs 3
 ```
 
 ## Troubleshooting

@@ -9,8 +9,11 @@ use persistence_sqlite::DbResult;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 const INDEX_DOC_MERGE_PAGE_SIZE: i64 = 50;
+const STAGING_CACHE_SIZE_KIB: i64 = 256 * 1024;
+const STAGING_MMAP_SIZE_BYTES: i64 = 256 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
 // Manifest types
@@ -202,7 +205,10 @@ pub fn open_enum_staging(
     partition_index: usize,
 ) -> DbResult<Connection> {
     let path = existing_enum_staging_db_path(case_root, data_source_id, partition_index);
-    persistence_sqlite::connection::open_staging(&path)
+    open_staging_with_schema(
+        &path,
+        include_str!("../../persistence-sqlite/src/migrations/scripts/staging_001.sql"),
+    )
 }
 
 /// Open (or create) an analysis staging DB for a worker.
@@ -212,18 +218,30 @@ pub fn open_analysis_staging(
     worker_id: usize,
 ) -> DbResult<Connection> {
     let path = analysis_staging_db_path(case_root, data_source_id, worker_id);
+    open_staging_with_schema(&path, ANALYSIS_STAGING_SCHEMA)
+}
+
+fn open_staging_with_schema(path: &Path, schema: &str) -> DbResult<Connection> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let conn = Connection::open(&path)?;
-    conn.execute_batch(
+    let conn = Connection::open(path)?;
+    apply_staging_connection_pragmas(&conn)?;
+    conn.execute_batch(schema)?;
+    Ok(conn)
+}
+
+fn apply_staging_connection_pragmas(conn: &Connection) -> DbResult<()> {
+    conn.execute_batch(&format!(
         "PRAGMA journal_mode=WAL;
+         PRAGMA synchronous=OFF;
+         PRAGMA temp_store=MEMORY;
          PRAGMA foreign_keys=ON;
          PRAGMA busy_timeout=5000;
-         PRAGMA synchronous=NORMAL;",
-    )?;
-    conn.execute_batch(ANALYSIS_STAGING_SCHEMA)?;
-    Ok(conn)
+         PRAGMA cache_size=-{STAGING_CACHE_SIZE_KIB};
+         PRAGMA mmap_size={STAGING_MMAP_SIZE_BYTES};"
+    ))?;
+    Ok(())
 }
 
 /// Get the count of rows in a staging DB.
@@ -366,7 +384,15 @@ pub fn merge_all_staging_to_main(
         }
         drop(staging_conn);
 
+        let merge_started = Instant::now();
         let inserted = merge_one_staging_partition(main_conn, &db_path, partition.index)?;
+        tracing::info!(
+            "Enum staging merge profile: partition={} rows={} elapsedMs={} rowsPerSec={}",
+            partition.index,
+            inserted,
+            merge_started.elapsed().as_millis(),
+            rows_per_sec(inserted as u64, merge_started.elapsed())
+        );
         let staging_conn = open_partition_staging(case_root, data_source_id, partition.index)
             .map_err(|e| format!("Reopen staging DB {}: {}", partition.index, e))?;
         set_staging_meta(&staging_conn, "merged", "true")
@@ -401,7 +427,7 @@ fn merge_one_staging_partition(
                 "INSERT OR IGNORE INTO main.file_entries
                  (id, parent_id, data_source_id, path, name, entry_type,
                   size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256)
-                 SELECT id, parent_id, data_source_id, path, name, entry_type,
+                 SELECT id, parent_id, data_source_id, path, name, LOWER(entry_type),
                   size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
                  FROM staging.file_entries",
                 [],
@@ -461,12 +487,32 @@ pub fn merge_analysis_staging_to_main(
         }
         drop(worker_conn);
 
+        let worker_merge_started = Instant::now();
         let worker_stats =
             merge_one_analysis_worker(main_conn, &db_path, *worker_id, case_id, data_source_id)?;
+        tracing::info!(
+            "Analysis DB merge profile: worker={} artifacts={} timeline={} elapsedMs={} rowsPerSec={}",
+            worker_id,
+            worker_stats.artifact_count,
+            worker_stats.timeline_count,
+            worker_merge_started.elapsed().as_millis(),
+            rows_per_sec(
+                worker_stats.artifact_count + worker_stats.timeline_count,
+                worker_merge_started.elapsed()
+            )
+        );
         stats.artifact_count += worker_stats.artifact_count;
         stats.timeline_count += worker_stats.timeline_count;
 
+        let index_merge_started = Instant::now();
         let indexed = merge_one_analysis_index_docs(&db_path, index_dir, *worker_id)?;
+        tracing::info!(
+            "Analysis index merge profile: worker={} indexed={} elapsedMs={} rowsPerSec={}",
+            worker_id,
+            indexed,
+            index_merge_started.elapsed().as_millis(),
+            rows_per_sec(indexed, index_merge_started.elapsed())
+        );
         stats.indexed_count += indexed;
 
         let worker_conn = open_analysis_staging(case_root, data_source_id, *worker_id)
@@ -610,11 +656,55 @@ fn merge_one_analysis_index_docs(
     Ok(indexed_total)
 }
 
+fn rows_per_sec(rows: u64, duration: Duration) -> u64 {
+    let secs = duration.as_secs_f64();
+    if secs <= 0.0 {
+        rows
+    } else {
+        (rows as f64 / secs).round() as u64
+    }
+}
+
 /// Clean up staging directory for a data source.
 pub fn cleanup_staging(case_root: &Path, data_source_id: &str) {
     let dir = staging_dir(case_root, data_source_id);
     if dir.exists() {
-        let _ = std::fs::remove_dir_all(&dir);
+        checkpoint_staging_wal_files(&dir);
+        if let Err(err) = std::fs::remove_dir_all(&dir) {
+            tracing::warn!(
+                "Failed to remove staging directory {}: {}",
+                dir.display(),
+                err
+            );
+        }
+    }
+}
+
+fn checkpoint_staging_wal_files(dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("db") {
+            continue;
+        }
+
+        match Connection::open(&path) {
+            Ok(conn) => {
+                if let Err(err) = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);") {
+                    tracing::debug!(
+                        "Failed to checkpoint staging WAL {}: {}",
+                        path.display(),
+                        err
+                    );
+                }
+            }
+            Err(err) => {
+                tracing::debug!("Failed to open staging DB {}: {}", path.display(), err);
+            }
+        }
     }
 }
 
@@ -737,6 +827,37 @@ mod tests {
     }
 
     #[test]
+    fn enum_and_analysis_staging_use_aggressive_temp_pragmas() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let enum_conn = open_enum_staging(tmp.path(), "ds-pragmas", 0).unwrap();
+        let analysis_conn = open_analysis_staging(tmp.path(), "ds-pragmas", 0).unwrap();
+
+        for conn in [&enum_conn, &analysis_conn] {
+            let journal_mode: String = conn
+                .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+                .unwrap();
+            let synchronous: i64 = conn
+                .query_row("PRAGMA synchronous", [], |row| row.get(0))
+                .unwrap();
+            let temp_store: i64 = conn
+                .query_row("PRAGMA temp_store", [], |row| row.get(0))
+                .unwrap();
+            let foreign_keys: i64 = conn
+                .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+                .unwrap();
+            let cache_size: i64 = conn
+                .query_row("PRAGMA cache_size", [], |row| row.get(0))
+                .unwrap();
+
+            assert_eq!(journal_mode, "wal");
+            assert_eq!(synchronous, 0);
+            assert_eq!(temp_store, 2);
+            assert_eq!(foreign_keys, 1);
+            assert_eq!(cache_size, -STAGING_CACHE_SIZE_KIB);
+        }
+    }
+
+    #[test]
     fn merge_staging_to_main() {
         let tmp = tempfile::TempDir::new().unwrap();
         let main_conn = persistence_sqlite::connection::open_in_memory().unwrap();
@@ -802,6 +923,15 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
             .unwrap();
         assert_eq!(count, 5);
+
+        let mixed_case_types: i64 = main_conn
+            .query_row(
+                "SELECT COUNT(*) FROM file_entries WHERE entry_type NOT IN ('file', 'directory')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(mixed_case_types, 0);
     }
 
     fn create_main_file_entries_table(conn: &Connection) {

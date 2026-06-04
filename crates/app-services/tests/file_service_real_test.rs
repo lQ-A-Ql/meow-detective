@@ -55,7 +55,7 @@ fn directory_tree_and_children_return_only_directories() {
             assert_eq!(tree.len(), 1);
             assert_eq!(tree[0].depth, 0);
 
-            let children_result = file_service::get_file_children_lazy(conn, &tree[0].id)
+            let children_result = file_service::get_file_children_lazy(conn, &tree[0].id, 0, 500)
                 .map_err(persistence_sqlite::DbError::System)?;
             let child_names: Vec<&str> = children_result
                 .children
@@ -69,19 +69,22 @@ fn directory_tree_and_children_return_only_directories() {
                 conn,
                 &GetFileRowsRequest {
                     parent_id: Some(tree[0].id.clone()),
+                    ..Default::default()
                 },
             )
             .map_err(persistence_sqlite::DbError::System)?;
-            let row_names: Vec<&str> = rows.iter().map(|row| row.name.as_str()).collect();
+            let row_names: Vec<&str> = rows.rows.iter().map(|row| row.name.as_str()).collect();
             assert_eq!(row_names, vec!["emptydir", "subdir", "root.txt"]);
 
             let file_id = rows
+                .rows
                 .iter()
                 .find(|row| row.name == "root.txt")
                 .map(|row| row.id.clone())
                 .unwrap();
-            let no_directory_children = file_service::get_file_children_lazy(conn, &file_id)
-                .map_err(persistence_sqlite::DbError::System)?;
+            let no_directory_children =
+                file_service::get_file_children_lazy(conn, &file_id, 0, 500)
+                    .map_err(persistence_sqlite::DbError::System)?;
             assert!(no_directory_children.children.is_empty());
 
             Ok(())
@@ -104,7 +107,7 @@ fn file_tree_real_contains_nested_directories_for_navigation() {
             assert_eq!(tree[0].depth, 0);
             assert_eq!(tree[0].expanded, Some(true));
 
-            let children_result = file_service::get_file_children_lazy(conn, &tree[0].id)
+            let children_result = file_service::get_file_children_lazy(conn, &tree[0].id, 0, 500)
                 .map_err(persistence_sqlite::DbError::System)?;
             let child_names: Vec<&str> = children_result
                 .children
@@ -138,10 +141,12 @@ fn file_rows_request_returns_direct_children_for_parent() {
                 conn,
                 &GetFileRowsRequest {
                     parent_id: Some(root.id),
+                    ..Default::default()
                 },
             )
             .map_err(persistence_sqlite::DbError::System)?;
             let subdir = root_rows
+                .rows
                 .iter()
                 .find(|row| row.name == "subdir")
                 .map(|row| row.id.clone())
@@ -151,13 +156,50 @@ fn file_rows_request_returns_direct_children_for_parent() {
                 conn,
                 &GetFileRowsRequest {
                     parent_id: Some(subdir),
+                    ..Default::default()
                 },
             )
             .map_err(persistence_sqlite::DbError::System)?;
 
-            assert_eq!(subdir_rows.len(), 1);
-            assert_eq!(subdir_rows[0].name, "nested.bin");
-            assert_eq!(subdir_rows[0].entry_type, "file");
+            assert_eq!(subdir_rows.rows.len(), 1);
+            assert_eq!(subdir_rows.rows[0].name, "nested.bin");
+            assert_eq!(subdir_rows.rows[0].entry_type, "file");
+
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn file_rows_and_children_are_limited_for_lazy_loading() {
+    let tmp = TempDir::new().unwrap();
+    let active = import_fixture_directory(&tmp);
+
+    active
+        .with_conn(|conn| {
+            let root = file_service::get_file_tree_real(conn)
+                .map_err(persistence_sqlite::DbError::System)?
+                .pop()
+                .unwrap();
+
+            let first_dir = file_service::get_file_children_lazy(conn, &root.id, 0, 1)
+                .map_err(persistence_sqlite::DbError::System)?;
+            assert_eq!(first_dir.children.len(), 1);
+            assert_eq!(first_dir.total_count, 2);
+            assert_eq!(first_dir.truncated, Some(true));
+
+            let first_rows = file_service::get_file_rows_for_request(
+                conn,
+                &GetFileRowsRequest {
+                    parent_id: Some(root.id),
+                    offset: 0,
+                    limit: 2,
+                },
+            )
+            .map_err(persistence_sqlite::DbError::System)?;
+            assert_eq!(first_rows.rows.len(), 2);
+            assert_eq!(first_rows.total_count, 3);
+            assert!(first_rows.truncated);
 
             Ok(())
         })
@@ -179,10 +221,12 @@ fn deterministic_handle_reads_real_logical_file_bytes_as_hex() {
                 conn,
                 &GetFileRowsRequest {
                     parent_id: Some(root.id),
+                    ..Default::default()
                 },
             )
             .map_err(persistence_sqlite::DbError::System)?;
             let file_id = rows
+                .rows
                 .iter()
                 .find(|row| row.name == "root.txt")
                 .map(|row| row.id.clone())
@@ -249,10 +293,12 @@ fn open_file_content_by_id_reads_uuid_backed_logical_file() {
                 conn,
                 &GetFileRowsRequest {
                     parent_id: Some(root.id),
+                    ..Default::default()
                 },
             )
             .map_err(persistence_sqlite::DbError::System)?;
             let file_id = rows
+                .rows
                 .iter()
                 .find(|row| row.name == "root.txt")
                 .map(|row| domain::FileEntryId(row.id.clone()))
@@ -282,10 +328,12 @@ fn open_file_content_rejects_traversal_paths_from_database() {
                 conn,
                 &GetFileRowsRequest {
                     parent_id: Some(root.id),
+                    ..Default::default()
                 },
             )
             .map_err(persistence_sqlite::DbError::System)?;
             let file_id = rows
+                .rows
                 .iter()
                 .find(|row| row.name == "root.txt")
                 .map(|row| row.id.clone())

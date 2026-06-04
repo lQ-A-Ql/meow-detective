@@ -4,8 +4,12 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub enum AnalysisParseStatusDto {
     Parsed,
+    Partial,
     NotParsed,
     Unavailable,
+    CandidateFound,
+    NotFound,
+    Failed,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -91,10 +95,58 @@ pub struct AnalysisBootRecordDto {
 pub struct AnalysisFileClassificationDto {
     pub category: String,
     pub files: Vec<AnalysisClassifiedFileDto>,
+    pub file_count: u64,
     pub total_size: u64,
     pub status: AnalysisParseStatusDto,
     pub warnings: Vec<String>,
     pub provenance: Vec<AnalysisProvenanceDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvidenceClassificationSummaryDto {
+    pub status: AnalysisParseStatusDto,
+    pub categories: Vec<EvidenceCategoryDto>,
+    pub totals: EvidenceClassificationTotalsDto,
+    pub generated_at: String,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvidenceClassificationTotalsDto {
+    pub category_count: u64,
+    pub candidate_file_count: u64,
+    pub total_size: u64,
+    pub artifact_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvidenceCategoryDto {
+    pub category: String,
+    pub display_name: String,
+    pub status: AnalysisParseStatusDto,
+    pub file_count: u64,
+    pub total_size: u64,
+    pub artifact_count: u64,
+    pub confidence: f32,
+    pub sources: Vec<EvidenceSourceDto>,
+    pub warnings: Vec<String>,
+    pub provenance: Vec<AnalysisProvenanceDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvidenceSourceDto {
+    pub file_id: String,
+    pub path: String,
+    pub size: u64,
+    pub evidence_kind: String,
+    pub parser: String,
+    pub status: AnalysisParseStatusDto,
+    pub artifact_count: u64,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -239,6 +291,7 @@ mod tests {
                     warnings: Vec::new(),
                 },
             }],
+            file_count: 1,
             total_size: 4,
             status: AnalysisParseStatusDto::Parsed,
             warnings: Vec::new(),
@@ -254,6 +307,7 @@ mod tests {
 
         let json = serde_json::to_value(dto).unwrap();
         assert_eq!(json["files"][0]["fileId"], "file-1");
+        assert_eq!(json["fileCount"], 1);
         assert_eq!(json["totalSize"], 4);
         assert_eq!(json["files"][0]["fileType"], "PDF");
         assert_eq!(json["files"][0]["magicDescription"], "PDF Document");

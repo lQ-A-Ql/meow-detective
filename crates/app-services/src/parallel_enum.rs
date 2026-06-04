@@ -6,12 +6,15 @@
 
 use crate::staging;
 use crossbeam_channel::{bounded, Receiver, Sender};
-use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
+use domain::DataSourceId;
+#[cfg(test)]
+use domain::{EntryType, FileEntry, FileEntryId};
 use evidence_core::{EvidenceReader, FileSystemReader, RawImageReader};
 use fs_ntfs::mft_scanner::{MftRecord, MftScanner};
+use fs_ntfs::NtfsReader;
 use image_e01::E01Reader;
 use rusqlite::params;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -28,7 +31,7 @@ const ENUM_PROGRESS_INTERVAL: u64 = 1;
 #[cfg(not(test))]
 const ENUM_PROGRESS_INTERVAL: u64 = 5_000;
 
-const MFT_CHUNK_RECORDS: u64 = 10_000;
+const MFT_CHUNK_RECORDS: u64 = 25_000;
 const MFT_FALLBACK_SIZE: u64 = 100 * 1024 * 1024;
 const MFT_HASHMAP_PATH_LIMIT: usize = 100_000;
 
@@ -308,8 +311,10 @@ fn enumerate_single_partition(
 
 /// Enumerate a filesystem into a staging DB connection.
 ///
-/// Uses transaction batching: commits every 50K entries to avoid WAL bloat
-/// while maintaining high throughput.
+/// Uses one staging transaction so cancellation/failure can roll back the
+/// partition write atomically. Staging DB connections use aggressive temp-DB
+/// pragmas, so this avoids extra commit/reprepare churn without changing the
+/// conservative main DB merge behavior.
 fn enumerate_fs_to_staging(
     conn: &rusqlite::Connection,
     fs: &dyn FileSystemReader,
@@ -317,8 +322,6 @@ fn enumerate_fs_to_staging(
     cancel_token: &AtomicBool,
     progress_cb: Option<&dyn Fn(u64, u64)>, // (total_entries, total_size)
 ) -> Result<(u64, u64, u64), String> {
-    const COMMIT_INTERVAL: u64 = 50_000;
-
     if cancel_token.load(Ordering::Relaxed) {
         return Err("Cancelled".to_string());
     }
@@ -333,117 +336,103 @@ fn enumerate_fs_to_staging(
     let mut file_count = 0u64;
     let mut dir_count = 0u64;
     let mut total_size = 0u64;
-    let mut entries_since_commit = 0u64;
 
-    conn.execute_batch("BEGIN TRANSACTION")
-        .map_err(|e| format!("Begin transaction: {}", e))?;
+    let transaction_result = (|| {
+        conn.execute_batch("BEGIN TRANSACTION")
+            .map_err(|e| format!("Begin transaction: {}", e))?;
 
-    let mut stmt = conn
-        .prepare_cached(
-            "INSERT INTO file_entries
-             (id, parent_id, data_source_id, path, name, entry_type,
-              size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-        )
-        .map_err(|e| format!("Prepare error: {}", e))?;
+        let mut stmt = conn
+            .prepare_cached(
+                "INSERT INTO file_entries
+                 (id, parent_id, data_source_id, path, name, entry_type,
+                  size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+            )
+            .map_err(|e| format!("Prepare error: {}", e))?;
 
-    let mut stack: Vec<(Vec<evidence_core::FsNode>, Option<String>)> = Vec::new();
-    stack.push((root_entries, None));
+        let mut stack: Vec<(Vec<evidence_core::FsNode>, Option<String>)> = Vec::new();
+        stack.push((root_entries, None));
 
-    while let Some((entries, parent_id)) = stack.pop() {
-        if cancel_token.load(Ordering::Relaxed) {
-            conn.execute_batch("ROLLBACK").ok();
-            return Err("Cancelled".to_string());
-        }
-
-        for entry in entries {
+        while let Some((entries, parent_id)) = stack.pop() {
             if cancel_token.load(Ordering::Relaxed) {
                 conn.execute_batch("ROLLBACK").ok();
                 return Err("Cancelled".to_string());
             }
 
-            let entry_id = uuid::Uuid::new_v4().to_string();
-            let is_dir = entry.is_dir;
-            let size = entry.size;
-
-            stmt.execute(rusqlite::params![
-                entry_id,
-                parent_id,
-                ds_id,
-                entry.path,
-                entry.name,
-                if is_dir { "Directory" } else { "File" },
-                Some(size),
-                entry.name.rsplit('.').next().map(|e| e.to_lowercase()),
-                0i32,
-                entry.created_at.as_ref().map(|dt| dt.to_rfc3339()),
-                entry.modified_at.as_ref().map(|dt| dt.to_rfc3339()),
-                entry.accessed_at.as_ref().map(|dt| dt.to_rfc3339()),
-                None::<String>,
-                None::<String>,
-            ])
-            .map_err(|e| format!("Insert error: {}", e))?;
-
-            entries_since_commit += 1;
-            if is_dir {
-                dir_count += 1;
-            } else {
-                file_count += 1;
-                total_size += size;
-            }
-
-            // Commit and restart transaction every COMMIT_INTERVAL entries
-            if entries_since_commit >= COMMIT_INTERVAL {
-                drop(stmt);
-                conn.execute_batch("COMMIT")
-                    .map_err(|e| format!("Commit error: {}", e))?;
-                conn.execute_batch("BEGIN TRANSACTION")
-                    .map_err(|e| format!("Begin transaction error: {}", e))?;
-                stmt = conn
-                    .prepare_cached(
-                        "INSERT INTO file_entries
-                         (id, parent_id, data_source_id, path, name, entry_type,
-                          size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-                    )
-                    .map_err(|e| format!("Prepare error: {}", e))?;
-                entries_since_commit = 0;
-            }
-
-            // Report progress every 5000 entries
-            let total_entries = file_count + dir_count;
-            if total_entries.is_multiple_of(ENUM_PROGRESS_INTERVAL) {
-                if let Some(cb) = progress_cb {
-                    cb(total_entries, total_size);
-                }
-            }
-
-            if is_dir {
+            for entry in entries {
                 if cancel_token.load(Ordering::Relaxed) {
                     conn.execute_batch("ROLLBACK").ok();
                     return Err("Cancelled".to_string());
                 }
-                match fs.list_children(&entry.path) {
-                    Ok(children) => {
-                        if cancel_token.load(Ordering::Relaxed) {
-                            conn.execute_batch("ROLLBACK").ok();
-                            return Err("Cancelled".to_string());
-                        }
-                        stack.push((children, Some(entry_id)));
+
+                let entry_id = uuid::Uuid::new_v4().to_string();
+                let is_dir = entry.is_dir;
+                let size = entry.size;
+
+                stmt.execute(rusqlite::params![
+                    entry_id,
+                    parent_id,
+                    ds_id,
+                    entry.path,
+                    entry.name,
+                    if is_dir { "directory" } else { "file" },
+                    Some(size),
+                    entry.name.rsplit('.').next().map(|e| e.to_lowercase()),
+                    0i32,
+                    entry.created_at.as_ref().map(|dt| dt.to_rfc3339()),
+                    entry.modified_at.as_ref().map(|dt| dt.to_rfc3339()),
+                    entry.accessed_at.as_ref().map(|dt| dt.to_rfc3339()),
+                    None::<String>,
+                    None::<String>,
+                ])
+                .map_err(|e| format!("Insert error: {}", e))?;
+
+                if is_dir {
+                    dir_count += 1;
+                } else {
+                    file_count += 1;
+                    total_size += size;
+                }
+
+                // Report progress every 5000 entries
+                let total_entries = file_count + dir_count;
+                if total_entries.is_multiple_of(ENUM_PROGRESS_INTERVAL) {
+                    if let Some(cb) = progress_cb {
+                        cb(total_entries, total_size);
                     }
-                    Err(e) => {
-                        tracing::warn!("Failed to list {}: {}", entry.path, e);
+                }
+
+                if is_dir {
+                    if cancel_token.load(Ordering::Relaxed) {
+                        conn.execute_batch("ROLLBACK").ok();
+                        return Err("Cancelled".to_string());
+                    }
+                    match fs.list_children(&entry.path) {
+                        Ok(children) => {
+                            if cancel_token.load(Ordering::Relaxed) {
+                                conn.execute_batch("ROLLBACK").ok();
+                                return Err("Cancelled".to_string());
+                            }
+                            stack.push((children, Some(entry_id)));
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to list {}: {}", entry.path, e);
+                        }
                     }
                 }
             }
         }
+
+        drop(stmt);
+        conn.execute_batch("COMMIT")
+            .map_err(|e| format!("Commit error: {}", e))?;
+        Ok((file_count, dir_count, total_size))
+    })();
+
+    if transaction_result.is_err() {
+        conn.execute_batch("ROLLBACK").ok();
     }
-
-    drop(stmt);
-    conn.execute_batch("COMMIT")
-        .map_err(|e| format!("Commit error: {}", e))?;
-
-    Ok((file_count, dir_count, total_size))
+    transaction_result
 }
 
 fn enumerate_ntfs_mft_to_staging(
@@ -492,6 +481,7 @@ fn enumerate_ntfs_mft_to_staging(
         let mut dir_count = 0u64;
         let mut total_size = 0u64;
         let mut path_map: HashMap<String, (Option<String>, String, bool)> = HashMap::new();
+        let mut buf = Vec::new();
 
         while start_record < total_records {
             if cancel_token.load(Ordering::Relaxed) {
@@ -499,46 +489,41 @@ fn enumerate_ntfs_mft_to_staging(
             }
 
             let chunk_count = MFT_CHUNK_RECORDS.min(total_records - start_record);
-            let byte_offset =
-                scanner.mft_abs_offset() + start_record * scanner.record_size() as u64;
             let byte_count = chunk_count * scanner.record_size() as u64;
-            reader
-                .seek(SeekFrom::Start(byte_offset))
-                .map_err(|e| format!("Seek MFT chunk {start_record}: {e}"))?;
-            let mut buf = vec![0u8; byte_count as usize];
-            reader
-                .read_exact(&mut buf)
-                .map_err(|e| format!("Read MFT chunk {start_record}: {e}"))?;
-
-            let records = scanner.parse_chunk(&buf, start_record, chunk_count);
-            for entry in records_to_partition_file_entries(&records, ds_id, partition.index) {
-                add_partition_entry_to_path_map(&mut path_map, &entry, partition.index);
-                match entry.entry_type {
-                    EntryType::Directory => dir_count += 1,
-                    EntryType::File => {
-                        file_count += 1;
-                        total_size += entry.size.unwrap_or(0);
-                    }
-                }
-                stmt.execute(params![
-                    entry.id.0,
-                    entry.parent_id.as_ref().map(|id| &id.0),
-                    entry.data_source_id.0,
-                    entry.name,
-                    if entry.entry_type == EntryType::Directory {
-                        "Directory"
-                    } else {
-                        "File"
-                    },
-                    entry.size,
-                    entry.ext,
-                    entry.created_at.as_ref().map(|dt| dt.to_rfc3339()),
-                    entry.modified_at.as_ref().map(|dt| dt.to_rfc3339()),
-                    entry.accessed_at.as_ref().map(|dt| dt.to_rfc3339()),
-                    entry.changed_at.as_ref().map(|dt| dt.to_rfc3339()),
-                ])
-                .map_err(|e| format!("Insert MFT staging row: {e}"))?;
+            buf.resize(byte_count as usize, 0);
+            let mft_stream_offset = start_record * scanner.record_size() as u64;
+            if params.mft_data_runs.is_empty() {
+                let byte_offset = scanner.mft_abs_offset() + mft_stream_offset;
+                reader
+                    .seek(SeekFrom::Start(byte_offset))
+                    .map_err(|e| format!("Seek MFT chunk {start_record}: {e}"))?;
+                reader
+                    .read_exact(&mut buf[..byte_count as usize])
+                    .map_err(|e| format!("Read MFT chunk {start_record}: {e}"))?;
+            } else {
+                read_ntfs_mft_stream(
+                    &mut *reader,
+                    params.volume_offset,
+                    params.cluster_size,
+                    &params.mft_data_runs,
+                    mft_stream_offset,
+                    &mut buf[..byte_count as usize],
+                )
+                .map_err(|e| format!("Read MFT runlist chunk {start_record}: {e}"))?;
             }
+
+            let records =
+                scanner.parse_chunk(&buf[..byte_count as usize], start_record, chunk_count);
+            stage_mft_records(
+                &mut stmt,
+                &records,
+                ds_id,
+                partition.index,
+                &mut path_map,
+                &mut file_count,
+                &mut dir_count,
+                &mut total_size,
+            )?;
 
             start_record += chunk_count;
             if let Some(cb) = progress_cb {
@@ -547,15 +532,24 @@ fn enumerate_ntfs_mft_to_staging(
         }
 
         drop(stmt);
+        backfill_ntfs_directory_index_entries(
+            conn,
+            ds_id,
+            partition,
+            partition.index,
+            &mut path_map,
+            &mut file_count,
+            &mut dir_count,
+        )
+        .map_err(|e| format!("Backfill NTFS directory index entries: {e}"))?;
         if path_map.len() > MFT_HASHMAP_PATH_LIMIT {
             update_mft_staging_paths_via_sqlite(conn, ds_id, partition.index, &path_map)
                 .map_err(|e| format!("Update large MFT staging paths: {e}"))?;
         } else {
-            update_mft_staging_paths(conn, ds_id, partition.index, &path_map)
-                .map_err(|e| format!("Update MFT staging paths: {e}"))?;
-            update_mft_staging_parent_ids(conn, ds_id, partition.index, &path_map)
-                .map_err(|e| format!("Update MFT staging parents: {e}"))?;
+            update_mft_staging_paths_and_parent_ids(conn, ds_id, partition.index, &path_map)
+                .map_err(|e| format!("Update MFT staging paths/parents: {e}"))?;
         }
+        validate_mft_staging_shape(conn, ds_id, partition.index)?;
         Ok((file_count, dir_count, total_size))
     })();
 
@@ -578,7 +572,63 @@ fn enumerate_ntfs_mft_to_staging(
     Ok(stats)
 }
 
-#[derive(Debug, Clone, Copy)]
+fn validate_mft_staging_shape(
+    conn: &rusqlite::Connection,
+    ds_id: &str,
+    partition_index: usize,
+) -> Result<(), String> {
+    let root_id = mft_entry_id(partition_index, 5);
+    let suspicious_root_system32 = mft_root_child_count(conn, ds_id, &root_id, "System32")?;
+    let suspicious_root_hives = mft_root_child_count(conn, ds_id, &root_id, "SOFTWARE")?
+        + mft_root_child_count(conn, ds_id, &root_id, "System.evtx")?;
+    let windows_dirs = mft_directory_name_count(conn, ds_id, partition_index, "Windows")?;
+    let users_dirs = mft_directory_name_count(conn, ds_id, partition_index, "Users")?;
+
+    if windows_dirs == 0
+        && users_dirs == 0
+        && (suspicious_root_system32 > 0 || suspicious_root_hives > 0)
+    {
+        return Err(format!(
+            "MFT fast path produced suspicious flat NTFS tree: root System32={suspicious_root_system32}, root hive/log candidates={suspicious_root_hives}, Windows dirs={windows_dirs}, Users dirs={users_dirs}. Falling back to recursive NTFS reader."
+        ));
+    }
+    Ok(())
+}
+
+fn mft_root_child_count(
+    conn: &rusqlite::Connection,
+    ds_id: &str,
+    root_id: &str,
+    name: &str,
+) -> Result<i64, String> {
+    conn.query_row(
+        "SELECT COUNT(*) FROM file_entries
+         WHERE data_source_id = ?1 AND parent_id = ?2 AND name = ?3 COLLATE NOCASE",
+        params![ds_id, root_id, name],
+        |row| row.get(0),
+    )
+    .map_err(|e| e.to_string())
+}
+
+fn mft_directory_name_count(
+    conn: &rusqlite::Connection,
+    ds_id: &str,
+    partition_index: usize,
+    name: &str,
+) -> Result<i64, String> {
+    conn.query_row(
+        "SELECT COUNT(*) FROM file_entries
+         WHERE data_source_id = ?1
+           AND id LIKE ?2
+           AND entry_type = 'directory' COLLATE NOCASE
+           AND name = ?3 COLLATE NOCASE",
+        params![ds_id, format!("mft:{partition_index}:%"), name],
+        |row| row.get(0),
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone)]
 struct NtfsMftParams {
     volume_offset: u64,
     mft_cluster: u64,
@@ -586,6 +636,7 @@ struct NtfsMftParams {
     record_size: u32,
     bytes_per_sector: u16,
     mft_data_size: u64,
+    mft_data_runs: Vec<(i64, u64)>,
 }
 
 fn read_ntfs_mft_parameters(partition: &PartitionWork) -> Result<NtfsMftParams, String> {
@@ -617,7 +668,11 @@ fn read_ntfs_mft_parameters(partition: &PartitionWork) -> Result<NtfsMftParams, 
     reader
         .read_exact(&mut mft_record)
         .map_err(|e| format!("Read MFT record 0: {e}"))?;
+    apply_ntfs_record_fixup(&mut mft_record, bytes_per_sector as usize)
+        .map_err(|e| format!("Fix up MFT record 0: {e}"))?;
     let mft_data_size = parse_mft_data_size(&mft_record).unwrap_or(MFT_FALLBACK_SIZE);
+    let mft_data_runs = parse_mft_data_runs_from_record(&mft_record)
+        .map_err(|e| format!("Parse MFT data runs: {e}"))?;
 
     Ok(NtfsMftParams {
         volume_offset: partition_offset(partition),
@@ -626,6 +681,7 @@ fn read_ntfs_mft_parameters(partition: &PartitionWork) -> Result<NtfsMftParams, 
         record_size,
         bytes_per_sector,
         mft_data_size,
+        mft_data_runs,
     })
 }
 
@@ -688,6 +744,380 @@ fn parse_mft_data_size(record: &[u8]) -> Option<u64> {
     None
 }
 
+fn apply_ntfs_record_fixup(record: &mut [u8], sector_size: usize) -> Result<(), String> {
+    if record.len() < 8 || sector_size < 2 {
+        return Ok(());
+    }
+
+    let usa_offset = u16::from_le_bytes([record[4], record[5]]) as usize;
+    let usa_count = u16::from_le_bytes([record[6], record[7]]) as usize;
+    if usa_offset == 0 || usa_count < 2 {
+        return Ok(());
+    }
+    let usa_bytes = usa_count
+        .checked_mul(2)
+        .ok_or_else(|| "invalid update sequence".to_string())?;
+    if usa_offset + usa_bytes > record.len() {
+        return Err("update sequence array exceeds record length".to_string());
+    }
+
+    let expected = [record[usa_offset], record[usa_offset + 1]];
+    for index in 1..usa_count {
+        let fixup_pos = index
+            .checked_mul(sector_size)
+            .and_then(|value| value.checked_sub(2))
+            .ok_or_else(|| "invalid fixup position".to_string())?;
+        if fixup_pos + 2 > record.len() {
+            return Err("record too short for update sequence fixup".to_string());
+        }
+        if record[fixup_pos..fixup_pos + 2] != expected {
+            return Err("update sequence signature mismatch".to_string());
+        }
+
+        let replacement = usa_offset + index * 2;
+        record[fixup_pos] = record[replacement];
+        record[fixup_pos + 1] = record[replacement + 1];
+    }
+    Ok(())
+}
+
+fn parse_mft_data_runs_from_record(record: &[u8]) -> Result<Vec<(i64, u64)>, String> {
+    if record.len() < 0x18 || &record[0..4] != b"FILE" {
+        return Err("MFT record 0 is not a valid FILE record".to_string());
+    }
+
+    let attr_off = u16::from_le_bytes([record[0x14], record[0x15]]) as usize;
+    let mut pos = attr_off;
+    while pos + 8 < record.len() {
+        let typ = u32::from_le_bytes(
+            record[pos..pos + 4]
+                .try_into()
+                .map_err(|_| "Invalid MFT attribute type".to_string())?,
+        );
+        if typ == 0xFFFFFFFF {
+            break;
+        }
+        let len = u32::from_le_bytes(
+            record[pos + 4..pos + 8]
+                .try_into()
+                .map_err(|_| "Invalid MFT attribute length".to_string())?,
+        ) as usize;
+        if len == 0 || pos + len > record.len() {
+            break;
+        }
+
+        if typ == 0x80 && pos + 0x40 <= record.len() && (record[pos + 8] & 1) != 0 {
+            let run_off = u16::from_le_bytes([record[pos + 0x20], record[pos + 0x21]]) as usize;
+            if run_off == 0 || run_off >= len {
+                return Ok(Vec::new());
+            }
+            return parse_ntfs_data_runs(&record[pos + run_off..pos + len]);
+        }
+        pos += len;
+    }
+    Ok(Vec::new())
+}
+
+fn parse_ntfs_data_runs(mut data: &[u8]) -> Result<Vec<(i64, u64)>, String> {
+    const MAX_DATA_RUNS: usize = 100_000;
+
+    let mut runs = Vec::new();
+    let mut prev_lcn: i64 = 0;
+    while !data.is_empty() && data[0] != 0 {
+        if runs.len() >= MAX_DATA_RUNS {
+            return Err(format!("too many data runs (limit: {MAX_DATA_RUNS})"));
+        }
+        let header = data[0];
+        let size_bytes = (header & 0x0F) as usize;
+        let offset_bytes = ((header >> 4) & 0x0F) as usize;
+        if size_bytes > 8 || offset_bytes > 8 {
+            break;
+        }
+        data = &data[1..];
+        if data.len() < size_bytes + offset_bytes {
+            break;
+        }
+        let cluster_count = read_sized_le(&data[..size_bytes]);
+        data = &data[size_bytes..];
+        let lcn_offset = read_sized_le_signed(&data[..offset_bytes]);
+        data = &data[offset_bytes..];
+        let lcn = if runs.is_empty() {
+            lcn_offset
+        } else {
+            prev_lcn + lcn_offset
+        };
+        prev_lcn = lcn;
+        if cluster_count == 0 {
+            continue;
+        }
+        runs.push((lcn, cluster_count));
+    }
+    Ok(runs)
+}
+
+fn read_ntfs_mft_stream(
+    reader: &mut dyn EvidenceReader,
+    volume_offset: u64,
+    cluster_size: u64,
+    runs: &[(i64, u64)],
+    mut stream_offset: u64,
+    out: &mut [u8],
+) -> std::io::Result<()> {
+    let mut written = 0usize;
+    let mut run_stream_start = 0u64;
+
+    for (lcn, cluster_count) in runs {
+        if *lcn < 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("negative MFT LCN {lcn}"),
+            ));
+        }
+        let run_bytes = cluster_count.checked_mul(cluster_size).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("MFT run overflow: {cluster_count} clusters x {cluster_size} bytes"),
+            )
+        })?;
+        let run_end = run_stream_start.saturating_add(run_bytes);
+        if stream_offset >= run_end {
+            run_stream_start = run_end;
+            continue;
+        }
+
+        let offset_in_run = stream_offset.saturating_sub(run_stream_start);
+        let available = run_bytes.saturating_sub(offset_in_run);
+        let to_read = available.min((out.len() - written) as u64) as usize;
+        let disk_offset = volume_offset
+            .checked_add((*lcn as u64).saturating_mul(cluster_size))
+            .and_then(|base| base.checked_add(offset_in_run))
+            .ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, "MFT disk offset overflow")
+            })?;
+
+        reader.seek(SeekFrom::Start(disk_offset))?;
+        reader.read_exact(&mut out[written..written + to_read])?;
+        written += to_read;
+        if written == out.len() {
+            return Ok(());
+        }
+        stream_offset = run_end;
+        run_stream_start = run_end;
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::UnexpectedEof,
+        format!(
+            "MFT stream ended before read completed (read {} of {} bytes)",
+            written,
+            out.len()
+        ),
+    ))
+}
+
+fn read_sized_le(bytes: &[u8]) -> u64 {
+    let mut value = 0u64;
+    for (index, byte) in bytes.iter().enumerate().take(8) {
+        value |= (*byte as u64) << (index * 8);
+    }
+    value
+}
+
+fn read_sized_le_signed(bytes: &[u8]) -> i64 {
+    let n = bytes.len().min(8);
+    if n == 0 {
+        return 0;
+    }
+    let mut value = 0u64;
+    for (index, byte) in bytes.iter().enumerate().take(n) {
+        value |= (*byte as u64) << (index * 8);
+    }
+    if bytes[n - 1] & 0x80 != 0 {
+        for index in n..8 {
+            value |= 0xFFu64 << (index * 8);
+        }
+    }
+    value as i64
+}
+
+fn backfill_ntfs_directory_index_entries(
+    conn: &rusqlite::Connection,
+    ds_id: &str,
+    partition: &PartitionWork,
+    partition_index: usize,
+    path_map: &mut HashMap<String, (Option<String>, String, bool)>,
+    file_count: &mut u64,
+    dir_count: &mut u64,
+) -> Result<(), String> {
+    let reader = open_partition_evidence_reader(partition)?;
+    let ntfs = NtfsReader::open(reader, partition_offset(partition))
+        .map_err(|e| format!("Open NTFS reader for directory indexes: {e}"))?;
+
+    let mut stmt = conn
+        .prepare_cached(
+            "INSERT OR IGNORE INTO file_entries
+             (id, parent_id, data_source_id, path, name, entry_type,
+              size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256)
+             VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, 0, NULL, NULL, NULL, NULL, NULL)",
+        )
+        .map_err(|e| format!("Prepare NTFS directory index backfill: {e}"))?;
+
+    let referenced_parents: HashSet<String> = path_map
+        .values()
+        .filter_map(|(parent, _, _)| parent.clone())
+        .collect();
+    let mut queue = VecDeque::from([5u64]);
+    let mut visited = HashSet::new();
+    while let Some(dir_ref) = queue.pop_front() {
+        if !visited.insert(dir_ref) {
+            continue;
+        }
+        let entries = match ntfs.list_directory_entries_by_inode(dir_ref) {
+            Ok(entries) => entries,
+            Err(error) => {
+                tracing::warn!("Failed to list NTFS directory index {}: {}", dir_ref, error);
+                continue;
+            }
+        };
+
+        for entry in entries {
+            if entry.name.is_empty() {
+                continue;
+            }
+            let record_key = entry.mft_ref.to_string();
+            let existing = path_map.get(&record_key).cloned();
+            let is_missing_record = existing.is_none();
+            let needs_name_backfill = existing
+                .as_ref()
+                .map(|(_, name, _)| name.is_empty())
+                .unwrap_or(false);
+            let is_missing_parent = referenced_parents.contains(&record_key);
+            let parent_key = dir_ref.to_string();
+            if is_missing_record || (needs_name_backfill && is_missing_parent) {
+                path_map.insert(
+                    record_key.clone(),
+                    (Some(parent_key.clone()), entry.name.clone(), entry.is_dir),
+                );
+                let entry_id = mft_entry_id(partition_index, entry.mft_ref);
+                let changed = stmt
+                    .execute(params![
+                        entry_id,
+                        mft_entry_id(partition_index, dir_ref),
+                        ds_id,
+                        entry.name,
+                        if entry.is_dir { "directory" } else { "file" },
+                        if entry.is_dir { None } else { Some(entry.size) },
+                        if entry.is_dir {
+                            None
+                        } else {
+                            entry
+                                .name
+                                .rsplit('.')
+                                .next()
+                                .filter(|ext| *ext != entry.name)
+                                .map(|ext| ext.to_string())
+                        },
+                    ])
+                    .map_err(|e| format!("Insert NTFS directory index backfill row: {e}"))?;
+                if changed > 0 {
+                    if entry.is_dir {
+                        *dir_count += 1;
+                    } else {
+                        *file_count += 1;
+                    }
+                }
+            }
+
+            if entry.is_dir
+                && !visited.contains(&entry.mft_ref)
+                && referenced_parents.contains(&record_key)
+            {
+                queue.push_back(entry.mft_ref);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn stage_mft_records(
+    stmt: &mut rusqlite::CachedStatement<'_>,
+    records: &[MftRecord],
+    ds_id: &str,
+    partition_index: usize,
+    path_map: &mut HashMap<String, (Option<String>, String, bool)>,
+    file_count: &mut u64,
+    dir_count: &mut u64,
+    total_size: &mut u64,
+) -> Result<(), String> {
+    for record in records {
+        if !record.is_valid || (record.name.is_empty() && record.record_number != 5) {
+            continue;
+        }
+
+        let name = if record.record_number == 5 && (record.name.is_empty() || record.name == ".") {
+            "\\".to_string()
+        } else {
+            record.name.clone()
+        };
+        let parent_key = if record.record_number == 5 {
+            None
+        } else {
+            Some(record.parent_ref.to_string())
+        };
+        path_map.insert(
+            record.record_number.to_string(),
+            (parent_key.clone(), name.clone(), record.is_dir),
+        );
+
+        let entry_id = mft_entry_id(partition_index, record.record_number);
+        let parent_id = parent_key
+            .as_deref()
+            .map(|parent| mft_entry_id_from_key(partition_index, parent));
+        let size = if record.is_dir {
+            None
+        } else {
+            Some(record.size)
+        };
+        let ext = if record.is_dir {
+            None
+        } else {
+            record
+                .name
+                .rsplit('.')
+                .next()
+                .filter(|ext| *ext != record.name)
+                .map(|ext| ext.to_string())
+        };
+
+        stmt.execute(params![
+            entry_id,
+            parent_id,
+            ds_id,
+            name,
+            if record.is_dir { "directory" } else { "file" },
+            size,
+            ext,
+            record.created_at.as_ref().map(|dt| dt.to_rfc3339()),
+            record.modified_at.as_ref().map(|dt| dt.to_rfc3339()),
+            record.accessed_at.as_ref().map(|dt| dt.to_rfc3339()),
+            record.changed_at.as_ref().map(|dt| dt.to_rfc3339()),
+        ])
+        .map_err(|e| format!("Insert MFT staging row: {e}"))?;
+
+        if record.is_dir {
+            *dir_count += 1;
+        } else {
+            *file_count += 1;
+            *total_size += record.size;
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
 fn records_to_partition_file_entries(
     records: &[MftRecord],
     ds_id: &str,
@@ -757,12 +1187,14 @@ fn mft_entry_id_from_key(partition_index: usize, record_key: &str) -> String {
     format!("mft:{partition_index}:{record_key}")
 }
 
+#[cfg(test)]
 fn mft_record_key(partition_index: usize, entry_id: &str) -> Option<String> {
     entry_id
         .strip_prefix(&format!("mft:{partition_index}:"))
         .map(|value| value.to_string())
 }
 
+#[cfg(test)]
 fn add_partition_entry_to_path_map(
     path_map: &mut HashMap<String, (Option<String>, String, bool)>,
     entry: &FileEntry,
@@ -785,6 +1217,7 @@ fn add_partition_entry_to_path_map(
     );
 }
 
+#[cfg(test)]
 fn update_mft_staging_paths(
     conn: &rusqlite::Connection,
     ds_id: &str,
@@ -806,6 +1239,44 @@ fn update_mft_staging_paths(
             mft_entry_id_from_key(partition_index, record_num),
             ds_id
         ])?;
+    }
+    Ok(())
+}
+
+fn update_mft_staging_paths_and_parent_ids(
+    conn: &rusqlite::Connection,
+    ds_id: &str,
+    partition_index: usize,
+    path_map: &HashMap<String, (Option<String>, String, bool)>,
+) -> rusqlite::Result<()> {
+    let mut resolved = HashMap::with_capacity(path_map.len());
+    let mut visiting = HashSet::new();
+    for record in path_map.keys() {
+        resolve_mft_path(record, path_map, &mut resolved, &mut visiting);
+    }
+
+    let root_id = mft_entry_id_from_key(partition_index, "5");
+    let mut stmt = conn.prepare_cached(
+        "UPDATE file_entries
+         SET path = ?1, parent_id = ?2
+         WHERE id = ?3 AND data_source_id = ?4",
+    )?;
+
+    for (record_num, (parent, _, _)) in path_map {
+        let path = resolved.get(record_num).map(String::as_str).unwrap_or("");
+        let entry_id = mft_entry_id_from_key(partition_index, record_num);
+        let parent_id = if record_num == "5" {
+            None
+        } else {
+            match parent.as_deref() {
+                Some(parent) if parent != record_num && path_map.contains_key(parent) => {
+                    Some(mft_entry_id_from_key(partition_index, parent))
+                }
+                _ if path_map.contains_key("5") => Some(root_id.clone()),
+                _ => None,
+            }
+        };
+        stmt.execute(params![path, parent_id, entry_id, ds_id])?;
     }
     Ok(())
 }
@@ -845,6 +1316,7 @@ fn resolve_mft_path(
     path
 }
 
+#[cfg(test)]
 fn update_mft_staging_parent_ids(
     conn: &rusqlite::Connection,
     ds_id: &str,
@@ -990,7 +1462,7 @@ mod tests {
     use super::*;
     use evidence_core::filesystem::root_node;
     use evidence_core::FsNode;
-    use std::io::{self, Cursor, Read};
+    use std::io::{self, Cursor, Read, Seek};
     use std::sync::atomic::AtomicUsize;
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
@@ -1074,6 +1546,36 @@ mod tests {
 
         fn data_source_name(&self) -> &str {
             &self.name
+        }
+    }
+
+    struct FakeEvidenceReader {
+        cursor: Cursor<Vec<u8>>,
+    }
+
+    impl FakeEvidenceReader {
+        fn new(data: Vec<u8>) -> Self {
+            Self {
+                cursor: Cursor::new(data),
+            }
+        }
+    }
+
+    impl Read for FakeEvidenceReader {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            self.cursor.read(buf)
+        }
+    }
+
+    impl Seek for FakeEvidenceReader {
+        fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+            self.cursor.seek(pos)
+        }
+    }
+
+    impl EvidenceReader for FakeEvidenceReader {
+        fn info(&self) -> &evidence_core::ReaderInfo {
+            unimplemented!()
         }
     }
 
@@ -1312,6 +1814,219 @@ mod tests {
     }
 
     #[test]
+    fn ntfs_mft_flat_windows_shape_is_rejected() {
+        let conn = persistence_sqlite::connection::open_in_memory().unwrap();
+        conn.execute_batch(include_str!(
+            "../../persistence-sqlite/src/migrations/scripts/staging_001.sql"
+        ))
+        .unwrap();
+        let ds_id = "ds-flat-mft";
+        conn.execute(
+            "INSERT INTO file_entries (id, parent_id, data_source_id, path, name, entry_type)
+             VALUES ('mft:3:5', NULL, ?1, '\\', '\\', 'directory')",
+            rusqlite::params![ds_id],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO file_entries (id, parent_id, data_source_id, path, name, entry_type)
+             VALUES ('mft:3:5662', 'mft:3:5', ?1, 'System32', 'System32', 'directory')",
+            rusqlite::params![ds_id],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO file_entries (id, parent_id, data_source_id, path, name, entry_type)
+             VALUES ('mft:3:109959', 'mft:3:5', ?1, 'SOFTWARE', 'SOFTWARE', 'file')",
+            rusqlite::params![ds_id],
+        )
+        .unwrap();
+
+        let err = validate_mft_staging_shape(&conn, ds_id, 3).unwrap_err();
+        assert!(err.contains("suspicious flat NTFS tree"));
+    }
+
+    #[test]
+    fn ntfs_mft_stream_reads_split_runs() {
+        let mut data = vec![0u8; 8192];
+        data[1024..1536].fill(0xAA);
+        data[4096..4608].fill(0xBB);
+        let mut reader = FakeEvidenceReader::new(data);
+        let mut out = vec![0u8; 1024];
+
+        read_ntfs_mft_stream(&mut reader, 0, 512, &[(2, 1), (8, 1)], 0, &mut out).unwrap();
+
+        assert!(out[..512].iter().all(|byte| *byte == 0xAA));
+        assert!(out[512..].iter().all(|byte| *byte == 0xBB));
+    }
+
+    #[test]
+    #[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
+    fn real_e01_ntfs_mft_parameters_include_data_runs() {
+        let sample = testing::fixtures::local_e01_fixture()
+            .expect("set FORENSICS_E01_FIXTURE to run real E01 MFT test");
+        let mut reader = E01Reader::open(&sample).unwrap();
+        let probe = crate::datasource_service::detect_image_filesystem(&mut reader).unwrap();
+        let ntfs = probe
+            .candidates
+            .iter()
+            .find(|candidate| {
+                matches!(
+                    candidate.kind,
+                    crate::datasource_service::ImageFilesystemKind::Ntfs
+                )
+            })
+            .expect("expected NTFS candidate");
+        let partition = PartitionWork {
+            index: ntfs.partition_index.unwrap_or(0),
+            name: ntfs
+                .partition_name
+                .clone()
+                .unwrap_or_else(|| "NTFS".to_string()),
+            fs_kind: "ntfs".to_string(),
+            fs: Box::new(FakeFsReader::new(
+                "unused",
+                0,
+                Duration::ZERO,
+                Arc::new(AtomicUsize::new(0)),
+                Arc::new(AtomicUsize::new(0)),
+            )),
+            source_path: sample,
+            source_kind: "e01".to_string(),
+            volume_offset: ntfs.offset,
+        };
+
+        let params = read_ntfs_mft_parameters(&partition).unwrap();
+        eprintln!(
+            "mft cluster={} record_size={} data_size={} runs={:?}",
+            params.mft_cluster,
+            params.record_size,
+            params.mft_data_size,
+            params.mft_data_runs.iter().take(8).collect::<Vec<_>>()
+        );
+        assert!(
+            !params.mft_data_runs.is_empty(),
+            "real NTFS $MFT must expose non-resident data runs"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires FORENSICS_E01_FIXTURE real E01 sample"]
+    fn real_e01_mft_parser_keeps_windows_parent_chain() {
+        let sample = testing::fixtures::local_e01_fixture()
+            .expect("set FORENSICS_E01_FIXTURE to run real E01 MFT test");
+        let mut reader = E01Reader::open(&sample).unwrap();
+        let probe = crate::datasource_service::detect_image_filesystem(&mut reader).unwrap();
+        let ntfs = probe
+            .candidates
+            .iter()
+            .find(|candidate| {
+                matches!(
+                    candidate.kind,
+                    crate::datasource_service::ImageFilesystemKind::Ntfs
+                )
+            })
+            .expect("expected NTFS candidate");
+        let partition = PartitionWork {
+            index: ntfs.partition_index.unwrap_or(0),
+            name: "NTFS".to_string(),
+            fs_kind: "ntfs".to_string(),
+            fs: Box::new(FakeFsReader::new(
+                "unused",
+                0,
+                Duration::ZERO,
+                Arc::new(AtomicUsize::new(0)),
+                Arc::new(AtomicUsize::new(0)),
+            )),
+            source_path: sample,
+            source_kind: "e01".to_string(),
+            volume_offset: ntfs.offset,
+        };
+        let params = read_ntfs_mft_parameters(&partition).unwrap();
+        let scanner = MftScanner::new(
+            params.volume_offset,
+            params.mft_cluster,
+            params.cluster_size,
+            params.record_size,
+            params.bytes_per_sector,
+            params.mft_data_size,
+        );
+        let mut reader = open_partition_evidence_reader(&partition).unwrap();
+        let mut buf = vec![0u8; scanner.total_records() as usize * scanner.record_size() as usize];
+        read_ntfs_mft_stream(
+            &mut *reader,
+            params.volume_offset,
+            params.cluster_size,
+            &params.mft_data_runs,
+            0,
+            &mut buf,
+        )
+        .unwrap();
+        let records = scanner.parse_chunk(&buf, 0, scanner.total_records());
+        let windows = records
+            .iter()
+            .filter(|record| record.name.eq_ignore_ascii_case("Windows"))
+            .take(8)
+            .map(|record| {
+                (
+                    record.record_number,
+                    record.parent_ref,
+                    record.is_dir,
+                    record.name.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let system32 = records
+            .iter()
+            .filter(|record| record.name.eq_ignore_ascii_case("System32"))
+            .take(8)
+            .map(|record| {
+                (
+                    record.record_number,
+                    record.parent_ref,
+                    record.is_dir,
+                    record.name.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let parent_records = system32
+            .iter()
+            .filter_map(|(_, parent, _, _)| {
+                records
+                    .iter()
+                    .find(|record| record.record_number == *parent)
+                    .map(|record| {
+                        (
+                            record.record_number,
+                            record.parent_ref,
+                            record.is_dir,
+                            record.is_valid,
+                            record.name.clone(),
+                        )
+                    })
+            })
+            .collect::<Vec<_>>();
+        eprintln!("Windows records: {windows:?}");
+        eprintln!("System32 records: {system32:?}");
+        eprintln!("System32 parent records: {parent_records:?}");
+        let ntfs = NtfsReader::open(
+            open_partition_evidence_reader(&partition).unwrap(),
+            ntfs.offset,
+        )
+        .unwrap();
+        let root_entries = ntfs.list_root_directory_entries().unwrap();
+        let windows_record = root_entries
+            .iter()
+            .find(|entry| entry.name.eq_ignore_ascii_case("Windows") && entry.is_dir)
+            .map(|entry| entry.mft_ref)
+            .expect("root index must expose Windows directory");
+        assert!(
+            system32
+                .iter()
+                .any(|(_, parent, is_dir, _)| *parent == windows_record && *is_dir),
+            "expected System32 directory under Windows record {windows_record}"
+        );
+    }
+
+    #[test]
     fn ntfs_mft_fast_path_fallback_records_warning() {
         let tmp = tempfile::TempDir::new().unwrap();
         let active_lists = Arc::new(AtomicUsize::new(0));
@@ -1411,6 +2126,38 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].file_count, 0);
         assert_eq!(results[0].error.as_deref(), Some("Cancelled"));
+    }
+
+    #[test]
+    fn recursive_enum_cancel_rolls_back_current_staging_transaction() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cancel = AtomicBool::new(false);
+        let progress_seen = AtomicUsize::new(0);
+        let active_lists = Arc::new(AtomicUsize::new(0));
+        let max_active_lists = Arc::new(AtomicUsize::new(0));
+        let partition = fake_partition_work(0, 10, Duration::ZERO, active_lists, max_active_lists);
+
+        let result = enumerate_single_partition(
+            tmp.path(),
+            "ds-cancel-rollback",
+            partition,
+            &cancel,
+            Some(&|_, _| {
+                progress_seen.fetch_add(1, Ordering::SeqCst);
+                cancel.store(true, Ordering::Relaxed);
+            }),
+        );
+
+        assert_eq!(result.error.as_deref(), Some("Cancelled"));
+        assert!(progress_seen.load(Ordering::SeqCst) > 0);
+        let conn = staging::open_partition_staging(tmp.path(), "ds-cancel-rollback", 0).unwrap();
+        assert_eq!(staging::staging_db_row_count(&conn).unwrap(), 0);
+        assert_eq!(
+            staging::get_staging_meta(&conn, "status")
+                .unwrap()
+                .as_deref(),
+            Some("failed")
+        );
     }
 
     #[test]

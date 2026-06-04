@@ -25,6 +25,13 @@ export async function createCase(caseRoot: string, name: string, examiner?: stri
     apiClient.getMockProvider().createCase(caseRoot, name, examiner), { request: { caseRoot, name, examiner: examiner ?? null } });
 }
 
+export async function createAnalysisDemoCase() {
+  return apiClient.request(
+    'create_analysis_demo_case',
+    () => apiClient.getMockProvider().createCase('mock://analysis-demo', 'Analysis Demo', 'Codex Demo'),
+  );
+}
+
 export async function openCase(caseRoot: string) {
   return apiClient.request('open_case', () => apiClient.getMockProvider().openCase(caseRoot), { request: { caseRoot } });
 }

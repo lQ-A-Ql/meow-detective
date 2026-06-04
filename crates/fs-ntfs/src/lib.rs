@@ -20,6 +20,20 @@ struct DirEntry {
     mft_ref: u64,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct DataRun {
+    lcn: Option<i64>,
+    cluster_count: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct NtfsDirectoryEntry {
+    pub name: String,
+    pub is_dir: bool,
+    pub size: u64,
+    pub mft_ref: u64,
+}
+
 #[allow(dead_code)]
 pub struct NtfsReader {
     reader: RefCell<Box<dyn EvidenceReader>>,
@@ -29,6 +43,7 @@ pub struct NtfsReader {
     mft_record_size: u32,
     index_record_size: u32,
     cluster_size: u64,
+    mft_data_runs: Vec<(i64, u64)>,
     /// Absolute offset of NTFS volume start in evidence.
     volume_offset: u64,
 }
@@ -54,6 +69,17 @@ impl NtfsReader {
         let mft_record_size = mft_record_bytes(&boot);
         let index_record_size = index_record_bytes(&boot, cluster_size as u32, mft_record_size);
 
+        let mft_record0 = read_contiguous_mft_record(
+            &mut *reader,
+            offset,
+            mft_cluster,
+            cluster_size,
+            mft_record_size,
+            bytes_per_sector,
+            0,
+        )?;
+        let mft_data_runs = parse_mft_data_runs_from_record(&mft_record0).unwrap_or_default();
+
         Ok(Self {
             reader: RefCell::new(reader),
             bytes_per_sector,
@@ -62,6 +88,7 @@ impl NtfsReader {
             mft_record_size,
             index_record_size,
             cluster_size,
+            mft_data_runs,
             volume_offset: offset,
         })
     }
@@ -81,13 +108,70 @@ impl NtfsReader {
     }
 
     fn read_mft_record(&self, record_number: u64) -> io::Result<Vec<u8>> {
-        let off = self.mft_offset(record_number);
-        let mut reader = self.reader.borrow_mut();
-        reader.seek(SeekFrom::Start(off))?;
         let mut rec = vec![0u8; self.mft_record_size as usize];
-        reader.read_exact(&mut rec)?;
+        if self.mft_data_runs.is_empty() {
+            let off = self.mft_offset(record_number);
+            let mut reader = self.reader.borrow_mut();
+            reader.seek(SeekFrom::Start(off))?;
+            reader.read_exact(&mut rec)?;
+        } else {
+            let mft_stream_offset = record_number
+                .checked_mul(self.mft_record_size as u64)
+                .ok_or_else(|| invalid_fs_data("MFT record offset overflow"))?;
+            self.read_mft_stream_at(mft_stream_offset, &mut rec)?;
+        }
         apply_record_fixup(&mut rec, self.bytes_per_sector as usize)?;
         Ok(rec)
+    }
+
+    fn read_mft_stream_at(&self, mut stream_offset: u64, out: &mut [u8]) -> io::Result<()> {
+        let mut written = 0usize;
+        let mut run_stream_start = 0u64;
+        let mut reader = self.reader.borrow_mut();
+
+        for (lcn, cluster_count) in &self.mft_data_runs {
+            if *lcn < 0 {
+                return Err(invalid_fs_data(format!("negative MFT LCN {}", lcn)));
+            }
+            let run_bytes = cluster_count
+                .checked_mul(self.cluster_size)
+                .ok_or_else(|| {
+                    invalid_fs_data(format!(
+                        "MFT run overflow: {} clusters × {} bytes/cluster",
+                        cluster_count, self.cluster_size
+                    ))
+                })?;
+            let run_end = run_stream_start.saturating_add(run_bytes);
+            if stream_offset >= run_end {
+                run_stream_start = run_end;
+                continue;
+            }
+
+            let offset_in_run = stream_offset.saturating_sub(run_stream_start);
+            let available = run_bytes.saturating_sub(offset_in_run);
+            let need = out.len() - written;
+            let to_read = available.min(need as u64) as usize;
+            let disk_offset = self
+                .volume_offset
+                .checked_add((*lcn as u64).saturating_mul(self.cluster_size))
+                .and_then(|base| base.checked_add(offset_in_run))
+                .ok_or_else(|| invalid_fs_data("MFT run disk offset overflow"))?;
+
+            reader.seek(SeekFrom::Start(disk_offset))?;
+            reader.read_exact(&mut out[written..written + to_read])?;
+            written += to_read;
+            if written == out.len() {
+                return Ok(());
+            }
+            stream_offset = run_end;
+            run_stream_start = run_end;
+        }
+
+        Err(unexpected_fs_eof(format!(
+            "MFT stream ended before record read completed (read {} of {} bytes)",
+            written,
+            out.len()
+        )))
     }
 
     /// List children of any directory by MFT inode number.
@@ -189,50 +273,6 @@ impl NtfsReader {
 
     // --- Non-resident attribute & INDX record helpers ---
 
-    /// Parse NTFS data run list. Returns Vec<(LCN, cluster_count)>.
-    ///
-    /// Limits the number of data runs to prevent excessive memory allocation
-    /// from malicious or corrupted NTFS metadata.
-    fn parse_data_runs(&self, mut data: &[u8]) -> io::Result<Vec<(i64, u64)>> {
-        const MAX_DATA_RUNS: usize = 100_000;
-
-        let mut runs = Vec::new();
-        let mut prev_lcn: i64 = 0;
-        while !data.is_empty() && data[0] != 0 {
-            if runs.len() >= MAX_DATA_RUNS {
-                return Err(invalid_fs_data(format!(
-                    "too many data runs (limit: {})",
-                    MAX_DATA_RUNS
-                )));
-            }
-            let header = data[0];
-            let size_bytes = (header & 0x0F) as usize;
-            let offset_bytes = ((header >> 4) & 0x0F) as usize;
-            if size_bytes > 8 || offset_bytes > 8 {
-                break; // invalid data run header nibbles
-            }
-            data = &data[1..];
-            if data.len() < size_bytes + offset_bytes {
-                break;
-            }
-            let cluster_count = read_sized_le(&data[..size_bytes]);
-            data = &data[size_bytes..];
-            let lcn_offset = read_sized_le_signed(&data[..offset_bytes]);
-            data = &data[offset_bytes..];
-            let lcn = if runs.is_empty() {
-                lcn_offset
-            } else {
-                prev_lcn + lcn_offset
-            };
-            prev_lcn = lcn;
-            if cluster_count == 0 {
-                continue; // sparse run: LCN gap without data
-            }
-            runs.push((lcn, cluster_count));
-        }
-        Ok(runs)
-    }
-
     /// Read non-resident attribute data by walking its data run list.
     fn read_attr_nonresident(&self, attr_pos: usize, record: &[u8]) -> io::Result<Vec<u8>> {
         // Verify non-resident flag
@@ -260,40 +300,200 @@ impl NtfsReader {
             )));
         }
 
-        let runs = self.parse_data_runs(&record[attr_pos + run_off..])?;
-        let mut buf = Vec::with_capacity(alloc_size as usize);
+        let attr_flags = u16::from_le_bytes(
+            record[attr_pos + 0x0c..attr_pos + 0x0e]
+                .try_into()
+                .unwrap_or([0; 2]),
+        );
+        let real_size = u64::from_le_bytes(
+            record[attr_pos + 0x30..attr_pos + 0x38]
+                .try_into()
+                .unwrap_or([0; 8]),
+        );
+        let runs = parse_data_runs_ext(&record[attr_pos + run_off..])?;
+
+        if attr_flags & 0x0001 != 0 {
+            let compression_unit_exp = if attr_pos + 0x24 <= record.len() {
+                u16::from_le_bytes(
+                    record[attr_pos + 0x22..attr_pos + 0x24]
+                        .try_into()
+                        .unwrap_or([0; 2]),
+                )
+            } else {
+                4
+            };
+            let decoded =
+                self.read_compressed_data_runs_to_vec(&runs, compression_unit_exp, real_size)?;
+            return Ok(truncate_data_to_declared_size(decoded, real_size));
+        }
+
+        let buf = self.read_data_runs_to_vec(&runs, true, alloc_size)?;
+        Ok(truncate_data_to_declared_size(buf, real_size))
+    }
+
+    fn read_data_runs_to_vec(
+        &self,
+        runs: &[DataRun],
+        include_sparse: bool,
+        max_bytes: u64,
+    ) -> io::Result<Vec<u8>> {
+        const MAX_FILE_BUFFER: usize = 128 * 1024 * 1024;
+        let mut buf = Vec::new();
         let mut reader = self.reader.borrow_mut();
 
-        for (lcn, count) in runs {
-            let offset = self.cluster_to_offset(lcn)?;
-            let chunk = count.checked_mul(self.cluster_size).ok_or_else(|| {
-                invalid_fs_data(format!(
-                    "data run overflow: {} clusters × {} bytes/cluster",
-                    count, self.cluster_size
-                ))
-            })?;
-            // Guard: prevent OOM from malicious data runs claiming huge clusters
-            const MAX_FILE_BUFFER: usize = 128 * 1024 * 1024; // 128 MB
-            let start = buf.len();
-            let new_size = start + chunk as usize;
+        for run in runs {
+            let chunk = run
+                .cluster_count
+                .checked_mul(self.cluster_size)
+                .ok_or_else(|| {
+                    invalid_fs_data(format!(
+                        "data run overflow: {} clusters × {} bytes/cluster",
+                        run.cluster_count, self.cluster_size
+                    ))
+                })?;
+            if max_bytes > 0 && buf.len() as u64 >= max_bytes {
+                break;
+            }
+            let to_append = if max_bytes > 0 {
+                chunk.min(max_bytes.saturating_sub(buf.len() as u64))
+            } else {
+                chunk
+            } as usize;
+            if to_append == 0 {
+                continue;
+            }
+            let new_size = buf
+                .len()
+                .checked_add(to_append)
+                .ok_or_else(|| invalid_fs_data("data run buffer size overflow"))?;
             if new_size > MAX_FILE_BUFFER {
                 return Err(invalid_fs_data(format!(
                     "data run buffer exceeds 128 MB limit (would be {} bytes)",
                     new_size
                 )));
             }
-            reader.seek(SeekFrom::Start(offset))?;
-            buf.resize(new_size, 0);
-            reader.read_exact(&mut buf[start..])?;
+
+            match run.lcn {
+                Some(lcn) => {
+                    let offset = self.cluster_to_offset(lcn)?;
+                    let start = buf.len();
+                    buf.resize(new_size, 0);
+                    reader.seek(SeekFrom::Start(offset))?;
+                    reader.read_exact(&mut buf[start..])?;
+                }
+                None if include_sparse => {
+                    buf.resize(new_size, 0);
+                }
+                None => {}
+            }
         }
 
-        // Trim to actual data (last cluster may be partial)
-        let real_size = u64::from_le_bytes(
-            record[attr_pos + 0x30..attr_pos + 0x38]
-                .try_into()
-                .unwrap_or([0; 8]),
-        );
-        Ok(truncate_data_to_declared_size(buf, real_size))
+        Ok(buf)
+    }
+
+    fn read_compressed_data_runs_to_vec(
+        &self,
+        runs: &[DataRun],
+        compression_unit_exp: u16,
+        real_size: u64,
+    ) -> io::Result<Vec<u8>> {
+        const MAX_FILE_BUFFER: usize = 128 * 1024 * 1024;
+        let unit_clusters = 1u64
+            .checked_shl(compression_unit_exp.min(20) as u32)
+            .filter(|value| *value > 0)
+            .unwrap_or(16);
+        let unit_bytes = unit_clusters
+            .checked_mul(self.cluster_size)
+            .ok_or_else(|| invalid_fs_data("compressed unit size overflow"))?;
+        let mut out = Vec::new();
+        let mut unit = Vec::new();
+        let mut unit_logical_clusters = 0u64;
+        let mut unit_has_sparse = false;
+
+        for run in runs {
+            let mut consumed = 0u64;
+            while consumed < run.cluster_count && out.len() as u64 <= real_size {
+                let unit_remaining = unit_clusters.saturating_sub(unit_logical_clusters);
+                let take = (run.cluster_count - consumed).min(unit_remaining);
+                if take == 0 {
+                    break;
+                }
+
+                if let Some(lcn) = run.lcn {
+                    let physical_lcn = lcn
+                        .checked_add(consumed as i64)
+                        .ok_or_else(|| invalid_fs_data("compressed data run LCN overflow"))?;
+                    self.read_clusters_into(physical_lcn, take, &mut unit, MAX_FILE_BUFFER)?;
+                } else {
+                    unit_has_sparse = true;
+                }
+
+                unit_logical_clusters += take;
+                consumed += take;
+                if unit_logical_clusters == unit_clusters {
+                    append_compressed_unit(
+                        &mut out,
+                        &unit,
+                        unit_has_sparse,
+                        unit_bytes,
+                        MAX_FILE_BUFFER,
+                    )?;
+                    unit.clear();
+                    unit_logical_clusters = 0;
+                    unit_has_sparse = false;
+                }
+            }
+        }
+
+        if unit_logical_clusters > 0 && out.len() as u64 <= real_size {
+            let logical_bytes = unit_logical_clusters
+                .checked_mul(self.cluster_size)
+                .ok_or_else(|| invalid_fs_data("compressed partial unit size overflow"))?;
+            append_compressed_unit(
+                &mut out,
+                &unit,
+                unit_has_sparse,
+                logical_bytes,
+                MAX_FILE_BUFFER,
+            )?;
+        }
+
+        Ok(out)
+    }
+
+    fn read_clusters_into(
+        &self,
+        lcn: i64,
+        cluster_count: u64,
+        out: &mut Vec<u8>,
+        max_bytes: usize,
+    ) -> io::Result<()> {
+        let bytes = cluster_count
+            .checked_mul(self.cluster_size)
+            .ok_or_else(|| {
+                invalid_fs_data(format!(
+                    "data run overflow: {} clusters × {} bytes/cluster",
+                    cluster_count, self.cluster_size
+                ))
+            })? as usize;
+        let new_size = out
+            .len()
+            .checked_add(bytes)
+            .ok_or_else(|| invalid_fs_data("data run buffer size overflow"))?;
+        if new_size > max_bytes {
+            return Err(invalid_fs_data(format!(
+                "data run buffer exceeds 128 MB limit (would be {} bytes)",
+                new_size
+            )));
+        }
+
+        let offset = self.cluster_to_offset(lcn)?;
+        let start = out.len();
+        out.resize(new_size, 0);
+        let mut reader = self.reader.borrow_mut();
+        reader.seek(SeekFrom::Start(offset))?;
+        reader.read_exact(&mut out[start..])?;
+        Ok(())
     }
 
     /// Scan INDX buffer for INDX records, apply fixup, extract entries.
@@ -380,6 +580,26 @@ impl NtfsReader {
         ))
     }
 
+    pub fn list_root_directory_entries(&self) -> io::Result<Vec<NtfsDirectoryEntry>> {
+        self.list_directory_entries_by_inode(5)
+    }
+
+    pub fn list_directory_entries_by_inode(
+        &self,
+        inode: u64,
+    ) -> io::Result<Vec<NtfsDirectoryEntry>> {
+        Ok(self
+            .list_dir_by_inode(inode)?
+            .into_iter()
+            .map(|entry| NtfsDirectoryEntry {
+                name: entry.node.name,
+                is_dir: entry.node.is_dir,
+                size: entry.node.size,
+                mft_ref: entry.mft_ref,
+            })
+            .collect())
+    }
+
     /// Read the $DATA attribute of a file by MFT inode.
     /// Handles both resident (inline) and non-resident (data run chain) $DATA.
     fn read_file_data(&self, inode: u64) -> io::Result<Vec<u8>> {
@@ -403,6 +623,10 @@ impl NtfsReader {
                 break;
             }
             if typ == 0x80 {
+                if !is_unnamed_attribute(&rec, pos) {
+                    pos += len;
+                    continue;
+                }
                 let is_nonresident = pos + 9 <= rec.len() && (rec[pos + 8] & 1) != 0;
                 if is_nonresident {
                     if pos + 0x40 > rec.len() {
@@ -569,6 +793,10 @@ fn resident_attr_content(record: &[u8], attr_pos: usize, attr_len: usize) -> Opt
     record.get(content_start..content_end)
 }
 
+fn is_unnamed_attribute(record: &[u8], attr_pos: usize) -> bool {
+    attr_pos + 0x0a <= record.len() && record[attr_pos + 0x09] == 0
+}
+
 fn apply_record_fixup(record: &mut [u8], sector_size: usize) -> io::Result<()> {
     if record.len() < 8 || sector_size < 2 {
         return Ok(());
@@ -673,8 +901,13 @@ fn parse_indx_entries(data: &[u8]) -> Vec<DirEntry> {
                 0
             };
             let is_dir = flags & 0x10000000 != 0;
+            let size = if is_dir || off + 0x48 > data.len() {
+                0
+            } else {
+                u64::from_le_bytes(data[off + 0x40..off + 0x48].try_into().unwrap_or([0; 8]))
+            };
             entries.push(DirEntry {
-                node: fs_node_without_timestamps(name, is_dir, 0),
+                node: fs_node_without_timestamps(name, is_dir, size),
                 mft_ref,
             });
         }
@@ -727,7 +960,228 @@ fn index_record_bytes(boot: &[u8], cluster_size: u32, fallback: u32) -> u32 {
     }
 }
 
+fn read_contiguous_mft_record(
+    reader: &mut dyn EvidenceReader,
+    volume_offset: u64,
+    mft_cluster: u64,
+    cluster_size: u64,
+    record_size: u32,
+    bytes_per_sector: u16,
+    record_number: u64,
+) -> io::Result<Vec<u8>> {
+    let offset = volume_offset
+        .checked_add(mft_cluster.saturating_mul(cluster_size))
+        .and_then(|base| base.checked_add(record_number.saturating_mul(record_size as u64)))
+        .ok_or_else(|| invalid_fs_data("MFT record offset overflow"))?;
+    let mut rec = vec![0u8; record_size as usize];
+    reader.seek(SeekFrom::Start(offset))?;
+    reader.read_exact(&mut rec)?;
+    apply_record_fixup(&mut rec, bytes_per_sector as usize)?;
+    Ok(rec)
+}
+
+fn parse_mft_data_runs_from_record(record: &[u8]) -> io::Result<Vec<(i64, u64)>> {
+    if record.len() < 0x18 || &record[0..4] != b"FILE" {
+        return Err(invalid_fs_data("MFT record 0 is not a valid FILE record"));
+    }
+
+    let attr_off = u16::from_le_bytes([record[0x14], record[0x15]]) as usize;
+    let mut pos = attr_off;
+    while pos + 8 < record.len() {
+        let typ = u32::from_le_bytes(record[pos..pos + 4].try_into().unwrap_or([0; 4]));
+        if typ == 0xFFFFFFFF {
+            break;
+        }
+        let len =
+            u32::from_le_bytes(record[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
+        if len == 0 || pos + len > record.len() {
+            break;
+        }
+
+        if typ == 0x80 && pos + 0x40 <= record.len() && (record[pos + 8] & 1) != 0 {
+            let run_off = u16::from_le_bytes([record[pos + 0x20], record[pos + 0x21]]) as usize;
+            if run_off == 0 || run_off >= len {
+                return Ok(Vec::new());
+            }
+            return parse_data_runs_bytes(&record[pos + run_off..pos + len]);
+        }
+        pos += len;
+    }
+    Ok(Vec::new())
+}
+
 // --- Data run parsing helpers ---
+
+fn parse_data_runs_bytes(data: &[u8]) -> io::Result<Vec<(i64, u64)>> {
+    Ok(parse_data_runs_ext(data)?
+        .into_iter()
+        .filter_map(|run| run.lcn.map(|lcn| (lcn, run.cluster_count)))
+        .collect())
+}
+
+fn parse_data_runs_ext(mut data: &[u8]) -> io::Result<Vec<DataRun>> {
+    const MAX_DATA_RUNS: usize = 100_000;
+
+    let mut runs = Vec::new();
+    let mut prev_lcn: i64 = 0;
+    while !data.is_empty() && data[0] != 0 {
+        if runs.len() >= MAX_DATA_RUNS {
+            return Err(invalid_fs_data(format!(
+                "too many data runs (limit: {})",
+                MAX_DATA_RUNS
+            )));
+        }
+        let header = data[0];
+        let size_bytes = (header & 0x0F) as usize;
+        let offset_bytes = ((header >> 4) & 0x0F) as usize;
+        if size_bytes > 8 || offset_bytes > 8 {
+            break;
+        }
+        data = &data[1..];
+        if data.len() < size_bytes + offset_bytes {
+            break;
+        }
+        let cluster_count = read_sized_le(&data[..size_bytes]);
+        data = &data[size_bytes..];
+        let lcn_offset = read_sized_le_signed(&data[..offset_bytes]);
+        data = &data[offset_bytes..];
+        let lcn = if offset_bytes == 0 {
+            None
+        } else if runs.is_empty() {
+            Some(lcn_offset)
+        } else {
+            Some(prev_lcn + lcn_offset)
+        };
+        if let Some(lcn) = lcn {
+            prev_lcn = lcn;
+        }
+        if cluster_count == 0 {
+            continue;
+        }
+        runs.push(DataRun { lcn, cluster_count });
+    }
+    Ok(runs)
+}
+
+fn lznt1_decompress(data: &[u8]) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    let mut pos = 0usize;
+    while pos + 2 <= data.len() {
+        let header = u16::from_le_bytes([data[pos], data[pos + 1]]);
+        pos += 2;
+        if header == 0 {
+            break;
+        }
+        let chunk_len = ((header & 0x0fff) as usize) + 1;
+        if pos + chunk_len > data.len() {
+            return Err("LZNT1 chunk exceeds input".to_string());
+        }
+        let chunk = &data[pos..pos + chunk_len];
+        pos += chunk_len;
+        if header & 0x8000 == 0 {
+            out.extend_from_slice(chunk);
+        } else {
+            decompress_lznt1_chunk(chunk, &mut out)?;
+        }
+    }
+    Ok(out)
+}
+
+fn append_compressed_unit(
+    out: &mut Vec<u8>,
+    physical: &[u8],
+    has_sparse: bool,
+    logical_bytes: u64,
+    max_bytes: usize,
+) -> io::Result<()> {
+    let logical_len = logical_bytes as usize;
+    let decoded = if physical.is_empty() {
+        vec![0u8; logical_len]
+    } else if has_sparse {
+        lznt1_decompress(physical)
+            .map_err(invalid_fs_data)
+            .unwrap_or_else(|_| physical.to_vec())
+    } else if physical.len() as u64 == logical_bytes {
+        physical.to_vec()
+    } else {
+        lznt1_decompress(physical).map_err(invalid_fs_data)?
+    };
+
+    let append_len = decoded.len().min(logical_len);
+    let new_size = out
+        .len()
+        .checked_add(append_len)
+        .ok_or_else(|| invalid_fs_data("compressed output size overflow"))?;
+    if new_size > max_bytes {
+        return Err(invalid_fs_data(format!(
+            "compressed output exceeds 128 MB limit (would be {} bytes)",
+            new_size
+        )));
+    }
+    out.extend_from_slice(&decoded[..append_len]);
+    if append_len < logical_len {
+        let final_size = out
+            .len()
+            .checked_add(logical_len - append_len)
+            .ok_or_else(|| invalid_fs_data("compressed sparse padding size overflow"))?;
+        if final_size > max_bytes {
+            return Err(invalid_fs_data(format!(
+                "compressed output exceeds 128 MB limit (would be {} bytes)",
+                final_size
+            )));
+        }
+        out.resize(final_size, 0);
+    }
+    Ok(())
+}
+
+fn decompress_lznt1_chunk(chunk: &[u8], out: &mut Vec<u8>) -> Result<(), String> {
+    let chunk_start = out.len();
+    let mut pos = 0usize;
+    while pos < chunk.len() {
+        let flags = chunk[pos];
+        pos += 1;
+        for bit in 0..8 {
+            if pos >= chunk.len() {
+                break;
+            }
+            if flags & (1 << bit) == 0 {
+                out.push(chunk[pos]);
+                pos += 1;
+                continue;
+            }
+            if pos + 2 > chunk.len() {
+                return Err("LZNT1 copy token truncated".to_string());
+            }
+            let token = u16::from_le_bytes([chunk[pos], chunk[pos + 1]]);
+            pos += 2;
+            let current = out.len().saturating_sub(chunk_start);
+            let displacement_bits = lznt1_displacement_bits(current);
+            let length_mask = (1u16 << displacement_bits) - 1;
+            let length = (token & length_mask) as usize + 3;
+            let displacement = (token >> displacement_bits) as usize + 1;
+            if displacement > out.len().saturating_sub(chunk_start) {
+                return Err("LZNT1 copy token points before chunk".to_string());
+            }
+            for _ in 0..length {
+                let src = out.len() - displacement;
+                let byte = out[src];
+                out.push(byte);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn lznt1_displacement_bits(current_chunk_output: usize) -> u16 {
+    let mut length_bits = 12u16;
+    let mut displacement = current_chunk_output.saturating_sub(1);
+    while length_bits > 4 && displacement >= 0x10 {
+        length_bits -= 1;
+        displacement >>= 1;
+    }
+    length_bits
+}
 
 /// Read a variable-width little-endian unsigned integer (1-8 bytes).
 fn read_sized_le(bytes: &[u8]) -> u64 {

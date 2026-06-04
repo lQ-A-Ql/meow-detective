@@ -19,7 +19,8 @@ use transport::{
     commands::GetFileRowsRequest,
     dto::{
         DataSourcePartitionDto, DataSourceSummaryDto, FileChildrenDto, FileEntryRowDto,
-        FileTreeNodeDto, ViewerHandleDto, ViewerRangeRequestDto, ViewerRangeResponseDto,
+        FileRowsPageDto, FileTreeNodeDto, ViewerHandleDto, ViewerRangeRequestDto,
+        ViewerRangeResponseDto,
     },
 };
 use uuid::Uuid;
@@ -305,6 +306,8 @@ pub fn get_file_tree_real(conn: &Connection) -> Result<Vec<FileTreeNodeDto>, Str
 pub fn get_file_children_lazy(
     conn: &Connection,
     parent_id: &str,
+    offset: u64,
+    limit: u32,
 ) -> Result<FileChildrenDto, String> {
     let repo = FileRepo::new(conn);
     let parent = match repo
@@ -316,14 +319,19 @@ pub fn get_file_children_lazy(
             return Ok(FileChildrenDto {
                 children: vec![],
                 total_count: 0,
+                offset: Some(offset),
+                limit: Some(limit),
+                truncated: Some(false),
             })
         }
     };
 
     let children = repo
-        .find_child_directories(&parent.id)
+        .find_child_directories_page(&parent.id, offset, limit)
         .map_err(|e| e.to_string())?;
-    let total_count = children.len() as u64;
+    let total_count = repo
+        .count_child_directories(&parent.id)
+        .map_err(|e| e.to_string())?;
     let child_depth = directory_depth(&parent).saturating_add(1);
 
     // Batch-check has_children for all children
@@ -342,30 +350,51 @@ pub fn get_file_children_lazy(
     Ok(FileChildrenDto {
         children: child_nodes,
         total_count,
+        offset: Some(offset),
+        limit: Some(limit),
+        truncated: Some(offset + (limit as u64) < total_count),
     })
 }
 
 pub fn get_file_rows_for_request(
     conn: &Connection,
     request: &GetFileRowsRequest,
-) -> Result<Vec<FileEntryRowDto>, String> {
+) -> Result<FileRowsPageDto, String> {
+    let mut request = request.clone();
+    request.validate()?;
     let repo = FileRepo::new(conn);
-    let entries = match request.parent_id.as_deref() {
+    let (entries, total_count) = match request.parent_id.as_deref() {
         Some(parent_id) => {
             let parent = repo
                 .find_by_id(&FileEntryId(parent_id.to_string()))
                 .map_err(|e| e.to_string())?;
             match parent {
                 Some(entry) if entry.entry_type == EntryType::Directory => {
-                    repo.find_children(&entry.id).map_err(|e| e.to_string())?
+                    let entries = repo
+                        .find_children_page(&entry.id, request.offset, request.limit)
+                        .map_err(|e| e.to_string())?;
+                    let total_count = repo.count_children(&entry.id).map_err(|e| e.to_string())?;
+                    (entries, total_count)
                 }
-                _ => Vec::new(),
+                _ => (Vec::new(), 0),
             }
         }
-        None => repo.find_root_entries().map_err(|e| e.to_string())?,
+        None => {
+            let entries = repo
+                .find_root_entries_page(request.offset, request.limit)
+                .map_err(|e| e.to_string())?;
+            let total_count = repo.count_root_entries().map_err(|e| e.to_string())?;
+            (entries, total_count)
+        }
     };
 
-    Ok(entries.iter().map(file_entry_to_dto).collect())
+    Ok(FileRowsPageDto {
+        rows: entries.iter().map(file_entry_to_dto).collect(),
+        total_count,
+        offset: request.offset,
+        limit: request.limit,
+        truncated: request.offset + (request.limit as u64) < total_count,
+    })
 }
 
 pub fn get_data_sources_real(

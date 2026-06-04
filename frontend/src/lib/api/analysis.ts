@@ -1,6 +1,7 @@
 import {
   AnalysisFileClassification,
   AnalysisSystemInfo,
+  EvidenceClassificationSummary,
 } from '@/types/models';
 import { apiClient } from './client';
 
@@ -16,6 +17,21 @@ export async function classifyFiles(sampleSize = 1000): Promise<AnalysisFileClas
     'classify_files',
     () => apiClient.getMockProvider().classifyFiles(sampleSize),
     { request: { sampleSize } },
+  );
+}
+
+export async function getEvidenceClassificationSummary(): Promise<EvidenceClassificationSummary> {
+  return apiClient.request(
+    'get_evidence_classification_summary',
+    () => apiClient.getMockProvider().getEvidenceClassificationSummary(),
+  );
+}
+
+export async function runEvidenceClassification(categories: string[] = []): Promise<EvidenceClassificationSummary> {
+  return apiClient.request(
+    'run_evidence_classification',
+    () => apiClient.getMockProvider().runEvidenceClassification(categories),
+    { request: { categories } },
   );
 }
 
