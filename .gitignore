@@ -30,3 +30,7 @@ Thumbs.db
 # Build output
 *.o
 *.exe
+
+
+docs/autopsy/
+docs/开发记录.md
