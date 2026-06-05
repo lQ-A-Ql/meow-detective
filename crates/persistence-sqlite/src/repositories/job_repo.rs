@@ -98,6 +98,22 @@ impl<'a> JobRepo<'a> {
         Ok(())
     }
 
+    pub fn mark_cancelling(&self, id: &JobId, detail: &str) -> DbResult<()> {
+        self.conn.execute(
+            "UPDATE jobs SET status = 'cancelling', detail = ?1 WHERE id = ?2",
+            params![detail, id.0],
+        )?;
+        Ok(())
+    }
+
+    pub fn cancel(&self, id: &JobId, detail: &str) -> DbResult<()> {
+        self.conn.execute(
+            "UPDATE jobs SET status = 'cancelled', detail = ?1, finished_at = datetime('now') WHERE id = ?2",
+            params![detail, id.0],
+        )?;
+        Ok(())
+    }
+
     pub fn list_recent(&self, limit: usize) -> DbResult<Vec<JobSummaryRow>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, kind, status, progress, detail,
@@ -106,7 +122,7 @@ impl<'a> JobRepo<'a> {
              FROM jobs
              ORDER BY
                  CASE
-                     WHEN status IN ('running', 'pending') THEN 0
+                     WHEN status IN ('running', 'pending', 'cancelling') THEN 0
                      WHEN status = 'failed' THEN 1
                      ELSE 2
                  END,
@@ -229,6 +245,23 @@ mod tests {
         let jobs = repo.list_recent(10).unwrap();
         assert_eq!(jobs[0].status, "failed");
         assert_eq!(jobs[0].detail, "error occurred");
+    }
+
+    #[test]
+    fn cancellation_methods_update_status_without_schema_changes() {
+        let conn = setup_db();
+        let repo = JobRepo::new(&conn);
+        let id = repo.create("case-1", "ingest").unwrap();
+
+        repo.mark_cancelling(&id, "Cancel requested").unwrap();
+        let jobs = repo.list_recent(10).unwrap();
+        assert_eq!(jobs[0].status, "cancelling");
+        assert_eq!(jobs[0].detail, "Cancel requested");
+
+        repo.cancel(&id, "Import cancelled by user").unwrap();
+        let jobs = repo.list_recent(10).unwrap();
+        assert_eq!(jobs[0].status, "cancelled");
+        assert_eq!(jobs[0].detail, "Import cancelled by user");
     }
 
     #[test]

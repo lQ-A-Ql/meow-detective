@@ -1,10 +1,15 @@
 use tauri::{AppHandle, Emitter};
-use transport::dto::DataSourceSummaryDto;
+use transport::dto::{
+    DataSourceSummaryDto, ImportPhaseProgressDto, IndexCacheStatusDto, JobCancellationDto,
+    PartialResultDto, PerformanceReportDto,
+};
 use transport::events::{
-    EventEnvelope, EventTopic, TOPIC_ARTIFACT_ADDED, TOPIC_CASE_CLOSED, TOPIC_CASE_OPENED,
-    TOPIC_DATA_SOURCE_IMPORTED, TOPIC_JOB_CANCELLED, TOPIC_JOB_COMPLETED, TOPIC_JOB_CREATED,
-    TOPIC_JOB_FAILED, TOPIC_JOB_PROGRESS, TOPIC_JOB_STARTED, TOPIC_PARTITION_PROGRESS,
-    TOPIC_SEARCH_INDEX_PROGRESS, TOPIC_TIMELINE_UPDATED,
+    EventEnvelope, EventTopic, TOPIC_ARTIFACT_ADDED, TOPIC_CACHE_INDEX_STATUS, TOPIC_CASE_CLOSED,
+    TOPIC_CASE_OPENED, TOPIC_DATA_SOURCE_IMPORTED, TOPIC_IMPORT_PARTIAL_RESULT,
+    TOPIC_IMPORT_PHASE_PROGRESS, TOPIC_JOB_CANCELLATION, TOPIC_JOB_CANCELLED, TOPIC_JOB_COMPLETED,
+    TOPIC_JOB_CREATED, TOPIC_JOB_FAILED, TOPIC_JOB_PROGRESS, TOPIC_JOB_STARTED,
+    TOPIC_PARTITION_PROGRESS, TOPIC_PERFORMANCE_REPORT_READY, TOPIC_SEARCH_INDEX_PROGRESS,
+    TOPIC_TIMELINE_UPDATED,
 };
 
 pub fn emit_event<T: serde::Serialize + Clone>(
@@ -133,6 +138,17 @@ pub fn emit_job_cancelled(app: &AppHandle, job_id: &str, reason: &str) {
     }
 }
 
+pub fn emit_job_cancellation(app: &AppHandle, cancellation: &JobCancellationDto) {
+    let envelope = envelope(EventTopic::JobCancellation, cancellation.clone());
+    if let Err(e) = emit_event(app, TOPIC_JOB_CANCELLATION, &envelope) {
+        tracing::warn!(
+            "Failed to emit job cancellation event for {}: {}",
+            cancellation.job_id,
+            e
+        );
+    }
+}
+
 pub fn emit_data_source_imported(
     app: &AppHandle,
     data_source: &DataSourceSummaryDto,
@@ -220,6 +236,50 @@ pub fn emit_partition_progress(
         tracing::warn!(
             "Failed to emit partition progress event for job {}: {}",
             job_id,
+            e
+        );
+    }
+}
+
+pub fn emit_import_phase_progress(app: &AppHandle, progress: &ImportPhaseProgressDto) {
+    let envelope = envelope(EventTopic::ImportPhaseProgress, progress.clone());
+    if let Err(e) = emit_event(app, TOPIC_IMPORT_PHASE_PROGRESS, &envelope) {
+        tracing::warn!(
+            "Failed to emit import phase progress event for job {}: {}",
+            progress.job_id,
+            e
+        );
+    }
+}
+
+pub fn emit_import_partial_result(app: &AppHandle, result: &PartialResultDto) {
+    let envelope = envelope(EventTopic::ImportPartialResult, result.clone());
+    if let Err(e) = emit_event(app, TOPIC_IMPORT_PARTIAL_RESULT, &envelope) {
+        tracing::warn!(
+            "Failed to emit import partial result event for {}: {}",
+            result.scope_id,
+            e
+        );
+    }
+}
+
+pub fn emit_cache_index_status(app: &AppHandle, status: &IndexCacheStatusDto) {
+    let envelope = envelope(EventTopic::CacheIndexStatus, status.clone());
+    if let Err(e) = emit_event(app, TOPIC_CACHE_INDEX_STATUS, &envelope) {
+        tracing::warn!(
+            "Failed to emit cache index status event for {}: {}",
+            status.cache_key,
+            e
+        );
+    }
+}
+
+pub fn emit_performance_report_ready(app: &AppHandle, report: &PerformanceReportDto) {
+    let envelope = envelope(EventTopic::PerformanceReportReady, report.clone());
+    if let Err(e) = emit_event(app, TOPIC_PERFORMANCE_REPORT_READY, &envelope) {
+        tracing::warn!(
+            "Failed to emit performance report ready event for {}: {}",
+            report.summary.report_id,
             e
         );
     }

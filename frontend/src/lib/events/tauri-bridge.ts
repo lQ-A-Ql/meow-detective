@@ -30,6 +30,11 @@ export async function startTauriEventBridge(): Promise<void> {
     'timeline-updated',
     'search-index_progress',
     'partition-progress',
+    'import.phase_progress',
+    'import.partial_result',
+    'job.cancellation',
+    'cache.index_status',
+    'performance.report_ready',
   ];
 
   for (const topic of topics) {

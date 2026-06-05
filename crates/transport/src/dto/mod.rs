@@ -2,6 +2,7 @@ pub mod analysis;
 pub mod artifacts;
 pub mod case;
 pub mod files;
+pub mod import;
 pub mod jobs;
 pub mod mcp;
 pub mod reports;
@@ -21,6 +22,12 @@ pub use case::{
     RecentObjectDto,
 };
 pub use files::{FileChildrenDto, FileEntryRowDto, FileRowsPageDto, FileTreeNodeDto};
+pub use import::{
+    CancelJobRequestDto, CancelReasonDto, CancellationStateDto, ImportPhaseDto,
+    ImportPhaseMetricsDto, ImportPhaseProgressDto, ImportPhaseStateDto, IndexCacheStatusDto,
+    JobCancellationDto, PartialResultDto, PartialResultKindDto, PerformanceMetricDto,
+    PerformanceReportDto, PerformanceReportSummaryDto, ResultFreshnessDto,
+};
 pub use jobs::{JobSnapshotDto, TraceItemDto, WarningItemDto};
 pub use mcp::{
     McpCapabilitiesDto, McpConfigDto, McpPromptArgumentDto, McpPromptDto, McpResourceDto,

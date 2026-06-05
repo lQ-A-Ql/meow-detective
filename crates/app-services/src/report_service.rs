@@ -1,7 +1,7 @@
 use domain::CaseMeta;
 use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo, file_repo::FileRepo, report_repo::ReportRepo,
-    timeline_repo::TimelineRepo,
+    artifact_repo::ArtifactRepo, datasource_repo::DataSourceRepo, file_repo::FileRepo,
+    report_repo::ReportRepo, timeline_repo::TimelineRepo,
 };
 use reports::{CsvExporter, HtmlReportExporter, JsonExporter};
 use rusqlite::Connection;
@@ -52,7 +52,7 @@ pub fn generate_html_report(
         Vec::new()
     };
     let analysis = current_analysis(conn)?;
-    let analysis_rows = scoped_analysis_rows(&analysis, scope);
+    let analysis_rows = report_analysis_rows(conn, &case.id.0, &analysis, scope);
 
     let file_name = format!("report-{}.html", Uuid::new_v4());
     let path = output_dir.join(&file_name);
@@ -93,7 +93,7 @@ pub fn generate_csv_artifacts(
     let mut rows_data = rows_data;
     let analysis = current_analysis(conn)?;
     rows_data.extend(
-        scoped_analysis_rows(&analysis, scope)
+        report_analysis_rows(conn, case_id, &analysis, scope)
             .into_iter()
             .map(|row| {
                 vec![
@@ -147,7 +147,7 @@ pub fn generate_json_export(
         .list_by_family(None)
         .map_err(|e| e.to_string())?;
     let analysis = current_analysis(conn)?;
-    let warnings = report_scope_warnings(scope);
+    let warnings = report_warnings(conn, case_id, scope);
     let summary = crate::analysis_service::generate_analysis_summary(
         &analysis.system_info,
         &analysis.classifications,
@@ -340,12 +340,82 @@ fn scoped_analysis_rows(analysis: &ReportAnalysis, scope: &ExportScopeDto) -> Ve
     rows
 }
 
+fn report_analysis_rows(
+    conn: &Connection,
+    case_id: &str,
+    analysis: &ReportAnalysis,
+    scope: &ExportScopeDto,
+) -> Vec<String> {
+    let mut rows = scoped_analysis_rows(analysis, scope);
+    rows.extend(evidence_hash_warnings(conn, case_id));
+    rows
+}
+
+fn report_warnings(conn: &Connection, case_id: &str, scope: &ExportScopeDto) -> Vec<String> {
+    let mut warnings = report_scope_warnings(scope);
+    warnings.extend(evidence_hash_warnings(conn, case_id));
+    warnings
+}
+
 fn report_scope_warnings(scope: &ExportScopeDto) -> Vec<String> {
     let mut warnings = Vec::new();
     if scope.raw_file_extraction {
         warnings.push(
             "rawFileExtraction unsupported: raw evidence files were not exported".to_string(),
         );
+    }
+    warnings
+}
+
+fn evidence_hash_warnings(conn: &Connection, case_id: &str) -> Vec<String> {
+    let repo = DataSourceRepo::new(conn);
+    let sources = repo
+        .find_by_case(&domain::CaseId(case_id.to_string()))
+        .unwrap_or_default();
+    let mut pending = 0;
+    let mut failed = 0;
+    let mut unavailable = 0;
+    let mut unknown = 0;
+
+    for source in sources {
+        match source.provenance.hash_status {
+            domain::DataSourceHashStatus::Pending => pending += 1,
+            domain::DataSourceHashStatus::Failed => failed += 1,
+            domain::DataSourceHashStatus::Unavailable => unavailable += 1,
+            domain::DataSourceHashStatus::Unknown => unknown += 1,
+            domain::DataSourceHashStatus::Hashed => {}
+        }
+    }
+
+    evidence_hash_warning_messages(pending, failed, unavailable, unknown)
+}
+
+fn evidence_hash_warning_messages(
+    pending: usize,
+    failed: usize,
+    unavailable: usize,
+    unknown: usize,
+) -> Vec<String> {
+    let mut warnings = Vec::new();
+    if pending > 0 {
+        warnings.push(format!(
+            "evidenceHash pending: {pending} data source(s) still require background hash verification"
+        ));
+    }
+    if failed > 0 {
+        warnings.push(format!(
+            "evidenceHash failed: {failed} data source(s) require manual verification"
+        ));
+    }
+    if unavailable > 0 {
+        warnings.push(format!(
+            "evidenceHash unavailable: {unavailable} data source(s) cannot provide source hash verification"
+        ));
+    }
+    if unknown > 0 {
+        warnings.push(format!(
+            "evidenceHash deferred: {unknown} data source(s) have unknown hash verification status"
+        ));
     }
     warnings
 }
@@ -858,6 +928,72 @@ mod tests {
         assert!(html.contains("extractor=unknown"));
         assert!(html.contains("parser=unknown"));
         assert!(html.contains("confidence=unknown"));
+    }
+
+    #[test]
+    fn json_export_warns_when_evidence_hash_is_pending_or_unavailable() {
+        let (conn, tmp, case, _ds_id) = setup_report_case();
+        let pending = DataSourceId("ds-pending".to_string());
+        DataSourceRepo::new(&conn)
+            .insert(
+                &case.id,
+                &DataSource {
+                    id: pending,
+                    name: "pending-source".to_string(),
+                    kind: DataSourceKind::Raw,
+                    source_path: tmp.path().join("pending.raw"),
+                    imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance {
+                        source_hash_sha256: None,
+                        hash_status: domain::DataSourceHashStatus::Pending,
+                        canonical_source_path: None,
+                        evidence_size: Some(4096),
+                        reader_kind: Some("raw".to_string()),
+                        provenance_status: domain::DataSourceProvenanceStatus::Recorded,
+                        warnings: Vec::new(),
+                    },
+                },
+            )
+            .unwrap();
+        let unavailable = DataSourceId("ds-unavailable".to_string());
+        DataSourceRepo::new(&conn)
+            .insert(
+                &case.id,
+                &DataSource {
+                    id: unavailable,
+                    name: "unavailable-source".to_string(),
+                    kind: DataSourceKind::LogicalDirectory,
+                    source_path: tmp.path().join("logical"),
+                    imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance {
+                        source_hash_sha256: None,
+                        hash_status: domain::DataSourceHashStatus::Unavailable,
+                        canonical_source_path: None,
+                        evidence_size: None,
+                        reader_kind: Some("logical_directory".to_string()),
+                        provenance_status: domain::DataSourceProvenanceStatus::Recorded,
+                        warnings: Vec::new(),
+                    },
+                },
+            )
+            .unwrap();
+
+        let json_name =
+            generate_json_export(&conn, &case.id.0, tmp.path(), &ExportScopeDto::default())
+                .unwrap();
+        let json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(tmp.path().join(json_name)).unwrap())
+                .unwrap();
+        let warnings = json["warnings"].as_array().unwrap();
+
+        assert!(warnings
+            .iter()
+            .any(|warning| warning.as_str().unwrap().contains("evidenceHash pending")));
+        assert!(warnings.iter().any(|warning| warning
+            .as_str()
+            .unwrap()
+            .contains("evidenceHash unavailable")));
+        assert!(!json.to_string().contains("pending.raw"));
     }
 
     #[test]

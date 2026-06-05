@@ -205,7 +205,10 @@ pub fn run_post_import_pipeline_with_counts(
         if let Some(cb) = progress_cb {
             cb(
                 84,
-                "Post-import skipped: phase=post-import-skip timeline=deferred content=disabled text=disabled",
+                &format!(
+                    "Post-import skipped: phase=post-import-skip scheduling=deferred workerBudget={} activeWorkers=0 queuedTasks=0 pendingTasks=0 timeline=deferred content=disabled text=disabled contentDeferred=true textDeferred=true",
+                    resolve_analysis_worker_count(options.max_analysis_workers).max(1)
+                ),
             );
         }
         return Ok((
@@ -215,21 +218,39 @@ pub fn run_post_import_pipeline_with_counts(
     }
 
     let stats = match run_import_analysis_staging(
-        ImportAnalysisOptions {
-            case_root: options.case_root,
-            db_path: options.db_path,
-            case_id: options.case_id,
-            data_source_id: options.data_source_id,
-            index_dir: options.index_dir,
-            max_analysis_workers: options.max_analysis_workers,
-            cancel_token: options.cancel_token,
-            enable_timeline_projection: options.enable_timeline_projection,
-            enable_content_extraction: options.enable_content_extraction,
-            enable_text_indexing: options.enable_text_indexing,
-            analysis_mode: options.analysis_mode,
-            content_budget: content_budget_for_mode(options.analysis_mode),
-            memory_soft_limit_mb: default_memory_soft_limit_mb(),
-            memory_hard_limit_mb: default_memory_hard_limit_mb(),
+        {
+            let content_deferred =
+                !options.enable_content_extraction || !options.analysis_mode.allows_content();
+            let text_deferred =
+                !options.enable_text_indexing || !options.analysis_mode.allows_content();
+            if let Some(cb) = progress_cb {
+                cb(
+                    70,
+                    &format!(
+                        "Post-import analysis scheduled: phase=analysis-start scheduling=queued mode={} workerBudget={} activeWorkers=0 queuedTasks=0 pendingTasks=unknown contentDeferred={} textDeferred={}",
+                        options.analysis_mode.as_str(),
+                        resolve_analysis_worker_count(options.max_analysis_workers).max(1),
+                        bool_word(content_deferred),
+                        bool_word(text_deferred)
+                    ),
+                );
+            }
+            ImportAnalysisOptions {
+                case_root: options.case_root,
+                db_path: options.db_path,
+                case_id: options.case_id,
+                data_source_id: options.data_source_id,
+                index_dir: options.index_dir,
+                max_analysis_workers: options.max_analysis_workers,
+                cancel_token: options.cancel_token,
+                enable_timeline_projection: options.enable_timeline_projection,
+                enable_content_extraction: options.enable_content_extraction,
+                enable_text_indexing: options.enable_text_indexing,
+                analysis_mode: options.analysis_mode,
+                content_budget: content_budget_for_mode(options.analysis_mode),
+                memory_soft_limit_mb: default_memory_soft_limit_mb(),
+                memory_hard_limit_mb: default_memory_hard_limit_mb(),
+            }
         },
         progress_cb,
     ) {
@@ -394,10 +415,12 @@ pub fn run_import_analysis_staging(
         cb(
             72,
             &format!(
-                "Analysis staging: phase=analysis-start mode={} workers={} files={} content={} text={} rssMb={}",
+                "Analysis staging: phase=analysis-start scheduling=queued mode={} workers={} workerBudget={} activeWorkers=0 queuedTasks=0 pendingTasks={} queueBound={} content={} text={} contentDeferred={} textDeferred={} rssMb={}",
                 options.analysis_mode.as_str(),
                 worker_count,
+                worker_count,
                 estimated,
+                analysis_task_queue_bound(worker_count),
                 if options.enable_content_extraction {
                     "enabled"
                 } else {
@@ -408,6 +431,8 @@ pub fn run_import_analysis_staging(
                 } else {
                     "disabled"
                 },
+                bool_word(!options.enable_content_extraction || !options.analysis_mode.allows_content()),
+                bool_word(!options.enable_text_indexing || !options.analysis_mode.allows_content()),
                 current_rss_mb()
             ),
         );
@@ -482,8 +507,14 @@ pub fn run_import_analysis_staging(
                     cb(
                         pct.min(82),
                         &format!(
-                            "Analysis workers done: phase=analysis workersDone={}/{} processed={} rowsPerSec={} queued={} indexed={} active={} rssMb={}",
+                            "Analysis workers done: phase=analysis scheduling={} workersDone={}/{} workerBudget={} processed={} rowsPerSec={} queuedTasks={} pendingTasks={} indexed={} activeWorkers={} rssMb={}",
+                            if options.cancel_token.load(Ordering::Relaxed) {
+                                "draining"
+                            } else {
+                                "running"
+                            },
                             completed,
+                            worker_count,
                             worker_count,
                             shared.processed_total.load(Ordering::Relaxed),
                             rows_per_sec(
@@ -491,6 +522,9 @@ pub fn run_import_analysis_staging(
                                 analysis_started.elapsed()
                             ),
                             shared.queued_total.load(Ordering::Relaxed),
+                            estimated.saturating_sub(
+                                shared.processed_total.load(Ordering::Relaxed) as u64
+                            ),
                             shared.indexed_total.load(Ordering::Relaxed),
                             shared.active_workers.load(Ordering::Relaxed),
                             current_rss_mb()
@@ -506,10 +540,14 @@ pub fn run_import_analysis_staging(
                         cb(
                             75,
                             &format!(
-                                "Analysis memory hard limit exceeded: phase=analysis rssMb={} hardLimitMb={} queuedTasks={} processed={} activeWorkers={}",
+                                "Analysis memory hard limit exceeded: phase=analysis scheduling=draining rssMb={} hardLimitMb={} workerBudget={} queuedTasks={} pendingTasks={} processed={} activeWorkers={}",
                                 rss_mb,
                                 memory_hard_limit_mb,
+                                worker_count,
                                 shared.queued_total.load(Ordering::Relaxed),
+                                estimated.saturating_sub(
+                                    shared.processed_total.load(Ordering::Relaxed) as u64
+                                ),
                                 shared.processed_total.load(Ordering::Relaxed),
                                 shared.active_workers.load(Ordering::Relaxed)
                             ),
@@ -524,12 +562,17 @@ pub fn run_import_analysis_staging(
                     cb(
                         75,
                         &format!(
-                            "Analysis heartbeat: phase=analysis memory={} rssMb={} softLimitMb={} hardLimitMb={} queuedTasks={} processed={}/{} indexed={} activeWorkers={}",
+                            "Analysis heartbeat: phase=analysis scheduling={} memory={} rssMb={} softLimitMb={} hardLimitMb={} workerBudget={} queuedTasks={} pendingTasks={} processed={}/{} indexed={} activeWorkers={}",
+                            scheduling_state(options.cancel_token.load(Ordering::Relaxed), rss_mb, memory_soft_limit_mb),
                             level,
                             rss_mb,
                             memory_soft_limit_mb,
                             memory_hard_limit_mb,
+                            worker_count,
                             shared.queued_total.load(Ordering::Relaxed),
+                            estimated.saturating_sub(
+                                shared.processed_total.load(Ordering::Relaxed) as u64
+                            ),
                             shared.processed_total.load(Ordering::Relaxed),
                             estimated,
                             shared.indexed_total.load(Ordering::Relaxed),
@@ -576,8 +619,10 @@ fn merge_finished_analysis_staging(
         cb(
             84,
             &format!(
-                "Analysis workers complete: phase=analysis elapsedMs={} processed={} rowsPerSec={} indexed={} rssMb={}",
+                "Analysis workers complete: phase=analysis scheduling=running elapsedMs={} workerBudget={} activeWorkers=0 queuedTasks={} pendingTasks=0 processed={} rowsPerSec={} indexed={} rssMb={}",
                 analysis_started.elapsed().as_millis(),
+                worker_ids.len().max(1),
+                stats.processed_count,
                 stats.processed_count,
                 rows_per_sec(stats.processed_count, analysis_started.elapsed()),
                 stats.indexed_count,
@@ -1274,6 +1319,28 @@ fn rows_per_sec(rows: u64, duration: Duration) -> u64 {
     }
 }
 
+fn bool_word(value: bool) -> &'static str {
+    if value {
+        "true"
+    } else {
+        "false"
+    }
+}
+
+fn scheduling_state(
+    cancel_requested: bool,
+    rss_mb: u64,
+    memory_soft_limit_mb: u64,
+) -> &'static str {
+    if cancel_requested {
+        "draining"
+    } else if rss_mb >= memory_soft_limit_mb {
+        "throttled"
+    } else {
+        "running"
+    }
+}
+
 fn memory_hard_limit_exceeded(limit_mb: u64) -> bool {
     let rss_mb = current_rss_mb();
     rss_mb > 0 && rss_mb >= limit_mb
@@ -1580,14 +1647,17 @@ mod tests {
             "Timeline: deferred until Timeline page. Artifacts: 0. Index: 0 indexed"
         );
         assert_eq!(counts, JobOutcomeCounts::default());
-        assert_eq!(
-            events.lock().unwrap().as_slice(),
-            &[(
-                84,
-                "Post-import skipped: phase=post-import-skip timeline=deferred content=disabled text=disabled"
-                    .to_string()
-            )]
-        );
+        let events = events.lock().unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].0, 84);
+        assert!(events[0].1.contains("phase=post-import-skip"));
+        assert!(events[0].1.contains("scheduling=deferred"));
+        assert!(events[0].1.contains("workerBudget=1"));
+        assert!(events[0].1.contains("activeWorkers=0"));
+        assert!(events[0].1.contains("queuedTasks=0"));
+        assert!(events[0].1.contains("pendingTasks=0"));
+        assert!(events[0].1.contains("contentDeferred=true"));
+        assert!(events[0].1.contains("textDeferred=true"));
     }
 
     #[test]
@@ -1616,11 +1686,27 @@ mod tests {
         assert!(message.starts_with("Timeline: 2 events"));
         assert!(message.contains("Artifacts: 0. Index: 0 indexed"));
         assert_eq!(counts, JobOutcomeCounts::default());
-        assert!(events
-            .lock()
-            .unwrap()
+        let events = events.lock().unwrap();
+        let scheduled = events
             .iter()
-            .any(|(_, detail)| detail.contains("Analysis workers complete")));
+            .find(|(_, detail)| detail.contains("Post-import analysis scheduled"))
+            .expect("scheduled progress");
+        assert!(scheduled.1.contains("scheduling=queued"));
+        assert!(scheduled.1.contains("workerBudget=1"));
+        assert!(scheduled.1.contains("contentDeferred=true"));
+        assert!(scheduled.1.contains("textDeferred=true"));
+        let started = events
+            .iter()
+            .find(|(_, detail)| detail.contains("Analysis staging:"))
+            .expect("analysis start progress");
+        assert!(started.1.contains("scheduling=queued"));
+        assert!(started.1.contains("queueBound=256"));
+        assert!(started.1.contains("pendingTasks=2"));
+        assert!(events
+            .iter()
+            .any(|(_, detail)| detail.contains("Analysis workers complete")
+                && detail.contains("workerBudget=1")
+                && detail.contains("pendingTasks=0")));
         let main_conn = persistence_sqlite::open_or_create(&tmp.path().join("app.db")).unwrap();
         let timeline_count: i64 = main_conn
             .query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row.get(0))

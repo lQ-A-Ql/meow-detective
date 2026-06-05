@@ -22,6 +22,11 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, State};
 use transport::{
     commands::{AppSettingsDto, ImportDataSourceRequest},
+    dto::{
+        CancellationStateDto, ImportPhaseDto, ImportPhaseMetricsDto, ImportPhaseProgressDto,
+        ImportPhaseStateDto, IndexCacheStatusDto, JobCancellationDto, PartialResultDto,
+        PartialResultKindDto, ResultFreshnessDto,
+    },
     CommandError,
 };
 
@@ -199,7 +204,40 @@ pub async fn cancel_import(
     tauri::async_runtime::spawn_blocking(move || {
         if app_state.task_manager.cancel(&job_id) {
             tracing::info!("Cancel requested for job {}", job_id);
+            if let Ok(guard) = app_state.active_case.lock() {
+                if let Some(active) = guard.as_ref() {
+                    match persistence_sqlite::open_or_create(&active.db_path()) {
+                        Ok(conn) => {
+                            let repo = JobRepo::new(&conn);
+                            if let Err(error) = repo.mark_cancelling(
+                                &domain::JobId(job_id.clone()),
+                                "Cancel requested by user",
+                            ) {
+                                tracing::warn!(
+                                    "Failed to mark job {} as cancelling: {}",
+                                    job_id,
+                                    error
+                                );
+                            }
+                        }
+                        Err(error) => tracing::warn!(
+                            "Failed to open case DB while cancelling job {}: {}",
+                            job_id,
+                            error
+                        ),
+                    }
+                }
+            }
             event_bridge::emit_job_cancelled(&app, &job_id, "Cancel requested by user");
+            event_bridge::emit_job_cancellation(
+                &app,
+                &job_cancellation_dto(
+                    &job_id,
+                    CancellationStateDto::Requested,
+                    false,
+                    "Cancel requested by user",
+                ),
+            );
             Ok("Cancel requested".to_string())
         } else {
             Err(CommandError::not_found("Job"))
@@ -285,11 +323,15 @@ fn run_background_import_job(
     // Check for cancellation before starting
     if cancel_token.load(Ordering::Relaxed) {
         let msg = "Import cancelled by user";
-        if let Err(e) = job_repo.fail(&job.job_id, msg) {
+        if let Err(e) = job_repo.cancel(&job.job_id, msg) {
             tracing::error!("Failed to mark job {} as cancelled: {}", job.job_id.0, e);
         }
         if let Some(app) = app {
-            event_bridge::emit_job_failed(app, &job.job_id.0, msg);
+            event_bridge::emit_job_cancelled(app, &job.job_id.0, msg);
+            event_bridge::emit_job_cancellation(
+                app,
+                &job_cancellation_dto(&job.job_id.0, CancellationStateDto::Cancelled, true, msg),
+            );
         }
         return Ok(());
     }
@@ -319,13 +361,32 @@ fn run_background_import_job(
             Ok(())
         }
         Err(error) => {
-            if let Err(e) = job_repo.fail(&job.job_id, &error.message) {
-                tracing::error!("Failed to mark job {} as failed: {}", job.job_id.0, e);
+            if is_import_cancelled_message(&error.message) {
+                if let Err(e) = job_repo.cancel(&job.job_id, &error.message) {
+                    tracing::error!("Failed to mark job {} as cancelled: {}", job.job_id.0, e);
+                }
+                if let Some(app) = app {
+                    event_bridge::emit_job_cancelled(app, &job.job_id.0, &error.message);
+                    event_bridge::emit_job_cancellation(
+                        app,
+                        &job_cancellation_dto(
+                            &job.job_id.0,
+                            CancellationStateDto::Cancelled,
+                            true,
+                            &error.message,
+                        ),
+                    );
+                }
+                Ok(())
+            } else {
+                if let Err(e) = job_repo.fail(&job.job_id, &error.message) {
+                    tracing::error!("Failed to mark job {} as failed: {}", job.job_id.0, e);
+                }
+                if let Some(app) = app {
+                    event_bridge::emit_job_failed(app, &job.job_id.0, &error.message);
+                }
+                Err(error)
             }
-            if let Some(app) = app {
-                event_bridge::emit_job_failed(app, &job.job_id.0, &error.message);
-            }
-            Err(error)
         }
     }
 }
@@ -375,16 +436,36 @@ fn execute_import_job_with_counts(
     emit_phase_profile(
         options.app,
         job_id,
+        case_id,
+        Some(&ds.id),
         12,
         format!(
             "Attach complete: phase=attach elapsedMs={} rssMb={}",
             elapsed_ms(attach_started.elapsed()),
             import_analysis::current_rss_mb()
         ),
+        options.cancel_token.load(Ordering::Relaxed),
     );
 
     // Check for cancellation
     if options.cancel_token.load(Ordering::Relaxed) {
+        mark_import_cancelling(&job_repo, job_id, "Cancellation acknowledged after attach");
+        emit_import_cancellation_state(
+            options.app,
+            job_id,
+            CancellationStateDto::Acknowledged,
+            false,
+            "Cancellation acknowledged after attach",
+        );
+        emit_import_profile_progress(
+            options.app,
+            job_id,
+            case_id,
+            Some(&ds.id),
+            12,
+            "Cancellation acknowledged: phase=attach",
+            true,
+        );
         return Err(CommandError::internal("Import cancelled by user"));
     }
 
@@ -428,6 +509,8 @@ fn execute_import_job_with_counts(
                 emit_phase_profile(
                     options.app,
                     job_id,
+                    case_id,
+                    Some(&ds.id),
                     28,
                     format!(
                         "Probe complete: phase=probe elapsedMs={} partitions={} candidates={} rssMb={}",
@@ -436,6 +519,7 @@ fn execute_import_job_with_counts(
                         probe.candidates.len(),
                         import_analysis::current_rss_mb()
                     ),
+                    options.cancel_token.load(Ordering::Relaxed),
                 );
 
                 // Store partition records in main DB
@@ -532,6 +616,8 @@ fn execute_import_job_with_counts(
                     emit_phase_profile(
                         options.app,
                         job_id,
+                        case_id,
+                        Some(&ds.id),
                         30,
                         format!(
                             "Probe complete: phase=probe-resume elapsedMs={} candidates={} rssMb={}",
@@ -539,6 +625,7 @@ fn execute_import_job_with_counts(
                             probe.candidates.len(),
                             import_analysis::current_rss_mb()
                         ),
+                        options.cancel_token.load(Ordering::Relaxed),
                     );
                     probe_candidates = probe.candidates;
                 }
@@ -574,6 +661,8 @@ fn execute_import_job_with_counts(
                 emit_phase_profile(
                     options.app,
                     job_id,
+                    case_id,
+                    Some(&ds.id),
                     31,
                     format!(
                         "Reader build complete: phase=reader-build elapsedMs={} pending={} failures={} rssMb={}",
@@ -582,6 +671,7 @@ fn execute_import_job_with_counts(
                         build_failures.len(),
                         import_analysis::current_rss_mb()
                     ),
+                    options.cancel_token.load(Ordering::Relaxed),
                 );
                 if !build_failures.is_empty() {
                     counts.add_warnings(build_failures.len());
@@ -667,9 +757,25 @@ fn execute_import_job_with_counts(
                     let enum_files: u64 = results.iter().map(|result| result.file_count).sum();
                     let enum_dirs: u64 = results.iter().map(|result| result.dir_count).sum();
                     let enum_size: u64 = results.iter().map(|result| result.total_size).sum();
+                    if options.cancel_token.load(Ordering::Relaxed) {
+                        mark_import_cancelling(
+                            &job_repo,
+                            job_id,
+                            "Cancellation acknowledged; draining enumeration workers",
+                        );
+                        emit_import_cancellation_state(
+                            options.app,
+                            job_id,
+                            CancellationStateDto::Draining,
+                            false,
+                            "Cancellation acknowledged; draining enumeration workers",
+                        );
+                    }
                     emit_phase_profile(
                         options.app,
                         job_id,
+                        case_id,
+                        Some(&ds.id),
                         60,
                         format!(
                             "Enumeration complete: phase=enumeration elapsedMs={} rows={} rowsPerSec={} dataMb={} mbPerSec={} workers={} rssMb={}",
@@ -681,6 +787,7 @@ fn execute_import_job_with_counts(
                             max_workers,
                             import_analysis::current_rss_mb()
                         ),
+                        options.cancel_token.load(Ordering::Relaxed),
                     );
 
                     // Update manifest with results
@@ -713,6 +820,26 @@ fn execute_import_job_with_counts(
                     manifest
                         .save(case_root)
                         .map_err(CommandError::from_service_error)?;
+
+                    if options.cancel_token.load(Ordering::Relaxed) {
+                        job_repo
+                            .update_outcome_counts(
+                                job_id,
+                                counts.warning_count,
+                                counts.skipped_count.saturating_add(1),
+                                counts.failed_count,
+                                true,
+                            )
+                            .map_err(CommandError::from_service_error)?;
+                        emit_import_cancellation_state(
+                            options.app,
+                            job_id,
+                            CancellationStateDto::Acknowledged,
+                            false,
+                            "Import cancellation acknowledged after enumeration",
+                        );
+                        return Err(CommandError::internal("Import cancelled by user"));
+                    }
 
                     let success_results = results
                         .iter()
@@ -766,6 +893,8 @@ fn execute_import_job_with_counts(
                     emit_phase_profile(
                         options.app,
                         job_id,
+                        case_id,
+                        Some(&ds.id),
                         70,
                         format!(
                             "Partition merge complete: phase=enum-merge elapsedMs={} rows={} rowsPerSec={} rssMb={}",
@@ -774,6 +903,7 @@ fn execute_import_job_with_counts(
                             rows_per_sec(merged, enum_merge_elapsed),
                             import_analysis::current_rss_mb()
                         ),
+                        options.cancel_token.load(Ordering::Relaxed),
                     );
 
                     let total_files: u64 = results.iter().map(|r| r.file_count).sum();
@@ -805,9 +935,46 @@ fn execute_import_job_with_counts(
         }
     };
     counts.add_warnings(stats.warnings.len());
+    emit_phase_profile(
+        options.app,
+        job_id,
+        case_id,
+        Some(&ds.id),
+        70,
+        format!(
+            "File catalog ready: phase=enum-merge rows={} files={} dirs={} warnings={} rssMb={}",
+            stats.file_count + stats.dir_count,
+            stats.file_count,
+            stats.dir_count,
+            stats.warnings.len(),
+            import_analysis::current_rss_mb()
+        ),
+        options.cancel_token.load(Ordering::Relaxed),
+    );
 
     // Check for cancellation
     if options.cancel_token.load(Ordering::Relaxed) {
+        mark_import_cancelling(
+            &job_repo,
+            job_id,
+            "Cancellation acknowledged before post-import analysis",
+        );
+        emit_import_cancellation_state(
+            options.app,
+            job_id,
+            CancellationStateDto::Acknowledged,
+            false,
+            "Cancellation acknowledged before post-import analysis",
+        );
+        emit_import_profile_progress(
+            options.app,
+            job_id,
+            case_id,
+            Some(&ds.id),
+            70,
+            "Cancellation acknowledged: phase=enumeration",
+            true,
+        );
         return Err(CommandError::internal("Import cancelled by user"));
     }
 
@@ -832,7 +999,15 @@ fn execute_import_job_with_counts(
     };
     let post_import_started = Instant::now();
     let progress_adapter = |pct: u32, detail: &str| {
-        emit_import_profile_progress(options.app, job_id, pct, detail);
+        emit_import_profile_progress(
+            options.app,
+            job_id,
+            case_id,
+            Some(&ds.id),
+            pct,
+            detail,
+            options.cancel_token.load(Ordering::Relaxed),
+        );
     };
     let (pipeline_msg, pipeline_counts) = import_analysis::run_post_import_pipeline_with_counts(
         import_analysis::PostImportPipelineOptions {
@@ -861,18 +1036,45 @@ fn execute_import_job_with_counts(
         counts.failed_count = counts
             .failed_count
             .saturating_add(service_counts.failed_count);
-        CommandError::from_service_error(error.message)
+        let cancellation_error = options.cancel_token.load(Ordering::Relaxed)
+            || is_import_cancelled_message(&error.message);
+        if cancellation_error {
+            mark_import_cancelling(
+                &job_repo,
+                job_id,
+                "Cancellation acknowledged during post-import analysis drain",
+            );
+            emit_import_cancellation_state(
+                options.app,
+                job_id,
+                CancellationStateDto::Draining,
+                false,
+                "Cancellation acknowledged during post-import analysis drain",
+            );
+        }
+        if cancellation_error {
+            CommandError::internal("Import cancelled by user")
+        } else {
+            CommandError::from_service_error(error.message)
+        }
     })?;
     let pipeline_counts = JobOutcomeCounts::from(pipeline_counts);
+    let post_import_results = post_import_counts_from_message(&pipeline_msg);
     emit_phase_profile(
         options.app,
         job_id,
+        case_id,
+        Some(&ds.id),
         94,
         format!(
-            "Post-import complete: phase=post-import elapsedMs={} rssMb={}",
+            "Post-import complete: phase=post-import elapsedMs={} timeline={} artifacts={} indexed={} rssMb={}",
             elapsed_ms(post_import_started.elapsed()),
+            post_import_results.timeline_events,
+            post_import_results.artifact_count,
+            post_import_results.indexed_count,
             import_analysis::current_rss_mb()
         ),
+        options.cancel_token.load(Ordering::Relaxed),
     );
     counts.warning_count = counts
         .warning_count
@@ -920,12 +1122,15 @@ fn execute_import_job_with_counts(
     emit_phase_profile(
         options.app,
         job_id,
+        case_id,
+        Some(&ds.id),
         99,
         format!(
             "Import profile complete: phase=total elapsedMs={} rssMb={}",
             elapsed_ms(import_started.elapsed()),
             import_analysis::current_rss_mb()
         ),
+        options.cancel_token.load(Ordering::Relaxed),
     );
 
     let mut msg = format!(
@@ -943,24 +1148,597 @@ fn execute_import_job_with_counts(
 fn emit_phase_profile(
     app: Option<&AppHandle>,
     job_id: &domain::JobId,
+    case_id: &domain::CaseId,
+    data_source_id: Option<&domain::DataSourceId>,
     progress: u32,
     detail: String,
+    cancel_requested: bool,
 ) {
-    emit_import_profile_progress(app, job_id, progress, &detail);
+    emit_import_profile_progress(
+        app,
+        job_id,
+        case_id,
+        data_source_id,
+        progress,
+        &detail,
+        cancel_requested,
+    );
+}
+
+fn emit_import_cancellation_state(
+    app: Option<&AppHandle>,
+    job_id: &domain::JobId,
+    state: CancellationStateDto,
+    safe_to_close: bool,
+    detail: &str,
+) {
+    if let Some(app) = app {
+        event_bridge::emit_job_cancellation(
+            app,
+            &job_cancellation_dto(&job_id.0, state, safe_to_close, detail),
+        );
+    }
+}
+
+fn job_cancellation_dto(
+    job_id: &str,
+    state: CancellationStateDto,
+    safe_to_close: bool,
+    detail: &str,
+) -> JobCancellationDto {
+    let now = chrono::Utc::now().to_rfc3339();
+    JobCancellationDto {
+        job_id: job_id.to_string(),
+        requested_at: Some(now.clone()),
+        acknowledged_at: matches!(
+            state,
+            CancellationStateDto::Acknowledged
+                | CancellationStateDto::Draining
+                | CancellationStateDto::Cancelled
+                | CancellationStateDto::TimedOut
+        )
+        .then_some(now),
+        state,
+        safe_to_close,
+        detail: detail.to_string(),
+    }
+}
+
+fn mark_import_cancelling(job_repo: &JobRepo<'_>, job_id: &domain::JobId, detail: &str) {
+    if let Err(error) = job_repo.mark_cancelling(job_id, detail) {
+        tracing::warn!("Failed to mark job {} as cancelling: {}", job_id.0, error);
+    }
+}
+
+fn is_import_cancelled_message(message: &str) -> bool {
+    message.to_ascii_lowercase().contains("cancel")
 }
 
 fn emit_import_profile_progress(
     app: Option<&AppHandle>,
     job_id: &domain::JobId,
+    case_id: &domain::CaseId,
+    data_source_id: Option<&domain::DataSourceId>,
     progress: u32,
     detail: &str,
+    cancel_requested: bool,
 ) {
     tracing::info!("Import profile for {}: {}", job_id.0, detail);
     #[cfg(test)]
     eprintln!("[import-profile] {}% {}", progress.min(99), detail);
     if let Some(app) = app {
+        let phase_progress = import_phase_progress_from_profile(
+            job_id,
+            case_id,
+            data_source_id,
+            progress,
+            detail,
+            cancel_requested,
+        );
+        event_bridge::emit_import_phase_progress(app, &phase_progress);
+        for result in &phase_progress.partial_results {
+            event_bridge::emit_import_partial_result(app, result);
+        }
+        for status in cache_statuses_from_profile(data_source_id, detail) {
+            event_bridge::emit_cache_index_status(app, &status);
+        }
         event_bridge::emit_job_progress(app, &job_id.0, progress.min(99), detail);
     }
+}
+
+fn import_phase_progress_from_profile(
+    job_id: &domain::JobId,
+    case_id: &domain::CaseId,
+    data_source_id: Option<&domain::DataSourceId>,
+    progress: u32,
+    detail: &str,
+    cancel_requested: bool,
+) -> ImportPhaseProgressDto {
+    ImportPhaseProgressDto {
+        job_id: job_id.0.clone(),
+        case_id: case_id.0.clone(),
+        data_source_id: data_source_id.map(|id| id.0.clone()),
+        phase: import_phase_from_profile(detail, progress),
+        state: import_phase_state_from_profile(detail, cancel_requested),
+        percent: progress.min(99),
+        detail: detail.to_string(),
+        metrics: import_phase_metrics_from_profile(detail),
+        partial_results: partial_results_from_profile(data_source_id, detail),
+        cancellable: progress < 99,
+        cancel_requested,
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct PostImportResultCounts {
+    timeline_events: u64,
+    artifact_count: u64,
+    indexed_count: u64,
+}
+
+fn partial_results_from_profile(
+    data_source_id: Option<&domain::DataSourceId>,
+    detail: &str,
+) -> Vec<PartialResultDto> {
+    let Some(scope_id) = data_source_id.map(|id| id.0.as_str()) else {
+        return Vec::new();
+    };
+    let lower = detail.to_ascii_lowercase();
+    if lower.contains("layout changed") && lower.contains("reinitializing") {
+        return analysis_slice_results(scope_id, 0, None, ResultFreshnessDto::Invalidated);
+    }
+    if lower.contains("already merged") {
+        return analysis_slice_results(scope_id, 0, None, ResultFreshnessDto::Stale);
+    }
+
+    match profile_value(detail, "phase").as_deref() {
+        Some("enum-merge") => {
+            let rows = profile_u64(detail, "rows").unwrap_or(0);
+            let freshness = if lower.contains("complete") || lower.contains("ready") {
+                ResultFreshnessDto::Ready
+            } else {
+                ResultFreshnessDto::Partial
+            };
+            vec![
+                partial_result(
+                    PartialResultKindDto::FileRows,
+                    scope_id,
+                    rows,
+                    Some(rows),
+                    "files:rows",
+                    freshness.clone(),
+                ),
+                partial_result(
+                    PartialResultKindDto::FileTree,
+                    scope_id,
+                    rows,
+                    Some(rows),
+                    "files:tree",
+                    freshness,
+                ),
+            ]
+        }
+        Some("analysis") => {
+            let indexed = profile_u64(detail, "indexed").unwrap_or(0);
+            let total = profile_u64(detail, "files")
+                .or_else(|| rows_from_profile(detail).1)
+                .or_else(|| profile_u64(detail, "queuedTasks"));
+            vec![partial_result(
+                PartialResultKindDto::SearchIndex,
+                scope_id,
+                indexed,
+                total,
+                "search:index",
+                ResultFreshnessDto::Partial,
+            )]
+        }
+        Some("post-import-skip") => vec![
+            partial_result(
+                PartialResultKindDto::TimelineEvents,
+                scope_id,
+                0,
+                None,
+                "timeline:events",
+                ResultFreshnessDto::Deferred,
+            ),
+            partial_result(
+                PartialResultKindDto::ArtifactFamily,
+                scope_id,
+                0,
+                None,
+                "artifacts:family",
+                ResultFreshnessDto::Deferred,
+            ),
+            partial_result(
+                PartialResultKindDto::SearchIndex,
+                scope_id,
+                0,
+                None,
+                "search:index",
+                ResultFreshnessDto::Deferred,
+            ),
+        ],
+        Some("post-import") => {
+            let counts = post_import_counts_from_profile(detail);
+            analysis_ready_results(scope_id, counts)
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn analysis_ready_results(scope_id: &str, counts: PostImportResultCounts) -> Vec<PartialResultDto> {
+    vec![
+        partial_result(
+            PartialResultKindDto::TimelineEvents,
+            scope_id,
+            counts.timeline_events,
+            Some(counts.timeline_events),
+            "timeline:events",
+            ResultFreshnessDto::Ready,
+        ),
+        partial_result(
+            PartialResultKindDto::ArtifactFamily,
+            scope_id,
+            counts.artifact_count,
+            Some(counts.artifact_count),
+            "artifacts:family",
+            ResultFreshnessDto::Ready,
+        ),
+        partial_result(
+            PartialResultKindDto::SearchIndex,
+            scope_id,
+            counts.indexed_count,
+            Some(counts.indexed_count),
+            "search:index",
+            ResultFreshnessDto::Ready,
+        ),
+    ]
+}
+
+fn cache_statuses_from_profile(
+    data_source_id: Option<&domain::DataSourceId>,
+    detail: &str,
+) -> Vec<IndexCacheStatusDto> {
+    let Some(scope_id) = data_source_id.map(|id| id.0.as_str()) else {
+        return Vec::new();
+    };
+    let lower = detail.to_ascii_lowercase();
+    if lower.contains("layout changed") && lower.contains("reinitializing") {
+        return analysis_cache_statuses(
+            scope_id,
+            "invalidated",
+            0,
+            None,
+            Some("Analysis staging layout changed; derived caches invalidated"),
+        );
+    }
+    if lower.contains("already merged") {
+        return analysis_cache_statuses(
+            scope_id,
+            "reused",
+            0,
+            None,
+            Some("Previously merged analysis output reused"),
+        );
+    }
+    if lower.contains("merging analysis staging dbs") {
+        return analysis_cache_statuses(
+            scope_id,
+            "stale",
+            0,
+            None,
+            Some("Worker output is being merged; existing derived caches may be stale"),
+        );
+    }
+
+    match profile_value(detail, "phase").as_deref() {
+        Some("analysis-start") => {
+            let total = profile_u64(detail, "pendingTasks");
+            analysis_cache_statuses(
+                scope_id,
+                "warming",
+                0,
+                total,
+                Some("Post-import analysis queued; derived caches warming"),
+            )
+        }
+        Some("analysis") => {
+            let indexed = profile_u64(detail, "indexed").unwrap_or(0);
+            let total = profile_u64(detail, "files")
+                .or_else(|| rows_from_profile(detail).1)
+                .or_else(|| profile_u64(detail, "queuedTasks"));
+            analysis_cache_statuses(
+                scope_id,
+                "warming",
+                indexed,
+                total,
+                Some("Post-import analysis running; derived caches warming"),
+            )
+        }
+        Some("post-import-skip") => analysis_cache_statuses(
+            scope_id,
+            "deferred",
+            0,
+            None,
+            Some("Metadata-only import deferred timeline, artifact, and search index caches"),
+        ),
+        Some("post-import") => {
+            let counts = post_import_counts_from_profile(detail);
+            analysis_cache_ready_statuses(scope_id, counts)
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn analysis_cache_ready_statuses(
+    scope_id: &str,
+    counts: PostImportResultCounts,
+) -> Vec<IndexCacheStatusDto> {
+    vec![
+        cache_status(
+            "timeline:events",
+            scope_id,
+            "ready",
+            counts.timeline_events,
+            Some(counts.timeline_events),
+            Some("Timeline projection ready"),
+        ),
+        cache_status(
+            "artifacts:family",
+            scope_id,
+            "ready",
+            counts.artifact_count,
+            Some(counts.artifact_count),
+            Some("Artifact analysis cache ready"),
+        ),
+        cache_status(
+            "search:index",
+            scope_id,
+            "ready",
+            counts.indexed_count,
+            Some(counts.indexed_count),
+            Some("Search index ready"),
+        ),
+    ]
+}
+
+fn analysis_cache_statuses(
+    scope_id: &str,
+    state: &str,
+    indexed_count: u64,
+    total_count: Option<u64>,
+    message: Option<&str>,
+) -> Vec<IndexCacheStatusDto> {
+    vec![
+        cache_status(
+            "timeline:events",
+            scope_id,
+            state,
+            indexed_count,
+            total_count,
+            message,
+        ),
+        cache_status(
+            "artifacts:family",
+            scope_id,
+            state,
+            indexed_count,
+            total_count,
+            message,
+        ),
+        cache_status(
+            "search:index",
+            scope_id,
+            state,
+            indexed_count,
+            total_count,
+            message,
+        ),
+    ]
+}
+
+fn cache_status(
+    key_prefix: &str,
+    scope_id: &str,
+    state: &str,
+    indexed_count: u64,
+    total_count: Option<u64>,
+    message: Option<&str>,
+) -> IndexCacheStatusDto {
+    IndexCacheStatusDto {
+        cache_key: format!("{key_prefix}:{scope_id}"),
+        state: state.to_string(),
+        indexed_count,
+        total_count,
+        updated_at: chrono::Utc::now().to_rfc3339(),
+        message: message.map(str::to_string),
+    }
+}
+
+fn analysis_slice_results(
+    scope_id: &str,
+    ready_count: u64,
+    total_estimate: Option<u64>,
+    freshness: ResultFreshnessDto,
+) -> Vec<PartialResultDto> {
+    vec![
+        partial_result(
+            PartialResultKindDto::TimelineEvents,
+            scope_id,
+            ready_count,
+            total_estimate,
+            "timeline:events",
+            freshness.clone(),
+        ),
+        partial_result(
+            PartialResultKindDto::ArtifactFamily,
+            scope_id,
+            ready_count,
+            total_estimate,
+            "artifacts:family",
+            freshness.clone(),
+        ),
+        partial_result(
+            PartialResultKindDto::SearchIndex,
+            scope_id,
+            ready_count,
+            total_estimate,
+            "search:index",
+            freshness,
+        ),
+    ]
+}
+
+fn partial_result(
+    kind: PartialResultKindDto,
+    scope_id: &str,
+    ready_count: u64,
+    total_estimate: Option<u64>,
+    key_prefix: &str,
+    freshness: ResultFreshnessDto,
+) -> PartialResultDto {
+    PartialResultDto {
+        kind,
+        scope_id: scope_id.to_string(),
+        ready_count,
+        total_estimate,
+        query_key: format!("{key_prefix}:{scope_id}"),
+        freshness,
+    }
+}
+
+fn post_import_counts_from_profile(detail: &str) -> PostImportResultCounts {
+    PostImportResultCounts {
+        timeline_events: profile_u64(detail, "timeline").unwrap_or(0),
+        artifact_count: profile_u64(detail, "artifacts").unwrap_or(0),
+        indexed_count: profile_u64(detail, "indexed").unwrap_or(0),
+    }
+}
+
+fn post_import_counts_from_message(message: &str) -> PostImportResultCounts {
+    let normalized = message
+        .replace(':', " ")
+        .replace('.', " ")
+        .replace(',', " ");
+    let parts: Vec<&str> = normalized.split_whitespace().collect();
+    PostImportResultCounts {
+        timeline_events: value_after_label(&parts, "Timeline").unwrap_or(0),
+        artifact_count: value_after_label(&parts, "Artifacts").unwrap_or(0),
+        indexed_count: value_after_label(&parts, "Index").unwrap_or(0),
+    }
+}
+
+fn value_after_label(parts: &[&str], label: &str) -> Option<u64> {
+    parts.windows(2).find_map(|window| {
+        (window[0] == label)
+            .then(|| window[1].parse::<u64>().ok())
+            .flatten()
+    })
+}
+
+fn import_phase_from_profile(detail: &str, progress: u32) -> ImportPhaseDto {
+    match profile_value(detail, "phase").as_deref() {
+        Some("attach") => ImportPhaseDto::Attach,
+        Some("probe") | Some("probe-resume") | Some("reader-build") => ImportPhaseDto::Probe,
+        Some("enumeration") => ImportPhaseDto::Enumerate,
+        Some("enum-merge") => ImportPhaseDto::MergeEnumeration,
+        Some("analysis-start") | Some("analysis") => ImportPhaseDto::Analyze,
+        Some("analysis-merge") => ImportPhaseDto::MergeAnalysis,
+        Some("post-import") | Some("post-import-skip") | Some("total") => ImportPhaseDto::Finalize,
+        _ if progress < 25 => ImportPhaseDto::Attach,
+        _ if progress < 70 => ImportPhaseDto::Enumerate,
+        _ if progress < 84 => ImportPhaseDto::Analyze,
+        _ if progress < 95 => ImportPhaseDto::MergeAnalysis,
+        _ => ImportPhaseDto::Finalize,
+    }
+}
+
+fn import_phase_state_from_profile(detail: &str, cancel_requested: bool) -> ImportPhaseStateDto {
+    if cancel_requested {
+        return ImportPhaseStateDto::Cancelling;
+    }
+    let lower = detail.to_ascii_lowercase();
+    if lower.contains("cancel") {
+        ImportPhaseStateDto::Cancelling
+    } else if lower.contains("skipped")
+        || profile_value(detail, "phase").as_deref() == Some("post-import-skip")
+    {
+        ImportPhaseStateDto::Skipped
+    } else if lower.contains("complete")
+        || lower.contains("ready")
+        || lower.contains("already merged")
+    {
+        ImportPhaseStateDto::Completed
+    } else if lower.contains("failed") || lower.contains("hard limit exceeded") {
+        ImportPhaseStateDto::Failed
+    } else {
+        ImportPhaseStateDto::Running
+    }
+}
+
+fn import_phase_metrics_from_profile(detail: &str) -> ImportPhaseMetricsDto {
+    let (rows_processed, rows_total) = rows_from_profile(detail);
+    let bytes_processed = profile_u64(detail, "bytes")
+        .or_else(|| profile_u64(detail, "dataMb").map(|mb| mb.saturating_mul(1024 * 1024)))
+        .unwrap_or(0);
+    ImportPhaseMetricsDto {
+        elapsed_ms: profile_u64(detail, "elapsedMs").unwrap_or(0),
+        rss_mb: profile_u64(detail, "rssMb").unwrap_or(0),
+        workers: profile_u64(detail, "workers")
+            .or_else(|| profile_nonzero_u64(detail, "activeWorkers"))
+            .or_else(|| profile_nonzero_u64(detail, "active"))
+            .or_else(|| profile_u64(detail, "workerBudget"))
+            .or_else(|| profile_u64(detail, "activeWorkers"))
+            .or_else(|| profile_u64(detail, "active"))
+            .unwrap_or(0) as u32,
+        rows_processed,
+        rows_total,
+        rows_per_sec: profile_f64(detail, "rowsPerSec"),
+        bytes_processed,
+        bytes_total: profile_u64(detail, "bytesTotal"),
+        mb_per_sec: profile_f64(detail, "mbPerSec"),
+        warnings: profile_u64(detail, "warnings").unwrap_or(0) as u32,
+        skipped: profile_u64(detail, "skipped").unwrap_or(0) as u32,
+        failed: profile_u64(detail, "failed")
+            .or_else(|| profile_u64(detail, "failures"))
+            .unwrap_or(0) as u32,
+    }
+}
+
+fn rows_from_profile(detail: &str) -> (u64, Option<u64>) {
+    if let Some(processed) = profile_value(detail, "processed") {
+        if let Some((done, total)) = processed.split_once('/') {
+            return (done.parse::<u64>().unwrap_or(0), total.parse::<u64>().ok());
+        }
+        if let Ok(rows) = processed.parse::<u64>() {
+            return (rows, profile_u64(detail, "files"));
+        }
+    }
+    let rows = profile_u64(detail, "rows").unwrap_or(0);
+    (
+        rows,
+        profile_u64(detail, "files").or_else(|| profile_u64(detail, "pendingTasks")),
+    )
+}
+
+fn profile_u64(detail: &str, key: &str) -> Option<u64> {
+    profile_value(detail, key).and_then(|value| value.parse::<u64>().ok())
+}
+
+fn profile_nonzero_u64(detail: &str, key: &str) -> Option<u64> {
+    profile_u64(detail, key).filter(|value| *value > 0)
+}
+
+fn profile_f64(detail: &str, key: &str) -> Option<f64> {
+    profile_value(detail, key).and_then(|value| value.parse::<f64>().ok())
+}
+
+fn profile_value(detail: &str, key: &str) -> Option<String> {
+    let prefix = format!("{key}=");
+    detail.split_whitespace().find_map(|part| {
+        part.strip_prefix(&prefix)
+            .map(|value| value.trim_end_matches([',', ';']).to_string())
+    })
 }
 
 fn elapsed_ms(duration: Duration) -> u128 {
@@ -1396,6 +2174,37 @@ mod tests {
             + (dt.timestamp_subsec_nanos() as u64 / 100)
     }
 
+    fn assert_partial_result(
+        result: &PartialResultDto,
+        kind: PartialResultKindDto,
+        scope_id: &str,
+        ready_count: u64,
+        total_estimate: Option<u64>,
+        query_key: &str,
+        freshness: ResultFreshnessDto,
+    ) {
+        assert_eq!(result.kind, kind);
+        assert_eq!(result.scope_id, scope_id);
+        assert_eq!(result.ready_count, ready_count);
+        assert_eq!(result.total_estimate, total_estimate);
+        assert_eq!(result.query_key, query_key);
+        assert_eq!(result.freshness, freshness);
+    }
+
+    fn assert_cache_status(
+        status: &IndexCacheStatusDto,
+        cache_key: &str,
+        state: &str,
+        indexed_count: u64,
+        total_count: Option<u64>,
+    ) {
+        assert_eq!(status.cache_key, cache_key);
+        assert_eq!(status.state, state);
+        assert_eq!(status.indexed_count, indexed_count);
+        assert_eq!(status.total_count, total_count);
+        assert!(chrono::DateTime::parse_from_rfc3339(&status.updated_at).is_ok());
+    }
+
     fn prefetch_fixture(exe_name: &str, run_count: u32, last_run: DateTime<Utc>) -> Vec<u8> {
         let mut data = Vec::new();
         data.extend_from_slice(b"SCCA");
@@ -1421,6 +2230,434 @@ mod tests {
         data.extend_from_slice(&[0u8; 7 * 8]);
         data.resize(4096, 0);
         data
+    }
+
+    #[test]
+    fn import_profile_progress_maps_enumeration_metrics_to_typed_dto() {
+        let dto = import_phase_progress_from_profile(
+            &domain::JobId("job-1".to_string()),
+            &domain::CaseId("case-1".to_string()),
+            Some(&domain::DataSourceId("ds-1".to_string())),
+            60,
+            "Enumeration complete: phase=enumeration elapsedMs=125 rows=12 rowsPerSec=96 dataMb=3 mbPerSec=24 workers=4 rssMb=512",
+            false,
+        );
+
+        assert_eq!(dto.job_id, "job-1");
+        assert_eq!(dto.case_id, "case-1");
+        assert_eq!(dto.data_source_id.as_deref(), Some("ds-1"));
+        assert_eq!(dto.phase, ImportPhaseDto::Enumerate);
+        assert_eq!(dto.state, ImportPhaseStateDto::Completed);
+        assert_eq!(dto.percent, 60);
+        assert_eq!(dto.metrics.elapsed_ms, 125);
+        assert_eq!(dto.metrics.rss_mb, 512);
+        assert_eq!(dto.metrics.workers, 4);
+        assert_eq!(dto.metrics.rows_processed, 12);
+        assert_eq!(dto.metrics.rows_per_sec, Some(96.0));
+        assert_eq!(dto.metrics.bytes_processed, 3 * 1024 * 1024);
+        assert_eq!(dto.metrics.mb_per_sec, Some(24.0));
+        assert!(dto.partial_results.is_empty());
+        assert!(dto.cancellable);
+        assert!(!dto.cancel_requested);
+    }
+
+    #[test]
+    fn enum_merge_progress_exposes_ready_file_results() {
+        let dto = import_phase_progress_from_profile(
+            &domain::JobId("job-files".to_string()),
+            &domain::CaseId("case-files".to_string()),
+            Some(&domain::DataSourceId("ds-files".to_string())),
+            70,
+            "File catalog ready: phase=enum-merge rows=9 files=6 dirs=3 warnings=0 rssMb=128",
+            false,
+        );
+
+        assert_eq!(dto.phase, ImportPhaseDto::MergeEnumeration);
+        assert_eq!(dto.state, ImportPhaseStateDto::Completed);
+        assert_eq!(dto.partial_results.len(), 2);
+        assert_partial_result(
+            &dto.partial_results[0],
+            PartialResultKindDto::FileRows,
+            "ds-files",
+            9,
+            Some(9),
+            "files:rows:ds-files",
+            ResultFreshnessDto::Ready,
+        );
+        assert_partial_result(
+            &dto.partial_results[1],
+            PartialResultKindDto::FileTree,
+            "ds-files",
+            9,
+            Some(9),
+            "files:tree:ds-files",
+            ResultFreshnessDto::Ready,
+        );
+    }
+
+    #[test]
+    fn analysis_progress_exposes_partial_search_index_result() {
+        let dto = import_phase_progress_from_profile(
+            &domain::JobId("job-search".to_string()),
+            &domain::CaseId("case-search".to_string()),
+            Some(&domain::DataSourceId("ds-search".to_string())),
+            75,
+            "Analysis heartbeat: phase=analysis scheduling=running memory=ok rssMb=256 workerBudget=4 queuedTasks=2 pendingTasks=5 processed=5/10 indexed=4 activeWorkers=2",
+            false,
+        );
+
+        assert_eq!(dto.partial_results.len(), 1);
+        assert_partial_result(
+            &dto.partial_results[0],
+            PartialResultKindDto::SearchIndex,
+            "ds-search",
+            4,
+            Some(10),
+            "search:index:ds-search",
+            ResultFreshnessDto::Partial,
+        );
+    }
+
+    #[test]
+    fn scheduling_profiles_expose_worker_budget_and_deferred_states() {
+        let queued = import_phase_progress_from_profile(
+            &domain::JobId("job-schedule".to_string()),
+            &domain::CaseId("case-schedule".to_string()),
+            Some(&domain::DataSourceId("ds-schedule".to_string())),
+            72,
+            "Analysis staging: phase=analysis-start scheduling=queued mode=budgetedContent workers=3 workerBudget=3 activeWorkers=0 queuedTasks=0 pendingTasks=42 queueBound=768 content=enabled text=enabled contentDeferred=false textDeferred=false rssMb=128",
+            false,
+        );
+
+        assert_eq!(queued.phase, ImportPhaseDto::Analyze);
+        assert_eq!(queued.state, ImportPhaseStateDto::Running);
+        assert_eq!(queued.metrics.workers, 3);
+        assert_eq!(queued.metrics.rows_total, Some(42));
+        assert!(queued.detail.contains("scheduling=queued"));
+        assert!(queued.detail.contains("workerBudget=3"));
+        assert!(queued.detail.contains("pendingTasks=42"));
+
+        let deferred = import_phase_progress_from_profile(
+            &domain::JobId("job-deferred".to_string()),
+            &domain::CaseId("case-deferred".to_string()),
+            Some(&domain::DataSourceId("ds-deferred".to_string())),
+            84,
+            "Post-import skipped: phase=post-import-skip scheduling=deferred workerBudget=2 activeWorkers=0 queuedTasks=0 pendingTasks=0 timeline=deferred content=disabled text=disabled contentDeferred=true textDeferred=true",
+            false,
+        );
+
+        assert_eq!(deferred.phase, ImportPhaseDto::Finalize);
+        assert_eq!(deferred.state, ImportPhaseStateDto::Skipped);
+        assert_eq!(deferred.metrics.workers, 2);
+        assert!(deferred.detail.contains("scheduling=deferred"));
+        assert!(deferred.detail.contains("contentDeferred=true"));
+        assert!(deferred.detail.contains("textDeferred=true"));
+        assert_eq!(deferred.partial_results.len(), 3);
+        assert!(deferred
+            .partial_results
+            .iter()
+            .all(|result| result.freshness == ResultFreshnessDto::Deferred));
+    }
+
+    #[test]
+    fn scheduling_profiles_expose_throttled_and_draining_states() {
+        let throttled = import_phase_progress_from_profile(
+            &domain::JobId("job-throttle".to_string()),
+            &domain::CaseId("case-throttle".to_string()),
+            Some(&domain::DataSourceId("ds-throttle".to_string())),
+            75,
+            "Analysis heartbeat: phase=analysis scheduling=throttled memory=soft-limit rssMb=4096 softLimitMb=4096 hardLimitMb=6144 workerBudget=4 queuedTasks=100 pendingTasks=25 processed=75/100 indexed=20 activeWorkers=4",
+            false,
+        );
+
+        assert_eq!(throttled.phase, ImportPhaseDto::Analyze);
+        assert_eq!(throttled.state, ImportPhaseStateDto::Running);
+        assert_eq!(throttled.metrics.workers, 4);
+        assert_eq!(throttled.metrics.rows_processed, 75);
+        assert_eq!(throttled.metrics.rows_total, Some(100));
+        assert!(throttled.detail.contains("scheduling=throttled"));
+        assert!(throttled.detail.contains("memory=soft-limit"));
+
+        let draining = import_phase_progress_from_profile(
+            &domain::JobId("job-drain".to_string()),
+            &domain::CaseId("case-drain".to_string()),
+            Some(&domain::DataSourceId("ds-drain".to_string())),
+            75,
+            "Analysis memory hard limit exceeded: phase=analysis scheduling=draining rssMb=6144 hardLimitMb=6144 workerBudget=4 queuedTasks=100 pendingTasks=25 processed=75 activeWorkers=4",
+            true,
+        );
+
+        assert_eq!(draining.phase, ImportPhaseDto::Analyze);
+        assert_eq!(draining.state, ImportPhaseStateDto::Cancelling);
+        assert_eq!(draining.metrics.workers, 4);
+        assert!(draining.cancel_requested);
+        assert!(draining.detail.contains("scheduling=draining"));
+    }
+
+    #[test]
+    fn post_import_profiles_expose_deferred_ready_stale_and_invalidated_results() {
+        let skipped = partial_results_from_profile(
+            Some(&domain::DataSourceId("ds-deferred".to_string())),
+            "Post-import skipped: phase=post-import-skip timeline=deferred content=disabled text=disabled",
+        );
+        assert_eq!(skipped.len(), 3);
+        assert_partial_result(
+            &skipped[0],
+            PartialResultKindDto::TimelineEvents,
+            "ds-deferred",
+            0,
+            None,
+            "timeline:events:ds-deferred",
+            ResultFreshnessDto::Deferred,
+        );
+        assert_partial_result(
+            &skipped[1],
+            PartialResultKindDto::ArtifactFamily,
+            "ds-deferred",
+            0,
+            None,
+            "artifacts:family:ds-deferred",
+            ResultFreshnessDto::Deferred,
+        );
+        assert_partial_result(
+            &skipped[2],
+            PartialResultKindDto::SearchIndex,
+            "ds-deferred",
+            0,
+            None,
+            "search:index:ds-deferred",
+            ResultFreshnessDto::Deferred,
+        );
+
+        let ready = partial_results_from_profile(
+            Some(&domain::DataSourceId("ds-ready".to_string())),
+            "Post-import complete: phase=post-import elapsedMs=42 timeline=8 artifacts=2 indexed=5 rssMb=128",
+        );
+        assert_partial_result(
+            &ready[0],
+            PartialResultKindDto::TimelineEvents,
+            "ds-ready",
+            8,
+            Some(8),
+            "timeline:events:ds-ready",
+            ResultFreshnessDto::Ready,
+        );
+        assert_partial_result(
+            &ready[1],
+            PartialResultKindDto::ArtifactFamily,
+            "ds-ready",
+            2,
+            Some(2),
+            "artifacts:family:ds-ready",
+            ResultFreshnessDto::Ready,
+        );
+        assert_partial_result(
+            &ready[2],
+            PartialResultKindDto::SearchIndex,
+            "ds-ready",
+            5,
+            Some(5),
+            "search:index:ds-ready",
+            ResultFreshnessDto::Ready,
+        );
+
+        let stale = partial_results_from_profile(
+            Some(&domain::DataSourceId("ds-stale".to_string())),
+            "Analysis staging already merged; skipping analysis resume.",
+        );
+        assert_partial_result(
+            &stale[2],
+            PartialResultKindDto::SearchIndex,
+            "ds-stale",
+            0,
+            None,
+            "search:index:ds-stale",
+            ResultFreshnessDto::Stale,
+        );
+
+        let invalidated = partial_results_from_profile(
+            Some(&domain::DataSourceId("ds-invalidated".to_string())),
+            "Analysis staging layout changed; reinitializing unfinished worker DBs: previousWorkers=[0] currentWorkers=[0, 1]",
+        );
+        assert_partial_result(
+            &invalidated[2],
+            PartialResultKindDto::SearchIndex,
+            "ds-invalidated",
+            0,
+            None,
+            "search:index:ds-invalidated",
+            ResultFreshnessDto::Invalidated,
+        );
+    }
+
+    #[test]
+    fn cache_status_profiles_expose_warming_ready_deferred_reused_stale_and_invalidated_states() {
+        let warming = cache_statuses_from_profile(
+            Some(&domain::DataSourceId("ds-warming".to_string())),
+            "Analysis heartbeat: phase=analysis scheduling=running memory=ok processed=4/10 indexed=3 activeWorkers=2",
+        );
+        assert_eq!(warming.len(), 3);
+        assert_cache_status(
+            &warming[2],
+            "search:index:ds-warming",
+            "warming",
+            3,
+            Some(10),
+        );
+
+        let ready = cache_statuses_from_profile(
+            Some(&domain::DataSourceId("ds-ready".to_string())),
+            "Post-import complete: phase=post-import elapsedMs=42 timeline=8 artifacts=2 indexed=5 rssMb=128",
+        );
+        assert_cache_status(&ready[0], "timeline:events:ds-ready", "ready", 8, Some(8));
+        assert_cache_status(&ready[1], "artifacts:family:ds-ready", "ready", 2, Some(2));
+        assert_cache_status(&ready[2], "search:index:ds-ready", "ready", 5, Some(5));
+
+        let deferred = cache_statuses_from_profile(
+            Some(&domain::DataSourceId("ds-deferred".to_string())),
+            "Post-import skipped: phase=post-import-skip scheduling=deferred timeline=deferred content=disabled text=disabled",
+        );
+        assert!(deferred
+            .iter()
+            .all(|status| status.state == "deferred" && status.total_count.is_none()));
+
+        let reused = cache_statuses_from_profile(
+            Some(&domain::DataSourceId("ds-reused".to_string())),
+            "Analysis staging already merged; skipping analysis resume.",
+        );
+        assert!(reused.iter().all(|status| status.state == "reused"));
+
+        let stale = cache_statuses_from_profile(
+            Some(&domain::DataSourceId("ds-stale".to_string())),
+            "Merging analysis staging DBs...",
+        );
+        assert!(stale.iter().all(|status| status.state == "stale"));
+
+        let invalidated = cache_statuses_from_profile(
+            Some(&domain::DataSourceId("ds-invalidated".to_string())),
+            "Analysis staging layout changed; reinitializing unfinished worker DBs: previousWorkers=[0] currentWorkers=[0, 1]",
+        );
+        assert!(invalidated
+            .iter()
+            .all(|status| status.state == "invalidated"));
+    }
+
+    #[test]
+    fn import_profile_progress_maps_analysis_and_cancel_state() {
+        let dto = import_phase_progress_from_profile(
+            &domain::JobId("job-2".to_string()),
+            &domain::CaseId("case-2".to_string()),
+            None,
+            75,
+            "Analysis heartbeat: phase=analysis memory=ok rssMb=256 softLimitMb=1536 hardLimitMb=3072 queuedTasks=2 processed=5/10 indexed=4 activeWorkers=2",
+            true,
+        );
+
+        assert_eq!(dto.data_source_id, None);
+        assert_eq!(dto.phase, ImportPhaseDto::Analyze);
+        assert_eq!(dto.state, ImportPhaseStateDto::Cancelling);
+        assert_eq!(dto.metrics.rss_mb, 256);
+        assert_eq!(dto.metrics.workers, 2);
+        assert_eq!(dto.metrics.rows_processed, 5);
+        assert_eq!(dto.metrics.rows_total, Some(10));
+        assert!(dto.cancel_requested);
+    }
+
+    #[test]
+    fn import_profile_progress_serializes_as_phase_progress_payload() {
+        let dto = import_phase_progress_from_profile(
+            &domain::JobId("job-3".to_string()),
+            &domain::CaseId("case-3".to_string()),
+            Some(&domain::DataSourceId("ds-3".to_string())),
+            99,
+            "Import profile complete: phase=total elapsedMs=1000 rssMb=128",
+            false,
+        );
+        let value = serde_json::to_value(dto).expect("serialize typed import progress");
+
+        assert_eq!(value["phase"], "finalize");
+        assert_eq!(value["state"], "completed");
+        assert_eq!(value["percent"], 99);
+        assert_eq!(value["cancellable"], false);
+        assert_eq!(value["metrics"]["elapsedMs"], 1000);
+        assert!(value.get("progress").is_none());
+        assert!(value.get("job_id").is_none());
+    }
+
+    #[test]
+    fn job_cancellation_dto_maps_requested_and_draining_states() {
+        let requested = job_cancellation_dto(
+            "job-cancel-1",
+            CancellationStateDto::Requested,
+            false,
+            "Cancel requested by user",
+        );
+        assert_eq!(requested.job_id, "job-cancel-1");
+        assert_eq!(requested.state, CancellationStateDto::Requested);
+        assert!(!requested.safe_to_close);
+        assert!(requested.requested_at.is_some());
+        assert!(requested.acknowledged_at.is_none());
+
+        let draining = job_cancellation_dto(
+            "job-cancel-1",
+            CancellationStateDto::Draining,
+            false,
+            "Cancellation acknowledged; draining workers",
+        );
+        assert_eq!(draining.state, CancellationStateDto::Draining);
+        assert!(!draining.safe_to_close);
+        assert!(draining.requested_at.is_some());
+        assert!(draining.acknowledged_at.is_some());
+    }
+
+    #[test]
+    fn cancellation_after_attach_marks_job_cancelling_without_failure() {
+        let tmp = TempDir::new().unwrap();
+        let evidence_dir = tmp.path().join("evidence-cancel");
+        std::fs::create_dir_all(&evidence_dir).unwrap();
+        std::fs::write(evidence_dir.join("notes.txt"), "cancel seam").unwrap();
+
+        let active = case_service::create_case(
+            &tmp.path().join("cases"),
+            "cancel-after-attach",
+            Some("tester"),
+        )
+        .unwrap();
+        let cancel = Arc::new(AtomicBool::new(true));
+
+        active
+            .with_conn(|conn| {
+                let job_id = JobRepo::new(conn)
+                    .create(&active.meta.id.0, "Import cancel")
+                    .unwrap();
+                let result = execute_import_job(
+                    conn,
+                    &active.meta.id,
+                    &active.case_root,
+                    &evidence_dir.to_string_lossy(),
+                    &job_id,
+                    ImportJobOptions {
+                        app: None,
+                        cancel_token: &cancel,
+                        max_import_workers: None,
+                        max_analysis_workers: None,
+                        analysis_mode: import_analysis::ImportAnalysisMode::MetadataOnly,
+                    },
+                );
+
+                assert!(matches!(result, Err(ref error) if error.message.contains("cancelled")));
+                let job = JobRepo::new(conn)
+                    .list_recent(10)
+                    .unwrap()
+                    .into_iter()
+                    .find(|job| job.id.0 == job_id.0)
+                    .unwrap();
+                assert_eq!(job.status, "cancelling");
+                assert_eq!(job.detail, "Cancellation acknowledged after attach");
+
+                Ok(())
+            })
+            .unwrap();
     }
 
     #[test]

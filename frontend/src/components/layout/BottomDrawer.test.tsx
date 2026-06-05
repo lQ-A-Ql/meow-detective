@@ -4,15 +4,21 @@ import { BottomDrawer } from './BottomDrawer';
 
 const mocks = vi.hoisted(() => ({
   jobs: vi.fn(),
+  dataSources: vi.fn(),
   warnings: vi.fn(),
   trace: vi.fn(),
   uiStore: vi.fn(),
+  importSignals: vi.fn(),
 }));
 
 vi.mock('@/features/jobs/hooks', () => ({
   useJobsSnapshot: mocks.jobs,
   useWarnings: mocks.warnings,
   useTraceItems: mocks.trace,
+}));
+
+vi.mock('@/features/case/hooks', () => ({
+  useDataSources: mocks.dataSources,
 }));
 
 vi.mock('@/lib/api/client', () => ({
@@ -22,6 +28,24 @@ vi.mock('@/lib/api/client', () => ({
 vi.mock('@/stores/ui-store', () => ({
   useUiStore: (selector: (state: { drawerOpen: boolean; toggleDrawer: () => void }) => unknown) =>
     selector(mocks.uiStore()),
+}));
+
+vi.mock('@/features/jobs/import-event-state', () => ({
+  useImportEventState: () => mocks.importSignals(),
+  getImportPhaseLabel: (phase: string) => phase,
+  getImportPhaseStateLabel: (state: string) => state,
+  getFreshnessLabel: (freshness: string) => freshness,
+  getPartialKindLabel: (kind: string) => kind,
+  getCacheStateLabel: (state: string) => state,
+  getEvidenceHashStatusLabel: (status: string) => status,
+  getEvidenceHashCaveatText: (status: string) => `hash caveat ${status}`,
+  deriveEvidenceHashStatus: (partials: Array<{ kind: string; freshness: string }>, sources: Array<{ hashStatus?: string }>) => {
+    if (sources.some((source) => source.hashStatus === 'failed')) return 'failed';
+    if (partials.some((partial) => partial.kind === 'evidenceHash' && partial.freshness === 'partial')) return 'pending';
+    if (sources.some((source) => source.hashStatus === 'unavailable')) return 'unavailable';
+    if (partials.some((partial) => partial.kind === 'evidenceHash' && partial.freshness === 'ready')) return 'ready';
+    return undefined;
+  },
 }));
 
 describe('BottomDrawer jobs panel', () => {
@@ -55,8 +79,17 @@ describe('BottomDrawer jobs panel', () => {
       ],
     });
     mocks.warnings.mockReturnValue({ data: [] });
+    mocks.dataSources.mockReturnValue({ data: [] });
     mocks.trace.mockReturnValue({ data: [] });
     mocks.uiStore.mockReturnValue({ drawerOpen: true, toggleDrawer: vi.fn() });
+    mocks.importSignals.mockReturnValue({
+      latestPhase: undefined,
+      latestCancellation: undefined,
+      partialResults: [],
+      cacheStatuses: [],
+      latestReport: undefined,
+      lastUpdatedAt: undefined,
+    });
   });
 
   it('renders partial badge and outcome counts', () => {
@@ -74,5 +107,89 @@ describe('BottomDrawer jobs panel', () => {
 
     expect(screen.getByText('Import data source')).toBeDefined();
     expect(screen.getByText('41%')).toBeDefined();
+  });
+
+  it('shows typed import signals for partial freshness, cache state, cancellation, and report readiness', () => {
+    mocks.importSignals.mockReturnValue({
+      latestPhase: {
+        phase: 'analyze',
+        state: 'running',
+        percent: 64,
+        detail: 'scheduling=draining workerBudget=4',
+        metrics: { rowsProcessed: 640, rowsTotal: 1000 },
+      },
+      latestCancellation: {
+        jobId: 'job-running',
+        state: 'draining',
+        safeToClose: false,
+        detail: 'Waiting for workers to settle',
+      },
+      partialResults: [
+        {
+          kind: 'searchIndex',
+          freshness: 'partial',
+          readyCount: 120,
+          totalEstimate: 400,
+          scopeId: 'ds-1',
+          queryKey: 'search:index:ds-1',
+        },
+      ],
+      cacheStatuses: [
+        {
+          cacheKey: 'search:index:ds-1',
+          state: 'warming',
+          indexedCount: 300,
+          totalCount: 1000,
+          updatedAt: '2026-06-05T10:03:00Z',
+          message: 'Index warming',
+        },
+      ],
+      latestReport: {
+        summary: {
+          reportId: 'perf-1',
+          jobId: 'job-running',
+          generatedAt: '2026-06-05T10:04:00Z',
+          elapsedMs: 842,
+          summary: 'Timeline query stayed within bounded metrics.',
+        },
+        metrics: [{ key: 'timeline.query.elapsedMs', value: 842, unit: 'ms' }],
+      },
+      lastUpdatedAt: '2026-06-05T10:04:00Z',
+    });
+
+    render(<BottomDrawer />);
+
+    expect(screen.getByText('Import Signals')).toBeDefined();
+    expect(screen.getByText('analyze · running')).toBeDefined();
+    expect(screen.getByText('draining')).toBeDefined();
+    expect(screen.getByText('searchIndex partial')).toBeDefined();
+    expect(screen.getByText('Search Cache')).toBeDefined();
+    expect(screen.getByText('842ms')).toBeDefined();
+  });
+
+  it('surfaces evidence hash caveats in the compact import signal panel', () => {
+    mocks.importSignals.mockReturnValue({
+      latestPhase: undefined,
+      latestCancellation: undefined,
+      partialResults: [
+        {
+          kind: 'evidenceHash',
+          freshness: 'partial',
+          readyCount: 0,
+          totalEstimate: 1,
+          scopeId: 'ds-1',
+          queryKey: 'evidence:hash:ds-1',
+        },
+      ],
+      cacheStatuses: [],
+      latestReport: undefined,
+      lastUpdatedAt: '2026-06-05T10:04:00Z',
+    });
+
+    render(<BottomDrawer />);
+
+    expect(screen.getByText('evidenceHash partial')).toBeDefined();
+    expect(screen.getByText('Evidence Hash pending')).toBeDefined();
+    expect(screen.getByText('hash caveat pending')).toBeDefined();
   });
 });

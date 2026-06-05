@@ -1,10 +1,12 @@
 use transport::{dto::TimelineEventDto, paging::PageResponse};
 
+use crate::performance::{measure_rows, metric, report, PerfSample};
 use domain::FileEntry;
 use persistence_sqlite::repositories::timeline_repo::TimelineRepo;
 use rayon::prelude::*;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::time::Instant;
+use transport::dto::PerformanceReportDto;
 
 const MACB_PROJECTION_KEY: &str = "macb";
 
@@ -13,6 +15,12 @@ pub struct TimelineProjectionStats {
     pub inserted_count: u64,
     pub elapsed_ms: u128,
     pub already_projected: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct InstrumentedPage<T> {
+    pub page: PageResponse<T>,
+    pub performance_report: PerformanceReportDto,
 }
 
 pub fn project_and_store_macb(conn: &Connection, files: &[FileEntry]) -> Result<u64, String> {
@@ -99,6 +107,24 @@ pub fn query_timeline(
     Ok(PageResponse { total, items })
 }
 
+pub fn query_timeline_instrumented(
+    conn: &Connection,
+    offset: u64,
+    limit: u32,
+) -> Result<InstrumentedPage<TimelineEventDto>, String> {
+    let (page, sample) = measure_rows(0, || query_timeline(conn, offset, limit));
+    let page = page?;
+    let sample = PerfSample {
+        rows: page.items.len() as u64,
+        ..sample
+    };
+    let performance_report = timeline_query_report("timeline.query", sample, page.total);
+    Ok(InstrumentedPage {
+        page,
+        performance_report,
+    })
+}
+
 /// Query timeline events with optional filtering by time range and event type.
 pub fn query_timeline_filtered(
     conn: &Connection,
@@ -133,6 +159,58 @@ pub fn query_timeline_filtered(
         })
         .collect();
     Ok(PageResponse { total, items })
+}
+
+pub fn query_timeline_filtered_instrumented(
+    conn: &Connection,
+    offset: u64,
+    limit: u32,
+    time_start: Option<&str>,
+    time_end: Option<&str>,
+    event_type: Option<&str>,
+) -> Result<InstrumentedPage<TimelineEventDto>, String> {
+    let (page, sample) = measure_rows(0, || {
+        query_timeline_filtered(conn, offset, limit, time_start, time_end, event_type)
+    });
+    let page = page?;
+    let sample = PerfSample {
+        rows: page.items.len() as u64,
+        ..sample
+    };
+    let performance_report = timeline_query_report("timeline.query", sample, page.total);
+    Ok(InstrumentedPage {
+        page,
+        performance_report,
+    })
+}
+
+fn timeline_query_report(prefix: &str, sample: PerfSample, total: u64) -> PerformanceReportDto {
+    let mut metrics = vec![
+        metric(
+            format!("{prefix}.elapsedMs"),
+            sample.elapsed_ms as f64,
+            "ms",
+        ),
+        metric(format!("{prefix}.rows"), sample.rows as f64, "rows"),
+        metric(format!("{prefix}.totalRows"), total as f64, "rows"),
+    ];
+    if let Some(rows_per_sec) = sample.rows_per_sec() {
+        metrics.push(metric(
+            format!("{prefix}.rowsPerSec"),
+            rows_per_sec,
+            "rows/s",
+        ));
+    }
+    report(
+        format!("{prefix}:{}:{}", sample.elapsed_ms, sample.rows),
+        None,
+        sample.elapsed_ms,
+        format!(
+            "Timeline query returned {} rows in {} ms",
+            sample.rows, sample.elapsed_ms
+        ),
+        metrics,
+    )
 }
 
 fn ensure_projection_meta_table(conn: &Connection) -> Result<(), String> {
@@ -332,6 +410,60 @@ mod tests {
         let page = query_timeline(&conn, 0, 100).unwrap();
         assert_eq!(page.items.len(), 3);
         assert_eq!(page.total, 3);
+    }
+
+    fn metric_value(report: &PerformanceReportDto, key: &str) -> Option<f64> {
+        report
+            .metrics
+            .iter()
+            .find(|metric| metric.key == key)
+            .map(|metric| metric.value)
+    }
+
+    #[test]
+    fn query_timeline_instrumented_reports_bounded_metrics() {
+        let conn = in_memory_db_with_timeline();
+        let files = vec![make_file("test.txt", "/test.txt", true, true)];
+        project_and_store_macb(&conn, &files).unwrap();
+
+        let result = query_timeline_instrumented(&conn, 0, 100).unwrap();
+
+        assert_eq!(result.page.items.len(), 3);
+        assert_eq!(
+            metric_value(&result.performance_report, "timeline.query.rows"),
+            Some(3.0)
+        );
+        assert_eq!(
+            metric_value(&result.performance_report, "timeline.query.totalRows"),
+            Some(3.0)
+        );
+        assert!(metric_value(&result.performance_report, "timeline.query.elapsedMs").is_some());
+        assert!(result
+            .performance_report
+            .metrics
+            .iter()
+            .all(|metric| !metric.key.contains("path")));
+    }
+
+    #[test]
+    fn query_timeline_filtered_instrumented_reports_filtered_rows() {
+        let conn = in_memory_db_with_timeline();
+        let files = vec![make_file("test.txt", "/test.txt", true, true)];
+        project_and_store_macb(&conn, &files).unwrap();
+
+        let result =
+            query_timeline_filtered_instrumented(&conn, 0, 100, None, None, Some("FILE_CREATED"))
+                .unwrap();
+
+        assert_eq!(result.page.items.len(), 1);
+        assert_eq!(
+            metric_value(&result.performance_report, "timeline.query.rows"),
+            Some(1.0)
+        );
+        assert_eq!(
+            metric_value(&result.performance_report, "timeline.query.totalRows"),
+            Some(1.0)
+        );
     }
 
     #[test]

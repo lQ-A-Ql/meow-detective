@@ -1,14 +1,16 @@
-use tauri::State;
+use tauri::{AppHandle, State};
 use transport::{
     commands::GetTimelineRequest, dto::TimelineEventDto, paging::PageResponse, CommandError,
 };
 
+use crate::events::event_bridge;
 use crate::state::AppState;
 
 /// Get timeline events with optional filtering.
 #[tauri::command]
 pub async fn get_timeline_events(
     state: State<'_, AppState>,
+    app: AppHandle,
     request: Option<GetTimelineRequest>,
 ) -> Result<PageResponse<TimelineEventDto>, CommandError> {
     let app_state = state.inner().clone();
@@ -39,7 +41,7 @@ pub async fn get_timeline_events(
         let has_filters =
             req.time_start.is_some() || req.time_end.is_some() || req.event_type.is_some();
         if has_filters {
-            app_services::timeline_service::query_timeline_filtered(
+            let result = app_services::timeline_service::query_timeline_filtered_instrumented(
                 &conn,
                 req.offset,
                 req.limit,
@@ -47,10 +49,16 @@ pub async fn get_timeline_events(
                 req.time_end.as_deref(),
                 req.event_type.as_deref(),
             )
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_service_error)?;
+            event_bridge::emit_performance_report_ready(&app, &result.performance_report);
+            Ok(result.page)
         } else {
-            app_services::timeline_service::query_timeline(&conn, req.offset, req.limit)
-                .map_err(CommandError::from_service_error)
+            let result = app_services::timeline_service::query_timeline_instrumented(
+                &conn, req.offset, req.limit,
+            )
+            .map_err(CommandError::from_service_error)?;
+            event_bridge::emit_performance_report_ready(&app, &result.performance_report);
+            Ok(result.page)
         }
     })
     .await

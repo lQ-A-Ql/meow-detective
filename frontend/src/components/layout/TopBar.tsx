@@ -1,6 +1,17 @@
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { Search, Activity, Settings, AlertTriangle } from 'lucide-react';
-import { useCurrentCase } from '@/features/case/hooks';
+import { useCurrentCase, useDataSources } from '@/features/case/hooks';
+import {
+  deriveEvidenceHashStatus,
+  getCacheStateLabel,
+  getEvidenceHashCaveatText,
+  getEvidenceHashStatusLabel,
+  getFreshnessLabel,
+  getImportPhaseLabel,
+  getImportPhaseStateLabel,
+  getPartialKindLabel,
+  useImportEventState,
+} from '@/features/jobs/import-event-state';
 import { useJobsSnapshot, useWarnings } from '@/features/jobs/hooks';
 import { apiMode } from '@/lib/api/client';
 import { useUiStore } from '@/stores/ui-store';
@@ -19,6 +30,7 @@ export function TopBar() {
   const navigate = useNavigate();
   const location = useLocation();
   const { data: currentCase } = useCurrentCase();
+  const { data: dataSources } = useDataSources();
   const { data: jobs } = useJobsSnapshot();
   const { data: warnings } = useWarnings();
   const toggleDrawer = useUiStore((state) => state.toggleDrawer);
@@ -28,9 +40,17 @@ export function TopBar() {
   const setGlobalSearchQuery = useUiStore((state) => state.setGlobalSearchQuery);
   const currentApiMode = apiMode();
   const isMockMode = currentApiMode === 'mock';
+  const importSignals = useImportEventState();
 
   const runningCount = jobs?.filter((job) => job.status === 'running').length ?? 0;
   const warningCount = warnings?.length ?? 0;
+  const partialCount = importSignals.partialResults.length;
+  const freshestPartial = importSignals.partialResults[0];
+  const cacheSummary = importSignals.cacheStatuses[0];
+  const cancellation = importSignals.latestCancellation;
+  const phase = importSignals.latestPhase;
+  const report = importSignals.latestReport;
+  const evidenceHashStatus = deriveEvidenceHashStatus(importSignals.partialResults, dataSources ?? []);
   const activeLink =
     links.find((link) => link.to === location.pathname)
     ?? links.find((link) => link.page === currentPage)
@@ -80,6 +100,48 @@ export function TopBar() {
               <span className="font-mono text-[#7a5600]">显示演示取证数据</span>
             </div>
           ) : null}
+          {phase ? (
+            <SignalChip
+              label="Import"
+              value={`${getImportPhaseLabel(phase.phase)} ${phase.percent}%`}
+              detail={`${getImportPhaseStateLabel(phase.state)} · ${phase.detail}`}
+            />
+          ) : null}
+          {cancellation ? (
+            <SignalChip
+              label="Cancel"
+              value={cancellation.safeToClose ? 'Safe To Close' : getCacheStateLabel(cancellation.state)}
+              detail={cancellation.detail}
+            />
+          ) : null}
+          {freshestPartial ? (
+            <SignalChip
+              label="Partial"
+              value={`${getFreshnessLabel(freshestPartial.freshness)} ${partialCount}`}
+              detail={`${getPartialKindLabel(freshestPartial.kind)} ${freshestPartial.readyCount}${freshestPartial.totalEstimate ? `/${freshestPartial.totalEstimate}` : ''}`}
+            />
+          ) : null}
+          {evidenceHashStatus ? (
+            <SignalChip
+              label="Hash"
+              value={getEvidenceHashStatusLabel(evidenceHashStatus)}
+              detail={getEvidenceHashCaveatText(evidenceHashStatus)}
+            />
+          ) : null}
+          {cacheSummary ? (
+            <SignalChip
+              label="Cache"
+              value={getCacheStateLabel(cacheSummary.state)}
+              detail={cacheSummary.message ?? cacheSummary.cacheKey}
+            />
+          ) : null}
+          {report ? (
+            <SignalChip
+              label="Perf"
+              value={`${report.summary.elapsedMs}ms`}
+              detail={report.summary.summary}
+            />
+          ) : null}
           <div className="flex items-center gap-2 border border-[#e0e0e0] bg-white px-2 py-1 rounded-sm">
             <Search size={12} className="text-[#888]" />
             <input
@@ -110,6 +172,18 @@ export function TopBar() {
           <Settings size={14} className="cursor-pointer hover:text-black" onClick={() => navigate('/settings')} />
         </div>
       </div>
+    </div>
+  );
+}
+
+function SignalChip({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div
+      className="hidden 2xl:flex max-w-[220px] items-center gap-2 border border-[#e0e0e0] bg-white px-2 py-1"
+      title={detail}
+    >
+      <span className="text-[10px] uppercase tracking-wider text-[#888]">{label}</span>
+      <span className="truncate text-[11px] font-medium text-[#111]">{value}</span>
     </div>
   );
 }

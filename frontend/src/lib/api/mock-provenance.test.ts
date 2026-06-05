@@ -49,8 +49,12 @@ describe('mock provenance API fixtures', () => {
     for (const source of sources) {
       expect(source.sourcePath).toBeDefined();
       expect(source.importedAt).toBeDefined();
-      expect(source.sourceHash).toBeDefined();
       expect(source.hashStatus).toBeDefined();
+      if (source.hashStatus === 'hashed') {
+        expect(source.sourceHash).toBeDefined();
+      } else {
+        expect(source.sourceHash).toBeUndefined();
+      }
       expect(source.canonicalPath).toBeDefined();
       expect(source.readerKind).toBeDefined();
       expect(source.provenanceStatus).toBe('Recorded');

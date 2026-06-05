@@ -1,6 +1,13 @@
 import { CheckCircle2, CircleDashed, Download, FileText } from 'lucide-react';
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useDataSources } from '@/features/case/hooks';
+import {
+  deriveEvidenceHashStatus,
+  getEvidenceHashCaveatText,
+  getEvidenceHashStatusLabel,
+  useImportEventState,
+} from '@/features/jobs/import-event-state';
 import { useReportHistory, useReportTemplates } from '@/features/reports/hooks';
 import { exportHtmlReport, exportCsvReport, exportJsonReport } from '@/lib/api/reports';
 import { toast } from 'sonner';
@@ -9,6 +16,8 @@ import type { ExportScope } from '@/types/models';
 export function Reports() {
   const { data: templates } = useReportTemplates();
   const { data: history } = useReportHistory();
+  const { data: dataSources } = useDataSources();
+  const importSignals = useImportEventState();
   const [selectedFormat, setSelectedFormat] = useState('html');
   const [exportScope, setExportScope] = useState<ExportScope>({
     fileSystemMetadata: true,
@@ -28,6 +37,7 @@ export function Reports() {
   });
   const runningCount = history?.filter((item) => item.status === 'running').length ?? 0;
   const completedCount = history?.filter((item) => item.status === 'completed').length ?? 0;
+  const evidenceHashStatus = deriveEvidenceHashStatus(importSignals.partialResults, dataSources ?? []);
 
   return (
     <div className="flex-1 flex flex-col w-full h-full bg-white min-w-0">
@@ -88,6 +98,13 @@ export function Reports() {
             <div>当前模板将生成案件执行摘要、关键时间线与核心痕迹清单。</div>
             <div className="font-mono text-[#888]">预计产物: 1 份 PDF / 14-18 页</div>
           </div>
+
+          {evidenceHashStatus ? (
+            <div className="border border-[#e7d9b4] bg-[#fff9ec] p-3 text-[11px] text-[#6f4d00] space-y-1">
+              <div className="font-semibold text-[#111]">Evidence Hash: {getEvidenceHashStatusLabel(evidenceHashStatus)}</div>
+              <div>{getEvidenceHashCaveatText(evidenceHashStatus)}</div>
+            </div>
+          ) : null}
 
           <div className="mt-4">
             <button onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending} className="bg-[#111] text-white font-semibold text-[11px] px-6 py-2 uppercase tracking-wider hover:bg-[#333] flex items-center gap-2 transition-colors disabled:opacity-50">

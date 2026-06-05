@@ -1,16 +1,19 @@
-use tauri::State;
+use tauri::{AppHandle, State};
 use transport::{commands::SearchFilesRequest, dto::SearchResultPageDto, CommandError};
 
+use crate::events::event_bridge;
 use crate::state::AppState;
 
 /// Search files in the current case's index.
 #[tauri::command]
 pub async fn search_files(
     state: State<'_, AppState>,
+    app: AppHandle,
     query: String,
 ) -> Result<SearchResultPageDto, CommandError> {
     search_files_request(
         state,
+        app,
         SearchFilesRequest {
             query,
             offset: 0,
@@ -24,6 +27,7 @@ pub async fn search_files(
 #[tauri::command]
 pub async fn search_files_request(
     state: State<'_, AppState>,
+    app: AppHandle,
     mut request: SearchFilesRequest,
 ) -> Result<SearchResultPageDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
@@ -61,13 +65,15 @@ pub async fn search_files_request(
                 items: vec![],
             });
         }
-        app_services::search_service::search_files_real(
+        let result = app_services::search_service::search_files_real_instrumented(
             &index_dir,
             &request.query,
             request.offset,
             request.limit,
         )
-        .map_err(CommandError::from_service_error)
+        .map_err(CommandError::from_service_error)?;
+        event_bridge::emit_performance_report_ready(&app, &result.performance_report);
+        Ok(result.page)
     })
     .await
     .map_err(CommandError::from_join_error)?

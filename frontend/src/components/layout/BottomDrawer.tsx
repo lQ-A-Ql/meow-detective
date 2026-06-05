@@ -1,4 +1,16 @@
 import { Terminal, AlertCircle, ChevronUp, ChevronDown, Clock3 } from 'lucide-react';
+import {
+  deriveEvidenceHashStatus,
+  getCacheStateLabel,
+  getEvidenceHashCaveatText,
+  getEvidenceHashStatusLabel,
+  getFreshnessLabel,
+  getImportPhaseLabel,
+  getImportPhaseStateLabel,
+  getPartialKindLabel,
+  useImportEventState,
+} from '@/features/jobs/import-event-state';
+import { useDataSources } from '@/features/case/hooks';
 import { useJobsSnapshot, useTraceItems, useWarnings } from '@/features/jobs/hooks';
 import { apiMode } from '@/lib/api/client';
 import { useUiStore } from '@/stores/ui-store';
@@ -7,9 +19,11 @@ import type { JobSnapshot } from '@/types/models';
 export function BottomDrawer() {
   const { data: jobs } = useJobsSnapshot();
   const { data: warnings } = useWarnings();
+  const { data: dataSources } = useDataSources();
   const { data: trace } = useTraceItems();
   const drawerOpen = useUiStore((state) => state.drawerOpen);
   const toggleDrawer = useUiStore((state) => state.toggleDrawer);
+  const importSignals = useImportEventState();
 
   const runningJobs = jobs?.filter((job) => job.status === 'running') ?? [];
   const completedJobs = jobs?.filter((job) => job.status === 'completed') ?? [];
@@ -18,8 +32,15 @@ export function BottomDrawer() {
   const jobWarningCount = jobs?.reduce((sum, job) => sum + job.warningCount, 0) ?? 0;
   const jobSkippedCount = jobs?.reduce((sum, job) => sum + job.skippedCount, 0) ?? 0;
   const runningCount = runningJobs.length;
+  const evidenceHashStatus = deriveEvidenceHashStatus(importSignals.partialResults, dataSources ?? []);
   const currentApiMode = apiMode();
+  const typedHeadline = importSignals.latestCancellation
+    ? `${importSignals.latestCancellation.safeToClose ? 'Safe To Close' : getCacheStateLabel(importSignals.latestCancellation.state)} · ${importSignals.latestCancellation.detail}`
+    : importSignals.latestPhase
+      ? `${getImportPhaseLabel(importSignals.latestPhase.phase)} ${importSignals.latestPhase.percent}% · ${importSignals.latestPhase.detail}`
+      : undefined;
   const headline =
+    typedHeadline ||
     runningJobs[0]?.detail ||
     failedJobs[0]?.detail ||
     completedJobs[0]?.detail ||
@@ -73,6 +94,86 @@ export function BottomDrawer() {
               </span>
             </div>
             <div className="space-y-3">
+              {importSignals.latestPhase || importSignals.latestCancellation || importSignals.partialResults.length || importSignals.cacheStatuses.length || importSignals.latestReport ? (
+                <div className="border border-[#d9d9d9] bg-[#fcfcfc] p-3 text-[11px]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-[#666]">Import Signals</div>
+                      <div className="mt-1 text-[#111] font-medium">
+                        {importSignals.latestPhase
+                          ? `${getImportPhaseLabel(importSignals.latestPhase.phase)} · ${getImportPhaseStateLabel(importSignals.latestPhase.state)}`
+                          : importSignals.latestCancellation
+                            ? `Cancellation · ${getCacheStateLabel(importSignals.latestCancellation.state)}`
+                            : 'Waiting for typed progress'}
+                      </div>
+                      <div className="mt-1 text-[#666]">
+                        {importSignals.latestCancellation?.detail || importSignals.latestPhase?.detail || '尚未收到导入状态事件'}
+                      </div>
+                    </div>
+                    {importSignals.latestPhase ? (
+                      <div className="text-right">
+                        <div className="font-mono text-[#111]">{importSignals.latestPhase.percent}%</div>
+                        <div className="text-[10px] text-[#888]">{importSignals.lastUpdatedAt ?? '-'}</div>
+                      </div>
+                    ) : null}
+                  </div>
+                  {importSignals.latestPhase ? (
+                    <div className="mt-2 flex items-center gap-2">
+                      <div className="flex-1 h-1 overflow-hidden border border-[#e0e0e0] bg-[#eee]">
+                        <div className="h-full bg-[#111]" style={{ width: `${importSignals.latestPhase.percent}%` }} />
+                      </div>
+                      <span className="text-[10px] font-mono text-[#555]">
+                        {importSignals.latestPhase.metrics.rowsProcessed}
+                        {importSignals.latestPhase.metrics.rowsTotal ? `/${importSignals.latestPhase.metrics.rowsTotal}` : ''}
+                      </span>
+                    </div>
+                  ) : null}
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {importSignals.latestCancellation ? (
+                      <DrawerChip
+                        tone={importSignals.latestCancellation.safeToClose ? 'ready' : 'warning'}
+                        label={importSignals.latestCancellation.safeToClose ? 'Safe To Close' : getCacheStateLabel(importSignals.latestCancellation.state)}
+                      />
+                    ) : null}
+                    {importSignals.partialResults.slice(0, 4).map((result) => (
+                      <DrawerChip
+                        key={`${result.kind}-${result.scopeId}-${result.queryKey}`}
+                        tone={result.freshness}
+                        label={`${getPartialKindLabel(result.kind)} ${getFreshnessLabel(result.freshness)}`}
+                        detail={`${result.readyCount}${result.totalEstimate ? `/${result.totalEstimate}` : ''}`}
+                      />
+                    ))}
+                    {importSignals.cacheStatuses.slice(0, 3).map((status) => (
+                      <DrawerChip
+                        key={status.cacheKey}
+                        tone={status.state}
+                        label={cacheKeyLabel(status.cacheKey)}
+                        detail={getCacheStateLabel(status.state)}
+                      />
+                    ))}
+                    {evidenceHashStatus ? (
+                      <DrawerChip
+                        tone={evidenceHashStatus}
+                        label={`Evidence Hash ${getEvidenceHashStatusLabel(evidenceHashStatus)}`}
+                      />
+                    ) : null}
+                  </div>
+                  {evidenceHashStatus && evidenceHashStatus !== 'ready' ? (
+                    <div className="mt-2 border border-[#e7d9b4] bg-[#fff9ec] px-2 py-1.5 text-[#6f4d00]">
+                      {getEvidenceHashCaveatText(evidenceHashStatus)}
+                    </div>
+                  ) : null}
+                  {importSignals.latestReport ? (
+                    <div className="mt-3 border-t border-[#ececec] pt-2 text-[#555]">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#666]">Performance</span>
+                        <span className="font-mono text-[#111]">{importSignals.latestReport.summary.elapsedMs}ms</span>
+                      </div>
+                      <div className="mt-1 text-[#666]">{importSignals.latestReport.summary.summary}</div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               {runningJobs.map((job) => (
                 <div key={job.id} className="border border-[#e0e0e0] bg-white p-3 text-[11px]">
                   <div className="flex items-center justify-between gap-3 text-[#111]">
@@ -185,6 +286,58 @@ export function BottomDrawer() {
       ) : null}
     </div>
   );
+}
+
+function cacheKeyLabel(cacheKey: string) {
+  if (cacheKey.startsWith('timeline:')) {
+    return 'Timeline Cache';
+  }
+
+  if (cacheKey.startsWith('artifacts:')) {
+    return 'Artifact Cache';
+  }
+
+  if (cacheKey.startsWith('search:')) {
+    return 'Search Cache';
+  }
+
+  return cacheKey;
+}
+
+function DrawerChip({ label, detail, tone }: { label: string; detail?: string; tone: string }) {
+  const toneClass = getToneClass(tone);
+
+  return (
+    <span className={`border px-1.5 py-0.5 text-[10px] font-medium ${toneClass}`}>
+      {label}
+      {detail ? <span className="ml-1 font-mono opacity-80">{detail}</span> : null}
+    </span>
+  );
+}
+
+function getToneClass(tone: string) {
+  switch (tone) {
+    case 'ready':
+    case 'reused':
+      return 'border-[#cfe3d3] bg-[#f4fbf5] text-[#245c2f]';
+    case 'pending':
+    case 'partial':
+    case 'warming':
+      return 'border-[#dcd4b0] bg-[#fff9ec] text-[#7f5b00]';
+    case 'unavailable':
+    case 'deferred':
+    case 'draining':
+      return 'border-[#d9d9d9] bg-white text-[#555]';
+    case 'failed':
+    case 'stale':
+    case 'invalidated':
+    case 'cancelled':
+      return 'border-red-200 bg-red-50 text-red-700';
+    case 'warning':
+      return 'border-[#dcd4b0] bg-[#fff9ec] text-[#7f5b00]';
+    default:
+      return 'border-[#d9d9d9] bg-white text-[#555]';
+  }
 }
 
 function JobOutcomeBadges({ job }: { job: JobSnapshot }) {
