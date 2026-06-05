@@ -14,11 +14,11 @@ pub const TOPIC_ARTIFACT_ADDED: &str = "artifact-added";
 pub const TOPIC_TIMELINE_UPDATED: &str = "timeline-updated";
 pub const TOPIC_SEARCH_INDEX_PROGRESS: &str = "search-index_progress";
 pub const TOPIC_PARTITION_PROGRESS: &str = "partition-progress";
-pub const TOPIC_IMPORT_PHASE_PROGRESS: &str = "import.phase_progress";
-pub const TOPIC_IMPORT_PARTIAL_RESULT: &str = "import.partial_result";
-pub const TOPIC_JOB_CANCELLATION: &str = "job.cancellation";
-pub const TOPIC_CACHE_INDEX_STATUS: &str = "cache.index_status";
-pub const TOPIC_PERFORMANCE_REPORT_READY: &str = "performance.report_ready";
+pub const TOPIC_IMPORT_PHASE_PROGRESS: &str = "import-phase-progress";
+pub const TOPIC_IMPORT_PARTIAL_RESULT: &str = "import-partial-result";
+pub const TOPIC_JOB_CANCELLATION: &str = "job-cancellation";
+pub const TOPIC_CACHE_INDEX_STATUS: &str = "cache-index-status";
+pub const TOPIC_PERFORMANCE_REPORT_READY: &str = "performance-report-ready";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -37,15 +37,15 @@ pub enum EventTopic {
     #[serde(rename = "search-index_progress")]
     SearchIndexProgress,
     PartitionProgress,
-    #[serde(rename = "import.phase_progress")]
+    #[serde(rename = "import-phase-progress")]
     ImportPhaseProgress,
-    #[serde(rename = "import.partial_result")]
+    #[serde(rename = "import-partial-result")]
     ImportPartialResult,
-    #[serde(rename = "job.cancellation")]
+    #[serde(rename = "job-cancellation")]
     JobCancellation,
-    #[serde(rename = "cache.index_status")]
+    #[serde(rename = "cache-index-status")]
     CacheIndexStatus,
-    #[serde(rename = "performance.report_ready")]
+    #[serde(rename = "performance-report-ready")]
     PerformanceReportReady,
 }
 
@@ -99,19 +99,40 @@ mod tests {
         assert_eq!(imported, "\"data-source-imported\"");
 
         let phase = serde_json::to_string(&EventTopic::ImportPhaseProgress).unwrap();
-        assert_eq!(phase, "\"import.phase_progress\"");
+        assert_eq!(phase, "\"import-phase-progress\"");
 
         let partial = serde_json::to_string(&EventTopic::ImportPartialResult).unwrap();
-        assert_eq!(partial, "\"import.partial_result\"");
+        assert_eq!(partial, "\"import-partial-result\"");
 
         let cancellation = serde_json::to_string(&EventTopic::JobCancellation).unwrap();
-        assert_eq!(cancellation, "\"job.cancellation\"");
+        assert_eq!(cancellation, "\"job-cancellation\"");
 
         let cache = serde_json::to_string(&EventTopic::CacheIndexStatus).unwrap();
-        assert_eq!(cache, "\"cache.index_status\"");
+        assert_eq!(cache, "\"cache-index-status\"");
 
         let report = serde_json::to_string(&EventTopic::PerformanceReportReady).unwrap();
-        assert_eq!(report, "\"performance.report_ready\"");
+        assert_eq!(report, "\"performance-report-ready\"");
+    }
+
+    #[test]
+    fn runtime_event_topics_are_tauri_safe() {
+        let topics = [
+            TOPIC_IMPORT_PHASE_PROGRESS,
+            TOPIC_IMPORT_PARTIAL_RESULT,
+            TOPIC_JOB_CANCELLATION,
+            TOPIC_CACHE_INDEX_STATUS,
+            TOPIC_PERFORMANCE_REPORT_READY,
+        ];
+
+        for topic in topics {
+            assert!(!topic.contains('.'), "{topic} must not contain dots");
+            assert!(
+                topic
+                    .chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '/' | ':' | '_')),
+                "{topic} contains a character rejected by Tauri event names"
+            );
+        }
     }
 
     #[test]

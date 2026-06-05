@@ -142,16 +142,18 @@ describe('import progress contract models', () => {
     expect(report.metrics[0].key).toBe('timeline.query.elapsedMs');
   });
 
-  it('includes dotted import, cache, cancellation, and performance event topics', () => {
+  it('includes Tauri-safe import, cache, cancellation, and performance event topics', () => {
     const topics = [
-      'import.phase_progress',
-      'import.partial_result',
-      'job.cancellation',
-      'cache.index_status',
-      'performance.report_ready',
+      'import-phase-progress',
+      'import-partial-result',
+      'job-cancellation',
+      'cache-index-status',
+      'performance-report-ready',
     ] satisfies EventTopic[];
 
-    expect(topics).toContain('import.phase_progress');
-    expect(topics).toContain('performance.report_ready');
+    expect(topics).toContain('import-phase-progress');
+    expect(topics).toContain('performance-report-ready');
+    expect(topics.every((topic) => !topic.includes('.'))).toBe(true);
+    expect(topics.every((topic) => /^[A-Za-z0-9_:/-]+$/.test(topic))).toBe(true);
   });
 });

@@ -21,11 +21,11 @@ export type EventTopic =
   | 'timeline-updated'
   | 'search-index_progress'
   | 'partition-progress'
-  | 'import.phase_progress'
-  | 'import.partial_result'
-  | 'job.cancellation'
-  | 'cache.index_status'
-  | 'performance.report_ready';
+  | 'import-phase-progress'
+  | 'import-partial-result'
+  | 'job-cancellation'
+  | 'cache-index-status'
+  | 'performance-report-ready';
 
 export interface EventEnvelope<T = unknown> {
   eventId: string;

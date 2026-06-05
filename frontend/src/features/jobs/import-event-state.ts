@@ -173,7 +173,7 @@ export function createImportEventStateStore() {
 
     connected = true;
     unsubs = [
-      subscribeToEvent<ImportPhaseProgress>('import.phase_progress', (event) => {
+      subscribeToEvent<ImportPhaseProgress>('import-phase-progress', (event) => {
         const payload = event.payload;
         const nextPartials = { ...state.partialResults };
         payload.partialResults.forEach((result) => {
@@ -186,14 +186,14 @@ export function createImportEventStateStore() {
           lastUpdatedAt: event.ts,
         });
       }),
-      subscribeToEvent<PartialResult>('import.partial_result', (event) => {
+      subscribeToEvent<PartialResult>('import-partial-result', (event) => {
         const payload = event.payload;
         update({
           partialResults: { ...state.partialResults, [partialKey(payload)]: payload },
           lastUpdatedAt: event.ts,
         });
       }),
-      subscribeToEvent<JobCancellation>('job.cancellation', (event) => {
+      subscribeToEvent<JobCancellation>('job-cancellation', (event) => {
         const payload = event.payload;
         update({
           activeJobId: payload.jobId,
@@ -201,14 +201,14 @@ export function createImportEventStateStore() {
           lastUpdatedAt: event.ts,
         });
       }),
-      subscribeToEvent<IndexCacheStatus>('cache.index_status', (event) => {
+      subscribeToEvent<IndexCacheStatus>('cache-index-status', (event) => {
         const payload = event.payload;
         update({
           caches: { ...state.caches, [payload.cacheKey]: payload },
           lastUpdatedAt: event.ts,
         });
       }),
-      subscribeToEvent<PerformanceReport>('performance.report_ready', (event) => {
+      subscribeToEvent<PerformanceReport>('performance-report-ready', (event) => {
         const payload = event.payload;
         update({
           activeJobId: payload.summary.jobId ?? state.activeJobId,

@@ -11,7 +11,7 @@ use domain::DataSourceId;
 use domain::{EntryType, FileEntry, FileEntryId};
 use evidence_core::{EvidenceReader, FileSystemReader, RawImageReader};
 use fs_ntfs::mft_scanner::{MftRecord, MftScanner};
-use fs_ntfs::NtfsReader;
+use fs_ntfs::{NtfsDirectoryEntry, NtfsReader};
 use image_e01::E01Reader;
 use rusqlite::params;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -962,10 +962,6 @@ fn backfill_ntfs_directory_index_entries(
         )
         .map_err(|e| format!("Prepare NTFS directory index backfill: {e}"))?;
 
-    let referenced_parents: HashSet<String> = path_map
-        .values()
-        .filter_map(|(parent, _, _)| parent.clone())
-        .collect();
     let mut queue = VecDeque::from([5u64]);
     let mut visited = HashSet::new();
     while let Some(dir_ref) = queue.pop_front() {
@@ -980,59 +976,43 @@ fn backfill_ntfs_directory_index_entries(
             }
         };
 
-        for entry in entries {
-            if entry.name.is_empty() {
-                continue;
-            }
-            let record_key = entry.mft_ref.to_string();
-            let existing = path_map.get(&record_key).cloned();
-            let is_missing_record = existing.is_none();
-            let needs_name_backfill = existing
-                .as_ref()
-                .map(|(_, name, _)| name.is_empty())
-                .unwrap_or(false);
-            let is_missing_parent = referenced_parents.contains(&record_key);
-            let parent_key = dir_ref.to_string();
-            if is_missing_record || (needs_name_backfill && is_missing_parent) {
-                path_map.insert(
-                    record_key.clone(),
-                    (Some(parent_key.clone()), entry.name.clone(), entry.is_dir),
-                );
-                let entry_id = mft_entry_id(partition_index, entry.mft_ref);
-                let changed = stmt
-                    .execute(params![
-                        entry_id,
-                        mft_entry_id(partition_index, dir_ref),
-                        ds_id,
-                        entry.name,
-                        if entry.is_dir { "directory" } else { "file" },
-                        if entry.is_dir { None } else { Some(entry.size) },
-                        if entry.is_dir {
-                            None
-                        } else {
-                            entry
-                                .name
-                                .rsplit('.')
-                                .next()
-                                .filter(|ext| *ext != entry.name)
-                                .map(|ext| ext.to_string())
-                        },
-                    ])
-                    .map_err(|e| format!("Insert NTFS directory index backfill row: {e}"))?;
-                if changed > 0 {
-                    if entry.is_dir {
-                        *dir_count += 1;
+        for action in mft_directory_index_backfill_actions(path_map, dir_ref, entries) {
+            let entry_id = mft_entry_id(partition_index, action.mft_ref);
+            let ext = if action.is_dir {
+                None
+            } else {
+                action
+                    .name
+                    .rsplit('.')
+                    .next()
+                    .filter(|ext| *ext != action.name)
+                    .map(|ext| ext.to_string())
+            };
+            let changed = stmt
+                .execute(params![
+                    entry_id,
+                    mft_entry_id(partition_index, dir_ref),
+                    ds_id,
+                    action.name,
+                    if action.is_dir { "directory" } else { "file" },
+                    if action.is_dir {
+                        None
                     } else {
-                        *file_count += 1;
-                    }
+                        Some(action.size)
+                    },
+                    ext,
+                ])
+                .map_err(|e| format!("Insert NTFS directory index backfill row: {e}"))?;
+            if changed > 0 {
+                if action.is_dir {
+                    *dir_count += 1;
+                } else {
+                    *file_count += 1;
                 }
             }
 
-            if entry.is_dir
-                && !visited.contains(&entry.mft_ref)
-                && referenced_parents.contains(&record_key)
-            {
-                queue.push_back(entry.mft_ref);
+            if action.is_dir && !visited.contains(&action.mft_ref) {
+                queue.push_back(action.mft_ref);
             }
         }
     }
@@ -1040,6 +1020,68 @@ fn backfill_ntfs_directory_index_entries(
     Ok(())
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MftDirectoryIndexBackfillAction {
+    name: String,
+    is_dir: bool,
+    size: u64,
+    mft_ref: u64,
+}
+
+fn mft_directory_index_backfill_actions(
+    path_map: &mut HashMap<String, (Option<String>, String, bool)>,
+    dir_ref: u64,
+    entries: Vec<NtfsDirectoryEntry>,
+) -> Vec<MftDirectoryIndexBackfillAction> {
+    let parent_key = dir_ref.to_string();
+    let mut actions = Vec::new();
+
+    for entry in entries {
+        if entry.name.is_empty() || entry.mft_ref == dir_ref {
+            continue;
+        }
+
+        let record_key = entry.mft_ref.to_string();
+        if mft_directory_index_entry_should_update(path_map, &record_key, &parent_key, &entry) {
+            path_map.insert(
+                record_key,
+                (Some(parent_key.clone()), entry.name.clone(), entry.is_dir),
+            );
+        }
+
+        actions.push(MftDirectoryIndexBackfillAction {
+            name: entry.name,
+            is_dir: entry.is_dir,
+            size: entry.size,
+            mft_ref: entry.mft_ref,
+        });
+    }
+
+    actions
+}
+
+fn mft_directory_index_entry_should_update(
+    path_map: &HashMap<String, (Option<String>, String, bool)>,
+    record_key: &str,
+    parent_key: &str,
+    entry: &NtfsDirectoryEntry,
+) -> bool {
+    match path_map.get(record_key) {
+        None => true,
+        Some((parent, name, is_dir)) => {
+            name.is_empty()
+                || parent.is_none()
+                || parent.as_deref() == Some(record_key)
+                || parent
+                    .as_deref()
+                    .map(|parent| !path_map.contains_key(parent))
+                    .unwrap_or(false)
+                || (parent.as_deref() == Some("5") && parent_key != "5")
+                || parent.as_deref() != Some(parent_key)
+                || *is_dir != entry.is_dir
+        }
+    }
+}
 #[allow(clippy::too_many_arguments)]
 fn stage_mft_records(
     stmt: &mut rusqlite::CachedStatement<'_>,
@@ -1653,6 +1695,19 @@ mod tests {
         }
     }
 
+    fn fake_ntfs_index_entry(
+        mft_ref: u64,
+        name: impl Into<String>,
+        is_dir: bool,
+    ) -> NtfsDirectoryEntry {
+        NtfsDirectoryEntry {
+            name: name.into(),
+            is_dir,
+            size: if is_dir { 0 } else { 12 },
+            mft_ref,
+        }
+    }
+
     #[test]
     fn test_default_worker_count() {
         let count = default_worker_count();
@@ -1737,6 +1792,87 @@ mod tests {
             .unwrap();
         assert_eq!(path, "Windows/notepad.exe");
         assert_eq!(parent_id.as_deref(), Some("mft:3:42"));
+    }
+
+    #[test]
+    fn ntfs_directory_index_backfill_traverses_newly_discovered_directories() {
+        let mut path_map = HashMap::new();
+        path_map.insert("5".to_string(), (None, "\\".to_string(), true));
+        let mut indexes = HashMap::new();
+        indexes.insert(5, vec![fake_ntfs_index_entry(42, "Users", true)]);
+        indexes.insert(42, vec![fake_ntfs_index_entry(43, "Liu Yang", true)]);
+        indexes.insert(43, vec![fake_ntfs_index_entry(44, "NTUSER.DAT", false)]);
+
+        let mut queue = VecDeque::from([5u64]);
+        let mut visited = HashSet::new();
+        while let Some(dir_ref) = queue.pop_front() {
+            if !visited.insert(dir_ref) {
+                continue;
+            }
+
+            for action in mft_directory_index_backfill_actions(
+                &mut path_map,
+                dir_ref,
+                indexes.remove(&dir_ref).unwrap_or_default(),
+            ) {
+                if action.is_dir && !visited.contains(&action.mft_ref) {
+                    queue.push_back(action.mft_ref);
+                }
+            }
+        }
+
+        assert_eq!(visited, HashSet::from([5, 42, 43]));
+        assert_eq!(
+            path_map.get("44"),
+            Some(&(Some("43".to_string()), "NTUSER.DAT".to_string(), false))
+        );
+    }
+
+    #[test]
+    fn ntfs_directory_index_parentage_corrects_existing_misparented_rows() {
+        let conn = persistence_sqlite::connection::open_in_memory().unwrap();
+        conn.execute_batch(include_str!(
+            "../../persistence-sqlite/src/migrations/scripts/staging_001.sql"
+        ))
+        .unwrap();
+        let ds_id = "ds-index-parentage";
+        insert_staging_entry(&conn, "mft:4:5", ds_id);
+        insert_staging_entry(&conn, "mft:4:42", ds_id);
+        insert_staging_entry(&conn, "mft:4:43", ds_id);
+        let mut path_map = HashMap::new();
+        path_map.insert("5".to_string(), (None, "\\".to_string(), true));
+        path_map.insert(
+            "42".to_string(),
+            (Some("5".to_string()), "Users".to_string(), true),
+        );
+        path_map.insert(
+            "43".to_string(),
+            (Some("5".to_string()), "Liu Yang".to_string(), true),
+        );
+
+        let actions = mft_directory_index_backfill_actions(
+            &mut path_map,
+            42,
+            vec![fake_ntfs_index_entry(43, "Liu Yang", true)],
+        );
+
+        assert_eq!(actions.len(), 1);
+        assert_eq!(
+            path_map.get("43"),
+            Some(&(Some("42".to_string()), "Liu Yang".to_string(), true))
+        );
+
+        update_mft_staging_paths_and_parent_ids(&conn, ds_id, 4, &path_map).unwrap();
+        let (path, parent_id): (String, Option<String>) = conn
+            .query_row(
+                "SELECT path, parent_id FROM file_entries WHERE id = 'mft:4:43'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+
+        assert_eq!(path, "Users/Liu Yang");
+        assert_eq!(parent_id.as_deref(), Some("mft:4:42"));
     }
 
     #[test]

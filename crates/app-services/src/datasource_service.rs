@@ -70,6 +70,45 @@ pub struct ImageFilesystemProbe {
     pub warnings: Vec<String>,
 }
 
+/// Build an honest partition display name from on-disk metadata.
+///
+/// NTFS/FAT boot sectors do not carry Windows drive-letter assignments. A real
+/// `C:`-style letter requires matching the offline SYSTEM MountedDevices hive,
+/// which this probe path does not currently parse.
+pub fn partition_display_name(
+    index: usize,
+    kind_label: &str,
+    candidate_name: Option<&str>,
+    partition_type_name: Option<&str>,
+) -> String {
+    let partition_label = format!("Partition {index}");
+    let kind_label = kind_label.trim();
+    let base_name = if kind_label.is_empty() {
+        partition_label.clone()
+    } else {
+        format!("{partition_label} ({kind_label})")
+    };
+
+    match candidate_name.and_then(|name| meaningful_partition_name(name, partition_type_name)) {
+        Some(name) => format!("{base_name} - {name}"),
+        None => base_name,
+    }
+}
+
+pub fn volume_display_name(kind_label: &str, candidate_name: Option<&str>) -> String {
+    let kind_label = kind_label.trim();
+    let base_name = if kind_label.is_empty() {
+        "Volume".to_string()
+    } else {
+        format!("Volume ({kind_label})")
+    };
+
+    match candidate_name.and_then(|name| meaningful_partition_name(name, None)) {
+        Some(name) => format!("{base_name} - {name}"),
+        None => base_name,
+    }
+}
+
 pub fn attach_data_source(
     conn: &rusqlite::Connection,
     case_id: &CaseId,
@@ -359,12 +398,6 @@ where
         let kind_label = fs_kind
             .map(kind_label)
             .unwrap_or_else(|| type_name.to_string());
-        let trimmed_name = partition.name.trim();
-        let display_name = if trimmed_name.is_empty() {
-            format!("Partition {}", partition.index)
-        } else {
-            trimmed_name.to_string()
-        };
         let mut status = PartitionStatus::Unsupported;
 
         if let Some(kind) = fs_kind {
@@ -378,7 +411,7 @@ where
             if matches!(kind, ImageFilesystemKind::Ntfs | ImageFilesystemKind::Fat) {
                 candidates.push(ImageFilesystemCandidate {
                     partition_index: Some(partition.index),
-                    partition_name: Some(display_name.clone()),
+                    partition_name: Some(partition.name.clone()),
                     kind,
                     offset,
                     source: ImageFilesystemSource::GptPartition,
@@ -387,11 +420,23 @@ where
         }
 
         if status == PartitionStatus::EncryptedBitLocker {
+            let display_name = partition_display_name(
+                partition.index,
+                &kind_label,
+                Some(&partition.name),
+                Some(type_name),
+            );
             warnings.push(format!(
                 "Partition {} '{}' is BitLocker-encrypted and currently locked",
                 partition.index, display_name
             ));
         } else if status == PartitionStatus::Unsupported {
+            let display_name = partition_display_name(
+                partition.index,
+                &kind_label,
+                Some(&partition.name),
+                Some(type_name),
+            );
             warnings.push(format!(
                 "Partition {} '{}' is not yet supported ({}, GUID {})",
                 partition.index,
@@ -400,6 +445,13 @@ where
                 evidence_core::volume::gpt::format_guid(&partition.type_guid)
             ));
         }
+
+        let display_name = partition_display_name(
+            partition.index,
+            &kind_label,
+            Some(&partition.name),
+            Some(type_name),
+        );
 
         records.push(PartitionRecord {
             index: partition.index,
@@ -428,6 +480,58 @@ fn kind_label(kind: ImageFilesystemKind) -> String {
         ImageFilesystemKind::Fat => "FAT".to_string(),
         ImageFilesystemKind::BitLocker => "BitLocker".to_string(),
     }
+}
+
+fn meaningful_partition_name<'a>(
+    name: &'a str,
+    partition_type_name: Option<&str>,
+) -> Option<&'a str> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() || is_misleading_partition_name(trimmed) {
+        return None;
+    }
+
+    if partition_type_name.is_some_and(|type_name| trimmed.eq_ignore_ascii_case(type_name.trim())) {
+        return None;
+    }
+
+    Some(trimmed)
+}
+
+fn is_misleading_partition_name(name: &str) -> bool {
+    let normalized = name.trim().trim_matches('\0');
+    if normalized.is_empty() {
+        return true;
+    }
+
+    let slash_trimmed = normalized.trim_matches(|ch| ch == '/' || ch == '\\');
+    if slash_trimmed.is_empty() || matches!(normalized, "." | "..") {
+        return true;
+    }
+
+    let collapsed = normalized
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase();
+
+    matches!(
+        collapsed.as_str(),
+        "system volume information"
+            | "$mft"
+            | "root"
+            | "volume"
+            | "ntfs"
+            | "fat"
+            | "fat32"
+            | "microsoft basic data"
+            | "basic data"
+            | "basic data partition"
+            | "efi system"
+            | "microsoft reserved"
+            | "windows recovery"
+            | "unknown"
+    )
 }
 
 fn looks_like_bitlocker_boot_sector(sector: &[u8; 512]) -> bool {

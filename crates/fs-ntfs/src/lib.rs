@@ -723,6 +723,7 @@ impl NtfsReader {
         };
         let attr_off = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
         let mut pos = attr_off;
+        let mut saw_file_name = false;
         while pos + 8 < rec.len() {
             let typ = u32::from_le_bytes(
                 rec[pos..pos + 4]
@@ -738,6 +739,7 @@ impl NtfsReader {
                 break;
             }
             if typ == 0x30 && pos + 8 <= rec.len() {
+                saw_file_name = true;
                 // $FILE_NAME is resident on normal NTFS records. The parent
                 // reference lives at the start of the resident content.
                 if let Some(content) = resident_attr_content(&rec, pos, len) {
@@ -745,18 +747,24 @@ impl NtfsReader {
                         let par_ref =
                             u64::from_le_bytes(content[0..8].try_into().unwrap_or([0; 8]))
                                 & 0x0000_FFFF_FFFF_FFFF;
-                        return Ok(par_ref == expected_parent);
+                        if par_ref == expected_parent {
+                            return Ok(true);
+                        }
+                        pos += len;
+                        continue;
                     }
                 }
 
                 // Legacy fallback for older simplified fixtures.
                 let par_ref = u64::from_le_bytes(rec[pos..pos + 8].try_into().unwrap_or([0; 8]))
                     & 0x0000_FFFF_FFFF_FFFF;
-                return Ok(par_ref == expected_parent);
+                if par_ref == expected_parent {
+                    return Ok(true);
+                }
             }
             pos += len;
         }
-        Ok(true) // no $FILE_NAME found — can't verify, allow
+        Ok(!saw_file_name) // no $FILE_NAME found — can't verify, allow
     }
 
     pub fn list_subdir_children(&self, path: &str) -> io::Result<Vec<FsNode>> {

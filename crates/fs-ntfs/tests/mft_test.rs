@@ -241,6 +241,60 @@ fn wrong_path_returns_empty() {
     assert!(nodes.is_empty(), "bare System32 should not resolve");
 }
 
+#[test]
+fn later_file_name_parent_match_resolves_directory() {
+    let mft_record_size = 1024usize;
+    let mft_cluster = 2u64;
+    let rec5_off = mft_cluster as usize * 512 + 5 * mft_record_size;
+    let rec6_off = mft_cluster as usize * 512 + 6 * mft_record_size;
+    let total = rec6_off + mft_record_size + 1024;
+    let mut data = vec![0u8; total];
+
+    make_boot(&mut data[0..512]);
+
+    let rec5 = &mut data[rec5_off..rec5_off + mft_record_size];
+    rec5[0..4].copy_from_slice(b"FILE");
+    rec5[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+    rec5[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+    rec5[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+    let iro = 0x68usize;
+    rec5[iro..iro + 4].copy_from_slice(&0x90u32.to_le_bytes());
+    rec5[iro + 0x10..iro + 0x14].copy_from_slice(&0x10u32.to_le_bytes());
+    let (dir_entry, _) = build_indx_entries(&["System Volume Information"], 6, true);
+    let mut off = iro + 0x20;
+    rec5[off..off + dir_entry.len()].copy_from_slice(&dir_entry);
+    off += dir_entry.len();
+    rec5[off..off + 4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+    off += 4;
+    rec5[iro + 4..iro + 8].copy_from_slice(&((off - iro) as u32).to_le_bytes());
+
+    let rec6 = &mut data[rec6_off..rec6_off + mft_record_size];
+    rec6[0..4].copy_from_slice(b"FILE");
+    rec6[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+    rec6[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+    rec6[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+    let mut attr_off = write_resident_file_name(rec6, 0x68, 99, "SYSTEM~1");
+    attr_off = write_resident_file_name(rec6, attr_off, 5, "System Volume Information");
+    rec6[attr_off..attr_off + 4].copy_from_slice(&0x90u32.to_le_bytes());
+    rec6[attr_off + 0x10..attr_off + 0x14].copy_from_slice(&0x10u32.to_le_bytes());
+    let (child_entry, _) = build_indx_entries(&["tracking.log"], 100, false);
+    off = attr_off + 0x20;
+    rec6[off..off + child_entry.len()].copy_from_slice(&child_entry);
+    off += child_entry.len();
+    rec6[off..off + 4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+    off += 4;
+    rec6[attr_off + 4..attr_off + 8].copy_from_slice(&((off - attr_off) as u32).to_le_bytes());
+
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data, pos: 0 });
+    let ntfs = NtfsReader::open(reader, 0).unwrap();
+    let nodes = ntfs
+        .list_subdir_children("System Volume Information")
+        .unwrap();
+
+    assert_eq!(nodes.len(), 1);
+    assert_eq!(nodes[0].name, "tracking.log");
+}
+
 // --- Phase 16: $INDEX_ALLOCATION tests ---
 
 /// Build INDX entries as bytes. Returns (data, entry_count).
@@ -530,6 +584,30 @@ fn write_resident_data(rec: &mut [u8], offset: usize, content: &[u8]) -> usize {
     let data_start = offset + content_off as usize;
     rec[data_start..data_start + content.len()].copy_from_slice(content);
     offset + attr_len as usize
+}
+
+fn write_resident_file_name(rec: &mut [u8], offset: usize, parent_ref: u64, name: &str) -> usize {
+    let utf16: Vec<u16> = name.encode_utf16().collect();
+    let content_len = 0x42 + utf16.len() * 2;
+    let content_off = 0x18u16;
+    let attr_len = content_off as usize + content_len;
+
+    rec[offset..offset + 4].copy_from_slice(&0x30u32.to_le_bytes());
+    rec[offset + 4..offset + 8].copy_from_slice(&(attr_len as u32).to_le_bytes());
+    rec[offset + 8] = 0;
+    rec[offset + 0x10..offset + 0x14].copy_from_slice(&(content_len as u32).to_le_bytes());
+    rec[offset + 0x14..offset + 0x16].copy_from_slice(&content_off.to_le_bytes());
+
+    let content_start = offset + content_off as usize;
+    rec[content_start..content_start + 8].copy_from_slice(&parent_ref.to_le_bytes());
+    rec[content_start + 0x40] = utf16.len() as u8;
+    rec[content_start + 0x41] = 1;
+    for (i, c) in utf16.iter().enumerate() {
+        let char_off = content_start + 0x42 + i * 2;
+        rec[char_off..char_off + 2].copy_from_slice(&c.to_le_bytes());
+    }
+
+    offset + attr_len
 }
 
 /// Build a fixture with a root directory containing a file "README.TXT"

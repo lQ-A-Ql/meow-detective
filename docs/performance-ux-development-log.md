@@ -206,5 +206,72 @@
 
 ---
 
+## 📅 阶段 8: 运行时修复、NTFS 真实样本回归与分区命名收口
+
+### 任务
+
+- [x] 修复 Tauri 运行时拒绝 dotted event topic 的告警
+- [x] 修复 NTFS `System Volume Information` 目录子项入库/展示链路
+- [x] 修复 NTFS 分区显示名误用 `/` 或 `System Volume Information` 的问题
+- [x] 补充真实刘洋样本 ignored/env-gated 回归
+- [x] 补跑前后端 CI 门禁并完成 diff 复审
+
+### 完成内容
+
+- [x] 将运行时事件主题从 dotted 形式改为 Tauri-safe kebab-case：
+  - `import-phase-progress`
+  - `import-partial-result`
+  - `job-cancellation`
+  - `cache-index-status`
+  - `performance-report-ready`
+- [x] Rust transport、Tauri bridge、前端 `EventTopic`、事件订阅与契约测试全部同步为新主题
+- [x] `fs-ntfs` 的 parent 校验会遍历多个 `$FILE_NAME` 属性，避免首个命名空间不匹配时误判目录不可达
+- [x] parallel MFT fast-path 的 directory-index backfill 改为从 root BFS 遍历可达目录，并用目录索引 parentage 修正 staging 中已有记录的 parent/path
+- [x] 新增真实刘洋样本回归，分别验证：
+  - `Users` 在主 NTFS root 下可达，且 merge 后 `FileRepo` 可列出子项
+  - `System Volume Information` 在 staging 和主库 merge 后均可列出直接子项
+- [x] 分区显示名改为保守、可解释策略：
+  - 无可靠名称时显示 `Partition N (NTFS)` 等确定性名称
+  - 保留有意义的 GPT 名称，例如 `Partition N (NTFS) - Evidence Volume`
+  - 过滤 `/`、`\`、`.`、`..`、`System Volume Information`、`Microsoft basic data`、`Basic data partition`、`Windows recovery` 等误导性名称
+- [x] 修正分区 root 名二次拼接，避免 `Partition 3 (NTFS) - Partition 3 (NTFS)`
+
+### 真实样本验证
+
+- [x] 刘洋样本 `Users` 回归通过：MFT fast-path 枚举后 `Users` 有直接子项
+- [x] 刘洋样本 `System Volume Information` 回归通过：样本自身有 SVI 子项，staging 与 merge 后主库均能访问
+- [x] 刘洋样本分区命名诊断通过，当前显示为：
+  - `Partition 1 (FAT)`
+  - `Partition 2 (Microsoft reserved) - Microsoft reserved partition`
+  - `Partition 3 (NTFS)`
+  - `Partition 4 (NTFS)`
+  - `Partition 5 (BitLocker)`
+
+### 盘符提取结论
+
+- [x] 当前修复不声称从 NTFS 本身提取 `C:`/`D:` 盘符
+- [x] 真实 Windows 盘符是 Mount Manager 分配，通常需要解析离线 `SYSTEM` hive 的 `MountedDevices` 并与卷 GUID、磁盘签名或分区偏移匹配
+- [x] 现阶段先保证名称不误导；后续如需展示 `C:`，应单独实现 MountedDevices 匹配链路
+
+### 门禁与复审
+
+- [x] `cargo fmt --all -- --check` 通过
+- [x] `cargo clippy --workspace --all-targets -- -D warnings` 通过
+- [x] `cargo test --workspace` 通过
+- [x] `cargo build -p forensics-desktop --release` 通过
+- [x] `pnpm --dir frontend typecheck` 通过
+- [x] `pnpm --dir frontend test --run` 通过
+- [x] `pnpm --dir frontend build` 通过
+- [x] 后端 diff 复审 APPROVE，无 findings
+- [x] 前端事件主题 diff 复审 APPROVE，无 findings
+
+### 已知边界
+
+- 真实刘洋样本回归仍为 ignored/env-gated，不进入默认 CI
+- 未提交私有样本路径、`.omo` 临时证据或 Playwright 输出目录
+- 已有旧 case DB 不会自动改名或补全 NTFS 树，需要用新构建重新导入/重新枚举
+
+---
+
 **日志维护人**: MiMo AI Assistant  
 **最后更新**: 2026-06-05

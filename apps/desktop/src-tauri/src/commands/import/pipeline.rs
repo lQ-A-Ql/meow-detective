@@ -1616,10 +1616,7 @@ fn post_import_counts_from_profile(detail: &str) -> PostImportResultCounts {
 }
 
 fn post_import_counts_from_message(message: &str) -> PostImportResultCounts {
-    let normalized = message
-        .replace(':', " ")
-        .replace('.', " ")
-        .replace(',', " ");
+    let normalized = message.replace([':', '.', ','], " ");
     let parts: Vec<&str> = normalized.split_whitespace().collect();
     PostImportResultCounts {
         timeline_events: value_after_label(&parts, "Timeline").unwrap_or(0),
@@ -2110,37 +2107,41 @@ fn build_partition_work(
 }
 
 fn format_partition_root_name(candidate: &datasource_service::ImageFilesystemCandidate) -> String {
-    let partition_label = candidate
-        .partition_index
-        .map(|index| format!("Partition {}", index))
-        .unwrap_or_else(|| "Volume".to_string());
     let fs_label = match candidate.kind {
         ImageFilesystemKind::Ntfs => "NTFS",
         ImageFilesystemKind::Fat => "FAT",
         ImageFilesystemKind::BitLocker => "BitLocker",
     };
 
-    match candidate.partition_name.as_deref() {
-        Some(name) if !name.trim().is_empty() => {
-            format!("{partition_label} ({fs_label}) - {}", name.trim())
+    match candidate.partition_index {
+        Some(index) => datasource_service::partition_display_name(
+            index,
+            fs_label,
+            candidate.partition_name.as_deref(),
+            None,
+        ),
+        None => {
+            datasource_service::volume_display_name(fs_label, candidate.partition_name.as_deref())
         }
-        _ => format!("{partition_label} ({fs_label})"),
     }
 }
 
 #[allow(dead_code)]
 fn format_partition_record_root_name(partition: &datasource_service::PartitionRecord) -> String {
-    let partition_label = format!("Partition {}", partition.index);
-    let kind_label = partition.kind_label.trim();
-
-    if partition.name.trim().is_empty() || partition.name.trim() == partition_label {
-        format!("{partition_label} ({kind_label})")
-    } else {
-        format!(
-            "{partition_label} ({kind_label}) - {}",
-            partition.name.trim()
-        )
+    let name = partition.name.trim();
+    if name.is_empty()
+        || name.eq_ignore_ascii_case("unknown")
+        || matches!(name, "/" | "\\" | "." | "..")
+    {
+        return datasource_service::partition_display_name(
+            partition.index,
+            &partition.kind_label,
+            None,
+            None,
+        );
     }
+
+    name.to_string()
 }
 
 #[allow(dead_code)]
@@ -2203,6 +2204,67 @@ mod tests {
         assert_eq!(status.indexed_count, indexed_count);
         assert_eq!(status.total_count, total_count);
         assert!(chrono::DateTime::parse_from_rfc3339(&status.updated_at).is_ok());
+    }
+
+    #[test]
+    fn partition_root_names_reject_misleading_filesystem_names() {
+        let candidate = datasource_service::ImageFilesystemCandidate {
+            partition_index: Some(3),
+            partition_name: Some("System Volume Information".to_string()),
+            kind: ImageFilesystemKind::Ntfs,
+            offset: 2048,
+            source: datasource_service::ImageFilesystemSource::GptPartition,
+        };
+        assert_eq!(format_partition_root_name(&candidate), "Partition 3 (NTFS)");
+
+        let root_candidate = datasource_service::ImageFilesystemCandidate {
+            partition_name: Some("\\".to_string()),
+            ..candidate.clone()
+        };
+        assert_eq!(
+            format_partition_root_name(&root_candidate),
+            "Partition 3 (NTFS)"
+        );
+
+        let record = datasource_service::PartitionRecord {
+            index: 3,
+            name: "/".to_string(),
+            kind_label: "NTFS".to_string(),
+            type_guid: None,
+            offset: 2048,
+            length: 4096,
+            status: datasource_service::PartitionStatus::Supported,
+            filesystem: Some(ImageFilesystemKind::Ntfs),
+        };
+        assert_eq!(
+            format_partition_record_root_name(&record),
+            "Partition 3 (NTFS)"
+        );
+
+        let display_record = datasource_service::PartitionRecord {
+            name: "Partition 3 (NTFS)".to_string(),
+            ..record
+        };
+        assert_eq!(
+            format_partition_record_root_name(&display_record),
+            "Partition 3 (NTFS)"
+        );
+    }
+
+    #[test]
+    fn partition_root_names_preserve_meaningful_names() {
+        let candidate = datasource_service::ImageFilesystemCandidate {
+            partition_index: Some(4),
+            partition_name: Some("Evidence Volume".to_string()),
+            kind: ImageFilesystemKind::Ntfs,
+            offset: 4096,
+            source: datasource_service::ImageFilesystemSource::GptPartition,
+        };
+
+        assert_eq!(
+            format_partition_root_name(&candidate),
+            "Partition 4 (NTFS) - Evidence Volume"
+        );
     }
 
     fn prefetch_fixture(exe_name: &str, run_count: u32, last_run: DateTime<Utc>) -> Vec<u8> {

@@ -83,7 +83,10 @@ mod tests {
 
         assert_eq!(result, vec![1, 2, 3]);
         assert_eq!(sample.rows, 3);
-        assert!(sample.elapsed_ms <= u64::MAX);
+        assert_eq!(
+            sample.rows_per_sec(),
+            rows_per_sec(sample.rows, sample.elapsed_ms)
+        );
     }
 
     #[test]

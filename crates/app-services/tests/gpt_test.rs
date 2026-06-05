@@ -104,10 +104,16 @@ fn detect_image_filesystem_returns_multiple_gpt_candidates() {
     entries[0..16].copy_from_slice(&ms_basic);
     entries[32..40].copy_from_slice(&2048u64.to_le_bytes());
     entries[40..48].copy_from_slice(&3071u64.to_le_bytes());
+    for (i, c) in "/".encode_utf16().enumerate() {
+        entries[56 + i * 2..56 + i * 2 + 2].copy_from_slice(&c.to_le_bytes());
+    }
 
     entries[128..144].copy_from_slice(&ms_basic);
     entries[160..168].copy_from_slice(&3072u64.to_le_bytes());
     entries[168..176].copy_from_slice(&4095u64.to_le_bytes());
+    for (i, c) in "System Volume Information".encode_utf16().enumerate() {
+        entries[128 + 56 + i * 2..128 + 56 + i * 2 + 2].copy_from_slice(&c.to_le_bytes());
+    }
 
     let ntfs1 = 2048usize * 512;
     image[ntfs1 + 3..ntfs1 + 11].copy_from_slice(b"NTFS    ");
@@ -132,6 +138,45 @@ fn detect_image_filesystem_returns_multiple_gpt_candidates() {
         .partitions
         .iter()
         .all(|partition| partition.status == PartitionStatus::Supported));
+    assert_eq!(probe.partitions[0].name, "Partition 1 (NTFS)");
+    assert_eq!(probe.partitions[1].name, "Partition 2 (NTFS)");
+}
+
+#[test]
+fn partition_display_name_rejects_root_and_first_child_like_names() {
+    use app_services::datasource_service::partition_display_name;
+
+    assert_eq!(
+        partition_display_name(3, "NTFS", Some("/"), None),
+        "Partition 3 (NTFS)"
+    );
+    assert_eq!(
+        partition_display_name(3, "NTFS", Some("\\"), None),
+        "Partition 3 (NTFS)"
+    );
+    assert_eq!(
+        partition_display_name(3, "NTFS", Some("System Volume Information"), None),
+        "Partition 3 (NTFS)"
+    );
+    assert_eq!(
+        partition_display_name(
+            3,
+            "Windows recovery",
+            Some("Windows recovery"),
+            Some("Windows recovery")
+        ),
+        "Partition 3 (Windows recovery)"
+    );
+}
+
+#[test]
+fn partition_display_name_preserves_meaningful_gpt_name() {
+    use app_services::datasource_service::partition_display_name;
+
+    assert_eq!(
+        partition_display_name(4, "NTFS", Some("Evidence Volume"), None),
+        "Partition 4 (NTFS) - Evidence Volume"
+    );
 }
 
 #[test]

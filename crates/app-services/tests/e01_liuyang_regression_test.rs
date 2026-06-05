@@ -1,8 +1,12 @@
-use app_services::{analysis_service, case_service, datasource_service, file_service};
+use app_services::{
+    analysis_service, case_service, datasource_service, file_service, parallel_enum, staging,
+};
 use evidence_core::{EvidenceReader, FileSystemReader};
 use image_e01::E01Reader;
 use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
 use std::io::{Read, Seek, SeekFrom};
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use tempfile::TempDir;
 
 fn sample_path() -> std::path::PathBuf {
@@ -16,7 +20,7 @@ fn expected_path_fragment() -> String {
 }
 
 // Local run example:
-//   $env:FORENSICS_LIUYANG_E01_FIXTURE='D:\\private-samples\\liuyang.E01'
+//   $env:FORENSICS_LIUYANG_E01_FIXTURE='<path-to-local-liuyang-sample.E01>'
 //   $env:FORENSICS_LIUYANG_EXPECTED_PATH='刘洋'
 //   cargo test -p app-services --test e01_liuyang_regression_test -- --ignored --nocapture
 #[test]
@@ -171,6 +175,7 @@ fn liuyang_e01_prints_parsed_system_info_and_evidence_summary() {
         candidate_summary,
         probe.warnings
     );
+    assert_partition_display_names_are_honest(&probe);
 
     let ntfs = probe
         .candidates
@@ -358,6 +363,530 @@ fn liuyang_e01_prints_parsed_system_info_and_evidence_summary() {
             Ok(())
         })
         .unwrap();
+}
+
+#[test]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample"]
+fn liuyang_e01_parallel_mft_backfill_surfaces_users_tree() {
+    let fixture_path = sample_path();
+    let mut reader = E01Reader::open(&fixture_path).unwrap();
+    let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
+    let ntfs = probe
+        .candidates
+        .iter()
+        .find(|candidate| {
+            matches!(
+                candidate.kind,
+                datasource_service::ImageFilesystemKind::Ntfs
+            )
+        })
+        .expect("Liu Yang sample should include a readable NTFS candidate");
+    let partition_index = ntfs.partition_index.unwrap_or(0);
+    let partition_name = ntfs
+        .partition_name
+        .clone()
+        .unwrap_or_else(|| "NTFS".to_string());
+
+    let tmp = TempDir::new().unwrap();
+    let active = case_service::create_case(
+        &tmp.path().join("cases"),
+        "liuyang-parallel-mft-backfill",
+        Some("tester"),
+    )
+    .unwrap();
+    let case_id = active.meta.id.clone();
+    let data_source_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
+    active
+        .with_conn(|conn| {
+            DataSourceRepo::new(conn).insert(
+                &case_id,
+                &domain::DataSource {
+                    id: data_source_id.clone(),
+                    name: "liuyang-real-sample".into(),
+                    kind: domain::DataSourceKind::E01,
+                    source_path: fixture_path.clone(),
+                    imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
+                },
+            )
+        })
+        .unwrap();
+
+    let fs: Box<dyn FileSystemReader + Send> = Box::new(
+        fs_ntfs::NtfsReader::open(
+            Box::new(E01Reader::open(&fixture_path).unwrap()),
+            ntfs.offset,
+        )
+        .unwrap(),
+    );
+    let work = parallel_enum::PartitionWork {
+        index: partition_index,
+        name: partition_name.clone(),
+        fs_kind: "ntfs".to_string(),
+        fs,
+        source_path: fixture_path.clone(),
+        source_kind: "e01".to_string(),
+        volume_offset: ntfs.offset,
+    };
+
+    let results = parallel_enum::enumerate_partitions_parallel(
+        &active.case_root,
+        &data_source_id,
+        vec![work],
+        1,
+        Arc::new(AtomicBool::new(false)),
+        &|partition_idx, pct, detail| eprintln!("[{partition_idx}:{pct}%] {detail}"),
+    )
+    .unwrap();
+    assert_eq!(results.len(), 1);
+    let result = &results[0];
+    assert!(
+        result.error.is_none(),
+        "parallel enum should complete without falling back to an error: {:?}",
+        result.error
+    );
+    assert!(
+        result.file_count > 1000,
+        "Should enumerate many Liu Yang files"
+    );
+    assert!(
+        result.dir_count > 10,
+        "Should enumerate Liu Yang directories"
+    );
+
+    let staging_conn =
+        staging::open_partition_staging(&active.case_root, &data_source_id.0, partition_index)
+            .unwrap();
+    let enum_strategy = staging::get_staging_meta(&staging_conn, "enum_strategy").unwrap();
+    assert_eq!(
+        enum_strategy.as_deref(),
+        Some("mft"),
+        "regression must exercise the parallel NTFS MFT fast path"
+    );
+
+    let root_id = format!("mft:{partition_index}:5");
+    let root_child_names = root_child_names(&staging_conn, &data_source_id.0, &root_id);
+    let users = staging_conn
+        .query_row(
+            "SELECT id, path FROM file_entries
+             WHERE data_source_id = ?1
+               AND parent_id = ?2
+               AND name = 'Users' COLLATE NOCASE
+               AND entry_type = 'directory' COLLATE NOCASE
+             LIMIT 1",
+            rusqlite::params![data_source_id.0, root_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .unwrap_or_else(|err| {
+            panic!(
+                "expected root-relative Users directory under NTFS root; root children sample={root_child_names:?}; query error={err}"
+            )
+        });
+    let users_child_count: i64 = staging_conn
+        .query_row(
+            "SELECT COUNT(*) FROM file_entries WHERE data_source_id = ?1 AND parent_id = ?2",
+            rusqlite::params![data_source_id.0, users.0],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(
+        users_child_count > 0,
+        "Users directory should be navigable and have children; path={}",
+        users.1
+    );
+    assert_eq!(
+        users.1, "Users",
+        "NTFS image paths are stored root-relative in file_entries, so C:\\Users is represented as Users under the NTFS root"
+    );
+    eprintln!(
+        "parallel Liu Yang enum: partition={} name={} files={} dirs={} strategy={:?} root_children={:?} users_path={} users_children={}",
+        partition_index,
+        partition_name,
+        result.file_count,
+        result.dir_count,
+        enum_strategy,
+        root_child_names,
+        users.1,
+        users_child_count
+    );
+
+    let mut manifest =
+        staging::StagingManifest::create(&data_source_id.0, &fixture_path.to_string_lossy(), "e01");
+    manifest.partitions.push(staging::PartitionEntry {
+        index: partition_index,
+        name: partition_name,
+        fs_kind: "Ntfs".to_string(),
+        staging_db: format!("enum_partition_{partition_index}.db"),
+        status: staging::PartitionStatus::Done,
+        file_count: result.file_count,
+        dir_count: result.dir_count,
+        total_size: result.total_size,
+        last_path: None,
+        completed_at: Some(chrono::Utc::now().to_rfc3339()),
+        error: None,
+    });
+    active
+        .with_conn(|conn| {
+            let merged = staging::merge_all_staging_to_main(
+                conn,
+                &active.case_root,
+                &data_source_id.0,
+                &manifest,
+                None,
+            )
+            .map_err(persistence_sqlite::DbError::System)?;
+            assert!(merged > 1000, "merge should copy enumerated NTFS rows");
+
+            let repo = FileRepo::new(conn);
+            let users_entry = repo
+                .find_children(&domain::FileEntryId(root_id.clone()))?
+                .into_iter()
+                .find(|entry| {
+                    entry.name.eq_ignore_ascii_case("Users")
+                        && entry.entry_type == domain::EntryType::Directory
+                })
+                .expect("FileRepo children should include Users under the MFT root");
+            let children = repo.find_children(&users_entry.id)?;
+            assert!(
+                !children.is_empty(),
+                "FileRepo should navigate into Users from the MFT root"
+            );
+            eprintln!(
+                "merged Liu Yang tree: root_id={} users_id={} users_path={} users_children={}",
+                root_id,
+                users_entry.id.0,
+                users_entry.path,
+                children.len()
+            );
+
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample"]
+fn liuyang_e01_parallel_mft_backfill_surfaces_system_volume_information_children() {
+    let fixture_path = sample_path();
+    let mut reader = E01Reader::open(&fixture_path).unwrap();
+    let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
+    let ntfs = probe
+        .candidates
+        .iter()
+        .find(|candidate| {
+            matches!(
+                candidate.kind,
+                datasource_service::ImageFilesystemKind::Ntfs
+            )
+        })
+        .expect("Liu Yang sample should include a readable NTFS candidate");
+    let partition_index = ntfs.partition_index.unwrap_or(0);
+    let partition_name = ntfs
+        .partition_name
+        .clone()
+        .unwrap_or_else(|| "NTFS".to_string());
+
+    let sample_svi_children = {
+        let fs = fs_ntfs::NtfsReader::open(
+            Box::new(E01Reader::open(&fixture_path).unwrap()),
+            ntfs.offset,
+        )
+        .unwrap();
+        fs.list_children("System Volume Information")
+            .unwrap_or_else(|err| panic!("failed to list sample System Volume Information: {err}"))
+    };
+    let sample_svi_child_names = sample_svi_children
+        .iter()
+        .take(20)
+        .map(|child| child.name.clone())
+        .collect::<Vec<_>>();
+    let expect_svi_children = !sample_svi_children.is_empty();
+    eprintln!(
+        "sample SVI direct_children={} child_sample={:?}",
+        sample_svi_children.len(),
+        sample_svi_child_names
+    );
+
+    let tmp = TempDir::new().unwrap();
+    let active = case_service::create_case(
+        &tmp.path().join("cases"),
+        "liuyang-parallel-mft-svi",
+        Some("tester"),
+    )
+    .unwrap();
+    let case_id = active.meta.id.clone();
+    let data_source_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
+    active
+        .with_conn(|conn| {
+            DataSourceRepo::new(conn).insert(
+                &case_id,
+                &domain::DataSource {
+                    id: data_source_id.clone(),
+                    name: "liuyang-real-sample".into(),
+                    kind: domain::DataSourceKind::E01,
+                    source_path: fixture_path.clone(),
+                    imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
+                },
+            )
+        })
+        .unwrap();
+
+    let fs: Box<dyn FileSystemReader + Send> = Box::new(
+        fs_ntfs::NtfsReader::open(
+            Box::new(E01Reader::open(&fixture_path).unwrap()),
+            ntfs.offset,
+        )
+        .unwrap(),
+    );
+    let work = parallel_enum::PartitionWork {
+        index: partition_index,
+        name: partition_name.clone(),
+        fs_kind: "ntfs".to_string(),
+        fs,
+        source_path: fixture_path.clone(),
+        source_kind: "e01".to_string(),
+        volume_offset: ntfs.offset,
+    };
+
+    let results = parallel_enum::enumerate_partitions_parallel(
+        &active.case_root,
+        &data_source_id,
+        vec![work],
+        1,
+        Arc::new(AtomicBool::new(false)),
+        &|partition_idx, pct, detail| eprintln!("[{partition_idx}:{pct}%] {detail}"),
+    )
+    .unwrap();
+    assert_eq!(results.len(), 1);
+    let result = &results[0];
+    assert!(
+        result.error.is_none(),
+        "parallel enum should complete without falling back to an error: {:?}",
+        result.error
+    );
+    assert!(
+        result.file_count > 1000,
+        "Should enumerate many Liu Yang files"
+    );
+    assert!(
+        result.dir_count > 10,
+        "Should enumerate Liu Yang directories"
+    );
+
+    let staging_conn =
+        staging::open_partition_staging(&active.case_root, &data_source_id.0, partition_index)
+            .unwrap();
+    let enum_strategy = staging::get_staging_meta(&staging_conn, "enum_strategy").unwrap();
+    assert_eq!(
+        enum_strategy.as_deref(),
+        Some("mft"),
+        "regression must exercise the parallel NTFS MFT fast path"
+    );
+
+    let root_id = format!("mft:{partition_index}:5");
+    let staging_root_child_names = root_child_names(&staging_conn, &data_source_id.0, &root_id);
+    let svi = staging_conn
+        .query_row(
+            "SELECT id, path FROM file_entries
+             WHERE data_source_id = ?1
+               AND parent_id = ?2
+               AND name = 'System Volume Information' COLLATE NOCASE
+               AND entry_type = 'directory' COLLATE NOCASE
+             LIMIT 1",
+            rusqlite::params![data_source_id.0, root_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .unwrap_or_else(|err| {
+            panic!(
+                "expected root-relative System Volume Information directory under NTFS root; root children sample={staging_root_child_names:?}; query error={err}"
+            )
+        });
+    assert_eq!(
+        svi.1, "System Volume Information",
+        "NTFS image paths are stored root-relative in file_entries"
+    );
+    let staging_svi_child_count: i64 = staging_conn
+        .query_row(
+            "SELECT COUNT(*) FROM file_entries WHERE data_source_id = ?1 AND parent_id = ?2",
+            rusqlite::params![data_source_id.0, svi.0],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let staging_svi_child_names = root_child_names(&staging_conn, &data_source_id.0, &svi.0);
+    if expect_svi_children {
+        assert!(
+            staging_svi_child_count > 0,
+            "staging SVI should expose right-table-equivalent direct children; sample_children={} root_children_sample={:?} svi_id={} svi_path={} child_sample={:?}",
+            sample_svi_children.len(),
+            staging_root_child_names,
+            svi.0,
+            svi.1,
+            staging_svi_child_names
+        );
+    }
+    eprintln!(
+        "staging SVI: root_children={:?} svi_id={} svi_path={} direct_children={} child_sample={:?}",
+        staging_root_child_names,
+        svi.0,
+        svi.1,
+        staging_svi_child_count,
+        staging_svi_child_names
+    );
+
+    let mut manifest =
+        staging::StagingManifest::create(&data_source_id.0, &fixture_path.to_string_lossy(), "e01");
+    manifest.partitions.push(staging::PartitionEntry {
+        index: partition_index,
+        name: partition_name,
+        fs_kind: "Ntfs".to_string(),
+        staging_db: format!("enum_partition_{partition_index}.db"),
+        status: staging::PartitionStatus::Done,
+        file_count: result.file_count,
+        dir_count: result.dir_count,
+        total_size: result.total_size,
+        last_path: None,
+        completed_at: Some(chrono::Utc::now().to_rfc3339()),
+        error: None,
+    });
+    active
+        .with_conn(|conn| {
+            let merged = staging::merge_all_staging_to_main(
+                conn,
+                &active.case_root,
+                &data_source_id.0,
+                &manifest,
+                None,
+            )
+            .map_err(persistence_sqlite::DbError::System)?;
+            assert!(merged > 1000, "merge should copy enumerated NTFS rows");
+
+            let repo = FileRepo::new(conn);
+            let root_id = domain::FileEntryId(root_id.clone());
+            let merged_root_children = repo.find_children(&root_id)?;
+            let merged_root_child_names = merged_root_children
+                .iter()
+                .take(40)
+                .map(|entry| entry.name.clone())
+                .collect::<Vec<_>>();
+            let svi_entry = merged_root_children
+                .into_iter()
+                .find(|entry| {
+                    entry.name.eq_ignore_ascii_case("System Volume Information")
+                        && entry.entry_type == domain::EntryType::Directory
+                })
+                .expect("FileRepo children should include System Volume Information under the MFT root");
+            let children = repo.find_children(&svi_entry.id)?;
+            let child_names = children
+                .iter()
+                .take(20)
+                .map(|entry| entry.name.clone())
+                .collect::<Vec<_>>();
+            if expect_svi_children {
+                assert!(
+                    !children.is_empty(),
+                    "FileRepo should expose SVI direct children from the MFT root; sample_children={} root_children_sample={:?} svi_id={} svi_path={} child_sample={:?}",
+                    sample_svi_children.len(),
+                    merged_root_child_names,
+                    svi_entry.id.0,
+                    svi_entry.path,
+                    child_names
+                );
+            }
+            eprintln!(
+                "merged SVI: root_children={:?} svi_id={} svi_path={} direct_children={} child_sample={:?}",
+                merged_root_child_names,
+                svi_entry.id.0,
+                svi_entry.path,
+                children.len(),
+                child_names
+            );
+
+            Ok(())
+        })
+        .unwrap();
+}
+
+fn root_child_names(
+    conn: &rusqlite::Connection,
+    data_source_id: &str,
+    root_id: &str,
+) -> Vec<String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT name FROM file_entries
+             WHERE data_source_id = ?1 AND parent_id = ?2
+             ORDER BY name COLLATE NOCASE
+             LIMIT 40",
+        )
+        .unwrap();
+    stmt.query_map(rusqlite::params![data_source_id, root_id], |row| {
+        row.get::<_, String>(0)
+    })
+    .unwrap()
+    .collect::<Result<Vec<_>, _>>()
+    .unwrap()
+}
+
+fn assert_partition_display_names_are_honest(probe: &datasource_service::ImageFilesystemProbe) {
+    for partition in &probe.partitions {
+        assert_honest_display_name(&partition.name);
+        let root_name = datasource_service::partition_display_name(
+            partition.index,
+            &partition.kind_label,
+            Some(&partition.name),
+            None,
+        );
+        assert_honest_display_name(&root_name);
+        eprintln!(
+            "partition display check: idx={} record_name={} root_name={} kind={} fs={:?}",
+            partition.index, partition.name, root_name, partition.kind_label, partition.filesystem
+        );
+    }
+
+    for candidate in &probe.candidates {
+        let fs_label = match candidate.kind {
+            datasource_service::ImageFilesystemKind::Ntfs => "NTFS",
+            datasource_service::ImageFilesystemKind::Fat => "FAT",
+            datasource_service::ImageFilesystemKind::BitLocker => "BitLocker",
+        };
+        let root_name = match candidate.partition_index {
+            Some(index) => datasource_service::partition_display_name(
+                index,
+                fs_label,
+                candidate.partition_name.as_deref(),
+                None,
+            ),
+            None => datasource_service::volume_display_name(
+                fs_label,
+                candidate.partition_name.as_deref(),
+            ),
+        };
+        assert_honest_display_name(&root_name);
+        eprintln!(
+            "candidate root display check: idx={:?} raw_name={:?} root_name={} kind={:?}",
+            candidate.partition_index, candidate.partition_name, root_name, candidate.kind
+        );
+    }
+}
+
+fn assert_honest_display_name(name: &str) {
+    assert_ne!(
+        name.trim(),
+        "/",
+        "partition display name must not be root slash"
+    );
+    assert_ne!(
+        name.trim(),
+        "\\",
+        "partition display name must not be root slash"
+    );
+    assert!(
+        !name
+            .trim()
+            .eq_ignore_ascii_case("System Volume Information"),
+        "partition display name must not be the first NTFS child directory"
+    );
 }
 
 fn read_fs_file(fs: &fs_ntfs::NtfsReader, path: &str) -> Vec<u8> {
