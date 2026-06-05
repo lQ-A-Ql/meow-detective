@@ -20,8 +20,8 @@ impl<'a> ArtifactRepo<'a> {
         let tx = self.conn.unchecked_transaction()?;
         {
             let mut stmt = tx.prepare_cached(
-                "INSERT INTO artifacts (id, case_id, data_source_id, artifact_type, source_object_id, title, summary, attrs, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                "INSERT INTO artifacts (id, case_id, data_source_id, artifact_type, source_object_id, extractor_id, extractor_version, confidence, source_attribution, title, summary, attrs, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             )?;
             for artifact in artifacts {
                 stmt.execute(params![
@@ -30,6 +30,10 @@ impl<'a> ArtifactRepo<'a> {
                     data_source_id,
                     artifact.family,
                     artifact.source_object_id.as_ref().map(|id| &id.0),
+                    artifact.extractor_id,
+                    artifact.extractor_version,
+                    artifact.confidence,
+                    artifact.source_attribution,
                     artifact.title,
                     artifact.summary,
                     serde_json::to_string(&artifact.attrs).unwrap_or_else(|_| "{}".to_string()),
@@ -44,11 +48,11 @@ impl<'a> ArtifactRepo<'a> {
     pub fn list_by_family(&self, family: Option<&str>) -> DbResult<Vec<Artifact>> {
         let mut stmt = match family {
             Some(_) => self.conn.prepare(
-                "SELECT id, artifact_type, source_object_id, title, summary, attrs, created_at
+                "SELECT id, artifact_type, source_object_id, extractor_id, extractor_version, confidence, source_attribution, title, summary, attrs, created_at
                  FROM artifacts WHERE artifact_type = ?1 ORDER BY created_at DESC LIMIT 1000",
             )?,
             None => self.conn.prepare(
-                "SELECT id, artifact_type, source_object_id, title, summary, attrs, created_at
+                "SELECT id, artifact_type, source_object_id, extractor_id, extractor_version, confidence, source_attribution, title, summary, attrs, created_at
                  FROM artifacts ORDER BY created_at DESC LIMIT 1000",
             )?,
         };
@@ -98,16 +102,20 @@ impl<'a> ArtifactRepo<'a> {
 }
 
 fn row_to_artifact(row: &rusqlite::Row) -> rusqlite::Result<Artifact> {
-    let attrs_str: String = row.get(5)?;
+    let attrs_str: String = row.get(9)?;
     let attrs: std::collections::BTreeMap<String, serde_json::Value> =
         serde_json::from_str(&attrs_str).unwrap_or_default();
     Ok(Artifact {
         id: ArtifactId(row.get::<_, String>(0)?),
         family: row.get(1)?,
         source_object_id: row.get::<_, Option<String>>(2)?.map(domain::FileEntryId),
-        title: row.get(3)?,
-        summary: row.get(4)?,
-        created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(6)?)
+        extractor_id: row.get(3)?,
+        extractor_version: row.get(4)?,
+        confidence: row.get(5)?,
+        source_attribution: row.get(6)?,
+        title: row.get(7)?,
+        summary: row.get(8)?,
+        created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(10)?)
             .map(|dt| dt.with_timezone(&chrono::Utc))
             .unwrap_or_else(|e| {
                 tracing::warn!("Invalid artifact timestamp, falling back to epoch: {}", e);
@@ -131,11 +139,38 @@ mod tests {
                 data_source_id TEXT NOT NULL DEFAULT '',
                 artifact_type TEXT NOT NULL,
                 source_object_id TEXT,
+                extractor_id TEXT,
+                extractor_version TEXT,
+                confidence REAL,
+                source_attribution TEXT,
                 title TEXT NOT NULL,
                 summary TEXT NOT NULL DEFAULT '',
                 attrs TEXT NOT NULL DEFAULT '{}',
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );",
+        )
+        .unwrap();
+        conn
+    }
+
+    fn setup_legacy_db() -> rusqlite::Connection {
+        let conn = crate::connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE artifacts (
+                id TEXT PRIMARY KEY NOT NULL,
+                case_id TEXT NOT NULL DEFAULT '',
+                data_source_id TEXT NOT NULL DEFAULT '',
+                artifact_type TEXT NOT NULL,
+                source_object_id TEXT,
+                title TEXT NOT NULL,
+                summary TEXT NOT NULL DEFAULT '',
+                attrs TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            ALTER TABLE artifacts ADD COLUMN extractor_id TEXT;
+            ALTER TABLE artifacts ADD COLUMN extractor_version TEXT;
+            ALTER TABLE artifacts ADD COLUMN confidence REAL;
+            ALTER TABLE artifacts ADD COLUMN source_attribution TEXT;",
         )
         .unwrap();
         conn
@@ -148,6 +183,10 @@ mod tests {
             title: format!("Title {}", id),
             summary: format!("Summary {}", id),
             source_object_id: None,
+            extractor_id: None,
+            extractor_version: None,
+            confidence: None,
+            source_attribution: None,
             created_at: chrono::Utc::now(),
             attrs: BTreeMap::new(),
         }
@@ -217,5 +256,47 @@ mod tests {
 
         let all = repo.list_by_family(None).unwrap();
         assert_eq!(all.len(), 3);
+    }
+
+    #[test]
+    fn artifact_provenance_round_trips() {
+        let conn = setup_db();
+        let repo = ArtifactRepo::new(&conn);
+        let mut artifact = make_artifact("a1", "prefetch");
+        artifact.extractor_id = Some("prefetch".to_string());
+        artifact.extractor_version = Some("1.2.3".to_string());
+        artifact.confidence = Some(0.93);
+        artifact.source_attribution = Some("Windows/Prefetch/CMD.EXE.pf".to_string());
+
+        repo.insert_batch(&[artifact], "case-1", "ds-1").unwrap();
+
+        let rows = repo.list_by_family(Some("prefetch")).unwrap();
+        assert_eq!(rows[0].extractor_id.as_deref(), Some("prefetch"));
+        assert_eq!(rows[0].extractor_version.as_deref(), Some("1.2.3"));
+        assert_eq!(rows[0].confidence, Some(0.93));
+        assert_eq!(
+            rows[0].source_attribution.as_deref(),
+            Some("Windows/Prefetch/CMD.EXE.pf")
+        );
+    }
+
+    #[test]
+    fn artifact_null_provenance_loads_as_missing() {
+        let conn = setup_legacy_db();
+        conn.execute(
+            "INSERT INTO artifacts (id, artifact_type, title, summary, attrs, created_at)
+             VALUES ('a1', 'legacy', 'Legacy', '', '{}', '2026-06-04T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+        let repo = ArtifactRepo::new(&conn);
+
+        let rows = repo.list_by_family(Some("legacy")).unwrap();
+
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].extractor_id.is_none());
+        assert!(rows[0].extractor_version.is_none());
+        assert!(rows[0].confidence.is_none());
+        assert!(rows[0].source_attribution.is_none());
     }
 }

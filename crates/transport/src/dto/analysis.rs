@@ -272,6 +272,79 @@ mod tests {
     }
 
     #[test]
+    fn current_provenance_contract_is_bounded_to_source_attribution() {
+        let dto = EvidenceCategoryDto {
+            category: "ProgramExecution".to_string(),
+            display_name: "Program execution".to_string(),
+            status: AnalysisParseStatusDto::Parsed,
+            file_count: 1,
+            total_size: 98_304,
+            artifact_count: 2,
+            confidence: 0.95,
+            sources: vec![EvidenceSourceDto {
+                file_id: "file-prefetch".to_string(),
+                path: "Windows/Prefetch/CMD.EXE-12345678.pf".to_string(),
+                size: 98_304,
+                evidence_kind: "execution_artifact".to_string(),
+                parser: "prefetch".to_string(),
+                status: AnalysisParseStatusDto::Parsed,
+                artifact_count: 2,
+                warnings: Vec::new(),
+            }],
+            warnings: Vec::new(),
+            provenance: vec![AnalysisProvenanceDto {
+                data_source_id: "ds-001".to_string(),
+                artifact_path: "Windows/Prefetch/CMD.EXE-12345678.pf".to_string(),
+                parser: "prefetch".to_string(),
+                parsed_at: "2026-01-01T00:00:00+00:00".to_string(),
+                status: AnalysisParseStatusDto::Parsed,
+                warnings: Vec::new(),
+            }],
+        };
+
+        let json = serde_json::to_value(dto).unwrap();
+        assert!((json["confidence"].as_f64().unwrap() - 0.95).abs() < 0.000_001);
+        assert_eq!(json["sources"][0]["fileId"], "file-prefetch");
+        assert_eq!(json["sources"][0]["evidenceKind"], "execution_artifact");
+        assert_eq!(json["sources"][0]["parser"], "prefetch");
+        assert_eq!(json["provenance"][0]["dataSourceId"], "ds-001");
+        assert_eq!(
+            json["provenance"][0]["artifactPath"],
+            "Windows/Prefetch/CMD.EXE-12345678.pf"
+        );
+        assert_eq!(json["provenance"][0]["parser"], "prefetch");
+        assert!(json["sources"][0].get("file_id").is_none());
+        assert!(json["provenance"][0].get("data_source_id").is_none());
+        assert!(json["provenance"][0].get("sourceHash").is_none());
+        assert!(json["provenance"][0].get("parserVersion").is_none());
+    }
+
+    #[test]
+    #[ignore = "future provenance contract: add after DataSource/Artifact/Timeline schema migrations"]
+    fn future_provenance_contract_includes_hash_version_and_confidence() {
+        let dto = AnalysisProvenanceDto {
+            data_source_id: "ds-001".to_string(),
+            artifact_path: "Windows/System32/config/SYSTEM".to_string(),
+            parser: "registry.system".to_string(),
+            parsed_at: "2026-01-01T00:00:00+00:00".to_string(),
+            status: AnalysisParseStatusDto::Parsed,
+            warnings: Vec::new(),
+        };
+
+        let json = serde_json::to_value(dto).unwrap();
+        assert_eq!(json["dataSourceId"], "ds-001");
+        assert_eq!(json["artifactPath"], "Windows/System32/config/SYSTEM");
+        assert_eq!(json["parser"], "registry.system");
+        assert!(json.get("sourceHash").is_some());
+        assert!(json.get("parserVersion").is_some());
+        assert!(json.get("confidence").is_some());
+        assert!(json.get("sourceAttribution").is_some());
+        assert!(json.get("source_hash").is_none());
+        assert!(json.get("parser_version").is_none());
+        assert!(json.get("source_attribution").is_none());
+    }
+
+    #[test]
     fn classification_serializes_camel_case() {
         let dto = AnalysisFileClassificationDto {
             category: "Documents".to_string(),

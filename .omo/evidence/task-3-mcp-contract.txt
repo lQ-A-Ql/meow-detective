@@ -1,0 +1,51 @@
+Task 3 MCP Contract Baseline Tests - Evidence
+Date: 2026-06-04
+
+Changed files:
+- crates/transport/src/dto/mcp.rs
+- frontend/src/stores/mcp-store.test.ts
+- .omo/notepads/engineering-audit-remediation/learnings.md
+- .omo/notepads/engineering-audit-remediation/decisions.md
+- .omo/notepads/engineering-audit-remediation/issues.md
+- .omo/evidence/task-3-mcp-contract.txt
+
+Command: cargo test -p transport dto::mcp
+Result: PASS
+
+Output:
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.15s
+     Running unittests src\lib.rs (target\debug\deps\transport-c384a629251e48e6.exe)
+
+running 5 tests
+test dto::mcp::tests::server_config_serializes_current_snake_case_response_fields ... ok
+test dto::mcp::tests::test_connection_request_accepts_current_snake_case_transport_field ... ok
+test dto::mcp::tests::server_status_serializes_current_snake_case_capability_fields ... ok
+test dto::mcp::tests::tool_call_request_accepts_current_snake_case_request_fields ... ok
+test dto::mcp::tests::tool_call_request_rejects_camel_case_request_fields_without_aliases ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 37 filtered out; finished in 0.00s
+
+Command: pnpm test src/stores/mcp-store.test.ts
+Working directory: frontend/
+Result: PASS
+
+Output:
+> @forensics/workbench@0.0.1 test D:\forensics\frontend
+> vitest run "src/stores/mcp-store.test.ts"
+
+ RUN  v4.1.0 D:/forensics/frontend
+
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  21:50:02
+   Duration  688ms (transform 71ms, setup 0ms, import 97ms, tests 6ms, environment 427ms)
+
+Diagnostics:
+- lsp_diagnostics could not run for Rust: rust-analyzer.exe is unavailable in the stable toolchain.
+- lsp_diagnostics could not run for TypeScript: typescript-language-server is not installed.
+
+Baseline locked:
+- transport MCP DTO responses currently serialize snake_case fields such as transport_type, auto_connect, has_resources, and last_error.
+- transport MCP nested request DTOs currently deserialize snake_case request fields and reject camelCase fields without aliases.
+- frontend MCP store currently maps snake_case backend response fields into camelCase local state.
+- frontend MCP store currently sends camelCase Tauri top-level command args for serverId/promptName and snake_case fields inside request DTO payloads.

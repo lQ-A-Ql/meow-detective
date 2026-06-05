@@ -137,6 +137,7 @@ fn mft_full_enumeration_via_multithread() {
                     kind: domain::DataSourceKind::E01,
                     source_path: sample_path(),
                     imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
                 },
             )?;
 

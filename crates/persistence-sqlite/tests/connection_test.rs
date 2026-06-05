@@ -283,6 +283,26 @@ fn upgrades_legacy_schema_to_latest_with_partition_job_columns() {
         assert!(exists, "jobs.{column} should exist after upgrade");
     }
 
+    for (table, column) in [
+        ("artifacts", "extractor_id"),
+        ("artifacts", "extractor_version"),
+        ("artifacts", "confidence"),
+        ("artifacts", "source_attribution"),
+        ("timeline_events", "parser_id"),
+        ("timeline_events", "parser_version"),
+        ("timeline_events", "confidence"),
+        ("timeline_events", "source_attribution"),
+    ] {
+        let exists: bool = conn
+            .query_row(
+                &format!("SELECT COUNT(*) > 0 FROM pragma_table_info('{table}') WHERE name = ?1"),
+                [column],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(exists, "{table}.{column} should exist after upgrade");
+    }
+
     let preserved: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM jobs WHERE id = 'job-old'",

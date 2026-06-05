@@ -1,0 +1,105 @@
+# Task 19 Full Workspace Quality Gates
+
+Date: 2026-06-05
+Working directory: `D:\forensics`
+
+## Required Context Read
+
+- `README.md` read.
+- `AGENTS.md` read.
+- `frontend/package.json` read.
+- root `Cargo.toml` read.
+- `.omo/notepads/engineering-audit-remediation/learnings.md` read.
+- `.omo/notepads/engineering-audit-remediation/issues.md` read.
+- `.omo/notepads/engineering-audit-remediation/decisions.md` read as additional task context.
+- `.omo/notepads/engineering-audit-remediation/problems.md` read as additional task context.
+
+## Initial Gate Run
+
+Command: `cargo fmt --all -- --check`
+Exit: 0
+Status: PASS
+Summary: no formatting output.
+
+Command: `cargo clippy --workspace --all-targets -- -D warnings`
+Exit: 101
+Status: FAIL, then fixed
+Summary: clippy failed in `crates/persistence-sqlite/src/repositories/timeline_repo.rs` with `clippy::useless_conversion` on `String::from(format!(...))` and `clippy::useless_vec` in the Task 17 timeline repository test data.
+
+Command: `cargo test --workspace`
+Exit: 0
+Status: PASS
+Summary: workspace tests passed. Output included expected ignored E01/real fixture tests requiring `FORENSICS_E01_FIXTURE` or local real fixtures, plus one ignored future provenance contract test.
+
+Command: `pnpm --dir frontend typecheck`
+Exit: 0
+Status: PASS
+Summary: `tsc --noEmit` completed with no errors.
+
+Command: `pnpm --dir frontend lint`
+Exit: 0
+Status: PASS with warning, then warning fixed
+Summary: ESLint reported one warning in `frontend/src/lib/api/mcp.ts`: `McpPromptArgumentProtocolDto` was defined but never used.
+
+Command: `pnpm --dir frontend test`
+Exit: 1
+Status: FAIL, then fixed
+Summary: Vitest failed 16 tests across `Artifacts.test.tsx`, `Search.test.tsx`, `Timeline.test.tsx`, and `FileBrowser.test.tsx` because `DenseDataTable` directly constructed `ResizeObserver`, which is unavailable in jsdom.
+
+Command: `pnpm --dir frontend build`
+Exit: 0
+Status: PASS
+Summary: Vite production build completed successfully.
+
+## Fixes Applied
+
+- Owning area Task 17 timeline query safeguards: changed `String::from(format!(...))` to direct `format!(...)` and changed a test-only `Vec` literal to an array in `crates/persistence-sqlite/src/repositories/timeline_repo.rs`.
+- Owning area Task 15 dense table virtualization: guarded `ResizeObserver` usage in `frontend/src/components/tables/DenseDataTable.tsx` so jsdom/non-browser environments keep the default measured height instead of crashing.
+- Owning area Task 14 MCP API normalization: made `McpPromptArgumentProtocolDto` participate in a type guard in `frontend/src/lib/api/mcp.ts`, removing the unused-type lint warning without suppressing ESLint.
+
+## Final Gate Run After Fixes
+
+Command: `cargo clippy --workspace --all-targets -- -D warnings`
+Exit: 0
+Status: PASS
+Summary: finished `dev` profile with no warnings promoted to errors.
+
+Command: `cargo test --workspace`
+Exit: 0
+Status: PASS
+Summary: workspace tests passed. Notable ignored/manual caveats from output: E01 tests and real artifact fixture tests were ignored unless `FORENSICS_E01_FIXTURE` or local real fixtures are provided; one future provenance contract test remains intentionally ignored.
+
+Command: `pnpm --dir frontend typecheck`
+Exit: 0
+Status: PASS
+Summary: `tsc --noEmit` completed with no errors.
+
+Command: `pnpm --dir frontend lint`
+Exit: 0
+Status: PASS
+Summary: ESLint completed with no warnings or errors.
+
+Command: `pnpm --dir frontend test`
+Exit: 0
+Status: PASS
+Summary: `30 passed` test files and `115 passed` tests. Output still includes expected React/jsdom console noise from the intentional `ErrorBoundary.test.tsx` throwing component and Node `--localstorage-file` warnings, but the test command exited successfully.
+
+Command: `pnpm --dir frontend build`
+Exit: 0
+Status: PASS
+Summary: Vite production build completed successfully in 10.94s.
+
+Command: `cargo fmt --all -- --check`
+Exit: 1 after edits, then 0 after `cargo fmt --all`
+Status: PASS
+Summary: formatting drift introduced while fixing clippy was corrected with `cargo fmt --all`; final fmt check produced no output.
+
+## LSP Diagnostics Caveat
+
+- `lsp_diagnostics` for `crates/persistence-sqlite/src/repositories/timeline_repo.rs` could not run because `rust-analyzer.exe` is missing from the stable Windows toolchain.
+- `lsp_diagnostics` for `frontend/src/components/tables/DenseDataTable.tsx` and `frontend/src/lib/api/mcp.ts` could not run because `typescript-language-server` is not installed.
+- Command gates above were used as the required verification path.
+
+## Final Status
+
+All required Task 19 gates passed after the smallest owning-area fixes. No warnings were suppressed, no `--no-verify` was used, and no commit was created.

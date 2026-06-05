@@ -1,5 +1,8 @@
 use app_services::case_service;
-use domain::{DataSource, DataSourceId, DataSourceKind, EntryType, FileEntry, FileEntryId};
+use domain::{
+    DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType, FileEntry,
+    FileEntryId,
+};
 use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
 use std::path::PathBuf;
 use tauri::{AppHandle, State};
@@ -480,6 +483,7 @@ fn seed_analysis_demo(active: &app_services::active_case::ActiveCase) -> Result<
         kind: DataSourceKind::LogicalDirectory,
         source_path: evidence_root.clone(),
         imported_at: chrono::Utc::now(),
+        provenance: DataSourceProvenance::unknown(),
     };
     let mut entries = Vec::new();
     collect_demo_entries(&evidence_root, &evidence_root, &ds_id, None, &mut entries)?;

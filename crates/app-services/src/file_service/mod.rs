@@ -1,5 +1,8 @@
 use crate::datasource_service::{self, ImageFilesystemKind};
-use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
+use domain::{
+    DataSourceHashStatus, DataSourceId, DataSourceProvenanceStatus, EntryType, FileEntry,
+    FileEntryId,
+};
 use evidence_core::{EvidenceReader, FileSystemReader, RawImageReader};
 use image_e01::E01Reader;
 use infrastructure::constants::FILE_INSERT_BATCH_SIZE;
@@ -436,10 +439,45 @@ pub fn get_data_sources_real(
                 source_path: source.source_path.display().to_string(),
                 imported_at: source.imported_at.to_rfc3339(),
                 file_count: file_repo.count_by_data_source(&source.id).ok(),
+                source_hash: source.provenance.source_hash_sha256,
+                hash_status: Some(data_source_hash_status_label(
+                    &source.provenance.hash_status,
+                )),
+                canonical_path: source
+                    .provenance
+                    .canonical_source_path
+                    .map(|path| path.display().to_string()),
+                evidence_size: source.provenance.evidence_size,
+                reader_kind: source.provenance.reader_kind,
+                provenance_status: Some(data_source_provenance_status_label(
+                    &source.provenance.provenance_status,
+                )),
+                warnings: source.provenance.warnings,
                 partitions,
             }
         })
         .collect())
+}
+
+fn data_source_hash_status_label(status: &DataSourceHashStatus) -> String {
+    match status {
+        DataSourceHashStatus::Unknown => "unknown",
+        DataSourceHashStatus::Pending => "pending",
+        DataSourceHashStatus::Hashed => "hashed",
+        DataSourceHashStatus::Failed => "failed",
+        DataSourceHashStatus::Unavailable => "unavailable",
+    }
+    .to_string()
+}
+
+fn data_source_provenance_status_label(status: &DataSourceProvenanceStatus) -> String {
+    match status {
+        DataSourceProvenanceStatus::Unknown => "unknown",
+        DataSourceProvenanceStatus::Recorded => "recorded",
+        DataSourceProvenanceStatus::Partial => "partial",
+        DataSourceProvenanceStatus::Failed => "failed",
+    }
+    .to_string()
 }
 
 pub fn rename_data_source_real(

@@ -1614,6 +1614,7 @@ mod tests {
             kind: DataSourceKind::LogicalDirectory,
             source_path: tmp.path().to_path_buf(),
             imported_at: chrono::Utc::now(),
+            provenance: domain::DataSourceProvenance::unknown(),
         };
         DataSourceRepo::new(&conn)
             .insert(&CaseId(case.id.0), &source)

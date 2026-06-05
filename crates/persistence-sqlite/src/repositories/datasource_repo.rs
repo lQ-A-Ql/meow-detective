@@ -1,5 +1,8 @@
 use crate::connection::DbResult;
-use domain::{CaseId, DataSource, DataSourceId, DataSourceKind};
+use domain::{
+    CaseId, DataSource, DataSourceHashStatus, DataSourceId, DataSourceKind, DataSourceProvenance,
+    DataSourceProvenanceStatus,
+};
 use rusqlite::{params, Connection};
 
 type ProgressCallback<'a> = &'a dyn Fn(u32, &str);
@@ -15,15 +18,38 @@ impl<'a> DataSourceRepo<'a> {
 
     pub fn insert(&self, case_id: &CaseId, ds: &DataSource) -> DbResult<()> {
         self.conn.execute(
-            "INSERT INTO data_sources (id, case_id, name, kind, source_path) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![ds.id.0, case_id.0, ds.name, kind_to_str(&ds.kind), ds.source_path.display().to_string()],
+            "INSERT INTO data_sources (
+                id, case_id, name, kind, source_path, source_hash_sha256, hash_status,
+                canonical_source_path, evidence_size, reader_kind, provenance_status,
+                provenance_warnings
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            params![
+                ds.id.0,
+                case_id.0,
+                ds.name,
+                kind_to_str(&ds.kind),
+                ds.source_path.display().to_string(),
+                ds.provenance.source_hash_sha256.as_deref(),
+                hash_status_to_str(&ds.provenance.hash_status),
+                ds.provenance
+                    .canonical_source_path
+                    .as_ref()
+                    .map(|path| path.display().to_string()),
+                ds.provenance.evidence_size.map(|size| size as i64),
+                ds.provenance.reader_kind.as_deref(),
+                provenance_status_to_str(&ds.provenance.provenance_status),
+                serde_json::to_string(&ds.provenance.warnings).unwrap_or_else(|_| "[]".to_string()),
+            ],
         )?;
         Ok(())
     }
 
     pub fn find_by_case(&self, case_id: &CaseId) -> DbResult<Vec<DataSource>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, kind, source_path, imported_at FROM data_sources WHERE case_id = ?1 ORDER BY imported_at DESC, name ASC",
+            "SELECT id, name, kind, source_path, imported_at, source_hash_sha256, hash_status,
+                canonical_source_path, evidence_size, reader_kind, provenance_status,
+                provenance_warnings
+             FROM data_sources WHERE case_id = ?1 ORDER BY imported_at DESC, name ASC",
         )?;
         let rows = stmt.query_map(params![case_id.0], |row| {
             Ok(DataSource {
@@ -32,6 +58,21 @@ impl<'a> DataSourceRepo<'a> {
                 kind: str_to_kind(&row.get::<_, String>(2)?),
                 source_path: std::path::PathBuf::from(row.get::<_, String>(3)?),
                 imported_at: crate::util::parse_datetime(&row.get::<_, String>(4)?),
+                provenance: DataSourceProvenance {
+                    source_hash_sha256: row.get(5)?,
+                    hash_status: str_to_hash_status(row.get::<_, Option<String>>(6)?.as_deref()),
+                    canonical_source_path: row
+                        .get::<_, Option<String>>(7)?
+                        .map(std::path::PathBuf::from),
+                    evidence_size: row
+                        .get::<_, Option<i64>>(8)?
+                        .and_then(|size| u64::try_from(size).ok()),
+                    reader_kind: row.get(9)?,
+                    provenance_status: str_to_provenance_status(
+                        row.get::<_, Option<String>>(10)?.as_deref(),
+                    ),
+                    warnings: parse_warnings(row.get::<_, Option<String>>(11)?),
+                },
             })
         })?;
         let mut result = Vec::new();
@@ -134,6 +175,50 @@ fn str_to_kind(s: &str) -> DataSourceKind {
     }
 }
 
+fn hash_status_to_str(status: &DataSourceHashStatus) -> &'static str {
+    match status {
+        DataSourceHashStatus::Unknown => "unknown",
+        DataSourceHashStatus::Pending => "pending",
+        DataSourceHashStatus::Hashed => "hashed",
+        DataSourceHashStatus::Failed => "failed",
+        DataSourceHashStatus::Unavailable => "unavailable",
+    }
+}
+
+fn str_to_hash_status(status: Option<&str>) -> DataSourceHashStatus {
+    match status {
+        Some("pending") => DataSourceHashStatus::Pending,
+        Some("hashed") => DataSourceHashStatus::Hashed,
+        Some("failed") => DataSourceHashStatus::Failed,
+        Some("unavailable") => DataSourceHashStatus::Unavailable,
+        _ => DataSourceHashStatus::Unknown,
+    }
+}
+
+fn provenance_status_to_str(status: &DataSourceProvenanceStatus) -> &'static str {
+    match status {
+        DataSourceProvenanceStatus::Unknown => "unknown",
+        DataSourceProvenanceStatus::Recorded => "recorded",
+        DataSourceProvenanceStatus::Partial => "partial",
+        DataSourceProvenanceStatus::Failed => "failed",
+    }
+}
+
+fn str_to_provenance_status(status: Option<&str>) -> DataSourceProvenanceStatus {
+    match status {
+        Some("recorded") => DataSourceProvenanceStatus::Recorded,
+        Some("partial") => DataSourceProvenanceStatus::Partial,
+        Some("failed") => DataSourceProvenanceStatus::Failed,
+        _ => DataSourceProvenanceStatus::Unknown,
+    }
+}
+
+fn parse_warnings(warnings_json: Option<String>) -> Vec<String> {
+    warnings_json
+        .and_then(|json| serde_json::from_str::<Vec<String>>(&json).ok())
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -156,7 +241,14 @@ mod tests {
                 name TEXT NOT NULL,
                 kind TEXT NOT NULL,
                 source_path TEXT NOT NULL,
-                imported_at TEXT NOT NULL DEFAULT (datetime('now'))
+                imported_at TEXT NOT NULL DEFAULT (datetime('now')),
+                source_hash_sha256 TEXT,
+                hash_status TEXT DEFAULT 'unknown',
+                canonical_source_path TEXT,
+                evidence_size INTEGER,
+                reader_kind TEXT,
+                provenance_status TEXT DEFAULT 'unknown',
+                provenance_warnings TEXT DEFAULT '[]'
             );
             CREATE TABLE file_entries (
                 id TEXT PRIMARY KEY NOT NULL,
@@ -224,6 +316,7 @@ mod tests {
             kind: DataSourceKind::Raw,
             source_path: std::path::PathBuf::from("/evidence/image.E01"),
             imported_at: chrono::Utc::now(),
+            provenance: DataSourceProvenance::unknown(),
         }
     }
 
@@ -238,6 +331,55 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].name, "Disk Image");
         assert_eq!(results[0].kind, DataSourceKind::Raw);
+    }
+
+    #[test]
+    fn insert_then_find_by_case_round_trips_provenance() {
+        let conn = setup_db();
+        let repo = DataSourceRepo::new(&conn);
+        let mut ds = make_ds("ds-1", "Disk Image");
+        ds.provenance = DataSourceProvenance {
+            source_hash_sha256: Some("a".repeat(64)),
+            hash_status: DataSourceHashStatus::Hashed,
+            canonical_source_path: Some(std::path::PathBuf::from("/canonical/image.E01")),
+            evidence_size: Some(42_000),
+            reader_kind: Some("raw-image".to_string()),
+            provenance_status: DataSourceProvenanceStatus::Recorded,
+            warnings: vec![
+                "sparse image metadata".to_string(),
+                "hash verified".to_string(),
+            ],
+        };
+
+        repo.insert(&CaseId("case-1".to_string()), &ds).unwrap();
+
+        let results = repo.find_by_case(&CaseId("case-1".to_string())).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].provenance, ds.provenance);
+    }
+
+    #[test]
+    fn legacy_null_provenance_loads_safe_defaults() {
+        let conn = setup_db();
+        conn.execute(
+            "INSERT INTO data_sources (
+                id, case_id, name, kind, source_path, imported_at, source_hash_sha256,
+                hash_status, canonical_source_path, evidence_size, reader_kind,
+                provenance_status, provenance_warnings
+            ) VALUES (
+                'legacy-ds', 'case-1', 'Legacy', 'raw', '/legacy.raw',
+                '2026-01-01T00:00:00Z', NULL, NULL, NULL, NULL, NULL, NULL, NULL
+            )",
+            [],
+        )
+        .unwrap();
+
+        let results = DataSourceRepo::new(&conn)
+            .find_by_case(&CaseId("case-1".to_string()))
+            .unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].provenance, DataSourceProvenance::unknown());
     }
 
     #[test]

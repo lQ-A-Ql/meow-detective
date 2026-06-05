@@ -45,6 +45,7 @@ fn index_and_search_basic() {
                     kind: domain::DataSourceKind::LogicalDirectory,
                     source_path: evidence_dir.clone(),
                     imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
                 },
             )?;
 
@@ -131,6 +132,7 @@ fn search_with_pagination() {
                     kind: domain::DataSourceKind::LogicalDirectory,
                     source_path: evidence_dir.clone(),
                     imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
                 },
             )?;
 
@@ -204,6 +206,7 @@ fn search_no_results() {
                     kind: domain::DataSourceKind::LogicalDirectory,
                     source_path: evidence_dir.clone(),
                     imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
                 },
             )?;
 

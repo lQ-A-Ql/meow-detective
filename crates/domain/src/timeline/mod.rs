@@ -14,5 +14,9 @@ pub struct TimelineEvent {
     pub timestamp: DateTime<Utc>,
     pub title: String,
     pub description: String,
+    pub parser_id: Option<String>,
+    pub parser_version: Option<String>,
+    pub confidence: Option<f32>,
+    pub source_attribution: Option<String>,
     pub attrs: BTreeMap<String, Value>,
 }

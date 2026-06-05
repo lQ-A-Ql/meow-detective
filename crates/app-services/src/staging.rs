@@ -218,7 +218,9 @@ pub fn open_analysis_staging(
     worker_id: usize,
 ) -> DbResult<Connection> {
     let path = analysis_staging_db_path(case_root, data_source_id, worker_id);
-    open_staging_with_schema(&path, ANALYSIS_STAGING_SCHEMA)
+    let conn = open_staging_with_schema(&path, ANALYSIS_STAGING_SCHEMA)?;
+    ensure_analysis_staging_provenance_columns(&conn)?;
+    Ok(conn)
 }
 
 fn open_staging_with_schema(path: &Path, schema: &str) -> DbResult<Connection> {
@@ -242,6 +244,36 @@ fn apply_staging_connection_pragmas(conn: &Connection) -> DbResult<()> {
          PRAGMA mmap_size={STAGING_MMAP_SIZE_BYTES};"
     ))?;
     Ok(())
+}
+
+fn ensure_analysis_staging_provenance_columns(conn: &Connection) -> DbResult<()> {
+    for (table, column, sql_type) in [
+        ("artifact_rows", "extractor_id", "TEXT"),
+        ("artifact_rows", "extractor_version", "TEXT"),
+        ("artifact_rows", "confidence", "REAL"),
+        ("artifact_rows", "source_attribution", "TEXT"),
+        ("timeline_rows", "parser_id", "TEXT"),
+        ("timeline_rows", "parser_version", "TEXT"),
+        ("timeline_rows", "confidence", "REAL"),
+        ("timeline_rows", "source_attribution", "TEXT"),
+    ] {
+        if !table_has_column(conn, table, column)? {
+            conn.execute(
+                &format!("ALTER TABLE {table} ADD COLUMN {column} {sql_type}"),
+                [],
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn table_has_column(conn: &Connection, table: &str, column: &str) -> DbResult<bool> {
+    conn.query_row(
+        &format!("SELECT COUNT(*) > 0 FROM pragma_table_info('{table}') WHERE name = ?1"),
+        [column],
+        |row| row.get(0),
+    )
+    .map_err(Into::into)
 }
 
 /// Get the count of rows in a staging DB.
@@ -307,6 +339,10 @@ CREATE TABLE IF NOT EXISTS artifact_rows (
     id TEXT PRIMARY KEY NOT NULL,
     file_id TEXT,
     artifact_type TEXT NOT NULL,
+    extractor_id TEXT,
+    extractor_version TEXT,
+    confidence REAL,
+    source_attribution TEXT,
     display_name TEXT NOT NULL,
     summary TEXT NOT NULL DEFAULT '',
     data_json TEXT NOT NULL DEFAULT '{}',
@@ -319,6 +355,10 @@ CREATE TABLE IF NOT EXISTS timeline_rows (
     file_id TEXT NOT NULL,
     timestamp TEXT NOT NULL,
     event_type TEXT NOT NULL,
+    parser_id TEXT,
+    parser_version TEXT,
+    confidence REAL,
+    source_attribution TEXT,
     title TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     data_json TEXT NOT NULL DEFAULT '{}'
@@ -555,9 +595,9 @@ fn merge_one_analysis_worker(
         let artifact_count = main_conn
             .execute(
                 "INSERT OR IGNORE INTO main.artifacts
-                 (id, case_id, data_source_id, artifact_type, source_object_id, title, summary, attrs, created_at)
-                 SELECT id, ?1, ?2, artifact_type, file_id, display_name, summary, data_json, created_at
-                 FROM analysis_stage.artifact_rows",
+                 (id, case_id, data_source_id, artifact_type, source_object_id, extractor_id, extractor_version, confidence, source_attribution, title, summary, attrs, created_at)
+                  SELECT id, ?1, ?2, artifact_type, file_id, extractor_id, extractor_version, confidence, source_attribution, display_name, summary, data_json, created_at
+                  FROM analysis_stage.artifact_rows",
                 params![case_id, data_source_id],
             )
             .map_err(|e| format!("Merge analysis artifacts {}: {}", worker_id, e))?;
@@ -565,9 +605,9 @@ fn merge_one_analysis_worker(
         let timeline_count = main_conn
             .execute(
                 "INSERT OR IGNORE INTO main.timeline_events
-                 (id, case_id, source_object_id, event_type, ts, title, description, attrs)
-                 SELECT id, ?1, file_id, event_type, timestamp, title, description, data_json
-                 FROM analysis_stage.timeline_rows",
+                 (id, case_id, source_object_id, event_type, ts, title, description, parser_id, parser_version, confidence, source_attribution, attrs)
+                  SELECT id, ?1, file_id, event_type, timestamp, title, description, parser_id, parser_version, confidence, source_attribution, data_json
+                  FROM analysis_stage.timeline_rows",
                 params![case_id],
             )
             .map_err(|e| format!("Merge analysis timeline {}: {}", worker_id, e))?;
@@ -1240,6 +1280,10 @@ mod tests {
                 data_source_id TEXT NOT NULL DEFAULT '',
                 artifact_type TEXT NOT NULL,
                 source_object_id TEXT,
+                extractor_id TEXT,
+                extractor_version TEXT,
+                confidence REAL,
+                source_attribution TEXT,
                 title TEXT NOT NULL,
                 summary TEXT NOT NULL DEFAULT '',
                 attrs TEXT NOT NULL DEFAULT '{}',
@@ -1253,6 +1297,10 @@ mod tests {
                 ts TEXT NOT NULL,
                 title TEXT NOT NULL,
                 description TEXT NOT NULL DEFAULT '',
+                parser_id TEXT,
+                parser_version TEXT,
+                confidence REAL,
+                source_attribution TEXT,
                 attrs TEXT NOT NULL DEFAULT '{}'
             );",
         )
@@ -1277,6 +1325,64 @@ mod tests {
                 )
                 .unwrap();
             assert_eq!(name, table);
+        }
+    }
+
+    #[test]
+    fn analysis_staging_open_upgrades_legacy_provenance_columns() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let db_path = analysis_staging_db_path(tmp.path(), "ds-analysis", 0);
+        std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
+        let legacy = Connection::open(&db_path).unwrap();
+        legacy
+            .execute_batch(
+                "CREATE TABLE artifact_rows (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    file_id TEXT,
+                    artifact_type TEXT NOT NULL,
+                    display_name TEXT NOT NULL,
+                    summary TEXT NOT NULL DEFAULT '',
+                    data_json TEXT NOT NULL DEFAULT '{}',
+                    source_path TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE timeline_rows (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    file_id TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    data_json TEXT NOT NULL DEFAULT '{}'
+                );
+                CREATE TABLE index_docs (
+                    file_id TEXT PRIMARY KEY NOT NULL,
+                    path TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    language TEXT NOT NULL DEFAULT 'unknown',
+                    truncated INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE TABLE worker_meta (
+                    key TEXT PRIMARY KEY NOT NULL,
+                    value TEXT NOT NULL
+                );",
+            )
+            .unwrap();
+        drop(legacy);
+
+        let conn = open_analysis_staging(tmp.path(), "ds-analysis", 0).unwrap();
+
+        for (table, column) in [
+            ("artifact_rows", "extractor_id"),
+            ("artifact_rows", "extractor_version"),
+            ("artifact_rows", "confidence"),
+            ("artifact_rows", "source_attribution"),
+            ("timeline_rows", "parser_id"),
+            ("timeline_rows", "parser_version"),
+            ("timeline_rows", "confidence"),
+            ("timeline_rows", "source_attribution"),
+        ] {
+            assert!(table_has_column(&conn, table, column).unwrap());
         }
     }
 
@@ -1355,6 +1461,10 @@ mod tests {
                     data_source_id TEXT NOT NULL DEFAULT '',
                     artifact_type TEXT NOT NULL,
                     source_object_id TEXT,
+                    extractor_id TEXT,
+                    extractor_version TEXT,
+                    confidence REAL,
+                    source_attribution TEXT,
                     title TEXT NOT NULL,
                     summary TEXT NOT NULL DEFAULT '',
                     attrs TEXT NOT NULL DEFAULT '{}',

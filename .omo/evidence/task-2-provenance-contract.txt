@@ -1,0 +1,41 @@
+## cargo test -p transport dto::analysis
+exit code: 0
+
+   Compiling transport v0.1.0 (D:\forensics\crates\transport)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.86s
+     Running unittests src\lib.rs (target\debug\deps\transport-c384a629251e48e6.exe)
+
+running 5 tests
+test dto::analysis::tests::future_provenance_contract_includes_hash_version_and_confidence ... ignored, future provenance contract: add after DataSource/Artifact/Timeline schema migrations
+test dto::analysis::tests::provenance_serializes_required_camel_case_fields ... ok
+test dto::analysis::tests::classification_serializes_camel_case ... ok
+test dto::analysis::tests::current_provenance_contract_is_bounded_to_source_attribution ... ok
+test dto::analysis::tests::system_info_serializes_camel_case_and_status ... ok
+
+test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 37 filtered out; finished in 0.00s
+
+
+## cargo test -p transport future_provenance_contract_includes_hash_version_and_confidence -- --ignored
+exit code: 101
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.16s
+     Running unittests src\lib.rs (target\debug\deps\transport-c384a629251e48e6.exe)
+
+running 1 test
+test dto::analysis::tests::future_provenance_contract_includes_hash_version_and_confidence ... FAILED
+
+failures:
+
+---- dto::analysis::tests::future_provenance_contract_includes_hash_version_and_confidence stdout ----
+
+thread 'dto::analysis::tests::future_provenance_contract_includes_hash_version_and_confidence' (34220) panicked at crates\transport\src\dto\analysis.rs:338:9:
+assertion failed: json.get("sourceHash").is_some()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    dto::analysis::tests::future_provenance_contract_includes_hash_version_and_confidence
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p transport --lib`

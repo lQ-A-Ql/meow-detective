@@ -20,6 +20,10 @@ pub struct Artifact {
     pub title: String,
     pub summary: String,
     pub source_object_id: Option<FileEntryId>,
+    pub extractor_id: Option<String>,
+    pub extractor_version: Option<String>,
+    pub confidence: Option<f32>,
+    pub source_attribution: Option<String>,
     pub created_at: DateTime<Utc>,
     pub attrs: BTreeMap<String, Value>,
 }

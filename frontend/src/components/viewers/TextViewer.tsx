@@ -9,7 +9,7 @@
  * - 语法高亮（可选）
  */
 
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, FileText, Search } from 'lucide-react';
 
 interface TextViewerProps {
@@ -25,6 +25,12 @@ interface TextViewerProps {
   isTruncated?: boolean;
 }
 
+const PAGE_SIZE = 1000;
+const ROW_HEIGHT = 18;
+const OVERSCAN_LINES = 8;
+const DEFAULT_CONTAINER_HEIGHT = 600;
+const LARGE_TEXT_LINE_THRESHOLD = 1000;
+
 export function TextViewer({
   content,
   encoding,
@@ -33,18 +39,78 @@ export function TextViewer({
 }: TextViewerProps) {
   const [currentPage, setCurrentPage] = useState(0);
   const [localSearch, setLocalSearch] = useState(searchQuery || '');
-  const pageSize = 1000; // 每页行数
   const containerRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(DEFAULT_CONTAINER_HEIGHT);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const updateContainerHeight = () => {
+      const nextHeight = container.clientHeight;
+      if (nextHeight > 0) {
+        setContainerHeight(nextHeight);
+      }
+    };
+
+    updateContainerHeight();
+
+    if (typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver(() => {
+      updateContainerHeight();
+    });
+
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    setCurrentPage(0);
+    setScrollTop(0);
+    if (containerRef.current) {
+      containerRef.current.scrollTop = 0;
+    }
+  }, [content]);
+
+  useEffect(() => {
+    setScrollTop(0);
+    if (containerRef.current) {
+      containerRef.current.scrollTop = 0;
+    }
+  }, [currentPage]);
 
   // 分割为行
   const lines = useMemo(() => content.split('\n'), [content]);
 
   // 分页
-  const totalPages = Math.ceil(lines.length / pageSize);
+  const totalPages = Math.ceil(lines.length / PAGE_SIZE);
   const currentLines = useMemo(
-    () => lines.slice(currentPage * pageSize, (currentPage + 1) * pageSize),
-    [lines, currentPage, pageSize]
+    () => lines.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE),
+    [lines, currentPage]
   );
+
+  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    setScrollTop(event.currentTarget.scrollTop);
+  }, []);
+
+  const visibleRange = useMemo(() => {
+    const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN_LINES);
+    const visibleLineCount = Math.ceil(containerHeight / ROW_HEIGHT) + OVERSCAN_LINES * 2;
+    const endIndex = Math.min(currentLines.length, startIndex + visibleLineCount);
+    return { startIndex, endIndex };
+  }, [containerHeight, currentLines.length, scrollTop]);
+
+  const visibleLines = useMemo(
+    () => currentLines.slice(visibleRange.startIndex, visibleRange.endIndex),
+    [currentLines, visibleRange.endIndex, visibleRange.startIndex]
+  );
+
+  const isLargeContent = lines.length >= LARGE_TEXT_LINE_THRESHOLD;
+  const visibleLineCount = visibleRange.endIndex - visibleRange.startIndex;
+  const pageStartLine = currentPage * PAGE_SIZE + 1;
+  const pageEndLine = Math.min((currentPage + 1) * PAGE_SIZE, lines.length);
 
   // 高亮搜索关键词
   const highlightText = useCallback(
@@ -70,10 +136,10 @@ export function TextViewer({
 
   // 计算当前页的行号宽度
   const lineNumberWidth = useMemo(() => {
-    const maxLine = Math.min((currentPage + 1) * pageSize, lines.length);
+    const maxLine = Math.min((currentPage + 1) * PAGE_SIZE, lines.length);
     const digits = String(maxLine).length;
     return Math.max(digits, 4) * 8 + 16; // 每位数字约 8px + padding
-  }, [currentPage, lines.length, pageSize]);
+  }, [currentPage, lines.length]);
 
   return (
     <div className="flex flex-col h-full">
@@ -88,6 +154,15 @@ export function TextViewer({
           <>
             <span className="text-[#ddd]">|</span>
             <span className="text-amber-600">已截断</span>
+          </>
+        )}
+
+        {isLargeContent && (
+          <>
+            <span className="text-[#ddd]">|</span>
+            <span className="text-[#666]" role="status">
+              大内容模式: 当前页 {pageStartLine.toLocaleString()}-{pageEndLine.toLocaleString()} 行，仅渲染可见附近的 {visibleLineCount.toLocaleString()} 行
+            </span>
           </>
         )}
 
@@ -134,37 +209,54 @@ export function TextViewer({
       <div
         ref={containerRef}
         className="flex-1 overflow-auto bg-white"
+        onScroll={handleScroll}
       >
-        <div className="font-mono text-[11px] leading-[18px]">
-          {currentLines.map((line, index) => {
-            const lineNum = currentPage * pageSize + index + 1;
-            const hasMatch =
-              (searchQuery || localSearch) &&
-              line
-                .toLowerCase()
-                .includes((searchQuery || localSearch).toLowerCase());
+        <div
+          className="font-mono text-[11px] leading-[18px]"
+          style={{ height: currentLines.length * ROW_HEIGHT, position: 'relative' }}
+        >
+          <div
+            data-testid="text-visible-window"
+            style={{
+              position: 'absolute',
+              top: visibleRange.startIndex * ROW_HEIGHT,
+              left: 0,
+              right: 0,
+            }}
+          >
+            {visibleLines.map((line, index) => {
+              const lineIndex = visibleRange.startIndex + index;
+              const lineNum = currentPage * PAGE_SIZE + lineIndex + 1;
+              const hasMatch =
+                (searchQuery || localSearch) &&
+                line
+                  .toLowerCase()
+                  .includes((searchQuery || localSearch).toLowerCase());
 
-            return (
-              <div
-                key={lineNum}
-                className={`flex hover:bg-[#f8f8f8] ${
-                  hasMatch ? 'bg-yellow-50' : ''
-                }`}
-              >
-                {/* 行号 */}
+              return (
                 <div
-                  className="shrink-0 text-right text-[#999] select-none border-r border-[#eee] bg-[#fafafa] px-2"
-                  style={{ width: `${lineNumberWidth}px` }}
+                  key={lineNum}
+                  data-line-number={lineNum}
+                  className={`flex hover:bg-[#f8f8f8] ${
+                    hasMatch ? 'bg-yellow-50' : ''
+                  }`}
+                  style={{ height: ROW_HEIGHT }}
                 >
-                  {lineNum}
+                  {/* 行号 */}
+                  <div
+                    className="shrink-0 text-right text-[#999] select-none border-r border-[#eee] bg-[#fafafa] px-2"
+                    style={{ width: `${lineNumberWidth}px` }}
+                  >
+                    {lineNum}
+                  </div>
+                  {/* 代码内容 */}
+                  <div className="flex-1 px-3 whitespace-pre-wrap break-all min-w-0">
+                    {highlightText(line) || '\u00A0'} {/* 空行也显示高度 */}
+                  </div>
                 </div>
-                {/* 代码内容 */}
-                <div className="flex-1 px-3 whitespace-pre-wrap break-all min-w-0">
-                  {highlightText(line) || '\u00A0'} {/* 空行也显示高度 */}
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
 

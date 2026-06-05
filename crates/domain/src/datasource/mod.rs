@@ -13,6 +13,54 @@ pub enum DataSourceKind {
     LogicalDirectory,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum DataSourceHashStatus {
+    Unknown,
+    Pending,
+    Hashed,
+    Failed,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum DataSourceProvenanceStatus {
+    Unknown,
+    Recorded,
+    Partial,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DataSourceProvenance {
+    pub source_hash_sha256: Option<String>,
+    pub hash_status: DataSourceHashStatus,
+    pub canonical_source_path: Option<PathBuf>,
+    pub evidence_size: Option<u64>,
+    pub reader_kind: Option<String>,
+    pub provenance_status: DataSourceProvenanceStatus,
+    pub warnings: Vec<String>,
+}
+
+impl DataSourceProvenance {
+    pub fn unknown() -> Self {
+        Self {
+            source_hash_sha256: None,
+            hash_status: DataSourceHashStatus::Unknown,
+            canonical_source_path: None,
+            evidence_size: None,
+            reader_kind: None,
+            provenance_status: DataSourceProvenanceStatus::Unknown,
+            warnings: Vec::new(),
+        }
+    }
+}
+
+impl Default for DataSourceProvenance {
+    fn default() -> Self {
+        Self::unknown()
+    }
+}
+
 impl fmt::Display for DataSourceKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -30,4 +78,5 @@ pub struct DataSource {
     pub kind: DataSourceKind,
     pub source_path: PathBuf,
     pub imported_at: DateTime<Utc>,
+    pub provenance: DataSourceProvenance,
 }

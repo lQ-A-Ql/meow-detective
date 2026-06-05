@@ -9,7 +9,7 @@
 
 use app_services::{
     datasource_service::{self, ImageFilesystemKind},
-    file_service, import_analysis, staging,
+    file_service, import_analysis, import_precheck, staging,
 };
 use domain::DataSourceKind;
 use evidence_core::{EvidenceReader, FileSystemReader, LogicalFsReader, RawImageReader};
@@ -55,22 +55,6 @@ struct BackgroundImportJob {
     analysis_mode: import_analysis::ImportAnalysisMode,
 }
 
-struct PostImportPipelineContext<'a> {
-    case_id: &'a domain::CaseId,
-    data_source_id: &'a domain::DataSourceId,
-    case_root: &'a std::path::Path,
-    db_path: &'a std::path::Path,
-    index_dir: &'a std::path::Path,
-    job_id: &'a domain::JobId,
-    app: Option<&'a AppHandle>,
-    cancel_token: Arc<AtomicBool>,
-    max_analysis_workers: Option<usize>,
-    enable_timeline_projection: bool,
-    enable_content_extraction: bool,
-    enable_text_indexing: bool,
-    analysis_mode: import_analysis::ImportAnalysisMode,
-}
-
 impl JobOutcomeCounts {
     fn add_warnings(&mut self, count: usize) {
         self.warning_count = self.warning_count.saturating_add(count as u32);
@@ -87,6 +71,16 @@ impl JobOutcomeCounts {
 
     fn is_partial(&self) -> bool {
         self.warning_count > 0 || self.skipped_count > 0 || self.failed_count > 0
+    }
+}
+
+impl From<import_analysis::JobOutcomeCounts> for JobOutcomeCounts {
+    fn from(counts: import_analysis::JobOutcomeCounts) -> Self {
+        Self {
+            warning_count: counts.warning_count,
+            skipped_count: counts.skipped_count,
+            failed_count: counts.failed_count,
+        }
     }
 }
 
@@ -121,68 +115,6 @@ fn enumerate_partition_with_fs(
     )
 }
 
-fn run_post_import_pipeline_with_counts(
-    _conn: &rusqlite::Connection,
-    ctx: PostImportPipelineContext<'_>,
-) -> persistence_sqlite::DbResult<(String, JobOutcomeCounts)> {
-    let mut counts = JobOutcomeCounts::default();
-    if !ctx.enable_timeline_projection
-        && !ctx.enable_content_extraction
-        && !ctx.enable_text_indexing
-    {
-        emit_import_profile_progress(
-            ctx.app,
-            ctx.job_id,
-            84,
-            "Post-import skipped: phase=post-import-skip timeline=deferred content=disabled text=disabled",
-        );
-        return Ok((
-            "Timeline: deferred until Timeline page. Artifacts: 0. Index: 0 indexed".to_string(),
-            counts,
-        ));
-    }
-
-    let stats = import_analysis::run_import_analysis_staging(
-        import_analysis::ImportAnalysisOptions {
-            case_root: ctx.case_root.to_path_buf(),
-            db_path: ctx.db_path.to_path_buf(),
-            case_id: ctx.case_id.0.clone(),
-            data_source_id: ctx.data_source_id.clone(),
-            index_dir: ctx.index_dir.to_path_buf(),
-            max_analysis_workers: ctx.max_analysis_workers,
-            cancel_token: ctx.cancel_token,
-            enable_timeline_projection: ctx.enable_timeline_projection,
-            enable_content_extraction: ctx.enable_content_extraction,
-            enable_text_indexing: ctx.enable_text_indexing,
-            analysis_mode: ctx.analysis_mode,
-            content_budget: import_analysis::content_budget_for_mode(ctx.analysis_mode),
-            memory_soft_limit_mb: import_analysis::default_memory_soft_limit_mb(),
-            memory_hard_limit_mb: import_analysis::default_memory_hard_limit_mb(),
-        },
-        Some(&|pct, detail| {
-            emit_import_profile_progress(ctx.app, ctx.job_id, pct, detail);
-        }),
-    )
-    .map_err(persistence_sqlite::DbError::System)?;
-
-    counts.warning_count = counts.warning_count.saturating_add(stats.warning_count);
-    counts.skipped_count = counts.skipped_count.saturating_add(stats.skipped_count);
-    counts.failed_count = counts.failed_count.saturating_add(stats.failed_count);
-
-    let mut message = format!(
-        "Timeline: {} events. Artifacts: {}. Index: {} indexed",
-        stats.timeline_count, stats.artifact_count, stats.indexed_count
-    );
-    if counts.is_partial() {
-        message.push_str(&format!(
-            ". Partial: {} warnings, {} skipped, {} failed",
-            counts.warning_count, counts.skipped_count, counts.failed_count
-        ));
-    }
-
-    Ok((message, counts))
-}
-
 /// Tauri command: Import a data source into the current case.
 #[tauri::command]
 pub async fn import_data_source(
@@ -190,9 +122,9 @@ pub async fn import_data_source(
     app: AppHandle,
     request: ImportDataSourceRequest,
 ) -> Result<String, CommandError> {
-    request.validate().map_err(CommandError::invalid_input)?;
+    let import_config = prepare_import_config(&request)?;
     let app_state = state.inner().clone();
-    let source_path = request.source_path.clone();
+    let source_path = import_config.source_path_display.clone();
     let app_clone = app.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
@@ -290,11 +222,9 @@ pub fn schedule_import_for_active_case(
     let case_id = active.meta.id.clone();
     let case_root = active.case_root.clone();
     let db_path = active.db_path();
-    let source_name = PathBuf::from(source_path)
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "data_source".to_string());
-    validate_import_source_for_filesystem(source_path)?;
+    let import_config = import_precheck::prepare_import_source_config_from_path(source_path)
+        .map_err(import_config_error_to_command_error)?;
+    let source_name = import_config.source_name.clone();
 
     let conn =
         persistence_sqlite::open_or_create(&db_path).map_err(CommandError::from_service_error)?;
@@ -422,14 +352,11 @@ fn execute_import_job_with_counts(
     job_id: &domain::JobId,
     options: ImportJobOptions<'_>,
 ) -> Result<(String, JobOutcomeCounts), CommandError> {
-    let path = PathBuf::from(source_path);
-    validate_import_source_for_filesystem(source_path)?;
-    let kind = datasource_service::classify_data_source_path(&path)
-        .map_err(CommandError::from_service_error)?;
-    let source_name = path
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "data_source".to_string());
+    let import_config = import_precheck::prepare_import_source_config_from_path(source_path)
+        .map_err(import_config_error_to_command_error)?;
+    let path = import_config.source_path.clone();
+    let kind = import_config.kind.clone();
+    let source_name = import_config.source_name.clone();
     let index_dir = case_root.join("indexes").join("tantivy");
     let job_repo = JobRepo::new(conn);
     let mut counts = JobOutcomeCounts::default();
@@ -482,11 +409,7 @@ fn execute_import_job_with_counts(
                     staging::StagingManifest::create(
                         &ds.id.0,
                         source_path,
-                        if kind == DataSourceKind::E01 {
-                            "E01"
-                        } else {
-                            "Raw"
-                        },
+                        import_config.staging_kind().unwrap_or("Raw"),
                     )
                 });
 
@@ -896,7 +819,7 @@ fn execute_import_job_with_counts(
     }
 
     let post_import_db_path = case_root.join("app.db");
-    let image_backed_source = matches!(kind, DataSourceKind::E01 | DataSourceKind::Raw);
+    let image_backed_source = import_config.is_image_backed();
     let analysis_mode = if image_backed_source {
         options.analysis_mode
     } else {
@@ -908,25 +831,39 @@ fn execute_import_job_with_counts(
         }
     };
     let post_import_started = Instant::now();
-    let (pipeline_msg, pipeline_counts) = run_post_import_pipeline_with_counts(
-        conn,
-        PostImportPipelineContext {
-            case_id,
-            data_source_id: &ds.id,
-            case_root,
-            db_path: &post_import_db_path,
-            index_dir: &index_dir,
-            job_id,
-            app: options.app,
-            cancel_token: Arc::clone(options.cancel_token),
+    let progress_adapter = |pct: u32, detail: &str| {
+        emit_import_profile_progress(options.app, job_id, pct, detail);
+    };
+    let (pipeline_msg, pipeline_counts) = import_analysis::run_post_import_pipeline_with_counts(
+        import_analysis::PostImportPipelineOptions {
+            case_root: case_root.to_path_buf(),
+            db_path: post_import_db_path,
+            case_id: case_id.0.clone(),
+            data_source_id: ds.id.clone(),
+            index_dir: index_dir.clone(),
             max_analysis_workers: options.max_analysis_workers,
+            cancel_token: Arc::clone(options.cancel_token),
             enable_timeline_projection: !image_backed_source,
             enable_content_extraction: analysis_mode.allows_content(),
             enable_text_indexing: analysis_mode.allows_content(),
             analysis_mode,
         },
+        Some(&progress_adapter),
     )
-    .map_err(CommandError::from_service_error)?;
+    .map_err(|error| {
+        let service_counts = JobOutcomeCounts::from(error.counts);
+        counts.warning_count = counts
+            .warning_count
+            .saturating_add(service_counts.warning_count);
+        counts.skipped_count = counts
+            .skipped_count
+            .saturating_add(service_counts.skipped_count);
+        counts.failed_count = counts
+            .failed_count
+            .saturating_add(service_counts.failed_count);
+        CommandError::from_service_error(error.message)
+    })?;
+    let pipeline_counts = JobOutcomeCounts::from(pipeline_counts);
     emit_phase_profile(
         options.app,
         job_id,
@@ -1060,17 +997,20 @@ fn import_analysis_mode_from_settings(value: &str) -> import_analysis::ImportAna
     }
 }
 
-fn validate_import_source_for_filesystem(source_path: &str) -> Result<(), CommandError> {
-    let path = PathBuf::from(source_path);
-    let metadata = std::fs::metadata(&path).map_err(|_| {
-        CommandError::invalid_input("sourcePath must exist and be accessible before import")
-    })?;
-    if metadata.is_dir() || metadata.is_file() {
-        Ok(())
+fn prepare_import_config(
+    request: &ImportDataSourceRequest,
+) -> Result<import_precheck::ImportSourceConfig, CommandError> {
+    import_precheck::prepare_import_source_config(request)
+        .map_err(import_config_error_to_command_error)
+}
+
+fn import_config_error_to_command_error(
+    error: import_precheck::ImportSourceConfigError,
+) -> CommandError {
+    if error.is_invalid_input() {
+        CommandError::invalid_input(error.to_string())
     } else {
-        Err(CommandError::invalid_input(
-            "sourcePath must point to a directory or regular image file",
-        ))
+        CommandError::from_service_error(error)
     }
 }
 
@@ -1527,6 +1467,27 @@ mod tests {
 
                 assert!(message.contains("Index:"));
 
+                let data_sources: i64 = conn.query_row(
+                    "SELECT COUNT(*) FROM data_sources WHERE case_id = ?1 AND kind = 'logical_directory'",
+                    [&active.meta.id.0],
+                    |row| row.get(0),
+                )?;
+                assert_eq!(data_sources, 1);
+
+                let file_entries: i64 = conn.query_row(
+                    "SELECT COUNT(*) FROM file_entries WHERE entry_type = 'file'",
+                    [],
+                    |row| row.get(0),
+                )?;
+                assert_eq!(file_entries, 2);
+
+                let timeline_events: i64 = conn.query_row(
+                    "SELECT COUNT(*) FROM timeline_events",
+                    [],
+                    |row| row.get(0),
+                )?;
+                assert!(timeline_events > 0);
+
                 let index_dir = active.case_root.join("indexes").join("tantivy");
                 let results = search_service::search_files_real(&index_dir, marker, 0, 10)
                     .map_err(persistence_sqlite::DbError::System)?;
@@ -1537,6 +1498,84 @@ mod tests {
                 assert!(artifact_repo.count()? > 0);
                 let families = artifact_repo.families()?;
                 assert!(families.iter().any(|family| family == "Prefetch"));
+
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn image_backed_metadata_only_post_import_defers_timeline_until_query() {
+        let tmp = TempDir::new().unwrap();
+        let active = case_service::create_case(
+            &tmp.path().join("cases"),
+            "raw-lazy-timeline",
+            Some("tester"),
+        )
+        .unwrap();
+        let cancel = Arc::new(AtomicBool::new(false));
+
+        active
+            .with_conn(|conn| {
+                let _job_id = JobRepo::new(conn).create(&active.meta.id.0, "Raw import seam")?;
+                let data_source_id = domain::DataSourceId("raw-ds-1".to_string());
+                conn.execute(
+                    "INSERT INTO data_sources (id, case_id, name, kind, source_path)
+                     VALUES (?1, ?2, 'sample.raw', 'raw', 'C:/evidence/sample.raw')",
+                    rusqlite::params![data_source_id.0, active.meta.id.0],
+                )?;
+                conn.execute(
+                    "INSERT INTO file_entries
+                     (id, data_source_id, path, name, entry_type, size, ext, deleted,
+                      created_at, modified_at, accessed_at, changed_at)
+                     VALUES
+                     ('raw-file-1', ?1, '/Windows/System32/config/SYSTEM', 'SYSTEM', 'file', 4096,
+                      NULL, 0, '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z',
+                      '2026-01-03T00:00:00Z', '2026-01-04T00:00:00Z')",
+                    [&data_source_id.0],
+                )?;
+
+                let index_dir = active.case_root.join("indexes").join("tantivy");
+                let (message, counts) = import_analysis::run_post_import_pipeline_with_counts(
+                    import_analysis::PostImportPipelineOptions {
+                        case_root: active.case_root.clone(),
+                        db_path: active.case_root.join("app.db"),
+                        case_id: active.meta.id.0.clone(),
+                        data_source_id: data_source_id.clone(),
+                        index_dir: index_dir.clone(),
+                        max_analysis_workers: Some(1),
+                        cancel_token: Arc::clone(&cancel),
+                        enable_timeline_projection: false,
+                        enable_content_extraction: false,
+                        enable_text_indexing: false,
+                        analysis_mode: import_analysis::ImportAnalysisMode::MetadataOnly,
+                    },
+                    None,
+                )
+                .map_err(|error| persistence_sqlite::DbError::System(error.message))?;
+
+                assert_eq!(
+                    message,
+                    "Timeline: deferred until Timeline page. Artifacts: 0. Index: 0 indexed"
+                );
+                assert!(!counts.is_partial());
+                let before_query: i64 =
+                    conn.query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row.get(0))?;
+                assert_eq!(before_query, 0);
+
+                let page = app_services::timeline_service::query_timeline(conn, 0, 10)
+                    .map_err(persistence_sqlite::DbError::System)?;
+                assert_eq!(page.total, 4);
+                assert_eq!(page.items.len(), 4);
+                assert!(page
+                    .items
+                    .iter()
+                    .any(|event| event.id == "macb:raw-file-1:FILE_CREATED"));
+
+                let second = app_services::timeline_service::ensure_macb_timeline_projected(conn)
+                    .map_err(persistence_sqlite::DbError::System)?;
+                assert!(second.already_projected);
+                assert_eq!(second.inserted_count, 0);
 
                 Ok(())
             })

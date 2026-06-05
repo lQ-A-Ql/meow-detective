@@ -1,6 +1,7 @@
 use domain::CaseMeta;
 use persistence_sqlite::repositories::{
-    file_repo::FileRepo, report_repo::ReportRepo, timeline_repo::TimelineRepo,
+    artifact_repo::ArtifactRepo, file_repo::FileRepo, report_repo::ReportRepo,
+    timeline_repo::TimelineRepo,
 };
 use reports::{CsvExporter, HtmlReportExporter, JsonExporter};
 use rusqlite::Connection;
@@ -32,7 +33,21 @@ pub fn generate_html_report(
         Vec::new()
     };
     let artifacts = if scope.full_timeline {
-        vec![format!("{} timeline events", tl_count)]
+        let mut rows = ArtifactRepo::new(conn)
+            .list_by_family(None)
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(|artifact| format_artifact_report_row(&artifact))
+            .collect::<Vec<_>>();
+        rows.push(format!("{} timeline events", tl_count));
+        rows.extend(
+            TimelineRepo::new(conn)
+                .query(0, 500)
+                .map_err(|e| e.to_string())?
+                .into_iter()
+                .map(|event| format_timeline_report_row(&event)),
+        );
+        rows
     } else {
         Vec::new()
     };
@@ -56,7 +71,7 @@ pub fn generate_csv_artifacts(
     scope: &ExportScopeDto,
 ) -> Result<String, String> {
     let mut stmt = conn.prepare(
-        "SELECT artifact_type, title, summary FROM artifacts ORDER BY created_at DESC LIMIT 1000"
+        "SELECT artifact_type, title, summary, extractor_id, extractor_version, confidence, source_attribution FROM artifacts ORDER BY created_at DESC LIMIT 1000"
     ).map_err(|e| e.to_string())?;
     let rows_data: Vec<Vec<String>> = stmt
         .query_map([], |row| {
@@ -64,24 +79,52 @@ pub fn generate_csv_artifacts(
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
+                row.get::<_, Option<String>>(3)?.unwrap_or_default(),
+                row.get::<_, Option<String>>(4)?.unwrap_or_default(),
+                row.get::<_, Option<f32>>(5)?
+                    .map(|value| value.to_string())
+                    .unwrap_or_default(),
+                row.get::<_, Option<String>>(6)?.unwrap_or_default(),
             ])
         })
         .map_err(|e| e.to_string())?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<Vec<String>>, rusqlite::Error>>()
+        .map_err(|e| e.to_string())?;
     let mut rows_data = rows_data;
     let analysis = current_analysis(conn)?;
     rows_data.extend(
         scoped_analysis_rows(&analysis, scope)
             .into_iter()
-            .map(|row| vec!["analysis".to_string(), "provenance".to_string(), row]),
+            .map(|row| {
+                vec![
+                    "analysis".to_string(),
+                    "provenance".to_string(),
+                    row,
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                ]
+            }),
     );
 
     let file_name = format!("artifacts-{}.csv", Uuid::new_v4());
     let path = output_dir.join(&file_name);
     let mut f = fs::File::create(&path).map_err(|e| e.to_string())?;
-    CsvExporter::export_artifacts(&mut f, &["type", "title", "summary"], &rows_data)
-        .map_err(|e| e.to_string())?;
+    CsvExporter::export_artifacts(
+        &mut f,
+        &[
+            "type",
+            "title",
+            "summary",
+            "extractorId",
+            "extractorVersion",
+            "confidence",
+            "sourceAttribution",
+        ],
+        &rows_data,
+    )
+    .map_err(|e| e.to_string())?;
 
     persist_report_record(conn, case_id, "report-files", &file_name, "completed")?;
     Ok(file_name)
@@ -100,6 +143,9 @@ pub fn generate_json_export(
     } else {
         Vec::new()
     };
+    let artifacts = ArtifactRepo::new(conn)
+        .list_by_family(None)
+        .map_err(|e| e.to_string())?;
     let analysis = current_analysis(conn)?;
     let warnings = report_scope_warnings(scope);
     let summary = crate::analysis_service::generate_analysis_summary(
@@ -119,9 +165,27 @@ pub fn generate_json_export(
     let json_val = serde_json::json!({
         "timeline_events": events.iter().map(|e| serde_json::json!({
             "id": e.id.0,
+            "sourceObjectId": e.source_object_id,
             "type": e.event_type,
             "ts": e.timestamp.to_rfc3339(),
             "title": e.title,
+            "description": e.description,
+            "parserId": e.parser_id,
+            "parserVersion": e.parser_version,
+            "confidence": e.confidence,
+            "sourceAttribution": e.source_attribution,
+        })).collect::<Vec<_>>(),
+        "artifacts": artifacts.iter().map(|artifact| serde_json::json!({
+            "id": artifact.id.0,
+            "artifactType": artifact.family,
+            "title": artifact.title,
+            "summary": artifact.summary,
+            "sourceObjectId": artifact.source_object_id.as_ref().map(|id| id.0.as_str()),
+            "extractorId": artifact.extractor_id,
+            "extractorVersion": artifact.extractor_version,
+            "confidence": artifact.confidence,
+            "sourceAttribution": artifact.source_attribution,
+            "createdAt": artifact.created_at.to_rfc3339(),
         })).collect::<Vec<_>>(),
         "scope": scope,
         "warnings": warnings,
@@ -286,6 +350,42 @@ fn report_scope_warnings(scope: &ExportScopeDto) -> Vec<String> {
     warnings
 }
 
+fn format_artifact_report_row(artifact: &domain::Artifact) -> String {
+    format!(
+        "artifact type={} title={} summary={} extractor={} extractorVersion={} confidence={} sourceAttribution={}",
+        artifact.family,
+        artifact.title,
+        artifact.summary,
+        optional_str(&artifact.extractor_id),
+        optional_str(&artifact.extractor_version),
+        optional_f32(artifact.confidence),
+        optional_str(&artifact.source_attribution)
+    )
+}
+
+fn format_timeline_report_row(event: &domain::TimelineEvent) -> String {
+    format!(
+        "timeline eventType={} timestamp={} title={} parser={} parserVersion={} confidence={} sourceAttribution={}",
+        event.event_type,
+        event.timestamp.to_rfc3339(),
+        event.title,
+        optional_str(&event.parser_id),
+        optional_str(&event.parser_version),
+        optional_f32(event.confidence),
+        optional_str(&event.source_attribution)
+    )
+}
+
+fn optional_str(value: &Option<String>) -> &str {
+    value.as_deref().unwrap_or("unknown")
+}
+
+fn optional_f32(value: Option<f32>) -> String {
+    value
+        .map(|confidence| confidence.to_string())
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
 fn push_optional_analysis_value(rows: &mut Vec<String>, field: &str, value: &Option<String>) {
     if let Some(value) = value {
         rows.push(format!("{field}={value}"));
@@ -376,8 +476,8 @@ fn persist_report_record(
 mod tests {
     use super::*;
     use domain::{
-        CaseId, CaseMeta, DataSource, DataSourceId, DataSourceKind, EntryType, FileEntry,
-        FileEntryId, TimelineEvent, TimelineEventId,
+        Artifact, ArtifactId, CaseId, CaseMeta, DataSource, DataSourceId, DataSourceKind,
+        EntryType, FileEntry, FileEntryId, TimelineEvent, TimelineEventId,
     };
     use persistence_sqlite::repositories::{
         case_repo::CaseRepo, datasource_repo::DataSourceRepo, file_repo::FileRepo,
@@ -414,6 +514,7 @@ mod tests {
                     kind: DataSourceKind::LogicalDirectory,
                     source_path: tmp.path().to_path_buf(),
                     imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
                 },
             )
             .unwrap();
@@ -452,9 +553,64 @@ mod tests {
                     timestamp: chrono::Utc::now(),
                     title: "Timeline Scope Event".to_string(),
                     description: "scope fixture".to_string(),
+                    parser_id: None,
+                    parser_version: None,
+                    confidence: None,
+                    source_attribution: None,
                     attrs: std::collections::BTreeMap::new(),
                 }],
                 case_id,
+            )
+            .unwrap();
+    }
+
+    fn insert_timeline_event_with_provenance(conn: &rusqlite::Connection, case_id: &str) {
+        TimelineRepo::new(conn)
+            .insert_batch_with_case(
+                &[TimelineEvent {
+                    id: TimelineEventId("timeline-provenance".to_string()),
+                    source_object_id: "file-1".to_string(),
+                    event_type: "file_modified".to_string(),
+                    timestamp: chrono::DateTime::parse_from_rfc3339("2026-06-04T12:00:00Z")
+                        .unwrap()
+                        .with_timezone(&chrono::Utc),
+                    title: "Timeline Provenance Event".to_string(),
+                    description: "timeline provenance fixture".to_string(),
+                    parser_id: Some("timeline.macb".to_string()),
+                    parser_version: Some("1.2.3".to_string()),
+                    confidence: Some(0.82),
+                    source_attribution: Some("modified_at".to_string()),
+                    attrs: std::collections::BTreeMap::new(),
+                }],
+                case_id,
+            )
+            .unwrap();
+    }
+
+    fn insert_artifact_with_provenance(
+        conn: &rusqlite::Connection,
+        case_id: &str,
+        ds_id: &DataSourceId,
+    ) {
+        persistence_sqlite::repositories::artifact_repo::ArtifactRepo::new(conn)
+            .insert_batch(
+                &[Artifact {
+                    id: ArtifactId("artifact-provenance".to_string()),
+                    family: "prefetch".to_string(),
+                    title: "CMD.EXE-12345678.pf".to_string(),
+                    summary: "Prefetch execution evidence".to_string(),
+                    source_object_id: Some(FileEntryId("file-1".to_string())),
+                    extractor_id: Some("prefetch".to_string()),
+                    extractor_version: Some("1.2.3".to_string()),
+                    confidence: Some(0.93),
+                    source_attribution: Some("Windows/Prefetch/CMD.EXE-12345678.pf".to_string()),
+                    created_at: chrono::DateTime::parse_from_rfc3339("2026-06-04T10:00:00Z")
+                        .unwrap()
+                        .with_timezone(&chrono::Utc),
+                    attrs: std::collections::BTreeMap::new(),
+                }],
+                case_id,
+                &ds_id.0,
             )
             .unwrap();
     }
@@ -608,6 +764,100 @@ mod tests {
             .unwrap()
             .is_empty());
         assert!(!json["analysis"]["systemInfo"].is_null());
+    }
+
+    #[test]
+    fn report_exports_include_artifact_provenance() {
+        let (conn, tmp, case, ds_id) = setup_report_case();
+        insert_artifact_with_provenance(&conn, &case.id.0, &ds_id);
+
+        let json_name =
+            generate_json_export(&conn, &case.id.0, tmp.path(), &ExportScopeDto::default())
+                .unwrap();
+        let json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(tmp.path().join(json_name)).unwrap())
+                .unwrap();
+        let artifact = &json["artifacts"][0];
+        assert_eq!(artifact["extractorId"], "prefetch");
+        assert_eq!(artifact["extractorVersion"], "1.2.3");
+        assert!((artifact["confidence"].as_f64().unwrap() - 0.93).abs() < 0.000001);
+        assert_eq!(
+            artifact["sourceAttribution"],
+            "Windows/Prefetch/CMD.EXE-12345678.pf"
+        );
+
+        let csv_name =
+            generate_csv_artifacts(&conn, &case.id.0, tmp.path(), &ExportScopeDto::default())
+                .unwrap();
+        let csv = std::fs::read_to_string(tmp.path().join(csv_name)).unwrap();
+        assert!(csv.contains("extractorId,extractorVersion,confidence,sourceAttribution"));
+        assert!(csv.contains("\"prefetch\",\"1.2.3\",\"0.93\""));
+        assert!(csv.contains("Windows/Prefetch/CMD.EXE-12345678.pf"));
+    }
+
+    #[test]
+    fn report_exports_include_timeline_provenance() {
+        let (conn, tmp, case, _ds_id) = setup_report_case();
+        insert_timeline_event_with_provenance(&conn, &case.id.0);
+
+        let json_name =
+            generate_json_export(&conn, &case.id.0, tmp.path(), &ExportScopeDto::default())
+                .unwrap();
+        let json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(tmp.path().join(json_name)).unwrap())
+                .unwrap();
+        let event = &json["timeline_events"][0];
+        assert_eq!(event["parserId"], "timeline.macb");
+        assert_eq!(event["parserVersion"], "1.2.3");
+        assert!((event["confidence"].as_f64().unwrap() - 0.82).abs() < 0.000001);
+        assert_eq!(event["sourceAttribution"], "modified_at");
+
+        let html_name =
+            generate_html_report(&conn, &case, tmp.path(), &ExportScopeDto::default()).unwrap();
+        let html = std::fs::read_to_string(tmp.path().join(html_name)).unwrap();
+        assert!(html.contains("timeline.macb"));
+        assert!(html.contains("parserVersion=1.2.3"));
+        assert!(html.contains("confidence=0.82"));
+        assert!(html.contains("sourceAttribution=modified_at"));
+    }
+
+    #[test]
+    fn report_exports_tolerate_legacy_missing_provenance() {
+        let (conn, tmp, case, ds_id) = setup_report_case();
+        conn.execute(
+            "INSERT INTO artifacts (id, case_id, data_source_id, artifact_type, title, summary, attrs, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params![
+                "artifact-legacy",
+                case.id.0,
+                ds_id.0,
+                "legacy",
+                "Legacy Artifact",
+                "legacy summary",
+                "{}",
+                "2026-06-04T09:00:00Z",
+            ],
+        )
+        .unwrap();
+        insert_timeline_event(&conn, &case.id.0);
+
+        let json_name =
+            generate_json_export(&conn, &case.id.0, tmp.path(), &ExportScopeDto::default())
+                .unwrap();
+        let json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(tmp.path().join(json_name)).unwrap())
+                .unwrap();
+        assert!(json["artifacts"][0]["extractorId"].is_null());
+        assert!(json["artifacts"][0]["confidence"].is_null());
+        assert!(json["timeline_events"][0]["parserId"].is_null());
+        assert!(json["timeline_events"][0]["sourceAttribution"].is_null());
+
+        let html_name =
+            generate_html_report(&conn, &case, tmp.path(), &ExportScopeDto::default()).unwrap();
+        let html = std::fs::read_to_string(tmp.path().join(html_name)).unwrap();
+        assert!(html.contains("extractor=unknown"));
+        assert!(html.contains("parser=unknown"));
+        assert!(html.contains("confidence=unknown"));
     }
 
     #[test]

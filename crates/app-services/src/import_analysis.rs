@@ -27,7 +27,7 @@ const DEFAULT_MEMORY_SOFT_LIMIT_MB: u64 = 4 * 1024;
 const DEFAULT_MEMORY_HARD_LIMIT_MB: u64 = 6 * 1024;
 const ANALYSIS_LAYOUT_VERSION: &str = "2";
 
-type AnalysisProgressCallback<'a> = &'a dyn Fn(u32, &str);
+pub type AnalysisProgressCallback<'a> = &'a dyn Fn(u32, &str);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -145,6 +145,122 @@ pub struct ImportAnalysisStats {
     pub skipped_count: u32,
     pub failed_count: u32,
     pub worker_ids: Vec<usize>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct JobOutcomeCounts {
+    pub warning_count: u32,
+    pub skipped_count: u32,
+    pub failed_count: u32,
+}
+
+impl JobOutcomeCounts {
+    pub fn add_warnings(&mut self, count: usize) {
+        self.warning_count = self.warning_count.saturating_add(count as u32);
+    }
+
+    pub fn add_skipped(&mut self, count: u32) {
+        self.skipped_count = self.skipped_count.saturating_add(count);
+    }
+
+    pub fn add_failed(&mut self, count: u32) {
+        self.failed_count = self.failed_count.saturating_add(count);
+    }
+
+    pub fn is_partial(&self) -> bool {
+        self.warning_count > 0 || self.skipped_count > 0 || self.failed_count > 0
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PostImportPipelineOptions {
+    pub case_root: PathBuf,
+    pub db_path: PathBuf,
+    pub case_id: String,
+    pub data_source_id: DataSourceId,
+    pub index_dir: PathBuf,
+    pub max_analysis_workers: Option<usize>,
+    pub cancel_token: Arc<AtomicBool>,
+    pub enable_timeline_projection: bool,
+    pub enable_content_extraction: bool,
+    pub enable_text_indexing: bool,
+    pub analysis_mode: ImportAnalysisMode,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PostImportPipelineError {
+    pub message: String,
+    pub counts: JobOutcomeCounts,
+}
+
+pub fn run_post_import_pipeline_with_counts(
+    options: PostImportPipelineOptions,
+    progress_cb: Option<AnalysisProgressCallback<'_>>,
+) -> Result<(String, JobOutcomeCounts), PostImportPipelineError> {
+    let mut counts = JobOutcomeCounts::default();
+    if !options.enable_timeline_projection
+        && !options.enable_content_extraction
+        && !options.enable_text_indexing
+    {
+        if let Some(cb) = progress_cb {
+            cb(
+                84,
+                "Post-import skipped: phase=post-import-skip timeline=deferred content=disabled text=disabled",
+            );
+        }
+        return Ok((
+            "Timeline: deferred until Timeline page. Artifacts: 0. Index: 0 indexed".to_string(),
+            counts,
+        ));
+    }
+
+    let stats = match run_import_analysis_staging(
+        ImportAnalysisOptions {
+            case_root: options.case_root,
+            db_path: options.db_path,
+            case_id: options.case_id,
+            data_source_id: options.data_source_id,
+            index_dir: options.index_dir,
+            max_analysis_workers: options.max_analysis_workers,
+            cancel_token: options.cancel_token,
+            enable_timeline_projection: options.enable_timeline_projection,
+            enable_content_extraction: options.enable_content_extraction,
+            enable_text_indexing: options.enable_text_indexing,
+            analysis_mode: options.analysis_mode,
+            content_budget: content_budget_for_mode(options.analysis_mode),
+            memory_soft_limit_mb: default_memory_soft_limit_mb(),
+            memory_hard_limit_mb: default_memory_hard_limit_mb(),
+        },
+        progress_cb,
+    ) {
+        Ok(stats) => stats,
+        Err(message) => {
+            counts.add_warnings(1);
+            if message.to_ascii_lowercase().contains("cancel") {
+                counts.add_skipped(1);
+            } else {
+                counts.add_failed(1);
+            }
+            return Err(PostImportPipelineError { message, counts });
+        }
+    };
+
+    counts.warning_count = counts.warning_count.saturating_add(stats.warning_count);
+    counts.skipped_count = counts.skipped_count.saturating_add(stats.skipped_count);
+    counts.failed_count = counts.failed_count.saturating_add(stats.failed_count);
+
+    let mut message = format!(
+        "Timeline: {} events. Artifacts: {}. Index: {} indexed",
+        stats.timeline_count, stats.artifact_count, stats.indexed_count
+    );
+    if counts.is_partial() {
+        message.push_str(&format!(
+            ". Partial: {} warnings, {} skipped, {} failed",
+            counts.warning_count, counts.skipped_count, counts.failed_count
+        ));
+    }
+
+    Ok((message, counts))
 }
 
 #[derive(Debug, Clone, Default)]
@@ -964,8 +1080,8 @@ fn flush_worker_rows(
         let mut artifact_stmt = tx
             .prepare_cached(
                 "INSERT OR IGNORE INTO artifact_rows
-                 (id, file_id, artifact_type, display_name, summary, data_json, source_path, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                 (id, file_id, artifact_type, extractor_id, extractor_version, confidence, source_attribution, display_name, summary, data_json, source_path, created_at)
+                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             )
             .map_err(|e| format!("Prepare artifact staging insert: {e}"))?;
         for artifact in artifacts.iter() {
@@ -974,6 +1090,10 @@ fn flush_worker_rows(
                     artifact.id.0,
                     artifact.source_object_id.as_ref().map(|id| &id.0),
                     artifact.family,
+                    artifact.extractor_id,
+                    artifact.extractor_version,
+                    artifact.confidence,
+                    artifact.source_attribution,
                     artifact.title,
                     artifact.summary,
                     serde_json::to_string(&artifact.attrs).unwrap_or_else(|_| "{}".to_string()),
@@ -987,8 +1107,8 @@ fn flush_worker_rows(
         let mut timeline_stmt = tx
             .prepare_cached(
                 "INSERT OR IGNORE INTO timeline_rows
-                 (id, file_id, timestamp, event_type, title, description, data_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                 (id, file_id, timestamp, event_type, parser_id, parser_version, confidence, source_attribution, title, description, data_json)
+                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             )
             .map_err(|e| format!("Prepare timeline staging insert: {e}"))?;
         for event in timeline_events.iter() {
@@ -998,6 +1118,10 @@ fn flush_worker_rows(
                     event.source_object_id,
                     event.timestamp.to_rfc3339(),
                     event.event_type,
+                    event.parser_id,
+                    event.parser_version,
+                    event.confidence,
+                    event.source_attribution,
                     event.title,
                     event.description,
                     serde_json::to_string(&event.attrs).unwrap_or_else(|_| "{}".to_string()),
@@ -1404,6 +1528,130 @@ mod tests {
             memory_soft_limit_mb: default_memory_soft_limit_mb(),
             memory_hard_limit_mb: default_memory_hard_limit_mb(),
         }
+    }
+
+    fn post_import_options(
+        tmp: &TempDir,
+        db_path: PathBuf,
+        ds_id: DataSourceId,
+        mode: ImportAnalysisMode,
+    ) -> PostImportPipelineOptions {
+        PostImportPipelineOptions {
+            case_root: tmp.path().to_path_buf(),
+            db_path,
+            case_id: "case-1".to_string(),
+            data_source_id: ds_id,
+            index_dir: tmp.path().join("indexes").join("tantivy"),
+            max_analysis_workers: Some(1),
+            cancel_token: Arc::new(AtomicBool::new(false)),
+            enable_timeline_projection: true,
+            enable_content_extraction: mode.allows_content(),
+            enable_text_indexing: mode.allows_content(),
+            analysis_mode: mode,
+        }
+    }
+
+    #[test]
+    fn post_import_skip_uses_progress_sink_without_running_workers() {
+        let tmp = TempDir::new().unwrap();
+        let options = PostImportPipelineOptions {
+            case_root: tmp.path().to_path_buf(),
+            db_path: tmp.path().join("app.db"),
+            case_id: "case-1".to_string(),
+            data_source_id: DataSourceId("ds-1".to_string()),
+            index_dir: tmp.path().join("indexes").join("tantivy"),
+            max_analysis_workers: Some(1),
+            cancel_token: Arc::new(AtomicBool::new(false)),
+            enable_timeline_projection: false,
+            enable_content_extraction: false,
+            enable_text_indexing: false,
+            analysis_mode: ImportAnalysisMode::MetadataOnly,
+        };
+        let events = std::sync::Mutex::new(Vec::new());
+        let progress = |pct: u32, detail: &str| {
+            events.lock().unwrap().push((pct, detail.to_string()));
+        };
+
+        let (message, counts) = run_post_import_pipeline_with_counts(options, Some(&progress))
+            .expect("post import skip");
+
+        assert_eq!(
+            message,
+            "Timeline: deferred until Timeline page. Artifacts: 0. Index: 0 indexed"
+        );
+        assert_eq!(counts, JobOutcomeCounts::default());
+        assert_eq!(
+            events.lock().unwrap().as_slice(),
+            &[(
+                84,
+                "Post-import skipped: phase=post-import-skip timeline=deferred content=disabled text=disabled"
+                    .to_string()
+            )]
+        );
+    }
+
+    #[test]
+    fn post_import_worker_staging_success_preserves_summary_and_counts() {
+        let tmp = TempDir::new().unwrap();
+        std::fs::create_dir_all(tmp.path().join("evidence")).unwrap();
+        let (db_path, ds_id) = setup_case_db(&tmp);
+        let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
+        insert_file(&conn, "f-a", &ds_id, "a.txt");
+        insert_file(&conn, "f-b", &ds_id, "b.txt");
+        drop(conn);
+        let options = post_import_options(
+            &tmp,
+            db_path,
+            ds_id.clone(),
+            ImportAnalysisMode::MetadataOnly,
+        );
+        let events = std::sync::Mutex::new(Vec::new());
+        let progress = |pct: u32, detail: &str| {
+            events.lock().unwrap().push((pct, detail.to_string()));
+        };
+
+        let (message, counts) = run_post_import_pipeline_with_counts(options, Some(&progress))
+            .expect("post import success");
+
+        assert!(message.starts_with("Timeline: 2 events"));
+        assert!(message.contains("Artifacts: 0. Index: 0 indexed"));
+        assert_eq!(counts, JobOutcomeCounts::default());
+        assert!(events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(_, detail)| detail.contains("Analysis workers complete")));
+        let main_conn = persistence_sqlite::open_or_create(&tmp.path().join("app.db")).unwrap();
+        let timeline_count: i64 = main_conn
+            .query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(timeline_count, 2);
+    }
+
+    #[test]
+    fn post_import_cancel_failure_preserves_partial_counts() {
+        let tmp = TempDir::new().unwrap();
+        std::fs::create_dir_all(tmp.path().join("evidence")).unwrap();
+        let (db_path, ds_id) = setup_case_db(&tmp);
+        let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
+        insert_file(&conn, "f-a", &ds_id, "a.txt");
+        drop(conn);
+        let cancel = Arc::new(AtomicBool::new(true));
+        let mut options = post_import_options(
+            &tmp,
+            db_path,
+            ds_id.clone(),
+            ImportAnalysisMode::MetadataOnly,
+        );
+        options.cancel_token = cancel;
+
+        let error = run_post_import_pipeline_with_counts(options, None).unwrap_err();
+
+        assert!(error.message.contains("cancelled"));
+        assert_eq!(error.counts.warning_count, 1);
+        assert_eq!(error.counts.skipped_count, 1);
+        assert_eq!(error.counts.failed_count, 0);
+        assert!(error.counts.is_partial());
     }
 
     #[test]

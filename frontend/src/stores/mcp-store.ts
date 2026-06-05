@@ -1,18 +1,28 @@
 import { create } from 'zustand';
-import { apiClient } from '@/lib/api/client';
+import {
+  addMcpServer,
+  callMcpTool,
+  connectMcpServer,
+  disconnectMcpServer,
+  getMcpConfig,
+  getMcpPrompt,
+  listMcpPrompts,
+  listMcpResources,
+  listMcpTools,
+  removeMcpServer,
+  saveMcpConfig,
+  testMcpConnection,
+  type McpConfig,
+  type McpPrompt,
+  type McpResource,
+  type McpServer as ApiMcpServer,
+  type McpServerStatus,
+  type McpTool,
+} from '@/lib/api/mcp';
 
 // ============================================
 // 类型定义
 // ============================================
-
-/** JSON Schema 类型 */
-interface JsonSchema {
-  type: string;
-  properties?: Record<string, JsonSchema>;
-  required?: string[];
-  items?: JsonSchema;
-  description?: string;
-}
 
 /** MCP Server configuration */
 interface McpServer {
@@ -31,102 +41,8 @@ interface McpServer {
   lastError?: string;
 }
 
-/** MCP Resource */
-interface McpResource {
-  uri: string;
-  name: string;
-  description?: string;
-  mimeType?: string;
-}
-
-/** MCP Tool */
-interface McpTool {
-  name: string;
-  description: string;
-  inputSchema: JsonSchema;
-}
-
-/** MCP Prompt Argument */
-interface McpPromptArgument {
-  name: string;
-  description?: string;
-  required: boolean;
-}
-
-/** MCP Prompt */
-interface McpPrompt {
-  name: string;
-  description?: string;
-  arguments: McpPromptArgument[];
-}
-
 /** MCP Tool Call Result */
 interface McpToolCallResult {
-  success: boolean;
-  data?: unknown;
-  error?: string;
-}
-
-// ============================================
-// 后端响应类型
-// ============================================
-
-interface McpServerResponse {
-  id: string;
-  name: string;
-  transport_type: string;
-  url?: string;
-  command?: string;
-  args?: string[];
-  enabled: boolean;
-  auto_connect: boolean;
-}
-
-interface McpConfigResponse {
-  servers: McpServerResponse[];
-  resources: Record<string, boolean>;
-  tools: Record<string, boolean>;
-}
-
-interface McpServerStatusResponse {
-  id: string;
-  name: string;
-  connected: boolean;
-  has_resources: boolean;
-  has_tools: boolean;
-  has_prompts: boolean;
-  last_error?: string;
-}
-
-interface McpResourceResponse {
-  uri: string;
-  name: string;
-  description?: string;
-  mime_type?: string;
-}
-
-interface McpToolResponse {
-  name: string;
-  description: string;
-  input_schema: JsonSchema;
-}
-
-interface McpPromptResponse {
-  name: string;
-  description?: string;
-  arguments: Array<{
-    name: string;
-    description?: string;
-    required: boolean;
-  }>;
-}
-
-interface McpTestConnectionResponse {
-  success: boolean;
-  error?: string;
-}
-
-interface McpToolCallResponse {
   success: boolean;
   data?: unknown;
   error?: string;
@@ -189,52 +105,20 @@ function formatError(err: unknown): string {
 }
 
 /** 转换服务器响应 */
-function mapServerResponse(s: McpServerResponse): McpServer {
+function mapServerResponse(s: ApiMcpServer): McpServer {
   return {
     id: s.id,
     name: s.name,
-    transportType: s.transport_type as 'sse' | 'stdio',
+    transportType: s.transportType,
     url: s.url,
     command: s.command,
     args: s.args,
     enabled: s.enabled,
-    autoConnect: s.auto_connect,
+    autoConnect: s.autoConnect,
     connected: false,
     hasResources: false,
     hasTools: false,
     hasPrompts: false,
-  };
-}
-
-/** 转换资源响应 */
-function mapResourceResponse(r: McpResourceResponse): McpResource {
-  return {
-    uri: r.uri,
-    name: r.name,
-    description: r.description,
-    mimeType: r.mime_type,
-  };
-}
-
-/** 转换工具响应 */
-function mapToolResponse(t: McpToolResponse): McpTool {
-  return {
-    name: t.name,
-    description: t.description,
-    inputSchema: t.input_schema,
-  };
-}
-
-/** 转换 Prompt 响应 */
-function mapPromptResponse(p: McpPromptResponse): McpPrompt {
-  return {
-    name: p.name,
-    description: p.description,
-    arguments: p.arguments.map((a) => ({
-      name: a.name,
-      description: a.description,
-      required: a.required,
-    })),
   };
 }
 
@@ -256,7 +140,7 @@ export const useMcpStore = create<McpState>((set, get) => ({
   loadConfig: async () => {
     try {
       set({ loading: true, error: null });
-      const config = await apiClient.request<McpConfigResponse>('get_mcp_config', () => Promise.resolve({ servers: [], resources: {}, tools: {} }));
+      const config: McpConfig = await getMcpConfig();
 
       const servers: McpServer[] = config.servers.map(mapServerResponse);
       set({ servers, loading: false });
@@ -269,21 +153,16 @@ export const useMcpStore = create<McpState>((set, get) => ({
   saveConfig: async () => {
     try {
       const { servers } = get();
-      const config = {
-        servers: servers.map((s) => ({
+      await saveMcpConfig(servers.map((s) => ({
           id: s.id,
           name: s.name,
-          transport_type: s.transportType,
+          transportType: s.transportType,
           url: s.url,
           command: s.command,
           args: s.args,
           enabled: s.enabled,
-          auto_connect: s.autoConnect,
-        })),
-        resources: {},
-        tools: {},
-      };
-      await apiClient.request('save_mcp_config', () => Promise.resolve(), { config });
+          autoConnect: s.autoConnect,
+        })));
     } catch (err) {
       set({ error: formatError(err) });
     }
@@ -295,18 +174,16 @@ export const useMcpStore = create<McpState>((set, get) => ({
       set({ loading: true, error: null });
       const id = crypto.randomUUID();
 
-      const serverConfig = {
+      await addMcpServer({
         id,
         name: server.name,
-        transport_type: server.transportType,
+        transportType: server.transportType,
         url: server.url,
         command: server.command,
         args: server.args,
         enabled: server.enabled,
-        auto_connect: server.autoConnect,
-      };
-
-      await apiClient.request('add_mcp_server', () => Promise.resolve(), { server: serverConfig });
+        autoConnect: server.autoConnect,
+      });
       await get().loadConfig();
     } catch (err) {
       set({ error: formatError(err), loading: false });
@@ -317,7 +194,7 @@ export const useMcpStore = create<McpState>((set, get) => ({
   removeServer: async (id) => {
     try {
       set({ loading: true, error: null });
-      await apiClient.request('remove_mcp_server', () => Promise.resolve(), { serverId: id });
+      await removeMcpServer(id);
 
       set((state) => ({
         servers: state.servers.filter((s) => s.id !== id),
@@ -333,7 +210,7 @@ export const useMcpStore = create<McpState>((set, get) => ({
   connectServer: async (id) => {
     try {
       set({ loading: true, error: null });
-      const status = await apiClient.request<McpServerStatusResponse>('connect_mcp_server', () => Promise.resolve({ id, name: '', connected: false, has_resources: false, has_tools: false, has_prompts: false }), { serverId: id });
+      const status: McpServerStatus = await connectMcpServer(id);
 
       set((state) => ({
         servers: state.servers.map((s) =>
@@ -341,10 +218,10 @@ export const useMcpStore = create<McpState>((set, get) => ({
             ? {
                 ...s,
                 connected: status.connected,
-                hasResources: status.has_resources,
-                hasTools: status.has_tools,
-                hasPrompts: status.has_prompts,
-                lastError: status.last_error,
+                hasResources: status.hasResources,
+                hasTools: status.hasTools,
+                hasPrompts: status.hasPrompts,
+                lastError: status.lastError,
               }
             : s
         ),
@@ -359,7 +236,7 @@ export const useMcpStore = create<McpState>((set, get) => ({
   disconnectServer: async (id) => {
     try {
       set({ loading: true, error: null });
-      await apiClient.request('disconnect_mcp_server', () => Promise.resolve(), { serverId: id });
+      await disconnectMcpServer(id);
 
       set((state) => ({
         servers: state.servers.map((s) =>
@@ -375,14 +252,7 @@ export const useMcpStore = create<McpState>((set, get) => ({
   // Test connection
   testConnection: async (transportType, url, command, args) => {
     try {
-      const result = await apiClient.request<McpTestConnectionResponse>('test_mcp_connection', () => Promise.resolve({ success: false }), {
-        request: {
-          transport_type: transportType,
-          url,
-          command,
-          args,
-        },
-      });
+      const result = await testMcpConnection(transportType, url, command, args);
       return {
         success: result.success,
         error: result.error,
@@ -412,9 +282,9 @@ export const useMcpStore = create<McpState>((set, get) => ({
   refreshResources: async (serverId) => {
     try {
       set({ loading: true, error: null });
-      const resources = await apiClient.request<McpResourceResponse[]>('list_mcp_resources', () => Promise.resolve([]), { serverId });
+      const resources: McpResource[] = await listMcpResources(serverId);
       set({
-        resources: resources.map(mapResourceResponse),
+        resources,
         loading: false,
       });
     } catch (err) {
@@ -426,9 +296,9 @@ export const useMcpStore = create<McpState>((set, get) => ({
   refreshTools: async (serverId) => {
     try {
       set({ loading: true, error: null });
-      const tools = await apiClient.request<McpToolResponse[]>('list_mcp_tools', () => Promise.resolve([]), { serverId });
+      const tools: McpTool[] = await listMcpTools(serverId);
       set({
-        tools: tools.map(mapToolResponse),
+        tools,
         loading: false,
       });
     } catch (err) {
@@ -439,13 +309,7 @@ export const useMcpStore = create<McpState>((set, get) => ({
   // Call a tool
   callTool: async (serverId, toolName, args) => {
     try {
-      const result = await apiClient.request<McpToolCallResponse>('call_mcp_tool', () => Promise.resolve({ success: false }), {
-        request: {
-          server_id: serverId,
-          tool_name: toolName,
-          arguments: args,
-        },
-      });
+      const result = await callMcpTool(serverId, toolName, args);
       return {
         success: result.success,
         data: result.data,
@@ -463,9 +327,9 @@ export const useMcpStore = create<McpState>((set, get) => ({
   refreshPrompts: async (serverId) => {
     try {
       set({ loading: true, error: null });
-      const prompts = await apiClient.request<McpPromptResponse[]>('list_mcp_prompts', () => Promise.resolve([]), { serverId });
+      const prompts: McpPrompt[] = await listMcpPrompts(serverId);
       set({
-        prompts: prompts.map(mapPromptResponse),
+        prompts,
         loading: false,
       });
     } catch (err) {
@@ -476,11 +340,7 @@ export const useMcpStore = create<McpState>((set, get) => ({
   // Get a prompt
   getPrompt: async (serverId, promptName, args) => {
     try {
-      const result = await apiClient.request<string>('get_mcp_prompt', () => Promise.resolve(''), {
-        serverId,
-        promptName,
-        arguments: args,
-      });
+      const result = await getMcpPrompt(serverId, promptName, args);
       return result;
     } catch (err) {
       throw Object.assign(new Error(formatError(err)), { cause: err });

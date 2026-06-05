@@ -54,6 +54,34 @@ fn search_no_results() {
 }
 
 #[test]
+fn search_many_results_respects_limit_and_total_count() {
+    let tmp = TempDir::new().unwrap();
+    let index_dir = tmp.path().join("many-results");
+
+    let texts: Vec<_> = (0..25)
+        .map(|i| {
+            extract_text(
+                format!("forensics document {i}").as_bytes(),
+                &format!("f{i}"),
+                Some("text/plain"),
+            )
+        })
+        .collect();
+    let paths: Vec<_> = (0..25)
+        .map(|i| (format!("f{i}"), format!("/case/evidence/file{i}.txt")))
+        .collect();
+
+    let index = SearchIndex::create(&index_dir).unwrap();
+    let count = index.index_documents(&texts, &paths).unwrap();
+    assert_eq!(count, 25);
+
+    let result = index.search("forensics", 10).unwrap();
+    assert_eq!(result.hits.len(), 10);
+    assert_eq!(result.total_count, 25);
+    assert!(result.hits.iter().all(|hit| !hit.snippets.is_empty()));
+}
+
+#[test]
 fn reopen_index() {
     let tmp = TempDir::new().unwrap();
     let index_dir = tmp.path().join("reopen");
@@ -99,6 +127,69 @@ fn search_returns_highlights() {
         "highlights should not be empty"
     );
     assert!(snippet.text.to_lowercase().contains("credential"));
+}
+
+#[test]
+fn search_highlights_large_content_with_bounded_snippets() {
+    let tmp = TempDir::new().unwrap();
+    let index_dir = tmp.path().join("large-highlight-index");
+
+    let content = (0..100)
+        .map(|i| format!("record-{i:03} credential {}", "x".repeat(200)))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let text = extract_text(content.as_bytes(), "f1", Some("text/plain"));
+    let index = SearchIndex::create(&index_dir).unwrap();
+    index
+        .index_documents(
+            &[text],
+            &[("f1".to_string(), "/evidence/large.txt".to_string())],
+        )
+        .unwrap();
+
+    let result = index.search("credential", 10).unwrap();
+    assert_eq!(result.hits.len(), 1);
+
+    let snippets = &result.hits[0].snippets;
+    assert_eq!(snippets.len(), 5);
+    assert!(snippets.iter().all(|snippet| snippet.text.len() <= 130));
+    assert!(snippets
+        .iter()
+        .all(|snippet| snippet.text.contains("credential")));
+    assert!(snippets.iter().all(|snippet| {
+        snippet
+            .highlights
+            .iter()
+            .any(|highlight| highlight.start < highlight.end)
+    }));
+}
+
+#[test]
+fn search_highlights_dense_large_content_with_bounded_snippet_text() {
+    let tmp = TempDir::new().unwrap();
+    let index_dir = tmp.path().join("dense-large-highlight-index");
+
+    let content = "credential ".repeat(10_000);
+    let text = extract_text(content.as_bytes(), "f1", Some("text/plain"));
+    let index = SearchIndex::create(&index_dir).unwrap();
+    index
+        .index_documents(
+            &[text],
+            &[("f1".to_string(), "/evidence/dense-large.txt".to_string())],
+        )
+        .unwrap();
+
+    let result = index.search("credential", 10).unwrap();
+    assert_eq!(result.hits.len(), 1);
+
+    let snippets = &result.hits[0].snippets;
+    assert_eq!(snippets.len(), 1);
+    assert!(snippets[0].text.len() <= 512);
+    assert!(snippets[0].text.contains("credential"));
+    assert!(snippets[0]
+        .highlights
+        .iter()
+        .any(|highlight| highlight.start < highlight.end));
 }
 
 #[test]

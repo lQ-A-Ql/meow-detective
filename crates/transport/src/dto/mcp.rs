@@ -157,3 +157,156 @@ pub struct McpCapabilitiesDto {
     /// 是否支持 Prompts
     pub prompts: bool,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn server_config_serializes_current_snake_case_response_fields() {
+        let server = McpServerConfigDto {
+            id: "srv-1".to_string(),
+            name: "Local MCP".to_string(),
+            transport_type: "stdio".to_string(),
+            url: None,
+            command: Some("node".to_string()),
+            args: Some(vec!["server.js".to_string()]),
+            enabled: true,
+            auto_connect: false,
+        };
+
+        let value = serde_json::to_value(server).expect("serialize server config");
+
+        assert_eq!(value["transport_type"], "stdio");
+        assert_eq!(value["auto_connect"], false);
+        assert!(value.get("transportType").is_none());
+        assert!(value.get("autoConnect").is_none());
+    }
+
+    #[test]
+    fn server_status_serializes_current_snake_case_capability_fields() {
+        let status = McpServerStatusDto {
+            id: "srv-1".to_string(),
+            name: "Local MCP".to_string(),
+            connected: true,
+            has_resources: true,
+            has_tools: false,
+            has_prompts: true,
+            last_error: Some("boom".to_string()),
+        };
+
+        let value = serde_json::to_value(status).expect("serialize server status");
+
+        assert_eq!(value["has_resources"], true);
+        assert_eq!(value["has_tools"], false);
+        assert_eq!(value["has_prompts"], true);
+        assert_eq!(value["last_error"], "boom");
+        assert!(value.get("hasResources").is_none());
+        assert!(value.get("hasTools").is_none());
+        assert!(value.get("hasPrompts").is_none());
+        assert!(value.get("lastError").is_none());
+    }
+
+    #[test]
+    fn tool_call_request_accepts_current_snake_case_request_fields() {
+        let value = json!({
+            "server_id": "srv-1",
+            "tool_name": "lookup",
+            "arguments": { "query": "mft" }
+        });
+
+        let request: McpToolCallRequest =
+            serde_json::from_value(value).expect("deserialize tool call request");
+
+        assert_eq!(request.server_id, "srv-1");
+        assert_eq!(request.tool_name, "lookup");
+        assert_eq!(request.arguments["query"], "mft");
+    }
+
+    #[test]
+    fn tool_call_request_documents_camel_case_boundary_is_top_level_only() {
+        let value = json!({
+            "serverId": "srv-1",
+            "toolName": "lookup",
+            "arguments": { "query": "mft" }
+        });
+
+        let error = serde_json::from_value::<McpToolCallRequest>(value)
+            .expect_err("camelCase is reserved for Tauri command args, not nested MCP requests");
+
+        assert!(error.to_string().contains("server_id"));
+    }
+
+    #[test]
+    fn test_connection_request_accepts_current_snake_case_transport_field() {
+        let value = json!({
+            "transport_type": "sse",
+            "url": "http://127.0.0.1:3000/sse",
+            "command": null,
+            "args": null
+        });
+
+        let request: McpTestConnectionRequest =
+            serde_json::from_value(value).expect("deserialize test connection request");
+
+        assert_eq!(request.transport_type, "sse");
+        assert_eq!(request.url.as_deref(), Some("http://127.0.0.1:3000/sse"));
+    }
+
+    #[test]
+    fn protocol_dtos_keep_current_nested_snake_case_fields() {
+        let resource = McpResourceDto {
+            uri: "file:///case/report".to_string(),
+            name: "Case report".to_string(),
+            description: Some("Report resource".to_string()),
+            mime_type: Some("text/markdown".to_string()),
+        };
+        let tool = McpToolDto {
+            name: "lookup".to_string(),
+            description: "Lookup evidence".to_string(),
+            input_schema: json!({ "type": "object" }),
+        };
+
+        let resource_value = serde_json::to_value(resource).expect("serialize resource");
+        let tool_value = serde_json::to_value(tool).expect("serialize tool");
+
+        assert_eq!(resource_value["mime_type"], "text/markdown");
+        assert_eq!(tool_value["input_schema"]["type"], "object");
+        assert!(resource_value.get("mimeType").is_none());
+        assert!(tool_value.get("inputSchema").is_none());
+    }
+
+    #[test]
+    fn server_config_request_documents_snake_case_protocol_boundary() {
+        let value = json!({
+            "id": "srv-1",
+            "name": "Local MCP",
+            "transport_type": "stdio",
+            "url": null,
+            "command": "node",
+            "args": ["server.js"],
+            "enabled": true,
+            "auto_connect": true
+        });
+
+        let server: McpServerConfigDto =
+            serde_json::from_value(value).expect("deserialize server config");
+
+        assert_eq!(server.transport_type, "stdio");
+        assert!(server.auto_connect);
+
+        let camel_case_value = json!({
+            "id": "srv-1",
+            "name": "Local MCP",
+            "transportType": "stdio",
+            "enabled": true,
+            "autoConnect": true
+        });
+
+        let error = serde_json::from_value::<McpServerConfigDto>(camel_case_value)
+            .expect_err("frontend maps camelCase server input before sending nested DTOs");
+
+        assert!(error.to_string().contains("transport_type"));
+    }
+}

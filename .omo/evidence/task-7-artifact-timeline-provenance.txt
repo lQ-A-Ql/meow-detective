@@ -1,0 +1,499 @@
+Task 7 Artifact and Timeline Provenance Evidence
+
+## cargo test -p persistence-sqlite artifact_repo::tests
+   Compiling domain v0.1.0 (D:\forensics\crates\domain)
+   Compiling persistence-sqlite v0.1.0 (D:\forensics\crates\persistence-sqlite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.56s
+     Running unittests src\lib.rs (target\debug\deps\persistence_sqlite-d2591583184f1d90.exe)
+
+running 6 tests
+test repositories::artifact_repo::tests::families_returns_distinct_types ... ok
+test repositories::artifact_repo::tests::artifact_provenance_round_trips ... ok
+test repositories::artifact_repo::tests::list_by_family_filters_correctly ... ok
+test repositories::artifact_repo::tests::artifact_null_provenance_loads_as_missing ... ok
+test repositories::artifact_repo::tests::count_by_family_returns_grouped_counts ... ok
+test repositories::artifact_repo::tests::insert_batch_then_count_returns_correct_number ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 40 filtered out; finished in 0.02s
+
+     Running tests\case_repo_test.rs (target\debug\deps\case_repo_test-bd5091fb806b53d0.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests\connection_test.rs (target\debug\deps\connection_test-a3c3551a6181e549.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+
+## cargo test -p persistence-sqlite timeline_repo::tests
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.16s
+     Running unittests src\lib.rs (target\debug\deps\persistence_sqlite-d2591583184f1d90.exe)
+
+running 6 tests
+test repositories::timeline_repo::tests::timeline_provenance_round_trips ... ok
+test repositories::timeline_repo::tests::count_filtered_with_time_range ... ok
+test repositories::timeline_repo::tests::query_filtered_filters_by_event_type ... ok
+test repositories::timeline_repo::tests::query_returns_events_ordered_by_timestamp ... ok
+test repositories::timeline_repo::tests::timeline_missing_confidence_loads_as_unknown ... ok
+test repositories::timeline_repo::tests::insert_batch_then_count_returns_correct_number ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 40 filtered out; finished in 0.01s
+
+     Running tests\case_repo_test.rs (target\debug\deps\case_repo_test-bd5091fb806b53d0.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests\connection_test.rs (target\debug\deps\connection_test-a3c3551a6181e549.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+
+## cargo test -p transport artifact_row_dto timeline_event_dto
+error: unexpected argument 'timeline_event_dto' found
+
+Usage: cargo.exe test [OPTIONS] [TESTNAME] [-- [ARGS]...]
+
+For more information, try '--help'.
+
+## cargo test -p app-services artifact_service::tests timeline_service::tests
+error: unexpected argument 'timeline_service::tests' found
+
+Usage: cargo.exe test [OPTIONS] [TESTNAME] [-- [ARGS]...]
+
+For more information, try '--help'.
+
+## cargo check affected crates
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.25s
+
+## cargo fmt --all -- --check
+
+## cargo test -p transport artifact_row_dto
+   Compiling transport v0.1.0 (D:\forensics\crates\transport)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.42s
+     Running unittests src\lib.rs (target\debug\deps\transport-c384a629251e48e6.exe)
+
+running 2 tests
+test dto::artifacts::tests::artifact_row_dto_skips_missing_optional_provenance ... ok
+test dto::artifacts::tests::artifact_row_dto_serializes_optional_provenance_as_camel_case ... FAILED
+
+failures:
+
+---- dto::artifacts::tests::artifact_row_dto_serializes_optional_provenance_as_camel_case stdout ----
+
+thread 'dto::artifacts::tests::artifact_row_dto_serializes_optional_provenance_as_camel_case' (88808) panicked at crates\transport\src\dto\artifacts.rs:57:9:
+assertion `left == right` failed
+  left: Number(0.949999988079071)
+ right: 0.95
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    dto::artifacts::tests::artifact_row_dto_serializes_optional_provenance_as_camel_case
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p transport --lib`
+
+## cargo test -p transport timeline_event_dto
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.14s
+     Running unittests src\lib.rs (target\debug\deps\transport-c384a629251e48e6.exe)
+
+running 2 tests
+test dto::timeline::tests::timeline_event_dto_skips_missing_optional_provenance ... ok
+test dto::timeline::tests::timeline_event_dto_serializes_optional_provenance_as_camel_case ... FAILED
+
+failures:
+
+---- dto::timeline::tests::timeline_event_dto_serializes_optional_provenance_as_camel_case stdout ----
+
+thread 'dto::timeline::tests::timeline_event_dto_serializes_optional_provenance_as_camel_case' (102476) panicked at crates\transport\src\dto\timeline.rs:50:9:
+assertion `left == right` failed
+  left: Number(0.800000011920929)
+ right: 0.8
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    dto::timeline::tests::timeline_event_dto_serializes_optional_provenance_as_camel_case
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p transport --lib`
+
+## cargo test -p app-services artifact_service::tests
+   Compiling domain v0.1.0 (D:\forensics\crates\domain)
+   Compiling transport v0.1.0 (D:\forensics\crates\transport)
+   Compiling artifacts-core v0.1.0 (D:\forensics\crates\artifacts-core)
+   Compiling timeline v0.1.0 (D:\forensics\crates\timeline)
+   Compiling search v0.1.0 (D:\forensics\crates\search)
+   Compiling reports v0.1.0 (D:\forensics\crates\reports)
+   Compiling persistence-sqlite v0.1.0 (D:\forensics\crates\persistence-sqlite)
+   Compiling artifacts-windows v0.1.0 (D:\forensics\crates\artifacts-windows)
+   Compiling app-services v0.1.0 (D:\forensics\crates\app-services)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 10.31s
+     Running unittests src\lib.rs (target\debug\deps\app_services-2603429c0a059eb8.exe)
+
+running 13 tests
+test artifact_service::tests::create_registry_returns_extractors ... ok
+test artifact_service::tests::run_extractors_no_matching_extractor ... ok
+test artifact_service::tests::parallel_extraction_skips_non_matching_files_without_reader ... ok
+test artifact_service::tests::parallel_extraction_reader_error_counts_warning_and_skipped ... ok
+test artifact_service::tests::parallel_extraction_limit_applies_after_extractor_filter ... ok
+test artifact_service::tests::store_artifacts_empty_is_noop ... ok
+test artifact_service::tests::get_artifact_families_from_db_returns_distinct ... ok
+test artifact_service::tests::get_artifact_family_counts_returns_counts ... ok
+test artifact_service::tests::store_artifacts_and_retrieve ... ok
+test artifact_service::tests::get_artifact_rows_from_db_filter_by_family ... ok
+test artifact_service::tests::targeted_scan_skips_files_without_matching_extractor ... ok
+test artifact_service::tests::targeted_scan_records_warning_for_read_error ... ok
+test artifact_service::tests::targeted_scan_deduplicates_existing_artifacts ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 149 filtered out; finished in 0.04s
+
+     Running tests\case_service_test.rs (target\debug\deps\case_service_test-41e5d79eec036b5a.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests\e01_full_pipeline_test.rs (target\debug\deps\e01_full_pipeline_test-0c2d28a71313caf4.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests\e01_mft_scan_test.rs (target\debug\deps\e01_mft_scan_test-f2531d4b9553f3bf.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests\e01_probe_real_test.rs (target\debug\deps\e01_probe_real_test-c092db6ae95e2ed4.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests\file_service_real_test.rs (target\debug\deps\file_service_real_test-21dc7748623afff0.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+     Running tests\gpt_test.rs (target\debug\deps\gpt_test-804650cf333f1c89.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests\integration_test.rs (target\debug\deps\integration_test-f6a4ba349da438ea.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests\mbr_test.rs (target\debug\deps\mbr_test-d626d5a0c7e9cff8.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests\search_service_test.rs (target\debug\deps\search_service_test-893cef581c4606a7.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests\timeline_service_test.rs (target\debug\deps\timeline_service_test-b8402af9255555f8.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+
+## cargo test -p app-services timeline_service::tests
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+     Running unittests src\lib.rs (target\debug\deps\app_services-2603429c0a059eb8.exe)
+
+running 4 tests
+test timeline_service::tests::project_and_store_macb_empty_files ... ok
+test timeline_service::tests::project_and_store_macb_inserts_events ... ok
+test timeline_service::tests::query_timeline_returns_inserted_events ... ok
+test timeline_service::tests::ensure_macb_timeline_projected_is_lazy_and_idempotent ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 158 filtered out; finished in 0.01s
+
+     Running tests\case_service_test.rs (target\debug\deps\case_service_test-41e5d79eec036b5a.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests\e01_full_pipeline_test.rs (target\debug\deps\e01_full_pipeline_test-0c2d28a71313caf4.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests\e01_mft_scan_test.rs (target\debug\deps\e01_mft_scan_test-f2531d4b9553f3bf.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests\e01_probe_real_test.rs (target\debug\deps\e01_probe_real_test-c092db6ae95e2ed4.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests\file_service_real_test.rs (target\debug\deps\file_service_real_test-21dc7748623afff0.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+     Running tests\gpt_test.rs (target\debug\deps\gpt_test-804650cf333f1c89.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests\integration_test.rs (target\debug\deps\integration_test-f6a4ba349da438ea.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests\mbr_test.rs (target\debug\deps\mbr_test-d626d5a0c7e9cff8.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests\search_service_test.rs (target\debug\deps\search_service_test-893cef581c4606a7.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests\timeline_service_test.rs (target\debug\deps\timeline_service_test-b8402af9255555f8.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+
+## cargo test -p persistence-sqlite upgrades_legacy_schema_to_latest_with_partition_job_columns
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.16s
+     Running unittests src\lib.rs (target\debug\deps\persistence_sqlite-d2591583184f1d90.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s
+
+     Running tests\case_repo_test.rs (target\debug\deps\case_repo_test-bd5091fb806b53d0.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests\connection_test.rs (target\debug\deps\connection_test-a3c3551a6181e549.exe)
+
+running 1 test
+test upgrades_legacy_schema_to_latest_with_partition_job_columns ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.01s
+
+
+## cargo fmt --all -- --check
+
+## rerun cargo test -p transport artifact_row_dto
+   Compiling transport v0.1.0 (D:\forensics\crates\transport)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.24s
+     Running unittests src\lib.rs (target\debug\deps\transport-c384a629251e48e6.exe)
+
+running 2 tests
+test dto::artifacts::tests::artifact_row_dto_skips_missing_optional_provenance ... ok
+test dto::artifacts::tests::artifact_row_dto_serializes_optional_provenance_as_camel_case ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.00s
+
+
+## rerun cargo test -p transport timeline_event_dto
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.16s
+     Running unittests src\lib.rs (target\debug\deps\transport-c384a629251e48e6.exe)
+
+running 2 tests
+test dto::timeline::tests::timeline_event_dto_serializes_optional_provenance_as_camel_case ... ok
+test dto::timeline::tests::timeline_event_dto_skips_missing_optional_provenance ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.00s
+
+
+## final cargo fmt --all -- --check
+
+## final cargo check affected crates
+    Checking transport v0.1.0 (D:\forensics\crates\transport)
+    Checking app-services v0.1.0 (D:\forensics\crates\app-services)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.13s
+
+## final cargo fmt --all -- --check
+
+## rerun cargo test -p app-services staging::tests::analysis_staging_open_upgrades_legacy_provenance_columns
+   Compiling transport v0.1.0 (D:\forensics\crates\transport)
+   Compiling app-services v0.1.0 (D:\forensics\crates\app-services)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.23s
+     Running unittests src\lib.rs (target\debug\deps\app_services-2603429c0a059eb8.exe)
+
+running 1 test
+test staging::tests::analysis_staging_open_upgrades_legacy_provenance_columns ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 162 filtered out; finished in 0.40s
+
+     Running tests\case_service_test.rs (target\debug\deps\case_service_test-41e5d79eec036b5a.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests\e01_full_pipeline_test.rs (target\debug\deps\e01_full_pipeline_test-0c2d28a71313caf4.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests\e01_mft_scan_test.rs (target\debug\deps\e01_mft_scan_test-f2531d4b9553f3bf.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests\e01_probe_real_test.rs (target\debug\deps\e01_probe_real_test-c092db6ae95e2ed4.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests\file_service_real_test.rs (target\debug\deps\file_service_real_test-21dc7748623afff0.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+     Running tests\gpt_test.rs (target\debug\deps\gpt_test-804650cf333f1c89.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests\integration_test.rs (target\debug\deps\integration_test-f6a4ba349da438ea.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests\mbr_test.rs (target\debug\deps\mbr_test-d626d5a0c7e9cff8.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests\search_service_test.rs (target\debug\deps\search_service_test-893cef581c4606a7.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests\timeline_service_test.rs (target\debug\deps\timeline_service_test-b8402af9255555f8.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+
+## rerun cargo test -p app-services artifact_service::tests timeline_service::tests staging::tests::analysis
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.59s
+     Running unittests src\lib.rs (target\debug\deps\app_services-2603429c0a059eb8.exe)
+
+running 3 tests
+test staging::tests::analysis_staging_open_creates_expected_tables ... ok
+test staging::tests::enum_and_analysis_staging_use_aggressive_temp_pragmas ... ok
+test staging::tests::analysis_staging_open_upgrades_legacy_provenance_columns ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 160 filtered out; finished in 0.10s
+
+     Running tests\case_service_test.rs (target\debug\deps\case_service_test-41e5d79eec036b5a.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests\e01_full_pipeline_test.rs (target\debug\deps\e01_full_pipeline_test-0c2d28a71313caf4.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests\e01_mft_scan_test.rs (target\debug\deps\e01_mft_scan_test-f2531d4b9553f3bf.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests\e01_probe_real_test.rs (target\debug\deps\e01_probe_real_test-c092db6ae95e2ed4.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests\file_service_real_test.rs (target\debug\deps\file_service_real_test-21dc7748623afff0.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+     Running tests\gpt_test.rs (target\debug\deps\gpt_test-804650cf333f1c89.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests\integration_test.rs (target\debug\deps\integration_test-f6a4ba349da438ea.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests\mbr_test.rs (target\debug\deps\mbr_test-d626d5a0c7e9cff8.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests\search_service_test.rs (target\debug\deps\search_service_test-893cef581c4606a7.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests\timeline_service_test.rs (target\debug\deps\timeline_service_test-b8402af9255555f8.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+
+## rerun final cargo check affected crates
+    Checking app-services v0.1.0 (D:\forensics\crates\app-services)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.98s
+
+## rerun final cargo fmt --all -- --check

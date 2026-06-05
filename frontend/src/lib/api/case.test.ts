@@ -42,5 +42,10 @@ describe('case API (mock mode)', () => {
     expect(result.length).toBeGreaterThan(0);
     expect(result[0].id).toBe('ds-001');
     expect(result[0].partitions.length).toBeGreaterThan(0);
+    expect(result[0].sourceHash).toBe('mock-finche01-sha256-demo-value');
+    expect(result[0].hashStatus).toBe('Recorded');
+    expect(result[0].canonicalPath).toContain('/mock/');
+    expect(result[0].provenanceStatus).toBe('Recorded');
+    expect(result[0].warnings?.[0]).toContain('MOCK DATA');
   });
 });

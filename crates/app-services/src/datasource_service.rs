@@ -1,4 +1,7 @@
-use domain::{CaseId, DataSource, DataSourceId, DataSourceKind};
+use domain::{
+    CaseId, DataSource, DataSourceHashStatus, DataSourceId, DataSourceKind, DataSourceProvenance,
+    DataSourceProvenanceStatus,
+};
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
@@ -75,16 +78,70 @@ pub fn attach_data_source(
     kind: DataSourceKind,
 ) -> Result<DataSource> {
     let id = DataSourceId(uuid::Uuid::new_v4().to_string());
+    let provenance = build_attach_provenance(source_path, &kind);
     let ds = DataSource {
         id: id.clone(),
         name: name.to_string(),
         kind,
         source_path: source_path.to_path_buf(),
         imported_at: chrono::Utc::now(),
+        provenance,
     };
 
     DataSourceRepo::new(conn).insert(case_id, &ds)?;
     Ok(ds)
+}
+
+fn build_attach_provenance(source_path: &Path, kind: &DataSourceKind) -> DataSourceProvenance {
+    let mut warnings = Vec::new();
+    let canonical_source_path = match std::fs::canonicalize(source_path) {
+        Ok(path) => Some(path),
+        Err(err) => {
+            warnings.push(format!(
+                "canonicalize failed for {}: {}",
+                source_path.display(),
+                err
+            ));
+            None
+        }
+    };
+    let metadata = match std::fs::metadata(source_path) {
+        Ok(metadata) => Some(metadata),
+        Err(err) => {
+            warnings.push(format!(
+                "metadata unavailable for {}: {}",
+                source_path.display(),
+                err
+            ));
+            None
+        }
+    };
+    let evidence_size = metadata
+        .as_ref()
+        .filter(|metadata| metadata.is_file())
+        .map(|metadata| metadata.len());
+    let hash_status = if metadata.as_ref().is_some_and(|metadata| metadata.is_file()) {
+        DataSourceHashStatus::Pending
+    } else if metadata.as_ref().is_some_and(|metadata| metadata.is_dir()) {
+        DataSourceHashStatus::Unavailable
+    } else {
+        DataSourceHashStatus::Unknown
+    };
+    let provenance_status = if canonical_source_path.is_some() && metadata.is_some() {
+        DataSourceProvenanceStatus::Recorded
+    } else {
+        DataSourceProvenanceStatus::Partial
+    };
+
+    DataSourceProvenance {
+        source_hash_sha256: None,
+        hash_status,
+        canonical_source_path,
+        evidence_size,
+        reader_kind: Some(kind.to_string()),
+        provenance_status,
+        warnings,
+    }
 }
 
 pub fn classify_data_source_path(source_path: &Path) -> Result<DataSourceKind> {
@@ -444,4 +501,102 @@ fn looks_like_fat_boot_sector(sector: &[u8; 512]) -> bool {
     let fat32_sectors = u32::from_le_bytes(sector[36..40].try_into().unwrap_or([0; 4]));
 
     (total16 != 0 || total32 != 0) && (fat16_sectors != 0 || fat32_sectors != 0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use domain::CaseMeta;
+    use persistence_sqlite::repositories::{case_repo::CaseRepo, datasource_repo::DataSourceRepo};
+    use tempfile::TempDir;
+
+    fn setup_case() -> (rusqlite::Connection, CaseId) {
+        let conn = persistence_sqlite::connection::open_in_memory().unwrap();
+        persistence_sqlite::runner::run_all(&conn).unwrap();
+        let case = CaseMeta {
+            id: CaseId("case-datasource".to_string()),
+            name: "DataSource Test".to_string(),
+            number: None,
+            examiner: None,
+            notes: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+        CaseRepo::new(&conn).create(&case).unwrap();
+        (conn, case.id)
+    }
+
+    #[test]
+    fn attach_data_source_records_file_provenance() {
+        let tmp = TempDir::new().unwrap();
+        let source_path = tmp.path().join("sample.raw");
+        std::fs::write(&source_path, b"sample evidence").unwrap();
+        let (conn, case_id) = setup_case();
+
+        let attached =
+            attach_data_source(&conn, &case_id, "sample", &source_path, DataSourceKind::Raw)
+                .unwrap();
+        let stored = DataSourceRepo::new(&conn)
+            .find_by_case(&case_id)
+            .unwrap()
+            .into_iter()
+            .find(|source| source.id == attached.id)
+            .unwrap();
+
+        assert_eq!(stored.provenance.source_hash_sha256, None);
+        assert_eq!(stored.provenance.hash_status, DataSourceHashStatus::Pending);
+        assert_eq!(stored.provenance.evidence_size, Some(15));
+        assert_eq!(stored.provenance.reader_kind.as_deref(), Some("raw"));
+        assert_eq!(
+            stored.provenance.provenance_status,
+            DataSourceProvenanceStatus::Recorded
+        );
+        assert_eq!(
+            stored.provenance.canonical_source_path,
+            Some(std::fs::canonicalize(&source_path).unwrap())
+        );
+        assert!(stored.provenance.warnings.is_empty());
+    }
+
+    #[test]
+    fn attach_data_source_records_directory_provenance_without_size() {
+        let tmp = TempDir::new().unwrap();
+        let source_path = tmp.path().join("logical-evidence");
+        std::fs::create_dir(&source_path).unwrap();
+        let (conn, case_id) = setup_case();
+
+        let attached = attach_data_source(
+            &conn,
+            &case_id,
+            "logical",
+            &source_path,
+            DataSourceKind::LogicalDirectory,
+        )
+        .unwrap();
+        let stored = DataSourceRepo::new(&conn)
+            .find_by_case(&case_id)
+            .unwrap()
+            .into_iter()
+            .find(|source| source.id == attached.id)
+            .unwrap();
+
+        assert_eq!(
+            stored.provenance.hash_status,
+            DataSourceHashStatus::Unavailable
+        );
+        assert_eq!(stored.provenance.evidence_size, None);
+        assert_eq!(
+            stored.provenance.reader_kind.as_deref(),
+            Some("logical_directory")
+        );
+        assert_eq!(
+            stored.provenance.provenance_status,
+            DataSourceProvenanceStatus::Recorded
+        );
+        assert_eq!(
+            stored.provenance.canonical_source_path,
+            Some(std::fs::canonicalize(&source_path).unwrap())
+        );
+        assert!(stored.provenance.warnings.is_empty());
+    }
 }

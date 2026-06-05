@@ -59,6 +59,10 @@ fn make_event(
         timestamp: ts,
         title,
         description,
+        parser_id: Some("timeline.macb".to_string()),
+        parser_version: None,
+        confidence: None,
+        source_attribution: Some(event_type.to_string()),
         attrs: BTreeMap::new(),
     }
 }

@@ -71,6 +71,17 @@ pub fn local_e01_fixture() -> Option<PathBuf> {
         .filter(|path| path.is_file())
 }
 
+/// Optional local Liu Yang E01 fixture for manual functional regression tests.
+///
+/// This private real-world sample is not committed to the repository. Set
+/// `FORENSICS_LIUYANG_E01_FIXTURE` to a local E01 path when running the ignored
+/// Liu Yang regression tests manually.
+pub fn local_liuyang_e01_fixture() -> Option<PathBuf> {
+    std::env::var_os("FORENSICS_LIUYANG_E01_FIXTURE")
+        .map(PathBuf::from)
+        .filter(|path| path.is_file())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -157,6 +168,14 @@ mod tests {
     #[test]
     fn local_e01_fixture_is_opt_in() {
         let fixture = local_e01_fixture();
+        if let Some(path) = fixture {
+            assert!(path.is_file());
+        }
+    }
+
+    #[test]
+    fn local_liuyang_e01_fixture_is_opt_in() {
+        let fixture = local_liuyang_e01_fixture();
         if let Some(path) = fixture {
             assert!(path.is_file());
         }

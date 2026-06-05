@@ -89,6 +89,10 @@ pub fn query_timeline(
             ts: ev.timestamp.to_rfc3339(),
             title: ev.title,
             description: ev.description,
+            parser_id: ev.parser_id,
+            parser_version: ev.parser_version,
+            confidence: ev.confidence,
+            source_attribution: ev.source_attribution,
             attrs: ev.attrs,
         })
         .collect();
@@ -121,6 +125,10 @@ pub fn query_timeline_filtered(
             ts: ev.timestamp.to_rfc3339(),
             title: ev.title,
             description: ev.description,
+            parser_id: ev.parser_id,
+            parser_version: ev.parser_version,
+            confidence: ev.confidence,
+            source_attribution: ev.source_attribution,
             attrs: ev.attrs,
         })
         .collect();
@@ -212,7 +220,7 @@ fn insert_macb_kind_sql(
 ) -> Result<u64, String> {
     let sql = format!(
         "INSERT OR IGNORE INTO timeline_events
-         (id, case_id, source_object_id, event_type, ts, title, description, attrs)
+         (id, case_id, source_object_id, event_type, ts, title, description, parser_id, source_attribution, attrs)
          SELECT
             'macb:' || fe.id || ':{event_type}',
             ds.case_id,
@@ -221,6 +229,8 @@ fn insert_macb_kind_sql(
             fe.{timestamp_column},
             ?1 || fe.name,
             fe.path || ?2,
+            'timeline.macb',
+            '{event_type}',
             '{{}}'
          FROM file_entries fe
          JOIN data_sources ds ON ds.id = fe.data_source_id
@@ -250,6 +260,13 @@ mod tests {
     fn in_memory_db_with_timeline() -> rusqlite::Connection {
         let conn = persistence_sqlite::connection::open_in_memory().unwrap();
         conn.execute_batch(TIMELINE_SCHEMA).unwrap();
+        conn.execute_batch(
+            "ALTER TABLE timeline_events ADD COLUMN parser_id TEXT;
+             ALTER TABLE timeline_events ADD COLUMN parser_version TEXT;
+             ALTER TABLE timeline_events ADD COLUMN confidence REAL;
+             ALTER TABLE timeline_events ADD COLUMN source_attribution TEXT;",
+        )
+        .unwrap();
         conn
     }
 
@@ -321,6 +338,13 @@ mod tests {
     fn ensure_macb_timeline_projected_is_lazy_and_idempotent() {
         let conn = persistence_sqlite::connection::open_in_memory().unwrap();
         conn.execute_batch(TIMELINE_SCHEMA).unwrap();
+        conn.execute_batch(
+            "ALTER TABLE timeline_events ADD COLUMN parser_id TEXT;
+             ALTER TABLE timeline_events ADD COLUMN parser_version TEXT;
+             ALTER TABLE timeline_events ADD COLUMN confidence REAL;
+             ALTER TABLE timeline_events ADD COLUMN source_attribution TEXT;",
+        )
+        .unwrap();
         conn.execute_batch(
             "CREATE TABLE data_sources (
                 id TEXT PRIMARY KEY NOT NULL,

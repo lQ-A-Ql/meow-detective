@@ -1,0 +1,77 @@
+Task 15 - DenseDataTable Virtualization Fix
+
+Search command:
+`rg -n "DenseDataTable|rows\.map|tbody|VirtualFileTree|scroll|sort|filter|10_000|10000" frontend/src/components`
+
+Exact output:
+frontend/src/components\layout\TopBar.tsx:32:  const runningCount = jobs?.filter((job) => job.status === 'running').length ?? 0;
+frontend/src/components\layout\BottomDrawer.tsx:14:  const runningJobs = jobs?.filter((job) => job.status === 'running') ?? [];
+frontend/src/components\layout\BottomDrawer.tsx:15:  const completedJobs = jobs?.filter((job) => job.status === 'completed') ?? [];
+frontend/src/components\layout\BottomDrawer.tsx:16:  const failedJobs = jobs?.filter((job) => job.status === 'failed') ?? [];
+frontend/src/components\layout\BottomDrawer.tsx:17:  const partialJobs = jobs?.filter((job) => job.partial) ?? [];
+frontend/src/components\mcp\McpServerDialog.tsx:41:      const args = argsStr ? argsStr.split(' ').filter(Boolean) : undefined;
+frontend/src/components\mcp\McpServerDialog.tsx:68:      const args = argsStr ? argsStr.split(' ').filter(Boolean) : undefined;
+frontend/src/components\tree\VirtualFileTree.tsx:2: * VirtualFileTree - 虚拟滚动文件树组件
+frontend/src/components\tree\VirtualFileTree.tsx:15:interface VirtualFileTreeProps {
+frontend/src/components\tree\VirtualFileTree.tsx:26:export function VirtualFileTree({
+frontend/src/components\tree\VirtualFileTree.tsx:31:}: VirtualFileTreeProps) {
+frontend/src/components\tables\DenseDataTable.tsx:2: * DenseDataTable - 密集数据表格组件 (性能优化版)
+frontend/src/components\tables\DenseDataTable.tsx:26:  sortable?: boolean;
+frontend/src/components\tables\DenseDataTable.tsx:28:  sortKey?: string;
+frontend/src/components\tables\DenseDataTable.tsx:32:interface DenseDataTableProps<T> {
+frontend/src/components\tables\DenseDataTable.tsx:41:  sortKey?: string;
+frontend/src/components\tables\DenseDataTable.tsx:43:  sortDirection?: 'asc' | 'desc';
+frontend/src/components\tables\DenseDataTable.tsx:94:export function DenseDataTable<T>({
+frontend/src/components\tables\DenseDataTable.tsx:102:  sortKey,
+frontend/src/components\tables\DenseDataTable.tsx:103:  sortDirection,
+frontend/src/components\tables\DenseDataTable.tsx:105:}: DenseDataTableProps<T>) {
+frontend/src/components\tables\DenseDataTable.tsx:122:                  column.sortable ? 'cursor-pointer select-none hover:bg-[#f0f0f0]' : ''
+frontend/src/components\tables\DenseDataTable.tsx:124:                onClick={() => column.sortable && handleSort(column.sortKey ?? column.key)}
+frontend/src/components\tables\DenseDataTable.tsx:128:                  {column.sortable && (
+frontend/src/components\tables\DenseDataTable.tsx:130:                      active={sortKey === (column.sortKey ?? column.key)}
+frontend/src/components\tables\DenseDataTable.tsx:131:                      direction={sortDirection}
+frontend/src/components\tables\DenseDataTable.tsx:154:          {rows.map((row) => {
+frontend/src/components\viewers\HexViewer.test.tsx:42:    const scrollContainer = container.firstElementChild as HTMLDivElement;
+frontend/src/components\viewers\HexViewer.test.tsx:43:    const spacer = scrollContainer.firstElementChild as HTMLDivElement;
+frontend/src/components\viewers\HexViewer.test.tsx:50:    fireEvent.scroll(scrollContainer, { target: { scrollTop: 19_000 } });
+frontend/src/components\viewers\HexViewer.tsx:34:    const bytes = hex.split(' ').filter(h => h.length === 2);
+frontend/src/components\viewers\HexViewer.tsx:48:  const [scrollTop, setScrollTop] = useState(0);
+frontend/src/components\viewers\HexViewer.tsx:73:    const startIndex = Math.max(0, Math.floor(scrollTop / lineHeight) - 5);
+frontend/src/components\viewers\HexViewer.tsx:76:      Math.ceil((scrollTop + containerHeight) / lineHeight) + 5
+frontend/src/components\viewers\HexViewer.tsx:79:  }, [scrollTop, containerHeight, lineHeight, parsedLines.length]);
+frontend/src/components\viewers\HexViewer.tsx:88:    setScrollTop(e.currentTarget.scrollTop);
+frontend/src/components\tree\VirtualFileTree.test.tsx:16:import { VirtualFileTree } from './VirtualFileTree';
+frontend/src/components\tree\VirtualFileTree.test.tsx:19:describe('VirtualFileTree', () => {
+frontend/src/components\tree\VirtualFileTree.test.tsx:21:    const nodes: FileTreeNode[] = Array.from({ length: 10_000 }, (_, index) => ({
+frontend/src/components\tree\VirtualFileTree.test.tsx:32:        <VirtualFileTree nodes={nodes} onNodeClick={vi.fn()} itemSize={28} overscan={2} />
+frontend/src/components\tables\DenseDataTable.test.tsx:3:import { DenseDataTable, type DenseColumn } from './DenseDataTable';
+frontend/src/components\tables\DenseDataTable.test.tsx:18:describe('DenseDataTable', () => {
+frontend/src/components\tables\DenseDataTable.test.tsx:20:    const rows = Array.from({ length: 10_000 }, (_, index) => ({
+frontend/src/components\tables\DenseDataTable.test.tsx:26:      <DenseDataTable
+frontend/src/components\tables\DenseDataTable.test.tsx:33:    const bodyRows = container.querySelectorAll('tbody tr');
+
+Focused test command:
+`pnpm --dir frontend test -- src/components/tables/DenseDataTable.test.tsx`
+
+Exact output:
+> @forensics/workbench@0.0.1 test D:\forensics\frontend
+> vitest run "src/components/tables/DenseDataTable.test.tsx"
+
+ RUN v4.1.0 D:/forensics/frontend
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  01:41:23
+   Duration  1.56s (transform 430ms, setup 0ms, import 699ms, tests 112ms, environment 558ms)
+
+Typecheck command:
+`pnpm --dir frontend typecheck`
+
+Exact output:
+> @forensics/workbench@0.0.1 typecheck D:\forensics\frontend
+> tsc --noEmit
+
+Notes:
+- DenseDataTable now uses internal row windowing with fixed row height 31px, overscan 8 rows, and top/bottom spacer rows.
+- Large-data tests now assert bounded tbody row count, scroll-visible window updates, and preserved external sort/filter semantics.
+- TypeScript LSP diagnostics were unavailable in this environment because `typescript-language-server` is not installed.

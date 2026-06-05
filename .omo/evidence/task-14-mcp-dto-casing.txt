@@ -1,0 +1,43 @@
+Task 14 MCP DTO Casing and Error Compatibility Evidence
+======================================================
+
+Chosen casing strategy:
+- Tauri top-level command args remain camelCase from frontend: serverId, promptName, config, server, request.
+- Nested MCP protocol DTO/request fields remain snake_case at the Rust/Tauri protocol boundary: transport_type, auto_connect, server_id, tool_name, mime_type, input_schema.
+- frontend/src/lib/api/mcp.ts explicitly maps snake_case protocol DTOs to camelCase safe API models before the Zustand store sees them.
+- Malformed/unknown config/status/resource/tool/prompt/tool-call responses are normalized to safe fallbacks by the API layer so the store/UI does not crash.
+
+LSP diagnostics:
+- TypeScript LSP unavailable: typescript-language-server command not found.
+- Rust LSP unavailable: rust-analyzer.exe missing from stable toolchain.
+
+
+COMMAND: pnpm --dir frontend test -- src/lib/api/mcp.test.ts src/stores/mcp-store.test.ts
+ > @forensics/workbench@0.0.1 test D:\forensics\frontend > vitest run "src/lib/api/mcp.test.ts" "src/stores/mcp-store.test.ts"   [1m[46m RUN [49m[22m [36mv4.1.0 [39m[90mD:/forensics/frontend[39m   [2m Test Files [22m [1m[32m2 passed[39m[22m[90m (2)[39m [2m      Tests [22m [1m[32m16 passed[39m[22m[90m (16)[39m [2m   Start at [22m 01:32:09 [2m   Duration [22m 1.21s[2m (transform 197ms, setup 0ms, import 255ms, tests 20ms, environment 1.71s)[22m 
+EXIT: 0
+
+
+COMMAND: cargo test -p transport dto::mcp
+   Compiling transport v0.1.0 (D:\forensics\crates\transport)     Finished `test` profile [unoptimized + debuginfo] target(s) in 5.08s      Running unittests src\lib.rs (target\debug\deps\transport-c384a629251e48e6.exe)  running 7 tests test dto::mcp::tests::server_config_serializes_current_snake_case_response_fields ... ok test dto::mcp::tests::protocol_dtos_keep_current_nested_snake_case_fields ... ok test dto::mcp::tests::server_status_serializes_current_snake_case_capability_fields ... ok test dto::mcp::tests::server_config_request_documents_snake_case_protocol_boundary ... ok test dto::mcp::tests::tool_call_request_accepts_current_snake_case_request_fields ... ok test dto::mcp::tests::tool_call_request_documents_camel_case_boundary_is_top_level_only ... ok test dto::mcp::tests::test_connection_request_accepts_current_snake_case_transport_field ... ok  test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 45 filtered out; finished in 0.00s 
+EXIT: 0
+
+
+COMMAND: pnpm --dir frontend typecheck
+ > @forensics/workbench@0.0.1 typecheck D:\forensics\frontend > tsc --noEmit 
+EXIT: 0
+
+
+RERUN COMMAND: cargo test -p transport dto::mcp
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.26s      Running unittests src\lib.rs (target\debug\deps\transport-c384a629251e48e6.exe)  running 7 tests test dto::mcp::tests::server_config_serializes_current_snake_case_response_fields ... ok test dto::mcp::tests::server_status_serializes_current_snake_case_capability_fields ... ok test dto::mcp::tests::server_config_request_documents_snake_case_protocol_boundary ... ok test dto::mcp::tests::test_connection_request_accepts_current_snake_case_transport_field ... ok test dto::mcp::tests::tool_call_request_accepts_current_snake_case_request_fields ... ok test dto::mcp::tests::tool_call_request_documents_camel_case_boundary_is_top_level_only ... ok test dto::mcp::tests::protocol_dtos_keep_current_nested_snake_case_fields ... ok  test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 45 filtered out; finished in 0.00s 
+EXIT: 0
+
+
+RERUN COMMAND: pnpm --dir frontend test -- src/lib/api/mcp.test.ts src/stores/mcp-store.test.ts
+ > @forensics/workbench@0.0.1 test D:\forensics\frontend > vitest run "src/lib/api/mcp.test.ts" "src/stores/mcp-store.test.ts"   [1m[46m RUN [49m[22m [36mv4.1.0 [39m[90mD:/forensics/frontend[39m   [2m Test Files [22m [1m[32m2 passed[39m[22m[90m (2)[39m [2m      Tests [22m [1m[32m16 passed[39m[22m[90m (16)[39m [2m   Start at [22m 01:33:19 [2m   Duration [22m 1.21s[2m (transform 174ms, setup 0ms, import 240ms, tests 29ms, environment 1.57s)[22m 
+EXIT: 0
+
+
+RERUN COMMAND: pnpm --dir frontend typecheck
+ > @forensics/workbench@0.0.1 typecheck D:\forensics\frontend > tsc --noEmit 
+EXIT: 0
+

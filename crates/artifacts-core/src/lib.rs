@@ -117,6 +117,10 @@ pub fn new_artifact(
         title,
         summary,
         source_object_id: source_id.cloned(),
+        extractor_id: None,
+        extractor_version: None,
+        confidence: None,
+        source_attribution: None,
         created_at: Utc::now(),
         attrs,
     }
@@ -137,6 +141,10 @@ pub fn new_timeline_event(
         timestamp: ts,
         title,
         description,
+        parser_id: None,
+        parser_version: None,
+        confidence: None,
+        source_attribution: None,
         attrs,
     }
 }

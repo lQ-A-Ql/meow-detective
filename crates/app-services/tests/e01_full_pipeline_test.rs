@@ -280,6 +280,7 @@ fn e01_ntfs_mft_enumeration_builds_navigable_tree() {
                     kind: domain::DataSourceKind::E01,
                     source_path: sample_path(),
                     imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
                 },
             )?;
 
@@ -435,6 +436,7 @@ fn e01_timeline_projection() {
                     kind: domain::DataSourceKind::E01,
                     source_path: sample_path(),
                     imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
                 },
             )?;
 

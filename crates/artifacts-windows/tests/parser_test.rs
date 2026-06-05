@@ -1,10 +1,14 @@
 mod fixture_builder;
 
 use artifacts_core::{ArtifactContext, ArtifactExtractor, ExtractorRegistry, VecSink};
-use artifacts_windows::{LnkExtractor, PrefetchExtractor, RecycleBinExtractor, RegistryExtractor};
+use artifacts_windows::{
+    extract_boot_shutdown_events_from_json_records, JumpListExtractor, LnkExtractor,
+    PrefetchExtractor, RecycleBinExtractor, RegistryExtractor, SruExtractor, ThumbcacheExtractor,
+};
 use chrono::{TimeZone, Utc};
 use domain::FileEntryId;
 use fixture_builder::*;
+use serde_json::json;
 
 fn t(s: &str) -> FileEntryId {
     FileEntryId(s.to_string())
@@ -165,6 +169,169 @@ fn registry_hive_fixture_parses_name() {
         !sink.timeline_events.is_empty(),
         "Expected REGISTRY_MODIFIED event"
     );
+}
+
+#[test]
+fn evtx_json_records_extract_boot_shutdown_candidates() {
+    let extraction = extract_boot_shutdown_events_from_json_records(
+        &[
+            json!({
+                "Event": {
+                    "System": {
+                        "Provider": { "@Name": "EventLog" },
+                        "EventID": 6005,
+                        "EventRecordID": 10,
+                        "TimeCreated": { "@SystemTime": "2026-02-01T00:00:00Z" }
+                    }
+                }
+            }),
+            json!({
+                "Event": {
+                    "System": {
+                        "Provider": "EventLog",
+                        "EventID": { "#text": "6008" },
+                        "EventRecordID": "11",
+                        "TimeCreated": "2026-02-01 01:30:00 +0000"
+                    }
+                }
+            }),
+            json!({
+                "Event": {
+                    "System": {
+                        "Provider": { "Name": "User32" },
+                        "EventID": "1074",
+                        "EventRecordID": 12,
+                        "TimeCreated": { "SystemTime": "2026-02-01T02:00:00Z" }
+                    }
+                }
+            }),
+            json!({"Event":{"System":{"EventID":7045}}}),
+        ],
+        "Windows/System32/winevt/Logs/System.evtx",
+    );
+
+    assert!(extraction.warnings.is_empty());
+    assert_eq!(extraction.events.len(), 3);
+    assert_eq!(extraction.events[0].event_id, 6005);
+    assert_eq!(extraction.events[0].kind.as_str(), "eventLogStarted");
+    assert_eq!(extraction.events[0].timestamp, "2026-02-01T00:00:00+00:00");
+    assert_eq!(extraction.events[0].record_id, Some(10));
+    assert_eq!(extraction.events[0].provider.as_deref(), Some("EventLog"));
+    assert_eq!(extraction.events[1].event_id, 6008);
+    assert_eq!(extraction.events[1].kind.as_str(), "unexpectedShutdown");
+    assert_eq!(extraction.events[1].record_id, Some(11));
+    assert!(extraction.events[1]
+        .note
+        .contains("unexpected prior shutdown"));
+    assert_eq!(extraction.events[2].event_id, 1074);
+    assert_eq!(extraction.events[2].kind.as_str(), "plannedShutdown");
+    assert_eq!(extraction.events[2].provider.as_deref(), Some("User32"));
+}
+
+#[test]
+fn jumplist_no_embedded_lnk_reports_generic_artifact() {
+    let extractor = JumpListExtractor;
+    assert!(extractor.supports_path(
+        "C:/Users/alice/AppData/Roaming/Microsoft/Windows/Recent/AutomaticDestinations/5f7b5f7e3243a7b8.ms-abc"
+    ));
+    assert!(extractor.supports_path(
+        "C:/Users/alice/AppData/Roaming/Microsoft/Windows/Recent/CustomDestinations/example.customDestinations-ms"
+    ));
+    assert!(!extractor.supports_path("C:/Users/alice/Documents/message.msg"));
+    assert!(!extractor.supports_path("C:/Users/alice/Documents/shortcut.lnk"));
+
+    let data = b"valid-looking AutomaticDestinations data without embedded shell links".to_vec();
+    let expected_size = data.len() as u64;
+    let ctx = ArtifactContext {
+        file_id: t("jl-001"),
+        file_path: "5f7b5f7e3243a7b8.ms-abc".into(),
+        reader: Box::new(std::io::Cursor::new(data)),
+    };
+    let mut sink = VecSink::new();
+    let report = extractor.run(ctx, &mut sink).unwrap();
+
+    assert_eq!(report.artifacts_found, 1);
+    assert!(report.errors.is_empty());
+    assert!(sink.timeline_events.is_empty());
+    assert_eq!(sink.artifacts.len(), 1);
+    assert_eq!(sink.artifacts[0].family, "JumpList");
+    assert!(sink.artifacts[0].title.contains("5f7b5f7e3243a7b8.ms-abc"));
+    assert_eq!(
+        sink.artifacts[0]
+            .attrs
+            .get("format")
+            .and_then(|v| v.as_str()),
+        Some("AutomaticDestinations")
+    );
+    assert_eq!(
+        sink.artifacts[0]
+            .attrs
+            .get("file_size")
+            .and_then(|v| v.as_u64()),
+        Some(expected_size)
+    );
+}
+
+#[test]
+fn thumbcache_minimal_header_extracts_metadata_artifact() {
+    let extractor = ThumbcacheExtractor;
+    assert!(extractor
+        .supports_path("C:/Users/alice/AppData/Local/Microsoft/Windows/Explorer/thumbcache_32.db"));
+    assert!(extractor.supports_path(
+        "C:/Users/alice/AppData/Local/Microsoft/Windows/Explorer/thumbcache_256.db"
+    ));
+    assert!(!extractor
+        .supports_path("C:/Users/alice/AppData/Local/Microsoft/Windows/Explorer/iconcache_32.db"));
+
+    let mut data = vec![0u8; 24];
+    data[0..4].copy_from_slice(b"CMMM");
+    data[4..8].copy_from_slice(&24u32.to_le_bytes());
+    data[8..12].copy_from_slice(&1u32.to_le_bytes());
+    data[12..16].copy_from_slice(&3u32.to_le_bytes());
+
+    let ctx = ArtifactContext {
+        file_id: t("tc-001"),
+        file_path: "thumbcache_256.db".into(),
+        reader: Box::new(std::io::Cursor::new(data)),
+    };
+    let mut sink = VecSink::new();
+    let report = extractor.run(ctx, &mut sink).unwrap();
+
+    assert_eq!(report.artifacts_found, 1);
+    assert!(report.errors.is_empty());
+    assert_eq!(sink.artifacts.len(), 1);
+    assert_eq!(sink.artifacts[0].family, "Thumbcache");
+    let attrs = &sink.artifacts[0].attrs;
+    assert_eq!(attrs.get("file_size").and_then(|v| v.as_u64()), Some(24));
+    assert_eq!(attrs.get("header_size").and_then(|v| v.as_u64()), Some(24));
+    assert_eq!(attrs.get("version").and_then(|v| v.as_u64()), Some(1));
+    assert_eq!(attrs.get("cache_type").and_then(|v| v.as_u64()), Some(3));
+    assert_eq!(
+        attrs.get("cache_type_desc").and_then(|v| v.as_str()),
+        Some("256x256")
+    );
+}
+
+#[test]
+fn sru_invalid_minimal_content_reports_sqlite_error_without_artifacts() {
+    let extractor = SruExtractor;
+    assert!(extractor.supports_path("C:/Windows/System32/sru/SRUDB.DAT"));
+    assert!(extractor.supports_path("C:\\Windows\\System32\\sru\\SRUDB.DAT"));
+    assert!(!extractor.supports_path("C:/Windows/System32/config/SYSTEM"));
+
+    let ctx = ArtifactContext {
+        file_id: t("sru-001"),
+        file_path: "C:/Windows/System32/sru/SRUDB.DAT".into(),
+        reader: Box::new(std::io::Cursor::new(b"not sqlite".to_vec())),
+    };
+    let mut sink = VecSink::new();
+    let report = extractor.run(ctx, &mut sink).unwrap();
+
+    assert_eq!(report.artifacts_found, 0);
+    assert_eq!(report.timeline_events, 0);
+    assert!(sink.artifacts.is_empty());
+    assert!(sink.timeline_events.is_empty());
+    assert_eq!(report.errors, vec!["Not a valid SQLite database"]);
 }
 
 #[test]

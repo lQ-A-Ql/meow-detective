@@ -37,6 +37,7 @@ fn project_and_query_timeline() {
                     kind: domain::DataSourceKind::LogicalDirectory,
                     source_path: evidence_dir.clone(),
                     imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
                 },
             )?;
 
@@ -102,6 +103,7 @@ fn timeline_pagination() {
                     kind: domain::DataSourceKind::LogicalDirectory,
                     source_path: evidence_dir.clone(),
                     imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
                 },
             )?;
 
@@ -159,6 +161,7 @@ fn timeline_filtered_by_event_type() {
                     kind: domain::DataSourceKind::LogicalDirectory,
                     source_path: evidence_dir.clone(),
                     imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
                 },
             )?;
 

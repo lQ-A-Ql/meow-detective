@@ -60,6 +60,13 @@ export interface DataSourceSummary {
   sourcePath: string;
   importedAt: string;
   fileCount?: number;
+  sourceHash?: string;
+  hashStatus?: string;
+  canonicalPath?: string;
+  evidenceSize?: number;
+  readerKind?: string;
+  provenanceStatus?: string;
+  warnings?: string[];
   partitions: DataSourcePartition[];
 }
 
@@ -272,6 +279,10 @@ export interface TimelineEventDto {
   ts: string;
   title: string;
   description: string;
+  parserId?: string;
+  parserVersion?: string;
+  confidence?: number;
+  sourceAttribution?: string;
   attrs: Record<string, unknown>;
 }
 
@@ -282,6 +293,10 @@ export interface ArtifactRow {
   summary: string;
   sourceObjectId?: string;
   createdAt: string;
+  extractorId?: string;
+  extractorVersion?: string;
+  confidence?: number;
+  sourceAttribution?: string;
   attrs: Record<string, unknown>;
 }
 

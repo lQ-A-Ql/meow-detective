@@ -7,7 +7,16 @@
  * 3. 虚拟滚动支持大列表
  */
 
-import { memo, useCallback, type ReactElement, type ReactNode } from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import {
   Table,
   TableBody,
@@ -51,6 +60,10 @@ interface TableRowMemoProps<T> {
   selected: boolean;
   onRowClick?: (row: T) => void;
 }
+
+const ROW_HEIGHT = 31;
+const OVERSCAN_ROWS = 8;
+const DEFAULT_CONTAINER_HEIGHT = 600;
 
 /**
  * 表格行组件 (使用 memo 优化)
@@ -103,6 +116,10 @@ export function DenseDataTable<T>({
   sortDirection,
   onSort,
 }: DenseDataTableProps<T>) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(DEFAULT_CONTAINER_HEIGHT);
+
   const handleSort = useCallback(
     (key: string) => {
       onSort?.(key);
@@ -110,8 +127,58 @@ export function DenseDataTable<T>({
     [onSort]
   );
 
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const updateContainerHeight = () => {
+      const nextHeight = container.clientHeight;
+      if (nextHeight > 0) {
+        setContainerHeight(nextHeight);
+      }
+    };
+
+    updateContainerHeight();
+
+    if (typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver(() => {
+      updateContainerHeight();
+    });
+
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
+  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    setScrollTop(event.currentTarget.scrollTop);
+  }, []);
+
+  const visibleRange = useMemo(() => {
+    const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN_ROWS);
+    const visibleRowCount = Math.ceil(containerHeight / ROW_HEIGHT) + OVERSCAN_ROWS * 2;
+    const endIndex = Math.min(rows.length, startIndex + visibleRowCount);
+
+    return { startIndex, endIndex };
+  }, [containerHeight, rows.length, scrollTop]);
+
+  const visibleRows = useMemo(
+    () => rows.slice(visibleRange.startIndex, visibleRange.endIndex),
+    [rows, visibleRange.endIndex, visibleRange.startIndex]
+  );
+
+  const topSpacerHeight = visibleRange.startIndex * ROW_HEIGHT;
+  const bottomSpacerHeight = Math.max(
+    0,
+    (rows.length - visibleRange.endIndex) * ROW_HEIGHT
+  );
+
   return (
-    <div className="min-h-0 flex-1 overflow-auto bg-white font-mono text-[11px]">
+    <div
+      ref={containerRef}
+      className="min-h-0 flex-1 overflow-auto bg-white font-mono text-[11px]"
+      onScroll={handleScroll}
+    >
       <Table className="text-[11px]">
         <TableHeader className="sticky top-0 z-10 bg-[#fafafa]">
           <TableRow className="border-b border-[#e0e0e0] hover:bg-[#fafafa]">
@@ -151,7 +218,16 @@ export function DenseDataTable<T>({
               </TableCell>
             </TableRow>
           ) : null}
-          {rows.map((row) => {
+          {rows.length > 0 && topSpacerHeight > 0 ? (
+            <TableRow aria-hidden="true" className="hover:bg-white">
+              <TableCell
+                colSpan={columns.length}
+                className="border-r-0 p-0"
+                style={{ height: topSpacerHeight }}
+              />
+            </TableRow>
+          ) : null}
+          {visibleRows.map((row) => {
             const key = getRowKey(row);
             const selected = key === selectedRowKey;
             return (
@@ -164,6 +240,15 @@ export function DenseDataTable<T>({
               />
             );
           })}
+          {rows.length > 0 && bottomSpacerHeight > 0 ? (
+            <TableRow aria-hidden="true" className="hover:bg-white">
+              <TableCell
+                colSpan={columns.length}
+                className="border-r-0 p-0"
+                style={{ height: bottomSpacerHeight }}
+              />
+            </TableRow>
+          ) : null}
         </TableBody>
       </Table>
     </div>

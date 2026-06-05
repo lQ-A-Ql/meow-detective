@@ -2,6 +2,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router';
 import { Search, Activity, Settings, AlertTriangle } from 'lucide-react';
 import { useCurrentCase } from '@/features/case/hooks';
 import { useJobsSnapshot, useWarnings } from '@/features/jobs/hooks';
+import { apiMode } from '@/lib/api/client';
 import { useUiStore } from '@/stores/ui-store';
 
 const links = [
@@ -25,6 +26,8 @@ export function TopBar() {
   const setCurrentPage = useUiStore((state) => state.setCurrentPage);
   const globalSearchQuery = useUiStore((state) => state.globalSearchQuery);
   const setGlobalSearchQuery = useUiStore((state) => state.setGlobalSearchQuery);
+  const currentApiMode = apiMode();
+  const isMockMode = currentApiMode === 'mock';
 
   const runningCount = jobs?.filter((job) => job.status === 'running').length ?? 0;
   const warningCount = warnings?.length ?? 0;
@@ -67,6 +70,16 @@ export function TopBar() {
         </div>
 
         <div className="flex shrink-0 items-center gap-3 text-[#666]">
+          {isMockMode ? (
+            <div
+              role="status"
+              aria-label="Mock mode data label"
+              className="flex items-center gap-2 border border-[#d7c7a0] bg-[#fff8e8] px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[#7a5600]"
+            >
+              <span className="text-[#111]">Mock Mode</span>
+              <span className="font-mono text-[#7a5600]">显示演示取证数据</span>
+            </div>
+          ) : null}
           <div className="flex items-center gap-2 border border-[#e0e0e0] bg-white px-2 py-1 rounded-sm">
             <Search size={12} className="text-[#888]" />
             <input

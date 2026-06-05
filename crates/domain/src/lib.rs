@@ -11,7 +11,10 @@ pub mod timestamp;
 
 pub use artifact::{Artifact, ArtifactFamily, ArtifactId};
 pub use case::{CaseId, CaseMeta, CaseSession};
-pub use datasource::{DataSource, DataSourceId, DataSourceKind};
+pub use datasource::{
+    DataSource, DataSourceHashStatus, DataSourceId, DataSourceKind, DataSourceProvenance,
+    DataSourceProvenanceStatus,
+};
 pub use error::{ForensicsError, ForensicsResult};
 pub use file_entry::{EntryType, FileEntry, FileEntryId};
 pub use job::{Job, JobId, JobScope, JobStatus};

@@ -1,0 +1,14 @@
+COMMAND: cargo test -p forensics-desktop import::pipeline::tests -- --nocapture
+
+running 3 tests
+test commands::import::pipeline::tests::e01_full_import ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test commands::import::pipeline::tests::image_backed_metadata_only_post_import_defers_timeline_until_query ... ok
+test commands::import::pipeline::tests::logical_import_post_pipeline_indexes_marker_and_extracts_artifact ... ok
+
+test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 39 filtered out; finished in 0.86s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

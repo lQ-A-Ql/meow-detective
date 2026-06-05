@@ -35,6 +35,7 @@ fn full_case_lifecycle() {
                     kind: domain::DataSourceKind::LogicalDirectory,
                     source_path: evidence_dir.clone(),
                     imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
                 },
             )?;
 

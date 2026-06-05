@@ -284,6 +284,10 @@ fn artifact_to_dto(a: &domain::Artifact) -> ArtifactRowDto {
         title: a.title.clone(),
         summary: a.summary.clone(),
         source_object_id: a.source_object_id.as_ref().map(|id| id.0.clone()),
+        extractor_id: a.extractor_id.clone(),
+        extractor_version: a.extractor_version.clone(),
+        confidence: a.confidence,
+        source_attribution: a.source_attribution.clone(),
         created_at: a.created_at.to_rfc3339(),
         attrs: a.attrs.clone(),
     }
@@ -303,6 +307,13 @@ mod tests {
     fn in_memory_db_with_artifacts() -> rusqlite::Connection {
         let conn = persistence_sqlite::connection::open_in_memory().unwrap();
         conn.execute_batch(ARTIFACTS_SCHEMA).unwrap();
+        conn.execute_batch(
+            "ALTER TABLE artifacts ADD COLUMN extractor_id TEXT;
+             ALTER TABLE artifacts ADD COLUMN extractor_version TEXT;
+             ALTER TABLE artifacts ADD COLUMN confidence REAL;
+             ALTER TABLE artifacts ADD COLUMN source_attribution TEXT;",
+        )
+        .unwrap();
         conn
     }
 
@@ -327,6 +338,7 @@ mod tests {
             kind: domain::DataSourceKind::LogicalDirectory,
             source_path: std::path::PathBuf::from("C:/fixture"),
             imported_at: Utc::now(),
+            provenance: domain::DataSourceProvenance::unknown(),
         };
         persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&conn)
             .insert(&domain::CaseId("case-1".to_string()), &ds)
@@ -341,6 +353,10 @@ mod tests {
             title: title.to_string(),
             summary: format!("summary for {}", title),
             source_object_id: Some(FileEntryId("src-1".to_string())),
+            extractor_id: None,
+            extractor_version: None,
+            confidence: None,
+            source_attribution: None,
             created_at: Utc::now(),
             attrs: BTreeMap::new(),
         }

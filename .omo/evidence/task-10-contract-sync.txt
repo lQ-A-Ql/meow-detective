@@ -1,0 +1,90 @@
+# Task 10 Rust-TypeScript Contract Synchronization Tests
+
+## cargo test -p transport
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.18s
+     Running unittests src\lib.rs (target\debug\deps\transport-c384a629251e48e6.exe)
+
+running 51 tests
+test commands::tests::classify_files_request_deserializes_sample_size ... ok
+test commands::tests::app_settings_rejects_missing_case_root ... ok
+test commands::tests::export_scope_defaults_enable_existing_sections_only ... ok
+test commands::tests::extract_file_request_rejects_device_destination ... ok
+test commands::tests::import_source_rejects_reserved_device_names ... ok
+test commands::tests::import_source_rejects_windows_device_paths ... ok
+test commands::tests::timeline_request_clamps_limit ... ok
+test commands::tests::timeline_request_rejects_reversed_time_range ... ok
+test commands::tests::app_settings_defaults_to_metadata_only_import_analysis ... ok
+test commands::tests::app_settings_rejects_unknown_import_analysis_mode ... ok
+test commands::tests::app_settings_rejects_invalid_theme ... ok
+test commands::tests::app_settings_rejects_zero_analysis_workers ... ok
+test commands::tests::app_settings_rejects_zero_import_workers ... ok
+test dto::analysis::tests::future_provenance_contract_includes_hash_version_and_confidence ... ignored, future provenance contract: add after DataSource/Artifact/Timeline schema migrations
+test commands::tests::import_source_rejects_extended_length_paths ... ok
+test dto::analysis::tests::classification_serializes_camel_case ... ok
+test dto::analysis::tests::current_provenance_contract_is_bounded_to_source_attribution ... ok
+test dto::analysis::tests::provenance_serializes_required_camel_case_fields ... ok
+test dto::analysis::tests::system_info_serializes_camel_case_and_status ... ok
+test dto::artifacts::tests::artifact_row_dto_serializes_optional_provenance_as_camel_case ... ok
+test dto::artifacts::tests::artifact_row_dto_skips_missing_optional_provenance ... ok
+test dto::case::tests::data_source_summary_serializes_provenance_fields_as_frontend_contract ... ok
+test dto::case::tests::data_source_summary_skips_missing_optional_provenance_fields ... ok
+test dto::jobs::tests::job_snapshot_defaults_stage4_counts ... ok
+test dto::jobs::tests::job_snapshot_serializes_stage4_counts_as_camel_case ... ok
+test dto::mcp::tests::protocol_dtos_keep_current_nested_snake_case_fields ... ok
+test dto::mcp::tests::server_config_serializes_current_snake_case_response_fields ... ok
+test dto::mcp::tests::server_status_serializes_current_snake_case_capability_fields ... ok
+test dto::mcp::tests::test_connection_request_accepts_current_snake_case_transport_field ... ok
+test dto::mcp::tests::tool_call_request_accepts_current_snake_case_request_fields ... ok
+test dto::mcp::tests::tool_call_request_rejects_camel_case_request_fields_without_aliases ... ok
+test dto::reports::tests::report_history_item_serializes_existing_contract_only_as_camel_case ... ok
+test dto::reports::tests::report_history_item_skips_missing_progress ... ok
+test dto::timeline::tests::timeline_event_dto_serializes_optional_provenance_as_camel_case ... ok
+test dto::timeline::tests::timeline_event_dto_skips_missing_optional_provenance ... ok
+test dto::viewer::tests::media_range_request_clamps_oversized_length ... ok
+test dto::viewer::tests::media_range_request_rejects_zero_length ... ok
+test dto::viewer::tests::test_image_preview_dto_serialization ... ok
+test dto::viewer::tests::test_media_url_dto_serialization ... ok
+test dto::viewer::tests::test_media_url_protocol_serialization ... ok
+test dto::viewer::tests::test_text_preview_dto_serialization ... ok
+test dto::viewer::tests::test_viewer_handle_dto_no_mime ... ok
+test dto::viewer::tests::test_viewer_handle_dto_serialization ... ok
+test dto::viewer::tests::test_viewer_range_request_deserialization ... ok
+test dto::viewer::tests::viewer_range_request_clamps_oversized_length ... ok
+test dto::viewer::tests::viewer_range_request_rejects_empty_handle ... ok
+test dto::viewer::tests::viewer_range_request_rejects_zero_length ... ok
+test events::tests::event_topic_serializes_as_wire_topic ... ok
+test events::tests::unknown_event_topic_is_rejected ... ok
+test paging::tests::page_request_clamps_unbounded_limit ... ok
+test paging::tests::page_request_replaces_zero_with_default ... ok
+
+test result: ok. 50 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests transport
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+## pnpm --dir frontend test -- src/lib/api/mock-provenance.test.ts
+
+> @forensics/workbench@0.0.1 test D:\forensics\frontend
+> vitest run "src/lib/api/mock-provenance.test.ts"
+
+
+[1m[46m RUN [49m[22m [36mv4.1.0 [39m[90mD:/forensics/frontend[39m
+
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m5 passed[39m[22m[90m (5)[39m
+[2m   Start at [22m 00:25:19
+[2m   Duration [22m 832ms[2m (transform 121ms, setup 0ms, import 149ms, tests 8ms, environment 508ms)[22m
+
+
+## pnpm --dir frontend typecheck
+
+> @forensics/workbench@0.0.1 typecheck D:\forensics\frontend
+> tsc --noEmit
+
+
+## cargo fmt --all -- --check

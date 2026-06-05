@@ -59,6 +59,18 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0018_job_partial_counts",
         include_str!("scripts/0018_job_partial_counts.sql"),
     ),
+    (
+        "0019_data_source_provenance",
+        include_str!("scripts/0019_data_source_provenance.sql"),
+    ),
+    (
+        "0020_artifact_timeline_provenance",
+        include_str!("scripts/0020_artifact_timeline_provenance.sql"),
+    ),
+    (
+        "0021_timeline_query_indexes",
+        include_str!("scripts/0021_timeline_query_indexes.sql"),
+    ),
 ];
 
 pub fn latest_version() -> &'static str {

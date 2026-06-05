@@ -2,9 +2,122 @@
 //!
 //! Analyzes data sources before import to generate optimal import plans.
 
-use crate::import_state::{ImportPlan, ImportStrategy};
+use crate::{
+    datasource_service::{self, DataSourceError},
+    import_state::{ImportPlan, ImportStrategy},
+};
 use domain::DataSourceKind;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use thiserror::Error;
+use transport::commands::ImportDataSourceRequest;
+
+/// Bounded import configuration prepared before the Tauri job orchestration starts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportSourceConfig {
+    pub source_path: PathBuf,
+    pub source_path_display: String,
+    pub source_name: String,
+    pub kind: DataSourceKind,
+    pub mode: ImportSourceMode,
+}
+
+/// Import source mode derived from source classification.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ImportSourceMode {
+    LogicalDirectory,
+    Image { staging_kind: &'static str },
+}
+
+#[derive(Debug, Error)]
+pub enum ImportSourceConfigError {
+    #[error("{0}")]
+    InvalidRequest(String),
+    #[error("sourcePath must exist and be accessible before import")]
+    MissingOrInaccessibleSource,
+    #[error("sourcePath must point to a directory or regular image file")]
+    UnsupportedSourceType,
+    #[error(transparent)]
+    Classification(#[from] DataSourceError),
+}
+
+impl ImportSourceConfig {
+    pub fn is_image_backed(&self) -> bool {
+        matches!(self.mode, ImportSourceMode::Image { .. })
+    }
+
+    pub fn staging_kind(&self) -> Option<&'static str> {
+        match self.mode {
+            ImportSourceMode::LogicalDirectory => None,
+            ImportSourceMode::Image { staging_kind } => Some(staging_kind),
+        }
+    }
+}
+
+impl ImportSourceConfigError {
+    pub fn is_invalid_input(&self) -> bool {
+        matches!(
+            self,
+            Self::InvalidRequest(_)
+                | Self::MissingOrInaccessibleSource
+                | Self::UnsupportedSourceType
+        )
+    }
+}
+
+pub fn prepare_import_source_config(
+    request: &ImportDataSourceRequest,
+) -> Result<ImportSourceConfig, ImportSourceConfigError> {
+    request
+        .validate()
+        .map_err(ImportSourceConfigError::InvalidRequest)?;
+    prepare_import_source_config_from_path(&request.source_path)
+}
+
+pub fn prepare_import_source_config_from_path(
+    source_path: &str,
+) -> Result<ImportSourceConfig, ImportSourceConfigError> {
+    let path = PathBuf::from(source_path);
+    validate_import_source_for_filesystem(&path)?;
+    let kind = datasource_service::classify_data_source_path(&path)?;
+    let source_name = derive_source_name(&path);
+    let mode = import_source_mode(&kind);
+
+    Ok(ImportSourceConfig {
+        source_path: path,
+        source_path_display: source_path.to_string(),
+        source_name,
+        kind,
+        mode,
+    })
+}
+
+fn validate_import_source_for_filesystem(path: &Path) -> Result<(), ImportSourceConfigError> {
+    let metadata = std::fs::metadata(path)
+        .map_err(|_| ImportSourceConfigError::MissingOrInaccessibleSource)?;
+    if metadata.is_dir() || metadata.is_file() {
+        Ok(())
+    } else {
+        Err(ImportSourceConfigError::UnsupportedSourceType)
+    }
+}
+
+fn derive_source_name(path: &Path) -> String {
+    path.file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "data_source".to_string())
+}
+
+fn import_source_mode(kind: &DataSourceKind) -> ImportSourceMode {
+    match kind {
+        DataSourceKind::LogicalDirectory => ImportSourceMode::LogicalDirectory,
+        DataSourceKind::E01 => ImportSourceMode::Image {
+            staging_kind: "E01",
+        },
+        DataSourceKind::Raw => ImportSourceMode::Image {
+            staging_kind: "Raw",
+        },
+    }
+}
 
 /// Pre-check result
 #[derive(Debug, Clone)]
@@ -199,5 +312,119 @@ mod tests {
             1024 * 1024 * 100,
         );
         assert!(plan.estimated_memory_bytes > 0);
+    }
+
+    #[test]
+    fn import_source_config_classifies_logical_directory() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let evidence_dir = tmp.path().join("logical-evidence");
+        std::fs::create_dir(&evidence_dir).unwrap();
+        let request = ImportDataSourceRequest {
+            source_path: evidence_dir.display().to_string(),
+        };
+
+        let config = prepare_import_source_config(&request).unwrap();
+
+        assert_eq!(config.source_path, evidence_dir);
+        assert_eq!(config.source_name, "logical-evidence");
+        assert_eq!(config.kind, DataSourceKind::LogicalDirectory);
+        assert_eq!(config.mode, ImportSourceMode::LogicalDirectory);
+        assert!(!config.is_image_backed());
+        assert_eq!(config.staging_kind(), None);
+    }
+
+    #[test]
+    fn import_source_config_classifies_raw_file() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let source = tmp.path().join("disk.raw");
+        std::fs::write(&source, b"not an e01 image").unwrap();
+        let request = ImportDataSourceRequest {
+            source_path: source.display().to_string(),
+        };
+
+        let config = prepare_import_source_config(&request).unwrap();
+
+        assert_eq!(config.source_path, source);
+        assert_eq!(config.source_name, "disk.raw");
+        assert_eq!(config.kind, DataSourceKind::Raw);
+        assert_eq!(
+            config.mode,
+            ImportSourceMode::Image {
+                staging_kind: "Raw"
+            }
+        );
+        assert!(config.is_image_backed());
+        assert_eq!(config.staging_kind(), Some("Raw"));
+    }
+
+    #[test]
+    fn import_source_config_classifies_e01_by_name() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let source = tmp.path().join("capture.E01");
+        std::fs::write(&source, b"short").unwrap();
+        let request = ImportDataSourceRequest {
+            source_path: source.display().to_string(),
+        };
+
+        let config = prepare_import_source_config(&request).unwrap();
+
+        assert_eq!(config.source_name, "capture.E01");
+        assert_eq!(config.kind, DataSourceKind::E01);
+        assert_eq!(
+            config.mode,
+            ImportSourceMode::Image {
+                staging_kind: "E01"
+            }
+        );
+        assert_eq!(config.staging_kind(), Some("E01"));
+    }
+
+    #[test]
+    fn import_source_config_classifies_e01_by_magic() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let source = tmp.path().join("capture.bin");
+        std::fs::write(&source, b"EVF\x09\x0d\x0a\xff\x00payload").unwrap();
+        let request = ImportDataSourceRequest {
+            source_path: source.display().to_string(),
+        };
+
+        let config = prepare_import_source_config(&request).unwrap();
+
+        assert_eq!(config.source_name, "capture.bin");
+        assert_eq!(config.kind, DataSourceKind::E01);
+        assert_eq!(config.staging_kind(), Some("E01"));
+    }
+
+    #[test]
+    fn import_source_config_rejects_missing_source() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let request = ImportDataSourceRequest {
+            source_path: tmp.path().join("missing.raw").display().to_string(),
+        };
+
+        let error = prepare_import_source_config(&request).unwrap_err();
+
+        assert!(matches!(
+            error,
+            ImportSourceConfigError::MissingOrInaccessibleSource
+        ));
+        assert!(error.is_invalid_input());
+        assert_eq!(
+            error.to_string(),
+            "sourcePath must exist and be accessible before import"
+        );
+    }
+
+    #[test]
+    fn import_source_config_preserves_request_validation_semantics() {
+        let request = ImportDataSourceRequest {
+            source_path: "CON".to_string(),
+        };
+
+        let error = prepare_import_source_config(&request).unwrap_err();
+
+        assert!(matches!(error, ImportSourceConfigError::InvalidRequest(_)));
+        assert!(error.is_invalid_input());
+        assert_eq!(error.to_string(), "CON is a reserved Windows device name");
     }
 }
