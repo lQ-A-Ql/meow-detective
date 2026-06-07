@@ -43,18 +43,37 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Reset display state when switching between preview sources.
+  useEffect(() => {
+    const video = videoRef.current;
+    video?.pause();
+    if (video) {
+      video.currentTime = 0;
+    }
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setIsLoading(true);
+    setError(null);
+  }, [src]);
+
   // 播放/暂停
   const togglePlay = useCallback(() => {
-    if (videoRef.current) {
-      if (isPlaying) {
-        videoRef.current.pause();
-      } else {
-        videoRef.current.play().catch((e) => {
-          setError(`播放失败: ${e.message}`);
-        });
-      }
-      setIsPlaying(!isPlaying);
+    const video = videoRef.current;
+    if (!video) {
+      return;
     }
+
+    if (isPlaying) {
+      video.pause();
+      return;
+    }
+
+    setError(null);
+    video.play().catch((e) => {
+      setIsPlaying(false);
+      setError(`播放失败: ${e.message}`);
+    });
   }, [isPlaying]);
 
   // 快进/快退
@@ -86,6 +105,16 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
         setIsFullscreen(false);
       }
     }
+  }, []);
+
+  // Keep fullscreen button state in sync with browser fullscreen changes.
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === containerRef.current);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
   // 视频事件监听

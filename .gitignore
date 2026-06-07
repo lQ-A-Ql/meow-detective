@@ -31,6 +31,6 @@ Thumbs.db
 *.o
 *.exe
 
-
-docs/autopsy/
-docs/开发记录.md
+.claude/
+.pi/
+.omo/

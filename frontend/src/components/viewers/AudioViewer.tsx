@@ -31,18 +31,37 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Reset display state when switching between preview sources.
+  useEffect(() => {
+    const audio = audioRef.current;
+    audio?.pause();
+    if (audio) {
+      audio.currentTime = 0;
+    }
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setIsLoading(true);
+    setError(null);
+  }, [src]);
+
   // 播放/暂停
   const togglePlay = useCallback(() => {
-    if (audioRef.current) {
-      if (isPlaying) {
-        audioRef.current.pause();
-      } else {
-        audioRef.current.play().catch((e) => {
-          setError(`播放失败: ${e.message}`);
-        });
-      }
-      setIsPlaying(!isPlaying);
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
     }
+
+    if (isPlaying) {
+      audio.pause();
+      return;
+    }
+
+    setError(null);
+    audio.play().catch((e) => {
+      setIsPlaying(false);
+      setError(`播放失败: ${e.message}`);
+    });
   }, [isPlaying]);
 
   // 快进/快退
@@ -154,7 +173,7 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
       )}
 
       {/* 进度条 */}
-      <div className="w-full mb-4">
+      <div className="relative w-full mb-4 focus-within:ring-2 focus-within:ring-white/40">
         <div className="relative h-1.5 bg-[#333] rounded-full overflow-hidden">
           <div
             className="absolute left-0 top-0 h-full bg-white rounded-full transition-all duration-100"
@@ -174,8 +193,8 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
             }
             setCurrentTime(time);
           }}
-          className="w-full h-1 opacity-0 absolute top-0 cursor-pointer"
-          style={{ marginTop: '-2px' }}
+          aria-label="音频播放进度"
+          className="absolute inset-x-0 -top-2 h-5 opacity-0 cursor-pointer"
         />
       </div>
 

@@ -90,8 +90,8 @@ export function Timeline() {
   return (
     <div className="flex-1 flex flex-col w-full h-full bg-white min-w-0">
       <PageSubbar title="时间线控制带" meta={`事件 ${events?.length ?? 0} 条 / 数据源 ${sourceCount} 个`}>
-        <div className="h-10 shrink-0 flex items-center px-4 justify-between">
-          <div className="flex items-center gap-4 flex-wrap">
+        <div className="min-h-10 shrink-0 flex items-center px-4 py-1 justify-between gap-3 overflow-x-auto">
+          <div className="flex items-center gap-4 whitespace-nowrap">
             <div className="flex items-center gap-2 text-[#666] text-[11px] font-mono">
               <Clock size={12} className="text-[#888]" />
               <span className="text-[#111]">{timeRange.start}</span>

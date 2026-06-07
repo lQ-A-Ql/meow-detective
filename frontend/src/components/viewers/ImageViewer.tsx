@@ -41,6 +41,16 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Reset state when switching between preview sources.
+  useEffect(() => {
+    setScale(1);
+    setRotation(0);
+    setPosition({ x: 0, y: 0 });
+    setImageSize({ width: 0, height: 0 });
+    setIsLoading(true);
+    setError(null);
+  }, [src]);
+
   // 图片加载完成
   const handleLoad = useCallback(() => {
     if (imgRef.current) {

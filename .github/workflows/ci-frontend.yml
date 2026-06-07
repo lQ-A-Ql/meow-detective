@@ -19,6 +19,9 @@ jobs:
         with:
           node-version: 20
       - run: pnpm --dir frontend install --frozen-lockfile
+      - name: Frontend lockfile policy
+        shell: pwsh
+        run: ./scripts/check-frontend-lockfile-policy.ps1
       - name: Typecheck
         run: pnpm --dir frontend typecheck
       - name: Lint

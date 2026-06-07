@@ -11,7 +11,7 @@ scripts\build-demo.bat
 ```bash
 # 1. Install frontend dependencies
 cd frontend
-pnpm install
+pnpm install --frozen-lockfile
 
 # 2. Build frontend
 pnpm build
@@ -167,7 +167,7 @@ powershell -ExecutionPolicy Bypass -File scripts\check-e01-import-performance.ps
 ### Frontend not loading
 ```bash
 cd frontend
-pnpm install
+pnpm install --frozen-lockfile
 pnpm build
 ```
 

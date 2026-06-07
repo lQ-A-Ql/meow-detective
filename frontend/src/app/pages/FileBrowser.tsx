@@ -631,10 +631,14 @@ export function FileBrowser() {
                   value: 'preview',
                   label: '预览',
                   content: (() => {
-                    const mime = viewer?.handle.mime || selectedFile?.ext || '';
+                    const mime = viewer?.handle.mime?.toLowerCase() ?? '';
+                    const ext = (selectedFile?.ext ?? selectedFile?.name.split('.').pop() ?? '').toLowerCase().replace(/^\./, '');
+                    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
+                    const videoExts = ['mp4', 'webm', 'avi', 'mkv'];
+                    const audioExts = ['mp3', 'wav', 'flac', 'aac', 'ogg'];
                     
                     // 图片预览
-                    if (mime.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(mime)) {
+                    if (mime.startsWith('image/') || imageExts.includes(ext)) {
                       if (imagePreview?.dataUrl) {
                         return (
                           <ImageViewer
@@ -648,7 +652,7 @@ export function FileBrowser() {
                     }
                     
                     // 视频预览
-                    if (mime.startsWith('video/') || ['mp4', 'webm', 'avi', 'mkv'].includes(mime)) {
+                    if (mime.startsWith('video/') || videoExts.includes(ext)) {
                       if (mediaUrl?.url) {
                         return mediaUrl.previewMode === 'rangeFallback' || mediaUrl.previewMode === 'range' ? (
                           <div className="h-full flex flex-col">
@@ -698,7 +702,7 @@ export function FileBrowser() {
                     }
                     
                     // 音频预览
-                    if (mime.startsWith('audio/') || ['mp3', 'wav', 'flac', 'aac', 'ogg'].includes(mime)) {
+                    if (mime.startsWith('audio/') || audioExts.includes(ext)) {
                       if (mediaUrl?.url) {
                         return mediaUrl.previewMode === 'rangeFallback' || mediaUrl.previewMode === 'range' ? (
                           <div className="h-full flex flex-col">

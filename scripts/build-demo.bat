@@ -6,7 +6,7 @@ echo.
 
 echo [1/3] Installing frontend dependencies...
 cd frontend
-call pnpm install
+call pnpm install --frozen-lockfile
 if errorlevel 1 (
     echo Failed to install frontend dependencies!
     exit /b 1

@@ -77,7 +77,7 @@ function TableRowMemoBase<T>({
   return (
     <TableRow
       data-state={selected ? 'selected' : undefined}
-      className={`cursor-pointer border-b ${
+      className={`h-[31px] cursor-pointer border-b ${
         selected
           ? 'bg-[#e8e8e8] text-[#111]'
           : 'text-[#333] hover:bg-[#f9f9f9]'
@@ -87,13 +87,13 @@ function TableRowMemoBase<T>({
       {columns.map((column, index) => (
         <TableCell
           key={column.key}
-          className={`px-2 py-1.5 align-middle ${
+          className={`h-[31px] max-w-0 overflow-hidden whitespace-nowrap px-2 py-1.5 align-middle ${
             index < columns.length - 1
               ? 'border-r border-[#f0f0f0]'
               : ''
           } ${column.className ?? ''}`}
         >
-          {column.render(row)}
+          <div className="truncate">{column.render(row)}</div>
         </TableCell>
       ))}
     </TableRow>
