@@ -22,6 +22,8 @@ pub struct FileEntry {
     pub size: Option<u64>,
     pub ext: Option<String>,
     pub deleted: bool,
+    pub hidden: bool,
+    pub system: bool,
     pub created_at: Option<DateTime<Utc>>,
     pub modified_at: Option<DateTime<Utc>>,
     pub accessed_at: Option<DateTime<Utc>>,
@@ -43,7 +45,7 @@ impl FileEntry {
 
     /// Check if this entry is hidden (name starts with '.').
     pub fn is_hidden(&self) -> bool {
-        self.name.starts_with('.')
+        self.hidden || self.name.starts_with('.')
     }
 
     /// Get the file extension (without the dot).
@@ -107,6 +109,8 @@ mod tests {
             size: Some(1024),
             ext: None,
             deleted: false,
+            hidden: false,
+            system: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,

@@ -11,6 +11,9 @@ pub struct FileTreeNodeDto {
     pub entry_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<u64>,
+    pub deleted: bool,
+    pub hidden: bool,
+    pub system: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub node_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -58,6 +61,8 @@ pub struct FileEntryRowDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ext: Option<String>,
     pub deleted: bool,
+    pub hidden: bool,
+    pub system: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -68,4 +73,67 @@ pub struct FileEntryRowDto {
     pub changed_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hash_sha256: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn file_entry_row_serializes_visibility_flags_as_camel_case() {
+        let dto = FileEntryRowDto {
+            id: "file-1".to_string(),
+            parent_id: Some("root".to_string()),
+            path: "/$DeletedOrphans/77-old.txt".to_string(),
+            name: "old.txt".to_string(),
+            entry_type: "file".to_string(),
+            size: Some(12),
+            ext: Some("txt".to_string()),
+            deleted: true,
+            hidden: true,
+            system: false,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        };
+
+        let value = serde_json::to_value(dto).unwrap();
+
+        assert_eq!(value["parentId"], "root");
+        assert_eq!(value["entryType"], "file");
+        assert_eq!(value["deleted"], true);
+        assert_eq!(value["hidden"], true);
+        assert_eq!(value["system"], false);
+        assert!(value.get("parent_id").is_none());
+    }
+
+    #[test]
+    fn file_tree_node_serializes_visibility_flags_as_camel_case() {
+        let dto = FileTreeNodeDto {
+            id: "node-1".to_string(),
+            name: "System Volume Information".to_string(),
+            depth: 1,
+            has_children: false,
+            entry_type: Some("directory".to_string()),
+            size: None,
+            deleted: false,
+            hidden: true,
+            system: true,
+            node_type: None,
+            status: None,
+            expanded: None,
+            active: None,
+        };
+
+        let value = serde_json::to_value(dto).unwrap();
+
+        assert_eq!(value["hasChildren"], false);
+        assert_eq!(value["entryType"], "directory");
+        assert_eq!(value["deleted"], false);
+        assert_eq!(value["hidden"], true);
+        assert_eq!(value["system"], true);
+        assert!(value.get("has_children").is_none());
+    }
 }

@@ -70,6 +70,8 @@ mod tests {
             size: Some(100),
             ext: ext.map(|s| s.to_string()),
             deleted: false,
+            hidden: false,
+            system: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,

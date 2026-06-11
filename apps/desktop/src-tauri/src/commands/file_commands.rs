@@ -11,7 +11,9 @@ use base64::Engine;
 use std::io::Read;
 use tauri::State;
 use transport::{
-    commands::{ExtractFileRequest, GetFileChildrenRequest, GetFileRowsRequest},
+    commands::{
+        ExtractFileRequest, GetFileChildrenRequest, GetFileRowsRequest, GetFileTreeRequest,
+    },
     dto::{
         FileChildrenDto, FileEntryRowDto, FileRowsPageDto, FileTreeNodeDto, ImagePreviewDto,
         MediaPreviewModeDto, MediaRangeRequestDto, MediaRangeResponseDto, MediaUrlDto,
@@ -37,6 +39,7 @@ pub async fn get_file_children(
             parent_id,
             offset: 0,
             limit: 500,
+            show_hidden: false,
         },
     )
     .await?;
@@ -74,11 +77,12 @@ pub async fn get_file_children_request(
         // Guard is now dropped — query with released lock
         let conn = persistence_sqlite::open_or_create(&db_path)
             .map_err(CommandError::from_service_error)?;
-        file_service::get_file_children_lazy(
+        file_service::get_file_children_lazy_with_visibility(
             &conn,
             &request.parent_id,
             request.offset,
             request.limit,
+            request.show_hidden,
         )
         .map_err(CommandError::from_service_error)
     })
@@ -90,6 +94,16 @@ pub async fn get_file_children_request(
 #[tauri::command]
 pub async fn get_file_tree(
     state: State<'_, AppState>,
+) -> Result<Vec<FileTreeNodeDto>, CommandError> {
+    let page = get_file_tree_request(state, GetFileTreeRequest::default()).await?;
+    Ok(page)
+}
+
+/// Get the complete file tree for the current case with explicit visibility.
+#[tauri::command]
+pub async fn get_file_tree_request(
+    state: State<'_, AppState>,
+    request: GetFileTreeRequest,
 ) -> Result<Vec<FileTreeNodeDto>, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -107,7 +121,8 @@ pub async fn get_file_tree(
         // Guard is now dropped — query with released lock
         let conn = persistence_sqlite::open_or_create(&db_path)
             .map_err(CommandError::from_service_error)?;
-        file_service::get_file_tree_real(&conn).map_err(CommandError::from_service_error)
+        file_service::get_file_tree_real_with_visibility(&conn, request.show_hidden)
+            .map_err(CommandError::from_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?

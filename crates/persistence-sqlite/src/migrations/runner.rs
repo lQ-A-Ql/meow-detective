@@ -71,6 +71,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0021_timeline_query_indexes",
         include_str!("scripts/0021_timeline_query_indexes.sql"),
     ),
+    (
+        "0022_file_entry_visibility_flags",
+        include_str!("scripts/0022_file_entry_visibility_flags.sql"),
+    ),
 ];
 
 pub fn latest_version() -> &'static str {

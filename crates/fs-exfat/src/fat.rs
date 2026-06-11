@@ -84,6 +84,18 @@ pub fn walk_cluster_chain<F>(start_cluster: u32, read_fat_entry: F) -> io::Resul
 where
     F: Fn(u32) -> io::Result<FatEntry>,
 {
+    walk_cluster_chain_with_limit(start_cluster, None, read_fat_entry)
+}
+
+/// Walk a cluster chain with an optional maximum chain length.
+pub fn walk_cluster_chain_with_limit<F>(
+    start_cluster: u32,
+    max_clusters: Option<usize>,
+    read_fat_entry: F,
+) -> io::Result<Vec<u32>>
+where
+    F: Fn(u32) -> io::Result<FatEntry>,
+{
     if start_cluster < MIN_CLUSTER {
         return Ok(Vec::new());
     }
@@ -93,6 +105,15 @@ where
     let mut visited = std::collections::HashSet::new();
 
     loop {
+        if let Some(max) = max_clusters {
+            if clusters.len() >= max {
+                return Err(invalid_fs_data(format!(
+                    "cluster chain exceeds declared cluster count ({})",
+                    max
+                )));
+            }
+        }
+
         // Cycle detection
         if !visited.insert(current) {
             return Err(invalid_fs_data(format!(
@@ -212,6 +233,36 @@ mod tests {
         let result = walk_cluster_chain(2, fat);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("cycle"));
+    }
+
+    #[test]
+    fn walk_unexpected_free_cluster_errors() {
+        let fat = |cluster: u32| -> io::Result<FatEntry> {
+            match cluster {
+                2 => Ok(FatEntry::Cluster(3)),
+                3 => Ok(FatEntry::Free),
+                _ => Ok(FatEntry::Free),
+            }
+        };
+
+        let result = walk_cluster_chain(2, fat);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("unexpected free cluster"));
+    }
+
+    #[test]
+    fn walk_chain_limit_errors() {
+        let fat = |cluster: u32| -> io::Result<FatEntry> { Ok(FatEntry::Cluster(cluster + 1)) };
+
+        let result = walk_cluster_chain_with_limit(2, Some(2), fat);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("declared cluster count"));
     }
 
     #[test]

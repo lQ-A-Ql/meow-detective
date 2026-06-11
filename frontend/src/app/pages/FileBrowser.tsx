@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { ChevronDown, ChevronRight, HardDrive } from 'lucide-react';
+import { Button } from '@/app/components/ui/button';
 import { PageSubbar } from '@/components/layout/PageSubbar';
 import { useResizablePanel } from '@/hooks/use-resizable-panel';
 import {
@@ -17,8 +18,10 @@ import { VideoViewer } from '@/components/viewers/VideoViewer';
 import { AudioViewer } from '@/components/viewers/AudioViewer';
 import { TreeConnector } from '@/components/tree/TreeConnector';
 import { TreeSearch } from '@/components/tree/TreeSearch';
+import { FileIconWithStatusOverlay } from '@/components/files/FileIconWithStatusOverlay';
+import { FileVisibilityToggle } from '@/components/files/FileVisibilityToggle';
 import { useFileTreeKeyboard } from '@/hooks/use-file-tree-keyboard';
-import { useCurrentCase } from '@/features/case/hooks';
+import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import {
   useExtractFile,
   useFileChildrenPage,
@@ -31,9 +34,68 @@ import {
 } from '@/features/files/hooks';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useUiStore } from '@/stores/ui-store';
-import { getFileIcon } from '@/lib/file-icons';
 import { sortFileEntries } from '@/lib/file-sort';
-import { FileEntryRow, FileTreeNode } from '@/types/models';
+import { formatPartitionRootDisplayName } from '@/lib/partition-display';
+import {
+  DataSourcePartition,
+  FileEntryRow,
+  FileTreeNode,
+} from '@/types/models';
+
+function sameTreeNode(left: FileTreeNode, right: FileTreeNode) {
+  return (
+    left.id === right.id &&
+    left.name === right.name &&
+    left.depth === right.depth &&
+    left.hasChildren === right.hasChildren &&
+    left.entryType === right.entryType &&
+    left.status === right.status &&
+    left.expanded === right.expanded &&
+    left.deleted === right.deleted &&
+    left.hidden === right.hidden &&
+    left.system === right.system
+  );
+}
+
+function sameTreeNodeList(left: FileTreeNode[], right: FileTreeNode[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  for (let index = 0; index < left.length; index += 1) {
+    if (!sameTreeNode(left[index], right[index])) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function mergeTreeNodePages(
+  existing: FileTreeNode[],
+  incoming: FileTreeNode[],
+) {
+  const merged = [...existing];
+  const indexById = new Map(existing.map((node, index) => [node.id, index]));
+  let changed = false;
+
+  for (const node of incoming) {
+    const existingIndex = indexById.get(node.id);
+    if (existingIndex === undefined) {
+      merged.push(node);
+      indexById.set(node.id, merged.length - 1);
+      changed = true;
+      continue;
+    }
+
+    if (!sameTreeNode(merged[existingIndex], node)) {
+      merged[existingIndex] = node;
+      changed = true;
+    }
+  }
+
+  return changed ? merged : existing;
+}
 
 function formatBytes(bytes?: number) {
   if (!bytes) {
@@ -83,7 +145,7 @@ function LargeMediaFallback({
 
 export function FileBrowser() {
   const { data: currentCase } = useCurrentCase();
-  const { data: rootTree } = useFileTree();
+  const { data: dataSources } = useDataSources();
   const selectedDirectoryId = useSelectionStore(
     (state) => state.selectedDirectoryId
   );
@@ -109,7 +171,12 @@ export function FileBrowser() {
   const [treeChildren, setTreeChildren] = useState<
     Record<string, FileTreeNode[]>
   >({});
+  const [treeChildOffsets, setTreeChildOffsets] = useState<
+    Record<string, number>
+  >({});
   const [filterQuery, setFilterQuery] = useState('');
+  const [showHidden, setShowHidden] = useState(false);
+  const [rowsOffset, setRowsOffset] = useState(0);
   const treeContainerRef = useRef<HTMLDivElement>(null);
   const FILE_BROWSER_PAGE_LIMIT = 500;
 
@@ -121,36 +188,71 @@ export function FileBrowser() {
     storageKey: 'fileTreeWidth',
   });
 
+  const { data: rootTree } = useFileTree(showHidden);
   const activeDirectoryId = selectedDirectoryId ?? rootTree?.[0]?.id;
   const activeDirectoryExpanded = Boolean(
     activeDirectoryId && expandedDirectoryIds.includes(activeDirectoryId)
   );
-  const { data: rowsPage } = useFileRowsPage(activeDirectoryId, 0, FILE_BROWSER_PAGE_LIMIT);
+  const activeChildrenOffset = activeDirectoryId
+    ? (treeChildOffsets[activeDirectoryId] ?? 0)
+    : 0;
+  const { data: rowsPage } = useFileRowsPage(
+    activeDirectoryId,
+    rowsOffset,
+    FILE_BROWSER_PAGE_LIMIT,
+    showHidden
+  );
   const { data: activeChildrenPage } = useFileChildrenPage(
     activeDirectoryExpanded ? activeDirectoryId : undefined,
-    0,
+    activeChildrenOffset,
     FILE_BROWSER_PAGE_LIMIT,
+    showHidden
   );
   const rows = rowsPage?.rows;
   const activeChildren = activeChildrenPage?.children;
+  const partitions = useMemo<DataSourcePartition[]>(
+    () => dataSources?.flatMap((source) => source.partitions ?? []) ?? [],
+    [dataSources],
+  );
 
   // 缓存限制常量
   const MAX_TREE_CACHE_SIZE = 100;
 
   useEffect(() => {
+    setTreeChildren({});
+    setTreeChildOffsets({});
+    setRowsOffset(0);
+  }, [showHidden]);
+
+  useEffect(() => {
+    setRowsOffset(0);
+  }, [activeDirectoryId]);
+
+  useEffect(() => {
     if (!activeDirectoryId || !activeChildren) {
       return;
     }
+    const pageOffset = activeChildrenOffset;
     setTreeChildren((current) => {
       const keys = Object.keys(current);
-      // 如果缓存超过限制，删除最早的条目
-      if (keys.length >= MAX_TREE_CACHE_SIZE) {
-        const { [keys[0]]: _, ...rest } = current;
-        return { ...rest, [activeDirectoryId]: activeChildren };
+      const previousChildren = current[activeDirectoryId] ?? [];
+      const nextChildren =
+        pageOffset > 0
+          ? mergeTreeNodePages(previousChildren, activeChildren)
+          : activeChildren;
+
+      if (sameTreeNodeList(previousChildren, nextChildren)) {
+        return current;
       }
-      return { ...current, [activeDirectoryId]: activeChildren };
+
+      // 如果缓存超过限制，删除最早的条目
+      if (!current[activeDirectoryId] && keys.length >= MAX_TREE_CACHE_SIZE) {
+        const { [keys[0]]: _, ...rest } = current;
+        return { ...rest, [activeDirectoryId]: nextChildren };
+      }
+      return { ...current, [activeDirectoryId]: nextChildren };
     });
-  }, [activeChildren, activeDirectoryId]);
+  }, [activeChildren, activeChildrenOffset, activeDirectoryId]);
 
   useEffect(() => {
     if (!selectedDirectoryId && rootTree?.[0]?.id) {
@@ -248,6 +350,13 @@ export function FileBrowser() {
     return rootTree[0];
   }, [activeDirectoryId, rootTree, treeChildren]);
 
+  function displayNodeName(nodeName: string, depth = 0) {
+    if (depth !== 0) {
+      return nodeName;
+    }
+    return formatPartitionRootDisplayName(nodeName, partitions);
+  }
+
   const executableCount =
     rows?.filter((row) =>
       ['exe', 'dll'].includes(
@@ -334,6 +443,44 @@ export function FileBrowser() {
     );
   }
 
+  const activeTreeChildrenLoaded = activeDirectoryId
+    ? (treeChildren[activeDirectoryId]?.length ?? 0)
+    : 0;
+  const canLoadMoreTreeChildren = Boolean(
+    activeDirectoryId &&
+      activeChildrenPage?.truncated &&
+      activeTreeChildrenLoaded < (activeChildrenPage?.totalCount ?? 0)
+  );
+  const canGoToPreviousRows = rowsOffset > 0;
+  const canGoToNextRows = Boolean(
+    rowsPage && rowsPage.offset + rowsPage.limit < rowsPage.totalCount
+  );
+
+  const loadMoreActiveTreeChildren = useCallback(() => {
+    if (!activeDirectoryId) {
+      return;
+    }
+    setTreeChildOffsets((current) => ({
+      ...current,
+      [activeDirectoryId]: (current[activeDirectoryId] ?? 0) + FILE_BROWSER_PAGE_LIMIT,
+    }));
+  }, [activeDirectoryId]);
+
+  const goToPreviousRows = useCallback(() => {
+    setRowsOffset((current) => Math.max(0, current - FILE_BROWSER_PAGE_LIMIT));
+  }, []);
+
+  const goToNextRows = useCallback(() => {
+    if (!rowsPage) {
+      return;
+    }
+    setRowsOffset((current) =>
+      current + rowsPage.limit < rowsPage.totalCount
+        ? current + FILE_BROWSER_PAGE_LIMIT
+        : current
+    );
+  }, [rowsPage]);
+
   if (!currentCase) {
     return (
       <div className="flex-1 flex items-center justify-center bg-white">
@@ -361,14 +508,14 @@ export function FileBrowser() {
             {treeNodes.length > 0 ? (
               <>
                 <span className="text-[#111] font-semibold">
-                  {activeRootNode?.name || '/'}
+                  {activeRootNode ? displayNodeName(activeRootNode.name, activeRootNode.depth) : '/'}
                 </span>
                 {currentDirectory &&
                 currentDirectory.id !== activeRootNode?.id ? (
                   <>
                     <ChevronRight size={12} className="text-[#aaa]" />
                     <span className="text-[#111] font-semibold">
-                      {currentDirectory.name}
+                      {displayNodeName(currentDirectory.name, currentDirectory.depth)}
                     </span>
                   </>
                 ) : null}
@@ -397,6 +544,7 @@ export function FileBrowser() {
           <div className="text-[11px] text-[#888] font-mono">
             viewer: metadata / hex 已启用
           </div>
+          <FileVisibilityToggle checked={showHidden} onCheckedChange={setShowHidden} />
           <div className="ml-auto text-[#888] text-[11px]">
             显示 {rows?.length ?? 0}
             {rowsPage?.truncated ? ` / ${rowsPage.totalCount}` : ''} 个项目
@@ -438,8 +586,6 @@ export function FileBrowser() {
               </div>
             ) : null}
             {filteredTreeNodes.map((node, index) => {
-              const iconInfo = getFileIcon(node);
-              const IconComponent = iconInfo.icon;
               // 判断是否是父节点的最后一个子节点
               const isLast =
                 index === filteredTreeNodes.length - 1 ||
@@ -480,14 +626,19 @@ export function FileBrowser() {
                   )}
 
                   {/* 文件类型图标 */}
-                  <IconComponent
+                  <FileIconWithStatusOverlay
+                    name={node.name}
+                    entryType={node.entryType}
+                    status={node.status}
+                    expanded={node.expanded}
+                    deleted={node.deleted}
+                    hidden={node.hidden}
+                    system={node.system}
                     size={12}
-                    style={{ color: iconInfo.color }}
-                    className="shrink-0"
                   />
 
                   {/* 文件名 */}
-                  <span className="truncate">{node.name}</span>
+                  <span className="truncate">{displayNodeName(node.name, node.depth)}</span>
 
                   {/* 状态标签 */}
                   {node.status && node.status !== 'ready' ? (
@@ -498,6 +649,25 @@ export function FileBrowser() {
                 </button>
               );
             })}
+            {canLoadMoreTreeChildren ? (
+              <div className="px-2 py-2">
+                <div className="flex items-center justify-between rounded border border-[#e0e0e0] bg-white px-2 py-1.5 text-[10px] text-[#666]">
+                  <span>
+                    已加载 {activeTreeChildrenLoaded} / {activeChildrenPage?.totalCount ?? activeTreeChildrenLoaded} 个子目录
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-6 px-2 text-[10px]"
+                    onClick={loadMoreActiveTreeChildren}
+                    data-testid="load-more-tree-children"
+                  >
+                    加载更多子目录
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -538,17 +708,15 @@ export function FileBrowser() {
                   sortable: true,
                   sortKey: 'name',
                   render: (row) => {
-                    const iconInfo = getFileIcon({
-                      name: row.name,
-                      entryType: row.entryType,
-                      deleted: row.deleted,
-                    });
-                    const IconComponent = iconInfo.icon;
                     return (
                       <div className="flex items-center gap-2 min-w-0">
-                        <IconComponent
+                        <FileIconWithStatusOverlay
+                          name={row.name}
+                          entryType={row.entryType}
+                          deleted={row.deleted}
+                          hidden={row.hidden}
+                          system={row.system}
                           size={12}
-                          style={{ color: iconInfo.color }}
                         />
                         <span className="truncate">{row.name}</span>
                       </div>
@@ -583,12 +751,39 @@ export function FileBrowser() {
                   render: (row) =>
                     row.entryType === 'directory'
                       ? 'DIR'
-                      : row.deleted
-                        ? 'DEL'
-                        : 'A--',
+                      : 'A--',
                 },
               ]}
             />
+            {rowsPage ? (
+              <div className="flex items-center justify-between border-t border-[#e0e0e0] bg-[#fafafa] px-3 py-2 text-[11px] text-[#666]">
+                <span>
+                  显示第 {rowsPage.totalCount === 0 ? 0 : rowsPage.offset + 1} - {Math.min(rowsPage.offset + rowsPage.rows.length, rowsPage.totalCount)} 项，共 {rowsPage.totalCount} 项
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={goToPreviousRows}
+                    disabled={!canGoToPreviousRows}
+                  >
+                    上一页
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={goToNextRows}
+                    disabled={!canGoToNextRows}
+                  >
+                    下一页
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="h-72 bg-[#fcfcfc] shrink-0 min-h-0">
@@ -834,6 +1029,17 @@ export function FileBrowser() {
                 value={selectedFile?.hashSha256 ?? '-'}
                 mono
               />
+            </InspectorSection>
+
+            <InspectorSection title="对象状态">
+              <div className="font-mono text-[11px] grid grid-cols-[60px_1fr] gap-1">
+                <div className="text-[#888]">deleted</div>
+                <div className="text-[#333]">{selectedFile?.deleted ? 'true' : 'false'}</div>
+                <div className="text-[#888]">hidden</div>
+                <div className="text-[#333]">{selectedFile?.hidden ? 'true' : 'false'}</div>
+                <div className="text-[#888]">system</div>
+                <div className="text-[#333]">{selectedFile?.system ? 'true' : 'false'}</div>
+              </div>
             </InspectorSection>
 
             <InspectorSection title="操作">

@@ -208,6 +208,104 @@ export interface EvidenceSource {
   warnings: string[];
 }
 
+export interface AnalysisExtractionRequest {
+  categories: string[];
+}
+
+export interface AnalysisExtractionPageRequest {
+  offset?: number;
+  limit?: number;
+}
+
+export interface AnalysisExtractionRun {
+  status: AnalysisParseStatus;
+  scannedCount: number;
+  artifactCount: number;
+  timelineEventCount: number;
+  generatedAt: string;
+  warnings: string[];
+}
+
+export interface RegistryExtractionSummary {
+  status: AnalysisParseStatus;
+  total: number;
+  values: RegistryValue[];
+  generatedAt: string;
+  warnings: string[];
+}
+
+export interface RegistryValue {
+  artifactId: string;
+  fileId: string;
+  sourcePath: string;
+  hivePath: string;
+  keyPath: string;
+  valueName: string;
+  valueType: string;
+  data: string;
+  parser: string;
+  createdAt: string;
+}
+
+export type BrowserKind = 'Chrome' | 'Edge' | 'Firefox' | string;
+
+export interface BrowserHistorySummary {
+  status: AnalysisParseStatus;
+  visitTotal: number;
+  downloadTotal: number;
+  visits: BrowserVisit[];
+  downloads: BrowserDownload[];
+  generatedAt: string;
+  warnings: string[];
+}
+
+export interface BrowserVisit {
+  artifactId: string;
+  fileId: string;
+  sourcePath: string;
+  browser: BrowserKind;
+  profile: string;
+  url: string;
+  title: string;
+  visitTime?: string;
+  visitCount: number;
+}
+
+export interface BrowserDownload {
+  artifactId: string;
+  fileId: string;
+  sourcePath: string;
+  browser: BrowserKind;
+  profile: string;
+  url: string;
+  targetPath: string;
+  startTime?: string;
+  totalBytes: number;
+}
+
+export interface EmailExtractionSummary {
+  status: AnalysisParseStatus;
+  total: number;
+  messages: EmailMessage[];
+  generatedAt: string;
+  warnings: string[];
+}
+
+export interface EmailMessage {
+  artifactId: string;
+  fileId: string;
+  sourcePath: string;
+  sentAt?: string;
+  from: string;
+  to: string[];
+  cc: string[];
+  bcc: string[];
+  subject: string;
+  messageId: string;
+  attachments: string[];
+  bodyPreview: string;
+}
+
 export interface RecentCase {
   caseRoot: string;
   name: string;
@@ -221,6 +319,9 @@ export interface FileTreeNode {
   hasChildren: boolean;
   entryType?: 'file' | 'directory';
   size?: number;
+  deleted?: boolean;
+  hidden: boolean;
+  system: boolean;
   nodeType?: string;
   status?: string;
   expanded?: boolean;
@@ -244,6 +345,8 @@ export interface FileEntryRow {
   size?: number;
   ext?: string;
   deleted: boolean;
+  hidden: boolean;
+  system: boolean;
   createdAt?: string;
   modifiedAt?: string;
   accessedAt?: string;

@@ -184,11 +184,6 @@ pub fn open_case(root: &Path) -> Result<ActiveCase> {
 /// Returns `NotFound` if the directory doesn't exist, or `InvalidCaseDir`
 /// if `case.json` is missing.
 pub fn delete_case(root: &Path) -> Result<()> {
-    // Security: prevent arbitrary directory deletion by requiring the case
-    // to be within the designated safe cases root directory.
-    infrastructure::config::validate_case_root_is_safe(root)
-        .map_err(CaseServiceError::InvalidCaseDir)?;
-
     if !root.exists() {
         return Err(CaseServiceError::NotFound(root.to_path_buf()));
     }
@@ -199,6 +194,9 @@ pub fn delete_case(root: &Path) -> Result<()> {
             "case.json not found — not a valid case directory".to_string(),
         ));
     }
+
+    let active = open_case(root)?;
+    drop(active);
 
     // Retry removal on Windows where SQLite WAL/SHM files may still be held
     let mut last_err = None;

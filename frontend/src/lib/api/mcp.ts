@@ -73,9 +73,16 @@ interface McpPromptArgumentProtocolDto {
   required?: unknown;
 }
 
+interface McpCapabilitiesProtocolDto {
+  resources?: unknown;
+  tools?: unknown;
+  prompts?: unknown;
+}
+
 interface McpTestConnectionProtocolDto {
   success?: unknown;
   error?: unknown;
+  capabilities?: unknown;
 }
 
 interface McpToolCallProtocolDto {
@@ -136,9 +143,16 @@ export interface McpPrompt {
   arguments: McpPromptArgument[];
 }
 
+export interface McpCapabilities {
+  resources: boolean;
+  tools: boolean;
+  prompts: boolean;
+}
+
 export interface McpTestConnectionResponse {
   success: boolean;
   error?: string;
+  capabilities?: McpCapabilities;
 }
 
 export interface McpToolCallResponse {
@@ -268,12 +282,23 @@ function normalizeList<T>(value: unknown, mapper: (entry: Record<string, unknown
   return value.filter(isRecord).map(mapper);
 }
 
+function normalizeCapabilities(value: unknown): McpCapabilities | undefined {
+  if (!isRecord(value)) return undefined;
+
+  return {
+    resources: value.resources === true,
+    tools: value.tools === true,
+    prompts: value.prompts === true,
+  };
+}
+
 function normalizeTestConnection(value: unknown): McpTestConnectionResponse {
   if (!isRecord(value)) return { success: false };
 
   return {
     success: value.success === true,
     error: optionalString(value.error),
+    capabilities: normalizeCapabilities(value.capabilities),
   };
 }
 

@@ -1,31 +1,33 @@
-import {
-  Archive,
-  Clock,
-  Database,
-  Download,
-  FileText,
-  HardDrive,
-  Image,
-  Monitor,
-  Network,
-  RefreshCw,
-  Shield,
-} from 'lucide-react';
+import { useState } from 'react';
+import { Database, Download, FileText, Globe, Mail, Monitor, Shield } from 'lucide-react';
 import { useCreateAnalysisDemoCase, useCurrentCase } from '@/features/case/hooks';
 import {
   useAnalysisClassifications,
-  useEvidenceClassificationSummary,
   useAnalysisSystemInfo,
+  useBrowserHistorySummary,
+  useEmailExtractionSummary,
+  useEvidenceClassificationSummary,
   useGenerateAnalysisSummary,
+  useRegistryExtractionSummary,
+  useRunAnalysisExtraction,
   useRunEvidenceClassification,
 } from '@/features/analysis/hooks';
 import {
-  AnalysisFieldProvenance,
-  AnalysisFileClassification,
-  AnalysisProvenance,
-  AnalysisSystemInfo,
-  EvidenceClassificationSummary,
-} from '@/types/models';
+  AnalysisEmptyState,
+  AnalysisErrorBanner,
+  AnalysisExtractionProgress,
+  type AnalysisExtractionProgressInfo,
+  type AnalysisExtractionProgressState,
+  AnalysisHeader,
+  AnalysisLoadingPanel,
+  AnalysisReportPanel,
+  BrowserHistoryPanel,
+  EmailExtractionPanel,
+  EvidenceClassificationPanel,
+  FileClassificationPanel,
+  RegistryExtractionPanel,
+  SystemInfoPanel,
+} from '@/components/analysis/AnalysisPanels';
 import {
   Tabs,
   TabsContent,
@@ -34,66 +36,51 @@ import {
 } from '@/app/components/ui/tabs';
 import { isApiErrorDto } from '@/lib/api/client';
 
-const CATEGORY_ICONS: Record<string, typeof Monitor> = {
-  Executables: Shield,
-  Documents: FileText,
-  Images: Image,
-  Archives: Archive,
-  Databases: Database,
-  System: HardDrive,
-  Forensics: Monitor,
-  Logs: FileText,
-  Registry: Database,
-  Prefetch: Clock,
-  Shortcuts: FileText,
-  SystemInformation: Monitor,
-  EventLogs: FileText,
-  ProgramExecution: Shield,
-  UserActivity: Clock,
-  RecycleBin: Archive,
-  Thumbnails: Image,
-  ResourceUsage: Database,
-  BrowserData: Network,
-  FileTypeInventory: FileText,
-  Other: FileText,
-};
-
-const CATEGORY_COLORS: Record<string, string> = {
-  Executables: '#b42318',
-  Documents: '#175cd3',
-  Images: '#027a48',
-  Archives: '#b54708',
-  Databases: '#6941c6',
-  System: '#475467',
-  Forensics: '#0e9384',
-  Logs: '#344054',
-  Registry: '#7a5af8',
-  Prefetch: '#9a6700',
-  Shortcuts: '#026aa2',
-  SystemInformation: '#344054',
-  EventLogs: '#175cd3',
-  ProgramExecution: '#b42318',
-  UserActivity: '#9a6700',
-  RecycleBin: '#b54708',
-  Thumbnails: '#027a48',
-  ResourceUsage: '#6941c6',
-  BrowserData: '#026aa2',
-  FileTypeInventory: '#667085',
-  Other: '#667085',
-};
-
-const tabs = [
+const analysisTabs = [
   { value: 'system', label: '系统信息', icon: Monitor },
   { value: 'evidence', label: '证据分类', icon: Shield },
+  { value: 'registry', label: '注册表', icon: Database },
+  { value: 'browser', label: '浏览器记录', icon: Globe },
+  { value: 'email', label: '邮件信息', icon: Mail },
   { value: 'files', label: '文件分类', icon: FileText },
-  { value: 'report', label: '分析报告', icon: Download },
+  { value: 'report', label: '报告', icon: Download },
 ] as const;
 
-function formatSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+type ExtractionCategory = 'Registry' | 'BrowserHistory' | 'Email';
+
+const extractionCategories: Array<{ key: ExtractionCategory; label: string }> = [
+  { key: 'Registry', label: '注册表提取' },
+  { key: 'BrowserHistory', label: '浏览器记录提取' },
+  { key: 'Email', label: '邮件信息提取' },
+];
+
+function emptyProgress(label: string): AnalysisExtractionProgressInfo {
+  return {
+    label,
+    status: 'idle',
+    scannedCount: 0,
+    artifactCount: 0,
+    timelineEventCount: 0,
+    warnings: [],
+  };
+}
+
+function statusFromRun(status: string): AnalysisExtractionProgressState {
+  if (status === 'failed' || status === 'unavailable') {
+    return 'failed';
+  }
+  if (status === 'partial') {
+    return 'partial';
+  }
+  return 'success';
+}
+
+function defaultProgressMap(): Record<ExtractionCategory, AnalysisExtractionProgressInfo> {
+  return {
+    Registry: emptyProgress('注册表提取'),
+    BrowserHistory: emptyProgress('浏览器记录提取'),
+    Email: emptyProgress('邮件信息提取'),
+  };
 }
 
 function errorMessage(error: unknown) {
@@ -112,23 +99,96 @@ export function DataAnalysis() {
   const systemInfo = useAnalysisSystemInfo();
   const evidenceSummary = useEvidenceClassificationSummary();
   const evidenceScan = useRunEvidenceClassification();
+  const extractionRun = useRunAnalysisExtraction();
+  const registrySummary = useRegistryExtractionSummary({ limit: 200 });
+  const browserSummary = useBrowserHistorySummary({ limit: 200 });
+  const emailSummary = useEmailExtractionSummary({ limit: 200 });
   const classifications = useAnalysisClassifications(1000);
   const summaryMutation = useGenerateAnalysisSummary();
+  const [extractionProgress, setExtractionProgress] = useState(defaultProgressMap);
+  const [extractionRunning, setExtractionRunning] = useState(false);
 
   const hasCase = Boolean(currentCase.data);
   const loading = currentCase.isLoading || demoCase.isPending;
-  const error = currentCase.error ?? systemInfo.error ?? evidenceSummary.error ?? classifications.error ?? summaryMutation.error ?? evidenceScan.error ?? demoCase.error;
-  const classes = classifications.data ?? [];
-  const totalFiles = classes.reduce((sum, category) => sum + category.fileCount, 0);
-  const totalSize = classes.reduce((sum, category) => sum + category.totalSize, 0);
+  const error = currentCase.error
+    ?? systemInfo.error
+    ?? evidenceSummary.error
+    ?? registrySummary.error
+    ?? browserSummary.error
+    ?? emailSummary.error
+    ?? classifications.error
+    ?? summaryMutation.error
+    ?? evidenceScan.error
+    ?? extractionRun.error
+    ?? demoCase.error;
 
   async function refresh() {
-    await Promise.all([systemInfo.refetch(), evidenceSummary.refetch(), classifications.refetch()]);
+    await Promise.all([
+      systemInfo.refetch(),
+      evidenceSummary.refetch(),
+      registrySummary.refetch(),
+      browserSummary.refetch(),
+      emailSummary.refetch(),
+      classifications.refetch(),
+    ]);
   }
 
   async function runEvidenceScan() {
     await evidenceScan.mutateAsync([]);
     await evidenceSummary.refetch();
+  }
+
+  async function runExtraction() {
+    setExtractionRunning(true);
+    setExtractionProgress(defaultProgressMap());
+    const refetchByCategory: Record<ExtractionCategory, () => Promise<unknown>> = {
+      Registry: registrySummary.refetch,
+      BrowserHistory: browserSummary.refetch,
+      Email: emailSummary.refetch,
+    };
+
+    try {
+      for (const category of extractionCategories) {
+        setExtractionProgress((current) => ({
+          ...current,
+          [category.key]: {
+            ...current[category.key],
+            status: 'running',
+            warnings: [],
+            error: undefined,
+          },
+        }));
+
+        try {
+          const run = await extractionRun.mutateAsync({ categories: [category.key] });
+          setExtractionProgress((current) => ({
+            ...current,
+            [category.key]: {
+              label: category.label,
+              status: statusFromRun(run.status),
+              scannedCount: run.scannedCount,
+              artifactCount: run.artifactCount,
+              timelineEventCount: run.timelineEventCount,
+              warnings: run.warnings,
+            },
+          }));
+          await refetchByCategory[category.key]();
+        } catch (err) {
+          setExtractionProgress((current) => ({
+            ...current,
+            [category.key]: {
+              ...current[category.key],
+              status: 'failed',
+              error: errorMessage(err),
+            },
+          }));
+        }
+      }
+
+      await evidenceSummary.refetch();
+    } finally {
+      setExtractionRunning(false);
+    }
   }
 
   async function downloadSummary() {
@@ -146,70 +206,50 @@ export function DataAnalysis() {
     await demoCase.mutateAsync();
   }
 
+  const extractionProgressCards = extractionCategories.map((category) => (
+    <AnalysisExtractionProgress
+      key={category.key}
+      progress={extractionProgress[category.key]}
+    />
+  ));
+
   return (
     <div className="flex h-full w-full flex-1 flex-col overflow-auto bg-white">
-      <div className="shrink-0 border-b border-[#e0e0e0] bg-[#fafafa] p-6">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <div className="font-serif text-xl tracking-tight text-[#111]">数据源分析</div>
-            <div className="mt-1 font-mono text-[11px] text-[#666]">
-              Registry 定向字段 · EVTX 候选事件 · 元数据分类
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={loadDemoCase}
-              disabled={loading}
-              className="flex items-center gap-2 rounded border border-[#111] bg-[#111] px-4 py-2 text-[12px] text-white hover:bg-[#333] disabled:opacity-50"
-            >
-              {demoCase.isPending ? <RefreshCw size={14} className="animate-spin" /> : <Database size={14} />}
-              加载演示案件
-            </button>
-            <button
-              type="button"
-              onClick={refresh}
-              disabled={!hasCase || loading}
-              className="flex items-center gap-2 rounded border border-[#ddd] bg-white px-4 py-2 text-[12px] hover:bg-[#f5f5f5] disabled:opacity-50"
-            >
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-              刷新
-            </button>
+      <AnalysisHeader
+        loading={loading}
+        hasCase={hasCase}
+        demoPending={demoCase.isPending}
+        extractionPending={extractionRun.isPending || extractionRunning}
+        extractionRun={extractionRun.data}
+        onLoadDemoCase={loadDemoCase}
+        onRefresh={refresh}
+        onRunExtraction={runExtraction}
+      />
+
+      {hasCase ? (
+        <div
+          data-testid="analysis-progress-overview"
+          className="shrink-0 border-b border-[#e8e8e8] bg-[#fcfcfc] px-6 py-4"
+        >
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+            {extractionProgressCards}
           </div>
         </div>
-        <div className="mt-4 rounded border border-[#e0e0e0] bg-white px-3 py-2 text-[11px] leading-5 text-[#666]">
-          Demo 会创建一个临时逻辑数据源，包含 tiny SYSTEM/SOFTWARE Registry hive、System.evtx
-          和少量 PDF/EXE/ZIP 样本，用于验证真实 reader + parser 链路；它不是完整系统画像。
-        </div>
-      </div>
+      ) : null}
 
       {!hasCase && currentCase.isSuccess ? (
-        <div className="flex flex-1 items-center justify-center p-8">
-          <div className="max-w-md text-center">
-            <Monitor size={40} className="mx-auto mb-4 text-[#bbb]" />
-            <div className="text-[15px] font-semibold text-[#111]">请先创建或打开案件</div>
-            <div className="mt-2 text-[12px] leading-6 text-[#666]">
-              数据源分析依赖当前案件中的文件目录和数据源记录。未选择案件时不会发起分析请求。
-            </div>
-            <button
-              type="button"
-              onClick={loadDemoCase}
-              disabled={demoCase.isPending}
-              className="mt-5 inline-flex items-center gap-2 rounded bg-[#111] px-5 py-2 text-[12px] text-white hover:bg-[#333] disabled:opacity-50"
-            >
-              {demoCase.isPending ? <RefreshCw size={14} className="animate-spin" /> : <Database size={14} />}
-              加载演示案件
-            </button>
-          </div>
-        </div>
+        <AnalysisEmptyState
+          demoPending={demoCase.isPending}
+          onLoadDemoCase={loadDemoCase}
+        />
       ) : (
         <Tabs defaultValue="system" className="min-h-0 flex-1 gap-0">
-          <TabsList className="h-auto w-full justify-start rounded-none border-b border-[#e0e0e0] bg-[#fafafa] p-0">
-            {tabs.map(({ value, label, icon: Icon }) => (
+          <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-none border-b border-[#e0e0e0] bg-[#fafafa] p-0">
+            {analysisTabs.map(({ value, label, icon: Icon }) => (
               <TabsTrigger
                 key={value}
                 value={value}
-                className="h-auto flex-none rounded-none border-x-0 border-t-0 border-b-2 border-transparent bg-transparent px-6 py-3 text-[12px] data-[state=active]:border-[#111] data-[state=active]:bg-transparent"
+                className="h-auto flex-none rounded-none border-x-0 border-t-0 border-b-2 border-transparent bg-transparent px-5 py-3 text-[12px] data-[state=active]:border-[#111] data-[state=active]:bg-transparent"
               >
                 <Icon size={14} />
                 {label}
@@ -219,56 +259,76 @@ export function DataAnalysis() {
 
           <div className="min-h-0 flex-1 overflow-auto p-6">
             {error ? (
-              <div className="mb-4 flex items-center justify-between gap-3 rounded border border-red-200 bg-red-50 p-3 text-[12px] text-red-700">
-                <span>{errorMessage(error)}</span>
-                <button
-                  type="button"
-                  onClick={refresh}
-                  className="shrink-0 rounded border border-red-200 bg-white px-3 py-1 text-red-700 hover:bg-red-100"
-                >
-                  重试
-                </button>
-              </div>
+              <AnalysisErrorBanner message={errorMessage(error)} onRetry={refresh} />
             ) : null}
 
             {loading ? (
-              <div className="flex h-64 items-center justify-center text-[#999]">
-                <RefreshCw size={24} className="mr-2 animate-spin" />
-                正在加载案件...
-              </div>
+              <AnalysisLoadingPanel text="正在加载案件..." />
             ) : (
               <>
                 <TabsContent value="system" forceMount className="m-0 data-[state=inactive]:hidden">
                   {systemInfo.isLoading ? (
-                    <LoadingPanel text="正在解析 Registry/EVTX 系统信息..." />
+                    <AnalysisLoadingPanel text="正在解析 Registry/EVTX 系统信息..." />
                   ) : (
-                    <SystemInfoTab systemInfo={systemInfo.data} />
+                    <SystemInfoPanel systemInfo={systemInfo.data} />
                   )}
                 </TabsContent>
+
                 <TabsContent value="evidence" forceMount className="m-0 data-[state=inactive]:hidden">
                   {evidenceSummary.isLoading ? (
-                    <LoadingPanel text="正在发现证据语义类别..." />
+                    <AnalysisLoadingPanel text="正在发现证据语义类别..." />
                   ) : (
-                    <EvidenceClassificationTab
+                    <EvidenceClassificationPanel
                       summary={evidenceSummary.data}
                       pending={evidenceScan.isPending}
                       onRun={runEvidenceScan}
                     />
                   )}
                 </TabsContent>
-                <TabsContent value="files" forceMount className="m-0 data-[state=inactive]:hidden">
-                  {classifications.isLoading ? (
-                    <LoadingPanel text="正在按元数据分类文件..." />
+
+                <TabsContent value="registry" forceMount className="m-0 data-[state=inactive]:hidden">
+                  {registrySummary.isLoading ? (
+                    <AnalysisLoadingPanel text="正在读取注册表提取结果..." />
                   ) : (
-                    <FileClassificationTab
-                      classifications={classes}
-                      totalFiles={totalFiles}
-                      totalSize={totalSize}
+                    <RegistryExtractionPanel
+                      summary={registrySummary.data}
+                      progress={extractionProgress.Registry}
                     />
                   )}
                 </TabsContent>
+
+                <TabsContent value="browser" forceMount className="m-0 data-[state=inactive]:hidden">
+                  {browserSummary.isLoading ? (
+                    <AnalysisLoadingPanel text="正在读取浏览器记录..." />
+                  ) : (
+                    <BrowserHistoryPanel
+                      summary={browserSummary.data}
+                      progress={extractionProgress.BrowserHistory}
+                    />
+                  )}
+                </TabsContent>
+
+                <TabsContent value="email" forceMount className="m-0 data-[state=inactive]:hidden">
+                  {emailSummary.isLoading ? (
+                    <AnalysisLoadingPanel text="正在读取邮件信息..." />
+                  ) : (
+                    <EmailExtractionPanel
+                      summary={emailSummary.data}
+                      progress={extractionProgress.Email}
+                    />
+                  )}
+                </TabsContent>
+
+                <TabsContent value="files" forceMount className="m-0 data-[state=inactive]:hidden">
+                  {classifications.isLoading ? (
+                    <AnalysisLoadingPanel text="正在按元数据分类文件..." />
+                  ) : (
+                    <FileClassificationPanel classifications={classifications.data ?? []} />
+                  )}
+                </TabsContent>
+
                 <TabsContent value="report" forceMount className="m-0 data-[state=inactive]:hidden">
-                  <ReportTab
+                  <AnalysisReportPanel
                     pending={summaryMutation.isPending}
                     onDownload={downloadSummary}
                   />
@@ -280,525 +340,4 @@ export function DataAnalysis() {
       )}
     </div>
   );
-}
-
-function SystemInfoTab({ systemInfo }: { systemInfo?: AnalysisSystemInfo }) {
-  const info = systemInfo ?? {
-    networkAdapters: [],
-    bootHistory: [],
-    status: 'unavailable' as const,
-    warnings: ['系统信息暂不可用。'],
-    provenance: [],
-    fieldProvenance: [],
-  };
-  const parserFailures = info.provenance.filter(
-    (item) => item.status !== 'parsed' && item.warnings.length > 0,
-  );
-
-  return (
-    <div className="space-y-6">
-      <section>
-        <h3 className="mb-3 flex items-center gap-2 text-[14px] font-semibold text-[#111]">
-          <Monitor size={16} />
-          系统信息
-        </h3>
-        <div className="mb-3 flex items-center gap-2 text-[12px] text-[#666]">
-          <span className="rounded bg-[#f0f0f0] px-2 py-0.5 font-mono text-[10px]">
-            {statusLabel(info.status)}
-          </span>
-          {info.warnings[0] ? <span>{info.warnings[0]}</span> : null}
-        </div>
-        {parserFailures.length > 0 ? (
-          <div className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-800">
-            已发现 Registry/EVTX 候选文件，但部分解析器失败；下方 provenance 已列出具体原因。
-          </div>
-        ) : null}
-        {info.warnings.length > 1 ? (
-          <div className="mb-3 rounded border border-[#e0e0e0] bg-[#fcfcfc] px-3 py-2 text-[11px] leading-5 text-[#666]">
-            {info.warnings.slice(0, 3).map((warning) => (
-              <div key={warning}>{warning}</div>
-            ))}
-            {info.warnings.length > 3 ? <div>还有 {info.warnings.length - 3} 条 warning...</div> : null}
-          </div>
-        ) : null}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <InfoCard label="计算机名" value={info.computerName} />
-          <InfoCard label="操作系统" value={info.osVersion} />
-          <InfoCard label="Build 号" value={info.buildNumber} />
-          <InfoCard label="注册用户" value={info.registeredOwner} />
-          <InfoCard label="时区" value={info.timezone} />
-          <InfoCard label="安装日期" value={info.installDate} />
-        </div>
-      </section>
-
-      <ProvenancePanel
-        title="解析来源"
-        provenance={info.provenance}
-        fallback="Registry/EVTX 解析来源暂不可用。"
-      />
-
-      <FieldProvenancePanel fieldProvenance={info.fieldProvenance} />
-
-      <section>
-        <h3 className="mb-3 flex items-center gap-2 text-[14px] font-semibold text-[#111]">
-          <Network size={16} />
-          网络适配器
-        </h3>
-        {info.networkAdapters.length > 0 ? (
-          <div className="space-y-2">
-            {info.networkAdapters.map((adapter) => (
-              <div key={adapter.name} className="rounded border border-[#e0e0e0] bg-[#f8f8f8] p-3">
-                <div className="text-[12px] font-medium">{adapter.name}</div>
-                <div className="mt-1 font-mono text-[11px] text-[#666]">
-                  MAC: {adapter.macAddress ?? '-'}
-                </div>
-                <div className="font-mono text-[11px] text-[#666]">
-                  IP: {adapter.ipAddresses.join(', ') || '-'}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyLine text="未解析到网络适配器。" />
-        )}
-      </section>
-
-      <section>
-        <h3 className="mb-3 flex items-center gap-2 text-[14px] font-semibold text-[#111]">
-          <Clock size={16} />
-          开关机历史
-        </h3>
-        {info.bootHistory.length > 0 ? (
-          <div className="space-y-1">
-            {info.bootHistory.map((boot) => (
-              <div key={`${boot.timestamp}-${boot.source}`} className="rounded border border-[#e0e0e0] bg-[#f8f8f8] p-3 text-[12px]">
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-[#666]">{boot.timestamp}</span>
-                  <span className="rounded bg-[#f0f0f0] px-2 py-0.5 text-[10px]">
-                    {boot.bootType}
-                  </span>
-                  {boot.eventId ? (
-                    <span className="rounded bg-[#f0f0f0] px-2 py-0.5 font-mono text-[10px]">
-                      EventID {boot.eventId}
-                    </span>
-                  ) : null}
-                  <span className="text-[#999]">{boot.source}</span>
-                </div>
-                {boot.note ? (
-                  <div className="mt-2 text-[11px] text-[#666]">{boot.note}</div>
-                ) : null}
-                <div className="mt-2 text-[11px] text-[#777]">
-                  {formatProvenanceSummary(boot.provenance)}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyLine text="未解析到开关机历史。" />
-        )}
-      </section>
-    </div>
-  );
-}
-
-function FieldProvenancePanel({
-  fieldProvenance,
-}: {
-  fieldProvenance: AnalysisFieldProvenance[];
-}) {
-  return (
-    <section>
-      <h3 className="mb-3 flex items-center gap-2 text-[14px] font-semibold text-[#111]">
-        <Database size={16} />
-        字段级来源
-      </h3>
-      {fieldProvenance.length > 0 ? (
-        <div className="overflow-hidden rounded border border-[#e0e0e0] bg-[#f8f8f8]">
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="bg-[#f0f0f0]">
-                <th className="px-3 py-2 text-left font-medium">字段</th>
-                <th className="px-3 py-2 text-left font-medium">Hive</th>
-                <th className="px-3 py-2 text-left font-medium">Key</th>
-                <th className="px-3 py-2 text-left font-medium">Value</th>
-                <th className="px-3 py-2 text-left font-medium">Parser</th>
-              </tr>
-            </thead>
-            <tbody>
-              {fieldProvenance.map((item) => (
-                <tr
-                  key={`${item.field}-${item.hivePath}-${item.keyPath}-${item.valueName}`}
-                  className="border-t border-[#e0e0e0]"
-                >
-                  <td className="px-3 py-1.5 font-mono text-[#333]">{item.field}</td>
-                  <td className="max-w-[240px] truncate px-3 py-1.5 font-mono text-[#666]">
-                    {item.hivePath || '-'}
-                  </td>
-                  <td className="max-w-[360px] truncate px-3 py-1.5 font-mono text-[#666]">
-                    {item.keyPath || '-'}
-                  </td>
-                  <td className="px-3 py-1.5 font-mono text-[#666]">
-                    {item.valueName || '-'}
-                  </td>
-                  <td className="px-3 py-1.5 font-mono text-[#666]">{item.parser || '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <EmptyLine text="字段级 Registry provenance 暂不可用。" />
-      )}
-    </section>
-  );
-}
-
-function EvidenceClassificationTab({
-  summary,
-  pending,
-  onRun,
-}: {
-  summary?: EvidenceClassificationSummary;
-  pending: boolean;
-  onRun: () => void;
-}) {
-  const info = summary ?? {
-    status: 'unavailable' as const,
-    categories: [],
-    generatedAt: '',
-    warnings: ['证据分类摘要暂不可用。'],
-    totals: {
-      categoryCount: 0,
-      candidateFileCount: 0,
-      totalSize: 0,
-      artifactCount: 0,
-    },
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="text-[14px] font-semibold text-[#111]">证据语义分类</h3>
-          <div className="mt-1 text-[11px] leading-5 text-[#666]">
-            候选来自文件树 metadata；点击后只对 Registry、Prefetch、LNK、JumpList、RecycleBin、SRU、Thumbcache 等候选运行 targeted parser。
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onRun}
-          disabled={pending}
-          className="flex items-center gap-2 rounded border border-[#111] bg-[#111] px-4 py-2 text-[12px] text-white hover:bg-[#333] disabled:opacity-50"
-        >
-          {pending ? <RefreshCw size={14} className="animate-spin" /> : <Shield size={14} />}
-          {pending ? '分类中...' : '开始证据分类'}
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-        <StatCard label="证据族" value={info.totals.categoryCount.toString()} />
-        <StatCard label="候选文件" value={info.totals.candidateFileCount.toString()} />
-        <StatCard label="候选总大小" value={formatSize(info.totals.totalSize)} />
-        <StatCard label="已解析 Artifact" value={info.totals.artifactCount.toString()} />
-      </div>
-
-      {info.warnings.length > 0 ? (
-        <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-800">
-          {info.warnings.join('；')}
-        </div>
-      ) : null}
-
-      {info.categories.length === 0 ? (
-        <EmptyLine text="未发现证据语义分类数据。" />
-      ) : (
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          {info.categories.map((category) => {
-            const Icon = CATEGORY_ICONS[category.category] || Shield;
-            const color = CATEGORY_COLORS[category.category] || '#344054';
-            return (
-              <section key={category.category} className="rounded border border-[#e0e0e0] bg-[#fcfcfc] p-4">
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <Icon size={17} style={{ color }} />
-                    <div>
-                      <h4 className="text-[13px] font-semibold text-[#111]">{category.displayName}</h4>
-                      <div className="font-mono text-[10px] text-[#888]">{category.category}</div>
-                    </div>
-                  </div>
-                  <span className="rounded bg-[#f0f0f0] px-2 py-0.5 text-[10px] text-[#555]">
-                    {statusLabel(category.status)}
-                  </span>
-                </div>
-
-                <div className="mb-3 grid grid-cols-2 gap-2 text-[11px]">
-                  <Metric label="候选" value={`${category.fileCount} 个`} />
-                  <Metric label="大小" value={formatSize(category.totalSize)} />
-                  <Metric label="Artifact" value={`${category.artifactCount} 条`} />
-                  <Metric label="置信度" value={`${Math.round(category.confidence * 100)}%`} />
-                </div>
-
-                {category.warnings.length > 0 ? (
-                  <div className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-800">
-                    {category.warnings.slice(0, 2).join('；')}
-                  </div>
-                ) : null}
-
-                {category.sources.length > 0 ? (
-                  <div className="space-y-2">
-                    {category.sources.slice(0, 4).map((source) => (
-                      <div key={source.fileId} className="rounded border border-[#e5e5e5] bg-white px-3 py-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="truncate font-mono text-[11px] text-[#333]">{source.path}</div>
-                          <span className="shrink-0 text-[10px] text-[#777]">{statusLabel(source.status)}</span>
-                        </div>
-                        <div className="mt-1 flex flex-wrap gap-2 font-mono text-[10px] text-[#888]">
-                          <span>{source.evidenceKind}</span>
-                          <span>{source.parser}</span>
-                          <span>{formatSize(source.size)}</span>
-                          <span>artifacts={source.artifactCount}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyLine text="该证据族暂无代表来源文件。" />
-                )}
-              </section>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function FileClassificationTab({
-  classifications,
-  totalFiles,
-  totalSize,
-}: {
-  classifications: AnalysisFileClassification[];
-  totalFiles: number;
-  totalSize: number;
-}) {
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <StatCard label="文件总数" value={totalFiles.toString()} />
-        <StatCard label="文件总大小" value={formatSize(totalSize)} />
-        <StatCard label="分类数" value={classifications.length.toString()} />
-      </div>
-      <div className="rounded border border-[#e0e0e0] bg-[#fcfcfc] px-3 py-2 text-[11px] leading-5 text-[#666]">
-        当前为 metadata-only 分类：总数/大小来自数据库全量聚合，文件列表仅展示抽样；不读取 E01/RAW 文件正文，避免数据源分析页触发大内存内容扫描。
-      </div>
-
-      {classifications.length === 0 ? (
-        <EmptyLine text="未发现可分类文件。" />
-      ) : (
-        <div className="space-y-4">
-          {classifications.map((category) => {
-            const Icon = CATEGORY_ICONS[category.category] || FileText;
-            const color = CATEGORY_COLORS[category.category] || CATEGORY_COLORS.Other;
-
-            return (
-              <section key={category.category}>
-                <div className="mb-2 flex items-center gap-2">
-                  <Icon size={16} style={{ color }} />
-                  <h3 className="text-[14px] font-semibold text-[#111]">{category.category}</h3>
-                  <span className="text-[11px] text-[#999]">
-                    总计 {category.fileCount} 个 · 抽样 {category.files.length} 个 · {formatSize(category.totalSize)} · {statusLabel(category.status)}
-                  </span>
-                </div>
-                {category.warnings.length > 0 ? (
-                  <div className="mb-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
-                    {category.warnings.join('；')}
-                  </div>
-                ) : null}
-                <ProvenancePanel
-                  title="分类来源"
-                  provenance={category.provenance}
-                  compact
-                  fallback="分类来源暂不可用。"
-                />
-                <div className="overflow-hidden rounded border border-[#e0e0e0] bg-[#f8f8f8]">
-                  <table className="w-full text-[11px]">
-                    <thead>
-                      <tr className="bg-[#f0f0f0]">
-                        <th className="px-3 py-2 text-left font-medium">文件名</th>
-                        <th className="px-3 py-2 text-left font-medium">类型</th>
-                        <th className="px-3 py-2 text-left font-medium">来源</th>
-                        <th className="px-3 py-2 text-right font-medium">大小</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {category.files.slice(0, 20).map((file) => (
-                        <tr key={file.fileId} className="border-t border-[#e0e0e0]">
-                          <td className="max-w-[300px] truncate px-3 py-1.5 font-mono">
-                            {file.name}
-                          </td>
-                          <td className="px-3 py-1.5 text-[#666]">{file.magicDescription}</td>
-                          <td className="max-w-[260px] truncate px-3 py-1.5 text-[#666]">
-                            {formatProvenanceSummary(file.provenance)}
-                          </td>
-                          <td className="px-3 py-1.5 text-right text-[#666]">
-                            {formatSize(file.size)}
-                          </td>
-                        </tr>
-                      ))}
-                      {category.files.length > 20 ? (
-                        <tr className="border-t border-[#e0e0e0]">
-                          <td colSpan={4} className="px-3 py-1.5 text-center text-[#999]">
-                            还有 {category.files.length - 20} 个文件...
-                          </td>
-                        </tr>
-                      ) : null}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded border border-[#e8e8e8] bg-white px-2 py-1.5">
-      <div className="text-[10px] text-[#999]">{label}</div>
-      <div className="font-mono text-[11px] text-[#333]">{value}</div>
-    </div>
-  );
-}
-
-function ReportTab({
-  pending,
-  onDownload,
-}: {
-  pending: boolean;
-  onDownload: () => void;
-}) {
-  return (
-    <div className="flex h-64 flex-col items-center justify-center gap-4">
-      <FileText size={48} className="text-[#ccc]" />
-      <div className="text-[14px] text-[#666]">生成分析报告</div>
-      <button
-        type="button"
-        onClick={onDownload}
-        disabled={pending}
-        className="flex items-center gap-2 rounded bg-[#111] px-6 py-2 text-[12px] text-white hover:bg-[#333] disabled:opacity-50"
-      >
-        {pending ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />}
-        下载 Markdown 报告
-      </button>
-    </div>
-  );
-}
-
-function InfoCard({ label, value }: { label: string; value?: string }) {
-  return (
-    <div className="rounded border border-[#e0e0e0] bg-[#f8f8f8] p-3">
-      <div className="mb-1 text-[10px] uppercase tracking-wider text-[#999]">{label}</div>
-      <div className="font-mono text-[13px] text-[#111]">{value || '未解析'}</div>
-    </div>
-  );
-}
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded border border-[#e0e0e0] bg-[#f8f8f8] p-4 text-center">
-      <div className="text-[24px] font-bold text-[#111]">{value}</div>
-      <div className="mt-1 text-[11px] text-[#666]">{label}</div>
-    </div>
-  );
-}
-
-function EmptyLine({ text }: { text: string }) {
-  return (
-    <div className="rounded border border-dashed border-[#d8d8d8] bg-[#fcfcfc] px-3 py-2 text-[12px] text-[#777]">
-      {text}
-    </div>
-  );
-}
-
-function LoadingPanel({ text }: { text: string }) {
-  return (
-    <div className="flex h-64 items-center justify-center text-[#999]">
-      <RefreshCw size={24} className="mr-2 animate-spin" />
-      {text}
-    </div>
-  );
-}
-
-function ProvenancePanel({
-  title,
-  provenance,
-  fallback,
-  compact = false,
-}: {
-  title: string;
-  provenance: AnalysisProvenance[];
-  fallback: string;
-  compact?: boolean;
-}) {
-  return (
-    <div className={compact ? 'mb-2' : 'space-y-2'}>
-      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#777]">
-        {title}
-      </div>
-      {provenance.length > 0 ? (
-        <div className="space-y-2">
-          {provenance.map((item, index) => (
-            <div
-              key={`${item.parser}-${item.artifactPath}-${index}`}
-              className="rounded border border-[#e0e0e0] bg-[#fcfcfc] px-3 py-2 text-[11px] text-[#666]"
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded bg-[#f0f0f0] px-2 py-0.5 font-mono text-[10px]">
-                  {statusLabel(item.status)}
-                </span>
-                <span className="font-mono text-[#333]">{item.parser || '-'}</span>
-                <span className="font-mono text-[#777]">{item.artifactPath || '-'}</span>
-              </div>
-              <div className="mt-1 font-mono text-[10px] text-[#888]">
-                dataSource={item.dataSourceId || '-'} · parsedAt={item.parsedAt || '-'}
-              </div>
-              {item.warnings.length > 0 ? (
-                <div className="mt-1 text-amber-800">{item.warnings.join('；')}</div>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <EmptyLine text={fallback} />
-      )}
-    </div>
-  );
-}
-
-function formatProvenanceSummary(provenance: AnalysisProvenance) {
-  return `${provenance.parser || '-'} · ${provenance.artifactPath || '-'} · ${statusLabel(provenance.status)}`;
-}
-
-function statusLabel(status: string) {
-  switch (status) {
-    case 'parsed':
-      return '已解析';
-    case 'notParsed':
-      return '未解析';
-    case 'unavailable':
-      return '不可用';
-    case 'partial':
-      return '部分解析';
-    case 'candidateFound':
-      return '已发现候选';
-    case 'notFound':
-      return '未发现';
-    case 'failed':
-      return '解析失败';
-    default:
-      return status;
-  }
 }

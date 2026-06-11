@@ -9,7 +9,7 @@ import { useRef, useCallback } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { TreeConnector } from './TreeConnector';
-import { getFileIcon } from '@/lib/file-icons';
+import { FileIconWithStatusOverlay } from '@/components/files/FileIconWithStatusOverlay';
 import type { FileTreeNode } from '@/types/models';
 
 interface VirtualFileTreeProps {
@@ -62,8 +62,6 @@ export function VirtualFileTree({
           const node = nodes[virtualRow.index];
           if (!node) return null;
 
-          const iconInfo = getFileIcon(node);
-          const IconComponent = iconInfo.icon;
           const isLast =
             virtualRow.index === nodes.length - 1 ||
             (nodes[virtualRow.index + 1]?.depth ?? 0) < node.depth;
@@ -107,10 +105,15 @@ export function VirtualFileTree({
                 )}
 
                 {/* 文件类型图标 */}
-                <IconComponent
+                <FileIconWithStatusOverlay
+                  name={node.name}
+                  entryType={node.entryType}
+                  status={node.status}
+                  expanded={node.expanded}
+                  deleted={node.deleted}
+                  hidden={node.hidden}
+                  system={node.system}
                   size={12}
-                  style={{ color: iconInfo.color }}
-                  className="shrink-0"
                 />
 
                 {/* 文件名 */}

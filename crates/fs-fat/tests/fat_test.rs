@@ -35,6 +35,65 @@ impl EvidenceReader for FakeReader {
     }
 }
 
+fn write_fat32_entry(img: &mut [u8], cluster: u32, value: u32) {
+    for fat_base in [1024usize, 1536usize] {
+        let offset = fat_base + cluster as usize * 4;
+        img[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+    }
+}
+
+#[test]
+fn fat32_open_file_errors_on_cycle() {
+    let mut img = build_fat32_fixture();
+    write_fat32_entry(&mut img, 4, 5);
+    write_fat32_entry(&mut img, 5, 4);
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let fat = FatReader::open(reader, 0).unwrap();
+
+    let Err(err) = fat.open_file("README.TXT") else {
+        panic!("expected FAT cycle to fail");
+    };
+    assert!(err.to_string().contains("cycle"));
+}
+
+#[test]
+fn fat32_open_file_errors_on_unexpected_free_cluster() {
+    let mut img = build_fat32_fixture();
+    write_fat32_entry(&mut img, 4, 0);
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let fat = FatReader::open(reader, 0).unwrap();
+
+    let Err(err) = fat.open_file("README.TXT") else {
+        panic!("expected unexpected free cluster to fail");
+    };
+    assert!(err.to_string().contains("unexpected free cluster"));
+}
+
+#[test]
+fn fat32_open_file_errors_on_bad_cluster_marker() {
+    let mut img = build_fat32_fixture();
+    write_fat32_entry(&mut img, 4, 0x0FFF_FFF7);
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let fat = FatReader::open(reader, 0).unwrap();
+
+    let Err(err) = fat.open_file("README.TXT") else {
+        panic!("expected bad cluster marker to fail");
+    };
+    assert!(err.to_string().contains("bad cluster marker"));
+}
+
+#[test]
+fn fat32_list_subdir_errors_on_directory_chain_cycle() {
+    let mut img = build_fat32_fixture();
+    write_fat32_entry(&mut img, 3, 3);
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let fat = FatReader::open(reader, 0).unwrap();
+
+    let Err(err) = fat.list_children("SUBDIR") else {
+        panic!("expected directory cluster cycle to fail");
+    };
+    assert!(err.to_string().contains("cycle"));
+}
 fn build_fat32_fixture() -> Vec<u8> {
     let bps = 512;
     let spc = 1;

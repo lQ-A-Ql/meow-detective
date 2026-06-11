@@ -1,10 +1,15 @@
 import {
   ArtifactRow,
+  AnalysisExtractionPageRequest,
+  AnalysisExtractionRequest,
+  AnalysisExtractionRun,
   AnalysisFileClassification,
   AnalysisSystemInfo,
+  BrowserHistorySummary,
   CaseMetrics,
   DataSourceSummary,
   CaseSummary,
+  EmailExtractionSummary,
   FileEntryRow,
   EvidenceClassificationSummary,
   FileTreeNode,
@@ -13,6 +18,7 @@ import {
   RecentObject,
   ReportHistoryItem,
   ReportTemplate,
+  RegistryExtractionSummary,
   SearchResultPage,
   TimelineEventDto,
   TraceItem,
@@ -25,6 +31,9 @@ import {
   artifactFamilies,
   artifactRows,
   analysisClassifications,
+  analysisExtractionRun,
+  browserHistorySummary,
+  emailExtractionSummary,
   evidenceClassificationSummary,
   analysisSummary,
   analysisSystemInfo,
@@ -38,6 +47,7 @@ import {
   recentObjects,
   reportHistory,
   reportTemplates,
+  registryExtractionSummary,
   searchHits,
   timelineEvents,
   traces,
@@ -55,9 +65,9 @@ export interface ApiProvider {
   closeCase(): Promise<void>;
   renameDataSource(dataSourceId: string, name: string): Promise<void>;
   importDataSource(sourcePath: string): Promise<string>;
-  getFileTree(): Promise<FileTreeNode[]>;
-  getFileChildren(parentId: string): Promise<FileTreeNode[]>;
-  getFileRows(parentId?: string): Promise<FileEntryRow[]>;
+  getFileTree(showHidden?: boolean): Promise<FileTreeNode[]>;
+  getFileChildren(parentId: string, showHidden?: boolean): Promise<FileTreeNode[]>;
+  getFileRows(parentId?: string, showHidden?: boolean): Promise<FileEntryRow[]>;
   openFileHandle(fileId: string): Promise<ViewerHandle>;
   readFileRange(request: ViewerRangeRequest): Promise<ViewerRangeResponse>;
   searchFiles(query: string): Promise<SearchResultPage>;
@@ -73,7 +83,21 @@ export interface ApiProvider {
   classifyFiles(sampleSize?: number): Promise<AnalysisFileClassification[]>;
   getEvidenceClassificationSummary(): Promise<EvidenceClassificationSummary>;
   runEvidenceClassification(categories?: string[]): Promise<EvidenceClassificationSummary>;
+  runAnalysisExtraction(request: AnalysisExtractionRequest): Promise<AnalysisExtractionRun>;
+  getRegistryExtractionSummary(request?: AnalysisExtractionPageRequest): Promise<RegistryExtractionSummary>;
+  getBrowserHistorySummary(request?: AnalysisExtractionPageRequest): Promise<BrowserHistorySummary>;
+  getEmailExtractionSummary(request?: AnalysisExtractionPageRequest): Promise<EmailExtractionSummary>;
   generateAnalysisSummary(): Promise<string>;
+}
+
+function filterHidden<T extends { hidden?: boolean; system?: boolean }>(
+  items: T[],
+  showHidden: boolean,
+): T[] {
+  if (showHidden) {
+    return items;
+  }
+  return items.filter((item) => !item.hidden && !item.system);
 }
 
 export const mockProvider: ApiProvider = {
@@ -92,15 +116,15 @@ export const mockProvider: ApiProvider = {
   async getDataSources() {
     return dataSources;
   },
-  async getFileTree() {
-    return filesTree;
+  async getFileTree(showHidden = false) {
+    return filterHidden(filesTree, showHidden);
   },
-  async getFileRows(parentId?: string) {
+  async getFileRows(parentId?: string, showHidden = false) {
     if (!parentId) {
       return [];
     }
     if (parentId === 'tree-system32') {
-      return fileRows;
+      return filterHidden(fileRows, showHidden);
     }
     return [];
   },
@@ -185,6 +209,34 @@ export const mockProvider: ApiProvider = {
       )),
     };
   },
+  async runAnalysisExtraction(_request: AnalysisExtractionRequest) {
+    return analysisExtractionRun;
+  },
+  async getRegistryExtractionSummary(request?: AnalysisExtractionPageRequest) {
+    const offset = request?.offset ?? 0;
+    const limit = request?.limit ?? registryExtractionSummary.values.length;
+    return {
+      ...registryExtractionSummary,
+      values: registryExtractionSummary.values.slice(offset, offset + limit),
+    };
+  },
+  async getBrowserHistorySummary(request?: AnalysisExtractionPageRequest) {
+    const offset = request?.offset ?? 0;
+    const limit = request?.limit ?? browserHistorySummary.visits.length;
+    return {
+      ...browserHistorySummary,
+      visits: browserHistorySummary.visits.slice(offset, offset + limit),
+      downloads: browserHistorySummary.downloads.slice(0, limit),
+    };
+  },
+  async getEmailExtractionSummary(request?: AnalysisExtractionPageRequest) {
+    const offset = request?.offset ?? 0;
+    const limit = request?.limit ?? emailExtractionSummary.messages.length;
+    return {
+      ...emailExtractionSummary,
+      messages: emailExtractionSummary.messages.slice(offset, offset + limit),
+    };
+  },
   async generateAnalysisSummary() {
     return analysisSummary;
   },
@@ -199,7 +251,13 @@ export const mockProvider: ApiProvider = {
   async importDataSource(_sourcePath: string) {
     return 'Mock import: 42 files, 3 dirs';
   },
-  async getFileChildren(_parentId: string) {
+  async getFileChildren(parentId: string, showHidden = false) {
+    if (parentId === 'tree-system32') {
+      return filterHidden(filesTree.filter((item) => item.depth === 1), showHidden);
+    }
+    if (parentId === 'tree-winevt') {
+      return filterHidden(filesTree.filter((item) => item.depth === 2), showHidden);
+    }
     return [];
   },
 };

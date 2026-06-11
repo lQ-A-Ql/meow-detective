@@ -158,7 +158,6 @@ export function getFileIcon(node: {
   entryType?: string;
   status?: string;
   expanded?: boolean;
-  deleted?: boolean;
 }): FileIconInfo {
   // 目录特殊处理
   if (node.entryType === 'directory') {
@@ -172,11 +171,6 @@ export function getFileIcon(node: {
     }
     // 普通目录 (展开/折叠)
     return { icon: node.expanded ? FolderOpen : Folder, color: '#888' };
-  }
-
-  // 已删除文件
-  if (node.deleted) {
-    return { icon: File, color: '#95a5a6' };
   }
 
   // 文件 - 根据扩展名

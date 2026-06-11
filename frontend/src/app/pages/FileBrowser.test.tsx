@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FileBrowser } from './FileBrowser';
 
 const mocks = vi.hoisted(() => ({
   currentCase: vi.fn(),
+  dataSources: vi.fn(),
   fileTree: vi.fn(),
   fileRows: vi.fn(),
   fileChildren: vi.fn(),
@@ -53,6 +54,7 @@ vi.mock('react-router', () => ({
 
 vi.mock('@/features/case/hooks', () => ({
   useCurrentCase: mocks.currentCase,
+  useDataSources: mocks.dataSources,
 }));
 
 vi.mock('@/features/files/hooks', () => ({
@@ -117,7 +119,7 @@ function queryState(data: unknown) {
 }
 
 const rootTree = [
-  { id: 'root', name: 'Root', depth: 0, hasChildren: true, expanded: true },
+  { id: 'root', name: 'Root', depth: 0, hasChildren: true, expanded: true, hidden: false, system: false },
 ];
 
 const videoFile = {
@@ -128,6 +130,39 @@ const videoFile = {
   size: 8_000_000,
   ext: 'mp4',
   deleted: false,
+  hidden: false,
+  system: false,
+};
+
+const deletedFile = {
+  ...videoFile,
+  id: 'deleted-1',
+  path: '/evidence/old.docx',
+  name: 'old.docx',
+  ext: 'docx',
+  deleted: true,
+};
+
+const hiddenFile = {
+  ...videoFile,
+  id: 'hidden-1',
+  path: '/evidence/System Volume Information',
+  name: 'System Volume Information',
+  entryType: 'directory' as const,
+  size: undefined,
+  ext: undefined,
+  hidden: true,
+  system: true,
+};
+
+const hiddenDeletedFile = {
+  ...videoFile,
+  id: 'hidden-deleted-1',
+  path: '/evidence/.old.txt',
+  name: '.old.txt',
+  ext: 'txt',
+  deleted: true,
+  hidden: true,
 };
 
 function renderPage() {
@@ -144,6 +179,12 @@ function renderPage() {
 describe('FileBrowser media preview', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.selectionState.setSelectedDirectoryId.mockImplementation((id?: string) => {
+      mocks.selectionState.selectedDirectoryId = id;
+    });
+    mocks.selectionState.setSelectedFileId.mockImplementation((id?: string) => {
+      mocks.selectionState.selectedFileId = id;
+    });
     Object.assign(mocks.selectionState, {
       selectedDirectoryId: 'root',
       selectedFileId: 'video-1',
@@ -159,6 +200,7 @@ describe('FileBrowser media preview', () => {
     });
 
     mocks.currentCase.mockReturnValue(queryState({ id: 'case-1', name: 'Case 1' }));
+    mocks.dataSources.mockReturnValue(queryState([]));
     mocks.fileTree.mockReturnValue(queryState(rootTree));
     mocks.fileRows.mockReturnValue(queryState({
       rows: [videoFile],
@@ -251,5 +293,157 @@ describe('FileBrowser media preview', () => {
     expect(screen.getByText(/受控流式预览/)).toBeDefined();
     expect(screen.getByTestId('video-viewer').textContent).not.toContain('C:\\');
     expect(screen.getByTestId('video-viewer').textContent).not.toContain('D:\\');
+  });
+
+  it('hides hidden and system files by default and reloads rows when enabled', async () => {
+    const visibleRows = [videoFile, deletedFile];
+    const allRows = [videoFile, deletedFile, hiddenFile];
+    mocks.fileRows.mockImplementation((_parentId, _offset, _limit, showHidden) => queryState({
+      rows: showHidden ? allRows : visibleRows,
+      totalCount: showHidden ? allRows.length : visibleRows.length,
+      offset: 0,
+      limit: 500,
+      truncated: false,
+    }));
+
+    renderPage();
+
+    expect(mocks.fileTree).toHaveBeenCalledWith(false);
+    expect(mocks.fileRows).toHaveBeenCalledWith('root', 0, 500, false);
+    expect(screen.queryByText('System Volume Information')).toBeNull();
+
+    fireEvent.click(screen.getByLabelText('显示隐藏文件'));
+
+    await waitFor(() => expect(mocks.fileTree).toHaveBeenLastCalledWith(true));
+    await waitFor(() => expect(mocks.fileRows).toHaveBeenLastCalledWith('root', 0, 500, true));
+    expect(screen.getByText('System Volume Information')).toBeDefined();
+  });
+
+  it('loads more tree children so hidden system directories remain reachable in large roots', async () => {
+    Object.assign(mocks.selectionState, {
+      selectedDirectoryId: undefined,
+      selectedFileId: undefined,
+    });
+    const firstChildren = Array.from({ length: 500 }, (_, index) => ({
+      id: `dir-${index}`,
+      name: `Dir ${index}`,
+      depth: 1,
+      hasChildren: false,
+      hidden: false,
+      system: false,
+    }));
+    const nextChildren = [
+      {
+        id: 'svi',
+        name: 'System Volume Information',
+        depth: 1,
+        hasChildren: true,
+        hidden: true,
+        system: true,
+      },
+    ];
+
+    mocks.fileChildren.mockImplementation((parentId, offset, limit, showHidden) => {
+      if (!showHidden) {
+        return queryState({
+          children: [],
+          totalCount: 0,
+          offset,
+          limit,
+          truncated: false,
+        });
+      }
+      return queryState({
+        children: offset === 0 ? firstChildren : nextChildren,
+        totalCount: 501,
+        offset,
+        limit,
+        truncated: offset === 0,
+      });
+    });
+    mocks.fileRows.mockReturnValue(queryState({
+      rows: [videoFile],
+      totalCount: 1,
+      offset: 0,
+      limit: 500,
+      truncated: false,
+    }));
+
+    renderPage();
+
+    fireEvent.click(screen.getByTestId('file-visibility-toggle'));
+
+    await waitFor(() => expect(mocks.fileChildren).toHaveBeenCalledWith('root', 0, 500, true));
+    expect(screen.queryByText('System Volume Information')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('load-more-tree-children'));
+
+    await waitFor(() => expect(mocks.fileChildren).toHaveBeenLastCalledWith('root', 500, 500, true));
+    expect(screen.getByText('System Volume Information')).toBeDefined();
+  });
+
+  it('renders deleted and hidden states as icon overlays', () => {
+    Object.assign(mocks.selectionState, {
+      selectedFileId: undefined,
+    });
+    mocks.fileRows.mockReturnValue(queryState({
+      rows: [deletedFile, hiddenFile, hiddenDeletedFile],
+      totalCount: 3,
+      offset: 0,
+      limit: 500,
+      truncated: false,
+    }));
+
+    renderPage();
+
+    const deletedRow = screen.getByText('old.docx').closest('tr');
+    const hiddenRow = screen.getByText('System Volume Information').closest('tr');
+    const bothRow = screen.getByText('.old.txt').closest('tr');
+
+    expect(deletedRow?.querySelector('[data-deleted="true"]')).toBeTruthy();
+    expect(deletedRow?.querySelector('[data-hidden="true"]')).toBeNull();
+    expect(hiddenRow?.querySelector('[data-hidden="true"]')).toBeTruthy();
+    expect(hiddenRow?.querySelector('[data-deleted="true"]')).toBeNull();
+    expect(bothRow?.querySelector('[data-deleted="true"]')).toBeTruthy();
+    expect(bothRow?.querySelector('[data-hidden="true"]')).toBeTruthy();
+  });
+
+  it('formats partition root names in the tree and breadcrumb using shared partition display rules', () => {
+    mocks.fileTree.mockReturnValue(queryState([
+      {
+        id: 'root',
+        name: 'Partition 1 (NTFS)',
+        depth: 0,
+        hasChildren: true,
+        expanded: true,
+        hidden: false,
+        system: false,
+      },
+    ]));
+    mocks.dataSources.mockReturnValue(queryState([
+      {
+        id: 'ds-1',
+        name: 'Demo Source',
+        kind: 'e01',
+        sourcePath: 'E:/demo.E01',
+        importedAt: '2026-06-01T10:00:00Z',
+        partitions: [
+          {
+            index: 1,
+            name: 'Basic data partition',
+            kindLabel: 'Basic data',
+            status: 'supported',
+            offset: 0,
+            length: 1024,
+            filesystem: 'NTFS',
+          },
+        ],
+      },
+    ]));
+
+    renderPage();
+
+    expect(screen.getAllByText('分区1（NTFS）').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Partition 1 (NTFS)')).toBeNull();
   });
 });

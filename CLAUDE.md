@@ -38,8 +38,10 @@ The frontend package lives in `frontend/` and uses pnpm.
 
 ### Desktop app
 
-- Tauri config is at `apps/desktop/src-tauri/tauri.conf.json`; it points `frontendDist` to `frontend/dist`.
+- Tauri config is at `apps/desktop/src-tauri/tauri.conf.json`; it points `frontendDist` to `frontend/dist` (hardcoded as `../../../frontend/dist`).
+- Full app with hot-reload (from `apps/desktop/src-tauri/`): `cargo tauri dev`. Release bundle: `cargo tauri build`.
 - For a production desktop build path, build the frontend first, then run/check the Tauri crate as needed.
+- The frontend runs standalone with mock data by default; set `VITE_API_MODE=tauri` to hit real Rust commands (the `ApiClient` switches on this at build time).
 
 ### Repository guard scripts
 
@@ -49,6 +51,8 @@ These PowerShell scripts encode important architectural/security boundaries:
 - Ensure Tauri command layer does not contain raw SQL: `powershell -File scripts/check-command-sql-boundary.ps1`
 - Ensure media preview stays on the guarded `evidence-media:` protocol path: `powershell -File scripts/check-media-protocol-guard.ps1`
 - Release/debug-string guard: `powershell -File scripts/check-release-guard.ps1`
+- Stage 5 regression guard for MCP transport validation, nested MCP DTO contract, and staging merge conflict visibility: `powershell -File scripts/check-stage5-regression-guard.ps1`
+- Frontend lockfile policy: `powershell -File scripts/check-frontend-lockfile-policy.ps1`
 - Additional targeted guards exist in `scripts/` for deny exceptions, EVTX dependency decisions, import optimization, E01 profiling/performance, fixture generation, and WebView2 media smoke checks.
 
 ## Architecture map
@@ -62,10 +66,13 @@ These PowerShell scripts encode important architectural/security boundaries:
 - `crates/persistence-sqlite/` — SQLite connection/migration/repository layer. Keep SQL here or in lower repository/service layers, not in Tauri command handlers.
 - `crates/transport/` — command DTOs, event DTOs, paging, and error shapes shared across the IPC boundary.
 - `crates/evidence-core/`, `crates/image-raw/`, `crates/image-e01/`, `crates/fs-ntfs/`, `crates/fs-fat/`, `crates/fs-exfat/` — read-only evidence/image/filesystem abstractions and implementations.
-- `crates/artifacts-core/`, `crates/artifacts-windows/` — artifact extraction framework and Windows artifact parsers.
-- `crates/search/`, `crates/timeline/`, `crates/catalog/`, `crates/reports/` — feature services for indexing/querying, event projection, catalog management, and report generation.
+- `crates/artifacts-core/`, `crates/artifacts-windows/` — artifact extraction framework and Windows artifact parsers (EVTX, Prefetch, LNK, JumpList, Registry, RecycleBin, SRU, Thumbcache).
+- `crates/search/`, `crates/timeline/`, `crates/catalog/`, `crates/reports/` — feature services for indexing/querying (tantivy), event projection, catalog management/projections, and report generation (HTML, CSV, JSON, evidence bundle).
+- `crates/ingest/` — ingestion pipeline orchestration: the `IngestPipeline` trait, `IngestConfig`, `IngestSink`, `IngestStats`.
+- `crates/infrastructure/` — cross-cutting utilities: logging, hashing, filesystem utils, text, clock, config.
 - `crates/runtime-cache/` — temporary runtime cache support; it must not become the source of truth.
-- `crates/mcp-client/` — MCP client integration exposed through desktop commands and settings UI.
+- `crates/mcp-client/` — MCP client integration (SSE and Stdio transports) exposed through desktop commands and settings UI.
+- `crates/evtx-patched/` — vendored/patched EVTX parser, consumed as the `evtx` dependency (see `docs/evtx-dependency-decision.md`).
 - `crates/testing/` and `testdata/` — shared testing utilities and fixtures.
 
 ### Backend layering
@@ -81,6 +88,19 @@ Long-running operations are represented as jobs/tasks and surfaced through job s
 The frontend uses React Router (`frontend/src/app/routes.tsx`) with lazy page modules for Case Home, Data Analysis, Files, Search, Timeline, Artifacts, Reports, and Settings. React Query is the default server-state layer (`frontend/src/app/providers.tsx`) with a 30 second stale time and no refetch on window focus. Zustand stores hold local UI/selection/MCP state.
 
 API modules in `frontend/src/lib/api/` call a small client wrapper that chooses live Tauri IPC when `VITE_API_MODE=tauri` or `isTauri()` is true, otherwise mock data. Feature hooks in `frontend/src/features/*/hooks.ts` wrap API calls and cache invalidation; prefer adding new calls there rather than invoking Tauri directly from page components.
+
+### The transport crate is the IPC contract
+
+`crates/transport/` is the single source of truth for the frontend↔backend boundary; there is no codegen, so the two sides are kept in sync manually:
+
+- DTOs live in per-domain files under `crates/transport/src/dto/` (case.rs, files.rs, search.rs, timeline.rs, artifacts.rs, jobs.rs, viewer.rs, reports.rs) and are re-exported from mod.rs. Never define serializable API types in other crates.
+- DTOs use `#[serde(rename_all = "camelCase")]`, so the frontend receives camelCase JSON; optional fields use `#[serde(skip_serializing_if = "Option::is_none")]`.
+- Tauri commands return `Result<T, String>`; the shared cross-crate error type is `transport::errors::ApiErrorDto`.
+- Event topics are string constants in `crates/transport/src/events/mod.rs`, mirrored as the `EventTopic` TypeScript union in `frontend/src/types/models.ts`. The frontend subscribes via `EventBus` (`src/lib/events/bus.ts`). Keep both sides in sync when changing topics or DTOs.
+
+A typical end-to-end feature touches, in order: transport DTO/command → `app-services/src/<domain>_service.rs` → `apps/desktop/src-tauri/src/commands/<domain>_commands.rs` → register in `src/lib.rs` `invoke_handler` → mirror DTO in `frontend/src/types/models.ts` → API fn in `src/lib/api/<domain>.ts` → mock data in `src/lib/api/mock-data.ts` → hook in `src/features/<domain>/hooks.ts` → page/component.
+
+App-shell layout components (AppShell, Layout, TopBar, BottomDrawer, InspectorPane, PageSubbar) live in `frontend/src/components/layout/`; shadcn/radix UI primitives live in `frontend/src/app/components/ui/`. Tailwind 4 is CSS-first via `@tailwindcss/vite` — there is no `tailwind.config.js`; configuration lives in CSS with `@source` directives. The `@/` path alias maps to `frontend/src/`.
 
 ### Evidence preview/media constraints
 
@@ -101,3 +121,5 @@ Media preview has a guarded split path: small content may be returned as bounded
 - `docs/architecture-model.md` — current architecture model, module responsibilities, data flow, and implementation constraints.
 - `ci.md` — intended CI gates and command sequence.
 - `test-plan.md` — test layering, naming, and fixture strategy.
+- `AGENTS.md` — overlapping agent-oriented guide with a crate-by-crate role table, conventions, gotchas, and the step-by-step "add a new feature" flow.
+- `design.md` — detailed architecture, crate responsibilities, data structures, and MVP phases.

@@ -1,13 +1,12 @@
-//! Windows SRU (System Resource Usage) database parser.
+//! Windows SRU (System Resource Usage) database recognizer.
 //!
-//! Parses the SRUDB.DAT file located at:
+//! Recognizes the SRUDB.DAT file located at:
 //! `C:\Windows\System32\sru\SRUDB.DAT`
 //!
-//! This is a SQLite database containing system resource usage data including:
-//! - Application resource usage
-//! - Network usage statistics
-//! - Energy usage data
-//! - Push notification data
+//! Modern Windows SRUDB.DAT files are ESE/Jet Blue databases. This extractor
+//! is intentionally fail-closed: it records bounded file-level metadata only
+//! for ESE-looking SRUDB.DAT inputs and refuses SQLite or unknown content rather
+//! than mislabeling unrelated databases as SRU records.
 
 use artifacts_core::{
     new_artifact, ArtifactContext, ArtifactExtractor, ArtifactSink, ExtractorReport,
@@ -18,6 +17,16 @@ use std::io::Read;
 
 /// SRU database parser.
 pub struct SruExtractor;
+
+impl SruExtractor {
+    fn looks_like_sqlite(data: &[u8]) -> bool {
+        data.len() >= 16 && &data[0..16] == b"SQLite format 3\0"
+    }
+
+    fn looks_like_ese(data: &[u8]) -> bool {
+        data.len() >= 8 && u32::from_le_bytes([data[4], data[5], data[6], data[7]]) == 0x89AB_CDEF
+    }
+}
 
 impl ArtifactExtractor for SruExtractor {
     fn id(&self) -> &'static str {
@@ -50,33 +59,32 @@ impl ArtifactExtractor for SruExtractor {
         let mut data = Vec::new();
         reader.read_to_end(&mut data).map_err(|e| e.to_string())?;
 
-        // Check SQLite magic header
-        if data.len() < 16 || &data[0..16] != b"SQLite format 3\0" {
+        // SRUDB.DAT is expected to be an ESE/Jet Blue database. Do not accept
+        // the SQLite header here: doing so falsely routes arbitrary SQLite
+        // databases named SRUDB.DAT into the Windows SRU artifact family.
+        if Self::looks_like_sqlite(&data) {
             return Ok(ExtractorReport {
                 artifacts_found: 0,
                 timeline_events: 0,
-                errors: vec!["Not a valid SQLite database".to_string()],
+                errors: vec!["SRUDB.DAT uses ESE/Jet Blue format, not SQLite".to_string()],
+            });
+        }
+        if !Self::looks_like_ese(&data) {
+            return Ok(ExtractorReport {
+                artifacts_found: 0,
+                timeline_events: 0,
+                errors: vec!["Not a recognized SRU ESE database".to_string()],
             });
         }
 
-        // Create a generic SRU artifact since we can't easily parse SQLite
-        // without a full SQLite library in the reader context
+        // Create a generic SRU artifact until full ESE table parsing is added.
         let mut attrs = BTreeMap::new();
         attrs.insert("file_size".into(), (data.len() as u64).into());
-        attrs.insert("format".into(), "SRUDB.DAT".into());
+        attrs.insert("format".into(), "ESE/Jet Blue".into());
         attrs.insert("database_type".into(), "System Resource Usage".into());
 
-        // Try to extract some basic info from the header
-        if data.len() >= 100 {
-            // SQLite page size is at offset 16-17
-            let page_size = u16::from_be_bytes([data[16], data[17]]);
-            let effective_page_size = if page_size == 1 {
-                65536u32
-            } else {
-                page_size as u32
-            };
-            attrs.insert("page_size".into(), effective_page_size.into());
-        }
+        // ESE page size is not represented by the SQLite header field; leave
+        // table/schema details to a future ESE parser.
 
         let artifact = new_artifact(
             "SRU",
@@ -122,18 +130,35 @@ mod tests {
         let mut sink = VecSink::new();
         let report = extractor.run(ctx, &mut sink).unwrap();
         assert_eq!(report.artifacts_found, 0);
-        assert!(!report.errors.is_empty());
+        assert_eq!(report.errors, vec!["Not a recognized SRU ESE database"]);
     }
 
     #[test]
-    fn sru_valid_header() {
+    fn sru_sqlite_header_is_rejected() {
         let extractor = SruExtractor;
         let mut data = vec![0u8; 1024];
-        // SQLite header
         data[0..16].copy_from_slice(b"SQLite format 3\0");
-        // Page size (4096)
-        data[16] = 0x10;
-        data[17] = 0x00;
+
+        let ctx = ArtifactContext {
+            file_id: domain::FileEntryId("test".to_string()),
+            file_path: "SRUDB.DAT".into(),
+            reader: Box::new(std::io::Cursor::new(data)),
+        };
+        let mut sink = VecSink::new();
+        let report = extractor.run(ctx, &mut sink).unwrap();
+        assert_eq!(report.artifacts_found, 0);
+        assert_eq!(
+            report.errors,
+            vec!["SRUDB.DAT uses ESE/Jet Blue format, not SQLite"]
+        );
+        assert!(sink.artifacts.is_empty());
+    }
+
+    #[test]
+    fn sru_ese_header_creates_file_level_artifact() {
+        let extractor = SruExtractor;
+        let mut data = vec![0u8; 1024];
+        data[4..8].copy_from_slice(&0x89AB_CDEFu32.to_le_bytes());
 
         let ctx = ArtifactContext {
             file_id: domain::FileEntryId("test".to_string()),

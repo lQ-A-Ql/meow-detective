@@ -108,6 +108,37 @@ fn reopen_case_shares_no_state() {
 }
 
 #[test]
+fn delete_case_removes_user_selected_case_directory() {
+    let tmp = TempDir::new().unwrap();
+    let parent = tmp.path().join("custom-cases");
+    let active = case_service::create_case(&parent, "delete-me", Some("tester")).unwrap();
+    let case_root = active.case_root.clone();
+    drop(active);
+
+    assert!(case_root.join("case.json").is_file());
+    assert!(case_root.join("app.db").is_file());
+
+    case_service::delete_case(&case_root).unwrap();
+
+    assert!(!case_root.exists());
+    assert!(parent.exists());
+}
+
+#[test]
+fn delete_case_rejects_non_case_directory_without_removing_it() {
+    let tmp = TempDir::new().unwrap();
+    let not_case = tmp.path().join("not-a-case");
+    std::fs::create_dir_all(&not_case).unwrap();
+    std::fs::write(not_case.join("note.txt"), "keep").unwrap();
+
+    let result = case_service::delete_case(&not_case);
+
+    assert!(result.is_err());
+    assert!(not_case.exists());
+    assert!(not_case.join("note.txt").is_file());
+}
+
+#[test]
 fn delete_data_source_cascades_rows_and_writes_audit_log() {
     let tmp = TempDir::new().unwrap();
     let active =
@@ -140,6 +171,8 @@ fn delete_data_source_cascades_rows_and_writes_audit_log() {
                 size: Some(4),
                 ext: Some("txt".to_string()),
                 deleted: false,
+                hidden: false,
+                system: false,
                 created_at: None,
                 modified_at: Some(chrono::Utc::now()),
                 accessed_at: None,

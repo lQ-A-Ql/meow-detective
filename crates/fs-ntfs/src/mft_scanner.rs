@@ -14,6 +14,9 @@ pub struct MftRecord {
     pub modified_at: Option<DateTime<Utc>>,
     pub accessed_at: Option<DateTime<Utc>>,
     pub changed_at: Option<DateTime<Utc>>,
+    pub hidden: bool,
+    pub system: bool,
+    pub deleted: bool,
     pub is_valid: bool,
 }
 
@@ -32,7 +35,8 @@ impl MftRecordParser {
     }
 
     /// Parse a single MFT FILE record into an MftRecord.
-    /// Returns None for invalid/inactive records.
+    /// Returns None for invalid records. Inactive records with a valid
+    /// $FILE_NAME attribute are retained and marked as deleted.
     pub fn parse(&self, record: &[u8], record_number: u64) -> Option<MftRecord> {
         if record.len() < 42 || &record[0..4] != b"FILE" {
             return None;
@@ -46,9 +50,7 @@ impl MftRecordParser {
         let attr_off = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
         let flags = u16::from_le_bytes([rec[0x16], rec[0x17]]);
         let in_use = flags & 0x01 != 0;
-        if !in_use {
-            return None;
-        }
+        let deleted = !in_use;
         let is_dir = flags & 0x02 != 0;
 
         let mut name = String::new();
@@ -63,6 +65,7 @@ impl MftRecordParser {
         let mut fn_accessed: Option<DateTime<Utc>> = None;
         let mut fn_changed: Option<DateTime<Utc>> = None;
         let mut fn_real_size: Option<u64> = None;
+        let mut fn_flags: Option<u32> = None;
         let mut selected_name_rank: Option<u8> = None;
 
         let mut pos = attr_off;
@@ -119,6 +122,11 @@ impl MftRecordParser {
                                             content[0x30..0x38].try_into().ok()?,
                                         ));
                                     }
+                                    if content.len() >= 0x3C {
+                                        fn_flags = Some(u32::from_le_bytes(
+                                            content[0x38..0x3C].try_into().ok()?,
+                                        ));
+                                    }
                                     selected_name_rank = Some(rank);
                                 }
                             }
@@ -155,7 +163,14 @@ impl MftRecordParser {
         let final_accessed = accessed_at.or(fn_accessed);
         let final_changed = changed_at.or(fn_changed);
 
-        let is_valid = !name.is_empty() || record_number < 24;
+        let is_valid = if deleted {
+            !name.is_empty()
+        } else {
+            !name.is_empty() || record_number < 24
+        };
+        if !is_valid {
+            return None;
+        }
 
         let size = if !is_dir && size == 0 {
             fn_real_size.unwrap_or(size)
@@ -173,6 +188,9 @@ impl MftRecordParser {
             modified_at: final_modified,
             accessed_at: final_accessed,
             changed_at: final_changed,
+            hidden: fn_flags.is_some_and(|flags| flags & 0x02 != 0),
+            system: fn_flags.is_some_and(|flags| flags & 0x04 != 0),
+            deleted,
             is_valid,
         })
     }
@@ -540,6 +558,7 @@ mod tests {
         assert_eq!(result.name, "test.txt");
         assert_eq!(result.parent_ref, 5);
         assert!(!result.is_dir);
+        assert!(!result.deleted);
         assert!(result.created_at.is_some());
         assert_eq!(result.size, 1234);
     }
@@ -595,7 +614,39 @@ mod tests {
         let parser = MftRecordParser::new(1024, 512);
         let mut rec = make_test_record(500, "deleted.txt", 5, false);
         rec[0x16] = 0x00;
-        assert!(parser.parse(&rec, 500).is_none());
+        let result = parser.parse(&rec, 500).unwrap();
+        assert_eq!(result.name, "deleted.txt");
+        assert!(result.deleted);
+        assert!(!result.is_dir);
+    }
+
+    #[test]
+    fn parse_inactive_hidden_system_record() {
+        let parser = MftRecordParser::new(1024, 512);
+        let mut rec = make_test_record(501, "hidden-deleted.txt", 5, false);
+        rec[0x16] = 0x00;
+        let mut pos = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
+        while pos + 8 < rec.len() {
+            let typ = u32::from_le_bytes(rec[pos..pos + 4].try_into().unwrap_or([0; 4]));
+            let len =
+                u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
+            if typ == 0x30 {
+                if let Some(content) = resident_content(&rec, pos, len) {
+                    let flags_offset = content.as_ptr() as usize - rec.as_ptr() as usize + 0x38;
+                    rec[flags_offset..flags_offset + 4].copy_from_slice(&0x06u32.to_le_bytes());
+                }
+                break;
+            }
+            if typ == 0xFFFFFFFF || len == 0 || pos + len > rec.len() {
+                break;
+            }
+            pos += len;
+        }
+
+        let result = parser.parse(&rec, 501).unwrap();
+        assert!(result.deleted);
+        assert!(result.hidden);
+        assert!(result.system);
     }
 
     #[test]

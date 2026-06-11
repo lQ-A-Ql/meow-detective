@@ -2,12 +2,68 @@
 //!
 //! Tauri commands for managing MCP server connections.
 
-use mcp_client::{McpConfig, McpServerConfig, McpTransport};
+use mcp_client::{
+    validate_mcp_config, validate_mcp_server_config, McpConfig, McpServerConfig, McpTransport,
+};
 use tauri::State;
 use transport::dto::mcp::*;
 use transport::CommandError;
 
 use crate::state::AppState;
+
+fn transport_from_dto(server: &McpServerConfigDto) -> Result<McpTransport, CommandError> {
+    match server.transport_type.as_str() {
+        "sse" => Ok(McpTransport::Sse {
+            url: server.url.clone().unwrap_or_default(),
+        }),
+        "stdio" => Ok(McpTransport::Stdio {
+            command: server.command.clone().unwrap_or_default(),
+            args: server.args.clone().unwrap_or_default(),
+        }),
+        _ => Err(CommandError::from_service_error(
+            "Invalid transport type".to_string(),
+        )),
+    }
+}
+
+fn server_config_from_dto(server: &McpServerConfigDto) -> Result<McpServerConfig, CommandError> {
+    Ok(McpServerConfig {
+        id: server.id.clone(),
+        name: server.name.clone(),
+        transport: transport_from_dto(server)?,
+        enabled: server.enabled,
+        auto_connect: server.auto_connect,
+    })
+}
+
+fn config_from_dto(config: McpConfigDto) -> Result<McpConfig, CommandError> {
+    let servers = config
+        .servers
+        .iter()
+        .map(server_config_from_dto)
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let mut config = McpConfig {
+        servers,
+        resources: config.resources,
+        tools: config.tools,
+    };
+    validate_mcp_config(&mut config)
+        .map_err(|e| CommandError::from_service_error(e.to_string()))?;
+    Ok(config)
+}
+
+fn status_to_dto(status: mcp_client::McpServerStatus) -> McpServerStatusDto {
+    McpServerStatusDto {
+        id: status.id,
+        name: status.name,
+        connected: status.connected,
+        has_resources: status.capabilities.resources,
+        has_tools: status.capabilities.tools,
+        has_prompts: status.capabilities.prompts,
+        last_error: status.last_error,
+    }
+}
 
 /// Get current MCP configuration.
 #[tauri::command]
@@ -55,33 +111,7 @@ pub async fn save_mcp_config(
     state: State<'_, AppState>,
     config: McpConfigDto,
 ) -> Result<(), CommandError> {
-    let mcp_config = McpConfig {
-        servers: config
-            .servers
-            .iter()
-            .map(|s| {
-                let transport = match s.transport_type.as_str() {
-                    "sse" => McpTransport::Sse {
-                        url: s.url.clone().unwrap_or_default(),
-                    },
-                    "stdio" => McpTransport::Stdio {
-                        command: s.command.clone().unwrap_or_default(),
-                        args: s.args.clone().unwrap_or_default(),
-                    },
-                    _ => McpTransport::Sse { url: String::new() },
-                };
-                McpServerConfig {
-                    id: s.id.clone(),
-                    name: s.name.clone(),
-                    transport,
-                    enabled: s.enabled,
-                    auto_connect: s.auto_connect,
-                }
-            })
-            .collect(),
-        resources: config.resources,
-        tools: config.tools,
-    };
+    let mcp_config = config_from_dto(config)?;
 
     let mut guard = state
         .mcp_config
@@ -101,28 +131,9 @@ pub async fn add_mcp_server(
     state: State<'_, AppState>,
     server: McpServerConfigDto,
 ) -> Result<McpServerStatusDto, CommandError> {
-    let transport = match server.transport_type.as_str() {
-        "sse" => McpTransport::Sse {
-            url: server.url.clone().unwrap_or_default(),
-        },
-        "stdio" => McpTransport::Stdio {
-            command: server.command.clone().unwrap_or_default(),
-            args: server.args.clone().unwrap_or_default(),
-        },
-        _ => {
-            return Err(CommandError::from_service_error(
-                "Invalid transport type".to_string(),
-            ))
-        }
-    };
-
-    let config = McpServerConfig {
-        id: server.id.clone(),
-        name: server.name.clone(),
-        transport,
-        enabled: server.enabled,
-        auto_connect: server.auto_connect,
-    };
+    let mut config = server_config_from_dto(&server)?;
+    validate_mcp_server_config(&mut config)
+        .map_err(|e| CommandError::from_service_error(e.to_string()))?;
 
     state
         .add_mcp_server(config)
@@ -167,12 +178,15 @@ pub async fn connect_mcp_server(
                 .mcp_config
                 .lock()
                 .map_err(|e| CommandError::from_service_error(e.to_string()))?;
-            guard
+            let mut config = guard
                 .servers
                 .iter()
                 .find(|s| s.id == server_id_clone)
                 .cloned()
-                .ok_or_else(|| CommandError::not_found("Server"))?
+                .ok_or_else(|| CommandError::not_found("Server"))?;
+            validate_mcp_server_config(&mut config)
+                .map_err(|e| CommandError::from_service_error(e.to_string()))?;
+            config
         };
 
         // Create client and connect in a blocking context
@@ -202,15 +216,7 @@ pub async fn connect_mcp_server(
         .get_mcp_server_status(&server_id)
         .ok_or_else(|| CommandError::not_found("Server"))?;
 
-    Ok(McpServerStatusDto {
-        id: status.id,
-        name: status.name,
-        connected: status.connected,
-        has_resources: status.capabilities.resources,
-        has_tools: status.capabilities.tools,
-        has_prompts: status.capabilities.prompts,
-        last_error: status.last_error,
-    })
+    Ok(status_to_dto(status))
 }
 
 /// Disconnect from an MCP server.
@@ -263,13 +269,20 @@ pub async fn test_mcp_connection(
         }
     };
 
-    let config = McpServerConfig {
+    let mut config = McpServerConfig {
         id: "test".to_string(),
         name: "Test".to_string(),
         transport,
         enabled: true,
         auto_connect: false,
     };
+    if let Err(e) = validate_mcp_server_config(&mut config) {
+        return Ok(McpTestConnectionResult {
+            success: false,
+            error: Some(e.to_string()),
+            capabilities: None,
+        });
+    }
 
     let mut client = mcp_client::McpClient::new(config);
     match client.connect().await {

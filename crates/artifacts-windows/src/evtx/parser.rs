@@ -4,6 +4,7 @@
 //! set of System.evtx EventLog/User32 records that can be shown as candidates
 //! with provenance.
 
+use super::capability::supports_evtx_boot_shutdown_path;
 use chrono::{DateTime, Utc};
 use evtx::{err::EvtxError, EvtxParser};
 use serde_json::Value;
@@ -66,6 +67,15 @@ pub struct EvtxBootExtraction {
 }
 
 pub fn extract_boot_shutdown_events(bytes: &[u8], source_path: &str) -> EvtxBootExtraction {
+    if !supports_evtx_boot_shutdown_path(source_path) {
+        return EvtxBootExtraction {
+            events: Vec::new(),
+            warnings: vec![format!(
+                "{source_path} is outside bounded System.evtx boot/shutdown parser scope"
+            )],
+        };
+    }
+
     if bytes.len() > MAX_EVTX_ANALYSIS_BYTES {
         return EvtxBootExtraction {
             events: Vec::new(),
@@ -155,6 +165,15 @@ pub fn extract_boot_shutdown_events_from_json_records(
     records: &[Value],
     source_path: &str,
 ) -> EvtxBootExtraction {
+    if !supports_evtx_boot_shutdown_path(source_path) {
+        return EvtxBootExtraction {
+            events: Vec::new(),
+            warnings: vec![format!(
+                "{source_path} is outside bounded System.evtx boot/shutdown parser scope"
+            )],
+        };
+    }
+
     let mut extraction = EvtxBootExtraction::default();
     for record in records {
         if let Some(event) = boot_event_from_json(record, None, None, source_path) {

@@ -7,6 +7,10 @@ pub mod registry;
 pub mod sru;
 pub mod thumbcache;
 
+pub use evtx::capability::{
+    evtx_capability, supports_evtx_boot_shutdown_path, EvtxCapability, EVTX_PARSER_ID,
+    SUPPORTED_EVENT_IDS, SUPPORTED_SOURCE_PATH_SUFFIX,
+};
 pub use evtx::parser::{
     extract_boot_shutdown_events, extract_boot_shutdown_events_from_json_records, EvtxBootEvent,
     EvtxBootEventKind, EvtxBootExtraction, MAX_EVTX_ANALYSIS_BYTES,

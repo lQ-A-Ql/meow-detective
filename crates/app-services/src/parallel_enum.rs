@@ -345,8 +345,8 @@ fn enumerate_fs_to_staging(
             .prepare_cached(
                 "INSERT INTO file_entries
                  (id, parent_id, data_source_id, path, name, entry_type,
-                  size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                  size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             )
             .map_err(|e| format!("Prepare error: {}", e))?;
 
@@ -368,6 +368,8 @@ fn enumerate_fs_to_staging(
                 let entry_id = uuid::Uuid::new_v4().to_string();
                 let is_dir = entry.is_dir;
                 let size = entry.size;
+                let (hidden, system) =
+                    visibility_flags_for_name(&entry.name, entry.hidden, entry.system);
 
                 stmt.execute(rusqlite::params![
                     entry_id,
@@ -379,6 +381,8 @@ fn enumerate_fs_to_staging(
                     Some(size),
                     entry.name.rsplit('.').next().map(|e| e.to_lowercase()),
                     0i32,
+                    hidden as i32,
+                    system as i32,
                     entry.created_at.as_ref().map(|dt| dt.to_rfc3339()),
                     entry.modified_at.as_ref().map(|dt| dt.to_rfc3339()),
                     entry.accessed_at.as_ref().map(|dt| dt.to_rfc3339()),
@@ -470,8 +474,8 @@ fn enumerate_ntfs_mft_to_staging(
             .prepare_cached(
                 "INSERT OR IGNORE INTO file_entries
                  (id, parent_id, data_source_id, path, name, entry_type,
-                  size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256)
-                 VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, 0, ?8, ?9, ?10, ?11, NULL)",
+                  size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256)
+                 VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, NULL)",
             )
             .map_err(|e| format!("Prepare MFT staging insert: {e}"))?;
 
@@ -481,6 +485,7 @@ fn enumerate_ntfs_mft_to_staging(
         let mut dir_count = 0u64;
         let mut total_size = 0u64;
         let mut path_map: HashMap<String, (Option<String>, String, bool)> = HashMap::new();
+        let mut deleted_records: HashSet<String> = HashSet::new();
         let mut buf = Vec::new();
 
         while start_record < total_records {
@@ -520,6 +525,7 @@ fn enumerate_ntfs_mft_to_staging(
                 ds_id,
                 partition.index,
                 &mut path_map,
+                &mut deleted_records,
                 &mut file_count,
                 &mut dir_count,
                 &mut total_size,
@@ -543,10 +549,22 @@ fn enumerate_ntfs_mft_to_staging(
         )
         .map_err(|e| format!("Backfill NTFS directory index entries: {e}"))?;
         if path_map.len() > MFT_HASHMAP_PATH_LIMIT {
-            update_mft_staging_paths_via_sqlite(conn, ds_id, partition.index, &path_map)
+            update_mft_staging_paths_via_sqlite(
+                conn,
+                ds_id,
+                partition.index,
+                &path_map,
+                &deleted_records,
+            )
                 .map_err(|e| format!("Update large MFT staging paths: {e}"))?;
         } else {
-            update_mft_staging_paths_and_parent_ids(conn, ds_id, partition.index, &path_map)
+            update_mft_staging_paths_and_parent_ids(
+                conn,
+                ds_id,
+                partition.index,
+                &path_map,
+                &deleted_records,
+            )
                 .map_err(|e| format!("Update MFT staging paths/parents: {e}"))?;
         }
         validate_mft_staging_shape(conn, ds_id, partition.index)?;
@@ -957,8 +975,8 @@ fn backfill_ntfs_directory_index_entries(
         .prepare_cached(
             "INSERT OR IGNORE INTO file_entries
              (id, parent_id, data_source_id, path, name, entry_type,
-              size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256)
-             VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, 0, NULL, NULL, NULL, NULL, NULL)",
+              size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256)
+             VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, 0, ?8, ?9, NULL, NULL, NULL, NULL, NULL)",
         )
         .map_err(|e| format!("Prepare NTFS directory index backfill: {e}"))?;
 
@@ -978,6 +996,8 @@ fn backfill_ntfs_directory_index_entries(
 
         for action in mft_directory_index_backfill_actions(path_map, dir_ref, entries) {
             let entry_id = mft_entry_id(partition_index, action.mft_ref);
+            let (hidden, system) =
+                visibility_flags_for_name(&action.name, action.hidden, action.system);
             let ext = if action.is_dir {
                 None
             } else {
@@ -1001,6 +1021,8 @@ fn backfill_ntfs_directory_index_entries(
                         Some(action.size)
                     },
                     ext,
+                    hidden as i32,
+                    system as i32,
                 ])
                 .map_err(|e| format!("Insert NTFS directory index backfill row: {e}"))?;
             if changed > 0 {
@@ -1026,6 +1048,8 @@ struct MftDirectoryIndexBackfillAction {
     is_dir: bool,
     size: u64,
     mft_ref: u64,
+    hidden: bool,
+    system: bool,
 }
 
 fn mft_directory_index_backfill_actions(
@@ -1054,6 +1078,8 @@ fn mft_directory_index_backfill_actions(
             is_dir: entry.is_dir,
             size: entry.size,
             mft_ref: entry.mft_ref,
+            hidden: entry.hidden,
+            system: entry.system,
         });
     }
 
@@ -1089,6 +1115,7 @@ fn stage_mft_records(
     ds_id: &str,
     partition_index: usize,
     path_map: &mut HashMap<String, (Option<String>, String, bool)>,
+    deleted_records: &mut HashSet<String>,
     file_count: &mut u64,
     dir_count: &mut u64,
     total_size: &mut u64,
@@ -1112,6 +1139,9 @@ fn stage_mft_records(
             record.record_number.to_string(),
             (parent_key.clone(), name.clone(), record.is_dir),
         );
+        if record.deleted {
+            deleted_records.insert(record.record_number.to_string());
+        }
 
         let entry_id = mft_entry_id(partition_index, record.record_number);
         let parent_id = parent_key
@@ -1132,6 +1162,7 @@ fn stage_mft_records(
                 .filter(|ext| *ext != record.name)
                 .map(|ext| ext.to_string())
         };
+        let (hidden, system) = visibility_flags_for_name(&name, record.hidden, record.system);
 
         stmt.execute(params![
             entry_id,
@@ -1141,6 +1172,9 @@ fn stage_mft_records(
             if record.is_dir { "directory" } else { "file" },
             size,
             ext,
+            record.deleted as i32,
+            hidden as i32,
+            system as i32,
             record.created_at.as_ref().map(|dt| dt.to_rfc3339()),
             record.modified_at.as_ref().map(|dt| dt.to_rfc3339()),
             record.accessed_at.as_ref().map(|dt| dt.to_rfc3339()),
@@ -1210,7 +1244,11 @@ fn records_to_partition_file_entries(
                     Some(record.size)
                 },
                 ext,
-                deleted: false,
+                deleted: record.deleted,
+                hidden: record.hidden
+                    || inferred_hidden_name(&record.name)
+                    || inferred_system_name(&record.name),
+                system: record.system || inferred_system_name(&record.name),
                 created_at: record.created_at,
                 modified_at: record.modified_at,
                 accessed_at: record.accessed_at,
@@ -1223,6 +1261,29 @@ fn records_to_partition_file_entries(
 
 fn mft_entry_id(partition_index: usize, record_number: u64) -> String {
     format!("mft:{partition_index}:{record_number}")
+}
+
+fn visibility_flags_for_name(name: &str, hidden: bool, system: bool) -> (bool, bool) {
+    let inferred_system = inferred_system_name(name);
+    (
+        hidden || inferred_hidden_name(name) || inferred_system,
+        system || inferred_system,
+    )
+}
+
+fn inferred_hidden_name(name: &str) -> bool {
+    name.starts_with('.')
+}
+
+fn inferred_system_name(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "$recycle.bin"
+            | "system volume information"
+            | "pagefile.sys"
+            | "hiberfil.sys"
+            | "swapfile.sys"
+    )
 }
 
 fn mft_entry_id_from_key(partition_index: usize, record_key: &str) -> String {
@@ -1265,12 +1326,13 @@ fn update_mft_staging_paths(
     ds_id: &str,
     partition_index: usize,
     path_map: &HashMap<String, (Option<String>, String, bool)>,
+    deleted_records: &HashSet<String>,
 ) -> rusqlite::Result<()> {
     let mut resolved = HashMap::with_capacity(path_map.len());
     let mut visiting = HashSet::new();
     let records: Vec<String> = path_map.keys().cloned().collect();
     for record in &records {
-        resolve_mft_path(record, path_map, &mut resolved, &mut visiting);
+        resolve_mft_path(record, path_map, deleted_records, &mut resolved, &mut visiting);
     }
 
     let mut stmt =
@@ -1290,11 +1352,12 @@ fn update_mft_staging_paths_and_parent_ids(
     ds_id: &str,
     partition_index: usize,
     path_map: &HashMap<String, (Option<String>, String, bool)>,
+    deleted_records: &HashSet<String>,
 ) -> rusqlite::Result<()> {
     let mut resolved = HashMap::with_capacity(path_map.len());
     let mut visiting = HashSet::new();
     for record in path_map.keys() {
-        resolve_mft_path(record, path_map, &mut resolved, &mut visiting);
+        resolve_mft_path(record, path_map, deleted_records, &mut resolved, &mut visiting);
     }
 
     let root_id = mft_entry_id_from_key(partition_index, "5");
@@ -1326,6 +1389,7 @@ fn update_mft_staging_paths_and_parent_ids(
 fn resolve_mft_path(
     record: &str,
     path_map: &HashMap<String, (Option<String>, String, bool)>,
+    deleted_records: &HashSet<String>,
     resolved: &mut HashMap<String, String>,
     visiting: &mut HashSet<String>,
 ) -> String {
@@ -1344,12 +1408,16 @@ fn resolve_mft_path(
     };
     let path = match parent {
         Some(parent) if parent != "5" && path_map.contains_key(parent) => {
-            let parent_path = resolve_mft_path(parent, path_map, resolved, visiting);
+            let parent_path =
+                resolve_mft_path(parent, path_map, deleted_records, resolved, visiting);
             if parent_path.is_empty() {
                 name.clone()
             } else {
                 format!("{parent_path}/{name}")
             }
+        }
+        _ if record != "5" && deleted_records.contains(record) => {
+            format!("/$DeletedOrphans/{record}-{name}")
         }
         _ => name.clone(),
     };
@@ -1392,6 +1460,7 @@ fn update_mft_staging_paths_via_sqlite(
     ds_id: &str,
     partition_index: usize,
     path_map: &HashMap<String, (Option<String>, String, bool)>,
+    deleted_records: &HashSet<String>,
 ) -> rusqlite::Result<()> {
     conn.execute_batch(
         "CREATE TEMP TABLE IF NOT EXISTS mft_path_records (
@@ -1421,7 +1490,7 @@ fn update_mft_staging_paths_via_sqlite(
         .query_map([], |row| row.get::<_, String>(0))?
         .collect::<Result<Vec<_>, _>>()?;
     for record in &records {
-        resolve_mft_path(record, path_map, &mut resolved, &mut visiting);
+        resolve_mft_path(record, path_map, deleted_records, &mut resolved, &mut visiting);
     }
     {
         let mut stmt = conn.prepare_cached(
@@ -1551,6 +1620,8 @@ mod tests {
                     path: format!("/file-{index}.txt"),
                     is_dir: false,
                     size: 1,
+                    hidden: false,
+                    system: false,
                     created_at: None,
                     modified_at: None,
                     accessed_at: None,
@@ -1691,8 +1762,22 @@ mod tests {
             modified_at: None,
             accessed_at: None,
             changed_at: None,
+            hidden: false,
+            system: false,
+            deleted: false,
             is_valid: true,
         }
+    }
+
+    fn fake_deleted_mft_record(
+        record_number: u64,
+        parent_ref: u64,
+        name: &str,
+        is_dir: bool,
+    ) -> MftRecord {
+        let mut record = fake_mft_record(record_number, parent_ref, name, is_dir);
+        record.deleted = true;
+        record
     }
 
     fn fake_ntfs_index_entry(
@@ -1705,6 +1790,8 @@ mod tests {
             is_dir,
             size: if is_dir { 0 } else { 12 },
             mft_ref,
+            hidden: false,
+            system: false,
         }
     }
 
@@ -1779,8 +1866,9 @@ mod tests {
             insert_staging_entry(&conn, &entry.id.0, "ds-mft");
             add_partition_entry_to_path_map(&mut path_map, entry, 3);
         }
+        let deleted_records = HashSet::new();
 
-        update_mft_staging_paths(&conn, "ds-mft", 3, &path_map).unwrap();
+        update_mft_staging_paths(&conn, "ds-mft", 3, &path_map, &deleted_records).unwrap();
         update_mft_staging_parent_ids(&conn, "ds-mft", 3, &path_map).unwrap();
 
         let (path, parent_id): (String, Option<String>) = conn
@@ -1862,7 +1950,15 @@ mod tests {
             Some(&(Some("42".to_string()), "Liu Yang".to_string(), true))
         );
 
-        update_mft_staging_paths_and_parent_ids(&conn, ds_id, 4, &path_map).unwrap();
+        let deleted_records = HashSet::new();
+        update_mft_staging_paths_and_parent_ids(
+            &conn,
+            ds_id,
+            4,
+            &path_map,
+            &deleted_records,
+        )
+        .unwrap();
         let (path, parent_id): (String, Option<String>) = conn
             .query_row(
                 "SELECT path, parent_id FROM file_entries WHERE id = 'mft:4:43'",
@@ -1897,7 +1993,9 @@ mod tests {
             (Some("42".to_string()), "notepad.exe".to_string(), false),
         );
 
-        update_mft_staging_paths_via_sqlite(&conn, ds_id, 9, &path_map).unwrap();
+        let deleted_records = HashSet::new();
+        update_mft_staging_paths_via_sqlite(&conn, ds_id, 9, &path_map, &deleted_records)
+            .unwrap();
 
         let (path, parent_id): (String, Option<String>) = conn
             .query_row(
@@ -1927,7 +2025,8 @@ mod tests {
             (Some("5".to_string()), "orphan.bin".to_string(), false),
         );
 
-        update_mft_staging_paths(&conn, "ds-mft", 8, &path_map).unwrap();
+        let deleted_records = HashSet::new();
+        update_mft_staging_paths(&conn, "ds-mft", 8, &path_map, &deleted_records).unwrap();
         update_mft_staging_parent_ids(&conn, "ds-mft", 8, &path_map).unwrap();
 
         let bad: (String, Option<String>) = conn
@@ -1947,6 +2046,45 @@ mod tests {
         assert_eq!(bad.0, "orphan.bin");
         assert_eq!(bad.1.as_deref(), Some("mft:8:5"));
         assert_eq!(zero_path, "");
+    }
+
+    #[test]
+    fn ntfs_mft_deleted_orphan_uses_deleted_orphans_path() {
+        let conn = persistence_sqlite::connection::open_in_memory().unwrap();
+        conn.execute_batch(include_str!(
+            "../../persistence-sqlite/src/migrations/scripts/staging_001.sql"
+        ))
+        .unwrap();
+        let ds_id = "ds-deleted-orphan";
+        let records = vec![
+            fake_mft_record(5, 5, ".", true),
+            fake_deleted_mft_record(77, 999, "old.txt", false),
+        ];
+        let entries = records_to_partition_file_entries(&records, ds_id, 2);
+        let mut path_map = HashMap::new();
+        let mut deleted_records = HashSet::new();
+        for entry in &entries {
+            insert_staging_entry(&conn, &entry.id.0, ds_id);
+            add_partition_entry_to_path_map(&mut path_map, entry, 2);
+            if entry.deleted {
+                let record = mft_record_key(2, &entry.id.0).unwrap();
+                deleted_records.insert(record);
+            }
+        }
+
+        update_mft_staging_paths_and_parent_ids(&conn, ds_id, 2, &path_map, &deleted_records)
+            .unwrap();
+
+        let (path, parent_id): (String, Option<String>) = conn
+            .query_row(
+                "SELECT path, parent_id FROM file_entries WHERE id = 'mft:2:77'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(path, "/$DeletedOrphans/77-old.txt");
+        assert_eq!(parent_id.as_deref(), Some("mft:2:5"));
+        assert!(entries.iter().any(|entry| entry.id.0 == "mft:2:77" && entry.deleted));
     }
 
     #[test]

@@ -4,6 +4,9 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::Path;
+
+use crate::error::{McpError, McpResult};
 
 /// MCP 服务器配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,7 +24,7 @@ pub struct McpServerConfig {
 }
 
 /// MCP 传输方式
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum McpTransport {
     /// HTTP/SSE 传输
     Sse {
@@ -53,7 +56,7 @@ pub struct McpServerStatus {
 }
 
 /// MCP 能力
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct McpCapabilities {
     /// 是否支持 Resources
     pub resources: bool,
@@ -118,6 +121,119 @@ pub struct McpConfig {
     pub resources: HashMap<String, bool>,
     /// 工具启用配置
     pub tools: HashMap<String, bool>,
+}
+
+/// Validate and normalize an MCP configuration before it is used or persisted.
+pub fn validate_mcp_config(config: &mut McpConfig) -> McpResult<()> {
+    let mut seen_server_ids = std::collections::HashSet::new();
+
+    for server in &mut config.servers {
+        server.id = server.id.trim().to_string();
+        server.name = server.name.trim().to_string();
+
+        if server.id.is_empty() {
+            return Err(McpError::Protocol("MCP server id is required".to_string()));
+        }
+        if !seen_server_ids.insert(server.id.clone()) {
+            return Err(McpError::Protocol(format!(
+                "Duplicate MCP server id: {}",
+                server.id
+            )));
+        }
+        if server.name.is_empty() {
+            return Err(McpError::Protocol(format!(
+                "MCP server {} name is required",
+                server.id
+            )));
+        }
+
+        validate_mcp_transport(&mut server.transport)?;
+    }
+
+    Ok(())
+}
+
+/// Validate a single MCP server config.
+pub fn validate_mcp_server_config(config: &mut McpServerConfig) -> McpResult<()> {
+    let mut mcp_config = McpConfig {
+        servers: vec![config.clone()],
+        resources: HashMap::new(),
+        tools: HashMap::new(),
+    };
+
+    validate_mcp_config(&mut mcp_config)?;
+    *config = mcp_config
+        .servers
+        .into_iter()
+        .next()
+        .ok_or_else(|| McpError::Protocol("MCP server config was not preserved".to_string()))?;
+    Ok(())
+}
+
+/// Validate and normalize an MCP transport.
+pub fn validate_mcp_transport(transport: &mut McpTransport) -> McpResult<()> {
+    match transport {
+        McpTransport::Sse { url } => validate_sse_url(url),
+        McpTransport::Stdio { command, args } => validate_stdio_command(command, args),
+    }
+}
+
+/// Validate and normalize an SSE endpoint URL.
+pub fn validate_sse_url(url: &mut String) -> McpResult<()> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return Err(McpError::Protocol("MCP SSE URL is required".to_string()));
+    }
+
+    let parsed = reqwest::Url::parse(trimmed)
+        .map_err(|e| McpError::Protocol(format!("Invalid MCP SSE URL: {}", e)))?;
+    match parsed.scheme() {
+        "http" | "https" => {}
+        scheme => {
+            return Err(McpError::Protocol(format!(
+                "Unsupported MCP SSE URL scheme: {}",
+                scheme
+            )))
+        }
+    }
+    if parsed.host_str().is_none() {
+        return Err(McpError::Protocol(
+            "MCP SSE URL must include a host".to_string(),
+        ));
+    }
+    if parsed.username() != "" || parsed.password().is_some() {
+        return Err(McpError::Protocol(
+            "MCP SSE URL must not include embedded credentials".to_string(),
+        ));
+    }
+
+    *url = parsed.to_string();
+    Ok(())
+}
+
+/// Validate and normalize a stdio command.
+pub fn validate_stdio_command(command: &mut String, args: &[String]) -> McpResult<()> {
+    let trimmed = command.trim();
+    if trimmed.is_empty() {
+        return Err(McpError::Protocol(
+            "MCP stdio command is required".to_string(),
+        ));
+    }
+    if trimmed.contains('\0') || args.iter().any(|arg| arg.contains('\0')) {
+        return Err(McpError::Protocol(
+            "MCP stdio command and args must not contain NUL bytes".to_string(),
+        ));
+    }
+
+    let path = Path::new(trimmed);
+    if path.is_absolute() || path.components().count() > 1 {
+        return Err(McpError::Protocol(
+            "MCP stdio command must be an executable name, not a path".to_string(),
+        ));
+    }
+
+    *command = trimmed.to_string();
+    Ok(())
 }
 
 /// MCP JSON-RPC Request
@@ -317,6 +433,72 @@ mod tests {
     }
 
     #[test]
+    fn validates_and_normalizes_sse_urls() {
+        let mut url = " http://localhost:3001/sse ".to_string();
+        validate_sse_url(&mut url).unwrap();
+        assert_eq!(url, "http://localhost:3001/sse");
+    }
+
+    #[test]
+    fn rejects_unsupported_sse_url_schemes() {
+        let mut url = "file:///tmp/mcp.sock".to_string();
+        let err = validate_sse_url(&mut url).unwrap_err();
+        assert!(err.to_string().contains("Unsupported MCP SSE URL scheme"));
+    }
+
+    #[test]
+    fn rejects_sse_urls_with_embedded_credentials() {
+        let mut url = "https://user:pass@example.com/sse".to_string();
+        let err = validate_sse_url(&mut url).unwrap_err();
+        assert!(err.to_string().contains("embedded credentials"));
+    }
+
+    #[test]
+    fn validates_and_normalizes_stdio_command() {
+        let mut command = " node ".to_string();
+        validate_stdio_command(&mut command, &["server.js".to_string()]).unwrap();
+        assert_eq!(command, "node");
+    }
+
+    #[test]
+    fn rejects_stdio_command_paths() {
+        let mut command = "./node".to_string();
+        let err = validate_stdio_command(&mut command, &[]).unwrap_err();
+        assert!(err.to_string().contains("not a path"));
+    }
+
+    #[test]
+    fn rejects_duplicate_mcp_server_ids() {
+        let mut config = McpConfig {
+            servers: vec![
+                McpServerConfig {
+                    id: "srv".to_string(),
+                    name: "One".to_string(),
+                    transport: McpTransport::Sse {
+                        url: "http://localhost:3001/sse".to_string(),
+                    },
+                    enabled: true,
+                    auto_connect: false,
+                },
+                McpServerConfig {
+                    id: " srv ".to_string(),
+                    name: "Two".to_string(),
+                    transport: McpTransport::Sse {
+                        url: "http://localhost:3002/sse".to_string(),
+                    },
+                    enabled: true,
+                    auto_connect: false,
+                },
+            ],
+            resources: HashMap::new(),
+            tools: HashMap::new(),
+        };
+
+        let err = validate_mcp_config(&mut config).unwrap_err();
+        assert!(err.to_string().contains("Duplicate MCP server id"));
+    }
+
+    #[test]
     fn test_mcp_prompt() {
         let prompt = McpPrompt {
             name: "analyze_timeline".to_string(),
@@ -367,5 +549,85 @@ mod tests {
         assert!(json.contains("forensics://test"));
         // description is null in JSON when None
         assert!(json.contains("\"description\":null"));
+    }
+
+    #[test]
+    fn validates_sse_urls() {
+        let mut url = " http://localhost:3001/mcp ".to_string();
+        validate_sse_url(&mut url).unwrap();
+        assert_eq!(url, "http://localhost:3001/mcp");
+
+        let mut https = "https://example.test/sse".to_string();
+        assert!(validate_sse_url(&mut https).is_ok());
+
+        let mut file_url = "file:///tmp/server".to_string();
+        assert!(validate_sse_url(&mut file_url).is_err());
+
+        let mut credential_url = "http://user:pass@example.test/sse".to_string();
+        assert!(validate_sse_url(&mut credential_url).is_err());
+
+        let mut missing_host = "http:///".to_string();
+        assert!(validate_sse_url(&mut missing_host).is_err());
+    }
+
+    #[test]
+    fn validates_stdio_commands() {
+        let mut command = " python ".to_string();
+        validate_stdio_command(&mut command, &[]).unwrap();
+        assert_eq!(command, "python");
+
+        let mut empty = String::new();
+        assert!(validate_stdio_command(&mut empty, &[]).is_err());
+
+        let mut relative = "../server".to_string();
+        assert!(validate_stdio_command(&mut relative, &[]).is_err());
+
+        let mut absolute = "C:\\tools\\server.exe".to_string();
+        assert!(validate_stdio_command(&mut absolute, &[]).is_err());
+
+        let mut nul_command = "server\0name".to_string();
+        assert!(validate_stdio_command(&mut nul_command, &[]).is_err());
+
+        let mut valid = "server".to_string();
+        assert!(validate_stdio_command(&mut valid, &["bad\0arg".to_string()]).is_err());
+    }
+
+    #[test]
+    fn validates_config_and_rejects_duplicate_ids() {
+        let mut config = McpConfig {
+            servers: vec![McpServerConfig {
+                id: " test ".to_string(),
+                name: " Test Server ".to_string(),
+                transport: McpTransport::Sse {
+                    url: " http://localhost:3001/sse ".to_string(),
+                },
+                enabled: true,
+                auto_connect: false,
+            }],
+            resources: HashMap::new(),
+            tools: HashMap::new(),
+        };
+
+        validate_mcp_config(&mut config).unwrap();
+        assert_eq!(config.servers[0].id, "test");
+        assert_eq!(config.servers[0].name, "Test Server");
+        assert_eq!(
+            config.servers[0].transport,
+            McpTransport::Sse {
+                url: "http://localhost:3001/sse".to_string()
+            }
+        );
+
+        config.servers.push(McpServerConfig {
+            id: "test".to_string(),
+            name: "Duplicate".to_string(),
+            transport: McpTransport::Stdio {
+                command: "python".to_string(),
+                args: vec![],
+            },
+            enabled: true,
+            auto_connect: false,
+        });
+        assert!(validate_mcp_config(&mut config).is_err());
     }
 }

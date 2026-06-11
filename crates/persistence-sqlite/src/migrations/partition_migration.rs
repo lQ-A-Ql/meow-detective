@@ -154,8 +154,18 @@ fn update_migration_log(conn: &Connection, result: &MigrationResult) -> DbResult
         result.migrated_count, result.skipped_count, result.error_count
     );
 
+    let migration_log_exists: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='migration_log'",
+        [],
+        |row| row.get(0),
+    )?;
+
+    if !migration_log_exists {
+        return Ok(());
+    }
+
     conn.execute(
-        "UPDATE migration_log SET status = ?1, details = ?2 WHERE migration_name = '0012_migrate_partitions'",
+        "UPDATE migration_log SET status = ?1, details = ?2 WHERE migration_name = '0014_migrate_partitions'",
         rusqlite::params![status, details],
     )?;
 
@@ -167,26 +177,103 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_and_migrate() {
+    fn migrate_partitions_updates_0014_migration_log() {
         let conn = crate::connection::open_in_memory().unwrap();
         conn.execute_batch(
-            "CREATE TABLE data_sources (id TEXT PRIMARY KEY, case_id TEXT, name TEXT, kind TEXT, source_path TEXT, imported_at TEXT);
-             CREATE TABLE data_source_partitions (id TEXT PRIMARY KEY, data_source_id TEXT REFERENCES data_sources(id), partition_index INTEGER, name TEXT, kind_label TEXT, status TEXT, type_guid TEXT, offset INTEGER, length INTEGER, filesystem TEXT, unlock_hint TEXT);"
-        ).unwrap();
+            "CREATE TABLE data_sources (
+                id TEXT PRIMARY KEY,
+                case_id TEXT,
+                name TEXT,
+                kind TEXT,
+                source_path TEXT,
+                imported_at TEXT,
+                partitions TEXT
+            );
+            CREATE TABLE data_source_partitions (
+                id TEXT PRIMARY KEY,
+                data_source_id TEXT REFERENCES data_sources(id),
+                partition_index INTEGER,
+                name TEXT,
+                kind_label TEXT,
+                status TEXT,
+                type_guid TEXT,
+                offset INTEGER,
+                length INTEGER,
+                filesystem TEXT,
+                unlock_hint TEXT
+            );
+            CREATE TABLE migration_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                migration_name TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                details TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            INSERT INTO migration_log (migration_name, status, details)
+                VALUES ('0014_migrate_partitions', 'pending', 'Waiting for application-layer migration');",
+        )
+        .unwrap();
 
         conn.execute(
-            "INSERT INTO data_sources (id, case_id, name, kind, source_path, imported_at) VALUES ('ds1', 'c1', 'Test', 'E01', '/path', '2024-01-01')",
-            [],
-        ).unwrap();
+            "INSERT INTO data_sources (id, case_id, name, kind, source_path, imported_at, partitions)
+             VALUES ('ds1', 'c1', 'Test', 'E01', '/path', '2024-01-01', ?1)",
+            [r#"[{"name":"Partition 1","kind_label":"NTFS","status":"supported","offset":0,"length":1048576,"filesystem":"NTFS"}]"#],
+        )
+        .unwrap();
 
-        let repo = PartitionRepo::new(&conn);
-        let json = r#"[{"name":"Partition 1","kind_label":"NTFS","status":"supported","offset":0,"length":1048576,"filesystem":"NTFS"}]"#;
+        let result = migrate_partitions(&conn).unwrap();
+        assert_eq!(result.migrated_count, 1);
 
-        let count = parse_and_migrate_partitions(&repo, "ds1", json).unwrap();
-        assert_eq!(count, 1);
+        let (status, details): (String, String) = conn
+            .query_row(
+                "SELECT status, details FROM migration_log WHERE migration_name = '0014_migrate_partitions'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(status, "completed");
+        assert!(details.contains("Migrated: 1"));
 
-        let records = repo.find_by_data_source("ds1").unwrap();
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0].name, "Partition 1");
+        let stale_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM migration_log WHERE migration_name = '0012_migrate_partitions'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stale_count, 0);
+    }
+
+    #[test]
+    fn migrate_partitions_succeeds_without_migration_log_table() {
+        let conn = crate::connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE data_sources (
+                id TEXT PRIMARY KEY,
+                case_id TEXT,
+                name TEXT,
+                kind TEXT,
+                source_path TEXT,
+                imported_at TEXT,
+                partitions TEXT
+            );
+            CREATE TABLE data_source_partitions (
+                id TEXT PRIMARY KEY,
+                data_source_id TEXT REFERENCES data_sources(id),
+                partition_index INTEGER,
+                name TEXT,
+                kind_label TEXT,
+                status TEXT,
+                type_guid TEXT,
+                offset INTEGER,
+                length INTEGER,
+                filesystem TEXT,
+                unlock_hint TEXT
+            );",
+        )
+        .unwrap();
+
+        let result = migrate_partitions(&conn).unwrap();
+        assert_eq!(result.migrated_count, 0);
     }
 }

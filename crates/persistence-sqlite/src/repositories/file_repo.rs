@@ -4,6 +4,8 @@ use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
 use rusqlite::{params, Connection};
 use std::collections::HashMap;
 
+const FILE_ENTRY_COLUMNS: &str = "id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256";
+
 pub struct FileRepo<'a> {
     conn: &'a Connection,
 }
@@ -25,41 +27,53 @@ impl<'a> FileRepo<'a> {
     pub fn insert_batch(&self, entries: &[FileEntry]) -> DbResult<()> {
         let tx = self.conn.unchecked_transaction()?;
         {
-            let mut stmt = tx.prepare_cached(
-                "INSERT INTO file_entries (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-            )?;
-            for entry in entries {
-                stmt.execute(params![
-                    entry.id.0,
-                    entry.parent_id.as_ref().map(|p| &p.0),
-                    entry.data_source_id.0,
-                    entry.path,
-                    entry.name,
-                    match entry.entry_type {
-                        EntryType::File => "file",
-                        EntryType::Directory => "directory",
-                    },
-                    entry.size,
-                    entry.ext,
-                    entry.deleted as i32,
-                    entry.created_at.map(|dt| dt.to_rfc3339()),
-                    entry.modified_at.map(|dt| dt.to_rfc3339()),
-                    entry.accessed_at.map(|dt| dt.to_rfc3339()),
-                    entry.changed_at.map(|dt| dt.to_rfc3339()),
-                    entry.hash_sha256,
-                ])?;
-            }
+            let repo = FileRepo::new(&tx);
+            repo.insert_batch_unchecked(entries)?;
         }
         tx.commit()?;
         Ok(())
     }
 
-    pub fn find_children(&self, parent_id: &FileEntryId) -> DbResult<Vec<FileEntry>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
-             FROM file_entries WHERE parent_id = ?1 ORDER BY entry_type ASC, name ASC",
+    /// Insert file entries using the current connection/transaction.
+    pub fn insert_batch_unchecked(&self, entries: &[FileEntry]) -> DbResult<()> {
+        if entries.is_empty() {
+            return Ok(());
+        }
+        let mut stmt = self.conn.prepare_cached(
+            "INSERT INTO file_entries (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
         )?;
+        for entry in entries {
+            stmt.execute(params![
+                entry.id.0,
+                entry.parent_id.as_ref().map(|p| &p.0),
+                entry.data_source_id.0,
+                entry.path,
+                entry.name,
+                match entry.entry_type {
+                    EntryType::File => "file",
+                    EntryType::Directory => "directory",
+                },
+                entry.size,
+                entry.ext,
+                entry.deleted as i32,
+                entry.hidden as i32,
+                entry.system as i32,
+                entry.created_at.map(|dt| dt.to_rfc3339()),
+                entry.modified_at.map(|dt| dt.to_rfc3339()),
+                entry.accessed_at.map(|dt| dt.to_rfc3339()),
+                entry.changed_at.map(|dt| dt.to_rfc3339()),
+                entry.hash_sha256,
+            ])?;
+        }
+        Ok(())
+    }
+
+    pub fn find_children(&self, parent_id: &FileEntryId) -> DbResult<Vec<FileEntry>> {
+        let sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id = ?1 ORDER BY entry_type ASC, name ASC",
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt.query_map(params![parent_id.0], row_to_file_entry)?;
         collect_entries(rows)
     }
@@ -70,14 +84,54 @@ impl<'a> FileRepo<'a> {
         offset: u64,
         limit: u32,
     ) -> DbResult<Vec<FileEntry>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
-             FROM file_entries WHERE parent_id = ?1 ORDER BY entry_type ASC, name ASC LIMIT ?2 OFFSET ?3",
-        )?;
+        let sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id = ?1 ORDER BY entry_type ASC, name ASC LIMIT ?2 OFFSET ?3",
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt.query_map(
             params![parent_id.0, limit as i64, offset as i64],
             row_to_file_entry,
         )?;
+        collect_entries(rows)
+    }
+
+    pub fn find_children_page_visible(
+        &self,
+        parent_id: &FileEntryId,
+        offset: u64,
+        limit: u32,
+        show_hidden: bool,
+    ) -> DbResult<Vec<FileEntry>> {
+        if show_hidden {
+            return self.find_children_page(parent_id, offset, limit);
+        }
+        let sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
+             WHERE parent_id = ?1 AND hidden = 0 AND system = 0
+             ORDER BY entry_type ASC, name ASC LIMIT ?2 OFFSET ?3",
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(
+            params![parent_id.0, limit as i64, offset as i64],
+            row_to_file_entry,
+        )?;
+        collect_entries(rows)
+    }
+
+    pub fn find_children_visible(
+        &self,
+        parent_id: &FileEntryId,
+        show_hidden: bool,
+    ) -> DbResult<Vec<FileEntry>> {
+        if show_hidden {
+            return self.find_children(parent_id);
+        }
+        let sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
+             WHERE parent_id = ?1 AND hidden = 0 AND system = 0",
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(params![parent_id.0], row_to_file_entry)?;
         collect_entries(rows)
     }
 
@@ -90,21 +144,69 @@ impl<'a> FileRepo<'a> {
         Ok(count as u64)
     }
 
-    pub fn find_root_entries(&self) -> DbResult<Vec<FileEntry>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
-             FROM file_entries WHERE parent_id IS NULL ORDER BY entry_type ASC, name ASC",
+    pub fn count_children_visible(
+        &self,
+        parent_id: &FileEntryId,
+        show_hidden: bool,
+    ) -> DbResult<u64> {
+        if show_hidden {
+            return self.count_children(parent_id);
+        }
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM file_entries WHERE parent_id = ?1 AND hidden = 0 AND system = 0",
+            params![parent_id.0],
+            |row| row.get(0),
         )?;
+        Ok(count as u64)
+    }
+
+    pub fn find_root_entries(&self) -> DbResult<Vec<FileEntry>> {
+        let sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id IS NULL ORDER BY entry_type ASC, name ASC",
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt.query_map([], row_to_file_entry)?;
         collect_entries(rows)
     }
 
     pub fn find_root_entries_page(&self, offset: u64, limit: u32) -> DbResult<Vec<FileEntry>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
-             FROM file_entries WHERE parent_id IS NULL ORDER BY entry_type ASC, name ASC LIMIT ?1 OFFSET ?2",
-        )?;
+        let sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id IS NULL ORDER BY entry_type ASC, name ASC LIMIT ?1 OFFSET ?2",
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt.query_map(params![limit as i64, offset as i64], row_to_file_entry)?;
+        collect_entries(rows)
+    }
+
+    pub fn find_root_entries_page_visible(
+        &self,
+        offset: u64,
+        limit: u32,
+        show_hidden: bool,
+    ) -> DbResult<Vec<FileEntry>> {
+        if show_hidden {
+            return self.find_root_entries_page(offset, limit);
+        }
+        let sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
+             WHERE parent_id IS NULL AND hidden = 0 AND system = 0
+             ORDER BY entry_type ASC, name ASC LIMIT ?1 OFFSET ?2",
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(params![limit as i64, offset as i64], row_to_file_entry)?;
+        collect_entries(rows)
+    }
+
+    pub fn find_root_entries_visible(&self, show_hidden: bool) -> DbResult<Vec<FileEntry>> {
+        if show_hidden {
+            return self.find_root_entries();
+        }
+        let sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
+             WHERE parent_id IS NULL AND hidden = 0 AND system = 0",
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map([], row_to_file_entry)?;
         collect_entries(rows)
     }
 
@@ -117,11 +219,23 @@ impl<'a> FileRepo<'a> {
         Ok(count as u64)
     }
 
-    pub fn find_child_directories(&self, parent_id: &FileEntryId) -> DbResult<Vec<FileEntry>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
-             FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE ORDER BY name ASC",
+    pub fn count_root_entries_visible(&self, show_hidden: bool) -> DbResult<u64> {
+        if show_hidden {
+            return self.count_root_entries();
+        }
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM file_entries WHERE parent_id IS NULL AND hidden = 0 AND system = 0",
+            [],
+            |row| row.get(0),
         )?;
+        Ok(count as u64)
+    }
+
+    pub fn find_child_directories(&self, parent_id: &FileEntryId) -> DbResult<Vec<FileEntry>> {
+        let sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE ORDER BY name ASC",
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt.query_map(params![parent_id.0], row_to_file_entry)?;
         collect_entries(rows)
     }
@@ -132,14 +246,54 @@ impl<'a> FileRepo<'a> {
         offset: u64,
         limit: u32,
     ) -> DbResult<Vec<FileEntry>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
-             FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE ORDER BY name ASC LIMIT ?2 OFFSET ?3",
-        )?;
+        let sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE ORDER BY name ASC LIMIT ?2 OFFSET ?3",
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt.query_map(
             params![parent_id.0, limit as i64, offset as i64],
             row_to_file_entry,
         )?;
+        collect_entries(rows)
+    }
+
+    pub fn find_child_directories_page_visible(
+        &self,
+        parent_id: &FileEntryId,
+        offset: u64,
+        limit: u32,
+        show_hidden: bool,
+    ) -> DbResult<Vec<FileEntry>> {
+        if show_hidden {
+            return self.find_child_directories_page(parent_id, offset, limit);
+        }
+        let sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
+             WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE AND hidden = 0 AND system = 0
+             ORDER BY name ASC LIMIT ?2 OFFSET ?3",
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(
+            params![parent_id.0, limit as i64, offset as i64],
+            row_to_file_entry,
+        )?;
+        collect_entries(rows)
+    }
+
+    pub fn find_child_directories_visible(
+        &self,
+        parent_id: &FileEntryId,
+        show_hidden: bool,
+    ) -> DbResult<Vec<FileEntry>> {
+        if show_hidden {
+            return self.find_child_directories(parent_id);
+        }
+        let sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
+             WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE AND hidden = 0 AND system = 0",
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(params![parent_id.0], row_to_file_entry)?;
         collect_entries(rows)
     }
 
@@ -152,29 +306,59 @@ impl<'a> FileRepo<'a> {
         Ok(count as u64)
     }
 
-    pub fn find_roots(&self, data_source_id: &DataSourceId) -> DbResult<Vec<FileEntry>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
-             FROM file_entries WHERE data_source_id = ?1 AND parent_id IS NULL ORDER BY entry_type ASC, name ASC",
+    pub fn count_child_directories_visible(
+        &self,
+        parent_id: &FileEntryId,
+        show_hidden: bool,
+    ) -> DbResult<u64> {
+        if show_hidden {
+            return self.count_child_directories(parent_id);
+        }
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM file_entries WHERE parent_id = ?1 AND entry_type = 'directory' COLLATE NOCASE AND hidden = 0 AND system = 0",
+            params![parent_id.0],
+            |row| row.get(0),
         )?;
+        Ok(count as u64)
+    }
+
+    pub fn find_roots(&self, data_source_id: &DataSourceId) -> DbResult<Vec<FileEntry>> {
+        let sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE data_source_id = ?1 AND parent_id IS NULL ORDER BY entry_type ASC, name ASC",
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt.query_map(params![data_source_id.0], row_to_file_entry)?;
         collect_entries(rows)
     }
 
     pub fn find_by_data_source(&self, data_source_id: &DataSourceId) -> DbResult<Vec<FileEntry>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
-             FROM file_entries WHERE data_source_id = ?1 ORDER BY entry_type ASC, name ASC",
-        )?;
+        let sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE data_source_id = ?1 ORDER BY entry_type ASC, name ASC",
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt.query_map(params![data_source_id.0], row_to_file_entry)?;
         collect_entries(rows)
     }
 
     pub fn find_root_directories(&self) -> DbResult<Vec<FileEntry>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
-             FROM file_entries WHERE parent_id IS NULL AND entry_type = 'directory' COLLATE NOCASE ORDER BY name ASC",
-        )?;
+        let sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE parent_id IS NULL AND entry_type = 'directory' COLLATE NOCASE ORDER BY name ASC",
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map([], row_to_file_entry)?;
+        collect_entries(rows)
+    }
+
+    pub fn find_root_directories_visible(&self, show_hidden: bool) -> DbResult<Vec<FileEntry>> {
+        if show_hidden {
+            return self.find_root_directories();
+        }
+        let sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries
+             WHERE parent_id IS NULL AND entry_type = 'directory' COLLATE NOCASE AND hidden = 0 AND system = 0
+             ORDER BY name ASC",
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt.query_map([], row_to_file_entry)?;
         collect_entries(rows)
     }
@@ -215,16 +399,47 @@ impl<'a> FileRepo<'a> {
         Ok(result)
     }
 
+    pub fn count_child_directories_batch_visible(
+        &self,
+        parent_ids: &[&FileEntryId],
+        show_hidden: bool,
+    ) -> DbResult<HashMap<String, i64>> {
+        if show_hidden {
+            return self.count_child_directories_batch(parent_ids);
+        }
+        if parent_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let placeholders: Vec<String> = (1..=parent_ids.len()).map(|i| format!("?{i}")).collect();
+        let sql = format!(
+            "SELECT parent_id, COUNT(*) FROM file_entries
+             WHERE parent_id IN ({}) AND entry_type = 'directory' COLLATE NOCASE AND hidden = 0 AND system = 0
+             GROUP BY parent_id",
+            placeholders.join(", ")
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let params: Vec<&str> = parent_ids.iter().map(|id| id.0.as_str()).collect();
+        let rows = stmt.query_map(rusqlite::params_from_iter(params.iter()), |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })?;
+        let mut result = HashMap::new();
+        for row in rows {
+            let (pid, count) = row?;
+            result.insert(pid, count);
+        }
+        Ok(result)
+    }
+
     pub fn find_by_path_prefix(
         &self,
         data_source_id: &DataSourceId,
         prefix: &str,
     ) -> DbResult<Vec<FileEntry>> {
         let pattern = format!("{}%", escape_like_literal(prefix));
-        let mut stmt = self.conn.prepare(
-            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
-             FROM file_entries WHERE data_source_id = ?1 AND path LIKE ?2 ESCAPE '\\' ORDER BY path ASC",
-        )?;
+        let sql = format!(
+            "SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE data_source_id = ?1 AND path LIKE ?2 ESCAPE '\\' ORDER BY path ASC",
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt.query_map(params![data_source_id.0, pattern], row_to_file_entry)?;
         collect_entries(rows)
     }
@@ -246,10 +461,8 @@ impl<'a> FileRepo<'a> {
     }
 
     pub fn find_by_id(&self, id: &FileEntryId) -> DbResult<Option<FileEntry>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
-             FROM file_entries WHERE id = ?1",
-        )?;
+        let sql = format!("SELECT {FILE_ENTRY_COLUMNS} FROM file_entries WHERE id = ?1");
+        let mut stmt = self.conn.prepare(&sql)?;
         let result = stmt.query_row(params![id.0], row_to_file_entry);
         match result {
             Ok(entry) => Ok(Some(entry)),
@@ -302,19 +515,21 @@ fn row_to_file_entry(row: &rusqlite::Row) -> rusqlite::Result<FileEntry> {
         size: row.get(6)?,
         ext: row.get(7)?,
         deleted: row.get::<_, i32>(8)? != 0,
+        hidden: row.get::<_, i32>(9)? != 0,
+        system: row.get::<_, i32>(10)? != 0,
         created_at: row
-            .get::<_, Option<String>>(9)?
-            .and_then(|s| parse_opt_datetime(&s)),
-        modified_at: row
-            .get::<_, Option<String>>(10)?
-            .and_then(|s| parse_opt_datetime(&s)),
-        accessed_at: row
             .get::<_, Option<String>>(11)?
             .and_then(|s| parse_opt_datetime(&s)),
-        changed_at: row
+        modified_at: row
             .get::<_, Option<String>>(12)?
             .and_then(|s| parse_opt_datetime(&s)),
-        hash_sha256: row.get(13)?,
+        accessed_at: row
+            .get::<_, Option<String>>(13)?
+            .and_then(|s| parse_opt_datetime(&s)),
+        changed_at: row
+            .get::<_, Option<String>>(14)?
+            .and_then(|s| parse_opt_datetime(&s)),
+        hash_sha256: row.get(15)?,
     })
 }
 
@@ -359,6 +574,8 @@ mod tests {
             size: Some(1),
             ext: None,
             deleted: false,
+            hidden: false,
+            system: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,

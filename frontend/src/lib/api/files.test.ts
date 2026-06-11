@@ -21,9 +21,15 @@ describe('files API (mock mode)', () => {
   it('getFileRows returns file entries for known parent', async () => {
     const result = await getFileRows('tree-system32');
     expect(result.length).toBeGreaterThan(0);
+    expect(result.some((item) => item.hidden || item.system)).toBe(false);
     expect(result[0].id).toBeDefined();
     expect(result[0].name).toBeDefined();
     expect(result[0].entryType).toBeDefined();
+  });
+
+  it('getFileRows can include hidden entries when requested', async () => {
+    const result = await getFileRows('tree-system32', true);
+    expect(result.some((item) => item.hidden || item.system)).toBe(true);
   });
 
   it('getFileRows returns empty for unknown parent', async () => {
@@ -86,6 +92,8 @@ describe('files API (mock mode)', () => {
       name: 'cmd.exe',
       entryType: 'file',
       deleted: false,
+      hidden: false,
+      system: false,
     });
 
     expect(result).toBe('Mock file exported');

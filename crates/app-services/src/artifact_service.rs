@@ -373,6 +373,8 @@ mod tests {
             size: Some(1),
             ext: None,
             deleted: false,
+            hidden: false,
+            system: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,

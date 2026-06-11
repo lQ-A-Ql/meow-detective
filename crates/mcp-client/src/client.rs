@@ -21,6 +21,8 @@ pub struct McpClient {
     transport: Option<Box<dyn McpTransportTrait>>,
     /// Connection state
     connected: bool,
+    /// Capabilities returned by the server during initialization.
+    capabilities: Option<McpCapabilities>,
 }
 
 impl McpClient {
@@ -30,6 +32,7 @@ impl McpClient {
             config,
             transport: None,
             connected: false,
+            capabilities: None,
         }
     }
 
@@ -38,13 +41,14 @@ impl McpClient {
         info!("Connecting to MCP server: {}", self.config.name);
 
         let mut transport: Box<dyn McpTransportTrait> = match &self.config.transport {
-            McpTransport::Sse { url } => Box::new(SseTransport::new(url)),
-            McpTransport::Stdio { command, args } => Box::new(StdioTransport::new(command, args)),
+            McpTransport::Sse { url } => Box::new(SseTransport::new(url)?),
+            McpTransport::Stdio { command, args } => Box::new(StdioTransport::new(command, args)?),
         };
 
         let capabilities = transport.initialize().await?;
         self.transport = Some(transport);
         self.connected = true;
+        self.capabilities = Some(capabilities.clone());
 
         info!("Connected to MCP server: {}", self.config.name);
         Ok(capabilities)
@@ -57,6 +61,7 @@ impl McpClient {
         }
         self.transport = None;
         self.connected = false;
+        self.capabilities = None;
         info!("Disconnected from MCP server: {}", self.config.name);
         Ok(())
     }
@@ -69,6 +74,11 @@ impl McpClient {
     /// Get server configuration
     pub fn config(&self) -> &McpServerConfig {
         &self.config
+    }
+
+    /// Get capabilities returned by the server during initialization.
+    pub fn capabilities(&self) -> Option<&McpCapabilities> {
+        self.capabilities.as_ref()
     }
 
     /// List available resources
@@ -232,5 +242,28 @@ mod tests {
         let client = McpClient::new(config);
         assert_eq!(client.config().id, "stdio-test");
         assert!(!client.config().enabled);
+    }
+
+    #[test]
+    fn test_client_capabilities_default_before_connect() {
+        let config = create_test_config();
+        let client = McpClient::new(config);
+        assert!(client.capabilities().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_client_rejects_invalid_transport_before_connect() {
+        let config = McpServerConfig {
+            id: "bad".to_string(),
+            name: "Bad".to_string(),
+            transport: McpTransport::Sse {
+                url: "file:///tmp/server".to_string(),
+            },
+            enabled: true,
+            auto_connect: false,
+        };
+        let mut client = McpClient::new(config);
+        assert!(matches!(client.connect().await, Err(McpError::Protocol(_))));
+        assert!(!client.is_connected());
     }
 }

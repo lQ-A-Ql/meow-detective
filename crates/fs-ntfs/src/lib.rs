@@ -5,7 +5,7 @@
 pub mod mft_scanner;
 
 use evidence_core::filesystem::{
-    child_nodes_with_parent_path, file_not_found, fs_node_without_timestamps, fs_out_of_memory,
+    child_nodes_with_parent_path, file_not_found, fs_node_with_attributes, fs_out_of_memory,
     invalid_fs_data, path_components, root_node, truncate_data_to_declared_size, unexpected_fs_eof,
     FileSystemReader, FsNode,
 };
@@ -32,6 +32,8 @@ pub struct NtfsDirectoryEntry {
     pub is_dir: bool,
     pub size: u64,
     pub mft_ref: u64,
+    pub hidden: bool,
+    pub system: bool,
 }
 
 #[allow(dead_code)]
@@ -596,6 +598,8 @@ impl NtfsReader {
                 is_dir: entry.node.is_dir,
                 size: entry.node.size,
                 mft_ref: entry.mft_ref,
+                hidden: entry.node.hidden,
+                system: entry.node.system,
             })
             .collect())
     }
@@ -903,19 +907,21 @@ fn parse_indx_entries(data: &[u8]) -> Vec<DirEntry> {
                 .map(|c| u16::from_le_bytes([c[0], c[1]]))
                 .collect();
             let name = String::from_utf16_lossy(&chars);
-            let flags = if off + 0x4C < data.len() {
+            let flags = if off + 0x4C <= data.len() && off + 0x4C <= off + entry_size {
                 u32::from_le_bytes(data[off + 0x48..off + 0x4C].try_into().unwrap_or([0; 4]))
             } else {
                 0
             };
             let is_dir = flags & 0x10000000 != 0;
+            let hidden = flags & 0x02 != 0;
+            let system = flags & 0x04 != 0;
             let size = if is_dir || off + 0x48 > data.len() {
                 0
             } else {
                 u64::from_le_bytes(data[off + 0x40..off + 0x48].try_into().unwrap_or([0; 8]))
             };
             entries.push(DirEntry {
-                node: fs_node_without_timestamps(name, is_dir, size),
+                node: fs_node_with_attributes(name, is_dir, size, hidden, system, None, None, None),
                 mft_ref,
             });
         }

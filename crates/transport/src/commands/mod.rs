@@ -163,6 +163,12 @@ pub struct GetFileRowsRequest {
     pub offset: u64,
     #[serde(default = "default_file_browser_limit")]
     pub limit: u32,
+    #[serde(default)]
+    pub show_hidden: bool,
+    #[serde(default)]
+    pub sort_key: FileSortKeyDto,
+    #[serde(default)]
+    pub sort_direction: FileSortDirectionDto,
 }
 
 impl Default for GetFileRowsRequest {
@@ -171,6 +177,9 @@ impl Default for GetFileRowsRequest {
             parent_id: None,
             offset: 0,
             limit: default_file_browser_limit(),
+            show_hidden: false,
+            sort_key: FileSortKeyDto::default(),
+            sort_direction: FileSortDirectionDto::default(),
         }
     }
 }
@@ -193,6 +202,15 @@ pub struct GetFileChildrenRequest {
     pub offset: u64,
     #[serde(default = "default_file_tree_limit")]
     pub limit: u32,
+    #[serde(default)]
+    pub show_hidden: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct GetFileTreeRequest {
+    #[serde(default)]
+    pub show_hidden: bool,
 }
 
 impl GetFileChildrenRequest {
@@ -214,6 +232,24 @@ fn default_file_browser_limit() -> u32 {
 
 fn default_file_tree_limit() -> u32 {
     500
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum FileSortKeyDto {
+    #[default]
+    Name,
+    Size,
+    ModifiedAt,
+    Ext,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum FileSortDirectionDto {
+    #[default]
+    Asc,
+    Desc,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -262,6 +298,45 @@ pub struct ClassifyFilesRequest {
 pub struct RunEvidenceClassificationRequest {
     #[serde(default)]
     pub categories: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RunAnalysisExtractionRequest {
+    #[serde(default)]
+    pub categories: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetAnalysisExtractionRequest {
+    #[serde(default)]
+    pub offset: u64,
+    #[serde(default = "default_analysis_extraction_limit")]
+    pub limit: u32,
+}
+
+impl Default for GetAnalysisExtractionRequest {
+    fn default() -> Self {
+        Self {
+            offset: 0,
+            limit: default_analysis_extraction_limit(),
+        }
+    }
+}
+
+impl GetAnalysisExtractionRequest {
+    pub fn validate(&mut self) -> Result<(), String> {
+        if self.limit == 0 {
+            self.limit = default_analysis_extraction_limit();
+        }
+        self.limit = self.limit.min(MAX_PAGE_LIMIT);
+        Ok(())
+    }
+}
+
+fn default_analysis_extraction_limit() -> u32 {
+    100
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -606,5 +681,32 @@ mod tests {
         assert!(scope.registry);
         assert!(scope.full_timeline);
         assert!(!scope.raw_file_extraction);
+    }
+
+    #[test]
+    fn file_rows_request_deserializes_show_hidden_camel_case() {
+        let request: GetFileRowsRequest =
+            serde_json::from_str(r#"{"parentId":"root","offset":10,"limit":50,"showHidden":true}"#)
+                .unwrap();
+
+        assert_eq!(request.parent_id.as_deref(), Some("root"));
+        assert_eq!(request.offset, 10);
+        assert_eq!(request.limit, 50);
+        assert!(request.show_hidden);
+    }
+
+    #[test]
+    fn file_tree_request_defaults_show_hidden_to_false() {
+        let request: GetFileTreeRequest = serde_json::from_str("{}").unwrap();
+        assert!(!request.show_hidden);
+    }
+
+    #[test]
+    fn file_children_request_deserializes_show_hidden_camel_case() {
+        let request: GetFileChildrenRequest =
+            serde_json::from_str(r#"{"parentId":"root","showHidden":true}"#).unwrap();
+
+        assert_eq!(request.parent_id, "root");
+        assert!(request.show_hidden);
     }
 }

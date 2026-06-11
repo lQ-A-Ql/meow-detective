@@ -2,24 +2,36 @@
 //!
 //! Provides system information status reporting and bounded file classification.
 
-use domain::{EntryType, FileEntry, FileEntryId};
-use persistence_sqlite::repositories::file_repo::FileRepo;
-use rusqlite::{params, Connection, OptionalExtension};
-use std::collections::HashMap;
-use std::path::Path;
+use chrono::{DateTime, TimeZone, Utc};
+use domain::{
+    Artifact, ArtifactId, EntryType, FileEntry, FileEntryId, TimelineEvent, TimelineEventId,
+};
+use persistence_sqlite::repositories::{
+    artifact_repo::ArtifactRepo, file_repo::FileRepo, timeline_repo::TimelineRepo,
+};
+use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
+use serde_json::Value;
+use std::collections::{BTreeMap, HashMap};
+use std::io::Read;
+use std::path::{Path, PathBuf};
 use transport::dto::analysis::{
     AnalysisBootRecordDto, AnalysisFieldProvenanceDto, AnalysisProvenanceDto,
 };
 use transport::dto::{
-    AnalysisClassifiedFileDto, AnalysisFileClassificationDto, AnalysisParseStatusDto,
-    AnalysisSystemInfoDto, EvidenceCategoryDto, EvidenceClassificationSummaryDto,
-    EvidenceClassificationTotalsDto, EvidenceSourceDto,
+    AnalysisClassifiedFileDto, AnalysisExtractionRunDto, AnalysisFileClassificationDto,
+    AnalysisParseStatusDto, AnalysisSystemInfoDto, BrowserDownloadDto, BrowserHistorySummaryDto,
+    BrowserVisitDto, EmailExtractionSummaryDto, EmailMessageDto, EvidenceCategoryDto,
+    EvidenceClassificationSummaryDto, EvidenceClassificationTotalsDto, EvidenceSourceDto,
+    RegistryExtractionSummaryDto, RegistryValueDto,
 };
+use uuid::Uuid;
 
 pub const DEFAULT_SAMPLE_SIZE: u32 = 1000;
 pub const MAX_SAMPLE_SIZE: u32 = 5000;
 pub const MAGIC_HEADER_LIMIT: usize = 8 * 1024;
 pub const MAX_REGISTRY_ANALYSIS_BYTES: usize = 256 * 1024 * 1024;
+pub const MAX_ANALYSIS_SOURCE_BYTES: usize = 128 * 1024 * 1024;
+const ANALYSIS_EXTRACTOR_VERSION: &str = "1.0.0";
 
 /// Magic bytes signature.
 struct MagicSignature {
@@ -178,7 +190,7 @@ enum EvidencePathPattern {
 const EVIDENCE_CATEGORY_DEFS: &[EvidenceCategoryDef] = &[
     EvidenceCategoryDef {
         category: "SystemInformation",
-        display_name: "系统信息",
+        display_name: "System information",
         evidence_kind: "registry_hive",
         parser: "registry.system_info",
         artifact_families: &["Registry"],
@@ -192,8 +204,26 @@ const EVIDENCE_CATEGORY_DEFS: &[EvidenceCategoryDef] = &[
         ],
     },
     EvidenceCategoryDef {
+        category: "Registry",
+        display_name: "注册表",
+        evidence_kind: "registry_hive",
+        parser: "registry.hive",
+        artifact_families: &["Registry"],
+        patterns: &[
+            EvidencePathPattern::Suffix("/windows/system32/config/system"),
+            EvidencePathPattern::Suffix("/windows/system32/config/software"),
+            EvidencePathPattern::Suffix("/windows/system32/config/sam"),
+            EvidencePathPattern::Suffix("/windows/system32/config/security"),
+            EvidencePathPattern::Suffix("/ntuser.dat"),
+            EvidencePathPattern::Suffix("/usrclass.dat"),
+            EvidencePathPattern::Contains("/registry/"),
+            EvidencePathPattern::Suffix(".reg"),
+            EvidencePathPattern::Suffix(".hive"),
+        ],
+    },
+    EvidenceCategoryDef {
         category: "EventLogs",
-        display_name: "事件日志",
+        display_name: "Event logs",
         evidence_kind: "event_log",
         parser: "evtx.boot_shutdown",
         artifact_families: &[],
@@ -201,7 +231,7 @@ const EVIDENCE_CATEGORY_DEFS: &[EvidenceCategoryDef] = &[
     },
     EvidenceCategoryDef {
         category: "ProgramExecution",
-        display_name: "程序执行",
+        display_name: "Program execution",
         evidence_kind: "execution_artifact",
         parser: "prefetch.amcache.shimcache",
         artifact_families: &["Prefetch"],
@@ -213,7 +243,7 @@ const EVIDENCE_CATEGORY_DEFS: &[EvidenceCategoryDef] = &[
     },
     EvidenceCategoryDef {
         category: "UserActivity",
-        display_name: "用户活动",
+        display_name: "User activity",
         evidence_kind: "user_activity",
         parser: "lnk.jumplist.shellbags",
         artifact_families: &["LNK", "JumpList"],
@@ -227,7 +257,7 @@ const EVIDENCE_CATEGORY_DEFS: &[EvidenceCategoryDef] = &[
     },
     EvidenceCategoryDef {
         category: "RecycleBin",
-        display_name: "回收站",
+        display_name: "Recycle bin",
         evidence_kind: "recycle_bin",
         parser: "recycle_bin",
         artifact_families: &["RecycleBin"],
@@ -238,7 +268,7 @@ const EVIDENCE_CATEGORY_DEFS: &[EvidenceCategoryDef] = &[
     },
     EvidenceCategoryDef {
         category: "Thumbnails",
-        display_name: "缩略图缓存",
+        display_name: "Thumbnail cache",
         evidence_kind: "thumbnail_cache",
         parser: "thumbcache",
         artifact_families: &["Thumbcache"],
@@ -249,7 +279,7 @@ const EVIDENCE_CATEGORY_DEFS: &[EvidenceCategoryDef] = &[
     },
     EvidenceCategoryDef {
         category: "ResourceUsage",
-        display_name: "资源使用",
+        display_name: "Resource usage",
         evidence_kind: "resource_usage",
         parser: "sru",
         artifact_families: &["SRU"],
@@ -259,7 +289,7 @@ const EVIDENCE_CATEGORY_DEFS: &[EvidenceCategoryDef] = &[
     },
     EvidenceCategoryDef {
         category: "BrowserData",
-        display_name: "浏览器数据",
+        display_name: "Browser data",
         evidence_kind: "browser_sqlite",
         parser: "browser.sqlite",
         artifact_families: &[],
@@ -268,13 +298,41 @@ const EVIDENCE_CATEGORY_DEFS: &[EvidenceCategoryDef] = &[
             EvidencePathPattern::Contains("/microsoft/edge/user data/"),
             EvidencePathPattern::Contains("/mozilla/firefox/profiles/"),
             EvidencePathPattern::Suffix("/history"),
+            EvidencePathPattern::Suffix("/archived history"),
             EvidencePathPattern::Suffix("/cookies"),
             EvidencePathPattern::Suffix("/places.sqlite"),
         ],
     },
     EvidenceCategoryDef {
+        category: "BrowserHistory",
+        display_name: "浏览器历史",
+        evidence_kind: "browser_history",
+        parser: "browser.history",
+        artifact_families: &["BrowserHistory", "BrowserDownload"],
+        patterns: &[
+            EvidencePathPattern::Contains("/google/chrome/user data/default/history"),
+            EvidencePathPattern::Contains("/google/chrome/user data/profile"),
+            EvidencePathPattern::Contains("/microsoft/edge/user data/default/history"),
+            EvidencePathPattern::Contains("/microsoft/edge/user data/profile"),
+            EvidencePathPattern::Contains("/mozilla/firefox/profiles/"),
+            EvidencePathPattern::Suffix("/history"),
+            EvidencePathPattern::Suffix("/places.sqlite"),
+        ],
+    },
+    EvidenceCategoryDef {
+        category: "Email",
+        display_name: "电子邮件",
+        evidence_kind: "email_eml_emlx",
+        parser: "email.eml_emlx",
+        artifact_families: &["EmailMessage"],
+        patterns: &[
+            EvidencePathPattern::Suffix(".eml"),
+            EvidencePathPattern::Suffix(".emlx"),
+        ],
+    },
+    EvidenceCategoryDef {
         category: "FileTypeInventory",
-        display_name: "文件类型清单",
+        display_name: "File type inventory",
         evidence_kind: "metadata_inventory",
         parser: "metadata.extension_path",
         artifact_families: &[],
@@ -448,7 +506,7 @@ fn find_candidate_by_path_suffix(
 ) -> Result<Option<FileEntry>, String> {
     conn.query_row(
         "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted,
-                created_at, modified_at, accessed_at, changed_at, hash_sha256
+                hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256
          FROM file_entries
          WHERE entry_type = 'file' COLLATE NOCASE
            AND REPLACE(LOWER(path), '\\', '/') LIKE ?1
@@ -477,23 +535,25 @@ fn row_to_file_entry_for_analysis(row: &rusqlite::Row) -> rusqlite::Result<FileE
         size: row.get(6)?,
         ext: row.get(7)?,
         deleted: row.get::<_, i32>(8)? != 0,
+        hidden: row.get::<_, i32>(9)? != 0,
+        system: row.get::<_, i32>(10)? != 0,
         created_at: row
-            .get::<_, Option<String>>(9)?
-            .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
-            .map(|dt| dt.with_timezone(&chrono::Utc)),
-        modified_at: row
-            .get::<_, Option<String>>(10)?
-            .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
-            .map(|dt| dt.with_timezone(&chrono::Utc)),
-        accessed_at: row
             .get::<_, Option<String>>(11)?
             .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
             .map(|dt| dt.with_timezone(&chrono::Utc)),
-        changed_at: row
+        modified_at: row
             .get::<_, Option<String>>(12)?
             .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
             .map(|dt| dt.with_timezone(&chrono::Utc)),
-        hash_sha256: row.get(13)?,
+        accessed_at: row
+            .get::<_, Option<String>>(13)?
+            .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+            .map(|dt| dt.with_timezone(&chrono::Utc)),
+        changed_at: row
+            .get::<_, Option<String>>(14)?
+            .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+            .map(|dt| dt.with_timezone(&chrono::Utc)),
+        hash_sha256: row.get(15)?,
     })
 }
 
@@ -505,7 +565,7 @@ pub fn classify_files_by_metadata(
     let mut stmt = conn
         .prepare(
             "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted,
-                    created_at, modified_at, accessed_at, changed_at, hash_sha256
+                    hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256
              FROM file_entries
              WHERE entry_type = 'file' COLLATE NOCASE
              ORDER BY size DESC, path ASC
@@ -554,6 +614,9 @@ pub fn discover_evidence_candidates(
 
         for def in EVIDENCE_CATEGORY_DEFS {
             if def.patterns.is_empty() || !evidence_path_matches(&normalized, def.patterns) {
+                continue;
+            }
+            if def.category == "BrowserHistory" && !is_browser_history_path(&normalized) {
                 continue;
             }
             map.entry(def.category.to_string())
@@ -761,6 +824,1087 @@ pub fn get_evidence_classification_summary(
     })
 }
 
+pub fn run_analysis_extraction(
+    conn: &Connection,
+    case_id: &str,
+    categories: &[&str],
+    mut file_reader: impl FnMut(&FileEntryId) -> Result<Box<dyn Read>, String>,
+) -> Result<AnalysisExtractionRunDto, String> {
+    let generated_at = Utc::now().to_rfc3339();
+    let selected = if categories.is_empty() {
+        vec!["Registry", "BrowserHistory", "Email"]
+    } else {
+        categories.to_vec()
+    };
+    let candidates = evidence_candidates_for_categories(conn, &selected)?;
+    let mut artifacts = Vec::new();
+    let mut events = Vec::new();
+    let mut warnings = Vec::new();
+    let mut scanned_count = 0u64;
+
+    for candidate in candidates {
+        if !matches!(
+            candidate.category.as_str(),
+            "Registry" | "BrowserHistory" | "Email"
+        ) {
+            continue;
+        }
+        if already_has_v1_artifacts(conn, &candidate)? {
+            continue;
+        }
+
+        let mut reader = match file_reader(&candidate.file_id) {
+            Ok(reader) => reader,
+            Err(err) => {
+                warnings.push(format!("{} read failed: {}", candidate.path, err));
+                continue;
+            }
+        };
+        let mut bytes = Vec::new();
+        if let Err(err) = reader
+            .by_ref()
+            .take(MAX_ANALYSIS_SOURCE_BYTES as u64)
+            .read_to_end(&mut bytes)
+        {
+            warnings.push(format!("{} read failed: {}", candidate.path, err));
+            continue;
+        }
+
+        scanned_count += 1;
+        let outcome = match candidate.category.as_str() {
+            "Registry" => extract_registry_candidate(&candidate, &bytes),
+            "BrowserHistory" => extract_browser_candidate(&candidate, &bytes),
+            "Email" => extract_email_candidate(&candidate, &bytes),
+            _ => ExtractionOutcome::default(),
+        };
+        warnings.extend(outcome.warnings);
+        artifacts.extend(outcome.artifacts);
+        events.extend(outcome.timeline_events);
+    }
+
+    if !artifacts.is_empty() {
+        let by_source = artifacts_by_data_source(artifacts);
+        let repo = ArtifactRepo::new(conn);
+        for (data_source_id, group) in by_source {
+            repo.insert_batch(&group, case_id, &data_source_id)
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    if !events.is_empty() {
+        TimelineRepo::new(conn)
+            .insert_batch_with_case(&events, case_id)
+            .map_err(|e| e.to_string())?;
+    }
+
+    let artifact_count = count_analysis_artifacts(conn)?;
+    Ok(AnalysisExtractionRunDto {
+        status: if scanned_count == 0 {
+            AnalysisParseStatusDto::NotFound
+        } else if warnings.is_empty() {
+            AnalysisParseStatusDto::Parsed
+        } else {
+            AnalysisParseStatusDto::Partial
+        },
+        scanned_count,
+        artifact_count,
+        timeline_event_count: events.len() as u64,
+        generated_at,
+        warnings,
+    })
+}
+
+pub fn get_registry_extraction_summary(
+    conn: &Connection,
+    offset: u64,
+    limit: u32,
+) -> Result<RegistryExtractionSummaryDto, String> {
+    let total = count_artifacts_by_type(conn, "RegistryValue")?;
+    let rows = query_artifact_rows(conn, &["RegistryValue"], offset, limit)?;
+    let values = rows
+        .into_iter()
+        .map(|row| RegistryValueDto {
+            artifact_id: row.id,
+            file_id: row.source_object_id.unwrap_or_default(),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            hive_path: string_attr(&row.attrs, "hivePath"),
+            key_path: string_attr(&row.attrs, "keyPath"),
+            value_name: string_attr(&row.attrs, "valueName"),
+            value_type: string_attr(&row.attrs, "valueType"),
+            data: string_attr(&row.attrs, "data"),
+            parser: row
+                .extractor_id
+                .unwrap_or_else(|| "registry.v1".to_string()),
+            created_at: row.created_at,
+        })
+        .collect::<Vec<_>>();
+    Ok(RegistryExtractionSummaryDto {
+        status: status_from_total(total),
+        total,
+        values,
+        generated_at: Utc::now().to_rfc3339(),
+        warnings: Vec::new(),
+    })
+}
+
+pub fn get_browser_history_summary(
+    conn: &Connection,
+    offset: u64,
+    limit: u32,
+) -> Result<BrowserHistorySummaryDto, String> {
+    let visit_total = count_artifacts_by_type(conn, "BrowserHistory")?;
+    let download_total = count_artifacts_by_type(conn, "BrowserDownload")?;
+    let visit_rows = query_artifact_rows(conn, &["BrowserHistory"], offset, limit)?;
+    let download_rows = query_artifact_rows(conn, &["BrowserDownload"], offset, limit)?;
+    let visits = visit_rows
+        .into_iter()
+        .map(|row| BrowserVisitDto {
+            artifact_id: row.id,
+            file_id: row.source_object_id.unwrap_or_default(),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            browser: string_attr(&row.attrs, "browser"),
+            profile: string_attr(&row.attrs, "profile"),
+            url: string_attr(&row.attrs, "url"),
+            title: string_attr(&row.attrs, "title"),
+            visit_time: optional_string_attr(&row.attrs, "visitTime"),
+            visit_count: u64_attr(&row.attrs, "visitCount"),
+        })
+        .collect::<Vec<_>>();
+    let downloads = download_rows
+        .into_iter()
+        .map(|row| BrowserDownloadDto {
+            artifact_id: row.id,
+            file_id: row.source_object_id.unwrap_or_default(),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            browser: string_attr(&row.attrs, "browser"),
+            profile: string_attr(&row.attrs, "profile"),
+            url: string_attr(&row.attrs, "url"),
+            target_path: string_attr(&row.attrs, "targetPath"),
+            start_time: optional_string_attr(&row.attrs, "startTime"),
+            total_bytes: u64_attr(&row.attrs, "totalBytes"),
+        })
+        .collect::<Vec<_>>();
+    Ok(BrowserHistorySummaryDto {
+        status: status_from_total(visit_total + download_total),
+        visit_total,
+        download_total,
+        visits,
+        downloads,
+        generated_at: Utc::now().to_rfc3339(),
+        warnings: Vec::new(),
+    })
+}
+
+pub fn get_email_extraction_summary(
+    conn: &Connection,
+    offset: u64,
+    limit: u32,
+) -> Result<EmailExtractionSummaryDto, String> {
+    let total = count_artifacts_by_type(conn, "EmailMessage")?;
+    let rows = query_artifact_rows(conn, &["EmailMessage"], offset, limit)?;
+    let messages = rows
+        .into_iter()
+        .map(|row| EmailMessageDto {
+            artifact_id: row.id,
+            file_id: row.source_object_id.unwrap_or_default(),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            sent_at: optional_string_attr(&row.attrs, "sentAt"),
+            from: string_attr(&row.attrs, "from"),
+            to: string_vec_attr(&row.attrs, "to"),
+            cc: string_vec_attr(&row.attrs, "cc"),
+            bcc: string_vec_attr(&row.attrs, "bcc"),
+            subject: string_attr(&row.attrs, "subject"),
+            message_id: string_attr(&row.attrs, "messageId"),
+            attachments: string_vec_attr(&row.attrs, "attachments"),
+            body_preview: string_attr(&row.attrs, "bodyPreview"),
+        })
+        .collect::<Vec<_>>();
+    Ok(EmailExtractionSummaryDto {
+        status: status_from_total(total),
+        total,
+        messages,
+        generated_at: Utc::now().to_rfc3339(),
+        warnings: Vec::new(),
+    })
+}
+
+#[derive(Default)]
+struct ExtractionOutcome {
+    artifacts: Vec<Artifact>,
+    timeline_events: Vec<TimelineEvent>,
+    warnings: Vec<String>,
+}
+
+struct AnalysisArtifactRow {
+    id: String,
+    source_object_id: Option<String>,
+    extractor_id: Option<String>,
+    created_at: String,
+    attrs: BTreeMap<String, Value>,
+}
+
+fn already_has_v1_artifacts(
+    conn: &Connection,
+    candidate: &EvidenceCandidate,
+) -> Result<bool, String> {
+    let families = match candidate.category.as_str() {
+        "Registry" => &["RegistryValue"][..],
+        "BrowserHistory" => &["BrowserHistory", "BrowserDownload"][..],
+        "Email" => &["EmailMessage"][..],
+        _ => &[][..],
+    };
+    if families.is_empty() {
+        return Ok(false);
+    }
+    let placeholders = (1..=families.len())
+        .map(|index| format!("?{}", index + 1))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
+        "SELECT COUNT(*) FROM artifacts WHERE source_object_id = ?1 AND artifact_type IN ({})",
+        placeholders
+    );
+    let mut params_values: Vec<Box<dyn rusqlite::types::ToSql>> =
+        vec![Box::new(candidate.file_id.0.clone())];
+    for family in families {
+        params_values.push(Box::new((*family).to_string()));
+    }
+    let params_refs = params_values
+        .iter()
+        .map(|param| param.as_ref())
+        .collect::<Vec<&dyn rusqlite::types::ToSql>>();
+    let count: i64 = conn
+        .query_row(&sql, params_refs.as_slice(), |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+    Ok(count > 0)
+}
+
+fn extract_registry_candidate(candidate: &EvidenceCandidate, bytes: &[u8]) -> ExtractionOutcome {
+    let mut outcome = ExtractionOutcome::default();
+    if !bytes.starts_with(b"regf") {
+        outcome
+            .warnings
+            .push(format!("{} is not a regf registry hive", candidate.path));
+        return outcome;
+    }
+
+    let normalized = normalize_evidence_path(&candidate.path);
+    if normalized.ends_with("/windows/system32/config/system") {
+        match artifacts_windows::extract_system_hive_fields(bytes, &candidate.path) {
+            Ok(info) => {
+                outcome.artifacts.extend(registry_field_artifacts(
+                    candidate,
+                    vec![
+                        ("computerName", info.computer_name),
+                        ("timezone", info.timezone),
+                    ],
+                ));
+                outcome.warnings.extend(info.warnings);
+            }
+            Err(err) => outcome
+                .warnings
+                .push(format!("{} registry parse failed: {}", candidate.path, err)),
+        }
+    } else if normalized.ends_with("/windows/system32/config/software") {
+        match artifacts_windows::extract_software_hive_fields(bytes, &candidate.path) {
+            Ok(info) => {
+                outcome.artifacts.extend(registry_field_artifacts(
+                    candidate,
+                    vec![
+                        ("productName", info.product_name),
+                        ("currentBuild", info.current_build),
+                        ("currentVersion", info.current_version),
+                        ("displayVersion", info.display_version),
+                        ("installDate", info.install_date),
+                        ("registeredOwner", info.registered_owner),
+                        ("registeredOrganization", info.registered_organization),
+                        ("productId", info.product_id),
+                    ],
+                ));
+                outcome.warnings.extend(info.warnings);
+            }
+            Err(err) => outcome
+                .warnings
+                .push(format!("{} registry parse failed: {}", candidate.path, err)),
+        }
+    } else {
+        outcome.warnings.push(format!(
+            "{} found as registry hive; v1 extracts key values only from SYSTEM/SOFTWARE",
+            candidate.path
+        ));
+    }
+    outcome
+}
+
+fn registry_field_artifacts(
+    candidate: &EvidenceCandidate,
+    fields: Vec<(&str, Option<artifacts_windows::ParsedRegistryField>)>,
+) -> Vec<Artifact> {
+    fields
+        .into_iter()
+        .filter_map(|(field_name, parsed)| parsed.map(|parsed| (field_name, parsed)))
+        .map(|(field_name, parsed)| {
+            let mut attrs = base_attrs(candidate);
+            attrs.insert("field".to_string(), Value::String(field_name.to_string()));
+            attrs.insert(
+                "hivePath".to_string(),
+                Value::String(parsed.hive_path.clone()),
+            );
+            attrs.insert(
+                "keyPath".to_string(),
+                Value::String(parsed.key_path.clone()),
+            );
+            attrs.insert(
+                "valueName".to_string(),
+                Value::String(parsed.value_name.clone()),
+            );
+            attrs.insert("valueType".to_string(), Value::String("string".to_string()));
+            attrs.insert("data".to_string(), Value::String(parsed.value.clone()));
+            attrs.insert("parser".to_string(), Value::String(parsed.parser.clone()));
+            make_artifact(
+                "RegistryValue",
+                format!("Registry {}: {}", field_name, parsed.value),
+                format!(
+                    "{}\\{} = {}",
+                    parsed.key_path, parsed.value_name, parsed.value
+                ),
+                candidate,
+                "registry.v1",
+                attrs,
+            )
+        })
+        .collect()
+}
+
+fn extract_browser_candidate(candidate: &EvidenceCandidate, bytes: &[u8]) -> ExtractionOutcome {
+    let normalized = normalize_evidence_path(&candidate.path);
+    if !is_browser_history_path(&normalized) {
+        return ExtractionOutcome {
+            warnings: vec![format!(
+                "{} is not a browser history database",
+                candidate.path
+            )],
+            ..ExtractionOutcome::default()
+        };
+    }
+    let (browser, profile) = browser_profile_from_path(&normalized);
+    let parse_result = with_temp_sqlite(bytes, "browser-history", |db| {
+        if normalized.ends_with("/places.sqlite") {
+            extract_firefox_history(db, candidate, &browser, &profile)
+        } else {
+            extract_chromium_history(db, candidate, &browser, &profile)
+        }
+    });
+    match parse_result {
+        Ok(outcome) => outcome,
+        Err(err) => ExtractionOutcome {
+            warnings: vec![format!("{} browser parse failed: {}", candidate.path, err)],
+            ..ExtractionOutcome::default()
+        },
+    }
+}
+
+fn extract_chromium_history(
+    db: &Connection,
+    candidate: &EvidenceCandidate,
+    browser: &str,
+    profile: &str,
+) -> Result<ExtractionOutcome, String> {
+    let mut outcome = ExtractionOutcome::default();
+    if table_exists(db, "urls")? {
+        let mut stmt = db
+            .prepare(
+                "SELECT urls.url, COALESCE(urls.title, ''), COALESCE(urls.visit_count, 0),
+                        COALESCE(visits.visit_time, urls.last_visit_time)
+                 FROM urls
+                 LEFT JOIN visits ON visits.url = urls.id
+                 ORDER BY COALESCE(visits.visit_time, urls.last_visit_time) DESC
+                 LIMIT 500",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, Option<i64>>(3)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (url, title, visit_count, raw_time) = row.map_err(|e| e.to_string())?;
+            if url.trim().is_empty() {
+                continue;
+            }
+            let visited_at = raw_time.and_then(chromium_time_to_dt);
+            let mut attrs = browser_attrs(candidate, browser, profile);
+            attrs.insert("url".to_string(), Value::String(url.clone()));
+            attrs.insert("title".to_string(), Value::String(title.clone()));
+            attrs.insert(
+                "visitCount".to_string(),
+                Value::Number(serde_json::Number::from(visit_count.max(0) as u64)),
+            );
+            if let Some(dt) = visited_at {
+                attrs.insert("visitTime".to_string(), Value::String(dt.to_rfc3339()));
+                outcome.timeline_events.push(make_timeline_event(
+                    &candidate.file_id,
+                    "BROWSER_VISIT",
+                    dt,
+                    format!("{} visit: {}", browser, title_or_url(&title, &url)),
+                    url.clone(),
+                    attrs.clone(),
+                    "browser.history",
+                ));
+            }
+            outcome.artifacts.push(make_artifact(
+                "BrowserHistory",
+                format!("{} visit: {}", browser, title_or_url(&title, &url)),
+                url,
+                candidate,
+                "browser.history",
+                attrs,
+            ));
+        }
+    }
+
+    if table_exists(db, "downloads")? {
+        outcome.artifacts.extend(extract_chromium_downloads(
+            db,
+            candidate,
+            browser,
+            profile,
+            &mut outcome.timeline_events,
+        )?);
+    }
+    Ok(outcome)
+}
+
+fn extract_chromium_downloads(
+    db: &Connection,
+    candidate: &EvidenceCandidate,
+    browser: &str,
+    profile: &str,
+    events: &mut Vec<TimelineEvent>,
+) -> Result<Vec<Artifact>, String> {
+    let columns = table_columns(db, "downloads")?;
+    let url_expr = if columns.iter().any(|column| column == "tab_url") {
+        "COALESCE(tab_url, '')"
+    } else if columns.iter().any(|column| column == "url") {
+        "COALESCE(url, '')"
+    } else {
+        "''"
+    };
+    let target_expr = if columns.iter().any(|column| column == "target_path") {
+        "COALESCE(target_path, '')"
+    } else if columns.iter().any(|column| column == "current_path") {
+        "COALESCE(current_path, '')"
+    } else {
+        "''"
+    };
+    let start_expr = if columns.iter().any(|column| column == "start_time") {
+        "COALESCE(start_time, 0)"
+    } else {
+        "0"
+    };
+    let bytes_expr = if columns.iter().any(|column| column == "total_bytes") {
+        "COALESCE(total_bytes, 0)"
+    } else if columns.iter().any(|column| column == "received_bytes") {
+        "COALESCE(received_bytes, 0)"
+    } else {
+        "0"
+    };
+    let sql = format!(
+        "SELECT {url_expr}, {target_expr}, {start_expr}, {bytes_expr} FROM downloads ORDER BY {start_expr} DESC LIMIT 500"
+    );
+    let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<i64>>(2)?,
+                row.get::<_, Option<i64>>(3)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+    let mut artifacts = Vec::new();
+    for row in rows {
+        let (url, target_path, raw_start, total_bytes) = row.map_err(|e| e.to_string())?;
+        if url.trim().is_empty() && target_path.trim().is_empty() {
+            continue;
+        }
+        let started_at = raw_start.and_then(chromium_time_to_dt);
+        let mut attrs = browser_attrs(candidate, browser, profile);
+        attrs.insert("url".to_string(), Value::String(url.clone()));
+        attrs.insert("targetPath".to_string(), Value::String(target_path.clone()));
+        attrs.insert(
+            "totalBytes".to_string(),
+            Value::Number(serde_json::Number::from(
+                total_bytes.unwrap_or(0).max(0) as u64
+            )),
+        );
+        if let Some(dt) = started_at {
+            attrs.insert("startTime".to_string(), Value::String(dt.to_rfc3339()));
+            events.push(make_timeline_event(
+                &candidate.file_id,
+                "BROWSER_DOWNLOAD",
+                dt,
+                format!("{} download: {}", browser, target_path),
+                url.clone(),
+                attrs.clone(),
+                "browser.history",
+            ));
+        }
+        artifacts.push(make_artifact(
+            "BrowserDownload",
+            format!("{} download: {}", browser, target_path),
+            url,
+            candidate,
+            "browser.history",
+            attrs,
+        ));
+    }
+    Ok(artifacts)
+}
+
+fn extract_firefox_history(
+    db: &Connection,
+    candidate: &EvidenceCandidate,
+    browser: &str,
+    profile: &str,
+) -> Result<ExtractionOutcome, String> {
+    let mut outcome = ExtractionOutcome::default();
+    if !table_exists(db, "moz_places")? {
+        outcome
+            .warnings
+            .push(format!("{} has no moz_places table", candidate.path));
+        return Ok(outcome);
+    }
+    let mut stmt = db
+        .prepare(
+            "SELECT p.url, COALESCE(p.title, ''), COALESCE(p.visit_count, 0),
+                    COALESCE(v.visit_date, p.last_visit_date)
+             FROM moz_places p
+             LEFT JOIN moz_historyvisits v ON v.place_id = p.id
+             ORDER BY COALESCE(v.visit_date, p.last_visit_date) DESC
+             LIMIT 500",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, Option<i64>>(3)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+    for row in rows {
+        let (url, title, visit_count, raw_time) = row.map_err(|e| e.to_string())?;
+        if url.trim().is_empty() {
+            continue;
+        }
+        let visited_at = raw_time.and_then(unix_microseconds_to_dt);
+        let mut attrs = browser_attrs(candidate, browser, profile);
+        attrs.insert("url".to_string(), Value::String(url.clone()));
+        attrs.insert("title".to_string(), Value::String(title.clone()));
+        attrs.insert(
+            "visitCount".to_string(),
+            Value::Number(serde_json::Number::from(visit_count.max(0) as u64)),
+        );
+        if let Some(dt) = visited_at {
+            attrs.insert("visitTime".to_string(), Value::String(dt.to_rfc3339()));
+            outcome.timeline_events.push(make_timeline_event(
+                &candidate.file_id,
+                "BROWSER_VISIT",
+                dt,
+                format!("{} visit: {}", browser, title_or_url(&title, &url)),
+                url.clone(),
+                attrs.clone(),
+                "browser.history",
+            ));
+        }
+        outcome.artifacts.push(make_artifact(
+            "BrowserHistory",
+            format!("{} visit: {}", browser, title_or_url(&title, &url)),
+            url,
+            candidate,
+            "browser.history",
+            attrs,
+        ));
+    }
+    Ok(outcome)
+}
+
+fn extract_email_candidate(candidate: &EvidenceCandidate, bytes: &[u8]) -> ExtractionOutcome {
+    let parsed = parse_email_message(bytes);
+    let mut attrs = base_attrs(candidate);
+    attrs.insert("from".to_string(), Value::String(parsed.from.clone()));
+    attrs.insert("to".to_string(), string_array_value(&parsed.to));
+    attrs.insert("cc".to_string(), string_array_value(&parsed.cc));
+    attrs.insert("bcc".to_string(), string_array_value(&parsed.bcc));
+    attrs.insert("subject".to_string(), Value::String(parsed.subject.clone()));
+    attrs.insert(
+        "messageId".to_string(),
+        Value::String(parsed.message_id.clone()),
+    );
+    attrs.insert(
+        "attachments".to_string(),
+        string_array_value(&parsed.attachments),
+    );
+    attrs.insert(
+        "bodyPreview".to_string(),
+        Value::String(parsed.body_preview.clone()),
+    );
+    if let Some(sent_at) = parsed.sent_at {
+        attrs.insert("sentAt".to_string(), Value::String(sent_at.to_rfc3339()));
+    }
+    let mut outcome = ExtractionOutcome::default();
+    if let Some(sent_at) = parsed.sent_at {
+        outcome.timeline_events.push(make_timeline_event(
+            &candidate.file_id,
+            "EMAIL_SENT",
+            sent_at,
+            format!("Email: {}", title_or_url(&parsed.subject, &candidate.path)),
+            parsed.from.clone(),
+            attrs.clone(),
+            "email.eml_emlx",
+        ));
+    }
+    outcome.artifacts.push(make_artifact(
+        "EmailMessage",
+        format!("Email: {}", title_or_url(&parsed.subject, &candidate.path)),
+        parsed.from,
+        candidate,
+        "email.eml_emlx",
+        attrs,
+    ));
+    outcome
+}
+
+fn artifacts_by_data_source(artifacts: Vec<Artifact>) -> HashMap<String, Vec<Artifact>> {
+    let mut grouped: HashMap<String, Vec<Artifact>> = HashMap::new();
+    for artifact in artifacts {
+        let data_source_id = artifact
+            .attrs
+            .get("dataSourceId")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        grouped.entry(data_source_id).or_default().push(artifact);
+    }
+    grouped
+}
+
+fn make_artifact(
+    family: &str,
+    title: String,
+    summary: String,
+    candidate: &EvidenceCandidate,
+    extractor_id: &str,
+    attrs: BTreeMap<String, Value>,
+) -> Artifact {
+    Artifact {
+        id: ArtifactId(Uuid::new_v4().to_string()),
+        family: family.to_string(),
+        title,
+        summary,
+        source_object_id: Some(candidate.file_id.clone()),
+        extractor_id: Some(extractor_id.to_string()),
+        extractor_version: Some(ANALYSIS_EXTRACTOR_VERSION.to_string()),
+        confidence: Some(0.85),
+        source_attribution: Some(candidate.path.clone()),
+        created_at: Utc::now(),
+        attrs,
+    }
+}
+
+fn make_timeline_event(
+    source_id: &FileEntryId,
+    event_type: &str,
+    timestamp: DateTime<Utc>,
+    title: String,
+    description: String,
+    attrs: BTreeMap<String, Value>,
+    parser_id: &str,
+) -> TimelineEvent {
+    TimelineEvent {
+        id: TimelineEventId(Uuid::new_v4().to_string()),
+        source_object_id: source_id.0.clone(),
+        event_type: event_type.to_string(),
+        timestamp,
+        title,
+        description,
+        parser_id: Some(parser_id.to_string()),
+        parser_version: Some(ANALYSIS_EXTRACTOR_VERSION.to_string()),
+        confidence: Some(0.85),
+        source_attribution: None,
+        attrs,
+    }
+}
+
+fn base_attrs(candidate: &EvidenceCandidate) -> BTreeMap<String, Value> {
+    let mut attrs = BTreeMap::new();
+    attrs.insert(
+        "dataSourceId".to_string(),
+        Value::String(candidate.data_source_id.clone()),
+    );
+    attrs.insert(
+        "sourcePath".to_string(),
+        Value::String(candidate.path.clone()),
+    );
+    attrs
+}
+
+fn browser_attrs(
+    candidate: &EvidenceCandidate,
+    browser: &str,
+    profile: &str,
+) -> BTreeMap<String, Value> {
+    let mut attrs = base_attrs(candidate);
+    attrs.insert("browser".to_string(), Value::String(browser.to_string()));
+    attrs.insert("profile".to_string(), Value::String(profile.to_string()));
+    attrs
+}
+
+fn count_analysis_artifacts(conn: &Connection) -> Result<u64, String> {
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM artifacts WHERE artifact_type IN ('RegistryValue', 'BrowserHistory', 'BrowserDownload', 'EmailMessage')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(count as u64)
+}
+
+fn count_artifacts_by_type(conn: &Connection, artifact_type: &str) -> Result<u64, String> {
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM artifacts WHERE artifact_type = ?1",
+            [artifact_type],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(count as u64)
+}
+
+fn query_artifact_rows(
+    conn: &Connection,
+    families: &[&str],
+    offset: u64,
+    limit: u32,
+) -> Result<Vec<AnalysisArtifactRow>, String> {
+    if families.is_empty() {
+        return Ok(Vec::new());
+    }
+    let placeholders = (1..=families.len())
+        .map(|index| format!("?{}", index))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
+        "SELECT id, source_object_id, extractor_id, created_at, attrs
+         FROM artifacts
+         WHERE artifact_type IN ({})
+         ORDER BY created_at DESC, id ASC
+         LIMIT ?{} OFFSET ?{}",
+        placeholders,
+        families.len() + 1,
+        families.len() + 2
+    );
+    let mut params_values: Vec<Box<dyn rusqlite::types::ToSql>> = families
+        .iter()
+        .map(|family| Box::new((*family).to_string()) as Box<dyn rusqlite::types::ToSql>)
+        .collect();
+    params_values.push(Box::new(limit as i64));
+    params_values.push(Box::new(offset as i64));
+    let params_refs = params_values
+        .iter()
+        .map(|param| param.as_ref())
+        .collect::<Vec<&dyn rusqlite::types::ToSql>>();
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params_refs.as_slice(), |row| {
+            let attrs_text: String = row.get(4)?;
+            Ok(AnalysisArtifactRow {
+                id: row.get(0)?,
+                source_object_id: row.get(1)?,
+                extractor_id: row.get(2)?,
+                created_at: row.get(3)?,
+                attrs: serde_json::from_str(&attrs_text).unwrap_or_default(),
+            })
+        })
+        .map_err(|e| e.to_string())?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row.map_err(|e| e.to_string())?);
+    }
+    Ok(result)
+}
+
+fn status_from_total(total: u64) -> AnalysisParseStatusDto {
+    if total > 0 {
+        AnalysisParseStatusDto::Parsed
+    } else {
+        AnalysisParseStatusDto::NotFound
+    }
+}
+
+fn string_attr(attrs: &BTreeMap<String, Value>, key: &str) -> String {
+    attrs
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_default()
+}
+
+fn optional_string_attr(attrs: &BTreeMap<String, Value>, key: &str) -> Option<String> {
+    attrs
+        .get(key)
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn u64_attr(attrs: &BTreeMap<String, Value>, key: &str) -> u64 {
+    attrs.get(key).and_then(Value::as_u64).unwrap_or(0)
+}
+
+fn string_vec_attr(attrs: &BTreeMap<String, Value>, key: &str) -> Vec<String> {
+    attrs
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn string_array_value(values: &[String]) -> Value {
+    Value::Array(values.iter().cloned().map(Value::String).collect())
+}
+
+fn with_temp_sqlite(
+    bytes: &[u8],
+    prefix: &str,
+    parse: impl FnOnce(&Connection) -> Result<ExtractionOutcome, String>,
+) -> Result<ExtractionOutcome, String> {
+    let path = temp_sqlite_path(prefix);
+    std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    let result = Connection::open_with_flags(
+        &path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(|e| e.to_string())
+    .and_then(|conn| parse(&conn));
+    let _ = std::fs::remove_file(path);
+    result
+}
+
+fn temp_sqlite_path(prefix: &str) -> PathBuf {
+    std::env::temp_dir().join(format!("forensics-{prefix}-{}.sqlite", Uuid::new_v4()))
+}
+
+fn table_exists(db: &Connection, table: &str) -> Result<bool, String> {
+    let count: i64 = db
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            [table],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(count > 0)
+}
+
+fn table_columns(db: &Connection, table: &str) -> Result<Vec<String>, String> {
+    let mut stmt = db
+        .prepare(&format!("PRAGMA table_info({})", table))
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|e| e.to_string())?;
+    let mut columns = Vec::new();
+    for row in rows {
+        columns.push(row.map_err(|e| e.to_string())?);
+    }
+    Ok(columns)
+}
+
+fn is_browser_history_path(normalized: &str) -> bool {
+    (normalized.ends_with("/history") || normalized.ends_with("/archived history"))
+        && (normalized.contains("/google/chrome/user data/")
+            || normalized.contains("/microsoft/edge/user data/"))
+        || (normalized.ends_with("/places.sqlite")
+            && normalized.contains("/mozilla/firefox/profiles/"))
+}
+
+fn browser_profile_from_path(normalized: &str) -> (String, String) {
+    let browser = if normalized.contains("/microsoft/edge/user data/") {
+        "Edge"
+    } else if normalized.contains("/mozilla/firefox/profiles/") {
+        "Firefox"
+    } else {
+        "Chrome"
+    };
+    let marker = if browser == "Firefox" {
+        "/mozilla/firefox/profiles/"
+    } else if browser == "Edge" {
+        "/microsoft/edge/user data/"
+    } else {
+        "/google/chrome/user data/"
+    };
+    let profile = normalized
+        .split_once(marker)
+        .map(|(_, rest)| rest.split('/').next().unwrap_or("default"))
+        .filter(|value| !value.is_empty())
+        .unwrap_or("default");
+    (browser.to_string(), profile.to_string())
+}
+
+fn chromium_time_to_dt(value: i64) -> Option<DateTime<Utc>> {
+    if value <= 0 {
+        return None;
+    }
+    let seconds = value / 1_000_000 - 11_644_473_600;
+    let nanos = ((value % 1_000_000) * 1_000) as u32;
+    Utc.timestamp_opt(seconds, nanos).single()
+}
+
+fn unix_microseconds_to_dt(value: i64) -> Option<DateTime<Utc>> {
+    if value <= 0 {
+        return None;
+    }
+    Utc.timestamp_opt(value / 1_000_000, ((value % 1_000_000) * 1_000) as u32)
+        .single()
+}
+
+fn title_or_url(title: &str, url: &str) -> String {
+    if title.trim().is_empty() {
+        url.to_string()
+    } else {
+        title.to_string()
+    }
+}
+
+struct ParsedEmail {
+    sent_at: Option<DateTime<Utc>>,
+    from: String,
+    to: Vec<String>,
+    cc: Vec<String>,
+    bcc: Vec<String>,
+    subject: String,
+    message_id: String,
+    attachments: Vec<String>,
+    body_preview: String,
+}
+
+fn parse_email_message(bytes: &[u8]) -> ParsedEmail {
+    let text = String::from_utf8_lossy(bytes).replace("\r\n", "\n");
+    let text = strip_emlx_size_line(&text);
+    let (header_text, body_text) = text.split_once("\n\n").unwrap_or((text.as_str(), ""));
+    let headers = parse_headers(header_text);
+    let date = header_value(&headers, "date");
+    ParsedEmail {
+        sent_at: date.and_then(parse_email_datetime),
+        from: header_value(&headers, "from").unwrap_or_default(),
+        to: split_address_list(header_value(&headers, "to").unwrap_or_default()),
+        cc: split_address_list(header_value(&headers, "cc").unwrap_or_default()),
+        bcc: split_address_list(header_value(&headers, "bcc").unwrap_or_default()),
+        subject: header_value(&headers, "subject").unwrap_or_default(),
+        message_id: header_value(&headers, "message-id").unwrap_or_default(),
+        attachments: extract_attachment_names(&text),
+        body_preview: body_text
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .take(8)
+            .collect::<Vec<_>>()
+            .join(" ")
+            .chars()
+            .take(500)
+            .collect(),
+    }
+}
+
+fn strip_emlx_size_line(text: &str) -> String {
+    let Some((first, rest)) = text.split_once('\n') else {
+        return text.to_string();
+    };
+    if first.chars().all(|ch| ch.is_ascii_digit()) {
+        rest.to_string()
+    } else {
+        text.to_string()
+    }
+}
+
+fn parse_headers(header_text: &str) -> Vec<(String, String)> {
+    let mut headers: Vec<(String, String)> = Vec::new();
+    for line in header_text.lines() {
+        if line.starts_with(' ') || line.starts_with('\t') {
+            if let Some((_, value)) = headers.last_mut() {
+                value.push(' ');
+                value.push_str(line.trim());
+            }
+            continue;
+        }
+        if let Some((name, value)) = line.split_once(':') {
+            headers.push((name.trim().to_ascii_lowercase(), value.trim().to_string()));
+        }
+    }
+    headers
+}
+
+fn header_value(headers: &[(String, String)], name: &str) -> Option<String> {
+    headers
+        .iter()
+        .find(|(header_name, _)| header_name == name)
+        .map(|(_, value)| value.clone())
+}
+
+fn split_address_list(value: String) -> Vec<String> {
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+fn parse_email_datetime(value: String) -> Option<DateTime<Utc>> {
+    DateTime::parse_from_rfc2822(&value)
+        .or_else(|_| DateTime::parse_from_rfc3339(&value))
+        .ok()
+        .map(|dt| dt.with_timezone(&Utc))
+}
+
+fn extract_attachment_names(text: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    for marker in ["filename=", "name="] {
+        let mut rest = text;
+        while let Some((_, tail)) = rest.split_once(marker) {
+            let trimmed = tail.trim_start_matches([' ', '\t']);
+            let (name, next) = if let Some(stripped) = trimmed.strip_prefix('"') {
+                stripped.split_once('"').unwrap_or((stripped, ""))
+            } else {
+                let end = trimmed
+                    .find(|ch: char| ch == ';' || ch == '\n' || ch.is_whitespace())
+                    .unwrap_or(trimmed.len());
+                (&trimmed[..end], &trimmed[end..])
+            };
+            if !name.trim().is_empty() && !names.iter().any(|existing| existing == name) {
+                names.push(name.trim().to_string());
+            }
+            rest = next;
+        }
+    }
+    names
+}
+
 fn metadata_category_stats(conn: &Connection) -> Result<HashMap<String, (u64, u64)>, String> {
     let mut stmt = conn
         .prepare(
@@ -890,7 +2034,7 @@ fn apply_metadata_category_stats(
         });
     }
 
-    classifications.sort_by(|a, b| b.total_size.cmp(&a.total_size));
+    classifications.sort_by_key(|classification| std::cmp::Reverse(classification.total_size));
 }
 
 fn classify_files_by_extension_path(
@@ -956,7 +2100,7 @@ fn classify_files_by_extension_path(
     if !other.files.is_empty() || !other.warnings.is_empty() {
         result.push(other);
     }
-    result.sort_by(|a, b| b.total_size.cmp(&a.total_size));
+    result.sort_by_key(|classification| std::cmp::Reverse(classification.total_size));
     result
 }
 
@@ -1035,7 +2179,7 @@ pub fn classify_files_by_magic(
     if !unclassified.files.is_empty() || !unclassified.warnings.is_empty() {
         result.push(unclassified);
     }
-    result.sort_by(|a, b| b.total_size.cmp(&a.total_size));
+    result.sort_by_key(|classification| std::cmp::Reverse(classification.total_size));
     result
 }
 
@@ -1578,6 +2722,8 @@ mod tests {
                 .extension()
                 .map(|ext| ext.to_string_lossy().to_string()),
             deleted: false,
+            hidden: false,
+            system: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,
@@ -1621,6 +2767,109 @@ mod tests {
             .unwrap();
 
         (conn, tmp, ds_id)
+    }
+
+    fn sqlite_db_bytes(build: impl FnOnce(&Connection)) -> Vec<u8> {
+        let tmp = TempDir::new().unwrap();
+        let db_path = tmp.path().join("source.sqlite");
+        {
+            let db = Connection::open(&db_path).unwrap();
+            build(&db);
+        }
+        std::fs::read(db_path).unwrap()
+    }
+
+    fn chromium_time(value: &str) -> i64 {
+        let dt = DateTime::parse_from_rfc3339(value)
+            .unwrap()
+            .with_timezone(&Utc);
+        (dt.timestamp() + 11_644_473_600) * 1_000_000 + i64::from(dt.timestamp_subsec_micros())
+    }
+
+    fn unix_microseconds(value: &str) -> i64 {
+        let dt = DateTime::parse_from_rfc3339(value)
+            .unwrap()
+            .with_timezone(&Utc);
+        dt.timestamp() * 1_000_000 + i64::from(dt.timestamp_subsec_micros())
+    }
+
+    fn chromium_history_bytes(url: &str, title: &str, target_path: &str) -> Vec<u8> {
+        sqlite_db_bytes(|db| {
+            db.execute_batch(
+                "CREATE TABLE urls (
+                    id INTEGER PRIMARY KEY,
+                    url TEXT NOT NULL,
+                    title TEXT,
+                    visit_count INTEGER,
+                    last_visit_time INTEGER
+                );
+                CREATE TABLE visits (
+                    id INTEGER PRIMARY KEY,
+                    url INTEGER NOT NULL,
+                    visit_time INTEGER
+                );
+                CREATE TABLE downloads (
+                    id INTEGER PRIMARY KEY,
+                    tab_url TEXT,
+                    target_path TEXT,
+                    start_time INTEGER,
+                    total_bytes INTEGER
+                );",
+            )
+            .unwrap();
+            db.execute(
+                "INSERT INTO urls (id, url, title, visit_count, last_visit_time)
+                 VALUES (1, ?1, ?2, 3, ?3)",
+                params![url, title, chromium_time("2024-01-02T03:04:05Z")],
+            )
+            .unwrap();
+            db.execute(
+                "INSERT INTO visits (id, url, visit_time) VALUES (1, 1, ?1)",
+                params![chromium_time("2024-01-02T03:04:05Z")],
+            )
+            .unwrap();
+            db.execute(
+                "INSERT INTO downloads (id, tab_url, target_path, start_time, total_bytes)
+                 VALUES (1, ?1, ?2, ?3, 4096)",
+                params![url, target_path, chromium_time("2024-01-03T04:05:06Z")],
+            )
+            .unwrap();
+        })
+    }
+
+    fn firefox_places_bytes() -> Vec<u8> {
+        sqlite_db_bytes(|db| {
+            db.execute_batch(
+                "CREATE TABLE moz_places (
+                    id INTEGER PRIMARY KEY,
+                    url TEXT NOT NULL,
+                    title TEXT,
+                    visit_count INTEGER,
+                    last_visit_date INTEGER
+                );
+                CREATE TABLE moz_historyvisits (
+                    id INTEGER PRIMARY KEY,
+                    place_id INTEGER NOT NULL,
+                    visit_date INTEGER
+                );",
+            )
+            .unwrap();
+            db.execute(
+                "INSERT INTO moz_places (id, url, title, visit_count, last_visit_date)
+                 VALUES (1, 'https://mozilla.example/', 'Firefox Example', 2, ?1)",
+                params![unix_microseconds("2024-01-04T05:06:07Z")],
+            )
+            .unwrap();
+            db.execute(
+                "INSERT INTO moz_historyvisits (id, place_id, visit_date) VALUES (1, 1, ?1)",
+                params![unix_microseconds("2024-01-04T05:06:07Z")],
+            )
+            .unwrap();
+        })
+    }
+
+    fn sample_email_bytes() -> Vec<u8> {
+        b"Date: Tue, 02 Jan 2024 03:04:05 +0000\r\nFrom: alice@example.com\r\nTo: bob@example.com, carol@example.com\r\nSubject: Quarterly evidence note\r\nMessage-ID: <msg-1@example.com>\r\nContent-Disposition: attachment; filename=\"evidence.txt\"\r\n\r\nThis is the first line of the message body.\r\nThis is the second line.\r\n".to_vec()
     }
 
     #[test]
@@ -1913,14 +3162,206 @@ mod tests {
                     "Users/alice/AppData/Roaming/Microsoft/Windows/Recent/app.lnk",
                     40,
                 ),
+                file_with_ds("reg", &ds_id, "Users/alice/NTUSER.DAT", 50),
+                file_with_ds(
+                    "history",
+                    &ds_id,
+                    "Users/alice/AppData/Local/Google/Chrome/User Data/Default/History",
+                    60,
+                ),
+                file_with_ds("email-eml", &ds_id, "Users/alice/Inbox/message.eml", 70),
+                file_with_ds("email-emlx", &ds_id, "Users/alice/Inbox/message.emlx", 80),
             ])
             .unwrap();
 
         let candidates = discover_evidence_candidates(&conn).unwrap();
-        assert_eq!(candidates["SystemInformation"].len(), 1);
-        assert_eq!(candidates["EventLogs"].len(), 1);
-        assert_eq!(candidates["ProgramExecution"].len(), 1);
-        assert_eq!(candidates["UserActivity"].len(), 1);
+        assert_eq!(candidates.get("SystemInformation").map(Vec::len), Some(2));
+        assert_eq!(candidates.get("Registry").map(Vec::len), Some(2));
+        assert_eq!(candidates.get("BrowserHistory").map(Vec::len), Some(1));
+        assert_eq!(candidates.get("Email").map(Vec::len), Some(2));
+        assert_eq!(candidates.get("EventLogs").map(Vec::len), Some(1));
+        assert_eq!(candidates.get("ProgramExecution").map(Vec::len), Some(1));
+        assert_eq!(candidates.get("UserActivity").map(Vec::len), Some(1));
+    }
+
+    #[test]
+    fn run_analysis_extraction_extracts_registry_browser_email_and_persists() {
+        let (conn, _tmp, ds_id) = setup_case_db();
+        let system_hive = std::fs::read(fixtures::tiny_registry_system_hive()).unwrap();
+        let software_hive = std::fs::read(fixtures::tiny_registry_software_hive()).unwrap();
+        let chrome_history = chromium_history_bytes(
+            "https://chrome.example/",
+            "Chrome Example",
+            "C:/Temp/chrome.bin",
+        );
+        let edge_history =
+            chromium_history_bytes("https://edge.example/", "Edge Example", "C:/Temp/edge.bin");
+        let firefox_places = firefox_places_bytes();
+        let email = sample_email_bytes();
+
+        FileRepo::new(&conn)
+            .insert_batch(&[
+                file_with_ds(
+                    "system",
+                    &ds_id,
+                    "Windows/System32/config/SYSTEM",
+                    system_hive.len() as u64,
+                ),
+                file_with_ds(
+                    "software",
+                    &ds_id,
+                    "Windows/System32/config/SOFTWARE",
+                    software_hive.len() as u64,
+                ),
+                file_with_ds(
+                    "chrome-history",
+                    &ds_id,
+                    "Users/alice/AppData/Local/Google/Chrome/User Data/Default/History",
+                    chrome_history.len() as u64,
+                ),
+                file_with_ds(
+                    "edge-history",
+                    &ds_id,
+                    "Users/alice/AppData/Local/Microsoft/Edge/User Data/Profile 1/History",
+                    edge_history.len() as u64,
+                ),
+                file_with_ds(
+                    "firefox-places",
+                    &ds_id,
+                    "Users/alice/AppData/Roaming/Mozilla/Firefox/Profiles/abc.default/places.sqlite",
+                    firefox_places.len() as u64,
+                ),
+                file_with_ds(
+                    "email",
+                    &ds_id,
+                    "Users/alice/Mail/message.eml",
+                    email.len() as u64,
+                ),
+            ])
+            .unwrap();
+
+        let mut contents = HashMap::new();
+        contents.insert("system".to_string(), system_hive);
+        contents.insert("software".to_string(), software_hive);
+        contents.insert("chrome-history".to_string(), chrome_history);
+        contents.insert("edge-history".to_string(), edge_history);
+        contents.insert("firefox-places".to_string(), firefox_places);
+        contents.insert("email".to_string(), email);
+
+        let run = run_analysis_extraction(&conn, "case-analysis", &[], |file_id| {
+            contents
+                .get(&file_id.0)
+                .cloned()
+                .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
+                .ok_or_else(|| format!("missing bytes for {}", file_id.0))
+        })
+        .unwrap();
+
+        assert_eq!(run.status, AnalysisParseStatusDto::Partial);
+        assert!(run
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("CurrentVersion")));
+        assert_eq!(run.scanned_count, 6);
+        assert_eq!(run.artifact_count, 14);
+        assert_eq!(run.timeline_event_count, 6);
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT artifact_type, COUNT(*)
+                 FROM artifacts
+                 GROUP BY artifact_type
+                 ORDER BY artifact_type",
+            )
+            .unwrap();
+        let counts = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
+            })
+            .unwrap()
+            .collect::<Result<HashMap<_, _>, _>>()
+            .unwrap();
+        assert_eq!(counts.get("RegistryValue").copied(), Some(8));
+        assert_eq!(counts.get("BrowserHistory").copied(), Some(3));
+        assert_eq!(counts.get("BrowserDownload").copied(), Some(2));
+        assert_eq!(counts.get("EmailMessage").copied(), Some(1));
+
+        let timeline_case_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM timeline_events WHERE case_id = 'case-analysis'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(timeline_case_count, 6);
+
+        let registry = get_registry_extraction_summary(&conn, 0, 20).unwrap();
+        assert_eq!(registry.total, 8);
+        assert!(registry.values.iter().any(|value| {
+            value.source_path == "Windows/System32/config/SYSTEM"
+                && value.key_path == "ControlSet001\\Control\\ComputerName\\ComputerName"
+                && value.value_name == "ComputerName"
+                && value.data == registry::SYSTEM_COMPUTER_NAME
+        }));
+
+        let browser = get_browser_history_summary(&conn, 0, 20).unwrap();
+        assert_eq!(browser.visit_total, 3);
+        assert_eq!(browser.download_total, 2);
+        assert!(browser.visits.iter().any(|visit| {
+            visit.browser == "Chrome"
+                && visit.profile == "default"
+                && visit.url == "https://chrome.example/"
+                && visit.visit_count == 3
+                && visit.visit_time.as_deref() == Some("2024-01-02T03:04:05+00:00")
+        }));
+        assert!(browser.visits.iter().any(|visit| {
+            visit.browser == "Firefox"
+                && visit.profile == "abc.default"
+                && visit.url == "https://mozilla.example/"
+        }));
+        assert!(browser.downloads.iter().any(|download| {
+            download.browser == "Edge"
+                && download.profile == "profile 1"
+                && download.target_path == "C:/Temp/edge.bin"
+                && download.total_bytes == 4096
+        }));
+
+        let email_summary = get_email_extraction_summary(&conn, 0, 20).unwrap();
+        assert_eq!(email_summary.total, 1);
+        let message = email_summary.messages.first().unwrap();
+        assert_eq!(message.from, "alice@example.com");
+        assert_eq!(
+            message.to,
+            vec![
+                "bob@example.com".to_string(),
+                "carol@example.com".to_string()
+            ]
+        );
+        assert_eq!(message.subject, "Quarterly evidence note");
+        assert_eq!(message.message_id, "<msg-1@example.com>");
+        assert_eq!(message.attachments, vec!["evidence.txt".to_string()]);
+        assert!(message
+            .body_preview
+            .contains("first line of the message body"));
+
+        let second_run = run_analysis_extraction(&conn, "case-analysis", &[], |file_id| {
+            contents
+                .get(&file_id.0)
+                .cloned()
+                .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
+                .ok_or_else(|| format!("missing bytes for {}", file_id.0))
+        })
+        .unwrap();
+        assert_eq!(second_run.scanned_count, 0);
+        assert_eq!(second_run.artifact_count, 14);
+        let artifact_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM artifacts", [], |row| row.get(0))
+            .unwrap();
+        let timeline_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(artifact_count, 14);
+        assert_eq!(timeline_count, 6);
     }
 
     #[test]

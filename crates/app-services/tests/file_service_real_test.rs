@@ -44,6 +44,45 @@ fn import_fixture_directory(tmp: &TempDir) -> app_services::active_case::ActiveC
     active
 }
 
+fn import_visibility_fixture_directory(tmp: &TempDir) -> app_services::active_case::ActiveCase {
+    let evidence_dir = tmp.path().join("visibility-evidence");
+    std::fs::create_dir_all(evidence_dir.join("visible-dir")).unwrap();
+    std::fs::create_dir_all(evidence_dir.join("System Volume Information")).unwrap();
+    std::fs::create_dir_all(evidence_dir.join("$Recycle.Bin")).unwrap();
+    std::fs::write(evidence_dir.join("visible.txt"), b"visible").unwrap();
+    std::fs::write(evidence_dir.join(".secret.txt"), b"hidden").unwrap();
+    std::fs::write(evidence_dir.join("pagefile.sys"), b"system").unwrap();
+
+    let active =
+        case_service::create_case(&tmp.path().join("cases"), "visibility", Some("tester"))
+            .unwrap();
+    let case_id = active.meta.id.clone();
+
+    active
+        .with_conn(|conn| {
+            let ds_id = domain::DataSourceId("ds-visibility".to_string());
+            DataSourceRepo::new(conn).insert(
+                &case_id,
+                &domain::DataSource {
+                    id: ds_id.clone(),
+                    name: "visibility-fixture".to_string(),
+                    kind: domain::DataSourceKind::LogicalDirectory,
+                    source_path: evidence_dir.clone(),
+                    imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
+                },
+            )?;
+
+            let fs = LogicalFsReader::open(&evidence_dir, "visibility-fixture")
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
+            Ok(())
+        })
+        .unwrap();
+
+    active
+}
+
 #[test]
 fn directory_tree_and_children_return_only_directories() {
     let tmp = TempDir::new().unwrap();
@@ -195,12 +234,104 @@ fn file_rows_and_children_are_limited_for_lazy_loading() {
                     parent_id: Some(root.id),
                     offset: 0,
                     limit: 2,
+                    show_hidden: false,
                 },
             )
             .map_err(persistence_sqlite::DbError::System)?;
             assert_eq!(first_rows.rows.len(), 2);
             assert_eq!(first_rows.total_count, 3);
             assert!(first_rows.truncated);
+
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn file_browser_visibility_respects_show_hidden_for_rows_and_tree() {
+    let tmp = TempDir::new().unwrap();
+    let active = import_visibility_fixture_directory(&tmp);
+
+    active
+        .with_conn(|conn| {
+            let root = file_service::get_file_tree_real_with_visibility(conn, false)
+                .map_err(persistence_sqlite::DbError::System)?
+                .pop()
+                .unwrap();
+
+            let visible_tree = file_service::get_file_children_lazy_with_visibility(
+                conn, &root.id, 0, 50, false,
+            )
+            .map_err(persistence_sqlite::DbError::System)?;
+            let visible_tree_names: Vec<&str> = visible_tree
+                .children
+                .iter()
+                .map(|node| node.name.as_str())
+                .collect();
+            assert_eq!(visible_tree_names, vec!["visible-dir"]);
+
+            let visible_rows = file_service::get_file_rows_for_request(
+                conn,
+                &GetFileRowsRequest {
+                    parent_id: Some(root.id.clone()),
+                    offset: 0,
+                    limit: 50,
+                    show_hidden: false,
+                },
+            )
+            .map_err(persistence_sqlite::DbError::System)?;
+            let visible_row_names: Vec<&str> =
+                visible_rows.rows.iter().map(|row| row.name.as_str()).collect();
+            assert_eq!(visible_row_names, vec!["visible-dir", "visible.txt"]);
+            assert!(!visible_rows.rows.iter().any(|row| row.hidden || row.system));
+
+            let all_tree = file_service::get_file_children_lazy_with_visibility(
+                conn, &root.id, 0, 50, true,
+            )
+            .map_err(persistence_sqlite::DbError::System)?;
+            let svi = all_tree
+                .children
+                .iter()
+                .find(|node| node.name == "System Volume Information")
+                .expect("show_hidden=true should surface System Volume Information");
+            assert!(svi.hidden);
+            assert!(svi.system);
+
+            let recycle_bin = all_tree
+                .children
+                .iter()
+                .find(|node| node.name == "$Recycle.Bin")
+                .expect("show_hidden=true should surface $Recycle.Bin");
+            assert!(recycle_bin.hidden);
+            assert!(recycle_bin.system);
+
+            let all_rows = file_service::get_file_rows_for_request(
+                conn,
+                &GetFileRowsRequest {
+                    parent_id: Some(root.id),
+                    offset: 0,
+                    limit: 50,
+                    show_hidden: true,
+                },
+            )
+            .map_err(persistence_sqlite::DbError::System)?;
+            assert!(all_rows.total_count > visible_rows.total_count);
+
+            let hidden_file = all_rows
+                .rows
+                .iter()
+                .find(|row| row.name == ".secret.txt")
+                .expect("show_hidden=true should surface dot-hidden files");
+            assert!(hidden_file.hidden);
+            assert!(!hidden_file.system);
+
+            let system_file = all_rows
+                .rows
+                .iter()
+                .find(|row| row.name == "pagefile.sys")
+                .expect("show_hidden=true should surface inferred system files");
+            assert!(system_file.hidden);
+            assert!(system_file.system);
 
             Ok(())
         })

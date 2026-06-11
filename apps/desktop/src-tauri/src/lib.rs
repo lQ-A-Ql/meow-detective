@@ -5,8 +5,10 @@ pub mod state;
 
 use commands::{
     analysis_commands::{
-        classify_files, generate_analysis_summary, get_evidence_classification_summary,
-        get_system_info, run_evidence_classification,
+        classify_files, generate_analysis_summary, get_browser_history_summary,
+        get_email_extraction_summary, get_evidence_classification_summary,
+        get_registry_extraction_summary, get_system_info, run_analysis_extraction,
+        run_evidence_classification,
     },
     artifact_commands::{
         get_artifact_families, get_artifact_family_counts, get_artifact_rows,
@@ -19,8 +21,9 @@ use commands::{
     },
     file_commands::{
         extract_file, get_file_children, get_file_children_request, get_file_rows,
-        get_file_rows_request, get_file_tree, get_image_preview, get_media_url, get_text_preview,
-        open_file_handle, open_file_handle_request, read_file_range, read_media_range,
+        get_file_rows_request, get_file_tree, get_file_tree_request, get_image_preview,
+        get_media_url, get_text_preview, open_file_handle, open_file_handle_request,
+        read_file_range, read_media_range,
     },
     import::pipeline::{cancel_import, import_data_source},
     job_commands::{get_jobs_snapshot, get_trace_items, get_warnings},
@@ -63,6 +66,7 @@ pub fn run() {
             get_file_children,
             get_file_children_request,
             get_file_tree,
+            get_file_tree_request,
             get_file_rows,
             get_file_rows_request,
             open_file_handle,
@@ -92,6 +96,10 @@ pub fn run() {
             classify_files,
             get_evidence_classification_summary,
             run_evidence_classification,
+            run_analysis_extraction,
+            get_registry_extraction_summary,
+            get_browser_history_summary,
+            get_email_extraction_summary,
             generate_analysis_summary,
             get_warnings,
             get_trace_items,

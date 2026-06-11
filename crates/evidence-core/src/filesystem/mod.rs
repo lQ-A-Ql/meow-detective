@@ -10,6 +10,8 @@ pub struct FsNode {
     pub path: String,
     pub is_dir: bool,
     pub size: u64,
+    pub hidden: bool,
+    pub system: bool,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
     pub modified_at: Option<chrono::DateTime<chrono::Utc>>,
     pub accessed_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -36,11 +38,37 @@ pub fn fs_node(
     modified_at: Option<chrono::DateTime<chrono::Utc>>,
     accessed_at: Option<chrono::DateTime<chrono::Utc>>,
 ) -> FsNode {
+    fs_node_with_attributes(
+        name,
+        is_dir,
+        size,
+        false,
+        false,
+        created_at,
+        modified_at,
+        accessed_at,
+    )
+}
+
+/// Build a filesystem node with explicit DOS/Windows-style hidden/system flags.
+#[allow(clippy::too_many_arguments)]
+pub fn fs_node_with_attributes(
+    name: impl Into<String>,
+    is_dir: bool,
+    size: u64,
+    hidden: bool,
+    system: bool,
+    created_at: Option<chrono::DateTime<chrono::Utc>>,
+    modified_at: Option<chrono::DateTime<chrono::Utc>>,
+    accessed_at: Option<chrono::DateTime<chrono::Utc>>,
+) -> FsNode {
     FsNode {
         name: name.into(),
         path: String::new(),
         is_dir,
         size,
+        hidden,
+        system,
         created_at,
         modified_at,
         accessed_at,
@@ -232,6 +260,8 @@ mod tests {
             path: String::new(),
             is_dir: false,
             size: 42,
+            hidden: false,
+            system: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,
@@ -254,6 +284,8 @@ mod tests {
                 path: String::new(),
                 is_dir: false,
                 size: 1,
+                hidden: false,
+                system: false,
                 created_at: None,
                 modified_at: None,
                 accessed_at: None,
@@ -263,6 +295,8 @@ mod tests {
                 path: String::new(),
                 is_dir: true,
                 size: 0,
+                hidden: false,
+                system: false,
                 created_at: None,
                 modified_at: None,
                 accessed_at: None,

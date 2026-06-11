@@ -11,12 +11,16 @@ import {
 } from '@/types/models';
 import { apiClient } from './client';
 
-export async function getFileTree() {
-  return apiClient.request('get_file_tree', () => apiClient.getMockProvider().getFileTree());
+export async function getFileTree(showHidden = false) {
+  return apiClient.request(
+    'get_file_tree_request',
+    () => apiClient.getMockProvider().getFileTree(showHidden),
+    { request: { showHidden } },
+  );
 }
 
-export async function getFileRows(parentId?: string) {
-  const rows = await getFileRowsPage(parentId);
+export async function getFileRows(parentId?: string, showHidden = false) {
+  const rows = await getFileRowsPage(parentId, 0, 500, showHidden);
   return rows.rows;
 }
 
@@ -24,11 +28,12 @@ export async function getFileRowsPage(
   parentId?: string,
   offset = 0,
   limit = 500,
+  showHidden = false,
 ): Promise<FileRowsPage> {
   return apiClient.request(
     'get_file_rows_request',
     async () => {
-      const rows = await apiClient.getMockProvider().getFileRows(parentId);
+      const rows = await apiClient.getMockProvider().getFileRows(parentId, showHidden);
       return {
         rows: rows.slice(offset, offset + limit),
         totalCount: rows.length,
@@ -37,7 +42,7 @@ export async function getFileRowsPage(
         truncated: offset + limit < rows.length,
       };
     },
-    { request: { parentId: parentId ?? null, offset, limit } },
+    { request: { parentId: parentId ?? null, offset, limit, showHidden } },
   );
 }
 
@@ -46,8 +51,8 @@ export async function importDataSource(sourcePath: string) {
     apiClient.getMockProvider().importDataSource(sourcePath), { request: { sourcePath } });
 }
 
-export async function getFileChildren(parentId: string): Promise<FileTreeNode[]> {
-  const page = await getFileChildrenPage(parentId);
+export async function getFileChildren(parentId: string, showHidden = false): Promise<FileTreeNode[]> {
+  const page = await getFileChildrenPage(parentId, 0, 500, showHidden);
   return page.children;
 }
 
@@ -55,15 +60,16 @@ export async function getFileChildrenPage(
   parentId: string,
   offset = 0,
   limit = 500,
+  showHidden = false,
 ): Promise<FileChildrenPage> {
   return apiClient.request('get_file_children_request', () =>
-    apiClient.getMockProvider().getFileChildren(parentId).then((children) => ({
+    apiClient.getMockProvider().getFileChildren(parentId, showHidden).then((children) => ({
       children: children.slice(offset, offset + limit),
       totalCount: children.length,
       offset,
       limit,
       truncated: offset + limit < children.length,
-    })), { request: { parentId, offset, limit } });
+    })), { request: { parentId, offset, limit, showHidden } });
 }
 
 export async function openFileHandle(fileId: string) {

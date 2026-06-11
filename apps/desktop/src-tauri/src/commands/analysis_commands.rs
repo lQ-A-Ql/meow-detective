@@ -3,8 +3,15 @@
 use app_services::{analysis_service, file_service};
 use tauri::State;
 use transport::{
-    commands::{ClassifyFilesRequest, RunEvidenceClassificationRequest},
-    dto::{AnalysisFileClassificationDto, AnalysisSystemInfoDto, EvidenceClassificationSummaryDto},
+    commands::{
+        ClassifyFilesRequest, GetAnalysisExtractionRequest, RunAnalysisExtractionRequest,
+        RunEvidenceClassificationRequest,
+    },
+    dto::{
+        AnalysisExtractionRunDto, AnalysisFileClassificationDto, AnalysisSystemInfoDto,
+        BrowserHistorySummaryDto, EmailExtractionSummaryDto, EvidenceClassificationSummaryDto,
+        RegistryExtractionSummaryDto,
+    },
     CommandError,
 };
 
@@ -138,6 +145,127 @@ pub async fn run_evidence_classification(
         )
         .map_err(CommandError::from_service_error)?;
         analysis_service::get_evidence_classification_summary(&conn)
+            .map_err(CommandError::from_service_error)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+/// Run v1 structured extraction for Registry, browser history, and email evidence.
+#[tauri::command]
+pub async fn run_analysis_extraction(
+    state: State<'_, AppState>,
+    request: RunAnalysisExtractionRequest,
+) -> Result<AnalysisExtractionRunDto, CommandError> {
+    let app_state = state.inner().clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let (case_id, db_path) = {
+            let guard = app_state
+                .active_case
+                .lock()
+                .map_err(|e| CommandError::from_lock_error("Case", e))?;
+            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
+            (active.meta.id.0.clone(), active.db_path())
+        };
+
+        let conn = persistence_sqlite::open_or_create(&db_path)
+            .map_err(CommandError::from_service_error)?;
+        let categories = request
+            .categories
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        analysis_service::run_analysis_extraction(&conn, &case_id, &categories, |file_id| {
+            file_service::open_file_content_by_id(&conn, file_id)
+        })
+        .map_err(CommandError::from_service_error)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+/// Get Registry key/value extraction summary.
+#[tauri::command]
+pub async fn get_registry_extraction_summary(
+    state: State<'_, AppState>,
+    request: Option<GetAnalysisExtractionRequest>,
+) -> Result<RegistryExtractionSummaryDto, CommandError> {
+    let app_state = state.inner().clone();
+    let mut req = request.unwrap_or_default();
+    req.validate().map_err(CommandError::invalid_input)?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let db_path = {
+            let guard = app_state
+                .active_case
+                .lock()
+                .map_err(|e| CommandError::from_lock_error("Case", e))?;
+            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
+            active.db_path()
+        };
+
+        let conn = persistence_sqlite::open_or_create(&db_path)
+            .map_err(CommandError::from_service_error)?;
+        analysis_service::get_registry_extraction_summary(&conn, req.offset, req.limit)
+            .map_err(CommandError::from_service_error)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+/// Get browser history/download extraction summary.
+#[tauri::command]
+pub async fn get_browser_history_summary(
+    state: State<'_, AppState>,
+    request: Option<GetAnalysisExtractionRequest>,
+) -> Result<BrowserHistorySummaryDto, CommandError> {
+    let app_state = state.inner().clone();
+    let mut req = request.unwrap_or_default();
+    req.validate().map_err(CommandError::invalid_input)?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let db_path = {
+            let guard = app_state
+                .active_case
+                .lock()
+                .map_err(|e| CommandError::from_lock_error("Case", e))?;
+            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
+            active.db_path()
+        };
+
+        let conn = persistence_sqlite::open_or_create(&db_path)
+            .map_err(CommandError::from_service_error)?;
+        analysis_service::get_browser_history_summary(&conn, req.offset, req.limit)
+            .map_err(CommandError::from_service_error)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+/// Get EML/EMLX extraction summary.
+#[tauri::command]
+pub async fn get_email_extraction_summary(
+    state: State<'_, AppState>,
+    request: Option<GetAnalysisExtractionRequest>,
+) -> Result<EmailExtractionSummaryDto, CommandError> {
+    let app_state = state.inner().clone();
+    let mut req = request.unwrap_or_default();
+    req.validate().map_err(CommandError::invalid_input)?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let db_path = {
+            let guard = app_state
+                .active_case
+                .lock()
+                .map_err(|e| CommandError::from_lock_error("Case", e))?;
+            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
+            active.db_path()
+        };
+
+        let conn = persistence_sqlite::open_or_create(&db_path)
+            .map_err(CommandError::from_service_error)?;
+        analysis_service::get_email_extraction_summary(&conn, req.offset, req.limit)
             .map_err(CommandError::from_service_error)
     })
     .await

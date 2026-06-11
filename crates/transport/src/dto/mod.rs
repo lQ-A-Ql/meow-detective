@@ -11,10 +11,12 @@ pub mod timeline;
 pub mod viewer;
 
 pub use analysis::{
-    AnalysisBootRecordDto, AnalysisClassifiedFileDto, AnalysisFieldProvenanceDto,
-    AnalysisFileClassificationDto, AnalysisNetworkAdapterDto, AnalysisParseStatusDto,
-    AnalysisProvenanceDto, AnalysisSystemInfoDto, EvidenceCategoryDto,
-    EvidenceClassificationSummaryDto, EvidenceClassificationTotalsDto, EvidenceSourceDto,
+    AnalysisBootRecordDto, AnalysisClassifiedFileDto, AnalysisExtractionRunDto,
+    AnalysisFieldProvenanceDto, AnalysisFileClassificationDto, AnalysisNetworkAdapterDto,
+    AnalysisParseStatusDto, AnalysisProvenanceDto, AnalysisSystemInfoDto, BrowserDownloadDto,
+    BrowserHistorySummaryDto, BrowserVisitDto, EmailExtractionSummaryDto, EmailMessageDto,
+    EvidenceCategoryDto, EvidenceClassificationSummaryDto, EvidenceClassificationTotalsDto,
+    EvidenceSourceDto, RegistryExtractionSummaryDto, RegistryValueDto,
 };
 pub use artifacts::{ArtifactRowDto, FamilyCountDto};
 pub use case::{

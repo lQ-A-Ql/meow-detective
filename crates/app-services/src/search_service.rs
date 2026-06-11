@@ -60,10 +60,11 @@ pub fn index_files(
 
             if let Some(reader) = reader_fn(&entry.id) {
                 let text = extract_text(reader, &entry.id.0, mime);
-                if text.extractable {
-                    texts.push(text);
-                    paths.push((entry.id.0.clone(), entry.path.clone()));
+                if !text.extractable {
+                    skipped_count += 1;
                 }
+                texts.push(text);
+                paths.push((entry.id.0.clone(), entry.path.clone()));
             } else {
                 warning_count += 1;
                 skipped_count += 1;
@@ -262,6 +263,10 @@ mod tests {
             "../../persistence-sqlite/src/migrations/scripts/0003_file_entries.sql"
         ))
         .unwrap();
+        conn.execute_batch(include_str!(
+            "../../persistence-sqlite/src/migrations/scripts/0022_file_entry_visibility_flags.sql"
+        ))
+        .unwrap();
         conn.execute(
             "INSERT INTO cases (id, name, created_at, updated_at)
              VALUES ('case-1', 'Case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
@@ -290,6 +295,8 @@ mod tests {
                 size: Some(32),
                 ext: Some("txt".to_string()),
                 deleted: false,
+                hidden: false,
+                system: false,
                 created_at: None,
                 modified_at: None,
                 accessed_at: None,

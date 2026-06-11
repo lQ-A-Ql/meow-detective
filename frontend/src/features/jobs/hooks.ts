@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { getJobsSnapshot, getTraceItems, getWarnings } from '@/lib/api/jobs';
+import { invalidatePostJobProjectionQueries } from '@/features/cache-invalidation';
 import type { JobSnapshot } from '@/types/models';
 
 const JOB_POLL_INTERVAL_MS = 1500;
@@ -9,15 +10,6 @@ const runningJobIds = new Set<string>();
 const refreshedSettledJobIds = new Set<string>();
 let handoffBaselineJobIds = new Set<string>();
 let pollJobsUntil = 0;
-
-const postJobRefreshKeys = [
-  ['case'],
-  ['timeline'],
-  ['artifacts'],
-  ['search'],
-  ['jobs', 'warnings'],
-  ['jobs', 'trace'],
-] as const;
 
 function hasRunningJobs(jobs?: JobSnapshot[]) {
   return jobs?.some((job) => job.status === 'running') ?? false;
@@ -36,9 +28,7 @@ export function expectJobsSnapshotActivity(baselineJobs?: JobSnapshot[], windowM
 }
 
 function invalidatePostJobQueries(queryClient: QueryClient) {
-  postJobRefreshKeys.forEach((queryKey) => {
-    queryClient.invalidateQueries({ queryKey });
-  });
+  invalidatePostJobProjectionQueries(queryClient);
 }
 
 function refreshWhenObservedJobsSettle(queryClient: QueryClient, jobs?: JobSnapshot[]) {

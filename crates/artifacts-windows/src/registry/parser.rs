@@ -134,12 +134,15 @@ impl ArtifactExtractor for RegistryExtractor {
         let normalized = file_path.replace('\\', "/").to_ascii_lowercase();
         let name = normalized.rsplit('/').next().unwrap_or(&normalized);
         if name.ends_with(".dat") {
-            return name.contains("ntuser")
-                || name.contains("usrclass")
-                || name.contains("system")
-                || name.contains("software")
-                || name.contains("sam")
-                || name.contains("security");
+            return matches!(
+                name,
+                "ntuser.dat"
+                    | "usrclass.dat"
+                    | "system.dat"
+                    | "software.dat"
+                    | "sam.dat"
+                    | "security.dat"
+            );
         }
         let components: Vec<_> = normalized
             .split('/')
@@ -175,6 +178,7 @@ impl ArtifactExtractor for RegistryExtractor {
         let mut attrs = BTreeMap::new();
         attrs.insert("hive_name".into(), serde_json::Value::String(name.clone()));
 
+        let mut timeline_events = 0;
         if let Some(dt) = Self::filetime_to_dt(hive.last_written) {
             if dt.year() > 2000 {
                 attrs.insert(
@@ -190,6 +194,7 @@ impl ArtifactExtractor for RegistryExtractor {
                     BTreeMap::new(),
                 );
                 sink.write_timeline_event(ev);
+                timeline_events += 1;
             }
         }
 
@@ -204,7 +209,7 @@ impl ArtifactExtractor for RegistryExtractor {
 
         Ok(ExtractorReport {
             artifacts_found: 1,
-            timeline_events: 1,
+            timeline_events,
             errors: vec![],
         })
     }

@@ -84,6 +84,8 @@ mod tests {
             size: Some(1024),
             ext: Some("txt".to_string()),
             deleted: false,
+            hidden: false,
+            system: false,
             created_at: Some(Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap()),
             modified_at: Some(Utc.with_ymd_and_hms(2024, 1, 2, 0, 0, 0).unwrap()),
             accessed_at: Some(Utc.with_ymd_and_hms(2024, 1, 3, 0, 0, 0).unwrap()),

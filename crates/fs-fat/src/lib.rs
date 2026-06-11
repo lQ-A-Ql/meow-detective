@@ -1,5 +1,5 @@
 use evidence_core::filesystem::{
-    child_nodes_with_parent_path, file_not_found, fs_node_without_timestamps, invalid_fs_data,
+    child_nodes_with_parent_path, file_not_found, fs_node_with_attributes, invalid_fs_data,
     is_special_directory_name, path_components, path_is_directory, root_node,
     truncate_data_to_declared_size, FileSystemReader, FsNode,
 };
@@ -18,6 +18,7 @@ pub struct FatReader {
     first_data_sector: u32,
     cluster_size: u64,
     fat_type: FatType,
+    cluster_count: u32,
     root_cluster: u32,
     volume_offset: u64,
 }
@@ -97,6 +98,7 @@ impl FatReader {
             first_data_sector,
             cluster_size,
             fat_type,
+            cluster_count,
             root_cluster,
             volume_offset: offset,
         })
@@ -111,6 +113,33 @@ impl FatReader {
             + (self.first_data_sector as u64
                 + (cluster as u64 - 2) * self.sectors_per_cluster as u64)
                 * self.bytes_per_sector as u64
+    }
+
+    fn max_cluster(&self) -> u32 {
+        self.cluster_count.saturating_add(1)
+    }
+
+    fn validate_data_cluster(&self, cluster: u32) -> io::Result<()> {
+        if cluster < 2 || cluster > self.max_cluster() {
+            return Err(invalid_fs_data(format!(
+                "cluster {} out of range 2..={}",
+                cluster,
+                self.max_cluster()
+            )));
+        }
+        Ok(())
+    }
+
+    fn is_free_cluster(&self, cluster: u32) -> bool {
+        cluster == 0
+    }
+
+    fn is_bad_cluster(&self, cluster: u32) -> bool {
+        match self.fat_type {
+            FatType::Fat12 => cluster == 0x0FF7,
+            FatType::Fat16 => cluster == 0xFFF7,
+            FatType::Fat32 => cluster == 0x0FFF_FFF7,
+        }
     }
 
     fn read_fat_entry(&self, cluster: u32) -> io::Result<u32> {
@@ -164,10 +193,22 @@ impl FatReader {
     }
 
     fn walk_cluster_chain(&self, start_cluster: u32) -> io::Result<Vec<u8>> {
+        self.validate_data_cluster(start_cluster)?;
+
         let mut data = Vec::new();
         let mut cluster = start_cluster;
+        let mut visited = std::collections::HashSet::new();
 
-        while cluster >= 2 && !self.is_eoc(cluster) {
+        while !self.is_eoc(cluster) {
+            self.validate_data_cluster(cluster)?;
+
+            if !visited.insert(cluster) {
+                return Err(invalid_fs_data(format!(
+                    "cycle detected in cluster chain at cluster {}",
+                    cluster
+                )));
+            }
+
             let offset = self.cluster_to_offset(cluster);
             let size = self.cluster_size as usize;
             let start = data.len();
@@ -177,7 +218,33 @@ impl FatReader {
                 reader.seek(SeekFrom::Start(offset))?;
                 reader.read_exact(&mut data[start..])?;
             }
-            cluster = self.read_fat_entry(cluster)?;
+
+            let next = self.read_fat_entry(cluster)?;
+            if self.is_free_cluster(next) {
+                return Err(invalid_fs_data(format!(
+                    "unexpected free cluster {} in chain starting at {}",
+                    cluster, start_cluster
+                )));
+            }
+            if self.is_bad_cluster(next) {
+                return Err(invalid_fs_data(format!(
+                    "bad cluster marker in chain starting at {} after cluster {}",
+                    start_cluster, cluster
+                )));
+            }
+            if !self.is_eoc(next) && visited.contains(&next) {
+                return Err(invalid_fs_data(format!(
+                    "cycle detected in cluster chain: cluster {} points to already-visited cluster {}",
+                    cluster, next
+                )));
+            }
+            if visited.len() > self.cluster_count as usize {
+                return Err(invalid_fs_data(format!(
+                    "cluster chain exceeds declared cluster count ({})",
+                    self.cluster_count
+                )));
+            }
+            cluster = next;
         }
 
         Ok(data)
@@ -370,7 +437,16 @@ impl FatReader {
             let is_dir = attr & 0x10 != 0;
             let size = u32::from_le_bytes(entry[28..32].try_into().unwrap_or([0; 4])) as u64;
 
-            nodes.push(fs_node_without_timestamps(name, is_dir, size));
+            nodes.push(fs_node_with_attributes(
+                name,
+                is_dir,
+                size,
+                attr & 0x02 != 0,
+                attr & 0x04 != 0,
+                None,
+                None,
+                None,
+            ));
 
             i += 32;
         }
@@ -401,6 +477,9 @@ impl FileSystemReader for FatReader {
     fn open_file(&self, path: &str) -> io::Result<Box<dyn Read>> {
         match self.resolve_path_cluster(path)? {
             Some((cluster, false, size)) => {
+                if size == 0 {
+                    return Ok(Box::new(io::Cursor::new(Vec::new())));
+                }
                 let data = truncate_data_to_declared_size(self.walk_cluster_chain(cluster)?, size);
                 Ok(Box::new(io::Cursor::new(data)))
             }

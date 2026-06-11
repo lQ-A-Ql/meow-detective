@@ -5,7 +5,7 @@ use tantivy::{
     doc,
     query::QueryParser,
     schema::{Schema, Value, STORED, STRING, TEXT},
-    Index, IndexWriter, ReloadPolicy, TantivyDocument,
+    Index, IndexWriter, ReloadPolicy, TantivyDocument, Term,
 };
 use thiserror::Error;
 
@@ -83,13 +83,15 @@ impl SearchIndex {
 
         let mut count = 0u64;
         for text in texts {
-            if !text.extractable || text.content.is_empty() {
-                continue;
-            }
             let (file_id, path) = path_map
                 .get(text.file_id.as_str())
                 .copied()
                 .unwrap_or((&text.file_id, ""));
+            writer.delete_term(Term::from_field_text(file_id_field, file_id));
+
+            if !text.extractable || text.content.is_empty() {
+                continue;
+            }
 
             let name = std::path::Path::new(path)
                 .file_name()
@@ -205,4 +207,250 @@ pub struct SearchSnippet {
 pub struct SearchHighlight {
     pub start: u32,
     pub end: u32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::extractor::ExtractedText;
+    use tempfile::tempdir;
+
+    fn sample_extracted_texts() -> Vec<ExtractedText> {
+        vec![
+            ExtractedText {
+                file_id: "f1".to_string(),
+                content: "The quick brown fox jumps over the lazy dog".to_string(),
+                encoding: "utf-8".to_string(),
+                extractable: true,
+                byte_count: 43,
+            },
+            ExtractedText {
+                file_id: "f2".to_string(),
+                content: "Rust is a systems programming language".to_string(),
+                encoding: "utf-8".to_string(),
+                extractable: true,
+                byte_count: 39,
+            },
+            ExtractedText {
+                file_id: "f3".to_string(),
+                content: "Binary file cannot be extracted".to_string(),
+                encoding: "utf-8".to_string(),
+                extractable: true,
+                byte_count: 32,
+            },
+        ]
+    }
+
+    fn sample_paths() -> Vec<(String, String)> {
+        vec![
+            ("f1".to_string(), "/evidence/doc1.txt".to_string()),
+            ("f2".to_string(), "/evidence/doc2.rs".to_string()),
+            ("f3".to_string(), "/evidence/doc3.bin".to_string()),
+        ]
+    }
+
+    #[test]
+    fn create_search_index_creates_directory() {
+        let dir = tempdir().unwrap();
+        let index_path = dir.path().join("test_index");
+        let result = SearchIndex::create(&index_path);
+        assert!(result.is_ok());
+        assert!(index_path.exists());
+    }
+
+    #[test]
+    fn index_documents_returns_count() {
+        let dir = tempdir().unwrap();
+        let index_path = dir.path().join("test_index");
+        let index = SearchIndex::create(&index_path).unwrap();
+        let count = index
+            .index_documents(&sample_extracted_texts(), &sample_paths())
+            .unwrap();
+        assert_eq!(count, 3);
+    }
+
+    #[test]
+    fn search_finds_indexed_document() {
+        let dir = tempdir().unwrap();
+        let index_path = dir.path().join("test_index");
+        let index = SearchIndex::create(&index_path).unwrap();
+        index
+            .index_documents(&sample_extracted_texts(), &sample_paths())
+            .unwrap();
+
+        let result = index.search("rust", 10).unwrap();
+        assert_eq!(result.total_count, 1);
+        assert_eq!(result.hits.len(), 1);
+        assert_eq!(result.hits[0].file_id, "f2");
+        assert!(result.hits[0].path.contains("doc2.rs"));
+    }
+
+    #[test]
+    fn search_returns_snippets_with_highlights() {
+        let dir = tempdir().unwrap();
+        let index_path = dir.path().join("test_index");
+        let index = SearchIndex::create(&index_path).unwrap();
+        index
+            .index_documents(&sample_extracted_texts(), &sample_paths())
+            .unwrap();
+
+        let result = index.search("fox", 10).unwrap();
+        assert_eq!(result.total_count, 1);
+        assert!(!result.hits[0].snippets.is_empty());
+        assert!(result.hits[0].snippets[0].text.contains("fox"));
+    }
+
+    #[test]
+    fn search_no_results() {
+        let dir = tempdir().unwrap();
+        let index_path = dir.path().join("test_index");
+        let index = SearchIndex::create(&index_path).unwrap();
+        index
+            .index_documents(&sample_extracted_texts(), &sample_paths())
+            .unwrap();
+
+        let result = index.search("nonexistent", 10).unwrap();
+        assert_eq!(result.total_count, 0);
+        assert!(result.hits.is_empty());
+    }
+
+    #[test]
+    fn search_respects_limit() {
+        let dir = tempdir().unwrap();
+        let index_path = dir.path().join("test_index");
+        let index = SearchIndex::create(&index_path).unwrap();
+
+        let texts: Vec<ExtractedText> = (0..20)
+            .map(|i| ExtractedText {
+                file_id: format!("f{i}"),
+                content: format!("document number {i} with test content"),
+                encoding: "utf-8".to_string(),
+                extractable: true,
+                byte_count: 50,
+            })
+            .collect();
+        let paths: Vec<(String, String)> = (0..20)
+            .map(|i| (format!("f{i}"), format!("/docs/doc{i}.txt")))
+            .collect();
+
+        index.index_documents(&texts, &paths).unwrap();
+        let result = index.search("test", 5).unwrap();
+        assert!(result.hits.len() <= 5);
+    }
+
+    #[test]
+    fn index_documents_skips_non_extractable() {
+        let dir = tempdir().unwrap();
+        let index_path = dir.path().join("test_index");
+        let index = SearchIndex::create(&index_path).unwrap();
+
+        let texts = vec![
+            ExtractedText {
+                file_id: "f1".to_string(),
+                content: "extractable content".to_string(),
+                encoding: "utf-8".to_string(),
+                extractable: true,
+                byte_count: 19,
+            },
+            ExtractedText {
+                file_id: "f2".to_string(),
+                content: String::new(),
+                encoding: "binary".to_string(),
+                extractable: false,
+                byte_count: 0,
+            },
+        ];
+        let paths = vec![
+            ("f1".to_string(), "/file1.txt".to_string()),
+            ("f2".to_string(), "/file2.bin".to_string()),
+        ];
+
+        let count = index.index_documents(&texts, &paths).unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn index_documents_skips_empty_content() {
+        let dir = tempdir().unwrap();
+        let index_path = dir.path().join("test_index");
+        let index = SearchIndex::create(&index_path).unwrap();
+
+        let texts = vec![ExtractedText {
+            file_id: "f1".to_string(),
+            content: String::new(),
+            encoding: "utf-8".to_string(),
+            extractable: true,
+            byte_count: 0,
+        }];
+        let paths = vec![("f1".to_string(), "/file1.txt".to_string())];
+
+        let count = index.index_documents(&texts, &paths).unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn open_existing_index() {
+        let dir = tempdir().unwrap();
+        let index_path = dir.path().join("test_index");
+        {
+            let index = SearchIndex::create(&index_path).unwrap();
+            index
+                .index_documents(&sample_extracted_texts(), &sample_paths())
+                .unwrap();
+        }
+        // Reopen the index
+        let index = SearchIndex::open(&index_path).unwrap();
+        let result = index.search("rust", 10).unwrap();
+        assert_eq!(result.total_count, 1);
+    }
+
+    #[test]
+    fn search_score_is_positive() {
+        let dir = tempdir().unwrap();
+        let index_path = dir.path().join("test_index");
+        let index = SearchIndex::create(&index_path).unwrap();
+        index
+            .index_documents(&sample_extracted_texts(), &sample_paths())
+            .unwrap();
+
+        let result = index.search("fox", 10).unwrap();
+        assert!(result.hits[0].score > 0.0);
+    }
+
+    #[test]
+    fn index_documents_replaces_existing() {
+        let dir = tempdir().unwrap();
+        let index_path = dir.path().join("test_index");
+        let index = SearchIndex::create(&index_path).unwrap();
+
+        // Index original
+        let texts1 = vec![ExtractedText {
+            file_id: "f1".to_string(),
+            content: "original content".to_string(),
+            encoding: "utf-8".to_string(),
+            extractable: true,
+            byte_count: 16,
+        }];
+        let paths1 = vec![("f1".to_string(), "/file1.txt".to_string())];
+        index.index_documents(&texts1, &paths1).unwrap();
+
+        // Re-index same file_id with new content
+        let texts2 = vec![ExtractedText {
+            file_id: "f1".to_string(),
+            content: "updated content".to_string(),
+            encoding: "utf-8".to_string(),
+            extractable: true,
+            byte_count: 16,
+        }];
+        let paths2 = vec![("f1".to_string(), "/file1.txt".to_string())];
+        index.index_documents(&texts2, &paths2).unwrap();
+
+        // Search for old content should return nothing
+        let result = index.search("original", 10).unwrap();
+        assert_eq!(result.total_count, 0);
+
+        // Search for new content should return 1
+        let result = index.search("updated", 10).unwrap();
+        assert_eq!(result.total_count, 1);
+    }
 }

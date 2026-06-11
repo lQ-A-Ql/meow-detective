@@ -1,5 +1,7 @@
 use app_services::active_case::ActiveCase;
-use mcp_client::{McpClient, McpConfig, McpServerConfig};
+use mcp_client::{
+    validate_mcp_config, validate_mcp_server_config, McpClient, McpConfig, McpServerConfig,
+};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use std::collections::HashMap;
@@ -86,6 +88,15 @@ impl AppState {
     pub fn get_connection(
         &self,
     ) -> Result<r2d2::PooledConnection<SqliteConnectionManager>, String> {
+        let active_guard = self
+            .active_case
+            .lock()
+            .map_err(|e| format!("Lock poisoned: {}", e))?;
+        if active_guard.is_none() {
+            return Err("No active case — open or create a case first".to_string());
+        }
+        drop(active_guard);
+
         let guard = self
             .db_pool
             .lock()
@@ -117,8 +128,9 @@ impl AppState {
         let content = std::fs::read_to_string(&self.mcp_config_path)
             .map_err(|e| format!("Failed to read MCP config: {}", e))?;
 
-        let config: McpConfig = serde_json::from_str(&content)
+        let mut config: McpConfig = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse MCP config: {}", e))?;
+        validate_mcp_config(&mut config).map_err(|e| format!("Invalid MCP config: {}", e))?;
 
         let mut guard = self
             .mcp_config
@@ -132,10 +144,14 @@ impl AppState {
 
     /// Save MCP configuration to file.
     pub fn save_mcp_config(&self) -> Result<(), String> {
-        let guard = self
-            .mcp_config
-            .lock()
-            .map_err(|e| format!("Lock poisoned: {}", e))?;
+        let mut config = {
+            let guard = self
+                .mcp_config
+                .lock()
+                .map_err(|e| format!("Lock poisoned: {}", e))?;
+            guard.clone()
+        };
+        validate_mcp_config(&mut config).map_err(|e| format!("Invalid MCP config: {}", e))?;
 
         // Create config directory if it doesn't exist
         if let Some(parent) = self.mcp_config_path.parent() {
@@ -143,18 +159,29 @@ impl AppState {
                 .map_err(|e| format!("Failed to create config directory: {}", e))?;
         }
 
-        let content = serde_json::to_string_pretty(&*guard)
+        let content = serde_json::to_string_pretty(&config)
             .map_err(|e| format!("Failed to serialize MCP config: {}", e))?;
 
         std::fs::write(&self.mcp_config_path, content)
             .map_err(|e| format!("Failed to write MCP config: {}", e))?;
+
+        {
+            let mut guard = self
+                .mcp_config
+                .lock()
+                .map_err(|e| format!("Lock poisoned: {}", e))?;
+            *guard = config;
+        }
 
         info!("MCP config saved to {:?}", self.mcp_config_path);
         Ok(())
     }
 
     /// Add an MCP server.
-    pub fn add_mcp_server(&self, config: McpServerConfig) -> Result<(), String> {
+    pub fn add_mcp_server(&self, mut config: McpServerConfig) -> Result<(), String> {
+        validate_mcp_server_config(&mut config)
+            .map_err(|e| format!("Invalid MCP server: {}", e))?;
+
         let mut guard = self
             .mcp_config
             .lock()
@@ -202,7 +229,7 @@ impl AppState {
             id: server_id.to_string(),
             name: client.config().name.clone(),
             connected: client.is_connected(),
-            capabilities: mcp_client::McpCapabilities::default(),
+            capabilities: client.capabilities().cloned().unwrap_or_default(),
             last_error: None,
         })
     }

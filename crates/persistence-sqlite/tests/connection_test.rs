@@ -174,6 +174,8 @@ fn upgrades_legacy_schema_to_latest_with_partition_job_columns() {
             size INTEGER,
             ext TEXT,
             deleted INTEGER NOT NULL DEFAULT 0,
+            hidden INTEGER NOT NULL DEFAULT 0,
+            system INTEGER NOT NULL DEFAULT 0,
             created_at TEXT,
             modified_at TEXT,
             accessed_at TEXT,

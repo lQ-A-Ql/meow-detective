@@ -205,10 +205,12 @@ pub fn open_enum_staging(
     partition_index: usize,
 ) -> DbResult<Connection> {
     let path = existing_enum_staging_db_path(case_root, data_source_id, partition_index);
-    open_staging_with_schema(
+    let conn = open_staging_with_schema(
         &path,
         include_str!("../../persistence-sqlite/src/migrations/scripts/staging_001.sql"),
-    )
+    )?;
+    ensure_enum_staging_visibility_columns(&conn)?;
+    Ok(conn)
 }
 
 /// Open (or create) an analysis staging DB for a worker.
@@ -260,6 +262,18 @@ fn ensure_analysis_staging_provenance_columns(conn: &Connection) -> DbResult<()>
         if !table_has_column(conn, table, column)? {
             conn.execute(
                 &format!("ALTER TABLE {table} ADD COLUMN {column} {sql_type}"),
+                [],
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn ensure_enum_staging_visibility_columns(conn: &Connection) -> DbResult<()> {
+    for column in ["hidden", "system"] {
+        if !table_has_column(conn, "file_entries", column)? {
+            conn.execute(
+                &format!("ALTER TABLE file_entries ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0"),
                 [],
             )?;
         }
@@ -397,8 +411,26 @@ pub fn merge_all_staging_to_main(
     manifest: &StagingManifest,
     progress_cb: Option<&dyn Fn(usize, usize)>, // (completed_partitions, total)
 ) -> Result<u64, String> {
+    merge_all_staging_to_main_with_stats(
+        main_conn,
+        case_root,
+        data_source_id,
+        manifest,
+        progress_cb,
+    )
+    .map(|stats| stats.merged_rows)
+}
+
+/// Merge all staging DBs into the main case.db and return row accounting.
+pub fn merge_all_staging_to_main_with_stats(
+    main_conn: &Connection,
+    case_root: &Path,
+    data_source_id: &str,
+    manifest: &StagingManifest,
+    progress_cb: Option<&dyn Fn(usize, usize)>, // (completed_partitions, total)
+) -> Result<StagingMergeStats, String> {
     let total = manifest.partitions.len();
-    let mut merged_total = 0u64;
+    let mut stats = StagingMergeStats::default();
 
     for (i, partition) in manifest.partitions.iter().enumerate() {
         if partition.status != PartitionStatus::Done {
@@ -425,36 +457,60 @@ pub fn merge_all_staging_to_main(
         drop(staging_conn);
 
         let merge_started = Instant::now();
-        let inserted = merge_one_staging_partition(main_conn, &db_path, partition.index)?;
+        let partition_stats =
+            merge_one_staging_partition(main_conn, &db_path, data_source_id, partition)?;
         tracing::info!(
-            "Enum staging merge profile: partition={} rows={} elapsedMs={} rowsPerSec={}",
+            "Enum staging merge profile: partition={} stagingRows={} mergedRows={} ignoredRows={} elapsedMs={} rowsPerSec={}",
             partition.index,
-            inserted,
+            partition_stats.staging_rows,
+            partition_stats.merged_rows,
+            partition_stats.ignored_rows,
             merge_started.elapsed().as_millis(),
-            rows_per_sec(inserted as u64, merge_started.elapsed())
+            rows_per_sec(partition_stats.merged_rows, merge_started.elapsed())
         );
         let staging_conn = open_partition_staging(case_root, data_source_id, partition.index)
             .map_err(|e| format!("Reopen staging DB {}: {}", partition.index, e))?;
         set_staging_meta(&staging_conn, "merged", "true")
             .map_err(|e| format!("Mark staging DB {} merged: {}", partition.index, e))?;
-        merged_total += inserted as u64;
+        stats.add(partition_stats);
 
         if let Some(cb) = progress_cb {
             cb(i + 1, total);
         }
     }
 
-    Ok(merged_total)
+    Ok(stats)
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct StagingMergeStats {
+    pub staging_rows: u64,
+    pub merged_rows: u64,
+    pub ignored_rows: u64,
+}
+
+impl StagingMergeStats {
+    fn add(&mut self, other: StagingMergeStats) {
+        self.staging_rows += other.staging_rows;
+        self.merged_rows += other.merged_rows;
+        self.ignored_rows += other.ignored_rows;
+    }
 }
 
 fn merge_one_staging_partition(
     main_conn: &Connection,
     db_path: &Path,
-    partition_index: usize,
-) -> Result<usize, String> {
+    data_source_id: &str,
+    partition: &PartitionEntry,
+) -> Result<StagingMergeStats, String> {
+    let partition_index = partition.index;
     let db_path_str = db_path.to_string_lossy().replace('\'', "''");
     let attach_sql = format!("ATTACH DATABASE '{}' AS staging", db_path_str);
     let result = (|| {
+        let placeholder_root_id =
+            find_partition_placeholder_root_id(main_conn, data_source_id, &partition.name)
+                .map_err(|e| format!("Resolve placeholder root {}: {}", partition_index, e))?;
+
         main_conn
             .execute_batch(&attach_sql)
             .map_err(|e| format!("Attach staging DB {}: {}", partition_index, e))?;
@@ -462,17 +518,74 @@ fn merge_one_staging_partition(
             .execute_batch("BEGIN IMMEDIATE")
             .map_err(|e| format!("Begin merge transaction {}: {}", partition_index, e))?;
 
-        let inserted = main_conn
-            .execute(
-                "INSERT OR IGNORE INTO main.file_entries
-                 (id, parent_id, data_source_id, path, name, entry_type,
-                  size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256)
-                 SELECT id, parent_id, data_source_id, path, name, LOWER(entry_type),
-                  size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
-                 FROM staging.file_entries",
-                [],
-            )
-            .map_err(|e| format!("Merge partition {}: {}", partition_index, e))?;
+        if let Some(root_id) = placeholder_root_id.as_deref() {
+            promote_partition_placeholder_root(main_conn, root_id, &partition.name)
+                .map_err(|e| format!("Promote placeholder root {}: {}", partition_index, e))?;
+        }
+
+        let staging_rows: u64 = main_conn
+            .query_row("SELECT COUNT(*) FROM staging.file_entries", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .map(|count| count as u64)
+            .map_err(|e| format!("Count staging rows {}: {}", partition_index, e))?;
+
+        let inserted = if let Some(root_id) = placeholder_root_id.as_deref() {
+            main_conn
+                .execute(
+                    "INSERT INTO main.file_entries
+                     (id, parent_id, data_source_id, path, name, entry_type,
+                      size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256)
+                     SELECT
+                        id,
+                        CASE
+                          WHEN parent_id IS NULL THEN ?1
+                          WHEN parent_id = id THEN ?1
+                          WHEN parent_id IN (
+                            SELECT id FROM staging.file_entries
+                            WHERE parent_id IS NULL
+                              AND entry_type = 'directory'
+                              AND name IN ('\\', '/', '.')
+                          ) THEN ?1
+                          ELSE parent_id
+                        END,
+                        data_source_id,
+                        path,
+                        name,
+                        LOWER(entry_type),
+                        size,
+                        ext,
+                        deleted,
+                        hidden,
+                        system,
+                        created_at,
+                        modified_at,
+                        accessed_at,
+                        changed_at,
+                        hash_sha256
+                     FROM staging.file_entries
+                     WHERE NOT (
+                        parent_id IS NULL
+                        AND entry_type = 'directory'
+                        AND name IN ('\\', '/', '.')
+                     )",
+                    params![root_id],
+                )
+                .map_err(|e| format!("Merge partition {}: {}", partition_index, e))?
+        } else {
+            main_conn
+                .execute(
+                    "INSERT INTO main.file_entries
+                     (id, parent_id, data_source_id, path, name, entry_type,
+                      size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256)
+                     SELECT id, parent_id, data_source_id, path, name, LOWER(entry_type),
+                      size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256
+                     FROM staging.file_entries",
+                    [],
+                )
+                .map_err(|e| format!("Merge partition {}: {}", partition_index, e))?
+        };
+        let merged_rows = inserted as u64;
 
         main_conn
             .execute_batch("COMMIT")
@@ -480,7 +593,11 @@ fn merge_one_staging_partition(
         main_conn
             .execute_batch("DETACH DATABASE staging")
             .map_err(|e| format!("Detach staging DB {}: {}", partition_index, e))?;
-        Ok(inserted)
+        Ok(StagingMergeStats {
+            staging_rows,
+            merged_rows,
+            ignored_rows: staging_rows.saturating_sub(merged_rows),
+        })
     })();
 
     if result.is_err() {
@@ -489,6 +606,58 @@ fn merge_one_staging_partition(
     }
 
     result
+}
+
+fn find_partition_placeholder_root_id(
+    conn: &Connection,
+    data_source_id: &str,
+    partition_name: &str,
+) -> rusqlite::Result<Option<String>> {
+    match conn.query_row(
+        "SELECT id
+         FROM file_entries
+         WHERE data_source_id = ?1
+           AND parent_id IS NULL
+           AND name = ?2
+           AND path GLOB '__partition_placeholder__/*'
+         LIMIT 1",
+        params![data_source_id, partition_name],
+        |row| row.get(0),
+    ) {
+        Ok(id) => Ok(Some(id)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => conn
+            .query_row(
+                "SELECT id
+                 FROM file_entries
+                 WHERE data_source_id = ?1
+                   AND parent_id IS NULL
+                   AND path GLOB '__partition_placeholder__/*'
+                 ORDER BY id ASC
+                 LIMIT 1",
+                params![data_source_id],
+                |row| row.get(0),
+            )
+            .map(Some)
+            .or_else(|err| match err {
+                rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                other => Err(other),
+            }),
+        Err(other) => Err(other),
+    }
+}
+
+fn promote_partition_placeholder_root(
+    conn: &Connection,
+    root_id: &str,
+    partition_name: &str,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE file_entries
+         SET path = '', name = ?2
+         WHERE id = ?1",
+        params![root_id, partition_name],
+    )?;
+    Ok(())
 }
 
 /// Merge analysis worker staging DBs into the main DB and search index.
@@ -594,7 +763,7 @@ fn merge_one_analysis_worker(
 
         let artifact_count = main_conn
             .execute(
-                "INSERT OR IGNORE INTO main.artifacts
+                "INSERT INTO main.artifacts
                  (id, case_id, data_source_id, artifact_type, source_object_id, extractor_id, extractor_version, confidence, source_attribution, title, summary, attrs, created_at)
                   SELECT id, ?1, ?2, artifact_type, file_id, extractor_id, extractor_version, confidence, source_attribution, display_name, summary, data_json, created_at
                   FROM analysis_stage.artifact_rows",
@@ -604,7 +773,7 @@ fn merge_one_analysis_worker(
 
         let timeline_count = main_conn
             .execute(
-                "INSERT OR IGNORE INTO main.timeline_events
+                "INSERT INTO main.timeline_events
                  (id, case_id, source_object_id, event_type, ts, title, description, parser_id, parser_version, confidence, source_attribution, attrs)
                   SELECT id, ?1, file_id, event_type, timestamp, title, description, parser_id, parser_version, confidence, source_attribution, data_json
                   FROM analysis_stage.timeline_rows",
@@ -913,6 +1082,8 @@ mod tests {
                     size INTEGER,
                     ext TEXT,
                     deleted INTEGER NOT NULL DEFAULT 0,
+                    hidden INTEGER NOT NULL DEFAULT 0,
+                    system INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT,
                     modified_at TEXT,
                     accessed_at TEXT,
@@ -986,6 +1157,8 @@ mod tests {
                 size INTEGER,
                 ext TEXT,
                 deleted INTEGER NOT NULL DEFAULT 0,
+                hidden INTEGER NOT NULL DEFAULT 0,
+                system INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT,
                 modified_at TEXT,
                 accessed_at TEXT,
@@ -1121,6 +1294,69 @@ mod tests {
 
         let staging_conn = open_partition_staging(tmp.path(), ds_id, 0).unwrap();
         assert_eq!(
+            get_staging_meta(&staging_conn, "merged")
+                .unwrap()
+                .as_deref(),
+            Some("true")
+        );
+    }
+
+    #[test]
+    fn merge_reports_conflicting_staging_rows_as_errors() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let main_conn = persistence_sqlite::connection::open_in_memory().unwrap();
+        create_main_file_entries_table(&main_conn);
+
+        let ds_id = "ds-conflict-accounting";
+        main_conn
+            .execute(
+                "INSERT INTO file_entries (id, data_source_id, path, name, entry_type)
+                 VALUES ('existing', ?1, '/existing', 'existing', 'file')",
+                params![ds_id],
+            )
+            .unwrap();
+
+        let staging_conn = open_partition_staging(tmp.path(), ds_id, 0).unwrap();
+        staging_conn
+            .execute(
+                "INSERT INTO file_entries (id, data_source_id, path, name, entry_type)
+                 VALUES ('existing', ?1, '/staged-existing', 'staged-existing', 'File')",
+                params![ds_id],
+            )
+            .unwrap();
+        staging_conn
+            .execute(
+                "INSERT INTO file_entries (id, data_source_id, path, name, entry_type)
+                 VALUES ('new', ?1, '/new', 'new', 'File')",
+                params![ds_id],
+            )
+            .unwrap();
+        drop(staging_conn);
+
+        let mut manifest = StagingManifest::create(ds_id, "/test.E01", "E01");
+        manifest.partitions.push(make_done_partition(0, 2));
+
+        let err =
+            merge_all_staging_to_main_with_stats(&main_conn, tmp.path(), ds_id, &manifest, None)
+                .unwrap_err();
+        assert!(err.contains("Merge partition 0"));
+
+        let count: i64 = main_conn
+            .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+
+        let existing_path: String = main_conn
+            .query_row(
+                "SELECT path FROM file_entries WHERE id = 'existing'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(existing_path, "/existing");
+
+        let staging_conn = open_partition_staging(tmp.path(), ds_id, 0).unwrap();
+        assert_ne!(
             get_staging_meta(&staging_conn, "merged")
                 .unwrap()
                 .as_deref(),

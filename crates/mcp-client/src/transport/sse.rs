@@ -11,7 +11,7 @@ use tracing::{debug, info};
 
 use super::McpTransportTrait;
 use crate::error::{McpError, McpResult};
-use crate::types::*;
+use crate::types::{validate_sse_url, *};
 
 /// SSE Transport
 ///
@@ -31,7 +31,10 @@ pub struct SseTransport {
 
 impl SseTransport {
     /// Create a new SSE transport
-    pub fn new(url: &str) -> Self {
+    pub fn new(url: &str) -> McpResult<Self> {
+        let mut url = url.to_string();
+        validate_sse_url(&mut url)?;
+
         // Build a reusable HTTP client with connection pooling
         let client = Client::builder()
             .pool_max_idle_per_host(10)
@@ -39,13 +42,13 @@ impl SseTransport {
             .build()
             .unwrap_or_else(|_| Client::new());
 
-        Self {
+        Ok(Self {
             client,
-            url: url.to_string(),
+            url,
             connected: Arc::new(AtomicBool::new(false)),
             request_id: Arc::new(AtomicU64::new(1)),
             capabilities: Arc::new(Mutex::new(None)),
-        }
+        })
     }
 
     /// Send a JSON-RPC request
@@ -304,16 +307,24 @@ mod tests {
 
     #[test]
     fn test_sse_transport_new() {
-        let transport = SseTransport::new("http://localhost:3001");
-        assert_eq!(transport.url, "http://localhost:3001");
+        let transport = SseTransport::new("http://localhost:3001").unwrap();
+        assert_eq!(transport.url, "http://localhost:3001/");
         assert!(!transport.is_connected());
     }
 
     #[test]
     fn test_request_id_increment() {
-        let transport = SseTransport::new("http://localhost:3001");
+        let transport = SseTransport::new("http://localhost:3001").unwrap();
         let id1 = transport.request_id.fetch_add(1, Ordering::SeqCst);
         let id2 = transport.request_id.fetch_add(1, Ordering::SeqCst);
         assert_eq!(id2, id1 + 1);
+    }
+
+    #[test]
+    fn test_sse_transport_rejects_invalid_url() {
+        let Err(err) = SseTransport::new("file:///tmp/mcp.sock") else {
+            panic!("expected invalid SSE URL to fail");
+        };
+        assert!(err.to_string().contains("Unsupported MCP SSE URL scheme"));
     }
 }

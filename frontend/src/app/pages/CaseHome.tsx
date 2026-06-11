@@ -21,6 +21,7 @@ import { useJobsSnapshot, useWarnings } from '@/features/jobs/hooks';
 import type { JobSnapshot } from '@/types/models';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { formatPartitionDisplayName, partitionDisplayLabel } from '@/lib/partition-display';
 
 const importJobPattern = /导入|加载|镜像|数据源|datasource|data source|import|ingest|image|e01|raw|dd|img/i;
 
@@ -482,7 +483,7 @@ export function CaseHome() {
                                     <div className="flex items-start justify-between gap-3">
                                       <div className="min-w-0">
                                         <div className="text-[#111] font-medium">
-                                          Partition {partition.index} / {partition.kindLabel}
+                                          {formatPartitionDisplayName(partition)}
                                         </div>
                                         <div className="mt-1 text-[#555]">{partition.name}</div>
                                         <div className="mt-1 font-mono text-[10px] break-all text-[#777]">
@@ -504,7 +505,7 @@ export function CaseHome() {
                                           {statusLabel}
                                         </div>
                                         <div className="mt-1 font-mono text-[10px] text-[#888]">
-                                          {partition.filesystem ?? partition.kindLabel}
+                                          {partitionDisplayLabel(partition)}
                                         </div>
                                       </div>
                                     </div>

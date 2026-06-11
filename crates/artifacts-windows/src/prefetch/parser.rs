@@ -12,7 +12,7 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use chrono::{DateTime, Datelike, TimeZone, Utc};
 use domain::ArtifactFamily;
 use std::collections::BTreeMap;
-use std::io::Read;
+use std::io::{Cursor, Read};
 
 pub struct PrefetchExtractor;
 
@@ -29,20 +29,26 @@ impl PrefetchExtractor {
     fn read_utf16le_string<R: Read>(reader: &mut R, byte_len: usize) -> Option<String> {
         let mut buf = vec![0u8; byte_len.min(256)];
         reader.read_exact(&mut buf).ok()?;
-        let end = buf.iter().position(|&b| {
-            b == 0
-                && buf
-                    .get(buf.iter().position(|&x| x == b).unwrap_or(0) + 1)
-                    .copied()
-                    .unwrap_or(1)
-                    == 0
-        });
-        let end = end.unwrap_or(buf.len());
+        let end = buf
+            .chunks_exact(2)
+            .position(|chunk| chunk == [0, 0])
+            .map(|idx| idx * 2)
+            .unwrap_or(buf.len());
         let chars: Vec<u16> = buf[..end]
             .chunks_exact(2)
             .map(|c| u16::from_le_bytes([c[0], c[1]]))
             .collect();
         String::from_utf16(&chars).ok()
+    }
+
+    fn reader_for_prefetch_payload(data: Vec<u8>) -> Result<Box<dyn Read>, String> {
+        if data.starts_with(b"SCCA") {
+            return Ok(Box::new(Cursor::new(data)));
+        }
+        if data.starts_with(b"MAM\x04") {
+            return Err("MAM-compressed Prefetch is unsupported".to_string());
+        }
+        Err("Not a Prefetch file".to_string())
     }
 }
 
@@ -65,19 +71,32 @@ impl ArtifactExtractor for PrefetchExtractor {
 
     fn run(
         &self,
-        ctx: ArtifactContext,
+        mut ctx: ArtifactContext,
         sink: &mut dyn ArtifactSink,
     ) -> Result<ExtractorReport, String> {
-        let mut reader = ctx.reader;
+        let mut data = Vec::new();
+        ctx.reader
+            .read_to_end(&mut data)
+            .map_err(|e| e.to_string())?;
+        let mut reader = match Self::reader_for_prefetch_payload(data) {
+            Ok(reader) => reader,
+            Err(err) if err == "Not a Prefetch file" => {
+                return Ok(ExtractorReport {
+                    artifacts_found: 0,
+                    timeline_events: 0,
+                    errors: vec![],
+                });
+            }
+            Err(err) => {
+                return Ok(ExtractorReport {
+                    artifacts_found: 0,
+                    timeline_events: 0,
+                    errors: vec![err],
+                });
+            }
+        };
         let mut magic = [0u8; 4];
         reader.read_exact(&mut magic).map_err(|e| e.to_string())?;
-        if &magic != b"SCCA" && &magic != b"MAM\x04" {
-            return Ok(ExtractorReport {
-                artifacts_found: 0,
-                timeline_events: 0,
-                errors: vec![],
-            });
-        }
 
         let format_version = reader.read_u32::<LittleEndian>().unwrap_or(0);
         let _signature = reader.read_u32::<LittleEndian>().unwrap_or(0);
@@ -152,5 +171,37 @@ impl ArtifactExtractor for PrefetchExtractor {
             timeline_events: events,
             errors: vec![],
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use artifacts_core::VecSink;
+    use domain::FileEntryId;
+
+    #[test]
+    fn mam_prefetch_magic_fails_closed_without_decompression() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"MAM\x04");
+        bytes.extend_from_slice(&30u32.to_le_bytes());
+        bytes.resize(128, 0);
+
+        let ctx = ArtifactContext {
+            file_id: FileEntryId("pf-1".to_string()),
+            file_path: "C:/Windows/Prefetch/CMD.EXE-1234.pf".to_string(),
+            reader: Box::new(std::io::Cursor::new(bytes)),
+        };
+        let mut sink = VecSink::new();
+
+        let report = PrefetchExtractor.run(ctx, &mut sink).unwrap();
+
+        assert_eq!(report.artifacts_found, 0);
+        assert_eq!(report.timeline_events, 0);
+        assert_eq!(
+            report.errors,
+            vec!["MAM-compressed Prefetch is unsupported"]
+        );
+        assert!(sink.artifacts.is_empty());
     }
 }

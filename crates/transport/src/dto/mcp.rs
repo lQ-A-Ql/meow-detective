@@ -255,6 +255,25 @@ mod tests {
     }
 
     #[test]
+    fn test_connection_result_serializes_capabilities_without_dropping_flags() {
+        let result = McpTestConnectionResult {
+            success: true,
+            error: None,
+            capabilities: Some(McpCapabilitiesDto {
+                resources: true,
+                tools: false,
+                prompts: true,
+            }),
+        };
+
+        let value = serde_json::to_value(result).expect("serialize test connection result");
+
+        assert_eq!(value["capabilities"]["resources"], true);
+        assert_eq!(value["capabilities"]["tools"], false);
+        assert_eq!(value["capabilities"]["prompts"], true);
+    }
+
+    #[test]
     fn protocol_dtos_keep_current_nested_snake_case_fields() {
         let resource = McpResourceDto {
             uri: "file:///case/report".to_string(),

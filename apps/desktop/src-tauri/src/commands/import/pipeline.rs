@@ -480,8 +480,15 @@ fn execute_import_job_with_counts(
         DataSourceKind::LogicalDirectory => {
             let fs =
                 LogicalFsReader::open(&path, &ds.name).map_err(CommandError::from_service_error)?;
-            file_service::enumerate_filesystem(conn, &ds.id, &fs)
-                .map_err(CommandError::from_service_error)?
+            file_service::enumerate_filesystem_with_root_name_and_cancel(
+                conn,
+                &ds.id,
+                &fs,
+                None,
+                None::<&dyn Fn(u32)>,
+                Some(options.cancel_token),
+            )
+            .map_err(CommandError::from_service_error)?
         }
         DataSourceKind::E01 | DataSourceKind::Raw => {
             // Load or create manifest for staging-based import
@@ -525,6 +532,35 @@ fn execute_import_job_with_counts(
                 // Store partition records in main DB
                 file_service::store_data_source_partitions(conn, &ds.id, &probe.partitions)
                     .map_err(CommandError::from_service_error)?;
+
+                let candidate_root_names = probe
+                    .candidates
+                    .iter()
+                    .filter_map(|candidate| {
+                        candidate
+                            .partition_index
+                            .map(|index| (index, format_partition_root_name(candidate)))
+                    })
+                    .collect::<std::collections::HashMap<usize, String>>();
+
+                for partition in &probe.partitions {
+                    let status = match partition.status {
+                        datasource_service::PartitionStatus::Supported => "queued",
+                        datasource_service::PartitionStatus::EncryptedBitLocker => "locked",
+                        datasource_service::PartitionStatus::Unsupported => "unsupported",
+                    };
+                    let root_name = candidate_root_names
+                        .get(&partition.index)
+                        .cloned()
+                        .unwrap_or_else(|| format_partition_record_root_name(partition));
+                    file_service::insert_partition_placeholder_root(
+                        conn,
+                        &ds.id,
+                        &root_name,
+                        status,
+                    )
+                    .map_err(CommandError::from_service_error)?;
+                }
 
                 // Build manifest entries for supported partitions
                 for candidate in &probe.candidates {

@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS file_entries (
     size INTEGER,
     ext TEXT,
     deleted INTEGER NOT NULL DEFAULT 0,
+    hidden INTEGER NOT NULL DEFAULT 0,
+    system INTEGER NOT NULL DEFAULT 0,
     created_at TEXT,
     modified_at TEXT,
     accessed_at TEXT,

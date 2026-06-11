@@ -152,8 +152,12 @@ describe('mcp API layer', () => {
     expect(requestMock).toHaveBeenLastCalledWith('remove_mcp_server', expect.any(Function), { serverId: 'srv-1' });
   });
 
-  it('keeps nested snake_case request fields for test connection', async () => {
-    requestMock.mockResolvedValueOnce({ success: true, error: 404 });
+  it('keeps nested snake_case request fields for test connection and normalizes capabilities', async () => {
+    requestMock.mockResolvedValueOnce({
+      success: true,
+      error: 404,
+      capabilities: { resources: true, tools: false, prompts: true },
+    });
 
     const result = await testMcpConnection('stdio', undefined, 'node', ['server.js']);
 
@@ -165,7 +169,11 @@ describe('mcp API layer', () => {
         args: ['server.js'],
       },
     });
-    expect(result).toEqual({ success: true, error: undefined });
+    expect(result).toEqual({
+      success: true,
+      error: undefined,
+      capabilities: { resources: true, tools: false, prompts: true },
+    });
   });
 
   it('uses camelCase top-level serverId args for list commands', async () => {

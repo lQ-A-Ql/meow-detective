@@ -359,6 +359,8 @@ mod tests {
             size: Some(1024),
             ext: Some("txt".to_string()),
             deleted: false,
+            hidden: false,
+            system: false,
             created_at: if created {
                 Some(Utc.with_ymd_and_hms(2024, 6, 15, 10, 0, 0).unwrap())
             } else {
@@ -494,10 +496,12 @@ mod tests {
                 path TEXT NOT NULL,
                 name TEXT NOT NULL,
                 entry_type TEXT NOT NULL,
-                size INTEGER,
-                ext TEXT,
-                deleted INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT,
+            size INTEGER,
+            ext TEXT,
+            deleted INTEGER NOT NULL DEFAULT 0,
+            hidden INTEGER NOT NULL DEFAULT 0,
+            system INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT,
                 modified_at TEXT,
                 accessed_at TEXT,
                 changed_at TEXT,

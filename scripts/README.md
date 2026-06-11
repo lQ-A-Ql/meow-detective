@@ -124,6 +124,14 @@ powershell -ExecutionPolicy Bypass -File scripts\run-webview2-media-smoke.ps1
 # Tauri command layer SQL boundary guard
 powershell -ExecutionPolicy Bypass -File scripts\check-command-sql-boundary.ps1
 
+# Documentation drift guard. This checks README/AGENTS/documentation-index
+# factual counts, required engineering-doc entries, and Mermaid block count.
+powershell -ExecutionPolicy Bypass -File scripts\check-doc-drift.ps1
+
+# Optional full Mermaid render validation. Requires Chrome/Edge or an available
+# Puppeteer browser; renders all diagrams to temporary SVG files.
+powershell -ExecutionPolicy Bypass -File scripts\check-doc-drift.ps1 -RenderMermaid
+
 # Dependency exception metadata/expiry guard
 powershell -ExecutionPolicy Bypass -File scripts\check-deny-exceptions.ps1
 

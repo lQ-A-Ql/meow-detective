@@ -14,4 +14,7 @@ CREATE TABLE IF NOT EXISTS migration_log (
 );
 
 INSERT INTO migration_log (migration_name, status, details)
-VALUES ('0012_migrate_partitions', 'pending', 'Waiting for application-layer migration');
+SELECT '0014_migrate_partitions', 'pending', 'Waiting for application-layer migration'
+WHERE NOT EXISTS (
+    SELECT 1 FROM migration_log WHERE migration_name = '0014_migrate_partitions'
+);

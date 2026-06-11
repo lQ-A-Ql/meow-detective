@@ -18,6 +18,15 @@ use uuid::Uuid;
 
 use crate::{events::event_bridge, state::AppState};
 
+fn activate_case_pool(state: &AppState, db_path: &std::path::Path) -> Result<(), CommandError> {
+    state
+        .clear_db_pool()
+        .map_err(CommandError::from_service_error)?;
+    state
+        .init_db_pool(db_path)
+        .map_err(CommandError::from_service_error)
+}
+
 fn meta_to_dto(meta: &domain::CaseMeta) -> CaseSummaryDto {
     CaseSummaryDto {
         id: meta.id.0.clone(),
@@ -26,6 +35,13 @@ fn meta_to_dto(meta: &domain::CaseMeta) -> CaseSummaryDto {
         examiner: meta.examiner.clone(),
         created_at: meta.created_at.to_rfc3339(),
         updated_at: meta.updated_at.to_rfc3339(),
+    }
+}
+
+fn same_path(left: &std::path::Path, right: &std::path::Path) -> bool {
+    match (left.canonicalize(), right.canonicalize()) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => left == right,
     }
 }
 
@@ -39,6 +55,9 @@ pub fn create_case(
     let root = PathBuf::from(&request.case_root);
     let active = case_service::create_case(&root, &request.name, request.examiner.as_deref())
         .map_err(CommandError::from_service_error)?;
+    let db_path = active.db_path();
+    let active_case_root = active.case_root.clone();
+    activate_case_pool(&state, &db_path)?;
 
     let dto = meta_to_dto(&active.meta);
     let mut guard = state
@@ -46,7 +65,7 @@ pub fn create_case(
         .lock()
         .map_err(|e| CommandError::from_lock_error("Case", e))?;
     *guard = Some(active);
-    remember_recent_case(&root, &dto)?;
+    remember_recent_case(&active_case_root, &dto)?;
     event_bridge::emit_case_opened(&app, &dto.id, &dto.name);
     Ok(dto)
 }
@@ -60,6 +79,8 @@ pub fn open_case(
     request.validate().map_err(CommandError::invalid_input)?;
     let root = PathBuf::from(&request.case_root);
     let active = case_service::open_case(&root).map_err(CommandError::from_service_error)?;
+    let db_path = active.db_path();
+    activate_case_pool(&state, &db_path)?;
 
     let dto = meta_to_dto(&active.meta);
     let mut guard = state
@@ -89,6 +110,8 @@ pub fn create_analysis_demo_case(
     let active = case_service::create_case(&case_root, "Analysis Demo", Some("Codex Demo"))
         .map_err(CommandError::from_service_error)?;
     seed_analysis_demo(&active).map_err(CommandError::from_service_error)?;
+    let db_path = active.db_path();
+    activate_case_pool(&state, &db_path)?;
 
     let dto = meta_to_dto(&active.meta);
     let mut guard = state
@@ -123,7 +146,12 @@ pub fn close_case(state: State<AppState>, app: AppHandle) -> Result<(), CommandE
         .task_manager
         .wait_all(std::time::Duration::from_secs(5));
 
-    // 3. Clear active case
+    // 3. Clear pooled database handles before clearing the active case.
+    state
+        .clear_db_pool()
+        .map_err(CommandError::from_service_error)?;
+
+    // 4. Clear active case
     let mut guard = state
         .active_case
         .lock()
@@ -282,16 +310,23 @@ pub async fn delete_case(
     request.validate().map_err(CommandError::invalid_input)?;
     let root = PathBuf::from(&request.case_root);
 
+    let mut cleared_active_case = false;
     {
         let mut guard = state
             .active_case
             .lock()
             .map_err(|e| CommandError::from_lock_error("Case", e))?;
         if let Some(ref active) = *guard {
-            if active.case_root == root {
+            if same_path(&active.case_root, &root) {
                 *guard = None;
+                cleared_active_case = true;
             }
         }
+    }
+    if cleared_active_case {
+        state
+            .clear_db_pool()
+            .map_err(CommandError::from_service_error)?;
     }
 
     let root_clone = root.clone();
@@ -305,7 +340,10 @@ pub async fn delete_case(
         tracing::warn!("Failed to read recent cases, starting fresh: {}", e);
         Vec::new()
     });
-    recent.retain(|item| item.case_root != request.case_root);
+    recent.retain(|item| {
+        item.case_root != request.case_root
+            && !same_path(std::path::Path::new(&item.case_root), &root)
+    });
     save_recent_cases(&recent)?;
 
     Ok("Case deleted".to_string())
@@ -556,12 +594,21 @@ fn collect_demo_entries(
         } else {
             EntryType::File
         };
+        let name = child.file_name().to_string_lossy().to_string();
+        let system = matches!(
+            name.to_ascii_lowercase().as_str(),
+            "$recycle.bin"
+                | "system volume information"
+                | "pagefile.sys"
+                | "hiberfil.sys"
+                | "swapfile.sys"
+        );
         entries.push(FileEntry {
             id: id.clone(),
             parent_id: parent_id.clone(),
             data_source_id: data_source_id.clone(),
             path: relative,
-            name: child.file_name().to_string_lossy().to_string(),
+            name: name.clone(),
             entry_type: entry_type.clone(),
             size: if metadata.is_file() {
                 Some(metadata.len())
@@ -572,6 +619,8 @@ fn collect_demo_entries(
                 .extension()
                 .map(|ext| ext.to_string_lossy().to_string()),
             deleted: false,
+            hidden: name.starts_with('.') || system,
+            system,
             created_at: None,
             modified_at: None,
             accessed_at: None,
@@ -597,6 +646,38 @@ fn valid_recent_case_root(case_root: &str) -> bool {
 mod tests {
     use super::*;
     use app_services::{analysis_service, file_service};
+
+    #[test]
+    fn active_case_pool_is_guarded_by_active_case_lifecycle() {
+        let root = std::env::temp_dir().join(format!(
+            "forensics-workbench-pool-lifecycle-test-{}",
+            Uuid::new_v4()
+        ));
+        let active = case_service::create_case(&root, "Pool Lifecycle", Some("Codex Test"))
+            .expect("create test case");
+        let db_path = active.db_path();
+        let state = AppState::default();
+
+        activate_case_pool(&state, &db_path).expect("initialize pool");
+        let no_active_case = state
+            .get_connection()
+            .expect_err("pool access must require active case");
+        assert!(no_active_case.contains("No active case"));
+
+        *state.active_case.lock().expect("active case lock") = Some(active);
+        state
+            .get_connection()
+            .expect("pool available when active case is set");
+
+        state.clear_db_pool().expect("clear pool");
+        *state.active_case.lock().expect("active case lock") = None;
+        let cleared = state
+            .get_connection()
+            .expect_err("cleared pool must not be usable");
+        assert!(cleared.contains("No active case"));
+
+        std::fs::remove_dir_all(root).ok();
+    }
 
     #[test]
     fn analysis_demo_seed_supports_real_analysis_flow() {
@@ -656,5 +737,29 @@ mod tests {
             .expect("verify demo analysis");
 
         std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn remember_recent_case_uses_actual_case_directory() {
+        let parent = std::env::temp_dir().join(format!(
+            "forensics-workbench-recent-case-test-{}",
+            Uuid::new_v4()
+        ));
+        let active = case_service::create_case(&parent, "recent-case", Some("tester"))
+            .expect("create recent case fixture");
+        let dto = meta_to_dto(&active.meta);
+        let actual_case_root = active.case_root.clone();
+        drop(active);
+
+        remember_recent_case(&actual_case_root, &dto).expect("remember recent case");
+        let recent = read_recent_cases().expect("read recent cases");
+
+        assert_eq!(recent[0].case_root, actual_case_root.display().to_string());
+        assert_ne!(recent[0].case_root, parent.display().to_string());
+
+        let mut remaining = recent;
+        remaining.retain(|item| item.case_root != actual_case_root.display().to_string());
+        save_recent_cases(&remaining).expect("restore recent cases");
+        std::fs::remove_dir_all(parent).ok();
     }
 }

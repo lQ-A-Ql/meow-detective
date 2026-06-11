@@ -49,6 +49,9 @@ jobs:
       - name: Command SQL boundary guard
         shell: pwsh
         run: ./scripts/check-command-sql-boundary.ps1
+      - name: Documentation drift guard
+        shell: pwsh
+        run: ./scripts/check-doc-drift.ps1
       - name: Dependency exception guard
         shell: pwsh
         run: ./scripts/check-deny-exceptions.ps1

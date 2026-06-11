@@ -15,7 +15,7 @@ use tracing::{debug, info};
 
 use super::McpTransportTrait;
 use crate::error::{McpError, McpResult};
-use crate::types::*;
+use crate::types::{validate_stdio_command, *};
 
 /// Stdio Transport
 ///
@@ -41,17 +41,20 @@ pub struct StdioTransport {
 
 impl StdioTransport {
     /// Create a new Stdio transport
-    pub fn new(command: &str, args: &[String]) -> Self {
-        Self {
+    pub fn new(command: &str, args: &[String]) -> McpResult<Self> {
+        let mut command = command.to_string();
+        validate_stdio_command(&mut command, args)?;
+
+        Ok(Self {
             child: Arc::new(Mutex::new(None)),
             stdin: Arc::new(Mutex::new(None)),
             stdout: Arc::new(Mutex::new(None)),
             connected: Arc::new(AtomicBool::new(false)),
             request_id: Arc::new(AtomicU64::new(1)),
-            command: command.to_string(),
+            command,
             args: args.to_vec(),
             capabilities: Arc::new(Mutex::new(None)),
-        }
+        })
     }
 
     /// Send a JSON-RPC request and read the response
@@ -361,7 +364,8 @@ mod tests {
 
     #[test]
     fn test_stdio_transport_new() {
-        let transport = StdioTransport::new("python", &["-m".to_string(), "server".to_string()]);
+        let transport =
+            StdioTransport::new("python", &["-m".to_string(), "server".to_string()]).unwrap();
         assert_eq!(transport.command, "python");
         assert_eq!(transport.args, vec!["-m", "server"]);
         assert!(!transport.is_connected());
@@ -369,9 +373,17 @@ mod tests {
 
     #[test]
     fn test_request_id_increment() {
-        let transport = StdioTransport::new("echo", &[]);
+        let transport = StdioTransport::new("echo", &[]).unwrap();
         let id1 = transport.request_id.fetch_add(1, Ordering::SeqCst);
         let id2 = transport.request_id.fetch_add(1, Ordering::SeqCst);
         assert_eq!(id2, id1 + 1);
+    }
+
+    #[test]
+    fn test_stdio_transport_rejects_empty_command() {
+        let Err(err) = StdioTransport::new("  ", &[]) else {
+            panic!("expected empty stdio command to fail");
+        };
+        assert!(err.to_string().contains("stdio command is required"));
     }
 }

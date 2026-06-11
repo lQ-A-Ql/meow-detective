@@ -17,53 +17,51 @@ import {
 } from '@/lib/api/files';
 import { FileEntryRow } from '@/types/models';
 import { expectJobsSnapshotActivity } from '@/features/jobs/hooks';
+import { invalidateImportProjectionQueries } from '@/features/cache-invalidation';
 
-const importRefreshKeys = [['case'], ['files'], ['timeline'], ['artifacts'], ['search']] as const;
 const MEDIA_CHUNK_PREVIEW_BYTES = 1024 * 1024;
 
 function invalidateImportQueries(qc: ReturnType<typeof useQueryClient>) {
-  importRefreshKeys.forEach((queryKey) => {
-    qc.invalidateQueries({ queryKey });
-  });
+  invalidateImportProjectionQueries(qc);
 }
 
-export function useFileTree() {
+export function useFileTree(showHidden = false) {
   return useQuery({
-    queryKey: ['files', 'tree'],
-    queryFn: getFileTree,
+    queryKey: ['files', 'tree', showHidden],
+    queryFn: () => getFileTree(showHidden),
     staleTime: Infinity,
   });
 }
 
-export function useFileRows(parentId?: string) {
+export function useFileRows(parentId?: string, showHidden = false) {
   return useQuery({
-    queryKey: ['files', 'rows', parentId ?? null],
-    queryFn: () => getFileRows(parentId),
+    queryKey: ['files', 'rows', parentId ?? null, showHidden],
+    queryFn: () => getFileRows(parentId, showHidden),
     enabled: parentId !== undefined,
   });
 }
 
-export function useFileRowsPage(parentId?: string, offset = 0, limit = 500) {
+export function useFileRowsPage(parentId?: string, offset = 0, limit = 500, showHidden = false) {
   return useQuery({
-    queryKey: ['files', 'rows-page', parentId ?? null, offset, limit],
-    queryFn: () => getFileRowsPage(parentId, offset, limit),
+    queryKey: ['files', 'rows-page', parentId ?? null, offset, limit, showHidden],
+    queryFn: () => getFileRowsPage(parentId, offset, limit, showHidden),
     enabled: parentId !== undefined,
   });
 }
 
-export function useFileChildren(parentId?: string) {
+export function useFileChildren(parentId?: string, showHidden = false) {
   return useQuery({
-    queryKey: ['files', 'children', parentId],
-    queryFn: () => getFileChildren(parentId!),
+    queryKey: ['files', 'children', parentId, showHidden],
+    queryFn: () => getFileChildren(parentId!, showHidden),
     enabled: Boolean(parentId),
     staleTime: 60_000,
   });
 }
 
-export function useFileChildrenPage(parentId?: string, offset = 0, limit = 500) {
+export function useFileChildrenPage(parentId?: string, offset = 0, limit = 500, showHidden = false) {
   return useQuery({
-    queryKey: ['files', 'children-page', parentId, offset, limit],
-    queryFn: () => getFileChildrenPage(parentId!, offset, limit),
+    queryKey: ['files', 'children-page', parentId, offset, limit, showHidden],
+    queryFn: () => getFileChildrenPage(parentId!, offset, limit, showHidden),
     enabled: Boolean(parentId),
     staleTime: 60_000,
   });

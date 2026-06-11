@@ -2,8 +2,9 @@ mod fixture_builder;
 
 use artifacts_core::{ArtifactContext, ArtifactExtractor, ExtractorRegistry, VecSink};
 use artifacts_windows::{
-    extract_boot_shutdown_events_from_json_records, JumpListExtractor, LnkExtractor,
-    PrefetchExtractor, RecycleBinExtractor, RegistryExtractor, SruExtractor, ThumbcacheExtractor,
+    extract_boot_shutdown_events, extract_boot_shutdown_events_from_json_records,
+    JumpListExtractor, LnkExtractor, PrefetchExtractor, RecycleBinExtractor, RegistryExtractor,
+    SruExtractor, ThumbcacheExtractor,
 };
 use chrono::{TimeZone, Utc};
 use domain::FileEntryId;
@@ -73,6 +74,46 @@ fn prefetch_fixture_extracts_exe_and_runs() {
     assert!(report.artifacts_found > 0);
     assert!(!sink.timeline_events.is_empty(), "Expected timeline events");
     assert_eq!(sink.artifacts[0].family, "Prefetch");
+    assert!(sink.artifacts[0].title.contains("CMD.EXE"));
+}
+
+#[test]
+fn mam_prefetch_fails_closed_without_decompression() {
+    let mut data = build_prefetch_v30("CMD.EXE", 5, &[]);
+    data[0..4].copy_from_slice(b"MAM\x04");
+
+    let extractor = PrefetchExtractor;
+    let ctx = ArtifactContext {
+        file_id: t("pf-mam"),
+        file_path: "CMD.EXE-DEADBEEF.pf".into(),
+        reader: Box::new(std::io::Cursor::new(data)),
+    };
+    let mut sink = VecSink::new();
+    let report = extractor.run(ctx, &mut sink).unwrap();
+
+    assert_eq!(report.artifacts_found, 0);
+    assert_eq!(report.timeline_events, 0);
+    assert_eq!(
+        report.errors,
+        vec!["MAM-compressed Prefetch is unsupported"]
+    );
+    assert!(sink.artifacts.is_empty());
+}
+
+#[test]
+fn prefetch_utf16_name_uses_aligned_nul_terminator() {
+    let data = build_prefetch_v30("CMD.EXE", 5, &[]);
+
+    let extractor = PrefetchExtractor;
+    let ctx = ArtifactContext {
+        file_id: t("pf-utf16"),
+        file_path: "CMD.EXE-DEADBEEF.pf".into(),
+        reader: Box::new(std::io::Cursor::new(data)),
+    };
+    let mut sink = VecSink::new();
+    let report = extractor.run(ctx, &mut sink).unwrap();
+
+    assert_eq!(report.artifacts_found, 1);
     assert!(sink.artifacts[0].title.contains("CMD.EXE"));
 }
 
@@ -229,6 +270,42 @@ fn evtx_json_records_extract_boot_shutdown_candidates() {
 }
 
 #[test]
+fn evtx_json_records_fail_closed_for_non_system_log_path() {
+    let extraction = extract_boot_shutdown_events_from_json_records(
+        &[json!({
+            "Event": {
+                "System": {
+                    "Provider": { "@Name": "EventLog" },
+                    "EventID": 6005,
+                    "TimeCreated": { "@SystemTime": "2026-02-01T00:00:00Z" }
+                }
+            }
+        })],
+        "Windows/System32/winevt/Logs/Security.evtx",
+    );
+
+    assert!(extraction.events.is_empty());
+    assert_eq!(
+        extraction.warnings,
+        vec!["Windows/System32/winevt/Logs/Security.evtx is outside bounded System.evtx boot/shutdown parser scope"]
+    );
+}
+
+#[test]
+fn evtx_binary_parser_fail_closed_for_non_system_log_path() {
+    let extraction = extract_boot_shutdown_events(
+        b"ElfFile\0",
+        "Windows/System32/winevt/Logs/Application.evtx",
+    );
+
+    assert!(extraction.events.is_empty());
+    assert_eq!(
+        extraction.warnings,
+        vec!["Windows/System32/winevt/Logs/Application.evtx is outside bounded System.evtx boot/shutdown parser scope"]
+    );
+}
+
+#[test]
 fn jumplist_no_embedded_lnk_reports_generic_artifact() {
     let extractor = JumpListExtractor;
     assert!(extractor.supports_path(
@@ -331,7 +408,50 @@ fn sru_invalid_minimal_content_reports_sqlite_error_without_artifacts() {
     assert_eq!(report.timeline_events, 0);
     assert!(sink.artifacts.is_empty());
     assert!(sink.timeline_events.is_empty());
-    assert_eq!(report.errors, vec!["Not a valid SQLite database"]);
+    assert_eq!(report.errors, vec!["Not a recognized SRU ESE database"]);
+}
+
+#[test]
+fn sru_sqlite_header_reports_format_mismatch_without_artifacts() {
+    let extractor = SruExtractor;
+    let mut data = vec![0u8; 1024];
+    data[0..16].copy_from_slice(b"SQLite format 3\0");
+
+    let ctx = ArtifactContext {
+        file_id: t("sru-sqlite"),
+        file_path: "C:/Windows/System32/sru/SRUDB.DAT".into(),
+        reader: Box::new(std::io::Cursor::new(data)),
+    };
+    let mut sink = VecSink::new();
+    let report = extractor.run(ctx, &mut sink).unwrap();
+
+    assert_eq!(report.artifacts_found, 0);
+    assert_eq!(report.timeline_events, 0);
+    assert!(sink.artifacts.is_empty());
+    assert_eq!(
+        report.errors,
+        vec!["SRUDB.DAT uses ESE/Jet Blue format, not SQLite"]
+    );
+}
+
+#[test]
+fn sru_ese_header_reports_file_level_artifact() {
+    let extractor = SruExtractor;
+    let mut data = vec![0u8; 1024];
+    data[4..8].copy_from_slice(&0x89AB_CDEFu32.to_le_bytes());
+
+    let ctx = ArtifactContext {
+        file_id: t("sru-ese"),
+        file_path: "C:/Windows/System32/sru/SRUDB.DAT".into(),
+        reader: Box::new(std::io::Cursor::new(data)),
+    };
+    let mut sink = VecSink::new();
+    let report = extractor.run(ctx, &mut sink).unwrap();
+
+    assert_eq!(report.artifacts_found, 1);
+    assert!(report.errors.is_empty());
+    assert_eq!(sink.artifacts.len(), 1);
+    assert_eq!(sink.artifacts[0].family, "SRU");
 }
 
 #[test]
@@ -344,6 +464,8 @@ fn registry_supports_standard_extensionless_hives_only_in_config_path() {
     assert!(extractor.supports_path("C:/Users/alice/AppData/Local/Microsoft/Windows/UsrClass.dat"));
     assert!(!extractor.supports_path("C:/Temp/SYSTEM"));
     assert!(!extractor.supports_path("C:/Temp/software"));
+    assert!(!extractor.supports_path("C:/Temp/system-backup.dat"));
+    assert!(!extractor.supports_path("C:/Temp/awesome.dat"));
     assert!(!extractor.supports_path("notes.txt"));
 }
 

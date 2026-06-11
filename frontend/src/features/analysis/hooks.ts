@@ -2,12 +2,17 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   classifyFiles,
   generateAnalysisSummary,
+  getBrowserHistorySummary,
+  getEmailExtractionSummary,
   getEvidenceClassificationSummary,
+  getRegistryExtractionSummary,
   getSystemInfo,
+  runAnalysisExtraction,
   runEvidenceClassification,
 } from '@/lib/api/analysis';
 import { useCurrentCase } from '@/features/case/hooks';
 import { useQueryClient } from '@tanstack/react-query';
+import { AnalysisExtractionPageRequest, AnalysisExtractionRequest } from '@/types/models';
 
 export function useAnalysisSystemInfo() {
   const currentCase = useCurrentCase();
@@ -39,6 +44,42 @@ export function useEvidenceClassificationSummary() {
   });
 }
 
+export function useRegistryExtractionSummary(request: AnalysisExtractionPageRequest = {}) {
+  const currentCase = useCurrentCase();
+  const offset = request.offset ?? 0;
+  const limit = request.limit ?? 200;
+  return useQuery({
+    queryKey: ['analysis', 'registry-extraction', currentCase.data?.id ?? null, offset, limit],
+    queryFn: () => getRegistryExtractionSummary({ offset, limit }),
+    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+    retry: false,
+  });
+}
+
+export function useBrowserHistorySummary(request: AnalysisExtractionPageRequest = {}) {
+  const currentCase = useCurrentCase();
+  const offset = request.offset ?? 0;
+  const limit = request.limit ?? 200;
+  return useQuery({
+    queryKey: ['analysis', 'browser-history', currentCase.data?.id ?? null, offset, limit],
+    queryFn: () => getBrowserHistorySummary({ offset, limit }),
+    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+    retry: false,
+  });
+}
+
+export function useEmailExtractionSummary(request: AnalysisExtractionPageRequest = {}) {
+  const currentCase = useCurrentCase();
+  const offset = request.offset ?? 0;
+  const limit = request.limit ?? 200;
+  return useQuery({
+    queryKey: ['analysis', 'email-extraction', currentCase.data?.id ?? null, offset, limit],
+    queryFn: () => getEmailExtractionSummary({ offset, limit }),
+    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+    retry: false,
+  });
+}
+
 export function useRunEvidenceClassification() {
   const qc = useQueryClient();
   const currentCase = useCurrentCase();
@@ -49,6 +90,22 @@ export function useRunEvidenceClassification() {
         queryKey: ['analysis', 'evidence-classification', currentCase.data?.id ?? null],
       });
       qc.invalidateQueries({ queryKey: ['artifacts'] });
+    },
+  });
+}
+
+export function useRunAnalysisExtraction() {
+  const qc = useQueryClient();
+  const currentCase = useCurrentCase();
+  return useMutation({
+    mutationFn: (request?: AnalysisExtractionRequest) => runAnalysisExtraction(request ?? { categories: [] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['analysis', 'evidence-classification', currentCase.data?.id ?? null] });
+      qc.invalidateQueries({ queryKey: ['analysis', 'registry-extraction', currentCase.data?.id ?? null] });
+      qc.invalidateQueries({ queryKey: ['analysis', 'browser-history', currentCase.data?.id ?? null] });
+      qc.invalidateQueries({ queryKey: ['analysis', 'email-extraction', currentCase.data?.id ?? null] });
+      qc.invalidateQueries({ queryKey: ['artifacts'] });
+      qc.invalidateQueries({ queryKey: ['timeline'] });
     },
   });
 }

@@ -305,6 +305,8 @@ struct FileTask {
     size: Option<u64>,
     ext: Option<String>,
     deleted: bool,
+    hidden: bool,
+    system: bool,
     created_at: Option<chrono::DateTime<chrono::Utc>>,
     modified_at: Option<chrono::DateTime<chrono::Utc>>,
     accessed_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -324,6 +326,8 @@ impl FileTask {
             size: self.size,
             ext: self.ext.clone(),
             deleted: self.deleted,
+            hidden: self.hidden,
+            system: self.system,
             created_at: self.created_at,
             modified_at: self.modified_at,
             accessed_at: self.accessed_at,
@@ -1441,7 +1445,7 @@ fn fetch_analysis_file_page(
     let mut stmt = conn
         .prepare(
             "SELECT id, parent_id, data_source_id, path, name, entry_type,
-                    size, ext, deleted, created_at, modified_at, accessed_at, changed_at, hash_sha256
+                    size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256
              FROM file_entries
              WHERE data_source_id = ?1 AND LOWER(entry_type) = 'file'
              ORDER BY path ASC
@@ -1473,23 +1477,25 @@ fn row_to_file_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<FileTask> {
         size: row.get(6)?,
         ext: row.get(7)?,
         deleted: row.get::<_, i32>(8)? != 0,
+        hidden: row.get::<_, i32>(9)? != 0,
+        system: row.get::<_, i32>(10)? != 0,
         created_at: row
-            .get::<_, Option<String>>(9)?
-            .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
-            .map(|dt| dt.with_timezone(&chrono::Utc)),
-        modified_at: row
-            .get::<_, Option<String>>(10)?
-            .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
-            .map(|dt| dt.with_timezone(&chrono::Utc)),
-        accessed_at: row
             .get::<_, Option<String>>(11)?
             .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
             .map(|dt| dt.with_timezone(&chrono::Utc)),
-        changed_at: row
+        modified_at: row
             .get::<_, Option<String>>(12)?
             .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
             .map(|dt| dt.with_timezone(&chrono::Utc)),
-        hash_sha256: row.get(13)?,
+        accessed_at: row
+            .get::<_, Option<String>>(13)?
+            .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+            .map(|dt| dt.with_timezone(&chrono::Utc)),
+        changed_at: row
+            .get::<_, Option<String>>(14)?
+            .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+            .map(|dt| dt.with_timezone(&chrono::Utc)),
+        hash_sha256: row.get(15)?,
     })
 }
 
@@ -1976,6 +1982,8 @@ mod tests {
             size: Some(512),
             ext: Some("txt".to_string()),
             deleted: false,
+            hidden: false,
+            system: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,
@@ -2011,6 +2019,8 @@ mod tests {
             size: Some(128 * 1024),
             ext: Some("pf".to_string()),
             deleted: false,
+            hidden: false,
+            system: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,
@@ -2155,6 +2165,8 @@ mod tests {
             size: Some(infrastructure::constants::IMPORT_TEXT_INDEX_FILE_LIMIT_BYTES + 1),
             ext: Some("txt".to_string()),
             deleted: false,
+            hidden: false,
+            system: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,

@@ -288,6 +288,7 @@ PR 是主校验入口。
 - `integration-tests`
 - `runtime-cache-tests`
 - `traceability-tests`
+- `documentation-drift-guard`
 
 ### ci-frontend.yml
 - `lint`

@@ -8,6 +8,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tempfile::TempDir;
+use transport::commands::GetFileRowsRequest;
 
 fn sample_path() -> std::path::PathBuf {
     testing::fixtures::local_liuyang_e01_fixture().unwrap_or_else(|| {
@@ -800,6 +801,164 @@ fn liuyang_e01_parallel_mft_backfill_surfaces_system_volume_information_children
                 svi_entry.path,
                 children.len(),
                 child_names
+            );
+
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample"]
+fn liuyang_e01_visibility_filters_surface_hidden_system_entries_only_when_requested() {
+    let fixture_path = sample_path();
+    let mut reader = E01Reader::open(&fixture_path).unwrap();
+    let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
+    let ntfs = probe
+        .candidates
+        .iter()
+        .find(|candidate| {
+            matches!(
+                candidate.kind,
+                datasource_service::ImageFilesystemKind::Ntfs
+            )
+        })
+        .expect("Liu Yang sample should include a readable NTFS candidate");
+
+    let (mft_cluster, cluster_size, record_size, bytes_per_sector, mft_data_size) =
+        read_mft_parameters(&fixture_path, ntfs.offset).unwrap();
+
+    let tmp = TempDir::new().unwrap();
+    let active = case_service::create_case(
+        &tmp.path().join("cases"),
+        "liuyang-visibility",
+        Some("tester"),
+    )
+    .unwrap();
+    let case_id = active.meta.id.clone();
+
+    active
+        .with_conn(|conn| {
+            let data_source_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
+            DataSourceRepo::new(conn).insert(
+                &case_id,
+                &domain::DataSource {
+                    id: data_source_id.clone(),
+                    name: "liuyang-real-sample".into(),
+                    kind: domain::DataSourceKind::E01,
+                    source_path: fixture_path.clone(),
+                    imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
+                },
+            )?;
+
+            let stats = file_service::enumerate_filesystem_mft(
+                conn,
+                &data_source_id,
+                &fixture_path,
+                ntfs.offset,
+                mft_cluster,
+                cluster_size,
+                record_size,
+                bytes_per_sector,
+                mft_data_size,
+                None,
+                None,
+            )?;
+            assert!(stats.file_count > 1000, "Should enumerate many Liu Yang files");
+            assert!(stats.dir_count > 10, "Should enumerate many Liu Yang directories");
+
+            let visible_root = file_service::get_file_tree_real_with_visibility(conn, false)
+                .map_err(persistence_sqlite::DbError::System)?
+                .into_iter()
+                .find(|node| node.id == "mft:5")
+                .expect("visible tree should contain NTFS root");
+            let visible_children = file_service::get_file_children_lazy_with_visibility(
+                conn,
+                &visible_root.id,
+                0,
+                500,
+                false,
+            )
+            .map_err(persistence_sqlite::DbError::System)?;
+            assert!(
+                visible_children
+                    .children
+                    .iter()
+                    .all(|node| node.name != "System Volume Information"),
+                "show_hidden=false should hide System Volume Information from the tree"
+            );
+
+            let all_root = file_service::get_file_tree_real_with_visibility(conn, true)
+                .map_err(persistence_sqlite::DbError::System)?
+                .into_iter()
+                .find(|node| node.id == "mft:5")
+                .expect("all tree should contain NTFS root");
+            let all_children = file_service::get_file_children_lazy_with_visibility(
+                conn,
+                &all_root.id,
+                0,
+                500,
+                true,
+            )
+            .map_err(persistence_sqlite::DbError::System)?;
+            let repo = FileRepo::new(conn);
+            let svi_entry = repo
+                .find_children(&domain::FileEntryId("mft:5".to_string()))?
+                .into_iter()
+                .find(|entry| {
+                    entry.name.eq_ignore_ascii_case("System Volume Information")
+                        && entry.entry_type == domain::EntryType::Directory
+                })
+                .expect("show_hidden=true should retain System Volume Information in the root children set");
+            assert!(svi_entry.hidden);
+            assert!(svi_entry.system);
+            assert!(
+                all_children.total_count > visible_children.total_count,
+                "show_hidden=true should increase tree child count even if the first page is saturated"
+            );
+
+            let visible_rows = file_service::get_file_rows_for_request(
+                conn,
+                &GetFileRowsRequest {
+                    parent_id: Some("mft:5".to_string()),
+                    offset: 0,
+                    limit: 500,
+                    show_hidden: false,
+                },
+            )
+            .map_err(persistence_sqlite::DbError::System)?;
+            assert!(
+                visible_rows
+                    .rows
+                    .iter()
+                    .all(|row| row.name != "System Volume Information"),
+                "show_hidden=false should hide System Volume Information from rows"
+            );
+
+            let all_rows = file_service::get_file_rows_for_request(
+                conn,
+                &GetFileRowsRequest {
+                    parent_id: Some("mft:5".to_string()),
+                    offset: 0,
+                    limit: 500,
+                    show_hidden: true,
+                },
+            )
+            .map_err(persistence_sqlite::DbError::System)?;
+            assert!(
+                all_rows.total_count > visible_rows.total_count,
+                "show_hidden=true should expand the row total when hidden/system children exist"
+            );
+
+            eprintln!(
+                "visibility regression: visible_tree={} all_tree_total={} visible_rows_total={} all_rows_total={} svi_hidden={} svi_system={}",
+                visible_children.children.len(),
+                all_children.total_count,
+                visible_rows.total_count,
+                all_rows.total_count,
+                svi_entry.hidden,
+                svi_entry.system
             );
 
             Ok(())

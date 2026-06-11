@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DataAnalysis } from './DataAnalysis';
 
@@ -10,6 +10,10 @@ const mocks = vi.hoisted(() => ({
   systemInfo: vi.fn(),
   evidenceSummary: vi.fn(),
   evidenceScan: vi.fn(),
+  extractionRun: vi.fn(),
+  registrySummary: vi.fn(),
+  browserSummary: vi.fn(),
+  emailSummary: vi.fn(),
   classifications: vi.fn(),
   summaryMutation: vi.fn(),
 }));
@@ -23,6 +27,10 @@ vi.mock('@/features/analysis/hooks', () => ({
   useAnalysisSystemInfo: mocks.systemInfo,
   useEvidenceClassificationSummary: mocks.evidenceSummary,
   useRunEvidenceClassification: mocks.evidenceScan,
+  useRunAnalysisExtraction: mocks.extractionRun,
+  useRegistryExtractionSummary: mocks.registrySummary,
+  useBrowserHistorySummary: mocks.browserSummary,
+  useEmailExtractionSummary: mocks.emailSummary,
   useAnalysisClassifications: mocks.classifications,
   useGenerateAnalysisSummary: mocks.summaryMutation,
 }));
@@ -190,6 +198,148 @@ describe('DataAnalysis page', () => {
       isPending: false,
       mutateAsync: vi.fn().mockResolvedValue({}),
     });
+    mocks.extractionRun.mockReturnValue({
+      data: undefined,
+      error: null,
+      isPending: false,
+      mutateAsync: vi.fn().mockResolvedValue({
+        status: 'parsed',
+        scannedCount: 8,
+        artifactCount: 7,
+        timelineEventCount: 3,
+        generatedAt: '2026-06-01T10:15:00Z',
+        warnings: [],
+      }),
+    });
+    mocks.registrySummary.mockReturnValue(queryState({
+      data: {
+        status: 'parsed',
+        total: 2,
+        generatedAt: '2026-06-01T10:10:00Z',
+        warnings: [],
+        values: [
+          {
+            artifactId: 'reg-1',
+            fileId: 'file-system',
+            sourcePath: 'Windows/System32/config/SYSTEM',
+            hivePath: 'SYSTEM',
+            keyPath: 'ControlSet001\\Control\\ComputerName\\ComputerName',
+            valueName: 'ComputerName',
+            valueType: 'REG_SZ',
+            data: 'BETA-LAB',
+            parser: 'registry.key_values',
+            createdAt: '2026-06-01T10:10:00Z',
+          },
+          {
+            artifactId: 'reg-2',
+            fileId: 'file-software',
+            sourcePath: 'Windows/System32/config/SOFTWARE',
+            hivePath: 'SOFTWARE',
+            keyPath: 'Microsoft\\Windows NT\\CurrentVersion',
+            valueName: 'ProductName',
+            valueType: 'REG_SZ',
+            data: 'Windows Evidence Edition 24H2',
+            parser: 'registry.key_values',
+            createdAt: '2026-06-01T10:10:00Z',
+          },
+        ],
+      },
+    }));
+    mocks.browserSummary.mockReturnValue(queryState({
+      data: {
+        status: 'parsed',
+        visitTotal: 3,
+        downloadTotal: 1,
+        generatedAt: '2026-06-01T10:12:00Z',
+        warnings: [],
+        visits: [
+          {
+            artifactId: 'visit-1',
+            fileId: 'file-chrome-history',
+            sourcePath: 'Users/Admin/AppData/Local/Google/Chrome/User Data/Default/History',
+            browser: 'Chrome',
+            profile: 'Default',
+            url: 'https://example.com/incident-playbook',
+            title: 'Incident Response Playbook',
+            visitTime: '2026-05-11T13:58:00Z',
+            visitCount: 3,
+          },
+          {
+            artifactId: 'visit-2',
+            fileId: 'file-edge-history',
+            sourcePath: 'Users/Admin/AppData/Local/Microsoft/Edge/User Data/Profile 1/History',
+            browser: 'Edge',
+            profile: 'Profile 1',
+            url: 'https://login.microsoftonline.com/',
+            title: 'Sign in to your account',
+            visitTime: '2026-05-11T14:02:10Z',
+            visitCount: 2,
+          },
+          {
+            artifactId: 'visit-3',
+            fileId: 'file-firefox-places',
+            sourcePath: 'Users/Admin/AppData/Roaming/Mozilla/Firefox/Profiles/abcd.default/places.sqlite',
+            browser: 'Firefox',
+            profile: 'abcd.default',
+            url: 'https://developer.mozilla.org/',
+            title: 'MDN Web Docs',
+            visitTime: '2026-05-11T14:08:40Z',
+            visitCount: 1,
+          },
+        ],
+        downloads: [
+          {
+            artifactId: 'download-1',
+            fileId: 'file-chrome-history',
+            sourcePath: 'Users/Admin/AppData/Local/Google/Chrome/User Data/Default/History',
+            browser: 'Chrome',
+            profile: 'Default',
+            url: 'https://example.com/tools/triage.zip',
+            targetPath: 'C:/Users/Admin/Downloads/triage.zip',
+            startTime: '2026-05-11T14:18:00Z',
+            totalBytes: 7340032,
+          },
+        ],
+      },
+    }));
+    mocks.emailSummary.mockReturnValue(queryState({
+      data: {
+        status: 'parsed',
+        total: 2,
+        generatedAt: '2026-06-01T10:14:00Z',
+        warnings: [],
+        messages: [
+          {
+            artifactId: 'mail-1',
+            fileId: 'file-mail-1',
+            sourcePath: 'Users/Admin/Documents/incident-response.eml',
+            sentAt: '2026-05-11T12:40:00Z',
+            from: 'alice@example.com',
+            to: ['dfir@example.com'],
+            cc: ['lead@example.com'],
+            bcc: [],
+            subject: 'Initial triage notes',
+            messageId: '<mock-incident-1@example.com>',
+            attachments: ['triage.csv'],
+            bodyPreview: 'Please review the initial triage notes.',
+          },
+          {
+            artifactId: 'mail-2',
+            fileId: 'file-mail-2',
+            sourcePath: 'Users/Admin/Documents/forwarded-alert.emlx',
+            sentAt: '2026-05-11T13:05:00Z',
+            from: 'soc@example.com',
+            to: ['admin@example.com'],
+            cc: [],
+            bcc: [],
+            subject: 'Forwarded security alert',
+            messageId: '<mock-alert-2@example.com>',
+            attachments: [],
+            bodyPreview: 'Endpoint alert was forwarded from the SOC queue.',
+          },
+        ],
+      },
+    }));
     mocks.classifications.mockReturnValue(queryState({
       data: [
         {
@@ -271,18 +421,21 @@ describe('DataAnalysis page', () => {
 
     expect(screen.getByRole('tab', { name: /系统信息/ })).toBeDefined();
     expect(screen.getByRole('tab', { name: /证据分类/ })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /注册表/ })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /浏览器记录/ })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /邮件信息/ })).toBeDefined();
     expect(screen.getByRole('tab', { name: /文件分类/ })).toBeDefined();
-    expect(screen.getByRole('tab', { name: /分析报告/ })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /报告/ })).toBeDefined();
     expect(screen.getAllByText('已解析').length).toBeGreaterThan(0);
-    expect(screen.getByText('BETA-LAB')).toBeDefined();
-    expect(screen.getByText('Windows Evidence Edition 24H2')).toBeDefined();
+    expect(screen.getAllByText('BETA-LAB').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Windows Evidence Edition 24H2').length).toBeGreaterThan(0);
     expect(screen.getAllByText('registry.system').length).toBeGreaterThan(0);
     expect(screen.getAllByText('registry.software').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Windows/System32/config/SYSTEM').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Windows/System32/config/SOFTWARE').length).toBeGreaterThan(0);
     expect(screen.getByText('字段级来源')).toBeDefined();
     expect(screen.getByText('computerName')).toBeDefined();
-    expect(screen.getByText('ProductName')).toBeDefined();
+    expect(screen.getAllByText('ProductName').length).toBeGreaterThan(0);
     expect(screen.getByText('EventID 6005')).toBeDefined();
     expect(screen.getByText(/EventLog 6005 candidate/)).toBeDefined();
     expect(screen.getAllByText(/evtx\.boot_shutdown/).length).toBeGreaterThan(0);
@@ -309,6 +462,84 @@ describe('DataAnalysis page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /开始证据分类/ }));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith([]));
+  });
+
+  it('runs Registry, BrowserHistory and Email extraction sequentially from the header toolbar', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({
+      status: 'parsed',
+      scannedCount: 8,
+      artifactCount: 7,
+      timelineEventCount: 3,
+      warnings: [],
+    });
+    mocks.extractionRun.mockReturnValue({
+      data: undefined,
+      error: null,
+      isPending: false,
+      mutateAsync,
+    });
+
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /运行提取/ }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(3));
+    expect(mutateAsync).toHaveBeenNthCalledWith(1, { categories: ['Registry'] });
+    expect(mutateAsync).toHaveBeenNthCalledWith(2, { categories: ['BrowserHistory'] });
+    expect(mutateAsync).toHaveBeenNthCalledWith(3, { categories: ['Email'] });
+  });
+
+  it('shows extraction progress overview on the first screen and updates it after running extraction', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({
+      status: 'parsed',
+      scannedCount: 8,
+      artifactCount: 7,
+      timelineEventCount: 3,
+      warnings: [],
+    });
+    mocks.extractionRun.mockReturnValue({
+      data: undefined,
+      error: null,
+      isPending: false,
+      mutateAsync,
+    });
+
+    renderPage();
+
+    const overview = screen.getByTestId('analysis-progress-overview');
+    expect(within(overview).getByText('注册表提取')).toBeDefined();
+    expect(within(overview).getByText('浏览器记录提取')).toBeDefined();
+    expect(within(overview).getByText('邮件信息提取')).toBeDefined();
+    expect(within(overview).getAllByText('等待').length).toBe(3);
+
+    fireEvent.click(screen.getByRole('button', { name: /运行提取/ }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(within(overview).getAllByText('已完成').length).toBe(3));
+    expect(within(overview).getAllByText('scanned=8').length).toBe(3);
+    expect(within(overview).getAllByText('artifacts=7').length).toBe(3);
+    expect(within(overview).getAllByText('timeline=3').length).toBe(3);
+  });
+
+  it('renders registry, browser and email extraction tabs', () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole('tab', { name: /注册表/ }));
+    expect(screen.getAllByText('注册表提取').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('ComputerName').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('registry.key_values').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('tab', { name: /浏览器记录/ }));
+    expect(screen.getAllByText('浏览器记录').length).toBeGreaterThan(0);
+    expect(screen.getByText('Incident Response Playbook')).toBeDefined();
+    expect(screen.getByText('Edge')).toBeDefined();
+    expect(screen.getByText('Firefox')).toBeDefined();
+    expect(screen.getByText('C:/Users/Admin/Downloads/triage.zip')).toBeDefined();
+
+    fireEvent.click(screen.getByRole('tab', { name: /邮件信息/ }));
+    expect(screen.getAllByText('邮件信息').length).toBeGreaterThan(0);
+    expect(screen.getByText('Initial triage notes')).toBeDefined();
+    expect(screen.getByText('alice@example.com')).toBeDefined();
+    expect(screen.getByText('triage.csv')).toBeDefined();
   });
 
   it('renders notParsed system info without fake facts', () => {
@@ -369,7 +600,7 @@ describe('DataAnalysis page', () => {
     });
 
     renderPage();
-    fireEvent.click(screen.getByRole('tab', { name: /分析报告/ }));
+    fireEvent.click(screen.getByRole('tab', { name: /报告/ }));
     fireEvent.click(screen.getByRole('button', { name: /下载 Markdown 报告/ }));
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));

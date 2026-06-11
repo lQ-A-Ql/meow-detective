@@ -1,7 +1,13 @@
 import {
+  AnalysisExtractionPageRequest,
+  AnalysisExtractionRequest,
+  AnalysisExtractionRun,
   AnalysisFileClassification,
   AnalysisSystemInfo,
+  BrowserHistorySummary,
+  EmailExtractionSummary,
   EvidenceClassificationSummary,
+  RegistryExtractionSummary,
 } from '@/types/models';
 import { apiClient } from './client';
 
@@ -32,6 +38,46 @@ export async function runEvidenceClassification(categories: string[] = []): Prom
     'run_evidence_classification',
     () => apiClient.getMockProvider().runEvidenceClassification(categories),
     { request: { categories } },
+  );
+}
+
+export async function runAnalysisExtraction(
+  request: AnalysisExtractionRequest = { categories: [] },
+): Promise<AnalysisExtractionRun> {
+  return apiClient.request(
+    'run_analysis_extraction',
+    () => apiClient.getMockProvider().runAnalysisExtraction(request),
+    { request },
+  );
+}
+
+export async function getRegistryExtractionSummary(
+  request: AnalysisExtractionPageRequest = {},
+): Promise<RegistryExtractionSummary> {
+  return apiClient.request(
+    'get_registry_extraction_summary',
+    () => apiClient.getMockProvider().getRegistryExtractionSummary(request),
+    { request },
+  );
+}
+
+export async function getBrowserHistorySummary(
+  request: AnalysisExtractionPageRequest = {},
+): Promise<BrowserHistorySummary> {
+  return apiClient.request(
+    'get_browser_history_summary',
+    () => apiClient.getMockProvider().getBrowserHistorySummary(request),
+    { request },
+  );
+}
+
+export async function getEmailExtractionSummary(
+  request: AnalysisExtractionPageRequest = {},
+): Promise<EmailExtractionSummary> {
+  return apiClient.request(
+    'get_email_extraction_summary',
+    () => apiClient.getMockProvider().getEmailExtractionSummary(request),
+    { request },
   );
 }
 

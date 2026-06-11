@@ -40,6 +40,8 @@ impl LogicalFsReader {
             path: self.to_relative(&full),
             is_dir: metadata.is_dir() && !metadata.file_type().is_symlink(),
             size: metadata.len(),
+            hidden: is_hidden_path(&full),
+            system: is_system_path(&full),
             created_at: system_time_to_utc(metadata.created().ok()),
             modified_at: system_time_to_utc(metadata.modified().ok()),
             accessed_at: system_time_to_utc(metadata.accessed().ok()),
@@ -59,6 +61,8 @@ impl FileSystemReader for LogicalFsReader {
             path: String::new(),
             is_dir: true,
             size: 0,
+            hidden: is_hidden_path(&self.root),
+            system: is_system_path(&self.root),
             created_at: system_time_to_utc(metadata.created().ok()),
             modified_at: system_time_to_utc(metadata.modified().ok()),
             accessed_at: system_time_to_utc(metadata.accessed().ok()),
@@ -89,6 +93,39 @@ impl FileSystemReader for LogicalFsReader {
     fn data_source_name(&self) -> &str {
         &self.data_source_name
     }
+}
+
+#[cfg(windows)]
+fn is_hidden_path(path: &Path) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with('.'))
+        || fs::symlink_metadata(path)
+            .map(|metadata| metadata.file_attributes() & FILE_ATTRIBUTE_HIDDEN != 0)
+            .unwrap_or(false)
+}
+
+#[cfg(not(windows))]
+fn is_hidden_path(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with('.'))
+}
+
+#[cfg(windows)]
+fn is_system_path(path: &Path) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_SYSTEM: u32 = 0x4;
+    fs::symlink_metadata(path)
+        .map(|metadata| metadata.file_attributes() & FILE_ATTRIBUTE_SYSTEM != 0)
+        .unwrap_or(false)
+}
+
+#[cfg(not(windows))]
+fn is_system_path(_path: &Path) -> bool {
+    false
 }
 
 fn system_time_to_utc(st: Option<std::time::SystemTime>) -> Option<chrono::DateTime<chrono::Utc>> {
@@ -137,7 +174,16 @@ mod tests {
         let tmp = tempfile::TempDir::new().unwrap();
         let outside = tempfile::TempDir::new().unwrap();
         std::fs::write(outside.path().join("outside.txt"), b"outside").unwrap();
-        std::os::windows::fs::symlink_dir(outside.path(), tmp.path().join("linked")).unwrap();
+        match std::os::windows::fs::symlink_dir(outside.path(), tmp.path().join("linked")) {
+            Ok(()) => {}
+            Err(err)
+                if err.kind() == std::io::ErrorKind::PermissionDenied
+                    || err.raw_os_error() == Some(1314) =>
+            {
+                return;
+            }
+            Err(err) => panic!("failed to create symlink fixture: {err}"),
+        }
 
         let reader = LogicalFsReader::open(tmp.path(), "fixture").unwrap();
         let children = reader.list_children("").unwrap();

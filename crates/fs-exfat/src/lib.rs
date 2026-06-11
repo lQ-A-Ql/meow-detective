@@ -11,15 +11,16 @@ pub mod types;
 use boot::ExfatBootSector;
 use dir::FileEntrySet;
 use evidence_core::filesystem::{
-    child_nodes_with_parent_path_with_separator, file_not_found, fs_node,
+    child_nodes_with_parent_path_with_separator, file_not_found, fs_node_with_attributes,
     is_special_directory_name, path_components, path_is_directory, path_is_not_directory,
     path_not_found, root_node, truncate_data_to_declared_size, unsupported_fs, FileSystemReader,
     FsNode,
 };
 use evidence_core::EvidenceReader;
-use fat::FatEntry;
+use fat::{FatEntry, FatReader};
 use std::cell::RefCell;
 use std::io::{self, Read, Seek, SeekFrom};
+use types::{ATTR_HIDDEN, ATTR_SYSTEM, MIN_CLUSTER};
 
 /// exFAT filesystem reader.
 pub struct ExfatReader {
@@ -56,8 +57,22 @@ impl ExfatReader {
         })
     }
 
+    /// Validate that a cluster index is addressable in this volume's cluster heap.
+    fn validate_cluster(&self, cluster: u32) -> io::Result<()> {
+        let max_cluster = self.boot.cluster_count.saturating_add(1);
+        if cluster < MIN_CLUSTER || cluster > max_cluster {
+            return Err(evidence_core::filesystem::invalid_fs_data(format!(
+                "cluster {} out of range 2..={}",
+                cluster, max_cluster
+            )));
+        }
+        Ok(())
+    }
+
     /// Read a FAT entry for a given cluster.
     fn read_fat_entry(&self, cluster: u32) -> io::Result<FatEntry> {
+        self.validate_cluster(cluster)?;
+
         let fat_reader = fat::FatReader::new(
             self.volume_offset + self.boot.fat_byte_offset(),
             self.boot.bytes_per_sector(),
@@ -75,12 +90,45 @@ impl ExfatReader {
 
     /// Walk a cluster chain and return all cluster indices.
     fn walk_cluster_chain(&self, start_cluster: u32) -> io::Result<Vec<u32>> {
-        fat::walk_cluster_chain(start_cluster, |cluster| self.read_fat_entry(cluster))
+        self.validate_cluster(start_cluster)?;
+        fat::walk_cluster_chain_with_limit(
+            start_cluster,
+            Some(self.boot.cluster_count as usize),
+            |cluster| self.read_fat_entry(cluster),
+        )
     }
 
     /// Convert a cluster index to an absolute byte offset in the evidence.
     fn cluster_to_abs_offset(&self, cluster: u32) -> u64 {
         self.volume_offset + self.boot.cluster_to_offset(cluster)
+    }
+
+    /// Read data from a contiguous cluster run that does not use the FAT chain.
+    fn read_no_fat_chain_data(&self, start_cluster: u32, data_length: u64) -> io::Result<Vec<u8>> {
+        self.validate_cluster(start_cluster)?;
+        let cluster_size = self.boot.cluster_size();
+        let clusters_to_read = data_length.div_ceil(cluster_size).max(1);
+        let max_cluster = self.boot.cluster_count.saturating_add(1) as u64;
+        let end_cluster = start_cluster as u64 + clusters_to_read - 1;
+        if end_cluster > max_cluster {
+            return Err(evidence_core::filesystem::invalid_fs_data(format!(
+                "NoFatChain run starting at cluster {} exceeds declared cluster count ({})",
+                start_cluster, self.boot.cluster_count
+            )));
+        }
+
+        let mut data = Vec::with_capacity((clusters_to_read * cluster_size) as usize);
+        for cluster in start_cluster..=end_cluster as u32 {
+            let offset = self.cluster_to_abs_offset(cluster);
+            let mut reader = self.reader.borrow_mut();
+            reader.seek(SeekFrom::Start(offset))?;
+
+            let mut buf = vec![0u8; cluster_size as usize];
+            reader.read_exact(&mut buf)?;
+            data.extend_from_slice(&buf);
+        }
+
+        Ok(data)
     }
 
     /// Read data from a cluster chain.
@@ -108,20 +156,36 @@ impl ExfatReader {
         dir::parse_directory_entries(&data)
     }
 
-    /// Resolve a path to a (cluster, is_dir, size) tuple.
+    fn read_entry_data(
+        &self,
+        cluster: u32,
+        data_length: u64,
+        no_fat_chain: bool,
+    ) -> io::Result<Vec<u8>> {
+        if data_length == 0 {
+            return Ok(Vec::new());
+        }
+        if no_fat_chain {
+            self.read_no_fat_chain_data(cluster, data_length)
+        } else {
+            self.read_cluster_chain_data(cluster)
+        }
+    }
+
+    /// Resolve a path to a (cluster, is_dir, size, no_fat_chain) tuple.
     ///
     /// Returns None if the path doesn't exist.
-    fn resolve_path(&self, path: &str) -> io::Result<Option<(u32, bool, u64)>> {
+    fn resolve_path(&self, path: &str) -> io::Result<Option<(u32, bool, u64, bool)>> {
         let components = path_components(path);
 
         if components.is_empty() {
             // Root directory
-            return Ok(Some((self.boot.first_cluster_of_root, true, 0)));
+            return Ok(Some((self.boot.first_cluster_of_root, true, 0, false)));
         }
 
         let mut current_cluster = self.boot.first_cluster_of_root;
         let mut is_dir = true;
-        let mut size = 0u64;
+        let mut no_fat_chain = false;
 
         for (i, component) in components.iter().enumerate() {
             if !is_dir {
@@ -140,17 +204,18 @@ impl ExfatReader {
                     let is_last = i == components.len() - 1;
                     current_cluster = entry.first_cluster;
                     is_dir = entry.is_directory();
-                    size = if is_dir { 0 } else { entry.valid_data_length };
+                    let size = if is_dir { 0 } else { entry.valid_data_length };
+                    no_fat_chain = entry.no_fat_chain;
 
                     if is_last {
-                        return Ok(Some((current_cluster, is_dir, size)));
+                        return Ok(Some((current_cluster, is_dir, size, no_fat_chain)));
                     }
                 }
                 None => return Ok(None),
             }
         }
 
-        Ok(Some((current_cluster, is_dir, size)))
+        Ok(Some((current_cluster, is_dir, 0, no_fat_chain)))
     }
 }
 
@@ -160,7 +225,7 @@ impl FileSystemReader for ExfatReader {
     }
 
     fn list_children(&self, path: &str) -> io::Result<Vec<FsNode>> {
-        let (cluster, is_dir, _) = self
+        let (cluster, is_dir, _, _) = self
             .resolve_path(path)?
             .ok_or_else(|| path_not_found(path))?;
 
@@ -179,10 +244,12 @@ impl FileSystemReader for ExfatReader {
 
             let is_dir = entry.is_directory();
 
-            nodes.push(fs_node(
+            nodes.push(fs_node_with_attributes(
                 entry.name,
                 is_dir,
                 entry.valid_data_length,
+                entry.attributes & ATTR_HIDDEN != 0,
+                entry.attributes & ATTR_SYSTEM != 0,
                 entry.created_at,
                 entry.modified_at,
                 entry.accessed_at,
@@ -195,7 +262,7 @@ impl FileSystemReader for ExfatReader {
     }
 
     fn open_file(&self, path: &str) -> io::Result<Box<dyn Read>> {
-        let (cluster, is_dir, size) = self
+        let (cluster, is_dir, size, no_fat_chain) = self
             .resolve_path(path)?
             .ok_or_else(|| file_not_found(path))?;
 
@@ -203,7 +270,10 @@ impl FileSystemReader for ExfatReader {
             return Err(path_is_directory(path));
         }
 
-        let data = truncate_data_to_declared_size(self.read_cluster_chain_data(cluster)?, size);
+        let data = truncate_data_to_declared_size(
+            self.read_entry_data(cluster, size, no_fat_chain)?,
+            size,
+        );
 
         Ok(Box::new(io::Cursor::new(data)))
     }
@@ -212,9 +282,6 @@ impl FileSystemReader for ExfatReader {
         "exFAT"
     }
 }
-
-// Re-export FatReader for use in tests
-use fat::FatReader;
 
 #[cfg(test)]
 mod tests {
@@ -328,6 +395,7 @@ mod tests {
 
         // Stream extension
         root[pos] = 0xC0; // In-use, type 0 (Stream)
+        root[pos + 1] = NO_FAT_CHAIN;
         root[pos + 3] = 8; // NameLength = 8 ("TEST.TXT")
         root[pos + 8] = 11; // ValidDataLength = 11
         root[pos + 9] = 0;
@@ -422,11 +490,74 @@ mod tests {
     }
 
     #[test]
+    fn exfat_open_file_honors_no_fat_chain() {
+        let mut img = build_exfat_fixture();
+        let fat_offset = 24 * 512;
+        img[fat_offset + 3 * 4..fat_offset + 3 * 4 + 4].copy_from_slice(&0u32.to_le_bytes());
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let fat = ExfatReader::open(reader, 0).unwrap();
+
+        let mut file = fat.open_file("TEST.TXT").unwrap();
+        let mut content = String::new();
+        file.read_to_string(&mut content).unwrap();
+        assert_eq!(content, "Hello World");
+    }
+
+    #[test]
     fn exfat_data_source_name() {
         let img = build_exfat_fixture();
         let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
         let fat = ExfatReader::open(reader, 0).unwrap();
 
         assert_eq!(fat.data_source_name(), "exFAT");
+    }
+
+    #[test]
+    fn exfat_open_file_errors_on_out_of_range_file_cluster() {
+        let mut img = build_exfat_fixture();
+        // TEST.TXT stream extension first_cluster field.
+        img[16384 + 32 + 20..16384 + 32 + 24].copy_from_slice(&200u32.to_le_bytes());
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let fat = ExfatReader::open(reader, 0).unwrap();
+
+        let Err(err) = fat.open_file("TEST.TXT") else {
+            panic!("expected out-of-range file cluster to fail");
+        };
+        assert!(err.to_string().contains("out of range"));
+    }
+
+    #[test]
+    fn exfat_open_file_errors_on_no_fat_chain_extent_past_cluster_count() {
+        let mut img = build_exfat_fixture();
+        img[16384 + 32 + 20..16384 + 32 + 24].copy_from_slice(&100u32.to_le_bytes());
+        img[16384 + 32 + 24..16384 + 32 + 32].copy_from_slice(&2048u64.to_le_bytes());
+        img[16384 + 32 + 8..16384 + 32 + 16].copy_from_slice(&2048u64.to_le_bytes());
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let fat = ExfatReader::open(reader, 0).unwrap();
+
+        let Err(err) = fat.open_file("TEST.TXT") else {
+            panic!("expected overflowing NoFatChain extent to fail");
+        };
+        assert!(err.to_string().contains("NoFatChain run"));
+    }
+
+    #[test]
+    fn exfat_open_file_errors_on_chain_longer_than_cluster_count() {
+        let mut img = build_exfat_fixture();
+        let fat_offset = 24 * 512;
+        img[16384 + 32 + 1] = 0;
+        for cluster in 3u32..=102 {
+            let next = cluster + 1;
+            let entry_offset = fat_offset + cluster as usize * 4;
+            img[entry_offset..entry_offset + 4].copy_from_slice(&next.to_le_bytes());
+        }
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let fat = ExfatReader::open(reader, 0).unwrap();
+
+        let Err(err) = fat.open_file("TEST.TXT") else {
+            panic!("expected overlong cluster chain to fail");
+        };
+        let err = err.to_string();
+        assert!(err.contains("declared cluster count") || err.contains("out of range"));
     }
 }

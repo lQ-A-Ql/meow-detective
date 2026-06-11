@@ -161,6 +161,112 @@ pub struct AnalysisClassifiedFileDto {
     pub provenance: AnalysisProvenanceDto,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnalysisExtractionRunDto {
+    pub status: AnalysisParseStatusDto,
+    pub scanned_count: u64,
+    pub artifact_count: u64,
+    pub timeline_event_count: u64,
+    pub generated_at: String,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryExtractionSummaryDto {
+    pub status: AnalysisParseStatusDto,
+    pub total: u64,
+    pub values: Vec<RegistryValueDto>,
+    pub generated_at: String,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryValueDto {
+    pub artifact_id: String,
+    pub file_id: String,
+    pub source_path: String,
+    pub hive_path: String,
+    pub key_path: String,
+    pub value_name: String,
+    pub value_type: String,
+    pub data: String,
+    pub parser: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserHistorySummaryDto {
+    pub status: AnalysisParseStatusDto,
+    pub visit_total: u64,
+    pub download_total: u64,
+    pub visits: Vec<BrowserVisitDto>,
+    pub downloads: Vec<BrowserDownloadDto>,
+    pub generated_at: String,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserVisitDto {
+    pub artifact_id: String,
+    pub file_id: String,
+    pub source_path: String,
+    pub browser: String,
+    pub profile: String,
+    pub url: String,
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visit_time: Option<String>,
+    pub visit_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserDownloadDto {
+    pub artifact_id: String,
+    pub file_id: String,
+    pub source_path: String,
+    pub browser: String,
+    pub profile: String,
+    pub url: String,
+    pub target_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_time: Option<String>,
+    pub total_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailExtractionSummaryDto {
+    pub status: AnalysisParseStatusDto,
+    pub total: u64,
+    pub messages: Vec<EmailMessageDto>,
+    pub generated_at: String,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailMessageDto {
+    pub artifact_id: String,
+    pub file_id: String,
+    pub source_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sent_at: Option<String>,
+    pub from: String,
+    pub to: Vec<String>,
+    pub cc: Vec<String>,
+    pub bcc: Vec<String>,
+    pub subject: String,
+    pub message_id: String,
+    pub attachments: Vec<String>,
+    pub body_preview: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

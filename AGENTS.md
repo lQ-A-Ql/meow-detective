@@ -69,7 +69,7 @@ Backend → Frontend via Tauri `emit`. Topics defined as constants in `crates/tr
 | `domain` | Core entities defined: CaseId/CaseMeta/CaseSession, DataSource, FileEntry, Artifact, TimelineEvent, Job, Report, Tag |
 | `app-services` | Application-layer orchestration per domain entity |
 | `transport` | Shared DTOs, commands, events, errors, paging — the contract between frontend and backend |
-| `persistence-sqlite` | SQLite repositories and migrations (9 repos, 18 migration scripts) |
+| `persistence-sqlite` | SQLite repositories and migrations (9 repos, 22 migration scripts) |
 | `evidence-core` | Disk image probing, volume detection, filesystem abstraction, reader |
 | `fs-ntfs` / `fs-fat` / `fs-exfat` | Filesystem-specific parsers |
 | `image-raw` / `image-e01` | Raw and E01 image format readers |
@@ -128,9 +128,9 @@ All app-shell layout components live in `src/components/layout/`: AppShell, Layo
 
 3. **Transport crate is the contract**: DTOs are in per-domain files under `crates/transport/src/dto/` (case.rs, files.rs, search.rs, timeline.rs, artifacts.rs, jobs.rs, viewer.rs, reports.rs). Any change must happen here first. Both the Tauri command layer and the frontend `types/models.ts` must stay in sync manually — there is no codegen yet.
 
-4. **domain crate is implemented**: Core types (CaseMeta, FileEntry, Artifact, TimelineEvent, Job, Report, Tag, DataSource) are defined with serde support. Most crates are fully implemented: `persistence-sqlite` (9 repos, 18 migrations), `evidence-core` (image probing, volume detection), `fs-ntfs`/`fs-fat`/`fs-exfat` (filesystem parsers), `artifacts-windows` (9 extractors), `search` (tantivy indexing), `catalog` (ExtensionProjection, PathPrefixProjection), `ingest` (pipeline trait), `mcp-client` (SSE + Stdio transports).
+4. **domain crate is implemented**: Core types (CaseMeta, FileEntry, Artifact, TimelineEvent, Job, Report, Tag, DataSource) are defined with serde support. Most crates are fully implemented: `persistence-sqlite` (9 repos, 22 migration scripts), `evidence-core` (image probing, volume detection), `fs-ntfs`/`fs-fat`/`fs-exfat` (filesystem parsers), `artifacts-windows` (9 extractors), `search` (tantivy indexing), `catalog` (ExtensionProjection, PathPrefixProjection), `ingest` (pipeline trait), `mcp-client` (SSE + Stdio transports).
 
-5. **Frontend test framework**: Vitest is configured with jsdom environment. Run `pnpm test` from `frontend/`. 24 test files, 81 tests covering pages (Settings, DataAnalysis, FileBrowser, Search, Timeline, Artifacts), viewers (Hex, Text, Image), stores (ui-store, selection-store), API layer, and hooks. Coverage thresholds: 45% branches, 35% functions/lines/statements.
+5. **Frontend test framework**: Vitest is configured with jsdom environment. Run `pnpm test` from `frontend/`. Current source tree has 34 frontend test files covering pages (Settings, DataAnalysis, FileBrowser, Search, Timeline, Artifacts, Reports), viewers (Hex, Text, Image), stores (ui-store, selection-store, mcp-store), API layer, events, routes, and hooks. Coverage thresholds: 45% branches, 35% functions/lines/statements.
 
 6. **Tailwind 4 with `source(none)`**: The Tailwind config uses `@import 'tailwindcss' source(none)` with explicit `@source` directive. Don't add a `tailwind.config.js` — configuration is CSS-first.
 
@@ -146,6 +146,14 @@ All app-shell layout components live in `src/components/layout/`: AppShell, Layo
 - `ci.md` — CI pipeline design (GitHub Actions structure, check steps, caching rules)
 - `test-plan.md` — Testing strategy
 - `autopsy-borrowings.md` — Concepts borrowed from Autopsy (reference forensic tool)
+
+补充工程化文档：
+
+- `docs/engineering-audit-plan.md` - 可执行的项目工程化全量审计清单
+- `docs/development-engineering-guide.md` - 开发流程与工程约定
+- `docs/design-constraints.md` - 架构、证据、安全、前端与发布约束
+- `docs/model-architecture-algorithm-diagrams.md` - 模型、架构与算法 Mermaid 图谱
+- `docs/documentation-index.md` - 当前权威文档入口、旧文档去重索引与事实校准记录
 
 ## Adding a New Feature (typical flow)
 

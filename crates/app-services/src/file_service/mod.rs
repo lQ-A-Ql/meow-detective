@@ -15,8 +15,9 @@ use persistence_sqlite::{
 use rusqlite::Connection;
 use std::{
     collections::VecDeque,
-    io::Read,
+    io::{Read, SeekFrom},
     path::{Component, Path, PathBuf},
+    sync::atomic::{AtomicBool, Ordering},
 };
 use transport::{
     commands::GetFileRowsRequest,
@@ -56,10 +57,33 @@ pub fn enumerate_filesystem_with_root_name(
     root_name_override: Option<&str>,
     progress_fn: Option<&dyn Fn(u32)>,
 ) -> DbResult<EnumerationStats> {
-    let repo = FileRepo::new(conn);
+    enumerate_filesystem_with_root_name_and_cancel(
+        conn,
+        data_source_id,
+        fs,
+        root_name_override,
+        progress_fn,
+        None,
+    )
+}
+
+pub fn enumerate_filesystem_with_root_name_and_cancel(
+    conn: &Connection,
+    data_source_id: &DataSourceId,
+    fs: &dyn FileSystemReader,
+    root_name_override: Option<&str>,
+    progress_fn: Option<&dyn Fn(u32)>,
+    cancel_token: Option<&AtomicBool>,
+) -> DbResult<EnumerationStats> {
     let root = fs.root().map_err(|e| {
         persistence_sqlite::DbError::System(format!("Failed to read filesystem root: {}", e))
     })?;
+
+    if cancellation_requested(cancel_token) {
+        return Err(persistence_sqlite::DbError::System(
+            "Enumeration cancelled".to_string(),
+        ));
+    }
 
     let root_id = FileEntryId(Uuid::new_v4().to_string());
     let root_entry = FileEntry {
@@ -72,6 +96,8 @@ pub fn enumerate_filesystem_with_root_name(
         size: None,
         ext: None,
         deleted: false,
+        hidden: root.hidden,
+        system: root.system,
         created_at: root.created_at,
         modified_at: root.modified_at,
         accessed_at: root.accessed_at,
@@ -79,8 +105,39 @@ pub fn enumerate_filesystem_with_root_name(
         hash_sha256: None,
     };
 
-    repo.insert_batch(&[root_entry])?;
-    walk_and_insert_children(&repo, fs, data_source_id, root_id, progress_fn)
+    let tx = conn.unchecked_transaction()?;
+    let result = {
+        let repo = FileRepo::new(&tx);
+        repo.insert_batch_unchecked(&[root_entry])?;
+        walk_and_insert_children(
+            &repo,
+            fs,
+            data_source_id,
+            root_id,
+            progress_fn,
+            cancel_token,
+        )
+    };
+    match result {
+        Ok(stats) => {
+            tx.commit()?;
+            Ok(stats)
+        }
+        Err(error) => {
+            tx.rollback().ok();
+            Err(error)
+        }
+    }
+}
+
+fn cancellation_requested(cancel_token: Option<&AtomicBool>) -> bool {
+    cancel_token
+        .map(|token| token.load(Ordering::Relaxed))
+        .unwrap_or(false)
+}
+
+fn enumeration_cancelled_error() -> DbError {
+    DbError::System("Enumeration cancelled".to_string())
 }
 
 fn compute_enumeration_progress(processed: u64) -> u64 {
@@ -99,6 +156,7 @@ fn walk_and_insert_children(
     data_source_id: &DataSourceId,
     root_id: FileEntryId,
     progress_fn: Option<&dyn Fn(u32)>,
+    cancel_token: Option<&AtomicBool>,
 ) -> DbResult<EnumerationStats> {
     let mut queue: VecDeque<(FileEntryId, String)> = VecDeque::new();
     queue.push_back((root_id, String::new()));
@@ -115,6 +173,10 @@ fn walk_and_insert_children(
     let mut total_processed: u64 = 0;
 
     while let Some((parent_id, dir_path)) = queue.pop_front() {
+        if cancellation_requested(cancel_token) {
+            return Err(enumeration_cancelled_error());
+        }
+
         let children = match fs.list_children(&dir_path) {
             Ok(c) => c,
             Err(e) => {
@@ -126,11 +188,16 @@ fn walk_and_insert_children(
         };
 
         for child in children {
+            if cancellation_requested(cancel_token) {
+                return Err(enumeration_cancelled_error());
+            }
+
             if child.name == "." || child.name == ".." {
                 continue;
             }
 
             let id = FileEntryId(Uuid::new_v4().to_string());
+            let (hidden, system) = visibility_flags_for_node(&child);
             let entry = FileEntry {
                 id: id.clone(),
                 parent_id: Some(parent_id.clone()),
@@ -150,6 +217,8 @@ fn walk_and_insert_children(
                     .filter(|e| *e != child.name)
                     .map(|e| e.to_string()),
                 deleted: false,
+                hidden,
+                system,
                 created_at: child.created_at,
                 modified_at: child.modified_at,
                 accessed_at: child.accessed_at,
@@ -169,7 +238,7 @@ fn walk_and_insert_children(
             total_processed += 1;
 
             if batch.len() >= batch_size {
-                repo.insert_batch(&batch)?;
+                repo.insert_batch_unchecked(&batch)?;
                 batch.clear();
             }
             if total_processed.is_multiple_of(100) {
@@ -182,11 +251,14 @@ fn walk_and_insert_children(
     }
 
     if !batch.is_empty() {
-        repo.insert_batch(&batch)?;
+        repo.insert_batch_unchecked(&batch)?;
     }
 
     if let Some(ref pf) = progress_fn {
         pf(100);
+    }
+    if cancellation_requested(cancel_token) {
+        return Err(enumeration_cancelled_error());
     }
 
     Ok(stats)
@@ -210,6 +282,8 @@ pub fn insert_partition_placeholder_root(
         size: None,
         ext: None,
         deleted: false,
+        hidden: false,
+        system: false,
         created_at: None,
         modified_at: None,
         accessed_at: None,
@@ -244,27 +318,34 @@ pub fn replace_placeholder_root_with_real(
     root_entry.created_at = root.created_at;
     root_entry.modified_at = root.modified_at;
     root_entry.accessed_at = root.accessed_at;
+    root_entry.hidden = root.hidden;
+    root_entry.system = root.system;
 
     let root_path = root_entry.path.clone();
     let root_name = root_entry.name.clone();
+    let root_hidden = root_entry.hidden as i32;
+    let root_system = root_entry.system as i32;
     let root_id_value = root_entry.id.0.clone();
     let data_source_id = root_entry.data_source_id.clone();
     let root_id = root_entry.id.clone();
     conn.execute(
         "UPDATE file_entries
-         SET path = ?1, name = ?2, created_at = ?3, modified_at = ?4, accessed_at = ?5
-         WHERE id = ?6",
+         SET path = ?1, name = ?2, created_at = ?3, modified_at = ?4, accessed_at = ?5,
+             hidden = ?6, system = ?7
+         WHERE id = ?8",
         rusqlite::params![
             root_path,
             root_name,
             root_entry.created_at.map(|dt| dt.to_rfc3339()),
             root_entry.modified_at.map(|dt| dt.to_rfc3339()),
             root_entry.accessed_at.map(|dt| dt.to_rfc3339()),
+            root_hidden,
+            root_system,
             root_id_value,
         ],
     )?;
 
-    walk_and_insert_children(&repo, fs, &data_source_id, root_id, progress_fn)
+    walk_and_insert_children(&repo, fs, &data_source_id, root_id, progress_fn, None)
 }
 
 pub fn file_entry_to_dto(entry: &FileEntry) -> FileEntryRowDto {
@@ -280,6 +361,8 @@ pub fn file_entry_to_dto(entry: &FileEntry) -> FileEntryRowDto {
         size: entry.size,
         ext: entry.ext.clone(),
         deleted: entry.deleted,
+        hidden: entry.hidden,
+        system: entry.system,
         created_at: entry.created_at.map(|dt| dt.to_rfc3339()),
         modified_at: entry.modified_at.map(|dt| dt.to_rfc3339()),
         accessed_at: entry.accessed_at.map(|dt| dt.to_rfc3339()),
@@ -289,12 +372,24 @@ pub fn file_entry_to_dto(entry: &FileEntry) -> FileEntryRowDto {
 }
 
 pub fn get_file_tree_real(conn: &Connection) -> Result<Vec<FileTreeNodeDto>, String> {
+    get_file_tree_real_with_visibility(conn, false)
+}
+
+pub fn get_file_tree_real_with_visibility(
+    conn: &Connection,
+    show_hidden: bool,
+) -> Result<Vec<FileTreeNodeDto>, String> {
     let repo = FileRepo::new(conn);
-    let roots = repo.find_root_directories().map_err(|e| e.to_string())?;
+    let roots = repo
+        .find_root_directories_visible(show_hidden)
+        .map_err(|e| e.to_string())?;
 
     // Batch-check has_children for all roots in a single pass
     let child_counts = repo
-        .count_child_directories_batch(&roots.iter().map(|r| &r.id).collect::<Vec<_>>())
+        .count_child_directories_batch_visible(
+            &roots.iter().map(|r| &r.id).collect::<Vec<_>>(),
+            show_hidden,
+        )
         .unwrap_or_default();
 
     roots
@@ -311,6 +406,16 @@ pub fn get_file_children_lazy(
     parent_id: &str,
     offset: u64,
     limit: u32,
+) -> Result<FileChildrenDto, String> {
+    get_file_children_lazy_with_visibility(conn, parent_id, offset, limit, false)
+}
+
+pub fn get_file_children_lazy_with_visibility(
+    conn: &Connection,
+    parent_id: &str,
+    offset: u64,
+    limit: u32,
+    show_hidden: bool,
 ) -> Result<FileChildrenDto, String> {
     let repo = FileRepo::new(conn);
     let parent = match repo
@@ -330,16 +435,19 @@ pub fn get_file_children_lazy(
     };
 
     let children = repo
-        .find_child_directories_page(&parent.id, offset, limit)
+        .find_child_directories_page_visible(&parent.id, offset, limit, show_hidden)
         .map_err(|e| e.to_string())?;
     let total_count = repo
-        .count_child_directories(&parent.id)
+        .count_child_directories_visible(&parent.id, show_hidden)
         .map_err(|e| e.to_string())?;
     let child_depth = directory_depth(&parent).saturating_add(1);
 
     // Batch-check has_children for all children
     let child_counts = repo
-        .count_child_directories_batch(&children.iter().map(|c| &c.id).collect::<Vec<_>>())
+        .count_child_directories_batch_visible(
+            &children.iter().map(|c| &c.id).collect::<Vec<_>>(),
+            show_hidden,
+        )
         .unwrap_or_default();
 
     let child_nodes = children
@@ -374,9 +482,16 @@ pub fn get_file_rows_for_request(
             match parent {
                 Some(entry) if entry.entry_type == EntryType::Directory => {
                     let entries = repo
-                        .find_children_page(&entry.id, request.offset, request.limit)
+                        .find_children_page_visible(
+                            &entry.id,
+                            request.offset,
+                            request.limit,
+                            request.show_hidden,
+                        )
                         .map_err(|e| e.to_string())?;
-                    let total_count = repo.count_children(&entry.id).map_err(|e| e.to_string())?;
+                    let total_count = repo
+                        .count_children_visible(&entry.id, request.show_hidden)
+                        .map_err(|e| e.to_string())?;
                     (entries, total_count)
                 }
                 _ => (Vec::new(), 0),
@@ -384,9 +499,11 @@ pub fn get_file_rows_for_request(
         }
         None => {
             let entries = repo
-                .find_root_entries_page(request.offset, request.limit)
+                .find_root_entries_page_visible(request.offset, request.limit, request.show_hidden)
                 .map_err(|e| e.to_string())?;
-            let total_count = repo.count_root_entries().map_err(|e| e.to_string())?;
+            let total_count = repo
+                .count_root_entries_visible(request.show_hidden)
+                .map_err(|e| e.to_string())?;
             (entries, total_count)
         }
     };
@@ -661,11 +778,42 @@ fn file_entry_to_tree_node(
             EntryType::File => "file".to_string(),
         }),
         size: entry.size,
+        deleted: entry.deleted,
+        hidden: entry.hidden,
+        system: entry.system,
         node_type: Some(node_type),
         status,
         expanded,
         active: Some(false),
     }
+}
+
+fn visibility_flags_for_node(node: &evidence_core::FsNode) -> (bool, bool) {
+    let inferred_hidden = inferred_hidden_name(&node.name);
+    let inferred_system = inferred_system_name(&node.name) || inferred_system_path(&node.path);
+    (
+        node.hidden || inferred_hidden || inferred_system,
+        node.system || inferred_system,
+    )
+}
+
+fn inferred_hidden_name(name: &str) -> bool {
+    name.starts_with('.')
+}
+
+fn inferred_system_name(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "$recycle.bin"
+            | "system volume information"
+            | "pagefile.sys"
+            | "hiberfil.sys"
+            | "swapfile.sys"
+    )
+}
+
+fn inferred_system_path(path: &str) -> bool {
+    path.split(['/', '\\']).any(inferred_system_name)
 }
 
 fn directory_depth(entry: &FileEntry) -> u32 {
@@ -1070,7 +1218,7 @@ fn empty_hex_response() -> ViewerRangeResponseDto {
 use crossbeam_channel::{bounded, Receiver, Sender};
 use fs_ntfs::mft_scanner::{MftRecord, MftScanner};
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::thread;
 
@@ -1112,10 +1260,25 @@ pub fn enumerate_filesystem_mft(
     );
     let total_records = scanner.total_records();
     let scanner_record_size = scanner.record_size();
-    let mft_abs_offset = scanner.mft_abs_offset();
 
     if let Some(pf) = progress_fn {
         pf(5, "Starting MFT scan...");
+    }
+
+    let mft_data_runs = read_ntfs_mft_data_runs(
+        e01_path,
+        volume_offset,
+        mft_cluster,
+        cluster_size,
+        record_size,
+        bytes_per_sector,
+    )
+    .map_err(|e| DbError::System(format!("Failed to inspect NTFS $MFT runs: {}", e)))?;
+    if mft_data_runs.len() > 1 {
+        tracing::info!(
+            "MFT reader: stitching fragmented $MFT from {} data runs",
+            mft_data_runs.len()
+        );
     }
 
     // --- Channel setup ---
@@ -1132,6 +1295,7 @@ pub fn enumerate_filesystem_mft(
     let reader_path = e01_path.to_path_buf();
     let reader_processed = processed.clone();
     let reader_cancel = cancel.clone();
+    let reader_mft_data_runs = mft_data_runs.clone();
 
     let reader_handle = thread::Builder::new()
         .name("mft-reader".into())
@@ -1156,17 +1320,31 @@ pub fn enumerate_filesystem_mft(
                 }
 
                 let chunk_count = MFT_CHUNK_RECORDS.min(total_records - start_record);
-                let byte_offset = mft_abs_offset + start_record * scanner_record_size as u64;
                 let byte_count = chunk_count * scanner_record_size as u64;
+                let mft_stream_offset = start_record * scanner_record_size as u64;
 
-                // Read chunk from E01
-                use std::io::{Read, Seek, SeekFrom};
-                if reader.seek(SeekFrom::Start(byte_offset)).is_err() {
-                    break;
-                }
                 let mut buf = vec![0u8; byte_count as usize];
-                if reader.read_exact(&mut buf).is_err() {
-                    tracing::warn!("MFT reader: read error at record {}", start_record);
+                let read_result = if reader_mft_data_runs.is_empty() {
+                    read_contiguous_ntfs_mft_stream(
+                        &mut reader,
+                        volume_offset,
+                        mft_cluster,
+                        cluster_size,
+                        mft_stream_offset,
+                        &mut buf,
+                    )
+                } else {
+                    read_ntfs_mft_stream(
+                        &mut reader,
+                        volume_offset,
+                        cluster_size,
+                        &reader_mft_data_runs,
+                        mft_stream_offset,
+                        &mut buf,
+                    )
+                };
+                if let Err(e) = read_result {
+                    tracing::warn!("MFT reader: read error at record {}: {}", start_record, e);
                     break;
                 }
 
@@ -1234,6 +1412,7 @@ pub fn enumerate_filesystem_mft(
     let mut warnings = Vec::new();
     let mut batch: Vec<FileEntry> = Vec::with_capacity(MFT_DB_BATCH_SIZE);
     let mut path_map: HashMap<String, (Option<String>, String, bool)> = HashMap::new();
+    let mut deleted_records: HashSet<String> = HashSet::new();
 
     for entry_batch in entry_rx.iter() {
         for mut entry in entry_batch {
@@ -1245,7 +1424,7 @@ pub fn enumerate_filesystem_mft(
                 EntryType::Directory => total_dirs += 1,
             }
 
-            add_entry_to_path_map(&mut path_map, &entry);
+            add_entry_to_path_map(&mut path_map, &mut deleted_records, &entry);
 
             // MFT parents can appear later than their children. Insert with a
             // temporary null parent, then restore parent links after all rows
@@ -1296,7 +1475,7 @@ pub fn enumerate_filesystem_mft(
         pf(95, "Reconstructing paths...");
     }
 
-    update_entry_paths(conn, data_source_id, &path_map)?;
+    update_entry_paths(conn, data_source_id, &path_map, &deleted_records)?;
     update_entry_parent_ids(conn, data_source_id, &path_map)?;
 
     if let Some(pf) = progress_fn {
@@ -1309,6 +1488,269 @@ pub fn enumerate_filesystem_mft(
         total_size,
         warnings,
     })
+}
+
+/// Read and parse the non-resident $DATA runlist from NTFS $MFT record 0.
+fn read_ntfs_mft_data_runs(
+    e01_path: &Path,
+    volume_offset: u64,
+    mft_cluster: u64,
+    cluster_size: u64,
+    record_size: u32,
+    bytes_per_sector: u16,
+) -> std::io::Result<Vec<(i64, u64)>> {
+    let mut reader = E01Reader::open(e01_path)?;
+    let mut record = vec![0u8; record_size as usize];
+    read_contiguous_ntfs_mft_stream(
+        &mut reader,
+        volume_offset,
+        mft_cluster,
+        cluster_size,
+        0,
+        &mut record,
+    )?;
+    apply_ntfs_record_fixup(&mut record, bytes_per_sector as usize)?;
+    parse_ntfs_mft_data_runs_from_record(&record)
+}
+
+fn apply_ntfs_record_fixup(record: &mut [u8], sector_size: usize) -> std::io::Result<()> {
+    if record.len() < 8 || sector_size < 2 {
+        return Ok(());
+    }
+
+    let usa_offset = u16::from_le_bytes([record[4], record[5]]) as usize;
+    let usa_count = u16::from_le_bytes([record[6], record[7]]) as usize;
+    if usa_offset == 0 || usa_count < 2 {
+        return Ok(());
+    }
+    let usa_bytes = usa_count.checked_mul(2).ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid update sequence")
+    })?;
+    if usa_offset + usa_bytes > record.len() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "update sequence array exceeds record length",
+        ));
+    }
+
+    let expected = [record[usa_offset], record[usa_offset + 1]];
+    for index in 1..usa_count {
+        let fixup_pos = index
+            .checked_mul(sector_size)
+            .and_then(|value| value.checked_sub(2))
+            .ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid fixup position")
+            })?;
+        if fixup_pos + 2 > record.len() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "record too short for update sequence fixup",
+            ));
+        }
+        if record[fixup_pos..fixup_pos + 2] != expected {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "update sequence signature mismatch",
+            ));
+        }
+
+        let replacement = usa_offset + index * 2;
+        record[fixup_pos] = record[replacement];
+        record[fixup_pos + 1] = record[replacement + 1];
+    }
+    Ok(())
+}
+
+fn parse_ntfs_mft_data_runs_from_record(record: &[u8]) -> std::io::Result<Vec<(i64, u64)>> {
+    if record.len() < 0x18 || &record[0..4] != b"FILE" {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "MFT record 0 is not a valid FILE record",
+        ));
+    }
+
+    let attr_off = u16::from_le_bytes([record[0x14], record[0x15]]) as usize;
+    let mut pos = attr_off;
+    while pos + 8 < record.len() {
+        let typ = u32::from_le_bytes(record[pos..pos + 4].try_into().map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Invalid MFT attribute type",
+            )
+        })?);
+        if typ == 0xFFFFFFFF {
+            break;
+        }
+        let len = u32::from_le_bytes(record[pos + 4..pos + 8].try_into().map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Invalid MFT attribute length",
+            )
+        })?) as usize;
+        if len == 0 || pos + len > record.len() {
+            break;
+        }
+
+        if typ == 0x80 && pos + 0x40 <= record.len() && (record[pos + 8] & 1) != 0 {
+            let run_off = u16::from_le_bytes([record[pos + 0x20], record[pos + 0x21]]) as usize;
+            if run_off == 0 || run_off >= len {
+                return Ok(Vec::new());
+            }
+            return parse_ntfs_data_runs(&record[pos + run_off..pos + len]);
+        }
+        pos += len;
+    }
+    Ok(Vec::new())
+}
+
+fn parse_ntfs_data_runs(mut data: &[u8]) -> std::io::Result<Vec<(i64, u64)>> {
+    const MAX_DATA_RUNS: usize = 100_000;
+
+    let mut runs = Vec::new();
+    let mut prev_lcn: i64 = 0;
+    while !data.is_empty() && data[0] != 0 {
+        if runs.len() >= MAX_DATA_RUNS {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("too many data runs (limit: {MAX_DATA_RUNS})"),
+            ));
+        }
+        let header = data[0];
+        let size_bytes = (header & 0x0F) as usize;
+        let offset_bytes = ((header >> 4) & 0x0F) as usize;
+        if size_bytes > 8 || offset_bytes > 8 {
+            break;
+        }
+        data = &data[1..];
+        if data.len() < size_bytes + offset_bytes {
+            break;
+        }
+        let cluster_count = read_sized_le(&data[..size_bytes]);
+        data = &data[size_bytes..];
+        let lcn_offset = read_sized_le_signed(&data[..offset_bytes]);
+        data = &data[offset_bytes..];
+        let lcn = if runs.is_empty() {
+            lcn_offset
+        } else {
+            prev_lcn + lcn_offset
+        };
+        prev_lcn = lcn;
+        if cluster_count == 0 {
+            continue;
+        }
+        runs.push((lcn, cluster_count));
+    }
+    Ok(runs)
+}
+
+fn read_sized_le(bytes: &[u8]) -> u64 {
+    let mut value = 0u64;
+    for (index, byte) in bytes.iter().enumerate().take(8) {
+        value |= (*byte as u64) << (index * 8);
+    }
+    value
+}
+
+fn read_sized_le_signed(bytes: &[u8]) -> i64 {
+    let n = bytes.len().min(8);
+    if n == 0 {
+        return 0;
+    }
+    let mut value = 0u64;
+    for (index, byte) in bytes.iter().enumerate().take(n) {
+        value |= (*byte as u64) << (index * 8);
+    }
+    if bytes[n - 1] & 0x80 != 0 {
+        for index in n..8 {
+            value |= 0xFFu64 << (index * 8);
+        }
+    }
+    value as i64
+}
+
+fn read_ntfs_mft_stream(
+    reader: &mut dyn EvidenceReader,
+    volume_offset: u64,
+    cluster_size: u64,
+    runs: &[(i64, u64)],
+    mut stream_offset: u64,
+    out: &mut [u8],
+) -> std::io::Result<()> {
+    let mut written = 0usize;
+    let mut run_stream_start = 0u64;
+
+    for (lcn, cluster_count) in runs {
+        if *lcn < 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("negative MFT LCN {lcn}"),
+            ));
+        }
+        let run_bytes = cluster_count.checked_mul(cluster_size).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("MFT run overflow: {cluster_count} clusters x {cluster_size} bytes"),
+            )
+        })?;
+        let run_end = run_stream_start.saturating_add(run_bytes);
+        if stream_offset >= run_end {
+            run_stream_start = run_end;
+            continue;
+        }
+
+        let offset_in_run = stream_offset.saturating_sub(run_stream_start);
+        let available = run_bytes.saturating_sub(offset_in_run);
+        let to_read = available.min((out.len() - written) as u64) as usize;
+        let disk_offset = volume_offset
+            .checked_add((*lcn as u64).saturating_mul(cluster_size))
+            .and_then(|base| base.checked_add(offset_in_run))
+            .ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, "MFT disk offset overflow")
+            })?;
+
+        reader.seek(SeekFrom::Start(disk_offset))?;
+        reader.read_exact(&mut out[written..written + to_read])?;
+        written += to_read;
+        if written == out.len() {
+            return Ok(());
+        }
+        stream_offset = run_end;
+        run_stream_start = run_end;
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::UnexpectedEof,
+        format!(
+            "MFT stream ended before read completed (read {} of {} bytes)",
+            written,
+            out.len()
+        ),
+    ))
+}
+
+/// Read from the legacy contiguous $MFT layout used by this entry point.
+fn read_contiguous_ntfs_mft_stream(
+    reader: &mut dyn EvidenceReader,
+    volume_offset: u64,
+    mft_cluster: u64,
+    cluster_size: u64,
+    stream_offset: u64,
+    out: &mut [u8],
+) -> std::io::Result<()> {
+    let mft_abs_offset = volume_offset
+        .checked_add(mft_cluster.checked_mul(cluster_size).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "MFT absolute offset overflow",
+            )
+        })?)
+        .and_then(|base| base.checked_add(stream_offset))
+        .ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "MFT read offset overflow")
+        })?;
+
+    reader.seek(SeekFrom::Start(mft_abs_offset))?;
+    reader.read_exact(out)
 }
 
 /// Internal chunk of raw MFT data.
@@ -1356,7 +1798,9 @@ fn records_to_file_entries(records: &[MftRecord], data_source_id: &DataSourceId)
                 entry_type,
                 size: if r.is_dir { None } else { Some(r.size) },
                 ext,
-                deleted: false,
+                deleted: r.deleted,
+                hidden: r.hidden || inferred_hidden_name(&r.name) || inferred_system_name(&r.name),
+                system: r.system || inferred_system_name(&r.name),
                 created_at: r.created_at,
                 modified_at: r.modified_at,
                 accessed_at: r.accessed_at,
@@ -1369,6 +1813,7 @@ fn records_to_file_entries(records: &[MftRecord], data_source_id: &DataSourceId)
 
 fn add_entry_to_path_map(
     path_map: &mut HashMap<String, (Option<String>, String, bool)>,
+    deleted_records: &mut HashSet<String>,
     entry: &FileEntry,
 ) {
     let record_num = entry.id.0.strip_prefix("mft:").unwrap_or(&entry.id.0);
@@ -1384,6 +1829,9 @@ fn add_entry_to_path_map(
             entry.entry_type == EntryType::Directory,
         ),
     );
+    if entry.deleted {
+        deleted_records.insert(record_num.to_string());
+    }
 }
 
 /// Reconstruct full paths from parent_ref chains and update DB entries.
@@ -1393,6 +1841,7 @@ fn update_entry_paths(
     conn: &Connection,
     data_source_id: &DataSourceId,
     path_map: &HashMap<String, (Option<String>, String, bool)>,
+    deleted_records: &HashSet<String>,
 ) -> DbResult<()> {
     let mut resolved: HashMap<String, String> = HashMap::with_capacity(path_map.len());
     let mut visiting: HashSet<String> = HashSet::new(); // Cycle detection
@@ -1401,6 +1850,7 @@ fn update_entry_paths(
     fn resolve_path(
         record: &str,
         path_map: &HashMap<String, (Option<String>, String, bool)>,
+        deleted_records: &HashSet<String>,
         resolved: &mut HashMap<String, String>,
         visiting: &mut HashSet<String>,
     ) -> String {
@@ -1425,12 +1875,15 @@ fn update_entry_paths(
 
         let path = match parent {
             Some(p) if p != "5" && path_map.contains_key(p) => {
-                let parent_path = resolve_path(p, path_map, resolved, visiting);
+                let parent_path = resolve_path(p, path_map, deleted_records, resolved, visiting);
                 if parent_path.is_empty() {
                     name.clone()
                 } else {
                     format!("{}/{}", parent_path, name)
                 }
+            }
+            _ if record != "5" && deleted_records.contains(record) => {
+                format!("/$DeletedOrphans/{}-{}", record, name)
             }
             _ => name.clone(), // Root entry
         };
@@ -1443,7 +1896,7 @@ fn update_entry_paths(
     // Resolve all entries
     let records: Vec<String> = path_map.keys().cloned().collect();
     for record in &records {
-        resolve_path(record, path_map, &mut resolved, &mut visiting);
+        resolve_path(record, path_map, deleted_records, &mut resolved, &mut visiting);
     }
 
     // Update DB in batches
@@ -1505,6 +1958,88 @@ fn errs_add(errors: &Arc<AtomicU64>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use evidence_core::{filesystem::root_node, FsNode};
+    use std::io::{self, Cursor, Seek};
+
+    struct CancelAfterRootFs;
+
+    impl FileSystemReader for CancelAfterRootFs {
+        fn root(&self) -> io::Result<FsNode> {
+            Ok(root_node())
+        }
+
+        fn list_children(&self, path: &str) -> io::Result<Vec<FsNode>> {
+            if path.is_empty() {
+                Ok(vec![
+                    FsNode {
+                        name: "first.txt".to_string(),
+                        path: "first.txt".to_string(),
+                        is_dir: false,
+                        size: 1,
+                        hidden: false,
+                        system: false,
+                        created_at: None,
+                        modified_at: None,
+                        accessed_at: None,
+                    },
+                    FsNode {
+                        name: "second.txt".to_string(),
+                        path: "second.txt".to_string(),
+                        is_dir: false,
+                        size: 1,
+                        hidden: false,
+                        system: false,
+                        created_at: None,
+                        modified_at: None,
+                        accessed_at: None,
+                    },
+                ])
+            } else {
+                Ok(Vec::new())
+            }
+        }
+
+        fn open_file(&self, _path: &str) -> io::Result<Box<dyn Read>> {
+            Ok(Box::new(Cursor::new(Vec::<u8>::new())))
+        }
+
+        fn data_source_name(&self) -> &str {
+            "cancel-after-root"
+        }
+    }
+
+    #[test]
+    fn enumerate_filesystem_cancel_rolls_back_transaction() {
+        let conn = persistence_sqlite::connection::open_in_memory().unwrap();
+        conn.execute_batch(include_str!(
+            "../../../persistence-sqlite/src/migrations/scripts/0003_file_entries.sql"
+        ))
+        .unwrap();
+        conn.execute_batch(include_str!(
+            "../../../persistence-sqlite/src/migrations/scripts/0022_file_entry_visibility_flags.sql"
+        ))
+        .unwrap();
+        let cancel = AtomicBool::new(false);
+        let ds_id = DataSourceId("ds-cancel-enum".to_string());
+        let fs = CancelAfterRootFs;
+
+        let Err(err) = enumerate_filesystem_with_root_name_and_cancel(
+            &conn,
+            &ds_id,
+            &fs,
+            None,
+            Some(&|_| cancel.store(true, Ordering::Relaxed)),
+            Some(&cancel),
+        ) else {
+            panic!("expected cancellation to roll back enumeration transaction");
+        };
+
+        assert!(err.to_string().contains("Enumeration cancelled"));
+        let row_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(row_count, 0);
+    }
 
     #[test]
     fn safe_path_rejects_dot_dot_traversal() {
@@ -1562,6 +2097,9 @@ mod tests {
                 modified_at: None,
                 accessed_at: None,
                 changed_at: None,
+                hidden: false,
+                system: false,
+                deleted: false,
                 is_valid: true,
             },
             MftRecord {
@@ -1574,6 +2112,9 @@ mod tests {
                 modified_at: None,
                 accessed_at: None,
                 changed_at: None,
+                hidden: false,
+                system: false,
+                deleted: false,
                 is_valid: true,
             },
         ];
@@ -1614,10 +2155,185 @@ mod tests {
     }
 
     #[test]
+    fn mft_deleted_orphan_path_uses_deleted_orphans_prefix() {
+        let conn = persistence_sqlite::connection::open_in_memory().unwrap();
+        conn.execute_batch(include_str!(
+            "../../../persistence-sqlite/src/migrations/scripts/0003_file_entries.sql"
+        ))
+        .unwrap();
+        conn.execute_batch(include_str!(
+            "../../../persistence-sqlite/src/migrations/scripts/0022_file_entry_visibility_flags.sql"
+        ))
+        .unwrap();
+        let ds_id = DataSourceId("ds-deleted-orphan".to_string());
+        let mut entries = records_to_file_entries(
+            &[
+                MftRecord {
+                    record_number: 5,
+                    name: ".".to_string(),
+                    parent_ref: 5,
+                    is_dir: true,
+                    size: 0,
+                    created_at: None,
+                    modified_at: None,
+                    accessed_at: None,
+                    changed_at: None,
+                    hidden: false,
+                    system: false,
+                    deleted: false,
+                    is_valid: true,
+                },
+                MftRecord {
+                    record_number: 77,
+                    name: "old.txt".to_string(),
+                    parent_ref: 999,
+                    is_dir: false,
+                    size: 12,
+                    created_at: None,
+                    modified_at: None,
+                    accessed_at: None,
+                    changed_at: None,
+                    hidden: false,
+                    system: false,
+                    deleted: true,
+                    is_valid: true,
+                },
+            ],
+            &ds_id,
+        );
+        for entry in &mut entries {
+            entry.parent_id = None;
+        }
+        FileRepo::new(&conn).insert_batch(&entries).unwrap();
+        let mut path_map = HashMap::new();
+        let mut deleted_records = HashSet::new();
+        for entry in &entries {
+            add_entry_to_path_map(&mut path_map, &mut deleted_records, entry);
+        }
+
+        update_entry_paths(&conn, &ds_id, &path_map, &deleted_records).unwrap();
+        update_entry_parent_ids(&conn, &ds_id, &path_map).unwrap();
+
+        let (path, parent_id, deleted): (String, Option<String>, i32) = conn
+            .query_row(
+                "SELECT path, parent_id, deleted FROM file_entries WHERE id = 'mft:77'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(path, "/$DeletedOrphans/77-old.txt");
+        assert_eq!(parent_id.as_deref(), Some("mft:5"));
+        assert_eq!(deleted, 1);
+    }
+
+    #[test]
     fn mft_partition_prefixed_id_exposes_partition_index() {
         assert_eq!(mft_partition_index_from_entry_id("mft:3:42"), Some(3));
         assert_eq!(mft_partition_index_from_entry_id("mft:42"), None);
         assert_eq!(mft_partition_index_from_entry_id("uuid"), None);
+    }
+
+    struct SliceEvidenceReader {
+        data: Vec<u8>,
+        pos: u64,
+        info: evidence_core::ReaderInfo,
+    }
+
+    impl SliceEvidenceReader {
+        fn new(data: Vec<u8>) -> Self {
+            Self {
+                data,
+                pos: 0,
+                info: evidence_core::ReaderInfo {
+                    path: PathBuf::from("slice"),
+                    size: 0,
+                    kind: "test".to_string(),
+                },
+            }
+        }
+    }
+
+    impl Read for SliceEvidenceReader {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let start = self.pos as usize;
+            if start >= self.data.len() {
+                return Ok(0);
+            }
+            let count = buf.len().min(self.data.len() - start);
+            buf[..count].copy_from_slice(&self.data[start..start + count]);
+            self.pos += count as u64;
+            Ok(count)
+        }
+    }
+
+    impl Seek for SliceEvidenceReader {
+        fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+            let next = match pos {
+                SeekFrom::Start(value) => value as i128,
+                SeekFrom::End(value) => self.data.len() as i128 + value as i128,
+                SeekFrom::Current(value) => self.pos as i128 + value as i128,
+            };
+            if next < 0 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "negative seek",
+                ));
+            }
+            self.pos = next as u64;
+            Ok(self.pos)
+        }
+    }
+
+    impl EvidenceReader for SliceEvidenceReader {
+        fn info(&self) -> &evidence_core::ReaderInfo {
+            &self.info
+        }
+    }
+
+    #[test]
+    fn read_ntfs_mft_stream_stitches_fragmented_runs() {
+        let mut disk = vec![0u8; 4096];
+        disk[1024..1536].fill(b'A');
+        disk[3072..3584].fill(b'B');
+        let mut reader = SliceEvidenceReader::new(disk);
+        let mut out = vec![0u8; 1024];
+
+        read_ntfs_mft_stream(&mut reader, 0, 512, &[(2, 1), (6, 1)], 0, &mut out).unwrap();
+
+        assert!(out[..512].iter().all(|byte| *byte == b'A'));
+        assert!(out[512..].iter().all(|byte| *byte == b'B'));
+    }
+
+    #[test]
+    fn read_ntfs_mft_stream_stitches_read_crossing_run_boundary() {
+        let mut disk = vec![0u8; 4096];
+        disk[1024..1536].fill(b'A');
+        disk[3072..3584].fill(b'B');
+        let mut reader = SliceEvidenceReader::new(disk);
+        let mut out = vec![0u8; 512];
+
+        read_ntfs_mft_stream(&mut reader, 0, 512, &[(2, 1), (6, 1)], 256, &mut out).unwrap();
+
+        assert!(out[..256].iter().all(|byte| *byte == b'A'));
+        assert!(out[256..].iter().all(|byte| *byte == b'B'));
+    }
+
+    #[test]
+    fn read_ntfs_mft_stream_rejects_negative_lcn() {
+        let mut reader = SliceEvidenceReader::new(vec![0u8; 1024]);
+        let mut out = vec![0u8; 512];
+
+        let err = read_ntfs_mft_stream(&mut reader, 0, 512, &[(-1, 1)], 0, &mut out)
+            .expect_err("negative LCN must fail closed");
+
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn parse_ntfs_data_runs_decodes_fragmented_runs() {
+        let runs = parse_ntfs_data_runs(&[0x11, 0x02, 0x05, 0x11, 0x03, 0x07, 0x00]).unwrap();
+
+        assert_eq!(runs, vec![(5, 2), (12, 3)]);
     }
 
     #[test]
