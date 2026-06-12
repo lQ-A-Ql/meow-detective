@@ -3,9 +3,20 @@ export type ApiMode = 'mock' | 'tauri';
 export interface ApiErrorDto {
   code: string;
   message: string;
+  category?: ErrorCategory;
   details?: unknown;
   recoverable: boolean;
 }
+
+export type ErrorCategory =
+  | 'validation'
+  | 'unsupported'
+  | 'io'
+  | 'parser'
+  | 'security'
+  | 'external'
+  | 'timeout'
+  | 'internal';
 
 export type EventTopic =
   | 'case-opened'
@@ -634,4 +645,8 @@ export interface ExportScope {
   registry: boolean;
   fullTimeline: boolean;
   rawFileExtraction: boolean;
+}
+
+export interface ExportOptions {
+  overwrite?: boolean;
 }

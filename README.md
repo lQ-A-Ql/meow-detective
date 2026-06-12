@@ -4,27 +4,16 @@ A Tauri 2 desktop application for disk image forensic analysis on Windows. 22 Ru
 
 ## Architecture
 
-```
-React UI (frontend/)  —  Vite + Tailwind 4 + React 18 + Zustand + TanStack Query
-  ↓ Tauri invoke / events
-Tauri Command Layer (apps/desktop/src-tauri/commands/)  —  67 commands
-  ↓
-Application Services (crates/app-services/)  —  20 source modules
-  ↓
-Core Crates: domain, evidence-core, fs-ntfs, fs-fat, fs-exfat, image-e01, image-raw,
-             search, timeline, artifacts-windows, catalog, ingest, mcp-client,
-             reports, persistence-sqlite, infrastructure
+```text
+React UI (frontend/) -> Tauri commands / events
+Tauri Command Layer (apps/desktop/src-tauri/) -> 67 commands
+Application Services (crates/app-services/) -> 16 source modules
+Core crates -> domain / evidence / persistence / search / timeline / artifacts / reports / MCP
 ```
 
 ## Quick Start
 
-### Prerequisites
-
-- Rust stable (see `rust-toolchain.toml`)
-- Node.js 20+ with pnpm
-- Windows 10/11 (primary platform)
-
-### Frontend (mock mode)
+### Frontend
 
 ```bash
 cd frontend
@@ -32,7 +21,7 @@ pnpm install
 pnpm dev
 ```
 
-### Full Desktop App
+### Desktop
 
 ```bash
 cd apps/desktop/src-tauri
@@ -42,66 +31,65 @@ cargo tauri dev
 ## Build
 
 ```bash
-# Frontend production build (~600KB, gzip ~170KB)
 cd frontend && pnpm build
-
-# Desktop release bundle (~23MB executable)
 cd apps/desktop/src-tauri && cargo tauri build
 ```
 
 ## Test
 
 ```bash
-# Backend
 cargo test --workspace
-
-# Frontend (41 test files)
+cd frontend && pnpm test            # Frontend (41 test files)
 cd frontend && pnpm test
-
-# Frontend with coverage
 cd frontend && pnpm test:coverage
 ```
 
 ## Quality Gates
 
 ```bash
-cargo fmt --all -- --check          # Rust formatting
-cargo clippy --workspace --all-targets -- -D warnings  # Lint
-cargo test --workspace              # Backend workspace tests
-cd frontend && pnpm typecheck       # TypeScript strict check
-cd frontend && pnpm lint            # ESLint
-cd frontend && pnpm test            # Frontend tests (Vitest)
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cd frontend && pnpm typecheck
+cd frontend && pnpm lint
+cd frontend && pnpm test
 ```
 
 ## Project Structure
 
 | Directory | Description |
-|-----------|-------------|
-| `frontend/` | React 18 + TypeScript 5 + Vite 6 + Tailwind 4 |
+|---|---|
+| `frontend/` | React 18 + TypeScript + Vite + Tailwind 4 |
 | `apps/desktop/src-tauri/` | Tauri 2 shell (67 commands) |
-| `crates/domain/` | Core entities (Case, FileEntry, Artifact, etc.) |
+| `crates/app-services/` | Application orchestration (16 source modules) |
 | `crates/transport/` | Shared DTOs, commands, events, errors |
-| `crates/app-services/` | Application-layer orchestration (20 source modules) |
 | `crates/persistence-sqlite/` | SQLite repos (9) and migration scripts (23) |
-| `crates/evidence-core/` | Disk image probing, volume detection |
+| `crates/evidence-core/` | Disk image probing and volume detection |
 | `crates/fs-ntfs/`, `fs-fat/`, `fs-exfat/` | Filesystem parsers |
-| `crates/image-e01/`, `image-raw/` | Image format readers |
-| `crates/search/` | Full-text indexing (tantivy) |
-| `crates/timeline/` | Timeline event generation |
-| `crates/artifacts-windows/` | Windows artifact parsers (EVTX, Prefetch, LNK, Registry, etc.) |
-| `crates/catalog/` | File catalog indexing and projections |
-| `crates/ingest/` | Ingestion pipeline orchestration |
-| `crates/mcp-client/` | MCP client (SSE + Stdio transports) |
-| `crates/reports/` | Report generation (HTML, CSV, JSON) |
-| `crates/infrastructure/` | Cross-cutting utilities |
+| `crates/image-e01/`, `image-raw/` | Image readers |
+| `crates/search/` | Full-text indexing |
+| `crates/timeline/` | Timeline generation |
+| `crates/artifacts-windows/` | Windows artifact parsers |
+| `crates/mcp-client/` | MCP client |
+| `crates/reports/` | HTML / CSV / JSON reports |
+| `crates/infrastructure/` | Shared utilities |
 
-## 工程化文档
+## Engineering Docs
 
-- `docs/engineering-audit-plan.md` - 可执行的项目工程化全量审计方案
-- `docs/development-engineering-guide.md` - 开发流程与工程约定
-- `docs/design-constraints.md` - 架构、证据、安全、前端与发布约束
-- `docs/model-architecture-algorithm-diagrams.md` - 模型、架构与算法 Mermaid 图谱
-- `docs/documentation-index.md` - 当前权威文档入口、旧文档去重索引与事实校准记录
+- `docs/engineering-audit-plan.md`
+- `docs/development-engineering-guide.md`
+- `docs/design-constraints.md`
+- `docs/model-architecture-algorithm-diagrams.md`
+- `docs/documentation-index.md`
+- `docs/validation-trust-framework.md`
+- `docs/parser-support-matrix.md`
+- `docs/known-unsupported-formats.md`
+- `docs/error-taxonomy.md`
+- `docs/mcp-security-model.md`
+- `docs/export-and-media-safety.md`
+- `docs/mcp-user-guide.md`
+- `docs/real-sample-regression/README.md`
+- `docs/benchmark-results/README.md`
 
 ## License
 

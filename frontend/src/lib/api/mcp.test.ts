@@ -58,6 +58,14 @@ describe('mcp API layer', () => {
           args: ['server.js'],
           enabled: true,
           autoConnect: true,
+          permissions: {
+            resourceAccess: 'readOnly',
+            toolAccess: 'disabled',
+            promptAccess: 'readOnly',
+            networkPolicy: 'localhostOnly',
+            allowedTools: [],
+            allowedCommands: [],
+          },
         },
       ],
       resources: { 'file:///case': true },
@@ -77,6 +85,14 @@ describe('mcp API layer', () => {
         args: ['server.js'],
         enabled: true,
         autoConnect: false,
+        permissions: {
+          resourceAccess: 'readOnly',
+          toolAccess: 'disabled',
+          promptAccess: 'readOnly',
+          networkPolicy: 'localhostOnly',
+          allowedTools: [],
+          allowedCommands: [],
+        },
       },
     ]);
 
@@ -92,6 +108,14 @@ describe('mcp API layer', () => {
             args: ['server.js'],
             enabled: true,
             auto_connect: false,
+            permissions: {
+              resource_access: 'readOnly',
+              tool_access: 'disabled',
+              prompt_access: 'readOnly',
+              network_policy: 'localhostOnly',
+              allowed_tools: [],
+              allowed_commands: [],
+            },
           },
         ],
         resources: {},
@@ -117,6 +141,14 @@ describe('mcp API layer', () => {
       url: 'http://127.0.0.1:3000/sse',
       enabled: true,
       autoConnect: true,
+      permissions: {
+        resourceAccess: 'readOnly',
+        toolAccess: 'disabled',
+        promptAccess: 'readOnly',
+        networkPolicy: 'localhostOnly',
+        allowedTools: [],
+        allowedCommands: [],
+      },
     });
 
     expect(requestMock).toHaveBeenCalledWith('add_mcp_server', expect.any(Function), {
@@ -129,6 +161,14 @@ describe('mcp API layer', () => {
         args: undefined,
         enabled: true,
         auto_connect: true,
+        permissions: {
+          resource_access: 'readOnly',
+          tool_access: 'disabled',
+          prompt_access: 'readOnly',
+          network_policy: 'localhostOnly',
+          allowed_tools: [],
+          allowed_commands: [],
+        },
       },
     });
     expect(result).toMatchObject({ id: 'srv-1', hasResources: false, hasTools: false, hasPrompts: false });
@@ -167,6 +207,14 @@ describe('mcp API layer', () => {
         url: undefined,
         command: 'node',
         args: ['server.js'],
+        permissions: {
+          resource_access: 'readOnly',
+          tool_access: 'disabled',
+          prompt_access: 'readOnly',
+          network_policy: 'localhostOnly',
+          allowed_tools: [],
+          allowed_commands: [],
+        },
       },
     });
     expect(result).toEqual({

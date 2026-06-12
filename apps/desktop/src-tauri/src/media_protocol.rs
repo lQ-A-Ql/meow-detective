@@ -1,6 +1,7 @@
 use crate::state::AppState;
 use app_services::file_service;
 use base64::Engine;
+use chrono::Duration;
 use std::borrow::Cow;
 use std::io::Read;
 use tauri::http::{self, header, StatusCode};
@@ -8,6 +9,7 @@ use tauri::{AppHandle, Manager, Wry};
 
 pub const EVIDENCE_MEDIA_SCHEME: &str = "evidence-media";
 pub const MAX_MEDIA_PROTOCOL_READ_BYTES: u64 = transport::dto::MAX_VIEWER_RANGE_LENGTH as u64;
+const MEDIA_HANDLE_TTL_MINUTES: i64 = 30;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedRange {
@@ -39,6 +41,55 @@ pub fn media_protocol_url(handle_id: &str) -> String {
         "{EVIDENCE_MEDIA_SCHEME}://handle/{}",
         base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(handle_id)
     )
+}
+
+pub fn create_scoped_media_handle(state: &AppState, file_id: &str) -> Result<String, String> {
+    let case_id = state
+        .active_case
+        .lock()
+        .map_err(|_| "media handle unavailable".to_string())?
+        .as_ref()
+        .map(|active| active.meta.id.0.clone())
+        .ok_or_else(|| "media handle unavailable".to_string())?;
+
+    let cache = state
+        .runtime_cache
+        .lock()
+        .map_err(|_| "media handle unavailable".to_string())?;
+    cache
+        .handles()
+        .create(
+            &case_id,
+            file_id,
+            Duration::minutes(MEDIA_HANDLE_TTL_MINUTES),
+        )
+        .map_err(|_| "media handle unavailable".to_string())
+}
+
+pub fn resolve_scoped_media_handle(state: &AppState, handle_id: &str) -> Result<String, String> {
+    let active_case_id = state
+        .active_case
+        .lock()
+        .map_err(|_| "media handle unavailable".to_string())?
+        .as_ref()
+        .map(|active| active.meta.id.0.clone())
+        .ok_or_else(|| "media handle unavailable".to_string())?;
+
+    let cache = state
+        .runtime_cache
+        .lock()
+        .map_err(|_| "media handle unavailable".to_string())?;
+    let handle = cache
+        .handles()
+        .get(handle_id)
+        .map_err(|_| "media handle unavailable".to_string())?
+        .ok_or_else(|| "media handle expired or invalid".to_string())?;
+
+    if handle.case_id != active_case_id {
+        return Err("media handle expired or invalid".to_string());
+    }
+
+    Ok(handle.object_id)
 }
 
 pub fn resolve_media_handle_from_uri(uri: &http::Uri) -> Result<String, String> {
@@ -155,32 +206,40 @@ fn handle_media_protocol_request_inner(
 ) -> Result<http::Response<Cow<'static, [u8]>>, (StatusCode, String)> {
     let handle_id = resolve_media_handle_from_uri(request.uri())
         .map_err(|err| (StatusCode::BAD_REQUEST, err))?;
-    let file_id = handle_id
-        .strip_prefix("file:")
-        .ok_or_else(|| (StatusCode::GONE, "unsupported media handle".to_string()))?
-        .to_string();
+    let app_state = app_handle.state::<AppState>();
+    let file_id = resolve_scoped_media_handle(app_state.inner(), &handle_id)
+        .map_err(|err| (StatusCode::GONE, err))?;
     let range_header = request
         .headers()
         .get(header::RANGE)
         .and_then(|value| value.to_str().ok())
         .map(str::to_string);
 
-    let app_state = app_handle.state::<AppState>().inner().clone();
+    let app_state = app_state.inner().clone();
     let db_path = {
-        let guard = app_state
-            .active_case
-            .lock()
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-        let active = guard
-            .as_ref()
-            .ok_or_else(|| (StatusCode::NOT_FOUND, "no active case".to_string()))?;
+        let guard = app_state.active_case.lock().map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "media backend unavailable".to_string(),
+            )
+        })?;
+        let active = guard.as_ref().ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                "media handle unavailable".to_string(),
+            )
+        })?;
         active.db_path()
     };
-    let conn = persistence_sqlite::open_or_create(&db_path)
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    let conn = persistence_sqlite::open_or_create(&db_path).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "media backend unavailable".to_string(),
+        )
+    })?;
 
     let handle = file_service::open_file_handle_real(&conn, &file_id)
-        .map_err(|err| (StatusCode::NOT_FOUND, err))?;
+        .map_err(|_| (StatusCode::NOT_FOUND, "media file unavailable".to_string()))?;
     let range = parse_media_range_header(
         range_header.as_deref(),
         handle.size,
@@ -189,14 +248,26 @@ fn handle_media_protocol_request_inner(
     .map_err(|err| (err.status(), "invalid media range".to_string()))?;
 
     let mut reader = file_service::open_file_content_by_id(&conn, &domain::FileEntryId(file_id))
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err))?;
-    file_service::skip_reader_bytes(reader.as_mut(), range.start)
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err))?;
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "media backend unavailable".to_string(),
+            )
+        })?;
+    file_service::skip_reader_bytes(reader.as_mut(), range.start).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "media backend unavailable".to_string(),
+        )
+    })?;
 
     let mut bytes = vec![0u8; range.length as usize];
-    let bytes_read = reader
-        .read(&mut bytes)
-        .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))?;
+    let bytes_read = reader.read(&mut bytes).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "media backend unavailable".to_string(),
+        )
+    })?;
     bytes.truncate(bytes_read);
 
     let content_end = range
@@ -247,8 +318,8 @@ mod tests {
 
     #[test]
     fn protocol_url_encodes_opaque_handle() {
-        let url = media_protocol_url("file:abc 123");
-        assert_eq!(url, "evidence-media://handle/ZmlsZTphYmMgMTIz");
+        let url = media_protocol_url("opaque-handle-123");
+        assert_eq!(url, "evidence-media://handle/b3BhcXVlLWhhbmRsZS0xMjM");
     }
 
     #[test]

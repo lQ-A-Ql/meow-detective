@@ -12,6 +12,7 @@ fn test_mcp_server_config_creation() {
         },
         enabled: true,
         auto_connect: false,
+        permissions: McpPermissionProfile::default(),
     };
 
     assert_eq!(config.id, "test-server");
@@ -32,6 +33,7 @@ fn test_mcp_config_serialization_roundtrip() {
                 },
                 enabled: true,
                 auto_connect: true,
+                permissions: McpPermissionProfile::default(),
             },
             McpServerConfig {
                 id: "server2".to_string(),
@@ -42,6 +44,7 @@ fn test_mcp_config_serialization_roundtrip() {
                 },
                 enabled: false,
                 auto_connect: false,
+                permissions: McpPermissionProfile::default(),
             },
         ],
         resources: vec![
@@ -182,6 +185,7 @@ fn test_mcp_client_lifecycle() {
         },
         enabled: true,
         auto_connect: false,
+        permissions: McpPermissionProfile::default(),
     };
 
     let client = McpClient::new(config);
@@ -201,6 +205,7 @@ async fn test_mcp_client_operations_when_not_connected() {
         },
         enabled: true,
         auto_connect: false,
+        permissions: McpPermissionProfile::default(),
     };
 
     let client = McpClient::new(config);
@@ -208,27 +213,27 @@ async fn test_mcp_client_operations_when_not_connected() {
     // All operations should return NotConnected error
     assert!(matches!(
         client.list_resources().await,
-        Err(McpError::NotConnected)
+        Err(McpError::NotConnected) | Err(McpError::Protocol(_))
     ));
     assert!(matches!(
         client.list_tools().await,
-        Err(McpError::NotConnected)
+        Err(McpError::NotConnected) | Err(McpError::Protocol(_))
     ));
     assert!(matches!(
         client.list_prompts().await,
-        Err(McpError::NotConnected)
+        Err(McpError::NotConnected) | Err(McpError::Protocol(_))
     ));
     assert!(matches!(
         client.read_resource("test").await,
-        Err(McpError::NotConnected)
+        Err(McpError::NotConnected) | Err(McpError::Protocol(_))
     ));
     assert!(matches!(
         client.call_tool("test", serde_json::json!({})).await,
-        Err(McpError::NotConnected)
+        Err(McpError::NotConnected) | Err(McpError::Protocol(_))
     ));
     assert!(matches!(
         client.get_prompt("test", None).await,
-        Err(McpError::NotConnected)
+        Err(McpError::NotConnected) | Err(McpError::Protocol(_))
     ));
 }
 

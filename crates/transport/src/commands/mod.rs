@@ -79,6 +79,8 @@ impl OpenFileHandleRequest {
 pub struct ExtractFileRequest {
     pub file_id: String,
     pub destination_path: String,
+    #[serde(default)]
+    pub overwrite: bool,
 }
 
 impl ExtractFileRequest {
@@ -517,6 +519,8 @@ pub struct ExportScopeDto {
     pub full_timeline: bool,
     #[serde(default)]
     pub raw_file_extraction: bool,
+    #[serde(default)]
+    pub overwrite: bool,
 }
 
 fn default_true() -> bool {
@@ -530,6 +534,7 @@ impl Default for ExportScopeDto {
             registry: true,
             full_timeline: true,
             raw_file_extraction: false,
+            overwrite: false,
         }
     }
 }
@@ -558,6 +563,7 @@ mod tests {
         let request = ExtractFileRequest {
             file_id: "file-1".to_string(),
             destination_path: r"\\.\PhysicalDrive0".to_string(),
+            overwrite: false,
         };
 
         assert!(request.validate().is_err());
@@ -681,6 +687,7 @@ mod tests {
         assert!(scope.registry);
         assert!(scope.full_timeline);
         assert!(!scope.raw_file_extraction);
+        assert!(!scope.overwrite);
     }
 
     #[test]

@@ -83,18 +83,39 @@ impl McpClient {
 
     /// List available resources
     pub async fn list_resources(&self) -> McpResult<Vec<McpResource>> {
+        if matches!(
+            self.config.permissions.resource_access,
+            McpResourceAccess::Disabled
+        ) {
+            return Err(McpError::Protocol(
+                "MCP resource access is disabled for this server".to_string(),
+            ));
+        }
         let transport = self.transport.as_ref().ok_or(McpError::NotConnected)?;
         transport.list_resources().await
     }
 
     /// Read a resource
     pub async fn read_resource(&self, uri: &str) -> McpResult<String> {
+        if matches!(
+            self.config.permissions.resource_access,
+            McpResourceAccess::Disabled
+        ) {
+            return Err(McpError::Protocol(
+                "MCP resource access is disabled for this server".to_string(),
+            ));
+        }
         let transport = self.transport.as_ref().ok_or(McpError::NotConnected)?;
         transport.read_resource(uri).await
     }
 
     /// List available tools
     pub async fn list_tools(&self) -> McpResult<Vec<McpTool>> {
+        if matches!(self.config.permissions.tool_access, McpToolAccess::Disabled) {
+            return Err(McpError::Protocol(
+                "MCP tool access is disabled for this server".to_string(),
+            ));
+        }
         let transport = self.transport.as_ref().ok_or(McpError::NotConnected)?;
         transport.list_tools().await
     }
@@ -105,12 +126,41 @@ impl McpClient {
         name: &str,
         arguments: serde_json::Value,
     ) -> McpResult<serde_json::Value> {
+        match self.config.permissions.tool_access {
+            McpToolAccess::Disabled => {
+                return Err(McpError::Protocol(
+                    "MCP tool access is disabled for this server".to_string(),
+                ))
+            }
+            McpToolAccess::AllowList => {
+                if !self
+                    .config
+                    .permissions
+                    .allowed_tools
+                    .iter()
+                    .any(|allowed| allowed.eq_ignore_ascii_case(name))
+                {
+                    return Err(McpError::ToolNotFound(format!(
+                        "{} (not permitted by allow list)",
+                        name
+                    )));
+                }
+            }
+        }
         let transport = self.transport.as_ref().ok_or(McpError::NotConnected)?;
         transport.call_tool(name, arguments).await
     }
 
     /// List available prompts
     pub async fn list_prompts(&self) -> McpResult<Vec<McpPrompt>> {
+        if matches!(
+            self.config.permissions.prompt_access,
+            McpPromptAccess::Disabled
+        ) {
+            return Err(McpError::Protocol(
+                "MCP prompt access is disabled for this server".to_string(),
+            ));
+        }
         let transport = self.transport.as_ref().ok_or(McpError::NotConnected)?;
         transport.list_prompts().await
     }
@@ -121,6 +171,14 @@ impl McpClient {
         name: &str,
         arguments: Option<HashMap<String, String>>,
     ) -> McpResult<String> {
+        if matches!(
+            self.config.permissions.prompt_access,
+            McpPromptAccess::Disabled
+        ) {
+            return Err(McpError::Protocol(
+                "MCP prompt access is disabled for this server".to_string(),
+            ));
+        }
         let transport = self.transport.as_ref().ok_or(McpError::NotConnected)?;
         transport.get_prompt(name, arguments).await
     }
@@ -139,6 +197,7 @@ mod tests {
             },
             enabled: true,
             auto_connect: false,
+            permissions: McpPermissionProfile::default(),
         }
     }
 
@@ -172,7 +231,10 @@ mod tests {
         let client = McpClient::new(config);
 
         let result = client.list_tools().await;
-        assert!(matches!(result, Err(McpError::NotConnected)));
+        assert!(matches!(
+            result,
+            Err(McpError::NotConnected) | Err(McpError::Protocol(_))
+        ));
     }
 
     #[tokio::test]
@@ -190,7 +252,10 @@ mod tests {
         let client = McpClient::new(config);
 
         let result = client.call_tool("test", serde_json::json!({})).await;
-        assert!(matches!(result, Err(McpError::NotConnected)));
+        assert!(matches!(
+            result,
+            Err(McpError::NotConnected) | Err(McpError::Protocol(_))
+        ));
     }
 
     #[tokio::test]
@@ -221,6 +286,7 @@ mod tests {
             },
             enabled: true,
             auto_connect: true,
+            permissions: McpPermissionProfile::default(),
         };
         let client = McpClient::new(config);
         assert_eq!(client.config().id, "sse-test");
@@ -238,6 +304,7 @@ mod tests {
             },
             enabled: false,
             auto_connect: false,
+            permissions: McpPermissionProfile::default(),
         };
         let client = McpClient::new(config);
         assert_eq!(client.config().id, "stdio-test");
@@ -261,9 +328,28 @@ mod tests {
             },
             enabled: true,
             auto_connect: false,
+            permissions: McpPermissionProfile::default(),
         };
         let mut client = McpClient::new(config);
         assert!(matches!(client.connect().await, Err(McpError::Protocol(_))));
         assert!(!client.is_connected());
+    }
+
+    #[tokio::test]
+    async fn test_client_blocks_disabled_tool_access_before_transport() {
+        let config = McpServerConfig {
+            id: "stdio-test".to_string(),
+            name: "Stdio Server".to_string(),
+            transport: McpTransport::Stdio {
+                command: "python".to_string(),
+                args: vec!["-m".to_string(), "server".to_string()],
+            },
+            enabled: true,
+            auto_connect: false,
+            permissions: McpPermissionProfile::default(),
+        };
+        let client = McpClient::new(config);
+        let result = client.call_tool("lookup", serde_json::json!({})).await;
+        assert!(matches!(result, Err(McpError::Protocol(_))));
     }
 }

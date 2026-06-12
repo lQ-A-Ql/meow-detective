@@ -13,6 +13,7 @@ import {
   saveMcpConfig,
   testMcpConnection,
   type McpConfig,
+  type McpPermissionProfile,
   type McpPrompt,
   type McpResource,
   type McpServer as ApiMcpServer,
@@ -20,11 +21,6 @@ import {
   type McpTool,
 } from '@/lib/api/mcp';
 
-// ============================================
-// 类型定义
-// ============================================
-
-/** MCP Server configuration */
 interface McpServer {
   id: string;
   name: string;
@@ -34,6 +30,7 @@ interface McpServer {
   args?: string[];
   enabled: boolean;
   autoConnect: boolean;
+  permissions: McpPermissionProfile;
   connected: boolean;
   hasResources: boolean;
   hasTools: boolean;
@@ -41,19 +38,20 @@ interface McpServer {
   lastError?: string;
 }
 
-/** MCP Tool Call Result */
+type NewMcpServerInput = Omit<
+  McpServer,
+  'id' | 'permissions' | 'connected' | 'hasResources' | 'hasTools' | 'hasPrompts'
+> & {
+  permissions?: McpPermissionProfile;
+};
+
 interface McpToolCallResult {
   success: boolean;
   data?: unknown;
   error?: string;
 }
 
-// ============================================
-// Store 状态接口
-// ============================================
-
 interface McpState {
-  // State
   servers: McpServer[];
   resources: McpResource[];
   tools: McpTool[];
@@ -61,40 +59,42 @@ interface McpState {
   selectedServerId: string | null;
   loading: boolean;
   error: string | null;
-
-  // Config operations
   loadConfig: () => Promise<void>;
   saveConfig: () => Promise<void>;
-
-  // Server operations
-  addServer: (server: Omit<McpServer, 'id' | 'connected' | 'hasResources' | 'hasTools' | 'hasPrompts'>) => Promise<void>;
+  addServer: (server: NewMcpServerInput) => Promise<void>;
   removeServer: (id: string) => Promise<void>;
-
-  // Connection operations
   connectServer: (id: string) => Promise<void>;
   disconnectServer: (id: string) => Promise<void>;
-  testConnection: (transportType: string, url?: string, command?: string, args?: string[]) => Promise<{ success: boolean; error?: string }>;
-
-  // Selection
+  testConnection: (
+    transportType: string,
+    url?: string,
+    command?: string,
+    args?: string[],
+    permissions?: McpPermissionProfile,
+  ) => Promise<{ success: boolean; error?: string }>;
   selectServer: (id: string | null) => void;
-
-  // Resource operations
   refreshResources: (serverId: string) => Promise<void>;
-
-  // Tool operations
   refreshTools: (serverId: string) => Promise<void>;
   callTool: (serverId: string, toolName: string, args: unknown) => Promise<McpToolCallResult>;
-
-  // Prompt operations
   refreshPrompts: (serverId: string) => Promise<void>;
-  getPrompt: (serverId: string, promptName: string, args?: Record<string, string>) => Promise<string>;
+  getPrompt: (
+    serverId: string,
+    promptName: string,
+    args?: Record<string, string>,
+  ) => Promise<string>;
 }
 
-// ============================================
-// 辅助函数
-// ============================================
+function defaultPermissions(): McpPermissionProfile {
+  return {
+    resourceAccess: 'readOnly',
+    toolAccess: 'disabled',
+    promptAccess: 'readOnly',
+    networkPolicy: 'localhostOnly',
+    allowedTools: [],
+    allowedCommands: [],
+  };
+}
 
-/** 格式化错误信息 */
 function formatError(err: unknown): string {
   if (typeof err === 'string') return err;
   if (err instanceof Error) return err.message;
@@ -104,17 +104,17 @@ function formatError(err: unknown): string {
   return '未知错误';
 }
 
-/** 转换服务器响应 */
-function mapServerResponse(s: ApiMcpServer): McpServer {
+function mapServerResponse(server: ApiMcpServer): McpServer {
   return {
-    id: s.id,
-    name: s.name,
-    transportType: s.transportType,
-    url: s.url,
-    command: s.command,
-    args: s.args,
-    enabled: s.enabled,
-    autoConnect: s.autoConnect,
+    id: server.id,
+    name: server.name,
+    transportType: server.transportType,
+    url: server.url,
+    command: server.command,
+    args: server.args,
+    enabled: server.enabled,
+    autoConnect: server.autoConnect,
+    permissions: server.permissions ?? defaultPermissions(),
     connected: false,
     hasResources: false,
     hasTools: false,
@@ -122,12 +122,7 @@ function mapServerResponse(s: ApiMcpServer): McpServer {
   };
 }
 
-// ============================================
-// Store 实现
-// ============================================
-
 export const useMcpStore = create<McpState>((set, get) => ({
-  // Initial state
   servers: [],
   resources: [],
   tools: [],
@@ -136,46 +131,45 @@ export const useMcpStore = create<McpState>((set, get) => ({
   loading: false,
   error: null,
 
-  // Load MCP config from backend
   loadConfig: async () => {
     try {
       set({ loading: true, error: null });
       const config: McpConfig = await getMcpConfig();
-
-      const servers: McpServer[] = config.servers.map(mapServerResponse);
-      set({ servers, loading: false });
+      set({
+        servers: config.servers.map(mapServerResponse),
+        loading: false,
+      });
     } catch (err) {
       set({ error: formatError(err), loading: false });
     }
   },
 
-  // Save MCP config to backend
   saveConfig: async () => {
     try {
       const { servers } = get();
-      await saveMcpConfig(servers.map((s) => ({
-          id: s.id,
-          name: s.name,
-          transportType: s.transportType,
-          url: s.url,
-          command: s.command,
-          args: s.args,
-          enabled: s.enabled,
-          autoConnect: s.autoConnect,
-        })));
+      await saveMcpConfig(
+        servers.map((server) => ({
+          id: server.id,
+          name: server.name,
+          transportType: server.transportType,
+          url: server.url,
+          command: server.command,
+          args: server.args,
+          enabled: server.enabled,
+          autoConnect: server.autoConnect,
+          permissions: server.permissions,
+        })),
+      );
     } catch (err) {
       set({ error: formatError(err) });
     }
   },
 
-  // Add a new server
   addServer: async (server) => {
     try {
       set({ loading: true, error: null });
-      const id = crypto.randomUUID();
-
       await addMcpServer({
-        id,
+        id: crypto.randomUUID(),
         name: server.name,
         transportType: server.transportType,
         url: server.url,
@@ -183,6 +177,7 @@ export const useMcpStore = create<McpState>((set, get) => ({
         args: server.args,
         enabled: server.enabled,
         autoConnect: server.autoConnect,
+        permissions: server.permissions ?? defaultPermissions(),
       });
       await get().loadConfig();
     } catch (err) {
@@ -190,14 +185,12 @@ export const useMcpStore = create<McpState>((set, get) => ({
     }
   },
 
-  // Remove a server
   removeServer: async (id) => {
     try {
       set({ loading: true, error: null });
       await removeMcpServer(id);
-
       set((state) => ({
-        servers: state.servers.filter((s) => s.id !== id),
+        servers: state.servers.filter((server) => server.id !== id),
         selectedServerId: state.selectedServerId === id ? null : state.selectedServerId,
         loading: false,
       }));
@@ -206,24 +199,22 @@ export const useMcpStore = create<McpState>((set, get) => ({
     }
   },
 
-  // Connect to a server
   connectServer: async (id) => {
     try {
       set({ loading: true, error: null });
       const status: McpServerStatus = await connectMcpServer(id);
-
       set((state) => ({
-        servers: state.servers.map((s) =>
-          s.id === id
+        servers: state.servers.map((server) =>
+          server.id === id
             ? {
-                ...s,
+                ...server,
                 connected: status.connected,
                 hasResources: status.hasResources,
                 hasTools: status.hasTools,
                 hasPrompts: status.hasPrompts,
                 lastError: status.lastError,
               }
-            : s
+            : server,
         ),
         loading: false,
       }));
@@ -232,15 +223,13 @@ export const useMcpStore = create<McpState>((set, get) => ({
     }
   },
 
-  // Disconnect from a server
   disconnectServer: async (id) => {
     try {
       set({ loading: true, error: null });
       await disconnectMcpServer(id);
-
       set((state) => ({
-        servers: state.servers.map((s) =>
-          s.id === id ? { ...s, connected: false } : s
+        servers: state.servers.map((server) =>
+          server.id === id ? { ...server, connected: false } : server,
         ),
         loading: false,
       }));
@@ -249,10 +238,15 @@ export const useMcpStore = create<McpState>((set, get) => ({
     }
   },
 
-  // Test connection
-  testConnection: async (transportType, url, command, args) => {
+  testConnection: async (transportType, url, command, args, permissions) => {
     try {
-      const result = await testMcpConnection(transportType, url, command, args);
+      const result = await testMcpConnection(
+        transportType,
+        url,
+        command,
+        args,
+        permissions ?? defaultPermissions(),
+      );
       return {
         success: result.success,
         error: result.error,
@@ -265,10 +259,11 @@ export const useMcpStore = create<McpState>((set, get) => ({
     }
   },
 
-  // Select a server (合并为单次 set)
   selectServer: (id) => {
     set((state) => {
-      if (id === state.selectedServerId) return state;
+      if (id === state.selectedServerId) {
+        return state;
+      }
       return {
         selectedServerId: id,
         resources: [],
@@ -278,35 +273,26 @@ export const useMcpStore = create<McpState>((set, get) => ({
     });
   },
 
-  // Refresh resources from a server
   refreshResources: async (serverId) => {
     try {
       set({ loading: true, error: null });
-      const resources: McpResource[] = await listMcpResources(serverId);
-      set({
-        resources,
-        loading: false,
-      });
+      const resources = await listMcpResources(serverId);
+      set({ resources, loading: false });
     } catch (err) {
       set({ error: formatError(err), loading: false });
     }
   },
 
-  // Refresh tools from a server
   refreshTools: async (serverId) => {
     try {
       set({ loading: true, error: null });
-      const tools: McpTool[] = await listMcpTools(serverId);
-      set({
-        tools,
-        loading: false,
-      });
+      const tools = await listMcpTools(serverId);
+      set({ tools, loading: false });
     } catch (err) {
       set({ error: formatError(err), loading: false });
     }
   },
 
-  // Call a tool
   callTool: async (serverId, toolName, args) => {
     try {
       const result = await callMcpTool(serverId, toolName, args);
@@ -323,25 +309,19 @@ export const useMcpStore = create<McpState>((set, get) => ({
     }
   },
 
-  // Refresh prompts from a server
   refreshPrompts: async (serverId) => {
     try {
       set({ loading: true, error: null });
-      const prompts: McpPrompt[] = await listMcpPrompts(serverId);
-      set({
-        prompts,
-        loading: false,
-      });
+      const prompts = await listMcpPrompts(serverId);
+      set({ prompts, loading: false });
     } catch (err) {
       set({ error: formatError(err), loading: false });
     }
   },
 
-  // Get a prompt
   getPrompt: async (serverId, promptName, args) => {
     try {
-      const result = await getMcpPrompt(serverId, promptName, args);
-      return result;
+      return await getMcpPrompt(serverId, promptName, args);
     } catch (err) {
       throw Object.assign(new Error(formatError(err)), { cause: err });
     }

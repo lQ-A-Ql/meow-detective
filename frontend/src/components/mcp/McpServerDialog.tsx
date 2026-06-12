@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { X, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import type { McpPermissionProfile } from '@/lib/api/mcp';
 
 interface McpServerDialogProps {
   onClose: () => void;
@@ -11,6 +12,7 @@ interface McpServerDialogProps {
     args?: string[];
     enabled: boolean;
     autoConnect: boolean;
+    permissions?: McpPermissionProfile;
   }) => Promise<void>;
   testConnection: (
     transportType: string,

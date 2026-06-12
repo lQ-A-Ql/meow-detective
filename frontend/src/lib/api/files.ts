@@ -198,6 +198,6 @@ export async function extractFile(file: FileEntryRow) {
   return apiClient.request(
     'extract_file',
     () => Promise.resolve('Mock file exported'),
-    { request: { fileId: file.id, destinationPath } },
+    { request: { fileId: file.id, destinationPath, overwrite: false } },
   );
 }

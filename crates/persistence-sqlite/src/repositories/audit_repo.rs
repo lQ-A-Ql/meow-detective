@@ -1,12 +1,12 @@
-//! 审计日志仓库
+//! 审计日志仓储。
 //!
-//! 记录和查询用户操作审计日志。
+//! 记录和查询用户或系统在案件中的关键操作，用于安全边界复核、
+//! MCP 调用留痕、导出留痕与问题追溯。
 
 use crate::connection::DbResult;
 use rusqlite::{params, Connection};
 use uuid::Uuid;
 
-/// 审计日志条目
 #[derive(Debug, Clone)]
 pub struct AuditLogEntry {
     pub id: String,
@@ -20,36 +20,31 @@ pub struct AuditLogEntry {
     pub created_at: String,
 }
 
-/// 审计操作类型
 #[derive(Debug, Clone, Copy)]
 pub enum AuditAction {
-    // 案件操作
     CaseCreate,
     CaseOpen,
     CaseClose,
     CaseDelete,
-
-    // 数据源操作
     DataSourceImport,
     DataSourceDelete,
     DataSourceRename,
-
-    // 文件操作
     FileView,
     FileExtract,
-
-    // 搜索操作
     SearchExecute,
-
-    // 报告操作
     ReportGenerate,
     ReportExport,
-
-    // 工件操作
     ArtifactView,
-
-    // 时间线操作
     TimelineView,
+    McpConnect,
+    McpDisconnect,
+    McpTest,
+    McpResourceList,
+    McpResourceRead,
+    McpToolList,
+    McpToolCall,
+    McpPromptList,
+    McpPromptGet,
 }
 
 impl AuditAction {
@@ -69,6 +64,15 @@ impl AuditAction {
             Self::ReportExport => "report.export",
             Self::ArtifactView => "artifact.view",
             Self::TimelineView => "timeline.view",
+            Self::McpConnect => "mcp.connect",
+            Self::McpDisconnect => "mcp.disconnect",
+            Self::McpTest => "mcp.test",
+            Self::McpResourceList => "mcp.resource.list",
+            Self::McpResourceRead => "mcp.resource.read",
+            Self::McpToolList => "mcp.tool.list",
+            Self::McpToolCall => "mcp.tool.call",
+            Self::McpPromptList => "mcp.prompt.list",
+            Self::McpPromptGet => "mcp.prompt.get",
         }
     }
 
@@ -83,11 +87,19 @@ impl AuditAction {
             Self::ReportGenerate | Self::ReportExport => "report",
             Self::ArtifactView => "artifact",
             Self::TimelineView => "timeline",
+            Self::McpConnect
+            | Self::McpDisconnect
+            | Self::McpTest
+            | Self::McpResourceList
+            | Self::McpResourceRead
+            | Self::McpToolList
+            | Self::McpToolCall
+            | Self::McpPromptList
+            | Self::McpPromptGet => "mcp",
         }
     }
 }
 
-/// 审计日志仓库
 pub struct AuditRepo<'a> {
     conn: &'a Connection,
 }
@@ -97,7 +109,6 @@ impl<'a> AuditRepo<'a> {
         Self { conn }
     }
 
-    /// 记录操作日志
     pub fn log(
         &self,
         case_id: Option<&str>,
@@ -123,7 +134,6 @@ impl<'a> AuditRepo<'a> {
         Ok(())
     }
 
-    /// 记录操作日志 (简化版本)
     pub fn log_simple(
         &self,
         case_id: Option<&str>,
@@ -133,7 +143,6 @@ impl<'a> AuditRepo<'a> {
         self.log(case_id, "system", action, resource_id, "{}")
     }
 
-    /// 查询日志
     pub fn query(
         &self,
         case_id: Option<&str>,
@@ -192,7 +201,6 @@ impl<'a> AuditRepo<'a> {
         Ok(entries)
     }
 
-    /// 统计日志数量
     pub fn count(&self, case_id: Option<&str>) -> DbResult<u64> {
         let (sql, param_values) = match case_id {
             Some(cid) => (
@@ -209,7 +217,6 @@ impl<'a> AuditRepo<'a> {
         Ok(count as u64)
     }
 
-    /// 按操作类型统计
     pub fn count_by_action(&self, action: &str) -> DbResult<u64> {
         let count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM audit_log WHERE action = ?1",
@@ -219,7 +226,6 @@ impl<'a> AuditRepo<'a> {
         Ok(count as u64)
     }
 
-    /// 清理指定天数前的日志
     pub fn cleanup_old(&self, days: u32) -> DbResult<usize> {
         let count = self.conn.execute(
             "DELETE FROM audit_log WHERE created_at < datetime('now', ?1)",
@@ -234,44 +240,50 @@ mod tests {
     use super::*;
     use crate::connection::open_in_memory;
 
-    #[test]
-    fn test_log_and_query() {
+    fn setup_conn() -> Connection {
         let conn = open_in_memory().unwrap();
         conn.execute_batch(
-            "CREATE TABLE audit_log (id TEXT PRIMARY KEY, case_id TEXT, user_id TEXT, action TEXT, resource_type TEXT, resource_id TEXT, details TEXT, ip_address TEXT, created_at TEXT DEFAULT (datetime('now')));"
-        ).unwrap();
+            "CREATE TABLE audit_log (
+                id TEXT PRIMARY KEY,
+                case_id TEXT,
+                user_id TEXT,
+                action TEXT,
+                resource_type TEXT,
+                resource_id TEXT,
+                details TEXT,
+                ip_address TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            );",
+        )
+        .unwrap();
+        conn
+    }
 
+    #[test]
+    fn log_and_query_roundtrip() {
+        let conn = setup_conn();
         let repo = AuditRepo::new(&conn);
 
-        // 记录日志
         repo.log(
             Some("case-1"),
             "user-1",
             &AuditAction::CaseCreate,
             Some("case-1"),
-            r#"{"name": "Test Case"}"#,
+            r#"{"name":"Test Case"}"#,
         )
         .unwrap();
 
-        // 查询日志
         let entries = repo.query(None, None, 10, 0).unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].action, "case.create");
-        assert_eq!(entries[0].case_id, Some("case-1".to_string()));
+        assert_eq!(entries[0].case_id.as_deref(), Some("case-1"));
     }
 
     #[test]
-    fn test_count() {
-        let conn = open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE audit_log (id TEXT PRIMARY KEY, case_id TEXT, user_id TEXT, action TEXT, resource_type TEXT, resource_id TEXT, details TEXT, ip_address TEXT, created_at TEXT DEFAULT (datetime('now')));"
-        ).unwrap();
-
+    fn count_filters_by_case() {
+        let conn = setup_conn();
         let repo = AuditRepo::new(&conn);
 
-        assert_eq!(repo.count(None).unwrap(), 0);
-
-        // 使用 log 而不是 log_simple，以便设置 case_id
         repo.log(
             Some("case-1"),
             "system",
@@ -295,25 +307,22 @@ mod tests {
     }
 
     #[test]
-    fn test_query_by_action() {
-        let conn = open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE audit_log (id TEXT PRIMARY KEY, case_id TEXT, user_id TEXT, action TEXT, resource_type TEXT, resource_id TEXT, details TEXT, ip_address TEXT, created_at TEXT DEFAULT (datetime('now')));"
-        ).unwrap();
-
+    fn query_by_action_filters_entries() {
+        let conn = setup_conn();
         let repo = AuditRepo::new(&conn);
 
         repo.log_simple(None, &AuditAction::CaseCreate, Some("case-1"))
             .unwrap();
         repo.log_simple(None, &AuditAction::CaseOpen, Some("case-1"))
             .unwrap();
-        repo.log_simple(None, &AuditAction::CaseCreate, Some("case-2"))
+        repo.log_simple(None, &AuditAction::McpConnect, Some("srv-1"))
             .unwrap();
 
         let entries = repo.query(None, Some("case.create"), 10, 0).unwrap();
-        assert_eq!(entries.len(), 2);
-
-        let entries = repo.query(None, Some("case.open"), 10, 0).unwrap();
         assert_eq!(entries.len(), 1);
+
+        let mcp_entries = repo.query(None, Some("mcp.connect"), 10, 0).unwrap();
+        assert_eq!(mcp_entries.len(), 1);
+        assert_eq!(mcp_entries[0].resource_type, "mcp");
     }
 }

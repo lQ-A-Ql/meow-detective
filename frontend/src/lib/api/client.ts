@@ -7,8 +7,6 @@ export function getApiMode(): ApiMode {
     return 'tauri';
   }
 
-  // Desktop builds must prefer the live Tauri bridge even if the env var
-  // was not injected into the prebuilt frontend bundle.
   return isTauri() ? 'tauri' : 'mock';
 }
 
@@ -21,6 +19,7 @@ function toApiError(error: unknown, fallbackCode: string): ApiErrorDto {
     return {
       code: fallbackCode,
       message: error,
+      category: 'internal',
       recoverable: true,
     };
   }
@@ -29,6 +28,7 @@ function toApiError(error: unknown, fallbackCode: string): ApiErrorDto {
     return {
       code: fallbackCode,
       message: error.message,
+      category: 'internal',
       recoverable: true,
     };
   }
@@ -36,6 +36,7 @@ function toApiError(error: unknown, fallbackCode: string): ApiErrorDto {
   return {
     code: fallbackCode,
     message: '未知接口错误',
+    category: 'internal',
     details: error,
     recoverable: true,
   };
@@ -47,11 +48,16 @@ export function isApiErrorDto(value: unknown): value is ApiErrorDto {
   }
 
   const candidate = value as Partial<ApiErrorDto>;
-  return typeof candidate.code === 'string' && typeof candidate.message === 'string'
+  return typeof candidate.code === 'string'
+    && typeof candidate.message === 'string'
+    && (candidate.category === undefined || typeof candidate.category === 'string')
     && (candidate.recoverable === undefined || typeof candidate.recoverable === 'boolean');
 }
 
-async function invokeTauriCommand<T>(command: string, payload?: Record<string, unknown>): Promise<T> {
+async function invokeTauriCommand<T>(
+  command: string,
+  payload?: Record<string, unknown>,
+): Promise<T> {
   return invoke<T>(command, payload);
 }
 
@@ -62,7 +68,11 @@ class ApiClient {
     return getApiMode();
   }
 
-  async request<T>(command: string, mockCall: () => Promise<T>, payload?: Record<string, unknown>) {
+  async request<T>(
+    command: string,
+    mockCall: () => Promise<T>,
+    payload?: Record<string, unknown>,
+  ) {
     if (getApiMode() === 'mock') {
       return mockCall();
     }

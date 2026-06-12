@@ -8,7 +8,9 @@
 
 use app_services::{file_service, text_service::TextService};
 use base64::Engine;
+use persistence_sqlite::repositories::audit_repo::{AuditAction, AuditRepo};
 use std::io::Read;
+use std::io::Write;
 use tauri::State;
 use transport::{
     commands::{
@@ -26,6 +28,34 @@ use transport::{
 use transport::dto::MAX_VIEWER_RANGE_LENGTH;
 
 use crate::state::AppState;
+
+fn current_case_id(state: &AppState) -> Option<String> {
+    state
+        .active_case
+        .lock()
+        .ok()
+        .and_then(|guard| guard.as_ref().map(|active| active.meta.id.0.clone()))
+}
+
+fn write_file_audit(
+    state: &AppState,
+    action: AuditAction,
+    resource_id: Option<&str>,
+    details: serde_json::Value,
+) {
+    let Ok(conn) = state.get_connection() else {
+        return;
+    };
+    let case_id = current_case_id(state);
+    let details_str = serde_json::to_string(&details).unwrap_or_else(|_| "{}".to_string());
+    let _ = AuditRepo::new(&conn).log(
+        case_id.as_deref(),
+        "system",
+        &action,
+        resource_id,
+        &details_str,
+    );
+}
 
 /// Get children of a file tree node (lazy loading).
 #[tauri::command]
@@ -406,7 +436,7 @@ pub async fn get_media_url(
         let conn = persistence_sqlite::open_or_create(&db_path)
             .map_err(CommandError::from_service_error)?;
 
-        media_data_url_for_file(&conn, &file_id)
+        media_data_url_for_file(&app_state, &conn, &file_id)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -435,7 +465,7 @@ pub async fn read_media_range(
         let conn = persistence_sqlite::open_or_create(&db_path)
             .map_err(CommandError::from_service_error)?;
 
-        media_range_for_file(&conn, &request)
+        media_range_for_file(&app_state, &conn, &request)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -449,6 +479,9 @@ pub async fn extract_file(
 ) -> Result<String, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
+    let audit_file_id = request.file_id.clone();
+    let audit_destination = request.destination_path.clone();
+    let overwrite = request.overwrite;
     tauri::async_runtime::spawn_blocking(move || {
         let db_path = {
             let guard = app_state
@@ -460,7 +493,39 @@ pub async fn extract_file(
         };
         let conn = persistence_sqlite::open_or_create(&db_path)
             .map_err(CommandError::from_service_error)?;
-        extract_file_for_case(&conn, &request)
+        let result = extract_file_for_case(&conn, &request);
+        match &result {
+            Ok(message) => write_file_audit(
+                &app_state,
+                AuditAction::FileExtract,
+                Some(&audit_file_id),
+                serde_json::json!({
+                    "status": "ok",
+                    "overwrite": overwrite,
+                    "destinationFileName": std::path::Path::new(&audit_destination)
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or("unknown"),
+                    "message": message,
+                }),
+            ),
+            Err(err) => write_file_audit(
+                &app_state,
+                AuditAction::FileExtract,
+                Some(&audit_file_id),
+                serde_json::json!({
+                    "status": "failed",
+                    "overwrite": overwrite,
+                    "destinationFileName": std::path::Path::new(&audit_destination)
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or("unknown"),
+                    "errorCode": err.code,
+                    "errorCategory": err.category,
+                }),
+            ),
+        }
+        result
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -479,19 +544,59 @@ fn extract_file_for_case(
             "destinationPath must point to a file, not a directory",
         ));
     }
+    if destination.exists() && !request.overwrite {
+        return Err(CommandError::conflict(
+            "destinationPath already exists; set overwrite=true to replace it",
+        ));
+    }
     if let Some(parent) = destination.parent() {
         if !parent.as_os_str().is_empty() {
             std::fs::create_dir_all(parent).map_err(CommandError::from_service_error)?;
         }
     }
-    let mut output =
-        std::fs::File::create(&destination).map_err(CommandError::from_service_error)?;
-    let bytes =
-        std::io::copy(&mut reader, &mut output).map_err(CommandError::from_service_error)?;
+    let temp_path = destination.with_extension(format!(
+        "{}{}.tmp",
+        destination
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| format!("{ext}."))
+            .unwrap_or_default(),
+        uuid::Uuid::new_v4()
+    ));
+    let mut output = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp_path)
+        .map_err(CommandError::from_service_error)?;
+    let bytes = std::io::copy(&mut reader, &mut output).map_err(|err| {
+        let _ = std::fs::remove_file(&temp_path);
+        CommandError::from_service_error(err)
+    })?;
+    output.flush().map_err(|err| {
+        let _ = std::fs::remove_file(&temp_path);
+        CommandError::from_service_error(err)
+    })?;
+    output.sync_all().map_err(|err| {
+        let _ = std::fs::remove_file(&temp_path);
+        CommandError::from_service_error(err)
+    })?;
+    drop(output);
+
+    if request.overwrite && destination.exists() {
+        std::fs::remove_file(&destination).map_err(|err| {
+            let _ = std::fs::remove_file(&temp_path);
+            CommandError::from_service_error(err)
+        })?;
+    }
+    std::fs::rename(&temp_path, &destination).map_err(|err| {
+        let _ = std::fs::remove_file(&temp_path);
+        CommandError::from_service_error(err)
+    })?;
     Ok(format!("Extracted {} bytes", bytes))
 }
 
 fn media_data_url_for_file(
+    state: &AppState,
     conn: &rusqlite::Connection,
     file_id: &str,
 ) -> Result<MediaUrlDto, CommandError> {
@@ -502,10 +607,12 @@ fn media_data_url_for_file(
         .clone()
         .unwrap_or_else(|| "application/octet-stream".to_string());
     if handle.size > infrastructure::constants::MAX_INLINE_MEDIA_PREVIEW_BYTES {
+        let scoped_handle = crate::media_protocol::create_scoped_media_handle(state, file_id)
+            .map_err(CommandError::security)?;
         return Ok(MediaUrlDto {
             mode: MediaPreviewModeDto::Protocol,
-            url: Some(crate::media_protocol::media_protocol_url(&handle.handle_id)),
-            handle_id: Some(handle.handle_id),
+            url: Some(crate::media_protocol::media_protocol_url(&scoped_handle)),
+            handle_id: Some(scoped_handle),
             mime_type: mime,
             size: handle.size,
             can_read_ranges: true,
@@ -532,14 +639,13 @@ fn media_data_url_for_file(
 }
 
 fn media_range_for_file(
+    state: &AppState,
     conn: &rusqlite::Connection,
     request: &MediaRangeRequestDto,
 ) -> Result<MediaRangeResponseDto, CommandError> {
-    let file_id = request
-        .handle_id
-        .strip_prefix("file:")
-        .ok_or_else(|| CommandError::invalid_input("unsupported media handle"))?;
-    let handle = file_service::open_file_handle_real(conn, file_id)
+    let file_id = crate::media_protocol::resolve_scoped_media_handle(state, &request.handle_id)
+        .map_err(CommandError::security)?;
+    let handle = file_service::open_file_handle_real(conn, &file_id)
         .map_err(CommandError::from_service_error)?;
     if request.offset >= handle.size {
         return Ok(MediaRangeResponseDto {
@@ -550,7 +656,7 @@ fn media_range_for_file(
         });
     }
     let mut reader =
-        file_service::open_file_content_by_id(conn, &domain::FileEntryId(file_id.to_string()))
+        file_service::open_file_content_by_id(conn, &domain::FileEntryId(file_id.clone()))
             .map_err(CommandError::from_service_error)?;
 
     file_service::skip_reader_bytes(reader.as_mut(), request.offset)
@@ -579,6 +685,26 @@ mod tests {
     use evidence_core::LogicalFsReader;
     use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
     use tempfile::TempDir;
+
+    fn test_state_with_case(case_id: &str) -> AppState {
+        let state = AppState::default();
+        let conn = persistence_sqlite::open_in_memory().expect("runtime cache test db");
+        let active = app_services::active_case::ActiveCase::new(
+            domain::CaseMeta {
+                id: domain::CaseId(case_id.to_string()),
+                name: "Test Case".to_string(),
+                number: None,
+                examiner: None,
+                notes: None,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+            },
+            std::env::temp_dir().join(format!("forensics-media-test-{case_id}")),
+            conn,
+        );
+        *state.active_case.lock().expect("active case lock") = Some(active);
+        state
+    }
 
     fn with_logical_case_file(
         case_name: &str,
@@ -639,7 +765,8 @@ mod tests {
             "clip.mp4",
             b"tiny media bytes",
             |conn, file_id, evidence_dir| {
-                let media = media_data_url_for_file(conn, &file_id)
+                let state = test_state_with_case("case-media-inline");
+                let media = media_data_url_for_file(&state, conn, &file_id)
                     .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
                 let url = media.url.expect("small media should return inline URL");
                 assert!(url.starts_with("data:"));
@@ -697,6 +824,7 @@ mod tests {
                     &transport::commands::ExtractFileRequest {
                         file_id,
                         destination_path: destination.display().to_string(),
+                        overwrite: false,
                     },
                 )
                 .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
@@ -718,7 +846,8 @@ mod tests {
             "large.mp4",
             &oversized,
             |conn, file_id, _| {
-                let media = media_data_url_for_file(conn, &file_id)
+                let state = test_state_with_case("case-media-large");
+                let media = media_data_url_for_file(&state, conn, &file_id)
                     .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
                 assert_eq!(media.mode, MediaPreviewModeDto::Protocol);
                 assert!(media
@@ -731,12 +860,14 @@ mod tests {
                     .map_err(|err| persistence_sqlite::DbError::System(err.to_string()))?;
                 assert!(!media_json.contains("large.mp4"));
                 assert!(media.can_read_ranges);
-                assert_eq!(
+                assert!(media.handle_id.is_some());
+                assert_ne!(
                     media.handle_id.as_deref(),
                     Some(format!("file:{file_id}").as_str())
                 );
 
                 let range = media_range_for_file(
+                    &state,
                     conn,
                     &MediaRangeRequestDto {
                         handle_id: media.handle_id.expect("handle"),
@@ -761,10 +892,14 @@ mod tests {
             "clip.mp4",
             b"0123456789",
             |conn, file_id, _| {
+                let state = test_state_with_case("case-media-eof");
+                let handle_id = crate::media_protocol::create_scoped_media_handle(&state, &file_id)
+                    .map_err(persistence_sqlite::DbError::System)?;
                 let range = media_range_for_file(
+                    &state,
                     conn,
                     &MediaRangeRequestDto {
-                        handle_id: format!("file:{file_id}"),
+                        handle_id,
                         offset: 10,
                         length: 8,
                     },
@@ -788,7 +923,9 @@ mod tests {
             "clip.mp4",
             b"0123456789",
             |conn, _, _| {
+                let state = test_state_with_case("case-media-invalid");
                 let err = media_range_for_file(
+                    &state,
                     conn,
                     &MediaRangeRequestDto {
                         handle_id: "C:/evidence/clip.mp4".to_string(),
@@ -798,7 +935,7 @@ mod tests {
                 )
                 .expect_err("host paths must not be valid media handles");
 
-                assert!(err.message.contains("unsupported media handle"));
+                assert!(err.message.contains("media handle"));
 
                 Ok(())
             },
@@ -809,8 +946,11 @@ mod tests {
     fn media_range_clamps_length_to_one_megabyte() {
         let content = vec![b'B'; MAX_VIEWER_RANGE_LENGTH as usize + 16];
         with_logical_case_file("media-clamp", "large.mp4", &content, |conn, file_id, _| {
+            let state = test_state_with_case("case-media-clamp");
+            let handle_id = crate::media_protocol::create_scoped_media_handle(&state, &file_id)
+                .map_err(persistence_sqlite::DbError::System)?;
             let mut request = MediaRangeRequestDto {
-                handle_id: format!("file:{file_id}"),
+                handle_id,
                 offset: 0,
                 length: u32::MAX,
             };
@@ -818,7 +958,7 @@ mod tests {
                 .validate()
                 .map_err(persistence_sqlite::DbError::System)?;
 
-            let range = media_range_for_file(conn, &request)
+            let range = media_range_for_file(&state, conn, &request)
                 .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
 
             assert_eq!(request.length, MAX_VIEWER_RANGE_LENGTH);
@@ -836,10 +976,14 @@ mod tests {
             "clip.mp4",
             b"0123456789",
             |conn, file_id, evidence_dir| {
+                let state = test_state_with_case("case-media-no-leak");
+                let handle_id = crate::media_protocol::create_scoped_media_handle(&state, &file_id)
+                    .map_err(persistence_sqlite::DbError::System)?;
                 let range = media_range_for_file(
+                    &state,
                     conn,
                     &MediaRangeRequestDto {
-                        handle_id: format!("file:{file_id}"),
+                        handle_id,
                         offset: 2,
                         length: 4,
                     },
@@ -850,7 +994,7 @@ mod tests {
 
                 assert!(!json.contains(&evidence_dir.to_string_lossy().to_string()));
                 assert!(!json.contains("clip.mp4"));
-                assert!(!json.contains("file:"));
+                assert!(!json.contains(&file_id));
 
                 Ok(())
             },

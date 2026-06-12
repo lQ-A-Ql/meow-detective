@@ -6,7 +6,9 @@ use persistence_sqlite::repositories::{
 use reports::{CsvExporter, HtmlReportExporter, JsonExporter};
 use rusqlite::Connection;
 use std::fs;
-use std::path::Path;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use transport::commands::ExportScopeDto;
 use transport::dto::{
     AnalysisFileClassificationDto, AnalysisProvenanceDto, AnalysisSystemInfoDto,
@@ -55,10 +57,11 @@ pub fn generate_html_report(
     let analysis_rows = report_analysis_rows(conn, &case.id.0, &analysis, scope);
 
     let file_name = format!("report-{}.html", Uuid::new_v4());
-    let path = output_dir.join(&file_name);
-    let mut f = fs::File::create(&path).map_err(|e| e.to_string())?;
-    HtmlReportExporter::export_with_analysis(&mut f, case, &files, &artifacts, &analysis_rows)
-        .map_err(|e| e.to_string())?;
+    let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
+    write_report_atomically(&path, scope.overwrite, |file| {
+        HtmlReportExporter::export_with_analysis(file, case, &files, &artifacts, &analysis_rows)
+            .map_err(|e| e.to_string())
+    })?;
 
     persist_report_record(conn, &case.id.0, "report-summary", &file_name, "completed")?;
     Ok(file_name)
@@ -109,22 +112,23 @@ pub fn generate_csv_artifacts(
     );
 
     let file_name = format!("artifacts-{}.csv", Uuid::new_v4());
-    let path = output_dir.join(&file_name);
-    let mut f = fs::File::create(&path).map_err(|e| e.to_string())?;
-    CsvExporter::export_artifacts(
-        &mut f,
-        &[
-            "type",
-            "title",
-            "summary",
-            "extractorId",
-            "extractorVersion",
-            "confidence",
-            "sourceAttribution",
-        ],
-        &rows_data,
-    )
-    .map_err(|e| e.to_string())?;
+    let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
+    write_report_atomically(&path, scope.overwrite, |file| {
+        CsvExporter::export_artifacts(
+            file,
+            &[
+                "type",
+                "title",
+                "summary",
+                "extractorId",
+                "extractorVersion",
+                "confidence",
+                "sourceAttribution",
+            ],
+            &rows_data,
+        )
+        .map_err(|e| e.to_string())
+    })?;
 
     persist_report_record(conn, case_id, "report-files", &file_name, "completed")?;
     Ok(file_name)
@@ -197,9 +201,10 @@ pub fn generate_json_export(
     });
 
     let file_name = format!("export-{}.json", Uuid::new_v4());
-    let path = output_dir.join(&file_name);
-    let mut f = fs::File::create(&path).map_err(|e| e.to_string())?;
-    JsonExporter::export(&mut f, &json_val).map_err(|e| e.to_string())?;
+    let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
+    write_report_atomically(&path, scope.overwrite, |file| {
+        JsonExporter::export(file, &json_val).map_err(|e| e.to_string())
+    })?;
 
     persist_report_record(conn, case_id, "report-summary", &file_name, "completed")?;
     Ok(file_name)
@@ -542,6 +547,68 @@ fn persist_report_record(
     repo.insert(&record).map_err(|e| e.to_string())
 }
 
+fn prepare_report_output(
+    output_dir: &Path,
+    file_name: &str,
+    overwrite: bool,
+) -> Result<PathBuf, String> {
+    fs::create_dir_all(output_dir).map_err(|e| e.to_string())?;
+    let path = output_dir.join(file_name);
+    if path.exists() && !overwrite {
+        return Err(format!(
+            "report output already exists: {} (set overwrite=true to replace it)",
+            file_name
+        ));
+    }
+    Ok(path)
+}
+
+fn write_report_atomically(
+    final_path: &Path,
+    overwrite: bool,
+    write_fn: impl FnOnce(&mut std::fs::File) -> Result<(), String>,
+) -> Result<(), String> {
+    let parent = final_path
+        .parent()
+        .ok_or_else(|| "report output path must have a parent directory".to_string())?;
+    let temp_name = format!(
+        ".{}.{}.tmp",
+        final_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("report"),
+        Uuid::new_v4()
+    );
+    let temp_path = parent.join(temp_name);
+    let mut temp_file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp_path)
+        .map_err(|e| e.to_string())?;
+
+    let write_result = write_fn(&mut temp_file)
+        .and_then(|_| temp_file.flush().map_err(|e| e.to_string()))
+        .and_then(|_| temp_file.sync_all().map_err(|e| e.to_string()));
+
+    if let Err(err) = write_result {
+        let _ = fs::remove_file(&temp_path);
+        return Err(err);
+    }
+    drop(temp_file);
+
+    if overwrite && final_path.exists() {
+        fs::remove_file(final_path).map_err(|e| {
+            let _ = fs::remove_file(&temp_path);
+            e.to_string()
+        })?;
+    }
+
+    fs::rename(&temp_path, final_path).map_err(|e| {
+        let _ = fs::remove_file(&temp_path);
+        e.to_string()
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -791,6 +858,7 @@ mod tests {
             registry: false,
             full_timeline: false,
             raw_file_extraction: true,
+            overwrite: false,
         };
 
         let file_name = generate_json_export(&conn, &case.id.0, tmp.path(), &scope).unwrap();
@@ -824,6 +892,7 @@ mod tests {
             registry: true,
             full_timeline: true,
             raw_file_extraction: false,
+            overwrite: false,
         };
 
         let file_name = generate_json_export(&conn, &case.id.0, tmp.path(), &scope).unwrap();

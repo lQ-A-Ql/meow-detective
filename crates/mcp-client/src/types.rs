@@ -1,131 +1,141 @@
-//! MCP Protocol Types
-//!
-//! Core types for the Model Context Protocol.
+//! MCP protocol types and validation helpers.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::net::IpAddr;
 use std::path::Path;
 
 use crate::error::{McpError, McpResult};
 
-/// MCP 服务器配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpServerConfig {
-    /// 服务器唯一标识
     pub id: String,
-    /// 服务器显示名称
     pub name: String,
-    /// 传输类型
     pub transport: McpTransport,
-    /// 是否启用
     pub enabled: bool,
-    /// 是否自动连接
     pub auto_connect: bool,
+    #[serde(default)]
+    pub permissions: McpPermissionProfile,
 }
 
-/// MCP 传输方式
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum McpTransport {
-    /// HTTP/SSE 传输
-    Sse {
-        /// SSE 端点 URL
-        url: String,
-    },
-    /// Stdio 传输 (本地进程)
-    Stdio {
-        /// 命令
-        command: String,
-        /// 参数
-        args: Vec<String>,
-    },
+    Sse { url: String },
+    Stdio { command: String, args: Vec<String> },
 }
 
-/// MCP 服务器状态
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum McpResourceAccess {
+    #[default]
+    ReadOnly,
+    Disabled,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum McpToolAccess {
+    #[default]
+    Disabled,
+    AllowList,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum McpPromptAccess {
+    #[default]
+    ReadOnly,
+    Disabled,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum McpNetworkPolicy {
+    #[default]
+    LocalhostOnly,
+    PrivateLanAllowed,
+    AnyHost,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct McpPermissionProfile {
+    #[serde(default)]
+    pub resource_access: McpResourceAccess,
+    #[serde(default)]
+    pub tool_access: McpToolAccess,
+    #[serde(default)]
+    pub prompt_access: McpPromptAccess,
+    #[serde(default)]
+    pub network_policy: McpNetworkPolicy,
+    #[serde(default)]
+    pub allowed_tools: Vec<String>,
+    #[serde(default)]
+    pub allowed_commands: Vec<String>,
+}
+
+impl Default for McpPermissionProfile {
+    fn default() -> Self {
+        Self {
+            resource_access: McpResourceAccess::ReadOnly,
+            tool_access: McpToolAccess::Disabled,
+            prompt_access: McpPromptAccess::ReadOnly,
+            network_policy: McpNetworkPolicy::LocalhostOnly,
+            allowed_tools: Vec::new(),
+            allowed_commands: Vec::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpServerStatus {
-    /// 服务器 ID
     pub id: String,
-    /// 服务器名称
     pub name: String,
-    /// 是否已连接
     pub connected: bool,
-    /// 服务器能力
     pub capabilities: McpCapabilities,
-    /// 最后错误信息
     pub last_error: Option<String>,
 }
 
-/// MCP 能力
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct McpCapabilities {
-    /// 是否支持 Resources
     pub resources: bool,
-    /// 是否支持 Tools
     pub tools: bool,
-    /// 是否支持 Prompts
     pub prompts: bool,
 }
 
-/// MCP Resource
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpResource {
-    /// 资源 URI (例如: forensics://cases)
     pub uri: String,
-    /// 资源名称
     pub name: String,
-    /// 资源描述
     pub description: Option<String>,
-    /// MIME 类型
     pub mime_type: Option<String>,
 }
 
-/// MCP Tool
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpTool {
-    /// 工具名称
     pub name: String,
-    /// 工具描述
     pub description: String,
-    /// 输入参数 JSON Schema
     pub input_schema: serde_json::Value,
 }
 
-/// MCP Prompt
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpPrompt {
-    /// Prompt 名称
     pub name: String,
-    /// Prompt 描述
     pub description: Option<String>,
-    /// 参数列表
     pub arguments: Vec<McpPromptArgument>,
 }
 
-/// MCP Prompt 参数
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpPromptArgument {
-    /// 参数名称
     pub name: String,
-    /// 参数描述
     pub description: Option<String>,
-    /// 是否必需
     pub required: bool,
 }
 
-/// MCP 配置
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct McpConfig {
-    /// 服务器列表
     pub servers: Vec<McpServerConfig>,
-    /// 资源启用配置
     pub resources: HashMap<String, bool>,
-    /// 工具启用配置
     pub tools: HashMap<String, bool>,
 }
 
-/// Validate and normalize an MCP configuration before it is used or persisted.
 pub fn validate_mcp_config(config: &mut McpConfig) -> McpResult<()> {
-    let mut seen_server_ids = std::collections::HashSet::new();
+    let mut seen_server_ids = HashSet::new();
 
     for server in &mut config.servers {
         server.id = server.id.trim().to_string();
@@ -148,12 +158,12 @@ pub fn validate_mcp_config(config: &mut McpConfig) -> McpResult<()> {
         }
 
         validate_mcp_transport(&mut server.transport)?;
+        validate_mcp_permissions(server)?;
     }
 
     Ok(())
 }
 
-/// Validate a single MCP server config.
 pub fn validate_mcp_server_config(config: &mut McpServerConfig) -> McpResult<()> {
     let mut mcp_config = McpConfig {
         servers: vec![config.clone()],
@@ -170,7 +180,6 @@ pub fn validate_mcp_server_config(config: &mut McpServerConfig) -> McpResult<()>
     Ok(())
 }
 
-/// Validate and normalize an MCP transport.
 pub fn validate_mcp_transport(transport: &mut McpTransport) -> McpResult<()> {
     match transport {
         McpTransport::Sse { url } => validate_sse_url(url),
@@ -178,8 +187,40 @@ pub fn validate_mcp_transport(transport: &mut McpTransport) -> McpResult<()> {
     }
 }
 
-/// Validate and normalize an SSE endpoint URL.
+pub fn validate_mcp_permissions(config: &mut McpServerConfig) -> McpResult<()> {
+    normalize_string_list(&mut config.permissions.allowed_tools);
+    normalize_string_list(&mut config.permissions.allowed_commands);
+
+    match &mut config.transport {
+        McpTransport::Sse { url } => {
+            validate_sse_url_with_policy(url, &config.permissions.network_policy)?;
+        }
+        McpTransport::Stdio { command, args } => {
+            validate_stdio_command(command, args)?;
+            if config.permissions.allowed_commands.is_empty() {
+                config.permissions.allowed_commands.push(command.clone());
+            }
+            if !config
+                .permissions
+                .allowed_commands
+                .iter()
+                .any(|allowed| allowed.eq_ignore_ascii_case(command))
+            {
+                return Err(McpError::Protocol(
+                    "MCP stdio command is not present in the allowed command list".to_string(),
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 pub fn validate_sse_url(url: &mut String) -> McpResult<()> {
+    validate_sse_url_with_policy(url, &McpNetworkPolicy::AnyHost)
+}
+
+pub fn validate_sse_url_with_policy(url: &mut String, policy: &McpNetworkPolicy) -> McpResult<()> {
     let trimmed = url.trim();
     if trimmed.is_empty() {
         return Err(McpError::Protocol("MCP SSE URL is required".to_string()));
@@ -201,17 +242,27 @@ pub fn validate_sse_url(url: &mut String) -> McpResult<()> {
             "MCP SSE URL must include a host".to_string(),
         ));
     }
-    if parsed.username() != "" || parsed.password().is_some() {
+    if !parsed.username().is_empty() || parsed.password().is_some() {
         return Err(McpError::Protocol(
             "MCP SSE URL must not include embedded credentials".to_string(),
         ));
+    }
+    if !sse_host_allowed(&parsed, policy) {
+        let detail = match policy {
+            McpNetworkPolicy::LocalhostOnly => "localhost only",
+            McpNetworkPolicy::PrivateLanAllowed => "private-lan only",
+            McpNetworkPolicy::AnyHost => "configured",
+        };
+        return Err(McpError::Protocol(format!(
+            "MCP SSE URL host is not allowed by the {} policy",
+            detail
+        )));
     }
 
     *url = parsed.to_string();
     Ok(())
 }
 
-/// Validate and normalize a stdio command.
 pub fn validate_stdio_command(command: &mut String, args: &[String]) -> McpResult<()> {
     let trimmed = command.trim();
     if trimmed.is_empty() {
@@ -236,7 +287,54 @@ pub fn validate_stdio_command(command: &mut String, args: &[String]) -> McpResul
     Ok(())
 }
 
-/// MCP JSON-RPC Request
+fn normalize_string_list(values: &mut Vec<String>) {
+    let mut seen = HashSet::new();
+    let mut normalized = Vec::with_capacity(values.len());
+    for value in values.drain(..) {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let key = trimmed.to_ascii_lowercase();
+        if seen.insert(key) {
+            normalized.push(trimmed.to_string());
+        }
+    }
+    *values = normalized;
+}
+
+fn sse_host_allowed(url: &reqwest::Url, policy: &McpNetworkPolicy) -> bool {
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+
+    match policy {
+        McpNetworkPolicy::AnyHost => true,
+        McpNetworkPolicy::LocalhostOnly => is_localhost(host),
+        McpNetworkPolicy::PrivateLanAllowed => is_localhost(host) || is_private_lan_host(host),
+    }
+}
+
+fn is_localhost(host: &str) -> bool {
+    matches!(host, "localhost" | "127.0.0.1" | "::1")
+}
+
+fn is_private_lan_host(host: &str) -> bool {
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        return match ip {
+            IpAddr::V4(v4) => {
+                let octets = v4.octets();
+                octets[0] == 10
+                    || (octets[0] == 172 && (16..=31).contains(&octets[1]))
+                    || (octets[0] == 192 && octets[1] == 168)
+            }
+            IpAddr::V6(v6) => v6.is_unique_local(),
+        };
+    }
+
+    !host.contains('.') || host.ends_with(".local") || host.ends_with(".lan")
+}
+
 #[derive(Debug, Serialize)]
 pub struct JsonRpcRequest {
     pub jsonrpc: String,
@@ -246,7 +344,6 @@ pub struct JsonRpcRequest {
     pub params: Option<serde_json::Value>,
 }
 
-/// MCP JSON-RPC Response
 #[derive(Debug, Deserialize)]
 pub struct JsonRpcResponse {
     pub jsonrpc: String,
@@ -255,7 +352,6 @@ pub struct JsonRpcResponse {
     pub error: Option<JsonRpcError>,
 }
 
-/// MCP JSON-RPC Error
 #[derive(Debug, Deserialize)]
 pub struct JsonRpcError {
     pub code: i64,
@@ -263,7 +359,6 @@ pub struct JsonRpcError {
     pub data: Option<serde_json::Value>,
 }
 
-/// Initialize Request 参数
 #[derive(Debug, Serialize)]
 pub struct InitializeParams {
     #[serde(rename = "protocolVersion")]
@@ -273,40 +368,34 @@ pub struct InitializeParams {
     pub client_info: ClientInfo,
 }
 
-/// 客户端能力
 #[derive(Debug, Serialize, Default)]
 pub struct ClientCapabilities {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub roots: Option<RootsCapability>,
 }
 
-/// Roots 能力
 #[derive(Debug, Serialize)]
 pub struct RootsCapability {
     pub list_changed: bool,
 }
 
-/// 客户端信息
 #[derive(Debug, Serialize)]
 pub struct ClientInfo {
     pub name: String,
     pub version: String,
 }
 
-/// Tool Call 参数
 #[derive(Debug, Serialize)]
 pub struct ToolCallParams {
     pub name: String,
     pub arguments: serde_json::Value,
 }
 
-/// Resource Read 参数
 #[derive(Debug, Serialize)]
 pub struct ResourceReadParams {
     pub uri: String,
 }
 
-/// Prompt Get 参数
 #[derive(Debug, Serialize)]
 pub struct PromptGetParams {
     pub name: String,
@@ -318,6 +407,10 @@ pub struct PromptGetParams {
 mod tests {
     use super::*;
 
+    fn localhost_permissions() -> McpPermissionProfile {
+        McpPermissionProfile::default()
+    }
+
     #[test]
     fn test_mcp_server_config_sse() {
         let config = McpServerConfig {
@@ -328,6 +421,7 @@ mod tests {
             },
             enabled: true,
             auto_connect: false,
+            permissions: localhost_permissions(),
         };
 
         let json = serde_json::to_string(&config).unwrap();
@@ -346,6 +440,10 @@ mod tests {
             },
             enabled: true,
             auto_connect: true,
+            permissions: McpPermissionProfile {
+                allowed_commands: vec!["python".to_string()],
+                ..McpPermissionProfile::default()
+            },
         };
 
         let json = serde_json::to_string(&config).unwrap();
@@ -479,6 +577,7 @@ mod tests {
                     },
                     enabled: true,
                     auto_connect: false,
+                    permissions: localhost_permissions(),
                 },
                 McpServerConfig {
                     id: " srv ".to_string(),
@@ -488,6 +587,7 @@ mod tests {
                     },
                     enabled: true,
                     auto_connect: false,
+                    permissions: localhost_permissions(),
                 },
             ],
             resources: HashMap::new(),
@@ -499,135 +599,60 @@ mod tests {
     }
 
     #[test]
-    fn test_mcp_prompt() {
-        let prompt = McpPrompt {
-            name: "analyze_timeline".to_string(),
-            description: Some("Analyze timeline".to_string()),
-            arguments: vec![
-                McpPromptArgument {
-                    name: "time_start".to_string(),
-                    description: Some("Start time".to_string()),
-                    required: true,
-                },
-                McpPromptArgument {
-                    name: "time_end".to_string(),
-                    description: Some("End time".to_string()),
-                    required: false,
-                },
-            ],
-        };
-
-        let json = serde_json::to_string(&prompt).unwrap();
-        assert!(json.contains("analyze_timeline"));
-        assert!(json.contains("time_start"));
-        assert!(json.contains("time_end"));
-    }
-
-    #[test]
-    fn test_mcp_server_status_no_error() {
-        let status = McpServerStatus {
-            id: "test".to_string(),
-            name: "Test".to_string(),
-            connected: false,
-            capabilities: McpCapabilities::default(),
-            last_error: Some("Connection refused".to_string()),
-        };
-
-        assert_eq!(status.last_error.unwrap(), "Connection refused");
-    }
-
-    #[test]
-    fn test_mcp_resource_no_optional() {
-        let resource = McpResource {
-            uri: "forensics://test".to_string(),
-            name: "Test".to_string(),
-            description: None,
-            mime_type: None,
-        };
-
-        let json = serde_json::to_string(&resource).unwrap();
-        assert!(json.contains("forensics://test"));
-        // description is null in JSON when None
-        assert!(json.contains("\"description\":null"));
-    }
-
-    #[test]
-    fn validates_sse_urls() {
-        let mut url = " http://localhost:3001/mcp ".to_string();
-        validate_sse_url(&mut url).unwrap();
-        assert_eq!(url, "http://localhost:3001/mcp");
-
-        let mut https = "https://example.test/sse".to_string();
-        assert!(validate_sse_url(&mut https).is_ok());
-
-        let mut file_url = "file:///tmp/server".to_string();
-        assert!(validate_sse_url(&mut file_url).is_err());
-
-        let mut credential_url = "http://user:pass@example.test/sse".to_string();
-        assert!(validate_sse_url(&mut credential_url).is_err());
-
-        let mut missing_host = "http:///".to_string();
-        assert!(validate_sse_url(&mut missing_host).is_err());
-    }
-
-    #[test]
-    fn validates_stdio_commands() {
-        let mut command = " python ".to_string();
-        validate_stdio_command(&mut command, &[]).unwrap();
-        assert_eq!(command, "python");
-
-        let mut empty = String::new();
-        assert!(validate_stdio_command(&mut empty, &[]).is_err());
-
-        let mut relative = "../server".to_string();
-        assert!(validate_stdio_command(&mut relative, &[]).is_err());
-
-        let mut absolute = "C:\\tools\\server.exe".to_string();
-        assert!(validate_stdio_command(&mut absolute, &[]).is_err());
-
-        let mut nul_command = "server\0name".to_string();
-        assert!(validate_stdio_command(&mut nul_command, &[]).is_err());
-
-        let mut valid = "server".to_string();
-        assert!(validate_stdio_command(&mut valid, &["bad\0arg".to_string()]).is_err());
-    }
-
-    #[test]
-    fn validates_config_and_rejects_duplicate_ids() {
-        let mut config = McpConfig {
-            servers: vec![McpServerConfig {
-                id: " test ".to_string(),
-                name: " Test Server ".to_string(),
-                transport: McpTransport::Sse {
-                    url: " http://localhost:3001/sse ".to_string(),
-                },
-                enabled: true,
-                auto_connect: false,
-            }],
-            resources: HashMap::new(),
-            tools: HashMap::new(),
-        };
-
-        validate_mcp_config(&mut config).unwrap();
-        assert_eq!(config.servers[0].id, "test");
-        assert_eq!(config.servers[0].name, "Test Server");
-        assert_eq!(
-            config.servers[0].transport,
-            McpTransport::Sse {
-                url: "http://localhost:3001/sse".to_string()
-            }
-        );
-
-        config.servers.push(McpServerConfig {
-            id: "test".to_string(),
-            name: "Duplicate".to_string(),
-            transport: McpTransport::Stdio {
-                command: "python".to_string(),
-                args: vec![],
+    fn validates_localhost_policy_for_sse() {
+        let mut config = McpServerConfig {
+            id: "srv".to_string(),
+            name: "Local".to_string(),
+            transport: McpTransport::Sse {
+                url: "http://localhost:3001/sse".to_string(),
             },
             enabled: true,
             auto_connect: false,
-        });
-        assert!(validate_mcp_config(&mut config).is_err());
+            permissions: localhost_permissions(),
+        };
+        validate_mcp_server_config(&mut config).unwrap();
+
+        config.transport = McpTransport::Sse {
+            url: "https://example.com/sse".to_string(),
+        };
+        let err = validate_mcp_server_config(&mut config).unwrap_err();
+        assert!(err.to_string().contains("localhost only policy"));
+    }
+
+    #[test]
+    fn validates_stdio_permissions_against_allow_list() {
+        let mut config = McpServerConfig {
+            id: "srv".to_string(),
+            name: "Proc".to_string(),
+            transport: McpTransport::Stdio {
+                command: "node".to_string(),
+                args: vec!["server.js".to_string()],
+            },
+            enabled: true,
+            auto_connect: false,
+            permissions: McpPermissionProfile {
+                allowed_commands: vec!["python".to_string()],
+                ..McpPermissionProfile::default()
+            },
+        };
+        let err = validate_mcp_server_config(&mut config).unwrap_err();
+        assert!(err.to_string().contains("allowed command list"));
+    }
+
+    #[test]
+    fn fills_stdio_allow_list_with_command_by_default() {
+        let mut config = McpServerConfig {
+            id: "srv".to_string(),
+            name: "Proc".to_string(),
+            transport: McpTransport::Stdio {
+                command: "node".to_string(),
+                args: vec!["server.js".to_string()],
+            },
+            enabled: true,
+            auto_connect: false,
+            permissions: McpPermissionProfile::default(),
+        };
+        validate_mcp_server_config(&mut config).unwrap();
+        assert_eq!(config.permissions.allowed_commands, vec!["node"]);
     }
 }

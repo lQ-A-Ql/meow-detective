@@ -4,6 +4,7 @@ use mcp_client::{
 };
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
+use runtime_cache::RuntimeCache;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -31,6 +32,8 @@ pub struct AppState {
     pub mcp_config_path: PathBuf,
     /// Application settings file path
     pub app_settings_path: PathBuf,
+    /// Runtime cache for ephemeral preview and query handles
+    pub runtime_cache: Arc<Mutex<RuntimeCache>>,
 }
 
 impl Default for AppState {
@@ -40,6 +43,7 @@ impl Default for AppState {
             .join("forensics");
         let mcp_config_path = config_dir.join("mcp-config.json");
         let app_settings_path = config_dir.join("app-settings.json");
+        let runtime_cache = RuntimeCache::open_in_memory().expect("runtime cache must initialize");
 
         Self {
             active_case: Arc::new(Mutex::new(None)),
@@ -49,6 +53,7 @@ impl Default for AppState {
             mcp_config: Arc::new(Mutex::new(McpConfig::default())),
             mcp_config_path,
             app_settings_path,
+            runtime_cache: Arc::new(Mutex::new(runtime_cache)),
         }
     }
 }
@@ -116,6 +121,16 @@ impl AppState {
             .map_err(|e| format!("Lock poisoned: {}", e))?;
         *guard = None;
         Ok(())
+    }
+
+    pub fn clear_runtime_cache_for_case(&self, case_id: &str) -> Result<u64, String> {
+        let cache = self
+            .runtime_cache
+            .lock()
+            .map_err(|e| format!("Lock poisoned: {}", e))?;
+        cache
+            .clear_case(case_id)
+            .map_err(|e| format!("Failed to clear runtime cache: {}", e))
     }
 
     /// Load MCP configuration from file.

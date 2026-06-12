@@ -1,102 +1,139 @@
-# Forensics Workbench 文档索引与事实校准
+# Forensics Workbench 文档入口与事实校准
 
-本文档是当前工程文档的权威入口。它用于解决旧审计报告、阶段计划、开发记录和架构文档之间的重复与漂移问题。若文档之间存在状态冲突，优先按本文档的“权威入口”和“当前事实快照”解释。
+本文档是当前工程文档的权威入口，用于解决旧审计报告、阶段方案、开发记录和架构文档之间的重复、漂移与引用混乱问题。
 
-## 1. 当前权威入口
+若多份文档对同一主题存在冲突，优先级如下：
+1. `AGENTS.md`
+2. 本文档
+3. 对应主题的当前权威文档
+4. 历史审计 / 历史方案 / 开发记录
+
+## 1. 当前权威文档
 
 | 主题 | 权威文档 | 用途 |
 |---|---|---|
 | 产品范围 | `PRD.md` | 产品目标、用户、MVP 范围、非目标 |
-| 技术规格 | `spec.md` | 技术原则、服务职责、数据流、持久化和安全约束 |
-| 详细设计 | `design.md` | 架构细节、核心算法、DTO、测试和 CI 设计 |
-| 工程化审计 | `docs/engineering-audit-plan.md` | 可执行全量审计清单、风险分级、证据采集和验收标准 |
-| 开发工程规范 | `docs/development-engineering-guide.md` | feature 开发流程、Rust / frontend / Tauri / transport / event / test 约定 |
-| 设计约束 | `docs/design-constraints.md` | desktop-first、backend-led、证据只读、路径安全、性能和发布约束 |
-| 图谱 | `docs/model-architecture-algorithm-diagrams.md` | Mermaid 架构、模型、IPC / event 和核心算法流程图 |
-| CI | `ci.md` 与 `.github/workflows/` | CI 设计与当前落地工作流 |
-| 测试 | `test-plan.md` | 测试分层、fixture 策略、回归和发布 gate |
-| 安全 | `SECURITY.md`, `docs/security-audit-*.md`, `docs/full-security-audit-*.md` | 安全策略、历史发现和修复参考 |
-| 当前修复计划 | 最新 `docs/remediation-plan-*.md` | 分阶段治理计划和剩余风险 |
-| 开发记录 | `docs/开发记录.md`, `development-reports/sessions/` | 实际执行、验证命令、剩余风险 |
+| 技术规格 | `spec.md` | 技术原则、模块职责、数据流与安全边界 |
+| 详细设计 | `design.md` | 架构细节、数据结构、阶段设计 |
+| 工程化审计 | `docs/engineering-audit-plan.md` | 全量工程化审计清单与执行口径 |
+| 开发工程规范 | `docs/development-engineering-guide.md` | 日常开发、契约、测试与发布约定 |
+| 设计与约束 | `docs/design-constraints.md` | 架构、证据、安全、前端、发布硬约束 |
+| 模型 / 架构 / 流程图 | `docs/model-architecture-algorithm-diagrams.md` | Mermaid 图谱合集 |
+| 文档索引与事实校准 | `docs/documentation-index.md` | 权威入口、旧文档去重、事实快照 |
+| 可验证性体系 | `docs/validation-trust-framework.md` | public fixture、expected JSON、真实样本回归说明 |
+| Parser 支持矩阵 | `docs/parser-support-matrix.md` | 支持边界、验证样本、字段承诺 |
+| 已知不支持格式 | `docs/known-unsupported-formats.md` | 明确不支持或仅部分支持的格式 |
+| 错误分类 | `docs/error-taxonomy.md` | 错误类别、脱敏策略、前后端约定 |
+| MCP 安全模型 | `docs/mcp-security-model.md` | MCP 权限模型、执行边界、审计要求 |
+| 导出与媒体安全 | `docs/export-and-media-safety.md` | 导出路径、overwrite、media handle 与脱敏要求 |
+| MCP 使用说明 | `docs/mcp-user-guide.md` | 面向使用者的 MCP 配置与权限说明 |
+| CI | `ci.md` | CI 流程与检查步骤 |
+| 测试策略 | `test-plan.md` | 测试分层、fixture、回归与发布 gate |
 
 ## 2. 当前事实快照
 
-本快照基于 2026-06-11 的本地源码静态校准：
+以下事实基于当前仓库静态校准得出；若代码变化，必须同步更新本文档、`README.md` 与 `AGENTS.md`。
 
-| 事实 | 当前值 | 事实来源 |
+| 事实 | 当前值 | 事实源 |
 |---|---:|---|
-| Rust workspace crate | 22 | root `Cargo.toml` / `crates/` |
-| 前端页面 | 8 | `frontend/src/app/pages/*.tsx`，排除测试文件 |
-| Tauri commands | 67 | `#[tauri::command]` occurrences under `apps/desktop/src-tauri/src/commands` |
-| app-services source modules | 20 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
+| Rust workspace crate | 22 | `crates/` |
+| Tauri commands | 67 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
+| app-services source modules | 16 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
 | SQLite repositories | 9 | `crates/persistence-sqlite/src/repositories/*_repo.rs` |
 | SQLite migration scripts | 23 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` |
-| 前端测试文件 | 41 | `frontend/src/**/*.test.ts(x)` |
+| frontend pages | 8 | `frontend/src/app/pages/*.tsx`，排除测试 |
+| frontend test files | 41 | `frontend/src/**/*.test.ts(x)` |
 | Mermaid 图块 | 14 | `docs/model-architecture-algorithm-diagrams.md` |
 
-校准命令：
+## 3. 路径级事实校准
 
-```powershell
-(Get-ChildItem crates -Directory | Measure-Object).Count
-(rg -n "#\[tauri::command\]" apps/desktop/src-tauri/src/commands | Measure-Object).Count
-(Get-ChildItem crates\app-services\src -Filter *.rs | Where-Object { $_.Name -ne 'lib.rs' } | Measure-Object).Count
-(Get-ChildItem crates\persistence-sqlite\src\repositories -Filter *_repo.rs | Measure-Object).Count
-(Get-ChildItem crates\persistence-sqlite\src\migrations\scripts -Filter *.sql | Measure-Object).Count
-(Get-ChildItem frontend\src\app\pages -Filter *.tsx | Where-Object { $_.Name -notlike '*.test.tsx' } | Measure-Object).Count
-(Get-ChildItem frontend\src -Recurse -Include *.test.ts,*.test.tsx | Measure-Object).Count
-rg -n "```mermaid" docs/model-architecture-algorithm-diagrams.md
-```
+| 路径模式 | 数量 | 说明 |
+|---|---:|---|
+| `frontend/src/app/pages/*.tsx` | 8 | 页面入口文件，不含 `*.test.tsx` |
+| `frontend/src/**/*.test.ts(x)` | 41 | Vitest 测试文件总数 |
+| `apps/desktop/src-tauri/src/commands/**/*.rs` | 67 | Tauri command 定义数 |
+| `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 23 | SQLite migration 脚本 |
+| `docs/model-architecture-algorithm-diagrams.md` 中 Mermaid | 14 | Mermaid 图块总数 |
 
-### 2.1 当前链路事实补充
+## 4. 当前实现事实
 
-- 分区可见根继续使用 placeholder root 模型，内部路径编码为 `__partition_placeholder__/{partition_index}/{status}`。
-- staging merge 以 `partition_index` 绑定 placeholder，不再依赖显示名；真实文件系统根标记节点 `\`、`/`、`.` 会在 merge 时折叠到分区根下。
-- 读取侧仍保留防御性归一化，避免历史残留的裸根直接暴露到文件树首层。
-- 文件列表真实排序已经下沉到后端：目录优先、状态后置、主字段排序、自然名兜底，并在排序后再分页。
-- 文件树目录排序也由后端统一执行，保持自然名称升序和懒加载稳定性。
-- 前端真实 Tauri 模式会透传 `showHidden`、`sortKey`、`sortDirection`，不再对返回的 rows 做第二次排序。
-- `deleted`、`hidden`、`system` 已经成为跨导入、持久化、transport、排序、过滤和图标叠加的共享状态字段。
+### 4.1 平台与通信
 
-## 3. 旧文档去重规则
+- Windows-primary、desktop-first、single-user
+- Tauri 2 桌面应用
+- 无 HTTP server
+- 前后端通过 Tauri commands 与 events 通信
+- `crates/transport` 是前后端契约源
 
-旧文档不删除，因为它们保留了历史审计证据、设计取舍和阶段验证记录。但阅读时应按以下规则去重：
+### 4.2 取证与文件浏览
 
-- **历史审计报告**：如 `docs/full-project-audit-2026-06-01.md`、`docs/full-security-audit-2026-05-29.md`、`docs/architecture-algorithm-audit-2026-06-08.md`，视为审计时点快照，不代表当前实现状态。
-- **修复计划**：同一主题存在多个 `remediation-plan` 时，以日期最新且在 `docs/开发记录.md` 中被后续验证引用的版本为准。
-- **开发记录**：用于确认某项修复是否实际执行和验证；若与设计文档冲突，开发记录只证明执行历史，不自动修改设计目标。
-- **专项提案**：如 preview、frontend optimization、database remediation 类文档，视为方案来源或 backlog，不自动代表当前功能完成。
-- **Autopsy / Sleuth Kit 分析**：用于借鉴和参考，不是本项目当前能力清单。
+- 文件树与文件表共享 `showHidden`
+- `deleted` / `hidden` / `system` 为真实状态字段，不是纯前端推断
+- 分区显示统一为 `分区x（LABEL）`
+- 列表与树的排序以“目录优先 + 状态后置 + 自然名称排序”为准
 
-## 4. 文档维护约束
+### 4.3 可验证性与支持边界
 
-- README 和 AGENTS 里的数量型事实必须能由 `scripts/check-doc-drift.ps1` 复算。
-- 新增 Tauri command、migration、frontend test、crate 或 Mermaid 图块后，必须同步更新本文档和入口文档。
-- 修改分区根模型、排序契约、`showHidden`、状态字段传播、架构、事件或主算法流程时，必须同步更新 `docs/model-architecture-algorithm-diagrams.md`。
-- 修复 `P0 / P1` 风险后，必须更新对应 remediation plan 和开发记录。
-- 不要在旧审计报告中直接改写历史结论；应新增复核说明或在本文档中标注当前权威状态。
+- 公开验证体系以 `testdata/fixtures/tiny/` 为默认 small fixture 来源
+- `expected.json` 用于真实样本回归对齐
+- 当前重点链路包括 E01、NTFS、Prefetch、LNK、Registry、Recycle Bin
+- 浏览器记录与邮件提取已纳入验证框架，但仍属于低成熟度链路
 
-## 5. Mermaid 渲染验证
+### 4.4 MCP 与安全边界
 
-2026-06-11 本地验证结果：
+- MCP 已具备 SSE / stdio 基础校验
+- 默认权限模型为最小权限：
+  - `resourceAccess=readOnly`
+  - `toolAccess=disabled`
+  - `promptAccess=readOnly`
+  - `networkPolicy=localhostOnly`
+- MCP 关键动作需要审计留痕
+- 导出与文件提取默认 `overwrite=false`
 
-- 从 `docs/model-architecture-algorithm-diagrams.md` 抽取 14 个 Mermaid 图块。
-- 使用 `npx --yes @mermaid-js/mermaid-cli@11.4.2` 渲染为 SVG。
-- 本机使用 Microsoft Edge 作为 Puppeteer executablePath。
-- 14 个 SVG 均成功生成。
+## 5. 旧文档去重规则
 
-推荐复验命令可见 `scripts/check-doc-drift.ps1`。若本机没有 Chrome / Edge，脚本会降级为语法块数量和文档事实检查；需要完整渲染时安装 Chrome、Edge 或 Puppeteer headless shell。
+以下文档保留，但默认视为历史快照或过程文档，不代表当前实现状态：
 
-## 6. 自动化防漂移
+- `docs/full-project-audit-*.md`
+- `docs/full-security-audit-*.md`
+- `docs/architecture-algorithm-audit-*.md`
+- `docs/remediation-plan-*.md`
+- `docs/preview-*.md`
+- `docs/frontend-optimization-*.md`
+- `docs/*development-log*.md`
 
-本仓库提供：
+使用规则：
+
+- 历史审计报告只说明“当时发现过什么”，不说明“现在仍然如此”
+- remediation plan 只说明“曾计划如何修复”，不自动等于“已经完成”
+- 开发记录只说明“执行过哪些步骤”，不替代当前权威设计
+
+## 6. Mermaid 渲染与防漂移
+
+工程文档的防漂移脚本：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\check-doc-drift.ps1
 ```
 
-该脚本检查：
+可选 Mermaid 渲染校验：
 
-- README / AGENTS / 本文档中的硬编码事实是否与当前源码一致。
-- `docs/model-architecture-algorithm-diagrams.md` 是否仍包含 14 个 Mermaid 图块。
-- 工程化文档入口是否存在。
-- 可选 `-RenderMermaid` 模式是否能把全部 Mermaid 图渲染为 SVG。
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\check-doc-drift.ps1 -RenderMermaid
+```
+
+当前脚本会检查：
+
+- `README.md` / `AGENTS.md` / 本文档中的事实数量是否过期
+- 工程化文档入口是否缺失
+- Mermaid 图块数量是否漂移
+- 可选地将全部 Mermaid 图渲染为 SVG
+
+## 7. 文档维护要求
+
+以下变更必须同步更新本文档：
+
+- crate / command / migration / test 数量变化
+- 新增权威工程文档
+- 文件浏览根模型、排序、状态字段、MCP 安全边界发生变化
+- 可验证性、支持矩阵、错误分类、导出与媒体安全要求发生变化

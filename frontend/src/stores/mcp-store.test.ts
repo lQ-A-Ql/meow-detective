@@ -5,6 +5,7 @@ import {
   getMcpConfig,
   getMcpPrompt,
   testMcpConnection,
+  type McpPermissionProfile,
 } from '@/lib/api/mcp';
 import { useMcpStore } from './mcp-store';
 
@@ -28,6 +29,15 @@ const connectMcpServerMock = vi.mocked(connectMcpServer);
 const callMcpToolMock = vi.mocked(callMcpTool);
 const getMcpPromptMock = vi.mocked(getMcpPrompt);
 const testMcpConnectionMock = vi.mocked(testMcpConnection);
+
+const defaultPermissions: McpPermissionProfile = {
+  resourceAccess: 'readOnly',
+  toolAccess: 'disabled',
+  promptAccess: 'readOnly',
+  networkPolicy: 'localhostOnly',
+  allowedTools: [],
+  allowedCommands: [],
+};
 
 function resetMcpStore() {
   useMcpStore.setState({
@@ -58,6 +68,7 @@ describe('mcp-store contract baseline', () => {
           args: ['server.js'],
           enabled: true,
           autoConnect: true,
+          permissions: defaultPermissions,
         },
       ],
       resources: {},
@@ -71,6 +82,7 @@ describe('mcp-store contract baseline', () => {
       id: 'srv-1',
       transportType: 'stdio',
       autoConnect: true,
+      permissions: defaultPermissions,
       connected: false,
       hasResources: false,
       hasTools: false,
@@ -87,6 +99,7 @@ describe('mcp-store contract baseline', () => {
           transportType: 'sse',
           enabled: true,
           autoConnect: false,
+          permissions: defaultPermissions,
           connected: false,
           hasResources: false,
           hasTools: false,
@@ -137,9 +150,17 @@ describe('mcp-store contract baseline', () => {
   it('testConnection delegates transport details to the MCP API layer', async () => {
     testMcpConnectionMock.mockResolvedValueOnce({ success: true });
 
-    const result = await useMcpStore.getState().testConnection('stdio', undefined, 'node', ['server.js']);
+    const result = await useMcpStore
+      .getState()
+      .testConnection('stdio', undefined, 'node', ['server.js']);
 
-    expect(testMcpConnectionMock).toHaveBeenCalledWith('stdio', undefined, 'node', ['server.js']);
+    expect(testMcpConnectionMock).toHaveBeenCalledWith(
+      'stdio',
+      undefined,
+      'node',
+      ['server.js'],
+      defaultPermissions,
+    );
     expect(result).toEqual({ success: true, error: undefined });
   });
 

@@ -158,6 +158,10 @@ pub fn close_case(state: State<AppState>, app: AppHandle) -> Result<(), CommandE
         .map_err(|e| CommandError::from_lock_error("Case", e))?;
     let closed_case_id = guard.as_ref().map(|active| active.meta.id.0.clone());
     *guard = None;
+    drop(guard);
+    if let Some(case_id) = &closed_case_id {
+        let _ = state.clear_runtime_cache_for_case(case_id);
+    }
     if let Some(case_id) = closed_case_id {
         event_bridge::emit_case_closed(&app, &case_id);
     }
@@ -311,6 +315,7 @@ pub async fn delete_case(
     let root = PathBuf::from(&request.case_root);
 
     let mut cleared_active_case = false;
+    let mut cleared_case_id: Option<String> = None;
     {
         let mut guard = state
             .active_case
@@ -318,6 +323,7 @@ pub async fn delete_case(
             .map_err(|e| CommandError::from_lock_error("Case", e))?;
         if let Some(ref active) = *guard {
             if same_path(&active.case_root, &root) {
+                cleared_case_id = Some(active.meta.id.0.clone());
                 *guard = None;
                 cleared_active_case = true;
             }
@@ -327,6 +333,9 @@ pub async fn delete_case(
         state
             .clear_db_pool()
             .map_err(CommandError::from_service_error)?;
+        if let Some(case_id) = cleared_case_id.as_deref() {
+            let _ = state.clear_runtime_cache_for_case(case_id);
+        }
     }
 
     let root_clone = root.clone();

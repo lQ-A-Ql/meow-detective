@@ -19,6 +19,16 @@ export interface McpServerConfigInput {
   args?: string[];
   enabled: boolean;
   autoConnect: boolean;
+  permissions?: McpPermissionProfile;
+}
+
+export interface McpPermissionProfile {
+  resourceAccess: 'readOnly' | 'disabled';
+  toolAccess: 'disabled' | 'allowList';
+  promptAccess: 'readOnly' | 'disabled';
+  networkPolicy: 'localhostOnly' | 'privateLanAllowed' | 'anyHost';
+  allowedTools: string[];
+  allowedCommands: string[];
 }
 
 interface McpServerProtocolDto {
@@ -30,6 +40,14 @@ interface McpServerProtocolDto {
   args?: string[];
   enabled: boolean;
   auto_connect: boolean;
+  permissions?: {
+    resource_access?: unknown;
+    tool_access?: unknown;
+    prompt_access?: unknown;
+    network_policy?: unknown;
+    allowed_tools?: unknown;
+    allowed_commands?: unknown;
+  };
 }
 
 interface McpConfigProtocolDto {
@@ -100,6 +118,7 @@ export interface McpServer {
   args?: string[];
   enabled: boolean;
   autoConnect: boolean;
+  permissions: McpPermissionProfile;
 }
 
 export interface McpConfig {
@@ -177,6 +196,37 @@ function booleanRecord(value: unknown): Record<string, boolean> {
   );
 }
 
+function normalizeStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function normalizePermissions(value: unknown): McpPermissionProfile {
+  if (!isRecord(value)) {
+    return {
+      resourceAccess: 'readOnly',
+      toolAccess: 'disabled',
+      promptAccess: 'readOnly',
+      networkPolicy: 'localhostOnly',
+      allowedTools: [],
+      allowedCommands: [],
+    };
+  }
+
+  return {
+    resourceAccess: value.resource_access === 'disabled' ? 'disabled' : 'readOnly',
+    toolAccess: value.tool_access === 'allowList' ? 'allowList' : 'disabled',
+    promptAccess: value.prompt_access === 'disabled' ? 'disabled' : 'readOnly',
+    networkPolicy:
+      value.network_policy === 'privateLanAllowed'
+        ? 'privateLanAllowed'
+        : value.network_policy === 'anyHost'
+          ? 'anyHost'
+          : 'localhostOnly',
+    allowedTools: normalizeStringArray(value.allowed_tools),
+    allowedCommands: normalizeStringArray(value.allowed_commands),
+  };
+}
+
 function toProtocolServerConfig(server: McpServerConfigInput): McpServerProtocolDto {
   return {
     id: server.id,
@@ -187,6 +237,14 @@ function toProtocolServerConfig(server: McpServerConfigInput): McpServerProtocol
     args: server.args,
     enabled: server.enabled,
     auto_connect: server.autoConnect,
+    permissions: {
+      resource_access: server.permissions?.resourceAccess ?? 'readOnly',
+      tool_access: server.permissions?.toolAccess ?? 'disabled',
+      prompt_access: server.permissions?.promptAccess ?? 'readOnly',
+      network_policy: server.permissions?.networkPolicy ?? 'localhostOnly',
+      allowed_tools: server.permissions?.allowedTools ?? [],
+      allowed_commands: server.permissions?.allowedCommands ?? [],
+    },
   };
 }
 
@@ -206,6 +264,7 @@ function normalizeServer(value: unknown): McpServer | null {
     args: Array.isArray(value.args) ? value.args.filter((arg): arg is string => typeof arg === 'string') : undefined,
     enabled: typeof value.enabled === 'boolean' ? value.enabled : false,
     autoConnect: typeof value.auto_connect === 'boolean' ? value.auto_connect : false,
+    permissions: normalizePermissions(value.permissions),
   };
 }
 
@@ -362,13 +421,27 @@ export function disconnectMcpServer(serverId: string) {
   return apiClient.request('disconnect_mcp_server', () => Promise.resolve(), { serverId });
 }
 
-export async function testMcpConnection(transportType: string, url?: string, command?: string, args?: string[]) {
+export async function testMcpConnection(
+  transportType: string,
+  url?: string,
+  command?: string,
+  args?: string[],
+  permissions?: McpPermissionProfile,
+) {
   const response = await apiClient.request<McpTestConnectionProtocolDto>('test_mcp_connection', () => Promise.resolve({ success: false }), {
     request: {
       transport_type: transportType,
       url,
       command,
       args,
+      permissions: {
+        resource_access: permissions?.resourceAccess ?? 'readOnly',
+        tool_access: permissions?.toolAccess ?? 'disabled',
+        prompt_access: permissions?.promptAccess ?? 'readOnly',
+        network_policy: permissions?.networkPolicy ?? 'localhostOnly',
+        allowed_tools: permissions?.allowedTools ?? [],
+        allowed_commands: permissions?.allowedCommands ?? [],
+      },
     },
   });
   return normalizeTestConnection(response);
