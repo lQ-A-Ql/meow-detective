@@ -5,15 +5,17 @@ use mcp_client::{
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use runtime_cache::RuntimeCache;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use tokio::sync::{Mutex as AsyncMutex, RwLock};
 use tracing::info;
 
 use super::task_manager::TaskManager;
 
 /// Type alias for the SQLite connection pool.
 pub type DbPool = Pool<SqliteConnectionManager>;
+pub type SharedMcpClient = Arc<AsyncMutex<McpClient>>;
 
 /// Application state shared across Tauri commands.
 #[derive(Clone)]
@@ -25,7 +27,7 @@ pub struct AppState {
     /// Database connection pool (initialized when a case is opened).
     pub db_pool: Arc<Mutex<Option<DbPool>>>,
     /// MCP clients (server_id -> client)
-    pub mcp_clients: Arc<Mutex<HashMap<String, McpClient>>>,
+    pub mcp_clients: Arc<RwLock<HashMap<String, SharedMcpClient>>>,
     /// MCP configuration
     pub mcp_config: Arc<Mutex<McpConfig>>,
     /// MCP config file path
@@ -49,7 +51,7 @@ impl Default for AppState {
             active_case: Arc::new(Mutex::new(None)),
             task_manager: Arc::new(TaskManager::new()),
             db_pool: Arc::new(Mutex::new(None)),
-            mcp_clients: Arc::new(Mutex::new(HashMap::new())),
+            mcp_clients: Arc::new(RwLock::new(HashMap::new())),
             mcp_config: Arc::new(Mutex::new(McpConfig::default())),
             mcp_config_path,
             app_settings_path,
@@ -59,6 +61,64 @@ impl Default for AppState {
 }
 
 impl AppState {
+    pub async fn get_mcp_client(&self, server_id: &str) -> Result<SharedMcpClient, String> {
+        let clients = self.mcp_clients.read().await;
+        clients
+            .get(server_id)
+            .cloned()
+            .ok_or_else(|| format!("Server {} not connected", server_id))
+    }
+
+    pub async fn replace_mcp_client(
+        &self,
+        server_id: String,
+        client: McpClient,
+    ) -> Result<(), String> {
+        let mut clients = self.mcp_clients.write().await;
+        clients.insert(server_id, Arc::new(AsyncMutex::new(client)));
+        Ok(())
+    }
+
+    pub async fn remove_mcp_client(
+        &self,
+        server_id: &str,
+    ) -> Result<Option<SharedMcpClient>, String> {
+        let mut clients = self.mcp_clients.write().await;
+        Ok(clients.remove(server_id))
+    }
+
+    pub async fn sync_mcp_clients_with_config(&self) -> Result<(), String> {
+        let allowed_ids: HashSet<String> = {
+            let guard = self
+                .mcp_config
+                .lock()
+                .map_err(|e| format!("Lock poisoned: {}", e))?;
+            guard
+                .servers
+                .iter()
+                .map(|server| server.id.clone())
+                .collect()
+        };
+
+        let stale_clients = {
+            let clients = self.mcp_clients.read().await;
+            clients
+                .keys()
+                .filter(|id| !allowed_ids.contains(*id))
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+
+        for server_id in stale_clients {
+            if let Some(client) = self.remove_mcp_client(&server_id).await? {
+                let mut client = client.lock().await;
+                let _ = client.disconnect().await;
+            }
+        }
+
+        Ok(())
+    }
+
     /// Initialize the database connection pool for the given database path.
     pub fn init_db_pool(&self, db_path: &Path) -> Result<(), String> {
         let manager = SqliteConnectionManager::file(db_path);
@@ -223,29 +283,25 @@ impl AppState {
             guard.servers.retain(|s| s.id != server_id);
         }
 
-        // Also disconnect and remove the client
-        {
-            let mut clients = self
-                .mcp_clients
-                .lock()
-                .map_err(|e| format!("Lock poisoned: {}", e))?;
-            clients.remove(server_id);
-        }
-
         self.save_mcp_config()
     }
 
     /// Get MCP server status.
     pub fn get_mcp_server_status(&self, server_id: &str) -> Option<mcp_client::McpServerStatus> {
-        let clients = self.mcp_clients.lock().ok()?;
-        let client = clients.get(server_id)?;
+        let handle = tokio::runtime::Handle::try_current().ok()?;
+        tokio::task::block_in_place(|| {
+            handle.block_on(async {
+                let client = self.get_mcp_client(server_id).await.ok()?;
+                let client = client.lock().await;
 
-        Some(mcp_client::McpServerStatus {
-            id: server_id.to_string(),
-            name: client.config().name.clone(),
-            connected: client.is_connected(),
-            capabilities: client.capabilities().cloned().unwrap_or_default(),
-            last_error: None,
+                Some(mcp_client::McpServerStatus {
+                    id: server_id.to_string(),
+                    name: client.config().name.clone(),
+                    connected: client.is_connected(),
+                    capabilities: client.capabilities().cloned().unwrap_or_default(),
+                    last_error: None,
+                })
+            })
         })
     }
 
@@ -269,41 +325,64 @@ impl AppState {
             .connect()
             .await
             .map_err(|e| format!("Failed to connect: {}", e))?;
-
-        let mut clients = self
-            .mcp_clients
-            .lock()
-            .map_err(|e| format!("Lock poisoned: {}", e))?;
-        clients.insert(server_id.to_string(), client);
+        self.replace_mcp_client(server_id.to_string(), client)
+            .await?;
 
         Ok(())
     }
 
     /// Disconnect from an MCP server.
     pub async fn disconnect_mcp_server(&self, server_id: &str) -> Result<(), String> {
-        let client = {
-            let mut clients = self
-                .mcp_clients
-                .lock()
-                .map_err(|e| format!("Lock poisoned: {}", e))?;
-            clients.remove(server_id)
-        };
-
-        if let Some(mut client) = client {
-            let result = client
+        if let Some(client) = self.remove_mcp_client(server_id).await? {
+            let mut client = client.lock().await;
+            client
                 .disconnect()
                 .await
-                .map_err(|e| format!("Failed to disconnect: {}", e));
-
-            let mut clients = self
-                .mcp_clients
-                .lock()
-                .map_err(|e| format!("Lock poisoned: {}", e))?;
-            clients.insert(server_id.to_string(), client);
-
-            result?;
+                .map_err(|e| format!("Failed to disconnect: {}", e))?;
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mcp_client::{McpPermissionProfile, McpTransport};
+
+    fn test_server(id: &str) -> McpServerConfig {
+        McpServerConfig {
+            id: id.to_string(),
+            name: format!("Server {id}"),
+            transport: McpTransport::Sse {
+                url: "http://localhost:3001/sse".to_string(),
+            },
+            enabled: true,
+            auto_connect: false,
+            permissions: McpPermissionProfile::default(),
+        }
+    }
+
+    #[tokio::test]
+    async fn sync_mcp_clients_with_config_removes_stale_clients() {
+        let state = AppState::default();
+        {
+            let mut config = state.mcp_config.lock().unwrap();
+            config.servers = vec![test_server("keep")];
+        }
+
+        state
+            .replace_mcp_client("keep".to_string(), McpClient::new(test_server("keep")))
+            .await
+            .unwrap();
+        state
+            .replace_mcp_client("drop".to_string(), McpClient::new(test_server("drop")))
+            .await
+            .unwrap();
+
+        state.sync_mcp_clients_with_config().await.unwrap();
+
+        assert!(state.get_mcp_client("keep").await.is_ok());
+        assert!(state.get_mcp_client("drop").await.is_err());
     }
 }

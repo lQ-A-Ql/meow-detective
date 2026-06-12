@@ -15,6 +15,7 @@ use transport::{
     CommandError,
 };
 
+use super::command_support::{get_case_connection, require_active_case};
 use crate::state::AppState;
 
 fn resolve_sample_size(request: &ClassifyFilesRequest) -> Result<u32, CommandError> {
@@ -38,17 +39,8 @@ pub async fn get_system_info(
     let app_state = state.inner().clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-            active.db_path()
-        };
-
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        require_active_case(&app_state)?;
+        let conn = get_case_connection(&app_state)?;
         Ok(analysis_service::extract_system_info_for_case(
             &conn,
             |file_id, max_bytes| file_service::read_file_header_by_id(&conn, file_id, max_bytes),
@@ -68,17 +60,8 @@ pub async fn classify_files(
     let app_state = state.inner().clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-            active.db_path()
-        };
-
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        require_active_case(&app_state)?;
+        let conn = get_case_connection(&app_state)?;
         analysis_service::classify_files_by_metadata(&conn, sample_size)
             .map_err(CommandError::from_service_error)
     })
@@ -94,17 +77,8 @@ pub async fn get_evidence_classification_summary(
     let app_state = state.inner().clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-            active.db_path()
-        };
-
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        require_active_case(&app_state)?;
+        let conn = get_case_connection(&app_state)?;
         analysis_service::get_evidence_classification_summary(&conn)
             .map_err(CommandError::from_service_error)
     })
@@ -121,17 +95,8 @@ pub async fn run_evidence_classification(
     let app_state = state.inner().clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        let (case_id, db_path) = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-            (active.meta.id.0.clone(), active.db_path())
-        };
-
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        let active = require_active_case(&app_state)?;
+        let conn = get_case_connection(&app_state)?;
         let categories = request
             .categories
             .iter()
@@ -139,7 +104,7 @@ pub async fn run_evidence_classification(
             .collect::<Vec<_>>();
         app_services::artifact_service::run_targeted_evidence_scan(
             &conn,
-            &case_id,
+            &active.case_id,
             &categories,
             |file_id| file_service::open_file_content_by_id(&conn, file_id),
         )
@@ -160,23 +125,14 @@ pub async fn run_analysis_extraction(
     let app_state = state.inner().clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        let (case_id, db_path) = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-            (active.meta.id.0.clone(), active.db_path())
-        };
-
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        let active = require_active_case(&app_state)?;
+        let conn = get_case_connection(&app_state)?;
         let categories = request
             .categories
             .iter()
             .map(String::as_str)
             .collect::<Vec<_>>();
-        analysis_service::run_analysis_extraction(&conn, &case_id, &categories, |file_id| {
+        analysis_service::run_analysis_extraction(&conn, &active.case_id, &categories, |file_id| {
             file_service::open_file_content_by_id(&conn, file_id)
         })
         .map_err(CommandError::from_service_error)
@@ -196,17 +152,8 @@ pub async fn get_registry_extraction_summary(
     req.validate().map_err(CommandError::invalid_input)?;
 
     tauri::async_runtime::spawn_blocking(move || {
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-            active.db_path()
-        };
-
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        require_active_case(&app_state)?;
+        let conn = get_case_connection(&app_state)?;
         analysis_service::get_registry_extraction_summary(&conn, req.offset, req.limit)
             .map_err(CommandError::from_service_error)
     })
@@ -225,17 +172,8 @@ pub async fn get_browser_history_summary(
     req.validate().map_err(CommandError::invalid_input)?;
 
     tauri::async_runtime::spawn_blocking(move || {
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-            active.db_path()
-        };
-
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        require_active_case(&app_state)?;
+        let conn = get_case_connection(&app_state)?;
         analysis_service::get_browser_history_summary(&conn, req.offset, req.limit)
             .map_err(CommandError::from_service_error)
     })
@@ -254,17 +192,8 @@ pub async fn get_email_extraction_summary(
     req.validate().map_err(CommandError::invalid_input)?;
 
     tauri::async_runtime::spawn_blocking(move || {
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-            active.db_path()
-        };
-
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        require_active_case(&app_state)?;
+        let conn = get_case_connection(&app_state)?;
         analysis_service::get_email_extraction_summary(&conn, req.offset, req.limit)
             .map_err(CommandError::from_service_error)
     })
@@ -278,17 +207,8 @@ pub async fn generate_analysis_summary(state: State<'_, AppState>) -> Result<Str
     let app_state = state.inner().clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-            active.db_path()
-        };
-
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        require_active_case(&app_state)?;
+        let conn = get_case_connection(&app_state)?;
         let system_info =
             analysis_service::extract_system_info_for_case(&conn, |file_id, max_bytes| {
                 file_service::read_file_header_by_id(&conn, file_id, max_bytes)

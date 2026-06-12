@@ -1359,10 +1359,9 @@ mod tests {
 
     fn prefetch_fixture(exe_name: &str, run_count: u32, last_run: DateTime<Utc>) -> Vec<u8> {
         let mut data = Vec::new();
-        data.extend_from_slice(b"SCCA");
         data.extend_from_slice(&0x1Eu32.to_le_bytes());
-        data.extend_from_slice(&0u32.to_le_bytes());
-        data.extend_from_slice(&0u32.to_le_bytes());
+        data.extend_from_slice(b"SCCA");
+        data.extend_from_slice(&0x11u32.to_le_bytes());
         data.extend_from_slice(&0x0000A000u32.to_le_bytes());
 
         let mut name_buf = vec![0u8; 60];
@@ -1376,10 +1375,19 @@ mod tests {
         data.extend_from_slice(&name_buf);
         data.extend_from_slice(&0xDEADBEEFu32.to_le_bytes());
         data.extend_from_slice(&0u32.to_le_bytes());
-        data.extend_from_slice(&[0u8; 12]);
-        data.extend_from_slice(&run_count.to_le_bytes());
-        data.extend_from_slice(&filetime(last_run).to_le_bytes());
-        data.extend_from_slice(&[0u8; 7 * 8]);
+
+        let mut file_info = vec![0u8; 212];
+        file_info[0..4].copy_from_slice(&0x128u32.to_le_bytes());
+        file_info[8..12].copy_from_slice(&0x128u32.to_le_bytes());
+        file_info[16..20].copy_from_slice(&0x128u32.to_le_bytes());
+        file_info[24..28].copy_from_slice(&0x128u32.to_le_bytes());
+        file_info[44..52].copy_from_slice(&filetime(last_run).to_le_bytes());
+        file_info[116..120].copy_from_slice(&run_count.to_le_bytes());
+        file_info[120..124].copy_from_slice(&1u32.to_le_bytes());
+        file_info[124..128].copy_from_slice(&3u32.to_le_bytes());
+        file_info[128..132].copy_from_slice(&0x128u32.to_le_bytes());
+        data.extend_from_slice(&file_info);
+
         data.resize(4096, 0);
         data
     }

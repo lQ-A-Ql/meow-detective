@@ -1,12 +1,20 @@
 use app_services::case_service;
 use domain::{Artifact, ArtifactId, DataSource, DataSourceId, EntryType, FileEntry, FileEntryId};
+use infrastructure::config::safe_cases_root;
 use persistence_sqlite::repositories::{
     artifact_repo::ArtifactRepo, audit_repo::AuditRepo, datasource_repo::DataSourceRepo,
     file_repo::FileRepo, job_repo::JobRepo, timeline_repo::TimelineRepo,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::sync::{Mutex, MutexGuard};
 use tempfile::TempDir;
+
+static CASE_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+fn lock_case_env() -> MutexGuard<'static, ()> {
+    CASE_ENV_LOCK.lock().unwrap()
+}
 
 #[test]
 fn create_case_creates_directory_structure() {
@@ -108,9 +116,11 @@ fn reopen_case_shares_no_state() {
 }
 
 #[test]
-fn delete_case_removes_user_selected_case_directory() {
+fn delete_case_removes_safe_case_directory() {
+    let _guard = lock_case_env();
     let tmp = TempDir::new().unwrap();
-    let parent = tmp.path().join("custom-cases");
+    std::env::set_var("APPDATA", tmp.path());
+    let parent = safe_cases_root();
     let active = case_service::create_case(&parent, "delete-me", Some("tester")).unwrap();
     let case_root = active.case_root.clone();
     drop(active);
@@ -125,8 +135,29 @@ fn delete_case_removes_user_selected_case_directory() {
 }
 
 #[test]
-fn delete_case_rejects_non_case_directory_without_removing_it() {
+fn delete_case_rejects_case_outside_safe_root() {
+    let _guard = lock_case_env();
     let tmp = TempDir::new().unwrap();
+    std::env::set_var("APPDATA", tmp.path().join("appdata"));
+    let outside_parent = tmp.path().join("outside-cases");
+    let active =
+        case_service::create_case(&outside_parent, "outside-delete", Some("tester")).unwrap();
+    let case_root = active.case_root.clone();
+    drop(active);
+
+    let result = case_service::delete_case(&case_root);
+
+    assert!(result.is_err());
+    let error = result.unwrap_err().to_string();
+    assert!(error.contains("outside the allowed cases directory"));
+    assert!(case_root.exists());
+}
+
+#[test]
+fn delete_case_rejects_non_case_directory_without_removing_it() {
+    let _guard = lock_case_env();
+    let tmp = TempDir::new().unwrap();
+    std::env::set_var("APPDATA", tmp.path());
     let not_case = tmp.path().join("not-a-case");
     std::fs::create_dir_all(&not_case).unwrap();
     std::fs::write(not_case.join("note.txt"), "keep").unwrap();

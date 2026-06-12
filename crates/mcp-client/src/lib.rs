@@ -10,4 +10,5 @@ pub mod types;
 
 pub use client::McpClient;
 pub use error::McpError;
+pub use error::McpResult;
 pub use types::*;

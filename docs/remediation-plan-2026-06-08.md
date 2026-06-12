@@ -452,3 +452,135 @@
 - `powershell -File scripts/check-release-guard.ps1`
 - `powershell -File scripts/run-coverage.ps1 -Rust`
 - 按 stage 运行对应 fixture 的导入、搜索、时间线、artifact、MCP 端到端回归
+
+---
+
+## V2 方向
+
+V2 的目标不是简单“继续堆功能”，而是把当前 V1 的单机取证工作台，推进为一套 **更可信、更可验证、更可扩展、更适合长期维护** 的分析平台。V2 仍然坚持当前基线不变：
+
+- 继续保持 Windows-primary、desktop-first、single-user
+- 继续保持无 HTTP server，前后端仅通过 Tauri commands / events 通信
+- 继续保持 `crates/transport` 为唯一跨端契约源
+- 继续保持证据只读、导出受控、MCP 最小权限
+
+### V2 总体目标
+
+1. 把“能解析”提升为“可证明解析正确”
+2. 把“能展示”提升为“可关联、可解释、可追溯”
+3. 把“能运行”提升为“可量化性能、可回归发布”
+4. 把“已有限制”提升为“有权限模型、有审计、有默认安全”
+
+### V2 阶段边界
+
+#### Stage V2-1：可信验证体系产品化
+
+目标：
+- 把 public small/medium fixture、expected JSON、真实样本回归、parser 支持矩阵、已知不支持格式、错误分类、benchmark 收敛为发布基线
+
+边界：
+- 聚焦 E01、NTFS、Prefetch、LNK、Registry、Recycle Bin、Browser History、Email
+- 不在本阶段追求新格式大规模扩张，优先把核心链路验证做深
+
+Phase Tasks：
+- 固化 `small / medium / real-sample` 三层 fixture 目录规范
+- 为核心 parser 补齐 `expected.json` 与字段级对齐说明
+- 在 `docs/parser-support-matrix.md` 中明确“验证样本、对齐基准、不保证字段”
+- 在 `docs/known-unsupported-formats.md` 中补齐“不支持 / 部分支持 / 计划支持”
+- 在 `docs/error-taxonomy.md` 中统一 parser / service / command 错误分类与脱敏边界
+- 为 benchmark 建立固定输入、固定指标、固定机器说明
+
+验收标准：
+- 每条核心链路至少有 1 套 public fixture、1 份 expected JSON、1 条真实样本回归说明
+- 每个 parser 都能回答“在哪些样本上验证过、与什么基准对齐、哪些字段不保证”
+- 发布前 gate 能自动检查文档、fixture、expected JSON 是否齐全
+
+#### Stage V2-2：多工件关联分析
+
+目标：
+- 把 Registry、Browser、Email、文件系统、时间线从并列结果，提升为关联分析结果
+
+边界：
+- 先做 Windows 取证主链路，不扩到 Linux/macOS 全平台语义统一
+- 先做 investigator-facing 关联，不做黑盒自动定责
+
+Phase Tasks：
+- 建立统一 artifact provenance / confidence / source-object 模型
+- 补齐浏览器记录提取的 profile、visit、download、cookie、cache 元数据关联
+- 补齐邮件信息提取的 message、attachment、sender/recipient、时间字段归一化
+- 建立 Registry 与 Prefetch / LNK / Recycle Bin / Browser 的交叉引用关系
+- 在时间线中支持“同一对象多来源证据合并视图”
+- 为数据源分析页补“按板块摘要 + 关联线索总览”
+
+验收标准：
+- 至少形成 3 条稳定的跨工件关联链路
+- 同一对象的多来源证据在 UI 中可追溯到原始来源
+- 时间线、Artifact 详情、报告导出对同一关联结果描述一致
+
+#### Stage V2-3：性能与规模化验证
+
+目标：
+- 让大镜像、大目录、大索引场景可测、可解释、可调优
+
+边界：
+- 优先解决百万级文件枚举、搜索索引、时间线分页、artifact 批处理
+- 不在本阶段引入分布式或远程分析架构
+
+Phase Tasks：
+- 建立 import / file tree / search / timeline / artifact / report 的 benchmark 基线
+- 补齐分页一致性、懒加载一致性、排序一致性的压力回归
+- 增加大样本下的内存上限、批处理大小、取消响应时间指标
+- 对 Tantivy、SQLite、artifact pipeline 建立热点分析与回归台账
+- 为慢测建立 opt-in gate 和 release 前人工核验清单
+
+验收标准：
+- 关键链路具备基准数据、趋势记录与回归阈值
+- 大样本导入、搜索、时间线、文件浏览均有明确性能边界
+- 取消、重试、重复导入在压力场景下行为稳定
+
+#### Stage V2-4：安全治理与发布治理
+
+目标：
+- 把当前安全边界从“已有校验”推进到“有权限模型、有审计模型、有发布门禁”
+
+边界：
+- 聚焦导出路径、overwrite、媒体 handle、MCP stdio、SSE MCP server、错误脱敏、审计留痕
+- 不在本阶段把产品扩成企业级多租户权限系统
+
+Phase Tasks：
+- 把 MCP 权限模型细化为 profile、capability、审计记录三层
+- 为 stdio / SSE MCP 建立连接审批、执行记录、错误分类与红线规则
+- 为导出、批量提取、报告生成补齐 overwrite、目标目录、manifest、hash 校验说明
+- 为媒体协议、预览、外部资源访问补齐 allowlist 与 release guard
+- 为高风险命令建立“默认拒绝 + 明确例外 + 自动脚本巡检”
+
+验收标准：
+- 每条高风险执行链路都有审计记录与默认拒绝策略
+- 发布前可以自动验证 MCP、导出、媒体协议、防漂移与依赖治理规则
+- 安全文档、实现、测试、脚本四者保持同步
+
+### V2 测试矩阵重点
+
+| 维度 | 重点场景 | 通过标准 |
+|---|---|---|
+| Fixture 验证 | small / medium / real sample | 样本、expected JSON、说明文档齐全且可复跑 |
+| Parser 正确性 | E01 / NTFS / Prefetch / LNK / Registry / Recycle Bin | 输出与基准对齐，unsupported 字段有明确声明 |
+| 关联分析 | Browser + Registry + File + Timeline | 同对象多来源可追溯，结果一致 |
+| 性能回归 | 大目录、长时间线、大索引 | 指标不劣化超过阈值，异常有解释 |
+| 安全边界 | MCP / export / media / overwrite | 默认拒绝生效，错误不泄漏敏感路径 |
+| 发布治理 | docs drift / support matrix / benchmark | 所有门禁脚本通过，文档与实现一致 |
+
+### V2 评分增补
+
+在现有 100 分制基础上，V2 建议把评分重心调整为：
+
+- 可信验证与基准对齐：30 分
+- 取证正确性与关联一致性：25 分
+- 性能与规模化稳定性：20 分
+- 安全治理与审计能力：15 分
+- 文档、脚本、发布门禁完整度：10 分
+
+V2 的强制门槛增加两条：
+
+- 核心 parser 若没有样本、expected JSON 或字段承诺说明，不得标记为“可发布”
+- 高风险执行链路若没有审计记录或默认拒绝策略，不得进入 release 候选

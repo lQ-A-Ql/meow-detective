@@ -81,6 +81,7 @@ fn prefetch_fixture_extracts_exe_and_runs() {
 fn mam_prefetch_fails_closed_without_decompression() {
     let mut data = build_prefetch_v30("CMD.EXE", 5, &[]);
     data[0..4].copy_from_slice(b"MAM\x04");
+    data[4..8].copy_from_slice(&(4096u32).to_le_bytes());
 
     let extractor = PrefetchExtractor;
     let ctx = ArtifactContext {
@@ -93,11 +94,37 @@ fn mam_prefetch_fails_closed_without_decompression() {
 
     assert_eq!(report.artifacts_found, 0);
     assert_eq!(report.timeline_events, 0);
-    assert_eq!(
-        report.errors,
-        vec!["MAM-compressed Prefetch is unsupported"]
-    );
+    assert_eq!(report.errors.len(), 1);
     assert!(sink.artifacts.is_empty());
+}
+
+#[cfg(windows)]
+#[test]
+fn mam_prefetch_fixture_extracts_exe_and_runs() {
+    let t1 = Utc.with_ymd_and_hms(2024, 1, 15, 12, 0, 0).unwrap();
+    let t2 = Utc.with_ymd_and_hms(2024, 1, 16, 8, 30, 0).unwrap();
+    let data = build_prefetch_mam_v30("CMD.EXE", 5, &[t1, t2]);
+
+    let extractor = PrefetchExtractor;
+    let ctx = ArtifactContext {
+        file_id: t("pf-mam-real"),
+        file_path: "CMD.EXE-DEADBEEF.pf".into(),
+        reader: Box::new(std::io::Cursor::new(data)),
+    };
+    let mut sink = VecSink::new();
+    let report = extractor.run(ctx, &mut sink).unwrap();
+
+    assert_eq!(report.artifacts_found, 1);
+    assert_eq!(sink.artifacts[0].family, "Prefetch");
+    assert!(sink.artifacts[0].title.contains("CMD.EXE"));
+    assert_eq!(
+        sink.artifacts[0]
+            .attrs
+            .get("run_count")
+            .and_then(|value| value.as_u64()),
+        Some(5)
+    );
+    assert_eq!(report.timeline_events, 2);
 }
 
 #[test]

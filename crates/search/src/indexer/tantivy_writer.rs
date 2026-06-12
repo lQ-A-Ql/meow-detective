@@ -40,7 +40,9 @@ impl SearchIndex {
         let schema = schema_builder.build();
 
         std::fs::create_dir_all(path)?;
-        let index = Index::create_in_dir(path, schema.clone())?;
+        let directory = tantivy::directory::MmapDirectory::open(path)
+            .map_err(|e| IndexError::Io(std::io::Error::other(e.to_string())))?;
+        let index = Index::open_or_create(directory, schema.clone())?;
 
         Ok(Self { index, schema })
     }
@@ -452,5 +454,30 @@ mod tests {
         // Search for new content should return 1
         let result = index.search("updated", 10).unwrap();
         assert_eq!(result.total_count, 1);
+    }
+
+    #[test]
+    fn create_reuses_existing_index_without_clearing_documents() {
+        let dir = tempdir().unwrap();
+        let index_path = dir.path().join("existing-index");
+
+        let index = SearchIndex::create(&index_path).unwrap();
+        index
+            .index_documents(
+                &[ExtractedText {
+                    file_id: "f1".to_string(),
+                    content: "persistent token".to_string(),
+                    encoding: "utf-8".to_string(),
+                    extractable: true,
+                    byte_count: 16,
+                }],
+                &[("f1".to_string(), "/file1.txt".to_string())],
+            )
+            .unwrap();
+
+        let reopened = SearchIndex::create(&index_path).unwrap();
+        let result = reopened.search("persistent", 10).unwrap();
+        assert_eq!(result.total_count, 1);
+        assert_eq!(result.hits[0].file_id, "f1");
     }
 }

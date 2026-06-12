@@ -4,6 +4,7 @@ use transport::{
     CommandError,
 };
 
+use super::command_support::{get_case_connection, snapshot_active_case};
 use crate::state::AppState;
 
 #[tauri::command]
@@ -12,20 +13,10 @@ pub async fn get_jobs_snapshot(
 ) -> Result<Vec<JobSnapshotDto>, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        // Short lock: extract db_path, then release
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            match guard.as_ref() {
-                Some(active) => active.db_path(),
-                None => return Ok(vec![]),
-            }
-        };
-        // Guard is now dropped — query with released lock
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        if snapshot_active_case(&app_state)?.is_none() {
+            return Ok(vec![]);
+        }
+        let conn = get_case_connection(&app_state)?;
         app_services::job_service::get_jobs_from_db(&conn).map_err(CommandError::from_service_error)
     })
     .await
@@ -36,11 +27,7 @@ pub async fn get_jobs_snapshot(
 pub async fn get_warnings(state: State<'_, AppState>) -> Result<Vec<WarningItemDto>, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let guard = app_state
-            .active_case
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("Case", e))?;
-        if guard.is_none() {
+        if snapshot_active_case(&app_state)?.is_none() {
             return Ok(vec![]);
         }
         Ok(vec![])
@@ -55,11 +42,7 @@ pub async fn get_trace_items(
 ) -> Result<Vec<TraceItemDto>, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let guard = app_state
-            .active_case
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("Case", e))?;
-        if guard.is_none() {
+        if snapshot_active_case(&app_state)?.is_none() {
             return Ok(vec![]);
         }
         Ok(vec![])

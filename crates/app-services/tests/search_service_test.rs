@@ -254,3 +254,100 @@ fn search_no_results() {
         })
         .unwrap();
 }
+
+#[test]
+fn reindex_keeps_existing_documents_for_unmodified_files() {
+    let (tmp, active) = setup_test_case();
+    let evidence_dir = tmp.path().join("evidence");
+    create_test_files(&evidence_dir);
+
+    let index_dir = active.case_root.join("indexes").join("tantivy");
+
+    active
+        .with_conn(|conn| {
+            let ds_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
+
+            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn).insert(
+                &active.meta.id,
+                &domain::DataSource {
+                    id: ds_id.clone(),
+                    name: "test-evidence".into(),
+                    kind: domain::DataSourceKind::LogicalDirectory,
+                    source_path: evidence_dir.clone(),
+                    imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
+                },
+            )?;
+
+            let fs = LogicalFsReader::open(&evidence_dir, "test-evidence")
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
+
+            let repo = persistence_sqlite::repositories::file_repo::FileRepo::new(conn);
+            let roots = repo.find_roots(&ds_id)?;
+            let mut all_files = Vec::new();
+            let mut queue = roots;
+            while let Some(f) = queue.pop() {
+                if f.entry_type != domain::EntryType::Directory {
+                    all_files.push(f);
+                } else {
+                    queue.extend(repo.find_children(&f.id)?);
+                }
+            }
+
+            let path_map: HashMap<String, String> = all_files
+                .iter()
+                .map(|f| (f.id.0.clone(), f.path.clone()))
+                .collect();
+            let ev = evidence_dir.clone();
+            let to_index: Vec<domain::FileEntryId> =
+                all_files.iter().map(|f| f.id.clone()).collect();
+
+            search_service::index_files(conn, &index_dir, &to_index, {
+                let path_map = path_map.clone();
+                let ev = ev.clone();
+                move |file_id| {
+                    let rel_path = path_map.get(&file_id.0)?;
+                    let abs_path = ev.join(if rel_path.is_empty() { "." } else { rel_path });
+                    std::fs::File::open(&abs_path)
+                        .ok()
+                        .map(|r| Box::new(r) as Box<dyn std::io::Read>)
+                }
+            })
+            .map_err(persistence_sqlite::DbError::System)?;
+
+            let first_results = search_service::search_files_real(&index_dir, "forensics", 0, 50)
+                .map_err(persistence_sqlite::DbError::System)?;
+            assert!(first_results.total >= 2);
+
+            let readme_id = all_files
+                .iter()
+                .find(|file| file.name == "readme.txt")
+                .map(|file| file.id.clone())
+                .expect("readme file id");
+
+            search_service::index_files(conn, &index_dir, &[readme_id], {
+                let path_map = path_map.clone();
+                let ev = ev.clone();
+                move |file_id| {
+                    let rel_path = path_map.get(&file_id.0)?;
+                    let abs_path = ev.join(if rel_path.is_empty() { "." } else { rel_path });
+                    std::fs::File::open(&abs_path)
+                        .ok()
+                        .map(|r| Box::new(r) as Box<dyn std::io::Read>)
+                }
+            })
+            .map_err(persistence_sqlite::DbError::System)?;
+
+            let second_results = search_service::search_files_real(&index_dir, "forensics", 0, 50)
+                .map_err(persistence_sqlite::DbError::System)?;
+            assert_eq!(second_results.total, first_results.total);
+            assert!(second_results
+                .items
+                .iter()
+                .any(|item| item.path.ends_with("config.json")));
+
+            Ok(())
+        })
+        .unwrap();
+}

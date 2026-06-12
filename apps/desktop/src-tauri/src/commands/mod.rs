@@ -1,6 +1,7 @@
 pub mod analysis_commands;
 pub mod artifact_commands;
 pub mod case_commands;
+pub(crate) mod command_support;
 pub mod file_commands;
 pub mod import;
 pub mod job_commands;

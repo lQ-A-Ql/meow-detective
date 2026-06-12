@@ -352,4 +352,27 @@ mod tests {
         let result = client.call_tool("lookup", serde_json::json!({})).await;
         assert!(matches!(result, Err(McpError::Protocol(_))));
     }
+
+    #[tokio::test]
+    async fn test_client_blocks_tool_not_in_allow_list() {
+        let config = McpServerConfig {
+            id: "stdio-test".to_string(),
+            name: "Stdio Server".to_string(),
+            transport: McpTransport::Stdio {
+                command: "python".to_string(),
+                args: vec!["-m".to_string(), "server".to_string()],
+            },
+            enabled: true,
+            auto_connect: false,
+            permissions: McpPermissionProfile {
+                tool_access: McpToolAccess::AllowList,
+                allowed_tools: vec!["lookup".to_string()],
+                allowed_commands: vec!["python".to_string()],
+                ..McpPermissionProfile::default()
+            },
+        };
+        let client = McpClient::new(config);
+        let result = client.call_tool("download", serde_json::json!({})).await;
+        assert!(matches!(result, Err(McpError::ToolNotFound(_))));
+    }
 }

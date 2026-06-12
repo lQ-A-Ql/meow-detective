@@ -655,4 +655,32 @@ mod tests {
         validate_mcp_server_config(&mut config).unwrap();
         assert_eq!(config.permissions.allowed_commands, vec!["node"]);
     }
+
+    #[test]
+    fn normalizes_allowed_command_casing_and_spacing() {
+        let mut config = McpServerConfig {
+            id: "srv".to_string(),
+            name: "Proc".to_string(),
+            transport: McpTransport::Stdio {
+                command: "Node".to_string(),
+                args: vec!["server.js".to_string()],
+            },
+            enabled: true,
+            auto_connect: false,
+            permissions: McpPermissionProfile {
+                allowed_commands: vec![
+                    " node ".to_string(),
+                    "NODE".to_string(),
+                    "python".to_string(),
+                ],
+                ..McpPermissionProfile::default()
+            },
+        };
+        validate_mcp_server_config(&mut config).unwrap();
+        assert_eq!(config.permissions.allowed_commands, vec!["node", "python"]);
+        match &config.transport {
+            McpTransport::Stdio { command, .. } => assert_eq!(command, "Node"),
+            _ => panic!("expected stdio transport"),
+        }
+    }
 }

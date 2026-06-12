@@ -5,18 +5,16 @@ use chrono::{DateTime, Utc};
 /// Build a Prefetch v30 file (Windows 10/11 format)
 pub fn build_prefetch_v30(exe_name: &str, run_count: u32, last_runs: &[DateTime<Utc>]) -> Vec<u8> {
     let mut data = Vec::new();
-    // Magic (offset 0x00, 4 bytes)
-    data.extend_from_slice(b"SCCA");
-    // Format version (0x04, 4 bytes) - v30 = 0x1E
+    // Format version (0x00, 4 bytes) - v30 = 0x1E
     data.extend_from_slice(&0x1Eu32.to_le_bytes());
-    // Signature (0x08, 4 bytes) - v30 has MAM\x04 at different offset, but many files have 0 here
-    data.extend_from_slice(&0u32.to_le_bytes());
-    // Unused (0x0C, 4 bytes)
-    data.extend_from_slice(&0u32.to_le_bytes());
-    // File size (0x10, 4 bytes) - uncompressed size of the original executable
+    // Signature (0x04, 4 bytes)
+    data.extend_from_slice(b"SCCA");
+    // Unknown (0x08, 4 bytes)
+    data.extend_from_slice(&0x11u32.to_le_bytes());
+    // File size (0x0C, 4 bytes)
     data.extend_from_slice(&0x0000A000u32.to_le_bytes());
 
-    // Executable name (0x14, 60 bytes, UTF-16LE null-terminated)
+    // Executable name (0x10, 60 bytes, UTF-16LE null-terminated)
     let mut name_buf = vec![0u8; 60];
     for (i, c) in exe_name.encode_utf16().enumerate() {
         if i * 2 + 1 < 60 {
@@ -26,28 +24,33 @@ pub fn build_prefetch_v30(exe_name: &str, run_count: u32, last_runs: &[DateTime<
     }
     data.extend_from_slice(&name_buf);
 
-    // Hash (0x50, 4 bytes) - PE hash of executable
+    // Hash (0x4C, 4 bytes) - PE hash of executable
     data.extend_from_slice(&0xDEADBEEFu32.to_le_bytes());
-    // Flags (0x54, 4 bytes) - 0 = uncompressed
+    // Flags (0x50, 4 bytes) - 0 = normal prefetch
     data.extend_from_slice(&0u32.to_le_bytes());
 
-    // After header: volume info, directory info, etc.
-    // For v30: skip 12 bytes then run_count
-    let skip = vec![0u8; 12];
-    data.extend_from_slice(&skip);
+    // File information v30 variant 2 (212 bytes) starts at 0x54.
+    let mut file_info = vec![0u8; 212];
+    file_info[0..4].copy_from_slice(&0x128u32.to_le_bytes()); // file metrics offset
+    file_info[8..12].copy_from_slice(&0x128u32.to_le_bytes()); // trace chains offset
+    file_info[16..20].copy_from_slice(&0x128u32.to_le_bytes()); // filename strings offset
+    file_info[24..28].copy_from_slice(&0x128u32.to_le_bytes()); // volumes info offset
+    file_info[116..120].copy_from_slice(&run_count.to_le_bytes());
+    file_info[120..124].copy_from_slice(&1u32.to_le_bytes());
+    file_info[124..128].copy_from_slice(&3u32.to_le_bytes());
+    file_info[128..132].copy_from_slice(&0x128u32.to_le_bytes()); // hash string offset
+    file_info[132..136].copy_from_slice(&0u32.to_le_bytes()); // hash string size
 
-    // Run count (4 bytes)
-    data.extend_from_slice(&run_count.to_le_bytes());
-
-    // 8 FILETIME slots (64 bytes total)
     for i in 0..8 {
+        let offset = 44 + i * 8;
         if i < last_runs.len() {
             let ft = dt_to_filetime(last_runs[i]);
-            data.extend_from_slice(&ft.to_le_bytes());
+            file_info[offset..offset + 8].copy_from_slice(&ft.to_le_bytes());
         } else {
-            data.extend_from_slice(&0u64.to_le_bytes());
+            file_info[offset..offset + 8].copy_from_slice(&0u64.to_le_bytes());
         }
     }
+    data.extend_from_slice(&file_info);
 
     // Fill remaining (referenced file strings, etc.) with zeros to make a realistic size
     let target_size = 4096;
@@ -55,6 +58,66 @@ pub fn build_prefetch_v30(exe_name: &str, run_count: u32, last_runs: &[DateTime<
         data.push(0);
     }
 
+    data
+}
+
+#[cfg(windows)]
+pub fn build_prefetch_mam_v30(
+    exe_name: &str,
+    run_count: u32,
+    last_runs: &[DateTime<Utc>],
+) -> Vec<u8> {
+    use windows_sys::Win32::Storage::Compression::{
+        CloseCompressor, Compress, CreateCompressor, COMPRESSOR_HANDLE,
+        COMPRESS_ALGORITHM_XPRESS_HUFF, COMPRESS_RAW,
+    };
+
+    let plain = build_prefetch_v30(exe_name, run_count, last_runs);
+    let mut handle: COMPRESSOR_HANDLE = std::ptr::null_mut();
+    // SAFETY: valid pointer provided for compressor handle out-param.
+    let created = unsafe {
+        CreateCompressor(
+            COMPRESS_ALGORITHM_XPRESS_HUFF | COMPRESS_RAW,
+            std::ptr::null(),
+            &mut handle,
+        )
+    };
+    assert_ne!(created, 0, "CreateCompressor should succeed on Windows");
+    assert!(!handle.is_null(), "CreateCompressor returned null handle");
+
+    struct CompressorGuard(COMPRESSOR_HANDLE);
+    impl Drop for CompressorGuard {
+        fn drop(&mut self) {
+            if !self.0.is_null() {
+                // SAFETY: handle was created by CreateCompressor and is closed exactly once.
+                unsafe {
+                    CloseCompressor(self.0);
+                }
+            }
+        }
+    }
+    let _guard = CompressorGuard(handle);
+
+    let mut compressed = vec![0u8; plain.len() * 2 + 1024];
+    let mut actual_size = 0usize;
+    // SAFETY: plain/compressed buffers are valid for the specified lengths.
+    let ok = unsafe {
+        Compress(
+            handle,
+            plain.as_ptr().cast(),
+            plain.len(),
+            compressed.as_mut_ptr().cast(),
+            compressed.len(),
+            &mut actual_size,
+        )
+    };
+    assert_ne!(ok, 0, "Compress should succeed on Windows");
+    compressed.truncate(actual_size);
+
+    let mut data = Vec::with_capacity(8 + compressed.len());
+    data.extend_from_slice(b"MAM\x04");
+    data.extend_from_slice(&(plain.len() as u32).to_le_bytes());
+    data.extend_from_slice(&compressed);
     data
 }
 

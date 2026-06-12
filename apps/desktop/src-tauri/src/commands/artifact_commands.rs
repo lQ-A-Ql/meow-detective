@@ -5,6 +5,7 @@ use transport::{
     CommandError,
 };
 
+use super::command_support::{get_case_connection, snapshot_active_case};
 use crate::state::AppState;
 
 /// Get list of artifact families in the current case.
@@ -14,20 +15,10 @@ pub async fn get_artifact_families(
 ) -> Result<Vec<String>, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        // Short lock: extract db_path, then release
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            match guard.as_ref() {
-                Some(active) => active.db_path(),
-                None => return Ok(vec![]),
-            }
-        };
-        // Guard is now dropped — query with released lock
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        if snapshot_active_case(&app_state)?.is_none() {
+            return Ok(vec![]);
+        }
+        let conn = get_case_connection(&app_state)?;
         app_services::artifact_service::get_artifact_families_from_db(&conn)
             .map_err(CommandError::from_service_error)
     })
@@ -52,20 +43,10 @@ pub async fn get_artifact_rows_request(
 ) -> Result<Vec<ArtifactRowDto>, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        // Short lock: extract db_path, then release
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            match guard.as_ref() {
-                Some(active) => active.db_path(),
-                None => return Ok(vec![]),
-            }
-        };
-        // Guard is now dropped — query with released lock
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        if snapshot_active_case(&app_state)?.is_none() {
+            return Ok(vec![]);
+        }
+        let conn = get_case_connection(&app_state)?;
         app_services::artifact_service::get_artifact_rows_from_db(&conn, request.family.as_deref())
             .map_err(CommandError::from_service_error)
     })
@@ -80,18 +61,10 @@ pub async fn get_artifact_family_counts(
 ) -> Result<Vec<FamilyCountDto>, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            match guard.as_ref() {
-                Some(active) => active.db_path(),
-                None => return Ok(vec![]),
-            }
-        };
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        if snapshot_active_case(&app_state)?.is_none() {
+            return Ok(vec![]);
+        }
+        let conn = get_case_connection(&app_state)?;
         app_services::artifact_service::get_artifact_family_counts(&conn)
             .map_err(CommandError::from_service_error)
     })

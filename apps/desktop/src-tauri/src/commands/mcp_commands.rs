@@ -15,7 +15,17 @@ use tauri::State;
 use transport::dto::mcp::*;
 use transport::CommandError;
 
-use crate::state::AppState;
+use crate::state::{app_state::SharedMcpClient, AppState};
+
+async fn get_connected_mcp_client(
+    state: &AppState,
+    server_id: &str,
+) -> Result<SharedMcpClient, CommandError> {
+    state
+        .get_mcp_client(server_id)
+        .await
+        .map_err(CommandError::from_service_error)
+}
 
 fn transport_from_dto(server: &McpServerConfigDto) -> Result<McpTransport, CommandError> {
     match server.transport_type.as_str() {
@@ -264,15 +274,20 @@ pub async fn save_mcp_config(
 ) -> Result<(), CommandError> {
     let mcp_config = config_from_dto(config)?;
 
-    let mut guard = state
-        .mcp_config
-        .lock()
-        .map_err(|e| CommandError::from_lock_error("MCP config", e))?;
-    *guard = mcp_config;
-    drop(guard);
+    {
+        let mut guard = state
+            .mcp_config
+            .lock()
+            .map_err(|e| CommandError::from_lock_error("MCP config", e))?;
+        *guard = mcp_config;
+    }
 
     state
         .save_mcp_config()
+        .map_err(CommandError::from_service_error)?;
+    state
+        .sync_mcp_clients_with_config()
+        .await
         .map_err(CommandError::from_service_error)
 }
 
@@ -317,6 +332,10 @@ pub async fn remove_mcp_server(
     server_id: String,
 ) -> Result<(), CommandError> {
     state
+        .disconnect_mcp_server(&server_id)
+        .await
+        .map_err(CommandError::from_service_error)?;
+    state
         .remove_mcp_server(&server_id)
         .map_err(CommandError::from_service_error)?;
 
@@ -338,42 +357,23 @@ pub async fn connect_mcp_server(
     state: State<'_, AppState>,
     server_id: String,
 ) -> Result<McpServerStatusDto, CommandError> {
-    let app_state = state.inner().clone();
-    let server_id_clone = server_id.clone();
+    state
+        .connect_mcp_server(&server_id)
+        .await
+        .map_err(CommandError::from_service_error)?;
 
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        let config = {
-            let guard = app_state
-                .mcp_config
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("MCP config", e))?;
-            let mut config = guard
-                .servers
-                .iter()
-                .find(|server| server.id == server_id_clone)
-                .cloned()
-                .ok_or_else(|| CommandError::not_found("Server"))?;
-            validate_mcp_server_config(&mut config).map_err(CommandError::from_service_error)?;
-            config
-        };
-
-        let rt = tokio::runtime::Runtime::new().map_err(CommandError::from_service_error)?;
-        let mut client = mcp_client::McpClient::new(config.clone());
-        rt.block_on(client.connect())
-            .map_err(CommandError::from_service_error)?;
-
-        let mut clients = app_state
-            .mcp_clients
+    let config = {
+        let guard = state
+            .mcp_config
             .lock()
-            .map_err(|e| CommandError::from_lock_error("MCP clients", e))?;
-        clients.insert(server_id_clone.clone(), client);
-
-        Ok::<McpServerConfig, CommandError>(config)
-    })
-    .await
-    .map_err(CommandError::from_join_error)?;
-
-    let config = result?;
+            .map_err(|e| CommandError::from_lock_error("MCP config", e))?;
+        guard
+            .servers
+            .iter()
+            .find(|server| server.id == server_id)
+            .cloned()
+            .ok_or_else(|| CommandError::not_found("Server"))?
+    };
     let status = state
         .get_mcp_server_status(&server_id)
         .ok_or_else(|| CommandError::not_found("Server"))?;
@@ -402,26 +402,11 @@ pub async fn disconnect_mcp_server(
     state: State<'_, AppState>,
     server_id: String,
 ) -> Result<(), CommandError> {
-    let app_state = state.inner().clone();
     let server_id_for_audit = server_id.clone();
-
-    tauri::async_runtime::spawn_blocking(move || {
-        let rt = tokio::runtime::Runtime::new().map_err(CommandError::from_service_error)?;
-
-        let mut clients = app_state
-            .mcp_clients
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("MCP clients", e))?;
-
-        if let Some(client) = clients.get_mut(&server_id) {
-            rt.block_on(client.disconnect())
-                .map_err(CommandError::from_service_error)?;
-        }
-
-        Ok::<(), CommandError>(())
-    })
-    .await
-    .map_err(CommandError::from_join_error)??;
+    state
+        .disconnect_mcp_server(&server_id)
+        .await
+        .map_err(CommandError::from_service_error)?;
 
     write_mcp_audit(
         state.inner(),
@@ -553,24 +538,15 @@ pub async fn list_mcp_resources(
     state: State<'_, AppState>,
     server_id: String,
 ) -> Result<Vec<McpResourceDto>, CommandError> {
-    let app_state = state.inner().clone();
     let server_id_for_audit = server_id.clone();
-
-    let resources = tauri::async_runtime::spawn_blocking(move || {
-        let rt = tokio::runtime::Runtime::new().map_err(CommandError::from_service_error)?;
-        let clients = app_state
-            .mcp_clients
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("MCP clients", e))?;
-        let client = clients
-            .get(&server_id)
-            .ok_or_else(|| CommandError::not_found("Server"))?;
-
-        rt.block_on(client.list_resources())
-            .map_err(CommandError::from_service_error)
-    })
-    .await
-    .map_err(CommandError::from_join_error)??;
+    let client = get_connected_mcp_client(state.inner(), &server_id).await?;
+    let resources = {
+        let client = client.lock().await;
+        client
+            .list_resources()
+            .await
+            .map_err(CommandError::from_service_error)?
+    };
 
     write_mcp_audit(
         state.inner(),
@@ -598,24 +574,15 @@ pub async fn list_mcp_tools(
     state: State<'_, AppState>,
     server_id: String,
 ) -> Result<Vec<McpToolDto>, CommandError> {
-    let app_state = state.inner().clone();
     let server_id_for_audit = server_id.clone();
-
-    let tools = tauri::async_runtime::spawn_blocking(move || {
-        let rt = tokio::runtime::Runtime::new().map_err(CommandError::from_service_error)?;
-        let clients = app_state
-            .mcp_clients
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("MCP clients", e))?;
-        let client = clients
-            .get(&server_id)
-            .ok_or_else(|| CommandError::not_found("Server"))?;
-
-        rt.block_on(client.list_tools())
-            .map_err(CommandError::from_service_error)
-    })
-    .await
-    .map_err(CommandError::from_join_error)??;
+    let client = get_connected_mcp_client(state.inner(), &server_id).await?;
+    let tools = {
+        let client = client.lock().await;
+        client
+            .list_tools()
+            .await
+            .map_err(CommandError::from_service_error)?
+    };
 
     write_mcp_audit(
         state.inner(),
@@ -642,35 +609,28 @@ pub async fn call_mcp_tool(
     state: State<'_, AppState>,
     request: McpToolCallRequest,
 ) -> Result<McpToolCallResult, CommandError> {
-    let app_state = state.inner().clone();
     let audit_server_id = request.server_id.clone();
     let audit_tool_name = request.tool_name.clone();
-
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        let rt = tokio::runtime::Runtime::new().map_err(CommandError::from_service_error)?;
-        let clients = app_state
-            .mcp_clients
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("MCP clients", e))?;
-        let client = clients
-            .get(&request.server_id)
-            .ok_or_else(|| CommandError::not_found("Server"))?;
-
-        match rt.block_on(client.call_tool(&request.tool_name, request.arguments)) {
-            Ok(data) => Ok::<McpToolCallResult, CommandError>(McpToolCallResult {
+    let client = get_connected_mcp_client(state.inner(), &request.server_id).await?;
+    let result = {
+        let client = client.lock().await;
+        match client
+            .call_tool(&request.tool_name, request.arguments)
+            .await
+            .map_err(CommandError::from_service_error)
+        {
+            Ok(data) => McpToolCallResult {
                 success: true,
                 data: Some(data),
                 error: None,
-            }),
-            Err(err) => Ok::<McpToolCallResult, CommandError>(McpToolCallResult {
+            },
+            Err(err) => McpToolCallResult {
                 success: false,
                 data: None,
                 error: Some(err.to_string()),
-            }),
+            },
         }
-    })
-    .await
-    .map_err(CommandError::from_join_error)??;
+    };
 
     write_mcp_audit(
         state.inner(),
@@ -692,24 +652,15 @@ pub async fn list_mcp_prompts(
     state: State<'_, AppState>,
     server_id: String,
 ) -> Result<Vec<McpPromptDto>, CommandError> {
-    let app_state = state.inner().clone();
     let server_id_for_audit = server_id.clone();
-
-    let prompts = tauri::async_runtime::spawn_blocking(move || {
-        let rt = tokio::runtime::Runtime::new().map_err(CommandError::from_service_error)?;
-        let clients = app_state
-            .mcp_clients
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("MCP clients", e))?;
-        let client = clients
-            .get(&server_id)
-            .ok_or_else(|| CommandError::not_found("Server"))?;
-
-        rt.block_on(client.list_prompts())
-            .map_err(CommandError::from_service_error)
-    })
-    .await
-    .map_err(CommandError::from_join_error)??;
+    let client = get_connected_mcp_client(state.inner(), &server_id).await?;
+    let prompts = {
+        let client = client.lock().await;
+        client
+            .list_prompts()
+            .await
+            .map_err(CommandError::from_service_error)?
+    };
 
     write_mcp_audit(
         state.inner(),
@@ -746,25 +697,16 @@ pub async fn get_mcp_prompt(
     prompt_name: String,
     arguments: Option<HashMap<String, String>>,
 ) -> Result<String, CommandError> {
-    let app_state = state.inner().clone();
     let audit_server_id = server_id.clone();
     let audit_prompt_name = prompt_name.clone();
-
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        let rt = tokio::runtime::Runtime::new().map_err(CommandError::from_service_error)?;
-        let clients = app_state
-            .mcp_clients
-            .lock()
-            .map_err(|e| CommandError::from_lock_error("MCP clients", e))?;
-        let client = clients
-            .get(&server_id)
-            .ok_or_else(|| CommandError::not_found("Server"))?;
-
-        rt.block_on(client.get_prompt(&prompt_name, arguments))
-            .map_err(CommandError::from_service_error)
-    })
-    .await
-    .map_err(CommandError::from_join_error)??;
+    let client = get_connected_mcp_client(state.inner(), &server_id).await?;
+    let result = {
+        let client = client.lock().await;
+        client
+            .get_prompt(&prompt_name, arguments)
+            .await
+            .map_err(CommandError::from_service_error)?
+    };
 
     write_mcp_audit(
         state.inner(),

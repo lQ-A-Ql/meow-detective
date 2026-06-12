@@ -654,6 +654,7 @@ fn valid_recent_case_root(case_root: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::command_support::{get_case_connection, require_active_case};
     use app_services::{analysis_service, file_service};
 
     #[test]
@@ -685,6 +686,34 @@ mod tests {
             .expect_err("cleared pool must not be usable");
         assert!(cleared.contains("No active case"));
 
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn command_support_helpers_follow_active_case_lifecycle() {
+        let root = std::env::temp_dir().join(format!(
+            "forensics-workbench-command-helper-lifecycle-test-{}",
+            Uuid::new_v4()
+        ));
+        let active = case_service::create_case(&root, "Lifecycle", Some("Codex Test"))
+            .expect("create test case");
+        let db_path = active.db_path();
+        let state = AppState::default();
+
+        activate_case_pool(&state, &db_path).expect("initialize pool");
+        let no_case = require_active_case(&state).expect_err("active case required");
+        assert_eq!(no_case.code, "NO_ACTIVE_CASE");
+
+        *state.active_case.lock().expect("active case lock") = Some(active);
+        let snapshot = require_active_case(&state).expect("snapshot available");
+        assert_eq!(snapshot.db_path, db_path);
+        get_case_connection(&state).expect("pooled connection available");
+
+        *state.active_case.lock().expect("active case lock") = None;
+        let no_case_again = get_case_connection(&state).expect_err("connection requires case");
+        assert_eq!(no_case_again.code, "NO_ACTIVE_CASE");
+
+        state.clear_db_pool().expect("clear pool");
         std::fs::remove_dir_all(root).ok();
     }
 

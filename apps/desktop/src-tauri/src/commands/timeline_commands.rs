@@ -3,6 +3,7 @@ use transport::{
     commands::GetTimelineRequest, dto::TimelineEventDto, paging::PageResponse, CommandError,
 };
 
+use super::command_support::{get_case_connection, snapshot_active_case};
 use crate::events::event_bridge;
 use crate::state::AppState;
 
@@ -17,27 +18,14 @@ pub async fn get_timeline_events(
     let mut req = request.unwrap_or_default();
     req.validate().map_err(CommandError::invalid_input)?;
     tauri::async_runtime::spawn_blocking(move || {
-        // Short lock: extract db_path, then release
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            match guard.as_ref() {
-                Some(active) => active.db_path(),
-                None => {
-                    return Ok(PageResponse {
-                        total: 0,
-                        items: vec![],
-                    })
-                }
-            }
-        };
-        // Guard is now dropped — query with released lock
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        if snapshot_active_case(&app_state)?.is_none() {
+            return Ok(PageResponse {
+                total: 0,
+                items: vec![],
+            });
+        }
+        let conn = get_case_connection(&app_state)?;
 
-        // Use filtered query if any filters are provided
         let has_filters =
             req.time_start.is_some() || req.time_end.is_some() || req.event_type.is_some();
         if has_filters {

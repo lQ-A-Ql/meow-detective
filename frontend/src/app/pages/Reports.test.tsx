@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 import { Reports } from './Reports';
@@ -76,5 +76,18 @@ describe('Reports hash caveat visibility', () => {
     expect(screen.getByText('Evidence Hash: pending')).toBeDefined();
     expect(screen.getByText('hash caveat pending')).toBeDefined();
     expect(screen.queryByText('D:/private/evidence.raw')).toBeNull();
+  });
+
+  it('updates export summary when raw file extraction is enabled', () => {
+    mocks.templates.mockReturnValue(queryState([{ id: 'summary', name: 'Summary', description: 'Case summary' }]));
+    mocks.history.mockReturnValue(queryState([]));
+    mocks.importSignals.mockReturnValue({ partialResults: [] });
+    mocks.dataSources.mockReturnValue(queryState([]));
+
+    renderReports();
+
+    expect(screen.getByText('预计产物: 报告主体文件')).toBeDefined();
+    fireEvent.click(screen.getByLabelText(/包含原始文件提取/));
+    expect(screen.getByText('预计产物: 报告 + 原始文件批量导出清单 + SHA256SUMS')).toBeDefined();
   });
 });

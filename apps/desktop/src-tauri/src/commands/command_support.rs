@@ -1,0 +1,85 @@
+use std::path::PathBuf;
+
+use r2d2::PooledConnection;
+use r2d2_sqlite::SqliteConnectionManager;
+use transport::CommandError;
+
+use crate::state::AppState;
+
+#[derive(Clone, Debug)]
+pub(crate) struct ActiveCaseSnapshot {
+    pub case_id: String,
+    pub case_root: PathBuf,
+    #[cfg(test)]
+    pub db_path: PathBuf,
+    pub meta: domain::CaseMeta,
+}
+
+pub(crate) fn snapshot_active_case(
+    state: &AppState,
+) -> Result<Option<ActiveCaseSnapshot>, CommandError> {
+    let guard = state
+        .active_case
+        .lock()
+        .map_err(|e| CommandError::from_lock_error("Case", e))?;
+
+    Ok(guard.as_ref().map(|active| ActiveCaseSnapshot {
+        case_id: active.meta.id.0.clone(),
+        case_root: active.case_root.clone(),
+        #[cfg(test)]
+        db_path: active.db_path(),
+        meta: active.meta.clone(),
+    }))
+}
+
+pub(crate) fn require_active_case(state: &AppState) -> Result<ActiveCaseSnapshot, CommandError> {
+    snapshot_active_case(state)?.ok_or_else(CommandError::no_active_case)
+}
+
+pub(crate) fn get_case_connection(
+    state: &AppState,
+) -> Result<PooledConnection<SqliteConnectionManager>, CommandError> {
+    state.get_connection().map_err(|error| {
+        if error.contains("No active case") || error.contains("No database pool initialized") {
+            CommandError::no_active_case()
+        } else {
+            CommandError::from_service_error(error)
+        }
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use app_services::case_service;
+    use uuid::Uuid;
+
+    #[test]
+    fn active_case_snapshot_and_pool_connection_stay_in_sync() {
+        let root = std::env::temp_dir().join(format!(
+            "forensics-workbench-command-support-test-{}",
+            Uuid::new_v4()
+        ));
+        let active =
+            case_service::create_case(&root, "Command Support", Some("Codex Test")).unwrap();
+        let db_path = active.db_path();
+        let state = AppState::default();
+
+        assert!(snapshot_active_case(&state).unwrap().is_none());
+
+        state.init_db_pool(&db_path).unwrap();
+        *state.active_case.lock().unwrap() = Some(active);
+
+        let snapshot = require_active_case(&state).unwrap();
+        assert_eq!(snapshot.db_path, db_path);
+        assert_eq!(snapshot.case_root.parent(), Some(root.as_path()));
+        get_case_connection(&state).unwrap();
+
+        *state.active_case.lock().unwrap() = None;
+        let err = require_active_case(&state).unwrap_err();
+        assert_eq!(err.code, "NO_ACTIVE_CASE");
+
+        state.clear_db_pool().unwrap();
+        std::fs::remove_dir_all(root).ok();
+    }
+}

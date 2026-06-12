@@ -96,7 +96,9 @@ export function Reports() {
           <div className="border border-[#e0e0e0] bg-[#fafafa] p-3 text-[11px] text-[#555] space-y-1">
             <div className="font-medium text-[#111]">导出摘要</div>
             <div>当前模板将生成案件执行摘要、关键时间线与核心痕迹清单。</div>
-            <div className="font-mono text-[#888]">预计产物: 1 份 PDF / 14-18 页</div>
+            <div className="font-mono text-[#888]">
+              预计产物: {exportScope.rawFileExtraction ? '报告 + 原始文件批量导出清单 + SHA256SUMS' : '报告主体文件'}
+            </div>
           </div>
 
           {evidenceHashStatus ? (
