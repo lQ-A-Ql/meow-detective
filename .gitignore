@@ -18,6 +18,9 @@ apps/desktop/src-tauri/gen/
 .idea/
 *.sw[a-zA-Z]
 *~
+.omo/
+.pi/
+.context/
 
 # OS
 .DS_Store
@@ -34,3 +37,7 @@ Thumbs.db
 .claude/
 .pi/
 .omo/
+
+demo*
+autopsy*
+development*
