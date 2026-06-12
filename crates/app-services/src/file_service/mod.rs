@@ -1,1215 +1,48 @@
-use crate::datasource_service::{self, ImageFilesystemKind};
-use domain::{
-    DataSourceHashStatus, DataSourceId, DataSourceProvenanceStatus, EntryType, FileEntry,
-    FileEntryId,
-};
-use evidence_core::{EvidenceReader, FileSystemReader, RawImageReader};
+use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
+use evidence_core::EvidenceReader;
 use image_e01::E01Reader;
-use infrastructure::constants::FILE_INSERT_BATCH_SIZE;
-use persistence_sqlite::{
-    repositories::{
-        datasource_repo::DataSourceRepo, file_repo::FileRepo, partition_repo::PartitionRepo,
-    },
-    DbError, DbResult,
-};
+use persistence_sqlite::{repositories::file_repo::FileRepo, DbError, DbResult};
 use rusqlite::Connection;
 use std::{
-    collections::VecDeque,
-    io::{Read, SeekFrom},
-    path::{Component, Path, PathBuf},
-    sync::atomic::{AtomicBool, Ordering},
-};
-use transport::{
-    commands::GetFileRowsRequest,
-    dto::{
-        DataSourcePartitionDto, DataSourceSummaryDto, FileChildrenDto, FileEntryRowDto,
-        FileRowsPageDto, FileTreeNodeDto, ViewerHandleDto, ViewerRangeRequestDto,
-        ViewerRangeResponseDto,
+    collections::{HashMap, HashSet},
+    io::SeekFrom,
+    path::Path,
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc,
     },
+    thread,
 };
-use uuid::Uuid;
 
-const FILE_HANDLE_PREFIX: &str = "file:";
-const PARTITION_PLACEHOLDER_PREFIX: &str = "__partition_placeholder__/";
-
-/// Statistics collected during filesystem enumeration.
-pub struct EnumerationStats {
-    pub file_count: u64,
-    pub dir_count: u64,
-    pub total_size: u64,
-    pub warnings: Vec<String>,
-}
-
-/// Enumerate all files and directories from a filesystem reader and insert them
-/// into the database. Uses the filesystem root name as the top-level directory name.
-pub fn enumerate_filesystem(
-    conn: &Connection,
-    data_source_id: &DataSourceId,
-    fs: &dyn FileSystemReader,
-) -> DbResult<EnumerationStats> {
-    enumerate_filesystem_with_root_name(conn, data_source_id, fs, None, None::<&dyn Fn(u32)>)
-}
-
-pub fn enumerate_filesystem_with_root_name(
-    conn: &Connection,
-    data_source_id: &DataSourceId,
-    fs: &dyn FileSystemReader,
-    root_name_override: Option<&str>,
-    progress_fn: Option<&dyn Fn(u32)>,
-) -> DbResult<EnumerationStats> {
-    enumerate_filesystem_with_root_name_and_cancel(
-        conn,
-        data_source_id,
-        fs,
-        root_name_override,
-        progress_fn,
-        None,
-    )
-}
-
-pub fn enumerate_filesystem_with_root_name_and_cancel(
-    conn: &Connection,
-    data_source_id: &DataSourceId,
-    fs: &dyn FileSystemReader,
-    root_name_override: Option<&str>,
-    progress_fn: Option<&dyn Fn(u32)>,
-    cancel_token: Option<&AtomicBool>,
-) -> DbResult<EnumerationStats> {
-    let root = fs.root().map_err(|e| {
-        persistence_sqlite::DbError::System(format!("Failed to read filesystem root: {}", e))
-    })?;
-
-    if cancellation_requested(cancel_token) {
-        return Err(persistence_sqlite::DbError::System(
-            "Enumeration cancelled".to_string(),
-        ));
-    }
-
-    let root_id = FileEntryId(Uuid::new_v4().to_string());
-    let root_entry = FileEntry {
-        id: root_id.clone(),
-        parent_id: None,
-        data_source_id: data_source_id.clone(),
-        path: String::new(),
-        name: root_name_override.unwrap_or(&root.name).to_string(),
-        entry_type: EntryType::Directory,
-        size: None,
-        ext: None,
-        deleted: false,
-        hidden: root.hidden,
-        system: root.system,
-        created_at: root.created_at,
-        modified_at: root.modified_at,
-        accessed_at: root.accessed_at,
-        changed_at: None,
-        hash_sha256: None,
-    };
-
-    let tx = conn.unchecked_transaction()?;
-    let result = {
-        let repo = FileRepo::new(&tx);
-        repo.insert_batch_unchecked(&[root_entry])?;
-        walk_and_insert_children(
-            &repo,
-            fs,
-            data_source_id,
-            root_id,
-            progress_fn,
-            cancel_token,
-        )
-    };
-    match result {
-        Ok(stats) => {
-            tx.commit()?;
-            Ok(stats)
-        }
-        Err(error) => {
-            tx.rollback().ok();
-            Err(error)
-        }
-    }
-}
-
-fn cancellation_requested(cancel_token: Option<&AtomicBool>) -> bool {
-    cancel_token
-        .map(|token| token.load(Ordering::Relaxed))
-        .unwrap_or(false)
-}
-
-fn enumeration_cancelled_error() -> DbError {
-    DbError::System("Enumeration cancelled".to_string())
-}
-
-fn compute_enumeration_progress(processed: u64) -> u64 {
-    if processed < 100 {
-        processed
-    } else if processed < 1000 {
-        50 + (processed - 100) * 30 / 900
-    } else {
-        80 + (processed - 1000).min(5000) * 15 / 5000
-    }
-}
-
-fn walk_and_insert_children(
-    repo: &FileRepo<'_>,
-    fs: &dyn FileSystemReader,
-    data_source_id: &DataSourceId,
-    root_id: FileEntryId,
-    progress_fn: Option<&dyn Fn(u32)>,
-    cancel_token: Option<&AtomicBool>,
-) -> DbResult<EnumerationStats> {
-    let mut queue: VecDeque<(FileEntryId, String)> = VecDeque::new();
-    queue.push_back((root_id, String::new()));
-
-    let mut stats = EnumerationStats {
-        file_count: 0,
-        dir_count: 1,
-        total_size: 0,
-        warnings: Vec::new(),
-    };
-
-    let batch_size = FILE_INSERT_BATCH_SIZE;
-    let mut batch: Vec<FileEntry> = Vec::with_capacity(batch_size);
-    let mut total_processed: u64 = 0;
-
-    while let Some((parent_id, dir_path)) = queue.pop_front() {
-        if cancellation_requested(cancel_token) {
-            return Err(enumeration_cancelled_error());
-        }
-
-        let children = match fs.list_children(&dir_path) {
-            Ok(c) => c,
-            Err(e) => {
-                stats
-                    .warnings
-                    .push(format!("Cannot read '{}': {}", dir_path, e));
-                continue;
-            }
-        };
-
-        for child in children {
-            if cancellation_requested(cancel_token) {
-                return Err(enumeration_cancelled_error());
-            }
-
-            if child.name == "." || child.name == ".." {
-                continue;
-            }
-
-            let id = FileEntryId(Uuid::new_v4().to_string());
-            let (hidden, system) = visibility_flags_for_node(&child);
-            let entry = FileEntry {
-                id: id.clone(),
-                parent_id: Some(parent_id.clone()),
-                data_source_id: data_source_id.clone(),
-                path: child.path.clone(),
-                name: child.name.clone(),
-                entry_type: if child.is_dir {
-                    EntryType::Directory
-                } else {
-                    EntryType::File
-                },
-                size: if child.is_dir { None } else { Some(child.size) },
-                ext: child
-                    .name
-                    .rsplit('.')
-                    .next()
-                    .filter(|e| *e != child.name)
-                    .map(|e| e.to_string()),
-                deleted: false,
-                hidden,
-                system,
-                created_at: child.created_at,
-                modified_at: child.modified_at,
-                accessed_at: child.accessed_at,
-                changed_at: None,
-                hash_sha256: None,
-            };
-
-            if child.is_dir {
-                stats.dir_count += 1;
-                queue.push_back((id, child.path));
-            } else {
-                stats.file_count += 1;
-                stats.total_size += child.size;
-            }
-
-            batch.push(entry);
-            total_processed += 1;
-
-            if batch.len() >= batch_size {
-                repo.insert_batch_unchecked(&batch)?;
-                batch.clear();
-            }
-            if total_processed.is_multiple_of(100) {
-                if let Some(ref pf) = progress_fn {
-                    let pct = compute_enumeration_progress(total_processed);
-                    pf(pct as u32);
-                }
-            }
-        }
-    }
-
-    if !batch.is_empty() {
-        repo.insert_batch_unchecked(&batch)?;
-    }
-
-    if let Some(ref pf) = progress_fn {
-        pf(100);
-    }
-    if cancellation_requested(cancel_token) {
-        return Err(enumeration_cancelled_error());
-    }
-
-    Ok(stats)
-}
-
-pub fn insert_partition_placeholder_root(
-    conn: &Connection,
-    data_source_id: &DataSourceId,
-    root_name: &str,
-    status: &str,
-) -> DbResult<FileEntryId> {
-    let repo = FileRepo::new(conn);
-    let root_id = FileEntryId(Uuid::new_v4().to_string());
-    let root_entry = FileEntry {
-        id: root_id.clone(),
-        parent_id: None,
-        data_source_id: data_source_id.clone(),
-        path: format!("{PARTITION_PLACEHOLDER_PREFIX}{status}"),
-        name: root_name.to_string(),
-        entry_type: EntryType::Directory,
-        size: None,
-        ext: None,
-        deleted: false,
-        hidden: false,
-        system: false,
-        created_at: None,
-        modified_at: None,
-        accessed_at: None,
-        changed_at: None,
-        hash_sha256: None,
-    };
-
-    repo.insert_batch(&[root_entry])?;
-    Ok(root_id)
-}
-
-pub fn replace_placeholder_root_with_real(
-    conn: &Connection,
-    placeholder_id: &FileEntryId,
-    fs: &dyn FileSystemReader,
-    root_name_override: Option<&str>,
-    progress_fn: Option<&dyn Fn(u32)>,
-) -> DbResult<EnumerationStats> {
-    let repo = FileRepo::new(conn);
-    let Some(mut root_entry) = repo.find_by_id(placeholder_id)? else {
-        return Err(persistence_sqlite::DbError::System(
-            "Partition placeholder root not found".to_string(),
-        ));
-    };
-
-    let root = fs.root().map_err(|e| {
-        persistence_sqlite::DbError::System(format!("Failed to read filesystem root: {}", e))
-    })?;
-
-    root_entry.path = String::new();
-    root_entry.name = root_name_override.unwrap_or(&root.name).to_string();
-    root_entry.created_at = root.created_at;
-    root_entry.modified_at = root.modified_at;
-    root_entry.accessed_at = root.accessed_at;
-    root_entry.hidden = root.hidden;
-    root_entry.system = root.system;
-
-    let root_path = root_entry.path.clone();
-    let root_name = root_entry.name.clone();
-    let root_hidden = root_entry.hidden as i32;
-    let root_system = root_entry.system as i32;
-    let root_id_value = root_entry.id.0.clone();
-    let data_source_id = root_entry.data_source_id.clone();
-    let root_id = root_entry.id.clone();
-    conn.execute(
-        "UPDATE file_entries
-         SET path = ?1, name = ?2, created_at = ?3, modified_at = ?4, accessed_at = ?5,
-             hidden = ?6, system = ?7
-         WHERE id = ?8",
-        rusqlite::params![
-            root_path,
-            root_name,
-            root_entry.created_at.map(|dt| dt.to_rfc3339()),
-            root_entry.modified_at.map(|dt| dt.to_rfc3339()),
-            root_entry.accessed_at.map(|dt| dt.to_rfc3339()),
-            root_hidden,
-            root_system,
-            root_id_value,
-        ],
-    )?;
-
-    walk_and_insert_children(&repo, fs, &data_source_id, root_id, progress_fn, None)
-}
-
-pub fn file_entry_to_dto(entry: &FileEntry) -> FileEntryRowDto {
-    FileEntryRowDto {
-        id: entry.id.0.clone(),
-        parent_id: entry.parent_id.as_ref().map(|p| p.0.clone()),
-        path: entry.path.clone(),
-        name: entry.name.clone(),
-        entry_type: match entry.entry_type {
-            EntryType::File => "file".to_string(),
-            EntryType::Directory => "directory".to_string(),
-        },
-        size: entry.size,
-        ext: entry.ext.clone(),
-        deleted: entry.deleted,
-        hidden: entry.hidden,
-        system: entry.system,
-        created_at: entry.created_at.map(|dt| dt.to_rfc3339()),
-        modified_at: entry.modified_at.map(|dt| dt.to_rfc3339()),
-        accessed_at: entry.accessed_at.map(|dt| dt.to_rfc3339()),
-        changed_at: entry.changed_at.map(|dt| dt.to_rfc3339()),
-        hash_sha256: entry.hash_sha256.clone(),
-    }
-}
-
-pub fn get_file_tree_real(conn: &Connection) -> Result<Vec<FileTreeNodeDto>, String> {
-    get_file_tree_real_with_visibility(conn, false)
-}
-
-pub fn get_file_tree_real_with_visibility(
-    conn: &Connection,
-    show_hidden: bool,
-) -> Result<Vec<FileTreeNodeDto>, String> {
-    let repo = FileRepo::new(conn);
-    let roots = repo
-        .find_root_directories_visible(show_hidden)
-        .map_err(|e| e.to_string())?;
-
-    // Batch-check has_children for all roots in a single pass
-    let child_counts = repo
-        .count_child_directories_batch_visible(
-            &roots.iter().map(|r| &r.id).collect::<Vec<_>>(),
-            show_hidden,
-        )
-        .unwrap_or_default();
-
-    roots
-        .iter()
-        .map(|entry| {
-            let has_children = child_counts.get(&entry.id.0).copied().unwrap_or(0) > 0;
-            Ok(file_entry_to_tree_node(entry, 0, Some(has_children)))
-        })
-        .collect()
-}
-
-pub fn get_file_children_lazy(
-    conn: &Connection,
-    parent_id: &str,
-    offset: u64,
-    limit: u32,
-) -> Result<FileChildrenDto, String> {
-    get_file_children_lazy_with_visibility(conn, parent_id, offset, limit, false)
-}
-
-pub fn get_file_children_lazy_with_visibility(
-    conn: &Connection,
-    parent_id: &str,
-    offset: u64,
-    limit: u32,
-    show_hidden: bool,
-) -> Result<FileChildrenDto, String> {
-    let repo = FileRepo::new(conn);
-    let parent = match repo
-        .find_by_id(&FileEntryId(parent_id.to_string()))
-        .map_err(|e| e.to_string())?
-    {
-        Some(entry) if entry.entry_type == EntryType::Directory => entry,
-        _ => {
-            return Ok(FileChildrenDto {
-                children: vec![],
-                total_count: 0,
-                offset: Some(offset),
-                limit: Some(limit),
-                truncated: Some(false),
-            })
-        }
-    };
-
-    let children = repo
-        .find_child_directories_page_visible(&parent.id, offset, limit, show_hidden)
-        .map_err(|e| e.to_string())?;
-    let total_count = repo
-        .count_child_directories_visible(&parent.id, show_hidden)
-        .map_err(|e| e.to_string())?;
-    let child_depth = directory_depth(&parent).saturating_add(1);
-
-    // Batch-check has_children for all children
-    let child_counts = repo
-        .count_child_directories_batch_visible(
-            &children.iter().map(|c| &c.id).collect::<Vec<_>>(),
-            show_hidden,
-        )
-        .unwrap_or_default();
-
-    let child_nodes = children
-        .iter()
-        .map(|entry| {
-            let has_children = child_counts.get(&entry.id.0).copied().unwrap_or(0) > 0;
-            file_entry_to_tree_node(entry, child_depth, Some(has_children))
-        })
-        .collect();
-
-    Ok(FileChildrenDto {
-        children: child_nodes,
-        total_count,
-        offset: Some(offset),
-        limit: Some(limit),
-        truncated: Some(offset + (limit as u64) < total_count),
-    })
-}
-
-pub fn get_file_rows_for_request(
-    conn: &Connection,
-    request: &GetFileRowsRequest,
-) -> Result<FileRowsPageDto, String> {
-    let mut request = request.clone();
-    request.validate()?;
-    let repo = FileRepo::new(conn);
-    let (entries, total_count) = match request.parent_id.as_deref() {
-        Some(parent_id) => {
-            let parent = repo
-                .find_by_id(&FileEntryId(parent_id.to_string()))
-                .map_err(|e| e.to_string())?;
-            match parent {
-                Some(entry) if entry.entry_type == EntryType::Directory => {
-                    let entries = repo
-                        .find_children_page_visible(
-                            &entry.id,
-                            request.offset,
-                            request.limit,
-                            request.show_hidden,
-                        )
-                        .map_err(|e| e.to_string())?;
-                    let total_count = repo
-                        .count_children_visible(&entry.id, request.show_hidden)
-                        .map_err(|e| e.to_string())?;
-                    (entries, total_count)
-                }
-                _ => (Vec::new(), 0),
-            }
-        }
-        None => {
-            let entries = repo
-                .find_root_entries_page_visible(request.offset, request.limit, request.show_hidden)
-                .map_err(|e| e.to_string())?;
-            let total_count = repo
-                .count_root_entries_visible(request.show_hidden)
-                .map_err(|e| e.to_string())?;
-            (entries, total_count)
-        }
-    };
-
-    Ok(FileRowsPageDto {
-        rows: entries.iter().map(file_entry_to_dto).collect(),
-        total_count,
-        offset: request.offset,
-        limit: request.limit,
-        truncated: request.offset + (request.limit as u64) < total_count,
-    })
-}
-
-pub fn get_data_sources_real(
-    conn: &Connection,
-    case_id: &domain::CaseId,
-) -> Result<Vec<DataSourceSummaryDto>, String> {
-    let ds_repo = DataSourceRepo::new(conn);
-    let file_repo = FileRepo::new(conn);
-    let partition_repo = PartitionRepo::new(conn);
-    let sources = ds_repo.find_by_case(case_id).map_err(|e| e.to_string())?;
-
-    Ok(sources
-        .into_iter()
-        .map(|source| {
-            let partitions = partition_repo
-                .find_by_data_source(&source.id.0)
-                .map(|items| {
-                    items
-                        .into_iter()
-                        .map(|item| DataSourcePartitionDto {
-                            index: item.partition_index,
-                            name: item.name,
-                            kind_label: item.kind_label,
-                            status: item.status,
-                            offset: item.offset,
-                            length: item.length,
-                            type_guid: item.type_guid,
-                            filesystem: item.filesystem,
-                            unlock_hint: item.unlock_hint,
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-
-            DataSourceSummaryDto {
-                id: source.id.0.clone(),
-                name: source.name,
-                kind: source.kind.to_string(),
-                source_path: source.source_path.display().to_string(),
-                imported_at: source.imported_at.to_rfc3339(),
-                file_count: file_repo.count_by_data_source(&source.id).ok(),
-                source_hash: source.provenance.source_hash_sha256,
-                hash_status: Some(data_source_hash_status_label(
-                    &source.provenance.hash_status,
-                )),
-                canonical_path: source
-                    .provenance
-                    .canonical_source_path
-                    .map(|path| path.display().to_string()),
-                evidence_size: source.provenance.evidence_size,
-                reader_kind: source.provenance.reader_kind,
-                provenance_status: Some(data_source_provenance_status_label(
-                    &source.provenance.provenance_status,
-                )),
-                warnings: source.provenance.warnings,
-                partitions,
-            }
-        })
-        .collect())
-}
-
-fn data_source_hash_status_label(status: &DataSourceHashStatus) -> String {
-    match status {
-        DataSourceHashStatus::Unknown => "unknown",
-        DataSourceHashStatus::Pending => "pending",
-        DataSourceHashStatus::Hashed => "hashed",
-        DataSourceHashStatus::Failed => "failed",
-        DataSourceHashStatus::Unavailable => "unavailable",
-    }
-    .to_string()
-}
-
-fn data_source_provenance_status_label(status: &DataSourceProvenanceStatus) -> String {
-    match status {
-        DataSourceProvenanceStatus::Unknown => "unknown",
-        DataSourceProvenanceStatus::Recorded => "recorded",
-        DataSourceProvenanceStatus::Partial => "partial",
-        DataSourceProvenanceStatus::Failed => "failed",
-    }
-    .to_string()
-}
-
-pub fn rename_data_source_real(
-    conn: &Connection,
-    data_source_id: &str,
-    name: &str,
-) -> Result<(), String> {
-    let trimmed = name.trim();
-    if trimmed.is_empty() {
-        return Err("Data source name cannot be empty".to_string());
-    }
-
-    DataSourceRepo::new(conn)
-        .rename(&DataSourceId(data_source_id.to_string()), trimmed)
-        .map_err(|e| e.to_string())
-}
-
-pub fn get_recent_objects_real(
-    conn: &Connection,
-) -> Result<Vec<transport::dto::RecentObjectDto>, String> {
-    let file_repo = FileRepo::new(conn);
-    let roots = file_repo.find_root_entries().map_err(|e| e.to_string())?;
-    let mut recent = Vec::new();
-    let mut queue: VecDeque<FileEntry> = roots.into();
-
-    while let Some(entry) = queue.pop_front() {
-        if entry.entry_type == EntryType::Directory {
-            let children = file_repo
-                .find_children(&entry.id)
-                .map_err(|e| e.to_string())?;
-            queue.extend(children);
-            continue;
-        }
-
-        let timestamp = entry
-            .modified_at
-            .or(entry.created_at)
-            .or(entry.accessed_at)
-            .map(|dt| dt.to_rfc3339())
-            .unwrap_or_else(|| "-".to_string());
-
-        recent.push(transport::dto::RecentObjectDto {
-            id: entry.id.0.clone(),
-            title: entry.name.clone(),
-            detail: if entry.path.is_empty() {
-                entry.name.clone()
-            } else {
-                entry.path.clone()
-            },
-            time: timestamp,
-            kind: "file".to_string(),
-        });
-
-        if recent.len() >= 8 {
-            break;
-        }
-    }
-
-    Ok(recent)
-}
-
-pub fn open_file_handle_real(conn: &Connection, file_id: &str) -> Result<ViewerHandleDto, String> {
-    let repo = FileRepo::new(conn);
-    let entry = repo
-        .find_by_id(&FileEntryId(file_id.to_string()))
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "File not found".to_string())?;
-
-    if entry.entry_type != EntryType::File {
-        return Err("Cannot open a directory as a file".to_string());
-    }
-
-    Ok(ViewerHandleDto {
-        handle_id: format!("{FILE_HANDLE_PREFIX}{}", entry.id.0),
-        size: entry.size.unwrap_or(0),
-        mime: mime_for_entry(&entry),
-    })
-}
-
-pub fn read_file_range_for_case(
-    conn: &Connection,
-    request: &ViewerRangeRequestDto,
-) -> Result<ViewerRangeResponseDto, String> {
-    let mut request = request.clone();
-    request.validate()?;
-    let file_id = file_id_from_handle(&request.handle_id)?;
-    let mut file = open_file_content_by_id(conn, &FileEntryId(file_id.to_string()))?;
-
-    skip_reader_bytes(file.as_mut(), request.offset)?;
-    let length = (request.length as usize).min(infrastructure::constants::MAX_RANGE_LENGTH);
-    let mut bytes = vec![0u8; length];
-    let read = file.read(&mut bytes).map_err(|e| e.to_string())?;
-    bytes.truncate(read);
-
-    Ok(ViewerRangeResponseDto {
-        kind: "hex".into(),
-        lines: format_hex_lines(request.offset, &bytes),
-        encoding: None,
-    })
-}
-
-pub fn read_file_range_real(_request: &ViewerRangeRequestDto) -> ViewerRangeResponseDto {
-    empty_hex_response()
-}
-
-/// Open real evidence content for a file entry.
-///
-/// The caller provides a `FileEntryId`; this helper resolves the backing data
-/// source and applies the same logical-directory and image-backed safety checks
-/// used by preview reads.
-pub fn open_file_content_by_id(
-    conn: &Connection,
-    file_id: &FileEntryId,
-) -> Result<Box<dyn Read>, String> {
-    let repo = FileRepo::new(conn);
-    let entry = repo
-        .find_by_id(file_id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "File not found".to_string())?;
-
-    open_file_content_for_entry(&repo, &entry)
-}
-
-pub fn read_file_header_by_id(
-    conn: &Connection,
-    file_id: &FileEntryId,
-    max_bytes: usize,
-) -> Result<Vec<u8>, String> {
-    let mut reader = open_file_content_by_id(conn, file_id)?;
-    let mut limited = reader.by_ref().take(max_bytes as u64);
-    let mut bytes = Vec::new();
-    limited.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
-    Ok(bytes)
-}
-
-fn open_file_content_for_entry(
-    repo: &FileRepo<'_>,
-    entry: &FileEntry,
-) -> Result<Box<dyn Read>, String> {
-    if entry.entry_type != EntryType::File {
-        return Err("Cannot read a directory as a file".to_string());
-    }
-
-    let (kind, source_path) = repo
-        .find_data_source_location(&entry.data_source_id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "Data source not found".to_string())?;
-    let expected_partition_index = root_partition_index_for_entry(repo, entry);
-
-    match kind.as_str() {
-        "logical_directory" => open_logical_file(&source_path, entry),
-        "e01" => open_e01_file(&source_path, entry, expected_partition_index),
-        "raw" => open_raw_file(&source_path, entry, expected_partition_index),
-        other => Err(format!(
-            "Range reading is not yet wired for data source kind '{}'",
-            other
-        )),
-    }
-}
-
-fn file_entry_to_tree_node(
-    entry: &FileEntry,
-    depth: u32,
-    expanded: Option<bool>,
-) -> FileTreeNodeDto {
-    let (node_type, status) = if let Some(partition_status) = partition_placeholder_status(entry) {
-        ("partition".to_string(), Some(partition_status.to_string()))
-    } else if depth == 0 && looks_like_partition_root_name(&entry.name) {
-        ("partition".to_string(), Some("ready".to_string()))
-    } else {
-        ("directory".to_string(), None)
-    };
-
-    FileTreeNodeDto {
-        id: entry.id.0.clone(),
-        name: entry.name.clone(),
-        depth,
-        has_children: entry.entry_type == EntryType::Directory,
-        entry_type: Some(match entry.entry_type {
-            EntryType::Directory => "directory".to_string(),
-            EntryType::File => "file".to_string(),
-        }),
-        size: entry.size,
-        deleted: entry.deleted,
-        hidden: entry.hidden,
-        system: entry.system,
-        node_type: Some(node_type),
-        status,
-        expanded,
-        active: Some(false),
-    }
-}
-
-fn visibility_flags_for_node(node: &evidence_core::FsNode) -> (bool, bool) {
-    let inferred_hidden = inferred_hidden_name(&node.name);
-    let inferred_system = inferred_system_name(&node.name) || inferred_system_path(&node.path);
-    (
-        node.hidden || inferred_hidden || inferred_system,
-        node.system || inferred_system,
-    )
-}
-
-fn inferred_hidden_name(name: &str) -> bool {
-    name.starts_with('.')
-}
-
-fn inferred_system_name(name: &str) -> bool {
-    matches!(
-        name.to_ascii_lowercase().as_str(),
-        "$recycle.bin"
-            | "system volume information"
-            | "pagefile.sys"
-            | "hiberfil.sys"
-            | "swapfile.sys"
-    )
-}
-
-fn inferred_system_path(path: &str) -> bool {
-    path.split(['/', '\\']).any(inferred_system_name)
-}
-
-fn directory_depth(entry: &FileEntry) -> u32 {
-    if entry.path.is_empty() {
-        return 0;
-    }
-
-    Path::new(&entry.path)
-        .components()
-        .filter(|component| matches!(component, Component::Normal(_)))
-        .count() as u32
-}
-
-fn partition_placeholder_status(entry: &FileEntry) -> Option<&str> {
-    entry
-        .path
-        .strip_prefix(PARTITION_PLACEHOLDER_PREFIX)
-        .filter(|status| !status.is_empty())
-}
-
-fn looks_like_partition_root_name(name: &str) -> bool {
-    name.starts_with("Partition ") || name.starts_with("Volume")
-}
-
-fn mime_for_entry(entry: &FileEntry) -> Option<String> {
-    let ext = entry.ext.as_deref()?.to_ascii_lowercase();
-    let mime = match ext.as_str() {
-        "txt" | "log" | "csv" | "md" => "text/plain",
-        "json" => "application/json",
-        "html" | "htm" => "text/html",
-        "jpg" | "jpeg" => "image/jpeg",
-        "png" => "image/png",
-        "gif" => "image/gif",
-        "pdf" => "application/pdf",
-        _ => "application/octet-stream",
-    };
-    Some(mime.to_string())
-}
-
-pub fn store_data_source_partitions(
-    conn: &Connection,
-    data_source_id: &DataSourceId,
-    partitions: &[crate::datasource_service::PartitionRecord],
-) -> Result<(), String> {
-    let repo = PartitionRepo::new(conn);
-    let records = partitions
-        .iter()
-        .map(|partition| {
-            persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord {
-                id: Uuid::new_v4().to_string(),
-                data_source_id: data_source_id.0.clone(),
-                partition_index: partition.index as u32,
-                name: partition.name.clone(),
-                kind_label: partition.kind_label.clone(),
-                status: partition_status_label(partition.status).to_string(),
-                type_guid: partition.type_guid.clone(),
-                offset: partition.offset,
-                length: partition.length,
-                filesystem: partition.filesystem.map(image_filesystem_kind_label),
-                unlock_hint: partition_unlock_hint(partition),
-            }
-        })
-        .collect::<Vec<_>>();
-
-    repo.replace_for_data_source(&data_source_id.0, &records)
-        .map_err(|e| e.to_string())
-}
-
-fn partition_status_label(status: crate::datasource_service::PartitionStatus) -> &'static str {
-    match status {
-        crate::datasource_service::PartitionStatus::Supported => "supported",
-        crate::datasource_service::PartitionStatus::EncryptedBitLocker => "locked",
-        crate::datasource_service::PartitionStatus::Unsupported => "unsupported",
-    }
-}
-
-fn image_filesystem_kind_label(kind: crate::datasource_service::ImageFilesystemKind) -> String {
-    match kind {
-        crate::datasource_service::ImageFilesystemKind::Ntfs => "NTFS".to_string(),
-        crate::datasource_service::ImageFilesystemKind::Fat => "FAT".to_string(),
-        crate::datasource_service::ImageFilesystemKind::BitLocker => "BitLocker".to_string(),
-    }
-}
-
-fn partition_unlock_hint(partition: &crate::datasource_service::PartitionRecord) -> Option<String> {
-    if partition.status == crate::datasource_service::PartitionStatus::EncryptedBitLocker {
-        Some("BitLocker 分区需要先解锁后才能浏览文件内容。".to_string())
-    } else {
-        None
-    }
-}
-
-fn file_id_from_handle(handle_id: &str) -> Result<&str, String> {
-    handle_id
-        .strip_prefix(FILE_HANDLE_PREFIX)
-        .filter(|file_id| !file_id.is_empty())
-        .ok_or_else(|| "Invalid file handle".to_string())
-}
-
-/// Get the full file path for a file entry.
-pub fn get_file_path_for_entry(conn: &Connection, file_id: &str) -> Result<PathBuf, String> {
-    let repo = FileRepo::new(conn);
-    let entry = repo
-        .find_by_id(&FileEntryId(file_id.to_string()))
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "File not found".to_string())?;
-
-    let (kind, source_path) = repo
-        .find_data_source_location(&entry.data_source_id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "Data source not found".to_string())?;
-
-    if kind == "logical_directory" {
-        let root = PathBuf::from(&source_path)
-            .canonicalize()
-            .map_err(|e| format!("Cannot access data source root: {}", e))?;
-        let relative_path = safe_relative_path(&entry.path)?;
-        Ok(root.join(relative_path))
-    } else {
-        Err("File path only available for logical directories".to_string())
-    }
-}
-
-fn open_logical_file(source_path: &str, entry: &FileEntry) -> Result<Box<dyn Read>, String> {
-    let root = PathBuf::from(source_path)
-        .canonicalize()
-        .map_err(|e| format!("Cannot access data source root: {}", e))?;
-    let relative_path = safe_relative_path(&entry.path)?;
-    let full_path = root.join(relative_path);
-
-    // Check for symlinks in the path before canonicalizing
-    let mut check_path = PathBuf::new();
-    for component in full_path.components() {
-        check_path.push(component);
-        if check_path.is_symlink() {
-            return Err(format!(
-                "Symlink detected in path at '{}' — rejected for security",
-                check_path.display()
-            ));
-        }
-    }
-
-    let canonical = full_path
-        .canonicalize()
-        .map_err(|e| format!("Cannot access file '{}': {}", entry.path, e))?;
-
-    if !canonical.starts_with(&root) {
-        return Err("File path escapes data source root".to_string());
-    }
-
-    if !canonical.is_file() {
-        return Err("File entry does not point to a regular file".to_string());
-    }
-
-    std::fs::File::open(canonical)
-        .map(|file| Box::new(file) as Box<dyn Read>)
-        .map_err(|e| e.to_string())
-}
-
-fn open_raw_file(
-    source_path: &str,
-    entry: &FileEntry,
-    expected_partition_index: Option<usize>,
-) -> Result<Box<dyn Read>, String> {
-    let reader = RawImageReader::open(Path::new(source_path)).map_err(|e| e.to_string())?;
-    open_image_file(entry, reader, expected_partition_index)
-}
-
-fn open_e01_file(
-    source_path: &str,
-    entry: &FileEntry,
-    expected_partition_index: Option<usize>,
-) -> Result<Box<dyn Read>, String> {
-    let reader = E01Reader::open(Path::new(source_path)).map_err(|e| e.to_string())?;
-    open_image_file(entry, reader, expected_partition_index)
-}
-
-fn open_image_file<R>(
-    entry: &FileEntry,
-    mut reader: R,
-    expected_partition_index: Option<usize>,
-) -> Result<Box<dyn Read>, String>
-where
-    R: EvidenceReader + Read + std::io::Seek + 'static,
-{
-    let probe =
-        datasource_service::detect_image_filesystem(&mut reader).map_err(|e| e.to_string())?;
-    if probe.candidates.is_empty() {
-        let detail = if probe.warnings.is_empty() {
-            "No supported NTFS/FAT filesystem detected".to_string()
-        } else {
-            probe.warnings.join("; ")
-        };
-        return Err(detail);
-    }
-
-    let source_path = reader.info().path.clone();
-    let source_kind = reader.info().kind.clone();
-    for candidate in probe.candidates {
-        if let Some(expected_partition) = expected_partition_index {
-            if candidate.partition_index != Some(expected_partition) {
-                continue;
-            }
-        }
-
-        let boxed_reader: Box<dyn EvidenceReader> = match source_kind.as_str() {
-            "e01" => Box::new(E01Reader::open(&source_path).map_err(|e| e.to_string())?),
-            _ => Box::new(RawImageReader::open(&source_path).map_err(|e| e.to_string())?),
-        };
-
-        let result = match candidate.kind {
-            ImageFilesystemKind::Ntfs => {
-                let fs = fs_ntfs::NtfsReader::open(boxed_reader, candidate.offset)
-                    .map_err(|e| e.to_string())?;
-                fs.open_file(&entry.path)
-                    .map_err(|e| format!("Cannot open NTFS file '{}': {}", entry.path, e))
-            }
-            ImageFilesystemKind::Fat => {
-                let fs = fs_fat::FatReader::open(boxed_reader, candidate.offset)
-                    .map_err(|e| e.to_string())?;
-                fs.open_file(&entry.path)
-                    .map_err(|e| format!("Cannot open FAT file '{}': {}", entry.path, e))
-            }
-            ImageFilesystemKind::BitLocker => Err(format!(
-                "Cannot open '{}' from locked BitLocker partition",
-                entry.path
-            )),
-        };
-
-        if result.is_ok() {
-            return result;
-        }
-    }
-
-    Err(format!(
-        "Cannot open image-backed file '{}' from any detected partition",
-        entry.path
-    ))
-}
-
-fn root_partition_index_for_entry(repo: &FileRepo<'_>, entry: &FileEntry) -> Option<usize> {
-    if let Some(index) = mft_partition_index_from_entry_id(&entry.id.0) {
-        return Some(index);
-    }
-
-    let mut current = entry.clone();
-    while let Some(parent_id) = &current.parent_id {
-        let parent = repo.find_by_id(parent_id).ok()??;
-        current = parent;
-    }
-
-    current
-        .name
-        .strip_prefix("Partition ")?
-        .chars()
-        .take_while(|ch| ch.is_ascii_digit())
-        .collect::<String>()
-        .parse()
-        .ok()
-}
-
-fn mft_partition_index_from_entry_id(entry_id: &str) -> Option<usize> {
-    let mut parts = entry_id.split(':');
-    match (parts.next(), parts.next(), parts.next(), parts.next()) {
-        (Some("mft"), Some(partition), Some(_record), None) => partition.parse().ok(),
-        _ => None,
-    }
-}
-
-pub fn safe_relative_path(path: &str) -> Result<PathBuf, String> {
-    // Reject empty paths
-    if path.is_empty() {
-        return Err("Empty file path".to_string());
-    }
-
-    // Reject URL-encoded traversal attempts
-    let decoded = urlencoding_decode(path);
-    if decoded != path {
-        // Check if decoded version contains traversal
-        if decoded.contains("..") || decoded.contains('/') || decoded.contains('\\') {
-            return Err("URL-encoded traversal detected".to_string());
-        }
-    }
-
-    let mut safe = PathBuf::new();
-    for component in Path::new(path).components() {
-        match component {
-            Component::Normal(part) => {
-                let s = part.to_str().ok_or("Invalid UTF-8 in path")?;
-                // Reject null byte injection
-                if s.contains('\0') {
-                    return Err("Null byte in path".to_string());
-                }
-                // Reject Windows reserved names
-                if is_windows_reserved_name(s) {
-                    return Err(format!("Reserved name: {}", s));
-                }
-                safe.push(part);
-            }
-            Component::CurDir => {}
-            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
-                return Err("Unsafe file path in catalog".to_string());
-            }
-        }
-    }
-
-    // Reject excessively long paths
-    if safe.as_os_str().len() > infrastructure::constants::MAX_PATH_LENGTH {
-        return Err("Path too long".to_string());
-    }
-
-    Ok(safe)
-}
-
-/// Decode URL-encoded characters in a path
-fn urlencoding_decode(path: &str) -> String {
-    let mut result = String::with_capacity(path.len());
-    let mut chars = path.chars();
-    while let Some(c) = chars.next() {
-        if c == '%' {
-            let hex: String = chars.by_ref().take(2).collect();
-            if let Ok(byte) = u8::from_str_radix(&hex, 16) {
-                result.push(byte as char);
-            } else {
-                result.push(c);
-                result.push_str(&hex);
-            }
-        } else {
-            result.push(c);
-        }
-    }
-    result
-}
-
-/// Check if a filename is a Windows reserved name
-fn is_windows_reserved_name(name: &str) -> bool {
-    const RESERVED: &[&str] = &[
-        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
-        "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
-    ];
-    let upper = name.to_ascii_uppercase();
-    let stem = upper.split('.').next().unwrap_or(&upper);
-    RESERVED.contains(&stem)
-}
-
-pub fn skip_reader_bytes(reader: &mut dyn Read, mut remaining: u64) -> Result<(), String> {
-    // 使用更大的缓冲区减少系统调用次数
-    let mut buffer = vec![0u8; 65536]; // 64KB buffer
-    while remaining > 0 {
-        let chunk_len = remaining.min(buffer.len() as u64) as usize;
-        let read = reader
-            .read(&mut buffer[..chunk_len])
-            .map_err(|e| e.to_string())?;
-        if read == 0 {
-            return Err("Read offset exceeds file size".to_string());
-        }
-        remaining -= read as u64;
-    }
-    Ok(())
-}
-
-fn format_hex_lines(base_offset: u64, bytes: &[u8]) -> Vec<String> {
-    // 预计算容量：每行最多 8(offset) + 2(spaces) + 16*3(hex) + 16(space) = 74 字符
-    let line_count = bytes.len().div_ceil(16);
-    let mut result = Vec::with_capacity(line_count);
-
-    for (line_idx, chunk) in bytes.chunks(16).enumerate() {
-        let offset = base_offset + (line_idx * 16) as u64;
-        // 预分配：8(offset) + 2(spaces) + chunk.len()*3(hex) + chunk.len()-1(spaces)
-        let mut line = String::with_capacity(8 + 2 + chunk.len() * 4);
-
-        // 写入偏移量
-        use std::fmt::Write;
-        let _ = write!(line, "{offset:08X}");
-        line.push_str("  ");
-
-        // 写入 hex 字节
-        for (i, byte) in chunk.iter().enumerate() {
-            if i > 0 {
-                line.push(' ');
-            }
-            let _ = write!(line, "{byte:02X}");
-        }
-
-        result.push(line);
-    }
-    result
-}
-
-fn empty_hex_response() -> ViewerRangeResponseDto {
-    ViewerRangeResponseDto {
-        kind: "hex".into(),
-        lines: Vec::new(),
-        encoding: None,
-    }
-}
+mod data_sources;
+mod enumeration;
+mod file_rows;
+mod mapping;
+mod partition_roots;
+mod sort;
+mod tree_queries;
+mod viewer;
+mod visibility;
+
+pub use data_sources::{get_data_sources_real, get_recent_objects_real, rename_data_source_real};
+pub use enumeration::{
+    enumerate_filesystem, enumerate_filesystem_with_root_name,
+    enumerate_filesystem_with_root_name_and_cancel, EnumerationStats,
+};
+pub use file_rows::get_file_rows_for_request;
+pub use partition_roots::{
+    insert_partition_placeholder_root, replace_placeholder_root_with_real,
+    store_data_source_partitions,
+};
+pub use tree_queries::{
+    get_file_children_lazy, get_file_children_lazy_with_visibility, get_file_tree_real,
+    get_file_tree_real_with_visibility,
+};
+pub use viewer::{
+    get_file_path_for_entry, open_file_content_by_id, open_file_handle_real,
+    read_file_header_by_id, read_file_range_for_case, read_file_range_real, safe_relative_path,
+    skip_reader_bytes,
+};
 
 // ============================================================================
 // MFT-based bulk NTFS enumeration with multi-threading
@@ -1217,10 +50,6 @@ fn empty_hex_response() -> ViewerRangeResponseDto {
 
 use crossbeam_channel::{bounded, Receiver, Sender};
 use fs_ntfs::mft_scanner::{MftRecord, MftScanner};
-use std::collections::{HashMap, HashSet};
-use std::sync::atomic::AtomicU64;
-use std::sync::Arc;
-use std::thread;
 
 const MFT_CHUNK_RECORDS: u64 = 10_000;
 const MFT_CHANNEL_BOUND: usize = 4;
@@ -1799,8 +628,10 @@ fn records_to_file_entries(records: &[MftRecord], data_source_id: &DataSourceId)
                 size: if r.is_dir { None } else { Some(r.size) },
                 ext,
                 deleted: r.deleted,
-                hidden: r.hidden || inferred_hidden_name(&r.name) || inferred_system_name(&r.name),
-                system: r.system || inferred_system_name(&r.name),
+                hidden: r.hidden
+                    || visibility::inferred_hidden_name(&r.name)
+                    || visibility::inferred_system_name(&r.name),
+                system: r.system || visibility::inferred_system_name(&r.name),
                 created_at: r.created_at,
                 modified_at: r.modified_at,
                 accessed_at: r.accessed_at,
@@ -1896,7 +727,13 @@ fn update_entry_paths(
     // Resolve all entries
     let records: Vec<String> = path_map.keys().cloned().collect();
     for record in &records {
-        resolve_path(record, path_map, deleted_records, &mut resolved, &mut visiting);
+        resolve_path(
+            record,
+            path_map,
+            deleted_records,
+            &mut resolved,
+            &mut visiting,
+        );
     }
 
     // Update DB in batches
@@ -1959,7 +796,25 @@ fn errs_add(errors: &Arc<AtomicU64>) {
 mod tests {
     use super::*;
     use evidence_core::{filesystem::root_node, FsNode};
-    use std::io::{self, Cursor, Seek};
+    use persistence_sqlite::{open_or_create, runner};
+    use rusqlite::params;
+    use std::{
+        cmp::Ordering as CmpOrdering,
+        io::{self, Cursor, Read, Seek},
+        path::PathBuf,
+        sync::atomic::AtomicBool,
+    };
+    use tempfile::TempDir;
+
+    use crate::file_service::{
+        partition_roots::{
+            looks_like_raw_fs_root_name, mft_entry_partition_index, normalized_bare_root_name,
+            partition_placeholder_index, partition_placeholder_status,
+        },
+        sort::{natural_cmp, sort_entries},
+    };
+    use evidence_core::FileSystemReader;
+    use transport::commands::{FileSortDirectionDto, FileSortKeyDto, GetFileRowsRequest};
 
     struct CancelAfterRootFs;
 
@@ -2228,9 +1083,18 @@ mod tests {
 
     #[test]
     fn mft_partition_prefixed_id_exposes_partition_index() {
-        assert_eq!(mft_partition_index_from_entry_id("mft:3:42"), Some(3));
-        assert_eq!(mft_partition_index_from_entry_id("mft:42"), None);
-        assert_eq!(mft_partition_index_from_entry_id("uuid"), None);
+        assert_eq!(
+            crate::file_service::viewer::mft_partition_index_from_entry_id("mft:3:42"),
+            Some(3)
+        );
+        assert_eq!(
+            crate::file_service::viewer::mft_partition_index_from_entry_id("mft:42"),
+            None
+        );
+        assert_eq!(
+            crate::file_service::viewer::mft_partition_index_from_entry_id("uuid"),
+            None
+        );
     }
 
     struct SliceEvidenceReader {
@@ -2341,5 +1205,383 @@ mod tests {
         assert!(safe_relative_path("config.txt").is_ok());
         assert!(safe_relative_path("data.json").is_ok());
         assert!(safe_relative_path("folder/subfolder/file.log").is_ok());
+    }
+
+    // ------------------------------------------------------------------
+    // Service-layer sort comparator
+    // ------------------------------------------------------------------
+
+    fn sort_entry(
+        name: &str,
+        entry_type: EntryType,
+        hidden: bool,
+        system: bool,
+        deleted: bool,
+        size: Option<u64>,
+    ) -> FileEntry {
+        FileEntry {
+            id: FileEntryId(format!("id-{name}")),
+            parent_id: None,
+            data_source_id: DataSourceId("ds".to_string()),
+            path: name.to_string(),
+            name: name.to_string(),
+            entry_type,
+            size,
+            ext: name
+                .rsplit('.')
+                .next()
+                .filter(|e| *e != name)
+                .map(|e| e.to_string()),
+            deleted,
+            hidden,
+            system,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        }
+    }
+
+    fn names_after_sort(
+        mut entries: Vec<FileEntry>,
+        key: FileSortKeyDto,
+        dir: FileSortDirectionDto,
+    ) -> Vec<String> {
+        sort_entries(&mut entries, key, dir);
+        entries.into_iter().map(|e| e.name).collect()
+    }
+
+    #[test]
+    fn natural_sort_orders_numeric_suffixes_like_explorer() {
+        assert_eq!(natural_cmp("file2", "file10"), CmpOrdering::Less);
+        assert_eq!(natural_cmp("file10", "file2"), CmpOrdering::Greater);
+        assert_eq!(natural_cmp("img9", "img09"), CmpOrdering::Less); // equal magnitude, shorter raw run first
+        assert_eq!(natural_cmp("Alpha", "alpha"), CmpOrdering::Less); // case-insensitive then raw
+    }
+
+    #[test]
+    fn sort_keeps_directories_before_files_even_when_descending() {
+        let entries = vec![
+            sort_entry("zeta.txt", EntryType::File, false, false, false, Some(1)),
+            sort_entry("alpha", EntryType::Directory, false, false, false, None),
+            sort_entry("beta", EntryType::Directory, false, false, false, None),
+        ];
+        let ordered = names_after_sort(entries, FileSortKeyDto::Name, FileSortDirectionDto::Desc);
+        // Directories first (fixed), files after — even under descending name sort.
+        assert_eq!(ordered, vec!["beta", "alpha", "zeta.txt"]);
+    }
+
+    #[test]
+    fn sort_uses_natural_name_order_for_files() {
+        let entries = vec![
+            sort_entry("file10.log", EntryType::File, false, false, false, Some(1)),
+            sort_entry("file2.log", EntryType::File, false, false, false, Some(1)),
+            sort_entry("file1.log", EntryType::File, false, false, false, Some(1)),
+        ];
+        let ordered = names_after_sort(entries, FileSortKeyDto::Name, FileSortDirectionDto::Asc);
+        assert_eq!(ordered, vec!["file1.log", "file2.log", "file10.log"]);
+    }
+
+    #[test]
+    fn sort_sinks_hidden_system_deleted_after_normal() {
+        let entries = vec![
+            sort_entry("normal.txt", EntryType::File, false, false, false, Some(1)),
+            sort_entry("deleted.txt", EntryType::File, false, false, true, Some(1)),
+            sort_entry("hidden.txt", EntryType::File, true, false, false, Some(1)),
+            sort_entry("both.txt", EntryType::File, true, false, true, Some(1)),
+        ];
+        let ordered = names_after_sort(entries, FileSortKeyDto::Name, FileSortDirectionDto::Asc);
+        // Buckets: normal(0) < hidden/system(1) < deleted(2) < hidden+deleted(3).
+        assert_eq!(
+            ordered,
+            vec!["normal.txt", "hidden.txt", "deleted.txt", "both.txt"]
+        );
+    }
+
+    #[test]
+    fn sort_status_buckets_are_fixed_under_descending_name() {
+        let entries = vec![
+            sort_entry("aaa.txt", EntryType::File, true, false, false, Some(1)), // hidden
+            sort_entry("zzz.txt", EntryType::File, false, false, false, Some(1)), // normal
+        ];
+        let ordered = names_after_sort(entries, FileSortKeyDto::Name, FileSortDirectionDto::Desc);
+        // Normal bucket still precedes hidden bucket regardless of direction.
+        assert_eq!(ordered, vec!["zzz.txt", "aaa.txt"]);
+    }
+
+    #[test]
+    fn sort_by_size_descending_within_files() {
+        let entries = vec![
+            sort_entry("small.bin", EntryType::File, false, false, false, Some(10)),
+            sort_entry("big.bin", EntryType::File, false, false, false, Some(9000)),
+            sort_entry("mid.bin", EntryType::File, false, false, false, Some(500)),
+        ];
+        let ordered = names_after_sort(entries, FileSortKeyDto::Size, FileSortDirectionDto::Desc);
+        assert_eq!(ordered, vec!["big.bin", "mid.bin", "small.bin"]);
+    }
+
+    #[test]
+    fn get_file_rows_sorts_full_set_then_paginates() {
+        let tmp = TempDir::new().unwrap();
+        let conn = open_or_create(&tmp.path().join("case.db")).unwrap();
+        runner::run_all(&conn).unwrap();
+        let ds_id = DataSourceId("ds-sort-page".to_string());
+        conn.execute(
+            "INSERT INTO cases (id, name, created_at, updated_at) VALUES ('c1','C','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO data_sources (id, case_id, name, kind, source_path, imported_at) VALUES (?1,'c1','ds','logical_directory','C:/e','2026-01-01T00:00:00Z')",
+            params![ds_id.0],
+        )
+        .unwrap();
+
+        // Root parent dir + children: 1 dir + files file1,file2,file10.
+        let parent = FileEntryId("parent".to_string());
+        let repo = FileRepo::new(&conn);
+        let mut parent_entry = sort_entry("root", EntryType::Directory, false, false, false, None);
+        parent_entry.id = parent.clone();
+        parent_entry.data_source_id = ds_id.clone();
+        repo.insert_batch(&[parent_entry]).unwrap();
+
+        let mut children = Vec::new();
+        for n in ["sub", "file10.txt", "file2.txt", "file1.txt"] {
+            let is_dir = n == "sub";
+            let mut child = sort_entry(
+                n,
+                if is_dir {
+                    EntryType::Directory
+                } else {
+                    EntryType::File
+                },
+                false,
+                false,
+                false,
+                if is_dir { None } else { Some(1) },
+            );
+            child.id = FileEntryId(format!("c-{n}"));
+            child.parent_id = Some(parent.clone());
+            child.data_source_id = ds_id.clone();
+            children.push(child);
+        }
+        repo.insert_batch(&children).unwrap();
+
+        let request = GetFileRowsRequest {
+            parent_id: Some(parent.0.clone()),
+            offset: 0,
+            limit: 2,
+            show_hidden: false,
+            sort_key: FileSortKeyDto::Name,
+            sort_direction: FileSortDirectionDto::Asc,
+        };
+        let page = get_file_rows_for_request(&conn, &request).unwrap();
+        assert_eq!(page.total_count, 4);
+        assert!(page.truncated);
+        // Page 1: directory first, then natural-sorted file1.
+        let names: Vec<_> = page.rows.iter().map(|r| r.name.clone()).collect();
+        assert_eq!(names, vec!["sub", "file1.txt"]);
+
+        let request2 = GetFileRowsRequest {
+            offset: 2,
+            ..request
+        };
+        let page2 = get_file_rows_for_request(&conn, &request2).unwrap();
+        let names2: Vec<_> = page2.rows.iter().map(|r| r.name.clone()).collect();
+        assert_eq!(names2, vec!["file2.txt", "file10.txt"]);
+    }
+
+    // ------------------------------------------------------------------
+    // Stage A: partition placeholder identity binding (index-encoded path)
+    // ------------------------------------------------------------------
+
+    fn placeholder_entry(path: &str) -> FileEntry {
+        let mut entry = sort_entry(
+            "Partition 1 (NTFS)",
+            EntryType::Directory,
+            false,
+            false,
+            false,
+            None,
+        );
+        entry.path = path.to_string();
+        entry
+    }
+
+    #[test]
+    fn placeholder_path_encodes_partition_index() {
+        let tmp = TempDir::new().unwrap();
+        let conn = open_or_create(&tmp.path().join("case.db")).unwrap();
+        runner::run_all(&conn).unwrap();
+        let ds_id = DataSourceId("ds-ph-index".to_string());
+        conn.execute(
+            "INSERT INTO cases (id, name, created_at, updated_at) VALUES ('c1','C','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO data_sources (id, case_id, name, kind, source_path, imported_at) VALUES (?1,'c1','ds','e01','C:/e','2026-01-01T00:00:00Z')",
+            params![ds_id.0],
+        )
+        .unwrap();
+
+        let id =
+            insert_partition_placeholder_root(&conn, &ds_id, 3, "Partition 3 (NTFS)", "queued")
+                .unwrap();
+        let entry = FileRepo::new(&conn).find_by_id(&id).unwrap().unwrap();
+        assert_eq!(entry.path, "__partition_placeholder__/3/queued");
+        assert_eq!(partition_placeholder_index(&entry), Some(3));
+        assert_eq!(partition_placeholder_status(&entry), Some("queued"));
+    }
+
+    #[test]
+    fn legacy_placeholder_path_without_index_still_parses_status() {
+        // Old form: "__partition_placeholder__/{status}" (no index segment).
+        let entry = placeholder_entry("__partition_placeholder__/locked");
+        assert_eq!(partition_placeholder_index(&entry), None);
+        assert_eq!(partition_placeholder_status(&entry), Some("locked"));
+    }
+
+    #[test]
+    fn placeholder_index_distinguishes_same_named_partitions() {
+        // Two placeholders with identical display names but different indices
+        // must resolve to distinct identities via the path index segment.
+        let p1 = placeholder_entry("__partition_placeholder__/1/queued");
+        let p2 = placeholder_entry("__partition_placeholder__/2/queued");
+        assert_eq!(partition_placeholder_index(&p1), Some(1));
+        assert_eq!(partition_placeholder_index(&p2), Some(2));
+        assert_ne!(
+            partition_placeholder_index(&p1),
+            partition_placeholder_index(&p2)
+        );
+    }
+
+    #[test]
+    fn placeholder_status_parses_multi_digit_index() {
+        let entry = placeholder_entry("__partition_placeholder__/12/unsupported");
+        assert_eq!(partition_placeholder_index(&entry), Some(12));
+        assert_eq!(partition_placeholder_status(&entry), Some("unsupported"));
+    }
+
+    // ------------------------------------------------------------------
+    // Stage C: read-side defensive root normalization
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn raw_fs_root_name_detection() {
+        assert!(looks_like_raw_fs_root_name("\\"));
+        assert!(looks_like_raw_fs_root_name("/"));
+        assert!(looks_like_raw_fs_root_name("."));
+        assert!(!looks_like_raw_fs_root_name("Windows"));
+        assert!(!looks_like_raw_fs_root_name("EFI"));
+        assert!(!looks_like_raw_fs_root_name("Partition 0 (NTFS)"));
+    }
+
+    #[test]
+    fn mft_entry_partition_index_parsing() {
+        assert_eq!(mft_entry_partition_index("mft:3:5"), Some(3));
+        assert_eq!(mft_entry_partition_index("mft:0:42"), Some(0));
+        assert_eq!(mft_entry_partition_index("mft:5"), None); // legacy, no partition
+        assert_eq!(mft_entry_partition_index("uuid-abc"), None);
+    }
+
+    fn seed_ds_with_partition(conn: &Connection, ds_id: &str, index: u32, kind: &str) {
+        conn.execute(
+            "INSERT OR IGNORE INTO cases (id, name, created_at, updated_at) VALUES ('c1','C','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT OR IGNORE INTO data_sources (id, case_id, name, kind, source_path, imported_at) VALUES (?1,'c1','ds','e01','C:/e','2026-01-01T00:00:00Z')",
+            params![ds_id],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO data_source_partitions (id, data_source_id, partition_index, name, kind_label, status, offset, length)
+             VALUES (?1, ?2, ?3, ?4, ?5, 'supported', 0, 1024)",
+            params![format!("p-{index}"), ds_id, index, format!("Part {index}"), kind],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn bare_root_renamed_via_mft_partition_index() {
+        let tmp = TempDir::new().unwrap();
+        let conn = open_or_create(&tmp.path().join("case.db")).unwrap();
+        runner::run_all(&conn).unwrap();
+        let ds_id = "ds-bare-mft";
+        seed_ds_with_partition(&conn, ds_id, 3, "NTFS");
+
+        let mut entry = sort_entry("\\", EntryType::Directory, false, false, false, None);
+        entry.id = FileEntryId("mft:3:5".to_string());
+        entry.data_source_id = DataSourceId(ds_id.to_string());
+
+        assert_eq!(
+            normalized_bare_root_name(&conn, &entry),
+            "Partition 3 (NTFS)"
+        );
+    }
+
+    #[test]
+    fn bare_root_renamed_via_sole_partition_when_no_mft_index() {
+        let tmp = TempDir::new().unwrap();
+        let conn = open_or_create(&tmp.path().join("case.db")).unwrap();
+        runner::run_all(&conn).unwrap();
+        let ds_id = "ds-bare-sole";
+        seed_ds_with_partition(&conn, ds_id, 0, "FAT");
+
+        let mut entry = sort_entry("/", EntryType::Directory, false, false, false, None);
+        entry.id = FileEntryId("uuid-root".to_string());
+        entry.data_source_id = DataSourceId(ds_id.to_string());
+
+        assert_eq!(
+            normalized_bare_root_name(&conn, &entry),
+            "Partition 0 (FAT)"
+        );
+    }
+
+    #[test]
+    fn bare_root_unknown_when_unattributable() {
+        let tmp = TempDir::new().unwrap();
+        let conn = open_or_create(&tmp.path().join("case.db")).unwrap();
+        runner::run_all(&conn).unwrap();
+        let ds_id = "ds-bare-unknown";
+        // Two partitions, non-MFT id → cannot attribute deterministically.
+        seed_ds_with_partition(&conn, ds_id, 0, "NTFS");
+        seed_ds_with_partition(&conn, ds_id, 1, "FAT");
+
+        let mut entry = sort_entry("\\", EntryType::Directory, false, false, false, None);
+        entry.id = FileEntryId("uuid-ambiguous".to_string());
+        entry.data_source_id = DataSourceId(ds_id.to_string());
+
+        assert_eq!(
+            normalized_bare_root_name(&conn, &entry),
+            "Partition ? (UNKNOWN)"
+        );
+    }
+
+    #[test]
+    fn tree_builder_normalizes_residual_bare_root() {
+        let tmp = TempDir::new().unwrap();
+        let conn = open_or_create(&tmp.path().join("case.db")).unwrap();
+        runner::run_all(&conn).unwrap();
+        let ds_id = "ds-tree-bare";
+        seed_ds_with_partition(&conn, ds_id, 2, "NTFS");
+
+        // A residual bare `\` root directly in the main DB (simulates an older
+        // case that escaped staging folding).
+        conn.execute(
+            "INSERT INTO file_entries (id, parent_id, data_source_id, path, name, entry_type, size)
+             VALUES ('mft:2:5', NULL, ?1, '', '\\', 'directory', 0)",
+            params![ds_id],
+        )
+        .unwrap();
+
+        let tree = get_file_tree_real_with_visibility(&conn, false).unwrap();
+        assert_eq!(tree.len(), 1);
+        assert_eq!(tree[0].name, "Partition 2 (NTFS)");
+        assert_eq!(tree[0].node_type.as_deref(), Some("partition"));
+        assert!(!tree.iter().any(|n| n.name == "\\"));
     }
 }

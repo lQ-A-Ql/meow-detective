@@ -1,6 +1,6 @@
 # Forensics Workbench 模型 / 架构 / 算法流程图
 
-本文档集中维护 Forensics Workbench 的 Mermaid 图谱。图谱描述当前工程模型和审计关注点，详细字段与实现仍以代码、迁移和 transport DTO 为准。
+本文档集中维护 Forensics Workbench 的 Mermaid 图谱。图谱描述当前工程模型和关键链路，尤其覆盖分区根节点、文件浏览排序、状态字段传播和真实 Tauri 请求路径。字段细节仍以源码、迁移和 `crates/transport` 契约为准。
 
 ## 1. 分层架构图
 
@@ -142,6 +142,8 @@ erDiagram
     text id PK
     text data_source_id FK
     int partition_index
+    text name
+    text kind_label
     text status
     int offset
     int length
@@ -153,8 +155,17 @@ erDiagram
     text parent_id FK
     text data_source_id FK
     text path
+    text name
     text entry_type
+    text ext
     int size
+    int deleted
+    int hidden
+    int system
+    text created_at
+    text modified_at
+    text accessed_at
+    text changed_at
     text hash_sha256
   }
 
@@ -199,26 +210,31 @@ erDiagram
 ```mermaid
 flowchart LR
   Page["页面 / 组件"]
+  Controls["UI 状态<br/>showHidden / sortKey / sortDirection"]
   Hook["功能 hook<br/>useQuery/useMutation"]
   ApiFn["领域 API 函数"]
   ApiClient["ApiClient.request"]
-  TauriMode{"VITE_API_MODE == tauri?"}
+  Mode{"VITE_API_MODE == tauri?"}
   Invoke["Tauri invoke"]
   Mock["Mock provider"]
   QueryCache["TanStack Query cache"]
-  Store["Zustand UI/选择状态"]
+  Formatter["partition-display / file-sort / icon overlay"]
+  Store["Zustand UI / 选择状态"]
 
-  Page --> Hook
+  Page --> Controls
   Page --> Store
+  Controls --> Hook
   Hook --> ApiFn
   Hook --> QueryCache
   ApiFn --> ApiClient
-  ApiClient --> TauriMode
-  TauriMode -->|是| Invoke
-  TauriMode -->|否| Mock
+  ApiClient --> Mode
+  Mode -->|是| Invoke
+  Mode -->|否| Mock
   Invoke --> Backend["Rust command"]
-  Mock --> Hook
-  Backend --> Hook
+  Mock --> Formatter
+  Backend --> Formatter
+  Formatter --> Hook
+  Hook --> Page
 ```
 
 ## 5. Tauri Command Request / Response 序列图
@@ -226,29 +242,33 @@ flowchart LR
 ```mermaid
 sequenceDiagram
   participant UI as React 组件
-  participant Hook as 功能 hook
-  participant API as 前端 API 封装
+  participant Hook as 文件 hooks
+  participant API as files API
   participant Client as ApiClient
-  participant Cmd as Tauri command
-  participant Svc as app-services
-  participant Repo as SQLite 仓储 / 核心 crate
+  participant Cmd as file_commands
+  participant Svc as file_service
+  participant Repo as SQLite repo
 
-  UI->>Hook: 用户操作或查询挂载
-  Hook->>API: 调用领域 API
-  API->>Client: request(command, mockFallback, payload)
+  UI->>Hook: 切换 showHidden / sortKey / sortDirection
+  Hook->>API: getFileRowsPage(parentId, offset, limit, showHidden, sortKey, sortDirection)
+  API->>Client: request("get_file_rows_request", payload)
   alt tauri mode
-    Client->>Cmd: invoke(command, payload)
-    Cmd->>Svc: 校验并委派
-    Svc->>Repo: 读取 / 写入 / 查询 / 处理
-    Repo-->>Svc: 领域或核心结果
-    Svc-->>Cmd: transport DTO
+    Client->>Cmd: invoke({request:{parentId, offset, limit, showHidden, sortKey, sortDirection}})
+    Cmd->>Svc: get_file_rows_for_request(...)
+    Svc->>Repo: 读取当前目录可见集合
+    Repo-->>Svc: FileEntry[]
+    Svc->>Svc: 过滤 hidden/system
+    Svc->>Svc: 目录优先 + 状态后置 + 主排序 + 自然名兜底
+    Svc->>Svc: 排序后分页切片
+    Svc-->>Cmd: FileRowsPageDto(rows with deleted/hidden/system)
     Cmd-->>Client: Result<T, String>
   else mock mode
-    Client-->>API: mock provider 结果
+    Client-->>API: mock rows
+    API->>API: 前端展示级排序兜底
   end
   Client-->>API: 类型化响应
-  API-->>Hook: data
-  Hook-->>UI: 渲染状态
+  API-->>Hook: page DTO
+  Hook-->>UI: 渲染列表、图标状态与面包屑
 ```
 
 ## 6. Backend Event Push 序列图
@@ -275,53 +295,64 @@ sequenceDiagram
 ```mermaid
 flowchart TB
   Start["导入数据源请求"]
-  Validate["校验案件与源路径"]
-  Job["创建导入任务"]
-  Probe["探测源类型<br/>logical/raw/e01"]
-  Reader["打开只读 reader"]
-  Hash["可选证据 hash/provenance"]
-  Volume["识别卷系统<br/>MBR/GPT/none"]
-  Partitions["持久化分区记录"]
-  FSLoop["遍历支持的分区"]
-  FsOpen["打开文件系统 parser<br/>NTFS/FAT/exFAT"]
-  Enumerate["枚举根目录或 staged 文件条目"]
-  Store["写入 file_entries 与进度"]
-  Partial["发出 partial result 与 phase progress"]
-  Finish["标记任务完成"]
-  Fail["标记任务失败并脱敏错误"]
+  Validate["校验案件、源路径、只读打开"]
+  Probe["detect_image_filesystem<br/>探测 logical/raw/e01 与分区候选"]
+  PersistDS["持久化 data source 与 partition records"]
+  Placeholder["按 partition index 插入 placeholder root<br/>__partition_placeholder__/{index}/{status}"]
+  PartitionLoop["按分区遍历候选文件系统"]
+  SelectMode{"枚举模式"}
+  Serial["串行枚举<br/>replace_placeholder_root_with_real(...)"]
+  Parallel["并行枚举到 staging DB"]
+  Locked["locked / unsupported<br/>保留 placeholder 作为可见分区根"]
+  Merge["按 partition index 合并 staging"]
+  Fold["折叠裸根 \\ / / / .<br/>并重挂顶层目录到分区根"]
+  Promote["提升 placeholder 显示名<br/>Partition n (LABEL)"]
+  Progress["更新 job 进度与阶段事件"]
+  Finish["导入完成"]
+  Fail["失败 / warning / partial"]
 
-  Start --> Validate --> Job --> Probe --> Reader --> Hash --> Volume --> Partitions --> FSLoop
-  FSLoop --> FsOpen --> Enumerate --> Store --> Partial --> Finish
-  Probe -->|不支持| Fail
-  Reader -->|打开失败| Fail
-  FsOpen -->|不支持的文件系统| Partial
-  Enumerate -->|可恢复 warning| Partial
-  Enumerate -->|致命错误| Fail
+  Start --> Validate --> Probe --> PersistDS --> Placeholder --> PartitionLoop
+  PartitionLoop --> SelectMode
+  SelectMode -->|NTFS / FAT / exFAT 串行| Serial
+  SelectMode -->|并行 staging| Parallel
+  SelectMode -->|BitLocker / unsupported| Locked
+  Serial --> Progress
+  Parallel --> Merge --> Fold --> Promote --> Progress
+  Locked --> Progress
+  Progress --> Finish
+  Probe -->|无法识别 / reader 失败| Fail
+  Serial -->|recoverable warning| Fail
+  Merge -->|事务失败| Fail
 ```
 
-## 8. 文件系统枚举与目录树懒加载
+## 8. 文件系统枚举、树根归一化与文件浏览排序
 
 ```mermaid
-flowchart LR
-  UI["FileBrowser 页面"]
-  Hook["useFileChildren / useFileRows"]
-  API["files API"]
-  Command["get_file_children_request"]
+flowchart TB
+  TreeReq["get_file_tree_request(showHidden)"]
+  ChildReq["get_file_children_request(parentId, offset, limit, showHidden)"]
+  RowReq["get_file_rows_request(parentId, offset, limit, showHidden, sortKey, sortDirection)"]
+  Command["Tauri file commands"]
   Service["file_service"]
-  Repo["file_repo"]
-  FS["filesystem reader 回退"]
-  Page["分页 children DTO"]
+  Repo["file_entries / partitions repo"]
+  Visible["可见性过滤<br/>showHidden=false 时过滤 hidden/system"]
+  Normalize["首层残留裸根读侧归一化<br/>\\ / / / . -> 分区显示名"]
+  TreeSort["树排序<br/>目录自然名称升序"]
+  RowSort["列表排序<br/>目录优先 -> 状态后置 -> 主字段 -> 自然名兜底"]
+  Page["排序后分页切片"]
+  Dto["FileTreeNodeDto / FileEntryRowDto"]
+  Frontend["FileBrowser<br/>formatPartitionDisplayName + FileIconWithStatusOverlay"]
 
-  UI --> Hook
-  Hook --> API
-  API --> Command
-  Command --> Service
-  Service --> Repo
-  Service -->|缓存未命中或直接读取路径| FS
-  Repo --> Page
-  FS --> Page
-  Page --> Hook
-  Hook --> UI
+  TreeReq --> Command
+  ChildReq --> Command
+  RowReq --> Command
+  Command --> Service --> Repo
+  Repo --> Visible --> Normalize
+  Normalize --> TreeSort
+  Normalize --> RowSort
+  TreeSort --> Page
+  RowSort --> Page
+  Page --> Dto --> Frontend
 ```
 
 ## 9. 搜索索引与查询流程
@@ -336,7 +367,7 @@ flowchart TB
   Query["搜索请求"]
   Parse["解析查询与过滤条件"]
   Searcher["Tantivy searcher"]
-  Highlight["构造 snippets/highlights"]
+  Highlight["构造 snippets / highlights"]
   Page["SearchResultPage DTO"]
 
   Files --> Extract --> Normalize --> Index --> Commit
@@ -352,9 +383,9 @@ flowchart TB
   Sources["来源<br/>文件元数据、工件、任务、parser"]
   Map["映射为归一化事件候选"]
   Validate["校验 timestamp 与 source_object_id"]
-  Enrich["补充 parser/provenance/confidence"]
+  Enrich["补充 parser / provenance / confidence"]
   Persist["持久化 timeline_events"]
-  Query["时间线查询<br/>range/type/source/page"]
+  Query["时间线查询<br/>range / type / source / page"]
   Indexes["SQLite 索引<br/>case_id, ts, type, source"]
   Aggregate["可选分组 / 聚合"]
   Dto["TimelineEventDto 分页"]
@@ -369,10 +400,10 @@ flowchart TB
 ```mermaid
 flowchart TB
   Candidate["候选文件或 registry hive"]
-  Select["选择 parser<br/>EVTX/Prefetch/LNK/JumpList/Registry/RecycleBin/SRU/Thumbcache"]
+  Select["选择 parser<br/>EVTX / Prefetch / LNK / JumpList / Registry / RecycleBin / SRU / Thumbcache"]
   Read["通过 evidence reader 有界读取"]
   Parse["解析记录"]
-  Recover{"是否可恢复问题?"}
+  Recover{"是否为可恢复问题?"}
   Artifact["ArtifactRow / artifact DB row"]
   Timeline["可选时间线事件"]
   Warn["带 source attribution 的 warning"]
@@ -384,7 +415,7 @@ flowchart TB
   Warn --> Artifact
   Artifact --> Timeline
   Read -->|invalid / truncated / unsupported| Warn
-  Parse -->|不允许 panic/OOM| Fatal
+  Parse -->|不得 panic / OOM| Fatal
 ```
 
 ## 12. 报告导出流程
@@ -393,7 +424,7 @@ flowchart TB
 flowchart LR
   Request["导出范围请求"]
   Validate["校验案件与输出路径"]
-  Collect["收集选中发现<br/>files/artifacts/timeline/tags"]
+  Collect["收集选中发现<br/>files / artifacts / timeline / tags"]
   ViewModel["构建报告 view model"]
   Render{"输出格式"}
   Html["HTML exporter"]
@@ -440,7 +471,7 @@ flowchart TB
   UI["MCP 设置 / 组件"]
   API["前端 MCP API"]
   Cmd["mcp_commands"]
-  Svc["app-services/state 中的 MCP 编排"]
+  Svc["app-services / state 中的 MCP 编排"]
   Client["mcp-client"]
   Stdio["Stdio transport"]
   SSE["SSE transport"]
@@ -456,6 +487,6 @@ flowchart TB
 
 ## 15. 审计使用说明
 
-- 修改架构、契约、事件、导入、搜索、时间线、工件、报告或 MCP 时，先更新对应图，再更新实现或审计记录。
-- Mermaid 图不替代代码审计；字段、索引、enum 和 payload 形状仍以源码和 migrations 为准。
-- 图谱中出现的新边界若尚未实现，必须在正文标注为设计目标，避免误导为当前能力。
+- 只要修改分区根模型、`showHidden`/排序契约、`deleted`/`hidden`/`system` 状态传播、导入 merge 规则或文件浏览读路径，就必须先同步本图谱。
+- Mermaid 图不替代代码审计；字段、索引、状态枚举和 payload 形状仍以源码、迁移和 `crates/transport` 为准。
+- 图谱只描述当前真实实现。尚未落地的想法应写入方案文档，不应混入这里伪装成既成事实。

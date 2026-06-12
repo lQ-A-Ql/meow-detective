@@ -925,6 +925,7 @@ fn liuyang_e01_visibility_filters_surface_hidden_system_entries_only_when_reques
                     offset: 0,
                     limit: 500,
                     show_hidden: false,
+                    ..Default::default()
                 },
             )
             .map_err(persistence_sqlite::DbError::System)?;
@@ -943,6 +944,7 @@ fn liuyang_e01_visibility_filters_surface_hidden_system_entries_only_when_reques
                     offset: 0,
                     limit: 500,
                     show_hidden: true,
+                    ..Default::default()
                 },
             )
             .map_err(persistence_sqlite::DbError::System)?;

@@ -22,6 +22,8 @@ Run commands from the repository root unless noted.
 - Test one Rust test by name: `cargo test -p <crate-name> <test_name>`
 - Build/check the Tauri Rust crate: `cargo check -p forensics-desktop`
 
+This is a Windows-first project that targets `x86_64-pc-windows-msvc`. Any cargo command that links (build, test, check, clippy with `--all-targets`) must run inside a Visual Studio developer environment (e.g. `vcvars64.bat` from the VS 2022 Build Tools) so the MSVC linker and Windows SDK lib paths resolve. Without it, a bash `PATH` resolves `link.exe` to Git's copy and linking fails, or `kernel32.lib`/`ntdll.lib` go unfound. `cargo fmt` does not link and works without it.
+
 ### Frontend
 
 The frontend package lives in `frontend/` and uses pnpm.

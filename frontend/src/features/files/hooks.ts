@@ -16,6 +16,7 @@ import {
   readFileRange,
 } from '@/lib/api/files';
 import { FileEntryRow } from '@/types/models';
+import type { FileSortKey, FileSortDirection } from '@/lib/file-sort';
 import { expectJobsSnapshotActivity } from '@/features/jobs/hooks';
 import { invalidateImportProjectionQueries } from '@/features/cache-invalidation';
 
@@ -41,10 +42,17 @@ export function useFileRows(parentId?: string, showHidden = false) {
   });
 }
 
-export function useFileRowsPage(parentId?: string, offset = 0, limit = 500, showHidden = false) {
+export function useFileRowsPage(
+  parentId?: string,
+  offset = 0,
+  limit = 500,
+  showHidden = false,
+  sortKey: FileSortKey = 'name',
+  sortDirection: FileSortDirection = 'asc',
+) {
   return useQuery({
-    queryKey: ['files', 'rows-page', parentId ?? null, offset, limit, showHidden],
-    queryFn: () => getFileRowsPage(parentId, offset, limit, showHidden),
+    queryKey: ['files', 'rows-page', parentId ?? null, offset, limit, showHidden, sortKey, sortDirection],
+    queryFn: () => getFileRowsPage(parentId, offset, limit, showHidden, sortKey, sortDirection),
     enabled: parentId !== undefined,
   });
 }

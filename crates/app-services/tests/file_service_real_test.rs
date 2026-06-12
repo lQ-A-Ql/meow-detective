@@ -54,8 +54,7 @@ fn import_visibility_fixture_directory(tmp: &TempDir) -> app_services::active_ca
     std::fs::write(evidence_dir.join("pagefile.sys"), b"system").unwrap();
 
     let active =
-        case_service::create_case(&tmp.path().join("cases"), "visibility", Some("tester"))
-            .unwrap();
+        case_service::create_case(&tmp.path().join("cases"), "visibility", Some("tester")).unwrap();
     let case_id = active.meta.id.clone();
 
     active
@@ -235,6 +234,7 @@ fn file_rows_and_children_are_limited_for_lazy_loading() {
                     offset: 0,
                     limit: 2,
                     show_hidden: false,
+                    ..Default::default()
                 },
             )
             .map_err(persistence_sqlite::DbError::System)?;
@@ -259,10 +259,9 @@ fn file_browser_visibility_respects_show_hidden_for_rows_and_tree() {
                 .pop()
                 .unwrap();
 
-            let visible_tree = file_service::get_file_children_lazy_with_visibility(
-                conn, &root.id, 0, 50, false,
-            )
-            .map_err(persistence_sqlite::DbError::System)?;
+            let visible_tree =
+                file_service::get_file_children_lazy_with_visibility(conn, &root.id, 0, 50, false)
+                    .map_err(persistence_sqlite::DbError::System)?;
             let visible_tree_names: Vec<&str> = visible_tree
                 .children
                 .iter()
@@ -277,18 +276,21 @@ fn file_browser_visibility_respects_show_hidden_for_rows_and_tree() {
                     offset: 0,
                     limit: 50,
                     show_hidden: false,
+                    ..Default::default()
                 },
             )
             .map_err(persistence_sqlite::DbError::System)?;
-            let visible_row_names: Vec<&str> =
-                visible_rows.rows.iter().map(|row| row.name.as_str()).collect();
+            let visible_row_names: Vec<&str> = visible_rows
+                .rows
+                .iter()
+                .map(|row| row.name.as_str())
+                .collect();
             assert_eq!(visible_row_names, vec!["visible-dir", "visible.txt"]);
             assert!(!visible_rows.rows.iter().any(|row| row.hidden || row.system));
 
-            let all_tree = file_service::get_file_children_lazy_with_visibility(
-                conn, &root.id, 0, 50, true,
-            )
-            .map_err(persistence_sqlite::DbError::System)?;
+            let all_tree =
+                file_service::get_file_children_lazy_with_visibility(conn, &root.id, 0, 50, true)
+                    .map_err(persistence_sqlite::DbError::System)?;
             let svi = all_tree
                 .children
                 .iter()
@@ -312,6 +314,7 @@ fn file_browser_visibility_respects_show_hidden_for_rows_and_tree() {
                     offset: 0,
                     limit: 50,
                     show_hidden: true,
+                    ..Default::default()
                 },
             )
             .map_err(persistence_sqlite::DbError::System)?;

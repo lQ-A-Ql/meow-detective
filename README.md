@@ -1,13 +1,13 @@
 # Forensics Workbench
 
-A Tauri 2 desktop application for disk image forensic analysis on Windows. 22 Rust crates, 8 frontend pages, 62 Tauri commands. MIT licensed.
+A Tauri 2 desktop application for disk image forensic analysis on Windows. 22 Rust crates, 8 frontend pages, 67 Tauri commands. MIT licensed.
 
 ## Architecture
 
 ```
 React UI (frontend/)  —  Vite + Tailwind 4 + React 18 + Zustand + TanStack Query
   ↓ Tauri invoke / events
-Tauri Command Layer (apps/desktop/src-tauri/commands/)  —  62 commands
+Tauri Command Layer (apps/desktop/src-tauri/commands/)  —  67 commands
   ↓
 Application Services (crates/app-services/)  —  20 source modules
   ↓
@@ -55,7 +55,7 @@ cd apps/desktop/src-tauri && cargo tauri build
 # Backend
 cargo test --workspace
 
-# Frontend (34 test files)
+# Frontend (41 test files)
 cd frontend && pnpm test
 
 # Frontend with coverage
@@ -70,7 +70,7 @@ cargo clippy --workspace --all-targets -- -D warnings  # Lint
 cargo test --workspace              # Backend workspace tests
 cd frontend && pnpm typecheck       # TypeScript strict check
 cd frontend && pnpm lint            # ESLint
-cd frontend && pnpm test            # 81 frontend tests (Vitest)
+cd frontend && pnpm test            # Frontend tests (Vitest)
 ```
 
 ## Project Structure
@@ -78,11 +78,11 @@ cd frontend && pnpm test            # 81 frontend tests (Vitest)
 | Directory | Description |
 |-----------|-------------|
 | `frontend/` | React 18 + TypeScript 5 + Vite 6 + Tailwind 4 |
-| `apps/desktop/src-tauri/` | Tauri 2 shell (62 commands) |
+| `apps/desktop/src-tauri/` | Tauri 2 shell (67 commands) |
 | `crates/domain/` | Core entities (Case, FileEntry, Artifact, etc.) |
 | `crates/transport/` | Shared DTOs, commands, events, errors |
-| `crates/app-services/` | Application-layer orchestration (19 services) |
-| `crates/persistence-sqlite/` | SQLite repos (9) and migration scripts (22) |
+| `crates/app-services/` | Application-layer orchestration (20 source modules) |
+| `crates/persistence-sqlite/` | SQLite repos (9) and migration scripts (23) |
 | `crates/evidence-core/` | Disk image probing, volume detection |
 | `crates/fs-ntfs/`, `fs-fat/`, `fs-exfat/` | Filesystem parsers |
 | `crates/image-e01/`, `image-raw/` | Image format readers |

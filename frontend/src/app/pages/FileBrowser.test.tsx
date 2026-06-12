@@ -16,8 +16,8 @@ const mocks = vi.hoisted(() => ({
   extractMutate: vi.fn(),
   navigate: vi.fn(),
   selectionState: {
-    selectedDirectoryId: 'root',
-    selectedFileId: 'video-1',
+    selectedDirectoryId: 'root' as string | undefined,
+    selectedFileId: 'video-1' as string | undefined,
     selectedSearchHitId: undefined as string | undefined,
     selectedTimelineId: undefined as string | undefined,
     selectedArtifactFamily: 'LNK',
@@ -309,13 +309,13 @@ describe('FileBrowser media preview', () => {
     renderPage();
 
     expect(mocks.fileTree).toHaveBeenCalledWith(false);
-    expect(mocks.fileRows).toHaveBeenCalledWith('root', 0, 500, false);
+    expect(mocks.fileRows).toHaveBeenCalledWith('root', 0, 500, false, 'name', 'asc');
     expect(screen.queryByText('System Volume Information')).toBeNull();
 
     fireEvent.click(screen.getByLabelText('显示隐藏文件'));
 
     await waitFor(() => expect(mocks.fileTree).toHaveBeenLastCalledWith(true));
-    await waitFor(() => expect(mocks.fileRows).toHaveBeenLastCalledWith('root', 0, 500, true));
+    await waitFor(() => expect(mocks.fileRows).toHaveBeenLastCalledWith('root', 0, 500, true, 'name', 'asc'));
     expect(screen.getByText('System Volume Information')).toBeDefined();
   });
 

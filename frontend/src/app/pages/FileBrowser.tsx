@@ -34,7 +34,6 @@ import {
 } from '@/features/files/hooks';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useUiStore } from '@/stores/ui-store';
-import { sortFileEntries } from '@/lib/file-sort';
 import { formatPartitionRootDisplayName } from '@/lib/partition-display';
 import {
   DataSourcePartition,
@@ -200,7 +199,9 @@ export function FileBrowser() {
     activeDirectoryId,
     rowsOffset,
     FILE_BROWSER_PAGE_LIMIT,
-    showHidden
+    showHidden,
+    fileSortKey,
+    fileSortDirection
   );
   const { data: activeChildrenPage } = useFileChildrenPage(
     activeDirectoryExpanded ? activeDirectoryId : undefined,
@@ -227,6 +228,11 @@ export function FileBrowser() {
   useEffect(() => {
     setRowsOffset(0);
   }, [activeDirectoryId]);
+
+  // 排序变化时回到第一页：排序由后端在完整可见集合上完成，分页随之失效。
+  useEffect(() => {
+    setRowsOffset(0);
+  }, [fileSortKey, fileSortDirection]);
 
   useEffect(() => {
     if (!activeDirectoryId || !activeChildren) {
@@ -364,11 +370,9 @@ export function FileBrowser() {
       )
     ).length ?? 0;
 
-  // 排序后的文件列表
-  const sortedRows = useMemo(() => {
-    if (!rows) return [];
-    return sortFileEntries(rows, fileSortKey, fileSortDirection);
-  }, [rows, fileSortKey, fileSortDirection]);
+  // 后端已在完整可见集合上完成「目录优先 + 状态后置 + 自然排序」并分页，
+  // 前端直接展示返回顺序，避免页内二次排序造成的假象。
+  const sortedRows = rows ?? [];
 
   const treeNodes = useMemo(
     () =>

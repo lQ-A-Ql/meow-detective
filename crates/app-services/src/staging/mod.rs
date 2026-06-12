@@ -4,868 +4,36 @@
 //! - Manifest tracking (partition state, progress, resume cursor)
 //! - Staging DB lifecycle (create, query, merge, cleanup)
 
-use infrastructure::constants::{MANIFEST_FILE_NAME, STAGING_DIR_NAME};
-use persistence_sqlite::DbResult;
+mod analysis_merge;
+mod cleanup;
+mod db_paths;
+mod enum_merge;
+mod manifest;
+mod schema_bootstrap;
+
+pub use analysis_merge::{merge_analysis_staging_to_main, AnalysisMergeStats};
+pub use cleanup::cleanup_staging;
+pub use db_paths::{analysis_staging_db_path, enum_staging_db_path, staging_db_path, staging_dir};
+pub use enum_merge::{
+    merge_all_staging_to_main, merge_all_staging_to_main_with_stats, StagingMergeStats,
+};
+pub use manifest::{ImportPhase, PartitionEntry, PartitionStatus, StagingManifest};
+pub use schema_bootstrap::{
+    analysis_staging_counts, get_staging_meta, get_worker_meta, open_analysis_staging,
+    open_enum_staging, open_partition_staging, set_staging_meta, set_worker_meta,
+    staging_db_row_count,
+};
+
+#[cfg(test)]
+use analysis_merge::{merge_one_analysis_index_docs, INDEX_DOC_MERGE_PAGE_SIZE};
+#[cfg(test)]
+use enum_merge::find_partition_placeholder_root_id_by_index;
+#[cfg(test)]
 use rusqlite::{params, Connection};
-use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+#[cfg(test)]
+use schema_bootstrap::{table_has_column, STAGING_CACHE_SIZE_KIB};
 
-const INDEX_DOC_MERGE_PAGE_SIZE: i64 = 50;
-const STAGING_CACHE_SIZE_KIB: i64 = 256 * 1024;
-const STAGING_MMAP_SIZE_BYTES: i64 = 256 * 1024 * 1024;
-
-// ---------------------------------------------------------------------------
-// Manifest types
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum ImportPhase {
-    Enumerating,
-    Merging,
-    PostProcessing,
-    Completed,
-    Failed,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum PartitionStatus {
-    Pending,
-    Running,
-    Done,
-    Failed,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PartitionEntry {
-    pub index: usize,
-    pub name: String,
-    pub fs_kind: String,
-    pub staging_db: String,
-    pub status: PartitionStatus,
-    pub file_count: u64,
-    pub dir_count: u64,
-    pub total_size: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub completed_at: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StagingManifest {
-    pub data_source_id: String,
-    pub source_path: String,
-    pub source_kind: String,
-    pub created_at: String,
-    pub phase: ImportPhase,
-    pub partitions: Vec<PartitionEntry>,
-}
-
-impl StagingManifest {
-    /// Create a new manifest for a data source import.
-    pub fn create(data_source_id: &str, source_path: &str, source_kind: &str) -> Self {
-        Self {
-            data_source_id: data_source_id.to_string(),
-            source_path: source_path.to_string(),
-            source_kind: source_kind.to_string(),
-            created_at: chrono::Utc::now().to_rfc3339(),
-            phase: ImportPhase::Enumerating,
-            partitions: Vec::new(),
-        }
-    }
-
-    /// Load an existing manifest from disk, if it exists.
-    pub fn load(case_root: &Path, data_source_id: &str) -> Option<Self> {
-        let path = manifest_path(case_root, data_source_id);
-        if !path.exists() {
-            return None;
-        }
-        let data = std::fs::read_to_string(&path).ok()?;
-        serde_json::from_str(&data).ok()
-    }
-
-    /// Save manifest to disk atomically (write .tmp then rename).
-    pub fn save(&self, case_root: &Path) -> Result<(), String> {
-        let path = manifest_path(case_root, &self.data_source_id);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        }
-        let json = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
-        let tmp_path = path.with_extension("json.tmp");
-        std::fs::write(&tmp_path, &json).map_err(|e| e.to_string())?;
-        std::fs::rename(&tmp_path, &path).map_err(|e| e.to_string())?;
-        Ok(())
-    }
-
-    /// Get partitions that need to be (re-)enumerated.
-    pub fn pending_partitions(&self) -> Vec<&PartitionEntry> {
-        self.partitions
-            .iter()
-            .filter(|p| p.status == PartitionStatus::Pending || p.status == PartitionStatus::Failed)
-            .collect()
-    }
-
-    /// Check if all partitions are done.
-    pub fn all_partitions_done(&self) -> bool {
-        !self.partitions.is_empty()
-            && self
-                .partitions
-                .iter()
-                .all(|p| p.status == PartitionStatus::Done)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Staging DB paths
-// ---------------------------------------------------------------------------
-
-/// Get the staging directory for a data source.
-pub fn staging_dir(case_root: &Path, data_source_id: &str) -> PathBuf {
-    case_root.join(STAGING_DIR_NAME).join(data_source_id)
-}
-
-/// Get the manifest file path.
-fn manifest_path(case_root: &Path, data_source_id: &str) -> PathBuf {
-    staging_dir(case_root, data_source_id).join(MANIFEST_FILE_NAME)
-}
-
-/// Get the staging DB path for a partition.
-pub fn staging_db_path(case_root: &Path, data_source_id: &str, partition_index: usize) -> PathBuf {
-    enum_staging_db_path(case_root, data_source_id, partition_index)
-}
-
-/// Get the enumeration staging DB path for a partition.
-pub fn enum_staging_db_path(
-    case_root: &Path,
-    data_source_id: &str,
-    partition_index: usize,
-) -> PathBuf {
-    staging_dir(case_root, data_source_id).join(format!("enum_partition_{}.db", partition_index))
-}
-
-fn legacy_partition_staging_db_path(
-    case_root: &Path,
-    data_source_id: &str,
-    partition_index: usize,
-) -> PathBuf {
-    staging_dir(case_root, data_source_id).join(format!("partition_{}.db", partition_index))
-}
-
-/// Resolve existing enum staging DBs created by older builds.
-fn existing_enum_staging_db_path(
-    case_root: &Path,
-    data_source_id: &str,
-    partition_index: usize,
-) -> PathBuf {
-    let current = enum_staging_db_path(case_root, data_source_id, partition_index);
-    if current.exists() {
-        return current;
-    }
-    let legacy = legacy_partition_staging_db_path(case_root, data_source_id, partition_index);
-    if legacy.exists() {
-        legacy
-    } else {
-        current
-    }
-}
-
-/// Get the analysis staging DB path for an analysis worker.
-pub fn analysis_staging_db_path(
-    case_root: &Path,
-    data_source_id: &str,
-    worker_id: usize,
-) -> PathBuf {
-    staging_dir(case_root, data_source_id).join(format!("analysis_worker_{}.db", worker_id))
-}
-
-// ---------------------------------------------------------------------------
-// Staging DB operations
-// ---------------------------------------------------------------------------
-
-/// Open (or create) a staging DB for a partition.
-pub fn open_partition_staging(
-    case_root: &Path,
-    data_source_id: &str,
-    partition_index: usize,
-) -> DbResult<Connection> {
-    open_enum_staging(case_root, data_source_id, partition_index)
-}
-
-/// Open (or create) an enumeration staging DB for a partition.
-pub fn open_enum_staging(
-    case_root: &Path,
-    data_source_id: &str,
-    partition_index: usize,
-) -> DbResult<Connection> {
-    let path = existing_enum_staging_db_path(case_root, data_source_id, partition_index);
-    let conn = open_staging_with_schema(
-        &path,
-        include_str!("../../persistence-sqlite/src/migrations/scripts/staging_001.sql"),
-    )?;
-    ensure_enum_staging_visibility_columns(&conn)?;
-    Ok(conn)
-}
-
-/// Open (or create) an analysis staging DB for a worker.
-pub fn open_analysis_staging(
-    case_root: &Path,
-    data_source_id: &str,
-    worker_id: usize,
-) -> DbResult<Connection> {
-    let path = analysis_staging_db_path(case_root, data_source_id, worker_id);
-    let conn = open_staging_with_schema(&path, ANALYSIS_STAGING_SCHEMA)?;
-    ensure_analysis_staging_provenance_columns(&conn)?;
-    Ok(conn)
-}
-
-fn open_staging_with_schema(path: &Path, schema: &str) -> DbResult<Connection> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let conn = Connection::open(path)?;
-    apply_staging_connection_pragmas(&conn)?;
-    conn.execute_batch(schema)?;
-    Ok(conn)
-}
-
-fn apply_staging_connection_pragmas(conn: &Connection) -> DbResult<()> {
-    conn.execute_batch(&format!(
-        "PRAGMA journal_mode=WAL;
-         PRAGMA synchronous=OFF;
-         PRAGMA temp_store=MEMORY;
-         PRAGMA foreign_keys=ON;
-         PRAGMA busy_timeout=5000;
-         PRAGMA cache_size=-{STAGING_CACHE_SIZE_KIB};
-         PRAGMA mmap_size={STAGING_MMAP_SIZE_BYTES};"
-    ))?;
-    Ok(())
-}
-
-fn ensure_analysis_staging_provenance_columns(conn: &Connection) -> DbResult<()> {
-    for (table, column, sql_type) in [
-        ("artifact_rows", "extractor_id", "TEXT"),
-        ("artifact_rows", "extractor_version", "TEXT"),
-        ("artifact_rows", "confidence", "REAL"),
-        ("artifact_rows", "source_attribution", "TEXT"),
-        ("timeline_rows", "parser_id", "TEXT"),
-        ("timeline_rows", "parser_version", "TEXT"),
-        ("timeline_rows", "confidence", "REAL"),
-        ("timeline_rows", "source_attribution", "TEXT"),
-    ] {
-        if !table_has_column(conn, table, column)? {
-            conn.execute(
-                &format!("ALTER TABLE {table} ADD COLUMN {column} {sql_type}"),
-                [],
-            )?;
-        }
-    }
-    Ok(())
-}
-
-fn ensure_enum_staging_visibility_columns(conn: &Connection) -> DbResult<()> {
-    for column in ["hidden", "system"] {
-        if !table_has_column(conn, "file_entries", column)? {
-            conn.execute(
-                &format!("ALTER TABLE file_entries ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0"),
-                [],
-            )?;
-        }
-    }
-    Ok(())
-}
-
-fn table_has_column(conn: &Connection, table: &str, column: &str) -> DbResult<bool> {
-    conn.query_row(
-        &format!("SELECT COUNT(*) > 0 FROM pragma_table_info('{table}') WHERE name = ?1"),
-        [column],
-        |row| row.get(0),
-    )
-    .map_err(Into::into)
-}
-
-/// Get the count of rows in a staging DB.
-pub fn staging_db_row_count(conn: &Connection) -> DbResult<u64> {
-    let count: i64 = conn.query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))?;
-    Ok(count as u64)
-}
-
-/// Set a metadata key in a staging DB.
-pub fn set_staging_meta(conn: &Connection, key: &str, value: &str) -> DbResult<()> {
-    conn.execute(
-        "INSERT OR REPLACE INTO staging_meta (key, value) VALUES (?1, ?2)",
-        params![key, value],
-    )?;
-    Ok(())
-}
-
-/// Get a metadata key from a staging DB.
-pub fn get_staging_meta(conn: &Connection, key: &str) -> DbResult<Option<String>> {
-    let mut stmt = conn.prepare("SELECT value FROM staging_meta WHERE key = ?1")?;
-    let mut rows = stmt.query_map(params![key], |row| row.get::<_, String>(0))?;
-    match rows.next() {
-        Some(Ok(v)) => Ok(Some(v)),
-        _ => Ok(None),
-    }
-}
-
-/// Set a metadata key in an analysis staging DB.
-pub fn set_worker_meta(conn: &Connection, key: &str, value: &str) -> DbResult<()> {
-    conn.execute(
-        "INSERT OR REPLACE INTO worker_meta (key, value) VALUES (?1, ?2)",
-        params![key, value],
-    )?;
-    Ok(())
-}
-
-/// Get a metadata key from an analysis staging DB.
-pub fn get_worker_meta(conn: &Connection, key: &str) -> DbResult<Option<String>> {
-    let mut stmt = conn.prepare("SELECT value FROM worker_meta WHERE key = ?1")?;
-    let mut rows = stmt.query_map(params![key], |row| row.get::<_, String>(0))?;
-    match rows.next() {
-        Some(Ok(v)) => Ok(Some(v)),
-        _ => Ok(None),
-    }
-}
-
-pub fn analysis_staging_counts(conn: &Connection) -> DbResult<(u64, u64, u64)> {
-    let artifact_count: i64 =
-        conn.query_row("SELECT COUNT(*) FROM artifact_rows", [], |row| row.get(0))?;
-    let timeline_count: i64 =
-        conn.query_row("SELECT COUNT(*) FROM timeline_rows", [], |row| row.get(0))?;
-    let index_count: i64 =
-        conn.query_row("SELECT COUNT(*) FROM index_docs", [], |row| row.get(0))?;
-    Ok((
-        artifact_count as u64,
-        timeline_count as u64,
-        index_count as u64,
-    ))
-}
-
-const ANALYSIS_STAGING_SCHEMA: &str = r#"
-CREATE TABLE IF NOT EXISTS artifact_rows (
-    id TEXT PRIMARY KEY NOT NULL,
-    file_id TEXT,
-    artifact_type TEXT NOT NULL,
-    extractor_id TEXT,
-    extractor_version TEXT,
-    confidence REAL,
-    source_attribution TEXT,
-    display_name TEXT NOT NULL,
-    summary TEXT NOT NULL DEFAULT '',
-    data_json TEXT NOT NULL DEFAULT '{}',
-    source_path TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS timeline_rows (
-    id TEXT PRIMARY KEY NOT NULL,
-    file_id TEXT NOT NULL,
-    timestamp TEXT NOT NULL,
-    event_type TEXT NOT NULL,
-    parser_id TEXT,
-    parser_version TEXT,
-    confidence REAL,
-    source_attribution TEXT,
-    title TEXT NOT NULL,
-    description TEXT NOT NULL DEFAULT '',
-    data_json TEXT NOT NULL DEFAULT '{}'
-);
-
-CREATE TABLE IF NOT EXISTS index_docs (
-    file_id TEXT PRIMARY KEY NOT NULL,
-    path TEXT NOT NULL,
-    text TEXT NOT NULL,
-    language TEXT NOT NULL DEFAULT 'unknown',
-    truncated INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS worker_meta (
-    key TEXT PRIMARY KEY NOT NULL,
-    value TEXT NOT NULL
-);
-"#;
-
-// ---------------------------------------------------------------------------
-// Merge
-// ---------------------------------------------------------------------------
-
-/// Merge all staging DBs into the main case.db.
-///
-/// For each staging DB:
-/// 1. ATTACH DATABASE
-/// 2. INSERT INTO main.file_entries SELECT * FROM staging.file_entries (in batches)
-/// 3. DETACH DATABASE
-///
-/// Returns total merged file count.
-pub fn merge_all_staging_to_main(
-    main_conn: &Connection,
-    case_root: &Path,
-    data_source_id: &str,
-    manifest: &StagingManifest,
-    progress_cb: Option<&dyn Fn(usize, usize)>, // (completed_partitions, total)
-) -> Result<u64, String> {
-    merge_all_staging_to_main_with_stats(
-        main_conn,
-        case_root,
-        data_source_id,
-        manifest,
-        progress_cb,
-    )
-    .map(|stats| stats.merged_rows)
-}
-
-/// Merge all staging DBs into the main case.db and return row accounting.
-pub fn merge_all_staging_to_main_with_stats(
-    main_conn: &Connection,
-    case_root: &Path,
-    data_source_id: &str,
-    manifest: &StagingManifest,
-    progress_cb: Option<&dyn Fn(usize, usize)>, // (completed_partitions, total)
-) -> Result<StagingMergeStats, String> {
-    let total = manifest.partitions.len();
-    let mut stats = StagingMergeStats::default();
-
-    for (i, partition) in manifest.partitions.iter().enumerate() {
-        if partition.status != PartitionStatus::Done {
-            continue;
-        }
-
-        let db_path = existing_enum_staging_db_path(case_root, data_source_id, partition.index);
-        if !db_path.exists() {
-            continue;
-        }
-
-        let staging_conn = open_partition_staging(case_root, data_source_id, partition.index)
-            .map_err(|e| format!("Open staging DB {}: {}", partition.index, e))?;
-        if get_staging_meta(&staging_conn, "merged")
-            .map_err(|e| format!("Read staging merge state {}: {}", partition.index, e))?
-            .as_deref()
-            == Some("true")
-        {
-            if let Some(cb) = progress_cb {
-                cb(i + 1, total);
-            }
-            continue;
-        }
-        drop(staging_conn);
-
-        let merge_started = Instant::now();
-        let partition_stats =
-            merge_one_staging_partition(main_conn, &db_path, data_source_id, partition)?;
-        tracing::info!(
-            "Enum staging merge profile: partition={} stagingRows={} mergedRows={} ignoredRows={} elapsedMs={} rowsPerSec={}",
-            partition.index,
-            partition_stats.staging_rows,
-            partition_stats.merged_rows,
-            partition_stats.ignored_rows,
-            merge_started.elapsed().as_millis(),
-            rows_per_sec(partition_stats.merged_rows, merge_started.elapsed())
-        );
-        let staging_conn = open_partition_staging(case_root, data_source_id, partition.index)
-            .map_err(|e| format!("Reopen staging DB {}: {}", partition.index, e))?;
-        set_staging_meta(&staging_conn, "merged", "true")
-            .map_err(|e| format!("Mark staging DB {} merged: {}", partition.index, e))?;
-        stats.add(partition_stats);
-
-        if let Some(cb) = progress_cb {
-            cb(i + 1, total);
-        }
-    }
-
-    Ok(stats)
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct StagingMergeStats {
-    pub staging_rows: u64,
-    pub merged_rows: u64,
-    pub ignored_rows: u64,
-}
-
-impl StagingMergeStats {
-    fn add(&mut self, other: StagingMergeStats) {
-        self.staging_rows += other.staging_rows;
-        self.merged_rows += other.merged_rows;
-        self.ignored_rows += other.ignored_rows;
-    }
-}
-
-fn merge_one_staging_partition(
-    main_conn: &Connection,
-    db_path: &Path,
-    data_source_id: &str,
-    partition: &PartitionEntry,
-) -> Result<StagingMergeStats, String> {
-    let partition_index = partition.index;
-    let db_path_str = db_path.to_string_lossy().replace('\'', "''");
-    let attach_sql = format!("ATTACH DATABASE '{}' AS staging", db_path_str);
-    let result = (|| {
-        let placeholder_root_id =
-            find_partition_placeholder_root_id(main_conn, data_source_id, &partition.name)
-                .map_err(|e| format!("Resolve placeholder root {}: {}", partition_index, e))?;
-
-        main_conn
-            .execute_batch(&attach_sql)
-            .map_err(|e| format!("Attach staging DB {}: {}", partition_index, e))?;
-        main_conn
-            .execute_batch("BEGIN IMMEDIATE")
-            .map_err(|e| format!("Begin merge transaction {}: {}", partition_index, e))?;
-
-        if let Some(root_id) = placeholder_root_id.as_deref() {
-            promote_partition_placeholder_root(main_conn, root_id, &partition.name)
-                .map_err(|e| format!("Promote placeholder root {}: {}", partition_index, e))?;
-        }
-
-        let staging_rows: u64 = main_conn
-            .query_row("SELECT COUNT(*) FROM staging.file_entries", [], |row| {
-                row.get::<_, i64>(0)
-            })
-            .map(|count| count as u64)
-            .map_err(|e| format!("Count staging rows {}: {}", partition_index, e))?;
-
-        let inserted = if let Some(root_id) = placeholder_root_id.as_deref() {
-            main_conn
-                .execute(
-                    "INSERT INTO main.file_entries
-                     (id, parent_id, data_source_id, path, name, entry_type,
-                      size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256)
-                     SELECT
-                        id,
-                        CASE
-                          WHEN parent_id IS NULL THEN ?1
-                          WHEN parent_id = id THEN ?1
-                          WHEN parent_id IN (
-                            SELECT id FROM staging.file_entries
-                            WHERE parent_id IS NULL
-                              AND entry_type = 'directory'
-                              AND name IN ('\\', '/', '.')
-                          ) THEN ?1
-                          ELSE parent_id
-                        END,
-                        data_source_id,
-                        path,
-                        name,
-                        LOWER(entry_type),
-                        size,
-                        ext,
-                        deleted,
-                        hidden,
-                        system,
-                        created_at,
-                        modified_at,
-                        accessed_at,
-                        changed_at,
-                        hash_sha256
-                     FROM staging.file_entries
-                     WHERE NOT (
-                        parent_id IS NULL
-                        AND entry_type = 'directory'
-                        AND name IN ('\\', '/', '.')
-                     )",
-                    params![root_id],
-                )
-                .map_err(|e| format!("Merge partition {}: {}", partition_index, e))?
-        } else {
-            main_conn
-                .execute(
-                    "INSERT INTO main.file_entries
-                     (id, parent_id, data_source_id, path, name, entry_type,
-                      size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256)
-                     SELECT id, parent_id, data_source_id, path, name, LOWER(entry_type),
-                      size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256
-                     FROM staging.file_entries",
-                    [],
-                )
-                .map_err(|e| format!("Merge partition {}: {}", partition_index, e))?
-        };
-        let merged_rows = inserted as u64;
-
-        main_conn
-            .execute_batch("COMMIT")
-            .map_err(|e| format!("Commit merge transaction {}: {}", partition_index, e))?;
-        main_conn
-            .execute_batch("DETACH DATABASE staging")
-            .map_err(|e| format!("Detach staging DB {}: {}", partition_index, e))?;
-        Ok(StagingMergeStats {
-            staging_rows,
-            merged_rows,
-            ignored_rows: staging_rows.saturating_sub(merged_rows),
-        })
-    })();
-
-    if result.is_err() {
-        let _ = main_conn.execute_batch("ROLLBACK");
-        let _ = main_conn.execute_batch("DETACH DATABASE staging");
-    }
-
-    result
-}
-
-fn find_partition_placeholder_root_id(
-    conn: &Connection,
-    data_source_id: &str,
-    partition_name: &str,
-) -> rusqlite::Result<Option<String>> {
-    match conn.query_row(
-        "SELECT id
-         FROM file_entries
-         WHERE data_source_id = ?1
-           AND parent_id IS NULL
-           AND name = ?2
-           AND path GLOB '__partition_placeholder__/*'
-         LIMIT 1",
-        params![data_source_id, partition_name],
-        |row| row.get(0),
-    ) {
-        Ok(id) => Ok(Some(id)),
-        Err(rusqlite::Error::QueryReturnedNoRows) => conn
-            .query_row(
-                "SELECT id
-                 FROM file_entries
-                 WHERE data_source_id = ?1
-                   AND parent_id IS NULL
-                   AND path GLOB '__partition_placeholder__/*'
-                 ORDER BY id ASC
-                 LIMIT 1",
-                params![data_source_id],
-                |row| row.get(0),
-            )
-            .map(Some)
-            .or_else(|err| match err {
-                rusqlite::Error::QueryReturnedNoRows => Ok(None),
-                other => Err(other),
-            }),
-        Err(other) => Err(other),
-    }
-}
-
-fn promote_partition_placeholder_root(
-    conn: &Connection,
-    root_id: &str,
-    partition_name: &str,
-) -> rusqlite::Result<()> {
-    conn.execute(
-        "UPDATE file_entries
-         SET path = '', name = ?2
-         WHERE id = ?1",
-        params![root_id, partition_name],
-    )?;
-    Ok(())
-}
-
-/// Merge analysis worker staging DBs into the main DB and search index.
-pub fn merge_analysis_staging_to_main(
-    main_conn: &Connection,
-    case_root: &Path,
-    data_source_id: &str,
-    worker_ids: &[usize],
-    case_id: &str,
-    index_dir: &Path,
-    progress_cb: Option<&dyn Fn(usize, usize)>,
-) -> Result<AnalysisMergeStats, String> {
-    let mut stats = AnalysisMergeStats::default();
-    let total = worker_ids.len().max(1);
-
-    for (position, worker_id) in worker_ids.iter().enumerate() {
-        let db_path = analysis_staging_db_path(case_root, data_source_id, *worker_id);
-        if !db_path.exists() {
-            if let Some(cb) = progress_cb {
-                cb(position + 1, total);
-            }
-            continue;
-        }
-
-        let worker_conn = open_analysis_staging(case_root, data_source_id, *worker_id)
-            .map_err(|e| format!("Open analysis staging DB {}: {}", worker_id, e))?;
-        if get_worker_meta(&worker_conn, "merged")
-            .map_err(|e| format!("Read analysis merge state {}: {}", worker_id, e))?
-            .as_deref()
-            == Some("true")
-        {
-            if let Some(cb) = progress_cb {
-                cb(position + 1, total);
-            }
-            continue;
-        }
-        drop(worker_conn);
-
-        let worker_merge_started = Instant::now();
-        let worker_stats =
-            merge_one_analysis_worker(main_conn, &db_path, *worker_id, case_id, data_source_id)?;
-        tracing::info!(
-            "Analysis DB merge profile: worker={} artifacts={} timeline={} elapsedMs={} rowsPerSec={}",
-            worker_id,
-            worker_stats.artifact_count,
-            worker_stats.timeline_count,
-            worker_merge_started.elapsed().as_millis(),
-            rows_per_sec(
-                worker_stats.artifact_count + worker_stats.timeline_count,
-                worker_merge_started.elapsed()
-            )
-        );
-        stats.artifact_count += worker_stats.artifact_count;
-        stats.timeline_count += worker_stats.timeline_count;
-
-        let index_merge_started = Instant::now();
-        let indexed = merge_one_analysis_index_docs(&db_path, index_dir, *worker_id)?;
-        tracing::info!(
-            "Analysis index merge profile: worker={} indexed={} elapsedMs={} rowsPerSec={}",
-            worker_id,
-            indexed,
-            index_merge_started.elapsed().as_millis(),
-            rows_per_sec(indexed, index_merge_started.elapsed())
-        );
-        stats.indexed_count += indexed;
-
-        let worker_conn = open_analysis_staging(case_root, data_source_id, *worker_id)
-            .map_err(|e| format!("Reopen analysis staging DB {}: {}", worker_id, e))?;
-        set_worker_meta(&worker_conn, "merged", "true")
-            .map_err(|e| format!("Mark analysis staging DB {} merged: {}", worker_id, e))?;
-
-        if let Some(cb) = progress_cb {
-            cb(position + 1, total);
-        }
-    }
-
-    Ok(stats)
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct AnalysisMergeStats {
-    pub artifact_count: u64,
-    pub timeline_count: u64,
-    pub indexed_count: u64,
-}
-
-fn merge_one_analysis_worker(
-    main_conn: &Connection,
-    db_path: &Path,
-    worker_id: usize,
-    case_id: &str,
-    data_source_id: &str,
-) -> Result<AnalysisMergeStats, String> {
-    let db_path_str = db_path.to_string_lossy().replace('\'', "''");
-    let attach_sql = format!("ATTACH DATABASE '{}' AS analysis_stage", db_path_str);
-    let result = (|| {
-        main_conn
-            .execute_batch(&attach_sql)
-            .map_err(|e| format!("Attach analysis DB {}: {}", worker_id, e))?;
-        main_conn
-            .execute_batch("BEGIN IMMEDIATE")
-            .map_err(|e| format!("Begin analysis merge transaction {}: {}", worker_id, e))?;
-
-        let artifact_count = main_conn
-            .execute(
-                "INSERT INTO main.artifacts
-                 (id, case_id, data_source_id, artifact_type, source_object_id, extractor_id, extractor_version, confidence, source_attribution, title, summary, attrs, created_at)
-                  SELECT id, ?1, ?2, artifact_type, file_id, extractor_id, extractor_version, confidence, source_attribution, display_name, summary, data_json, created_at
-                  FROM analysis_stage.artifact_rows",
-                params![case_id, data_source_id],
-            )
-            .map_err(|e| format!("Merge analysis artifacts {}: {}", worker_id, e))?;
-
-        let timeline_count = main_conn
-            .execute(
-                "INSERT INTO main.timeline_events
-                 (id, case_id, source_object_id, event_type, ts, title, description, parser_id, parser_version, confidence, source_attribution, attrs)
-                  SELECT id, ?1, file_id, event_type, timestamp, title, description, parser_id, parser_version, confidence, source_attribution, data_json
-                  FROM analysis_stage.timeline_rows",
-                params![case_id],
-            )
-            .map_err(|e| format!("Merge analysis timeline {}: {}", worker_id, e))?;
-
-        main_conn
-            .execute_batch("COMMIT")
-            .map_err(|e| format!("Commit analysis merge transaction {}: {}", worker_id, e))?;
-        main_conn
-            .execute_batch("DETACH DATABASE analysis_stage")
-            .map_err(|e| format!("Detach analysis DB {}: {}", worker_id, e))?;
-
-        Ok(AnalysisMergeStats {
-            artifact_count: artifact_count as u64,
-            timeline_count: timeline_count as u64,
-            indexed_count: 0,
-        })
-    })();
-
-    if result.is_err() {
-        let _ = main_conn.execute_batch("ROLLBACK");
-        let _ = main_conn.execute_batch("DETACH DATABASE analysis_stage");
-    }
-
-    result
-}
-
-fn merge_one_analysis_index_docs(
-    db_path: &Path,
-    index_dir: &Path,
-    worker_id: usize,
-) -> Result<u64, String> {
-    let conn = Connection::open(db_path)
-        .map_err(|e| format!("Open analysis index docs {}: {}", worker_id, e))?;
-    let index = match search::SearchIndex::open(index_dir) {
-        Ok(index) => index,
-        Err(_) => search::SearchIndex::create(index_dir).map_err(|e| e.to_string())?,
-    };
-    let mut indexed_total = 0u64;
-    let mut offset = 0i64;
-    loop {
-        let mut stmt = conn
-            .prepare(
-                "SELECT file_id, path, text, language
-                 FROM index_docs
-                 WHERE text <> ''
-                 ORDER BY file_id
-                 LIMIT ?1 OFFSET ?2",
-            )
-            .map_err(|e| format!("Prepare index docs {}: {}", worker_id, e))?;
-        let rows = stmt
-            .query_map(params![INDEX_DOC_MERGE_PAGE_SIZE, offset], |row| {
-                let file_id: String = row.get(0)?;
-                let path: String = row.get(1)?;
-                let text: String = row.get(2)?;
-                let language: String = row.get(3)?;
-                Ok((file_id, path, text, language))
-            })
-            .map_err(|e| format!("Read index docs {}: {}", worker_id, e))?;
-
-        let mut texts = Vec::new();
-        let mut paths = Vec::new();
-        for row in rows {
-            let (file_id, path, text, language) =
-                row.map_err(|e| format!("Map index docs {}: {}", worker_id, e))?;
-            texts.push(search::ExtractedText {
-                file_id: file_id.clone(),
-                content: text,
-                encoding: language,
-                extractable: true,
-                byte_count: 0,
-            });
-            paths.push((file_id, path));
-        }
-        if texts.is_empty() {
-            break;
-        }
-
-        indexed_total += index
-            .index_documents(&texts, &paths)
-            .map_err(|e| e.to_string())?;
-        if texts.len() < INDEX_DOC_MERGE_PAGE_SIZE as usize {
-            break;
-        }
-        offset += INDEX_DOC_MERGE_PAGE_SIZE;
-    }
-    Ok(indexed_total)
-}
-
-fn rows_per_sec(rows: u64, duration: Duration) -> u64 {
+fn rows_per_sec(rows: u64, duration: std::time::Duration) -> u64 {
     let secs = duration.as_secs_f64();
     if secs <= 0.0 {
         rows
@@ -873,53 +41,6 @@ fn rows_per_sec(rows: u64, duration: Duration) -> u64 {
         (rows as f64 / secs).round() as u64
     }
 }
-
-/// Clean up staging directory for a data source.
-pub fn cleanup_staging(case_root: &Path, data_source_id: &str) {
-    let dir = staging_dir(case_root, data_source_id);
-    if dir.exists() {
-        checkpoint_staging_wal_files(&dir);
-        if let Err(err) = std::fs::remove_dir_all(&dir) {
-            tracing::warn!(
-                "Failed to remove staging directory {}: {}",
-                dir.display(),
-                err
-            );
-        }
-    }
-}
-
-fn checkpoint_staging_wal_files(dir: &Path) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("db") {
-            continue;
-        }
-
-        match Connection::open(&path) {
-            Ok(conn) => {
-                if let Err(err) = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);") {
-                    tracing::debug!(
-                        "Failed to checkpoint staging WAL {}: {}",
-                        path.display(),
-                        err
-                    );
-                }
-            }
-            Err(err) => {
-                tracing::debug!("Failed to open staging DB {}: {}", path.display(), err);
-            }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
@@ -1130,10 +251,22 @@ mod tests {
             merge_all_staging_to_main(&main_conn, tmp.path(), ds_id, &manifest, None).unwrap();
         assert_eq!(merged, 5);
 
+        // 5 merged staging rows + 1 synthesized partition placeholder root.
         let count: i64 = main_conn
             .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(count, 5);
+        assert_eq!(count, 6);
+
+        // The synthesized root is promoted to a single first-level partition
+        // root (path cleared, name set to the partition name) during merge.
+        let root_count: i64 = main_conn
+            .query_row(
+                "SELECT COUNT(*) FROM file_entries WHERE parent_id IS NULL AND name = 'P0'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(root_count, 1);
 
         let mixed_case_types: i64 = main_conn
             .query_row(
@@ -1254,10 +387,22 @@ mod tests {
             merge_all_staging_to_main(&main_conn, tmp.path(), ds_id, &manifest, None).unwrap();
         assert_eq!(merged, 5);
 
+        // 5 merged staging rows + 1 synthesized placeholder root per partition (2).
         let count: i64 = main_conn
             .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(count, 5);
+        assert_eq!(count, 7);
+
+        // One first-level partition root per partition (promoted from the
+        // synthesized placeholders; names set to P0/P1 during merge).
+        let root_count: i64 = main_conn
+            .query_row(
+                "SELECT COUNT(*) FROM file_entries WHERE parent_id IS NULL AND name IN ('P0', 'P1')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(root_count, 2);
     }
 
     #[test]
@@ -1287,10 +432,12 @@ mod tests {
 
         assert_eq!(first, 1);
         assert_eq!(second, 0);
+        // 1 merged staging row + 1 synthesized placeholder root; second merge is
+        // skipped (already merged) so no duplicate placeholder is created.
         let count: i64 = main_conn
             .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(count, 1);
+        assert_eq!(count, 2);
 
         let staging_conn = open_partition_staging(tmp.path(), ds_id, 0).unwrap();
         assert_eq!(
@@ -1850,5 +997,346 @@ mod tests {
     fn manifest_all_partitions_done_false_when_empty() {
         let m = StagingManifest::create("ds-1", "/test.E01", "E01");
         assert!(!m.all_partitions_done());
+    }
+
+    // ------------------------------------------------------------------
+    // Stage B: staging root folding into the partition placeholder
+    // ------------------------------------------------------------------
+
+    /// Insert a staging row with explicit parent/name/type for root-folding tests.
+    fn insert_staging_row(
+        conn: &Connection,
+        ds_id: &str,
+        id: &str,
+        parent: Option<&str>,
+        name: &str,
+        entry_type: &str,
+    ) {
+        conn.execute(
+            "INSERT INTO file_entries (id, parent_id, data_source_id, path, name, entry_type)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![id, parent, ds_id, format!("/{name}"), name, entry_type],
+        )
+        .unwrap();
+    }
+
+    fn single_done_manifest(ds_id: &str, name: &str) -> StagingManifest {
+        let mut manifest = StagingManifest::create(ds_id, "/test.E01", "E01");
+        manifest.partitions.push(PartitionEntry {
+            index: 0,
+            name: name.to_string(),
+            fs_kind: "Ntfs".to_string(),
+            staging_db: "partition_0.db".to_string(),
+            status: PartitionStatus::Done,
+            file_count: 0,
+            dir_count: 0,
+            total_size: 0,
+            last_path: None,
+            completed_at: None,
+            error: None,
+        });
+        manifest
+    }
+
+    /// Pre-seed a partition-0 placeholder root in the main DB and return its id.
+    fn seed_placeholder(main_conn: &Connection, ds_id: &str, name: &str) -> String {
+        crate::file_service::insert_partition_placeholder_root(
+            main_conn,
+            &domain::DataSourceId(ds_id.to_string()),
+            0,
+            name,
+            "queued",
+        )
+        .unwrap()
+        .0
+    }
+
+    fn first_level_roots(main_conn: &Connection) -> Vec<String> {
+        let mut stmt = main_conn
+            .prepare("SELECT name FROM file_entries WHERE parent_id IS NULL ORDER BY name")
+            .unwrap();
+        stmt.query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    }
+
+    #[test]
+    fn placeholder_index_lookup_does_not_collide_on_digit_prefix() {
+        // Regression guard: the index lookup GLOB is `__partition_placeholder__/{index}/*`.
+        // A query for index 1 must NOT match index 12's placeholder, because the
+        // literal `/` after the index anchors the segment. Seed ONLY index 12,
+        // then look up index 1 — it must return None, never partition 12's root.
+        let main_conn = persistence_sqlite::connection::open_in_memory().unwrap();
+        create_main_file_entries_table(&main_conn);
+        let ds_id = "ds-glob-collision";
+
+        let id_12 = crate::file_service::insert_partition_placeholder_root(
+            &main_conn,
+            &domain::DataSourceId(ds_id.to_string()),
+            12,
+            "Partition 12 (NTFS)",
+            "queued",
+        )
+        .unwrap()
+        .0;
+
+        // Looking up index 1 must not find index 12's placeholder.
+        let one = find_partition_placeholder_root_id_by_index(&main_conn, ds_id, 1).unwrap();
+        assert_eq!(
+            one, None,
+            "index 1 lookup must not match index 12 placeholder"
+        );
+
+        // And index 12 finds exactly its own placeholder.
+        let twelve = find_partition_placeholder_root_id_by_index(&main_conn, ds_id, 12).unwrap();
+        assert_eq!(twelve.as_deref(), Some(id_12.as_str()));
+
+        // Conversely, seed index 1 too and confirm each resolves to itself.
+        let id_1 = crate::file_service::insert_partition_placeholder_root(
+            &main_conn,
+            &domain::DataSourceId(ds_id.to_string()),
+            1,
+            "Partition 1 (NTFS)",
+            "queued",
+        )
+        .unwrap()
+        .0;
+        assert_eq!(
+            find_partition_placeholder_root_id_by_index(&main_conn, ds_id, 1)
+                .unwrap()
+                .as_deref(),
+            Some(id_1.as_str())
+        );
+        assert_eq!(
+            find_partition_placeholder_root_id_by_index(&main_conn, ds_id, 12)
+                .unwrap()
+                .as_deref(),
+            Some(id_12.as_str())
+        );
+    }
+
+    #[test]
+    fn merge_folds_null_parent_synthetic_root_and_reparents_children() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let main_conn = persistence_sqlite::connection::open_in_memory().unwrap();
+        create_main_file_entries_table(&main_conn);
+        let ds_id = "ds-fold-null-root";
+        let ph = seed_placeholder(&main_conn, ds_id, "Partition 0 (NTFS)");
+
+        let staging = open_partition_staging(tmp.path(), ds_id, 0).unwrap();
+        // Synthetic NTFS root (NULL parent, name `\`) + a child directory.
+        insert_staging_row(&staging, ds_id, "root5", None, "\\", "directory");
+        insert_staging_row(
+            &staging,
+            ds_id,
+            "win",
+            Some("root5"),
+            "Windows",
+            "directory",
+        );
+        drop(staging);
+
+        merge_all_staging_to_main(
+            &main_conn,
+            tmp.path(),
+            ds_id,
+            &single_done_manifest(ds_id, "Partition 0 (NTFS)"),
+            None,
+        )
+        .unwrap();
+
+        // Synthetic `\` root is not inserted; the only first-level root is the partition.
+        assert_eq!(
+            first_level_roots(&main_conn),
+            vec!["Partition 0 (NTFS)".to_string()]
+        );
+        // Child re-parented onto the placeholder.
+        let win_parent: String = main_conn
+            .query_row(
+                "SELECT parent_id FROM file_entries WHERE id = 'win'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(win_parent, ph);
+    }
+
+    #[test]
+    fn merge_folds_self_referential_root() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let main_conn = persistence_sqlite::connection::open_in_memory().unwrap();
+        create_main_file_entries_table(&main_conn);
+        let ds_id = "ds-fold-self-root";
+        let ph = seed_placeholder(&main_conn, ds_id, "Partition 0 (NTFS)");
+
+        let staging = open_partition_staging(tmp.path(), ds_id, 0).unwrap();
+        // Self-referential root (parent_id = id, name `.`).
+        insert_staging_row(
+            &staging,
+            ds_id,
+            "selfroot",
+            Some("selfroot"),
+            ".",
+            "directory",
+        );
+        insert_staging_row(
+            &staging,
+            ds_id,
+            "docs",
+            Some("selfroot"),
+            "Docs",
+            "directory",
+        );
+        drop(staging);
+
+        merge_all_staging_to_main(
+            &main_conn,
+            tmp.path(),
+            ds_id,
+            &single_done_manifest(ds_id, "Partition 0 (NTFS)"),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            first_level_roots(&main_conn),
+            vec!["Partition 0 (NTFS)".to_string()]
+        );
+        let docs_parent: String = main_conn
+            .query_row(
+                "SELECT parent_id FROM file_entries WHERE id = 'docs'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(docs_parent, ph);
+    }
+
+    #[test]
+    fn merge_folds_slash_named_root() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let main_conn = persistence_sqlite::connection::open_in_memory().unwrap();
+        create_main_file_entries_table(&main_conn);
+        let ds_id = "ds-fold-slash-root";
+        seed_placeholder(&main_conn, ds_id, "Partition 0 (FAT)");
+
+        let staging = open_partition_staging(tmp.path(), ds_id, 0).unwrap();
+        insert_staging_row(&staging, ds_id, "root", None, "/", "directory");
+        insert_staging_row(&staging, ds_id, "f1", Some("root"), "boot.ini", "file");
+        drop(staging);
+
+        merge_all_staging_to_main(
+            &main_conn,
+            tmp.path(),
+            ds_id,
+            &single_done_manifest(ds_id, "Partition 0 (FAT)"),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            first_level_roots(&main_conn),
+            vec!["Partition 0 (FAT)".to_string()]
+        );
+    }
+
+    #[test]
+    fn merge_synthesizes_root_when_placeholder_missing() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let main_conn = persistence_sqlite::connection::open_in_memory().unwrap();
+        create_main_file_entries_table(&main_conn);
+        let ds_id = "ds-synth-missing";
+        // NOTE: no placeholder seeded — exercises the synthesis branch.
+
+        let staging = open_partition_staging(tmp.path(), ds_id, 0).unwrap();
+        insert_staging_row(&staging, ds_id, "root5", None, "\\", "directory");
+        insert_staging_row(
+            &staging,
+            ds_id,
+            "win",
+            Some("root5"),
+            "Windows",
+            "directory",
+        );
+        drop(staging);
+
+        merge_all_staging_to_main(
+            &main_conn,
+            tmp.path(),
+            ds_id,
+            &single_done_manifest(ds_id, "Partition 0 (NTFS)"),
+            None,
+        )
+        .unwrap();
+
+        // No bare `\` leaks to the first level — a partition root is synthesized.
+        let roots = first_level_roots(&main_conn);
+        assert_eq!(roots, vec!["Partition 0 (NTFS)".to_string()]);
+        assert!(!roots.iter().any(|n| n == "\\"));
+        // The child hangs under the synthesized+promoted root.
+        let win_parent: Option<String> = main_conn
+            .query_row(
+                "SELECT parent_id FROM file_entries WHERE id = 'win'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let root_id: String = main_conn
+            .query_row(
+                "SELECT id FROM file_entries WHERE parent_id IS NULL",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(win_parent, Some(root_id));
+    }
+
+    #[test]
+    fn merge_keeps_fat_top_level_entries_under_partition_root() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let main_conn = persistence_sqlite::connection::open_in_memory().unwrap();
+        create_main_file_entries_table(&main_conn);
+        let ds_id = "ds-fat-efi";
+        let ph = seed_placeholder(&main_conn, ds_id, "Partition 0 (FAT)");
+
+        // FAT path has no synthetic root: real top-level entries (EFI) have a
+        // NULL parent directly and must be re-parented (kept), not dropped.
+        let staging = open_partition_staging(tmp.path(), ds_id, 0).unwrap();
+        insert_staging_row(&staging, ds_id, "efi", None, "EFI", "directory");
+        insert_staging_row(&staging, ds_id, "boot", Some("efi"), "Boot", "directory");
+        drop(staging);
+
+        merge_all_staging_to_main(
+            &main_conn,
+            tmp.path(),
+            ds_id,
+            &single_done_manifest(ds_id, "Partition 0 (FAT)"),
+            None,
+        )
+        .unwrap();
+
+        // First level is only the partition root; EFI is now its child.
+        assert_eq!(
+            first_level_roots(&main_conn),
+            vec!["Partition 0 (FAT)".to_string()]
+        );
+        let efi_parent: String = main_conn
+            .query_row(
+                "SELECT parent_id FROM file_entries WHERE id = 'efi'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(efi_parent, ph);
+        // EFI itself is retained (not dropped as a synthetic root).
+        let efi_exists: i64 = main_conn
+            .query_row(
+                "SELECT COUNT(*) FROM file_entries WHERE id = 'efi'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(efi_exists, 1);
     }
 }

@@ -9,6 +9,7 @@ import {
   MediaUrl,
   ViewerRangeRequest,
 } from '@/types/models';
+import { sortFileEntries, type FileSortKey, type FileSortDirection } from '@/lib/file-sort';
 import { apiClient } from './client';
 
 export async function getFileTree(showHidden = false) {
@@ -29,20 +30,25 @@ export async function getFileRowsPage(
   offset = 0,
   limit = 500,
   showHidden = false,
+  sortKey: FileSortKey = 'name',
+  sortDirection: FileSortDirection = 'asc',
 ): Promise<FileRowsPage> {
   return apiClient.request(
     'get_file_rows_request',
     async () => {
       const rows = await apiClient.getMockProvider().getFileRows(parentId, showHidden);
+      // Mock mode mirrors the backend's directory-first + status-last + natural
+      // sort so the standalone UI matches live behavior.
+      const sorted = sortFileEntries(rows, sortKey, sortDirection);
       return {
-        rows: rows.slice(offset, offset + limit),
-        totalCount: rows.length,
+        rows: sorted.slice(offset, offset + limit),
+        totalCount: sorted.length,
         offset,
         limit,
-        truncated: offset + limit < rows.length,
+        truncated: offset + limit < sorted.length,
       };
     },
-    { request: { parentId: parentId ?? null, offset, limit, showHidden } },
+    { request: { parentId: parentId ?? null, offset, limit, showHidden, sortKey, sortDirection } },
   );
 }
 
