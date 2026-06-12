@@ -1,43 +1,35 @@
 # Rust
-target/
-coverage/
-artifacts/
+/target/
+/coverage/
+/artifacts/
 
 # Node
-node_modules/
-frontend/dist/
-frontend/node_modules/
-frontend/coverage/
-package-lock.json
+/node_modules/
+/frontend/dist/
+/frontend/node_modules/
+/frontend/coverage/
+/package-lock.json
 
 # Tauri (auto-generated)
-apps/desktop/src-tauri/gen/
+/apps/desktop/src-tauri/gen/
 *.wasm
 
 # IDE
-.idea/
+/.idea/
 *.sw[a-zA-Z]
 *~
-.omo/
-.pi/
-.context/
+/.omo/
+/.pi/
+/.context/
 
 # OS
 .DS_Store
 Thumbs.db
 
 # Editor / AI config (personal)
-.obsidian/
-.claude/
+/.obsidian/
+/.claude/
 
 # Build output
 *.o
 *.exe
-
-.claude/
-.pi/
-.omo/
-
-demo*
-autopsy*
-development*
