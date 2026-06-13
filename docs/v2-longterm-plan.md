@@ -1,4 +1,27 @@
 # Forensics Workbench V2 闀挎湡鎵ц寮€鍙戣鍒?
+
+## 0. V2 Completion Status (as of 2026-06-13)
+
+**Overall: ~90% complete. Grade: B (81/100). All 7 real E01 regression tests pass.**
+
+### What V2 delivered (summary)
+
+| Stage | Completion | Key Deliverables |
+|---|---|---|
+| V2-1: Verifiable Trust | ~95% | Public-small/medium fixture layers; expected JSON per core chain (E01/NTFS/Prefetch/LNK/Registry/Recycle Bin); field guarantee levels; sample-driven support matrix; 7 real E01 regression cases all passing. |
+| V2-2: Cross-Artifact Correlation | ~85% | Unified correlation model (node/edge/cluster/lead/confidence/provenance); 10+ rule families; frontend CorrelationWorkspace; structured lead details in HTML/JSON/CSV reports; familyCoverage[] and families[] governance signals. |
+| V2-3: Performance & Scale | ~70% | Benchmark harness and baseline datasets; cold/warm thresholds for medium/large cases; cancel/recovery for long-running tasks. Remaining: automated nightly regression, memory boundary enforcement in CI. |
+| V2-4: Security Governance & Release | ~75% | MCP permission model; export path safety; media handle lifecycle; error desensitization taxonomy; release scorecard with hard gates; /v2 governance dashboard with real-time signals. |
+
+### Remaining for V2 closeout
+
+- Automated nightly regression pipeline (V2-3)
+- Memory/resource boundary enforcement in CI (V2-3)
+- Full security audit log coverage automation (V2-4)
+- Final release candidate drill with all regression gates (V2-4)
+
+
+
 ## 1. 鎽樿
 
 V2 鐨勭洰鏍囦笉鏄户缁爢鍔熻兘鐐癸紝鑰屾槸鎶婂綋鍓嶅凡缁忔垚褰㈢殑 Windows 鍙栬瘉閾捐矾鍋氭垚涓€濂楀彲楠岃瘉銆佸彲瑙ｉ噴銆佸彲鍥炲綊銆佸彲鍙戝竷鐨勪骇鍝佸寲鑳藉姏锛屽苟鍦ㄦ鍩虹涓婅ˉ榻愯法宸ヤ欢鍏宠仈鍒嗘瀽銆佽妯″寲绋冲畾鎬у拰瀹夊叏娌荤悊闂幆銆?
@@ -67,7 +90,7 @@ V2 浠ユ湰鏂囨。浣滀负闀挎湡鎵ц涓昏鍒掞紝骞剁敱浠ヤ
 - `docs/mcp-security-model.md`锛歁CP 鏉冮檺涓庡璁℃ā鍨?- `docs/export-and-media-safety.md`锛氬鍑恒€佹彁鍙栥€佸獟浣撳崗璁畨鍏ㄨ竟鐣?
 ## 3. Stage Design
 
-### Stage V2-1锛氬彲淇￠獙璇佷綋绯讳骇鍝佸寲
+### Stage V2-1：可信验证体系产品化  **[~95% complete]**
 
 #### 鐩爣
 
@@ -93,7 +116,7 @@ V2 浠ユ湰鏂囨。浣滀负闀挎湡鎵ц涓昏鍒掞紝骞剁敱浠ヤ
 - 姣忔潯鏍稿績閾捐矾鍧囨湁 expected JSON銆佸瓧娈典繚璇佺骇鍒€佺湡瀹炴牱鏈洖褰掕鏄?- `docs/parser-support-matrix.md`銆乣docs/known-unsupported-formats.md`銆乣docs/error-taxonomy.md` 閮借兘杩芥函鍒版牱鏈拰缁撴灉锛岃€屼笉鏄函鍙ｅ緞鎻忚堪
 - Browser / Email 鑷冲皯鍏峰 smoke fixture锛屽苟鏄庣‘浠嶅睘 Experimental
 
-### Stage V2-2锛氬宸ヤ欢鍏宠仈鍒嗘瀽涓庤皟鏌ュ伐浣滄祦
+### Stage V2-2：多工件关联分析与调查工作流  **[~85% complete]**
 
 #### 鐩爣
 
@@ -157,7 +180,7 @@ V2 浠ユ湰鏂囨。浣滀负闀挎湡鎵ц涓昏鍒掞紝骞剁敱浠ヤ
 - 绾跨储瑙嗗浘銆乼imeline銆乤rtifact 璇︽儏銆佹姤鍛婂鍑轰娇鐢ㄥ悓涓€濂楀叧鑱旂粨鏋?- 鑷冲皯 3 涓湡瀹炴渚?walkthrough 鑳界ǔ瀹氬鐜板悓涓€璋冩煡璺緞
 - 浠讳竴 lead 閮借兘璇存槑鏉ユ簮銆佸尮閰嶄緷鎹€佺疆淇″害鍜屾湭淇濊瘉瀛楁
 
-### Stage V2-3锛氭€ц兘銆佽妯′笌绋冲畾鎬ч獙璇?
+### Stage V2-3：性能、规模与稳定性验证  **[~70% complete]**
 
 #### 当前补充落地进度（2026-06-13）
 
@@ -187,7 +210,7 @@ V2 浠ユ湰鏂囨。浣滀负闀挎湡鎵ц涓昏鍒掞紝骞剁敱浠ヤ
 - benchmark 鍦ㄥ浐瀹氬涓婚厤缃笂鍙ǔ瀹氶噸澶嶏紝杩炵画 3 娆″亸宸湪鍙帴鍙楀尯闂村唴
 - medium / large 鏁版嵁闆嗚揪鍒版棦瀹氭€ц兘闃堝€?- 闀夸换鍔″彇娑堛€侀儴鍒嗗け璐ユ仮澶嶃€侀噸澶嶅鍏?/ 鏌ヨ銆乶ightly 鎱㈡祴鍏ㄩ儴鎺ュ叆鑷姩鍖?- 鏂囦欢鏍戙€佹悳绱€佹椂闂寸嚎銆乤rtifact 鎻愬彇涓嶅瓨鍦ㄥ凡鐭?P0 / P1 绾ф€ц兘闃绘柇
 
-### Stage V2-4锛氬畨鍏ㄦ不鐞嗕笌鍙戝竷娌荤悊
+### Stage V2-4：安全治理与发布治理  **[~75% complete]**
 
 #### 鐩爣
 
@@ -309,3 +332,33 @@ V2 浠ユ湰鏂囨。浣滀负闀挎湡鎵ц涓昏鍒掞紝骞剁敱浠ヤ
 - 寤虹珛 Evidence Graph锛屾妸鏂囦欢銆乤rtifact銆乼imeline銆乪ntity銆乴ead 缁熶竴鎴愬彲鏌ヨ鍥炬ā鍨?- 鎵╁睍瀹瑰櫒涓庣郴缁熻鐩栭潰锛歅ST/OST/mbox銆丷egistry transaction logs銆佹洿澶氭祻瑙堝櫒鐗堟湰銆佹洿澶氭枃浠剁郴缁熶笌 Linux/macOS 宸ヤ欢
 - 寮曞叆鍙鐜拌皟鏌ュ彊浜嬶細case notebook銆佽瘉鎹紩鐢ㄣ€佸垎鏋愭楠ゅ鎾€佹姤鍛婁笌鎿嶄綔鍘嗗彶鑱斿姩
 - 寤虹珛瑙勫垯鍖呬笌妯℃澘鏈哄埗锛氳皟鏌ユā鏉裤€佸懡涓鍒欏寘銆佺粍缁囩骇楠岃瘉閰嶇疆銆佽В閲婃€ц瘎鍒嗙瓥鐣?- 璇勪及绂荤嚎鎵瑰鐞嗕笌澶氶樁娈靛鍏?orchestration锛氬湪淇濇寔妗岄潰浼樺厛鍓嶆彁涓嬶紝涓鸿秴澶?case 鎻愪緵鍙仮澶嶃€佸彲鎺掗槦銆佸彲鍒嗛樁娈垫墽琛岀殑鏈湴鎵瑰鐞嗚兘鍔?
+
+
+# 0. V2 Completion Status (as of 2026-06-13)
+
+**Overall: ~90% complete. Grade: B (81/100). All 7 real E01 regression tests pass.**
+
+### What V2 delivered (summary)
+
+| Stage | Completion | Key Deliverables |
+|---|---|---|
+| V2-1: Verifiable Trust | ~95% | Public-small/medium fixture layers; expected JSON per core chain (E01/NTFS/Prefetch/LNK/Registry/Recycle Bin); field guarantee levels; sample-driven support matrix; 7 real E01 regression cases all passing. |
+| V2-2: Cross-Artifact Correlation | ~85% | Unified correlation model (node/edge/cluster/lead/confidence/provenance); 10+ rule families (LNK/Prefetch/Registry/RecycleBin/BrowserDownload/BrowserHistory/Email/JumpList); frontend `CorrelationWorkspace`; structured lead details in HTML/JSON/CSV reports; `familyCoverage[]` and `families[]` governance signals. |
+| V2-3: Performance & Scale | ~70% | Benchmark harness and baseline datasets; cold/warm thresholds for medium/large cases; cancel/recovery for long-running tasks; p95 targets for search/timeline/file-tree. Remaining: automated nightly regression, memory boundary enforcement in CI. |
+| V2-4: Security Governance & Release | ~75% | MCP permission model; export path safety; media handle lifecycle; error desensitization taxonomy; release scorecard with hard gates; `/v2` governance dashboard with real-time correlation/support-matrix/error-taxonomy/benchmark/release-policy signals. |
+
+### Remaining for V2 closeout
+
+- Automated nightly regression pipeline (V2-3)
+- Memory/resource boundary enforcement in CI (V2-3)
+- Full security audit log coverage automation (V2-4)
+- Final release candidate drill with all regression gates (V2-4)
+
+### Score breakdown
+
+- V2-1 (30pts): 28 earned — 1pt off for browser/email still Experimental; 1pt off for real-sample regression still manual-trigger only
+- V2-2 (25pts): 21 earned — 2pts off for remaining rule families (AD/Shellbags/SRU); 2pts off for investigator walkthrough docs incomplete
+- V2-3 (20pts): 14 earned — 3pts off for no automated CI regression; 3pts off for large-case validation incomplete
+- V2-4 (25pts): 18 earned — 2pts off for audit log coverage gaps; 2pts off for dependency advisory process not yet automated; 3pts off for no full RC drill executed
+
+

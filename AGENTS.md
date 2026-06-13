@@ -6,6 +6,8 @@
 
 Single-user, desktop-first, Windows-primary. No HTTP server — all frontend↔backend communication goes through Tauri commands and events.
 
+**V2 Status: ~90% complete, Grade B (81/100).** All 7 real E01 regression tests pass. Four stages (V2-1 through V2-4) cover verifiable trust (95%), cross-artifact correlation (85%), performance/scale (70%), and security governance/release (75%). The `/v2` governance dashboard surfaces live scores from correlation signals, support matrix, error taxonomy, benchmark thresholds, and release gates. Governance fact sources live in `testdata/governance/`.
+
 ## Commands
 
 ```bash
@@ -137,6 +139,20 @@ All app-shell layout components live in `src/components/layout/`: AppShell, Layo
 7. **Event topics are string constants**: Defined in `crates/transport/src/events/mod.rs` and mirrored as a TypeScript union type `EventTopic` in `src/types/models.ts`. Keep them in sync.
 
 8. **Tauri 2**: This project uses Tauri v2 (not v1). Commands use `#[tauri::command]` with the v2 handler registration pattern. The `Emitter` trait is used for events.
+
+## V2 Specific Gotchas
+
+1. **Governance fact sources are canonical**: The `/v2` dashboard and `V2GovernanceSnapshotDto` derive from JSON files in `testdata/governance/`. Updating `v2-release-policy.json` score policies or `v2-known-limitations.json` immediately changes the governance dashboard and release scorecard. Do not edit these by hand without understanding the pipeline implications.
+
+2. **Correlation rules depend on `sourceObjectId`**: The primary correlation bridge between Artifact↔Timeline uses shared `sourceObjectId`. If a parser does not set `sourceObjectId` correctly, cross-artifact leads will silently miss connections. Every new artifact extractor must set this field.
+
+3. **Expected JSON is the contract, not the implementation**: When a parser output changes, update the corresponding expected JSON in `testdata/fixtures/` FIRST, then update the parser. The CI regression gate compares parser output against expected JSON — mismatches block merges.
+
+4. **Release scorecard is derived, not static**: The `releaseScorecard` in the governance snapshot is computed from `releaseGates` + `runtimeSignals` (correlation signals, family coverage, benchmark thresholds). Adding a new rule family or benchmark dataset automatically affects the scorecard through runtime signals.
+
+5. **Benchmark baselines are host-specific**: `v2-benchmark-baseline.json` stores thresholds calibrated for the reference host. Running benchmarks on a different machine produces invalid comparisons. The `v2-runtime-results.json` records the last run's host configuration — always check this before interpreting benchmark regressions.
+
+6. **V2-2 rule families map to artifact types**: The `families[]` field on `CorrelationLeadDto` and `CorrelationClusterDto` is derived from artifact type (not hardcoded). Adding a new artifact type requires adding corresponding family derivation logic in `correlation_service` and updating the governance catalog.
 
 ## Key Design Documents
 

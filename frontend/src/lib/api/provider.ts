@@ -78,7 +78,7 @@ export interface ApiProvider {
     options?: {
       showHidden?: boolean;
       pageLimit?: number;
-      sortKey?: 'name' | 'size' | 'modifiedAt' | 'ext';
+      sortKey?: 'name' | 'size' | 'modifiedAt' | 'ext' | 'entryType';
       sortDirection?: 'asc' | 'desc';
     },
   ): Promise<FileJumpContext>;

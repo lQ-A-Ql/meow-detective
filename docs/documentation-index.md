@@ -20,17 +20,18 @@
 | 设计与约束 | `docs/design-constraints.md` | 架构、证据、安全、前端、发布硬约束 |
 | 模型 / 架构 / 流程图 | `docs/model-architecture-algorithm-diagrams.md` | Mermaid 图谱合集 |
 | 文档索引与事实校准 | `docs/documentation-index.md` | 权威入口、旧文档去重、事实快照 |
-| V2 长期执行计划 | `docs/v2-longterm-plan.md` | V2 阶段边界、测试矩阵、验收标准、评分机制 |
-| 可验证性体系 | `docs/validation-trust-framework.md` | public fixture、expected JSON、真实样本回归说明 |
-| Fixture 手册 | `docs/fixture-handbook.md` | fixture 分层、目录规范、元数据要求 |
-| Expected JSON 契约 | `docs/expected-json-contract.md` | expected JSON 结构、字段分级、差异规则 |
+| V2 长期执行计划 **(V2)** | `docs/v2-longterm-plan.md` | V2 阶段边界、测试矩阵、验收标准、评分机制 |
+| 可验证性体系 **(V2)** | `docs/validation-trust-framework.md` | public fixture、expected JSON、真实样本回归说明 |
+| Fixture 手册 **(V2)** | `docs/fixture-handbook.md` | fixture 分层、目录规范、元数据要求 |
+| Expected JSON 契约 **(V2)** | `docs/expected-json-contract.md` | expected JSON 结构、字段分级、差异规则 |
 | Parser 支持矩阵 | `docs/parser-support-matrix.md` | 支持边界、验证样本、字段承诺 |
 | 已知不支持格式 | `docs/known-unsupported-formats.md` | 明确不支持或仅部分支持的格式 |
 | 错误分类 | `docs/error-taxonomy.md` | 错误类别、脱敏策略、前后端约定 |
-| 错误分类手册 | `docs/error-classification-manual.md` | V2 错误分层、脱敏与审计实施口径 |
-| Benchmark 基线 | `docs/benchmark-baseline.md` | 数据集分级、指标口径、默认阈值 |
-| 关联分析设计 | `docs/correlation-analysis-design.md` | 关联模型、规则集、前端工作流 |
-| 发布评分卡 | `docs/release-scorecard.md` | 候选发布评分、硬门禁、发布材料 |
+| 错误分类手册 **(V2)** | `docs/error-classification-manual.md` | V2 错误分层、脱敏与审计实施口径 |
+| Benchmark 基线 **(V2)** | `docs/benchmark-baseline.md` | 数据集分级、指标口径、默认阈值 |
+| 关联分析设计 **(V2)** | `docs/correlation-analysis-design.md` | 关联模型、规则集、前端工作流 |
+| 发布评分卡 **(V2)** | `docs/release-scorecard.md` | 候选发布评分、硬门禁、发布材料 |
+| 真实样本回归说明 **(V2)** | `docs/real-sample-regression/README.md` | 真实 E01 样本回归流程、判定规则、结果记录 |
 | MCP 安全模型 | `docs/mcp-security-model.md` | MCP 权限模型、执行边界、审计要求 |
 | 导出与媒体安全 | `docs/export-and-media-safety.md` | 导出路径、overwrite、media handle 与脱敏要求 |
 | MCP 使用说明 | `docs/mcp-user-guide.md` | 面向使用者的 MCP 配置与权限说明 |
