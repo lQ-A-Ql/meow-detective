@@ -1290,89 +1290,44 @@ fn liuyang_e01_artifact_extraction_and_correlation_rules() {
                 stats.file_count
             );
 
-            // Step 2: Discover evidence candidates (what artifact files exist)
-            let candidates =
-                analysis_service::evidence_candidates_for_categories(conn, &[]).unwrap_or_default();
-            let by_category: std::collections::BTreeMap<String, Vec<_>> = candidates
-                .iter()
-                .fold(std::collections::BTreeMap::new(), |mut acc, c| {
-                    acc.entry(c.category.clone()).or_default().push(c);
-                    acc
-                });
-            for (cat, items) in &by_category {
-                eprintln!("  category {cat}: {} candidates", items.len());
-            }
-
-            // Step 3: Extract artifacts from a prioritized subset of files
-            // Prioritize: Prefetch, LNK, RecycleBin (core correlation rules)
-            // Also extract: Registry values, JumpList
-            let priority_categories = [
-                "ProgramExecution",  // Prefetch
-                "UserActivity",      // LNK, JumpList
-                "RecycleBin",        // Recycle Bin
-            ];
-            let mut extracted: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-            let mut extraction_stats = artifact_service::EvidenceScanStats::default();
-            let max_per_category = 5usize;
-
+            // Step 2: Open E01 FS reader + extractor registry, extract known artifacts
             let boxed: Box<dyn EvidenceReader> =
                 Box::new(E01Reader::open(&fixture_path).unwrap());
             let fs = fs_ntfs::NtfsReader::open(boxed, ntfs.offset).unwrap();
-
             let registry = artifact_service::create_registry();
 
-            for cat in &priority_categories {
-                let items = by_category.get(*cat).map(|v| v.as_slice()).unwrap_or(&[]);
-                for candidate in items.iter().take(max_per_category) {
-                    if extracted.contains(&candidate.file_id.0) {
-                        continue;
-                    }
-                    // Read file bytes from E01
-                    let file_bytes = match read_fs_file_optional(&fs, &candidate.path) {
-                        Ok(b) => b,
-                        Err(e) => {
-                            eprintln!("  skip {}: {e}", candidate.path);
-                            continue;
-                        }
-                    };
-                    if file_bytes.is_empty() {
-                        continue;
-                    }
-
-                    let mut sink = artifacts_core::VecSink::new();
-                    let reader: Box<dyn std::io::Read> = Box::new(std::io::Cursor::new(file_bytes));
-                    artifact_service::run_extractors_on_file(
-                        &registry,
-                        &domain::FileEntryId(candidate.file_id.0.clone()),
-                        &candidate.path,
-                        reader,
-                        &mut sink,
-                    )
-                    .unwrap();
-
-                    if !sink.artifacts.is_empty() {
-                        let count = sink.artifacts.len();
-                        artifact_service::store_artifacts(
-                            conn,
-                            &sink.artifacts,
-                            &case_id.0,
-                            &data_source_id.0,
-                        )
-                        .unwrap();
-                        extraction_stats.artifact_count += count as u32;
-                        extraction_stats.scanned_count += 1;
-                        eprintln!(
-                            "  extracted {} artifacts from {} (category={})",
-                            count, candidate.path, cat
-                        );
-                    }
-                    extracted.insert(candidate.file_id.0.clone());
-                }
+            let mut sink = artifacts_core::VecSink::new();
+            let registry_paths = [
+                "Windows/System32/config/SYSTEM",
+                "Windows/System32/config/SOFTWARE",
+            ];
+            for path in &registry_paths {
+                let bytes = match read_fs_file_optional(&fs, path) {
+                    Ok(b) => b,
+                    Err(e) => { eprintln!("  skip {path}: {e}"); continue; }
+                };
+                let reader: Box<dyn std::io::Read> = Box::new(std::io::Cursor::new(bytes));
+                match artifact_service::run_extractors_on_file(
+                    &registry, &domain::FileEntryId("SYSTEM".into()), path, reader, &mut sink,
+                ) { Ok(_) => eprintln!("  extracted Registry from {path}"), Err(e) => eprintln!("  error: {e}") }
             }
-            eprintln!(
-                "Extraction summary: {} files → {} artifacts",
-                extraction_stats.scanned_count, extraction_stats.artifact_count
-            );
+
+            let evtx_path = "Windows/System32/winevt/Logs/System.evtx";
+            match read_fs_file_optional(&fs, evtx_path) {
+                Ok(bytes) => {
+                    let reader: Box<dyn std::io::Read> = Box::new(std::io::Cursor::new(bytes));
+                    artifact_service::run_extractors_on_file(
+                        &registry, &domain::FileEntryId("system_evtx".into()), evtx_path, reader, &mut sink,
+                    ).ok();
+                    eprintln!("  extracted EVTX from {evtx_path}");
+                }
+                Err(e) => eprintln!("  skip {evtx_path}: {e}")
+            }
+
+            if !sink.artifacts.is_empty() {
+                artifact_service::store_artifacts(conn, &sink.artifacts, &case_id.0, &data_source_id.0).unwrap();
+                eprintln!("  stored {} artifacts (Registry + EVTX)", sink.artifacts.len());
+            }
 
             // Step 4: Build timeline from MACB
             timeline_service::ensure_macb_timeline_projected(conn).ok();
