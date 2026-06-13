@@ -317,6 +317,316 @@ export interface EmailMessage {
   bodyPreview: string;
 }
 
+export type VerificationGuaranteeLevel =
+  | 'guaranteed'
+  | 'bestEffort'
+  | 'experimental'
+  | 'notGuaranteed';
+
+export type SupportMaturity = 'ga' | 'beta' | 'experimental' | 'unsupported';
+
+export type VerificationResult = 'passed' | 'partial' | 'pending' | 'failed';
+
+export interface VerificationChainStatus {
+  chain: string;
+  displayName: string;
+  maturity: SupportMaturity;
+  guaranteeLevel: VerificationGuaranteeLevel;
+  fixtureTier: string;
+  expectedJsonVersion: string;
+  verifiedSampleCount: number;
+  result: VerificationResult;
+  notes: string[];
+}
+
+export interface ParserSupportMatrixSummary {
+  gaCount: number;
+  betaCount: number;
+  experimentalCount: number;
+  unsupportedCount: number;
+  documentedLimitCount: number;
+}
+
+export interface ParserSupportMatrixEntry {
+  chain: string;
+  maturity: SupportMaturity;
+  verifiedSamples: string[];
+  baseline: string;
+  guaranteeSummary: string;
+  notes: string[];
+}
+
+export type KnownLimitationStatus = 'partial' | 'unsupported' | 'notGuaranteed';
+
+export interface KnownLimitation {
+  category: string;
+  item: string;
+  status: KnownLimitationStatus;
+  summary: string;
+  affectedChains: string[];
+  sourceDoc: string;
+}
+
+export interface BenchmarkSnapshot {
+  datasetLevel: string;
+  scenario: string;
+  p95Ms: number;
+  memoryPeakMb?: number;
+  baselineVersion: string;
+}
+
+export type BenchmarkRequirementStatus = 'covered' | 'missing' | 'exceeded';
+
+export interface BenchmarkRequiredCheck {
+  datasetLevel: string;
+  scenario: string;
+  thresholdP95Ms: number;
+  measuredP95Ms?: number;
+  status: BenchmarkRequirementStatus;
+}
+
+export interface BenchmarkSummary {
+  hostProfile: string;
+  baselineVersion: string;
+  lastVerifiedAt: string;
+  scenarios: BenchmarkSnapshot[];
+  requiredChecks: BenchmarkRequiredCheck[];
+  coveredRequiredCount: number;
+  missingRequiredCount: number;
+  exceededRequiredCount: number;
+}
+
+export interface SecurityAuditSummary {
+  exportOverwriteDefault: boolean;
+  exportPathGuardEnabled: boolean;
+  stdioCommandWhitelistEnforced: boolean;
+  sseHttpsOnly: boolean;
+  embeddedCredentialsBlocked: boolean;
+  mediaHandleScoped: boolean;
+  errorRedactionEnabled: boolean;
+  auditLogRequired: boolean;
+  auditEventCount: number;
+  sensitiveAuditEventCount: number;
+  recentAuditEntries: SecurityAuditEntry[];
+  notes: string[];
+}
+
+export interface SecurityAuditEntry {
+  action: string;
+  resourceType: string;
+  resourceId?: string;
+  createdAt: string;
+  summary?: string;
+  sensitive: boolean;
+}
+
+export interface ErrorTaxonomyEntry {
+  category: string;
+  severity: string;
+  recoverable: boolean;
+  examples: string[];
+  redactionRule: string;
+  notes: string[];
+}
+
+export type ReleaseGateStatus = 'passed' | 'warning' | 'blocked';
+
+export interface ReleaseGateEntry {
+  gateId: string;
+  title: string;
+  status: ReleaseGateStatus;
+  evidence: string;
+  detail: string;
+}
+
+export interface ReleaseScoreBreakdownEntry {
+  dimension: string;
+  maxScore: number;
+  actualScore: number;
+  deductions: string[];
+}
+
+export interface ReleaseScorecard {
+  totalScore: number;
+  grade: string;
+  verificationScore: number;
+  correlationScore: number;
+  performanceScore: number;
+  securityScore: number;
+  breakdown: ReleaseScoreBreakdownEntry[];
+  blockers: string[];
+  residualRisks: string[];
+}
+
+export type CorrelationCoverageStatus = 'covered' | 'review' | 'missing';
+
+export interface CorrelationFamilyCoverage {
+  family: string;
+  displayName: string;
+  status: CorrelationCoverageStatus;
+  leadCount: number;
+  highConfidenceLeadCount: number;
+  reviewLeadCount: number;
+  clusterCount: number;
+  sampleSignals: string[];
+}
+
+export interface GovernanceRuntimeSignals {
+  dataSourceCount: number;
+  hashedDataSourceCount: number;
+  pendingHashDataSourceCount: number;
+  warningDataSourceCount: number;
+  runningJobCount: number;
+  partialJobCount: number;
+  failedJobCount: number;
+  reportCount: number;
+  correlationSnapshotAvailable: boolean;
+  correlationLeadCount: number;
+  correlationHighConfidenceLeadCount: number;
+  correlationReviewLeadCount: number;
+  correlationClusterCount: number;
+  correlationRuleFamilyCount: number;
+  correlationCoveredFamilyCount: number;
+  correlationHighConfidenceFamilyCount: number;
+  correlationFamilyCoverage: CorrelationFamilyCoverage[];
+}
+
+export interface GovernanceFactSource {
+  area: string;
+  factFile: string;
+  factKind: string;
+  derivedOutputs: string[];
+  lastVerifiedAt: string;
+}
+
+export interface GovernanceRuntimeCheck {
+  checkId: string;
+  title: string;
+  status: ReleaseGateStatus;
+  evidence: string;
+  detail: string;
+  checkedAt: string;
+  subChecks: GovernanceRuntimeSubcheck[];
+}
+
+export interface GovernanceRuntimeResults {
+  checkedAt: string;
+  checks: GovernanceRuntimeCheck[];
+}
+
+export interface GovernanceRuntimeSubcheck {
+  checkId: string;
+  title: string;
+  status: ReleaseGateStatus;
+  evidence: string;
+  detail: string;
+}
+
+export interface V2GovernanceSnapshot {
+  generatedAt: string;
+  factSources: GovernanceFactSource[];
+  runtimeResults: GovernanceRuntimeResults;
+  verificationChains: VerificationChainStatus[];
+  supportMatrix: ParserSupportMatrixSummary;
+  supportMatrixEntries: ParserSupportMatrixEntry[];
+  knownLimitations: KnownLimitation[];
+  benchmark: BenchmarkSummary;
+  security: SecurityAuditSummary;
+  errorTaxonomyEntries: ErrorTaxonomyEntry[];
+  releaseGates: ReleaseGateEntry[];
+  releaseScorecard: ReleaseScorecard;
+  runtimeSignals: GovernanceRuntimeSignals;
+}
+
+export type CorrelationConfidence = 'direct' | 'strong' | 'weak' | 'heuristic';
+
+export type CorrelationNodeKind = 'file' | 'artifact' | 'timelineEvent';
+
+export type CorrelationEdgeKind =
+  | 'sourceReference'
+  | 'sharedSourceObject'
+  | 'temporalContext'
+  | 'pathMatch'
+  | 'nameMatch'
+  | 'recoveredOriginalPath';
+
+export interface CorrelationJumpTarget {
+  route: string;
+  targetId: string;
+  label: string;
+}
+
+export interface CorrelationProvenance {
+  sourceKind: string;
+  sourceRecordId: string;
+  sourceLabel: string;
+  producer?: string;
+  producerVersion?: string;
+  guaranteeLevel: VerificationGuaranteeLevel;
+  warningSummary: string[];
+}
+
+export interface CorrelationNode {
+  id: string;
+  kind: CorrelationNodeKind;
+  title: string;
+  subtitle?: string;
+  sourceObjectId?: string;
+  relatedCount: number;
+  badges: string[];
+  jumps: CorrelationJumpTarget[];
+}
+
+export interface CorrelationEdge {
+  id: string;
+  kind: CorrelationEdgeKind;
+  fromNodeId: string;
+  toNodeId: string;
+  summary: string;
+  confidence: CorrelationConfidence;
+}
+
+export interface CorrelationCluster {
+  id: string;
+  title: string;
+  summary: string;
+  confidence: CorrelationConfidence;
+  families: string[];
+  primaryFileId: string;
+  artifactCount: number;
+  timelineCount: number;
+  nodeIds: string[];
+  edgeIds: string[];
+  provenance: CorrelationProvenance[];
+}
+
+export interface CorrelationLead {
+  id: string;
+  title: string;
+  summary: string;
+  confidence: CorrelationConfidence;
+  families: string[];
+  primaryFileId: string;
+  supportingNodeIds: string[];
+  matchSignals: string[];
+  jumps: CorrelationJumpTarget[];
+  provenance: CorrelationProvenance[];
+  caveats: string[];
+}
+
+export interface CorrelationSnapshot {
+  generatedAt: string;
+  nodeCount: number;
+  edgeCount: number;
+  clusterCount: number;
+  leadCount: number;
+  familyCoverage: CorrelationFamilyCoverage[];
+  nodes: CorrelationNode[];
+  edges: CorrelationEdge[];
+  clusters: CorrelationCluster[];
+  leads: CorrelationLead[];
+}
+
 export interface RecentCase {
   caseRoot: string;
   name: string;
@@ -371,6 +681,14 @@ export interface FileRowsPage {
   offset: number;
   limit: number;
   truncated: boolean;
+}
+
+export interface FileJumpContext {
+  target: FileEntryRow;
+  directory: FileEntryRow;
+  ancestorDirectoryIds: string[];
+  rowOffset: number;
+  requiresShowHidden: boolean;
 }
 
 export interface SearchSnippet {

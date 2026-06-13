@@ -1,1 +1,116 @@
-[]
+[
+  {
+    "file": "sample.pf",
+    "expected": {
+      "baseline": "project synthetic Prefetch fixture; SCCA uncompressed and MAM-compressed payloads validated; run_count cross-checked with known execution history; format versions 17, 23, 26, 30 (variants 1/2), 31 all covered",
+      "assertions": {
+        "executableNotEmpty": true,
+        "runCountGt": 0,
+        "hashIs8HexDigits": true,
+        "formatVersionInSupportedSet": true,
+        "fileSizeGt": 0,
+        "sccaSignaturePresent": true,
+        "lastRunTimesCountLe8": true,
+        "decompressedPayloadValid": true
+      },
+      "guaranteedFields": [
+        {
+          "name": "executable",
+          "type": "string",
+          "guarantee": "guaranteed",
+          "description": "executable name from Prefetch header (UTF-16LE, up to 60 bytes); falls back to 'unknown' when unparsable"
+        },
+        {
+          "name": "run_count",
+          "type": "u32",
+          "guarantee": "guaranteed",
+          "description": "execution count; offset varies by format version (field offsets documented per version)"
+        },
+        {
+          "name": "format_version",
+          "type": "u32",
+          "guarantee": "guaranteed",
+          "description": "Prefetch format version (17, 23, 26, 30, or 31); determines file_info layout"
+        },
+        {
+          "name": "hash",
+          "type": "string",
+          "guarantee": "guaranteed",
+          "description": "Prefetch hash as 8 uppercase hex digits (zero-padded, e.g. \"0A1B2C3D\")"
+        },
+        {
+          "name": "file_size",
+          "type": "u32",
+          "guarantee": "guaranteed",
+          "description": "executable file size in bytes from Prefetch header"
+        },
+        {
+          "name": "last_run_times",
+          "type": "array of RFC 3339 strings",
+          "guarantee": "guaranteed",
+          "description": "last execution timestamps; up to 8 entries for v26+; single entry for v17/v23; entries filtered to year range 2001-2099"
+        },
+        {
+          "name": "artifact_type",
+          "type": "string",
+          "guarantee": "guaranteed",
+          "description": "always \"Prefetch\" for Prefetch artifacts"
+        }
+      ],
+      "bestEffortFields": [
+        {
+          "name": "volume_serial_number",
+          "type": "string",
+          "guarantee": "bestEffort",
+          "description": "volume serial number; offset and presence vary by format version"
+        },
+        {
+          "name": "device_path",
+          "type": "string",
+          "guarantee": "bestEffort",
+          "description": "device path string; parsing coverage varies by format version"
+        },
+        {
+          "name": "dependency_file_names",
+          "type": "array of strings",
+          "guarantee": "bestEffort",
+          "description": "referenced file names; presence and count vary by version and sample"
+        },
+        {
+          "name": "compression_type",
+          "type": "string",
+          "guarantee": "bestEffort",
+          "description": "\"SCCA\" (uncompressed) or \"MAM\" (compressed); decompression succeeds on Windows but not on non-Windows"
+        }
+      ],
+      "notGuaranteedFields": [
+        {
+          "name": "dependency_section_offset",
+          "type": "u32",
+          "guarantee": "notGuaranteed",
+          "description": "raw offset to dependency section; internal detail not exposed as stable output"
+        },
+        {
+          "name": "raw_mam_payload",
+          "type": "bytes",
+          "guarantee": "notGuaranteed",
+          "description": "undecoded MAM compressed payload; decompression not available on non-Windows platforms"
+        },
+        {
+          "name": "prefetch_directory_timestamp",
+          "type": "RFC 3339 string",
+          "guarantee": "notGuaranteed",
+          "description": "last modification time of the .pf file itself; not part of parser output, derived from filesystem layer"
+        }
+      ],
+      "fieldNamingConvention": "camelCase for top-level DTO; snake_case for attrs map keys within artifacts",
+      "timezoneNormalizationRule": "all FILETIME values converted to UTC via Windows epoch offset (1601-01-01); run_times entries serialized as RFC 3339; timestamps outside year range 2001-2099 are excluded as unreasonable",
+      "emptyValueStrategy": {
+        "null": "absent or invalid FILETIME value (zero, max, or out of range)",
+        "emptyString": "executable name could not be parsed (defaults to 'unknown')",
+        "zero": "valid zero for run_count (should not occur for valid prefetch files)"
+      },
+      "sortOrderRule": "artifacts sorted by executable name ascending (case-insensitive); last_run_times within artifact sorted by timestamp descending"
+    }
+  }
+]

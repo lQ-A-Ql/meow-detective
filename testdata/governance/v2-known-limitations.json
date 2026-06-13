@@ -1,0 +1,150 @@
+{
+  "lastVerifiedAt": "2026-06-13T00:00:00Z",
+  "documentedLimitCount": 18,
+  "items": [
+    {
+      "category": "E01",
+      "item": "多段复杂样本",
+      "status": "partial",
+      "summary": "当前公开样本仅 tiny.E01 单段。public-medium/e01 尚空",
+      "affectedChains": ["E01"],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "NTFS",
+      "item": "全量损坏恢复",
+      "status": "notGuaranteed",
+      "summary": "极端损坏、复杂修复场景仍缺样本与回归",
+      "affectedChains": ["NTFS"],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "FAT/exFAT",
+      "item": "已删除文件恢复",
+      "status": "notGuaranteed",
+      "summary": "本轮 deleted 重点仅覆盖 NTFS MFT",
+      "affectedChains": ["FAT", "exFAT"],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "FAT/exFAT",
+      "item": "committed fixture",
+      "status": "unsupported",
+      "summary": "无 fixture 文件。expected.json 待建",
+      "affectedChains": ["FAT", "exFAT"],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Registry",
+      "item": "transaction log 完整重放",
+      "status": "notGuaranteed",
+      "summary": "当前以 hive 直接解析为主",
+      "affectedChains": ["Registry"],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Registry",
+      "item": "private-real 回归 E01",
+      "status": "unsupported",
+      "summary": "testdata/fixtures/private-real-regression/ 仅存 metadata.json，E01 镜像未提交",
+      "affectedChains": ["Registry"],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Prefetch",
+      "item": "committed fixture 文件",
+      "status": "unsupported",
+      "summary": "testdata/artifacts/windows/prefetch/ 仅含 .gitkeep。public-medium/prefetch 尚空",
+      "affectedChains": ["Prefetch"],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Prefetch",
+      "item": "自动化测试",
+      "status": "partial",
+      "summary": "仅 1 个 synthetic 单元测试",
+      "affectedChains": ["Prefetch"],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Prefetch",
+      "item": "全版本压缩变体",
+      "status": "partial",
+      "summary": "需要继续补样本与 expected baseline",
+      "affectedChains": ["Prefetch"],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "LNK",
+      "item": "committed fixture 文件",
+      "status": "unsupported",
+      "summary": "testdata/artifacts/windows/lnk/ 仅含 .gitkeep。无自动化测试",
+      "affectedChains": ["LNK"],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "LNK",
+      "item": "全量复杂 shell item",
+      "status": "partial",
+      "summary": "当前重点是 target path 与核心时间字段",
+      "affectedChains": ["LNK"],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Recycle Bin",
+      "item": "committed fixture 文件",
+      "status": "unsupported",
+      "summary": "testdata/artifacts/windows/recycle-bin/ 仅含 .gitkeep。无自动化测试",
+      "affectedChains": ["RecycleBin"],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Recycle Bin",
+      "item": "全损坏恢复场景",
+      "status": "notGuaranteed",
+      "summary": "当前以标准结构提取为主",
+      "affectedChains": ["RecycleBin"],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "JumpList",
+      "item": "committed fixture",
+      "status": "unsupported",
+      "summary": "有实现 (2 测试)，无 fixture，无 expected.json",
+      "affectedChains": ["JumpList"],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "SRU",
+      "item": "committed fixture",
+      "status": "unsupported",
+      "summary": "有实现 (4 测试)，无 fixture，无 expected.json",
+      "affectedChains": ["SRU"],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Thumbcache",
+      "item": "committed fixture",
+      "status": "unsupported",
+      "summary": "有实现 (3 测试)，无 fixture，无 expected.json",
+      "affectedChains": ["Thumbcache"],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Browser",
+      "item": "全部",
+      "status": "unsupported",
+      "summary": "artifacts-windows 中无浏览器模块。Chrome/Edge/Firefox 均无代码、无 fixture、无 expected.json",
+      "affectedChains": ["ChromeHistory", "EdgeHistory", "FirefoxHistory"],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Email",
+      "item": "全部",
+      "status": "unsupported",
+      "summary": "artifacts-windows 中无邮件模块。EML/EMLX/PST/OST/mbox 均无实现",
+      "affectedChains": ["Email"],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    }
+  ]
+}

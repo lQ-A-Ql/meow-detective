@@ -33,3 +33,6 @@ Thumbs.db
 # Build output
 *.o
 *.exe
+
+# Private regression fixtures (real disk images, not for CI)
+/testdata/fixtures/private-real-regression/

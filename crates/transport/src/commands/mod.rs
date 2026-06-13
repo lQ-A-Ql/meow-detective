@@ -4,11 +4,11 @@ const MAX_PAGE_LIMIT: u32 = 500;
 const DEFAULT_PAGE_LIMIT: u32 = 100;
 
 pub use crate::dto::{
-    ArtifactRowDto, CaseMetricsDto, CaseSummaryDto, DataSourceSummaryDto, FileChildrenDto,
-    FileEntryRowDto, FileRowsPageDto, FileTreeNodeDto, JobSnapshotDto, RecentCaseDto,
-    RecentObjectDto, ReportHistoryItemDto, ReportTemplateDto, SearchResultPageDto,
-    TimelineEventDto, TraceItemDto, ViewerHandleDto, ViewerRangeRequestDto, ViewerRangeResponseDto,
-    WarningItemDto,
+    ArtifactRowDto, CaseMetricsDto, CaseSummaryDto, CorrelationSnapshotDto, DataSourceSummaryDto,
+    FileChildrenDto, FileEntryRowDto, FileJumpContextDto, FileRowsPageDto, FileTreeNodeDto,
+    JobSnapshotDto, RecentCaseDto, RecentObjectDto, ReportHistoryItemDto, ReportTemplateDto,
+    SearchResultPageDto, TimelineEventDto, TraceItemDto, V2GovernanceSnapshotDto, ViewerHandleDto,
+    ViewerRangeRequestDto, ViewerRangeResponseDto, WarningItemDto,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -198,6 +198,33 @@ impl GetFileRowsRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GetFileJumpContextRequest {
+    pub file_id: String,
+    #[serde(default)]
+    pub show_hidden: bool,
+    #[serde(default = "default_file_browser_limit")]
+    pub page_limit: u32,
+    #[serde(default)]
+    pub sort_key: FileSortKeyDto,
+    #[serde(default)]
+    pub sort_direction: FileSortDirectionDto,
+}
+
+impl GetFileJumpContextRequest {
+    pub fn validate(&mut self) -> Result<(), String> {
+        if self.file_id.trim().is_empty() {
+            return Err("fileId is required".to_string());
+        }
+        if self.page_limit == 0 {
+            self.page_limit = default_file_browser_limit();
+        }
+        self.page_limit = self.page_limit.min(MAX_PAGE_LIMIT);
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetFileChildrenRequest {
     pub parent_id: String,
     #[serde(default)]
@@ -286,6 +313,21 @@ fn default_search_limit() -> u32 {
 pub struct GetArtifactRowsRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub family: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetArtifactByIdRequest {
+    pub artifact_id: String,
+}
+
+impl GetArtifactByIdRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.artifact_id.trim().is_empty() {
+            return Err("artifactId is required".to_string());
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -403,6 +445,21 @@ pub struct GetTimelineRequest {
     pub time_end: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub event_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetTimelineEventByIdRequest {
+    pub event_id: String,
+}
+
+impl GetTimelineEventByIdRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.event_id.trim().is_empty() {
+            return Err("eventId is required".to_string());
+        }
+        Ok(())
+    }
 }
 
 impl GetTimelineRequest {
@@ -715,5 +772,37 @@ mod tests {
 
         assert_eq!(request.parent_id, "root");
         assert!(request.show_hidden);
+    }
+
+    #[test]
+    fn file_jump_context_request_deserializes_sort_and_limit() {
+        let request: GetFileJumpContextRequest = serde_json::from_str(
+            r#"{"fileId":"file-1","showHidden":true,"pageLimit":250,"sortKey":"modifiedAt","sortDirection":"desc"}"#,
+        )
+        .unwrap();
+
+        assert_eq!(request.file_id, "file-1");
+        assert!(request.show_hidden);
+        assert_eq!(request.page_limit, 250);
+        assert_eq!(request.sort_key, FileSortKeyDto::ModifiedAt);
+        assert_eq!(request.sort_direction, FileSortDirectionDto::Desc);
+    }
+
+    #[test]
+    fn artifact_by_id_request_requires_id() {
+        assert!(GetArtifactByIdRequest {
+            artifact_id: String::new(),
+        }
+        .validate()
+        .is_err());
+    }
+
+    #[test]
+    fn timeline_event_by_id_request_requires_id() {
+        assert!(GetTimelineEventByIdRequest {
+            event_id: String::new(),
+        }
+        .validate()
+        .is_err());
     }
 }

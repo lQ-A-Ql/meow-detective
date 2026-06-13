@@ -6,6 +6,8 @@ import { Timeline } from './Timeline';
 
 const mocks = vi.hoisted(() => ({
   timelineEvents: vi.fn(),
+  timelineEventById: vi.fn(),
+  navigate: vi.fn(),
   selectionState: {
     selectedTimelineId: undefined as string | undefined,
     selectedFileId: undefined as string | undefined,
@@ -17,6 +19,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/features/timeline/hooks', () => ({
+  useTimelineEventById: mocks.timelineEventById,
   useTimelineEvents: mocks.timelineEvents,
 }));
 
@@ -25,7 +28,7 @@ vi.mock('@/stores/selection-store', () => ({
 }));
 
 vi.mock('react-router', () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mocks.navigate,
 }));
 
 function queryState(overrides: Record<string, unknown> = {}) {
@@ -85,6 +88,7 @@ describe('Timeline page', () => {
       selectedFileId: undefined,
       selectedArtifactId: undefined,
     });
+    mocks.timelineEventById.mockReturnValue(queryState({ data: null }));
   });
 
   it('renders empty state when no events', () => {
@@ -120,5 +124,28 @@ describe('Timeline page', () => {
     expect(screen.getAllByText('2026-06-01T10:15:00Z').length).toBeGreaterThan(0);
     expect(screen.getAllByText('User opened document').length).toBeGreaterThan(0);
     expect(screen.getByText(/当前事件 evt-1/)).toBeDefined();
+  });
+
+  it('hydrates a selected event from by-id query when it is outside the current page', () => {
+    mocks.timelineEvents.mockReturnValue(queryState({ data: emptyTimelineResult }));
+    Object.assign(mocks.selectionState, { selectedTimelineId: 'evt-offpage' });
+    mocks.timelineEventById.mockReturnValue(
+      queryState({
+        data: {
+          id: 'evt-offpage',
+          sourceObjectId: 'file-9',
+          eventType: 'BrowserDownload',
+          ts: '2026-06-13T08:00:00Z',
+          title: 'Downloaded payload.exe',
+          description: 'Browser saved payload.exe',
+          attrs: { source: 'BrowserHistory' },
+        },
+      }),
+    );
+
+    renderPage();
+
+    expect(screen.getAllByText('Downloaded payload.exe').length).toBeGreaterThan(0);
+    expect(screen.getByText(/当前事件 evt-offpage/)).toBeDefined();
   });
 });

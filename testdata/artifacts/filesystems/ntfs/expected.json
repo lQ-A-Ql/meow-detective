@@ -1,0 +1,65 @@
+[
+  {
+    "file": "tiny.raw (NTFS volume)",
+    "expected": {
+      "baseline": "project synthetic NTFS fixture; MFT record parsing validated against known record content",
+      "assertions": {
+        "rootDirExists": true,
+        "rootDirNameIsBackslash": true,
+        "mftRecordZeroIsValid": true,
+        "listChildrenReturnsKnownDirs": true,
+        "fileSizeMatchesMft": true,
+        "timestampsParsedCorrectly": true,
+        "hiddenFlagCorrect": true,
+        "systemFlagCorrect": true,
+        "deletedFlagCorrect": true,
+        "orphanDetectionWorks": true,
+        "openFileReadsCorrectBytes": true,
+        "bootSectorMagicValid": true,
+        "mftDataRunsParsed": true
+      },
+      "guaranteedFields": [
+        "name",
+        "path",
+        "isDir",
+        "size",
+        "hidden",
+        "system",
+        "deleted",
+        "createdAt",
+        "modifiedAt",
+        "accessedAt",
+        "changedAt",
+        "recordNumber"
+      ],
+      "bestEffortFields": [
+        "extension",
+        "fileType",
+        "mftSequenceNumber",
+        "parentMftReference",
+        "dataRuns",
+        "residentDataSize",
+        "hardLinkCount",
+        "alternateDataStreams"
+      ],
+      "notGuaranteedFields": [
+        "usnJournalEntry",
+        "logFileRollbackRecord",
+        "objectId",
+        "reparsePointTarget",
+        "eaData",
+        "encryptedDataRecovery",
+        "compressedDataForSparse",
+        "mftMirrorConsistency"
+      ],
+      "fieldNamingConvention": "camelCase",
+      "timezoneNormalizationRule": "all timestamps serialized as RFC 3339 with UTC offset; MFT FILETIME values converted to UTC DateTime; $FILE_NAME and $STANDARD_INFORMATION attribute timestamps both normalized to UTC",
+      "emptyValueStrategy": {
+        "null": "absent timestamp (e.g. deleted file with no valid $FILE_NAME)",
+        "emptyString": "absent name (should not occur for valid records)",
+        "zero": "zero size for directories"
+      },
+      "sortOrderRule": "directory entries sorted by name ascending (case-insensitive); deleted entries sorted after live entries; orphan entries sorted last"
+    }
+  }
+]

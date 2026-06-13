@@ -3,7 +3,7 @@ use persistence_sqlite::repositories::{
     artifact_repo::ArtifactRepo, datasource_repo::DataSourceRepo, file_repo::FileRepo,
     report_repo::ReportRepo, timeline_repo::TimelineRepo,
 };
-use reports::{CsvExporter, HtmlReportExporter, JsonExporter};
+use reports::{CsvExporter, HtmlCorrelationLeadSection, HtmlReportExporter, JsonExporter};
 use rusqlite::Connection;
 use sha2::Digest;
 use std::fs;
@@ -13,7 +13,8 @@ use std::path::{Path, PathBuf};
 use transport::commands::ExportScopeDto;
 use transport::dto::{
     AnalysisFileClassificationDto, AnalysisProvenanceDto, AnalysisSystemInfoDto,
-    ReportHistoryItemDto, ReportTemplateDto,
+    CorrelationLeadDto, CorrelationSnapshotDto, ReleaseGateStatusDto, ReportHistoryItemDto,
+    ReportTemplateDto, SupportMaturityDto, V2GovernanceSnapshotDto, VerificationResultDto,
 };
 use uuid::Uuid;
 
@@ -56,18 +57,31 @@ pub fn generate_html_report(
     };
     let analysis = current_analysis(conn)?;
     let analysis_rows = report_analysis_rows(conn, &case.id.0, &analysis, scope);
+    let governance = current_governance(conn, &case.id.0)?;
+    let governance_rows = report_governance_rows(&governance, scope);
+    let correlation = current_correlation(conn)?;
+    let correlation_rows = report_correlation_rows(&correlation, scope);
+    let correlation_leads = report_correlation_lead_sections(&correlation, scope);
 
     let file_name = format!("report-{}.html", Uuid::new_v4());
     let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
     write_report_atomically(&path, scope.overwrite, |file| {
-        HtmlReportExporter::export_with_analysis(file, case, &files, &artifacts, &analysis_rows)
-            .map_err(|e| e.to_string())
+        HtmlReportExporter::export_with_structured_sections(
+            file,
+            case,
+            &files,
+            &artifacts,
+            &analysis_rows,
+            &governance_rows,
+            &correlation_rows,
+            &correlation_leads,
+        )
+        .map_err(|e| e.to_string())
     })?;
 
     persist_report_record(conn, &case.id.0, "report-summary", &file_name, "completed")?;
     Ok(file_name)
 }
-
 pub fn generate_csv_artifacts(
     conn: &Connection,
     case_id: &str,
@@ -96,6 +110,8 @@ pub fn generate_csv_artifacts(
         .map_err(|e| e.to_string())?;
     let mut rows_data = rows_data;
     let analysis = current_analysis(conn)?;
+    let governance = current_governance(conn, case_id)?;
+    let correlation = current_correlation(conn)?;
     rows_data.extend(
         report_analysis_rows(conn, case_id, &analysis, scope)
             .into_iter()
@@ -103,6 +119,36 @@ pub fn generate_csv_artifacts(
                 vec![
                     "analysis".to_string(),
                     "provenance".to_string(),
+                    row,
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                ]
+            }),
+    );
+    rows_data.extend(
+        report_governance_rows(&governance, scope)
+            .into_iter()
+            .map(|row| {
+                vec![
+                    "governance".to_string(),
+                    "snapshot".to_string(),
+                    row,
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                ]
+            }),
+    );
+    rows_data.extend(
+        report_correlation_rows(&correlation, scope)
+            .into_iter()
+            .map(|row| {
+                vec![
+                    "correlation".to_string(),
+                    "lead".to_string(),
                     row,
                     String::new(),
                     String::new(),
@@ -135,6 +181,57 @@ pub fn generate_csv_artifacts(
     Ok(file_name)
 }
 
+pub fn generate_csv_correlation(
+    conn: &Connection,
+    case_id: &str,
+    output_dir: &Path,
+    scope: &ExportScopeDto,
+) -> Result<String, String> {
+    let correlation = current_correlation(conn)?;
+
+    let rows: Vec<Vec<String>> = correlation
+        .snapshot
+        .leads
+        .iter()
+        .map(|lead| {
+            let families = lead.families.join("; ");
+            let provenance_sources = lead
+                .provenance
+                .iter()
+                .map(|item| {
+                    format!(
+                        "{}:{}:{}",
+                        item.source_kind, item.source_record_id, item.source_label
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("; ");
+            let caveats = lead.caveats.join("; ");
+
+            vec![
+                lead.id.clone(),
+                lead.title.clone(),
+                correlation_confidence_str(&lead.confidence).to_string(),
+                families,
+                lead.primary_file_id.clone(),
+                lead.supporting_node_ids.len().to_string(),
+                lead.match_signals.len().to_string(),
+                provenance_sources,
+                caveats,
+            ]
+        })
+        .collect();
+
+    let file_name = format!("correlation-{}.csv", Uuid::new_v4());
+    let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
+    write_report_atomically(&path, scope.overwrite, |file| {
+        CsvExporter::export_correlation_leads(file, &rows).map_err(|e| e.to_string())
+    })?;
+
+    persist_report_record(conn, case_id, "report-correlation", &file_name, "completed")?;
+    Ok(file_name)
+}
+
 pub fn generate_json_export(
     conn: &Connection,
     case_id: &str,
@@ -152,6 +249,8 @@ pub fn generate_json_export(
         .list_by_family(None)
         .map_err(|e| e.to_string())?;
     let analysis = current_analysis(conn)?;
+    let governance = current_governance(conn, case_id)?;
+    let correlation = current_correlation(conn)?;
     let summary = crate::analysis_service::generate_analysis_summary(
         &analysis.system_info,
         &analysis.classifications,
@@ -198,6 +297,8 @@ pub fn generate_json_export(
             "classifications": classifications,
             "summary": summary,
         },
+        "governance": governance_json_section(&governance),
+        "correlation": correlation_json_section(&correlation),
     });
 
     let file_name = format!("export-{}.json", Uuid::new_v4());
@@ -237,6 +338,14 @@ struct ReportAnalysis {
     classifications: Vec<AnalysisFileClassificationDto>,
 }
 
+struct ReportCorrelation {
+    snapshot: CorrelationSnapshotDto,
+}
+
+struct ReportGovernance {
+    snapshot: V2GovernanceSnapshotDto,
+}
+
 fn current_analysis(conn: &Connection) -> Result<ReportAnalysis, String> {
     let system_info =
         crate::analysis_service::extract_system_info_for_case(conn, |file_id, max_bytes| {
@@ -258,6 +367,18 @@ fn current_analysis(conn: &Connection) -> Result<ReportAnalysis, String> {
     Ok(ReportAnalysis {
         system_info,
         classifications,
+    })
+}
+
+fn current_correlation(conn: &Connection) -> Result<ReportCorrelation, String> {
+    Ok(ReportCorrelation {
+        snapshot: crate::correlation_service::get_correlation_snapshot(conn)?,
+    })
+}
+
+fn current_governance(conn: &Connection, case_id: &str) -> Result<ReportGovernance, String> {
+    Ok(ReportGovernance {
+        snapshot: crate::v2_governance_service::get_v2_governance_snapshot(conn, case_id)?,
     })
 }
 
@@ -376,6 +497,259 @@ fn report_analysis_rows(
     let mut rows = scoped_analysis_rows(analysis, scope);
     rows.extend(evidence_hash_warnings(conn, case_id));
     rows
+}
+
+fn report_governance_rows(governance: &ReportGovernance, scope: &ExportScopeDto) -> Vec<String> {
+    if !scope.file_system_metadata && !scope.full_timeline {
+        return Vec::new();
+    }
+
+    let snapshot = &governance.snapshot;
+    let mut rows = vec![
+        format!(
+            "governance summary generatedAt={} grade={} totalScore={} verification={} correlation={} performance={} security={}",
+            snapshot.generated_at,
+            snapshot.release_scorecard.grade,
+            snapshot.release_scorecard.total_score,
+            snapshot.release_scorecard.verification_score,
+            snapshot.release_scorecard.correlation_score,
+            snapshot.release_scorecard.performance_score,
+            snapshot.release_scorecard.security_score
+        ),
+        format!(
+            "governance supportMatrix ga={} beta={} experimental={} unsupported={} documentedLimit={}",
+            snapshot.support_matrix.ga_count,
+            snapshot.support_matrix.beta_count,
+            snapshot.support_matrix.experimental_count,
+            snapshot.support_matrix.unsupported_count,
+            snapshot.support_matrix.documented_limit_count
+        ),
+        format!(
+            "governance benchmarkSummary baselineVersion={} coveredRequired={} missingRequired={} exceededRequired={}",
+            snapshot.benchmark.baseline_version,
+            snapshot.benchmark.covered_required_count,
+            snapshot.benchmark.missing_required_count,
+            snapshot.benchmark.exceeded_required_count
+        ),
+    ];
+
+    rows.extend(snapshot.release_gates.iter().map(|gate| {
+        format!(
+            "governance gate={} status={} evidence={} detail={}",
+            gate.gate_id,
+            release_gate_status_str(&gate.status),
+            gate.evidence,
+            gate.detail
+        )
+    }));
+    rows.extend(snapshot.runtime_results.checks.iter().map(|check| {
+        format!(
+            "governance runtimeCheck={} status={} checkedAt={} evidence={} detail={}",
+            check.check_id,
+            release_gate_status_str(&check.status),
+            check.checked_at,
+            check.evidence,
+            check.detail
+        )
+    }));
+    rows.extend(snapshot.runtime_results.checks.iter().flat_map(|check| {
+        check.sub_checks.iter().map(move |sub_check| {
+            format!(
+                "governance runtimeSubcheck={} parent={} status={} evidence={} detail={}",
+                sub_check.check_id,
+                check.check_id,
+                release_gate_status_str(&sub_check.status),
+                sub_check.evidence,
+                sub_check.detail
+            )
+        })
+    }));
+    rows.extend(snapshot.verification_chains.iter().map(|chain| {
+        format!(
+            "governance chain={} displayName={} result={} maturity={} guarantee={} fixtureTier={} expectedJson={} sampleCount={}",
+            chain.chain,
+            chain.display_name,
+            verification_result_str(&chain.result),
+            support_maturity_str(&chain.maturity),
+            guarantee_level_str(&chain.guarantee_level),
+            chain.fixture_tier,
+            chain.expected_json_version,
+            chain.verified_sample_count
+        )
+    }));
+    rows.extend(snapshot.benchmark.required_checks.iter().map(|check| {
+        format!(
+            "governance benchmarkCheck datasetLevel={} scenario={} status={} thresholdP95Ms={} measuredP95Ms={}",
+            check.dataset_level,
+            check.scenario,
+            benchmark_requirement_status_str(&check.status),
+            check.threshold_p95_ms,
+            check
+                .measured_p95_ms
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "unknown".to_string())
+        )
+    }));
+    rows.extend(snapshot.fact_sources.iter().map(|source| {
+        format!(
+            "governance factSource area={} factFile={} factKind={} lastVerifiedAt={} outputs={}",
+            source.area,
+            source.fact_file,
+            source.fact_kind,
+            source.last_verified_at,
+            source.derived_outputs.join(" | ")
+        )
+    }));
+    rows.extend(snapshot.known_limitations.iter().map(|item| {
+        format!(
+            "governance knownLimitation category={} item={} status={} affectedChains={} sourceDoc={} summary={}",
+            item.category,
+            item.item,
+            known_limitation_status_str(&item.status),
+            item.affected_chains.join(" | "),
+            item.source_doc,
+            item.summary
+        )
+    }));
+    rows.extend(snapshot.runtime_signals.correlation_family_coverage.iter().map(|family| {
+        format!(
+            "governance correlationFamily family={} displayName={} status={} leads={} highConfidenceLeads={} reviewLeads={} clusters={} signals={}",
+            family.family,
+            family.display_name,
+            correlation_coverage_status_str(&family.status),
+            family.lead_count,
+            family.high_confidence_lead_count,
+            family.review_lead_count,
+            family.cluster_count,
+            family.sample_signals.join(" | ")
+        )
+    }));
+    rows
+}
+
+fn report_correlation_rows(correlation: &ReportCorrelation, scope: &ExportScopeDto) -> Vec<String> {
+    if !scope.file_system_metadata && !scope.full_timeline {
+        return Vec::new();
+    }
+
+    let mut rows = Vec::new();
+    rows.push(format!(
+        "correlation summary leads={} clusters={} nodes={} edges={} generatedAt={}",
+        correlation.snapshot.lead_count,
+        correlation.snapshot.cluster_count,
+        correlation.snapshot.node_count,
+        correlation.snapshot.edge_count,
+        correlation.snapshot.generated_at
+    ));
+    rows.extend(
+        correlation
+            .snapshot
+            .leads
+            .iter()
+            .map(format_correlation_lead_row),
+    );
+    rows
+}
+
+fn report_correlation_lead_sections(
+    correlation: &ReportCorrelation,
+    scope: &ExportScopeDto,
+) -> Vec<HtmlCorrelationLeadSection> {
+    if !scope.file_system_metadata && !scope.full_timeline {
+        return Vec::new();
+    }
+
+    correlation
+        .snapshot
+        .leads
+        .iter()
+        .map(|lead| HtmlCorrelationLeadSection {
+            title: lead.title.clone(),
+            confidence: correlation_confidence_str(&lead.confidence).to_string(),
+            families: lead.families.clone(),
+            primary_file_id: lead.primary_file_id.clone(),
+            summary: lead.summary.clone(),
+            supporting_node_ids: lead.supporting_node_ids.clone(),
+            match_signals: lead.match_signals.clone(),
+            provenance: lead
+                .provenance
+                .iter()
+                .map(|item| {
+                    format!(
+                        "{}:{}:{}:{}",
+                        item.source_kind,
+                        item.source_record_id,
+                        item.source_label,
+                        guarantee_level_str(&item.guarantee_level)
+                    )
+                })
+                .collect(),
+            caveats: lead.caveats.clone(),
+        })
+        .collect()
+}
+
+fn correlation_json_section(correlation: &ReportCorrelation) -> serde_json::Value {
+    serde_json::json!({
+        "generatedAt": correlation.snapshot.generated_at,
+        "leadCount": correlation.snapshot.lead_count,
+        "clusterCount": correlation.snapshot.cluster_count,
+        "nodeCount": correlation.snapshot.node_count,
+        "edgeCount": correlation.snapshot.edge_count,
+        "familyCoverage": correlation.snapshot.family_coverage,
+        "leads": correlation.snapshot.leads.iter().map(|lead| serde_json::json!({
+            "id": lead.id,
+            "title": lead.title,
+            "summary": lead.summary,
+            "confidence": lead.confidence,
+            "families": lead.families,
+            "primaryFileId": lead.primary_file_id,
+            "supportingNodeIds": lead.supporting_node_ids,
+            "matchSignals": lead.match_signals,
+            "jumps": lead.jumps,
+            "provenance": lead.provenance,
+            "caveats": lead.caveats,
+        })).collect::<Vec<_>>(),
+    })
+}
+
+fn governance_json_section(governance: &ReportGovernance) -> serde_json::Value {
+    let snapshot = &governance.snapshot;
+    serde_json::json!({
+        "generatedAt": snapshot.generated_at,
+        "factSources": snapshot.fact_sources,
+        "runtimeResults": snapshot.runtime_results,
+        "verificationChains": snapshot.verification_chains,
+        "supportMatrix": snapshot.support_matrix,
+        "supportMatrixEntries": snapshot.support_matrix_entries,
+        "knownLimitations": snapshot.known_limitations,
+        "benchmark": snapshot.benchmark,
+        "security": snapshot.security,
+        "errorTaxonomyEntries": snapshot.error_taxonomy_entries,
+        "releaseGates": snapshot.release_gates,
+        "releaseScorecard": snapshot.release_scorecard,
+        "runtimeSignals": snapshot.runtime_signals,
+    })
+}
+
+fn correlation_coverage_status_str(
+    value: &transport::dto::CorrelationCoverageStatusDto,
+) -> &'static str {
+    match value {
+        transport::dto::CorrelationCoverageStatusDto::Covered => "covered",
+        transport::dto::CorrelationCoverageStatusDto::Review => "review",
+        transport::dto::CorrelationCoverageStatusDto::Missing => "missing",
+    }
+}
+
+fn benchmark_requirement_status_str(
+    value: &transport::dto::BenchmarkRequirementStatusDto,
+) -> &'static str {
+    match value {
+        transport::dto::BenchmarkRequirementStatusDto::Covered => "covered",
+        transport::dto::BenchmarkRequirementStatusDto::Missing => "missing",
+        transport::dto::BenchmarkRequirementStatusDto::Exceeded => "exceeded",
+    }
 }
 
 fn report_warnings(
@@ -703,6 +1077,83 @@ fn format_timeline_report_row(event: &domain::TimelineEvent) -> String {
         optional_f32(event.confidence),
         optional_str(&event.source_attribution)
     )
+}
+
+fn format_correlation_lead_row(lead: &CorrelationLeadDto) -> String {
+    format!(
+        "correlation lead={} confidence={} families={} primaryFileId={} supportNodes={} matchSignals={} summary={} caveats={} provenance={}",
+        lead.title,
+        correlation_confidence_str(&lead.confidence),
+        lead.families.join(" | "),
+        lead.primary_file_id,
+        lead.supporting_node_ids.join(" | "),
+        lead.match_signals.join(" | "),
+        lead.summary,
+        lead.caveats.join(" | "),
+        lead.provenance
+            .iter()
+            .map(|item| format!(
+                "{}:{}:{}:{}",
+                item.source_kind,
+                item.source_record_id,
+                item.source_label,
+                guarantee_level_str(&item.guarantee_level)
+            ))
+            .collect::<Vec<_>>()
+            .join(" ; ")
+    )
+}
+
+fn correlation_confidence_str(value: &transport::dto::CorrelationConfidenceDto) -> &'static str {
+    match value {
+        transport::dto::CorrelationConfidenceDto::Direct => "direct",
+        transport::dto::CorrelationConfidenceDto::Strong => "strong",
+        transport::dto::CorrelationConfidenceDto::Weak => "weak",
+        transport::dto::CorrelationConfidenceDto::Heuristic => "heuristic",
+    }
+}
+
+fn release_gate_status_str(value: &ReleaseGateStatusDto) -> &'static str {
+    match value {
+        ReleaseGateStatusDto::Passed => "passed",
+        ReleaseGateStatusDto::Warning => "warning",
+        ReleaseGateStatusDto::Blocked => "blocked",
+    }
+}
+
+fn verification_result_str(value: &VerificationResultDto) -> &'static str {
+    match value {
+        VerificationResultDto::Passed => "passed",
+        VerificationResultDto::Partial => "partial",
+        VerificationResultDto::Pending => "pending",
+        VerificationResultDto::Failed => "failed",
+    }
+}
+
+fn support_maturity_str(value: &SupportMaturityDto) -> &'static str {
+    match value {
+        SupportMaturityDto::Ga => "ga",
+        SupportMaturityDto::Beta => "beta",
+        SupportMaturityDto::Experimental => "experimental",
+        SupportMaturityDto::Unsupported => "unsupported",
+    }
+}
+
+fn known_limitation_status_str(value: &transport::dto::KnownLimitationStatusDto) -> &'static str {
+    match value {
+        transport::dto::KnownLimitationStatusDto::Partial => "partial",
+        transport::dto::KnownLimitationStatusDto::Unsupported => "unsupported",
+        transport::dto::KnownLimitationStatusDto::NotGuaranteed => "notGuaranteed",
+    }
+}
+
+fn guarantee_level_str(value: &transport::dto::VerificationGuaranteeLevelDto) -> &'static str {
+    match value {
+        transport::dto::VerificationGuaranteeLevelDto::Guaranteed => "guaranteed",
+        transport::dto::VerificationGuaranteeLevelDto::BestEffort => "bestEffort",
+        transport::dto::VerificationGuaranteeLevelDto::Experimental => "experimental",
+        transport::dto::VerificationGuaranteeLevelDto::NotGuaranteed => "notGuaranteed",
+    }
 }
 
 fn optional_str(value: &Option<String>) -> &str {
@@ -1038,6 +1489,51 @@ mod tests {
             .unwrap();
     }
 
+    fn insert_artifact_and_timeline_for_correlation(
+        conn: &rusqlite::Connection,
+        case_id: &str,
+        ds_id: &DataSourceId,
+    ) {
+        insert_file(conn, ds_id, "file-1", "C:/Windows/System32/cmd.exe");
+        persistence_sqlite::repositories::artifact_repo::ArtifactRepo::new(conn)
+            .insert_batch(
+                &[Artifact {
+                    id: ArtifactId("artifact-correlation".to_string()),
+                    family: "LNK".to_string(),
+                    title: "cmd.lnk".to_string(),
+                    summary: "target -> cmd.exe".to_string(),
+                    source_object_id: Some(FileEntryId("file-1".to_string())),
+                    extractor_id: Some("lnk".to_string()),
+                    extractor_version: Some("1.0.0".to_string()),
+                    confidence: Some(0.91),
+                    source_attribution: Some("Users/Admin/Desktop/cmd.lnk".to_string()),
+                    created_at: chrono::Utc::now(),
+                    attrs: std::collections::BTreeMap::new(),
+                }],
+                case_id,
+                &ds_id.0,
+            )
+            .unwrap();
+        TimelineRepo::new(conn)
+            .insert_batch_with_case(
+                &[TimelineEvent {
+                    id: TimelineEventId("timeline-correlation".to_string()),
+                    source_object_id: "file-1".to_string(),
+                    event_type: "FILE_MODIFIED".to_string(),
+                    timestamp: chrono::Utc::now(),
+                    title: "cmd.exe modified".to_string(),
+                    description: "timeline correlation fixture".to_string(),
+                    parser_id: Some("timeline.macb".to_string()),
+                    parser_version: Some("1.0.0".to_string()),
+                    confidence: Some(0.82),
+                    source_attribution: Some("modified_at".to_string()),
+                    attrs: std::collections::BTreeMap::new(),
+                }],
+                case_id,
+            )
+            .unwrap();
+    }
+
     #[test]
     fn json_export_includes_analysis_provenance_without_fake_facts() {
         let (conn, tmp, case, ds_id) = setup_report_case();
@@ -1268,6 +1764,117 @@ mod tests {
     }
 
     #[test]
+    fn report_exports_include_correlation_section() {
+        let (conn, tmp, case, ds_id) = setup_report_case();
+        insert_artifact_and_timeline_for_correlation(&conn, &case.id.0, &ds_id);
+
+        let json_name =
+            generate_json_export(&conn, &case.id.0, tmp.path(), &ExportScopeDto::default())
+                .unwrap();
+        let json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(tmp.path().join(json_name)).unwrap())
+                .unwrap();
+
+        assert!(json["correlation"]["leadCount"].as_u64().unwrap() >= 1);
+        assert_eq!(json["governance"]["releaseScorecard"]["grade"], "C");
+        assert!(json["governance"]["factSources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["factFile"] == "testdata/governance/v2-release-policy.json"));
+        assert!(json["governance"]["factSources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["factFile"] == "testdata/governance/v2-known-limitations.json"));
+        assert!(json["governance"]["factSources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["factFile"] == "testdata/governance/v2-runtime-results.json"));
+        assert!(json["governance"]["knownLimitations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["category"] == "Browser" && item["status"] == "unsupported"));
+        assert!(json["governance"]["runtimeResults"]["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["checkId"] == "docs-drift"));
+        assert!(json["governance"]["runtimeResults"]["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["subChecks"]
+                .as_array()
+                .map(|items| !items.is_empty())
+                .unwrap_or(false)));
+        assert!(json["governance"]["releaseGates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["gateId"] == "security-baseline"));
+        assert!(
+            json["governance"]["runtimeSignals"]["correlationFamilyCoverage"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| item["family"] == "LNK")
+        );
+        assert!(json["governance"]["benchmark"]["requiredChecks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["scenario"] == "medium 文件树首展开"
+                || item["scenario"] == "文件树首展开"));
+        assert_eq!(json["governance"]["benchmark"]["missingRequiredCount"], 3);
+        assert_eq!(json["correlation"]["leads"][0]["primaryFileId"], "file-1");
+        assert!(json["correlation"]["leads"][0]["summary"]
+            .as_str()
+            .unwrap()
+            .contains("source object"));
+
+        let html_name =
+            generate_html_report(&conn, &case, tmp.path(), &ExportScopeDto::default()).unwrap();
+        let html = std::fs::read_to_string(tmp.path().join(html_name)).unwrap();
+        assert!(html.contains("Governance Snapshot"));
+        assert!(html.contains("governance summary generatedAt="));
+        assert!(html.contains("governance runtimeCheck=docs-drift"));
+        assert!(html.contains("governance runtimeSubcheck=readme-fact-sync parent=docs-drift"));
+        assert!(html.contains("governance factSource area=knownLimitations factFile=testdata/governance/v2-known-limitations.json"));
+        assert!(html.contains("governance knownLimitation category=Recycle Bin item=全损坏恢复场景 status=notGuaranteed"));
+        assert!(html.contains("governance benchmarkSummary baselineVersion="));
+        assert!(html.contains(
+            "governance benchmarkCheck datasetLevel=medium scenario=文件树首展开 status=covered"
+        ));
+        assert!(html.contains("governance gate=security-baseline"));
+        assert!(html.contains("governance correlationFamily family=LNK"));
+        assert!(html.contains("Correlation Leads"));
+        assert!(html.contains("primaryFileId=file-1"));
+        assert!(html.contains("confidence=direct"));
+
+        let csv_name =
+            generate_csv_artifacts(&conn, &case.id.0, tmp.path(), &ExportScopeDto::default())
+                .unwrap();
+        let csv = std::fs::read_to_string(tmp.path().join(csv_name)).unwrap();
+        assert!(csv.contains("\"governance\""));
+        assert!(csv.contains("governance summary generatedAt="));
+        assert!(csv.contains("governance runtimeCheck=docs-drift"));
+        assert!(csv.contains("governance runtimeSubcheck=readme-fact-sync parent=docs-drift"));
+        assert!(csv.contains("governance factSource area=knownLimitations factFile=testdata/governance/v2-known-limitations.json"));
+        assert!(csv.contains("governance knownLimitation category=Recycle Bin item=全损坏恢复场景 status=notGuaranteed"));
+        assert!(csv.contains("governance benchmarkSummary baselineVersion="));
+        assert!(csv.contains(
+            "governance benchmarkCheck datasetLevel=medium scenario=文件树首展开 status=covered"
+        ));
+        assert!(csv.contains("governance gate=security-baseline"));
+        assert!(csv.contains("governance correlationFamily family=LNK"));
+        assert!(csv.contains("correlation summary leads="));
+        assert!(csv.contains("cmd.lnk"));
+    }
+
+    #[test]
     fn report_exports_tolerate_legacy_missing_provenance() {
         let (conn, tmp, case, ds_id) = setup_report_case();
         conn.execute(
@@ -1449,5 +2056,77 @@ mod tests {
         assert!(joined.contains("recordId=42"));
         assert!(joined.contains("evtx.boot_shutdown"));
         assert!(!joined.contains("FORENSICS-PC"));
+    }
+
+    #[test]
+    fn csv_correlation_export_includes_all_columns() {
+        let (conn, tmp, case, ds_id) = setup_report_case();
+        insert_artifact_and_timeline_for_correlation(&conn, &case.id.0, &ds_id);
+
+        let file_name =
+            generate_csv_correlation(&conn, &case.id.0, tmp.path(), &ExportScopeDto::default())
+                .unwrap();
+        let csv = std::fs::read_to_string(tmp.path().join(file_name)).unwrap();
+
+        // Verify header row contains all 9 columns
+        assert!(csv.contains("lead_id,title,confidence,families,primary_file_path,supporting_node_count,match_signals_count,provenance_sources,caveats"));
+
+        // Verify at least one data row with real correlation data
+        assert!(csv.contains("\"cmd.exe 形成关联线索\""));
+        assert!(csv.contains("\"direct\""));
+        assert!(csv.contains("LNK"));
+        assert!(csv.contains("\"file-1\""));
+
+        // Verify history record was persisted (dedicated correlation CSV file)
+        let history = get_report_history(&conn, &case.id.0);
+        assert!(history
+            .iter()
+            .any(|item| item.file_name.starts_with("correlation-")
+                && item.file_name.ends_with(".csv")));
+    }
+
+    #[test]
+    fn csv_correlation_export_persists_history() {
+        let (conn, tmp, case, ds_id) = setup_report_case();
+        insert_artifact_and_timeline_for_correlation(&conn, &case.id.0, &ds_id);
+
+        let file_name =
+            generate_csv_correlation(&conn, &case.id.0, tmp.path(), &ExportScopeDto::default())
+                .unwrap();
+
+        let csv_path = tmp.path().join(&file_name);
+        assert!(csv_path.exists());
+
+        let csv = std::fs::read_to_string(&csv_path).unwrap();
+        // File name starts with "correlation-" but CSV content has the structured header
+        assert!(csv.contains("lead_id"));
+
+        let history = get_report_history(&conn, &case.id.0);
+        let correlation_items: Vec<_> = history
+            .iter()
+            .filter(|item| item.file_name.starts_with("correlation-"))
+            .collect();
+        assert_eq!(correlation_items.len(), 1);
+        assert_eq!(correlation_items[0].file_name, file_name);
+        assert_eq!(correlation_items[0].status, "completed");
+    }
+
+    #[test]
+    fn csv_correlation_export_scope_gates_empty_when_no_scope() {
+        let (conn, tmp, case, _ds_id) = setup_report_case();
+        // No artifacts or timeline — correlation snapshot should be empty
+        let scope = ExportScopeDto {
+            file_system_metadata: false,
+            registry: false,
+            full_timeline: false,
+            raw_file_extraction: false,
+            overwrite: false,
+        };
+
+        let file_name = generate_csv_correlation(&conn, &case.id.0, tmp.path(), &scope).unwrap();
+        let csv = std::fs::read_to_string(tmp.path().join(file_name)).unwrap();
+
+        // Header should exist even with empty data (no rows)
+        assert!(csv.contains("lead_id,title,confidence,families,primary_file_path,supporting_node_count,match_signals_count,provenance_sources,caveats"));
     }
 }

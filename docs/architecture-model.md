@@ -253,11 +253,11 @@
 
 ### 测试 Fixture 策略
 
-- `testdata/fixtures/tiny/logical/` 是默认 CI 可用的逻辑目录 fixture。
-- `testdata/fixtures/tiny/raw/tiny.raw` 是 1024-byte deterministic RAW fixture，含 MBR signature。
-- `testdata/fixtures/tiny/e01/tiny.E01` 是 4405-byte synthetic single-segment E01 fixture，用于 `image-e01` reader 的 section/table/read/seek 回归。它不是完整文件系统镜像，也不能替代真实 E01 分区/文件系统慢测。
-- `testdata/fixtures/tiny/logical/Windows/System32/config/SYSTEM` 和 `SOFTWARE` 是 deterministic synthetic registry hives，用于 Analysis Registry targeted parser path 回归；它们不是完整 Windows registry corpus。
-- `testdata/fixtures/tiny/evtx/system.evtx` 是 1,118,208-byte real System.evtx fixture，用于 `evtx.boot_shutdown` parser path 回归；fixture provenance 写在同目录 `README.md`。
+- `testdata/fixtures/public-small/logical/` 是默认 CI 可用的逻辑目录 fixture。
+- `testdata/fixtures/public-small/raw/tiny.raw` 是 1024-byte deterministic RAW fixture，含 MBR signature。
+- `testdata/fixtures/public-small/e01/tiny.E01` 是 4405-byte synthetic single-segment E01 fixture，用于 `image-e01` reader 的 section/table/read/seek 回归。它不是完整文件系统镜像，也不能替代真实 E01 分区/文件系统慢测。
+- `testdata/fixtures/public-small/logical/Windows/System32/config/SYSTEM` 和 `SOFTWARE` 是 deterministic synthetic registry hives，用于 Analysis Registry targeted parser path 回归；它们不是完整 Windows registry corpus。
+- `testdata/fixtures/public-small/evtx/system.evtx` 是 1,118,208-byte real System.evtx fixture，用于 `evtx.boot_shutdown` parser path 回归；fixture provenance 写在同目录 `README.md`。
 - `scripts/generate-tiny-fixtures.ps1` 可重建 RAW/E01/Registry tiny fixtures。真实 E01 验收继续通过 `FORENSICS_E01_FIXTURE` opt-in ignored slow tests 执行，默认 CI 不依赖私有样本。
 
 ---

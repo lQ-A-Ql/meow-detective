@@ -268,6 +268,15 @@ pub fn get_artifact_rows_from_db(
     Ok(artifacts.iter().map(artifact_to_dto).collect())
 }
 
+pub fn get_artifact_row_by_id(
+    conn: &Connection,
+    artifact_id: &str,
+) -> Result<Option<ArtifactRowDto>, String> {
+    let repo = ArtifactRepo::new(conn);
+    let artifact = repo.find_by_id(artifact_id).map_err(|e| e.to_string())?;
+    Ok(artifact.as_ref().map(artifact_to_dto))
+}
+
 pub fn get_artifact_family_counts(conn: &Connection) -> Result<Vec<FamilyCountDto>, String> {
     let repo = ArtifactRepo::new(conn);
     let counts = repo.count_by_family().map_err(|e| e.to_string())?;

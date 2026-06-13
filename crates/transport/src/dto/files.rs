@@ -49,6 +49,16 @@ pub struct FileRowsPageDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct FileJumpContextDto {
+    pub target: FileEntryRowDto,
+    pub directory: FileEntryRowDto,
+    pub ancestor_directory_ids: Vec<String>,
+    pub row_offset: u64,
+    pub requires_show_hidden: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FileEntryRowDto {
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -135,5 +145,55 @@ mod tests {
         assert_eq!(value["hidden"], true);
         assert_eq!(value["system"], true);
         assert!(value.get("has_children").is_none());
+    }
+
+    #[test]
+    fn file_jump_context_serializes_camel_case_fields() {
+        let dto = FileJumpContextDto {
+            target: FileEntryRowDto {
+                id: "file-1".to_string(),
+                parent_id: Some("dir-1".to_string()),
+                path: "/Windows/System32/cmd.exe".to_string(),
+                name: "cmd.exe".to_string(),
+                entry_type: "file".to_string(),
+                size: Some(1024),
+                ext: Some("exe".to_string()),
+                deleted: false,
+                hidden: false,
+                system: false,
+                created_at: None,
+                modified_at: None,
+                accessed_at: None,
+                changed_at: None,
+                hash_sha256: None,
+            },
+            directory: FileEntryRowDto {
+                id: "dir-1".to_string(),
+                parent_id: Some("root".to_string()),
+                path: "/Windows/System32".to_string(),
+                name: "System32".to_string(),
+                entry_type: "directory".to_string(),
+                size: None,
+                ext: None,
+                deleted: false,
+                hidden: false,
+                system: false,
+                created_at: None,
+                modified_at: None,
+                accessed_at: None,
+                changed_at: None,
+                hash_sha256: None,
+            },
+            ancestor_directory_ids: vec!["root".to_string(), "dir-1".to_string()],
+            row_offset: 500,
+            requires_show_hidden: false,
+        };
+
+        let value = serde_json::to_value(dto).unwrap();
+
+        assert_eq!(value["rowOffset"], 500);
+        assert_eq!(value["requiresShowHidden"], false);
+        assert_eq!(value["ancestorDirectoryIds"][0], "root");
+        assert!(value.get("row_offset").is_none());
     }
 }

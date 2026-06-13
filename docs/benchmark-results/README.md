@@ -2,6 +2,15 @@
 
 本目录用于保存 parser、导出、搜索与时间线相关 benchmark 结果。
 
+统一口径说明见：
+
+- `docs/benchmark-baseline.md`
+- `docs/v2-longterm-plan.md`
+
+当前 `/v2` 治理工作台默认读取的 benchmark 基线事实源：
+
+- `testdata/governance/v2-benchmark-baseline.json`
+
 每条 benchmark 结果至少包含：
 
 - 时间

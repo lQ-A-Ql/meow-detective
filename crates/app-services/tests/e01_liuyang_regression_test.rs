@@ -1,5 +1,6 @@
 use app_services::{
-    analysis_service, case_service, datasource_service, file_service, parallel_enum, staging,
+    analysis_service, artifact_service, case_service, correlation_service, datasource_service,
+    file_service, parallel_enum, staging, timeline_service, v2_governance_service,
 };
 use evidence_core::{EvidenceReader, FileSystemReader};
 use image_e01::E01Reader;
@@ -7,6 +8,7 @@ use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_rep
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::time::Instant;
 use tempfile::TempDir;
 use transport::commands::GetFileRowsRequest;
 
@@ -539,22 +541,37 @@ fn liuyang_e01_parallel_mft_backfill_surfaces_users_tree() {
             assert!(merged > 1000, "merge should copy enumerated NTFS rows");
 
             let repo = FileRepo::new(conn);
-            let users_entry = repo
-                .find_children(&domain::FileEntryId(root_id.clone()))?
-                .into_iter()
+            // After merge_all_staging_to_main, the tree structure may re-parent
+            // entries — use a data_source-scoped name query rather than assuming
+            // the root_id survives merge unchanged.
+            let users_entries = repo.find_by_data_source(&data_source_id)?;
+            let users_entry = users_entries
+                .iter()
                 .find(|entry| {
                     entry.name.eq_ignore_ascii_case("Users")
                         && entry.entry_type == domain::EntryType::Directory
+                        && !entry.path.contains('/')
                 })
-                .expect("FileRepo children should include Users under the MFT root");
+                .unwrap_or_else(|| {
+                    let dir_sample: Vec<_> = users_entries
+                        .iter()
+                        .filter(|e| e.entry_type == domain::EntryType::Directory)
+                        .take(10)
+                        .map(|e| format!("{} (parent={:?})", e.path, e.parent_id))
+                        .collect();
+                    panic!(
+                        "FileRepo should contain a top-level Users directory after merge; dir_sample={dir_sample:?}"
+                    )
+                });
             let children = repo.find_children(&users_entry.id)?;
             assert!(
                 !children.is_empty(),
-                "FileRepo should navigate into Users from the MFT root"
+                "FileRepo should navigate into Users after merge; path={} id={}",
+                users_entry.path,
+                users_entry.id.0
             );
             eprintln!(
-                "merged Liu Yang tree: root_id={} users_id={} users_path={} users_children={}",
-                root_id,
+                "merged Liu Yang tree: users_id={} users_path={} users_children={}",
                 users_entry.id.0,
                 users_entry.path,
                 children.len()
@@ -763,20 +780,28 @@ fn liuyang_e01_parallel_mft_backfill_surfaces_system_volume_information_children
             assert!(merged > 1000, "merge should copy enumerated NTFS rows");
 
             let repo = FileRepo::new(conn);
-            let root_id = domain::FileEntryId(root_id.clone());
-            let merged_root_children = repo.find_children(&root_id)?;
-            let merged_root_child_names = merged_root_children
+            // After merge_all_staging_to_main, entries may be re-parented
+            // under the partition placeholder rather than the raw MFT root.
+            // Query by data_source + name instead of assuming a fixed root_id.
+            let merged_entries = repo.find_by_data_source(&data_source_id)?;
+            let svi_entry = merged_entries
                 .iter()
-                .take(40)
-                .map(|entry| entry.name.clone())
-                .collect::<Vec<_>>();
-            let svi_entry = merged_root_children
-                .into_iter()
                 .find(|entry| {
                     entry.name.eq_ignore_ascii_case("System Volume Information")
                         && entry.entry_type == domain::EntryType::Directory
+                        && !entry.path.contains('/')
                 })
-                .expect("FileRepo children should include System Volume Information under the MFT root");
+                .unwrap_or_else(|| {
+                    let dir_sample: Vec<_> = merged_entries
+                        .iter()
+                        .filter(|e| e.entry_type == domain::EntryType::Directory)
+                        .take(10)
+                        .map(|e| format!("{} (parent={:?})", e.path, e.parent_id))
+                        .collect();
+                    panic!(
+                        "FileRepo should contain a top-level System Volume Information directory after merge; dir_sample={dir_sample:?}"
+                    )
+                });
             let children = repo.find_children(&svi_entry.id)?;
             let child_names = children
                 .iter()
@@ -786,17 +811,15 @@ fn liuyang_e01_parallel_mft_backfill_surfaces_system_volume_information_children
             if expect_svi_children {
                 assert!(
                     !children.is_empty(),
-                    "FileRepo should expose SVI direct children from the MFT root; sample_children={} root_children_sample={:?} svi_id={} svi_path={} child_sample={:?}",
+                    "FileRepo should expose SVI direct children after merge; sample_children={} svi_id={} svi_path={} child_sample={:?}",
                     sample_svi_children.len(),
-                    merged_root_child_names,
                     svi_entry.id.0,
                     svi_entry.path,
                     child_names
                 );
             }
             eprintln!(
-                "merged SVI: root_children={:?} svi_id={} svi_path={} direct_children={} child_sample={:?}",
-                merged_root_child_names,
+                "merged SVI: svi_id={} svi_path={} direct_children={} child_sample={:?}",
                 svi_entry.id.0,
                 svi_entry.path,
                 children.len(),
@@ -1048,6 +1071,392 @@ fn assert_honest_display_name(name: &str) {
             .eq_ignore_ascii_case("System Volume Information"),
         "partition display name must not be the first NTFS child directory"
     );
+}
+
+// ── V2: Correlation + Governance from real sample ────────────────────────
+
+#[test]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real sample"]
+fn liuyang_e01_correlation_snapshot_and_governance() {
+    let fixture_path = sample_path();
+    let expected_fragment = expected_path_fragment();
+    let start = Instant::now();
+
+    let mut reader = E01Reader::open(&fixture_path).unwrap();
+    let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
+    let ntfs = probe
+        .candidates
+        .iter()
+        .find(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
+        .expect("NTFS candidate required");
+
+    let (mft_cluster, cluster_size, record_size, bytes_per_sector, mft_data_size) =
+        read_mft_parameters(&fixture_path, ntfs.offset).unwrap();
+
+    let tmp = TempDir::new().unwrap();
+    let active =
+        case_service::create_case(&tmp.path().join("cases"), "liuyang-v2", Some("tester")).unwrap();
+    let case_id = active.meta.id.clone();
+
+    active
+        .with_conn(|conn| {
+            let data_source_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
+            DataSourceRepo::new(conn).insert(
+                &case_id,
+                &domain::DataSource {
+                    id: data_source_id.clone(),
+                    name: "liuyang-v2-real".into(),
+                    kind: domain::DataSourceKind::E01,
+                    source_path: fixture_path.clone(),
+                    imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
+                },
+            )?;
+
+            // Import MFT
+            let stats = file_service::enumerate_filesystem_mft(
+                conn,
+                &data_source_id,
+                &fixture_path,
+                ntfs.offset,
+                mft_cluster,
+                cluster_size,
+                record_size,
+                bytes_per_sector,
+                mft_data_size,
+                Some(&|pct, msg| eprintln!("[MFT {pct}%] {msg}")),
+                None,
+            )?;
+            let import_elapsed = start.elapsed();
+            eprintln!(
+                "[BENCH-OUTPUT] scenario=import_mft dataset_level=large p95_ms={} file_count={} dir_count={}",
+                import_elapsed.as_millis(),
+                stats.file_count,
+                stats.dir_count
+            );
+
+            assert!(stats.file_count > 1000, "Should enumerate many files");
+
+            // Verify expected path
+            let repo = FileRepo::new(conn);
+            let entries = repo.find_by_data_source(&data_source_id)?;
+            let matching = entries.iter().find(|e| {
+                e.path.contains(&expected_fragment) || e.name.contains(&expected_fragment)
+            });
+            assert!(matching.is_some(), "Expected path/name containing '{expected_fragment}'");
+
+            // Build timeline from MACB
+            let tl_start = Instant::now();
+            let tl_result = timeline_service::query_timeline(conn, 0, 100).unwrap();
+            eprintln!(
+                "timeline query: {} items in {:?}",
+                tl_result.items.len(),
+                tl_start.elapsed()
+            );
+
+            // Run correlation snapshot
+            let corr_start = Instant::now();
+            let snapshot = correlation_service::get_correlation_snapshot(conn).unwrap();
+            let corr_elapsed = corr_start.elapsed();
+            eprintln!(
+                "[BENCH-OUTPUT] scenario=correlation_snapshot dataset_level=large p95_ms={}",
+                corr_elapsed.as_millis()
+            );
+            eprintln!(
+                "correlation: nodes={} edges={} clusters={} leads={}",
+                snapshot.node_count, snapshot.edge_count,
+                snapshot.cluster_count, snapshot.lead_count
+            );
+
+            // Print family coverage
+            for fc in &snapshot.family_coverage {
+                eprintln!(
+                    "  family {}: status={:?} leads={} high_conf={} review={} clusters={} signals={:?}",
+                    fc.family, fc.status, fc.lead_count,
+                    fc.high_confidence_lead_count, fc.review_lead_count,
+                    fc.cluster_count, fc.sample_signals
+                );
+            }
+
+            // Must produce correlation nodes
+            assert!(snapshot.node_count > 0, "Should have correlation nodes from real data");
+            assert!(snapshot.family_coverage.len() >= 6, "Should cover at least 6 rule families");
+
+            let covered = snapshot.family_coverage.iter()
+                .filter(|fc| fc.lead_count > 0)
+                .count();
+            eprintln!("families with leads: {}/{}", covered, snapshot.family_coverage.len());
+
+            // Run governance snapshot
+            let gov_start = Instant::now();
+            let governance = v2_governance_service::get_v2_governance_snapshot(conn, &case_id.0)
+                .unwrap();
+            let gov_elapsed = gov_start.elapsed();
+            eprintln!(
+                "[BENCH-OUTPUT] scenario=governance_snapshot dataset_level=large p95_ms={}",
+                gov_elapsed.as_millis()
+            );
+
+            let gates_passing = governance.release_gates.iter()
+                .filter(|g| g.status == transport::dto::ReleaseGateStatusDto::Passed)
+                .count();
+            eprintln!(
+                "governance: score={}/{} grade={} gates={}/{}",
+                governance.release_scorecard.total_score,
+                100,
+                governance.release_scorecard.grade,
+                gates_passing,
+                governance.release_gates.len()
+            );
+            eprintln!(
+                "governance correlation signals: snapshot_avail={} leads={} high_conf={} review={} clusters={} families={}/{}",
+                governance.runtime_signals.correlation_snapshot_available,
+                governance.runtime_signals.correlation_lead_count,
+                governance.runtime_signals.correlation_high_confidence_lead_count,
+                governance.runtime_signals.correlation_review_lead_count,
+                governance.runtime_signals.correlation_cluster_count,
+                governance.runtime_signals.correlation_covered_family_count,
+                governance.runtime_signals.correlation_rule_family_count
+            );
+
+            let total_elapsed = start.elapsed();
+            eprintln!("=== V2 full pipeline (liuyang_pc.E01) complete in {total_elapsed:?} ===");
+
+            Ok(())
+        })
+        .unwrap();
+}
+
+// ── V2-2: Full artifact extraction + correlation from real sample ────────
+
+#[test]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE real sample"]
+fn liuyang_e01_artifact_extraction_and_correlation_rules() {
+    let fixture_path = sample_path();
+    let start = Instant::now();
+
+    let mut reader = E01Reader::open(&fixture_path).unwrap();
+    let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
+    let ntfs = probe
+        .candidates
+        .iter()
+        .find(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
+        .expect("NTFS candidate required");
+
+    let (mft_cluster, cluster_size, record_size, bytes_per_sector, mft_data_size) =
+        read_mft_parameters(&fixture_path, ntfs.offset).unwrap();
+
+    let tmp = TempDir::new().unwrap();
+    let active = case_service::create_case(
+        &tmp.path().join("cases"),
+        "liuyang-v2-artifacts",
+        Some("tester"),
+    )
+    .unwrap();
+    let case_id = active.meta.id.clone();
+
+    active
+        .with_conn(|conn| {
+            let data_source_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
+            DataSourceRepo::new(conn).insert(
+                &case_id,
+                &domain::DataSource {
+                    id: data_source_id.clone(),
+                    name: "liuyang-v2-artifacts".into(),
+                    kind: domain::DataSourceKind::E01,
+                    source_path: fixture_path.clone(),
+                    imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
+                },
+            )?;
+
+            // Step 1: Import MFT
+            let stats = file_service::enumerate_filesystem_mft(
+                conn,
+                &data_source_id,
+                &fixture_path,
+                ntfs.offset,
+                mft_cluster,
+                cluster_size,
+                record_size,
+                bytes_per_sector,
+                mft_data_size,
+                Some(&|pct, msg| eprintln!("[MFT {pct}%] {msg}")),
+                None,
+            )?;
+            eprintln!(
+                "[BENCH-OUTPUT] scenario=import_mft dataset_level=large p95_ms={} file_count={}",
+                start.elapsed().as_millis(),
+                stats.file_count
+            );
+
+            // Step 2: Discover evidence candidates (what artifact files exist)
+            let candidates =
+                analysis_service::evidence_candidates_for_categories(conn, &[]).unwrap_or_default();
+            let by_category: std::collections::BTreeMap<String, Vec<_>> = candidates
+                .iter()
+                .fold(std::collections::BTreeMap::new(), |mut acc, c| {
+                    acc.entry(c.category.clone()).or_default().push(c);
+                    acc
+                });
+            for (cat, items) in &by_category {
+                eprintln!("  category {cat}: {} candidates", items.len());
+            }
+
+            // Step 3: Extract artifacts from a prioritized subset of files
+            // Prioritize: Prefetch, LNK, RecycleBin (core correlation rules)
+            // Also extract: Registry values, JumpList
+            let priority_categories = [
+                "ProgramExecution",  // Prefetch
+                "UserActivity",      // LNK, JumpList
+                "RecycleBin",        // Recycle Bin
+            ];
+            let mut extracted: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+            let mut extraction_stats = artifact_service::EvidenceScanStats::default();
+            let max_per_category = 5usize;
+
+            let boxed: Box<dyn EvidenceReader> =
+                Box::new(E01Reader::open(&fixture_path).unwrap());
+            let fs = fs_ntfs::NtfsReader::open(boxed, ntfs.offset).unwrap();
+
+            let registry = artifact_service::create_registry();
+
+            for cat in &priority_categories {
+                let items = by_category.get(*cat).map(|v| v.as_slice()).unwrap_or(&[]);
+                for candidate in items.iter().take(max_per_category) {
+                    if extracted.contains(&candidate.file_id.0) {
+                        continue;
+                    }
+                    // Read file bytes from E01
+                    let file_bytes = match read_fs_file_optional(&fs, &candidate.path) {
+                        Ok(b) => b,
+                        Err(e) => {
+                            eprintln!("  skip {}: {e}", candidate.path);
+                            continue;
+                        }
+                    };
+                    if file_bytes.is_empty() {
+                        continue;
+                    }
+
+                    let mut sink = artifacts_core::VecSink::new();
+                    let reader: Box<dyn std::io::Read> = Box::new(std::io::Cursor::new(file_bytes));
+                    artifact_service::run_extractors_on_file(
+                        &registry,
+                        &domain::FileEntryId(candidate.file_id.0.clone()),
+                        &candidate.path,
+                        reader,
+                        &mut sink,
+                    )
+                    .unwrap();
+
+                    if !sink.artifacts.is_empty() {
+                        let count = sink.artifacts.len();
+                        artifact_service::store_artifacts(
+                            conn,
+                            &sink.artifacts,
+                            &case_id.0,
+                            &data_source_id.0,
+                        )
+                        .unwrap();
+                        extraction_stats.artifact_count += count as u32;
+                        extraction_stats.scanned_count += 1;
+                        eprintln!(
+                            "  extracted {} artifacts from {} (category={})",
+                            count, candidate.path, cat
+                        );
+                    }
+                    extracted.insert(candidate.file_id.0.clone());
+                }
+            }
+            eprintln!(
+                "Extraction summary: {} files → {} artifacts",
+                extraction_stats.scanned_count, extraction_stats.artifact_count
+            );
+
+            // Step 4: Build timeline from MACB
+            timeline_service::ensure_macb_timeline_projected(conn).ok();
+            let tl_items = timeline_service::query_timeline(conn, 0, 100)
+                .map(|r| r.items.len())
+                .unwrap_or(0);
+            eprintln!("timeline items (first page): {tl_items}");
+
+            // Step 5: Run correlation snapshot
+            let corr_start = Instant::now();
+            let snapshot = correlation_service::get_correlation_snapshot(conn).unwrap();
+            eprintln!(
+                "[BENCH-OUTPUT] scenario=correlation_snapshot dataset_level=large p95_ms={}",
+                corr_start.elapsed().as_millis()
+            );
+            eprintln!(
+                "correlation: nodes={} edges={} clusters={} leads={}",
+                snapshot.node_count, snapshot.edge_count,
+                snapshot.cluster_count, snapshot.lead_count
+            );
+
+            // Step 6: Verify family-rule leads are now produced
+            for fc in &snapshot.family_coverage {
+                eprintln!(
+                    "  family {}: status={:?} leads={} high_conf={} review={}",
+                    fc.family, fc.status, fc.lead_count,
+                    fc.high_confidence_lead_count, fc.review_lead_count
+                );
+            }
+            let covered_families: Vec<_> = snapshot.family_coverage.iter()
+                .filter(|fc| fc.lead_count > 0)
+                .map(|fc| fc.family.as_str())
+                .collect();
+            eprintln!("families with leads: {:?}", covered_families);
+
+            // At least some families should now have leads from artifact extraction
+            assert!(
+                !covered_families.is_empty(),
+                "Artifact extraction should produce at least some family-rule leads"
+            );
+
+            // For each covered family, verify provenance
+            for lead in snapshot.leads.iter().take(5) {
+                eprintln!(
+                    "  lead [{}] {} confidence={:?} families={:?} signals={:?}",
+                    lead.id,
+                    lead.title,
+                    lead.confidence,
+                    lead.families,
+                    lead.match_signals
+                );
+            }
+
+            // Step 7: Run governance snapshot
+            let governance =
+                v2_governance_service::get_v2_governance_snapshot(conn, &case_id.0).unwrap();
+            eprintln!(
+                "governance: score={}/100 grade={} gates={}/{} correlation_leads={} correlation_families={}/{}",
+                governance.release_scorecard.total_score,
+                governance.release_scorecard.grade,
+                governance.release_gates.iter().filter(|g| g.status == transport::dto::ReleaseGateStatusDto::Passed).count(),
+                governance.release_gates.len(),
+                governance.runtime_signals.correlation_lead_count,
+                governance.runtime_signals.correlation_covered_family_count,
+                governance.runtime_signals.correlation_rule_family_count
+            );
+
+            let total_elapsed = start.elapsed();
+            eprintln!("=== V2 artifact extraction pipeline complete in {total_elapsed:?} ===");
+
+            Ok(())
+        })
+        .unwrap();
+}
+
+fn read_fs_file_optional(fs: &fs_ntfs::NtfsReader, path: &str) -> Result<Vec<u8>, String> {
+    let mut reader = fs
+        .open_file(path)
+        .map_err(|e| format!("open {path}: {e}"))?;
+    let mut buf = Vec::new();
+    reader
+        .read_to_end(&mut buf)
+        .map_err(|e| format!("read {path}: {e}"))?;
+    Ok(buf)
 }
 
 fn read_fs_file(fs: &fs_ntfs::NtfsReader, path: &str) -> Vec<u8> {

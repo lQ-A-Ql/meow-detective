@@ -19,6 +19,12 @@ export const appRoutes: RouteObject[] = [
         }),
       },
       {
+        path: 'v2',
+        lazy: async () => ({
+          Component: (await import('./pages/V2Workbench')).V2Workbench,
+        }),
+      },
+      {
         path: 'files',
         lazy: async () => ({
           Component: (await import('./pages/FileBrowser')).FileBrowser,

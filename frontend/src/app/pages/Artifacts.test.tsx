@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   artifactFamilies: vi.fn(),
   artifactFamilyCounts: vi.fn(),
   artifactRows: vi.fn(),
+  artifactById: vi.fn(),
+  navigate: vi.fn(),
   selectionState: {
     selectedArtifactFamily: 'LNK',
     selectedArtifactId: undefined as string | undefined,
@@ -19,6 +21,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/features/artifacts/hooks', () => ({
+  useArtifactById: mocks.artifactById,
   useArtifactFamilies: mocks.artifactFamilies,
   useArtifactFamilyCounts: mocks.artifactFamilyCounts,
   useArtifactRows: mocks.artifactRows,
@@ -29,7 +32,7 @@ vi.mock('@/stores/selection-store', () => ({
 }));
 
 vi.mock('react-router', () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mocks.navigate,
 }));
 
 function queryState(overrides: Record<string, unknown> = {}) {
@@ -65,7 +68,12 @@ const populatedRows = [
     summary: '目标路径: D:\\Documents\\classified.pdf',
     sourceObjectId: 'file-10',
     createdAt: '2026-05-15T09:00:00Z',
-    attrs: { targetPath: 'D:\\Documents\\classified.pdf', driveType: 'Fixed', volumeSerial: 'A1B2-C3D4', machineId: 'PC-001' },
+    attrs: {
+      targetPath: 'D:\\Documents\\classified.pdf',
+      driveType: 'Fixed',
+      volumeSerial: 'A1B2-C3D4',
+      machineId: 'PC-001',
+    },
   },
   {
     id: 'lnk-2',
@@ -74,7 +82,12 @@ const populatedRows = [
     summary: '目标路径: E:\\Work\\report.xlsx',
     sourceObjectId: 'file-20',
     createdAt: '2026-05-20T14:30:00Z',
-    attrs: { targetPath: 'E:\\Work\\report.xlsx', driveType: 'Fixed', volumeSerial: 'E5F6-G7H8', machineId: 'PC-001' },
+    attrs: {
+      targetPath: 'E:\\Work\\report.xlsx',
+      driveType: 'Fixed',
+      volumeSerial: 'E5F6-G7H8',
+      machineId: 'PC-001',
+    },
   },
 ];
 
@@ -85,14 +98,19 @@ describe('Artifacts page', () => {
       selectedArtifactFamily: 'LNK',
       selectedArtifactId: undefined,
     });
-    mocks.artifactFamilies.mockReturnValue(queryState({ data: ['LNK', 'Prefetch', 'JumpList'] }));
-    mocks.artifactFamilyCounts.mockReturnValue(queryState({
-      data: [
-        { family: 'LNK', count: 2 },
-        { family: 'Prefetch', count: 5 },
-        { family: 'JumpList', count: 3 },
-      ],
-    }));
+    mocks.artifactFamilies.mockReturnValue(
+      queryState({ data: ['LNK', 'Prefetch', 'JumpList'] }),
+    );
+    mocks.artifactFamilyCounts.mockReturnValue(
+      queryState({
+        data: [
+          { family: 'LNK', count: 2 },
+          { family: 'Prefetch', count: 5 },
+          { family: 'JumpList', count: 3 },
+        ],
+      }),
+    );
+    mocks.artifactById.mockReturnValue(queryState({ data: null }));
   });
 
   it('renders empty state when no artifacts', () => {
@@ -120,10 +138,47 @@ describe('Artifacts page', () => {
 
     renderPage();
 
-    expect(screen.getAllByText('C:\\Users\\admin\\Desktop\\secret.lnk').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('C:\\Users\\admin\\Recent\\report.lnk').length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText('C:\\Users\\admin\\Desktop\\secret.lnk').length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText('C:\\Users\\admin\\Recent\\report.lnk').length,
+    ).toBeGreaterThan(0);
     expect(screen.getAllByText('D:\\Documents\\classified.pdf').length).toBeGreaterThan(0);
     expect(screen.getAllByText('E:\\Work\\report.xlsx').length).toBeGreaterThan(0);
     expect(screen.getByText(/记录 2 条/)).toBeDefined();
   });
+
+  it('hydrates a selected artifact from by-id query when family list does not contain it', () => {
+    Object.assign(mocks.selectionState, {
+      selectedArtifactFamily: 'LNK',
+      selectedArtifactId: 'prefetch-1',
+    });
+    mocks.artifactRows.mockReturnValue(queryState({ data: populatedRows }));
+    mocks.artifactById.mockReturnValue(
+      queryState({
+        data: {
+          id: 'prefetch-1',
+          artifactType: 'Prefetch',
+          title: 'CMD.EXE-12345678.pf',
+          summary: '目标路径: C:\\Windows\\System32\\cmd.exe',
+          sourceObjectId: 'file-cmd-exe',
+          createdAt: '2026-06-13T10:00:00Z',
+          attrs: {
+            targetPath: 'C:\\Windows\\System32\\cmd.exe',
+            driveType: 'Fixed',
+            volumeSerial: 'AA-BB',
+            machineId: 'PC-001',
+          },
+        },
+      }),
+    );
+
+    renderPage();
+
+    expect(mocks.selectionState.setSelectedArtifactFamily).toHaveBeenCalledWith('Prefetch');
+    expect(screen.getAllByText('CMD.EXE-12345678.pf').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('C:\\Windows\\System32\\cmd.exe').length).toBeGreaterThan(0);
+  });
 });
+

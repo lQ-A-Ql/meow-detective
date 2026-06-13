@@ -328,8 +328,45 @@ flowchart TB
   Result --> Docs
 ```
 
-## 15. 维护说明
+## 15. V2 关联分析与发布治理图
 
-- 当前文档保持 `14` 个 Mermaid 图块，以配合防漂移脚本
+```mermaid
+flowchart LR
+  Sources["NTFS / Prefetch / LNK / Registry / Recycle Bin / Browser / Email"]
+  Normalize["normalize + provenance"]
+  Proximity["BrowserHistory / BrowserDownload / Email 邻近时间线信号"]
+  Correlate["correlation rules"]
+  Leads["lead / cluster / confidence"]
+  Views["timeline / artifacts / files / reports"]
+  Release["scorecard / release gate"]
+
+  Sources --> Normalize --> Correlate --> Leads --> Views
+  Normalize --> Proximity --> Correlate
+  Leads --> Release
+```
+
+当前首版真实链路已经实现：
+
+- `Artifact.sourceObjectId -> File`
+- `Timeline.sourceObjectId -> File`
+- `Artifact <-> Timeline` shared `sourceObjectId`
+- `LNK.target_path -> File.path`
+- `BrowserDownload.targetPath -> File.path`
+- `BrowserHistory.url/title + visitTime -> timeline proximity`
+- `RegistryValue.data -> File.path / File.name`
+- `RecycleBin.original_path -> deleted File.path`
+- `Prefetch.executable -> File.name`
+- `EmailMessage.attachments[] / subject / sentAt -> File.name / timeline proximity`
+- `JumpList.target_path -> File.path`
+- 命中目标若已有 timeline event，会补挂 `TemporalContext`
+- 产品内展示入口为 `V2Workbench -> CorrelationWorkspace`
+- 报告导出已复用同一条关联快照：
+  - HTML `Correlation Leads`
+  - HTML `Correlation Lead Details`
+  - JSON `correlation`
+
+## 16. 维护说明
+
+- 当前文档保持 `15` 个 Mermaid 图块，以配合防漂移脚本
 - 图谱描述当前真实实现与确定的安全边界
 - 如分区根模型、排序契约、MCP 权限、导出 overwrite 或验证体系变化，必须同步更新

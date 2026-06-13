@@ -5,6 +5,7 @@ import {
   exportHtmlReport,
   exportCsvReport,
   exportJsonReport,
+  exportCsvCorrelationReport,
 } from '@/lib/api/reports';
 
 describe('reports API (mock mode)', () => {
@@ -63,6 +64,22 @@ describe('reports API (mock mode)', () => {
       fileSystemMetadata: true,
       registry: true,
       fullTimeline: false,
+      rawFileExtraction: false,
+    });
+    expect(typeof result).toBe('string');
+  });
+
+  it('exportCsvCorrelationReport returns mock fallback string', async () => {
+    const result = await exportCsvCorrelationReport();
+    expect(typeof result).toBe('string');
+    expect(result).toContain('not available');
+  });
+
+  it('exportCsvCorrelationReport accepts scope parameter', async () => {
+    const result = await exportCsvCorrelationReport({
+      fileSystemMetadata: true,
+      registry: false,
+      fullTimeline: true,
       rawFileExtraction: false,
     });
     expect(typeof result).toBe('string');

@@ -9,8 +9,10 @@ import {
   CaseMetrics,
   DataSourceSummary,
   CaseSummary,
+  CorrelationSnapshot,
   EmailExtractionSummary,
   FileEntryRow,
+  FileJumpContext,
   EvidenceClassificationSummary,
   FileTreeNode,
   JobSnapshot,
@@ -22,6 +24,7 @@ import {
   SearchResultPage,
   TimelineEventDto,
   TraceItem,
+  V2GovernanceSnapshot,
   ViewerHandle,
   ViewerRangeRequest,
   ViewerRangeResponse,
@@ -39,6 +42,7 @@ import {
   analysisSystemInfo,
   caseMetrics,
   currentCase,
+  correlationSnapshot,
   dataSources,
   fileRows,
   filesTree,
@@ -51,6 +55,7 @@ import {
   searchHits,
   timelineEvents,
   traces,
+  v2GovernanceSnapshot,
   warnings,
 } from './mock-data';
 
@@ -68,12 +73,23 @@ export interface ApiProvider {
   getFileTree(showHidden?: boolean): Promise<FileTreeNode[]>;
   getFileChildren(parentId: string, showHidden?: boolean): Promise<FileTreeNode[]>;
   getFileRows(parentId?: string, showHidden?: boolean): Promise<FileEntryRow[]>;
+  getFileJumpContext(
+    fileId: string,
+    options?: {
+      showHidden?: boolean;
+      pageLimit?: number;
+      sortKey?: 'name' | 'size' | 'modifiedAt' | 'ext';
+      sortDirection?: 'asc' | 'desc';
+    },
+  ): Promise<FileJumpContext>;
   openFileHandle(fileId: string): Promise<ViewerHandle>;
   readFileRange(request: ViewerRangeRequest): Promise<ViewerRangeResponse>;
   searchFiles(query: string): Promise<SearchResultPage>;
   getTimelineEvents(): Promise<TimelineEventDto[]>;
+  getTimelineEventById(eventId: string): Promise<TimelineEventDto | null>;
   getArtifactFamilies(): Promise<string[]>;
   getArtifactRows(family?: string): Promise<ArtifactRow[]>;
+  getArtifactById(artifactId: string): Promise<ArtifactRow | null>;
   getReportTemplates(): Promise<ReportTemplate[]>;
   getReportHistory(): Promise<ReportHistoryItem[]>;
   getJobsSnapshot(): Promise<JobSnapshot[]>;
@@ -87,6 +103,8 @@ export interface ApiProvider {
   getRegistryExtractionSummary(request?: AnalysisExtractionPageRequest): Promise<RegistryExtractionSummary>;
   getBrowserHistorySummary(request?: AnalysisExtractionPageRequest): Promise<BrowserHistorySummary>;
   getEmailExtractionSummary(request?: AnalysisExtractionPageRequest): Promise<EmailExtractionSummary>;
+  getV2GovernanceSnapshot(): Promise<V2GovernanceSnapshot>;
+  getCorrelationSnapshot(): Promise<CorrelationSnapshot>;
   generateAnalysisSummary(): Promise<string>;
 }
 
@@ -128,6 +146,40 @@ export const mockProvider: ApiProvider = {
     }
     return [];
   },
+  async getFileJumpContext(fileId: string, options) {
+    const allRows = await this.getFileRows('tree-system32', options?.showHidden ?? false);
+    const target = allRows.find((item) => item.id === fileId) ?? fileRows.find((item) => item.id === fileId);
+    if (!target) {
+      throw new Error('file not found');
+    }
+    const directoryId = target.entryType === 'directory' ? target.id : target.parentId ?? 'tree-system32';
+    const directoryRows = await this.getFileRows(directoryId, options?.showHidden ?? false);
+    const sortedRows = directoryId === 'tree-system32' ? directoryRows : fileRows.filter((item) => item.parentId === directoryId);
+    const rowIndex = Math.max(
+      0,
+      sortedRows.findIndex((item) => item.id === target.id),
+    );
+    const pageLimit = options?.pageLimit ?? 500;
+    return {
+      target,
+      directory:
+        fileRows.find((item) => item.id === directoryId) ?? {
+          id: directoryId,
+          parentId: undefined,
+          path: '/',
+          name: 'Root',
+          entryType: 'directory',
+          deleted: false,
+          hidden: false,
+          system: false,
+        },
+      ancestorDirectoryIds: ['tree-system32', directoryId].filter(
+        (value, index, source) => source.indexOf(value) === index,
+      ),
+      rowOffset: Math.floor(rowIndex / pageLimit) * pageLimit,
+      requiresShowHidden: Boolean(target.hidden || target.system),
+    };
+  },
   async openFileHandle(fileId: string) {
     const file = fileRows.find((item) => item.id === fileId);
     return {
@@ -156,11 +208,17 @@ export const mockProvider: ApiProvider = {
   async getTimelineEvents() {
     return timelineEvents;
   },
+  async getTimelineEventById(eventId: string) {
+    return timelineEvents.find((item) => item.id === eventId) ?? null;
+  },
   async getArtifactFamilies() {
     return artifactFamilies;
   },
   async getArtifactRows(family?: string) {
     return artifactRows.filter((item) => !family || item.artifactType === family);
+  },
+  async getArtifactById(artifactId: string) {
+    return artifactRows.find((item) => item.id === artifactId) ?? null;
   },
   async getReportTemplates() {
     return reportTemplates;
@@ -236,6 +294,12 @@ export const mockProvider: ApiProvider = {
       ...emailExtractionSummary,
       messages: emailExtractionSummary.messages.slice(offset, offset + limit),
     };
+  },
+  async getV2GovernanceSnapshot() {
+    return v2GovernanceSnapshot;
+  },
+  async getCorrelationSnapshot() {
+    return correlationSnapshot;
   },
   async generateAnalysisSummary() {
     return analysisSummary;

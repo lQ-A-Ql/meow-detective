@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { getArtifactRows } from '@/lib/api/artifacts';
+import { getArtifactById, getArtifactRows } from '@/lib/api/artifacts';
 import { getDataSources } from '@/lib/api/case';
 import {
   classifyFiles,
+  getCorrelationSnapshot,
   getEvidenceClassificationSummary,
   getSystemInfo,
+  getV2GovernanceSnapshot,
 } from '@/lib/api/analysis';
 import { getReportHistory } from '@/lib/api/reports';
-import { getTimelineEvents } from '@/lib/api/timeline';
+import { getTimelineEventById, getTimelineEvents } from '@/lib/api/timeline';
+import { getFileJumpContext } from '@/lib/api/files';
 import type {
   AnalysisFileClassification,
   AnalysisProvenance,
@@ -166,5 +169,144 @@ describe('mock provenance API fixtures', () => {
       'created_by',
       'created_at',
     ]);
+  });
+
+  it('returns V2 governance snapshot using camelCase DTO fields', async () => {
+    const snapshot = await getV2GovernanceSnapshot();
+
+    expect(snapshot.generatedAt).toBeDefined();
+    expect(snapshot.verificationChains[0].displayName).toBeDefined();
+    expect(snapshot.verificationChains[0].expectedJsonVersion).toBeDefined();
+    expect(snapshot.supportMatrix.gaCount).toBeGreaterThan(0);
+    expect(snapshot.supportMatrixEntries[0].verifiedSamples.length).toBeGreaterThan(0);
+    expect(snapshot.knownLimitations[0].sourceDoc).toBeDefined();
+    expect(snapshot.benchmark.lastVerifiedAt).toBeDefined();
+    expect(snapshot.benchmark.requiredChecks[0].status).toBeDefined();
+    expect(snapshot.security.exportPathGuardEnabled).toBe(true);
+    expect(snapshot.security.auditEventCount).toBeGreaterThan(0);
+    expect(snapshot.security.recentAuditEntries[0].action).toBeDefined();
+    expect(snapshot.errorTaxonomyEntries[0].redactionRule).toBeDefined();
+    expect(snapshot.releaseGates[0].gateId).toBeDefined();
+    expect(snapshot.releaseScorecard.totalScore).toBeGreaterThan(0);
+    expect(snapshot.runtimeResults.checkedAt).toBeDefined();
+    expect(snapshot.runtimeResults.checks[0].subChecks[0].checkId).toBeDefined();
+    expect(snapshot.runtimeSignals.dataSourceCount).toBeGreaterThan(0);
+    expect(snapshot.runtimeSignals.correlationSnapshotAvailable).toBe(true);
+    expect(snapshot.runtimeSignals.correlationLeadCount).toBeGreaterThan(0);
+    expect(snapshot.runtimeSignals.correlationHighConfidenceLeadCount).toBeGreaterThan(0);
+    expect(snapshot.runtimeSignals.correlationClusterCount).toBeGreaterThan(0);
+    expect(snapshot.runtimeSignals.correlationRuleFamilyCount).toBeGreaterThan(0);
+    expect(snapshot.runtimeSignals.correlationFamilyCoverage[0].family).toBeDefined();
+    expect(snapshot.runtimeSignals.correlationFamilyCoverage[0].status).toBeDefined();
+    expectNoSnakeCaseKeys(snapshot as unknown as Record<string, unknown>, ['generated_at']);
+    expectNoSnakeCaseKeys(snapshot.verificationChains[0] as unknown as Record<string, unknown>, [
+      'display_name',
+      'guarantee_level',
+      'fixture_tier',
+      'expected_json_version',
+      'verified_sample_count',
+    ]);
+    expectNoSnakeCaseKeys(snapshot.supportMatrixEntries[0] as unknown as Record<string, unknown>, [
+      'verified_samples',
+      'guarantee_summary',
+    ]);
+    expectNoSnakeCaseKeys(snapshot.knownLimitations[0] as unknown as Record<string, unknown>, [
+      'affected_chains',
+      'source_doc',
+    ]);
+    expectNoSnakeCaseKeys(snapshot.errorTaxonomyEntries[0] as unknown as Record<string, unknown>, [
+      'redaction_rule',
+    ]);
+    expectNoSnakeCaseKeys(snapshot.security.recentAuditEntries[0] as unknown as Record<string, unknown>, [
+      'resource_type',
+      'resource_id',
+      'created_at',
+    ]);
+    expectNoSnakeCaseKeys(snapshot.releaseGates[0] as unknown as Record<string, unknown>, [
+      'gate_id',
+    ]);
+    expectNoSnakeCaseKeys(snapshot.runtimeResults as unknown as Record<string, unknown>, [
+      'checked_at',
+    ]);
+    expectNoSnakeCaseKeys(snapshot.runtimeResults.checks[0] as unknown as Record<string, unknown>, [
+      'check_id',
+      'checked_at',
+      'sub_checks',
+    ]);
+    expectNoSnakeCaseKeys(snapshot.runtimeResults.checks[0].subChecks[0] as unknown as Record<string, unknown>, [
+      'check_id',
+    ]);
+    expectNoSnakeCaseKeys(snapshot.runtimeSignals as unknown as Record<string, unknown>, [
+      'correlation_rule_family_count',
+      'correlation_covered_family_count',
+      'correlation_high_confidence_family_count',
+      'correlation_family_coverage',
+    ]);
+  });
+
+  it('returns correlation snapshot using camelCase DTO fields', async () => {
+    const snapshot = await getCorrelationSnapshot();
+
+    expect(snapshot.generatedAt).toBeDefined();
+    expect(snapshot.familyCoverage[0].family).toBeDefined();
+    expect(snapshot.familyCoverage[0].sampleSignals).toBeDefined();
+    expect(snapshot.leads[0].primaryFileId).toBeDefined();
+    expect(snapshot.leads[0].supportingNodeIds.length).toBeGreaterThan(0);
+    expect(snapshot.nodes[0].relatedCount).toBeGreaterThanOrEqual(0);
+    expect(snapshot.edges[0].fromNodeId).toBeDefined();
+    expect(snapshot.edges.some((edge) => edge.kind === 'pathMatch')).toBe(true);
+    expect(snapshot.clusters[0].provenance[0].sourceRecordId).toBeDefined();
+    expectNoSnakeCaseKeys(snapshot as unknown as Record<string, unknown>, ['generated_at']);
+    expectNoSnakeCaseKeys(snapshot.familyCoverage[0] as unknown as Record<string, unknown>, [
+      'display_name',
+      'lead_count',
+      'high_confidence_lead_count',
+      'review_lead_count',
+      'cluster_count',
+      'sample_signals',
+    ]);
+    expectNoSnakeCaseKeys(snapshot.leads[0] as unknown as Record<string, unknown>, [
+      'primary_file_id',
+      'supporting_node_ids',
+    ]);
+    expectNoSnakeCaseKeys(snapshot.clusters[0].provenance[0] as unknown as Record<string, unknown>, [
+      'source_kind',
+      'source_record_id',
+      'source_label',
+      'guarantee_level',
+      'warning_summary',
+    ]);
+  });
+
+  it('returns jump context and by-id helpers using camelCase DTO fields', async () => {
+    const jump = await getFileJumpContext('file-cmd-exe', { pageLimit: 200 });
+    const artifact = await getArtifactById('artifact-1');
+    const timeline = await getTimelineEvents();
+    const event = timeline.items[0]
+      ? await getTimelineEventById(timeline.items[0].id)
+      : null;
+
+    expect(jump.target.id).toBeDefined();
+    expect(jump.directory.id).toBeDefined();
+    expect(Array.isArray(jump.ancestorDirectoryIds)).toBe(true);
+    expectNoSnakeCaseKeys(jump as unknown as Record<string, unknown>, [
+      'ancestor_directory_ids',
+      'row_offset',
+      'requires_show_hidden',
+    ]);
+    if (artifact) {
+      expect(artifact.id).toBeDefined();
+      expectNoSnakeCaseKeys(artifact as unknown as Record<string, unknown>, [
+        'artifact_type',
+        'source_object_id',
+      ]);
+    }
+    if (event) {
+      expect(event.id).toBeDefined();
+      expectNoSnakeCaseKeys(event as unknown as Record<string, unknown>, [
+        'source_object_id',
+        'event_type',
+      ]);
+    }
   });
 });

@@ -14,12 +14,13 @@ use std::io::Write;
 use tauri::State;
 use transport::{
     commands::{
-        ExtractFileRequest, GetFileChildrenRequest, GetFileRowsRequest, GetFileTreeRequest,
+        ExtractFileRequest, GetFileChildrenRequest, GetFileJumpContextRequest, GetFileRowsRequest,
+        GetFileTreeRequest,
     },
     dto::{
-        FileChildrenDto, FileEntryRowDto, FileRowsPageDto, FileTreeNodeDto, ImagePreviewDto,
-        MediaPreviewModeDto, MediaRangeRequestDto, MediaRangeResponseDto, MediaUrlDto,
-        TextPreviewDto, ViewerHandleDto, ViewerRangeResponseDto,
+        FileChildrenDto, FileEntryRowDto, FileJumpContextDto, FileRowsPageDto, FileTreeNodeDto,
+        ImagePreviewDto, MediaPreviewModeDto, MediaRangeRequestDto, MediaRangeResponseDto,
+        MediaUrlDto, TextPreviewDto, ViewerHandleDto, ViewerRangeResponseDto,
     },
     CommandError,
 };
@@ -200,6 +201,37 @@ pub async fn get_file_rows_request(
             .map_err(CommandError::from_service_error)?;
         file_service::get_file_rows_for_request(&conn, &request)
             .map_err(CommandError::from_service_error)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+/// Resolve a file jump target into directory context and row page offset.
+#[tauri::command]
+pub async fn get_file_jump_context(
+    state: State<'_, AppState>,
+    mut request: GetFileJumpContextRequest,
+) -> Result<FileJumpContextDto, CommandError> {
+    request.validate().map_err(CommandError::invalid_input)?;
+    let app_state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let db_path = {
+            let guard = app_state
+                .active_case
+                .lock()
+                .map_err(|e| CommandError::from_lock_error("Case", e))?;
+            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
+            active.db_path()
+        };
+        let conn = persistence_sqlite::open_or_create(&db_path)
+            .map_err(CommandError::from_service_error)?;
+        file_service::get_file_jump_context(&conn, &request).map_err(|err| {
+            if err.contains("not found") {
+                CommandError::not_found("File")
+            } else {
+                CommandError::from_service_error(err)
+            }
+        })
     })
     .await
     .map_err(CommandError::from_join_error)?

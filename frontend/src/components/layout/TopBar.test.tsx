@@ -99,6 +99,7 @@ describe('TopBar mock mode label', () => {
     expect(screen.getByRole('status', { name: 'Mock mode data label' })).toBeDefined();
     expect(screen.getByText('Mock Mode')).toBeDefined();
     expect(screen.getByText('显示演示取证数据')).toBeDefined();
+    expect(screen.getByText('V2 治理')).toBeDefined();
   });
 
   it('hides the mock data label in tauri mode', () => {

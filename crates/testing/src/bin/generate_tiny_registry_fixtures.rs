@@ -7,7 +7,8 @@ fn main() -> anyhow::Result<()> {
         .nth(1)
         .map(PathBuf::from)
         .unwrap_or_else(testing::fixtures::repo_root);
-    let config_dir = repo_root.join("testdata/fixtures/tiny/logical/Windows/System32/config");
+    let config_dir =
+        repo_root.join("testdata/fixtures/public-small/logical/Windows/System32/config");
     fs::create_dir_all(&config_dir)?;
 
     let system_path = config_dir.join(registry::SYSTEM_HIVE_NAME);

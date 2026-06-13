@@ -1,0 +1,124 @@
+import { RefreshCw, Shield } from 'lucide-react';
+import { AnalysisEmptyState, AnalysisErrorBanner, AnalysisLoadingPanel } from '@/components/analysis/AnalysisPanels';
+import { CorrelationWorkspace } from '@/components/analysis/CorrelationWorkspace';
+import {
+  BenchmarkPanel,
+  ErrorTaxonomyPanel,
+  GovernanceFactSourcesPanel,
+  GovernanceOverviewStrip,
+  GovernanceRuntimeResultsPanel,
+  KnownLimitationsPanel,
+  ReleaseGatePanel,
+  ReleaseScorecardPanel,
+  SecurityAuditPanel,
+  SupportMatrixPanel,
+  VerificationDashboard,
+} from '@/components/analysis/V2GovernancePanels';
+import { useCurrentCase, useCreateAnalysisDemoCase } from '@/features/case/hooks';
+import { useCorrelationSnapshot, useV2GovernanceSnapshot } from '@/features/analysis/hooks';
+import { Button } from '@/app/components/ui/button';
+import { isApiErrorDto } from '@/lib/api/client';
+
+function errorMessage(error: unknown) {
+  if (isApiErrorDto(error)) {
+    return error.message;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+export function V2Workbench() {
+  const currentCase = useCurrentCase();
+  const demoCase = useCreateAnalysisDemoCase();
+  const snapshot = useV2GovernanceSnapshot();
+  const correlation = useCorrelationSnapshot();
+
+  const hasCase = Boolean(currentCase.data);
+  const loading = currentCase.isLoading || demoCase.isPending;
+  const error = currentCase.error ?? snapshot.error ?? correlation.error ?? demoCase.error;
+
+  async function refresh() {
+    await Promise.all([snapshot.refetch(), correlation.refetch()]);
+  }
+
+  async function loadDemoCase() {
+    await demoCase.mutateAsync();
+  }
+
+  return (
+    <div className="flex h-full w-full flex-1 flex-col overflow-auto bg-white">
+      <div className="shrink-0 border-b border-[#e0e0e0] bg-[#fafafa] p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div className="font-serif text-xl tracking-tight text-[#111]">V2 治理工作台</div>
+            <div className="mt-1 font-mono text-[11px] text-[#666]">
+              可信验证 / 支持矩阵 / Benchmark / 安全治理 / 发布评分卡
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              onClick={loadDemoCase}
+              disabled={loading}
+              className="h-8 rounded border border-[#111] bg-[#111] px-3 text-[12px] text-white hover:bg-[#333]"
+            >
+              {demoCase.isPending ? <RefreshCw size={14} className="animate-spin" /> : <Shield size={14} />}
+              加载演示案件
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={refresh}
+              disabled={!hasCase || loading}
+              className="h-8 rounded border-[#ddd] bg-white px-3 text-[12px] hover:bg-[#f5f5f5]"
+            >
+              <RefreshCw size={14} className={snapshot.isFetching ? 'animate-spin' : ''} />
+              刷新
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {!hasCase && currentCase.isSuccess ? (
+        <AnalysisEmptyState demoPending={demoCase.isPending} onLoadDemoCase={loadDemoCase} />
+      ) : loading ? (
+        <AnalysisLoadingPanel text="正在加载 V2 治理快照..." />
+      ) : (
+        <div className="flex-1 space-y-6 overflow-auto p-6">
+          {error ? <AnalysisErrorBanner message={errorMessage(error)} onRetry={refresh} /> : null}
+          {snapshot.data ? (
+            <>
+              <GovernanceOverviewStrip snapshot={snapshot.data} />
+              <GovernanceFactSourcesPanel snapshot={snapshot.data} />
+              <GovernanceRuntimeResultsPanel snapshot={snapshot.data} />
+              <VerificationDashboard snapshot={snapshot.data} />
+              <SupportMatrixPanel entries={snapshot.data.supportMatrixEntries} />
+              <KnownLimitationsPanel items={snapshot.data.knownLimitations} />
+              <BenchmarkPanel benchmark={snapshot.data.benchmark} />
+              <SecurityAuditPanel security={snapshot.data.security} />
+              <ErrorTaxonomyPanel entries={snapshot.data.errorTaxonomyEntries} />
+              <ReleaseGatePanel entries={snapshot.data.releaseGates} />
+              <ReleaseScorecardPanel
+                scorecard={snapshot.data.releaseScorecard}
+                runtimeSummary={snapshot.data.runtimeSignals}
+              />
+              {correlation.data ? (
+                <CorrelationWorkspace
+                  snapshot={correlation.data}
+                  onRefresh={refresh}
+                  refreshing={snapshot.isFetching || correlation.isFetching}
+                />
+              ) : (
+                <AnalysisLoadingPanel text="正在加载关联分析快照..." />
+              )}
+            </>
+          ) : (
+            <AnalysisLoadingPanel text="当前案件尚未返回治理快照。" />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

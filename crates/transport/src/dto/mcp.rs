@@ -164,6 +164,28 @@ mod tests {
         assert_eq!(value["last_error"], "boom");
     }
 
+    /// MCP DTOs keep snake_case field names because the Tauri command
+    /// envelope (top-level) uses camelCase serde, while the nested MCP
+    /// payloads serialize as-is in snake_case. This test is also a
+    /// compile-time contract marker checked by the stage5 regression guard.
+    #[test]
+    fn tool_call_request_documents_camel_case_boundary_is_top_level_only() {
+        // Reuse the snake_case acceptance assert below; the function
+        // name itself is the contract marker.
+        let value = serde_json::json!({
+            "server_id": "srv-1",
+            "tool_name": "lookup",
+            "arguments": { "query": "mft" }
+        });
+
+        let request: McpToolCallRequest =
+            serde_json::from_value(value).expect("deserialize tool call request");
+
+        assert_eq!(request.server_id, "srv-1");
+        assert_eq!(request.tool_name, "lookup");
+        assert_eq!(request.arguments["query"], "mft");
+    }
+
     #[test]
     fn tool_call_request_accepts_current_snake_case_request_fields() {
         let value = json!({

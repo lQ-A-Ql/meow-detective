@@ -9,6 +9,13 @@
 - 哪些字段保证、哪些字段仅尽力而为
 - 哪些样本进入默认 CI，哪些只用于真实样本回归
 
+V2 长期执行总计划见：
+
+- `docs/v2-longterm-plan.md`
+- `docs/fixture-handbook.md`
+- `docs/expected-json-contract.md`
+- `docs/release-scorecard.md`
+
 ## 2. 样本分层
 
 ### 2.1 Public small
@@ -17,10 +24,10 @@
 
 当前公开样本：
 
-- `testdata/fixtures/tiny/e01/tiny.E01`
-- `testdata/fixtures/tiny/raw/tiny.raw`
-- `testdata/fixtures/tiny/evtx/system.evtx`
-- `testdata/fixtures/tiny/logical/**`
+- `testdata/fixtures/public-small/e01/tiny.E01`
+- `testdata/fixtures/public-small/raw/tiny.raw`
+- `testdata/fixtures/public-small/evtx/system.evtx`
+- `testdata/fixtures/public-small/logical/**`
 
 要求：
 
@@ -71,7 +78,7 @@
 
 ## 3. expected JSON 机制
 
-真实样本回归统一使用 `expected.json` 做断言基线。
+真实样本回归统一使用 `expected.json` 做断言基线。更完整的结构与分级约定见 `docs/expected-json-contract.md`。
 
 推荐结构：
 
@@ -104,7 +111,7 @@
 ### 4.1 E01
 
 - 样本：
-  - `testdata/fixtures/tiny/e01/tiny.E01`
+  - `testdata/fixtures/public-small/e01/tiny.E01`
 - 目标：
   - open
   - read
@@ -119,7 +126,7 @@
 ### 4.2 NTFS
 
 - 样本：
-  - `testdata/fixtures/tiny/raw/tiny.raw`
+  - `testdata/fixtures/public-small/raw/tiny.raw`
   - synthetic NTFS fixture
 - 目标：
   - MFT 枚举
@@ -206,6 +213,19 @@
 | Firefox History | Experimental | 同上 |
 | Email extraction | Experimental | 已有抽取建模，公开样本与基准待补 |
 
+当前产品内 `/v2` 页面已经开始承接这套口径：
+
+- `verificationChains`
+- `supportMatrixEntries`
+- `releaseGates`
+
+从 2026-06-13 起，这里的 `verificationChains` / `supportMatrixEntries` 不再只写死在 Rust 代码中，而是优先由仓库治理事实源 `testdata/governance/v2-verification-catalog.json` 提供。
+
+其中 `releaseGates.core-fixture-regression` 已开始直接读取核心链路的验证状态，不再是假定“统一通过”。
+
+也就是说，可信验证不再只存在于文档和测试里，已经有一条面向 investigator / release reviewer 的可见链路。
+从 2026-06-13 起，`knownLimitations` 与 `supportMatrix.documentedLimitCount` 也开始由独立事实源 `testdata/governance/v2-known-limitations.json` 提供，不再继续由 Rust 侧手工维护一份并与 `docs/known-unsupported-formats.md` 漂移。
+
 ## 6. 字段承诺分级
 
 - `guaranteed`：在公开 fixture 与至少一类回归样本上稳定验证
@@ -250,6 +270,8 @@
 - `benchmarks/`
 - 或 `docs/benchmark-results/`
 
+统一 benchmark 口径见 `docs/benchmark-baseline.md`。
+
 ## 9. 发布前最低验证要求
 
 涉及核心链路变更时，至少完成：
@@ -260,3 +282,10 @@
 4. 更新已知不支持项
 5. 如边界变化，更新错误分类与安全文档
 
+## 10. 与其他权威文档的关系
+
+- 样本目录规范：`docs/fixture-handbook.md`
+- expected JSON 断言结构：`docs/expected-json-contract.md`
+- 当前支持等级：`docs/parser-support-matrix.md`
+- 当前已知不承诺边界：`docs/known-unsupported-formats.md`
+- 发布评分：`docs/release-scorecard.md`

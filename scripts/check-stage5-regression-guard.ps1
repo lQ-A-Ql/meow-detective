@@ -6,9 +6,9 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $mcpCommandsPath = Join-Path $repoRoot "apps/desktop/src-tauri/src/commands/mcp_commands.rs"
 $mcpDtoPath = Join-Path $repoRoot "crates/transport/src/dto/mcp.rs"
-$stagingPath = Join-Path $repoRoot "crates/app-services/src/staging.rs"
+$stagingDir = Join-Path $repoRoot "crates/app-services/src/staging"
 
-foreach ($path in @($mcpCommandsPath, $mcpDtoPath, $stagingPath)) {
+foreach ($path in @($mcpCommandsPath, $mcpDtoPath, $stagingDir)) {
   if (-not (Test-Path -LiteralPath $path)) {
     throw "Required Stage 5 regression guard input is missing: $path"
   }
@@ -16,7 +16,7 @@ foreach ($path in @($mcpCommandsPath, $mcpDtoPath, $stagingPath)) {
 
 $mcpCommands = Get-Content -LiteralPath $mcpCommandsPath -Raw -Encoding UTF8
 $mcpDto = Get-Content -LiteralPath $mcpDtoPath -Raw -Encoding UTF8
-$staging = Get-Content -LiteralPath $stagingPath -Raw -Encoding UTF8
+$staging = (Get-ChildItem -LiteralPath $stagingDir -Filter '*.rs' -File | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8 }) -join "`n"
 
 function Assert-Matches {
   param(

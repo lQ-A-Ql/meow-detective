@@ -1,1 +1,108 @@
-[]
+[
+  {
+    "file": "SYSTEM (registry hive)",
+    "expected": {
+      "baseline": "project synthetic registry hive (tiny SYSTEM); base block (regf magic, last_written FILETIME, root_cell_offset) validated; root NK cell name extraction validated; key paths cross-checked with python-registry output",
+      "assertions": {
+        "regfMagicPresent": true,
+        "lastWrittenTimestampParsed": true,
+        "hiveNameNonEmpty": true,
+        "rootCellOffsetGt0x1000": true,
+        "isValidHive": true,
+        "baseBlockSequenceNumbersConsistent": true
+      },
+      "guaranteedFields": [
+        {
+          "name": "hive_name",
+          "type": "string",
+          "guarantee": "guaranteed",
+          "description": "root key name extracted from root NK cell (UTF-16LE); falls back to 'unknown' on failure; note: not the filesystem filename"
+        },
+        {
+          "name": "last_written",
+          "type": "RFC 3339 string",
+          "guarantee": "guaranteed",
+          "description": "base block last_written FILETIME converted to UTC RFC 3339; null when FILETIME is zero or out of reasonable year range (2001-2099)"
+        },
+        {
+          "name": "artifact_type",
+          "type": "string",
+          "guarantee": "guaranteed",
+          "description": "always \"Registry\" for registry hive artifacts"
+        }
+      ],
+      "bestEffortFields": [
+        {
+          "name": "major_version",
+          "type": "u32",
+          "guarantee": "bestEffort",
+          "description": "registry hive major version from base block"
+        },
+        {
+          "name": "minor_version",
+          "type": "u32",
+          "guarantee": "bestEffort",
+          "description": "registry hive minor version from base block"
+        },
+        {
+          "name": "file_type",
+          "type": "u32",
+          "guarantee": "bestEffort",
+          "description": "registry file type from base block (0 = primary, 1 = transaction log, etc.)"
+        },
+        {
+          "name": "root_cell_offset",
+          "type": "u64",
+          "guarantee": "bestEffort",
+          "description": "offset to root cell in hbin blocks; internal detail useful for debugging"
+        },
+        {
+          "name": "hbin_data_size",
+          "type": "u32",
+          "guarantee": "bestEffort",
+          "description": "first hbin block data size from base block"
+        }
+      ],
+      "notGuaranteedFields": [
+        {
+          "name": "full_key_paths",
+          "type": "array of strings",
+          "guarantee": "notGuaranteed",
+          "description": "complete registry key path enumeration; full hive traversal requires proper cell/bin parsing"
+        },
+        {
+          "name": "value_data",
+          "type": "object",
+          "guarantee": "notGuaranteed",
+          "description": "individual registry value data (REG_SZ, REG_DWORD, REG_BINARY, etc.); not covered by current simplified parser"
+        },
+        {
+          "name": "transaction_log_replay",
+          "type": "object",
+          "guarantee": "notGuaranteed",
+          "description": "LOG/LOG1/LOG2 transaction log replay; known limitation documented in parser-support-matrix.md"
+        },
+        {
+          "name": "deleted_cell_recovery",
+          "type": "object",
+          "guarantee": "notGuaranteed",
+          "description": "recovery of deleted registry keys/values from unallocated cells; not supported"
+        },
+        {
+          "name": "security_descriptor_parsing",
+          "type": "object",
+          "guarantee": "notGuaranteed",
+          "description": "SK cell security descriptor resolution; not implemented"
+        }
+      ],
+      "fieldNamingConvention": "camelCase for top-level DTO; snake_case for attrs map keys within artifacts",
+      "timezoneNormalizationRule": "base block last_written FILETIME converted to UTC via Windows epoch offset (1601-01-01); serialized as RFC 3339; timestamps outside year range 2001-2099 are excluded",
+      "emptyValueStrategy": {
+        "null": "last_written FILETIME is zero or out of reasonable range",
+        "emptyString": "hive_name defaults to 'unknown' or '(non-nk root)' when root NK cell signature is not 'nk'",
+        "zero": "valid zero for sequence numbers and offsets"
+      },
+      "sortOrderRule": "artifacts sorted by hive_name ascending (case-insensitive)"
+    }
+  }
+]

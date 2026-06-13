@@ -3,10 +3,12 @@ import {
   classifyFiles,
   generateAnalysisSummary,
   getBrowserHistorySummary,
+  getCorrelationSnapshot,
   getEmailExtractionSummary,
   getEvidenceClassificationSummary,
   getRegistryExtractionSummary,
   getSystemInfo,
+  getV2GovernanceSnapshot,
   runAnalysisExtraction,
   runEvidenceClassification,
 } from '@/lib/api/analysis';
@@ -75,6 +77,26 @@ export function useEmailExtractionSummary(request: AnalysisExtractionPageRequest
   return useQuery({
     queryKey: ['analysis', 'email-extraction', currentCase.data?.id ?? null, offset, limit],
     queryFn: () => getEmailExtractionSummary({ offset, limit }),
+    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+    retry: false,
+  });
+}
+
+export function useV2GovernanceSnapshot() {
+  const currentCase = useCurrentCase();
+  return useQuery({
+    queryKey: ['analysis', 'v2-governance', currentCase.data?.id ?? null],
+    queryFn: getV2GovernanceSnapshot,
+    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+    retry: false,
+  });
+}
+
+export function useCorrelationSnapshot() {
+  const currentCase = useCurrentCase();
+  return useQuery({
+    queryKey: ['analysis', 'correlation', currentCase.data?.id ?? null],
+    queryFn: getCorrelationSnapshot,
     enabled: currentCase.isSuccess && Boolean(currentCase.data),
     retry: false,
   });

@@ -20,10 +20,17 @@
 | 设计与约束 | `docs/design-constraints.md` | 架构、证据、安全、前端、发布硬约束 |
 | 模型 / 架构 / 流程图 | `docs/model-architecture-algorithm-diagrams.md` | Mermaid 图谱合集 |
 | 文档索引与事实校准 | `docs/documentation-index.md` | 权威入口、旧文档去重、事实快照 |
+| V2 长期执行计划 | `docs/v2-longterm-plan.md` | V2 阶段边界、测试矩阵、验收标准、评分机制 |
 | 可验证性体系 | `docs/validation-trust-framework.md` | public fixture、expected JSON、真实样本回归说明 |
+| Fixture 手册 | `docs/fixture-handbook.md` | fixture 分层、目录规范、元数据要求 |
+| Expected JSON 契约 | `docs/expected-json-contract.md` | expected JSON 结构、字段分级、差异规则 |
 | Parser 支持矩阵 | `docs/parser-support-matrix.md` | 支持边界、验证样本、字段承诺 |
 | 已知不支持格式 | `docs/known-unsupported-formats.md` | 明确不支持或仅部分支持的格式 |
 | 错误分类 | `docs/error-taxonomy.md` | 错误类别、脱敏策略、前后端约定 |
+| 错误分类手册 | `docs/error-classification-manual.md` | V2 错误分层、脱敏与审计实施口径 |
+| Benchmark 基线 | `docs/benchmark-baseline.md` | 数据集分级、指标口径、默认阈值 |
+| 关联分析设计 | `docs/correlation-analysis-design.md` | 关联模型、规则集、前端工作流 |
+| 发布评分卡 | `docs/release-scorecard.md` | 候选发布评分、硬门禁、发布材料 |
 | MCP 安全模型 | `docs/mcp-security-model.md` | MCP 权限模型、执行边界、审计要求 |
 | 导出与媒体安全 | `docs/export-and-media-safety.md` | 导出路径、overwrite、media handle 与脱敏要求 |
 | MCP 使用说明 | `docs/mcp-user-guide.md` | 面向使用者的 MCP 配置与权限说明 |
@@ -37,23 +44,23 @@
 | 事实 | 当前值 | 事实源 |
 |---|---:|---|
 | Rust workspace crate | 22 | `crates/` |
-| Tauri commands | 67 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
-| app-services source modules | 16 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
+| Tauri commands | 73 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
+| app-services source modules | 18 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
 | SQLite repositories | 9 | `crates/persistence-sqlite/src/repositories/*_repo.rs` |
 | SQLite migration scripts | 23 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` |
-| frontend pages | 8 | `frontend/src/app/pages/*.tsx`，排除测试 |
-| frontend test files | 41 | `frontend/src/**/*.test.ts(x)` |
-| Mermaid 图块 | 14 | `docs/model-architecture-algorithm-diagrams.md` |
+| frontend pages | 9 | `frontend/src/app/pages/*.tsx`，排除测试 |
+| frontend test files | 42 | `frontend/src/**/*.test.ts(x)` |
+| Mermaid 图块 | 15 | `docs/model-architecture-algorithm-diagrams.md` |
 
 ## 3. 路径级事实校准
 
 | 路径模式 | 数量 | 说明 |
 |---|---:|---|
-| `frontend/src/app/pages/*.tsx` | 8 | 页面入口文件，不含 `*.test.tsx` |
-| `frontend/src/**/*.test.ts(x)` | 41 | Vitest 测试文件总数 |
-| `apps/desktop/src-tauri/src/commands/**/*.rs` | 67 | Tauri command 定义数 |
+| `frontend/src/app/pages/*.tsx` | 9 | 页面入口文件，不含 `*.test.tsx` |
+| `frontend/src/**/*.test.ts(x)` | 42 | Vitest 测试文件总数 |
+| `apps/desktop/src-tauri/src/commands/**/*.rs` | 72 | Tauri command 定义数 |
 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 23 | SQLite migration 脚本 |
-| `docs/model-architecture-algorithm-diagrams.md` 中 Mermaid | 14 | Mermaid 图块总数 |
+| `docs/model-architecture-algorithm-diagrams.md` 中 Mermaid | 15 | Mermaid 图块总数 |
 
 ## 4. 当前实现事实
 
@@ -74,10 +81,33 @@
 
 ### 4.3 可验证性与支持边界
 
-- 公开验证体系以 `testdata/fixtures/tiny/` 为默认 small fixture 来源
+- 公开验证体系以 `testdata/fixtures/public-small/` 为默认 small fixture 来源
 - `expected.json` 用于真实样本回归对齐
 - 当前重点链路包括 E01、NTFS、Prefetch、LNK、Registry、Recycle Bin
 - 浏览器记录与邮件提取已纳入验证框架，但仍属于低成熟度链路
+- V2 权威主计划位于 `docs/v2-longterm-plan.md`
+- V2 的 fixture、expected JSON、benchmark、关联分析、评分卡均已有独立专题文档
+- V2 治理工作台已经接入产品页 `/v2`
+- V2 关联分析首版已落地 `get_correlation_snapshot` 与 `CorrelationWorkspace`
+- V2 关联分析当前已把规则家族覆盖下沉到 `CorrelationSnapshot.familyCoverage[]`，工作台不再只能绕经治理快照读取家族状态
+- V2 治理工作台已接住支持矩阵明细与错误分类明细：`supportMatrixEntries`、`errorTaxonomyEntries`
+- V2 治理工作台已接住结构化已知限制：`knownLimitations`
+- V2 治理工作台已接住候选发布门禁明细：`releaseGates`
+- V2 治理快照当前已改为“仓库内治理目录 + 单一链路目录派生 verificationChains / supportMatrixEntries / supportMatrixSummary”，当前事实源为 `testdata/governance/v2-verification-catalog.json`
+- V2 benchmark 基线当前事实源为 `testdata/governance/v2-benchmark-baseline.json`
+- V2 security defaults 与 error taxonomy 当前事实源为 `testdata/governance/v2-security-taxonomy.json`
+- V2 release policy 当前事实源为 `testdata/governance/v2-release-policy.json`
+- V2 已知限制当前事实源为 `testdata/governance/v2-known-limitations.json`
+- V2 `supportMatrix.documentedLimitCount` 当前由 `testdata/governance/v2-known-limitations.json` 派生
+- V2 评分卡分值与扣分文案当前事实源为 `testdata/governance/v2-release-policy.json -> scorePolicy`
+- V2 治理快照当前已显式返回 `factSources`，用于列出每个治理区域的事实文件、派生输出与最近校验时间
+- V2 文档漂移 / fixture 回归 / benchmark 阈值的最近一次运行结果当前事实源为 `testdata/governance/v2-runtime-results.json`
+- V2 治理快照当前已显式返回 `runtimeResults`，用于列出最近一次运行型检查的结构化结果
+- V2 治理快照当前已把 `runtimeResults.checks[].subChecks[]` 细化为子检查级明细，并在 `/v2` 与报告导出中展示
+- V2 治理工作台当前已开始按治理快照事实派生 `core-fixture-regression`、`benchmark-thresholds`、`security-baseline`、`runtime-failures`，不再只展示静态门禁名称
+- V2 治理快照当前已进入报告导出链路：HTML `Governance Snapshot`、JSON `governance`、CSV `governance` 行
+- V2 关联分析已接住首批真实规则字段：`target_path`、`targetPath`、`url`、`title`、`visitTime`、`data`、`original_path`、`executable`、`attachments`、`subject`、`sentAt`
+- 报告导出已开始复用关联分析结果，HTML/JSON/CSV 三种导出格式已具备首版关联摘要，其中 HTML 已具备结构化 `Correlation Lead Details`
 
 ### 4.4 MCP 与安全边界
 
@@ -106,7 +136,7 @@
 
 - 历史审计报告只说明“当时发现过什么”，不说明“现在仍然如此”
 - remediation plan 只说明“曾计划如何修复”，不自动等于“已经完成”
-- 若需要查看当前长期执行修复路线与 V2 演进方向，优先参考 `docs/remediation-plan-2026-06-08.md` 末尾的 `V2 方向`
+- 若需要查看当前长期执行修复路线与 V2 方向，优先参考 `docs/v2-longterm-plan.md`
 - 开发记录只说明“执行过哪些步骤”，不替代当前权威设计
 
 ## 6. Mermaid 渲染与防漂移

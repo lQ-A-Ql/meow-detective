@@ -178,6 +178,18 @@ impl<'a> TimelineRepo<'a> {
         let n: i64 = stmt.query_row(params_refs.as_slice(), |r| r.get(0))?;
         Ok(n as u64)
     }
+
+    pub fn find_by_id(&self, event_id: &str) -> DbResult<Option<TimelineEvent>> {
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {TIMELINE_SELECT_COLUMNS} FROM timeline_events WHERE id = ?1"
+        ))?;
+        let result = stmt.query_row(params![event_id], row_to_timeline_event);
+        match result {
+            Ok(event) => Ok(Some(event)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
 }
 
 fn row_to_timeline_event(row: &rusqlite::Row<'_>) -> rusqlite::Result<TimelineEvent> {

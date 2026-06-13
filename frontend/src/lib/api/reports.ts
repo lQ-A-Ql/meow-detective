@@ -26,3 +26,9 @@ export async function exportJsonReport(scope?: ExportScope, options?: ExportOpti
     scope: scope ? { ...scope, overwrite: options?.overwrite ?? false } : undefined,
   });
 }
+
+export async function exportCsvCorrelationReport(scope?: ExportScope, options?: ExportOptions) {
+  return apiClient.request('export_csv_correlation_report', () => Promise.resolve('Export not available in mock mode'), {
+    scope: scope ? { ...scope, overwrite: options?.overwrite ?? false } : undefined,
+  });
+}

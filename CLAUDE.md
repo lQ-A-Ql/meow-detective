@@ -22,11 +22,18 @@ Run commands from the repository root unless noted.
 - Test one Rust test by name: `cargo test -p <crate-name> <test_name>`
 - Build/check the Tauri Rust crate: `cargo check -p forensics-desktop`
 
-This is a Windows-first project that targets `x86_64-pc-windows-msvc`. Any cargo command that links (build, test, check, clippy with `--all-targets`) must run inside a Visual Studio developer environment (e.g. `vcvars64.bat` from the VS 2022 Build Tools) so the MSVC linker and Windows SDK lib paths resolve. Without it, a bash `PATH` resolves `link.exe` to Git's copy and linking fails, or `kernel32.lib`/`ntdll.lib` go unfound. `cargo fmt` does not link and works without it.
+This is a Windows-first project that targets `x86_64-pc-windows-msvc`. Any cargo command that links (build, test, check, clippy with `--all-targets`) must run inside a Visual Studio developer environment. The VS 2022 Build Tools are installed at `C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools`. Without vcvars64, a bash `PATH` resolves `link.exe` to Git's copy and linking fails, or `kernel32.lib`/`ntdll.lib` go unfound.
+
+To run a full lint+test cycle with the MSVC linker:
+```bash
+powershell -NoProfile -Command '$vcvars = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"; $inner = "call `"$vcvars`" && cd /d D:\process\forensic && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace"; cmd.exe /d /s /c $inner'
+```
+
+`cargo fmt` does not link and works from plain bash.
 
 ### Frontend
 
-The frontend package lives in `frontend/` and uses pnpm.
+The frontend package lives in `frontend/` and uses pnpm (version pinned in `package.json` → `packageManager`). pnpm should be on PATH; if not, use `corepack pnpm@10.25.0 --dir frontend <cmd>` as a fallback.
 
 - Install dependencies: `pnpm --dir frontend install --frozen-lockfile`
 - Dev server: `pnpm --dir frontend dev`
@@ -47,15 +54,23 @@ The frontend package lives in `frontend/` and uses pnpm.
 
 ### Repository guard scripts
 
-These PowerShell scripts encode important architectural/security boundaries:
+These PowerShell scripts encode important architectural/security boundaries. Run them with `powershell -File scripts/<name>`:
 
-- Coverage harness: `powershell -File scripts/run-coverage.ps1` (`-Rust`, `-Frontend`, and `-StrictRustTool` are supported)
-- Ensure Tauri command layer does not contain raw SQL: `powershell -File scripts/check-command-sql-boundary.ps1`
-- Ensure media preview stays on the guarded `evidence-media:` protocol path: `powershell -File scripts/check-media-protocol-guard.ps1`
-- Release/debug-string guard: `powershell -File scripts/check-release-guard.ps1`
-- Stage 5 regression guard for MCP transport validation, nested MCP DTO contract, and staging merge conflict visibility: `powershell -File scripts/check-stage5-regression-guard.ps1`
-- Frontend lockfile policy: `powershell -File scripts/check-frontend-lockfile-policy.ps1`
-- Additional targeted guards exist in `scripts/` for deny exceptions, EVTX dependency decisions, import optimization, E01 profiling/performance, fixture generation, and WebView2 media smoke checks.
+| Script | What it guards |
+|--------|---------------|
+| `check-command-sql-boundary.ps1` | No raw SQL in Tauri command handlers |
+| `check-media-protocol-guard.ps1` | Media preview stays on `evidence-media:` protocol |
+| `check-release-guard.ps1` | No debug strings in release paths |
+| `check-stage5-regression-guard.ps1` | MCP transport validation, nested MCP DTO contract, staging merge conflicts |
+| `check-frontend-lockfile-policy.ps1` | Frontend lockfile policy compliance |
+| `check-deny-exceptions.ps1` | Cargo deny exception validity |
+| `check-evtx-dependency-decision.ps1` | EVTX vendored dependency constraints |
+| `check-import-optimization-guard.ps1` | Import optimization boundaries |
+| `check-doc-drift.ps1` | Documentation consistency |
+| `run-coverage.ps1` | Coverage harness (`-Rust`, `-Frontend`, `-StrictRustTool`) |
+| `run-e01-import-profile.ps1` | E01 import performance profiling |
+| `run-webview2-media-smoke.ps1` | WebView2 media preview smoke test |
+| `generate-tiny-fixtures.ps1` | Tiny test fixture generation |
 
 ## Architecture map
 
@@ -110,10 +125,31 @@ Evidence content must be read through the evidence reader path keyed by `FileEnt
 
 Media preview has a guarded split path: small content may be returned as bounded data URLs; larger audio/video uses the custom `evidence-media://handle/<encoded>` protocol registered by Tauri. The CSP in `tauri.conf.json` allows `media-src 'self' data: evidence-media:`. Keep `scripts/check-media-protocol-guard.ps1` passing when touching file preview, media protocol, viewer DTOs, or frontend media hooks.
 
+## Naming conventions
+
+- **Rust crates**: kebab-case (`artifacts-windows`, `app-services`, `evidence-core`).
+- **Rust modules/files**: snake_case (`case_service.rs`, `file_commands.rs`, `artifact_repo.rs`).
+- **Frontend components**: PascalCase files (`FileBrowser.tsx`, `TopBar.tsx`).
+- **Frontend hooks/utils**: camelCase files (`hooks.ts`, `bus.ts`).
+- **DTO types**: Rust structs end in `Dto` (`CaseSummaryDto`, `FileViewDto`). Frontend TypeScript interfaces drop the suffix (`CaseSummary`, `FileView`) except `TimelineEventDto` which kept it.
+- **Workspace dependencies**: All external crate versions are centralized in root `Cargo.toml` `[workspace.dependencies]`. Internal crates reference each other by path there too. When adding a dependency, add it there first and reference by name in member `Cargo.toml` files (e.g. `transport = { workspace = true }`).
+
+## Gotchas
+
+1. **Mock vs Tauri mode**: `pnpm dev` runs the frontend standalone with mock data. Set `VITE_API_MODE=tauri` to target real Rust commands. The `ApiClient` switches at build time based on this env var. When running via `cargo tauri dev`, Tauri sets this automatically.
+
+2. **Transport crate is the manual contract**: There is no codegen. DTO changes in `crates/transport/src/dto/` must be manually mirrored in `frontend/src/types/models.ts`. Event topics in `crates/transport/src/events/mod.rs` must stay in sync with the `EventTopic` TypeScript union.
+
+3. **Tauri 2, not v1**: Commands use `#[tauri::command]` with v2 handler registration. Events use the `Emitter` trait. Do not use v1 patterns.
+
+4. **Tailwind 4 CSS-first**: There is no `tailwind.config.js`. Configuration uses `@import 'tailwindcss' source(none)` with explicit `@source` directives in CSS. The `@/` path alias maps to `frontend/src/`.
+
+5. **Evidence paths never use host filesystem**: Always route through the evidence reader APIs keyed by `FileEntryId` and data source type. Never construct host filesystem paths from case root + file entry path.
+
 ## Tests and fixtures
 
 - Frontend Vitest config includes `src/**/*.{test,spec}.{ts,tsx}` with jsdom and coverage thresholds in `frontend/vitest.config.ts`.
-- Tiny CI fixtures are documented in `docs/architecture-model.md`, including logical, RAW, synthetic E01, synthetic registry hive, and EVTX samples under `testdata/fixtures/tiny/`.
+- Tiny CI fixtures are documented in `docs/architecture-model.md`, including logical, RAW, synthetic E01, synthetic registry hive, and EVTX samples under `testdata/fixtures/public-small/`.
 - `scripts/run-coverage.ps1` uses `cargo llvm-cov` for Rust if installed and Vitest coverage for frontend.
 
 ## Documentation worth checking

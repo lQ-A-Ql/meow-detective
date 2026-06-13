@@ -184,6 +184,28 @@ pub fn query_timeline_filtered_instrumented(
     })
 }
 
+pub fn get_timeline_event_by_id(
+    conn: &Connection,
+    event_id: &str,
+) -> Result<Option<TimelineEventDto>, String> {
+    ensure_macb_timeline_projected(conn)?;
+    let repo = TimelineRepo::new(conn);
+    let event = repo.find_by_id(event_id).map_err(|e| e.to_string())?;
+    Ok(event.map(|ev| TimelineEventDto {
+        id: ev.id.0,
+        source_object_id: ev.source_object_id,
+        event_type: ev.event_type,
+        ts: ev.timestamp.to_rfc3339(),
+        title: ev.title,
+        description: ev.description,
+        parser_id: ev.parser_id,
+        parser_version: ev.parser_version,
+        confidence: ev.confidence,
+        source_attribution: ev.source_attribution,
+        attrs: ev.attrs,
+    }))
+}
+
 fn timeline_query_report(prefix: &str, sample: PerfSample, total: u64) -> PerformanceReportDto {
     let mut metrics = vec![
         metric(

@@ -2,14 +2,14 @@
 
 use std::path::{Path, PathBuf};
 
-const TINY_LOGICAL_REL: &str = "testdata/fixtures/tiny/logical";
-const TINY_RAW_REL: &str = "testdata/fixtures/tiny/raw/tiny.raw";
-const TINY_E01_REL: &str = "testdata/fixtures/tiny/e01/tiny.E01";
-const TINY_SYSTEM_EVTX_REL: &str = "testdata/fixtures/tiny/evtx/system.evtx";
+const TINY_LOGICAL_REL: &str = "testdata/fixtures/public-small/logical";
+const TINY_RAW_REL: &str = "testdata/fixtures/public-small/raw/tiny.raw";
+const TINY_E01_REL: &str = "testdata/fixtures/public-small/e01/tiny.E01";
+const TINY_SYSTEM_EVTX_REL: &str = "testdata/fixtures/public-small/evtx/system.evtx";
 const TINY_REGISTRY_SYSTEM_REL: &str =
-    "testdata/fixtures/tiny/logical/Windows/System32/config/SYSTEM";
+    "testdata/fixtures/public-small/logical/Windows/System32/config/SYSTEM";
 const TINY_REGISTRY_SOFTWARE_REL: &str =
-    "testdata/fixtures/tiny/logical/Windows/System32/config/SOFTWARE";
+    "testdata/fixtures/public-small/logical/Windows/System32/config/SOFTWARE";
 
 /// Returns the repository root as seen by the `testing` crate.
 pub fn repo_root() -> PathBuf {

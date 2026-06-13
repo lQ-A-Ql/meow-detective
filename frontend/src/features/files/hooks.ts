@@ -4,6 +4,7 @@ import {
   extractFile,
   getFileChildren,
   getFileChildrenPage,
+  getFileJumpContext,
   getFileRows,
   getFileRowsPage,
   getFileTree,
@@ -54,6 +55,27 @@ export function useFileRowsPage(
     queryKey: ['files', 'rows-page', parentId ?? null, offset, limit, showHidden, sortKey, sortDirection],
     queryFn: () => getFileRowsPage(parentId, offset, limit, showHidden, sortKey, sortDirection),
     enabled: parentId !== undefined,
+  });
+}
+
+export function useFileJumpContext(
+  fileId?: string,
+  showHidden = false,
+  pageLimit = 500,
+  sortKey: FileSortKey = 'name',
+  sortDirection: FileSortDirection = 'asc',
+) {
+  return useQuery({
+    queryKey: ['files', 'jump-context', fileId ?? null, showHidden, pageLimit, sortKey, sortDirection],
+    queryFn: () =>
+      getFileJumpContext(fileId!, {
+        showHidden,
+        pageLimit,
+        sortKey,
+        sortDirection,
+      }),
+    enabled: Boolean(fileId),
+    retry: false,
   });
 }
 

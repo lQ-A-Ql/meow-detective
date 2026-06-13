@@ -49,6 +49,57 @@ function Assert-Matches {
   }
 }
 
+function Get-KnownLimitationDocRows {
+  param([Parameter(Mandatory = $true)][string]$Content)
+
+  $lines = $Content -split "\r?\n"
+  $sectionStart = -1
+  for ($i = 0; $i -lt $lines.Count; $i++) {
+    if ($lines[$i] -match '^## 2\.') {
+      $sectionStart = $i
+      break
+    }
+  }
+
+  if ($sectionStart -lt 0) {
+    throw 'known-unsupported-formats.md section 2 heading not found'
+  }
+
+  $rows = New-Object System.Collections.Generic.List[string]
+  $tableStarted = $false
+  for ($i = $sectionStart + 1; $i -lt $lines.Count; $i++) {
+    $line = $lines[$i]
+    if ($line -match '^## 3\.') {
+      break
+    }
+    if ($line -match '^## ' -and $line -notmatch '^## 2\.') {
+      break
+    }
+    if (-not $tableStarted) {
+      if ($line -match '^\|') {
+        $tableStarted = $true
+      }
+      continue
+    }
+    if ($line -match '^\|---\|---\|---\|---\|$') {
+      continue
+    }
+    if ($line -match '^\| .+ \| .+ \| .+ \| .+ \|$') {
+      $rows.Add($line)
+      continue
+    }
+    if (-not [string]::IsNullOrWhiteSpace($line)) {
+      break
+    }
+  }
+
+  if ($rows.Count -eq 0) {
+    throw 'known-unsupported-formats.md section 2 table rows not found'
+  }
+
+  return $rows
+}
+
 function Assert-TableFact {
   param(
     [Parameter(Mandatory = $true)][string]$Content,
@@ -68,6 +119,11 @@ $readme = Read-Text 'README.md'
 $agents = Read-Text 'AGENTS.md'
 $docIndex = Read-Text 'docs/documentation-index.md'
 $diagramDoc = Read-Text 'docs/model-architecture-algorithm-diagrams.md'
+$knownUnsupportedDoc = Read-Text 'docs/known-unsupported-formats.md'
+$releaseScorecardDoc = Read-Text 'docs/release-scorecard.md'
+$validationDoc = Read-Text 'docs/validation-trust-framework.md'
+$knownLimitationsFact = Read-Text 'testdata/governance/v2-known-limitations.json' | ConvertFrom-Json
+$benchmarkBaseline = Read-Text 'testdata/governance/v2-benchmark-baseline.json' | ConvertFrom-Json
 
 $crateCount = (Get-ChildItem -LiteralPath (Join-Path $repoRoot 'crates') -Directory | Measure-Object).Count
 $commandFiles = Get-ChildItem -LiteralPath (Join-Path $repoRoot 'apps/desktop/src-tauri/src/commands') -Recurse -File -Filter '*.rs'
@@ -82,6 +138,7 @@ $frontendTestCount = (
 ).Count
 $serviceModuleCount = (Get-ChildItem -LiteralPath (Join-Path $repoRoot 'crates/app-services/src') -Filter '*.rs' | Where-Object { $_.Name -ne 'lib.rs' } | Measure-Object).Count
 $mermaidCount = ([regex]::Matches($diagramDoc, '```mermaid')).Count
+$knownLimitationRows = Get-KnownLimitationDocRows $knownUnsupportedDoc
 
 Assert-Contains $readme "$crateCount Rust crates" 'README crate count is stale'
 Assert-Contains $readme "$pageCount frontend pages" 'README frontend page count is stale'
@@ -102,20 +159,84 @@ Assert-TableFact $docIndex 'frontend/src/app/pages/*.tsx' $pageCount 'documentat
 Assert-TableFact $docIndex 'frontend/src/**/*.test.ts(x)' $frontendTestCount 'documentation-index frontend test row is stale'
 Assert-Matches $docIndex "\|\s*[^|]*Mermaid[^|]*\|\s*$mermaidCount\s*\|" 'documentation-index Mermaid count is stale'
 
-Assert-Equals $mermaidCount 14 'Mermaid diagram count drifted'
+Assert-Equals $mermaidCount 15 'Mermaid diagram count drifted'
+Assert-Equals $knownLimitationsFact.documentedLimitCount $knownLimitationsFact.items.Count 'known limitations documentedLimitCount drifted'
+Assert-Equals $knownLimitationRows.Count $knownLimitationsFact.documentedLimitCount 'known unsupported formats table row count drifted'
+Assert-Contains $docIndex 'testdata/governance/v2-known-limitations.json' 'documentation-index is missing known limitations fact source'
+Assert-Contains $releaseScorecardDoc 'testdata/governance/v2-known-limitations.json' 'release-scorecard is missing known limitations fact source'
+Assert-Contains $validationDoc 'testdata/governance/v2-known-limitations.json' 'validation-trust-framework is missing known limitations fact source'
+
+foreach ($item in $knownLimitationsFact.items) {
+  Assert-Contains $knownUnsupportedDoc $item.item "known-unsupported-formats.md is missing item: $($item.item)"
+  Assert-Contains $knownUnsupportedDoc $item.summary "known-unsupported-formats.md is missing summary: $($item.summary)"
+}
+
+# ── Benchmark baseline structural validation ─────────────────────
+Assert-Contains $benchmarkBaseline.hostProfile 'Windows' 'benchmark-baseline hostProfile is missing Windows'
+Assert-Equals $benchmarkBaseline.baselineVersion '2026.06' 'benchmark-baseline baselineVersion drifted'
+Assert-Contains $benchmarkBaseline.lastVerifiedAt '2026-06-13' 'benchmark-baseline lastVerifiedAt is stale'
+$requiredCheckCount = $benchmarkBaseline.requiredChecks.Count
+$scenarioCount = $benchmarkBaseline.scenarios.Count
+Assert-Contains $readme "v2-benchmark-baseline.json" 'README is missing benchmark baseline fact source'
+Assert-Contains $docIndex "v2-benchmark-baseline.json" 'documentation-index is missing benchmark baseline fact source'
+Assert-Contains $agents "v2-benchmark-baseline.json" 'AGENTS is missing benchmark baseline fact source'
+
+# Verify required checks reference existing scenarios
+$scenarioKeys = @{}
+foreach ($s in $benchmarkBaseline.scenarios) {
+  $key = "$($s.datasetLevel)/$($s.scenario)"
+  $scenarioKeys[$key] = $s
+}
+foreach ($check in $benchmarkBaseline.requiredChecks) {
+  $key = "$($check.datasetLevel)/$($check.scenario)"
+  if (-not $scenarioKeys.ContainsKey($key)) {
+    throw "benchmark-baseline requiredCheck references nonexistent scenario: $key"
+  }
+}
+
+# Verify all six scenarios exist for each dataset level
+$requiredLevels = @('small','medium','large')
+$requiredScenarios = @('search_query','file_tree_expand','file_paginate','timeline_filter','artifact_extract','report_export')
+foreach ($level in $requiredLevels) {
+  foreach ($scenario in $requiredScenarios) {
+    $key = "$level/$scenario"
+    if (-not $scenarioKeys.ContainsKey($key)) {
+      throw "benchmark-baseline is missing scenario: $key"
+    }
+  }
+}
+foreach ($level in $requiredLevels) {
+  foreach ($scenario in $requiredScenarios) {
+    $key = "$level/$scenario"
+    $check = $benchmarkBaseline.requiredChecks | Where-Object {
+      "$($_.datasetLevel)/$($_.scenario)" -eq $key
+    } | Select-Object -First 1
+    if ($null -eq $check) {
+      throw "benchmark-baseline is missing required check: $key"
+    }
+  }
+}
 
 foreach ($path in @(
     'docs/engineering-audit-plan.md',
     'docs/development-engineering-guide.md',
     'docs/design-constraints.md',
     'docs/model-architecture-algorithm-diagrams.md',
-    'docs/documentation-index.md'
+    'docs/documentation-index.md',
+    'docs/v2-longterm-plan.md',
+    'docs/fixture-handbook.md',
+    'docs/expected-json-contract.md',
+    'docs/error-classification-manual.md',
+    'docs/benchmark-baseline.md',
+    'docs/correlation-analysis-design.md',
+    'docs/release-scorecard.md'
   )) {
   if (-not (Test-Path -LiteralPath (Join-Path $repoRoot $path))) {
     throw "Required engineering document is missing: $path"
   }
   Assert-Contains $readme $path "README is missing engineering doc entry: $path"
   Assert-Contains $agents $path "AGENTS is missing engineering doc entry: $path"
+  Assert-Contains $docIndex $path "documentation-index is missing engineering doc entry: $path"
 }
 
 if ($RenderMermaid) {

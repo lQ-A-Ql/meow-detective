@@ -14,4 +14,12 @@ describe('app route code splitting', () => {
       expect(route.Component).toBeUndefined();
     }
   });
+
+  it('includes the V2 governance workbench route', () => {
+    const rootRoute = appRoutes[0];
+    const v2Route = rootRoute.children?.find((route) => route.path === 'v2');
+
+    expect(v2Route).toBeDefined();
+    expect(v2Route?.lazy).toEqual(expect.any(Function));
+  });
 });

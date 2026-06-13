@@ -1,6 +1,9 @@
 use tauri::{AppHandle, State};
 use transport::{
-    commands::GetTimelineRequest, dto::TimelineEventDto, paging::PageResponse, CommandError,
+    commands::{GetTimelineEventByIdRequest, GetTimelineRequest},
+    dto::TimelineEventDto,
+    paging::PageResponse,
+    CommandError,
 };
 
 use super::command_support::{get_case_connection, snapshot_active_case};
@@ -48,6 +51,27 @@ pub async fn get_timeline_events(
             event_bridge::emit_performance_report_ready(&app, &result.performance_report);
             Ok(result.page)
         }
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+/// Resolve a single timeline event by id.
+#[tauri::command]
+pub async fn get_timeline_event_by_id(
+    state: State<'_, AppState>,
+    request: GetTimelineEventByIdRequest,
+) -> Result<TimelineEventDto, CommandError> {
+    request.validate().map_err(CommandError::invalid_input)?;
+    let app_state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        if snapshot_active_case(&app_state)?.is_none() {
+            return Err(CommandError::no_active_case());
+        }
+        let conn = get_case_connection(&app_state)?;
+        app_services::timeline_service::get_timeline_event_by_id(&conn, &request.event_id)
+            .map_err(CommandError::from_service_error)?
+            .ok_or_else(|| CommandError::not_found("Timeline event"))
     })
     .await
     .map_err(CommandError::from_join_error)?

@@ -1,0 +1,50 @@
+{
+  "securityDefaults": {
+    "exportOverwriteDefault": false,
+    "exportPathGuardEnabled": true,
+    "stdioCommandWhitelistEnforced": true,
+    "sseHttpsOnly": true,
+    "embeddedCredentialsBlocked": true,
+    "mediaHandleScoped": true,
+    "errorRedactionEnabled": true,
+    "notes": [
+      "SSE 仅允许 http/https，禁止 embedded credentials。",
+      "stdio command 必须是命令名而不是路径，并拒绝 NUL 字节。",
+      "导出默认不覆盖；覆盖必须显式确认。"
+    ]
+  },
+  "errorTaxonomyEntries": [
+    {
+      "category": "validation",
+      "severity": "medium",
+      "recoverable": true,
+      "examples": ["NO_ACTIVE_CASE", "INVALID_INPUT"],
+      "redactionRule": "return user-actionable message without leaking internals",
+      "notes": ["前端可直接引导用户修正输入"]
+    },
+    {
+      "category": "parser",
+      "severity": "high",
+      "recoverable": true,
+      "examples": ["registry parse failed", "prefetch decode failed"],
+      "redactionRule": "hide raw bytes, stack traces, and host absolute paths",
+      "notes": ["需要保留 parser family 以便 investigator 判断边界"]
+    },
+    {
+      "category": "security",
+      "severity": "high",
+      "recoverable": false,
+      "examples": ["MCP policy block", "export path traversal denied"],
+      "redactionRule": "never expose credentials, tokens, or raw absolute paths",
+      "notes": ["安全拒绝必须保留审计记录"]
+    },
+    {
+      "category": "external",
+      "severity": "medium",
+      "recoverable": true,
+      "examples": ["SSE connection failed", "stdio tool exited unexpectedly"],
+      "redactionRule": "summarize stderr/network cause without passing raw payload through",
+      "notes": ["MCP 外部错误需要和 security block 区分"]
+    }
+  ]
+}

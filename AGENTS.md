@@ -130,7 +130,7 @@ All app-shell layout components live in `src/components/layout/`: AppShell, Layo
 
 4. **domain crate is implemented**: Core types (CaseMeta, FileEntry, Artifact, TimelineEvent, Job, Report, Tag, DataSource) are defined with serde support. Most crates are fully implemented: `persistence-sqlite` (9 repos, 23 migration scripts), `evidence-core` (image probing, volume detection), `fs-ntfs`/`fs-fat`/`fs-exfat` (filesystem parsers), `artifacts-windows` (9 extractors), `search` (tantivy indexing), `catalog` (ExtensionProjection, PathPrefixProjection), `ingest` (pipeline trait), `mcp-client` (SSE + Stdio transports).
 
-5. **Frontend test framework**: Vitest is configured with jsdom environment. Run `pnpm test` from `frontend/`. Current source tree has 41 frontend test files covering pages (Settings, DataAnalysis, FileBrowser, Search, Timeline, Artifacts, Reports), viewers (Hex, Text, Image), stores (ui-store, selection-store, mcp-store), API layer, events, routes, and hooks. Coverage thresholds: 45% branches, 35% functions/lines/statements.
+5. **Frontend test framework**: Vitest is configured with jsdom environment. Run `pnpm test` from `frontend/`. Current source tree has 42 frontend test files covering pages (Settings, DataAnalysis, FileBrowser, Search, Timeline, Artifacts, Reports, V2Workbench), viewers (Hex, Text, Image), stores (ui-store, selection-store, mcp-store), API layer, events, routes, and hooks. Coverage thresholds: 45% branches, 35% functions/lines/statements.
 
 6. **Tailwind 4 with `source(none)`**: The Tailwind config uses `@import 'tailwindcss' source(none)` with explicit `@source` directive. Don't add a `tailwind.config.js` — configuration is CSS-first.
 
@@ -154,6 +154,20 @@ All app-shell layout components live in `src/components/layout/`: AppShell, Layo
 - `docs/design-constraints.md` - 架构、证据、安全、前端与发布约束
 - `docs/model-architecture-algorithm-diagrams.md` - 模型、架构与算法 Mermaid 图谱
 - `docs/documentation-index.md` - 当前权威文档入口、旧文档去重索引与事实校准记录
+- `docs/v2-longterm-plan.md` - V2 长期执行计划、阶段边界、评分与验收标准
+- `docs/fixture-handbook.md` - fixture 分层、目录规范与样本元数据要求
+- `docs/expected-json-contract.md` - expected JSON 断言结构与字段承诺规则
+- `docs/error-classification-manual.md` - 错误分层、脱敏与审计实施口径
+- `docs/benchmark-baseline.md` - benchmark 数据集分级、指标口径与阈值
+- `docs/correlation-analysis-design.md` - 多工件关联分析设计与调查工作流
+- `docs/release-scorecard.md` - 发布评分卡、硬门禁与发布材料要求
+
+治理事实源（编译时嵌入，驱动 /v2 governance snapshot）：
+- `testdata/governance/v2-verification-catalog.json`
+- `testdata/governance/v2-benchmark-baseline.json`
+- `testdata/governance/v2-known-limitations.json`
+- `testdata/governance/v2-release-policy.json`
+- `testdata/governance/v2-runtime-results.json`
 
 ## Adding a New Feature (typical flow)
 

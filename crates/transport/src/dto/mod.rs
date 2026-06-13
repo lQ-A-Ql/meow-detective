@@ -1,6 +1,7 @@
 pub mod analysis;
 pub mod artifacts;
 pub mod case;
+pub mod correlation;
 pub mod files;
 pub mod import;
 pub mod jobs;
@@ -13,17 +14,33 @@ pub mod viewer;
 pub use analysis::{
     AnalysisBootRecordDto, AnalysisClassifiedFileDto, AnalysisExtractionRunDto,
     AnalysisFieldProvenanceDto, AnalysisFileClassificationDto, AnalysisNetworkAdapterDto,
-    AnalysisParseStatusDto, AnalysisProvenanceDto, AnalysisSystemInfoDto, BrowserDownloadDto,
-    BrowserHistorySummaryDto, BrowserVisitDto, EmailExtractionSummaryDto, EmailMessageDto,
-    EvidenceCategoryDto, EvidenceClassificationSummaryDto, EvidenceClassificationTotalsDto,
-    EvidenceSourceDto, RegistryExtractionSummaryDto, RegistryValueDto,
+    AnalysisParseStatusDto, AnalysisProvenanceDto, AnalysisSystemInfoDto,
+    BenchmarkRequiredCheckDto, BenchmarkRequirementStatusDto, BenchmarkSnapshotDto,
+    BenchmarkSummaryDto, BrowserDownloadDto, BrowserHistorySummaryDto, BrowserVisitDto,
+    CorrelationCoverageStatusDto, CorrelationFamilyCoverageDto, EmailExtractionSummaryDto,
+    EmailMessageDto, ErrorTaxonomyEntryDto, EvidenceCategoryDto, EvidenceClassificationSummaryDto,
+    EvidenceClassificationTotalsDto, EvidenceSourceDto, GovernanceFactSourceDto,
+    GovernanceRuntimeCheckDto, GovernanceRuntimeResultsDto, GovernanceRuntimeSignalsDto,
+    GovernanceRuntimeSubcheckDto, KnownLimitationDto, KnownLimitationStatusDto,
+    ParserSupportMatrixEntryDto, ParserSupportMatrixSummaryDto, RegistryExtractionSummaryDto,
+    RegistryValueDto, ReleaseGateEntryDto, ReleaseGateStatusDto, ReleaseScoreBreakdownEntryDto,
+    ReleaseScorecardDto, SecurityAuditEntryDto, SecurityAuditSummaryDto, SupportMaturityDto,
+    V2GovernanceSnapshotDto, VerificationChainStatusDto, VerificationGuaranteeLevelDto,
+    VerificationResultDto,
 };
 pub use artifacts::{ArtifactRowDto, FamilyCountDto};
 pub use case::{
     CaseMetricsDto, CaseSummaryDto, DataSourcePartitionDto, DataSourceSummaryDto, RecentCaseDto,
     RecentObjectDto,
 };
-pub use files::{FileChildrenDto, FileEntryRowDto, FileRowsPageDto, FileTreeNodeDto};
+pub use correlation::{
+    CorrelationClusterDto, CorrelationConfidenceDto, CorrelationEdgeDto, CorrelationEdgeKindDto,
+    CorrelationJumpTargetDto, CorrelationLeadDto, CorrelationNodeDto, CorrelationNodeKindDto,
+    CorrelationProvenanceDto, CorrelationSnapshotDto,
+};
+pub use files::{
+    FileChildrenDto, FileEntryRowDto, FileJumpContextDto, FileRowsPageDto, FileTreeNodeDto,
+};
 pub use import::{
     CancelJobRequestDto, CancelReasonDto, CancellationStateDto, ImportPhaseDto,
     ImportPhaseMetricsDto, ImportPhaseProgressDto, ImportPhaseStateDto, IndexCacheStatusDto,

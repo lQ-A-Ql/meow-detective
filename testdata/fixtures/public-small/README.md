@@ -1,6 +1,6 @@
-# Tiny Fixtures
+# Public-Small Fixtures
 
-This directory contains small committed fixtures that are safe for default CI:
+This directory contains small committed fixtures (formerly `testdata/fixtures/tiny/`) that are safe for default CI:
 
 - `logical/` is a tiny logical directory tree for directory import and file path tests.
 - `raw/tiny.raw` is a 1024-byte deterministic RAW image with an MBR signature.

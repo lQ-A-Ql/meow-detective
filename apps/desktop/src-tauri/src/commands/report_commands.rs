@@ -71,6 +71,30 @@ pub async fn export_csv_report(
     .map_err(CommandError::from_join_error)?
 }
 
+/// Export CSV correlation report.
+#[tauri::command]
+pub async fn export_csv_correlation_report(
+    state: State<'_, AppState>,
+    scope: Option<ExportScopeDto>,
+) -> Result<String, CommandError> {
+    let scope = scope.unwrap_or_default();
+    let app_state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let active = require_active_case(&app_state)?;
+        let output_dir = active.case_root.join("reports");
+        let conn = get_case_connection(&app_state)?;
+        app_services::report_service::generate_csv_correlation(
+            &conn,
+            &active.case_id,
+            &output_dir,
+            &scope,
+        )
+        .map_err(CommandError::from_service_error)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
 /// Export JSON report.
 #[tauri::command]
 pub async fn export_json_report(

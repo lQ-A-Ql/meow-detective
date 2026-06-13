@@ -28,6 +28,12 @@ describe('ui-store', () => {
     expect(useUiStore.getState().currentPage).toBe('search');
   });
 
+  it('accepts the v2 governance page key', () => {
+    useUiStore.getState().setCurrentPage('v2');
+
+    expect(useUiStore.getState().currentPage).toBe('v2');
+  });
+
   it('toggleDrawer toggles drawer state', () => {
     expect(useUiStore.getState().drawerOpen).toBe(false);
 

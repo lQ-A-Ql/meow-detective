@@ -31,3 +31,11 @@ export async function getTimelineEvents(
     } } : undefined,
   );
 }
+
+export async function getTimelineEventById(eventId: string): Promise<TimelineEventDto | null> {
+  return apiClient.request(
+    'get_timeline_event_by_id',
+    () => apiClient.getMockProvider().getTimelineEventById(eventId),
+    { request: { eventId } },
+  );
+}

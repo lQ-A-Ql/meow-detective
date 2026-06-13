@@ -2,9 +2,9 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$rawDir = Join-Path $repoRoot 'testdata/fixtures/tiny/raw'
+$rawDir = Join-Path $repoRoot 'testdata/fixtures/public-small/raw'
 $rawPath = Join-Path $rawDir 'tiny.raw'
-$e01Dir = Join-Path $repoRoot 'testdata/fixtures/tiny/e01'
+$e01Dir = Join-Path $repoRoot 'testdata/fixtures/public-small/e01'
 $e01Path = Join-Path $e01Dir 'tiny.E01'
 New-Item -ItemType Directory -Path $rawDir -Force | Out-Null
 New-Item -ItemType Directory -Path $e01Dir -Force | Out-Null

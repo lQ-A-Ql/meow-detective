@@ -13,6 +13,7 @@ use std::{
     },
     thread,
 };
+use transport::{commands::GetFileJumpContextRequest, dto::FileJumpContextDto};
 
 mod data_sources;
 mod enumeration;
@@ -44,6 +45,84 @@ pub use viewer::{
     skip_reader_bytes,
 };
 
+pub fn get_file_jump_context(
+    conn: &Connection,
+    request: &GetFileJumpContextRequest,
+) -> Result<FileJumpContextDto, String> {
+    let mut request = request.clone();
+    request.validate()?;
+    let repo = FileRepo::new(conn);
+    let target = repo
+        .find_by_id(&FileEntryId(request.file_id.clone()))
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "file not found".to_string())?;
+
+    let directory =
+        resolve_jump_directory(&repo, &target).ok_or_else(|| "directory not found".to_string())?;
+
+    let requires_show_hidden =
+        target.hidden || target.system || directory.hidden || directory.system;
+    let effective_show_hidden = request.show_hidden || requires_show_hidden;
+
+    let ancestor_directory_ids = collect_ancestor_directory_ids(&repo, &directory);
+
+    let mut rows = if target.entry_type == EntryType::Directory {
+        if let Some(parent_id) = target.parent_id.as_ref() {
+            repo.find_children_visible(parent_id, effective_show_hidden)
+                .map_err(|e| e.to_string())?
+        } else {
+            repo.find_root_entries_visible(effective_show_hidden)
+                .map_err(|e| e.to_string())?
+        }
+    } else {
+        repo.find_children_visible(&directory.id, effective_show_hidden)
+            .map_err(|e| e.to_string())?
+    };
+    sort::sort_entries(&mut rows, request.sort_key, request.sort_direction);
+    let index = rows
+        .iter()
+        .position(|entry| entry.id == target.id)
+        .unwrap_or(0);
+    let row_offset = ((index as u64) / request.page_limit as u64) * request.page_limit as u64;
+
+    Ok(FileJumpContextDto {
+        target: mapping::file_entry_to_dto(&target),
+        directory: mapping::file_entry_to_dto(&directory),
+        ancestor_directory_ids,
+        row_offset,
+        requires_show_hidden,
+    })
+}
+
+fn resolve_jump_directory(repo: &FileRepo<'_>, target: &FileEntry) -> Option<FileEntry> {
+    if target.entry_type == EntryType::Directory {
+        return Some(target.clone());
+    }
+    let parent_id = target.parent_id.as_ref()?;
+    repo.find_by_id(parent_id).ok()?
+}
+
+fn collect_ancestor_directory_ids(repo: &FileRepo<'_>, directory: &FileEntry) -> Vec<String> {
+    let mut chain = Vec::new();
+    let mut cursor = directory.parent_id.clone();
+    let mut guard = 0usize;
+    while let Some(parent_id) = cursor {
+        if guard > JUMP_CONTEXT_MAX_ANCESTOR_DEPTH {
+            break;
+        }
+        guard += 1;
+        chain.push(parent_id.0.clone());
+        cursor = repo
+            .find_by_id(&parent_id)
+            .ok()
+            .flatten()
+            .and_then(|entry| entry.parent_id);
+    }
+    chain.reverse();
+    chain.push(directory.id.0.clone());
+    chain
+}
+
 // ============================================================================
 // MFT-based bulk NTFS enumeration with multi-threading
 // ============================================================================
@@ -51,6 +130,7 @@ pub use viewer::{
 use crossbeam_channel::{bounded, Receiver, Sender};
 use fs_ntfs::mft_scanner::{MftRecord, MftScanner};
 
+const JUMP_CONTEXT_MAX_ANCESTOR_DEPTH: usize = 256;
 const MFT_CHUNK_RECORDS: u64 = 10_000;
 const MFT_CHANNEL_BOUND: usize = 4;
 const MFT_DB_BATCH_SIZE: usize = 2_000;

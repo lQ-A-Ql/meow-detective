@@ -5,9 +5,11 @@ import {
   AnalysisFileClassification,
   AnalysisSystemInfo,
   BrowserHistorySummary,
+  CorrelationSnapshot,
   EmailExtractionSummary,
   EvidenceClassificationSummary,
   RegistryExtractionSummary,
+  V2GovernanceSnapshot,
 } from '@/types/models';
 import { apiClient } from './client';
 
@@ -78,6 +80,20 @@ export async function getEmailExtractionSummary(
     'get_email_extraction_summary',
     () => apiClient.getMockProvider().getEmailExtractionSummary(request),
     { request },
+  );
+}
+
+export async function getV2GovernanceSnapshot(): Promise<V2GovernanceSnapshot> {
+  return apiClient.request(
+    'get_v2_governance_snapshot',
+    () => apiClient.getMockProvider().getV2GovernanceSnapshot(),
+  );
+}
+
+export async function getCorrelationSnapshot(): Promise<CorrelationSnapshot> {
+  return apiClient.request(
+    'get_correlation_snapshot',
+    () => apiClient.getMockProvider().getCorrelationSnapshot(),
   );
 }
 

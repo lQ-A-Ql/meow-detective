@@ -9,6 +9,11 @@
 - 宿主真实路径泄露
 - 可推导、长期有效的媒体访问标识
 
+V2 安全治理与发布门禁总计划见：
+
+- `docs/v2-longterm-plan.md`
+- `docs/release-scorecard.md`
+
 ## 2. 文件提取
 
 当前实现：
@@ -72,3 +77,9 @@
 - 媒体协议与 range 响应不泄露宿主路径
 - 大媒体文件使用短期 handle，不暴露 `file:<id>`
 
+## 7. V2 补充要求
+
+- 导出、提取、媒体 handle 结果必须能进入统一审计记录
+- overwrite 行为必须进入候选发布回归
+- 媒体协议、导出策略与错误脱敏必须纳入 release scorecard
+- 当前 `/v2` 页面中的 security defaults 与 error taxonomy 仓库事实源为 `testdata/governance/v2-security-taxonomy.json`

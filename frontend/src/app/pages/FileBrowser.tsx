@@ -25,6 +25,7 @@ import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import {
   useExtractFile,
   useFileChildrenPage,
+  useFileJumpContext,
   useFileRowsPage,
   useFileTree,
   useFileViewer,
@@ -210,6 +211,17 @@ export function FileBrowser() {
     showHidden
   );
   const rows = rowsPage?.rows;
+  const {
+    data: jumpContext,
+    isLoading: jumpContextLoading,
+    isFetching: jumpContextFetching,
+  } = useFileJumpContext(
+    selectedFileId,
+    showHidden,
+    FILE_BROWSER_PAGE_LIMIT,
+    fileSortKey,
+    fileSortDirection,
+  );
   const activeChildren = activeChildrenPage?.children;
   const partitions = useMemo<DataSourcePartition[]>(
     () => dataSources?.flatMap((source) => source.partitions ?? []) ?? [],
@@ -283,12 +295,19 @@ export function FileBrowser() {
       }
     };
     collect(rootTree ?? []);
+    if (jumpContext) {
+      visibleIds.add(jumpContext.directory.id);
+      for (const id of jumpContext.ancestorDirectoryIds) {
+        visibleIds.add(id);
+      }
+    }
 
     if (selectedDirectoryId && !visibleIds.has(selectedDirectoryId)) {
       setSelectedDirectoryId(rootTree?.[0]?.id);
       setSelectedFileId(undefined);
     }
   }, [
+    jumpContext,
     rootTree,
     selectedDirectoryId,
     setSelectedDirectoryId,
@@ -301,9 +320,48 @@ export function FileBrowser() {
       selectedFileId &&
       (!rows || !rows.some((row) => row.id === selectedFileId))
     ) {
-      setSelectedFileId(undefined);
+      if (!jumpContext && !jumpContextLoading && !jumpContextFetching) {
+        setSelectedFileId(undefined);
+      }
     }
-  }, [rows, selectedFileId, setSelectedFileId]);
+  }, [
+    jumpContext,
+    jumpContextFetching,
+    jumpContextLoading,
+    rows,
+    selectedFileId,
+    setSelectedFileId,
+  ]);
+
+  useEffect(() => {
+    if (!jumpContext || !selectedFileId || jumpContext.target.id !== selectedFileId) {
+      return;
+    }
+    if (jumpContext.requiresShowHidden && !showHidden) {
+      setShowHidden(true);
+      return;
+    }
+    if (selectedDirectoryId !== jumpContext.directory.id) {
+      setSelectedDirectoryId(jumpContext.directory.id);
+    }
+    setExpandedDirectoryIds((current) => {
+      const next = new Set(current);
+      for (const id of jumpContext.ancestorDirectoryIds) {
+        next.add(id);
+      }
+      return next.size === current.length ? current : Array.from(next);
+    });
+    if (rowsOffset !== jumpContext.rowOffset) {
+      setRowsOffset(jumpContext.rowOffset);
+    }
+  }, [
+    jumpContext,
+    rowsOffset,
+    selectedDirectoryId,
+    selectedFileId,
+    setSelectedDirectoryId,
+    showHidden,
+  ]);
 
   const selectedFile = rows?.find((row) => row.id === selectedFileId);
   const { data: viewer } = useFileViewer(selectedFile?.id);

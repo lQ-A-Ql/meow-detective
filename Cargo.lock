@@ -83,6 +83,7 @@ dependencies = [
  "image-e01",
  "infrastructure",
  "num_cpus",
+ "once_cell",
  "persistence-sqlite",
  "rayon",
  "reports",

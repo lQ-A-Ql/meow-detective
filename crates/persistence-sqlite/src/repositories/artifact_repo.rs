@@ -99,6 +99,19 @@ impl<'a> ArtifactRepo<'a> {
         }
         Ok(counts)
     }
+
+    pub fn find_by_id(&self, artifact_id: &str) -> DbResult<Option<Artifact>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, artifact_type, source_object_id, extractor_id, extractor_version, confidence, source_attribution, title, summary, attrs, created_at
+             FROM artifacts WHERE id = ?1",
+        )?;
+        let result = stmt.query_row(params![artifact_id], row_to_artifact);
+        match result {
+            Ok(artifact) => Ok(Some(artifact)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
 }
 
 fn row_to_artifact(row: &rusqlite::Row) -> rusqlite::Result<Artifact> {

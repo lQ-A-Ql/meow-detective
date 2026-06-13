@@ -11,6 +11,8 @@
 - 无 HTTP server
 - `crates/transport` 是契约源
 
+V2 长期执行主计划见 `docs/v2-longterm-plan.md`。
+
 ## 2. 典型开发顺序
 
 1. 修改或新增 `crates/transport` DTO / request / event
@@ -94,6 +96,14 @@
 - `git diff --check`
 - `scripts/check-doc-drift.ps1`
 - 如图谱变更较大，再跑 `-RenderMermaid`
+
+### V2 专项
+
+- fixture 变更同步 `docs/fixture-handbook.md`
+- expected JSON 变更同步 `docs/expected-json-contract.md`
+- benchmark 变更同步 `docs/benchmark-baseline.md`
+- 关联分析变更同步 `docs/correlation-analysis-design.md`
+- 发布门禁变更同步 `docs/release-scorecard.md`
 
 ## 8. 默认 gate
 

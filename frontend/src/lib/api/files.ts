@@ -2,6 +2,7 @@ import { save } from '@tauri-apps/plugin-dialog';
 import {
   FileChildrenPage,
   FileEntryRow,
+  FileJumpContext,
   FileRowsPage,
   FileTreeNode,
   MediaRangeRequest,
@@ -199,5 +200,33 @@ export async function extractFile(file: FileEntryRow) {
     'extract_file',
     () => Promise.resolve('Mock file exported'),
     { request: { fileId: file.id, destinationPath, overwrite: false } },
+  );
+}
+
+export async function getFileJumpContext(
+  fileId: string,
+  options: {
+    showHidden?: boolean;
+    pageLimit?: number;
+    sortKey?: FileSortKey;
+    sortDirection?: FileSortDirection;
+  } = {},
+): Promise<FileJumpContext> {
+  const {
+    showHidden = false,
+    pageLimit = 500,
+    sortKey = 'name',
+    sortDirection = 'asc',
+  } = options;
+  return apiClient.request(
+    'get_file_jump_context',
+    () =>
+      apiClient.getMockProvider().getFileJumpContext(fileId, {
+        showHidden,
+        pageLimit,
+        sortKey,
+        sortDirection,
+      }),
+    { request: { fileId, showHidden, pageLimit, sortKey, sortDirection } },
   );
 }

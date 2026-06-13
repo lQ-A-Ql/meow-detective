@@ -1,4 +1,4 @@
-﻿# Security Audit Report — Forensics Workbench Rust Backend
+# Security Audit Report — Forensics Workbench Rust Backend
 
 **Auditor**: Codex (lQ-A-Ql)
 **Date**: 2026-05-29

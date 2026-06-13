@@ -4,6 +4,11 @@
 
 MCP 在取证工具中天然敏感。本项目里的 MCP 必须是“最小权限、可审计、可解释”的受控扩展边界。
 
+V2 安全治理与发布门禁总计划见：
+
+- `docs/v2-longterm-plan.md`
+- `docs/release-scorecard.md`
+
 ## 2. 默认权限模型
 
 默认权限：
@@ -92,3 +97,8 @@ MCP 在取证工具中天然敏感。本项目里的 MCP 必须是“最小权�
 - tool call 参数脱敏策略
 - 更强的 host allowlist / denylist
 
+## 8. V2 期间的新增实施要求
+
+- connect、disconnect、test、resource、tool、prompt 都必须纳入统一审计记录模型
+- MCP 的权限、能力、审计结果必须能进入发布评分卡
+- 未经说明的权限提升不得进入候选发布

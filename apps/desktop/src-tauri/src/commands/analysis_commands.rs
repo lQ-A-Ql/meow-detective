@@ -9,8 +9,8 @@ use transport::{
     },
     dto::{
         AnalysisExtractionRunDto, AnalysisFileClassificationDto, AnalysisSystemInfoDto,
-        BrowserHistorySummaryDto, EmailExtractionSummaryDto, EvidenceClassificationSummaryDto,
-        RegistryExtractionSummaryDto,
+        BrowserHistorySummaryDto, CorrelationSnapshotDto, EmailExtractionSummaryDto,
+        EvidenceClassificationSummaryDto, RegistryExtractionSummaryDto, V2GovernanceSnapshotDto,
     },
     CommandError,
 };
@@ -195,6 +195,40 @@ pub async fn get_email_extraction_summary(
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         analysis_service::get_email_extraction_summary(&conn, req.offset, req.limit)
+            .map_err(CommandError::from_service_error)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+/// Get V2 governance, verification, benchmark, and release snapshot.
+#[tauri::command]
+pub async fn get_v2_governance_snapshot(
+    state: State<'_, AppState>,
+) -> Result<V2GovernanceSnapshotDto, CommandError> {
+    let app_state = state.inner().clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let active = require_active_case(&app_state)?;
+        let conn = get_case_connection(&app_state)?;
+        app_services::v2_governance_service::get_v2_governance_snapshot(&conn, &active.case_id)
+            .map_err(CommandError::from_service_error)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+/// Get V2 correlation snapshot for shared source-object evidence linking.
+#[tauri::command]
+pub async fn get_correlation_snapshot(
+    state: State<'_, AppState>,
+) -> Result<CorrelationSnapshotDto, CommandError> {
+    let app_state = state.inner().clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        require_active_case(&app_state)?;
+        let conn = get_case_connection(&app_state)?;
+        app_services::correlation_service::get_correlation_snapshot(&conn)
             .map_err(CommandError::from_service_error)
     })
     .await
