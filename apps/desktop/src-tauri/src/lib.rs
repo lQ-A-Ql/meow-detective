@@ -28,6 +28,10 @@ use commands::{
     graph_commands::{
         get_graph_snapshot, get_node_neighborhood, get_provenance_chain, query_graph,
     },
+    notebook_commands::{
+        add_evidence_citation, create_notebook_entry, get_notebook_thread,
+        list_investigation_steps, list_notebook_entries, update_notebook_entry,
+    },
     import::pipeline::{cancel_import, import_data_source},
     job_commands::{get_jobs_snapshot, get_trace_items, get_warnings},
     mcp_commands::{
@@ -129,6 +133,13 @@ pub fn run() {
             call_mcp_tool,
             list_mcp_prompts,
             get_mcp_prompt,
+            // Notebook commands
+            create_notebook_entry,
+            update_notebook_entry,
+            list_notebook_entries,
+            get_notebook_thread,
+            add_evidence_citation,
+            list_investigation_steps,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

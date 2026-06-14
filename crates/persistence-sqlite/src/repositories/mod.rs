@@ -5,6 +5,7 @@ pub mod datasource_repo;
 pub mod file_repo;
 pub mod graph_repo;
 pub mod job_repo;
+pub mod notebook_repo;
 pub mod partition_repo;
 pub mod report_repo;
 pub mod timeline_repo;

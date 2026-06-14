@@ -7,6 +7,8 @@ pub mod graph;
 pub mod import;
 pub mod jobs;
 pub mod mcp;
+pub mod notebook;
+pub mod registry;
 pub mod reports;
 pub mod search;
 pub mod timeline;
@@ -58,6 +60,11 @@ pub use mcp::{
     McpServerConfigDto, McpServerStatusDto, McpTestConnectionRequest, McpTestConnectionResult,
     McpToolCallRequest, McpToolCallResult, McpToolDto,
 };
+pub use notebook::{
+    EvidenceCitationDto, InvestigationStepDto, NotebookEntryDto, NotebookEntryStatusDto,
+    NotebookEntryTypeDto, NotebookExportDto, NotebookThreadEdgeDto, StepReplayDto,
+};
+pub use registry::{RegistryTransactionDto, RegistryTransactionOperationDto, TxLogParseResultDto};
 pub use reports::{ReportHistoryItemDto, ReportTemplateDto};
 pub use search::{SearchHighlightDto, SearchHitDto, SearchResultPageDto, SearchSnippetDto};
 pub use timeline::TimelineEventDto;

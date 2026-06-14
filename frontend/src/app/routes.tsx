@@ -25,6 +25,12 @@ export const appRoutes: RouteObject[] = [
         }),
       },
       {
+        path: 'v3',
+        lazy: async () => ({
+          Component: (await import('./pages/V3Dashboard')).V3Dashboard,
+        }),
+      },
+      {
         path: 'files',
         lazy: async () => ({
           Component: (await import('./pages/FileBrowser')).FileBrowser,

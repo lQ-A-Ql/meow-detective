@@ -24,5 +24,8 @@ pub use registry::lookup::{
     SoftwareHiveInfo, SystemHiveInfo,
 };
 pub use registry::parser::RegistryExtractor;
+pub use registry::txlog::{
+    parse_transaction_log, RegistryTransaction, RegistryTransactionOperation, TxLogParseResult,
+};
 pub use sru::SruExtractor;
 pub use thumbcache::ThumbcacheExtractor;

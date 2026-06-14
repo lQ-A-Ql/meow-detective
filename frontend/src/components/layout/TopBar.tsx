@@ -21,6 +21,7 @@ const links = [
   { to: '/files', label: '文件浏览', page: 'files' as const, context: '目录树、文件表与取证查看器' },
   { to: '/analysis', label: '数据源分析', page: 'analysis' as const, context: '系统信息、文件分类与分析报告' },
   { to: '/v2', label: 'V2 治理', page: 'v2' as const, context: '可信验证、Benchmark、安全治理与发布评分' },
+  { to: '/v3', label: 'V3', page: 'v3' as const, context: '图统计、平台覆盖、规则包状态与批处理状态' },
   { to: '/search', label: '全局搜索', page: 'search' as const, context: '关键字、结构化查询与命中详情' },
   { to: '/timeline', label: '时间线', page: 'timeline' as const, context: '事件聚合、筛选与时序检视' },
   { to: '/artifacts', label: '痕迹分析', page: 'artifacts' as const, context: 'Windows 痕迹家族与解析字段' },

@@ -14,6 +14,7 @@ pub mod import_precheck;
 pub mod import_report;
 pub mod import_state;
 pub mod job_service;
+pub mod notebook_service;
 pub mod parallel_enum;
 pub mod performance;
 pub mod report_service;
