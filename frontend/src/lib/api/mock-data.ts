@@ -2550,6 +2550,118 @@ export const graphEdges: GraphEdge[] = [
   },
 ];
 
+import type {
+  BatchJob,
+  BatchJobLogLine,
+  BatchPhaseName,
+} from '@/types/models';
+
+export const batchJobs: BatchJob[] = [
+  {
+    id: 'batch-1',
+    name: 'WannaCry 全量分析',
+    status: 'completed',
+    progress: 100,
+    phases: [
+      { phase: 'Mount' as BatchPhaseName, state: 'completed', progress: 100, detail: '3 data sources mounted' },
+      { phase: 'Catalog' as BatchPhaseName, state: 'completed', progress: 100, detail: '1,492,033 files indexed' },
+      { phase: 'ExtractArtifacts' as BatchPhaseName, state: 'completed', progress: 100, detail: '45,102 artifacts extracted' },
+      { phase: 'Index' as BatchPhaseName, state: 'completed', progress: 100, detail: 'Full-text index built' },
+      { phase: 'Correlate' as BatchPhaseName, state: 'completed', progress: 100, detail: '128 correlation leads found' },
+      { phase: 'Export' as BatchPhaseName, state: 'completed', progress: 100, detail: 'Report exported' },
+    ],
+    plan: {
+      name: 'WannaCry 全量分析',
+      dataSourceIds: ['ds-001', 'ds-002', 'ds-003'],
+      dataSourceCount: 3,
+      phases: ['Mount', 'Catalog', 'ExtractArtifacts', 'Index', 'Correlate', 'Export'] as BatchPhaseName[],
+      phaseCount: 6,
+      resourceLimits: { memoryMb: 4096, threadCount: 8 },
+    },
+    createdAt: '2026-06-10T08:00:00Z',
+    startedAt: '2026-06-10T08:00:05Z',
+    completedAt: '2026-06-10T08:52:30Z',
+    elapsedMs: 3145000,
+    fileCount: 1492033,
+    artifactCount: 45102,
+    logTail: [
+      { ts: '2026-06-10T08:52:30Z', level: 'info', message: 'Batch job completed successfully.' },
+      { ts: '2026-06-10T08:52:29Z', level: 'info', message: 'Export phase finished: report.html (2.1 MB).' },
+      { ts: '2026-06-10T08:45:00Z', level: 'info', message: 'Correlation found 128 leads across 18 rule families.' },
+    ],
+  },
+  {
+    id: 'batch-2',
+    name: 'RDP 横向移动排查',
+    status: 'running',
+    progress: 62,
+    phases: [
+      { phase: 'Mount' as BatchPhaseName, state: 'completed', progress: 100, detail: '2 data sources mounted' },
+      { phase: 'Catalog' as BatchPhaseName, state: 'completed', progress: 100, detail: '892,110 files indexed' },
+      { phase: 'ExtractArtifacts' as BatchPhaseName, state: 'running', progress: 71, detail: 'Prefetch parser running... 1,203/1,704' },
+      { phase: 'Index' as BatchPhaseName, state: 'pending', progress: 0, detail: '' },
+      { phase: 'Correlate' as BatchPhaseName, state: 'pending', progress: 0, detail: '' },
+      { phase: 'Export' as BatchPhaseName, state: 'pending', progress: 0, detail: '' },
+    ],
+    plan: {
+      name: 'RDP 横向移动排查',
+      dataSourceIds: ['ds-004', 'ds-005'],
+      dataSourceCount: 2,
+      phases: ['Mount', 'Catalog', 'ExtractArtifacts', 'Index', 'Correlate', 'Export'] as BatchPhaseName[],
+      phaseCount: 6,
+      resourceLimits: { memoryMb: 2048, threadCount: 4 },
+    },
+    createdAt: '2026-06-14T09:30:00Z',
+    startedAt: '2026-06-14T09:30:02Z',
+    elapsedMs: 1820000,
+    etaMs: 1120000,
+    fileCount: 892110,
+    artifactCount: 1203,
+    logTail: [
+      { ts: '2026-06-14T10:00:30Z', level: 'info', message: 'ExtractArtifacts phase: Prefetch 1,203/1,704 (71%).' },
+      { ts: '2026-06-14T09:58:12Z', level: 'warn', message: '6 files skipped due to unsupported encoding.' },
+      { ts: '2026-06-14T09:45:00Z', level: 'info', message: 'Catalog phase completed: 892,110 files in 14m 58s.' },
+      { ts: '2026-06-14T09:30:03Z', level: 'info', message: 'Mount phase completed: 2 data sources attached.' },
+      { ts: '2026-06-14T09:30:02Z', level: 'info', message: 'Batch job started.' },
+    ],
+  },
+  {
+    id: 'batch-3',
+    name: 'USB 设备痕迹提取',
+    status: 'failed',
+    progress: 35,
+    phases: [
+      { phase: 'Mount' as BatchPhaseName, state: 'completed', progress: 100, detail: '1 data source mounted' },
+      { phase: 'Catalog' as BatchPhaseName, state: 'completed', progress: 100, detail: '45,200 files indexed' },
+      { phase: 'ExtractArtifacts' as BatchPhaseName, state: 'failed', progress: 18, detail: 'Registry parser error: corrupted hive' },
+      { phase: 'Index' as BatchPhaseName, state: 'skipped', progress: 0, detail: '' },
+      { phase: 'Correlate' as BatchPhaseName, state: 'skipped', progress: 0, detail: '' },
+      { phase: 'Export' as BatchPhaseName, state: 'skipped', progress: 0, detail: '' },
+    ],
+    plan: {
+      name: 'USB 设备痕迹提取',
+      dataSourceIds: ['ds-006'],
+      dataSourceCount: 1,
+      phases: ['Mount', 'Catalog', 'ExtractArtifacts', 'Index', 'Correlate', 'Export'] as BatchPhaseName[],
+      phaseCount: 6,
+      resourceLimits: { memoryMb: 1024, threadCount: 2 },
+    },
+    createdAt: '2026-06-13T14:00:00Z',
+    startedAt: '2026-06-13T14:00:01Z',
+    completedAt: '2026-06-13T14:12:30Z',
+    elapsedMs: 749000,
+    fileCount: 45200,
+    artifactCount: 0,
+    logTail: [
+      { ts: '2026-06-13T14:12:30Z', level: 'error', message: 'ExtractArtifacts failed: Registry hive SOFTWARE is corrupted at offset 0x2A000.' },
+      { ts: '2026-06-13T14:12:00Z', level: 'error', message: 'Registry parser encountered unexpected EOF while parsing value list.' },
+      { ts: '2026-06-13T14:10:00Z', level: 'info', message: 'ExtractArtifacts phase started: 6 parsers scheduled.' },
+      { ts: '2026-06-13T14:03:00Z', level: 'info', message: 'Catalog phase completed: 45,200 files in 2m 59s.' },
+      { ts: '2026-06-13T14:00:02Z', level: 'info', message: 'Mount phase completed: 1 data source attached.' },
+    ],
+  },
+];
+
 export const graphSnapshot: GraphSnapshot = {
   nodeCountByType: { File: 3, Artifact: 2 },
   edgeCountByType: { DerivesFrom: 1, References: 1 },
@@ -2558,3 +2670,241 @@ export const graphSnapshot: GraphSnapshot = {
   density: 0.2,
   largestComponentSize: 4,
 };
+
+// ── Rule Pack mock data ──
+
+export const loadedRulePacks: import('@/types/models').RulePackSummary[] = [
+  {
+    id: 'rp-001',
+    name: 'Windows DFIR Essentials',
+    version: '2.3.1',
+    author: 'Forensics Workbench Team',
+    description: 'Core rule set covering common Windows forensic artifacts: Prefetch, LNK, Registry, Event Logs, and Browser History.',
+    status: 'loaded',
+    ruleCount: 184,
+    loadedAt: '2026-06-14T08:45:00Z',
+    warnings: ['3 rules use deprecated field selectors; recommend upgrading to v3.0 schema.'],
+    errors: [],
+    coveredFamilies: ['Prefetch', 'LNK', 'JumpList', 'Registry', 'EventLog', 'BrowserHistory', 'UserAssist'],
+  },
+  {
+    id: 'rp-002',
+    name: 'Ransomware IOC Scanner',
+    version: '1.7.0',
+    author: 'Community Contributed',
+    description: 'Signature-based detection rules for known ransomware families including WannaCry, Ryuk, Conti, and Lockbit.',
+    status: 'loaded',
+    ruleCount: 312,
+    loadedAt: '2026-06-14T09:10:00Z',
+    warnings: [
+      '18 rules reference third-party hash lists (VT Integration License required).',
+      '5 rules are tagged as experimental and may produce false positives.',
+    ],
+    errors: [],
+    coveredFamilies: ['Prefetch', 'Registry', 'EventLog', 'FileSystem', 'NetworkArtifacts'],
+  },
+  {
+    id: 'rp-003',
+    name: 'USB Device Tracing',
+    version: '0.9.2-beta',
+    author: 'DFIR Lab',
+    description: 'Rules for detecting USB device connection history, drive serial numbers, and volume GUIDs.',
+    status: 'validating',
+    ruleCount: 47,
+    loadedAt: '2026-06-14T09:25:00Z',
+    warnings: ['Beta version: schema may change without backward compatibility.', 'Requires registry hive SOFTWARE to be accessible.'],
+    errors: [],
+    coveredFamilies: ['Registry', 'EventLog', 'LNK'],
+  },
+  {
+    id: 'rp-004',
+    name: 'Malformed Rule Pack',
+    version: '0.1.0',
+    author: 'Unknown',
+    description: 'A pack with validation errors for UI testing.',
+    status: 'error',
+    ruleCount: 12,
+    loadedAt: '2026-06-14T09:30:00Z',
+    warnings: ['Pack metadata lacks required "format" field.'],
+    errors: ['YAML parse error at line 42: unexpected indentation.', 'Rule "evil_rule_03" references unknown parser "not_a_real_parser".'],
+    coveredFamilies: [],
+  },
+];
+
+export const rulePackValidationResult: import('@/types/models').RulePackValidationResult = {
+  packId: 'rp-001',
+  valid: true,
+  errors: [],
+  warnings: ['3 rules use deprecated field selectors.'],
+  coverage: {
+    coveredFamilies: ['Prefetch', 'LNK', 'JumpList', 'Registry', 'EventLog', 'BrowserHistory', 'UserAssist'],
+    uncoveredFamilies: ['RecycleBin', 'Thumbcache', 'SRU', 'Amcache', 'BAM', 'MFT'],
+    coveragePercent: 54,
+  },
+};
+
+// ── Notebook mock data ──
+
+export const notebookEntries: import('@/types/models').NotebookEntry[] = [
+  {
+    id: 'nb-001',
+    caseId: 'case-2026-fx-091',
+    parentId: undefined,
+    title: 'Initial triage observations',
+    content: `## Summary
+
+Initial examination of the evidence image reveals several indicators of compromise:
+
+1. **Suspicious scheduled task** — \`tasksche.exe\` registered under \`HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tasks\`
+2. **Lateral movement artifacts** — Multiple RDP connection logs found, unusual for this workstation
+3. **Registry persistence** — \`WanaCrypt0r\` key present in SOFTWARE hive
+
+### Next Steps
+
+- [ ] Run full Prefetch parser
+- [ ] Correlate network connections with timeline
+- [ ] Extract and analyze browser history
+
+> ⚠️ BitLocker partition #5 is locked — cannot access until key is provided.`,
+    entryType: 'finding',
+    status: 'draft',
+    tags: ['triage', 'ransomware', 'wannacry'],
+    citationNodeIds: ['graph-node-artifact-1', 'graph-node-file-1'],
+    createdAt: '2026-06-14T09:30:00Z',
+    updatedAt: '2026-06-14T10:15:00Z',
+  },
+  {
+    id: 'nb-002',
+    caseId: 'case-2026-fx-091',
+    parentId: 'nb-001',
+    title: 'Re: Initial triage observations',
+    content: 'Checked the Prefetch output — `tasksche.exe` was executed 6 times on 2026-05-15 between 08:00 and 14:30 UTC. The Prefetch hash matches known WannaCry dropper samples.',
+    entryType: 'observation',
+    status: 'draft',
+    tags: ['prefetch', 'execution'],
+    citationNodeIds: ['graph-node-file-1'],
+    createdAt: '2026-06-14T10:45:00Z',
+    updatedAt: '2026-06-14T10:45:00Z',
+  },
+  {
+    id: 'nb-003',
+    caseId: 'case-2026-fx-091',
+    parentId: 'nb-001',
+    title: 'Re: Initial triage observations',
+    content: 'RDP connections to 192.168.1.50 (DC01) at 09:12 and 14:45 on 2026-05-15. Source IP is 192.168.1.23 which matches the victim workstation. Unusual RDP activity during night hours (22:30 UTC) on the same day.',
+    entryType: 'observation',
+    status: 'draft',
+    tags: ['lateral-movement', 'rdp'],
+    citationNodeIds: ['graph-node-artifact-2'],
+    createdAt: '2026-06-14T11:00:00Z',
+    updatedAt: '2026-06-14T11:00:00Z',
+  },
+  {
+    id: 'nb-004',
+    caseId: 'case-2026-fx-091',
+    parentId: undefined,
+    title: 'Email trace investigation',
+    content: 'EML files recovered from the Outlook OST suggest a phishing email was opened at 07:58 on 2026-05-15. The email contained a macro-enabled spreadsheet "invoice_20260515.xlsm".',
+    entryType: 'finding',
+    status: 'review',
+    tags: ['phishing', 'email', 'initial-access'],
+    citationNodeIds: [],
+    createdAt: '2026-06-14T11:20:00Z',
+    updatedAt: '2026-06-14T12:00:00Z',
+  },
+  {
+    id: 'nb-005',
+    caseId: 'case-2026-fx-091',
+    parentId: undefined,
+    title: 'Open question: encryption scope',
+    content: 'Need to determine which file extensions were encrypted. The ransomware note ("@Please_Read_Me@.txt") is present in 23 directories, but only 8 show encrypted file extensions (.WNCRY). Check if encryption was interrupted.',
+    entryType: 'lead',
+    status: 'draft',
+    tags: ['ransomware', 'encryption', 'open-question'],
+    citationNodeIds: [],
+    createdAt: '2026-06-14T12:30:00Z',
+    updatedAt: '2026-06-14T12:30:00Z',
+  },
+  {
+    id: 'nb-006',
+    caseId: 'case-2026-fx-091',
+    parentId: 'nb-005',
+    title: 'Re: Open question: encryption scope',
+    content: 'Quick check: 23 ransom notes found across user directories and network shares (\\\\DC01\\Shared). 8 directories with .WNCRY files are all under C:\\Users. Encryption likely started but was terminated when the process crashed or was killed.',
+    entryType: 'observation',
+    status: 'draft',
+    tags: ['encryption', 'ransom-note'],
+    citationNodeIds: ['graph-node-file-3'],
+    createdAt: '2026-06-14T13:00:00Z',
+    updatedAt: '2026-06-14T13:00:00Z',
+  },
+];
+
+export const notebookEntryList: import('@/types/models').NotebookEntryListItem[] = [
+  {
+    id: 'nb-001',
+    parentId: undefined,
+    title: 'Initial triage observations',
+    entryType: 'finding',
+    status: 'draft',
+    tags: ['triage', 'ransomware', 'wannacry'],
+    replyCount: 2,
+    createdAt: '2026-06-14T09:30:00Z',
+    updatedAt: '2026-06-14T10:15:00Z',
+  },
+  {
+    id: 'nb-002',
+    parentId: 'nb-001',
+    title: 'Re: Initial triage observations',
+    entryType: 'observation',
+    status: 'draft',
+    tags: ['prefetch', 'execution'],
+    replyCount: 0,
+    createdAt: '2026-06-14T10:45:00Z',
+    updatedAt: '2026-06-14T10:45:00Z',
+  },
+  {
+    id: 'nb-003',
+    parentId: 'nb-001',
+    title: 'Re: Initial triage observations',
+    entryType: 'observation',
+    status: 'draft',
+    tags: ['lateral-movement', 'rdp'],
+    replyCount: 0,
+    createdAt: '2026-06-14T11:00:00Z',
+    updatedAt: '2026-06-14T11:00:00Z',
+  },
+  {
+    id: 'nb-004',
+    parentId: undefined,
+    title: 'Email trace investigation',
+    entryType: 'finding',
+    status: 'review',
+    tags: ['phishing', 'email', 'initial-access'],
+    replyCount: 0,
+    createdAt: '2026-06-14T11:20:00Z',
+    updatedAt: '2026-06-14T12:00:00Z',
+  },
+  {
+    id: 'nb-005',
+    parentId: undefined,
+    title: 'Open question: encryption scope',
+    entryType: 'lead',
+    status: 'draft',
+    tags: ['ransomware', 'encryption', 'open-question'],
+    replyCount: 1,
+    createdAt: '2026-06-14T12:30:00Z',
+    updatedAt: '2026-06-14T12:30:00Z',
+  },
+  {
+    id: 'nb-006',
+    parentId: 'nb-005',
+    title: 'Re: Open question: encryption scope',
+    entryType: 'observation',
+    status: 'draft',
+    tags: ['encryption', 'ransom-note'],
+    replyCount: 0,
+    createdAt: '2026-06-14T13:00:00Z',
+    updatedAt: '2026-06-14T13:00:00Z',
+  },
+];

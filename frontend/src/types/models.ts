@@ -1017,3 +1017,146 @@ export interface ExportScope {
 export interface ExportOptions {
   overwrite?: boolean;
 }
+
+// ── Batch ──
+
+export type BatchPhaseName = 'Mount' | 'Catalog' | 'ExtractArtifacts' | 'Index' | 'Correlate' | 'Export';
+
+export type BatchPhaseState = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
+
+export type BatchJobStatus = 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
+
+export interface ResourceLimits {
+  memoryMb: number;
+  threadCount: number;
+}
+
+export interface BatchPlan {
+  name: string;
+  dataSourceIds: string[];
+  phases: BatchPhaseName[];
+  resourceLimits: ResourceLimits;
+}
+
+export interface BatchPlanSummary {
+  name: string;
+  dataSourceIds: string[];
+  dataSourceCount: number;
+  phases: BatchPhaseName[];
+  phaseCount: number;
+  resourceLimits: ResourceLimits;
+}
+
+export interface BatchPhaseProgress {
+  phase: BatchPhaseName;
+  state: BatchPhaseState;
+  progress: number;
+  detail: string;
+}
+
+export interface BatchJobLogLine {
+  ts: string;
+  level: 'info' | 'warn' | 'error';
+  message: string;
+}
+
+export interface BatchJob {
+  id: string;
+  name: string;
+  status: BatchJobStatus;
+  progress: number;
+  phases: BatchPhaseProgress[];
+  plan: BatchPlanSummary;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  elapsedMs?: number;
+  etaMs?: number;
+  fileCount: number;
+  artifactCount: number;
+  logTail: BatchJobLogLine[];
+}
+
+// ── Rule Packs ──
+
+export interface RulePackSummary {
+  id: string;
+  name: string;
+  version: string;
+  author?: string;
+  description?: string;
+  status: 'loaded' | 'error' | 'validating';
+  ruleCount: number;
+  loadedAt: string;
+  warnings: string[];
+  errors: string[];
+  coveredFamilies: string[];
+}
+
+export interface RulePackValidationResult {
+  packId: string;
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  coverage: RulePackCoverage;
+}
+
+export interface RulePackCoverage {
+  coveredFamilies: string[];
+  uncoveredFamilies: string[];
+  coveragePercent: number;
+}
+
+// ── Notebook ──
+
+export type NotebookEntryType = 'note' | 'observation' | 'finding' | 'lead';
+
+export type NotebookEntryStatus = 'draft' | 'review' | 'final';
+
+export interface NotebookEntry {
+  id: string;
+  caseId: string;
+  parentId?: string;
+  title: string;
+  content: string;
+  entryType: NotebookEntryType;
+  status: NotebookEntryStatus;
+  tags: string[];
+  citationNodeIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotebookEntryListItem {
+  id: string;
+  parentId?: string;
+  title: string;
+  entryType: NotebookEntryType;
+  status: NotebookEntryStatus;
+  tags: string[];
+  replyCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateEntryRequest {
+  title: string;
+  content: string;
+  entryType: NotebookEntryType;
+  tags?: string[];
+  parentId?: string;
+}
+
+export interface UpdateEntryRequest {
+  entryId: string;
+  title?: string;
+  content?: string;
+  entryType?: NotebookEntryType;
+  tags?: string[];
+  status?: NotebookEntryStatus;
+}
+
+export interface AddCitationRequest {
+  entryId: string;
+  nodeIds: string[];
+}

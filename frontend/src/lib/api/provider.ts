@@ -1,12 +1,16 @@
 import {
+  AddCitationRequest,
   ArtifactRow,
   AnalysisExtractionPageRequest,
+  BatchJob,
+  BatchPlan,
   AnalysisExtractionRequest,
   AnalysisExtractionRun,
   AnalysisFileClassification,
   AnalysisSystemInfo,
   BrowserHistorySummary,
   CaseMetrics,
+  CreateEntryRequest,
   DataSourceSummary,
   CaseSummary,
   CorrelationSnapshot,
@@ -21,14 +25,19 @@ import {
   EvidenceClassificationSummary,
   FileTreeNode,
   JobSnapshot,
+  NotebookEntry,
+  NotebookEntryListItem,
   RecentCase,
   RecentObject,
   ReportHistoryItem,
   ReportTemplate,
   RegistryExtractionSummary,
+  RulePackSummary,
+  RulePackValidationResult,
   SearchResultPage,
   TimelineEventDto,
   TraceItem,
+  UpdateEntryRequest,
   V2GovernanceSnapshot,
   ViewerHandle,
   ViewerRangeRequest,
@@ -62,9 +71,14 @@ import {
   traces,
   v2GovernanceSnapshot,
   warnings,
+  batchJobs,
   graphSnapshot,
   graphNodes,
   graphEdges,
+  loadedRulePacks,
+  rulePackValidationResult,
+  notebookEntries,
+  notebookEntryList,
 } from './mock-data';
 
 export interface ApiProvider {
@@ -103,6 +117,13 @@ export interface ApiProvider {
   getJobsSnapshot(): Promise<JobSnapshot[]>;
   getWarnings(): Promise<WarningItem[]>;
   getTraceItems(): Promise<TraceItem[]>;
+  createBatchPlan(plan: BatchPlan): Promise<BatchJob>;
+  startBatch(jobId: string): Promise<void>;
+  pauseBatch(jobId: string): Promise<void>;
+  resumeBatch(jobId: string): Promise<void>;
+  cancelBatch(jobId: string): Promise<void>;
+  getBatchJob(jobId: string): Promise<BatchJob | null>;
+  listBatchJobs(): Promise<BatchJob[]>;
   getSystemInfo(): Promise<AnalysisSystemInfo>;
   classifyFiles(sampleSize?: number): Promise<AnalysisFileClassification[]>;
   getEvidenceClassificationSummary(): Promise<EvidenceClassificationSummary>;
@@ -117,6 +138,14 @@ export interface ApiProvider {
   getGraphSnapshot(caseId: string): Promise<GraphSnapshot>;
   queryGraph(query: GraphQuery): Promise<GraphQueryResult>;
   getNodeNeighborhood(nodeId: string, depth?: number): Promise<GraphQueryResult>;
+  listLoadedRulePacks(): Promise<RulePackSummary[]>;
+  loadRulePack(path: string): Promise<RulePackSummary>;
+  validateRulePack(packId: string): Promise<RulePackValidationResult>;
+  listNotebookEntries(): Promise<NotebookEntryListItem[]>;
+  getNotebookEntry(entryId: string): Promise<NotebookEntry | null>;
+  createNotebookEntry(request: CreateEntryRequest): Promise<NotebookEntry>;
+  updateNotebookEntry(request: UpdateEntryRequest): Promise<NotebookEntry>;
+  addCitation(request: AddCitationRequest): Promise<NotebookEntry>;
 }
 
 function filterHidden<T extends { hidden?: boolean; system?: boolean }>(
@@ -246,6 +275,59 @@ export const mockProvider: ApiProvider = {
   async getTraceItems() {
     return traces;
   },
+  async createBatchPlan(plan: BatchPlan) {
+    const job: BatchJob = {
+      id: `batch-${Date.now()}`,
+      name: plan.name,
+      status: 'pending',
+      progress: 0,
+      phases: plan.phases.map((phase) => ({ phase, state: 'pending' as const, progress: 0, detail: '' })),
+      plan: { ...plan, dataSourceCount: plan.dataSourceIds.length, phaseCount: plan.phases.length },
+      createdAt: new Date().toISOString(),
+      fileCount: 0,
+      artifactCount: 0,
+      logTail: [{ ts: new Date().toISOString(), level: 'info', message: 'Batch plan created.' }],
+    };
+    batchJobs.unshift(job);
+    return job;
+  },
+  async startBatch(jobId: string) {
+    const job = batchJobs.find((j) => j.id === jobId);
+    if (job) {
+      job.status = 'running';
+      job.startedAt = new Date().toISOString();
+      job.progress = 5;
+      job.logTail.unshift({ ts: new Date().toISOString(), level: 'info', message: 'Batch job started.' });
+    }
+  },
+  async pauseBatch(jobId: string) {
+    const job = batchJobs.find((j) => j.id === jobId);
+    if (job) {
+      job.status = 'paused';
+      job.logTail.unshift({ ts: new Date().toISOString(), level: 'info', message: 'Batch job paused.' });
+    }
+  },
+  async resumeBatch(jobId: string) {
+    const job = batchJobs.find((j) => j.id === jobId);
+    if (job) {
+      job.status = 'running';
+      job.logTail.unshift({ ts: new Date().toISOString(), level: 'info', message: 'Batch job resumed.' });
+    }
+  },
+  async cancelBatch(jobId: string) {
+    const job = batchJobs.find((j) => j.id === jobId);
+    if (job) {
+      job.status = 'cancelled';
+      job.completedAt = new Date().toISOString();
+      job.logTail.unshift({ ts: new Date().toISOString(), level: 'warn', message: 'Batch job cancelled by user.' });
+    }
+  },
+  async getBatchJob(jobId: string) {
+    return batchJobs.find((j) => j.id === jobId) ?? null;
+  },
+  async listBatchJobs() {
+    return batchJobs;
+  },
   async getSystemInfo() {
     return analysisSystemInfo;
   },
@@ -361,6 +443,117 @@ export const mockProvider: ApiProvider = {
       nodeCount: connectedNodes.length,
       edgeCount: connectedEdges.length,
     };
+  },
+  async listLoadedRulePacks() {
+    return loadedRulePacks;
+  },
+  async loadRulePack(_path: string) {
+    const newPack: RulePackSummary = {
+      id: `rp-${Date.now()}`,
+      name: 'Newly Loaded Rule Pack',
+      version: '1.0.0',
+      author: 'User',
+      description: 'Custom rule pack loaded by user.',
+      status: 'validating',
+      ruleCount: 45,
+      loadedAt: new Date().toISOString(),
+      warnings: [],
+      errors: [],
+      coveredFamilies: ['Registry', 'Prefetch', 'LNK'],
+    };
+    loadedRulePacks.push(newPack);
+    return newPack;
+  },
+  async validateRulePack(packId: string) {
+    const pack = loadedRulePacks.find((p) => p.id === packId);
+    if (!pack) {
+      throw new Error('Rule pack not found');
+    }
+    return {
+      packId,
+      valid: pack.status !== 'error',
+      errors: pack.errors,
+      warnings: pack.warnings,
+      coverage: {
+        coveredFamilies: pack.coveredFamilies,
+        uncoveredFamilies: ['RecycleBin', 'Thumbcache', 'SRU', 'Amcache', 'BAM', 'MFT'],
+        coveragePercent: Math.round((pack.coveredFamilies.length / (pack.coveredFamilies.length + 6)) * 100),
+      },
+    };
+  },
+  async listNotebookEntries() {
+    return notebookEntryList;
+  },
+  async getNotebookEntry(entryId: string) {
+    return notebookEntries.find((e) => e.id === entryId) ?? null;
+  },
+  async createNotebookEntry(request: CreateEntryRequest) {
+    const entry: NotebookEntry = {
+      id: `nb-${Date.now()}`,
+      caseId: 'case-2026-fx-091',
+      parentId: request.parentId,
+      title: request.title,
+      content: request.content,
+      entryType: request.entryType,
+      status: 'draft',
+      tags: request.tags ?? [],
+      citationNodeIds: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    notebookEntries.unshift(entry);
+    notebookEntryList.unshift({
+      id: entry.id,
+      parentId: entry.parentId,
+      title: entry.title,
+      entryType: entry.entryType,
+      status: entry.status,
+      tags: entry.tags,
+      replyCount: 0,
+      createdAt: entry.createdAt,
+      updatedAt: entry.updatedAt,
+    });
+    if (request.parentId) {
+      const parentListItem = notebookEntryList.find((e) => e.id === request.parentId);
+      if (parentListItem) {
+        (parentListItem as NotebookEntryListItem).replyCount += 1;
+      }
+    }
+    return entry;
+  },
+  async updateNotebookEntry(request: UpdateEntryRequest) {
+    const entry = notebookEntries.find((e) => e.id === request.entryId);
+    if (!entry) {
+      throw new Error('Notebook entry not found');
+    }
+    if (request.title !== undefined) entry.title = request.title;
+    if (request.content !== undefined) entry.content = request.content;
+    if (request.entryType !== undefined) entry.entryType = request.entryType;
+    if (request.tags !== undefined) entry.tags = request.tags;
+    if (request.status !== undefined) entry.status = request.status;
+    entry.updatedAt = new Date().toISOString();
+    const listItem = notebookEntryList.find((e) => e.id === request.entryId);
+    if (listItem) {
+      if (request.title !== undefined) listItem.title = request.title;
+      if (request.entryType !== undefined) listItem.entryType = request.entryType;
+      if (request.tags !== undefined) listItem.tags = request.tags;
+      if (request.status !== undefined) listItem.status = request.status;
+      listItem.updatedAt = entry.updatedAt;
+    }
+    return entry;
+  },
+  async addCitation(request: AddCitationRequest) {
+    const entry = notebookEntries.find((e) => e.id === request.entryId);
+    if (!entry) {
+      throw new Error('Notebook entry not found');
+    }
+    const existing = new Set(entry.citationNodeIds);
+    for (const nodeId of request.nodeIds) {
+      existing.add(nodeId);
+    }
+    entry.citationNodeIds = Array.from(existing);
+    entry.updatedAt = new Date().toISOString();
+    return entry;
   },
   async createCase(_caseRoot: string, name: string, examiner?: string) {
     return { ...currentCase, name, number: 'MOCK-001', examiner };

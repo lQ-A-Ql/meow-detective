@@ -1,4 +1,5 @@
 pub mod analysis;
+pub mod macos;
 pub mod artifacts;
 pub mod batch;
 pub mod case;
@@ -76,6 +77,10 @@ pub use timeline::TimelineEventDto;
 pub use v3_governance::{
     BatchStatusDto, GraphStatsDto, NotebookStatsDto, PlatformCoverageDto, RulePackInfoDto,
     RulePackStatusDto, V3GovernanceSnapshotDto,
+};
+pub use macos::{
+    FSEventDto, FSEventTypeDto, LaunchServiceDto, MacPlistEntryDto, PlistTypeDto,
+    QuarantineEntryDto, RecentItemDto, RecentItemKindDto, SpotlightEntryDto, UnifiedLogEntryDto,
 };
 pub use viewer::{
     ImagePreviewDto, MediaPreviewModeDto, MediaRangeRequestDto, MediaRangeResponseDto, MediaUrlDto,
