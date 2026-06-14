@@ -202,7 +202,10 @@ mod tests {
         let data = build_quarantine_test_db();
         let entries = parse_quarantine_events(&data).expect("should parse");
 
-        assert!(!entries.is_empty(), "Expected at least one quarantine event");
+        assert!(
+            !entries.is_empty(),
+            "Expected at least one quarantine event"
+        );
         assert_eq!(entries.len(), 3);
 
         let first = &entries[0];

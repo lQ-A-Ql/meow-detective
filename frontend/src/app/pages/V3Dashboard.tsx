@@ -1,11 +1,11 @@
 import type { LucideIcon } from 'lucide-react';
-import { Activity, BarChart3, GitBranch, Layers, RefreshCw, Shield } from 'lucide-react';
+import { Activity, BarChart3, GitBranch, Layers, Monitor, Globe, Server, Apple, RefreshCw, Shield } from 'lucide-react';
 import { AnalysisEmptyState, AnalysisErrorBanner, AnalysisLoadingPanel } from '@/components/analysis/AnalysisPanels';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import { useGraphSnapshot } from '@/features/graph/hooks';
 import { useTimelineEvents } from '@/features/timeline/hooks';
 import { useArtifactFamilyCounts } from '@/features/artifacts/hooks';
-import { useCorrelationSnapshot } from '@/features/analysis/hooks';
+import { useCorrelationSnapshot, useV3GovernanceSnapshot } from '@/features/analysis/hooks';
 import { Button } from '@/app/components/ui/button';
 import { isApiErrorDto } from '@/lib/api/client';
 
@@ -98,11 +98,12 @@ export function V3Dashboard() {
   const timeline = useTimelineEvents({ limit: 1 });
   const artifactCounts = useArtifactFamilyCounts();
   const correlation = useCorrelationSnapshot();
+  const v3Governance = useV3GovernanceSnapshot();
 
   const hasCase = Boolean(currentCase.data);
   const loading =
-    currentCase.isLoading || graph.isLoading || timeline.isLoading || artifactCounts.isLoading || correlation.isLoading;
-  const error = currentCase.error ?? graph.error ?? timeline.error ?? artifactCounts.error ?? correlation.error;
+    currentCase.isLoading || graph.isLoading || timeline.isLoading || artifactCounts.isLoading || correlation.isLoading || v3Governance.isLoading;
+  const error = currentCase.error ?? graph.error ?? timeline.error ?? artifactCounts.error ?? correlation.error ?? v3Governance.error;
 
   async function refresh() {
     await Promise.all([
@@ -110,6 +111,7 @@ export function V3Dashboard() {
       timeline.refetch(),
       artifactCounts.refetch(),
       correlation.refetch(),
+      v3Governance.refetch(),
     ]);
   }
 
@@ -333,28 +335,191 @@ export function V3Dashboard() {
             ) : null}
           </section>
 
-          {/* Platform Coverage (placeholder) */}
+          {/* Platform Coverage */}
           <section>
-            <SectionHeader icon={Layers} title="平台覆盖" subtitle="文件系统 / 镜像格式 / 痕迹家族" />
-            <div className="mt-3 rounded border border-dashed border-[#ccc] bg-[#fafafa] p-6 text-center text-[12px] text-[#999]">
-              平台覆盖矩阵将在规则包导入后动态生成。
-            </div>
+            <SectionHeader icon={Layers} title="平台覆盖" subtitle="痕迹家族按目标平台分布" />
+            {v3Governance.data?.platformCoverage ? (
+              <>
+                <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <StatCard
+                    title="Windows"
+                    value={v3Governance.data.platformCoverage.windowsArtifactFamilies}
+                    subtitle="个家族"
+                    icon={Monitor}
+                  />
+                  <StatCard
+                    title="Linux"
+                    value={v3Governance.data.platformCoverage.linuxArtifactFamilies}
+                    subtitle="个家族"
+                    icon={Server}
+                  />
+                  <StatCard
+                    title="macOS"
+                    value={v3Governance.data.platformCoverage.macosArtifactFamilies}
+                    subtitle="个家族"
+                    icon={Apple}
+                  />
+                  <StatCard
+                    title="跨平台"
+                    value={v3Governance.data.platformCoverage.crossPlatformArtifactFamilies}
+                    subtitle="个家族"
+                    icon={Globe}
+                  />
+                </div>
+                <div className="mt-3 rounded border border-[#e0e0e0] bg-white p-4">
+                  <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-[#888]">家族明细</div>
+                  <div className="space-y-3">
+                    {v3Governance.data.platformCoverage.windowsFamilies.length > 0 && (
+                      <div>
+                        <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-[#555]">
+                          <Monitor size={12} /> Windows
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {v3Governance.data.platformCoverage.windowsFamilies.map((f) => (
+                            <span key={f} className="rounded border border-[#e0e0e0] bg-[#f5f5f5] px-2 py-0.5 font-mono text-[10px] text-[#333]">
+                              {f}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {v3Governance.data.platformCoverage.crossPlatformFamilies.length > 0 && (
+                      <div>
+                        <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-[#555]">
+                          <Globe size={12} /> 跨平台
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {v3Governance.data.platformCoverage.crossPlatformFamilies.map((f) => (
+                            <span key={f} className="rounded border border-[#e0e0e0] bg-[#e8f4fd] px-2 py-0.5 font-mono text-[10px] text-[#1a5c8a]">
+                              {f}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {v3Governance.data.platformCoverage.linuxFamilies.length > 0 && (
+                      <div>
+                        <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-[#555]">
+                          <Server size={12} /> Linux
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {v3Governance.data.platformCoverage.linuxFamilies.map((f) => (
+                            <span key={f} className="rounded border border-[#e0e0e0] bg-[#f5f5f5] px-2 py-0.5 font-mono text-[10px] text-[#333]">
+                              {f}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {v3Governance.data.platformCoverage.macosFamilies.length > 0 && (
+                      <div>
+                        <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-[#555]">
+                          <Apple size={12} /> macOS
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {v3Governance.data.platformCoverage.macosFamilies.map((f) => (
+                            <span key={f} className="rounded border border-[#e0e0e0] bg-[#f5f5f5] px-2 py-0.5 font-mono text-[10px] text-[#333]">
+                              {f}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="mt-3 rounded border border-dashed border-[#ccc] bg-[#fafafa] p-6 text-center text-[12px] text-[#999]">
+                暂无平台覆盖数据。导入数据源并运行痕迹提取后生成。
+              </div>
+            )}
           </section>
 
-          {/* Rule Pack Status (placeholder) */}
+          {/* Rule Pack Status */}
           <section>
-            <SectionHeader icon={Shield} title="规则包状态" subtitle="规则版本、覆盖率、校验和" />
-            <div className="mt-3 rounded border border-dashed border-[#ccc] bg-[#fafafa] p-6 text-center text-[12px] text-[#999]">
-              规则包管理将在后续版本中实现。
-            </div>
+            <SectionHeader icon={Shield} title="规则包状态" subtitle="规则版本、覆盖率、执行状态" />
+            {v3Governance.data?.rulePackCoverage ? (
+              <>
+                <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <StatCard
+                    title="已加载规则包"
+                    value={v3Governance.data.rulePackCoverage.loadedPacks.length}
+                    icon={Shield}
+                  />
+                  <StatCard
+                    title="规则总数"
+                    value={v3Governance.data.rulePackCoverage.totalRuleCount}
+                    icon={BarChart3}
+                  />
+                  <StatCard
+                    title="执行状态"
+                    value={v3Governance.data.rulePackCoverage.executionStatus}
+                    icon={Activity}
+                  />
+                </div>
+                {v3Governance.data.rulePackCoverage.loadedPacks.length > 0 && (
+                  <div className="mt-3 rounded border border-[#e0e0e0] bg-white p-4">
+                    <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-[#888]">已加载规则包</div>
+                    <div className="space-y-1">
+                      {v3Governance.data.rulePackCoverage.loadedPacks.map((pack) => (
+                        <div key={pack.name} className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-[#111]">{pack.name}</span>
+                            <span className="font-mono text-[#aaa]">v{pack.version}</span>
+                          </div>
+                          <div className="flex items-center gap-3 font-mono text-[#666]">
+                            <span>{pack.ruleCount} 规则</span>
+                            <span className="text-[#888]">{pack.author}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="mt-3 rounded border border-dashed border-[#ccc] bg-[#fafafa] p-6 text-center text-[12px] text-[#999]">
+                规则包数据将在导入数据源后加载。
+              </div>
+            )}
           </section>
 
-          {/* Batch Status (placeholder) */}
+          {/* Batch Status */}
           <section>
             <SectionHeader icon={Activity} title="批处理状态" subtitle="批量导入、批量提取、批量报告" />
-            <div className="mt-3 rounded border border-dashed border-[#ccc] bg-[#fafafa] p-6 text-center text-[12px] text-[#999]">
-              批处理状态将在后续版本中实现。
-            </div>
+            {v3Governance.data?.batchStatus ? (
+              <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-5">
+                <StatCard
+                  title="进行中"
+                  value={v3Governance.data.batchStatus.activeJobs}
+                  icon={Activity}
+                />
+                <StatCard
+                  title="已完成"
+                  value={v3Governance.data.batchStatus.completedJobs}
+                  icon={Shield}
+                />
+                <StatCard
+                  title="失败"
+                  value={v3Governance.data.batchStatus.failedJobs}
+                  icon={BarChart3}
+                />
+                <StatCard
+                  title="排队中"
+                  value={v3Governance.data.batchStatus.queuedJobs}
+                  icon={Layers}
+                />
+                <StatCard
+                  title="总计"
+                  value={v3Governance.data.batchStatus.totalJobs}
+                  icon={GitBranch}
+                />
+              </div>
+            ) : (
+              <div className="mt-3 rounded border border-dashed border-[#ccc] bg-[#fafafa] p-6 text-center text-[12px] text-[#999]">
+                暂无批处理作业。
+              </div>
+            )}
           </section>
         </div>
       )}

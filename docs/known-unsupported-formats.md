@@ -34,7 +34,23 @@ V2 长期计划与能力评级请同时参考：
 | SRU | committed fixture | 缺失 | 有实现 (4 测试)，无 fixture，无 expected.json |
 | Thumbcache | committed fixture | 缺失 | 有实现 (3 测试)，无 fixture，无 expected.json |
 | Browser | 全部 | 未实现 | artifacts-windows 中无浏览器模块。Chrome/Edge/Firefox 均无代码、无 fixture、无 expected.json |
-| Email | 全部 | 未实现 | artifacts-windows 中无邮件模块。EML/EMLX/PST/OST/mbox 均无实现 |
+| Email | 全部 | 未实现 | artifacts-windows 中无邮件模块。EML/EMLX/PST/OST/mbox 均无实现。PST/OST/mbox 规划于 V3-2 |
+| Linux 文件系统 | ext4 raw disk | 不支持 | 当前仅支持从已挂载或导入的 Linux 文件树提取制品。ext4 原始磁盘镜像解析规划于 V4 |
+| Linux 文件系统 | XFS raw disk | 不支持 | XFS 原始磁盘镜像解析规划于 V4 |
+| Linux 文件系统 | Btrfs raw disk | 不支持 | Btrfs 原始磁盘镜像解析规划于 V4 |
+| Linux 文件系统 | 已删除文件恢复 (ext4/XFS/Btrfs) | 不承诺 | 文件雕刻与已删除恢复规划于 V4 |
+| macOS 文件系统 | APFS raw disk | 不支持 | 当前仅支持从已挂载或导入的 macOS 文件树提取制品。APFS 原始磁盘镜像解析规划于 V4 |
+| macOS 文件系统 | HFS+ raw disk | 不支持 | HFS+ 原始磁盘镜像解析规划于 V4 |
+| macOS 文件系统 | 已删除文件恢复 (APFS/HFS+) | 不承诺 | 文件雕刻与已删除恢复规划于 V4 |
+| 移动设备 | iOS 制品 | 不支持 | iOS 备份/镜像解析（Contacts、Messages、Photos、Safari 等）规划于 V4 |
+| 移动设备 | Android 制品 | 不支持 | Android 备份/镜像解析（SMS/MMS、联系人、应用数据、Chrome 历史）规划于 V4 |
+| 云 | AWS CloudTrail | 不支持 | 云审计日志采集与关联规划于 V4 |
+| 云 | Azure Audit Logs | 不支持 | 云审计日志采集与关联规划于 V4 |
+| 云 | GCP Audit Logs | 不支持 | 云审计日志采集与关联规划于 V4 |
+| 云 | Google Workspace Logs | 不支持 | 云工作空间日志规划于 V4 |
+| 云 | Microsoft 365 Unified Audit Log | 不支持 | 云审计日志规划于 V4 |
+| 网络 | PCAP/网络捕获 | 不支持 | 网络数据包捕获摄入与流记录解析规划于 V4 |
+| 内存 | 内存镜像采集与分析 | 不支持 | 实时响应采集与内存镜像集成规划于 V4 |
 
 ## 3. V2 期间仍不得被市场化夸大的边界
 
@@ -49,6 +65,24 @@ V2 长期计划与能力评级请同时参考：
 - JumpList / SRU / Thumbcache 全格式覆盖（当前无 fixture，无 expected.json）
 - Browser 全浏览器全版本兼容（当前无任何实现代码）
 - Email 各类邮箱容器全覆盖（当前无任何实现代码）
+
+## 3a. V3 期间仍不得被市场化夸大的边界
+
+以下能力即便在 V3 期间有实现增量，也不得在 README、PRD、用户文案中写成"完整支持"：
+
+- Linux 文件系统 (ext4/XFS/Btrfs) 原始磁盘镜像解析（V3 仅支持从文件树提取制品）
+- macOS 文件系统 (APFS/HFS+) 原始磁盘镜像解析（V3 仅支持从文件树提取制品）
+- Linux/macOS 文件系统已删除文件恢复
+- PST 加密消息支持
+- PST 全 MAPI 属性级精度
+- iOS/Android 移动设备制品
+- 云服务商审计日志 (AWS CloudTrail / Azure Audit / GCP Audit)
+- 网络数据包捕获 (PCAP) 摄入
+- 内存镜像采集与分析
+- 全浏览器全版本全平台兼容（V3 目标为 Chrome/Edge/Firefox 主流版本）
+- 规则包 DSL / 脚本逻辑（V3 规则条件为声明式字段断言）
+- 多用户协作笔记本（V3 为单用户）
+- 图形查询语言 DSL（V3 使用结构化 Rust API）
 
 ## 4. 前端与链路层限制
 
@@ -73,3 +107,6 @@ V2 长期计划与能力评级请同时参考：
 - `docs/parser-support-matrix.md`
 - `docs/validation-trust-framework.md`
 - `docs/release-scorecard.md`
+- `docs/v3-plan.md`
+- `docs/linux-artifact-coverage.md`
+- `docs/mac-artifact-coverage.md`

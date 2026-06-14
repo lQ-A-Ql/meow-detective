@@ -37,6 +37,16 @@
 | MCP 使用说明 | `docs/mcp-user-guide.md` | 面向使用者的 MCP 配置与权限说明 |
 | CI | `ci.md` | CI 流程与检查步骤 |
 | 测试策略 | `test-plan.md` | 测试分层、fixture、回归与发布 gate |
+| V3 主计划 **(V3)** | `docs/v3-plan.md` | V3 五支柱：证据图、跨平台覆盖、可复现调查、规则包、离线批处理 |
+| 证据图设计 **(V3)** | `docs/evidence-graph-design.md` | 图模式、查询语义、索引策略、节点/边类型定义（规划中） |
+| 案例笔记本设计 **(V3)** | `docs/case-notebook-design.md` | 笔记本模型、证据引用、步骤记录与重放（规划中） |
+| 规则包规范 **(V3)** | `docs/rule-pack-spec.md` | 声明式规则包 TOML 格式、校验规则、共享约定（规划中） |
+| PST 依赖决策 **(V3)** | `docs/pst-dependency-decision.md` | PST 解析库选型决策记录：依赖评估、安全审计、许可兼容（规划中） |
+| 批处理设计 **(V3)** | `docs/batch-processing-design.md` | 离线批处理子系统架构、检查点、资源治理（规划中） |
+| Linux 制品覆盖 **(V3)** | `docs/linux-artifact-coverage.md` | Linux 解析器路线图、fixture 要求、已知缺口（规划中） |
+| macOS 制品覆盖 **(V3)** | `docs/mac-artifact-coverage.md` | macOS 解析器路线图、fixture 要求、已知缺口（规划中） |
+| PST/OST/mbox 支持 **(V3)** | `docs/pst-ost-mbox-support.md` | 容器邮件路线图、Outlook/Thunderbird 版本矩阵（规划中） |
+| V3 演练 **(V3)** | `docs/v3-walkthrough.md` | 端到端 V3 调查工作流演练：导入、图浏览、关联、笔记本、规则包、批处理 |
 
 ## 2. 当前事实快照
 
@@ -52,6 +62,8 @@
 | frontend pages | 9 | `frontend/src/app/pages/*.tsx`，排除测试 |
 | frontend test files | 42 | `frontend/src/**/*.test.ts(x)` |
 | Mermaid 图块 | 15 | `docs/model-architecture-algorithm-diagrams.md` |
+| V3 参考文档（已规划） | 9 | `docs/v3-plan.md` 及 8 篇 V3 参考文档 |
+| V3 计划新增 crate | 3 | `crates/containers-pst/`, `crates/artifacts-linux/`, `crates/artifacts-macos/` |
 
 ## 3. 路径级事实校准
 
@@ -62,6 +74,8 @@
 | `apps/desktop/src-tauri/src/commands/**/*.rs` | 72 | Tauri command 定义数 |
 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 23 | SQLite migration 脚本 |
 | `docs/model-architecture-algorithm-diagrams.md` 中 Mermaid | 15 | Mermaid 图块总数 |
+| `docs/v3-*.md` | 1 | V3 阶段文档入口（主计划） |
+| `docs/` 中 V3 参考文档 | 8 | 证据图、笔记本、规则包、PST决策、批处理、Linux/macOS覆盖、PST支持 |
 
 ## 4. 当前实现事实
 
@@ -109,6 +123,16 @@
 - V2 治理快照当前已进入报告导出链路：HTML `Governance Snapshot`、JSON `governance`、CSV `governance` 行
 - V2 关联分析已接住首批真实规则字段：`target_path`、`targetPath`、`url`、`title`、`visitTime`、`data`、`original_path`、`executable`、`attachments`、`subject`、`sentAt`
 - 报告导出已开始复用关联分析结果，HTML/JSON/CSV 三种导出格式已具备首版关联摘要，其中 HTML 已具备结构化 `Correlation Lead Details`
+
+### 4.3a V3 规划与当前状态
+
+- V3 主计划位于 `docs/v3-plan.md`，五支柱为：证据图(Evidence Graph)、容器与跨平台覆盖、可复现调查(Notebook+Step Replay)、规则包系统(Rule Pack)、离线批处理(Batch Processing)
+- V3 阶段为 V3-1(证据图基础) → V3-2(容器与跨平台覆盖) → V3-3(可复现调查与规则包) → V3-4(离线批处理与发布)
+- V3 目前处于规划阶段，所有 V3 参考文档标记为“规划中”
+- V3 文档入口：`docs/v3-plan.md`（主计划）、`docs/v3-walkthrough.md`（调查工作流演练）
+- V3 参考文档（规划中）：`docs/evidence-graph-design.md`、`docs/case-notebook-design.md`、`docs/rule-pack-spec.md`、`docs/pst-dependency-decision.md`、`docs/batch-processing-design.md`、`docs/linux-artifact-coverage.md`、`docs/mac-artifact-coverage.md`、`docs/pst-ost-mbox-support.md`
+- V3 将在 `docs/parser-support-matrix.md` 中新增 Linux/macOS 解析器条目，在 `docs/known-unsupported-formats.md` 中新增 Linux/macOS 文件系统与移动/云制品缺口
+- V3 治理工作台将替代 `/v2` 为 `/v3`，引入图统计、平台覆盖、规则包覆盖、批处理状态等信号
 
 ### 4.4 MCP 与安全边界
 

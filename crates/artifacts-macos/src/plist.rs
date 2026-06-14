@@ -92,16 +92,34 @@ pub fn parse_binary_plist(data: &[u8], source_file: &str) -> Result<Vec<MacPlist
     let offset_size: usize = trailer[6] as usize;
     let obj_ref_size: usize = trailer[7] as usize;
     let num_objects = u64::from_be_bytes([
-        trailer[8], trailer[9], trailer[10], trailer[11],
-        trailer[12], trailer[13], trailer[14], trailer[15],
+        trailer[8],
+        trailer[9],
+        trailer[10],
+        trailer[11],
+        trailer[12],
+        trailer[13],
+        trailer[14],
+        trailer[15],
     ]) as usize;
     let top_object = u64::from_be_bytes([
-        trailer[16], trailer[17], trailer[18], trailer[19],
-        trailer[20], trailer[21], trailer[22], trailer[23],
+        trailer[16],
+        trailer[17],
+        trailer[18],
+        trailer[19],
+        trailer[20],
+        trailer[21],
+        trailer[22],
+        trailer[23],
     ]) as usize;
     let offset_table_start = u64::from_be_bytes([
-        trailer[24], trailer[25], trailer[26], trailer[27],
-        trailer[28], trailer[29], trailer[30], trailer[31],
+        trailer[24],
+        trailer[25],
+        trailer[26],
+        trailer[27],
+        trailer[28],
+        trailer[29],
+        trailer[30],
+        trailer[31],
     ]) as usize;
 
     if offset_size == 0 || obj_ref_size == 0 || num_objects == 0 {
@@ -240,7 +258,10 @@ fn parse_dict(
     let marker = data[offset];
     let marker_type = marker >> 4;
     if marker_type != 0xD {
-        return Err(format!("Expected dict marker (0xDx) at offset {}, got 0x{:02X}", offset, marker));
+        return Err(format!(
+            "Expected dict marker (0xDx) at offset {}, got 0x{:02X}",
+            offset, marker
+        ));
     }
     let count = (marker & 0x0F) as usize;
 
@@ -304,7 +325,11 @@ fn read_string_object(data: &[u8], ref_idx: usize, offsets: &[usize]) -> Result<
 }
 
 /// Read a binary plist value and return (string_value, type_name).
-fn read_value_string(data: &[u8], ref_idx: usize, offsets: &[usize]) -> Result<(String, String), String> {
+fn read_value_string(
+    data: &[u8],
+    ref_idx: usize,
+    offsets: &[usize],
+) -> Result<(String, String), String> {
     if ref_idx >= offsets.len() {
         return Ok(("<invalid ref>".to_string(), "unknown".to_string()));
     }
@@ -341,7 +366,12 @@ fn read_value_string(data: &[u8], ref_idx: usize, offsets: &[usize]) -> Result<(
             let float_val = if extra == 2 {
                 // 4-byte float
                 if end - start >= 4 {
-                    f64::from(f32::from_be_bytes([data[start], data[start+1], data[start+2], data[start+3]]))
+                    f64::from(f32::from_be_bytes([
+                        data[start],
+                        data[start + 1],
+                        data[start + 2],
+                        data[start + 3],
+                    ]))
                 } else {
                     0.0
                 }
@@ -349,8 +379,14 @@ fn read_value_string(data: &[u8], ref_idx: usize, offsets: &[usize]) -> Result<(
                 // 8-byte double
                 if end - start >= 8 {
                     f64::from_be_bytes([
-                        data[start], data[start+1], data[start+2], data[start+3],
-                        data[start+4], data[start+5], data[start+6], data[start+7],
+                        data[start],
+                        data[start + 1],
+                        data[start + 2],
+                        data[start + 3],
+                        data[start + 4],
+                        data[start + 5],
+                        data[start + 6],
+                        data[start + 7],
                     ])
                 } else {
                     0.0
@@ -366,13 +402,23 @@ fn read_value_string(data: &[u8], ref_idx: usize, offsets: &[usize]) -> Result<(
             let end = std::cmp::min(start + 8, data.len());
             if end - start >= 8 {
                 let secs = f64::from_be_bytes([
-                    data[start], data[start+1], data[start+2], data[start+3],
-                    data[start+4], data[start+5], data[start+6], data[start+7],
+                    data[start],
+                    data[start + 1],
+                    data[start + 2],
+                    data[start + 3],
+                    data[start + 4],
+                    data[start + 5],
+                    data[start + 6],
+                    data[start + 7],
                 ]);
                 // Apple epoch: 2001-01-01T00:00:00Z = 978307200 seconds since Unix epoch
                 let unix_secs = secs + 978_307_200.0;
                 if unix_secs >= 0.0 && unix_secs < (i64::MAX as f64) {
-                    let dt = Utc.timestamp_opt(unix_secs as i64, ((unix_secs - unix_secs.floor()) * 1_000_000_000.0) as u32)
+                    let dt = Utc
+                        .timestamp_opt(
+                            unix_secs as i64,
+                            ((unix_secs - unix_secs.floor()) * 1_000_000_000.0) as u32,
+                        )
                         .single();
                     match dt {
                         Some(d) => Ok((d.to_rfc3339(), "date".to_string())),
@@ -390,17 +436,22 @@ fn read_value_string(data: &[u8], ref_idx: usize, offsets: &[usize]) -> Result<(
             let len = extra;
             let start = offset + 1;
             let end = std::cmp::min(start + len, data.len());
-            let hex: String = data[start..end].iter().map(|b| format!("{:02x}", b)).collect();
+            let hex: String = data[start..end]
+                .iter()
+                .map(|b| format!("{:02x}", b))
+                .collect();
             Ok((format!("<{} bytes: {}>", len, hex), "data".to_string()))
         }
         0x5 => {
             // ASCII string (reuse read_string_object logic)
-            let s = read_string_object(data, ref_idx, offsets).unwrap_or_else(|_| "<error>".to_string());
+            let s = read_string_object(data, ref_idx, offsets)
+                .unwrap_or_else(|_| "<error>".to_string());
             Ok((s, "string".to_string()))
         }
         0x6 => {
             // UTF-16 string
-            let s = read_string_object(data, ref_idx, offsets).unwrap_or_else(|_| "<error>".to_string());
+            let s = read_string_object(data, ref_idx, offsets)
+                .unwrap_or_else(|_| "<error>".to_string());
             Ok((s, "string".to_string()))
         }
         0x8 => {
@@ -414,7 +465,10 @@ fn read_value_string(data: &[u8], ref_idx: usize, offsets: &[usize]) -> Result<(
         0xA => Ok(("<array>".to_string(), "array".to_string())),
         0xC => Ok(("<set>".to_string(), "set".to_string())),
         0xD => Ok(("<dict>".to_string(), "dict".to_string())),
-        _ => Ok((format!("<unknown type 0x{:X}>", marker_type), "unknown".to_string())),
+        _ => Ok((
+            format!("<unknown type 0x{:X}>", marker_type),
+            "unknown".to_string(),
+        )),
     }
 }
 
@@ -523,11 +577,17 @@ mod tests {
         let entries = parse_xml_plist(xml.as_bytes(), "/test/Info.plist").expect("should parse");
         assert_eq!(entries.len(), 4);
 
-        let id = entries.iter().find(|e| e.key == "CFBundleIdentifier").unwrap();
+        let id = entries
+            .iter()
+            .find(|e| e.key == "CFBundleIdentifier")
+            .unwrap();
         assert_eq!(id.value, "com.apple.Safari");
         assert_eq!(id.value_type, "string");
 
-        let iphone = entries.iter().find(|e| e.key == "LSRequiresIPhoneOS").unwrap();
+        let iphone = entries
+            .iter()
+            .find(|e| e.key == "LSRequiresIPhoneOS")
+            .unwrap();
         assert_eq!(iphone.value, "true");
         assert_eq!(iphone.value_type, "boolean");
     }

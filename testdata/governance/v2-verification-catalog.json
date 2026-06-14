@@ -2,6 +2,7 @@
   "chains": [
     {
       "chain": "E01",
+      "platform": "Windows",
       "displayName": "E01 镜像读取",
       "maturity": "beta",
       "guaranteeLevel": "bestEffort",
@@ -17,6 +18,7 @@
     },
     {
       "chain": "RAW",
+      "platform": "Windows",
       "displayName": "RAW 镜像读取",
       "maturity": "ga",
       "guaranteeLevel": "guaranteed",
@@ -32,6 +34,7 @@
     },
     {
       "chain": "NTFS",
+      "platform": "Windows",
       "displayName": "NTFS 文件系统",
       "maturity": "beta",
       "guaranteeLevel": "bestEffort",
@@ -47,6 +50,7 @@
     },
     {
       "chain": "FAT",
+      "platform": "Windows",
       "displayName": "FAT 文件系统",
       "maturity": "experimental",
       "guaranteeLevel": "experimental",
@@ -62,6 +66,7 @@
     },
     {
       "chain": "exFAT",
+      "platform": "Windows",
       "displayName": "exFAT 文件系统",
       "maturity": "experimental",
       "guaranteeLevel": "experimental",
@@ -77,6 +82,7 @@
     },
     {
       "chain": "EVTX",
+      "platform": "Windows",
       "displayName": "EVTX 事件日志",
       "maturity": "beta",
       "guaranteeLevel": "bestEffort",
@@ -92,6 +98,7 @@
     },
     {
       "chain": "Prefetch",
+      "platform": "Windows",
       "displayName": "Prefetch 执行痕迹",
       "maturity": "beta",
       "guaranteeLevel": "bestEffort",
@@ -107,6 +114,7 @@
     },
     {
       "chain": "LNK",
+      "platform": "Windows",
       "displayName": "LNK 快捷方式",
       "maturity": "beta",
       "guaranteeLevel": "bestEffort",
@@ -122,6 +130,7 @@
     },
     {
       "chain": "Registry",
+      "platform": "Windows",
       "displayName": "Registry Hive",
       "maturity": "beta",
       "guaranteeLevel": "bestEffort",
@@ -137,6 +146,7 @@
     },
     {
       "chain": "RecycleBin",
+      "platform": "Windows",
       "displayName": "Recycle Bin",
       "maturity": "beta",
       "guaranteeLevel": "bestEffort",
@@ -152,6 +162,7 @@
     },
     {
       "chain": "JumpList",
+      "platform": "Windows",
       "displayName": "Jump List",
       "maturity": "experimental",
       "guaranteeLevel": "experimental",
@@ -167,6 +178,7 @@
     },
     {
       "chain": "SRU",
+      "platform": "Windows",
       "displayName": "SRU 系统资源使用",
       "maturity": "experimental",
       "guaranteeLevel": "experimental",
@@ -182,6 +194,7 @@
     },
     {
       "chain": "Thumbcache",
+      "platform": "Windows",
       "displayName": "Thumbcache 缩略图缓存",
       "maturity": "experimental",
       "guaranteeLevel": "experimental",
@@ -197,6 +210,7 @@
     },
     {
       "chain": "ChromeHistory",
+      "platform": "Cross-platform",
       "displayName": "Chrome History",
       "maturity": "unsupported",
       "guaranteeLevel": "experimental",
@@ -204,7 +218,7 @@
       "expectedJsonVersion": "none",
       "verifiedSampleCount": 0,
       "result": "pending",
-      "notes": ["artifacts-windows 中无浏览器模块。无实现代码，无 fixture，无 expected.json。"],
+      "notes": ["artifacts-windows 中无浏览器模块。无实现代码，无 fixture，无 expected.json。medium fixture 规划中 (Chrome SQLite)。"],
       "verifiedSamples": [],
       "baseline": "无",
       "guaranteeSummary": "未实现",
@@ -212,6 +226,7 @@
     },
     {
       "chain": "EdgeHistory",
+      "platform": "Cross-platform",
       "displayName": "Edge History",
       "maturity": "unsupported",
       "guaranteeLevel": "experimental",
@@ -219,7 +234,7 @@
       "expectedJsonVersion": "none",
       "verifiedSampleCount": 0,
       "result": "pending",
-      "notes": ["artifacts-windows 中无浏览器模块。无实现代码，无 fixture，无 expected.json。"],
+      "notes": ["artifacts-windows 中无浏览器模块。无实现代码，无 fixture，无 expected.json。medium fixture 规划中 (Edge Chromium SQLite)。"],
       "verifiedSamples": [],
       "baseline": "无",
       "guaranteeSummary": "未实现",
@@ -227,6 +242,7 @@
     },
     {
       "chain": "FirefoxHistory",
+      "platform": "Cross-platform",
       "displayName": "Firefox History",
       "maturity": "unsupported",
       "guaranteeLevel": "experimental",
@@ -234,7 +250,7 @@
       "expectedJsonVersion": "none",
       "verifiedSampleCount": 0,
       "result": "pending",
-      "notes": ["artifacts-windows 中无浏览器模块。无实现代码，无 fixture，无 expected.json。"],
+      "notes": ["artifacts-windows 中无浏览器模块。无实现代码，无 fixture，无 expected.json。medium fixture 规划中 (Firefox SQLite)。"],
       "verifiedSamples": [],
       "baseline": "无",
       "guaranteeSummary": "未实现",
@@ -242,6 +258,7 @@
     },
     {
       "chain": "Email",
+      "platform": "Cross-platform",
       "displayName": "邮件结构化信息",
       "maturity": "unsupported",
       "guaranteeLevel": "experimental",
@@ -249,7 +266,7 @@
       "expectedJsonVersion": "none",
       "verifiedSampleCount": 0,
       "result": "pending",
-      "notes": ["artifacts-windows 中无邮件模块。无实现代码，无 fixture，无 expected.json。"],
+      "notes": ["artifacts-windows 中无邮件模块。无实现代码，无 fixture，无 expected.json。medium fixture 规划中 (EML/EMLX)。"],
       "verifiedSamples": [],
       "baseline": "无",
       "guaranteeSummary": "未实现",

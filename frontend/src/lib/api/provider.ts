@@ -39,6 +39,7 @@ import {
   TraceItem,
   UpdateEntryRequest,
   V2GovernanceSnapshot,
+  V3GovernanceSnapshot,
   ViewerHandle,
   ViewerRangeRequest,
   ViewerRangeResponse,
@@ -70,6 +71,7 @@ import {
   timelineEvents,
   traces,
   v2GovernanceSnapshot,
+  v3GovernanceSnapshot,
   warnings,
   batchJobs,
   graphSnapshot,
@@ -133,6 +135,7 @@ export interface ApiProvider {
   getBrowserHistorySummary(request?: AnalysisExtractionPageRequest): Promise<BrowserHistorySummary>;
   getEmailExtractionSummary(request?: AnalysisExtractionPageRequest): Promise<EmailExtractionSummary>;
   getV2GovernanceSnapshot(): Promise<V2GovernanceSnapshot>;
+  getV3GovernanceSnapshot(): Promise<V3GovernanceSnapshot>;
   getCorrelationSnapshot(): Promise<CorrelationSnapshot>;
   generateAnalysisSummary(): Promise<string>;
   getGraphSnapshot(caseId: string): Promise<GraphSnapshot>;
@@ -390,6 +393,9 @@ export const mockProvider: ApiProvider = {
   },
   async getV2GovernanceSnapshot() {
     return v2GovernanceSnapshot;
+  },
+  async getV3GovernanceSnapshot() {
+    return v3GovernanceSnapshot;
   },
   async getCorrelationSnapshot() {
     return correlationSnapshot;

@@ -10,6 +10,7 @@ import {
   EvidenceClassificationSummary,
   RegistryExtractionSummary,
   V2GovernanceSnapshot,
+  V3GovernanceSnapshot,
 } from '@/types/models';
 import { apiClient } from './client';
 
@@ -87,6 +88,13 @@ export async function getV2GovernanceSnapshot(): Promise<V2GovernanceSnapshot> {
   return apiClient.request(
     'get_v2_governance_snapshot',
     () => apiClient.getMockProvider().getV2GovernanceSnapshot(),
+  );
+}
+
+export async function getV3GovernanceSnapshot(): Promise<V3GovernanceSnapshot> {
+  return apiClient.request(
+    'get_v3_governance_snapshot',
+    () => apiClient.getMockProvider().getV3GovernanceSnapshot(),
   );
 }
 

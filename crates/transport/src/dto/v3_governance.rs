@@ -63,6 +63,8 @@ pub struct PlatformCoverageDto {
     pub linux_artifact_families: u32,
     /// Number of artifact families targeting macOS.
     pub macos_artifact_families: u32,
+    /// Number of artifact families that are cross-platform.
+    pub cross_platform_artifact_families: u32,
     /// Total number of distinct artifact families.
     pub total_families: u32,
     /// List of Windows artifact family names.
@@ -71,6 +73,8 @@ pub struct PlatformCoverageDto {
     pub linux_families: Vec<String>,
     /// List of macOS artifact family names.
     pub macos_families: Vec<String>,
+    /// List of cross-platform artifact family names.
+    pub cross_platform_families: Vec<String>,
 }
 
 // ── Rule Pack Status ──────────────────────────────────────────────────────
@@ -249,10 +253,12 @@ mod tests {
                 windows_artifact_families: 8,
                 linux_artifact_families: 0,
                 macos_artifact_families: 0,
+                cross_platform_artifact_families: 0,
                 total_families: 8,
                 windows_families: vec!["LNK".to_string(), "Prefetch".to_string()],
                 linux_families: vec![],
                 macos_families: vec![],
+                cross_platform_families: vec![],
             },
             rule_pack_coverage: RulePackStatusDto {
                 loaded_packs: vec![RulePackInfoDto {
@@ -321,10 +327,12 @@ mod tests {
                 windows_artifact_families: 0,
                 linux_artifact_families: 0,
                 macos_artifact_families: 0,
+                cross_platform_artifact_families: 0,
                 total_families: 0,
                 windows_families: vec![],
                 linux_families: vec![],
                 macos_families: vec![],
+                cross_platform_families: vec![],
             },
             rule_pack_coverage: RulePackStatusDto {
                 loaded_packs: vec![],

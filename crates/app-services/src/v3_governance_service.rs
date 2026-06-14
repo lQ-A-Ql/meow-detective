@@ -67,7 +67,7 @@ fn build_graph_stats(conn: &Connection, case_id: &str) -> Result<GraphStatsDto, 
 ///
 /// Unknown families default to Windows since this is a Windows-first product.
 fn get_platform(family: &str) -> &'static str {
-    // Windows artifact families
+    // Windows artifact families (Windows-only forensics artifacts)
     let windows_families: &[&str] = &[
         "LNK",
         "Prefetch",
@@ -75,12 +75,6 @@ fn get_platform(family: &str) -> &'static str {
         "RegistryValue",
         "Registry",
         "RecycleBin",
-        "BrowserDownload",
-        "BrowserHistory",
-        "BrowserVisit",
-        "BrowserCookie",
-        "BrowserSessionTab",
-        "EmailMessage",
         "EVTX",
         "SRU",
         "Thumbcache",
@@ -113,6 +107,15 @@ fn get_platform(family: &str) -> &'static str {
         "PowerShellHistory",
         "CmdHistory",
     ];
+    // Cross-platform artifact families (browsers, email)
+    let cross_platform_families: &[&str] = &[
+        "BrowserDownload",
+        "BrowserHistory",
+        "BrowserVisit",
+        "BrowserCookie",
+        "BrowserSessionTab",
+        "EmailMessage",
+    ];
     let linux_families: &[&str] = &[
         "BashHistory",
         "AuthLog",
@@ -138,6 +141,11 @@ fn get_platform(family: &str) -> &'static str {
         .any(|f| f.eq_ignore_ascii_case(family))
     {
         "windows"
+    } else if cross_platform_families
+        .iter()
+        .any(|f| f.eq_ignore_ascii_case(family))
+    {
+        "cross-platform"
     } else if linux_families
         .iter()
         .any(|f| f.eq_ignore_ascii_case(family))
@@ -164,12 +172,14 @@ fn build_platform_coverage(conn: &Connection) -> Result<PlatformCoverageDto, Str
     let mut windows_families: Vec<String> = Vec::new();
     let mut linux_families: Vec<String> = Vec::new();
     let mut macos_families: Vec<String> = Vec::new();
+    let mut cross_platform_families: Vec<String> = Vec::new();
 
     for (family, _count) in &family_counts {
         match get_platform(family) {
             "windows" => windows_families.push(family.clone()),
             "linux" => linux_families.push(family.clone()),
             "macos" => macos_families.push(family.clone()),
+            "cross-platform" => cross_platform_families.push(family.clone()),
             _ => windows_families.push(family.clone()),
         }
     }
@@ -178,10 +188,12 @@ fn build_platform_coverage(conn: &Connection) -> Result<PlatformCoverageDto, Str
         windows_artifact_families: windows_families.len() as u32,
         linux_artifact_families: linux_families.len() as u32,
         macos_artifact_families: macos_families.len() as u32,
+        cross_platform_artifact_families: cross_platform_families.len() as u32,
         total_families: family_counts.len() as u32,
         windows_families,
         linux_families,
         macos_families,
+        cross_platform_families,
     })
 }
 
@@ -478,8 +490,9 @@ mod tests {
         assert_eq!(get_platform("JumpList"), "windows");
         assert_eq!(get_platform("RegistryValue"), "windows");
         assert_eq!(get_platform("RecycleBin"), "windows");
-        assert_eq!(get_platform("BrowserHistory"), "windows");
-        assert_eq!(get_platform("EmailMessage"), "windows");
+        assert_eq!(get_platform("BrowserHistory"), "cross-platform");
+        assert_eq!(get_platform("BrowserCookie"), "cross-platform");
+        assert_eq!(get_platform("EmailMessage"), "cross-platform");
         assert_eq!(get_platform("BashHistory"), "linux");
         assert_eq!(get_platform("QuarantineDB"), "macos");
     }

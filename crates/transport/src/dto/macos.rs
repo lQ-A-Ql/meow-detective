@@ -119,7 +119,10 @@ mod tests {
         let json = serde_json::to_value(&dto).unwrap();
         assert_eq!(json["key"], "CFBundleIdentifier");
         assert_eq!(json["type"], "string"); // renamed via #[serde(rename = "type")]
-        assert_eq!(json["sourceFile"], "/Applications/Safari.app/Contents/Info.plist");
+        assert_eq!(
+            json["sourceFile"],
+            "/Applications/Safari.app/Contents/Info.plist"
+        );
     }
 
     #[test]

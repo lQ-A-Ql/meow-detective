@@ -132,7 +132,8 @@ fn parse_chunk(data: &[u8], pos: usize) -> Option<UnifiedLogEntry> {
     // ... more header fields
     // ... message data
 
-    let chunk_len = u32::from_le_bytes([data[pos+4], data[pos+5], data[pos+6], data[pos+7]]) as usize;
+    let chunk_len =
+        u32::from_le_bytes([data[pos + 4], data[pos + 5], data[pos + 6], data[pos + 7]]) as usize;
     if chunk_len == 0 || chunk_len > 1024 * 1024 {
         return None;
     }
@@ -141,8 +142,14 @@ fn parse_chunk(data: &[u8], pos: usize) -> Option<UnifiedLogEntry> {
     // Read timestamp at offset 8
     let mach_ts = if pos + 16 <= data.len() {
         u64::from_le_bytes([
-            data[pos+8], data[pos+9], data[pos+10], data[pos+11],
-            data[pos+12], data[pos+13], data[pos+14], data[pos+15],
+            data[pos + 8],
+            data[pos + 9],
+            data[pos + 10],
+            data[pos + 11],
+            data[pos + 12],
+            data[pos + 13],
+            data[pos + 14],
+            data[pos + 15],
         ])
     } else {
         return None;
@@ -198,13 +205,24 @@ fn extract_process_name(data: &[u8], start: usize, end: usize) -> String {
 
     // Look for common process names as null-terminated strings
     let common_procs: &[&[u8]] = &[
-        b"kernel\0", b"launchd\0", b"WindowServer", b"mDNSRespo",
-        b"configd\0", b"syslogd\0", b"logd\0\0\0", b"cfprefsd",
-        b"security", b"coreaudi", b"bluetooth",
+        b"kernel\0",
+        b"launchd\0",
+        b"WindowServer",
+        b"mDNSRespo",
+        b"configd\0",
+        b"syslogd\0",
+        b"logd\0\0\0",
+        b"cfprefsd",
+        b"security",
+        b"coreaudi",
+        b"bluetooth",
     ];
 
     for proc_bytes in common_procs {
-        let trimmed = &proc_bytes[..proc_bytes.iter().position(|&b| b == 0).unwrap_or(proc_bytes.len())];
+        let trimmed = &proc_bytes[..proc_bytes
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(proc_bytes.len())];
         if trimmed.is_empty() {
             continue;
         }
@@ -219,7 +237,9 @@ fn extract_process_name(data: &[u8], start: usize, end: usize) -> String {
     while i < range.len() {
         if range[i].is_ascii_alphanumeric() || range[i] == b'_' {
             let mut j = i + 1;
-            while j < range.len() && (range[j].is_ascii_alphanumeric() || range[j] == b'_' || range[j] == b'-') {
+            while j < range.len()
+                && (range[j].is_ascii_alphanumeric() || range[j] == b'_' || range[j] == b'-')
+            {
                 j += 1;
             }
             let len = j - i;
@@ -280,8 +300,14 @@ fn extract_ids(data: &[u8], chunk_start: usize, header_end: usize) -> (String, S
     for i in (0..range.len().saturating_sub(8)).step_by(4) {
         if i + 8 <= range.len() {
             let v1 = u64::from_le_bytes([
-                range[i], range[i+1], range[i+2], range[i+3],
-                range[i+4], range[i+5], range[i+6], range[i+7],
+                range[i],
+                range[i + 1],
+                range[i + 2],
+                range[i + 3],
+                range[i + 4],
+                range[i + 5],
+                range[i + 6],
+                range[i + 7],
             ]);
             // Activity IDs are often small-ish but non-zero
             if v1 > 0 && v1 < 1_000_000 && activity_id == "0x0" {
@@ -290,8 +316,14 @@ fn extract_ids(data: &[u8], chunk_start: usize, header_end: usize) -> (String, S
             // Thread IDs look similar
             if i + 16 <= range.len() {
                 let v2 = u64::from_le_bytes([
-                    range[i+8], range[i+9], range[i+10], range[i+11],
-                    range[i+12], range[i+13], range[i+14], range[i+15],
+                    range[i + 8],
+                    range[i + 9],
+                    range[i + 10],
+                    range[i + 11],
+                    range[i + 12],
+                    range[i + 13],
+                    range[i + 14],
+                    range[i + 15],
                 ]);
                 if v2 > 0 && v2 < 1_000_000 && thread_id == "0x0" {
                     thread_id = format!("0x{:X}", v2);
@@ -366,12 +398,12 @@ mod tests {
         // Add process name "kernel\0" in the header region
         let proc_pos = data.len() - 20;
         data[proc_pos] = b'k';
-        data[proc_pos+1] = b'e';
-        data[proc_pos+2] = b'r';
-        data[proc_pos+3] = b'n';
-        data[proc_pos+4] = b'e';
-        data[proc_pos+5] = b'l';
-        data[proc_pos+6] = 0;
+        data[proc_pos + 1] = b'e';
+        data[proc_pos + 2] = b'r';
+        data[proc_pos + 3] = b'n';
+        data[proc_pos + 4] = b'e';
+        data[proc_pos + 5] = b'l';
+        data[proc_pos + 6] = 0;
 
         // Add message text in the payload region
         data.extend_from_slice(b"System boot completed successfully");

@@ -117,7 +117,9 @@ fn parse_metadata_table(conn: &Connection, table: &str) -> Result<Vec<SpotlightE
         .collect();
 
     // Look for key Spotlight columns
-    let has_path = columns.iter().any(|c| c.contains("Path") || c.contains("path"));
+    let has_path = columns
+        .iter()
+        .any(|c| c.contains("Path") || c.contains("path"));
     let has_display_name = columns
         .iter()
         .any(|c| c.contains("DisplayName") || c.contains("FSName"));
@@ -133,7 +135,10 @@ fn parse_metadata_table(conn: &Connection, table: &str) -> Result<Vec<SpotlightE
     // Build query using only columns that actually exist
     let mut select_cols: Vec<&str> = Vec::new();
     if has_path {
-        if let Some(c) = columns.iter().find(|c| c.contains("Path") || c.as_str() == "path") {
+        if let Some(c) = columns
+            .iter()
+            .find(|c| c.contains("Path") || c.as_str() == "path")
+        {
             select_cols.push(c);
         }
     }
@@ -163,11 +168,7 @@ fn parse_metadata_table(conn: &Connection, table: &str) -> Result<Vec<SpotlightE
         select_cols.push("*");
     }
 
-    let query = format!(
-        "SELECT {} FROM {} LIMIT 500",
-        select_cols.join(", "),
-        table
-    );
+    let query = format!("SELECT {} FROM {} LIMIT 500", select_cols.join(", "), table);
 
     let mut stmt = conn
         .prepare(&query)
@@ -213,7 +214,13 @@ fn parse_generic_metadata(conn: &Connection) -> Result<Vec<SpotlightEntry>, Stri
     let mut entries: Vec<SpotlightEntry> = Vec::new();
 
     // Known Spotlight metadata column names
-    let path_columns = ["kMDItemPath", "kMDItemFSName", "path", "FilePath", "file_path"];
+    let path_columns = [
+        "kMDItemPath",
+        "kMDItemFSName",
+        "path",
+        "FilePath",
+        "file_path",
+    ];
     let name_columns = [
         "kMDItemDisplayName",
         "kMDItemFSName",
@@ -222,7 +229,12 @@ fn parse_generic_metadata(conn: &Connection) -> Result<Vec<SpotlightEntry>, Stri
         "name",
     ];
     let kind_columns = ["kMDItemKind", "kind", "Kind"];
-    let content_columns = ["kMDItemContentType", "kMDItemContentTypeTree", "content_type", "UTI"];
+    let content_columns = [
+        "kMDItemContentType",
+        "kMDItemContentTypeTree",
+        "content_type",
+        "UTI",
+    ];
 
     let tables = get_table_names(conn)?;
 
@@ -258,16 +270,8 @@ fn parse_generic_metadata(conn: &Connection) -> Result<Vec<SpotlightEntry>, Stri
                 .cloned()
                 .unwrap_or_else(|| "''".to_string()),
         );
-        select_parts.push(
-            kind_col
-                .cloned()
-                .unwrap_or_else(|| "''".to_string()),
-        );
-        select_parts.push(
-            content_col
-                .cloned()
-                .unwrap_or_else(|| "''".to_string()),
-        );
+        select_parts.push(kind_col.cloned().unwrap_or_else(|| "''".to_string()));
+        select_parts.push(content_col.cloned().unwrap_or_else(|| "''".to_string()));
 
         let query = format!(
             "SELECT {} FROM {} LIMIT 200",
@@ -384,11 +388,17 @@ mod tests {
         let entries = parse_spotlight_store(&data).expect("should parse");
 
         // We should get at least one entry
-        assert!(!entries.is_empty(), "Expected at least one entry from Spotlight DB");
+        assert!(
+            !entries.is_empty(),
+            "Expected at least one entry from Spotlight DB"
+        );
 
         // First entry should have correct values
         let first = &entries[0];
-        assert!(!first.display_name.is_empty(), "Display name should not be empty");
+        assert!(
+            !first.display_name.is_empty(),
+            "Display name should not be empty"
+        );
     }
 
     #[test]
@@ -402,10 +412,8 @@ mod tests {
     #[test]
     fn get_column_names_works() {
         let conn = Connection::open_in_memory().expect("open");
-        conn.execute_batch(
-            "CREATE TABLE test (col_a TEXT, col_b INTEGER);"
-        )
-        .expect("create");
+        conn.execute_batch("CREATE TABLE test (col_a TEXT, col_b INTEGER);")
+            .expect("create");
 
         let cols = get_column_names(&conn, "test").expect("get columns");
         assert_eq!(cols.len(), 2);

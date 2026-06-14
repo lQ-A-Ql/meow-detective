@@ -1,5 +1,4 @@
 pub mod analysis;
-pub mod macos;
 pub mod artifacts;
 pub mod batch;
 pub mod case;
@@ -8,6 +7,7 @@ pub mod files;
 pub mod graph;
 pub mod import;
 pub mod jobs;
+pub mod macos;
 pub mod mcp;
 pub mod notebook;
 pub mod registry;
@@ -60,6 +60,10 @@ pub use import::{
     PerformanceReportDto, PerformanceReportSummaryDto, ResultFreshnessDto,
 };
 pub use jobs::{JobSnapshotDto, TraceItemDto, WarningItemDto};
+pub use macos::{
+    FSEventDto, FSEventTypeDto, LaunchServiceDto, MacPlistEntryDto, PlistTypeDto,
+    QuarantineEntryDto, RecentItemDto, RecentItemKindDto, SpotlightEntryDto, UnifiedLogEntryDto,
+};
 pub use mcp::{
     McpCapabilitiesDto, McpConfigDto, McpPromptArgumentDto, McpPromptDto, McpResourceDto,
     McpServerConfigDto, McpServerStatusDto, McpTestConnectionRequest, McpTestConnectionResult,
@@ -77,10 +81,6 @@ pub use timeline::TimelineEventDto;
 pub use v3_governance::{
     BatchStatusDto, GraphStatsDto, NotebookStatsDto, PlatformCoverageDto, RulePackInfoDto,
     RulePackStatusDto, V3GovernanceSnapshotDto,
-};
-pub use macos::{
-    FSEventDto, FSEventTypeDto, LaunchServiceDto, MacPlistEntryDto, PlistTypeDto,
-    QuarantineEntryDto, RecentItemDto, RecentItemKindDto, SpotlightEntryDto, UnifiedLogEntryDto,
 };
 pub use viewer::{
     ImagePreviewDto, MediaPreviewModeDto, MediaRangeRequestDto, MediaRangeResponseDto, MediaUrlDto,

@@ -93,8 +93,7 @@ pub fn parse_fsevents_log(data: &[u8]) -> Result<Vec<FSEvent>, String> {
     // Read first event timestamp from header (offset 16)
     let base_timestamp = if data.len() >= 24 {
         Some(u64::from_be_bytes([
-            data[16], data[17], data[18], data[19],
-            data[20], data[21], data[22], data[23],
+            data[16], data[17], data[18], data[19], data[20], data[21], data[22], data[23],
         ]))
     } else {
         None
@@ -169,7 +168,8 @@ fn decode_event(data: &[u8], pos: usize) -> Option<(FSEvent, usize)> {
     // Compute timestamp (base + offset or derive from position)
     let timestamp = if let Some(base) = base_timestamp_from_data(data, pos) {
         let dt = Utc.timestamp_opt(base as i64, 0).single();
-        dt.map(|d| d.to_rfc3339()).unwrap_or_else(|| "unknown".to_string())
+        dt.map(|d| d.to_rfc3339())
+            .unwrap_or_else(|| "unknown".to_string())
     } else {
         "unknown".to_string()
     };
@@ -236,8 +236,7 @@ fn base_timestamp_from_data(data: &[u8], _pos: usize) -> Option<u64> {
     // Look for a plausible timestamp in the header area (offset 16..31)
     if data.len() >= 24 {
         let ts = u64::from_be_bytes([
-            data[16], data[17], data[18], data[19],
-            data[20], data[21], data[22], data[23],
+            data[16], data[17], data[18], data[19], data[20], data[21], data[22], data[23],
         ]);
         // Sanity check: relevant timestamps are between 2010 and 2100
         if ts > 1_260_000_000 && ts < 4_100_000_000 {

@@ -11,6 +11,7 @@ use transport::{
         AnalysisExtractionRunDto, AnalysisFileClassificationDto, AnalysisSystemInfoDto,
         BrowserHistorySummaryDto, CorrelationSnapshotDto, EmailExtractionSummaryDto,
         EvidenceClassificationSummaryDto, RegistryExtractionSummaryDto, V2GovernanceSnapshotDto,
+        V3GovernanceSnapshotDto,
     },
     CommandError,
 };
@@ -212,6 +213,24 @@ pub async fn get_v2_governance_snapshot(
         let active = require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         app_services::v2_governance_service::get_v2_governance_snapshot(&conn, &active.case_id)
+            .map_err(CommandError::from_service_error)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+/// Get V3 governance snapshot: extends V2 with graph, platform coverage,
+/// rule pack status, batch job status, and notebook stats.
+#[tauri::command]
+pub async fn get_v3_governance_snapshot(
+    state: State<'_, AppState>,
+) -> Result<V3GovernanceSnapshotDto, CommandError> {
+    let app_state = state.inner().clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let active = require_active_case(&app_state)?;
+        let conn = get_case_connection(&app_state)?;
+        app_services::v3_governance_service::get_v3_governance_snapshot(&conn, &active.case_id)
             .map_err(CommandError::from_service_error)
     })
     .await

@@ -9,6 +9,7 @@ import {
   getRegistryExtractionSummary,
   getSystemInfo,
   getV2GovernanceSnapshot,
+  getV3GovernanceSnapshot,
   runAnalysisExtraction,
   runEvidenceClassification,
 } from '@/lib/api/analysis';
@@ -97,6 +98,16 @@ export function useCorrelationSnapshot() {
   return useQuery({
     queryKey: ['analysis', 'correlation', currentCase.data?.id ?? null],
     queryFn: getCorrelationSnapshot,
+    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+    retry: false,
+  });
+}
+
+export function useV3GovernanceSnapshot() {
+  const currentCase = useCurrentCase();
+  return useQuery({
+    queryKey: ['analysis', 'v3-governance', currentCase.data?.id ?? null],
+    queryFn: getV3GovernanceSnapshot,
     enabled: currentCase.isSuccess && Boolean(currentCase.data),
     retry: false,
   });

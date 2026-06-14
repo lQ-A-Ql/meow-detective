@@ -76,7 +76,9 @@ pub fn parse_recent_items_plist(data: &[u8]) -> Result<Vec<RecentItem>, String> 
 }
 
 /// Convert binary plist entries to RecentItem structs.
-fn parse_from_bplist_entries(entries: &[crate::plist::MacPlistEntry]) -> Result<Vec<RecentItem>, String> {
+fn parse_from_bplist_entries(
+    entries: &[crate::plist::MacPlistEntry],
+) -> Result<Vec<RecentItem>, String> {
     let mut items: Vec<RecentItem> = Vec::new();
     let mut current_name = String::new();
     let mut current_path = String::new();
@@ -97,7 +99,10 @@ fn parse_from_bplist_entries(entries: &[crate::plist::MacPlistEntry]) -> Result<
                     } else {
                         current_kind = RecentItemKind::File;
                     }
-                } else if entry.value.starts_with("smb://") || entry.value.starts_with("afp://") || entry.value.starts_with("nfs://") {
+                } else if entry.value.starts_with("smb://")
+                    || entry.value.starts_with("afp://")
+                    || entry.value.starts_with("nfs://")
+                {
                     current_kind = RecentItemKind::Server;
                 } else if entry.value.starts_with("/Volumes/") {
                     current_kind = RecentItemKind::Volume;
@@ -258,8 +263,12 @@ fn detect_section_start(line: &str) -> Option<String> {
     if let Some(key) = extract_xml_content(line, "key") {
         match key.as_str() {
             "RecentFiles" | "Files" => return Some("Files".to_string()),
-            "RecentServers" | "Servers" | "RecentNetworkServers" => return Some("Servers".to_string()),
-            "RecentApplications" | "Applications" | "Apps" => return Some("Applications".to_string()),
+            "RecentServers" | "Servers" | "RecentNetworkServers" => {
+                return Some("Servers".to_string())
+            }
+            "RecentApplications" | "Applications" | "Apps" => {
+                return Some("Applications".to_string())
+            }
             "RecentVolumes" | "Volumes" => return Some("Volumes".to_string()),
             _ => {}
         }

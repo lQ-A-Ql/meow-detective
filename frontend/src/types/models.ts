@@ -349,6 +349,7 @@ export interface ParserSupportMatrixSummary {
 
 export interface ParserSupportMatrixEntry {
   chain: string;
+  platform: string;
   maturity: SupportMaturity;
   verifiedSamples: string[];
   baseline: string;
@@ -536,6 +537,64 @@ export interface V2GovernanceSnapshot {
   releaseGates: ReleaseGateEntry[];
   releaseScorecard: ReleaseScorecard;
   runtimeSignals: GovernanceRuntimeSignals;
+}
+
+// ── V3 Governance types ─────────────────────────────────────────────────
+
+export interface GraphStats {
+  nodeCountByType: Record<string, number>;
+  edgeCountByType: Record<string, number>;
+  totalNodes: number;
+  totalEdges: number;
+  density: number;
+  largestComponentSize: number;
+}
+
+export interface PlatformCoverage {
+  windowsArtifactFamilies: number;
+  linuxArtifactFamilies: number;
+  macosArtifactFamilies: number;
+  crossPlatformArtifactFamilies: number;
+  totalFamilies: number;
+  windowsFamilies: string[];
+  linuxFamilies: string[];
+  macosFamilies: string[];
+  crossPlatformFamilies: string[];
+}
+
+export interface RulePackInfo {
+  name: string;
+  version: string;
+  author: string;
+  ruleCount: number;
+  scope: string[];
+}
+
+export interface RulePackStatus {
+  loadedPacks: RulePackInfo[];
+  totalRuleCount: number;
+  executionStatus: string;
+}
+
+export interface BatchStatus {
+  activeJobs: number;
+  completedJobs: number;
+  failedJobs: number;
+  queuedJobs: number;
+  totalJobs: number;
+}
+
+export interface NotebookStats {
+  entryCount: number;
+  citationCount: number;
+}
+
+export interface V3GovernanceSnapshot extends V2GovernanceSnapshot {
+  graphStatistics: GraphStats;
+  platformCoverage: PlatformCoverage;
+  rulePackCoverage: RulePackStatus;
+  batchStatus: BatchStatus;
+  notebookStats: NotebookStats;
 }
 
 export type CorrelationConfidence = 'direct' | 'strong' | 'weak' | 'heuristic';

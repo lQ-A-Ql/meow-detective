@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   useTimelineEvents: vi.fn(),
   useArtifactFamilyCounts: vi.fn(),
   useCorrelationSnapshot: vi.fn(),
+  useV3GovernanceSnapshot: vi.fn(),
 }));
 
 vi.mock('@/features/case/hooks', () => ({
@@ -30,6 +31,7 @@ vi.mock('@/features/artifacts/hooks', () => ({
 
 vi.mock('@/features/analysis/hooks', () => ({
   useCorrelationSnapshot: mocks.useCorrelationSnapshot,
+  useV3GovernanceSnapshot: mocks.useV3GovernanceSnapshot,
 }));
 
 vi.mock('react-router', () => ({
@@ -129,6 +131,18 @@ describe('V3Dashboard', () => {
       clusters: [],
       leads: [],
     }));
+    mocks.useV3GovernanceSnapshot.mockReturnValue(queryState({
+      generatedAt: '2026-06-12T00:00:00Z',
+      overallStatus: 'ok',
+      rulePackQuality: { coverage: 0, missingRules: 0, staleRules: 0, totalRules: 0 },
+      artifactCoverage: { coveredFamilies: 0, missingFamilies: 0, totalFamilies: 0 },
+      batchStatus: undefined,
+      notebookStats: { entryCount: 0, citationCount: 0 },
+      platformCoverage: undefined,
+      graphStatistics: { nodeCountByType: {}, edgeCountByType: {}, totalNodes: 0, totalEdges: 0, density: 0, largestComponentSize: 0 },
+      rulePackCoverage: undefined,
+      familyStatuses: [],
+    }));
   });
 
   it('renders without crashing', () => {
@@ -196,20 +210,20 @@ describe('V3Dashboard', () => {
     render(<V3Dashboard />);
 
     expect(screen.getByText('平台覆盖')).toBeDefined();
-    expect(screen.getByText('平台覆盖矩阵将在规则包导入后动态生成。')).toBeDefined();
+    expect(screen.getByText('暂无平台覆盖数据。导入数据源并运行痕迹提取后生成。')).toBeDefined();
   });
 
   it('shows placeholder rule pack status section', () => {
     render(<V3Dashboard />);
 
     expect(screen.getByText('规则包状态')).toBeDefined();
-    expect(screen.getByText('规则包管理将在后续版本中实现。')).toBeDefined();
+    expect(screen.getByText('规则包数据将在导入数据源后加载。')).toBeDefined();
   });
 
   it('shows placeholder batch status section', () => {
     render(<V3Dashboard />);
 
     expect(screen.getByText('批处理状态')).toBeDefined();
-    expect(screen.getByText('批处理状态将在后续版本中实现。')).toBeDefined();
+    expect(screen.getByText('暂无批处理作业。')).toBeDefined();
   });
 });

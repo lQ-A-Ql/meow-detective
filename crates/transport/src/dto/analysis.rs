@@ -369,6 +369,7 @@ pub struct ParserSupportMatrixSummaryDto {
 #[serde(rename_all = "camelCase")]
 pub struct ParserSupportMatrixEntryDto {
     pub chain: String,
+    pub platform: String,
     pub maturity: SupportMaturityDto,
     pub verified_samples: Vec<String>,
     pub baseline: String,
@@ -915,6 +916,7 @@ mod tests {
             },
             support_matrix_entries: vec![ParserSupportMatrixEntryDto {
                 chain: "NTFS".to_string(),
+                platform: "Windows".to_string(),
                 maturity: SupportMaturityDto::Ga,
                 verified_samples: vec![
                     "tiny.raw".to_string(),

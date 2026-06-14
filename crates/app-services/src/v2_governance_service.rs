@@ -139,6 +139,7 @@ struct ScoreContribution {
 #[serde(rename_all = "camelCase")]
 struct GovernanceChainCatalogEntry {
     chain: String,
+    platform: String,
     display_name: String,
     maturity: SupportMaturityDto,
     guarantee_level: VerificationGuaranteeLevelDto,
@@ -670,6 +671,7 @@ fn support_matrix_entries(
         .iter()
         .map(|item| ParserSupportMatrixEntryDto {
             chain: item.chain.clone(),
+            platform: item.platform.clone(),
             maturity: item.maturity.clone(),
             verified_samples: item.verified_samples.clone(),
             baseline: item.baseline.clone(),

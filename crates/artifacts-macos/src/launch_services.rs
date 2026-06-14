@@ -60,7 +60,9 @@ pub fn parse_launch_services_plist(data: &[u8]) -> Result<Vec<LaunchService>, St
 }
 
 /// Convert plist entries to LaunchService structs.
-fn parse_from_plist_entries(entries: &[crate::plist::MacPlistEntry]) -> Result<Vec<LaunchService>, String> {
+fn parse_from_plist_entries(
+    entries: &[crate::plist::MacPlistEntry],
+) -> Result<Vec<LaunchService>, String> {
     let mut services: Vec<LaunchService> = Vec::new();
 
     for entry in entries {
@@ -196,7 +198,10 @@ fn parse_xml_launch_services(xml: &str) -> Result<Vec<LaunchService>, String> {
 
     // If we only got the plist-level entries, also try standard plist parsing
     if services.is_empty() {
-        let entries = crate::plist::parse_xml_plist(data_from_str(xml).as_slice(), "com.apple.LaunchServices.plist")?;
+        let entries = crate::plist::parse_xml_plist(
+            data_from_str(xml).as_slice(),
+            "com.apple.LaunchServices.plist",
+        )?;
         return parse_from_plist_entries(&entries);
     }
 
