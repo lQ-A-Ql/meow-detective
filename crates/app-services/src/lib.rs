@@ -1,6 +1,7 @@
 pub mod active_case;
 pub mod analysis_service;
 pub mod artifact_service;
+pub mod batch_service;
 pub mod case_service;
 pub mod correlation_service;
 pub mod datasource_service;
@@ -18,6 +19,7 @@ pub mod notebook_service;
 pub mod parallel_enum;
 pub mod performance;
 pub mod report_service;
+pub mod rule_pack;
 pub mod search_service;
 pub mod staging;
 pub mod streaming;

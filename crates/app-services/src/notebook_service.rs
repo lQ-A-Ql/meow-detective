@@ -209,10 +209,7 @@ pub fn list_entries(
 ///
 /// Walks up to find the root entry, then uses a recursive CTE to fetch
 /// the entire thread (root + all descendants in depth-first order).
-pub fn get_thread(
-    conn: &Connection,
-    entry_id: &str,
-) -> Result<Vec<NotebookEntryDto>, String> {
+pub fn get_thread(conn: &Connection, entry_id: &str) -> Result<Vec<NotebookEntryDto>, String> {
     let repo = NotebookRepo::new(conn);
 
     let root_id = find_root_id(&repo, entry_id)?;
@@ -452,15 +449,7 @@ mod tests {
         .unwrap();
 
         // Update only title
-        let updated = update_entry(
-            &conn,
-            &dto.id,
-            Some("New title"),
-            None,
-            None,
-            None,
-        )
-        .unwrap();
+        let updated = update_entry(&conn, &dto.id, Some("New title"), None, None, None).unwrap();
 
         assert_eq!(updated.title, "New title");
         assert_eq!(updated.body_markdown, "Body"); // unchanged

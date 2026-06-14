@@ -1,3 +1,4 @@
+pub mod browser;
 pub mod evtx;
 pub mod jumplist;
 pub mod lnk;
@@ -7,6 +8,13 @@ pub mod registry;
 pub mod sru;
 pub mod thumbcache;
 
+pub use browser::chromium::{
+    parse_chrome_cookies, parse_chrome_downloads, parse_chrome_history, parse_chrome_session,
+    BrowserCookie, BrowserDownload, BrowserSessionTab, BrowserVisit,
+};
+pub use browser::firefox::{
+    parse_firefox_cookies, parse_firefox_downloads, parse_firefox_history, parse_firefox_session,
+};
 pub use evtx::capability::{
     evtx_capability, supports_evtx_boot_shutdown_path, EvtxCapability, EVTX_PARSER_ID,
     SUPPORTED_EVENT_IDS, SUPPORTED_SOURCE_PATH_SUFFIX,

@@ -28,16 +28,16 @@ use commands::{
     graph_commands::{
         get_graph_snapshot, get_node_neighborhood, get_provenance_chain, query_graph,
     },
-    notebook_commands::{
-        add_evidence_citation, create_notebook_entry, get_notebook_thread,
-        list_investigation_steps, list_notebook_entries, update_notebook_entry,
-    },
     import::pipeline::{cancel_import, import_data_source},
     job_commands::{get_jobs_snapshot, get_trace_items, get_warnings},
     mcp_commands::{
         add_mcp_server, call_mcp_tool, connect_mcp_server, disconnect_mcp_server, get_mcp_config,
         get_mcp_prompt, list_mcp_prompts, list_mcp_resources, list_mcp_tools, remove_mcp_server,
         save_mcp_config, test_mcp_connection,
+    },
+    notebook_commands::{
+        add_evidence_citation, create_notebook_entry, get_notebook_thread,
+        list_investigation_steps, list_notebook_entries, update_notebook_entry,
     },
     report_commands::{
         export_csv_correlation_report, export_csv_report, export_html_report, export_json_report,

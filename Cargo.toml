@@ -70,3 +70,5 @@ testing = { path = "crates/testing" }
 runtime-cache = { path = "crates/runtime-cache" }
 evtx = { path = "crates/evtx-patched", default-features = false }
 containers-pst = { path = "crates/containers-pst" }
+lz4_flex = "0.13"
+toml = "0.8"

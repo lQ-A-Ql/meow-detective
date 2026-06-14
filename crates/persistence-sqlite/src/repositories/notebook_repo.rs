@@ -1,5 +1,5 @@
 use crate::connection::DbResult;
-use domain::{EntryStatus, EvidenceCitation, NotebookEntry, NotebookEntryType, NodeType};
+use domain::{EntryStatus, EvidenceCitation, NodeType, NotebookEntry, NotebookEntryType};
 use rusqlite::{params, Connection};
 use std::collections::HashMap;
 
@@ -328,9 +328,7 @@ impl<'a> NotebookRepo<'a> {
         }
 
         // Dynamic IN clause
-        let placeholders: Vec<String> = (1..=entry_ids.len())
-            .map(|i| format!("?{i}"))
-            .collect();
+        let placeholders: Vec<String> = (1..=entry_ids.len()).map(|i| format!("?{i}")).collect();
         let sql = format!(
             "SELECT {CITATION_COLUMNS} FROM evidence_citations
              WHERE entry_id IN ({}) ORDER BY cited_at ASC",
@@ -417,10 +415,7 @@ impl<'a> NotebookRepo<'a> {
         params.push(offset.to_string());
 
         let mut stmt = self.conn.prepare(&sql)?;
-        let rows = stmt.query_map(
-            rusqlite::params_from_iter(params.iter()),
-            row_to_step,
-        )?;
+        let rows = stmt.query_map(rusqlite::params_from_iter(params.iter()), row_to_step)?;
         let mut steps = Vec::new();
         for row in rows {
             steps.push(row?);
@@ -584,7 +579,12 @@ mod tests {
         }
     }
 
-    fn make_citation(id: &str, entry_id: &str, target_node_type: NodeType, target_node_id: &str) -> EvidenceCitation {
+    fn make_citation(
+        id: &str,
+        entry_id: &str,
+        target_node_type: NodeType,
+        target_node_id: &str,
+    ) -> EvidenceCitation {
         EvidenceCitation {
             id: id.to_string(),
             entry_id: entry_id.to_string(),
@@ -613,7 +613,14 @@ mod tests {
     #[test]
     fn create_and_get_entry() {
         let (_conn, repo) = setup();
-        let entry = make_entry("e1", "case-1", None, NotebookEntryType::Finding, "A Finding", EntryStatus::Draft);
+        let entry = make_entry(
+            "e1",
+            "case-1",
+            None,
+            NotebookEntryType::Finding,
+            "A Finding",
+            EntryStatus::Draft,
+        );
         repo.create_entry(&entry).unwrap();
 
         let fetched = repo.get_entry("e1").unwrap().expect("entry should exist");
@@ -627,11 +634,25 @@ mod tests {
     #[test]
     fn update_entry_fields() {
         let (_conn, repo) = setup();
-        let entry = make_entry("e1", "case-1", None, NotebookEntryType::Observation, "Original", EntryStatus::Draft);
+        let entry = make_entry(
+            "e1",
+            "case-1",
+            None,
+            NotebookEntryType::Observation,
+            "Original",
+            EntryStatus::Draft,
+        );
         repo.create_entry(&entry).unwrap();
 
-        repo.update_entry("e1", Some("Updated Title"), Some("Updated body"), None, Some(&EntryStatus::Reviewed), "2026-06-14T01:00:00Z")
-            .unwrap();
+        repo.update_entry(
+            "e1",
+            Some("Updated Title"),
+            Some("Updated body"),
+            None,
+            Some(&EntryStatus::Reviewed),
+            "2026-06-14T01:00:00Z",
+        )
+        .unwrap();
 
         let fetched = repo.get_entry("e1").unwrap().unwrap();
         assert_eq!(fetched.title, "Updated Title");
@@ -645,9 +666,30 @@ mod tests {
     #[test]
     fn list_entries_with_filters() {
         let (_conn, repo) = setup();
-        let e1 = make_entry("e1", "case-1", None, NotebookEntryType::Finding, "Finding One", EntryStatus::Draft);
-        let e2 = make_entry("e2", "case-1", None, NotebookEntryType::Observation, "Observation Two", EntryStatus::Final);
-        let e3 = make_entry("e3", "case-1", None, NotebookEntryType::Observation, "Observation Three", EntryStatus::Draft);
+        let e1 = make_entry(
+            "e1",
+            "case-1",
+            None,
+            NotebookEntryType::Finding,
+            "Finding One",
+            EntryStatus::Draft,
+        );
+        let e2 = make_entry(
+            "e2",
+            "case-1",
+            None,
+            NotebookEntryType::Observation,
+            "Observation Two",
+            EntryStatus::Final,
+        );
+        let e3 = make_entry(
+            "e3",
+            "case-1",
+            None,
+            NotebookEntryType::Observation,
+            "Observation Three",
+            EntryStatus::Draft,
+        );
         repo.create_entry(&e1).unwrap();
         repo.create_entry(&e2).unwrap();
         repo.create_entry(&e3).unwrap();
@@ -682,9 +724,30 @@ mod tests {
     #[test]
     fn get_thread_recursive_cte() {
         let (_conn, repo) = setup();
-        let root = make_entry("root", "case-1", None, NotebookEntryType::Observation, "Root", EntryStatus::Draft);
-        let child1 = make_entry("child1", "case-1", Some("root"), NotebookEntryType::Hypothesis, "Child 1", EntryStatus::Draft);
-        let child2 = make_entry("child2", "case-1", Some("child1"), NotebookEntryType::Finding, "Child 2", EntryStatus::Draft);
+        let root = make_entry(
+            "root",
+            "case-1",
+            None,
+            NotebookEntryType::Observation,
+            "Root",
+            EntryStatus::Draft,
+        );
+        let child1 = make_entry(
+            "child1",
+            "case-1",
+            Some("root"),
+            NotebookEntryType::Hypothesis,
+            "Child 1",
+            EntryStatus::Draft,
+        );
+        let child2 = make_entry(
+            "child2",
+            "case-1",
+            Some("child1"),
+            NotebookEntryType::Finding,
+            "Child 2",
+            EntryStatus::Draft,
+        );
         repo.create_entry(&root).unwrap();
         repo.create_entry(&child1).unwrap();
         repo.create_entry(&child2).unwrap();
@@ -699,7 +762,14 @@ mod tests {
     #[test]
     fn soft_delete_entry() {
         let (_conn, repo) = setup();
-        let entry = make_entry("e1", "case-1", None, NotebookEntryType::Observation, "To Delete", EntryStatus::Draft);
+        let entry = make_entry(
+            "e1",
+            "case-1",
+            None,
+            NotebookEntryType::Observation,
+            "To Delete",
+            EntryStatus::Draft,
+        );
         repo.create_entry(&entry).unwrap();
 
         repo.delete_entry("e1", "2026-06-15T00:00:00Z").unwrap();
@@ -712,7 +782,14 @@ mod tests {
     #[test]
     fn add_and_list_citations() {
         let (_conn, repo) = setup();
-        let entry = make_entry("e1", "case-1", None, NotebookEntryType::Finding, "With Citations", EntryStatus::Draft);
+        let entry = make_entry(
+            "e1",
+            "case-1",
+            None,
+            NotebookEntryType::Finding,
+            "With Citations",
+            EntryStatus::Draft,
+        );
         repo.create_entry(&entry).unwrap();
 
         let c1 = make_citation("c1", "e1", NodeType::File, "node-1");
@@ -754,8 +831,22 @@ mod tests {
     #[test]
     fn batch_citations_maps_correctly() {
         let (_conn, repo) = setup();
-        let e1 = make_entry("e1", "case-1", None, NotebookEntryType::Finding, "E1", EntryStatus::Draft);
-        let e2 = make_entry("e2", "case-1", None, NotebookEntryType::Finding, "E2", EntryStatus::Draft);
+        let e1 = make_entry(
+            "e1",
+            "case-1",
+            None,
+            NotebookEntryType::Finding,
+            "E1",
+            EntryStatus::Draft,
+        );
+        let e2 = make_entry(
+            "e2",
+            "case-1",
+            None,
+            NotebookEntryType::Finding,
+            "E2",
+            EntryStatus::Draft,
+        );
         repo.create_entry(&e1).unwrap();
         repo.create_entry(&e2).unwrap();
 
@@ -784,14 +875,23 @@ mod tests {
     #[test]
     fn delete_case_notebook_removes_all() {
         let (_conn, repo) = setup();
-        let e1 = make_entry("e1", "case-1", None, NotebookEntryType::Finding, "E1", EntryStatus::Draft);
+        let e1 = make_entry(
+            "e1",
+            "case-1",
+            None,
+            NotebookEntryType::Finding,
+            "E1",
+            EntryStatus::Draft,
+        );
         repo.create_entry(&e1).unwrap();
         let c1 = make_citation("c1", "e1", NodeType::File, "node-1");
         repo.add_citation(&c1).unwrap();
 
         repo.delete_case_notebook("case-1").unwrap();
 
-        let entries = repo.list_entries("case-1", &NotebookEntryFilters::default()).unwrap();
+        let entries = repo
+            .list_entries("case-1", &NotebookEntryFilters::default())
+            .unwrap();
         assert_eq!(entries.len(), 0);
     }
 }
