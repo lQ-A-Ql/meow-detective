@@ -5,7 +5,7 @@
 
 use app_services::{
     datasource_service::{self, ImageFilesystemKind},
-    file_service, import_analysis, import_precheck, staging,
+    file_service, import_analysis, import_precheck, staging, step_recorder,
 };
 use domain::DataSourceKind;
 use evidence_core::{EvidenceReader, FileSystemReader, LogicalFsReader, RawImageReader};
@@ -930,6 +930,26 @@ fn execute_import_job_with_counts(
         msg.push_str(". ");
         msg.push_str(&pipeline_msg);
     }
+
+    // Record investigation step for provenance
+    let import_duration_ms = import_started.elapsed().as_millis() as u32;
+    let params_json = serde_json::json!({
+        "sourcePath": source_path,
+        "sourceName": source_name,
+        "kind": format!("{:?}", kind),
+        "filesEnumerated": stats.file_count,
+        "dirsEnumerated": stats.dir_count,
+    })
+    .to_string();
+    let _ = step_recorder::record_step(
+        conn,
+        &case_id.0,
+        "import",
+        &params_json,
+        import_duration_ms,
+        true,
+        None,
+    );
 
     Ok((msg, counts))
 }

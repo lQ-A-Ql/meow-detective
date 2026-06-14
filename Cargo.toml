@@ -20,6 +20,7 @@ members = [
   "crates/timeline",
   "crates/artifacts-core",
   "crates/artifacts-windows",
+  "crates/artifacts-linux",
   "crates/reports",
   "crates/transport",
   "crates/testing",
@@ -65,6 +66,7 @@ search = { path = "crates/search" }
 timeline = { path = "crates/timeline" }
 artifacts-core = { path = "crates/artifacts-core" }
 artifacts-windows = { path = "crates/artifacts-windows" }
+artifacts-linux = { path = "crates/artifacts-linux" }
 reports = { path = "crates/reports" }
 testing = { path = "crates/testing" }
 runtime-cache = { path = "crates/runtime-cache" }

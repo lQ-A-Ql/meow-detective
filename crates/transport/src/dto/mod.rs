@@ -66,7 +66,8 @@ pub use mcp::{
 };
 pub use notebook::{
     EvidenceCitationDto, InvestigationStepDto, NotebookEntryDto, NotebookEntryStatusDto,
-    NotebookEntryTypeDto, NotebookExportDto, NotebookThreadEdgeDto, StepReplayDto,
+    NotebookEntryTypeDto, NotebookExportDto, NotebookThreadEdgeDto, StepReplayDifferDto,
+    StepReplayDto, StepReplayFailDto, StepReplayMatchDto, StepReplayResultDto,
 };
 pub use registry::{RegistryTransactionDto, RegistryTransactionOperationDto, TxLogParseResultDto};
 pub use reports::{ReportHistoryItemDto, ReportTemplateDto};

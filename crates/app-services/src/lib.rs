@@ -22,6 +22,8 @@ pub mod report_service;
 pub mod rule_pack;
 pub mod search_service;
 pub mod staging;
+pub mod step_recorder;
+pub mod step_replay;
 pub mod streaming;
 pub mod text_service;
 pub mod timeline_service;
