@@ -13,6 +13,11 @@ import {
   EmailExtractionSummary,
   FileEntryRow,
   FileJumpContext,
+  GraphEdge,
+  GraphNode,
+  GraphQuery,
+  GraphQueryResult,
+  GraphSnapshot,
   EvidenceClassificationSummary,
   FileTreeNode,
   JobSnapshot,
@@ -57,6 +62,9 @@ import {
   traces,
   v2GovernanceSnapshot,
   warnings,
+  graphSnapshot,
+  graphNodes,
+  graphEdges,
 } from './mock-data';
 
 export interface ApiProvider {
@@ -106,6 +114,9 @@ export interface ApiProvider {
   getV2GovernanceSnapshot(): Promise<V2GovernanceSnapshot>;
   getCorrelationSnapshot(): Promise<CorrelationSnapshot>;
   generateAnalysisSummary(): Promise<string>;
+  getGraphSnapshot(caseId: string): Promise<GraphSnapshot>;
+  queryGraph(query: GraphQuery): Promise<GraphQueryResult>;
+  getNodeNeighborhood(nodeId: string, depth?: number): Promise<GraphQueryResult>;
 }
 
 function filterHidden<T extends { hidden?: boolean; system?: boolean }>(
@@ -303,6 +314,53 @@ export const mockProvider: ApiProvider = {
   },
   async generateAnalysisSummary() {
     return analysisSummary;
+  },
+  async getGraphSnapshot(_caseId: string) {
+    return graphSnapshot;
+  },
+  async queryGraph(query: GraphQuery) {
+    const startSet = new Set(query.startIds);
+    let candidateEdges = graphEdges;
+    if (query.edgeTypes.length > 0) {
+      const edgeTypeSet = new Set(query.edgeTypes);
+      candidateEdges = graphEdges.filter((e) => edgeTypeSet.has(e.edgeType));
+    }
+    if (query.confidenceFloor != null) {
+      candidateEdges = candidateEdges.filter((e) => (e.confidence ?? 1) >= query.confidenceFloor!);
+    }
+    const relevantEdges = candidateEdges.filter(
+      (e) => startSet.has(e.sourceId) || startSet.has(e.targetId),
+    );
+    const nodeIds = new Set<string>(query.startIds);
+    relevantEdges.forEach((e) => {
+      nodeIds.add(e.sourceId);
+      nodeIds.add(e.targetId);
+    });
+    const relevantNodes = graphNodes.filter((n) => nodeIds.has(n.id));
+    const limit = query.limit ?? 100;
+    return {
+      nodes: relevantNodes.slice(0, limit),
+      edges: relevantEdges.slice(0, limit),
+      nodeCount: relevantNodes.length,
+      edgeCount: relevantEdges.length,
+    };
+  },
+  async getNodeNeighborhood(nodeId: string, _depth?: number) {
+    const connectedEdges = graphEdges.filter(
+      (e) => e.sourceId === nodeId || e.targetId === nodeId,
+    );
+    const nodeIds = new Set<string>([nodeId]);
+    connectedEdges.forEach((e) => {
+      nodeIds.add(e.sourceId);
+      nodeIds.add(e.targetId);
+    });
+    const connectedNodes = graphNodes.filter((n) => nodeIds.has(n.id));
+    return {
+      nodes: connectedNodes,
+      edges: connectedEdges,
+      nodeCount: connectedNodes.length,
+      edgeCount: connectedEdges.length,
+    };
   },
   async createCase(_caseRoot: string, name: string, examiner?: string) {
     return { ...currentCase, name, number: 'MOCK-001', examiner };

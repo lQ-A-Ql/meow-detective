@@ -1,9 +1,10 @@
+use chrono::Utc;
 use std::io::Read;
 use transport::dto::{ArtifactRowDto, FamilyCountDto};
 
 use artifacts_core::{ArtifactContext, ExtractorRegistry, VecSink};
-use domain::FileEntryId;
-use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
+use domain::{EdgeType, FileEntryId, GraphEdge, GraphNode, NodeType};
+use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, graph_repo::GraphRepo};
 use rusqlite::Connection;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -92,7 +93,69 @@ pub fn store_artifacts(
     }
     let repo = ArtifactRepo::new(conn);
     repo.insert_batch(artifacts, case_id, data_source_id)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // Populate investigative graph: Artifact nodes and References edges.
+    // Non-fatal: graph population is a best-effort side effect (the graph
+    // tables may not exist in partial-migration or test databases).
+    let _ = populate_artifact_graph(conn, artifacts, case_id);
+
+    Ok(())
+}
+
+/// Write Artifact graph nodes and References edges into the investigative graph.
+fn populate_artifact_graph(
+    conn: &Connection,
+    artifacts: &[domain::Artifact],
+    case_id: &str,
+) -> Result<(), String> {
+    if artifacts.is_empty() {
+        return Ok(());
+    }
+
+    let graph_repo = GraphRepo::new(conn);
+    let now = Utc::now().to_rfc3339();
+
+    let mut nodes = Vec::with_capacity(artifacts.len());
+    let mut edges = Vec::new();
+
+    for artifact in artifacts {
+        nodes.push(GraphNode {
+            id: artifact.id.0.clone(),
+            case_id: case_id.to_string(),
+            node_type: NodeType::Artifact,
+            label: artifact.title.clone(),
+            summary: artifact.family.clone(),
+            tags: Vec::new(),
+            created_at: now.clone(),
+        });
+
+        if let Some(ref source_id) = artifact.source_object_id {
+            edges.push(GraphEdge {
+                id: format!("references:{}:{}", artifact.id.0, source_id.0),
+                case_id: case_id.to_string(),
+                source_id: artifact.id.0.clone(),
+                target_id: source_id.0.clone(),
+                edge_type: EdgeType::References,
+                confidence: artifact.confidence.map(|v| v as f64),
+                provenance: artifact.extractor_id.clone(),
+                created_at: now.clone(),
+            });
+        }
+    }
+
+    if !nodes.is_empty() {
+        graph_repo
+            .insert_nodes_batch(&nodes)
+            .map_err(|e| format!("graph node insert: {e}"))?;
+    }
+    if !edges.is_empty() {
+        graph_repo
+            .insert_edges_batch(&edges)
+            .map_err(|e| format!("graph edge insert: {e}"))?;
+    }
+
+    Ok(())
 }
 
 pub fn run_targeted_evidence_scan(

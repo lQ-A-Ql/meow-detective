@@ -75,6 +75,7 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0022_file_entry_visibility_flags",
         include_str!("scripts/0022_file_entry_visibility_flags.sql"),
     ),
+    ("0023_graph", include_str!("scripts/0023_graph.sql")),
 ];
 
 pub fn latest_version() -> &'static str {

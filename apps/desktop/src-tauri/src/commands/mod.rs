@@ -5,6 +5,7 @@ mod benchmarks;
 pub mod case_commands;
 pub(crate) mod command_support;
 pub mod file_commands;
+pub mod graph_commands;
 pub mod import;
 pub mod job_commands;
 pub mod mcp_commands;

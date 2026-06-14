@@ -1,18 +1,16 @@
 [package]
-name = "ingest"
+name = "containers-pst"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
 [dependencies]
-domain.workspace = true
-persistence-sqlite.workspace = true
 serde.workspace = true
-serde_json.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
+base64.workspace = true
 
 [dev-dependencies]
 tempfile = "3"

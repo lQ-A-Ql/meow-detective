@@ -3,6 +3,7 @@ pub mod audit_repo;
 pub mod case_repo;
 pub mod datasource_repo;
 pub mod file_repo;
+pub mod graph_repo;
 pub mod job_repo;
 pub mod partition_repo;
 pub mod report_repo;

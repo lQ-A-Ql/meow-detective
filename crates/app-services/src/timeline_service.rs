@@ -1,8 +1,9 @@
+use chrono::Utc;
 use transport::{dto::TimelineEventDto, paging::PageResponse};
 
 use crate::performance::{measure_rows, metric, report, PerfSample};
-use domain::FileEntry;
-use persistence_sqlite::repositories::timeline_repo::TimelineRepo;
+use domain::{EdgeType, FileEntry, GraphEdge, GraphNode, NodeType};
+use persistence_sqlite::repositories::{graph_repo::GraphRepo, timeline_repo::TimelineRepo};
 use rayon::prelude::*;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::time::Instant;
@@ -59,6 +60,12 @@ pub fn ensure_macb_timeline_projected(
     let started = Instant::now();
     let inserted = project_macb_timeline_sql(conn)?;
     mark_projection_done(conn, MACB_PROJECTION_KEY, inserted)?;
+
+    // Populate investigative graph: TimelineEvent nodes and References edges
+    if inserted > 0 {
+        let _ = populate_timeline_event_graph(conn);
+    }
+
     Ok(TimelineProjectionStats {
         inserted_count: inserted,
         elapsed_ms: started.elapsed().as_millis(),
@@ -346,6 +353,113 @@ fn insert_macb_kind_sql(
     conn.execute(&sql, params![title_prefix, description_suffix])
         .map(|count| count as u64)
         .map_err(|e| format!("Insert {event_type} timeline projection: {e}"))
+}
+
+/// Write TimelineEvent graph nodes and References edges for all timeline events
+/// in the current case. Called after MACB timeline projection inserts new events.
+fn populate_timeline_event_graph(conn: &Connection) -> Result<(), String> {
+    let case_id: String = conn
+        .query_row(
+            "SELECT DISTINCT case_id FROM timeline_events LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| format!("resolve case_id for timeline graph: {e}"))?;
+
+    let graph_repo = GraphRepo::new(conn);
+    let now = Utc::now().to_rfc3339();
+
+    const TIMELINE_GRAPH_BATCH: u32 = 5000;
+    const GRAPH_WRITE_CHUNK: usize = 2000;
+    let mut offset = 0u64;
+
+    loop {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, source_object_id, event_type, title, description, confidence, parser_id
+                 FROM timeline_events
+                 WHERE case_id = ?1
+                 LIMIT ?2 OFFSET ?3",
+            )
+            .map_err(|e| format!("prepare timeline graph query: {e}"))?;
+
+        let rows: Vec<(
+            String,
+            String,
+            String,
+            String,
+            String,
+            Option<f64>,
+            Option<String>,
+        )> = stmt
+            .query_map(
+                rusqlite::params![case_id, TIMELINE_GRAPH_BATCH, offset],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                        row.get(6)?,
+                    ))
+                },
+            )
+            .map_err(|e| format!("query timeline events for graph: {e}"))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("collect timeline rows: {e}"))?;
+
+        if rows.is_empty() {
+            break;
+        }
+
+        let row_count = rows.len() as u64;
+
+        let mut nodes = Vec::with_capacity(rows.len());
+        let mut edges = Vec::with_capacity(rows.len());
+
+        for (id, source_object_id, event_type, title, _description, confidence, _parser_id) in &rows
+        {
+            nodes.push(GraphNode {
+                id: id.clone(),
+                case_id: case_id.clone(),
+                node_type: NodeType::TimelineEvent,
+                label: title.clone(),
+                summary: event_type.clone(),
+                tags: Vec::new(),
+                created_at: now.clone(),
+            });
+
+            if !source_object_id.is_empty() {
+                edges.push(GraphEdge {
+                    id: format!("references:{}:{}", id, source_object_id),
+                    case_id: case_id.clone(),
+                    source_id: id.clone(),
+                    target_id: source_object_id.clone(),
+                    edge_type: EdgeType::References,
+                    confidence: *confidence,
+                    provenance: Some(format!("timeline.macb:{event_type}")),
+                    created_at: now.clone(),
+                });
+            }
+        }
+
+        for node_chunk in nodes.chunks(GRAPH_WRITE_CHUNK) {
+            graph_repo
+                .insert_nodes_batch(node_chunk)
+                .map_err(|e| format!("timeline graph node insert: {e}"))?;
+        }
+        for edge_chunk in edges.chunks(GRAPH_WRITE_CHUNK) {
+            graph_repo
+                .insert_edges_batch(edge_chunk)
+                .map_err(|e| format!("timeline graph edge insert: {e}"))?;
+        }
+
+        offset += row_count;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

@@ -25,6 +25,9 @@ use commands::{
         get_image_preview, get_media_url, get_text_preview, open_file_handle,
         open_file_handle_request, read_file_range, read_media_range,
     },
+    graph_commands::{
+        get_graph_snapshot, get_node_neighborhood, get_provenance_chain, query_graph,
+    },
     import::pipeline::{cancel_import, import_data_source},
     job_commands::{get_jobs_snapshot, get_trace_items, get_warnings},
     mcp_commands::{
@@ -107,6 +110,10 @@ pub fn run() {
             get_v2_governance_snapshot,
             get_correlation_snapshot,
             generate_analysis_summary,
+            get_graph_snapshot,
+            query_graph,
+            get_node_neighborhood,
+            get_provenance_chain,
             get_warnings,
             get_trace_items,
             // MCP commands

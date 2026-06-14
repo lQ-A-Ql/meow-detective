@@ -11,6 +11,11 @@ import {
   EmailExtractionSummary,
   EvidenceClassificationSummary,
   FileEntryRow,
+  GraphEdge,
+  GraphNode,
+  GraphQuery,
+  GraphQueryResult,
+  GraphSnapshot,
   JobSnapshot,
   RecentCase,
   RecentObject,
@@ -2473,3 +2478,83 @@ export const traces: TraceItem[] = [
   { id: 'trace-2', ts: '2026-05-16T14:09:02Z', message: 'artifact.added payload.lnk' },
   { id: 'trace-3', ts: '2026-05-16T14:09:11Z', message: 'timeline.updated file-created' },
 ];
+
+export const graphNodes: GraphNode[] = [
+  {
+    id: 'graph-node-file-1',
+    caseId: 'case-2026-fx-091',
+    nodeType: 'File',
+    label: 'tasksche.exe',
+    summary: 'C:/Windows/System32/tasksche.exe — suspicious executable',
+    tags: ['suspicious', 'pe'],
+    createdAt: '2026-05-16T09:20:00Z',
+  },
+  {
+    id: 'graph-node-file-2',
+    caseId: 'case-2026-fx-091',
+    nodeType: 'File',
+    label: 'cmd.exe',
+    summary: 'C:/Windows/System32/cmd.exe — command interpreter',
+    tags: ['system', 'pe'],
+    createdAt: '2026-05-16T09:21:00Z',
+  },
+  {
+    id: 'graph-node-file-3',
+    caseId: 'case-2026-fx-091',
+    nodeType: 'File',
+    label: 'payload.dll',
+    summary: 'C:/Temp/payload.dll — dropped payload',
+    tags: ['suspicious', 'dropped'],
+    createdAt: '2026-05-16T09:22:00Z',
+  },
+  {
+    id: 'graph-node-artifact-1',
+    caseId: 'case-2026-fx-091',
+    nodeType: 'Artifact',
+    label: 'Prefetch: TASKSCHE.EXE',
+    summary: 'Prefetch entry for tasksche.exe with 8 run count',
+    tags: ['prefetch', 'execution'],
+    createdAt: '2026-05-16T09:20:30Z',
+  },
+  {
+    id: 'graph-node-artifact-2',
+    caseId: 'case-2026-fx-091',
+    nodeType: 'Artifact',
+    label: 'LNK: cmd.lnk',
+    summary: 'Shortcut targeting cmd.exe with /c payload.dll arguments',
+    tags: ['lnk', 'command-line'],
+    createdAt: '2026-05-16T09:21:30Z',
+  },
+];
+
+export const graphEdges: GraphEdge[] = [
+  {
+    id: 'graph-edge-1',
+    caseId: 'case-2026-fx-091',
+    sourceId: 'graph-node-artifact-1',
+    targetId: 'graph-node-file-1',
+    edgeType: 'DerivesFrom',
+    confidence: 0.95,
+    provenance: 'prefetch.execution',
+    createdAt: '2026-05-16T09:20:30Z',
+  },
+  {
+    id: 'graph-edge-2',
+    caseId: 'case-2026-fx-091',
+    sourceId: 'graph-node-artifact-2',
+    targetId: 'graph-node-file-2',
+    edgeType: 'References',
+    confidence: 0.9,
+    provenance: 'lnk.target_path',
+    createdAt: '2026-05-16T09:21:30Z',
+  },
+];
+
+export const graphSnapshot: GraphSnapshot = {
+  nodeCountByType: { File: 3, Artifact: 2 },
+  edgeCountByType: { DerivesFrom: 1, References: 1 },
+  totalNodes: 5,
+  totalEdges: 2,
+  density: 0.2,
+  largestComponentSize: 4,
+};

@@ -86,6 +86,7 @@ dependencies = [
  "once_cell",
  "persistence-sqlite",
  "rayon",
+ "regex",
  "reports",
  "rusqlite",
  "search",
@@ -491,6 +492,18 @@ checksum = "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd"
 dependencies = [
  "bytes",
  "memchr",
+]
+
+[[package]]
+name = "containers-pst"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "chrono",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2052,6 +2065,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "domain",
+ "persistence-sqlite",
  "serde",
  "serde_json",
  "tempfile",

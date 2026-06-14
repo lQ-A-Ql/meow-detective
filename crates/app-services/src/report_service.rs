@@ -1826,9 +1826,8 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .any(|item| item["scenario"] == "medium 文件树首展开"
-                || item["scenario"] == "文件树首展开"));
-        assert_eq!(json["governance"]["benchmark"]["missingRequiredCount"], 3);
+            .any(|item| item["scenario"] == "file_tree_expand"));
+        assert_eq!(json["governance"]["benchmark"]["missingRequiredCount"], 0);
         assert_eq!(json["correlation"]["leads"][0]["primaryFileId"], "file-1");
         assert!(json["correlation"]["leads"][0]["summary"]
             .as_str()
@@ -1846,7 +1845,7 @@ mod tests {
         assert!(html.contains("governance knownLimitation category=Recycle Bin item=全损坏恢复场景 status=notGuaranteed"));
         assert!(html.contains("governance benchmarkSummary baselineVersion="));
         assert!(html.contains(
-            "governance benchmarkCheck datasetLevel=medium scenario=文件树首展开 status=covered"
+            "governance benchmarkCheck datasetLevel=medium scenario=file_tree_expand status=covered"
         ));
         assert!(html.contains("governance gate=security-baseline"));
         assert!(html.contains("governance correlationFamily family=LNK"));
@@ -1866,7 +1865,7 @@ mod tests {
         assert!(csv.contains("governance knownLimitation category=Recycle Bin item=全损坏恢复场景 status=notGuaranteed"));
         assert!(csv.contains("governance benchmarkSummary baselineVersion="));
         assert!(csv.contains(
-            "governance benchmarkCheck datasetLevel=medium scenario=文件树首展开 status=covered"
+            "governance benchmarkCheck datasetLevel=medium scenario=file_tree_expand status=covered"
         ));
         assert!(csv.contains("governance gate=security-baseline"));
         assert!(csv.contains("governance correlationFamily family=LNK"));

@@ -1,7 +1,13 @@
-use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
+use chrono::Utc;
+use domain::{
+    DataSourceId, EdgeType, EntryType, FileEntry, FileEntryId, GraphEdge, GraphNode, NodeType,
+};
 use evidence_core::EvidenceReader;
 use image_e01::E01Reader;
-use persistence_sqlite::{repositories::file_repo::FileRepo, DbError, DbResult};
+use persistence_sqlite::{
+    repositories::{file_repo::FileRepo, graph_repo::GraphRepo},
+    DbError, DbResult,
+};
 use rusqlite::Connection;
 use std::{
     collections::{HashMap, HashSet},
@@ -389,6 +395,12 @@ pub fn enumerate_filesystem_mft(
 
     if let Some(pf) = progress_fn {
         pf(100, "MFT scan complete");
+    }
+
+    // Populate investigative graph: File nodes and Contains edges
+    if let Err(e) = populate_mft_file_graph(conn, data_source_id) {
+        warnings.push(format!("Graph population warning: {}", e));
+        tracing::warn!("Failed to populate file graph after MFT enumeration: {}", e);
     }
 
     Ok(EnumerationStats {
@@ -870,6 +882,98 @@ fn mft_parent_entry_id(
 
 fn errs_add(errors: &Arc<AtomicU64>) {
     errors.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Write File graph nodes and Contains edges for all file entries belonging to
+/// the given data source. Run after MFT enumeration completes so paths and
+/// parent links are already persisted.
+fn populate_mft_file_graph(conn: &Connection, data_source_id: &DataSourceId) -> DbResult<()> {
+    let case_id: String = conn.query_row(
+        "SELECT case_id FROM data_sources WHERE id = ?1",
+        rusqlite::params![data_source_id.0],
+        |row| row.get(0),
+    )?;
+
+    let graph_repo = GraphRepo::new(conn);
+    let now = Utc::now().to_rfc3339();
+
+    const GRAPH_QUERY_BATCH: u32 = 5000;
+    const GRAPH_WRITE_CHUNK: usize = 2000;
+    let mut offset = 0u64;
+
+    loop {
+        let mut stmt = conn.prepare(
+            "SELECT id, parent_id, name, path, entry_type FROM file_entries
+             WHERE data_source_id = ?1
+             LIMIT ?2 OFFSET ?3",
+        )?;
+        let rows: Vec<(String, Option<String>, String, String, String)> = stmt
+            .query_map(
+                rusqlite::params![data_source_id.0, GRAPH_QUERY_BATCH, offset],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        if rows.is_empty() {
+            break;
+        }
+
+        let row_count = rows.len() as u64;
+
+        // Build nodes and edges from the query result
+        let mut nodes: Vec<GraphNode> = Vec::with_capacity(rows.len());
+        let mut edges: Vec<GraphEdge> = Vec::with_capacity(rows.len());
+
+        for (id, parent_id, name, path, _entry_type) in &rows {
+            // Only directories and files: skip root sentinels with empty names
+            if name.is_empty() && parent_id.is_none() {
+                continue;
+            }
+
+            nodes.push(GraphNode {
+                id: id.clone(),
+                case_id: case_id.clone(),
+                node_type: NodeType::File,
+                label: name.clone(),
+                summary: path.clone(),
+                tags: Vec::new(),
+                created_at: now.clone(),
+            });
+
+            if let Some(pid) = parent_id {
+                edges.push(GraphEdge {
+                    id: format!("contains:{pid}:{id}"),
+                    case_id: case_id.clone(),
+                    source_id: pid.clone(),
+                    target_id: id.clone(),
+                    edge_type: EdgeType::Contains,
+                    confidence: None,
+                    provenance: None,
+                    created_at: now.clone(),
+                });
+            }
+        }
+
+        // Write in chunks so each GraphRepo transaction stays bounded
+        for node_chunk in nodes.chunks(GRAPH_WRITE_CHUNK) {
+            graph_repo.insert_nodes_batch(node_chunk)?;
+        }
+        for edge_chunk in edges.chunks(GRAPH_WRITE_CHUNK) {
+            graph_repo.insert_edges_batch(edge_chunk)?;
+        }
+
+        offset += row_count;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

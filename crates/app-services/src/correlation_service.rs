@@ -1,6 +1,6 @@
 use chrono::Utc;
-use domain::{EntryType, FileEntry, FileEntryId};
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use domain::{EdgeType, EntryType, FileEntry, FileEntryId, GraphEdge};
+use persistence_sqlite::repositories::{file_repo::FileRepo, graph_repo::GraphRepo};
 use rusqlite::Connection;
 use serde_json::Value;
 use std::cmp::Reverse;
@@ -115,6 +115,9 @@ pub fn get_correlation_snapshot(conn: &Connection) -> Result<CorrelationSnapshot
         )
     });
     let family_coverage = build_family_coverage(&leads, &clusters);
+
+    // Persist CorrelatesWith edges into the investigative graph
+    let _ = persist_correlation_edges(conn, &leads);
 
     Ok(CorrelationSnapshotDto {
         generated_at: Utc::now().to_rfc3339(),
@@ -1658,6 +1661,99 @@ where
         }
     }
     *values = deduped;
+}
+
+/// Persist CorrelatesWith graph edges from correlation leads into the investigative graph.
+///
+/// For each lead, creates CorrelatesWith edges linking each supporting artifact node
+/// to the lead's primary file node. The edge carries confidence and rule provenance
+/// (serialised match signals).
+fn persist_correlation_edges(
+    conn: &Connection,
+    leads: &[CorrelationLeadDto],
+) -> Result<(), String> {
+    if leads.is_empty() {
+        return Ok(());
+    }
+
+    // Resolve case_id from the artifacts table
+    let case_id: String = match conn.query_row(
+        "SELECT DISTINCT case_id FROM artifacts LIMIT 1",
+        [],
+        |row| row.get::<_, String>(0),
+    ) {
+        Ok(id) => id,
+        Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(()),
+        Err(e) => return Err(format!("resolve case_id for correlation edges: {e}")),
+    };
+
+    let graph_repo = GraphRepo::new(conn);
+    let now = Utc::now().to_rfc3339();
+    let mut edges: Vec<GraphEdge> = Vec::new();
+
+    for lead in leads {
+        let confidence = map_correlation_confidence(&lead.confidence);
+        let provenance = build_correlation_provenance(lead);
+
+        for node_id in &lead.supporting_node_ids {
+            // Only process artifact nodes (prefixed "artifact:")
+            let artifact_id = match node_id.strip_prefix("artifact:") {
+                Some(raw) => raw,
+                None => continue,
+            };
+
+            edges.push(GraphEdge {
+                id: format!("correlates_with:{artifact_id}:{}", lead.primary_file_id),
+                case_id: case_id.clone(),
+                source_id: artifact_id.to_string(),
+                target_id: lead.primary_file_id.clone(),
+                edge_type: EdgeType::CorrelatesWith,
+                confidence: Some(confidence),
+                provenance: Some(provenance.clone()),
+                created_at: now.clone(),
+            });
+        }
+    }
+
+    if !edges.is_empty() {
+        graph_repo
+            .insert_edges_batch(&edges)
+            .map_err(|e| format!("correlation graph edge insert: {e}"))?;
+    }
+
+    Ok(())
+}
+
+/// Map CorrelationConfidenceDto to a numeric confidence value in [0.0, 1.0].
+fn map_correlation_confidence(confidence: &CorrelationConfidenceDto) -> f64 {
+    match confidence {
+        CorrelationConfidenceDto::Direct => 1.0,
+        CorrelationConfidenceDto::Strong => 0.9,
+        CorrelationConfidenceDto::Weak => 0.5,
+        CorrelationConfidenceDto::Heuristic => 0.3,
+    }
+}
+
+/// Build a JSON provenance string from a correlation lead's match signals.
+fn build_correlation_provenance(lead: &CorrelationLeadDto) -> String {
+    let signals = if lead.match_signals.is_empty() {
+        serde_json::Value::Null
+    } else {
+        serde_json::Value::Array(
+            lead.match_signals
+                .iter()
+                .map(|s| serde_json::Value::String(s.clone()))
+                .collect(),
+        )
+    };
+
+    serde_json::json!({
+        "kind": "correlation_rule",
+        "lead_id": lead.id,
+        "match_signals": signals,
+        "families": lead.families,
+    })
+    .to_string()
 }
 
 #[cfg(test)]

@@ -3,6 +3,7 @@ pub mod artifacts;
 pub mod case;
 pub mod correlation;
 pub mod files;
+pub mod graph;
 pub mod import;
 pub mod jobs;
 pub mod mcp;
@@ -40,6 +41,10 @@ pub use correlation::{
 };
 pub use files::{
     FileChildrenDto, FileEntryRowDto, FileJumpContextDto, FileRowsPageDto, FileTreeNodeDto,
+};
+pub use graph::{
+    GraphEdgeDto, GraphEdgeTypeDto, GraphNodeDto, GraphNodeTypeDto, GraphProvenanceEntryDto,
+    GraphQueryDto, GraphQueryResultDto, GraphSnapshotDto,
 };
 pub use import::{
     CancelJobRequestDto, CancelReasonDto, CancellationStateDto, ImportPhaseDto,

@@ -7,11 +7,13 @@
 //! - Post-import pipeline (timeline projection, artifact extraction, text indexing)
 
 pub mod config;
+pub mod graph_writer;
 pub mod pipeline;
 pub mod sink;
 pub mod stats;
 
 pub use config::IngestConfig;
+pub use graph_writer::{GraphWriter, SqliteGraphWriter};
 pub use pipeline::IngestPipeline;
 pub use sink::IngestSink;
 pub use stats::IngestStats;
