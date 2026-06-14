@@ -108,10 +108,7 @@ impl<'a> BatchRepo<'a> {
             _ => "",
         };
         self.conn.execute(
-            &format!(
-                "UPDATE batch_jobs SET status = ?1{} WHERE id = ?2",
-                now
-            ),
+            &format!("UPDATE batch_jobs SET status = ?1{} WHERE id = ?2", now),
             params![status, id],
         )?;
         Ok(())
@@ -275,8 +272,13 @@ mod tests {
         let conn = setup_db();
         let repo = BatchRepo::new(&conn);
 
-        repo.create_job("batch-1", "case-1", "Test Batch", r#"{"phases":["Mount","Catalog"]}"#)
-            .unwrap();
+        repo.create_job(
+            "batch-1",
+            "case-1",
+            "Test Batch",
+            r#"{"phases":["Mount","Catalog"]}"#,
+        )
+        .unwrap();
 
         let job = repo.get_job("batch-1").unwrap().expect("should exist");
         assert_eq!(job.id, "batch-1");
@@ -291,7 +293,8 @@ mod tests {
         let repo = BatchRepo::new(&conn);
 
         repo.create_job("batch-1", "case-1", "First", "{}").unwrap();
-        repo.create_job("batch-2", "case-1", "Second", "{}").unwrap();
+        repo.create_job("batch-2", "case-1", "Second", "{}")
+            .unwrap();
 
         let jobs = repo.list_jobs("case-1").unwrap();
         assert_eq!(jobs.len(), 2);

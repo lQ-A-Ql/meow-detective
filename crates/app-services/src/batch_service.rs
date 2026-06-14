@@ -1,4 +1,4 @@
-use domain::batch::{BatchJob, BatchPhase, BatchPlan, BatchResourceLimits, PhaseKind, PhaseState};
+use domain::batch::{BatchPlan, BatchResourceLimits, PhaseKind};
 use persistence_sqlite::repositories::batch_repo::BatchRepo;
 use rusqlite::Connection;
 use transport::dto::batch::{
@@ -43,15 +43,8 @@ pub fn create_and_persist_batch(
         .map_err(|e| e.to_string())?;
 
     for kind in &plan.phases {
-        repo.upsert_phase(
-            &batch_id,
-            &phase_kind_to_str(kind),
-            "queued",
-            0.0,
-            0,
-            "[]",
-        )
-        .map_err(|e| e.to_string())?;
+        repo.upsert_phase(&batch_id, &phase_kind_to_str(kind), "queued", 0.0, 0, "[]")
+            .map_err(|e| e.to_string())?;
     }
 
     get_batch_status(conn, &batch_id)
@@ -74,8 +67,7 @@ pub fn get_batch_status(conn: &Connection, batch_id: &str) -> Result<BatchJobDto
     let phases: Vec<BatchPhaseDto> = phase_rows
         .into_iter()
         .map(|pr| {
-            let warnings: Vec<String> =
-                serde_json::from_str(&pr.warnings_json).unwrap_or_default();
+            let warnings: Vec<String> = serde_json::from_str(&pr.warnings_json).unwrap_or_default();
             BatchPhaseDto {
                 kind: pr.kind,
                 state: pr.state,
@@ -132,10 +124,7 @@ pub fn pause_batch(_conn: &Connection, _batch_id: &str) -> Result<BatchJobDto, S
 }
 
 /// Resume a paused batch job.  MVP stub.
-pub fn resume_batch(
-    _conn: &Connection,
-    _resume: BatchResumeDto,
-) -> Result<BatchJobDto, String> {
+pub fn resume_batch(_conn: &Connection, _resume: BatchResumeDto) -> Result<BatchJobDto, String> {
     // TODO: restart the task from the last checkpoint of the paused phase.
     Err("batch resume is not yet implemented (MVP stub)".to_string())
 }

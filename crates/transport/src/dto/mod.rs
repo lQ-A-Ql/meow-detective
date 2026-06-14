@@ -22,17 +22,19 @@ pub use analysis::{
     BenchmarkRequiredCheckDto, BenchmarkRequirementStatusDto, BenchmarkSnapshotDto,
     BenchmarkSummaryDto, BrowserCookieDto, BrowserDownloadDto, BrowserHistorySummaryDto,
     BrowserSessionTabDto, BrowserVisitDto, CorrelationCoverageStatusDto,
-    CorrelationFamilyCoverageDto, EmailExtractionSummaryDto, EmailMessageDto, ErrorTaxonomyEntryDto,
-    EvidenceCategoryDto, EvidenceClassificationSummaryDto, EvidenceClassificationTotalsDto,
-    EvidenceSourceDto, GovernanceFactSourceDto, GovernanceRuntimeCheckDto,
-    GovernanceRuntimeResultsDto, GovernanceRuntimeSignalsDto, GovernanceRuntimeSubcheckDto,
-    KnownLimitationDto, KnownLimitationStatusDto, ParserSupportMatrixEntryDto,
-    ParserSupportMatrixSummaryDto, RegistryExtractionSummaryDto, RegistryValueDto,
-    ReleaseGateEntryDto, ReleaseGateStatusDto, ReleaseScoreBreakdownEntryDto, ReleaseScorecardDto,
-    SecurityAuditEntryDto, SecurityAuditSummaryDto, SupportMaturityDto, V2GovernanceSnapshotDto,
-    VerificationChainStatusDto, VerificationGuaranteeLevelDto, VerificationResultDto,
+    CorrelationFamilyCoverageDto, EmailExtractionSummaryDto, EmailMessageDto,
+    ErrorTaxonomyEntryDto, EvidenceCategoryDto, EvidenceClassificationSummaryDto,
+    EvidenceClassificationTotalsDto, EvidenceSourceDto, GovernanceFactSourceDto,
+    GovernanceRuntimeCheckDto, GovernanceRuntimeResultsDto, GovernanceRuntimeSignalsDto,
+    GovernanceRuntimeSubcheckDto, KnownLimitationDto, KnownLimitationStatusDto,
+    ParserSupportMatrixEntryDto, ParserSupportMatrixSummaryDto, RegistryExtractionSummaryDto,
+    RegistryValueDto, ReleaseGateEntryDto, ReleaseGateStatusDto, ReleaseScoreBreakdownEntryDto,
+    ReleaseScorecardDto, SecurityAuditEntryDto, SecurityAuditSummaryDto, SupportMaturityDto,
+    V2GovernanceSnapshotDto, VerificationChainStatusDto, VerificationGuaranteeLevelDto,
+    VerificationResultDto,
 };
 pub use artifacts::{ArtifactRowDto, FamilyCountDto};
+pub use batch::{BatchJobDto, BatchPhaseDto, BatchPlanDto, BatchResourceLimitsDto, BatchResumeDto};
 pub use case::{
     CaseMetricsDto, CaseSummaryDto, DataSourcePartitionDto, DataSourceSummaryDto, RecentCaseDto,
     RecentObjectDto,
@@ -69,7 +71,6 @@ pub use registry::{RegistryTransactionDto, RegistryTransactionOperationDto, TxLo
 pub use reports::{ReportHistoryItemDto, ReportTemplateDto};
 pub use search::{SearchHighlightDto, SearchHitDto, SearchResultPageDto, SearchSnippetDto};
 pub use timeline::TimelineEventDto;
-pub use batch::{BatchJobDto, BatchPhaseDto, BatchPlanDto, BatchResourceLimitsDto, BatchResumeDto};
 pub use viewer::{
     ImagePreviewDto, MediaPreviewModeDto, MediaRangeRequestDto, MediaRangeResponseDto, MediaUrlDto,
     TextPreviewDto, ViewerHandleDto, ViewerRangeRequestDto, ViewerRangeResponseDto,

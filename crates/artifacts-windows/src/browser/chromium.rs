@@ -566,8 +566,7 @@ mod tests {
     #[test]
     fn parse_chrome_history_two_visits() {
         let db = make_test_history_db_two_visits();
-        let visits =
-            parse_chrome_history(&db, "Chrome", Some("Default")).expect("parse history");
+        let visits = parse_chrome_history(&db, "Chrome", Some("Default")).expect("parse history");
         assert_eq!(visits.len(), 2);
         // ORDER BY visit_time DESC: newer visit (rust-lang.org) comes first.
         assert_eq!(visits[0].url, "https://rust-lang.org");
