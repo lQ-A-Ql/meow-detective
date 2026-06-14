@@ -13,6 +13,7 @@ pub mod registry;
 pub mod reports;
 pub mod search;
 pub mod timeline;
+pub mod v3_governance;
 pub mod viewer;
 
 pub use analysis::{
@@ -71,6 +72,10 @@ pub use registry::{RegistryTransactionDto, RegistryTransactionOperationDto, TxLo
 pub use reports::{ReportHistoryItemDto, ReportTemplateDto};
 pub use search::{SearchHighlightDto, SearchHitDto, SearchResultPageDto, SearchSnippetDto};
 pub use timeline::TimelineEventDto;
+pub use v3_governance::{
+    BatchStatusDto, GraphStatsDto, NotebookStatsDto, PlatformCoverageDto, RulePackInfoDto,
+    RulePackStatusDto, V3GovernanceSnapshotDto,
+};
 pub use viewer::{
     ImagePreviewDto, MediaPreviewModeDto, MediaRangeRequestDto, MediaRangeResponseDto, MediaUrlDto,
     TextPreviewDto, ViewerHandleDto, ViewerRangeRequestDto, ViewerRangeResponseDto,

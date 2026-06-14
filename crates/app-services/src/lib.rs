@@ -26,3 +26,4 @@ pub mod streaming;
 pub mod text_service;
 pub mod timeline_service;
 pub mod v2_governance_service;
+pub mod v3_governance_service;

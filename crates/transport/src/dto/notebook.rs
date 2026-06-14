@@ -119,6 +119,53 @@ pub struct StepReplayDto {
     pub caveats: Vec<String>,
 }
 
+/// The result of replaying a range of investigation steps.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StepReplayResultDto {
+    /// Steps whose re-execution produced matching results.
+    pub matched_steps: Vec<StepReplayMatchDto>,
+    /// Steps whose re-execution produced differing results.
+    pub differed_steps: Vec<StepReplayDifferDto>,
+    /// Steps that failed during re-execution.
+    pub failed_steps: Vec<StepReplayFailDto>,
+    /// Observations or caveats about the replay.
+    pub caveats: Vec<String>,
+}
+
+/// A step that replayed successfully with matching results.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StepReplayMatchDto {
+    pub step_id: String,
+    pub step_kind: String,
+    pub recorded_duration_ms: u32,
+    pub replay_duration_ms: u32,
+    pub detail: String,
+}
+
+/// A step that replayed but produced different results from the recording.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StepReplayDifferDto {
+    pub step_id: String,
+    pub step_kind: String,
+    pub recorded_duration_ms: u32,
+    pub replay_duration_ms: u32,
+    pub expected: String,
+    pub actual: String,
+}
+
+/// A step that failed during re-execution.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StepReplayFailDto {
+    pub step_id: String,
+    pub step_kind: String,
+    pub recorded_duration_ms: u32,
+    pub error: String,
+}
+
 /// A directed edge in the notebook entry thread graph (parent-child relationships).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
