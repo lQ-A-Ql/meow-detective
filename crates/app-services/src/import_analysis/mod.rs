@@ -25,12 +25,6 @@ pub use worker_pool::{
     run_post_import_pipeline_with_counts,
 };
 
-#[allow(dead_code)]
-fn _keep_file_repo_import_used_for_docs(
-    _: &persistence_sqlite::repositories::file_repo::FileRepo<'_>,
-) {
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

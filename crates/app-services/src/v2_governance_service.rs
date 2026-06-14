@@ -216,8 +216,8 @@ pub fn get_v2_governance_snapshot(
     let runtime_signals = build_runtime_signals(conn, case_id)?;
     let audit_snapshot = security_audit_snapshot(conn, case_id)?;
     let chain_catalog = governance_chain_catalog();
-    let verification_chains = verification_chains(&chain_catalog);
-    let support_matrix_entries = support_matrix_entries(&chain_catalog);
+    let verification_chains = verification_chains(chain_catalog);
+    let support_matrix_entries = support_matrix_entries(chain_catalog);
     let support_matrix = support_matrix_summary(&support_matrix_entries);
     let benchmark_file = benchmark_baseline();
     let security_file = security_taxonomy();
@@ -297,7 +297,7 @@ fn build_runtime_signals(
         .find_by_case(&domain::CaseId(case_id.to_string()))
         .map_err(|e| e.to_string())?;
     let jobs = crate::job_service::get_jobs_from_db(conn)?;
-    let reports = crate::report_service::get_report_history(conn, case_id);
+    let reports = crate::report::get_report_history(conn, case_id);
 
     let hashed_data_source_count = data_sources
         .iter()
@@ -343,7 +343,7 @@ fn build_runtime_signals(
 }
 
 fn correlation_runtime_snapshot(conn: &Connection) -> Result<CorrelationRuntimeSnapshot, String> {
-    let snapshot = crate::correlation_service::get_correlation_snapshot(conn)?;
+    let snapshot = crate::correlation::get_correlation_snapshot(conn)?;
     let high_confidence_lead_count = snapshot
         .leads
         .iter()

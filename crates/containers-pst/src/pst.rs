@@ -42,7 +42,7 @@ use std::path::Path;
 
 use chrono::{DateTime, TimeZone, Utc};
 
-use crate::{PstAttachment, PstCalendar, PstContact, PstFolder, PstMessage};
+use crate::{PstAttachment, PstCalendar, PstContact, PstError, PstFolder, PstMessage};
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -312,11 +312,13 @@ impl PstReader {
     ///
     /// Reads the header, validates the magic bytes, detects Unicode vs ANSI,
     /// and caches the NBT and BBT entries for subsequent lookups.
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, String> {
-        let data = fs::read(path).map_err(|e| format!("Failed to read PST file: {}", e))?;
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, PstError> {
+        let data = fs::read(path)?;
 
         if data.len() < HEADER_SIZE {
-            return Err("File is too small to be a PST".to_string());
+            return Err(PstError::InvalidFormat(
+                "File is too small to be a PST".to_string(),
+            ));
         }
 
         let header = parse_header(&data)?;
@@ -348,7 +350,7 @@ impl PstReader {
     // ── Public extraction methods ────────────────────────────────────────
 
     /// Extract all email messages from the PST.
-    pub fn read_messages(&self) -> Result<Vec<PstMessage>, String> {
+    pub fn read_messages(&self) -> Result<Vec<PstMessage>, PstError> {
         let mut messages = Vec::new();
         let folder_nids = self.collect_folder_nids()?;
 
@@ -375,7 +377,7 @@ impl PstReader {
     }
 
     /// Extract the folder hierarchy from the PST.
-    pub fn read_folders(&self) -> Result<Vec<PstFolder>, String> {
+    pub fn read_folders(&self) -> Result<Vec<PstFolder>, PstError> {
         let mut folders = Vec::new();
         let nids = self.collect_folder_nids()?;
 
@@ -407,7 +409,7 @@ impl PstReader {
     }
 
     /// Extract calendar entries.
-    pub fn read_calendar(&self) -> Result<Vec<PstCalendar>, String> {
+    pub fn read_calendar(&self) -> Result<Vec<PstCalendar>, PstError> {
         let mut calendars = Vec::new();
         let folder_nids = self.collect_folder_nids()?;
 
@@ -447,7 +449,7 @@ impl PstReader {
     }
 
     /// Extract contact entries.
-    pub fn read_contacts(&self) -> Result<Vec<PstContact>, String> {
+    pub fn read_contacts(&self) -> Result<Vec<PstContact>, PstError> {
         let mut contacts = Vec::new();
         let folder_nids = self.collect_folder_nids()?;
 
@@ -495,7 +497,7 @@ impl PstReader {
 
     // ── Internal: NBT/BBT caching ────────────────────────────────────────
 
-    fn cache_bbt(&mut self) -> Result<(), String> {
+    fn cache_bbt(&mut self) -> Result<(), PstError> {
         let bref = self.header.root_bbt;
         if bref.bid == 0 {
             return Ok(());
@@ -513,13 +515,13 @@ impl PstReader {
         Ok(())
     }
 
-    fn load_bbt_page(&mut self, bid: u64) -> Result<(), String> {
+    fn load_bbt_page(&mut self, bid: u64) -> Result<(), PstError> {
         let page_offset = self.bid_to_file_offset(bid);
         if page_offset + PAGE_SIZE > self.data.len() {
-            return Err(format!(
+            return Err(PstError::InvalidFormat(format!(
                 "BBT page BID 0x{:X} at offset {} is out of bounds",
                 bid, page_offset
-            ));
+            )));
         }
 
         let page_data = &self.data[page_offset..page_offset + PAGE_SIZE];
@@ -584,22 +586,24 @@ impl PstReader {
         Ok(())
     }
 
-    fn cache_nbt(&mut self) -> Result<(), String> {
+    fn cache_nbt(&mut self) -> Result<(), PstError> {
         let bid = self.header.root_nbt.bid;
         if bid == 0 {
-            return Err("No NBT root found in header".to_string());
+            return Err(PstError::InvalidFormat(
+                "No NBT root found in header".to_string(),
+            ));
         }
         self.load_nbt_page(bid)?;
         Ok(())
     }
 
-    fn load_nbt_page(&mut self, bid: u64) -> Result<(), String> {
+    fn load_nbt_page(&mut self, bid: u64) -> Result<(), PstError> {
         let page_offset = self.bid_to_file_offset(bid);
         if page_offset + PAGE_SIZE > self.data.len() {
-            return Err(format!(
+            return Err(PstError::InvalidFormat(format!(
                 "NBT page BID 0x{:X} at offset {} is out of bounds",
                 bid, page_offset
-            ));
+            )));
         }
 
         let page_data = &self.data[page_offset..page_offset + PAGE_SIZE];
@@ -944,7 +948,7 @@ impl PstReader {
     // ── Internal: folder hierarchy ───────────────────────────────────────
 
     /// Collect all folder NIDs by traversing the hierarchy from the root folder.
-    fn collect_folder_nids(&self) -> Result<Vec<u32>, String> {
+    fn collect_folder_nids(&self) -> Result<Vec<u32>, PstError> {
         let mut folder_nids = Vec::new();
 
         // Start from well-known folder NIDs.
@@ -1020,7 +1024,7 @@ impl PstReader {
     }
 
     /// Retrieve sub-node NIDs (messages/items) for a given folder NID.
-    fn get_subnode_nids(&self, folder_nid: u32) -> Result<Vec<u32>, String> {
+    fn get_subnode_nids(&self, folder_nid: u32) -> Result<Vec<u32>, PstError> {
         let mut sub_nids = Vec::new();
 
         // Find NBT entries whose parent is this folder.
@@ -1075,10 +1079,10 @@ impl PstReader {
     }
 
     /// Read a single message from the given NID.
-    fn read_message(&self, nid: u32, folder_path: &str) -> Result<PstMessage, String> {
+    fn read_message(&self, nid: u32, folder_path: &str) -> Result<PstMessage, PstError> {
         let block = self
             .read_subnode_block(nid)
-            .ok_or_else(|| format!("No data block for NID {:X}", nid))?;
+            .ok_or_else(|| PstError::InvalidFormat(format!("No data block for NID {:X}", nid)))?;
 
         let _props = self.parse_property_context(block);
 
@@ -1210,23 +1214,27 @@ impl PstReader {
 
 // ─── Header parsing ─────────────────────────────────────────────────────────
 
-fn parse_header(data: &[u8]) -> Result<PstHeader, String> {
+fn parse_header(data: &[u8]) -> Result<PstHeader, PstError> {
     if data.len() < 512 {
-        return Err("File is too small to contain a PST header".to_string());
+        return Err(PstError::InvalidFormat(
+            "File is too small to contain a PST header".to_string(),
+        ));
     }
 
     // Verify magic bytes.
     let magic = &data[0..4];
     if magic != PST_MAGIC {
-        return Err(format!(
+        return Err(PstError::InvalidFormat(format!(
             "Invalid PST magic bytes: expected {:02X?}, got {:02X?}",
             &PST_MAGIC[..],
             magic
-        ));
+        )));
     }
 
     // Read version at offset 10.
-    let version = read_u16_le(data, 10).ok_or("Failed to read PST version")?;
+    let version = read_u16_le(data, 10).ok_or(PstError::InvalidFormat(
+        "Failed to read PST version".to_string(),
+    ))?;
 
     let is_unicode = version >= 23;
 
@@ -1259,17 +1267,21 @@ fn parse_header(data: &[u8]) -> Result<PstHeader, String> {
 
     let (file_size, root_nbt, root_bbt) = if is_unicode {
         let file_size = read_u64_le(data, root_offset + 4).unwrap_or(0);
-        let nbt = Bref::from_bytes_unicode(data, root_offset + 36)
-            .ok_or("Failed to read NBT root BREF")?;
-        let bbt = Bref::from_bytes_unicode(data, root_offset + 56)
-            .ok_or("Failed to read BBT root BREF")?;
+        let nbt = Bref::from_bytes_unicode(data, root_offset + 36).ok_or(
+            PstError::InvalidFormat("Failed to read NBT root BREF".to_string()),
+        )?;
+        let bbt = Bref::from_bytes_unicode(data, root_offset + 56).ok_or(
+            PstError::InvalidFormat("Failed to read BBT root BREF".to_string()),
+        )?;
         (file_size, nbt, bbt)
     } else {
         let file_size = read_u32_le(data, root_offset + 4).unwrap_or(0) as u64;
-        let nbt =
-            Bref::from_bytes_ansi(data, root_offset + 20).ok_or("Failed to read NBT root BREF")?;
-        let bbt =
-            Bref::from_bytes_ansi(data, root_offset + 32).ok_or("Failed to read BBT root BREF")?;
+        let nbt = Bref::from_bytes_ansi(data, root_offset + 20).ok_or(PstError::InvalidFormat(
+            "Failed to read NBT root BREF".to_string(),
+        ))?;
+        let bbt = Bref::from_bytes_ansi(data, root_offset + 32).ok_or(PstError::InvalidFormat(
+            "Failed to read BBT root BREF".to_string(),
+        ))?;
         (file_size, nbt, bbt)
     };
 
@@ -1577,7 +1589,7 @@ mod tests {
     fn empty_file_rejected() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("empty.pst");
-        std::fs::write(&path, &[]).unwrap();
+        std::fs::write(&path, []).unwrap();
 
         let result = PstReader::open(&path);
         assert!(result.is_err());

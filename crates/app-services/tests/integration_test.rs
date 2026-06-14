@@ -96,7 +96,7 @@ fn full_case_lifecycle() {
 
             // Report
             let output_dir = active.case_root.join("reports");
-            let report_file = app_services::report_service::generate_html_report(
+            let report_file = app_services::report::generate_html_report(
                 conn,
                 &active.meta,
                 &output_dir,

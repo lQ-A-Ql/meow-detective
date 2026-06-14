@@ -11,7 +11,7 @@ use crate::state::AppState;
 /// Get available report templates (static data, no DB access).
 #[tauri::command]
 pub fn get_report_templates() -> Result<Vec<ReportTemplateDto>, CommandError> {
-    Ok(app_services::report_service::get_report_templates())
+    Ok(app_services::report::get_report_templates())
 }
 
 /// Get report generation history from database.
@@ -22,7 +22,7 @@ pub fn get_report_history(
     let app_state = state.inner().clone();
     let active = require_active_case(&app_state)?;
     let conn = get_case_connection(&app_state)?;
-    Ok(app_services::report_service::get_report_history(
+    Ok(app_services::report::get_report_history(
         &conn,
         &active.case_id,
     ))
@@ -40,7 +40,7 @@ pub async fn export_html_report(
         let active = require_active_case(&app_state)?;
         let output_dir = active.case_root.join("reports");
         let conn = get_case_connection(&app_state)?;
-        app_services::report_service::generate_html_report(&conn, &active.meta, &output_dir, &scope)
+        app_services::report::generate_html_report(&conn, &active.meta, &output_dir, &scope)
             .map_err(CommandError::from_service_error)
     })
     .await
@@ -59,13 +59,8 @@ pub async fn export_csv_report(
         let active = require_active_case(&app_state)?;
         let output_dir = active.case_root.join("reports");
         let conn = get_case_connection(&app_state)?;
-        app_services::report_service::generate_csv_artifacts(
-            &conn,
-            &active.case_id,
-            &output_dir,
-            &scope,
-        )
-        .map_err(CommandError::from_service_error)
+        app_services::report::generate_csv_artifacts(&conn, &active.case_id, &output_dir, &scope)
+            .map_err(CommandError::from_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -83,13 +78,8 @@ pub async fn export_csv_correlation_report(
         let active = require_active_case(&app_state)?;
         let output_dir = active.case_root.join("reports");
         let conn = get_case_connection(&app_state)?;
-        app_services::report_service::generate_csv_correlation(
-            &conn,
-            &active.case_id,
-            &output_dir,
-            &scope,
-        )
-        .map_err(CommandError::from_service_error)
+        app_services::report::generate_csv_correlation(&conn, &active.case_id, &output_dir, &scope)
+            .map_err(CommandError::from_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -107,13 +97,8 @@ pub async fn export_json_report(
         let active = require_active_case(&app_state)?;
         let output_dir = active.case_root.join("reports");
         let conn = get_case_connection(&app_state)?;
-        app_services::report_service::generate_json_export(
-            &conn,
-            &active.case_id,
-            &output_dir,
-            &scope,
-        )
-        .map_err(CommandError::from_service_error)
+        app_services::report::generate_json_export(&conn, &active.case_id, &output_dir, &scope)
+            .map_err(CommandError::from_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?

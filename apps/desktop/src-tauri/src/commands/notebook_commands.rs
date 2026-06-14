@@ -13,6 +13,7 @@ use crate::state::AppState;
 // ── Notebook entry commands ──────────────────────────────────────────────
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn create_notebook_entry(
     state: State<'_, AppState>,
     case_id: String,
@@ -73,6 +74,7 @@ pub async fn update_notebook_entry(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn list_notebook_entries(
     state: State<'_, AppState>,
     case_id: String,

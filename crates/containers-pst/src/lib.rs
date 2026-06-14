@@ -1,6 +1,9 @@
+pub mod error;
 pub mod mbox;
 pub mod ost;
 pub mod pst;
+
+pub use error::PstError;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -170,7 +173,7 @@ mod tests {
 
     #[test]
     fn reject_file_too_small() {
-        let tiny = vec![0u8; 100];
+        let tiny = [0u8; 100];
         // A file smaller than 512 bytes cannot be a valid PST.
         assert!(tiny.len() < 512);
         // The PST magic check requires at least 4 bytes.

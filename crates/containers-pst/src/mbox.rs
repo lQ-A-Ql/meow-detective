@@ -10,8 +10,7 @@
 //! - **mboxcl**: "Content-Length" header delimits each message; no escaping needed.
 //! - **mboxcl2**: like mboxcl but with additional metadata headers.
 
-use crate::{MboxMessage, PstAttachment};
-use anyhow::{anyhow, Result};
+use crate::{MboxMessage, PstAttachment, PstError};
 use chrono::DateTime;
 
 /// Recognized mbox sub-format variant.
@@ -35,12 +34,13 @@ pub enum MboxVariant {
 ///
 /// Automatically detects the mbox variant. If the variant cannot be determined,
 /// defaults to `mboxrd` style parsing.
-pub fn parse_mbox(data: &[u8]) -> Result<Vec<MboxMessage>> {
+pub fn parse_mbox(data: &[u8]) -> Result<Vec<MboxMessage>, PstError> {
     if data.is_empty() {
         return Ok(Vec::new());
     }
 
-    let text = std::str::from_utf8(data).map_err(|_| anyhow!("mbox data is not valid UTF-8"))?;
+    let text = std::str::from_utf8(data)
+        .map_err(|_| PstError::MboxError("mbox data is not valid UTF-8".to_string()))?;
 
     let variant = detect_variant(text);
     let raw_messages = split_into_raw_messages(text, variant);
@@ -188,7 +188,7 @@ fn is_message_separator(line: &str) -> bool {
 // ---------------------------------------------------------------------------
 
 /// Parse one raw message block into an `MboxMessage`.
-fn parse_single_message(raw: &str, variant: MboxVariant) -> Result<Option<MboxMessage>> {
+fn parse_single_message(raw: &str, variant: MboxVariant) -> Result<Option<MboxMessage>, PstError> {
     // Split headers from body at the first blank line.
     let (mut header_str, body_str) = split_headers_and_body(raw);
 

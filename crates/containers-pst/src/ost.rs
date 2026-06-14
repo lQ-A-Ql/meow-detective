@@ -33,7 +33,7 @@
 use std::path::Path;
 
 use crate::pst::PstReader;
-use crate::{PstCalendar, PstContact, PstFolder, PstMessage};
+use crate::{PstCalendar, PstContact, PstError, PstFolder, PstMessage};
 
 /// Recognized flavor of an Outlook data file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,7 +80,7 @@ impl OstReader {
     ///
     /// Detects the file kind from the header and delegates parsing to
     /// the underlying PST reader.
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, String> {
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, PstError> {
         let inner = PstReader::open(path)?;
         let file_kind = detect_file_kind(&inner);
 
@@ -118,22 +118,22 @@ impl OstReader {
     // ── Delegated extraction methods ─────────────────────────────────────
 
     /// Extract all email messages from the file.
-    pub fn read_messages(&self) -> Result<Vec<PstMessage>, String> {
+    pub fn read_messages(&self) -> Result<Vec<PstMessage>, PstError> {
         self.inner.read_messages()
     }
 
     /// Extract the folder hierarchy.
-    pub fn read_folders(&self) -> Result<Vec<PstFolder>, String> {
+    pub fn read_folders(&self) -> Result<Vec<PstFolder>, PstError> {
         self.inner.read_folders()
     }
 
     /// Extract calendar entries.
-    pub fn read_calendar(&self) -> Result<Vec<PstCalendar>, String> {
+    pub fn read_calendar(&self) -> Result<Vec<PstCalendar>, PstError> {
         self.inner.read_calendar()
     }
 
     /// Extract contact entries.
-    pub fn read_contacts(&self) -> Result<Vec<PstContact>, String> {
+    pub fn read_contacts(&self) -> Result<Vec<PstContact>, PstError> {
         self.inner.read_contacts()
     }
 }

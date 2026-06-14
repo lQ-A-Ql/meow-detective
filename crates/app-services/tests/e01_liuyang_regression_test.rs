@@ -1,5 +1,5 @@
 use app_services::{
-    analysis_service, artifact_service, case_service, correlation_service, datasource_service,
+    analysis_service, artifact_service, case_service, correlation, datasource_service,
     file_service, parallel_enum, staging, timeline_service, v2_governance_service,
 };
 use evidence_core::{EvidenceReader, FileSystemReader};
@@ -1156,7 +1156,7 @@ fn liuyang_e01_correlation_snapshot_and_governance() {
 
             // Run correlation snapshot
             let corr_start = Instant::now();
-            let snapshot = correlation_service::get_correlation_snapshot(conn).unwrap();
+            let snapshot = correlation::get_correlation_snapshot(conn).unwrap();
             let corr_elapsed = corr_start.elapsed();
             eprintln!(
                 "[BENCH-OUTPUT] scenario=correlation_snapshot dataset_level=large p95_ms={}",
@@ -1338,7 +1338,7 @@ fn liuyang_e01_artifact_extraction_and_correlation_rules() {
 
             // Step 5: Run correlation snapshot
             let corr_start = Instant::now();
-            let snapshot = correlation_service::get_correlation_snapshot(conn).unwrap();
+            let snapshot = correlation::get_correlation_snapshot(conn).unwrap();
             eprintln!(
                 "[BENCH-OUTPUT] scenario=correlation_snapshot dataset_level=large p95_ms={}",
                 corr_start.elapsed().as_millis()

@@ -112,7 +112,7 @@ fn query_quarantine_events(conn: &Connection) -> Result<Vec<QuarantineEntry>, St
             let timestamp_raw: Option<f64> = row.get(3).ok();
 
             let timestamp = timestamp_raw
-                .and_then(|ts| convert_apple_timestamp(ts))
+                .and_then(convert_apple_timestamp)
                 .unwrap_or_else(|| "unknown".to_string());
 
             Ok(QuarantineEntry {

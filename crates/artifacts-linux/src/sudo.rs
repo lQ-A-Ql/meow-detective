@@ -39,7 +39,7 @@ pub struct SudoEvent {
 ///
 /// Looks for lines containing `sudo:` and extracts COMMAND= entries
 /// as well as session open/close lines.
-pub fn parse_auth_log_sudo(content: &str) -> Result<Vec<SudoEvent>, String> {
+pub fn parse_auth_log_sudo(content: &str) -> Result<Vec<SudoEvent>, crate::LinuxArtifactError> {
     let mut events: Vec<SudoEvent> = Vec::new();
     // Track session opens to mark command lines successful
     let mut session_open_users: Vec<(String, String)> = Vec::new(); // (target_user, invoking_user)

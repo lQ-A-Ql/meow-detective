@@ -50,12 +50,15 @@ const SCHEDULE_KEYWORDS: &[&str] = &[
 ///
 /// Lines starting with `#` are comments and skipped. Variable assignments
 /// (containing `=`) are also skipped. Blank lines are ignored.
-pub fn parse_crontab(content: &str) -> Result<Vec<CronJob>, String> {
+pub fn parse_crontab(content: &str) -> Result<Vec<CronJob>, crate::LinuxArtifactError> {
     parse_crontab_with_source(content, "<unknown>")
 }
 
 /// Parse a crontab file with an explicit source file path.
-pub fn parse_crontab_with_source(content: &str, source_file: &str) -> Result<Vec<CronJob>, String> {
+pub fn parse_crontab_with_source(
+    content: &str,
+    source_file: &str,
+) -> Result<Vec<CronJob>, crate::LinuxArtifactError> {
     let mut jobs: Vec<CronJob> = Vec::new();
 
     for line in content.lines() {
@@ -138,7 +141,7 @@ pub fn parse_crontab_with_source(content: &str, source_file: &str) -> Result<Vec
 
 /// Alias kept for convenience — same as `parse_crontab`.
 #[deprecated(note = "Use parse_crontab instead")]
-pub fn parse_crontab_file(content: &str) -> Result<Vec<CronJob>, String> {
+pub fn parse_crontab_file(content: &str) -> Result<Vec<CronJob>, crate::LinuxArtifactError> {
     parse_crontab(content)
 }
 

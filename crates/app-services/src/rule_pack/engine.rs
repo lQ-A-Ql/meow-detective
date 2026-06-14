@@ -274,13 +274,11 @@ struct FileEntryRow {
     id: String,
     path: String,
     name: String,
-    #[allow(dead_code)]
-    deleted: bool,
 }
 
 fn load_file_entries(conn: &Connection) -> Result<Vec<FileEntryRow>, String> {
     let mut stmt = conn
-        .prepare("SELECT id, path, name, deleted FROM file_entries WHERE entry_type = 'file'")
+        .prepare("SELECT id, path, name FROM file_entries WHERE entry_type = 'file'")
         .map_err(|e| format!("prepare file_entries query: {e}"))?;
 
     let rows = stmt
@@ -289,7 +287,6 @@ fn load_file_entries(conn: &Connection) -> Result<Vec<FileEntryRow>, String> {
                 id: row.get(0)?,
                 path: row.get(1)?,
                 name: row.get(2)?,
-                deleted: row.get::<_, bool>(3)?,
             })
         })
         .map_err(|e| format!("query file_entries: {e}"))?;

@@ -257,21 +257,18 @@ fn parse_generic_metadata(conn: &Connection) -> Result<Vec<SpotlightEntry>, Stri
         }
 
         // Build a query with the available columns
-        let mut select_parts: Vec<String> = Vec::new();
-        select_parts.push(
+        let select_parts: Vec<String> = vec![
             path_col
                 .or(name_col)
                 .cloned()
                 .unwrap_or_else(|| "'unknown'".to_string()),
-        );
-        select_parts.push(
             name_col
                 .or(path_col)
                 .cloned()
                 .unwrap_or_else(|| "''".to_string()),
-        );
-        select_parts.push(kind_col.cloned().unwrap_or_else(|| "''".to_string()));
-        select_parts.push(content_col.cloned().unwrap_or_else(|| "''".to_string()));
+            kind_col.cloned().unwrap_or_else(|| "''".to_string()),
+            content_col.cloned().unwrap_or_else(|| "''".to_string()),
+        ];
 
         let query = format!(
             "SELECT {} FROM {} LIMIT 200",

@@ -551,7 +551,9 @@ mod tests {
     fn insert_and_get_node() {
         let (_conn, repo) = setup();
         let node = make_node("n1", NodeType::File, "cmd.exe");
-        let count = repo.insert_nodes_batch(&[node.clone()]).unwrap();
+        let count = repo
+            .insert_nodes_batch(std::slice::from_ref(&node))
+            .unwrap();
         assert_eq!(count, 1);
 
         let fetched = repo.get_node("n1").unwrap().expect("node should exist");
@@ -569,7 +571,9 @@ mod tests {
         repo.insert_nodes_batch(&[n1, n2]).unwrap();
 
         let edge = make_edge("e1", "n1", "n2", EdgeType::References);
-        let count = repo.insert_edges_batch(&[edge.clone()]).unwrap();
+        let count = repo
+            .insert_edges_batch(std::slice::from_ref(&edge))
+            .unwrap();
         assert_eq!(count, 1);
 
         // Verify edge exists via neighbor query

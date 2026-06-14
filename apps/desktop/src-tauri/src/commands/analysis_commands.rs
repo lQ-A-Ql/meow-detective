@@ -247,7 +247,7 @@ pub async fn get_correlation_snapshot(
     tauri::async_runtime::spawn_blocking(move || {
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
-        app_services::correlation_service::get_correlation_snapshot(&conn)
+        app_services::correlation::get_correlation_snapshot(&conn)
             .map_err(CommandError::from_service_error)
     })
     .await

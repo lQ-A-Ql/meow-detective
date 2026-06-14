@@ -3,7 +3,8 @@ pub mod analysis_service;
 pub mod artifact_service;
 pub mod batch_service;
 pub mod case_service;
-pub mod correlation_service;
+pub mod correlation;
+pub use correlation::get_correlation_snapshot;
 pub mod datasource_service;
 pub mod entity_extraction;
 pub mod error_ext;
@@ -18,7 +19,11 @@ pub mod job_service;
 pub mod notebook_service;
 pub mod parallel_enum;
 pub mod performance;
-pub mod report_service;
+pub mod report;
+pub use report::{
+    generate_csv_artifacts, generate_csv_correlation, generate_html_report, generate_json_export,
+    get_report_history, get_report_templates,
+};
 pub mod rule_pack;
 pub mod search_service;
 pub mod staging;

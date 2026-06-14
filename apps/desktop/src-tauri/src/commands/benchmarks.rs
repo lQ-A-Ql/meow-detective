@@ -131,7 +131,7 @@ mod benchmark_tests {
     }
 
     /// Run an operation `runs` times, return Vec of elapsed_ms per run.
-    fn measure_runs(runs: u32, mut op: impl FnMut() -> ()) -> Vec<u64> {
+    fn measure_runs(runs: u32, mut op: impl FnMut()) -> Vec<u64> {
         let mut elapsed = Vec::with_capacity(runs as usize);
         for _ in 0..runs {
             let started = Instant::now();
@@ -341,7 +341,7 @@ mod benchmark_tests {
             active
                 .with_conn(|conn| {
                     for _ in 0..warmup_runs {
-                        let _ = app_services::report_service::generate_html_report(
+                        let _ = app_services::report::generate_html_report(
                             conn,
                             &active.meta,
                             &output_dir,
@@ -355,7 +355,7 @@ mod benchmark_tests {
             let timings = active
                 .with_conn(|conn| {
                     Ok(measure_runs(measure_runs_count, || {
-                        let _ = app_services::report_service::generate_html_report(
+                        let _ = app_services::report::generate_html_report(
                             conn,
                             &active.meta,
                             &output_dir,

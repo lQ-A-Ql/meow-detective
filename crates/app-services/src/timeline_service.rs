@@ -383,6 +383,7 @@ fn populate_timeline_event_graph(conn: &Connection) -> Result<(), String> {
             )
             .map_err(|e| format!("prepare timeline graph query: {e}"))?;
 
+        #[allow(clippy::type_complexity)]
         let rows: Vec<(
             String,
             String,

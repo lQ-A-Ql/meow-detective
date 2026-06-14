@@ -118,6 +118,7 @@ fn step_to_dto(s: &InvestigationStep) -> InvestigationStepDto {
 // ── Public API ───────────────────────────────────────────────────────────
 
 /// Create a new notebook entry and return its DTO.
+#[allow(clippy::too_many_arguments)]
 pub fn create_entry(
     conn: &Connection,
     case_id: &str,
@@ -252,6 +253,7 @@ pub fn add_citation(
 /// Record an investigation step for audit/replay purposes.
 ///
 /// Returns the recorded step as a DTO.
+#[allow(clippy::too_many_arguments)]
 pub fn record_step(
     conn: &Connection,
     case_id: &str,
@@ -666,11 +668,11 @@ mod tests {
 
         assert_eq!(s1.step_kind, "import");
         assert_eq!(s1.duration_ms, 5000);
-        assert_eq!(s1.success, true);
+        assert!(s1.success);
 
         assert_eq!(s2.case_state_hash.as_deref(), Some("abc123hash"));
 
-        assert_eq!(s3.success, false);
+        assert!(!s3.success);
         assert_eq!(s3.error_code.as_deref(), Some("E_PARSE_FAILED"));
 
         // Filter by step_kind
@@ -689,6 +691,6 @@ mod tests {
         };
         let filtered = list_steps(&conn, "case-1", &filters).unwrap();
         assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].success, false);
+        assert!(!filtered[0].success);
     }
 }

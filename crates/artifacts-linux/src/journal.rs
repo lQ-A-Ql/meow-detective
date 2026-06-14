@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{Cursor, Read};
 
+use crate::LinuxArtifactError;
+
 /// Magic bytes at offset 0 for a systemd journal file: `LPKSHHRH`
 const JOURNAL_HEADER_SIGNATURE: &[u8; 8] = b"LPKSHHRH";
 
@@ -167,35 +169,32 @@ struct Header {
 }
 
 impl Header {
-    fn read(reader: &mut Cursor<&[u8]>) -> Result<Self, String> {
+    fn read(reader: &mut Cursor<&[u8]>) -> Result<Self, LinuxArtifactError> {
         let pos = |r: &mut Cursor<&[u8]>| r.position();
 
         let mut sig = [0u8; 8];
-        reader.read_exact(&mut sig).map_err(|e| e.to_string())?;
+        reader.read_exact(&mut sig)?;
         if &sig != JOURNAL_HEADER_SIGNATURE {
-            return Err("Not a systemd journal file (invalid signature)".to_string());
+            return Err(LinuxArtifactError::ParseError {
+                parser: "journal",
+                message: "Not a systemd journal file (invalid signature)".to_string(),
+            });
         }
 
         let compatible_flags = read_le_u32(reader)?;
         let incompatible_flags = read_le_u32(reader)?;
         let state = read_u8(reader)?;
         let mut reserved = [0u8; 7];
-        reader
-            .read_exact(&mut reserved)
-            .map_err(|e| e.to_string())?;
+        reader.read_exact(&mut reserved)?;
 
         let mut file_id = [0u8; 16];
-        reader.read_exact(&mut file_id).map_err(|e| e.to_string())?;
+        reader.read_exact(&mut file_id)?;
         let mut machine_id = [0u8; 16];
-        reader
-            .read_exact(&mut machine_id)
-            .map_err(|e| e.to_string())?;
+        reader.read_exact(&mut machine_id)?;
         let mut boot_id = [0u8; 16];
-        reader.read_exact(&mut boot_id).map_err(|e| e.to_string())?;
+        reader.read_exact(&mut boot_id)?;
         let mut seqnum_id = [0u8; 16];
-        reader
-            .read_exact(&mut seqnum_id)
-            .map_err(|e| e.to_string())?;
+        reader.read_exact(&mut seqnum_id)?;
 
         let header_size = read_le_u64(reader)?;
         let arena_size = read_le_u64(reader)?;
@@ -217,7 +216,10 @@ impl Header {
         if header_size > pos(reader) {
             let remaining = (header_size - pos(reader)) as usize;
             if reader.position() as usize + remaining > reader.get_ref().len() {
-                return Err("Header size exceeds file length".to_string());
+                return Err(LinuxArtifactError::ParseError {
+                    parser: "journal",
+                    message: "Header size exceeds file length".to_string(),
+                });
             }
             reader.set_position(header_size);
         }
@@ -274,13 +276,11 @@ struct ObjectHeader {
 }
 
 impl ObjectHeader {
-    fn read(reader: &mut Cursor<&[u8]>) -> Result<Self, String> {
+    fn read(reader: &mut Cursor<&[u8]>) -> Result<Self, LinuxArtifactError> {
         let object_type = read_u8(reader)?;
         let flags = read_u8(reader)?;
         let mut reserved = [0u8; 6];
-        reader
-            .read_exact(&mut reserved)
-            .map_err(|e| e.to_string())?;
+        reader.read_exact(&mut reserved)?;
         let payload_size = read_le_u64(reader)?;
         // payload_size is aligned to 8 bytes in the object header
         Ok(ObjectHeader {
@@ -295,9 +295,12 @@ impl ObjectHeader {
 /// Parse a systemd journal binary file and return all journal entries.
 ///
 /// The input is the raw bytes of a journal file (e.g. from `/var/log/journal/<machine-id>/system.journal`).
-pub fn parse_journal(data: &[u8]) -> Result<Vec<JournalEntry>, String> {
+pub fn parse_journal(data: &[u8]) -> Result<Vec<JournalEntry>, LinuxArtifactError> {
     if data.len() < 240 {
-        return Err("Data too short to be a systemd journal file".to_string());
+        return Err(LinuxArtifactError::ParseError {
+            parser: "journal",
+            message: "Data too short to be a systemd journal file".to_string(),
+        });
     }
 
     let mut reader = Cursor::new(data);
@@ -354,9 +357,7 @@ pub fn parse_journal(data: &[u8]) -> Result<Vec<JournalEntry>, String> {
                         && (reader.position() as usize + value_len) <= reader.get_ref().len()
                     {
                         let mut raw_value = vec![0u8; value_len];
-                        reader
-                            .read_exact(&mut raw_value)
-                            .map_err(|e| e.to_string())?;
+                        reader.read_exact(&mut raw_value)?;
 
                         if has_compressed && !raw_value.is_empty() {
                             let maybe_decompressed =
@@ -805,21 +806,21 @@ fn decompress_if_needed(data: &[u8], _flags: u8) -> Option<Vec<u8>> {
 
 // ---- little-endian readers ----
 
-fn read_u8(reader: &mut Cursor<&[u8]>) -> Result<u8, String> {
+fn read_u8(reader: &mut Cursor<&[u8]>) -> Result<u8, LinuxArtifactError> {
     let mut buf = [0u8; 1];
-    reader.read_exact(&mut buf).map_err(|e| e.to_string())?;
+    reader.read_exact(&mut buf)?;
     Ok(buf[0])
 }
 
-fn read_le_u32(reader: &mut Cursor<&[u8]>) -> Result<u32, String> {
+fn read_le_u32(reader: &mut Cursor<&[u8]>) -> Result<u32, LinuxArtifactError> {
     let mut buf = [0u8; 4];
-    reader.read_exact(&mut buf).map_err(|e| e.to_string())?;
+    reader.read_exact(&mut buf)?;
     Ok(u32::from_le_bytes(buf))
 }
 
-fn read_le_u64(reader: &mut Cursor<&[u8]>) -> Result<u64, String> {
+fn read_le_u64(reader: &mut Cursor<&[u8]>) -> Result<u64, LinuxArtifactError> {
     let mut buf = [0u8; 8];
-    reader.read_exact(&mut buf).map_err(|e| e.to_string())?;
+    reader.read_exact(&mut buf)?;
     Ok(u64::from_le_bytes(buf))
 }
 

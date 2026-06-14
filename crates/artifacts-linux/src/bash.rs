@@ -33,7 +33,7 @@ pub struct BashCommand {
 /// followed by an epoch timestamp precede each command.
 ///
 /// Lines that are blank or only contain `#` followed by non-numeric content are skipped.
-pub fn parse_bash_history(content: &str) -> Result<Vec<BashCommand>, String> {
+pub fn parse_bash_history(content: &str) -> Result<Vec<BashCommand>, crate::LinuxArtifactError> {
     let mut commands: Vec<BashCommand> = Vec::new();
     let mut pending_timestamp: Option<i64> = None;
 

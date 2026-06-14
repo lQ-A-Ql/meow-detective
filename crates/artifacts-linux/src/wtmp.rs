@@ -104,7 +104,7 @@ struct Layout {
     off_tv_usec: usize,
 }
 
-fn detect_layout(data: &[u8]) -> Result<Layout, String> {
+fn detect_layout(data: &[u8]) -> Result<Layout, crate::LinuxArtifactError> {
     let candidates: [(usize, &dyn Fn() -> Layout); 3] = [
         (WTMP_SIZE_64, &|| layout_64()),
         (WTMP_SIZE_32, &|| layout_32()),
@@ -124,7 +124,10 @@ fn detect_layout(data: &[u8]) -> Result<Layout, String> {
         }
     }
 
-    Err("Cannot determine wtmp struct layout: file too small".to_string())
+    Err(crate::LinuxArtifactError::ParseError {
+        parser: "wtmp",
+        message: "Cannot determine wtmp struct layout: file too small".to_string(),
+    })
 }
 
 fn layout_64() -> Layout {
@@ -229,9 +232,12 @@ fn timestamp_from_utmp(sec: i64, _usec: i64) -> Option<DateTime<Utc>> {
 ///
 /// Returns a list of `LoginRecord` entries. Each USER_PROCESS record creates a login,
 /// and matching DEAD_PROCESS records (by pid) set the logout time.
-pub fn parse_wtmp(data: &[u8]) -> Result<Vec<LoginRecord>, String> {
+pub fn parse_wtmp(data: &[u8]) -> Result<Vec<LoginRecord>, crate::LinuxArtifactError> {
     if data.is_empty() {
-        return Err("Empty wtmp data".to_string());
+        return Err(crate::LinuxArtifactError::ParseError {
+            parser: "wtmp",
+            message: "Empty wtmp data".to_string(),
+        });
     }
 
     let layout = detect_layout(data)?;

@@ -100,6 +100,9 @@ fn current_rss_bytes() -> u64 {
         PagefileUsage: 0,
         PeakPagefileUsage: 0,
     };
+    // SAFETY: GetProcessMemoryInfo is called with a valid handle (GetCurrentProcess)
+    // and a properly initialized PROCESS_MEMORY_COUNTERS struct. The Windows API
+    // guarantees these are safe to call from any thread.
     let ok = unsafe {
         GetProcessMemoryInfo(
             GetCurrentProcess(),

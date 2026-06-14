@@ -704,7 +704,7 @@ mod tests {
         assert_eq!(step.params_json, "{}");
         assert_eq!(step.duration_ms, 100);
         assert_eq!(step.case_state_hash, None);
-        assert_eq!(step.success, true);
+        assert!(step.success);
         assert_eq!(step.error_code, None);
     }
 
@@ -728,7 +728,7 @@ mod tests {
         let replay: StepReplayDto = serde_json::from_value(json).unwrap();
 
         assert_eq!(replay.total_steps, 1);
-        assert_eq!(replay.replayable, false);
+        assert!(!replay.replayable);
         assert_eq!(replay.caveats, vec!["c1"]);
         assert_eq!(replay.steps.len(), 1);
     }

@@ -1,0 +1,557 @@
+use super::*;
+use chrono::Utc;
+use domain::{
+    Artifact, ArtifactId, CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance,
+    EntryType, FileEntry, FileEntryId, TimelineEvent, TimelineEventId,
+};
+use persistence_sqlite::repositories::{
+    artifact_repo::ArtifactRepo, case_repo::CaseRepo, datasource_repo::DataSourceRepo,
+    file_repo::FileRepo, timeline_repo::TimelineRepo,
+};
+use rusqlite::Connection;
+use std::collections::BTreeMap;
+use transport::dto::CorrelationNodeKindDto;
+
+fn setup_case_db() -> Connection {
+    let conn = Connection::open_in_memory().unwrap();
+    persistence_sqlite::runner::run_all(&conn).unwrap();
+    CaseRepo::new(&conn)
+        .create(&domain::CaseMeta {
+            id: CaseId("case-1".to_string()),
+            name: "Case".to_string(),
+            number: None,
+            examiner: None,
+            notes: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        })
+        .unwrap();
+    DataSourceRepo::new(&conn)
+        .insert(
+            &CaseId("case-1".to_string()),
+            &DataSource {
+                id: DataSourceId("ds-1".to_string()),
+                name: "source".to_string(),
+                kind: DataSourceKind::Raw,
+                source_path: "C:/evidence/mock.raw".into(),
+                imported_at: Utc::now(),
+                provenance: DataSourceProvenance::unknown(),
+            },
+        )
+        .unwrap();
+    conn
+}
+
+fn insert_file(conn: &Connection, id: &str, path: &str, deleted: bool) {
+    FileRepo::new(conn)
+        .insert_batch(&[FileEntry {
+            id: FileEntryId(id.to_string()),
+            parent_id: None,
+            data_source_id: DataSourceId("ds-1".to_string()),
+            path: path.to_string(),
+            name: super::rules::basename(path),
+            entry_type: EntryType::File,
+            size: Some(1024),
+            ext: Some("exe".to_string()),
+            deleted,
+            hidden: false,
+            system: false,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        }])
+        .unwrap();
+}
+
+fn insert_artifact(
+    conn: &Connection,
+    id: &str,
+    family: &str,
+    source_object_id: Option<&str>,
+    attrs: BTreeMap<String, Value>,
+) {
+    ArtifactRepo::new(conn)
+        .insert_batch(
+            &[Artifact {
+                id: ArtifactId(id.to_string()),
+                family: family.to_string(),
+                title: format!("{family} artifact"),
+                summary: "fixture".to_string(),
+                source_object_id: source_object_id.map(|value| FileEntryId(value.to_string())),
+                extractor_id: Some(family.to_ascii_lowercase()),
+                extractor_version: Some("1.0.0".to_string()),
+                confidence: Some(0.91),
+                source_attribution: Some("fixture".to_string()),
+                created_at: Utc::now(),
+                attrs,
+            }],
+            "case-1",
+            "ds-1",
+        )
+        .unwrap();
+}
+
+#[test]
+fn correlation_snapshot_groups_artifact_and_timeline_by_source_object() {
+    let conn = setup_case_db();
+    insert_file(&conn, "file-1", "C:/Windows/System32/cmd.exe", true);
+    insert_artifact(
+        &conn,
+        "artifact-1",
+        "Prefetch",
+        Some("file-1"),
+        BTreeMap::new(),
+    );
+    TimelineRepo::new(&conn)
+        .insert_batch_with_case(
+            &[TimelineEvent {
+                id: TimelineEventId("timeline-1".to_string()),
+                source_object_id: "file-1".to_string(),
+                event_type: "FILE_MODIFIED".to_string(),
+                timestamp: Utc::now(),
+                title: "File modified".to_string(),
+                description: "MACB projection".to_string(),
+                parser_id: Some("timeline.macb".to_string()),
+                parser_version: Some("1.0.0".to_string()),
+                confidence: Some(0.82),
+                source_attribution: Some("modified_at".to_string()),
+                attrs: BTreeMap::new(),
+            }],
+            "case-1",
+        )
+        .unwrap();
+
+    let snapshot = get_correlation_snapshot(&conn).unwrap();
+
+    assert_eq!(snapshot.cluster_count, 1);
+    assert_eq!(snapshot.lead_count, 1);
+    assert!(snapshot.node_count >= 3);
+    assert!(snapshot.edge_count >= 3);
+    assert_eq!(
+        snapshot.leads[0].confidence,
+        CorrelationConfidenceDto::Direct
+    );
+    assert_eq!(snapshot.leads[0].primary_file_id, "file-1");
+    assert!(snapshot.leads[0].summary.contains("痕迹记录"));
+    assert!(snapshot.nodes.iter().any(|node| {
+        node.kind == CorrelationNodeKindDto::File
+            && node.badges.iter().any(|badge| badge == "deleted")
+    }));
+    assert!(
+        snapshot.clusters[0]
+            .provenance
+            .iter()
+            .any(|item| item.source_kind == "artifact"
+                && item.producer.as_deref() == Some("prefetch"))
+    );
+}
+
+#[test]
+fn correlation_snapshot_matches_lnk_target_path_to_file() {
+    let conn = setup_case_db();
+    insert_file(&conn, "file-lnk", "C:/Users/Admin/Desktop/cmd.lnk", false);
+    insert_file(&conn, "file-cmd", "C:/Windows/System32/cmd.exe", false);
+
+    let mut attrs = BTreeMap::new();
+    attrs.insert(
+        "target_path".to_string(),
+        Value::String("C:/Windows/System32/cmd.exe".to_string()),
+    );
+    insert_artifact(&conn, "artifact-lnk", "LNK", Some("file-lnk"), attrs);
+
+    let snapshot = get_correlation_snapshot(&conn).unwrap();
+    let lead = snapshot
+        .leads
+        .iter()
+        .find(|item| item.id == "lead:rules:file-cmd")
+        .unwrap();
+
+    assert_eq!(lead.primary_file_id, "file-cmd");
+    assert_eq!(lead.confidence, CorrelationConfidenceDto::Direct);
+    assert!(lead.summary.contains("路径"));
+    assert!(snapshot.edges.iter().any(|edge| {
+        edge.kind == CorrelationEdgeKindDto::PathMatch
+            && edge.from_node_id == "artifact:artifact-lnk"
+            && edge.to_node_id == "file:file-cmd"
+    }));
+}
+
+#[test]
+fn correlation_snapshot_matches_registry_value_path_to_file() {
+    let conn = setup_case_db();
+    insert_file(
+        &conn,
+        "file-reg",
+        "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+        false,
+    );
+
+    let mut attrs = BTreeMap::new();
+    attrs.insert(
+        "data".to_string(),
+        Value::String(
+            "\"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" -nop".to_string(),
+        ),
+    );
+    insert_artifact(
+        &conn,
+        "artifact-reg",
+        "RegistryValue",
+        Some("registry-hive"),
+        attrs,
+    );
+
+    let snapshot = get_correlation_snapshot(&conn).unwrap();
+
+    assert!(snapshot.edges.iter().any(|edge| {
+        edge.kind == CorrelationEdgeKindDto::PathMatch
+            && edge.from_node_id == "artifact:artifact-reg"
+            && edge.to_node_id == "file:file-reg"
+    }));
+}
+
+#[test]
+fn correlation_snapshot_matches_recycle_bin_original_path_to_deleted_file() {
+    let conn = setup_case_db();
+    insert_file(
+        &conn,
+        "file-deleted",
+        "C:/Users/Admin/Desktop/secrets.txt",
+        true,
+    );
+
+    let mut attrs = BTreeMap::new();
+    attrs.insert(
+        "original_path".to_string(),
+        Value::String("C:/Users/Admin/Desktop/secrets.txt".to_string()),
+    );
+    insert_artifact(&conn, "artifact-rb", "RecycleBin", Some("recycle-i"), attrs);
+
+    let snapshot = get_correlation_snapshot(&conn).unwrap();
+
+    assert!(snapshot.edges.iter().any(|edge| {
+        edge.kind == CorrelationEdgeKindDto::RecoveredOriginalPath
+            && edge.from_node_id == "artifact:artifact-rb"
+            && edge.to_node_id == "file:file-deleted"
+    }));
+}
+
+#[test]
+fn correlation_snapshot_matches_prefetch_executable_name_to_file_name() {
+    let conn = setup_case_db();
+    insert_file(&conn, "file-cmd", "C:/Windows/System32/cmd.exe", false);
+
+    let mut attrs = BTreeMap::new();
+    attrs.insert(
+        "executable".to_string(),
+        Value::String("CMD.EXE".to_string()),
+    );
+    insert_artifact(&conn, "artifact-pf", "Prefetch", Some("pf-file"), attrs);
+
+    let snapshot = get_correlation_snapshot(&conn).unwrap();
+    let edge = snapshot
+        .edges
+        .iter()
+        .find(|edge| {
+            edge.from_node_id == "artifact:artifact-pf"
+                && edge.kind == CorrelationEdgeKindDto::NameMatch
+        })
+        .unwrap();
+
+    assert_eq!(edge.kind, CorrelationEdgeKindDto::NameMatch);
+    assert_eq!(edge.confidence, CorrelationConfidenceDto::Strong);
+}
+
+#[test]
+fn correlation_snapshot_rule_group_uses_related_timeline_as_context() {
+    let conn = setup_case_db();
+    insert_file(&conn, "file-payload", "C:/Temp/payload.exe", false);
+
+    let mut attrs = BTreeMap::new();
+    attrs.insert(
+        "targetPath".to_string(),
+        Value::String("C:/Temp/payload.exe".to_string()),
+    );
+    insert_artifact(
+        &conn,
+        "artifact-download",
+        "BrowserDownload",
+        Some("browser-db"),
+        attrs,
+    );
+
+    TimelineRepo::new(&conn)
+        .insert_batch_with_case(
+            &[TimelineEvent {
+                id: TimelineEventId("timeline-download".to_string()),
+                source_object_id: "file-payload".to_string(),
+                event_type: "FILE_CREATED".to_string(),
+                timestamp: Utc::now(),
+                title: "payload.exe created".to_string(),
+                description: "download landed".to_string(),
+                parser_id: Some("timeline.macb".to_string()),
+                parser_version: Some("1.0.0".to_string()),
+                confidence: Some(0.8),
+                source_attribution: Some("created_at".to_string()),
+                attrs: BTreeMap::new(),
+            }],
+            "case-1",
+        )
+        .unwrap();
+
+    let snapshot = get_correlation_snapshot(&conn).unwrap();
+    let cluster = snapshot
+        .clusters
+        .iter()
+        .find(|item| item.id == "cluster:rules:file-payload")
+        .unwrap();
+
+    assert_eq!(cluster.timeline_count, 1);
+    assert!(cluster
+        .edge_ids
+        .iter()
+        .any(|item| item.contains("rule-timeline")));
+    assert!(snapshot.edges.iter().any(|edge| {
+        edge.id.contains("rule-timeline")
+            && edge.to_node_id == "file:file-payload"
+            && edge.kind == CorrelationEdgeKindDto::TemporalContext
+    }));
+}
+
+#[test]
+fn correlation_snapshot_matches_jumplist_target_path_to_file() {
+    let conn = setup_case_db();
+    insert_file(
+        &conn,
+        "file-report",
+        "C:/Users/Admin/Documents/report.docx",
+        false,
+    );
+
+    let mut attrs = BTreeMap::new();
+    attrs.insert(
+        "target_path".to_string(),
+        Value::String("C:/Users/Admin/Documents/report.docx".to_string()),
+    );
+    insert_artifact(
+        &conn,
+        "artifact-jumplist",
+        "JumpList",
+        Some("jumplist-file"),
+        attrs,
+    );
+
+    let snapshot = get_correlation_snapshot(&conn).unwrap();
+
+    assert!(snapshot.edges.iter().any(|edge| {
+        edge.kind == CorrelationEdgeKindDto::PathMatch
+            && edge.from_node_id == "artifact:artifact-jumplist"
+            && edge.to_node_id == "file:file-report"
+    }));
+}
+
+#[test]
+fn correlation_snapshot_adds_proximity_timeline_signal_for_browser_download() {
+    let conn = setup_case_db();
+    insert_file(&conn, "file-payload", "C:/Temp/payload.exe", false);
+    insert_file(
+        &conn,
+        "file-history",
+        "C:/Users/Admin/AppData/Local/Edge/User Data/Default/History",
+        false,
+    );
+
+    let mut attrs = BTreeMap::new();
+    attrs.insert(
+        "targetPath".to_string(),
+        Value::String("C:/Temp/payload.exe".to_string()),
+    );
+    attrs.insert(
+        "startTime".to_string(),
+        Value::String("2026-06-12T10:00:00Z".to_string()),
+    );
+    insert_artifact(
+        &conn,
+        "artifact-download-proximity",
+        "BrowserDownload",
+        Some("file-history"),
+        attrs,
+    );
+
+    TimelineRepo::new(&conn)
+        .insert_batch_with_case(
+            &[TimelineEvent {
+                id: TimelineEventId("timeline-near-download".to_string()),
+                source_object_id: "other-file".to_string(),
+                event_type: "FILE_CREATED".to_string(),
+                timestamp: chrono::DateTime::parse_from_rfc3339("2026-06-12T10:05:00Z")
+                    .unwrap()
+                    .with_timezone(&Utc),
+                title: "payload created".to_string(),
+                description: "nearby timeline".to_string(),
+                parser_id: Some("timeline.macb".to_string()),
+                parser_version: Some("1.0.0".to_string()),
+                confidence: Some(0.75),
+                source_attribution: Some("C:/Temp/payload.exe".to_string()),
+                attrs: BTreeMap::new(),
+            }],
+            "case-1",
+        )
+        .unwrap();
+
+    let snapshot = get_correlation_snapshot(&conn).unwrap();
+    let lead = snapshot
+        .leads
+        .iter()
+        .find(|item| item.id == "lead:rules:file-payload")
+        .unwrap();
+
+    assert!(lead
+        .match_signals
+        .iter()
+        .any(|item| item.contains("邻近时间线命中 FILE_CREATED")));
+}
+
+#[test]
+fn correlation_snapshot_adds_proximity_timeline_signal_for_email_message() {
+    let conn = setup_case_db();
+    insert_file(&conn, "file-triage", "C:/Cases/triage.csv", false);
+    insert_file(
+        &conn,
+        "file-mail",
+        "C:/Users/Admin/Documents/incident-response.eml",
+        false,
+    );
+
+    let mut attrs = BTreeMap::new();
+    attrs.insert(
+        "attachments".to_string(),
+        Value::Array(vec![Value::String("triage.csv".to_string())]),
+    );
+    attrs.insert(
+        "subject".to_string(),
+        Value::String("Initial triage notes".to_string()),
+    );
+    attrs.insert(
+        "sentAt".to_string(),
+        Value::String("2026-06-12T11:00:00Z".to_string()),
+    );
+    insert_artifact(
+        &conn,
+        "artifact-email-proximity",
+        "EmailMessage",
+        Some("file-mail"),
+        attrs,
+    );
+
+    TimelineRepo::new(&conn)
+        .insert_batch_with_case(
+            &[TimelineEvent {
+                id: TimelineEventId("timeline-near-email".to_string()),
+                source_object_id: "other-file".to_string(),
+                event_type: "REPORT_UPDATED".to_string(),
+                timestamp: chrono::DateTime::parse_from_rfc3339("2026-06-12T11:10:00Z")
+                    .unwrap()
+                    .with_timezone(&Utc),
+                title: "Initial triage notes".to_string(),
+                description: "triage.csv refreshed".to_string(),
+                parser_id: Some("timeline.note".to_string()),
+                parser_version: Some("1.0.0".to_string()),
+                confidence: Some(0.72),
+                source_attribution: Some("C:/Cases/triage.csv".to_string()),
+                attrs: BTreeMap::new(),
+            }],
+            "case-1",
+        )
+        .unwrap();
+
+    let snapshot = get_correlation_snapshot(&conn).unwrap();
+    let lead = snapshot
+        .leads
+        .iter()
+        .find(|item| item.id == "lead:rules:file-triage")
+        .unwrap();
+
+    assert!(lead
+        .match_signals
+        .iter()
+        .any(|item| item.contains("邻近时间线命中 REPORT_UPDATED")));
+}
+
+#[test]
+fn correlation_snapshot_adds_proximity_timeline_signal_for_browser_history() {
+    let conn = setup_case_db();
+    insert_file(
+        &conn,
+        "file-browser-cache",
+        "C:/Users/Admin/AppData/Local/Edge/User Data/Default/History",
+        false,
+    );
+    insert_file(
+        &conn,
+        "file-report",
+        "C:/Cases/browser-incident-report.docx",
+        false,
+    );
+
+    let mut attrs = BTreeMap::new();
+    attrs.insert(
+        "url".to_string(),
+        Value::String("https://intranet.local/reports/browser-incident-report".to_string()),
+    );
+    attrs.insert(
+        "title".to_string(),
+        Value::String("browser-incident-report.docx draft".to_string()),
+    );
+    attrs.insert(
+        "visitTime".to_string(),
+        Value::String("2026-06-12T12:00:00Z".to_string()),
+    );
+    insert_artifact(
+        &conn,
+        "artifact-browser-history-proximity",
+        "BrowserHistory",
+        Some("file-browser-cache"),
+        attrs,
+    );
+
+    TimelineRepo::new(&conn)
+        .insert_batch_with_case(
+            &[TimelineEvent {
+                id: TimelineEventId("timeline-near-browser-history".to_string()),
+                source_object_id: "other-file".to_string(),
+                event_type: "REPORT_OPENED".to_string(),
+                timestamp: chrono::DateTime::parse_from_rfc3339("2026-06-12T12:15:00Z")
+                    .unwrap()
+                    .with_timezone(&Utc),
+                title: "browser-incident-report.docx draft".to_string(),
+                description: "C:/Cases/browser-incident-report.docx opened".to_string(),
+                parser_id: Some("timeline.note".to_string()),
+                parser_version: Some("1.0.0".to_string()),
+                confidence: Some(0.78),
+                source_attribution: Some("C:/Cases/browser-incident-report.docx".to_string()),
+                attrs: BTreeMap::new(),
+            }],
+            "case-1",
+        )
+        .unwrap();
+
+    let snapshot = get_correlation_snapshot(&conn).unwrap();
+    let lead = snapshot
+        .leads
+        .iter()
+        .find(|item| item.id == "lead:rules:file-report")
+        .unwrap();
+
+    assert_eq!(lead.confidence, CorrelationConfidenceDto::Strong);
+    assert!(lead
+        .match_signals
+        .iter()
+        .any(|item| item.contains("BrowserHistory 标题或 URL 命中文件名")));
+    assert!(lead
+        .match_signals
+        .iter()
+        .any(|item| item.contains("邻近时间线命中 REPORT_OPENED")));
+}

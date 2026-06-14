@@ -94,7 +94,7 @@ pub async fn search_files_request(
                 .to_string();
                 let _ = step_recorder::record_step(
                     &conn,
-                    &case_id,
+                    case_id,
                     "search",
                     &params_json,
                     elapsed_ms,

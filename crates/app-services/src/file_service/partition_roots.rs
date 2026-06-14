@@ -127,13 +127,6 @@ pub(crate) fn partition_placeholder_status(entry: &FileEntry) -> Option<&str> {
     }
 }
 
-#[allow(dead_code)]
-pub(crate) fn partition_placeholder_index(entry: &FileEntry) -> Option<usize> {
-    let rest = entry.path.strip_prefix(PARTITION_PLACEHOLDER_PREFIX)?;
-    let (index, _status) = rest.split_once('/')?;
-    index.parse().ok()
-}
-
 pub(crate) fn looks_like_partition_root_name(name: &str) -> bool {
     name.starts_with("Partition ") || name.starts_with("Volume")
 }

@@ -278,7 +278,7 @@ mod tests {
 
     fn insert_artifact(conn: &rusqlite::Connection, artifact: &Artifact) {
         ArtifactRepo::new(conn)
-            .insert_batch(&[artifact.clone()], "case-1", "ds-1")
+            .insert_batch(std::slice::from_ref(artifact), "case-1", "ds-1")
             .unwrap();
     }
 

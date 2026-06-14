@@ -38,7 +38,7 @@ pub struct AptEvent {
 ///
 /// Extracts Start-Date/End-Date transaction entries and returns individual
 /// package events for each Install/Upgrade/Remove/Purge line.
-pub fn parse_apt_history(content: &str) -> Result<Vec<AptEvent>, String> {
+pub fn parse_apt_history(content: &str) -> Result<Vec<AptEvent>, crate::LinuxArtifactError> {
     let mut events: Vec<AptEvent> = Vec::new();
     let mut current_timestamp: Option<DateTime<Utc>> = None;
 
@@ -95,7 +95,7 @@ pub fn parse_apt_history(content: &str) -> Result<Vec<AptEvent>, String> {
 /// ```text
 /// YYYY-MM-DD HH:MM:SS action package version [prev_version]
 /// ```
-pub fn parse_dpkg_log(content: &str) -> Result<Vec<AptEvent>, String> {
+pub fn parse_dpkg_log(content: &str) -> Result<Vec<AptEvent>, crate::LinuxArtifactError> {
     let mut events: Vec<AptEvent> = Vec::new();
 
     for line in content.lines() {

@@ -243,9 +243,9 @@ fn extract_process_name(data: &[u8], start: usize, end: usize) -> String {
                 j += 1;
             }
             let len = j - i;
-            if len >= 3 && len <= 32 && j < range.len() && range[j] == 0 {
+            if (3..=32).contains(&len) && j < range.len() && range[j] == 0 {
                 let s = String::from_utf8_lossy(&range[i..j]).to_string();
-                if best.as_ref().map_or(true, |b| s.len() > b.len()) {
+                if best.as_ref().is_none_or(|b| s.len() > b.len()) {
                     best = Some(s);
                 }
             }
@@ -272,9 +272,9 @@ fn extract_message(data: &[u8], start: usize, end: usize) -> String {
                 j += 1;
             }
             let len = j - i;
-            if len >= 4 && len <= 512 {
+            if (4..=512).contains(&len) {
                 let s = String::from_utf8_lossy(&range[i..j]).to_string();
-                if best.as_ref().map_or(true, |b| s.len() > b.len()) {
+                if best.as_ref().is_none_or(|b| s.len() > b.len()) {
                     best = Some(s);
                 }
             }

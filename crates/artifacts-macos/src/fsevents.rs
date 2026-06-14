@@ -221,8 +221,10 @@ fn read_path_string(data: &[u8], start: usize) -> String {
     let slice = &data[start..end];
 
     // Only consider it a valid path if it looks like one
-    let has_slash = slice.iter().any(|&b| b == b'/');
-    let is_readable = slice.iter().all(|&b| b >= 0x20 && b < 0x7f || b == b'/');
+    let has_slash = slice.contains(&b'/');
+    let is_readable = slice
+        .iter()
+        .all(|&b| (0x20..0x7f).contains(&b) || b == b'/');
 
     if !has_slash || !is_readable || slice.len() < 2 {
         return String::new();
@@ -265,7 +267,7 @@ fn extract_paths_fallback(data: &[u8], base_timestamp: Option<u64>) -> Vec<FSEve
                 end += 1;
             }
             let len = end - start;
-            if len >= 3 && len <= 1024 {
+            if (3..=1024).contains(&len) {
                 let path = String::from_utf8_lossy(&data[start..end]).to_string();
                 events.push(FSEvent {
                     path,

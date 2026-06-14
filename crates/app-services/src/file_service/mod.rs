@@ -993,7 +993,7 @@ mod tests {
     use crate::file_service::{
         partition_roots::{
             looks_like_raw_fs_root_name, mft_entry_partition_index, normalized_bare_root_name,
-            partition_placeholder_index, partition_placeholder_status,
+            partition_placeholder_status,
         },
         sort::{natural_cmp, sort_entries},
     };
@@ -1576,23 +1576,6 @@ mod tests {
         assert_eq!(names2, vec!["file2.txt", "file10.txt"]);
     }
 
-    // ------------------------------------------------------------------
-    // Stage A: partition placeholder identity binding (index-encoded path)
-    // ------------------------------------------------------------------
-
-    fn placeholder_entry(path: &str) -> FileEntry {
-        let mut entry = sort_entry(
-            "Partition 1 (NTFS)",
-            EntryType::Directory,
-            false,
-            false,
-            false,
-            None,
-        );
-        entry.path = path.to_string();
-        entry
-    }
-
     #[test]
     fn placeholder_path_encodes_partition_index() {
         let tmp = TempDir::new().unwrap();
@@ -1615,37 +1598,7 @@ mod tests {
                 .unwrap();
         let entry = FileRepo::new(&conn).find_by_id(&id).unwrap().unwrap();
         assert_eq!(entry.path, "__partition_placeholder__/3/queued");
-        assert_eq!(partition_placeholder_index(&entry), Some(3));
         assert_eq!(partition_placeholder_status(&entry), Some("queued"));
-    }
-
-    #[test]
-    fn legacy_placeholder_path_without_index_still_parses_status() {
-        // Old form: "__partition_placeholder__/{status}" (no index segment).
-        let entry = placeholder_entry("__partition_placeholder__/locked");
-        assert_eq!(partition_placeholder_index(&entry), None);
-        assert_eq!(partition_placeholder_status(&entry), Some("locked"));
-    }
-
-    #[test]
-    fn placeholder_index_distinguishes_same_named_partitions() {
-        // Two placeholders with identical display names but different indices
-        // must resolve to distinct identities via the path index segment.
-        let p1 = placeholder_entry("__partition_placeholder__/1/queued");
-        let p2 = placeholder_entry("__partition_placeholder__/2/queued");
-        assert_eq!(partition_placeholder_index(&p1), Some(1));
-        assert_eq!(partition_placeholder_index(&p2), Some(2));
-        assert_ne!(
-            partition_placeholder_index(&p1),
-            partition_placeholder_index(&p2)
-        );
-    }
-
-    #[test]
-    fn placeholder_status_parses_multi_digit_index() {
-        let entry = placeholder_entry("__partition_placeholder__/12/unsupported");
-        assert_eq!(partition_placeholder_index(&entry), Some(12));
-        assert_eq!(partition_placeholder_status(&entry), Some("unsupported"));
     }
 
     // ------------------------------------------------------------------
