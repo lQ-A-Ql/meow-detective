@@ -1,3 +1,6 @@
+use rayon::prelude::*;
+use std::sync::Mutex;
+
 use super::rules::{
     build_artifact_rule_matches, rule_match_paths, rule_match_text_needles, rule_match_timestamps,
     timeline_path_candidates, timeline_text_candidates,
@@ -111,33 +114,35 @@ pub(crate) fn build_source_groups(
     artifacts: Vec<ArtifactRowDto>,
     timelines: Vec<TimelineEventDto>,
 ) -> Result<Vec<CorrelationSourceGroup>, String> {
-    let mut groups = BTreeMap::<String, CorrelationSourceGroup>::new();
+    let groups_map = Mutex::new(BTreeMap::<String, CorrelationSourceGroup>::new());
 
-    for artifact in artifacts {
-        let Some(source_object_id) = artifact.source_object_id.clone() else {
-            continue;
+    artifacts.par_iter().for_each(|artifact| {
+        let Some(ref source_object_id) = artifact.source_object_id else {
+            return;
         };
+        let mut groups = groups_map.lock().unwrap();
         let group =
             groups
                 .entry(source_object_id.clone())
                 .or_insert_with(|| CorrelationSourceGroup {
-                    source_object_id,
+                    source_object_id: source_object_id.clone(),
                     ..CorrelationSourceGroup::default()
                 });
-        group.artifacts.push(artifact);
-    }
+        group.artifacts.push(artifact.clone());
+    });
 
-    for timeline in timelines {
-        let source_object_id = timeline.source_object_id.clone();
-        let group =
-            groups
-                .entry(source_object_id.clone())
-                .or_insert_with(|| CorrelationSourceGroup {
-                    source_object_id,
-                    ..CorrelationSourceGroup::default()
-                });
-        group.timelines.push(timeline);
-    }
+    timelines.par_iter().for_each(|timeline| {
+        let mut groups = groups_map.lock().unwrap();
+        let group = groups
+            .entry(timeline.source_object_id.clone())
+            .or_insert_with(|| CorrelationSourceGroup {
+                source_object_id: timeline.source_object_id.clone(),
+                ..CorrelationSourceGroup::default()
+            });
+        group.timelines.push(timeline.clone());
+    });
+
+    let mut groups = groups_map.into_inner().unwrap();
 
     let repo = FileRepo::new(conn);
     let mut items = groups.into_values().collect::<Vec<_>>();
@@ -171,22 +176,22 @@ pub(crate) fn build_rule_groups(
             acc
         },
     );
-    let mut groups = BTreeMap::<String, CorrelationRuleGroup>::new();
+    // Parallel: each artifact's rule matching against all files is independent.
+    // Use Mutex for shared group map — contention is low (~250 artifacts).
+    let groups_map = Mutex::new(BTreeMap::<String, CorrelationRuleGroup>::new());
 
-    for artifact in artifacts {
+    artifacts.par_iter().for_each(|artifact| {
         for rule_match in build_artifact_rule_matches(&files, artifact) {
+            let file_id = rule_match.file.id.0.clone();
+            let mut groups = groups_map.lock().unwrap();
             let group = groups
-                .entry(rule_match.file.id.0.clone())
+                .entry(file_id.clone())
                 .or_insert_with(|| CorrelationRuleGroup {
                     file: rule_match.file.clone(),
                     matches: Vec::new(),
-                    timelines: timeline_map
-                        .get(&rule_match.file.id.0)
-                        .cloned()
-                        .unwrap_or_default(),
+                    timelines: timeline_map.get(&file_id).cloned().unwrap_or_default(),
                     timeline_signals: Vec::new(),
                 });
-
             let exists = group.matches.iter().any(|existing| {
                 existing.artifact.id == rule_match.artifact.id
                     && existing.kind == rule_match.kind
@@ -196,7 +201,9 @@ pub(crate) fn build_rule_groups(
                 group.matches.push(rule_match);
             }
         }
-    }
+    });
+
+    let mut groups = groups_map.into_inner().unwrap();
 
     let mut items = groups.into_values().collect::<Vec<_>>();
     for group in &mut items {

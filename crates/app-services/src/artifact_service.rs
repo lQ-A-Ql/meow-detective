@@ -1,4 +1,5 @@
 use chrono::Utc;
+use rayon::prelude::*;
 use std::io::Read;
 use transport::dto::{ArtifactRowDto, FamilyCountDto};
 
@@ -245,7 +246,7 @@ fn already_has_artifact_for_source(
 pub fn run_extractors_parallel(
     registry: &ExtractorRegistry,
     files: &[domain::FileEntry],
-    file_reader: &dyn Fn(&FileEntryId) -> Option<Box<dyn Read>>,
+    file_reader: &(dyn Fn(&FileEntryId) -> Option<Box<dyn Read>> + Sync),
     limit: usize,
 ) -> (Vec<domain::Artifact>, ArtifactExtractionStats) {
     let to_process: Vec<&domain::FileEntry> = files
@@ -255,7 +256,7 @@ pub fn run_extractors_parallel(
         .collect();
 
     let results: Vec<(Vec<domain::Artifact>, ArtifactExtractionStats)> = to_process
-        .iter()
+        .par_iter()
         .map(|file| {
             let extractors = registry.find_for_path(&file.path);
             let mut sink = VecSink::new();
