@@ -71,13 +71,16 @@ Backend → Frontend via Tauri `emit`. Topics defined as constants in `crates/tr
 | `domain` | Core entities defined: CaseId/CaseMeta/CaseSession, DataSource, FileEntry, Artifact, TimelineEvent, Job, Report, Tag |
 | `app-services` | Application-layer orchestration per domain entity |
 | `transport` | Shared DTOs, commands, events, errors, paging — the contract between frontend and backend |
-| `persistence-sqlite` | SQLite repositories and migrations (9 repos, 23 migration scripts) |
+| `persistence-sqlite` | SQLite repositories and migrations (12 repos, 26 migration scripts) |
 | `evidence-core` | Disk image probing, volume detection, filesystem abstraction, reader |
 | `fs-ntfs` / `fs-fat` / `fs-exfat` | Filesystem-specific parsers |
 | `image-raw` / `image-e01` | Raw and E01 image format readers |
 | `search` | Full-text indexing (tantivy), query parsing, highlighting |
 | `timeline` | Timeline event generation and aggregation |
-| `artifacts-windows` | Windows artifact parsers: EVTX, Prefetch, LNK, JumpList, Registry, RecycleBin, SRU, Thumbcache |
+| `artifacts-windows` | Windows artifact parsers: Browser (Chrome/Edge/Firefox), EVTX, Prefetch, LNK, JumpList, Registry, RecycleBin, SRU, Thumbcache |
+| `artifacts-linux` | Linux artifact parsers: systemd journal, wtmp, bash history, apt/dpkg, cron, sudo |
+| `artifacts-macos` | macOS artifact parsers: plist, unified log, Spotlight, Quarantine, Launch Services, FSEvents |
+| `containers-pst` | PST/OST/mbox email container parsing (Unicode 32/64, RFC 4155 mbox variants) |
 | `catalog` | File catalog indexing with ExtensionProjection, PathPrefixProjection, CatalogIndex |
 | `reports` | Report generation: HTML, CSV, JSON, evidence bundle |
 | `ingest` | Ingestion pipeline orchestration — IngestPipeline trait, IngestConfig, IngestSink, IngestStats |
@@ -153,6 +156,20 @@ All app-shell layout components live in `src/components/layout/`: AppShell, Layo
 5. **Benchmark baselines are host-specific**: `v2-benchmark-baseline.json` stores thresholds calibrated for the reference host. Running benchmarks on a different machine produces invalid comparisons. The `v2-runtime-results.json` records the last run's host configuration — always check this before interpreting benchmark regressions.
 
 6. **V2-2 rule families map to artifact types**: The `families[]` field on `CorrelationLeadDto` and `CorrelationClusterDto` is derived from artifact type (not hardcoded). Adding a new artifact type requires adding corresponding family derivation logic in `correlation_service` and updating the governance catalog.
+
+## V3 Specific Gotchas
+
+1. **MBR partitions need unique indices**: MBR disks lack GPT partition_index. The import pipeline and file viewer now compute effective indices from candidate offset order. When adding new MBR-aware code, use `parse_mbr_full()` not `parse_partition_table()`.
+
+2. **Rayon requires Sync closures**: `artifact_service::run_extractors_parallel` now requires `file_reader: &(dyn Fn(...) + Sync)`. All existing callers (closures) are automatically Sync. New callers passing non-Sync state will fail to compile.
+
+3. **Correlation sub-modules**: `correlation_service.rs` is now split into `correlation/{mod.rs, rules.rs, graph.rs, tests.rs}`. Import as `app_services::correlation::*`.
+
+4. **Report sub-modules**: `report_service.rs` is now split into `report/{mod.rs, html.rs, csv.rs, json.rs, tests.rs}`. Import as `app_services::report::*`.
+
+5. **Graph population is non-fatal**: Graph node/edge writes in file/artifact/timeline/correlation services use non-fatal error handling — a graph write failure does not abort the import. Check `graph_nodes`/`graph_edges` counts after import to verify completeness.
+
+6. **New crates need thiserror**: `artifacts-linux` and `containers-pst` now use typed errors (`LinuxArtifactError`, `PstError`). New parsers should follow this pattern — no raw `Result<T, String>` returns.
 
 ## Key Design Documents
 
