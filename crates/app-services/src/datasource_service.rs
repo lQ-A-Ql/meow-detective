@@ -234,23 +234,30 @@ where
         });
     }
 
-    let mbr_entries = evidence_core::volume::mbr::parse_partition_table(&sector0);
+    let mbr_entries = evidence_core::volume::mbr::parse_mbr_full(reader)
+        .map_err(|e| DataSourceError::Evidence(format!("MBR read error: {}", e)))?;
     let mbr_types: Vec<String> = mbr_entries
         .iter()
         .filter(|entry| entry.partition_type != 0)
         .map(|entry| format!("{:02X}", entry.partition_type))
         .collect();
 
-    for entry in mbr_entries
-        .iter()
-        .filter(|entry| entry.partition_type != 0 && entry.lba_start > 0)
-    {
+    // Push filesystem candidates from primary + logical partitions
+    for entry in &mbr_entries {
+        if entry.is_extended() || entry.lba_start == 0 {
+            continue;
+        }
         let offset = entry.lba_start as u64 * SECTOR_SIZE;
+        let name = if entry.is_logical {
+            Some(format!("Logical Volume {}", entry.partition_number))
+        } else {
+            Some(format!("Partition {}", entry.partition_number))
+        };
         if let Some(kind) = read_boot_filesystem(reader, offset)? {
             push_candidate(
                 &mut candidates,
-                None,
-                None,
+                Some(entry.partition_number),
+                name,
                 kind,
                 offset,
                 ImageFilesystemSource::MbrPartition,
