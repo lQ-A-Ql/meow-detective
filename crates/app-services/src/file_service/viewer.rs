@@ -206,9 +206,32 @@ where
 
     let source_path = reader.info().path.clone();
     let source_kind = reader.info().kind.clone();
-    for candidate in probe.candidates {
+    // For MBR disks, partition_index is None. Assign unique indices by
+    // candidate offset order, matching the import pipeline's index scheme.
+    let candidate_effective_indices: std::collections::HashMap<usize, usize> = {
+        let mut offsets: Vec<(usize, u64)> = probe
+            .candidates
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (i, c.offset))
+            .collect();
+        offsets.sort_by_key(|(_, o)| *o);
+        let mut map = std::collections::HashMap::new();
+        for (unique_idx, (pos, _)) in offsets.iter().enumerate() {
+            if probe.candidates[*pos].partition_index.is_none() {
+                map.insert(*pos, unique_idx);
+            }
+        }
+        map
+    };
+
+    for (ci, candidate) in probe.candidates.iter().enumerate() {
+        let effective_index = candidate
+            .partition_index
+            .unwrap_or_else(|| *candidate_effective_indices.get(&ci).unwrap_or(&0));
+
         if let Some(expected_partition) = expected_partition_index {
-            if candidate.partition_index != Some(expected_partition) {
+            if effective_index != expected_partition {
                 continue;
             }
         }
