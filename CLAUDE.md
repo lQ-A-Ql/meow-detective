@@ -67,6 +67,9 @@ These PowerShell scripts encode important architectural/security boundaries. Run
 | `check-evtx-dependency-decision.ps1` | EVTX vendored dependency constraints |
 | `check-import-optimization-guard.ps1` | Import optimization boundaries |
 | `check-doc-drift.ps1` | Documentation consistency |
+| `check-benchmark-regression.ps1` | Benchmark threshold regression in CI |
+| `run-benchmark.ps1` | Benchmark data collection harness |
+| `run-liuyang-artifact-test.ps1` | Real E01 sample pipeline test runner |
 | `run-coverage.ps1` | Coverage harness (`-Rust`, `-Frontend`, `-StrictRustTool`) |
 | `run-e01-import-profile.ps1` | E01 import performance profiling |
 | `run-webview2-media-smoke.ps1` | WebView2 media preview smoke test |
@@ -83,7 +86,10 @@ These PowerShell scripts encode important architectural/security boundaries. Run
 - `crates/persistence-sqlite/` — SQLite connection/migration/repository layer. Keep SQL here or in lower repository/service layers, not in Tauri command handlers.
 - `crates/transport/` — command DTOs, event DTOs, paging, and error shapes shared across the IPC boundary.
 - `crates/evidence-core/`, `crates/image-raw/`, `crates/image-e01/`, `crates/fs-ntfs/`, `crates/fs-fat/`, `crates/fs-exfat/` — read-only evidence/image/filesystem abstractions and implementations.
-- `crates/artifacts-core/`, `crates/artifacts-windows/` — artifact extraction framework and Windows artifact parsers (EVTX, Prefetch, LNK, JumpList, Registry, RecycleBin, SRU, Thumbcache).
+- `crates/containers-pst/` — PST/OST/mbox email container parsing (Unicode 32/64, RFC 4155 mbox variants).
+- `crates/artifacts-core/`, `crates/artifacts-windows/` — artifact extraction framework and Windows artifact parsers (Browser, EVTX, Prefetch, LNK, JumpList, Registry, RecycleBin, SRU, Thumbcache).
+- `crates/artifacts-linux/` — Linux artifact parsers (systemd journal, wtmp, bash history, apt/dpkg, cron, sudo).
+- `crates/artifacts-macos/` — macOS artifact parsers (plist, unified log, Spotlight, Quarantine, Launch Services, FSEvents).
 - `crates/search/`, `crates/timeline/`, `crates/catalog/`, `crates/reports/` — feature services for indexing/querying (tantivy), event projection, catalog management/projections, and report generation (HTML, CSV, JSON, evidence bundle).
 - `crates/ingest/` — ingestion pipeline orchestration: the `IngestPipeline` trait, `IngestConfig`, `IngestSink`, `IngestStats`.
 - `crates/infrastructure/` — cross-cutting utilities: logging, hashing, filesystem utils, text, clock, config.

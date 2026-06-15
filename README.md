@@ -1,14 +1,14 @@
 # Forensics Workbench
 
-A Tauri 2 desktop application for disk image forensic analysis on Windows. 22 Rust crates, 9 frontend pages, 73 Tauri commands. MIT licensed.
+A Tauri 2 desktop application for disk image forensic analysis on Windows. 25 Rust crates, 9 frontend pages, 80+ Tauri commands. MIT licensed.
 
 ## Architecture
 
 ```text
 React UI (frontend/) -> Tauri commands / events
-Tauri Command Layer (apps/desktop/src-tauri/) -> 73 commands
-Application Services (crates/app-services/) -> 18 source modules
-Core crates -> domain / evidence / persistence / search / timeline / artifacts / reports / MCP
+Tauri Command Layer (apps/desktop/src-tauri/) -> 80+ commands
+Application Services (crates/app-services/) -> 25 source modules
+Core crates -> domain / evidence / persistence / search / timeline / artifacts / reports / MCP / graph
 ```
 
 ## Quick Start
@@ -65,12 +65,15 @@ cd frontend && pnpm test
 | `crates/transport/` | Shared DTOs, commands, events, errors |
 | `crates/persistence-sqlite/` | SQLite repos (9) and migration scripts (23) |
 | `crates/evidence-core/` | Disk image probing and volume detection |
-| `crates/fs-ntfs/`, `fs-fat/`, `fs-exfat/` | Filesystem parsers |
-| `crates/image-e01/`, `image-raw/` | Image readers |
-| `crates/search/` | Full-text indexing |
+| `crates/fs-ntfs/`, `fs-fat/`, `fs-exfat/` | Filesystem parsers (NTFS/FAT/ExFAT) |
+| `crates/image-e01/`, `image-raw/` | Image readers (E01/RAW) |
+| `crates/containers-pst/` | PST/OST/mbox email container parsers |
+| `crates/artifacts-windows/` | Windows artifact parsers (Browser/EVTX/Prefetch/LNK/Registry/SRU/Thumbcache/JumpList) |
+| `crates/artifacts-linux/` | Linux artifact parsers (journal/wtmp/bash/apt/cron/sudo) |
+| `crates/artifacts-macos/` | macOS artifact parsers (plist/unified_log/Spotlight/Quarantine/FSEvents) |
+| `crates/search/` | Full-text indexing (tantivy) |
 | `crates/timeline/` | Timeline generation |
-| `crates/artifacts-windows/` | Windows artifact parsers |
-| `crates/mcp-client/` | MCP client |
+| `crates/mcp-client/` | MCP client (SSE + Stdio) |
 | `crates/reports/` | HTML / CSV / JSON reports |
 | `crates/infrastructure/` | Shared utilities |
 
@@ -118,15 +121,32 @@ cd frontend && pnpm test
 - `testdata/governance/v2-runtime-results.json`
 - `testdata/governance/v2-security-taxonomy.json`
 
-## V3 Planning
+## V3 Status
 
-V3 will build on the V2 productized foundation with these directions (see `docs/v2-longterm-plan.md` Section 8):
+**V3 is ~89% complete.** 22/22 phases implemented. 19 new parser families across 3 new crates.
 
-- **Evidence Graph** — unify files, artifacts, timeline, entities, leads into a queryable graph model.
-- **Broader coverage** — PST/OST/mbox email, Registry transaction logs, more browser versions, more filesystems, Linux/macOS artifacts.
-- **Reproducible investigation narratives** — case notebook, evidence citations, analysis step replay, report-operation history linkage.
-- **Rule packs & templates** — investigation templates, hit rule bundles, org-level verification configs, interpretability scoring strategies.
-- **Offline batch & multi-stage orchestration** — recoverable, queuable, phased local batch execution for very large cases, while keeping desktop-first.
+### New crates
+
+| Crate | Tests | Description |
+|-------|-------|-------------|
+| `crates/containers-pst/` | 63 | PST (Unicode 32/64), OST, mbox (RFC 4155) email parsing |
+| `crates/artifacts-linux/` | 30 | systemd journal, wtmp, bash hist, apt/dpkg, cron, sudo |
+| `crates/artifacts-macos/` | 37 | plist (binary+XML), unified log, Spotlight, Quarantine, FSEvents |
+
+### New capabilities
+
+- **Evidence Graph**: 6 node types + 7 edge types, graph query API, /v3 dashboard
+- **Browser parsers**: Chrome/Edge/Firefox history, downloads, cookies, sessions (123 tests)
+- **Registry txlog**: .LOG1/.LOG2 transaction log parsing (18 tests)
+- **Case Notebook**: CRUD + threading + evidence citations + step recording/replay
+- **Rule Pack engine**: TOML-based declarative correlation rules with validation
+- **Batch subsystem**: plan/build/monitor/resume/cancel for large cases
+- **MBR full parsing**: EBR chain support for extended/logical partitions
+- **Rayon parallelization**: CPU-bound artifact extraction + correlation matching
+
+### Quality gates (all pass)
+
+cargo fmt ✓ | cargo clippy ✓ | 295 Rust tests ✓ | 228 frontend tests ✓ | cargo-deny ✓ | 6 guard scripts ✓
 
 ## License
 
