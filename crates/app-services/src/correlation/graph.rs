@@ -142,7 +142,7 @@ pub(crate) fn build_source_groups(
         group.timelines.push(timeline.clone());
     });
 
-    let mut groups = groups_map.into_inner().unwrap();
+    let groups = groups_map.into_inner().unwrap();
 
     let repo = FileRepo::new(conn);
     let mut items = groups.into_values().collect::<Vec<_>>();
@@ -203,7 +203,7 @@ pub(crate) fn build_rule_groups(
         }
     });
 
-    let mut groups = groups_map.into_inner().unwrap();
+    let groups = groups_map.into_inner().unwrap();
 
     let mut items = groups.into_values().collect::<Vec<_>>();
     for group in &mut items {
