@@ -1,0 +1,26 @@
+# Force LF line endings for all text files
+* text=auto eol=lf
+
+# Binary files - no line ending conversion
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.E01 binary
+*.e01 binary
+*.raw binary
+*.evtx binary
+*.pf binary
+*.lnk binary
+*.exe binary
+*.dll binary
+*.dmp binary
+*.tar binary
+*.db binary
+*.sqlite binary
+*.lock binary
+*.wasm binary
+Cargo.lock binary
+pnpm-lock.yaml binary
