@@ -487,7 +487,10 @@ fn seed_analysis_demo(active: &app_services::active_case::ActiveCase) -> Result<
     }
     std::fs::create_dir_all(&evidence_root).map_err(|e| e.to_string())?;
 
-    let fixture_root = repo_root().join("testdata").join("fixtures").join("tiny");
+    let fixture_root = repo_root()
+        .join("testdata")
+        .join("fixtures")
+        .join("public-small");
     copy_dir_all(&fixture_root.join("logical"), &evidence_root)?;
     let evtx_src = fixture_root.join("evtx").join("system.evtx");
     let evtx_dest = evidence_root
@@ -500,7 +503,7 @@ fn seed_analysis_demo(active: &app_services::active_case::ActiveCase) -> Result<
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     std::fs::copy(&evtx_src, &evtx_dest)
-        .map_err(|e| format!("copy tiny System.evtx fixture: {e}"))?;
+        .map_err(|e| format!("copy public-small System.evtx fixture: {e}"))?;
 
     write_demo_file(
         &evidence_root.join("Users").join("alice").join("report.pdf"),

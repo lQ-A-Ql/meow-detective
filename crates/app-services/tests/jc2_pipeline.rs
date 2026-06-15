@@ -2,11 +2,9 @@ use app_services::{
     artifact_service, case_service, correlation, datasource_service, file_service,
     timeline_service, v2_governance_service,
 };
-use evidence_core::{EvidenceReader, FileSystemReader};
+use evidence_core::FileSystemReader;
 use image_e01::E01Reader;
-use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo, datasource_repo::DataSourceRepo, file_repo::FileRepo,
-};
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 /// Full V2/V3 pipeline for 检材2.E01 (MBR, 3 NTFS partitions)
 /// Run: cargo test -p app-services --test jc2_pipeline -- --nocapture
 use std::io::{Read, Seek, SeekFrom};
@@ -16,7 +14,6 @@ use tempfile::TempDir;
 
 const SAMPLE_PATH: &str = "D:/獬豸杯/检材2.E01";
 // MBR: partition_index=None → after fix: 0=offset-1MB, 1=offset-580MB(system), 2=offset-50.6GB
-const MAIN_PARTITION_INDEX: usize = 1; // system drive with 69K files
 const MAIN_NTFS_OFFSET: u64 = 608_174_080;
 
 fn read_mft_params(path: &Path, vol_offset: u64) -> (u64, u64, u32, u16, u64) {
@@ -79,7 +76,19 @@ fn jc2_full_pipeline() {
     for (i, c) in candidates.iter().enumerate() {
         println!("  [{}] {:?} @ offset={}", i, c.kind, c.offset);
     }
-    assert!(candidates.len() == 3, "expected 3 NTFS candidates");
+    let ntfs_count = candidates
+        .iter()
+        .filter(|c| {
+            matches!(
+                c.kind,
+                app_services::datasource_service::ImageFilesystemKind::Ntfs
+            )
+        })
+        .count();
+    assert!(
+        ntfs_count == 3,
+        "expected 3 NTFS candidates, got {ntfs_count}"
+    );
 
     // Open system partition
     let (mc, cs, rs, bps, mft_size) = read_mft_params(path, MAIN_NTFS_OFFSET);

@@ -31,22 +31,31 @@ fn parse_partition_table() {
 fn find_first_ntfs() {
     let entries = vec![
         mbr::PartitionEntry {
+            partition_number: 0,
+            is_logical: false,
             bootable: false,
             partition_type: 0x0B,
             lba_start: 100,
             sector_count: 500,
+            ebr_lba: None,
         },
         mbr::PartitionEntry {
+            partition_number: 1,
+            is_logical: false,
             bootable: true,
             partition_type: 0x07,
             lba_start: 2048,
             sector_count: 100000,
+            ebr_lba: None,
         },
         mbr::PartitionEntry {
+            partition_number: 2,
+            is_logical: false,
             bootable: false,
             partition_type: 0x07,
             lba_start: 0,
             sector_count: 0,
+            ebr_lba: None,
         },
     ];
     let ntfs = mbr::find_first_ntfs(&entries).unwrap();
