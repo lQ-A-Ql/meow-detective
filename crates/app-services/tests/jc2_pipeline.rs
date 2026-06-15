@@ -7,6 +7,7 @@ use image_e01::E01Reader;
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 /// Full V2/V3 pipeline for 检材2.E01 (MBR, 3 NTFS partitions)
 /// Run: cargo test -p app-services --test jc2_pipeline -- --nocapture
+use std::collections::BTreeMap;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 use std::time::Instant;
@@ -26,7 +27,12 @@ fn read_mft_params(path: &Path, vol_offset: u64) -> (u64, u64, u32, u16, u64) {
     let mc = u64::from_le_bytes(boot[0x30..0x38].try_into().unwrap());
     let rs = match boot[0x40] as i8 {
         v if v > 0 => 1024,
-        v if v < 0 => (1u32 << v.unsigned_abs()).max(512),
+        v if v < 0 => {
+            // boot[0x40] encodes the MFT record size as 2^(-v) when negative.
+            // Guard against overflow in debug mode when v is unusually large.
+            let shift = v.unsigned_abs();
+            1u32.checked_shl(shift as u32).unwrap_or(4096).max(512)
+        }
         _ => 1024,
     };
     let mft_off = vol_offset + mc * cs;
@@ -279,6 +285,714 @@ fn jc2_full_pipeline() {
             assert!(stats.file_count > 1000);
             assert!(total_artifacts > 0, "should extract some artifacts");
             assert!(snapshot.node_count > 0, "should have correlation nodes");
+            Ok(())
+        })
+        .unwrap();
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+fn read_mft_params_for_partition(path: &Path, vol_offset: u64) -> (u64, u64, u32, u16, u64) {
+    let mut r = E01Reader::open(path).unwrap();
+    r.seek(SeekFrom::Start(vol_offset)).unwrap();
+    let mut boot = [0u8; 512];
+    r.read_exact(&mut boot).unwrap();
+    let bps = u16::from_le_bytes([boot[11], boot[12]]);
+    let cs = bps as u64 * boot[13] as u64;
+    let mc = u64::from_le_bytes(boot[0x30..0x38].try_into().unwrap());
+    let rs = match boot[0x40] as i8 {
+        v if v > 0 => 1024,
+        v if v < 0 => {
+            // boot[0x40] encodes the MFT record size as 2^(-v) when negative.
+            // Guard against overflow in debug mode when v is unusually large.
+            let shift = v.unsigned_abs();
+            1u32.checked_shl(shift as u32).unwrap_or(4096).max(512)
+        }
+        _ => 1024,
+    };
+    let mft_off = vol_offset + mc * cs;
+    r.seek(SeekFrom::Start(mft_off)).unwrap();
+    let mut rec = vec![0u8; rs as usize];
+    r.read_exact(&mut rec).unwrap();
+    let mft_size = {
+        let mut sz = 100 * 1024 * 1024u64;
+        if &rec[0..4] == b"FILE" {
+            let ao = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
+            let mut p = ao;
+            while p + 8 < rec.len() {
+                let t = u32::from_le_bytes(rec[p..p + 4].try_into().unwrap());
+                if t == 0xFFFF_FFFF {
+                    break;
+                }
+                let l = u32::from_le_bytes(rec[p + 4..p + 8].try_into().unwrap()) as usize;
+                if l < 4 || p + l > rec.len() {
+                    break;
+                }
+                if t == 0x80 && p + 0x38 <= rec.len() && (rec[p + 8] & 1) != 0 {
+                    sz = u64::from_le_bytes(rec[p + 0x30..p + 0x38].try_into().unwrap());
+                    break;
+                }
+                p += l;
+            }
+        }
+        sz
+    };
+    (mc, cs, rs, bps, mft_size)
+}
+
+// ── jc2_visibility_and_partitions ────────────────────────────────────────────
+
+#[test]
+fn jc2_visibility_and_partitions() {
+    let path = Path::new(SAMPLE_PATH);
+    let start = Instant::now();
+
+    // ── Probe ──────────────────────────────────────────────────────────────
+    let mut reader = E01Reader::open(path).unwrap();
+    let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
+    let candidates = &probe.candidates;
+
+    println!(
+        "检材2 visibility probe: {} candidates, {} partition-records",
+        candidates.len(),
+        probe.partitions.len()
+    );
+    for (i, c) in candidates.iter().enumerate() {
+        println!(
+            "  candidate[{}]: {:?} offset={} partition_index={:?} source={:?} name={:?}",
+            i, c.kind, c.offset, c.partition_index, c.source, c.partition_name
+        );
+    }
+
+    // Verify 3 NTFS candidates (MBR layout)
+    let ntfs_count = candidates
+        .iter()
+        .filter(|c| {
+            matches!(
+                c.kind,
+                app_services::datasource_service::ImageFilesystemKind::Ntfs
+            )
+        })
+        .count();
+    assert!(
+        ntfs_count == 3,
+        "expected 3 NTFS candidates in jc2 MBR layout, got {ntfs_count}"
+    );
+
+    // MBR-specific: probe.partitions is empty (partitions are not PartitionRecord entries)
+    assert!(
+        probe.partitions.is_empty(),
+        "MBR probe should have no PartitionRecord entries (GPT-only feature), got {}",
+        probe.partitions.len()
+    );
+
+    // MBR candidates carry partition_index from MBR entry partition_number (0-indexed)
+    for (i, c) in candidates.iter().enumerate() {
+        assert_eq!(
+            c.source,
+            app_services::datasource_service::ImageFilesystemSource::MbrPartition,
+            "candidate[{i}] should be MbrPartition source"
+        );
+        assert!(
+            c.partition_index.is_some(),
+            "candidate[{i}] partition_index should be Some for MBR"
+        );
+    }
+
+    // ── Create case ────────────────────────────────────────────────────────
+    let tmp = TempDir::new().unwrap();
+    let active =
+        case_service::create_case(&tmp.path().join("cases"), "jc2-visibility", Some("tester"))
+            .unwrap();
+    let case_id = active.meta.id.clone();
+
+    active
+        .with_conn(|conn| {
+            // ── Import each partition separately and verify file counts ────
+            let mut partition_stats = Vec::new();
+
+            for (i, candidate) in candidates
+                .iter()
+                .filter(|c| {
+                    matches!(
+                        c.kind,
+                        app_services::datasource_service::ImageFilesystemKind::Ntfs
+                    )
+                })
+                .enumerate()
+            {
+                let ds_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
+                let ds_name = format!("jc2-part{}", candidate.partition_index.map_or(i, |idx| idx));
+
+                DataSourceRepo::new(conn).insert(
+                    &case_id,
+                    &domain::DataSource {
+                        id: ds_id.clone(),
+                        name: ds_name.clone(),
+                        kind: domain::DataSourceKind::E01,
+                        source_path: path.to_path_buf(),
+                        imported_at: chrono::Utc::now(),
+                        provenance: domain::DataSourceProvenance::unknown(),
+                    },
+                )?;
+
+                let (mc, cs, rs, bps, mft_size) =
+                    read_mft_params_for_partition(path, candidate.offset);
+
+                let t0 = Instant::now();
+                let stats = file_service::enumerate_filesystem_mft(
+                    conn,
+                    &ds_id,
+                    path,
+                    candidate.offset,
+                    mc,
+                    cs,
+                    rs,
+                    bps,
+                    mft_size,
+                    Some(&|pct, msg| eprintln!("  [part{} MFT {pct}%] {msg}", i)),
+                    None,
+                )?;
+                let ms = t0.elapsed().as_millis();
+                println!(
+                    "  partition {} (offset={}): files={} dirs={} in {ms}ms",
+                    i, candidate.offset, stats.file_count, stats.dir_count
+                );
+
+                partition_stats.push((
+                    i,
+                    candidate.offset,
+                    candidate.partition_index,
+                    stats.file_count,
+                    stats.dir_count,
+                ));
+            }
+
+            // ── Verify per-partition expectations ─────────────────────────
+            assert_eq!(partition_stats.len(), 3);
+
+            // Partition 0: ~1 MB offset (recovery), few files
+            let (p0_idx, p0_offset, _p0_part_idx, p0_files, p0_dirs) = &partition_stats[0];
+            assert_eq!(*p0_idx, 0);
+            assert!(
+                *p0_offset < 2_000_000,
+                "partition 0 should be at ~1 MB offset, got {}",
+                p0_offset
+            );
+            assert!(
+                *p0_files < 1000,
+                "recovery partition should have few files, got {}",
+                p0_files
+            );
+            println!(
+                "  [PASS] partition 0 (recovery): {} files, {} dirs at offset {}",
+                p0_files, p0_dirs, p0_offset
+            );
+
+            // Partition 1: ~580 MB offset (main system drive), ~69K files
+            let (p1_idx, p1_offset, _p1_part_idx, p1_files, p1_dirs) = &partition_stats[1];
+            assert_eq!(*p1_idx, 1);
+            assert!(
+                *p1_offset > 500_000_000 && *p1_offset < 700_000_000,
+                "partition 1 (system) should be at ~580 MB offset, got {}",
+                p1_offset
+            );
+            assert!(
+                *p1_files > 50_000,
+                "main system partition should have many files (>50K), got {}",
+                p1_files
+            );
+            println!(
+                "  [PASS] partition 1 (system): {} files, {} dirs at offset {}",
+                p1_files, p1_dirs, p1_offset
+            );
+
+            // Partition 2: ~50.6 GB offset (data drive), has files
+            let (p2_idx, p2_offset, _p2_part_idx, p2_files, p2_dirs) = &partition_stats[2];
+            assert_eq!(*p2_idx, 2);
+            assert!(
+                *p2_offset > 50_000_000_000,
+                "partition 2 (data) should be at ~50.6 GB offset, got {}",
+                p2_offset
+            );
+            assert!(
+                *p2_files > 0,
+                "data partition should have some files, got {}",
+                p2_files
+            );
+            println!(
+                "  [PASS] partition 2 (data): {} files, {} dirs at offset {}",
+                p2_files, p2_dirs, p2_offset
+            );
+
+            let total_ms = start.elapsed().as_millis();
+            println!("=== jc2 visibility + partitions: {total_ms}ms ===");
+            Ok(())
+        })
+        .unwrap();
+}
+
+// ── jc2_artifact_extraction ─────────────────────────────────────────────────
+
+#[test]
+fn jc2_artifact_extraction() {
+    let path = Path::new(SAMPLE_PATH);
+    let start = Instant::now();
+
+    // ── Probe and find system partition (index 1 = main system drive) ──────
+    let mut reader = E01Reader::open(path).unwrap();
+    let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
+    let ntfs_candidates: Vec<_> = probe
+        .candidates
+        .iter()
+        .filter(|c| {
+            matches!(
+                c.kind,
+                app_services::datasource_service::ImageFilesystemKind::Ntfs
+            )
+        })
+        .collect();
+    assert!(
+        ntfs_candidates.len() >= 3,
+        "need at least 3 NTFS partitions"
+    );
+
+    // Partition index 1 is the main system drive (~580 MB offset)
+    let system = ntfs_candidates[1];
+    let system_offset = system.offset;
+    println!(
+        "System partition: offset={} partition_index={:?}",
+        system_offset, system.partition_index
+    );
+
+    let (mc, cs, rs, bps, mft_size) = read_mft_params_for_partition(path, system_offset);
+    println!("MFT params: cluster={mc} cs={cs} rs={rs} bps={bps} mft_size={mft_size}");
+
+    // ── Create case ────────────────────────────────────────────────────────
+    let tmp = TempDir::new().unwrap();
+    let active =
+        case_service::create_case(&tmp.path().join("cases"), "jc2-artifacts", Some("tester"))
+            .unwrap();
+    let case_id = active.meta.id.clone();
+
+    active
+        .with_conn(|conn| {
+            let ds_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
+            DataSourceRepo::new(conn).insert(
+                &case_id,
+                &domain::DataSource {
+                    id: ds_id.clone(),
+                    name: "jc2-system".into(),
+                    kind: domain::DataSourceKind::E01,
+                    source_path: path.to_path_buf(),
+                    imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
+                },
+            )?;
+
+            // ── Import MFT ────────────────────────────────────────────────
+            let t0 = Instant::now();
+            let stats = file_service::enumerate_filesystem_mft(
+                conn,
+                &ds_id,
+                path,
+                system_offset,
+                mc,
+                cs,
+                rs,
+                bps,
+                mft_size,
+                Some(&|pct, msg| eprintln!("[MFT {pct}%] {msg}")),
+                None,
+            )?;
+            println!(
+                "MFT import: files={} dirs={} in {}ms",
+                stats.file_count,
+                stats.dir_count,
+                t0.elapsed().as_millis()
+            );
+            assert!(stats.file_count > 50_000, "system partition should be large");
+
+            // ── Open filesystem ────────────────────────────────────────────
+            let boxed: Box<dyn evidence_core::EvidenceReader> =
+                Box::new(E01Reader::open(path).unwrap());
+            let fs = fs_ntfs::NtfsReader::open(boxed, system_offset).unwrap();
+
+            let registry = artifact_service::create_registry();
+            let mut total_artifacts = 0u32;
+
+            // ── Extract Registry hives ────────────────────────────────────
+            let hives = [
+                ("SYSTEM", "Windows/System32/config/SYSTEM"),
+                ("SOFTWARE", "Windows/System32/config/SOFTWARE"),
+                ("SAM", "Windows/System32/config/SAM"),
+                ("SECURITY", "Windows/System32/config/SECURITY"),
+            ];
+            for (name, hive_path) in &hives {
+                let mut buf = Vec::new();
+                if fs
+                    .open_file(hive_path)
+                    .and_then(|mut f| f.read_to_end(&mut buf))
+                    .is_ok()
+                {
+                    let mut sink = artifacts_core::VecSink::new();
+                    let reader: Box<dyn std::io::Read> = Box::new(std::io::Cursor::new(buf));
+                    if artifact_service::run_extractors_on_file(
+                        &registry,
+                        &domain::FileEntryId(format!("jc2-art-{name}")),
+                        hive_path,
+                        reader,
+                        &mut sink,
+                    )
+                    .is_ok()
+                        && !sink.artifacts.is_empty()
+                    {
+                        artifact_service::store_artifacts(
+                            conn,
+                            &sink.artifacts,
+                            &case_id.0,
+                            &ds_id.0,
+                        )
+                        .unwrap();
+                        total_artifacts += sink.artifacts.len() as u32;
+                        println!("  registry {name}: {} artifacts", sink.artifacts.len());
+                    }
+                }
+            }
+
+            // ── Extract EVTX boot/shutdown events ─────────────────────────
+            let evtx_paths = [
+                "Windows/System32/winevt/Logs/System.evtx",
+                "Windows/System32/winevt/Logs/Application.evtx",
+                "Windows/System32/winevt/Logs/Security.evtx",
+            ];
+            let mut evtx_artifacts: Vec<domain::Artifact> = Vec::new();
+            for evtx_path in &evtx_paths {
+                let mut buf = Vec::new();
+                if fs
+                    .open_file(evtx_path)
+                    .and_then(|mut f| f.read_to_end(&mut buf))
+                    .is_ok()
+                {
+                    let extraction =
+                        artifacts_windows::extract_boot_shutdown_events(&buf, evtx_path);
+                    println!(
+                        "  EVTX {}: {} events, {} warnings",
+                        evtx_path,
+                        extraction.events.len(),
+                        extraction.warnings.len()
+                    );
+                    for event in &extraction.events {
+                        let mut attrs = BTreeMap::new();
+                        attrs.insert(
+                            "eventId".to_string(),
+                            serde_json::Value::Number(event.event_id.into()),
+                        );
+                        attrs.insert(
+                            "eventKind".to_string(),
+                            serde_json::Value::String(event.kind.as_str().to_string()),
+                        );
+                        attrs.insert(
+                            "provider".to_string(),
+                            serde_json::Value::String(
+                                event.provider.clone().unwrap_or_default(),
+                            ),
+                        );
+                        attrs.insert(
+                            "sourcePath".to_string(),
+                            serde_json::Value::String(event.source_path.clone()),
+                        );
+                        attrs.insert(
+                            "note".to_string(),
+                            serde_json::Value::String(event.note.clone()),
+                        );
+                        evtx_artifacts.push(domain::Artifact {
+                            id: domain::ArtifactId(uuid::Uuid::new_v4().to_string()),
+                            family: "EvtxBootShutdown".to_string(),
+                            title: format!(
+                                "EVTX {} event {} ({})",
+                                evtx_path, event.event_id, event.kind.as_str()
+                            ),
+                            summary: event.note.clone(),
+                            source_object_id: Some(domain::FileEntryId(format!(
+                                "jc2-evtx-{}",
+                                event.event_id
+                            ))),
+                            extractor_id: Some("evtx.boot_shutdown".to_string()),
+                            extractor_version: Some("1.0".to_string()),
+                            confidence: Some(0.9),
+                            source_attribution: Some(evtx_path.to_string()),
+                            created_at: chrono::Utc::now(),
+                            attrs,
+                        });
+                    }
+                }
+            }
+            if !evtx_artifacts.is_empty() {
+                artifact_service::store_artifacts(
+                    conn,
+                    &evtx_artifacts,
+                    &case_id.0,
+                    &ds_id.0,
+                )
+                .unwrap();
+                total_artifacts += evtx_artifacts.len() as u32;
+                println!("  stored {} EVTX boot/shutdown artifacts", evtx_artifacts.len());
+            }
+
+            // ── Extract Browser history artifacts ─────────────────────────
+            let mut browser_artifacts: Vec<domain::Artifact> = Vec::new();
+
+            // Walk Users directory for browser history databases
+            if let Ok(users_children) = fs.list_children("Users") {
+                for user_entry in &users_children {
+                    if !user_entry.is_dir
+                        || user_entry.name == "Public"
+                        || user_entry.name == "Default"
+                    {
+                        continue;
+                    }
+
+                    // Chrome History
+                    let chrome_history = format!(
+                        "{}/AppData/Local/Google/Chrome/User Data/Default/History",
+                        user_entry.path
+                    );
+
+                    let mut buf = Vec::new();
+                    if fs
+                        .open_file(&chrome_history)
+                        .and_then(|mut f| f.read_to_end(&mut buf))
+                        .is_ok()
+                    {
+                        if let Ok(visits) =
+                            artifacts_windows::parse_chrome_history(&buf, "Chrome", Some("Default"))
+                        {
+                            for visit in &visits {
+                                let mut attrs = BTreeMap::new();
+                                attrs.insert(
+                                    "url".to_string(),
+                                    serde_json::Value::String(visit.url.clone()),
+                                );
+                                attrs.insert(
+                                    "title".to_string(),
+                                    serde_json::Value::String(
+                                        visit.title.clone().unwrap_or_default(),
+                                    ),
+                                );
+                                attrs.insert(
+                                    "browser".to_string(),
+                                    serde_json::Value::String(visit.browser.clone()),
+                                );
+                                attrs.insert(
+                                    "visitCount".to_string(),
+                                    serde_json::Value::Number(
+                                        (visit.visit_count as u32).into(),
+                                    ),
+                                );
+                                if let Some(ref ts) = visit.visit_time {
+                                    attrs.insert(
+                                        "visitTime".to_string(),
+                                        serde_json::Value::String(ts.to_rfc3339()),
+                                    );
+                                }
+                                browser_artifacts.push(domain::Artifact {
+                                    id: domain::ArtifactId(uuid::Uuid::new_v4().to_string()),
+                                    family: "BrowserHistory".to_string(),
+                                    title: format!(
+                                        "Chrome visit: {}",
+                                        visit.title.as_deref().unwrap_or("untitled")
+                                    ),
+                                    summary: format!(
+                                        "{} ({} visits)",
+                                        visit.url, visit.visit_count
+                                    ),
+                                    source_object_id: Some(domain::FileEntryId(
+                                        "jc2-browser-chrome".to_string(),
+                                    )),
+                                    extractor_id: Some("browser.chromium.history".to_string()),
+                                    extractor_version: Some("1.0".to_string()),
+                                    confidence: Some(0.85),
+                                    source_attribution: Some(chrome_history.clone()),
+                                    created_at: chrono::Utc::now(),
+                                    attrs,
+                                });
+                            }
+                            if !visits.is_empty() {
+                                println!(
+                                    "  Chrome history {}: {} visits",
+                                    chrome_history,
+                                    visits.len()
+                                );
+                            }
+                        }
+                    }
+
+                    // Edge History
+                    let edge_history = format!(
+                        "{}/AppData/Local/Microsoft/Edge/User Data/Default/History",
+                        user_entry.path
+                    );
+                    buf.clear();
+                    if fs
+                        .open_file(&edge_history)
+                        .and_then(|mut f| f.read_to_end(&mut buf))
+                        .is_ok()
+                    {
+                        if let Ok(visits) =
+                            artifacts_windows::parse_chrome_history(&buf, "Edge", Some("Default"))
+                        {
+                            for visit in &visits {
+                                let mut attrs = BTreeMap::new();
+                                attrs.insert(
+                                    "url".to_string(),
+                                    serde_json::Value::String(visit.url.clone()),
+                                );
+                                attrs.insert(
+                                    "title".to_string(),
+                                    serde_json::Value::String(
+                                        visit.title.clone().unwrap_or_default(),
+                                    ),
+                                );
+                                attrs.insert(
+                                    "browser".to_string(),
+                                    serde_json::Value::String(visit.browser.clone()),
+                                );
+                                attrs.insert(
+                                    "visitCount".to_string(),
+                                    serde_json::Value::Number(
+                                        (visit.visit_count as u32).into(),
+                                    ),
+                                );
+                                if let Some(ref ts) = visit.visit_time {
+                                    attrs.insert(
+                                        "visitTime".to_string(),
+                                        serde_json::Value::String(ts.to_rfc3339()),
+                                    );
+                                }
+                                browser_artifacts.push(domain::Artifact {
+                                    id: domain::ArtifactId(uuid::Uuid::new_v4().to_string()),
+                                    family: "BrowserHistory".to_string(),
+                                    title: format!(
+                                        "Edge visit: {}",
+                                        visit.title.as_deref().unwrap_or("untitled")
+                                    ),
+                                    summary: format!(
+                                        "{} ({} visits)",
+                                        visit.url, visit.visit_count
+                                    ),
+                                    source_object_id: Some(domain::FileEntryId(
+                                        "jc2-browser-edge".to_string(),
+                                    )),
+                                    extractor_id: Some("browser.chromium.history".to_string()),
+                                    extractor_version: Some("1.0".to_string()),
+                                    confidence: Some(0.85),
+                                    source_attribution: Some(edge_history.clone()),
+                                    created_at: chrono::Utc::now(),
+                                    attrs,
+                                });
+                            }
+                            if !visits.is_empty() {
+                                println!(
+                                    "  Edge history {}: {} visits",
+                                    edge_history,
+                                    visits.len()
+                                );
+                            }
+                        }
+                    }
+
+                    // Early limit per user to avoid excessive memory
+                    if browser_artifacts.len() > 5000 {
+                        break;
+                    }
+                }
+            }
+
+            if !browser_artifacts.is_empty() {
+                artifact_service::store_artifacts(
+                    conn,
+                    &browser_artifacts,
+                    &case_id.0,
+                    &ds_id.0,
+                )
+                .unwrap();
+                total_artifacts += browser_artifacts.len() as u32;
+                println!(
+                    "  stored {} browser history artifacts",
+                    browser_artifacts.len()
+                );
+            } else {
+                println!("  no browser history artifacts found (may not be a user workstation)");
+            }
+
+            println!("Total artifacts extracted: {total_artifacts}");
+            assert!(total_artifacts > 0, "should extract some artifacts");
+
+            // ── Timeline ──────────────────────────────────────────────────
+            let t_tl = Instant::now();
+            timeline_service::ensure_macb_timeline_projected(conn).ok();
+            let tl = timeline_service::query_timeline(conn, 0, 100).unwrap();
+            println!(
+                "Timeline: {} items in {}ms",
+                tl.items.len(),
+                t_tl.elapsed().as_millis()
+            );
+
+            // ── Correlation ───────────────────────────────────────────────
+            let t_corr = Instant::now();
+            let snapshot = correlation::get_correlation_snapshot(conn).unwrap();
+            println!(
+                "Correlation: nodes={} edges={} clusters={} leads={} in {}ms",
+                snapshot.node_count,
+                snapshot.edge_count,
+                snapshot.cluster_count,
+                snapshot.lead_count,
+                t_corr.elapsed().as_millis()
+            );
+
+            // ── Verify family-rule leads ──────────────────────────────────
+            // After extracting Registry + EVTX + Browser artifacts,
+            // correlation should produce leads for at least some families.
+            for fc in &snapshot.family_coverage {
+                println!(
+                    "  family {}: status={:?} leads={} high_conf={} review={} clusters={} samples={:?}",
+                    fc.family,
+                    fc.status,
+                    fc.lead_count,
+                    fc.high_confidence_lead_count,
+                    fc.review_lead_count,
+                    fc.cluster_count,
+                    fc.sample_signals
+                );
+            }
+
+            let covered_families: Vec<_> = snapshot
+                .family_coverage
+                .iter()
+                .filter(|fc| fc.lead_count > 0)
+                .map(|fc| fc.family.as_str())
+                .collect();
+            println!(
+                "Families with leads: {:?} ({}/{})",
+                covered_families,
+                covered_families.len(),
+                snapshot.family_coverage.len()
+            );
+
+            assert!(
+                snapshot.lead_count > 0,
+                "correlation should produce at least one lead after artifact extraction"
+            );
+            assert!(
+                !covered_families.is_empty(),
+                "at least one artifact family should produce correlation leads"
+            );
+
+            let total_ms = start.elapsed().as_millis();
+            println!(
+                "=== jc2 artifact extraction + correlation: {total_ms}ms ==="
+            );
             Ok(())
         })
         .unwrap();
