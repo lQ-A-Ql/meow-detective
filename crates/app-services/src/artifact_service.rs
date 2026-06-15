@@ -151,9 +151,12 @@ fn populate_artifact_graph(
             .map_err(|e| format!("graph node insert: {e}"))?;
     }
     if !edges.is_empty() {
-        graph_repo
-            .insert_edges_batch(&edges)
-            .map_err(|e| format!("graph edge insert: {e}"))?;
+        // Non-fatal: graph edges may reference nodes that are not yet populated
+        // (e.g. File nodes created in a separate import step). Missing edges are
+        // logged but do not block the primary operation.
+        if let Err(e) = graph_repo.insert_edges_batch(&edges) {
+            tracing::warn!("artifact graph edge insert (non-fatal): {e}");
+        }
     }
 
     Ok(())

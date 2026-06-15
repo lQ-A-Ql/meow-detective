@@ -1114,9 +1114,12 @@ fn persist_correlation_edges(
     }
 
     if !edges.is_empty() {
-        graph_repo
-            .insert_edges_batch(&edges)
-            .map_err(|e| format!("correlation graph edge insert: {e}"))?;
+        // Non-fatal: correlation edges reference artifact/file nodes that may
+        // not exist in the graph yet (e.g. partial import, test case). Missing
+        // edges are logged but do not block the correlation operation.
+        if let Err(e) = graph_repo.insert_edges_batch(&edges) {
+            tracing::warn!("correlation graph edge insert (non-fatal): {e}");
+        }
     }
 
     Ok(())

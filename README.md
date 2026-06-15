@@ -1,6 +1,6 @@
 # Forensics Workbench
 
-A Tauri 2 desktop application for disk image forensic analysis on Windows. 25 Rust crates, 9 frontend pages, 80+ Tauri commands. MIT licensed.
+A Tauri 2 desktop application for disk image forensic analysis on Windows. 25 Rust crates, 10 frontend pages, 80+ Tauri commands. MIT licensed.
 
 ## Architecture
 
