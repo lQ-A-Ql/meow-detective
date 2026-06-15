@@ -609,6 +609,7 @@ mod tests {
             })
             .expect("expected NTFS candidate");
         let partition = PartitionWork {
+            // MBR fallback: use the offset-ordered index (same logic as pipeline.rs)
             index: ntfs.partition_index.unwrap_or(0),
             name: ntfs
                 .partition_name
@@ -659,6 +660,7 @@ mod tests {
             })
             .expect("expected NTFS candidate");
         let partition = PartitionWork {
+            // MBR fallback: use the offset-ordered index (same logic as pipeline.rs)
             index: ntfs.partition_index.unwrap_or(0),
             name: "NTFS".to_string(),
             fs_kind: "ntfs".to_string(),

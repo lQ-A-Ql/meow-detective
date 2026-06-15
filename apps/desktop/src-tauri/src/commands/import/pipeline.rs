@@ -285,13 +285,34 @@ fn execute_import_job_with_counts(
                 file_service::store_data_source_partitions(conn, &ds.id, &probe.partitions)
                     .map_err(CommandError::from_service_error)?;
 
+                // For MBR disks, partition_index is None. Assign unique indices based on
+                // candidate position (by offset) so that parallel enum and merge don't collide.
+                let candidate_index_map = {
+                    let mut offsets: Vec<(usize, u64)> = probe
+                        .candidates
+                        .iter()
+                        .enumerate()
+                        .map(|(i, c)| (i, c.offset))
+                        .collect();
+                    offsets.sort_by_key(|(_, o)| *o);
+                    let mut map = std::collections::HashMap::new();
+                    for (unique_idx, (orig_pos, _)) in offsets.iter().enumerate() {
+                        if probe.candidates[*orig_pos].partition_index.is_none() {
+                            map.insert(*orig_pos, unique_idx);
+                        }
+                    }
+                    map
+                };
+
                 let candidate_root_names = probe
                     .candidates
                     .iter()
-                    .filter_map(|candidate| {
-                        candidate
+                    .enumerate()
+                    .filter_map(|(i, candidate)| {
+                        let index = candidate
                             .partition_index
-                            .map(|index| (index, format_partition_root_name(candidate)))
+                            .unwrap_or_else(|| *candidate_index_map.get(&i).unwrap_or(&0));
+                        Some((index, format_partition_root_name(candidate)))
                     })
                     .collect::<std::collections::HashMap<usize, String>>();
 
@@ -316,16 +337,16 @@ fn execute_import_job_with_counts(
                 }
 
                 // Build manifest entries for supported partitions
-                for candidate in &probe.candidates {
+                for (i, candidate) in probe.candidates.iter().enumerate() {
+                    let index = candidate
+                        .partition_index
+                        .unwrap_or_else(|| *candidate_index_map.get(&i).unwrap_or(&0));
                     let name = format_partition_root_name(candidate);
                     manifest.partitions.push(staging::PartitionEntry {
-                        index: candidate.partition_index.unwrap_or(0),
+                        index,
                         name,
                         fs_kind: format!("{:?}", candidate.kind),
-                        staging_db: format!(
-                            "enum_partition_{}.db",
-                            candidate.partition_index.unwrap_or(0)
-                        ),
+                        staging_db: format!("enum_partition_{index}.db"),
                         status: staging::PartitionStatus::Pending,
                         file_count: 0,
                         dir_count: 0,
@@ -1239,7 +1260,16 @@ fn build_partition_work(
 ) -> Option<app_services::parallel_enum::PartitionWork> {
     let candidate = probe_candidates
         .iter()
-        .find(|c| c.partition_index.unwrap_or(0) == partition_index)?;
+        .enumerate()
+        .find(|(i, c)| {
+            let idx = c.partition_index.unwrap_or_else(|| {
+                // MBR fallback: assign unique index by candidate offset order.
+                // This mirrors the index assignment in the probe/import flow above.
+                *i
+            });
+            idx == partition_index
+        })
+        .map(|(_, c)| c)?;
 
     let fs: Box<dyn FileSystemReader + Send> = match candidate.kind {
         ImageFilesystemKind::Ntfs => {
