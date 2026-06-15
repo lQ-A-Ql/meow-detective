@@ -1,4 +1,4 @@
-use app_services::case_service;
+use app_services::{case_service, job_service};
 use domain::{
     DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType, FileEntry,
     FileEntryId,
@@ -81,6 +81,29 @@ pub fn open_case(
     let active = case_service::open_case(&root).map_err(CommandError::from_service_error)?;
     let db_path = active.db_path();
     activate_case_pool(&state, &db_path)?;
+
+    // Recover any jobs that were left in a running/cancelling state from a
+    // previous app crash or unexpected shutdown.  This is best-effort;
+    // case opening continues even if recovery fails.
+    match state.get_connection() {
+        Ok(conn) => match job_service::recover_interrupted_jobs(&conn) {
+            Ok(recovery) => {
+                if !recovery.recovered_job_ids.is_empty() {
+                    tracing::info!(
+                        "Recovered {} interrupted job(s): {:?}",
+                        recovery.recovered_job_ids.len(),
+                        recovery.recovered_job_ids
+                    );
+                }
+            }
+            Err(error) => {
+                tracing::warn!("Failed to recover interrupted jobs on case open: {error}");
+            }
+        },
+        Err(error) => {
+            tracing::warn!("Failed to get connection for job recovery on case open: {error}");
+        }
+    }
 
     let dto = meta_to_dto(&active.meta);
     let mut guard = state

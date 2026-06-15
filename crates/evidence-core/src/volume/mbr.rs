@@ -268,34 +268,35 @@ mod tests {
 
     #[test]
     fn all_ntfs_returns_primary_and_logical() {
-        let mut entries = Vec::new();
-        entries.push(PartitionEntry {
-            partition_number: 0,
-            is_logical: false,
-            bootable: true,
-            partition_type: 0x07,
-            lba_start: 2048,
-            sector_count: 1000,
-            ebr_lba: None,
-        });
-        entries.push(PartitionEntry {
-            partition_number: 1,
-            is_logical: true,
-            bootable: false,
-            partition_type: 0x07,
-            lba_start: 200063,
-            sector_count: 2000,
-            ebr_lba: Some(200000),
-        });
-        entries.push(PartitionEntry {
-            partition_number: 2,
-            is_logical: false,
-            bootable: false,
-            partition_type: 0x83,
-            lba_start: 400000,
-            sector_count: 5000,
-            ebr_lba: None,
-        });
+        let entries = vec![
+            PartitionEntry {
+                partition_number: 0,
+                is_logical: false,
+                bootable: true,
+                partition_type: 0x07,
+                lba_start: 2048,
+                sector_count: 1000,
+                ebr_lba: None,
+            },
+            PartitionEntry {
+                partition_number: 1,
+                is_logical: true,
+                bootable: false,
+                partition_type: 0x07,
+                lba_start: 200063,
+                sector_count: 2000,
+                ebr_lba: Some(200000),
+            },
+            PartitionEntry {
+                partition_number: 2,
+                is_logical: false,
+                bootable: false,
+                partition_type: 0x83,
+                lba_start: 400000,
+                sector_count: 5000,
+                ebr_lba: None,
+            },
+        ];
         let ntfs = all_ntfs(&entries);
         assert_eq!(ntfs.len(), 2);
         assert_eq!(ntfs[0].partition_number, 0);

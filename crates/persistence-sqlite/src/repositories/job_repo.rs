@@ -114,6 +114,22 @@ impl<'a> JobRepo<'a> {
         Ok(())
     }
 
+    /// Find jobs left in a running or cancelling state (interrupted by crash/shutdown).
+    pub fn find_interrupted(&self) -> DbResult<Vec<JobId>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id FROM jobs WHERE status IN ('running', 'cancelling')")?;
+        let rows = stmt.query_map([], |row| {
+            let raw: String = row.get(0)?;
+            Ok(JobId(raw))
+        })?;
+        let mut result = Vec::new();
+        for r in rows {
+            result.push(r?);
+        }
+        Ok(result)
+    }
+
     pub fn list_recent(&self, limit: usize) -> DbResult<Vec<JobSummaryRow>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, kind, status, progress, detail,
@@ -278,5 +294,27 @@ mod tests {
         // Running/pending jobs come before completed ones
         assert_eq!(jobs[0].status, "running");
         assert_eq!(jobs[1].status, "completed");
+    }
+
+    #[test]
+    fn find_interrupted_returns_only_running_and_cancelling() {
+        let conn = setup_db();
+        let repo = JobRepo::new(&conn);
+
+        let running = repo.create("case-1", "import").unwrap();
+        let cancelling = repo.create("case-1", "import").unwrap();
+        repo.mark_cancelling(&cancelling, "test").unwrap();
+
+        let completed = repo.create("case-1", "import").unwrap();
+        repo.complete(&completed, "done").unwrap();
+
+        let failed = repo.create("case-1", "import").unwrap();
+        repo.fail(&failed, "err").unwrap();
+
+        let interrupted = repo.find_interrupted().unwrap();
+        let ids: Vec<&str> = interrupted.iter().map(|id| id.0.as_str()).collect();
+        assert_eq!(interrupted.len(), 2);
+        assert!(ids.contains(&running.0.as_str()));
+        assert!(ids.contains(&cancelling.0.as_str()));
     }
 }

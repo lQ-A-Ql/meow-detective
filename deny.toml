@@ -2,6 +2,19 @@
 #
 # Every exception must include owner, reason, and expiry date. Expired entries
 # should be removed or renewed only after re-reviewing the dependency path.
+#
+# --- Exception format ---
+# Advisory exceptions live in [advisories].ignore and use this template:
+#   { id = "<RUSTSEC-ID>", reason = "owner: <name|team>; expires: <YYYY-MM-DD>; <technical justification>" }
+#
+# License exceptions live in [licenses].exceptions and use this template:
+#   { name = "<crate>", version = "*", allow = ["<license-id>"], reason = "owner: ...; expires: ...; ..." }
+#
+# Ban exceptions live in [bans].skip and use this template:
+#   { name = "<crate>", version = "<semver>", reason = "owner: ...; expires: ...; ..." }
+#
+# Every exception MUST include owner, expires, and a technical reason. Entries
+# whose expiry has passed will fail CI (enforced by check-deny-exceptions.ps1).
 
 [graph]
 targets = [
@@ -11,6 +24,8 @@ targets = [
 all-features = false
 
 [advisories]
+db-url = "https://github.com/rustsec/advisory-db"
+db-path = "~/.cargo/advisory-db"
 ignore = [
     { id = "RUSTSEC-2024-0419", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; Tauri 2 linux stack pulls gtk3 bindings transitively via wry/tao and no direct safe upgrade is available in this repo." },
     { id = "RUSTSEC-2024-0413", reason = "owner: Stage 5 CI / Fixture Agent; expires: 2026-09-01; Tauri 2 linux stack pulls gtk3 bindings transitively via wry/tao and no direct safe upgrade is available in this repo." },
@@ -38,6 +53,7 @@ allow = [
     "BSD-2-Clause",
     "BSD-3-Clause",
     "CC0-1.0",
+    "ISC",
     "MIT",
     "MPL-2.0",
     "Unicode-3.0",
