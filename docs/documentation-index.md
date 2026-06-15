@@ -38,14 +38,14 @@
 | CI | `ci.md` | CI 流程与检查步骤 |
 | 测试策略 | `test-plan.md` | 测试分层、fixture、回归与发布 gate |
 | V3 主计划 **(V3)** | `docs/v3-plan.md` | V3 五支柱：证据图、跨平台覆盖、可复现调查、规则包、离线批处理 |
-| 证据图设计 **(V3)** | `docs/evidence-graph-design.md` | 图模式、查询语义、索引策略、节点/边类型定义（规划中） |
-| 案例笔记本设计 **(V3)** | `docs/case-notebook-design.md` | 笔记本模型、证据引用、步骤记录与重放（规划中） |
-| 规则包规范 **(V3)** | `docs/rule-pack-spec.md` | 声明式规则包 TOML 格式、校验规则、共享约定（规划中） |
-| PST 依赖决策 **(V3)** | `docs/pst-dependency-decision.md` | PST 解析库选型决策记录：依赖评估、安全审计、许可兼容（规划中） |
-| 批处理设计 **(V3)** | `docs/batch-processing-design.md` | 离线批处理子系统架构、检查点、资源治理（规划中） |
-| Linux 制品覆盖 **(V3)** | `docs/linux-artifact-coverage.md` | Linux 解析器路线图、fixture 要求、已知缺口（规划中） |
-| macOS 制品覆盖 **(V3)** | `docs/mac-artifact-coverage.md` | macOS 解析器路线图、fixture 要求、已知缺口（规划中） |
-| PST/OST/mbox 支持 **(V3)** | `docs/pst-ost-mbox-support.md` | 容器邮件路线图、Outlook/Thunderbird 版本矩阵（规划中） |
+| 证据图设计 **(V3)** | `docs/evidence-graph-design.md` | 图模式、查询语义、索引策略、节点/边类型定义 |
+| 案例笔记本设计 **(V3)** | `docs/case-notebook-design.md` | 笔记本模型、证据引用、步骤记录与重放 |
+| 规则包规范 **(V3)** | `docs/rule-pack-spec.md` | 声明式规则包 TOML 格式、校验规则、共享约定 |
+| PST 依赖决策 **(V3)** | `docs/pst-dependency-decision.md` | PST 解析库选型决策记录：依赖评估、安全审计、许可兼容 |
+| 批处理设计 **(V3)** | `docs/batch-processing-design.md` | 离线批处理子系统架构、检查点、资源治理 |
+| Linux 制品覆盖 **(V3)** | `docs/linux-artifact-coverage.md` | Linux 解析器路线图、fixture 要求、已知缺口 |
+| macOS 制品覆盖 **(V3)** | `docs/mac-artifact-coverage.md` | macOS 解析器路线图、fixture 要求、已知缺口 |
+| PST/OST/mbox 支持 **(V3)** | `docs/pst-ost-mbox-support.md` | 容器邮件路线图、Outlook/Thunderbird 版本矩阵 |
 | V3 演练 **(V3)** | `docs/v3-walkthrough.md` | 端到端 V3 调查工作流演练：导入、图浏览、关联、笔记本、规则包、批处理 |
 
 ## 2. 当前事实快照
@@ -54,28 +54,28 @@
 
 | 事实 | 当前值 | 事实源 |
 |---|---:|---|
-| Rust workspace crate | 22 | `crates/` |
-| Tauri commands | 73 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
-| app-services source modules | 18 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
-| SQLite repositories | 9 | `crates/persistence-sqlite/src/repositories/*_repo.rs` |
-| SQLite migration scripts | 23 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` |
-| frontend pages | 9 | `frontend/src/app/pages/*.tsx`，排除测试 |
-| frontend test files | 42 | `frontend/src/**/*.test.ts(x)` |
+| Rust workspace crate | 25 | `crates/` (新增: containers-pst, artifacts-linux, artifacts-macos) |
+| Tauri commands | 84 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
+| app-services source modules | 25 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
+| SQLite repositories | 12 | `crates/persistence-sqlite/src/repositories/*_repo.rs` (新增: graph_repo, notebook_repo, batch_repo) |
+| SQLite migration scripts | 26 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` |
+| frontend pages | 10 | `frontend/src/app/pages/*.tsx`，排除测试 (新增: V3Dashboard) |
+| frontend test files | 43 | `frontend/src/**/*.test.ts(x)` |
 | Mermaid 图块 | 15 | `docs/model-architecture-algorithm-diagrams.md` |
-| V3 参考文档（已规划） | 9 | `docs/v3-plan.md` 及 8 篇 V3 参考文档 |
-| V3 计划新增 crate | 3 | `crates/containers-pst/`, `crates/artifacts-linux/`, `crates/artifacts-macos/` |
+| V3 参考文档 | 9 | `docs/v3-plan.md` 及 8 篇 V3 参考文档 (已实现) |
+| V3 新增 crate | 3 | `crates/containers-pst/`, `crates/artifacts-linux/`, `crates/artifacts-macos/` (已创建) |
 
 ## 3. 路径级事实校准
 
 | 路径模式 | 数量 | 说明 |
 |---|---:|---|
-| `frontend/src/app/pages/*.tsx` | 9 | 页面入口文件，不含 `*.test.tsx` |
-| `frontend/src/**/*.test.ts(x)` | 42 | Vitest 测试文件总数 |
-| `apps/desktop/src-tauri/src/commands/**/*.rs` | 72 | Tauri command 定义数 |
-| `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 23 | SQLite migration 脚本 |
+| `frontend/src/app/pages/*.tsx` | 10 | 页面入口文件，不含 `*.test.tsx` |
+| `frontend/src/**/*.test.ts(x)` | 43 | Vitest 测试文件总数 |
+| `apps/desktop/src-tauri/src/commands/**/*.rs` | 84 | Tauri command 定义数 |
+| `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 26 | SQLite migration 脚本 |
 | `docs/model-architecture-algorithm-diagrams.md` 中 Mermaid | 15 | Mermaid 图块总数 |
 | `docs/v3-*.md` | 1 | V3 阶段文档入口（主计划） |
-| `docs/` 中 V3 参考文档 | 8 | 证据图、笔记本、规则包、PST决策、批处理、Linux/macOS覆盖、PST支持 |
+| `docs/` 中 V3 参考文档 | 9 | 证据图、笔记本、规则包、PST决策、批处理、Linux/macOS覆盖、PST支持、演练 |
 
 ## 4. 当前实现事实
 
