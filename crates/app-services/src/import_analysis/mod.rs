@@ -6,8 +6,10 @@
 mod budget;
 mod finalize;
 mod options;
+pub mod priority_queue;
 mod progress;
 mod task_feed;
+pub mod tier;
 mod worker_pool;
 mod worker_runtime;
 
@@ -27,6 +29,7 @@ pub use worker_pool::{
 
 #[cfg(test)]
 mod tests {
+    use super::tier::TierStateMachine;
     use super::*;
     use super::{
         finalize::{prepare_analysis_staging_startup, AnalysisStartupAction},
@@ -45,7 +48,7 @@ mod tests {
     use rusqlite::{params, Connection};
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use tempfile::TempDir;
 
     fn setup_case_db(tmp: &TempDir) -> (PathBuf, DataSourceId) {
@@ -139,6 +142,7 @@ mod tests {
             content_budget: content_budget_for_mode(mode),
             memory_soft_limit_mb: default_memory_soft_limit_mb(),
             memory_hard_limit_mb: default_memory_hard_limit_mb(),
+            tier_state: Arc::new(Mutex::new(TierStateMachine::new())),
         }
     }
 
@@ -160,6 +164,7 @@ mod tests {
             enable_content_extraction: mode.allows_content(),
             enable_text_indexing: mode.allows_content(),
             analysis_mode: mode,
+            tier_state: Arc::new(Mutex::new(TierStateMachine::new())),
         }
     }
 
@@ -178,6 +183,7 @@ mod tests {
             enable_content_extraction: false,
             enable_text_indexing: false,
             analysis_mode: ImportAnalysisMode::MetadataOnly,
+            tier_state: Arc::new(Mutex::new(TierStateMachine::new())),
         };
         let events = std::sync::Mutex::new(Vec::new());
         let progress = |pct: u32, detail: &str| {

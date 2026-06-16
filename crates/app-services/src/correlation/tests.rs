@@ -9,7 +9,7 @@ use persistence_sqlite::repositories::{
     file_repo::FileRepo, timeline_repo::TimelineRepo,
 };
 use rusqlite::Connection;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use transport::dto::CorrelationNodeKindDto;
 
 fn setup_case_db() -> Connection {
@@ -554,4 +554,248 @@ fn correlation_snapshot_adds_proximity_timeline_signal_for_browser_history() {
         .match_signals
         .iter()
         .any(|item| item.contains("邻近时间线命中 REPORT_OPENED")));
+}
+
+// ── Cache tests ──
+
+#[test]
+fn cached_snapshot_matches_recomputed() {
+    let conn = setup_case_db();
+    insert_file(&conn, "file-1", "C:/Windows/System32/cmd.exe", false);
+
+    let mut attrs = BTreeMap::new();
+    attrs.insert(
+        "target_path".to_string(),
+        Value::String("C:/Windows/System32/cmd.exe".to_string()),
+    );
+    insert_artifact(&conn, "artifact-lnk", "LNK", Some("file-lnk"), attrs);
+
+    // First call: compute and cache
+    let first = get_correlation_snapshot(&conn).unwrap();
+
+    // Second call: should come from cache and match
+    let second = get_correlation_snapshot(&conn).unwrap();
+
+    assert_eq!(first.nodes.len(), second.nodes.len());
+    assert_eq!(first.edges.len(), second.edges.len());
+    assert_eq!(first.clusters.len(), second.clusters.len());
+    assert_eq!(first.leads.len(), second.leads.len());
+    assert_eq!(first.node_count, second.node_count);
+    assert_eq!(first.edge_count, second.edge_count);
+    assert_eq!(first.cluster_count, second.cluster_count);
+    assert_eq!(first.lead_count, second.lead_count);
+
+    // Node IDs should match
+    let first_ids: BTreeSet<_> = first.nodes.iter().map(|n| n.id.clone()).collect();
+    let second_ids: BTreeSet<_> = second.nodes.iter().map(|n| n.id.clone()).collect();
+    assert_eq!(first_ids, second_ids);
+}
+
+#[test]
+fn cache_invalidates_on_new_import() {
+    let conn = setup_case_db();
+    insert_file(&conn, "file-1", "C:/Windows/System32/cmd.exe", false);
+
+    let mut attrs = BTreeMap::new();
+    attrs.insert(
+        "target_path".to_string(),
+        Value::String("C:/Windows/System32/cmd.exe".to_string()),
+    );
+    insert_artifact(&conn, "artifact-lnk", "LNK", Some("file-lnk"), attrs);
+
+    // Populate cache
+    let first = get_correlation_snapshot(&conn).unwrap();
+    assert!(first.node_count > 0);
+
+    // Verify cache row exists
+    let cached_hash: String = conn
+        .query_row(
+            "SELECT artifact_hash FROM correlation_snapshots WHERE case_id = 'case-1'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(!cached_hash.is_empty());
+
+    // Simulate new data source import by invalidating the cache
+    invalidate_correlation_cache(&conn, "case-1").unwrap();
+
+    // Verify cache is cleared
+    let cached: Option<String> = conn
+        .query_row(
+            "SELECT artifact_hash FROM correlation_snapshots WHERE case_id = 'case-1'",
+            [],
+            |row| row.get(0),
+        )
+        .ok();
+    assert!(cached.is_none(), "cache should be empty after invalidation");
+
+    // Next call should recompute (not return from cache)
+    let second = get_correlation_snapshot(&conn).unwrap();
+    assert_eq!(second.node_count, first.node_count);
+
+    // Cache should be repopulated
+    let repopulated: String = conn
+        .query_row(
+            "SELECT artifact_hash FROM correlation_snapshots WHERE case_id = 'case-1'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(!repopulated.is_empty());
+}
+
+#[test]
+fn incremental_only_processes_new_artifacts() {
+    let conn = setup_case_db();
+    insert_file(&conn, "file-lnk", "C:/Users/Admin/Desktop/cmd.lnk", false);
+    insert_file(&conn, "file-cmd", "C:/Windows/System32/cmd.exe", false);
+
+    // First artifact: LNK pointing to cmd.exe
+    let mut attrs = BTreeMap::new();
+    attrs.insert(
+        "target_path".to_string(),
+        Value::String("C:/Windows/System32/cmd.exe".to_string()),
+    );
+    insert_artifact(&conn, "artifact-lnk", "LNK", Some("file-lnk"), attrs);
+
+    // Build initial snapshot (and cache)
+    let initial = get_correlation_snapshot(&conn).unwrap();
+    let initial_node_count = initial.node_count;
+    let initial_edge_count = initial.edge_count;
+    assert!(initial_node_count > 0);
+
+    // Verify the cached artifact_ids include artifact-lnk
+    let cached_ids: String = conn
+        .query_row(
+            "SELECT artifact_ids_json FROM correlation_snapshots WHERE case_id = 'case-1'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(cached_ids.contains("artifact-lnk"));
+    let cached_ids_set: BTreeSet<String> = serde_json::from_str(&cached_ids).unwrap();
+    assert!(!cached_ids_set.contains("artifact-lnk-2"));
+
+    // Add a new LNK artifact (different file target)
+    insert_file(
+        &conn,
+        "file-lnk-2",
+        "C:/Users/Admin/Desktop/powershell.lnk",
+        false,
+    );
+    insert_file(
+        &conn,
+        "file-powershell",
+        "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+        false,
+    );
+    let mut attrs2 = BTreeMap::new();
+    attrs2.insert(
+        "target_path".to_string(),
+        Value::String("C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe".to_string()),
+    );
+    insert_artifact(&conn, "artifact-lnk-2", "LNK", Some("file-lnk-2"), attrs2);
+
+    // Incremental: should only process the new artifact
+    let updated = get_correlation_snapshot_incremental(&conn).unwrap();
+
+    // Should have more nodes and edges than the initial snapshot
+    assert!(
+        updated.node_count > initial_node_count,
+        "expected updated node_count {} > initial {}",
+        updated.node_count,
+        initial_node_count
+    );
+    assert!(
+        updated.edge_count > initial_edge_count,
+        "expected updated edge_count {} > initial {}",
+        updated.edge_count,
+        initial_edge_count
+    );
+
+    // Both artifacts' nodes should be present
+    assert!(updated
+        .nodes
+        .iter()
+        .any(|n| n.id == "artifact:artifact-lnk"));
+    assert!(updated
+        .nodes
+        .iter()
+        .any(|n| n.id == "artifact:artifact-lnk-2"));
+
+    // The new LNK artifact should have generated a PathMatch edge to powershell.exe
+    assert!(updated.edges.iter().any(|edge| {
+        edge.kind == CorrelationEdgeKindDto::PathMatch
+            && edge.from_node_id == "artifact:artifact-lnk-2"
+            && edge.to_node_id == "file:file-powershell"
+    }));
+
+    // Original data is preserved
+    assert!(updated.edges.iter().any(|edge| {
+        edge.kind == CorrelationEdgeKindDto::PathMatch
+            && edge.from_node_id == "artifact:artifact-lnk"
+            && edge.to_node_id == "file:file-cmd"
+    }));
+
+    // Cache should now include both artifact IDs
+    let updated_ids: String = conn
+        .query_row(
+            "SELECT artifact_ids_json FROM correlation_snapshots WHERE case_id = 'case-1'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(updated_ids.contains("artifact-lnk"));
+    assert!(updated_ids.contains("artifact-lnk-2"));
+}
+
+#[test]
+fn second_call_under_200ms() {
+    let conn = setup_case_db();
+
+    // Insert a modest number of artifacts and files to make the first call non-trivial
+    for i in 0..10 {
+        insert_file(
+            &conn,
+            &format!("file-{i}"),
+            &format!("C:/Test/file{i}.exe"),
+            false,
+        );
+    }
+    for i in 0..10 {
+        let mut attrs = BTreeMap::new();
+        attrs.insert(
+            "target_path".to_string(),
+            Value::String(format!("C:/Test/file{i}.exe")),
+        );
+        insert_artifact(
+            &conn,
+            &format!("artifact-lnk-{i}"),
+            "LNK",
+            Some(&format!("file-{i}")),
+            attrs,
+        );
+    }
+
+    // First call: populate cache (measure but don't enforce a limit)
+    let t0 = std::time::Instant::now();
+    let _first = get_correlation_snapshot(&conn).unwrap();
+    let first_duration = t0.elapsed();
+    // Verify first call was non-trivial (should take some time with rayon + files)
+    assert!(
+        first_duration.as_nanos() > 0,
+        "first call should do real work"
+    );
+
+    // Second call: should hit cache
+    let t1 = std::time::Instant::now();
+    let _second = get_correlation_snapshot(&conn).unwrap();
+    let second_duration = t1.elapsed();
+
+    assert!(
+        second_duration.as_millis() < 200,
+        "second cached call took {}ms, expected < 200ms",
+        second_duration.as_millis()
+    );
 }

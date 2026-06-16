@@ -44,7 +44,7 @@ pub(super) struct FileTask {
 }
 
 impl FileTask {
-    fn to_file_entry(&self) -> FileEntry {
+    pub(crate) fn to_file_entry(&self) -> FileEntry {
         FileEntry {
             id: self.id.clone(),
             parent_id: None,
@@ -410,7 +410,7 @@ pub(super) fn should_index_file(file: &FileEntry) -> bool {
     )
 }
 
-pub(super) fn should_extract_artifact(
+pub(crate) fn should_extract_artifact(
     registry: &artifacts_core::ExtractorRegistry,
     file: &FileEntry,
 ) -> bool {

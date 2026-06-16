@@ -77,7 +77,9 @@ pub use notebook::{
 pub use registry::{RegistryTransactionDto, RegistryTransactionOperationDto, TxLogParseResultDto};
 pub use reports::{ReportHistoryItemDto, ReportTemplateDto};
 pub use search::{SearchHighlightDto, SearchHitDto, SearchResultPageDto, SearchSnippetDto};
-pub use timeline::TimelineEventDto;
+pub use timeline::{
+    TimelineAggregatedDto, TimelineClusterDto, TimelineEventDto, TimelineStripeDto,
+};
 pub use v3_governance::{
     BatchStatusDto, GraphStatsDto, NotebookStatsDto, PlatformCoverageDto, RulePackInfoDto,
     RulePackStatusDto, V3GovernanceSnapshotDto,

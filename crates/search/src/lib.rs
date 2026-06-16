@@ -4,4 +4,7 @@ pub mod indexer;
 
 pub use extractor::{extract_text, ExtractedText};
 pub use highlighter::highlight;
-pub use indexer::{SearchHighlight, SearchHit, SearchIndex, SearchResult, SearchSnippet};
+pub use indexer::{
+    ChunkedIndexStats, SearchHighlight, SearchHit, SearchIndex, SearchResult, SearchSnippet,
+    CHUNK_COMMIT_INTERVAL,
+};

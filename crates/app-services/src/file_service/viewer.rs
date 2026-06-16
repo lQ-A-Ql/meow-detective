@@ -8,12 +8,77 @@ use image_e01::E01Reader;
 use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 use std::{
+    collections::{HashMap, VecDeque},
     io::Read,
     path::{Path, PathBuf},
+    sync::Mutex,
 };
 use transport::dto::{ViewerHandleDto, ViewerRangeRequestDto, ViewerRangeResponseDto};
 
 const FILE_HANDLE_PREFIX: &str = "file:";
+
+/// Maximum number of concurrently cached E01 readers (one per data source).
+const E01_READER_CACHE_MAX_SIZE: usize = 4;
+
+struct E01ReaderCache {
+    max_size: usize,
+    paths: VecDeque<PathBuf>, // front = least recently used
+    readers: HashMap<PathBuf, E01Reader>,
+}
+
+impl E01ReaderCache {
+    fn new(max_size: usize) -> Self {
+        Self {
+            max_size,
+            paths: VecDeque::with_capacity(max_size),
+            readers: HashMap::with_capacity(max_size),
+        }
+    }
+
+    /// Return a cloned reader from the cache, inserting a freshly opened one on miss.
+    fn get_or_open(&mut self, source_path: &Path) -> std::io::Result<E01Reader> {
+        if let Some(pos) = self.paths.iter().position(|p| p == source_path) {
+            // Cache hit: move to most-recently-used end and return a clone.
+            self.paths.remove(pos);
+            self.paths.push_back(source_path.to_path_buf());
+            let reader = self.readers.get(source_path).expect("cache invariant");
+            return reader.try_clone();
+        }
+
+        // Cache miss: open, evict if full, cache, clone.
+        let reader = E01Reader::open(source_path)?;
+        let clone = reader.try_clone()?;
+
+        while self.paths.len() >= self.max_size {
+            if let Some(evict_path) = self.paths.pop_front() {
+                self.readers.remove(&evict_path);
+            }
+        }
+
+        self.paths.push_back(source_path.to_path_buf());
+        self.readers.insert(source_path.to_path_buf(), reader);
+        Ok(clone)
+    }
+}
+
+/// Global E01 reader cache for connection reuse across sequential file opens.
+static E01_READER_CACHE: std::sync::LazyLock<Mutex<E01ReaderCache>> =
+    std::sync::LazyLock::new(|| Mutex::new(E01ReaderCache::new(E01_READER_CACHE_MAX_SIZE)));
+
+/// Clear all cached E01 readers (called on case close).
+pub fn clear_e01_reader_cache() {
+    if let Ok(mut cache) = E01_READER_CACHE.lock() {
+        cache.paths.clear();
+        cache.readers.clear();
+    }
+}
+
+fn open_e01_reader_cached(source_path: &Path) -> std::io::Result<E01Reader> {
+    E01_READER_CACHE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .get_or_open(source_path)
+}
 
 pub fn open_file_handle_real(conn: &Connection, file_id: &str) -> Result<ViewerHandleDto, String> {
     let repo = FileRepo::new(conn);
@@ -181,7 +246,7 @@ fn open_e01_file(
     entry: &FileEntry,
     expected_partition_index: Option<usize>,
 ) -> Result<Box<dyn Read>, String> {
-    let reader = E01Reader::open(Path::new(source_path)).map_err(|e| e.to_string())?;
+    let reader = open_e01_reader_cached(Path::new(source_path)).map_err(|e| e.to_string())?;
     open_image_file(entry, reader, expected_partition_index)
 }
 
@@ -237,7 +302,7 @@ where
         }
 
         let boxed_reader: Box<dyn EvidenceReader> = match source_kind.as_str() {
-            "e01" => Box::new(E01Reader::open(&source_path).map_err(|e| e.to_string())?),
+            "e01" => Box::new(open_e01_reader_cached(&source_path).map_err(|e| e.to_string())?),
             _ => Box::new(RawImageReader::open(&source_path).map_err(|e| e.to_string())?),
         };
 
@@ -421,5 +486,130 @@ fn empty_hex_response() -> ViewerRangeResponseDto {
         kind: "hex".into(),
         lines: Vec::new(),
         encoding: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Seek, SeekFrom, Write};
+
+    fn make_temp_e01() -> (tempfile::TempDir, PathBuf) {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("cache_test.E01");
+        // Write a minimal single-chunk E01 so the reader can be opened.
+        write_tiny_e01(&path).unwrap();
+        (dir, path)
+    }
+
+    fn write_tiny_e01(path: &std::path::Path) -> std::io::Result<()> {
+        let chunk_sectors: u32 = 8;
+        let sectors = chunk_sectors as u64;
+        let chunk_bytes = (chunk_sectors * 512) as usize;
+
+        let mut f = std::fs::File::create(path)?;
+        // EVF file header (13 bytes)
+        f.write_all(b"EVF\t\r\n\x01\x00\x00\x01\x00\x01\x00")?;
+
+        let mut vol = vec![0u8; 36];
+        vol[12..16].copy_from_slice(&chunk_sectors.to_le_bytes());
+        vol[16..24].copy_from_slice(&sectors.to_le_bytes());
+
+        let volume_desc_offset = 13u64;
+        let table_desc_offset = volume_desc_offset + 76 + vol.len() as u64;
+        let table_len = 24 + 4 + 4; // 1 chunk entry + padding
+        let done_desc_offset = table_desc_offset + 76 + table_len as u64;
+        let chunk0_offset = done_desc_offset + 76;
+
+        // volume section
+        f.write_all(&section_desc(
+            "volume",
+            table_desc_offset,
+            76 + vol.len() as u64,
+        ))?;
+        f.write_all(&vol)?;
+
+        // table section (1 chunk)
+        let mut table = vec![0u8; table_len];
+        table[0..4].copy_from_slice(&1u32.to_le_bytes()); // 1 entry
+        table[8..16].copy_from_slice(&chunk0_offset.to_le_bytes()); // base offset
+        table[24..28].copy_from_slice(&0u32.to_le_bytes()); // rel offset 0
+        f.write_all(&section_desc(
+            "table",
+            done_desc_offset,
+            76 + table.len() as u64,
+        ))?;
+        f.write_all(&table)?;
+
+        // done section
+        f.write_all(&section_desc("done", 0, 0))?;
+
+        // chunk data
+        let marker = b"E01-CACHE-TEST";
+        let mut chunk = vec![0u8; chunk_bytes];
+        chunk[..marker.len()].copy_from_slice(marker);
+        f.write_all(&chunk)?;
+        f.flush()
+    }
+
+    fn section_desc(stype: &str, next: u64, size: u64) -> [u8; 76] {
+        let mut desc = [0u8; 76];
+        let bytes = stype.as_bytes();
+        desc[0..bytes.len().min(16)].copy_from_slice(&bytes[..bytes.len().min(16)]);
+        desc[16..24].copy_from_slice(&next.to_le_bytes());
+        desc[24..32].copy_from_slice(&size.to_le_bytes());
+        desc
+    }
+
+    #[test]
+    fn cache_miss_opens_new_reader() {
+        clear_e01_reader_cache();
+        let (_dir, path) = make_temp_e01();
+
+        // First open: cache miss (should parse header from disk).
+        let mut reader = open_e01_reader_cached(&path).unwrap();
+        let mut buf = [0u8; 14];
+        reader.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf, b"E01-CACHE-TEST");
+
+        // Clear cache and open again: another cache miss.
+        clear_e01_reader_cache();
+        let mut reader2 = open_e01_reader_cached(&path).unwrap();
+        let mut buf2 = [0u8; 14];
+        reader2.read_exact(&mut buf2).unwrap();
+        assert_eq!(&buf2, b"E01-CACHE-TEST");
+
+        clear_e01_reader_cache();
+    }
+
+    #[test]
+    fn cache_hit_avoids_second_open() {
+        clear_e01_reader_cache();
+        let (_dir, path) = make_temp_e01();
+
+        // First open populates the cache.
+        let mut reader1 = open_e01_reader_cached(&path).unwrap();
+        let mut buf1 = [0u8; 14];
+        reader1.read_exact(&mut buf1).unwrap();
+        assert_eq!(&buf1, b"E01-CACHE-TEST");
+
+        // Second open with the same path hits the cache (clone of the cached
+        // reader, not a fresh disk parse).
+        let mut reader2 = open_e01_reader_cached(&path).unwrap();
+        let mut buf2 = [0u8; 14];
+        reader2.read_exact(&mut buf2).unwrap();
+        assert_eq!(&buf2, b"E01-CACHE-TEST");
+
+        // The two clones must have independent seek positions.
+        reader1.seek(SeekFrom::Start(0)).unwrap();
+        reader2.seek(SeekFrom::Start(4)).unwrap();
+        let mut b1 = [0u8; 4];
+        let mut b2 = [0u8; 4];
+        reader1.read_exact(&mut b1).unwrap();
+        reader2.read_exact(&mut b2).unwrap();
+        assert_eq!(&b1, b"E01-");
+        assert_eq!(&b2, b"CACH");
+
+        clear_e01_reader_cache();
     }
 }

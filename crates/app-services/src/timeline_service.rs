@@ -1,5 +1,12 @@
 use chrono::Utc;
-use transport::{dto::TimelineEventDto, paging::PageResponse};
+use std::collections::HashMap;
+use transport::{
+    dto::{
+        PerformanceReportDto, TimelineAggregatedDto, TimelineClusterDto, TimelineEventDto,
+        TimelineStripeDto,
+    },
+    paging::PageResponse,
+};
 
 use crate::performance::{measure_rows, metric, report, PerfSample};
 use domain::{EdgeType, FileEntry, GraphEdge, GraphNode, NodeType};
@@ -7,7 +14,6 @@ use persistence_sqlite::repositories::{graph_repo::GraphRepo, timeline_repo::Tim
 use rayon::prelude::*;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::time::Instant;
-use transport::dto::PerformanceReportDto;
 
 const MACB_PROJECTION_KEY: &str = "macb";
 
@@ -189,6 +195,135 @@ pub fn query_timeline_filtered_instrumented(
         page,
         performance_report,
     })
+}
+
+/// Query timeline events in aggregated form, grouped by (event_type, description).
+///
+/// `offset` and `limit` apply to the number of resulting **clusters**, not raw events.
+/// The returned `TimelineAggregatedDto` maps each distinct `event_type` to a
+/// `TimelineStripeDto` with all of its clusters and the total event count for that type.
+pub fn query_timeline_aggregated(
+    conn: &Connection,
+    offset: u64,
+    limit: u32,
+) -> Result<TimelineAggregatedDto, String> {
+    ensure_macb_timeline_projected(conn)?;
+
+    // Query clusters: group by (event_type, description), paginate cluster count
+    let cluster_rows: Vec<(String, String, i64, String, String, String)> = {
+        let mut stmt = conn
+            .prepare(
+                "SELECT event_type, description, COUNT(*) AS cnt,
+                        MIN(ts) AS first_ts, MAX(ts) AS last_ts,
+                        GROUP_CONCAT(id, ',') AS sample_ids
+                 FROM timeline_events
+                 GROUP BY event_type, description
+                 ORDER BY cnt DESC, event_type ASC, description ASC
+                 LIMIT ?1 OFFSET ?2",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![limit, offset], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        rows
+    };
+
+    // Collect distinct event_types present in this page
+    let mut event_types: Vec<String> = cluster_rows
+        .iter()
+        .map(|(et, _, _, _, _, _)| et.clone())
+        .collect();
+    event_types.sort();
+    event_types.dedup();
+
+    // Fetch the true total event count per event_type for the types that appear
+    let totals = query_totals_by_type(conn, &event_types)?;
+
+    // Build stripes keyed by event_type, seeded with the true total
+    let mut stripes_by_type: HashMap<String, TimelineStripeDto> = HashMap::new();
+    for (et, total) in &totals {
+        stripes_by_type.insert(
+            et.clone(),
+            TimelineStripeDto {
+                clusters: Vec::new(),
+                total_events: *total,
+            },
+        );
+    }
+
+    // Populate clusters into their respective stripes
+    for (event_type, description, count, first_ts, last_ts, sample_ids_str) in &cluster_rows {
+        let sample_event_ids: Vec<String> = sample_ids_str
+            .split(',')
+            .take(5)
+            .map(|s| s.to_string())
+            .collect();
+
+        let cluster = TimelineClusterDto {
+            event_type: event_type.clone(),
+            description: description.clone(),
+            count: *count as u64,
+            first_ts: first_ts.clone(),
+            last_ts: last_ts.clone(),
+            sample_event_ids,
+        };
+
+        stripes_by_type
+            .entry(event_type.clone())
+            .or_insert_with(|| TimelineStripeDto {
+                clusters: Vec::new(),
+                total_events: 0,
+            })
+            .clusters
+            .push(cluster);
+    }
+
+    Ok(TimelineAggregatedDto { stripes_by_type })
+}
+
+fn query_totals_by_type(
+    conn: &Connection,
+    event_types: &[String],
+) -> Result<Vec<(String, u64)>, String> {
+    if event_types.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let placeholders: Vec<String> = (1..=event_types.len()).map(|i| format!("?{i}")).collect();
+    let in_clause = placeholders.join(",");
+    let sql = format!(
+        "SELECT event_type, COUNT(*) AS total
+         FROM timeline_events
+         WHERE event_type IN ({in_clause})
+         GROUP BY event_type"
+    );
+
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let params_refs: Vec<&dyn rusqlite::types::ToSql> = event_types
+        .iter()
+        .map(|s| s as &dyn rusqlite::types::ToSql)
+        .collect();
+
+    let rows = stmt
+        .query_map(params_refs.as_slice(), |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(rows)
 }
 
 pub fn get_timeline_event_by_id(
@@ -602,6 +737,224 @@ mod tests {
         assert_eq!(
             metric_value(&result.performance_report, "timeline.query.totalRows"),
             Some(1.0)
+        );
+    }
+
+    // ── Aggregation tests ──────────────────────────────────────────────
+
+    fn insert_events(conn: &rusqlite::Connection, rows: &[(&str, &str, &str, &str)]) {
+        let repo = persistence_sqlite::repositories::timeline_repo::TimelineRepo::new(conn);
+        let events: Vec<domain::TimelineEvent> = rows
+            .iter()
+            .map(|(id, event_type, description, ts)| domain::TimelineEvent {
+                id: domain::TimelineEventId(id.to_string()),
+                source_object_id: "src-1".to_string(),
+                event_type: event_type.to_string(),
+                timestamp: chrono::DateTime::parse_from_rfc3339(ts)
+                    .unwrap()
+                    .with_timezone(&Utc),
+                title: format!("{event_type} event"),
+                description: description.to_string(),
+                parser_id: None,
+                parser_version: None,
+                confidence: None,
+                source_attribution: None,
+                attrs: std::collections::BTreeMap::new(),
+            })
+            .collect();
+        repo.insert_batch(&events).unwrap();
+    }
+
+    #[test]
+    fn aggregate_groups_by_event_type() {
+        let conn = in_memory_db_with_timeline();
+        insert_events(
+            &conn,
+            &[
+                (
+                    "e1",
+                    "FILE_CREATED",
+                    "File created: /a.txt",
+                    "2025-01-01T10:00:00Z",
+                ),
+                (
+                    "e2",
+                    "FILE_CREATED",
+                    "File created: /b.txt",
+                    "2025-01-01T11:00:00Z",
+                ),
+                (
+                    "e3",
+                    "FILE_MODIFIED",
+                    "File modified: /a.txt",
+                    "2025-01-01T12:00:00Z",
+                ),
+                (
+                    "e4",
+                    "FILE_MODIFIED",
+                    "File modified: /a.txt",
+                    "2025-01-01T12:30:00Z",
+                ),
+                (
+                    "e5",
+                    "FILE_ACCESSED",
+                    "File accessed: /c.txt",
+                    "2025-01-01T13:00:00Z",
+                ),
+            ],
+        );
+
+        let result = query_timeline_aggregated(&conn, 0, 50).unwrap();
+        let stripes = &result.stripes_by_type;
+
+        // Three distinct event types
+        assert_eq!(stripes.len(), 3);
+        assert!(stripes.contains_key("FILE_CREATED"));
+        assert!(stripes.contains_key("FILE_MODIFIED"));
+        assert!(stripes.contains_key("FILE_ACCESSED"));
+
+        // FILE_CREATED stripe: 2 events across 2 clusters, one per description
+        let created = &stripes["FILE_CREATED"];
+        assert_eq!(created.total_events, 2);
+        assert_eq!(created.clusters.len(), 2);
+        let descriptions: Vec<&str> = created
+            .clusters
+            .iter()
+            .map(|c| c.description.as_str())
+            .collect();
+        assert!(descriptions.contains(&"File created: /a.txt"));
+        assert!(descriptions.contains(&"File created: /b.txt"));
+
+        // FILE_MODIFIED stripe: 2 events, same description => 1 cluster
+        let modified = &stripes["FILE_MODIFIED"];
+        assert_eq!(modified.total_events, 2);
+        assert_eq!(modified.clusters.len(), 1);
+        assert_eq!(modified.clusters[0].description, "File modified: /a.txt");
+        assert_eq!(modified.clusters[0].count, 2);
+
+        // FILE_ACCESSED stripe: 1 event, 1 cluster
+        let accessed = &stripes["FILE_ACCESSED"];
+        assert_eq!(accessed.total_events, 1);
+        assert_eq!(accessed.clusters.len(), 1);
+        assert_eq!(accessed.clusters[0].count, 1);
+    }
+
+    #[test]
+    fn cluster_contains_correct_count_and_range() {
+        let conn = in_memory_db_with_timeline();
+        // Same (event_type, description) across three timestamps
+        insert_events(
+            &conn,
+            &[
+                (
+                    "e1",
+                    "FILE_MODIFIED",
+                    "File modified: /shared.txt",
+                    "2025-06-01T08:00:00Z",
+                ),
+                (
+                    "e2",
+                    "FILE_MODIFIED",
+                    "File modified: /shared.txt",
+                    "2025-06-02T12:00:00Z",
+                ),
+                (
+                    "e3",
+                    "FILE_MODIFIED",
+                    "File modified: /shared.txt",
+                    "2025-06-03T16:00:00Z",
+                ),
+            ],
+        );
+
+        let result = query_timeline_aggregated(&conn, 0, 10).unwrap();
+        let modified = &result.stripes_by_type["FILE_MODIFIED"];
+        assert_eq!(modified.total_events, 3);
+        assert_eq!(modified.clusters.len(), 1);
+
+        let cluster = &modified.clusters[0];
+        assert_eq!(cluster.count, 3);
+        // first_ts = MIN(ts), last_ts = MAX(ts)
+        assert!(cluster.first_ts.starts_with("2025-06-01T08:00:00"));
+        assert!(cluster.last_ts.starts_with("2025-06-03T16:00:00"));
+        // Sample IDs: GROUP_CONCAT then split, at most 5
+        assert!(!cluster.sample_event_ids.is_empty());
+        assert!(cluster.sample_event_ids.len() <= 5);
+        // Every sample ID should be among the inserted IDs
+        let expected_ids: Vec<&str> = vec!["e1", "e2", "e3"];
+        for sid in &cluster.sample_event_ids {
+            assert!(expected_ids.contains(&sid.as_str()));
+        }
+    }
+
+    #[test]
+    fn large_timeline_aggregation_is_fast() {
+        let conn = in_memory_db_with_timeline();
+        let total = 10_000u32;
+
+        // Build 10K events: 4 types, 100 unique descriptions each => ~400 clusters
+        let event_types = [
+            "FILE_CREATED",
+            "FILE_MODIFIED",
+            "FILE_ACCESSED",
+            "FILE_METADATA_CHANGED",
+        ];
+        let mut events: Vec<domain::TimelineEvent> = Vec::with_capacity(total as usize);
+        for i in 0..total {
+            let et = event_types[(i as usize) % event_types.len()];
+            let desc_idx = i % 100;
+            let desc = format!("Test: /path/{desc_idx}.txt");
+            let hour = (i % 24) as u32;
+            let ts = format!("2025-06-01T{hour:02}:00:00Z");
+            events.push(domain::TimelineEvent {
+                id: domain::TimelineEventId(format!("e{i:05}")),
+                source_object_id: "src-1".to_string(),
+                event_type: et.to_string(),
+                timestamp: chrono::DateTime::parse_from_rfc3339(&ts)
+                    .unwrap()
+                    .with_timezone(&Utc),
+                title: format!("{et} event"),
+                description: desc,
+                parser_id: None,
+                parser_version: None,
+                confidence: None,
+                source_attribution: None,
+                attrs: std::collections::BTreeMap::new(),
+            });
+        }
+
+        let repo = persistence_sqlite::repositories::timeline_repo::TimelineRepo::new(&conn);
+        let started = std::time::Instant::now();
+        repo.insert_batch(&events).unwrap();
+
+        // Aggregate with a cluster limit smaller than total clusters
+        let result = query_timeline_aggregated(&conn, 0, 20).unwrap();
+        let elapsed = started.elapsed();
+
+        // Should return at most 20 clusters (across all types)
+        let total_clusters: usize = result
+            .stripes_by_type
+            .values()
+            .map(|s| s.clusters.len())
+            .sum();
+        assert!(
+            total_clusters <= 20,
+            "expected ≤ 20 clusters, got {total_clusters}"
+        );
+
+        // Each stripe should report its true total, which is much larger than cluster count
+        for stripe in result.stripes_by_type.values() {
+            assert!(
+                stripe.total_events >= stripe.clusters.len() as u64,
+                "total_events must be at least the returned cluster count"
+            );
+        }
+
+        // The aggregation itself should be fast (well under 5 seconds for 10K rows)
+        assert!(
+            elapsed.as_millis() < 5000,
+            "aggregation took {} ms; expected < 5000 ms",
+            elapsed.as_millis()
         );
     }
 

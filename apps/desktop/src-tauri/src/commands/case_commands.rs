@@ -165,16 +165,52 @@ pub fn close_case(state: State<AppState>, app: AppHandle) -> Result<(), CommandE
     state.task_manager.cancel_all();
 
     // 2. Wait for tasks to complete (with timeout)
-    let _ = state
-        .task_manager
-        .wait_all(std::time::Duration::from_secs(5));
+    let timeout = std::time::Duration::from_secs(5);
+    let _ = state.task_manager.wait_all(timeout);
 
-    // 3. Clear pooled database handles before clearing the active case.
+    // 3. Drain database jobs — mark any that are still running as interrupted
+    match state.get_connection() {
+        Ok(conn) => {
+            let case_id = {
+                let guard = state
+                    .active_case
+                    .lock()
+                    .map_err(|e| CommandError::from_lock_error("Case", e))?;
+                guard
+                    .as_ref()
+                    .map(|active| active.meta.id.0.clone())
+                    .unwrap_or_default()
+            };
+            match case_service::close_case_drain(&conn, &case_id, timeout.as_millis() as u64) {
+                Ok(drain) => {
+                    if !drain.fully_drained {
+                        tracing::warn!(
+                            "Degraded case close — {} job(s) did not drain within {}ms: {:?}",
+                            drain.pending_jobs.len(),
+                            timeout.as_millis(),
+                            drain.pending_jobs,
+                        );
+                        for warning in &drain.warnings {
+                            tracing::warn!("{}", warning);
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to drain jobs during case close: {}", e);
+                }
+            }
+        }
+        Err(e) => {
+            tracing::warn!("Failed to get connection for case close drain: {}", e);
+        }
+    }
+
+    // 4. Clear pooled database handles before clearing the active case.
     state
         .clear_db_pool()
         .map_err(CommandError::from_service_error)?;
 
-    // 4. Clear active case
+    // 5. Clear active case
     let mut guard = state
         .active_case
         .lock()
@@ -185,6 +221,7 @@ pub fn close_case(state: State<AppState>, app: AppHandle) -> Result<(), CommandE
     if let Some(case_id) = &closed_case_id {
         let _ = state.clear_runtime_cache_for_case(case_id);
     }
+    app_services::file_service::clear_e01_reader_cache();
     if let Some(case_id) = closed_case_id {
         event_bridge::emit_case_closed(&app, &case_id);
     }

@@ -13,8 +13,9 @@ use super::progress::{
     bool_word, current_rss_mb, memory_hard_limit_exceeded, rows_per_sec, scheduling_state,
 };
 use super::task_feed::{
-    analysis_task_queue_bound, count_analysis_file_tasks, enqueue_analysis_tasks,
+    analysis_task_queue_bound, count_analysis_file_tasks, enqueue_analysis_tasks_prioritized,
 };
+use super::tier::advance_tier;
 use super::worker_runtime::{add_worker_stats, run_analysis_worker, FileTask, SharedAnalysisState};
 use crossbeam_channel::{bounded, Receiver, Sender};
 use std::sync::atomic::Ordering;
@@ -26,6 +27,9 @@ pub fn run_post_import_pipeline_with_counts(
     progress_cb: Option<AnalysisProgressCallback<'_>>,
 ) -> Result<(String, JobOutcomeCounts), PostImportPipelineError> {
     let mut counts = JobOutcomeCounts::default();
+    // Clone before options is partially moved constructing ImportAnalysisOptions.
+    let tier_state = Arc::clone(&options.tier_state);
+
     if !options.enable_timeline_projection
         && !options.enable_content_extraction
         && !options.enable_text_indexing
@@ -38,6 +42,11 @@ pub fn run_post_import_pipeline_with_counts(
                     resolve_analysis_worker_count(options.max_analysis_workers).max(1)
                 ),
             );
+        }
+        // All tiers skipped — mark them done for consistent inspection.
+        {
+            let mut ts = tier_state.lock().unwrap();
+            while advance_tier(&mut ts).is_some() {}
         }
         return Ok((
             "Timeline: deferred until Timeline page. Artifacts: 0. Index: 0 indexed".to_string(),
@@ -78,6 +87,7 @@ pub fn run_post_import_pipeline_with_counts(
                 content_budget: content_budget_for_mode(options.analysis_mode),
                 memory_soft_limit_mb: default_memory_soft_limit_mb(),
                 memory_hard_limit_mb: default_memory_hard_limit_mb(),
+                tier_state: Arc::clone(&tier_state),
             }
         },
         progress_cb,
@@ -93,6 +103,12 @@ pub fn run_post_import_pipeline_with_counts(
             return Err(PostImportPipelineError { message, counts });
         }
     };
+
+    // All tiers complete — advance to None (marks CorrelateAndIndex as done).
+    {
+        let mut ts = tier_state.lock().unwrap();
+        while advance_tier(&mut ts).is_some() {}
+    }
 
     counts.warning_count = counts.warning_count.saturating_add(stats.warning_count);
     counts.skipped_count = counts.skipped_count.saturating_add(stats.skipped_count);
@@ -153,6 +169,11 @@ pub fn run_import_analysis_staging(
                 "Analysis staging already merged; skipping analysis resume.",
             );
         }
+        // All tiers were completed in a previous run.
+        {
+            let mut ts = options.tier_state.lock().unwrap();
+            while advance_tier(&mut ts).is_some() {}
+        }
         let merged_worker_ids =
             discover_analysis_worker_ids(&options.case_root, &options.data_source_id.0)?;
         return collect_done_worker_stats(&options, &merged_worker_ids);
@@ -194,15 +215,33 @@ pub fn run_import_analysis_staging(
         );
     }
 
+    // Begin Catalog tier (MFT enumeration / file counting).
+    {
+        let mut ts = options.tier_state.lock().unwrap();
+        advance_tier(&mut ts);
+    }
+
     if startup_action == AnalysisStartupAction::MergeOnly {
+        // Producer and workers completed in a previous run.
+        {
+            let mut ts = options.tier_state.lock().unwrap();
+            advance_tier(&mut ts); // → Catalog
+            advance_tier(&mut ts); // → ExtractArtifacts
+        }
         let stats = collect_done_worker_stats(&options, &worker_ids)?;
-        return merge_finished_analysis_staging(
+        let result = merge_finished_analysis_staging(
             &options,
             &worker_ids,
             stats,
             progress_cb,
             analysis_started,
-        );
+        )?;
+        // Merge done — advance to CorrelateAndIndex.
+        {
+            let mut ts = options.tier_state.lock().unwrap();
+            advance_tier(&mut ts);
+        }
+        return Ok(result);
     }
 
     let queue_bound = analysis_task_queue_bound(worker_count);
@@ -215,7 +254,8 @@ pub fn run_import_analysis_staging(
     let producer = std::thread::Builder::new()
         .name("analysis-task-producer".to_string())
         .spawn(move || {
-            let result = enqueue_analysis_tasks(&producer_options, &task_tx, producer_shared);
+            let result =
+                enqueue_analysis_tasks_prioritized(&producer_options, &task_tx, producer_shared);
             drop(task_tx);
             result
         })
@@ -356,10 +396,28 @@ pub fn run_import_analysis_staging(
             .map_err(|_| "Analysis worker panicked".to_string())?;
     }
 
+    // MFT enumeration done — advance to ExtractArtifacts tier.
+    {
+        let mut ts = options.tier_state.lock().unwrap();
+        advance_tier(&mut ts);
+    }
+
     if options.cancel_token.load(Ordering::Relaxed) {
         stats.warning_count = stats.warning_count.saturating_add(1);
         return Err("Import analysis cancelled by user".to_string());
     }
 
-    merge_finished_analysis_staging(&options, &worker_ids, stats, progress_cb, analysis_started)
+    let result = merge_finished_analysis_staging(
+        &options,
+        &worker_ids,
+        stats,
+        progress_cb,
+        analysis_started,
+    )?;
+    // Merge (correlation + index) done — advance to CorrelateAndIndex.
+    {
+        let mut ts = options.tier_state.lock().unwrap();
+        advance_tier(&mut ts);
+    }
+    Ok(result)
 }

@@ -12,7 +12,7 @@ use evidence_core::{EvidenceReader, FileSystemReader, LogicalFsReader, RawImageR
 use image_e01::E01Reader;
 use persistence_sqlite::repositories::job_repo::JobRepo;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::{AppHandle, State};
 use transport::{commands::ImportDataSourceRequest, dto::CancellationStateDto, CommandError};
@@ -832,6 +832,7 @@ fn execute_import_job_with_counts(
             enable_content_extraction: analysis_mode.allows_content(),
             enable_text_indexing: analysis_mode.allows_content(),
             analysis_mode,
+            tier_state: Arc::new(Mutex::new(import_analysis::tier::TierStateMachine::new())),
         },
         Some(&progress_adapter),
     )
@@ -1996,6 +1997,9 @@ mod tests {
                         enable_content_extraction: false,
                         enable_text_indexing: false,
                         analysis_mode: import_analysis::ImportAnalysisMode::MetadataOnly,
+                        tier_state: Arc::new(Mutex::new(
+                            import_analysis::tier::TierStateMachine::new(),
+                        )),
                     },
                     None,
                 )

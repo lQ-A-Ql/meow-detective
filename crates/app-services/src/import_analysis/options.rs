@@ -1,9 +1,10 @@
 use super::budget::ContentBudget;
+use super::tier::TierStateMachine;
 use domain::DataSourceId;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub type AnalysisProgressCallback<'a> = &'a dyn Fn(u32, &str);
 
@@ -46,6 +47,9 @@ pub struct ImportAnalysisOptions {
     pub content_budget: ContentBudget,
     pub memory_soft_limit_mb: u64,
     pub memory_hard_limit_mb: u64,
+    /// See [`PostImportPipelineOptions::tier_state`].
+    #[allow(clippy::type_complexity)]
+    pub tier_state: Arc<Mutex<TierStateMachine>>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -98,6 +102,11 @@ pub struct PostImportPipelineOptions {
     pub enable_content_extraction: bool,
     pub enable_text_indexing: bool,
     pub analysis_mode: ImportAnalysisMode,
+    /// Optional tier state machine for tracking post-import pipeline progress.
+    /// When provided, the pipeline advances through Catalog → ExtractArtifacts →
+    /// CorrelateAndIndex and the caller can inspect partial results after each tier.
+    #[allow(clippy::type_complexity)]
+    pub tier_state: Arc<Mutex<TierStateMachine>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

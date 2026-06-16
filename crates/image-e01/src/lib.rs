@@ -29,6 +29,28 @@ pub struct E01Reader {
     last_chunk_read: Option<u64>,
 }
 
+/// Clone the reader's immutable parsing state (metadata, chunk table, segment
+/// file handles) but reset all mutable state (cursor, chunk cache, sequential
+/// read tracking). Each clone shares the underlying open file handles through
+/// `File::try_clone` but has an independent seek position and read cache.
+impl E01Reader {
+    pub fn try_clone(&self) -> io::Result<Self> {
+        let segment_files: io::Result<Vec<_>> =
+            self.segment_files.iter().map(|f| f.try_clone()).collect();
+        Ok(Self {
+            info: self.info.clone(),
+            total_bytes: self.total_bytes,
+            chunk_size_sectors: self.chunk_size_sectors,
+            chunk_table: self.chunk_table.clone(),
+            segment_files: segment_files?,
+            cursor: 0,
+            chunk_cache: VecDeque::new(),
+            chunk_cache_bytes: 0,
+            last_chunk_read: None,
+        })
+    }
+}
+
 impl E01Reader {
     pub fn open(path: &Path) -> io::Result<Self> {
         let base = path.with_extension("");
@@ -577,6 +599,37 @@ mod tests {
         assert!(cached.contains(&0));
         assert!(cached.contains(&4));
         assert!(!cached.contains(&5));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn cloned_reader_reads_same_data() {
+        let dir = std::env::temp_dir().join("e01_clone");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("clone.E01");
+        write_multichunk_e01(&path, 6).unwrap();
+
+        let mut reader = E01Reader::open(&path).unwrap();
+        let mut clone = reader.try_clone().unwrap();
+
+        // Both should read the same data from the start.
+        let chunk_bytes = reader.chunk_size_sectors as usize * 512;
+        let mut buf1 = vec![0u8; chunk_bytes];
+        let mut buf2 = vec![0u8; chunk_bytes];
+        reader.read_exact(&mut buf1).unwrap();
+        clone.read_exact(&mut buf2).unwrap();
+        assert_eq!(buf1, buf2);
+
+        // Seek the clone independently — should not affect the original.
+        reader.seek(SeekFrom::Start(0)).unwrap();
+        clone.seek(SeekFrom::Start(chunk_bytes as u64)).unwrap();
+        let mut byte1 = [0u8; 1];
+        let mut byte2 = [0u8; 1];
+        reader.read_exact(&mut byte1).unwrap();
+        clone.read_exact(&mut byte2).unwrap();
+        assert_ne!(byte1, byte2); // different chunks
 
         let _ = std::fs::remove_dir_all(&dir);
     }

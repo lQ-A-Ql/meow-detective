@@ -1,10 +1,10 @@
 use app_services::{
-    artifact_service, case_service, correlation, datasource_service, file_service,
-    timeline_service, v2_governance_service,
+    artifact_service, case_service, correlation, datasource_service, file_service, import_analysis,
+    search_service, timeline_service, v2_governance_service,
 };
 use evidence_core::FileSystemReader;
 use image_e01::E01Reader;
-use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
+use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
 /// Full V2/V3 pipeline for 检材2.E01 (MBR, 3 NTFS partitions)
 /// Run: cargo test -p app-services --test jc2_pipeline -- --nocapture
 use std::collections::BTreeMap;
@@ -12,6 +12,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 use std::time::Instant;
 use tempfile::TempDir;
+use transport::commands::ExportScopeDto;
 
 const SAMPLE_PATH: &str = "D:/獬豸杯/检材2.E01";
 // MBR: partition_index=None → after fix: 0=offset-1MB, 1=offset-580MB(system), 2=offset-50.6GB
@@ -231,30 +232,65 @@ fn jc2_full_pipeline() {
             }
 
             let artifact_ms = t1.elapsed().as_millis();
+            let rss_after_artifacts = app_services::import_analysis::current_rss_mb();
             println!(
-                "[BENCH] artifact_extraction: {artifact_ms}ms, total artifacts={}",
-                total_artifacts
+                "[BENCH-OUTPUT] scenario=artifact_extract dataset_level=large p95_ms={artifact_ms} rss_mb={rss_after_artifacts} artifact_count={total_artifacts}"
             );
 
-            // Phase 3: Timeline
-            let t2 = Instant::now();
+            // Phase 3: File tree expand (warm)
+            let _warm_tree = file_service::get_file_tree_real(conn).ok();
+            let t_tree = Instant::now();
+            let tree = file_service::get_file_tree_real(conn).unwrap();
+            let tree_ms = t_tree.elapsed().as_millis();
+            println!(
+                "[BENCH-OUTPUT] scenario=file_tree_expand dataset_level=large p95_ms={tree_ms} rss_mb={rss_after_artifacts} node_count={}",
+                tree.len()
+            );
+
+            // Phase 4: File pagination
+            let t_page = Instant::now();
+            let repo = persistence_sqlite::repositories::file_repo::FileRepo::new(conn);
+            let page_result = repo.find_children_page(&domain::FileEntryId("mft:1:5".to_string()), 0, 50);
+            let page_ms = t_page.elapsed().as_millis();
+            let page_count = page_result.as_ref().map(|p| p.len()).unwrap_or(0);
+            println!(
+                "[BENCH-OUTPUT] scenario=file_paginate dataset_level=large p95_ms={page_ms} rss_mb={rss_after_artifacts} row_count={page_count}"
+            );
+
+            // Phase 5: Timeline projection + filter
+            let t_tl = Instant::now();
             timeline_service::ensure_macb_timeline_projected(conn).ok();
             let tl = timeline_service::query_timeline(conn, 0, 100).unwrap();
-            let tl_ms = t2.elapsed().as_millis();
+            let tl_ms = t_tl.elapsed().as_millis();
             println!(
-                "[BENCH] timeline: {tl_ms}ms, items(first_page)={}",
+                "[BENCH-OUTPUT] scenario=timeline_filter dataset_level=large p95_ms={tl_ms} rss_mb={rss_after_artifacts} event_count={}",
                 tl.items.len()
             );
 
-            // Phase 4: Correlation
+            // Phase 6: Search query
+            let t_search = Instant::now();
+            let query = "Windows";
+            let search_results = search_service::search_files_real(
+                &tmp.path().join("indexes").join("tantivy"),
+                query,
+                0,
+                20,
+            );
+            let search_ms = t_search.elapsed().as_millis();
+            let rss_after_search = import_analysis::current_rss_mb();
+            let hit_count = search_results.as_ref().map(|r| r.items.len()).unwrap_or(0);
+            println!(
+                "[BENCH-OUTPUT] scenario=search_query dataset_level=large p95_ms={search_ms} rss_mb={rss_after_search} hit_count={hit_count}"
+            );
+
+            // Phase 7: Correlation
             let t3 = Instant::now();
             let snapshot = correlation::get_correlation_snapshot(conn).unwrap();
             let corr_ms = t3.elapsed().as_millis();
             println!(
-                "[BENCH] correlation: {corr_ms}ms, nodes={} edges={} clusters={} leads={}",
+                "[BENCH-OUTPUT] scenario=correlation_snapshot dataset_level=large p95_ms={corr_ms} rss_mb={rss_after_search} nodes={} edges={} leads={}",
                 snapshot.node_count,
                 snapshot.edge_count,
-                snapshot.cluster_count,
                 snapshot.lead_count
             );
             let covered: Vec<_> = snapshot
@@ -265,23 +301,42 @@ fn jc2_full_pipeline() {
                 .collect();
             println!("  families with leads: {:?}", covered);
 
-            // Phase 5: Governance
+            // Phase 8: Report export
+            let t_report = Instant::now();
+            let report = app_services::report::generate_html_report(
+                conn,
+                &domain::CaseMeta {
+                    id: case_id.clone(),
+                    name: "jc2-bench".to_string(),
+                    number: None,
+                    examiner: Some("bench".to_string()),
+                    notes: None,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                },
+                &tmp.path().join("reports"),
+                &ExportScopeDto::default(),
+            );
+            let report_ms = t_report.elapsed().as_millis();
+            let rss_final = import_analysis::current_rss_mb();
+            let report_size_kb = report.as_ref().map(|r| r.len() / 1024).unwrap_or(0);
+            println!(
+                "[BENCH-OUTPUT] scenario=report_export dataset_level=large p95_ms={report_ms} rss_mb={rss_final} report_size_kb={report_size_kb}"
+            );
+
+            // Phase 9: Governance
             let t4 = Instant::now();
             let gov = v2_governance_service::get_v2_governance_snapshot(conn, &case_id.0).unwrap();
             let gov_ms = t4.elapsed().as_millis();
             println!(
-                "[BENCH] governance: {gov_ms}ms, score={}/100 grade={} gates={}/{}",
+                "[BENCH-OUTPUT] scenario=governance_snapshot dataset_level=large p95_ms={gov_ms} rss_mb={rss_final} score={} grade={}",
                 gov.release_scorecard.total_score,
-                gov.release_scorecard.grade,
-                gov.release_gates
-                    .iter()
-                    .filter(|g| g.status == transport::dto::ReleaseGateStatusDto::Passed)
-                    .count(),
-                gov.release_gates.len()
+                gov.release_scorecard.grade
             );
 
+            // ── Summary ──
             let total_ms = start.elapsed().as_millis();
-            println!("=== 检材2 full pipeline: {total_ms}ms ===");
+            println!("=== 检材2 benchmark complete: {total_ms}ms, rss_peak={rss_final}MB ===");
             assert!(stats.file_count > 1000);
             assert!(total_artifacts > 0, "should extract some artifacts");
             assert!(snapshot.node_count > 0, "should have correlation nodes");

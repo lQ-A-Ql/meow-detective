@@ -78,6 +78,14 @@ const MIGRATIONS: &[(&str, &str)] = &[
     ("0023_graph", include_str!("scripts/0023_graph.sql")),
     ("0024_notebook", include_str!("scripts/0024_notebook.sql")),
     ("0025_batch", include_str!("scripts/0025_batch.sql")),
+    (
+        "0026_correlation_cache",
+        include_str!("scripts/0026_correlation_cache.sql"),
+    ),
+    (
+        "0027_entity_index",
+        include_str!("scripts/0027_entity_index.sql"),
+    ),
 ];
 
 pub fn latest_version() -> &'static str {

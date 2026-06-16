@@ -15,7 +15,8 @@ use super::{
 use chrono::Utc;
 use domain::{EdgeType, FileEntry, FileEntryId, GraphEdge};
 use persistence_sqlite::repositories::{file_repo::FileRepo, graph_repo::GraphRepo};
-use rusqlite::Connection;
+use rusqlite::{params, Connection, OptionalExtension};
+use sha2::{Digest, Sha256};
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 use transport::dto::{
@@ -28,7 +29,39 @@ use transport::dto::{
 
 // ── Main entry point ──
 
+/// Returns a correlation snapshot with caching. On first call (or after artifact changes),
+/// the full correlation pipeline runs; subsequent calls with the same artifact set return the
+/// cached snapshot immediately.
 pub fn get_correlation_snapshot(conn: &Connection) -> Result<CorrelationSnapshotDto, String> {
+    let Some(case_id) = resolve_case_id(conn)? else {
+        // No artifacts in the database yet — nothing to cache, but still compute
+        // family coverage from the rule families constant.
+        return compute_correlation_snapshot(conn);
+    };
+    let artifact_hash = compute_artifact_hash(conn)?;
+
+    // Check cache first
+    if let Some(cached) = get_cached_snapshot(conn, &case_id)? {
+        if cached.artifact_hash == artifact_hash {
+            let mut snapshot: CorrelationSnapshotDto = serde_json::from_str(&cached.snapshot_json)
+                .map_err(|e| format!("deserialize cached snapshot: {e}"))?;
+            // Refresh generated_at to reflect this read
+            snapshot.generated_at = Utc::now().to_rfc3339();
+            return Ok(snapshot);
+        }
+    }
+
+    // Cache miss or hash changed — full recompute
+    let snapshot = compute_correlation_snapshot(conn)?;
+    let ids_json = serde_json::to_string(&collect_artifact_ids(conn)?)
+        .map_err(|e| format!("serialize artifact ids: {e}"))?;
+    store_cached_snapshot(conn, &case_id, &snapshot, &artifact_hash, &ids_json)?;
+    Ok(snapshot)
+}
+
+/// Full uncached correlation computation (shared by get_correlation_snapshot and the incremental
+/// path when incremental is not applicable).
+fn compute_correlation_snapshot(conn: &Connection) -> Result<CorrelationSnapshotDto, String> {
     let artifacts = crate::artifact_service::get_artifact_rows_from_db(conn, None)?
         .into_iter()
         .take(MAX_CORRELATION_ARTIFACTS)
@@ -40,8 +73,283 @@ pub fn get_correlation_snapshot(conn: &Connection) -> Result<CorrelationSnapshot
             .filter(|row| !row.source_object_id.trim().is_empty())
             .collect::<Vec<_>>();
 
-    let groups = build_source_groups(conn, artifacts.clone(), timelines.clone())?;
-    let rule_groups = build_rule_groups(conn, &artifacts, &timelines)?;
+    build_snapshot_from(conn, &artifacts, &timelines)
+}
+
+/// Incremental correlation snapshot: only processes artifacts that are new since the last
+/// cached snapshot. Falls back to full recompute when the cache is empty or more than half
+/// the artifacts are new.
+pub fn get_correlation_snapshot_incremental(
+    conn: &Connection,
+) -> Result<CorrelationSnapshotDto, String> {
+    let Some(case_id) = resolve_case_id(conn)? else {
+        // No artifacts — nothing to cache or diff, but still compute family coverage.
+        return compute_correlation_snapshot(conn);
+    };
+    let artifact_hash = compute_artifact_hash(conn)?;
+
+    let cached = match get_cached_snapshot(conn, &case_id)? {
+        Some(c) => c,
+        None => {
+            // No cache — full compute
+            let snapshot = compute_correlation_snapshot(conn)?;
+            let ids_json = serde_json::to_string(&collect_artifact_ids(conn)?)
+                .map_err(|e| format!("serialize artifact ids: {e}"))?;
+            store_cached_snapshot(conn, &case_id, &snapshot, &artifact_hash, &ids_json)?;
+            return Ok(snapshot);
+        }
+    };
+
+    // Hash unchanged — return cached
+    if cached.artifact_hash == artifact_hash {
+        let mut snapshot: CorrelationSnapshotDto = serde_json::from_str(&cached.snapshot_json)
+            .map_err(|e| format!("deserialize cached snapshot: {e}"))?;
+        snapshot.generated_at = Utc::now().to_rfc3339();
+        return Ok(snapshot);
+    }
+
+    // Find new artifact IDs
+    let current_ids: BTreeSet<String> = collect_artifact_ids(conn)?;
+    let cached_ids: BTreeSet<String> =
+        serde_json::from_str(&cached.artifact_ids_json).unwrap_or_default();
+    let new_ids: Vec<_> = current_ids.difference(&cached_ids).cloned().collect();
+
+    // If too many new (or cached is stale), full recompute
+    if new_ids.is_empty() || new_ids.len() > current_ids.len() / 2 {
+        let snapshot = compute_correlation_snapshot(conn)?;
+        let ids_json = serde_json::to_string(&current_ids)
+            .map_err(|e| format!("serialize artifact ids: {e}"))?;
+        store_cached_snapshot(conn, &case_id, &snapshot, &artifact_hash, &ids_json)?;
+        return Ok(snapshot);
+    }
+
+    // ── Incremental path: only process new artifacts ──
+    let new_artifacts: Vec<ArtifactRowDto> =
+        crate::artifact_service::get_artifact_rows_from_db(conn, None)?
+            .into_iter()
+            .filter(|a| new_ids.contains(&a.id))
+            .take(MAX_CORRELATION_ARTIFACTS)
+            .collect();
+
+    let timelines =
+        crate::timeline_service::query_timeline(conn, 0, MAX_CORRELATION_TIMELINE_ROWS)?
+            .items
+            .into_iter()
+            .filter(|row| !row.source_object_id.trim().is_empty())
+            .collect::<Vec<_>>();
+
+    // Build source groups and rule groups from new artifacts only.
+    // Order matters: build_rule_groups borrows, build_source_groups takes ownership.
+    let new_rule_groups = build_rule_groups(conn, &new_artifacts, &timelines)?;
+    let new_source_groups = build_source_groups(conn, new_artifacts, timelines.clone())?;
+
+    // Deserialize the cached snapshot and build its node/edge maps
+    let mut cached: CorrelationSnapshotDto = serde_json::from_str(&cached.snapshot_json)
+        .map_err(|e| format!("deserialize cached snapshot: {e}"))?;
+
+    let mut node_map = cached
+        .nodes
+        .drain(..)
+        .map(|n| (n.id.clone(), n))
+        .collect::<BTreeMap<_, _>>();
+    let mut edge_map = cached
+        .edges
+        .drain(..)
+        .map(|e| (e.id.clone(), e))
+        .collect::<BTreeMap<_, _>>();
+    let mut clusters = cached.clusters;
+    let mut leads = cached.leads;
+
+    // Append new groups — append_* already deduplicates via insert_node
+    for group in new_source_groups {
+        append_source_group(
+            &group,
+            &mut node_map,
+            &mut edge_map,
+            &mut clusters,
+            &mut leads,
+        );
+    }
+    for group in new_rule_groups {
+        append_rule_group(
+            &group,
+            &mut node_map,
+            &mut edge_map,
+            &mut clusters,
+            &mut leads,
+        );
+    }
+
+    let mut nodes = node_map.into_values().collect::<Vec<_>>();
+    nodes.sort_by_key(|node| (node.kind.clone(), node.title.clone(), node.id.clone()));
+
+    let mut edges = edge_map.into_values().collect::<Vec<_>>();
+    edges.sort_by_key(|edge| (Reverse(confidence_rank(&edge.confidence)), edge.id.clone()));
+
+    leads.sort_by_key(|lead| {
+        (
+            Reverse(confidence_rank(&lead.confidence)),
+            Reverse(lead.supporting_node_ids.len()),
+            lead.title.clone(),
+        )
+    });
+    clusters.sort_by_key(|cluster| {
+        (
+            Reverse(confidence_rank(&cluster.confidence)),
+            Reverse(cluster.node_ids.len()),
+            cluster.title.clone(),
+        )
+    });
+    let family_coverage = build_family_coverage(&leads, &clusters);
+
+    let _ = persist_correlation_edges(conn, &leads);
+
+    let snapshot = CorrelationSnapshotDto {
+        generated_at: Utc::now().to_rfc3339(),
+        node_count: nodes.len() as u32,
+        edge_count: edges.len() as u32,
+        cluster_count: clusters.len() as u32,
+        lead_count: leads.len() as u32,
+        family_coverage,
+        nodes,
+        edges,
+        clusters,
+        leads,
+    };
+
+    store_cached_snapshot(
+        conn,
+        &case_id,
+        &snapshot,
+        &artifact_hash,
+        &serde_json::to_string(&current_ids).map_err(|e| format!("serialize artifact ids: {e}"))?,
+    )?;
+    Ok(snapshot)
+}
+
+// ── Cache helpers ──
+
+struct CachedSnapshot {
+    snapshot_json: String,
+    artifact_hash: String,
+    artifact_ids_json: String,
+}
+
+fn get_cached_snapshot(conn: &Connection, case_id: &str) -> Result<Option<CachedSnapshot>, String> {
+    conn.query_row(
+        "SELECT snapshot_json, artifact_hash, artifact_ids_json
+         FROM correlation_snapshots WHERE case_id = ?1",
+        params![case_id],
+        |row| {
+            Ok(CachedSnapshot {
+                snapshot_json: row.get(0)?,
+                artifact_hash: row.get(1)?,
+                artifact_ids_json: row.get(2)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(|e| e.to_string())
+}
+
+fn store_cached_snapshot(
+    conn: &Connection,
+    case_id: &str,
+    snapshot: &CorrelationSnapshotDto,
+    artifact_hash: &str,
+    artifact_ids_json: &str,
+) -> Result<(), String> {
+    let json = serde_json::to_string(snapshot)
+        .map_err(|e| format!("serialize snapshot for cache: {e}"))?;
+    conn.execute(
+        "INSERT OR REPLACE INTO correlation_snapshots
+         (case_id, snapshot_json, generated_at, artifact_hash, artifact_ids_json)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![
+            case_id,
+            json,
+            snapshot.generated_at,
+            artifact_hash,
+            artifact_ids_json,
+        ],
+    )
+    .map_err(|e| format!("store cached snapshot: {e}"))?;
+    Ok(())
+}
+
+/// Invalidate the correlation cache for a given case (call after a new data source import).
+pub fn invalidate_correlation_cache(conn: &Connection, case_id: &str) -> Result<(), String> {
+    conn.execute(
+        "DELETE FROM correlation_snapshots WHERE case_id = ?1",
+        params![case_id],
+    )
+    .map_err(|e| format!("invalidate correlation snapshots cache: {e}"))?;
+    conn.execute(
+        "DELETE FROM correlation_edges_cache WHERE case_id = ?1",
+        params![case_id],
+    )
+    .map_err(|e| format!("invalidate correlation edges cache: {e}"))?;
+    Ok(())
+}
+
+/// Compute a SHA-256 artifact hash over (sorted artifact id, created_at) pairs.
+fn compute_artifact_hash(conn: &Connection) -> Result<String, String> {
+    let mut stmt = conn
+        .prepare("SELECT id, created_at FROM artifacts ORDER BY id")
+        .map_err(|e| format!("compute artifact hash: {e}"))?;
+    let mut hasher = Sha256::new();
+    let rows = stmt
+        .query_map([], |row| {
+            let id: String = row.get(0)?;
+            let created_at: String = row.get(1)?;
+            Ok((id, created_at))
+        })
+        .map_err(|e| format!("compute artifact hash query: {e}"))?;
+    for row in rows {
+        let (id, created_at) = row.map_err(|e| format!("compute artifact hash row: {e}"))?;
+        hasher.update(id.as_bytes());
+        hasher.update(b"|");
+        hasher.update(created_at.as_bytes());
+        hasher.update(b"\n");
+    }
+    Ok(hex::encode(hasher.finalize()))
+}
+
+/// Collect all artifact IDs for cache tracking.
+fn collect_artifact_ids(conn: &Connection) -> Result<BTreeSet<String>, String> {
+    let mut stmt = conn
+        .prepare("SELECT id FROM artifacts ORDER BY id")
+        .map_err(|e| format!("collect artifact ids: {e}"))?;
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|e| format!("collect artifact ids query: {e}"))?;
+    let mut ids = BTreeSet::new();
+    for row in rows {
+        ids.insert(row.map_err(|e| format!("collect artifact ids row: {e}"))?);
+    }
+    Ok(ids)
+}
+
+/// Resolve the case_id from the database (needed for cache key).
+/// Returns `None` when the artifacts table is empty (nothing to correlate).
+fn resolve_case_id(conn: &Connection) -> Result<Option<String>, String> {
+    conn.query_row(
+        "SELECT DISTINCT case_id FROM artifacts LIMIT 1",
+        [],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .map_err(|e| format!("resolve case_id: {e}"))
+}
+
+/// Build a CorrelationSnapshotDto from pre-fetched artifacts and timelines.
+fn build_snapshot_from(
+    conn: &Connection,
+    artifacts: &[ArtifactRowDto],
+    timelines: &[TimelineEventDto],
+) -> Result<CorrelationSnapshotDto, String> {
+    let groups = build_source_groups(conn, artifacts.to_vec(), timelines.to_vec())?;
+    let rule_groups = build_rule_groups(conn, artifacts, timelines)?;
 
     let mut node_map = BTreeMap::<String, CorrelationNodeDto>::new();
     let mut edge_map = BTreeMap::<String, CorrelationEdgeDto>::new();

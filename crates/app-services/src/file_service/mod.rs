@@ -46,9 +46,9 @@ pub use tree_queries::{
     get_file_tree_real_with_visibility,
 };
 pub use viewer::{
-    get_file_path_for_entry, open_file_content_by_id, open_file_handle_real,
-    read_file_header_by_id, read_file_range_for_case, read_file_range_real, safe_relative_path,
-    skip_reader_bytes,
+    clear_e01_reader_cache, get_file_path_for_entry, open_file_content_by_id,
+    open_file_handle_real, read_file_header_by_id, read_file_range_for_case, read_file_range_real,
+    safe_relative_path, skip_reader_bytes,
 };
 
 pub fn get_file_jump_context(

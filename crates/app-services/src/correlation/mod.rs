@@ -8,7 +8,9 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use transport::dto::{CorrelationConfidenceDto, CorrelationEdgeKindDto, CorrelationNodeDto};
 
-pub use self::graph::get_correlation_snapshot;
+pub use self::graph::{
+    get_correlation_snapshot, get_correlation_snapshot_incremental, invalidate_correlation_cache,
+};
 
 pub(crate) const MAX_CORRELATION_ARTIFACTS: usize = 250;
 pub(crate) const MAX_CORRELATION_TIMELINE_ROWS: u32 = 250;

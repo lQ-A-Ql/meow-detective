@@ -1,5 +1,7 @@
 use super::options::ImportAnalysisOptions;
-use super::worker_runtime::{FileTask, SharedAnalysisState};
+use super::priority_queue::{PriorityTaskQueue, TaskPriority};
+use super::worker_runtime::{should_extract_artifact, FileTask, SharedAnalysisState};
+use crate::artifact_service;
 use crossbeam_channel::Sender;
 use domain::{DataSourceId, EntryType, FileEntryId};
 use rusqlite::{params, Connection};
@@ -12,36 +14,6 @@ const FILE_PAGE_SIZE: u64 = 750;
 
 pub(super) fn analysis_task_queue_bound(worker_count: usize) -> usize {
     worker_count.max(1) * TASKS_PER_WORKER_BOUND
-}
-
-pub(super) fn enqueue_analysis_tasks(
-    options: &ImportAnalysisOptions,
-    task_tx: &Sender<FileTask>,
-    shared: Arc<SharedAnalysisState>,
-) -> Result<(), String> {
-    let conn = persistence_sqlite::open_or_create(&options.db_path).map_err(|e| e.to_string())?;
-    let mut offset = 0u64;
-    loop {
-        if options.cancel_token.load(Ordering::Relaxed) {
-            break;
-        }
-        let page =
-            fetch_analysis_file_page(&conn, &options.data_source_id, offset, FILE_PAGE_SIZE)?;
-        if page.is_empty() {
-            break;
-        }
-        for file in page {
-            if options.cancel_token.load(Ordering::Relaxed) {
-                break;
-            }
-            task_tx
-                .send(file)
-                .map_err(|e| format!("Queue analysis task: {e}"))?;
-            shared.queued_total.fetch_add(1, Ordering::Relaxed);
-        }
-        offset += FILE_PAGE_SIZE;
-    }
-    Ok(())
 }
 
 pub(super) fn count_analysis_file_tasks(
@@ -84,6 +56,68 @@ pub(super) fn fetch_analysis_file_page(
         files.push(row.map_err(|e| e.to_string())?);
     }
     Ok(files)
+}
+
+/// Enqueue file tasks with priority classification.
+///
+/// Each file row is classified and pushed with the appropriate
+/// [`TaskPriority`]:
+///
+/// | Condition | Priority |
+/// |---|---|
+/// | File matches an artifact extractor and is a content candidate | [`TaskPriority::Normal`] |
+/// | All other files | [`TaskPriority::Low`] |
+///
+/// Artifact-candidate files are processed before plain enumeration tasks.
+/// When derived-analysis tasks are added in a future iteration they will
+/// be pushed at [`TaskPriority::High`].
+pub(super) fn enqueue_analysis_tasks_prioritized(
+    options: &ImportAnalysisOptions,
+    task_tx: &Sender<FileTask>,
+    shared: Arc<SharedAnalysisState>,
+) -> Result<(), String> {
+    let conn = persistence_sqlite::open_or_create(&options.db_path).map_err(|e| e.to_string())?;
+    let registry = artifact_service::create_registry();
+    let mut offset = 0u64;
+
+    loop {
+        if options.cancel_token.load(Ordering::Relaxed) {
+            break;
+        }
+        let page =
+            fetch_analysis_file_page(&conn, &options.data_source_id, offset, FILE_PAGE_SIZE)?;
+        if page.is_empty() {
+            break;
+        }
+
+        let mut pq = PriorityTaskQueue::new();
+        for file in page {
+            if options.cancel_token.load(Ordering::Relaxed) {
+                break;
+            }
+            let entry = file.to_file_entry();
+            let priority = if should_extract_artifact(&registry, &entry) {
+                // Artifact-candidate files get Normal priority so they are
+                // processed before plain file enumeration tasks.
+                TaskPriority::Normal
+            } else {
+                TaskPriority::Low
+            };
+            pq.push(file, priority);
+        }
+
+        // Drain the priority queue into the channel (high → normal → low).
+        // This preserves backpressure on the bounded channel.
+        while let Some(task) = pq.pop() {
+            task_tx
+                .send(task)
+                .map_err(|e| format!("Queue analysis task: {e}"))?;
+            shared.queued_total.fetch_add(1, Ordering::Relaxed);
+        }
+
+        offset += FILE_PAGE_SIZE;
+    }
+    Ok(())
 }
 
 fn row_to_file_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<FileTask> {
