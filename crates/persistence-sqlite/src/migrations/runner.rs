@@ -86,6 +86,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0027_entity_index",
         include_str!("scripts/0027_entity_index.sql"),
     ),
+    (
+        "0028_entity_merge",
+        include_str!("scripts/0028_entity_merge.sql"),
+    ),
 ];
 
 pub fn latest_version() -> &'static str {

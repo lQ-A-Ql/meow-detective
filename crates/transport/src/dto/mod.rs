@@ -3,6 +3,7 @@ pub mod artifacts;
 pub mod batch;
 pub mod case;
 pub mod correlation;
+pub mod entity_resolution;
 pub mod files;
 pub mod graph;
 pub mod import;
@@ -46,6 +47,7 @@ pub use correlation::{
     CorrelationJumpTargetDto, CorrelationLeadDto, CorrelationNodeDto, CorrelationNodeKindDto,
     CorrelationProvenanceDto, CorrelationSnapshotDto,
 };
+pub use entity_resolution::{EntityMergeResultDto, ResolvedEntityDto};
 pub use files::{
     FileChildrenDto, FileEntryRowDto, FileJumpContextDto, FileRowsPageDto, FileTreeNodeDto,
 };

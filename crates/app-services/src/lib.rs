@@ -7,6 +7,7 @@ pub mod correlation;
 pub use correlation::get_correlation_snapshot;
 pub mod datasource_service;
 pub mod entity_extraction;
+pub mod entity_resolution;
 pub mod error_ext;
 pub mod file_service;
 pub mod graph_service;
