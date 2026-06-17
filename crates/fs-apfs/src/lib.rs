@@ -850,10 +850,16 @@ mod tests {
     //    9    0x09000   Subdir B-tree node
     //   10    0x0A000   Nested file inode
     //   11    0x0B000   Nested file data block
+    //   12    0x0C000   dir1 inode
+    //   13    0x0D000   dir1 B-tree node
+    //   14    0x0E000   dir2 inode
+    //   15    0x0F000   dir2 B-tree node
+    //   16    0x10000   three-level file inode
+    //   17    0x11000   three-level file data
 
     fn build_apfs_fixture() -> Vec<u8> {
         let block_size: usize = 4096;
-        let total_blocks: usize = 12;
+        let total_blocks: usize = 18;
         let total_size = total_blocks * block_size;
         let mut img = vec![0u8; total_size];
 
@@ -877,7 +883,7 @@ mod tests {
         cp[BT_FLAGS_OFF..BT_FLAGS_OFF + 2]
             .copy_from_slice(&(BT_ROOT | BT_LEAF | BT_FIXED_KV).to_le_bytes());
         cp[BT_LEVEL_OFF..BT_LEVEL_OFF + 2].copy_from_slice(&0u16.to_le_bytes());
-        let nkeys: u32 = 9;
+        let nkeys: u32 = 15;
         cp[BT_NKEYS_OFF..BT_NKEYS_OFF + 4].copy_from_slice(&nkeys.to_le_bytes());
 
         // kvloc_t entries at table_space_offset.
@@ -909,6 +915,12 @@ mod tests {
             (700, 9),
             (800, 10),
             (900, 11),
+            (1000, 12),
+            (1001, 13),
+            (1100, 14),
+            (1101, 15),
+            (1200, 16),
+            (1300, 17),
         ];
 
         let kv_data_start = table_off as usize + nkeys as usize * TOC_ENTRY_SIZE;
@@ -955,8 +967,8 @@ mod tests {
         let rdb = &mut img[block(5)..block(6)];
         rdb[BT_FLAGS_OFF..BT_FLAGS_OFF + 2].copy_from_slice(&(BT_ROOT | BT_LEAF).to_le_bytes());
         rdb[BT_LEVEL_OFF..BT_LEVEL_OFF + 2].copy_from_slice(&0u16.to_le_bytes());
-        let _dir_nkeys: u32 = 3; // file.txt, subdir, nested (actually let's do 2)
-        rdb[BT_NKEYS_OFF..BT_NKEYS_OFF + 4].copy_from_slice(&2u32.to_le_bytes());
+        let _dir_nkeys: u32 = 3; // file.txt, subdir, dir1
+        rdb[BT_NKEYS_OFF..BT_NKEYS_OFF + 4].copy_from_slice(&3u32.to_le_bytes());
 
         // Helper: write a variable-length KV entry for directory.
         fn write_dir_kv(
@@ -1005,7 +1017,7 @@ mod tests {
         rdb[BT_TABLE_SPACE_OFF + 2..BT_TABLE_SPACE_OFF + 4]
             .copy_from_slice(&dir_table_len.to_le_bytes());
 
-        let mut kv_start = dir_toc_start + (2usize * TOC_ENTRY_SIZE); // after TOC entries
+        let mut kv_start = dir_toc_start + (3usize * TOC_ENTRY_SIZE); // after TOC entries
         write_dir_kv(
             rdb,
             0,
@@ -1016,6 +1028,7 @@ mod tests {
             false,
         );
         write_dir_kv(rdb, 1, dir_toc_start, &mut kv_start, b"subdir", 600, true);
+        write_dir_kv(rdb, 2, dir_toc_start, &mut kv_start, b"dir1", 1000, true);
 
         // ── Block 6: File inode (file.txt) ──
         let fi = &mut img[block(6)..block(7)];
@@ -1095,6 +1108,93 @@ mod tests {
 
         // ── Block 11: Nested file data ──
         img[block(11)..block(11) + nested_content.len()].copy_from_slice(nested_content);
+
+        // ── Block 12: dir1 inode ──
+        let d1 = &mut img[block(12)..block(13)];
+        d1[0..8].copy_from_slice(&200u64.to_le_bytes()); // parent_id (root)
+        d1[8..16].copy_from_slice(&1000u64.to_le_bytes()); // private_id
+        d1[0x10..0x18].copy_from_slice(&700_003_000_000u64.to_le_bytes());
+        d1[0x18..0x20].copy_from_slice(&700_003_000_001u64.to_le_bytes());
+        d1[0x20..0x28].copy_from_slice(&700_003_000_002u64.to_le_bytes());
+        d1[0x28..0x30].copy_from_slice(&700_003_000_003u64.to_le_bytes());
+        d1[0x30..0x38].copy_from_slice(&0u64.to_le_bytes());
+        d1[0x38..0x3C].copy_from_slice(&3u32.to_le_bytes());
+        d1[0x44..0x48].copy_from_slice(&501u32.to_le_bytes());
+        d1[0x48..0x4C].copy_from_slice(&20u32.to_le_bytes());
+        d1[0x4C..0x4E].copy_from_slice(&S_IFDIR.to_le_bytes());
+        d1[0x58..0x60].copy_from_slice(&0u64.to_le_bytes());
+        d1[0x80..0x88].copy_from_slice(&1001u64.to_le_bytes()); // children_oid → block 13
+
+        // ── Block 13: dir1 B-tree node ──
+        let d1b = &mut img[block(13)..block(14)];
+        d1b[BT_FLAGS_OFF..BT_FLAGS_OFF + 2].copy_from_slice(&(BT_ROOT | BT_LEAF).to_le_bytes());
+        d1b[BT_LEVEL_OFF..BT_LEVEL_OFF + 2].copy_from_slice(&0u16.to_le_bytes());
+        d1b[BT_NKEYS_OFF..BT_NKEYS_OFF + 4].copy_from_slice(&1u32.to_le_bytes());
+        d1b[BT_TABLE_SPACE_OFF..BT_TABLE_SPACE_OFF + 2]
+            .copy_from_slice(&dir_table_off.to_le_bytes());
+        d1b[BT_TABLE_SPACE_OFF + 2..BT_TABLE_SPACE_OFF + 4]
+            .copy_from_slice(&dir_table_len.to_le_bytes());
+
+        let mut kv_start3 = dir_toc_start + 1 * TOC_ENTRY_SIZE;
+        write_dir_kv(d1b, 0, dir_toc_start, &mut kv_start3, b"dir2", 1100, true);
+
+        // ── Block 14: dir2 inode ──
+        let d2 = &mut img[block(14)..block(15)];
+        d2[0..8].copy_from_slice(&1000u64.to_le_bytes()); // parent_id (dir1)
+        d2[8..16].copy_from_slice(&1100u64.to_le_bytes()); // private_id
+        d2[0x10..0x18].copy_from_slice(&700_004_000_000u64.to_le_bytes());
+        d2[0x18..0x20].copy_from_slice(&700_004_000_001u64.to_le_bytes());
+        d2[0x20..0x28].copy_from_slice(&700_004_000_002u64.to_le_bytes());
+        d2[0x28..0x30].copy_from_slice(&700_004_000_003u64.to_le_bytes());
+        d2[0x30..0x38].copy_from_slice(&0u64.to_le_bytes());
+        d2[0x38..0x3C].copy_from_slice(&3u32.to_le_bytes());
+        d2[0x44..0x48].copy_from_slice(&501u32.to_le_bytes());
+        d2[0x48..0x4C].copy_from_slice(&20u32.to_le_bytes());
+        d2[0x4C..0x4E].copy_from_slice(&S_IFDIR.to_le_bytes());
+        d2[0x58..0x60].copy_from_slice(&0u64.to_le_bytes());
+        d2[0x80..0x88].copy_from_slice(&1101u64.to_le_bytes()); // children_oid → block 15
+
+        // ── Block 15: dir2 B-tree node ──
+        let d2b = &mut img[block(15)..block(16)];
+        d2b[BT_FLAGS_OFF..BT_FLAGS_OFF + 2].copy_from_slice(&(BT_ROOT | BT_LEAF).to_le_bytes());
+        d2b[BT_LEVEL_OFF..BT_LEVEL_OFF + 2].copy_from_slice(&0u16.to_le_bytes());
+        d2b[BT_NKEYS_OFF..BT_NKEYS_OFF + 4].copy_from_slice(&1u32.to_le_bytes());
+        d2b[BT_TABLE_SPACE_OFF..BT_TABLE_SPACE_OFF + 2]
+            .copy_from_slice(&dir_table_off.to_le_bytes());
+        d2b[BT_TABLE_SPACE_OFF + 2..BT_TABLE_SPACE_OFF + 4]
+            .copy_from_slice(&dir_table_len.to_le_bytes());
+
+        let mut kv_start4 = dir_toc_start + 1 * TOC_ENTRY_SIZE;
+        write_dir_kv(
+            d2b,
+            0,
+            dir_toc_start,
+            &mut kv_start4,
+            b"file.txt",
+            1200,
+            false,
+        );
+
+        // ── Block 16: three-level file inode ──
+        let tfi = &mut img[block(16)..block(17)];
+        tfi[0..8].copy_from_slice(&1100u64.to_le_bytes()); // parent_id (dir2)
+        tfi[8..16].copy_from_slice(&1200u64.to_le_bytes()); // private_id
+        tfi[0x10..0x18].copy_from_slice(&700_005_000_000u64.to_le_bytes());
+        tfi[0x18..0x20].copy_from_slice(&700_005_000_001u64.to_le_bytes());
+        tfi[0x20..0x28].copy_from_slice(&700_005_000_002u64.to_le_bytes());
+        tfi[0x28..0x30].copy_from_slice(&700_005_000_003u64.to_le_bytes());
+        tfi[0x30..0x38].copy_from_slice(&0u64.to_le_bytes());
+        tfi[0x38..0x3C].copy_from_slice(&1u32.to_le_bytes());
+        tfi[0x44..0x48].copy_from_slice(&501u32.to_le_bytes());
+        tfi[0x48..0x4C].copy_from_slice(&20u32.to_le_bytes());
+        let three_content = b"Deep nested content";
+        tfi[0x4C..0x4E].copy_from_slice(&S_IFREG.to_le_bytes());
+        tfi[0x58..0x60].copy_from_slice(&(three_content.len() as u64).to_le_bytes());
+        tfi[0x80..0x88].copy_from_slice(&0u64.to_le_bytes());
+        tfi[0x88..0x90].copy_from_slice(&1300u64.to_le_bytes()); // extent → block 17
+
+        // ── Block 17: Three-level file data ──
+        img[block(17)..block(17) + three_content.len()].copy_from_slice(three_content);
 
         img
     }
@@ -1223,6 +1323,84 @@ mod tests {
             Err(e) => e,
             Ok(_) => panic!("expected error"),
         };
+        assert_eq!(e.kind(), io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn test_object_map_for_root_inode() {
+        // Build a minimal checkpoint node with fixed-KV OID→block mappings.
+        let mut cp = vec![0u8; 1024];
+        cp[BT_FLAGS_OFF..BT_FLAGS_OFF + 2]
+            .copy_from_slice(&(BT_ROOT | BT_LEAF | BT_FIXED_KV).to_le_bytes());
+        cp[BT_LEVEL_OFF..BT_LEVEL_OFF + 2].copy_from_slice(&0u16.to_le_bytes());
+        let nkeys: u32 = 2;
+        cp[BT_NKEYS_OFF..BT_NKEYS_OFF + 4].copy_from_slice(&nkeys.to_le_bytes());
+
+        let key_size: u16 = 8;
+        let val_size: u16 = 8;
+        let entry_size = (key_size + val_size) as usize;
+        let table_off: u16 = BT_TOC_BASE as u16;
+        let table_len = (nkeys as usize * TOC_ENTRY_SIZE + nkeys as usize * entry_size) as u16;
+        cp[BT_TABLE_SPACE_OFF..BT_TABLE_SPACE_OFF + 2].copy_from_slice(&table_off.to_le_bytes());
+        cp[BT_TABLE_SPACE_OFF + 2..BT_TABLE_SPACE_OFF + 4]
+            .copy_from_slice(&table_len.to_le_bytes());
+
+        let mappings: [(u64, u64); 2] = [(200, 4), (300, 5)];
+        let kv_start = table_off as usize + nkeys as usize * TOC_ENTRY_SIZE;
+
+        for (i, &(oid, blk)) in mappings.iter().enumerate() {
+            let toc_off = table_off as usize + i * TOC_ENTRY_SIZE;
+            let key_off = kv_start + i * entry_size;
+            let val_off = key_off + key_size as usize;
+
+            cp[toc_off..toc_off + 2].copy_from_slice(&(key_off as u16).to_le_bytes());
+            cp[toc_off + 2..toc_off + 4].copy_from_slice(&key_size.to_le_bytes());
+            cp[toc_off + 4..toc_off + 6].copy_from_slice(&(val_off as u16).to_le_bytes());
+            cp[toc_off + 6..toc_off + 8].copy_from_slice(&val_size.to_le_bytes());
+
+            cp[key_off..key_off + 8].copy_from_slice(&oid.to_le_bytes());
+            cp[val_off..val_off + 8].copy_from_slice(&blk.to_le_bytes());
+        }
+
+        let flags = BT_ROOT | BT_LEAF | BT_FIXED_KV;
+        let omap = OidMap::from_checkpoint_node(&cp, flags, nkeys);
+
+        assert_eq!(omap.resolve(200).unwrap(), 4);
+        assert_eq!(omap.resolve(300).unwrap(), 5);
+        // Non-existent OID should fail.
+        assert!(omap.resolve(999).is_err());
+    }
+
+    #[test]
+    fn test_nested_three_levels() {
+        let img = build_apfs_fixture();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let apfs = ApfsReader::open(reader, 0).unwrap();
+
+        let vol_name = &apfs.volumes[0].name;
+        let path = format!("{}/dir1/dir2/file.txt", vol_name);
+        let mut f = apfs.open_file(&path).unwrap();
+        let mut s = String::new();
+        f.read_to_string(&mut s).unwrap();
+        assert_eq!(s, "Deep nested content");
+    }
+
+    #[test]
+    fn test_container_superblock_info() {
+        let img = build_apfs_fixture();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let apfs = ApfsReader::open(reader, 0).unwrap();
+        assert!(apfs.block_size > 0);
+        assert!(apfs.volumes.len() > 0);
+    }
+
+    #[test]
+    fn test_nonexistent_volume() {
+        let img = build_apfs_fixture();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let apfs = ApfsReader::open(reader, 0).unwrap();
+
+        let e = apfs.list_children("NoSuchVol").unwrap_err();
         assert_eq!(e.kind(), io::ErrorKind::NotFound);
     }
 }

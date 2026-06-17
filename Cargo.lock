@@ -2245,6 +2245,7 @@ dependencies = [
  "chrono",
  "domain",
  "persistence-sqlite",
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",

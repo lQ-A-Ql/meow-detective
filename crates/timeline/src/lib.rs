@@ -463,4 +463,122 @@ mod tests {
             // id is intentionally excluded — it varies per invocation.
         }
     }
+
+    // ---------------------------------------------------------------------------
+    // 11 – file with a future timestamp (ts > now)
+    // ---------------------------------------------------------------------------
+    #[test]
+    fn test_project_file_with_future_timestamp() {
+        let file = make_entry(
+            "id-11",
+            "future.txt",
+            "/future/future.txt",
+            EntryType::File,
+            false,
+            Some(ts(2030, 1, 1)),
+            None,
+            None,
+            None,
+        );
+        let events = project_file_macb(&file);
+        assert_eq!(
+            events.len(),
+            1,
+            "should produce 1 event for the future timestamp"
+        );
+        assert_eq!(events[0].event_type, "FILE_CREATED");
+        assert_eq!(events[0].timestamp, ts(2030, 1, 1));
+        assert!(
+            events[0].timestamp > Utc::now(),
+            "timestamp should be in the future"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // 12 – batch projection of 25 files (100 events)
+    // ---------------------------------------------------------------------------
+    #[test]
+    fn test_project_batch_25_files() {
+        let entries: Vec<FileEntry> = (0..25)
+            .map(|i| {
+                make_entry(
+                    &format!("id-batch-{}", i),
+                    &format!("file_{}.dat", i),
+                    &format!("/batch/file_{}.dat", i),
+                    EntryType::File,
+                    false,
+                    Some(ts(2024, 1, 1 + (i % 28) as u32)),
+                    Some(ts(2024, 2, 1 + (i % 28) as u32)),
+                    Some(ts(2024, 3, 1 + (i % 28) as u32)),
+                    Some(ts(2024, 4, 1 + (i % 28) as u32)),
+                )
+            })
+            .collect();
+
+        let all_events: Vec<TimelineEvent> = entries.iter().flat_map(project_file_macb).collect();
+        assert_eq!(all_events.len(), 100, "25 files x 4 MACB = 100 events");
+    }
+
+    // ---------------------------------------------------------------------------
+    // 13 – file with only created_at and accessed_at set (2 events)
+    // ---------------------------------------------------------------------------
+    #[test]
+    fn test_project_file_mixed_timestamps() {
+        let file = make_entry(
+            "id-13",
+            "mixed.txt",
+            "/mixed/mixed.txt",
+            EntryType::File,
+            false,
+            Some(ts(2024, 7, 1)), // created
+            None,
+            Some(ts(2024, 8, 15)), // accessed
+            None,
+        );
+        let events = project_file_macb(&file);
+        assert_eq!(events.len(), 2, "only created and accessed set → 2 events");
+
+        let types: Vec<&str> = events.iter().map(|e| e.event_type.as_str()).collect();
+        assert!(types.contains(&"FILE_CREATED"));
+        assert!(types.contains(&"FILE_ACCESSED"));
+        assert!(!types.contains(&"FILE_MODIFIED"));
+        assert!(!types.contains(&"FILE_METADATA_CHANGED"));
+    }
+
+    // ---------------------------------------------------------------------------
+    // 14 – projecting zero files returns 0 events
+    // ---------------------------------------------------------------------------
+    #[test]
+    fn test_empty_slice_no_events() {
+        let entries: Vec<FileEntry> = vec![];
+        let events: Vec<TimelineEvent> = entries.iter().flat_map(project_file_macb).collect();
+        assert_eq!(events.len(), 0, "empty slice should produce 0 events");
+    }
+
+    // ---------------------------------------------------------------------------
+    // 15 – event.source_object_id matches file.id.0
+    // ---------------------------------------------------------------------------
+    #[test]
+    fn test_event_source_object_id_matches() {
+        let file = make_entry(
+            "my-id",
+            "source.txt",
+            "/source/source.txt",
+            EntryType::File,
+            false,
+            Some(ts(2024, 9, 10)),
+            Some(ts(2024, 10, 20)),
+            Some(ts(2024, 11, 30)),
+            Some(ts(2024, 12, 31)),
+        );
+        let events = project_file_macb(&file);
+        assert_eq!(events.len(), 4);
+
+        for event in &events {
+            assert_eq!(
+                event.source_object_id, file.id.0,
+                "source_object_id should match the file entry id"
+            );
+        }
+    }
 }

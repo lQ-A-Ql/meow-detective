@@ -969,7 +969,7 @@ mod tests {
 
     fn build_hfsplus_fixture_v2() -> Vec<u8> {
         let block_size: usize = 4096;
-        let total_blocks: usize = 8;
+        let total_blocks: usize = 10;
         let total_size = total_blocks * block_size;
         let mut img = vec![0u8; total_size];
 
@@ -991,17 +991,21 @@ mod tests {
         vh[VH_BLOCK_SIZE..VH_BLOCK_SIZE + 4].copy_from_slice(&(block_size as u32).to_be_bytes());
         vh[VH_TOTAL_BLOCKS..VH_TOTAL_BLOCKS + 4]
             .copy_from_slice(&(total_blocks as u32).to_be_bytes());
-        vh[VH_FREE_BLOCKS..VH_FREE_BLOCKS + 4].copy_from_slice(&3u32.to_be_bytes());
+        vh[VH_FREE_BLOCKS..VH_FREE_BLOCKS + 4].copy_from_slice(&1u32.to_be_bytes());
         vh[VH_NEXT_CATALOG_ID..VH_NEXT_CATALOG_ID + 4].copy_from_slice(&100u32.to_be_bytes());
 
-        // Catalog file fork: logicalSize = 4*4096 = 16384, totalBlocks=4, extent[0]=(1,4)
+        // Catalog file fork: logicalSize = 5*4096 = 20480, totalBlocks=5,
+        // extent[0]=(1,4), extent[1]=(7,1)
         let cf = VH_CATALOG_FILE;
         vh[cf + FORK_LOGICAL_SIZE..cf + FORK_LOGICAL_SIZE + 8]
-            .copy_from_slice(&(4u64 * block_size as u64).to_be_bytes());
-        vh[cf + FORK_TOTAL_BLOCKS..cf + FORK_TOTAL_BLOCKS + 4].copy_from_slice(&4u32.to_be_bytes());
+            .copy_from_slice(&(5u64 * block_size as u64).to_be_bytes());
+        vh[cf + FORK_TOTAL_BLOCKS..cf + FORK_TOTAL_BLOCKS + 4].copy_from_slice(&5u32.to_be_bytes());
         let ext0 = cf + FORK_EXTENTS;
         vh[ext0..ext0 + 4].copy_from_slice(&1u32.to_be_bytes()); // startBlock
         vh[ext0 + 4..ext0 + 8].copy_from_slice(&4u32.to_be_bytes()); // blockCount
+        let ext1 = ext0 + EXTENT_DESC_SIZE;
+        vh[ext1..ext1 + 4].copy_from_slice(&7u32.to_be_bytes()); // startBlock
+        vh[ext1 + 4..ext1 + 8].copy_from_slice(&1u32.to_be_bytes()); // blockCount
 
         // ===================================================================
         // Block 1: Catalog B-tree header node (node 0, kind=0x02)
@@ -1034,13 +1038,13 @@ mod tests {
         let hd = &mut hdr[8..];
         hd[BT_HEADER_TREE_DEPTH..BT_HEADER_TREE_DEPTH + 2].copy_from_slice(&2u16.to_be_bytes()); // depth=2 (header鈫抜ndex鈫抣eaf)
         hd[BT_HEADER_ROOT_NODE..BT_HEADER_ROOT_NODE + 4].copy_from_slice(&2u32.to_be_bytes()); // root = node 2 (the index node)
-        hd[BT_HEADER_LEAF_RECORDS..BT_HEADER_LEAF_RECORDS + 4].copy_from_slice(&5u32.to_be_bytes());
+        hd[BT_HEADER_LEAF_RECORDS..BT_HEADER_LEAF_RECORDS + 4].copy_from_slice(&8u32.to_be_bytes());
         hd[BT_HEADER_FIRST_LEAF..BT_HEADER_FIRST_LEAF + 4].copy_from_slice(&3u32.to_be_bytes()); // first leaf = node 3
         hd[BT_HEADER_LAST_LEAF..BT_HEADER_LAST_LEAF + 4].copy_from_slice(&5u32.to_be_bytes()); // last leaf = node 5 (subdir)
         hd[BT_HEADER_NODE_SIZE..BT_HEADER_NODE_SIZE + 2]
             .copy_from_slice(&(block_size as u16).to_be_bytes());
         hd[BT_HEADER_MAX_KEY_LEN..BT_HEADER_MAX_KEY_LEN + 2].copy_from_slice(&512u16.to_be_bytes());
-        hd[BT_HEADER_TOTAL_NODES..BT_HEADER_TOTAL_NODES + 4].copy_from_slice(&4u32.to_be_bytes()); // nodes 0,1,2,3 鈫?4 total
+        hd[BT_HEADER_TOTAL_NODES..BT_HEADER_TOTAL_NODES + 4].copy_from_slice(&5u32.to_be_bytes()); // nodes 0,1,2,3 鈫?4 total
         hd[BT_HEADER_FREE_LIST..BT_HEADER_FREE_LIST + 4].copy_from_slice(&0u32.to_be_bytes());
 
         // Fill in dummy user data record and map record (minimal).
@@ -1081,7 +1085,7 @@ mod tests {
         hn[hdr_off_fix + BT_HEADER_FIRST_LEAF..hdr_off_fix + BT_HEADER_FIRST_LEAF + 4]
             .copy_from_slice(&2u32.to_be_bytes()); // firstLeaf = 2
         hn[hdr_off_fix + BT_HEADER_LAST_LEAF..hdr_off_fix + BT_HEADER_LAST_LEAF + 4]
-            .copy_from_slice(&3u32.to_be_bytes()); // lastLeaf = 3
+            .copy_from_slice(&4u32.to_be_bytes()); // lastLeaf = 4
 
         // ===================================================================
         // Block 2: Index node (node 1)
@@ -1092,7 +1096,7 @@ mod tests {
         idx[BT_B_LINK..BT_B_LINK + 4].copy_from_slice(&0u32.to_be_bytes());
         idx[BT_KIND] = BT_INDEX_NODE;
         idx[BT_HEIGHT] = 1; // height above leaf level
-        idx[BT_NUM_RECORDS..BT_NUM_RECORDS + 2].copy_from_slice(&2u16.to_be_bytes());
+        idx[BT_NUM_RECORDS..BT_NUM_RECORDS + 2].copy_from_slice(&3u16.to_be_bytes());
         idx[BT_RESERVED..BT_RESERVED + 2].copy_from_slice(&0u16.to_be_bytes());
 
         // Index record 0: parentCNID=2 (key only, no name for first separator).
@@ -1113,9 +1117,18 @@ mod tests {
         idx_rec1[6..8].copy_from_slice(&0u16.to_be_bytes()); // nameLen=0
         idx_rec1[8..12].copy_from_slice(&3u32.to_be_bytes()); // childNode=3
 
+        // Index record 2: parentCNID=64.
+        let idx_rec2_off: u16 = 0x0120;
+        let idx_rec2 = &mut idx[idx_rec2_off as usize..];
+        idx_rec2[0..2].copy_from_slice(&0x0008u16.to_be_bytes()); // keyLength=8
+        idx_rec2[2..6].copy_from_slice(&64u32.to_be_bytes()); // parentCNID=64
+        idx_rec2[6..8].copy_from_slice(&0u16.to_be_bytes()); // nameLen=0
+        idx_rec2[8..12].copy_from_slice(&4u32.to_be_bytes()); // childNode=4
+
         // Record offset table.
         idx[rec_off_start..rec_off_start + 2].copy_from_slice(&idx_rec0_off.to_be_bytes());
         idx[rec_off_start + 2..rec_off_start + 4].copy_from_slice(&idx_rec1_off.to_be_bytes());
+        idx[rec_off_start + 4..rec_off_start + 6].copy_from_slice(&idx_rec2_off.to_be_bytes());
 
         // ===================================================================
         // Block 3: Leaf node (node 2) 鈥?root directory entries (parentCNID=2)
@@ -1259,11 +1272,11 @@ mod tests {
         sleaf[BT_B_LINK..BT_B_LINK + 4].copy_from_slice(&0u32.to_be_bytes());
         sleaf[BT_KIND] = BT_LEAF_NODE;
         sleaf[BT_HEIGHT] = 0;
-        sleaf[BT_NUM_RECORDS..BT_NUM_RECORDS + 2].copy_from_slice(&2u16.to_be_bytes());
+        sleaf[BT_NUM_RECORDS..BT_NUM_RECORDS + 2].copy_from_slice(&3u16.to_be_bytes());
         sleaf[BT_RESERVED..BT_RESERVED + 2].copy_from_slice(&0u16.to_be_bytes());
 
         let mut scursor = 0x0100;
-        let mut soffsets: [u16; 2] = [0; 2];
+        let mut soffsets: [u16; 3] = [0; 3];
 
         // Record 0: Folder thread for CNID=32
         soffsets[0] = scursor as u16;
@@ -1283,7 +1296,7 @@ mod tests {
         soffsets[1] = scursor as u16;
         scursor = write_key(sleaf, scursor, 32, "nested.dat");
         let nested_content = b"Nested HFS+ content";
-        let _scursor = write_file_body(
+        scursor = write_file_body(
             sleaf,
             scursor,
             48,
@@ -1294,6 +1307,11 @@ mod tests {
             6, // extent at block 6
             1,
         );
+
+        // Record 2: "deeper" folder (CNID=64, children in node 4)
+        soffsets[2] = scursor as u16;
+        scursor = write_key(sleaf, scursor, 32, "deeper");
+        let _scursor = write_folder_body(sleaf, scursor, 64, ts_create, ts_modify, ts_access);
 
         for (i, &off) in soffsets.iter().enumerate() {
             let pos = rec_off_start + i * 2;
@@ -1310,6 +1328,62 @@ mod tests {
         // ===================================================================
         img[block(6)..block(6) + nested_content.len()].copy_from_slice(nested_content);
 
+        // ===================================================================
+        // Block 7: Leaf node (node 4) -- deeper subdirectory entries
+        //          (parentCNID=64, child of subdir/CNID=32)
+        // ===================================================================
+        let dleaf = &mut img[block(7)..block(8)];
+
+        dleaf[BT_F_LINK..BT_F_LINK + 4].copy_from_slice(&0u32.to_be_bytes());
+        dleaf[BT_B_LINK..BT_B_LINK + 4].copy_from_slice(&0u32.to_be_bytes());
+        dleaf[BT_KIND] = BT_LEAF_NODE;
+        dleaf[BT_HEIGHT] = 0;
+        dleaf[BT_NUM_RECORDS..BT_NUM_RECORDS + 2].copy_from_slice(&2u16.to_be_bytes());
+        dleaf[BT_RESERVED..BT_RESERVED + 2].copy_from_slice(&0u16.to_be_bytes());
+
+        let mut dcursor = 0x0100;
+        let mut doffsets: [u16; 2] = [0; 2];
+
+        // Record 0: Folder thread for CNID=64
+        doffsets[0] = dcursor as u16;
+        dcursor = write_key(dleaf, dcursor, 64, "");
+        let deeper_utf16: Vec<u16> = "deeper".encode_utf16().collect();
+        let deeper_cu = deeper_utf16.len() as u16;
+        let deeper_thread_size = 8 + 2 + deeper_cu as usize * 2;
+        dleaf[dcursor..dcursor + 2].copy_from_slice(&RECORD_TYPE_FOLDER_THREAD.to_be_bytes());
+        dleaf[dcursor + 4..dcursor + 8].copy_from_slice(&32u32.to_be_bytes()); // parentID=32 (subdir)
+        dleaf[dcursor + 8..dcursor + 10].copy_from_slice(&deeper_cu.to_be_bytes());
+        for (i, &cu) in deeper_utf16.iter().enumerate() {
+            dleaf[dcursor + 10 + i * 2..dcursor + 12 + i * 2].copy_from_slice(&cu.to_be_bytes());
+        }
+        dcursor += deeper_thread_size;
+
+        // Record 1: "deeper_file.txt" file, CNID=80, data at block 8
+        doffsets[1] = dcursor as u16;
+        dcursor = write_key(dleaf, dcursor, 64, "deeper_file.txt");
+        let deeper_content = b"Deeper HFS+ content";
+        let _dcursor = write_file_body(
+            dleaf,
+            dcursor,
+            80,
+            ts_create,
+            ts_modify,
+            ts_access,
+            deeper_content.len() as u64,
+            8, // extent at block 8
+            1,
+        );
+
+        for (i, &off) in doffsets.iter().enumerate() {
+            let pos = rec_off_start + i * 2;
+            dleaf[pos..pos + 2].copy_from_slice(&off.to_be_bytes());
+        }
+
+        // ===================================================================
+        // Block 8: File data for "deeper_file.txt"
+        // ===================================================================
+        img[block(8)..block(8) + deeper_content.len()].copy_from_slice(deeper_content);
+
         img
     }
 
@@ -1325,8 +1399,8 @@ mod tests {
 
         assert_eq!(hfs.data_source_name(), "hfsplus");
         assert_eq!(hfs.block_size(), 4096);
-        assert_eq!(hfs.total_blocks(), 8);
-        assert_eq!(hfs.free_blocks(), 3);
+        assert_eq!(hfs.total_blocks(), 10);
+        assert_eq!(hfs.free_blocks(), 1);
     }
 
     #[test]
@@ -1417,5 +1491,120 @@ mod tests {
             Err(e) => assert_eq!(e.kind(), io::ErrorKind::NotFound),
             Ok(_) => panic!("expected error for nonexistent file"),
         }
+    }
+
+    #[test]
+    fn test_deeply_nested_path() {
+        let img = build_hfsplus_fixture_v2();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let hfs = HfsPlusReader::open(reader, 0).unwrap();
+
+        // Verify we can list the intermediate directory.
+        let deeper_children = hfs.list_children("subdir/deeper").unwrap();
+        let deeper_names: Vec<&str> = deeper_children.iter().map(|n| n.name.as_str()).collect();
+        assert!(
+            deeper_names.contains(&"deeper_file.txt"),
+            "expected deeper_file.txt in subdir/deeper listing, got {deeper_names:?}"
+        );
+
+        // Open deeply nested file.
+        let mut f = hfs.open_file("subdir/deeper/deeper_file.txt").unwrap();
+        let mut s = String::new();
+        f.read_to_string(&mut s).unwrap();
+        assert_eq!(s, "Deeper HFS+ content");
+    }
+
+    #[test]
+    fn test_missing_subdirectory() {
+        let img = build_hfsplus_fixture_v2();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let hfs = HfsPlusReader::open(reader, 0).unwrap();
+
+        // Intermediate directory does not exist.
+        let e = hfs.list_children("subdir/nonexistentdir").unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::NotFound);
+
+        // File under nonexistent intermediate dir.
+        match hfs.open_file("subdir/nonexistentdir/file.txt") {
+            Err(e) => assert_eq!(e.kind(), io::ErrorKind::NotFound),
+            Ok(_) => panic!("expected NotFound for path with missing intermediate dir"),
+        }
+    }
+
+    #[test]
+    fn test_case_insensitive_lookup() {
+        let img = build_hfsplus_fixture_v2();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let hfs = HfsPlusReader::open(reader, 0).unwrap();
+
+        // HFS+ is case-insensitive by default. "FILE.TXT" should find "file.txt".
+        let mut f = hfs.open_file("FILE.TXT").unwrap();
+        let mut s = String::new();
+        f.read_to_string(&mut s).unwrap();
+        assert_eq!(s, "Hello from HFS+!");
+
+        // Also verify case-insensitive lookup in a subdirectory.
+        let mut f2 = hfs.open_file("SUBDIR/NESTED.DAT").unwrap();
+        let mut s2 = String::new();
+        f2.read_to_string(&mut s2).unwrap();
+        assert_eq!(s2, "Nested HFS+ content");
+    }
+
+    #[test]
+    fn test_case_sensitive_exact() {
+        let img = build_hfsplus_fixture_v2();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let hfs = HfsPlusReader::open(reader, 0).unwrap();
+
+        // Exact-case matches work as well.
+        let mut f = hfs.open_file("file.txt").unwrap();
+        let mut s = String::new();
+        f.read_to_string(&mut s).unwrap();
+        assert_eq!(s, "Hello from HFS+!");
+    }
+
+    #[test]
+    fn test_timestamp_format() {
+        let img = build_hfsplus_fixture_v2();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let hfs = HfsPlusReader::open(reader, 0).unwrap();
+
+        let children = hfs.list_children("").unwrap();
+        let file_entry = children
+            .iter()
+            .find(|n| n.name == "file.txt")
+            .expect("file.txt should be in root listing");
+
+        // Timestamps should be present (non-None) when the fixture provides them.
+        assert!(
+            file_entry.created_at.is_some(),
+            "created timestamp should be present for file.txt"
+        );
+        assert!(
+            file_entry.modified_at.is_some(),
+            "modified timestamp should be present for file.txt"
+        );
+
+        // Subdirectory should also have timestamps.
+        let sub_children = hfs.list_children("subdir").unwrap();
+        let sub_file = sub_children
+            .iter()
+            .find(|n| n.name == "nested.dat")
+            .expect("nested.dat should be in subdir listing");
+        assert!(
+            sub_file.created_at.is_some(),
+            "created timestamp should be present for nested.dat"
+        );
+    }
+
+    #[test]
+    fn test_root_node() {
+        let img = build_hfsplus_fixture_v2();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let hfs = HfsPlusReader::open(reader, 0).unwrap();
+
+        let root = hfs.root().unwrap();
+        assert!(root.is_dir, "root node should be a directory");
+        assert_eq!(root.name, "\\");
     }
 }

@@ -1247,4 +1247,67 @@ mod tests {
         };
         assert_eq!(e.kind(), io::ErrorKind::NotFound);
     }
+
+    // -------------------------------------------------------------------
+    // test_subvolume_count
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_subvolume_count() {
+        let img = build_btrfs_fixture();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let btrfs = BtrfsReader::open(reader, 0).unwrap();
+        assert!(
+            !btrfs.subvolumes.is_empty(),
+            "should have at least one subvolume"
+        );
+        assert!(btrfs.subvolumes.iter().any(|s| s.name == "default"));
+    }
+
+    // -------------------------------------------------------------------
+    // test_chunk_identity_mapping
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_chunk_identity_mapping() {
+        let img = build_btrfs_fixture();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let btrfs = BtrfsReader::open(reader, 0).unwrap();
+
+        // An address outside the single chunk (0..0x18000) triggers the
+        // fallback identity mapping.
+        let phys = btrfs.translate_logical(0x20000).unwrap();
+        assert_eq!(phys, 0x20000);
+    }
+
+    // -------------------------------------------------------------------
+    // test_subdir_listing
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_subdir_listing() {
+        let img = build_btrfs_fixture();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let btrfs = BtrfsReader::open(reader, 0).unwrap();
+
+        let children = btrfs.list_children("default/subdir").unwrap();
+        let names: Vec<&str> = children.iter().map(|n| n.name.as_str()).collect();
+        assert!(
+            names.contains(&"nested.dat"),
+            "subdir should contain nested.dat"
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // test_superblock_values
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_superblock_values() {
+        let img = build_btrfs_fixture();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let btrfs = BtrfsReader::open(reader, 0).unwrap();
+        assert!(btrfs.sectorsize > 0, "sectorsize must be > 0");
+        assert!(btrfs.nodesize > 0, "nodesize must be > 0");
+    }
 }
