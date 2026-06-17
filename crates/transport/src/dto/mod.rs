@@ -4,6 +4,7 @@ pub mod batch;
 pub mod case;
 pub mod correlation;
 pub mod entity_resolution;
+pub mod exchange;
 pub mod files;
 pub mod graph;
 pub mod import;
@@ -48,6 +49,7 @@ pub use correlation::{
     CorrelationProvenanceDto, CorrelationSnapshotDto,
 };
 pub use entity_resolution::{EntityMergeResultDto, ResolvedEntityDto};
+pub use exchange::{StixExportRequestDto, StixExportResultDto};
 pub use files::{
     FileChildrenDto, FileEntryRowDto, FileJumpContextDto, FileRowsPageDto, FileTreeNodeDto,
 };

@@ -27,6 +27,11 @@ members = [
   "crates/testing",
   "crates/evtx-patched",
   "crates/containers-pst",
+  "crates/fs-ext4",
+  "crates/fs-btrfs",
+  "crates/fs-apfs",
+  "crates/fs-xfs",
+  "crates/exchange",
 ]
 
 [workspace.package]
@@ -44,6 +49,7 @@ anyhow = "~1.0"
 crossbeam-channel = "~0.5"
 regex = "~1"
 base64 = "~0.22"
+uuid = { version = "~1", features = ["v4"] }
 num_cpus = "~1"
 rayon = "~1.10"
 tracing = "~0.1"
@@ -59,6 +65,10 @@ evidence-core = { path = "crates/evidence-core" }
 fs-ntfs = { path = "crates/fs-ntfs" }
 fs-fat = { path = "crates/fs-fat" }
 fs-exfat = { path = "crates/fs-exfat" }
+fs-ext4 = { path = "crates/fs-ext4" }
+fs-btrfs = { path = "crates/fs-btrfs" }
+fs-apfs = { path = "crates/fs-apfs" }
+fs-xfs = { path = "crates/fs-xfs" }
 image-raw = { path = "crates/image-raw" }
 image-e01 = { path = "crates/image-e01" }
 catalog = { path = "crates/catalog" }
@@ -74,5 +84,6 @@ testing = { path = "crates/testing" }
 runtime-cache = { path = "crates/runtime-cache" }
 evtx = { path = "crates/evtx-patched", default-features = false }
 containers-pst = { path = "crates/containers-pst" }
+exchange = { path = "crates/exchange" }
 lz4_flex = "0.13"
 toml = "0.8"

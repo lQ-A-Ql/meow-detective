@@ -1045,6 +1045,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "exchange"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "domain",
+ "serde",
+ "serde_json",
+ "transport",
+ "uuid",
+]
+
+[[package]]
 name = "fallible-iterator"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1220,6 +1232,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs-apfs"
+version = "0.1.0"
+dependencies = [
+ "evidence-core",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "fs-btrfs"
+version = "0.1.0"
+dependencies = [
+ "evidence-core",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "fs-exfat"
 version = "0.1.0"
 dependencies = [
@@ -1232,6 +1264,16 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
+]
+
+[[package]]
+name = "fs-ext4"
+version = "0.1.0"
+dependencies = [
+ "evidence-core",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1255,6 +1297,16 @@ dependencies = [
  "evidence-core",
  "serde",
  "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "fs-xfs"
+version = "0.1.0"
+dependencies = [
+ "evidence-core",
+ "serde",
  "tempfile",
  "thiserror 2.0.18",
 ]

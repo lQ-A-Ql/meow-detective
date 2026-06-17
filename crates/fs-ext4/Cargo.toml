@@ -1,0 +1,14 @@
+[package]
+name = "fs-ext4"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+evidence-core.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
