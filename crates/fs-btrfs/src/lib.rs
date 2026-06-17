@@ -51,21 +51,27 @@ const ROOT_BACKREF_KEY: u8 = 144;
 const CHUNK_ITEM_KEY: u8 = 228;
 
 // Well-known object ids.
+#[allow(dead_code)]
 const CHUNK_TREE_OBJECTID: u64 = 3;
 const FS_TREE_OBJECTID: u64 = 5;
 const FIRST_FREE_OBJECTID: u64 = 256;
 
 // Directory entry file types.
+#[allow(dead_code)]
 const FT_REG_FILE: u8 = 1;
 const FT_DIR: u8 = 2;
+#[allow(dead_code)]
 const FT_SYMLINK: u8 = 7;
 
 // Extent types.
 const EXTENT_INLINE: u8 = 0;
+#[allow(dead_code)]
 const EXTENT_REGULAR: u8 = 1;
 
 // Inode mode bits.
+#[allow(dead_code)]
 const S_IFDIR: u32 = 0o040000;
+#[allow(dead_code)]
 const S_IFREG: u32 = 0o100000;
 
 // ---------------------------------------------------------------------------
@@ -88,6 +94,7 @@ impl BtrfsKey {
         }
     }
 
+    #[allow(dead_code)]
     fn to_bytes(&self) -> [u8; KEY_SIZE] {
         let mut buf = [0u8; KEY_SIZE];
         buf[0..8].copy_from_slice(&self.objectid.to_le_bytes());
@@ -122,6 +129,7 @@ impl Eq for BtrfsKey {}
 
 #[derive(Debug)]
 struct BtrfsHeader {
+    #[allow(dead_code)]
     bytenr: u64,
     nritems: u32,
     level: u8,
@@ -161,6 +169,7 @@ struct BtrfsSubvol {
 
 pub struct BtrfsReader {
     reader: RefCell<Box<dyn EvidenceReader>>,
+    #[allow(dead_code)]
     sectorsize: u32,
     nodesize: u32,
     root_tree_logical: u64,
@@ -200,8 +209,7 @@ impl BtrfsReader {
         }
 
         // Parse sys_chunk_array for initial chunk mappings.
-        let sys_chunk_array_size =
-            u32::from_le_bytes(sb[0xC8..0xCC].try_into().unwrap()) as usize;
+        let sys_chunk_array_size = u32::from_le_bytes(sb[0xC8..0xCC].try_into().unwrap()) as usize;
         let sys_chunk_start = 0x32B;
         let sys_chunk_end = (sys_chunk_start + sys_chunk_array_size).min(sb.len());
         let chunk_data = &sb[sys_chunk_start..sys_chunk_end];
@@ -271,13 +279,12 @@ impl BtrfsReader {
             if key.ty != CHUNK_ITEM_KEY {
                 break;
             }
-            if pos + 0x50 > data.len() {
+            if pos + 0x30 > data.len() {
                 break;
             }
             let length = u64::from_le_bytes(data[pos..pos + 8].try_into().unwrap());
-            let num_stripes =
-                u16::from_le_bytes(data[pos + 0x34..pos + 0x36].try_into().unwrap());
-            let stripe_offset = pos + 0x38;
+            let num_stripes = u16::from_le_bytes(data[pos + 0x2C..pos + 0x2E].try_into().unwrap());
+            let stripe_offset = pos + 0x30;
             if num_stripes > 0 {
                 let phys = u64::from_le_bytes(
                     data[stripe_offset + 8..stripe_offset + 16]
@@ -291,7 +298,7 @@ impl BtrfsReader {
                 });
             }
             let stripe_size: usize = 0x20; // devid(8) + offset(8) + uuid(16)
-            pos += 0x38 + num_stripes as usize * stripe_size;
+            pos += 0x30 + num_stripes as usize * stripe_size;
         }
         Ok(())
     }
@@ -542,8 +549,7 @@ impl BtrfsReader {
             offset: 0,
         };
         let (leaf_data, items) = self.walk_to_leaf(tree_root_bytenr, &search_key)?;
-        let indices =
-            Self::find_items_by_object_and_type(&items, dir_objectid, DIR_INDEX_KEY);
+        let indices = Self::find_items_by_object_and_type(&items, dir_objectid, DIR_INDEX_KEY);
 
         let mut entries = Vec::new();
         for &idx in &indices {
@@ -555,8 +561,7 @@ impl BtrfsReader {
 
         // Fallback to DIR_ITEM if no DIR_INDEX entries.
         if entries.is_empty() {
-            let ditem =
-                Self::find_items_by_object_and_type(&items, dir_objectid, DIR_ITEM_KEY);
+            let ditem = Self::find_items_by_object_and_type(&items, dir_objectid, DIR_ITEM_KEY);
             for &idx in &ditem {
                 let item_data = Self::get_item_data(&leaf_data, &items[idx]);
                 if let Some(entry) = Self::parse_dir_entry(item_data) {
@@ -580,8 +585,7 @@ impl BtrfsReader {
             offset: 0,
         };
         let (leaf_data, items) = self.walk_to_leaf(tree_root_bytenr, &search_key)?;
-        let indices =
-            Self::find_items_by_object_and_type(&items, inode_objectid, EXTENT_DATA_KEY);
+        let indices = Self::find_items_by_object_and_type(&items, inode_objectid, EXTENT_DATA_KEY);
 
         let mut data = Vec::new();
         for &idx in &indices {
@@ -598,10 +602,8 @@ impl BtrfsReader {
                     if item_data.len() < 53 {
                         continue;
                     }
-                    let disk_bytenr =
-                        u64::from_le_bytes(item_data[21..29].try_into().unwrap());
-                    let num_bytes =
-                        u64::from_le_bytes(item_data[45..53].try_into().unwrap());
+                    let disk_bytenr = u64::from_le_bytes(item_data[21..29].try_into().unwrap());
+                    let num_bytes = u64::from_le_bytes(item_data[45..53].try_into().unwrap());
                     let absolute = self.volume_offset + disk_bytenr;
                     let mut buf = vec![0u8; num_bytes as usize];
                     let mut reader = self.reader.borrow_mut();
@@ -614,11 +616,7 @@ impl BtrfsReader {
         Ok(truncate_data_to_declared_size(data, declared_size))
     }
 
-    fn get_inode_size(
-        &self,
-        tree_root_bytenr: u64,
-        inode_objectid: u64,
-    ) -> io::Result<u64> {
+    fn get_inode_size(&self, tree_root_bytenr: u64, inode_objectid: u64) -> io::Result<u64> {
         let key = BtrfsKey {
             objectid: inode_objectid,
             ty: INODE_ITEM_KEY,
@@ -681,7 +679,7 @@ impl FileSystemReader for BtrfsReader {
     fn list_children(&self, path: &str) -> io::Result<Vec<FsNode>> {
         // Empty/root path: list subvolumes.
         if path.is_empty() || path == "/" || path == "\\" {
-            let mut nodes: Vec<FsNode> = self
+            let nodes: Vec<FsNode> = self
                 .subvolumes
                 .iter()
                 .map(|sv| fs_node(sv.name.clone(), true, 0, None, None, None))
@@ -753,8 +751,7 @@ impl FileSystemReader for BtrfsReader {
             return Ok(Box::new(io::Cursor::new(Vec::new())));
         }
 
-        let data =
-            self.read_file_extents(subvol.tree_root_bytenr, inode_obj, file_size)?;
+        let data = self.read_file_extents(subvol.tree_root_bytenr, inode_obj, file_size)?;
         Ok(Box::new(io::Cursor::new(data)))
     }
 
@@ -989,82 +986,110 @@ mod tests {
 
         // Item 0: INODE_ITEM (256) - root dir
         put_item(
-            fs, 0, 256, INODE_ITEM_KEY, 0,
+            fs,
+            0,
+            256,
+            INODE_ITEM_KEY,
+            0,
             &make_inode(S_IFDIR, 0, 3),
             &mut fs_doff,
         );
 
         // Item 1: DIR_INDEX "file.txt" (child 257)
         put_item(
-            fs, 1, 256, DIR_INDEX_KEY, 1,
+            fs,
+            1,
+            256,
+            DIR_INDEX_KEY,
+            1,
             &make_dir_entry(b"file.txt", 257, FT_REG_FILE),
             &mut fs_doff,
         );
 
         // Item 2: DIR_INDEX "subdir" (child 258)
         put_item(
-            fs, 2, 256, DIR_INDEX_KEY, 2,
+            fs,
+            2,
+            256,
+            DIR_INDEX_KEY,
+            2,
             &make_dir_entry(b"subdir", 258, FT_DIR),
             &mut fs_doff,
         );
 
         // Item 3: INODE_ITEM (257) - file.txt
         put_item(
-            fs, 3, 257, INODE_ITEM_KEY, 0,
+            fs,
+            3,
+            257,
+            INODE_ITEM_KEY,
+            0,
             &make_inode(S_IFREG, file_content.len() as u64, 1),
             &mut fs_doff,
         );
 
         // Item 4: EXTENT_DATA (257,0) - regular extent at block 20
         put_item(
-            fs, 4, 257, EXTENT_DATA_KEY, 0,
-            &make_regular_extent(0x14000, file_content.len() as u64, file_content.len() as u64),
+            fs,
+            4,
+            257,
+            EXTENT_DATA_KEY,
+            0,
+            &make_regular_extent(
+                0x14000,
+                file_content.len() as u64,
+                file_content.len() as u64,
+            ),
             &mut fs_doff,
         );
 
         // Item 5: INODE_ITEM (258) - subdir
         put_item(
-            fs, 5, 258, INODE_ITEM_KEY, 0,
+            fs,
+            5,
+            258,
+            INODE_ITEM_KEY,
+            0,
             &make_inode(S_IFDIR, 0, 2),
             &mut fs_doff,
         );
 
         // Item 6: DIR_INDEX "nested.dat" in subdir (parent 258)
         put_item(
-            fs, 6, 258, DIR_INDEX_KEY, 1,
+            fs,
+            6,
+            258,
+            DIR_INDEX_KEY,
+            1,
             &make_dir_entry(b"nested.dat", 259, FT_REG_FILE),
             &mut fs_doff,
         );
 
-        fs[0x5D..0x61].copy_from_slice(&7u32.to_le_bytes());
-
-        // ---- Block 20: file.txt data ----
-        img[block(20)..block(20) + file_content.len()].copy_from_slice(file_content);
-
-        // ---- Nested file leaf at block 21 (0x15000) ----
-        let sd = &mut img[block(21)..block(22)];
-        sd[0x30..0x38].copy_from_slice(&0x15000u64.to_le_bytes());
-        sd[0x61] = 0;
-        let sd_data_end = nodesize as usize;
-        let mut sd_doff = sd_data_end;
-
         let nested_content = b"Nested file data";
 
-        // Item 0: INODE_ITEM (259)
+        // Item 7: INODE_ITEM (259)
         put_item(
-            sd, 0, 259, INODE_ITEM_KEY, 0,
+            fs,
+            7,
+            259,
+            INODE_ITEM_KEY,
+            0,
             &make_inode(S_IFREG, nested_content.len() as u64, 1),
-            &mut sd_doff,
+            &mut fs_doff,
         );
 
-        // Item 1: EXTENT_DATA inline
+        // Item 8: EXTENT_DATA inline for nested.dat
         let mut inline_ext = vec![0u8; 21 + nested_content.len()];
         inline_ext[0..8].copy_from_slice(&1u64.to_le_bytes());
         inline_ext[8..16].copy_from_slice(&(nested_content.len() as u64).to_le_bytes());
         inline_ext[20] = EXTENT_INLINE;
         inline_ext[21..21 + nested_content.len()].copy_from_slice(nested_content);
-        put_item(sd, 1, 259, EXTENT_DATA_KEY, 0, &inline_ext, &mut sd_doff);
-        sd[0x5D..0x61].copy_from_slice(&2u32.to_le_bytes());
+        put_item(fs, 8, 259, EXTENT_DATA_KEY, 0, &inline_ext, &mut fs_doff);
+
+        fs[0x5D..0x61].copy_from_slice(&9u32.to_le_bytes());
+
+        // ---- Block 20: file.txt data ----
+        img[block(20)..block(20) + file_content.len()].copy_from_slice(file_content);
 
         img
     }
@@ -1216,7 +1241,10 @@ mod tests {
         let e = btrfs.list_children("nonexistent").unwrap_err();
         assert_eq!(e.kind(), io::ErrorKind::NotFound);
 
-        let e = btrfs.open_file("default/no_such.txt").unwrap_err();
+        let e = match btrfs.open_file("default/no_such.txt") {
+            Err(e) => e,
+            Ok(_) => panic!("expected error"),
+        };
         assert_eq!(e.kind(), io::ErrorKind::NotFound);
     }
 }

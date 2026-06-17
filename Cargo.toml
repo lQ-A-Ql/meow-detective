@@ -31,6 +31,7 @@ members = [
   "crates/fs-btrfs",
   "crates/fs-apfs",
   "crates/fs-xfs",
+  "crates/fs-hfsplus",
   "crates/exchange",
 ]
 
@@ -69,6 +70,7 @@ fs-ext4 = { path = "crates/fs-ext4" }
 fs-btrfs = { path = "crates/fs-btrfs" }
 fs-apfs = { path = "crates/fs-apfs" }
 fs-xfs = { path = "crates/fs-xfs" }
+fs-hfsplus = { path = "crates/fs-hfsplus" }
 image-raw = { path = "crates/image-raw" }
 image-e01 = { path = "crates/image-e01" }
 catalog = { path = "crates/catalog" }
@@ -87,3 +89,6 @@ containers-pst = { path = "crates/containers-pst" }
 exchange = { path = "crates/exchange" }
 lz4_flex = "0.13"
 toml = "0.8"
+ed25519-dalek = "2"
+sha2 = "0.10"
+rand = "0.8"

@@ -94,6 +94,7 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0029_entity_relationships",
         include_str!("scripts/0029_entity_relationships.sql"),
     ),
+    ("0030_custody", include_str!("scripts/0030_custody.sql")),
 ];
 
 pub fn latest_version() -> &'static str {

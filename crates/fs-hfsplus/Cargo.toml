@@ -1,5 +1,5 @@
 [package]
-name = "fs-apfs"
+name = "fs-hfsplus"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
