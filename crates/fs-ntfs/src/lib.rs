@@ -2,6 +2,8 @@
 //! Parses boot sector to locate $MFT, reads FILE records, enumerates file names.
 //! Supports resident and non-resident attributes via data run parsing.
 
+pub mod ads;
+pub mod logfile;
 pub mod mft_scanner;
 
 use evidence_core::filesystem::{
@@ -662,7 +664,7 @@ impl NtfsReader {
 
     /// Resolve a file path: walk parent directories, then find the file
     /// in the final directory. Returns file MFT inode, or None if not found.
-    fn resolve_file_path(&self, path: &str) -> io::Result<Option<u64>> {
+    pub(crate) fn resolve_file_path(&self, path: &str) -> io::Result<Option<u64>> {
         let components = path_components(path);
         let (parent_dirs, file_name) = match components.split_last() {
             Some((file, dirs)) => (dirs, *file),

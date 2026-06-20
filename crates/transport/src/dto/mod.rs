@@ -1,17 +1,21 @@
 pub mod analysis;
+pub mod android;
 pub mod artifacts;
 pub mod batch;
 pub mod case;
+pub mod cloud_audit;
 pub mod correlation;
 pub mod entity_resolution;
 pub mod exchange;
 pub mod files;
 pub mod graph;
 pub mod import;
+pub mod ios;
 pub mod jobs;
 pub mod macos;
 pub mod mcp;
 pub mod notebook;
+pub mod recovery;
 pub mod registry;
 pub mod reports;
 pub mod search;
@@ -37,12 +41,16 @@ pub use analysis::{
     V2GovernanceSnapshotDto, VerificationChainStatusDto, VerificationGuaranteeLevelDto,
     VerificationResultDto,
 };
+pub use android::{
+    AndroidBackupDto, AndroidCallDto, AndroidChromeVisitDto, AndroidContactDto, AndroidSmsDto,
+};
 pub use artifacts::{ArtifactRowDto, FamilyCountDto};
 pub use batch::{BatchJobDto, BatchPhaseDto, BatchPlanDto, BatchResourceLimitsDto, BatchResumeDto};
 pub use case::{
     CaseMetricsDto, CaseSummaryDto, DataSourcePartitionDto, DataSourceSummaryDto, RecentCaseDto,
     RecentObjectDto,
 };
+pub use cloud_audit::{CloudAuditEntryDto, CloudAuditSourceDto};
 pub use correlation::{
     CorrelationClusterDto, CorrelationConfidenceDto, CorrelationEdgeDto, CorrelationEdgeKindDto,
     CorrelationJumpTargetDto, CorrelationLeadDto, CorrelationNodeDto, CorrelationNodeKindDto,
@@ -63,6 +71,10 @@ pub use import::{
     JobCancellationDto, PartialResultDto, PartialResultKindDto, PerformanceMetricDto,
     PerformanceReportDto, PerformanceReportSummaryDto, ResultFreshnessDto,
 };
+pub use ios::{
+    IosBackupFileDto, IosCallDto, IosContactDto, IosMessageDto, IosNoteDto, IosPhotoDto,
+    IosSafariEntryDto,
+};
 pub use jobs::{JobSnapshotDto, TraceItemDto, WarningItemDto};
 pub use macos::{
     FSEventDto, FSEventTypeDto, LaunchServiceDto, MacPlistEntryDto, PlistTypeDto,
@@ -78,6 +90,7 @@ pub use notebook::{
     NotebookEntryTypeDto, NotebookExportDto, NotebookThreadEdgeDto, StepReplayDifferDto,
     StepReplayDto, StepReplayFailDto, StepReplayMatchDto, StepReplayResultDto,
 };
+pub use recovery::DeletedFileRecoveryDto;
 pub use registry::{RegistryTransactionDto, RegistryTransactionOperationDto, TxLogParseResultDto};
 pub use reports::{ReportHistoryItemDto, ReportTemplateDto};
 pub use search::{SearchHighlightDto, SearchHitDto, SearchResultPageDto, SearchSnippetDto};

@@ -13,6 +13,8 @@
 //! - Directory listing via `j_drec_hashed_key` B-tree
 //! - File content via extent references
 
+pub mod checkpoint;
+
 use evidence_core::filesystem::{
     child_nodes_with_parent_path, file_not_found, fs_node, invalid_fs_data,
     is_special_directory_name, path_components, path_is_directory, path_not_found, root_node,
@@ -28,76 +30,76 @@ use std::io::{self, Read, Seek, SeekFrom};
 // ---------------------------------------------------------------------------
 
 /// Container superblock magic ("NXSB" as u32 LE).
-const NXSB_MAGIC: u32 = 0x4253_584E;
+pub(crate) const NXSB_MAGIC: u32 = 0x4253_584E;
 /// Volume superblock magic ("APSB" as u32 LE).
-const APSB_MAGIC: u32 = 0x4253_5350;
+pub(crate) const APSB_MAGIC: u32 = 0x4253_5350;
 
 // Container superblock field offsets.
-const NX_MAGIC_OFF: usize = 0x20;
-const NX_BLOCK_SIZE_OFF: usize = 0x24;
-const NX_XP_DESC_BLOCKS_OFF: usize = 0x38;
-const NX_XP_DESC_BASE_OFF: usize = 0x40;
-const NX_XP_DESC_INDEX_OFF: usize = 0x58;
+pub(crate) const NX_MAGIC_OFF: usize = 0x20;
+pub(crate) const NX_BLOCK_SIZE_OFF: usize = 0x24;
+pub(crate) const NX_XP_DESC_BLOCKS_OFF: usize = 0x38;
+pub(crate) const NX_XP_DESC_BASE_OFF: usize = 0x40;
+pub(crate) const NX_XP_DESC_INDEX_OFF: usize = 0x58;
 #[allow(dead_code)]
-const NX_XP_DESC_LEN_OFF: usize = 0x5C;
-const NX_MAX_FILE_SYSTEMS_OFF: usize = 0x84;
-const NX_FS_OID_OFF: usize = 0x88;
+pub(crate) const NX_XP_DESC_LEN_OFF: usize = 0x5C;
+pub(crate) const NX_MAX_FILE_SYSTEMS_OFF: usize = 0x84;
+pub(crate) const NX_FS_OID_OFF: usize = 0x88;
 
 // Volume superblock field offsets.
-const AP_MAGIC_OFF: usize = 0x20;
-const AP_ROOT_TREE_OID_OFF: usize = 0xB0;
+pub(crate) const AP_MAGIC_OFF: usize = 0x20;
+pub(crate) const AP_ROOT_TREE_OID_OFF: usize = 0xB0;
 
 // B-tree node field offsets.
 #[allow(dead_code)]
-const BT_FLAGS_OFF: usize = 0x00;
+pub(crate) const BT_FLAGS_OFF: usize = 0x00;
 #[allow(dead_code)]
-const BT_LEVEL_OFF: usize = 0x02;
+pub(crate) const BT_LEVEL_OFF: usize = 0x02;
 #[allow(dead_code)]
-const BT_NKEYS_OFF: usize = 0x04;
+pub(crate) const BT_NKEYS_OFF: usize = 0x04;
 #[allow(dead_code)]
-const BT_TABLE_SPACE_OFF: usize = 0x08; // 2+2 bytes (offset, len)
+pub(crate) const BT_TABLE_SPACE_OFF: usize = 0x08;
 #[allow(dead_code)]
-const BT_TOC_BASE: usize = 0x14; // data area starts here
+pub(crate) const BT_TOC_BASE: usize = 0x14;
 
 // B-tree flags.
 #[allow(dead_code)]
-const BT_ROOT: u16 = 0x0002;
+pub(crate) const BT_ROOT: u16 = 0x0002;
 #[allow(dead_code)]
-const BT_LEAF: u16 = 0x0004;
+pub(crate) const BT_LEAF: u16 = 0x0004;
 #[allow(dead_code)]
-const BT_FIXED_KV: u16 = 0x0008;
+pub(crate) const BT_FIXED_KV: u16 = 0x0008;
 
 // Inode types.
 #[allow(dead_code)]
-const S_IFDIR: u16 = 4;
+pub(crate) const S_IFDIR: u16 = 4;
 #[allow(dead_code)]
-const S_IFREG: u16 = 8;
+pub(crate) const S_IFREG: u16 = 8;
 #[allow(dead_code)]
-const S_IFLNK: u16 = 10;
+pub(crate) const S_IFLNK: u16 = 10;
 
 // j_drec_val type.
 #[allow(dead_code)]
-const DREC_TYPE_DIR: u16 = 2;
+pub(crate) const DREC_TYPE_DIR: u16 = 2;
 #[allow(dead_code)]
-const DREC_TYPE_FILE: u16 = 1;
+pub(crate) const DREC_TYPE_FILE: u16 = 1;
 
 // TOC entry size.
-const TOC_ENTRY_SIZE: usize = 8;
+pub(crate) const TOC_ENTRY_SIZE: usize = 8;
 
 // ---------------------------------------------------------------------------
 // On-disk helpers
 // ---------------------------------------------------------------------------
 
 /// APFS B-tree TOC entry (kvloc_t).
-struct TocEntry {
-    key_off: u16,
-    key_len: u16,
-    val_off: u16,
-    val_len: u16,
+pub(crate) struct TocEntry {
+    pub(crate) key_off: u16,
+    pub(crate) key_len: u16,
+    pub(crate) val_off: u16,
+    pub(crate) val_len: u16,
 }
 
 impl TocEntry {
-    fn parse(data: &[u8]) -> Self {
+    pub(crate) fn parse(data: &[u8]) -> Self {
         Self {
             key_off: u16::from_le_bytes([data[0], data[1]]),
             key_len: u16::from_le_bytes([data[2], data[3]]),
@@ -108,7 +110,7 @@ impl TocEntry {
 }
 
 /// Read a TOC from a B-tree node.
-fn parse_toc(node_data: &[u8], nkeys: u32) -> Vec<TocEntry> {
+pub(crate) fn parse_toc(node_data: &[u8], nkeys: u32) -> Vec<TocEntry> {
     let table_off = u16::from_le_bytes([
         node_data[BT_TABLE_SPACE_OFF],
         node_data[BT_TABLE_SPACE_OFF + 1],
@@ -130,12 +132,12 @@ fn parse_toc(node_data: &[u8], nkeys: u32) -> Vec<TocEntry> {
 
 /// Simple OID→block translation built from the container checkpoint.
 #[derive(Debug, Clone)]
-struct OidMap {
-    mappings: HashMap<u64, u64>,
+pub(crate) struct OidMap {
+    pub(crate) mappings: HashMap<u64, u64>,
 }
 
 impl OidMap {
-    fn from_checkpoint_node(node_data: &[u8], flags: u16, nkeys: u32) -> Self {
+    pub(crate) fn from_checkpoint_node(node_data: &[u8], flags: u16, nkeys: u32) -> Self {
         let mut mappings = HashMap::new();
         if flags & BT_FIXED_KV == 0 {
             return Self { mappings };
@@ -161,7 +163,7 @@ impl OidMap {
         Self { mappings }
     }
 
-    fn resolve(&self, oid: u64) -> io::Result<u64> {
+    pub(crate) fn resolve(&self, oid: u64) -> io::Result<u64> {
         self.mappings
             .get(&oid)
             .copied()
@@ -175,25 +177,25 @@ impl OidMap {
 
 #[derive(Debug)]
 #[allow(dead_code)]
-struct ApfsInode {
-    oid: u64,
-    parent_id: u64,
-    private_id: u64,
-    mode: u16,
-    uid: u32,
-    gid: u32,
-    flags: u64,
-    access_time: u64, // nanoseconds since epoch
-    change_time: u64,
-    mod_time: u64,
-    create_time: u64,
-    nchildren_or_nlink: u32,
+pub(crate) struct ApfsInode {
+    pub(crate) oid: u64,
+    pub(crate) parent_id: u64,
+    pub(crate) private_id: u64,
+    pub(crate) mode: u16,
+    pub(crate) uid: u32,
+    pub(crate) gid: u32,
+    pub(crate) flags: u64,
+    pub(crate) access_time: u64,
+    pub(crate) change_time: u64,
+    pub(crate) mod_time: u64,
+    pub(crate) create_time: u64,
+    pub(crate) nchildren_or_nlink: u32,
     /// OID of the child B-tree root (for directories).
-    children_oid: u64,
+    pub(crate) children_oid: u64,
     /// Extent references (OIDs pointing to data blocks).
-    extents: Vec<u64>,
+    pub(crate) extents: Vec<u64>,
     /// Logical size in bytes.
-    logical_size: u64,
+    pub(crate) logical_size: u64,
 }
 
 /// Parse a `j_inode_val_t` from bytes (the value of a B-tree inode record).
@@ -218,7 +220,7 @@ struct ApfsInode {
 ///
 /// The children_oid / extents follow in the j_inode_val or are stored separately
 /// in the xfield area. For simplicity we scan the raw value for known OID patterns.
-fn parse_inode_val(data: &[u8], oid: u64) -> ApfsInode {
+pub(crate) fn parse_inode_val(data: &[u8], oid: u64) -> ApfsInode {
     let parent_id = if data.len() >= 8 {
         u64::from_le_bytes(data[0..8].try_into().unwrap())
     } else {
@@ -318,7 +320,7 @@ fn parse_inode_val(data: &[u8], oid: u64) -> ApfsInode {
     }
 }
 
-fn ns_to_option_dt(ns: u64) -> Option<chrono::DateTime<chrono::Utc>> {
+pub(crate) fn ns_to_option_dt(ns: u64) -> Option<chrono::DateTime<chrono::Utc>> {
     if ns == 0 {
         return None;
     }
@@ -333,17 +335,17 @@ fn ns_to_option_dt(ns: u64) -> Option<chrono::DateTime<chrono::Utc>> {
 
 /// A directory entry parsed from a `j_drec` record.
 #[derive(Debug)]
-struct DirEntry {
-    name: String,
-    file_id: u64,
-    is_dir: bool,
-    date_added: u64,
+pub(crate) struct DirEntry {
+    pub(crate) name: String,
+    pub(crate) file_id: u64,
+    pub(crate) is_dir: bool,
+    pub(crate) date_added: u64,
 }
 
 /// Parse a directory B-tree leaf node (variable-size KV).
 /// Key: `j_drec_hashed_key_t` (name_hash: u64, name_len: u16, name: [u8]).
 /// Value: `j_drec_val_t` (file_id: u64, date_added: u64, flags: u64).
-fn parse_dir_b_tree(node_data: &[u8], flags: u16, nkeys: u32) -> Vec<DirEntry> {
+pub(crate) fn parse_dir_b_tree(node_data: &[u8], flags: u16, nkeys: u32) -> Vec<DirEntry> {
     // Variable-size KV directory nodes.
     if flags & BT_FIXED_KV != 0 {
         return Vec::new();
@@ -422,11 +424,11 @@ pub struct ApfsReader {
 }
 
 #[derive(Debug, Clone)]
-struct ApfsVolume {
-    name: String,
+pub(crate) struct ApfsVolume {
+    pub(crate) name: String,
     #[allow(dead_code)]
-    fs_oid: u64,
-    root_tree_oid: u64,
+    pub(crate) fs_oid: u64,
+    pub(crate) root_tree_oid: u64,
 }
 
 impl ApfsReader {
@@ -781,54 +783,58 @@ impl FileSystemReader for ApfsReader {
 // Tests
 // ===========================================================================
 
+// ---------------------------------------------------------------------------
+// Shared test helpers (available to checkpoint.rs tests as well)
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+pub(crate) struct FakeReader {
+    pub(crate) data: Vec<u8>,
+    pos: u64,
+}
+
+#[cfg(test)]
+impl FakeReader {
+    pub(crate) fn new(data: Vec<u8>) -> Self {
+        Self { data, pos: 0 }
+    }
+}
+
+#[cfg(test)]
+impl std::io::Read for FakeReader {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let start = (self.pos as usize).min(self.data.len());
+        let end = (start + buf.len()).min(self.data.len());
+        let n = end - start;
+        buf[..n].copy_from_slice(&self.data[start..end]);
+        self.pos += n as u64;
+        Ok(n)
+    }
+}
+
+#[cfg(test)]
+impl std::io::Seek for FakeReader {
+    fn seek(&mut self, pos: std::io::SeekFrom) -> io::Result<u64> {
+        self.pos = match pos {
+            std::io::SeekFrom::Start(p) => p,
+            std::io::SeekFrom::End(p) => (self.data.len() as i64 + p).max(0) as u64,
+            std::io::SeekFrom::Current(p) => (self.pos as i64 + p).max(0) as u64,
+        };
+        Ok(self.pos)
+    }
+}
+
+#[cfg(test)]
+impl EvidenceReader for FakeReader {
+    fn info(&self) -> &evidence_core::ReaderInfo {
+        unimplemented!()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use evidence_core::ReaderInfo;
-    use std::io::{Read, Seek};
-
-    // -------------------------------------------------------------------
-    // Fake evidence reader
-    // -------------------------------------------------------------------
-
-    struct FakeReader {
-        data: Vec<u8>,
-        pos: u64,
-    }
-
-    impl FakeReader {
-        fn new(data: Vec<u8>) -> Self {
-            Self { data, pos: 0 }
-        }
-    }
-
-    impl Read for FakeReader {
-        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-            let start = (self.pos as usize).min(self.data.len());
-            let end = (start + buf.len()).min(self.data.len());
-            let n = end - start;
-            buf[..n].copy_from_slice(&self.data[start..end]);
-            self.pos += n as u64;
-            Ok(n)
-        }
-    }
-
-    impl Seek for FakeReader {
-        fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
-            self.pos = match pos {
-                SeekFrom::Start(p) => p,
-                SeekFrom::End(p) => (self.data.len() as i64 + p).max(0) as u64,
-                SeekFrom::Current(p) => (self.pos as i64 + p).max(0) as u64,
-            };
-            Ok(self.pos)
-        }
-    }
-
-    impl EvidenceReader for FakeReader {
-        fn info(&self) -> &ReaderInfo {
-            unimplemented!()
-        }
-    }
+    use std::io::Read;
 
     // -------------------------------------------------------------------
     // Minimal APFS fixture
@@ -1077,7 +1083,7 @@ mod tests {
         sdb[BT_TABLE_SPACE_OFF + 2..BT_TABLE_SPACE_OFF + 4]
             .copy_from_slice(&dir_table_len.to_le_bytes());
 
-        let mut kv_start2 = dir_toc_start + 1 * TOC_ENTRY_SIZE;
+        let mut kv_start2 = dir_toc_start + TOC_ENTRY_SIZE;
         write_dir_kv(
             sdb,
             0,
@@ -1135,7 +1141,7 @@ mod tests {
         d1b[BT_TABLE_SPACE_OFF + 2..BT_TABLE_SPACE_OFF + 4]
             .copy_from_slice(&dir_table_len.to_le_bytes());
 
-        let mut kv_start3 = dir_toc_start + 1 * TOC_ENTRY_SIZE;
+        let mut kv_start3 = dir_toc_start + TOC_ENTRY_SIZE;
         write_dir_kv(d1b, 0, dir_toc_start, &mut kv_start3, b"dir2", 1100, true);
 
         // ── Block 14: dir2 inode ──
@@ -1164,7 +1170,7 @@ mod tests {
         d2b[BT_TABLE_SPACE_OFF + 2..BT_TABLE_SPACE_OFF + 4]
             .copy_from_slice(&dir_table_len.to_le_bytes());
 
-        let mut kv_start4 = dir_toc_start + 1 * TOC_ENTRY_SIZE;
+        let mut kv_start4 = dir_toc_start + TOC_ENTRY_SIZE;
         write_dir_kv(
             d2b,
             0,
@@ -1391,7 +1397,7 @@ mod tests {
         let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
         let apfs = ApfsReader::open(reader, 0).unwrap();
         assert!(apfs.block_size > 0);
-        assert!(apfs.volumes.len() > 0);
+        assert!(!apfs.volumes.is_empty());
     }
 
     #[test]

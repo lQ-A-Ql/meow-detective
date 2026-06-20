@@ -9,6 +9,7 @@ pub mod datasource_service;
 pub mod entity_extraction;
 pub mod entity_resolution;
 pub mod error_ext;
+pub mod file_carving;
 pub mod file_service;
 pub mod graph_service;
 pub mod hash_service;

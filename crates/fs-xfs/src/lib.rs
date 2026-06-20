@@ -14,6 +14,9 @@
 //! - Shortform directories (di_format = 1): inline xfs_dir2_sf_hdr + entries
 //! - Extent-mapped files (di_format = 2): bmbt records in data fork
 //! - B+tree extent maps (di_format = 3): bmbt btree blocks with leaf records
+//! - Log replay and metadata/deleted-inode recovery (`log` module)
+
+pub mod log;
 
 use evidence_core::filesystem::{
     child_nodes_with_parent_path, file_not_found, fs_node_without_timestamps, invalid_fs_data,

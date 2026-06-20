@@ -9,6 +9,9 @@
 //! - Depth-0 and depth-1 extent trees
 //! - Fast symlinks (inline target in i_block, <60 bytes)
 //! - Standard ext4 directory entries (ext4_dir_entry_2)
+//! - Journal replay and deleted-inode recovery (`journal` module)
+
+pub mod journal;
 
 use evidence_core::filesystem::{
     child_nodes_with_parent_path, file_not_found, fs_node_without_timestamps, invalid_fs_data,

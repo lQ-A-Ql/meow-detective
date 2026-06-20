@@ -21,7 +21,9 @@ members = [
   "crates/artifacts-core",
   "crates/artifacts-windows",
   "crates/artifacts-linux",
+  "crates/artifacts-ios",
   "crates/artifacts-macos",
+  "crates/artifacts-android",
   "crates/reports",
   "crates/transport",
   "crates/testing",
@@ -33,6 +35,10 @@ members = [
   "crates/fs-xfs",
   "crates/fs-hfsplus",
   "crates/exchange",
+  "crates/cloud-audit",
+  "crates/gql",
+  "crates/updater",
+  "crates/crash_handler",
 ]
 
 [workspace.package]
@@ -80,15 +86,22 @@ timeline = { path = "crates/timeline" }
 artifacts-core = { path = "crates/artifacts-core" }
 artifacts-windows = { path = "crates/artifacts-windows" }
 artifacts-linux = { path = "crates/artifacts-linux" }
+artifacts-ios = { path = "crates/artifacts-ios" }
 artifacts-macos = { path = "crates/artifacts-macos" }
+artifacts-android = { path = "crates/artifacts-android" }
 reports = { path = "crates/reports" }
 testing = { path = "crates/testing" }
 runtime-cache = { path = "crates/runtime-cache" }
 evtx = { path = "crates/evtx-patched", default-features = false }
 containers-pst = { path = "crates/containers-pst" }
 exchange = { path = "crates/exchange" }
+cloud-audit = { path = "crates/cloud-audit" }
+gql = { path = "crates/gql" }
+updater = { path = "crates/updater" }
+crash_handler = { path = "crates/crash_handler" }
 lz4_flex = "0.13"
 toml = "0.8"
 ed25519-dalek = "2"
 sha2 = "0.10"
 rand = "0.8"
+winres = "0.1"

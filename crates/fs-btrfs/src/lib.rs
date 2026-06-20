@@ -12,6 +12,8 @@
 //! - Directory listing via DIR_INDEX / DIR_ITEM
 //! - File content via EXTENT_DATA (inline and regular extents)
 
+pub mod snapshot;
+
 use evidence_core::filesystem::{
     child_nodes_with_parent_path, file_not_found, fs_node, invalid_fs_data,
     is_special_directory_name, path_components, path_is_directory, path_not_found, root_node,
@@ -26,67 +28,67 @@ use std::io::{self, Read, Seek, SeekFrom};
 // Constants
 // ---------------------------------------------------------------------------
 
-const BTRFS_SUPERBLOCK_OFFSET: u64 = 0x10000;
-const BTRFS_MAGIC: &[u8; 8] = b"_BHRfS_M";
+pub(crate) const BTRFS_SUPERBLOCK_OFFSET: u64 = 0x10000;
+pub(crate) const BTRFS_MAGIC: &[u8; 8] = b"_BHRfS_M";
 
 /// B-tree node header size in bytes (items start at this offset).
-const BTRFS_HEADER_SIZE: usize = 101;
+pub(crate) const BTRFS_HEADER_SIZE: usize = 101;
 
 /// Size of a single item descriptor in a leaf node.
-const LEAF_ITEM_SIZE: usize = 25;
+pub(crate) const LEAF_ITEM_SIZE: usize = 25;
 
 /// Size of a single key-pointer in an internal node.
-const INTERNAL_ITEM_SIZE: usize = 33;
+pub(crate) const INTERNAL_ITEM_SIZE: usize = 33;
 
 /// B-tree key size in bytes.
-const KEY_SIZE: usize = 17;
+pub(crate) const KEY_SIZE: usize = 17;
 
 // Key types.
-const INODE_ITEM_KEY: u8 = 1;
-const DIR_ITEM_KEY: u8 = 84;
-const DIR_INDEX_KEY: u8 = 96;
-const EXTENT_DATA_KEY: u8 = 108;
-const ROOT_ITEM_KEY: u8 = 132;
-const ROOT_BACKREF_KEY: u8 = 144;
-const CHUNK_ITEM_KEY: u8 = 228;
+pub(crate) const INODE_ITEM_KEY: u8 = 1;
+pub(crate) const DIR_ITEM_KEY: u8 = 84;
+pub(crate) const DIR_INDEX_KEY: u8 = 96;
+pub(crate) const EXTENT_DATA_KEY: u8 = 108;
+pub(crate) const ROOT_ITEM_KEY: u8 = 132;
+pub(crate) const ROOT_BACKREF_KEY: u8 = 144;
+pub(crate) const CHUNK_ITEM_KEY: u8 = 228;
 
 // Well-known object ids.
 #[allow(dead_code)]
-const CHUNK_TREE_OBJECTID: u64 = 3;
-const FS_TREE_OBJECTID: u64 = 5;
-const FIRST_FREE_OBJECTID: u64 = 256;
+pub(crate) const CHUNK_TREE_OBJECTID: u64 = 3;
+pub(crate) const FS_TREE_OBJECTID: u64 = 5;
+pub(crate) const FIRST_FREE_OBJECTID: u64 = 256;
 
 // Directory entry file types.
 #[allow(dead_code)]
-const FT_REG_FILE: u8 = 1;
-const FT_DIR: u8 = 2;
+pub(crate) const FT_REG_FILE: u8 = 1;
+pub(crate) const FT_DIR: u8 = 2;
 #[allow(dead_code)]
-const FT_SYMLINK: u8 = 7;
+pub(crate) const FT_SYMLINK: u8 = 7;
 
 // Extent types.
-const EXTENT_INLINE: u8 = 0;
+pub(crate) const EXTENT_INLINE: u8 = 0;
 #[allow(dead_code)]
-const EXTENT_REGULAR: u8 = 1;
+pub(crate) const EXTENT_REGULAR: u8 = 1;
 
 // Inode mode bits.
 #[allow(dead_code)]
-const S_IFDIR: u32 = 0o040000;
+pub(crate) const S_IFDIR: u32 = 0o040000;
 #[allow(dead_code)]
-const S_IFREG: u32 = 0o100000;
+pub(crate) const S_IFREG: u32 = 0o100000;
 
 // ---------------------------------------------------------------------------
 // On-disk structures
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
-struct BtrfsKey {
-    objectid: u64,
-    ty: u8,
-    offset: u64,
+pub(crate) struct BtrfsKey {
+    pub(crate) objectid: u64,
+    pub(crate) ty: u8,
+    pub(crate) offset: u64,
 }
 
 impl BtrfsKey {
-    fn parse(data: &[u8]) -> Self {
+    pub(crate) fn parse(data: &[u8]) -> Self {
         Self {
             objectid: u64::from_le_bytes(data[0..8].try_into().unwrap()),
             ty: data[8],
@@ -128,39 +130,39 @@ impl PartialEq for BtrfsKey {
 impl Eq for BtrfsKey {}
 
 #[derive(Debug)]
-struct BtrfsHeader {
+pub(crate) struct BtrfsHeader {
     #[allow(dead_code)]
-    bytenr: u64,
-    nritems: u32,
-    level: u8,
+    pub(crate) bytenr: u64,
+    pub(crate) nritems: u32,
+    pub(crate) level: u8,
 }
 
 #[derive(Debug)]
-struct LeafItem {
-    key: BtrfsKey,
-    data_offset: u32,
-    data_size: u32,
+pub(crate) struct LeafItem {
+    pub(crate) key: BtrfsKey,
+    pub(crate) data_offset: u32,
+    pub(crate) data_size: u32,
 }
 
 #[derive(Debug)]
-struct InternalItem {
-    key: BtrfsKey,
-    blockptr: u64,
+pub(crate) struct InternalItem {
+    pub(crate) key: BtrfsKey,
+    pub(crate) blockptr: u64,
 }
 
 #[derive(Debug)]
-struct BtrfsChunk {
-    logical: u64,
-    length: u64,
-    physical: u64,
+pub(crate) struct BtrfsChunk {
+    pub(crate) logical: u64,
+    pub(crate) length: u64,
+    pub(crate) physical: u64,
 }
 
 #[derive(Debug, Clone)]
-struct BtrfsSubvol {
-    id: u64,
-    name: String,
-    root_dirid: u64,
-    tree_root_bytenr: u64,
+pub struct BtrfsSubvol {
+    pub id: u64,
+    pub name: String,
+    pub root_dirid: u64,
+    pub tree_root_bytenr: u64,
 }
 
 // ---------------------------------------------------------------------------
@@ -764,54 +766,58 @@ impl FileSystemReader for BtrfsReader {
 // Tests
 // ===========================================================================
 
+// ---------------------------------------------------------------------------
+// Shared test helpers (available to snapshot.rs tests as well)
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+pub(crate) struct FakeReader {
+    pub(crate) data: Vec<u8>,
+    pos: u64,
+}
+
+#[cfg(test)]
+impl FakeReader {
+    pub(crate) fn new(data: Vec<u8>) -> Self {
+        Self { data, pos: 0 }
+    }
+}
+
+#[cfg(test)]
+impl std::io::Read for FakeReader {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let start = (self.pos as usize).min(self.data.len());
+        let end = (start + buf.len()).min(self.data.len());
+        let n = end - start;
+        buf[..n].copy_from_slice(&self.data[start..end]);
+        self.pos += n as u64;
+        Ok(n)
+    }
+}
+
+#[cfg(test)]
+impl std::io::Seek for FakeReader {
+    fn seek(&mut self, pos: std::io::SeekFrom) -> io::Result<u64> {
+        self.pos = match pos {
+            std::io::SeekFrom::Start(p) => p,
+            std::io::SeekFrom::End(p) => (self.data.len() as i64 + p).max(0) as u64,
+            std::io::SeekFrom::Current(p) => (self.pos as i64 + p).max(0) as u64,
+        };
+        Ok(self.pos)
+    }
+}
+
+#[cfg(test)]
+impl EvidenceReader for FakeReader {
+    fn info(&self) -> &evidence_core::ReaderInfo {
+        unimplemented!()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use evidence_core::ReaderInfo;
-    use std::io::{Read, Seek};
-
-    // -------------------------------------------------------------------
-    // Fake evidence reader
-    // -------------------------------------------------------------------
-
-    struct FakeReader {
-        data: Vec<u8>,
-        pos: u64,
-    }
-
-    impl FakeReader {
-        fn new(data: Vec<u8>) -> Self {
-            Self { data, pos: 0 }
-        }
-    }
-
-    impl Read for FakeReader {
-        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-            let start = (self.pos as usize).min(self.data.len());
-            let end = (start + buf.len()).min(self.data.len());
-            let n = end - start;
-            buf[..n].copy_from_slice(&self.data[start..end]);
-            self.pos += n as u64;
-            Ok(n)
-        }
-    }
-
-    impl Seek for FakeReader {
-        fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
-            self.pos = match pos {
-                SeekFrom::Start(p) => p,
-                SeekFrom::End(p) => (self.data.len() as i64 + p).max(0) as u64,
-                SeekFrom::Current(p) => (self.pos as i64 + p).max(0) as u64,
-            };
-            Ok(self.pos)
-        }
-    }
-
-    impl EvidenceReader for FakeReader {
-        fn info(&self) -> &ReaderInfo {
-            unimplemented!()
-        }
-    }
+    use std::io::Read;
 
     // -------------------------------------------------------------------
     // Minimal Btrfs fixture
@@ -864,7 +870,7 @@ mod tests {
         ca[0x3F..0x41].copy_from_slice(&1u16.to_le_bytes());
         ca[0x41..0x49].copy_from_slice(&1u64.to_le_bytes());
         ca[0x49..0x51].copy_from_slice(&0u64.to_le_bytes());
-        let array_size: u32 = 0x51 + ((4 - (0x51 % 4)) % 4);
+        let array_size: u32 = 0x51 + (4 - (0x51 % 4));
         sb[0xC8..0xCC].copy_from_slice(&array_size.to_le_bytes());
 
         // ---- Root tree internal node at block 17 (0x11000) ----
