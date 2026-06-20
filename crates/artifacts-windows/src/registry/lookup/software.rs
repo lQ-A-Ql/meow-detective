@@ -1,3 +1,5 @@
+use super::reader::RegistryHiveReader;
+use super::txlog_util::apply_single_txlog_override;
 use super::*;
 
 // ── SOFTWARE hive field extraction ────────────────────────────────────────────

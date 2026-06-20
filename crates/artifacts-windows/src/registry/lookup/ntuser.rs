@@ -1,3 +1,8 @@
+use super::reader::RegistryHiveReader;
+use super::txlog_util::{
+    find_best_txlog_match, find_best_txlog_match_user_assist, parse_user_assist_binary,
+    txlog_data_to_string,
+};
 use super::*;
 
 // ── NTUSER.DAT field extraction ──────────────────────────────────────────────

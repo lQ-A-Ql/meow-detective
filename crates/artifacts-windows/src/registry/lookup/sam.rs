@@ -1,3 +1,4 @@
+use super::reader::RegistryHiveReader;
 use super::*;
 
 /// Extract local user accounts, groups, and memberships from a SAM registry hive.
