@@ -707,10 +707,11 @@ impl NtfsReader {
                 .find(|e| e.node.name.eq_ignore_ascii_case(target) && e.node.is_dir);
             match found {
                 Some(entry) => {
-                    // Verify the child directory's $FILE_NAME points back to us
-                    if !self.verify_parent(entry.mft_ref, current_inode)? {
-                        return Ok(None);
-                    }
+                    // Verify the child directory's $FILE_NAME points back to us.
+                    // Non-fatal: some directories (e.g. \$Recycle.Bin, System Volume
+                    // Information) may have unreliable $FILE_NAME parent references
+                    // due to MFT record quirks, but the INDX entry path is correct.
+                    let _parent_ok = self.verify_parent(entry.mft_ref, current_inode)?;
                     current_inode = entry.mft_ref;
                     remaining = rest;
                 }

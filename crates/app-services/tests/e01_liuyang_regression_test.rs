@@ -2142,29 +2142,32 @@ fn liuyang_e01_recycle_bin_extraction() {
                 Box::new(E01Reader::open(&fixture_path).unwrap());
             let fs = fs_ntfs::NtfsReader::open(boxed, ntfs.offset).unwrap();
 
+            // List root directory to find $Recycle.Bin, then scan for $I files
             let mut recycle_bin_paths: Vec<String> = Vec::new();
-            match fs.list_children("$Recycle.Bin") {
-                Ok(rb_children) => {
-                    for child in &rb_children {
-                        if !child.is_dir {
-                            continue;
-                        }
-                        if let Ok(sid_children) = fs.list_children(&child.path) {
-                            for f in &sid_children {
-                                if !f.is_dir && f.name.starts_with("$I") {
-                                    recycle_bin_paths.push(f.path.clone());
-                                    if recycle_bin_paths.len() >= 20 {
-                                        break;
+            if let Ok(root) = fs.list_children("") {
+                let rb = root.iter().find(|c| c.name.eq_ignore_ascii_case("$Recycle.Bin"));
+                if let Some(rb_dir) = rb {
+                    eprintln!("Found $Recycle.Bin at path={}", rb_dir.path);
+                    if let Ok(sid_dirs) = fs.list_children(&rb_dir.path) {
+                        for sid in &sid_dirs {
+                            if !sid.is_dir { continue; }
+                            if let Ok(files) = fs.list_children(&sid.path) {
+                                for f in &files {
+                                    if !f.is_dir && f.name.starts_with("$I") {
+                                        recycle_bin_paths.push(f.path.clone());
+                                        if recycle_bin_paths.len() >= 20 { break; }
                                     }
                                 }
                             }
-                        }
-                        if recycle_bin_paths.len() >= 20 {
-                            break;
+                            if recycle_bin_paths.len() >= 20 { break; }
                         }
                     }
+                } else {
+                    eprintln!("$Recycle.Bin not found in root directory ({} entries)", root.len());
+                    for c in root.iter().take(30) {
+                        eprintln!("  root: {} (dir={})", c.name, c.is_dir);
+                    }
                 }
-                Err(e) => eprintln!("  $Recycle.Bin directory cannot be listed: {e}"),
             }
 
             eprintln!(
