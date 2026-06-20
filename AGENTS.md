@@ -71,9 +71,10 @@ Backend → Frontend via Tauri `emit`. Topics defined as constants in `crates/tr
 | `domain` | Core entities defined: CaseId/CaseMeta/CaseSession, DataSource, FileEntry, Artifact, TimelineEvent, Job, Report, Tag |
 | `app-services` | Application-layer orchestration per domain entity |
 | `transport` | Shared DTOs, commands, events, errors, paging — the contract between frontend and backend |
-| `persistence-sqlite` | SQLite repositories and migrations (12 repos, 26 migration scripts) |
+| `persistence-sqlite` | SQLite repositories and migrations (12 repos, 31 migration scripts) |
 | `evidence-core` | Disk image probing, volume detection, filesystem abstraction, reader |
 | `fs-ntfs` / `fs-fat` / `fs-exfat` | Filesystem-specific parsers |
+| `fs-ext4` / `fs-xfs` / `fs-btrfs` / `fs-apfs` / `fs-hfsplus` | Additional filesystem parsers for Linux/macOS filesystems |
 | `image-raw` / `image-e01` | Raw and E01 image format readers |
 | `search` | Full-text indexing (tantivy), query parsing, highlighting |
 | `timeline` | Timeline event generation and aggregation |
@@ -83,6 +84,7 @@ Backend → Frontend via Tauri `emit`. Topics defined as constants in `crates/tr
 | `containers-pst` | PST/OST/mbox email container parsing (Unicode 32/64, RFC 4155 mbox variants) |
 | `catalog` | File catalog indexing with ExtensionProjection, PathPrefixProjection, CatalogIndex |
 | `reports` | Report generation: HTML, CSV, JSON, evidence bundle |
+| `exchange` | STIX 2.1 exchange engine with Ed25519 signing, chain-of-custody, and UCO case mapping |
 | `ingest` | Ingestion pipeline orchestration — IngestPipeline trait, IngestConfig, IngestSink, IngestStats |
 | `mcp-client` | MCP (Model Context Protocol) client — SSE and Stdio transports |
 | `runtime-cache` | Handle-based runtime caching |
@@ -131,11 +133,11 @@ All app-shell layout components live in `src/components/layout/`: AppShell, Layo
 
 2. **Frontend dist path**: Tauri expects the built frontend at `frontend/dist` (relative from `src-tauri/`). The path is hardcoded in `tauri.conf.json` as `"../../../frontend/dist"`.
 
-3. **Transport crate is the contract**: DTOs are in per-domain files under `crates/transport/src/dto/` (case.rs, files.rs, search.rs, timeline.rs, artifacts.rs, jobs.rs, viewer.rs, reports.rs). Any change must happen here first. Both the Tauri command layer and the frontend `types/models.ts` must stay in sync manually — there is no codegen yet.
+3. **Transport crate is the contract**: DTOs are in per-domain files under `crates/transport/src/dto/` (case.rs, files.rs, search.rs, timeline.rs, artifacts.rs, jobs.rs, viewer.rs, reports.rs, exchange.rs, entity_resolution.rs). Any change must happen here first. Both the Tauri command layer and the frontend `types/models.ts` must stay in sync manually — there is no codegen yet.
 
-4. **domain crate is implemented**: Core types (CaseMeta, FileEntry, Artifact, TimelineEvent, Job, Report, Tag, DataSource) are defined with serde support. Most crates are fully implemented: `persistence-sqlite` (9 repos, 23 migration scripts), `evidence-core` (image probing, volume detection), `fs-ntfs`/`fs-fat`/`fs-exfat` (filesystem parsers), `artifacts-windows` (9 extractors), `search` (tantivy indexing), `catalog` (ExtensionProjection, PathPrefixProjection), `ingest` (pipeline trait), `mcp-client` (SSE + Stdio transports).
+4. **domain crate is implemented**: Core types (CaseMeta, FileEntry, Artifact, TimelineEvent, Job, Report, Tag, DataSource) are defined with serde support. Most crates are fully implemented: `persistence-sqlite` (12 repos, 31 migration scripts), `evidence-core` (image probing, volume detection), `fs-ntfs`/`fs-fat`/`fs-exfat`/`fs-ext4`/`fs-xfs`/`fs-btrfs`/`fs-apfs`/`fs-hfsplus` (filesystem parsers), `artifacts-windows` (9 extractors), `search` (tantivy indexing), `catalog` (ExtensionProjection, PathPrefixProjection), `exchange` (STIX 2.1 signing + custody + UCO), `entity_resolution` (merge engine + cross-case matching), `ingest` (pipeline trait), `mcp-client` (SSE + Stdio transports).
 
-5. **Frontend test framework**: Vitest is configured with jsdom environment. Run `pnpm test` from `frontend/`. Current source tree has 42 frontend test files covering pages (Settings, DataAnalysis, FileBrowser, Search, Timeline, Artifacts, Reports, V2Workbench), viewers (Hex, Text, Image), stores (ui-store, selection-store, mcp-store), API layer, events, routes, and hooks. Coverage thresholds: 45% branches, 35% functions/lines/statements.
+5. **Frontend test framework**: Vitest is configured with jsdom environment. Run `pnpm test` from `frontend/`. Current source tree has 43 frontend test files covering pages (Settings, DataAnalysis, FileBrowser, Search, Timeline, Artifacts, Reports, V2Workbench), viewers (Hex, Text, Image), stores (ui-store, selection-store, mcp-store), API layer, events, routes, and hooks. Coverage thresholds: 45% branches, 35% functions/lines/statements.
 
 6. **Tailwind 4 with `source(none)`**: The Tailwind config uses `@import 'tailwindcss' source(none)` with explicit `@source` directive. Don't add a `tailwind.config.js` — configuration is CSS-first.
 
@@ -170,6 +172,22 @@ All app-shell layout components live in `src/components/layout/`: AppShell, Layo
 5. **Graph population is non-fatal**: Graph node/edge writes in file/artifact/timeline/correlation services use non-fatal error handling — a graph write failure does not abort the import. Check `graph_nodes`/`graph_edges` counts after import to verify completeness.
 
 6. **New crates need thiserror**: `artifacts-linux` and `containers-pst` now use typed errors (`LinuxArtifactError`, `PstError`). New parsers should follow this pattern — no raw `Result<T, String>` returns.
+
+## V4 Specific Gotchas
+
+1. **Entity merge must precede cross-case matching**: `EntityMergeEngine::deduplicate_entity_nodes` populates the `resolved_entities` table. `CrossCaseEntityMatcher::match_entities_across_cases` reads from this table. Running cross-case matching without per-case deduplication produces no matches because unresolvable entities never appear in `resolved_entities`.
+
+2. **Entity merge re-points graph edges before deletion**: `deduplicate_entity_nodes` updates graph_edges (both `source_id` and `target_id`) from merged nodes to the kept node before deleting merged nodes. If you insert graph_edges manually outside the merge path, those edges will be lost on merge — they won't be automatically re-pointed.
+
+3. **Cross-case matching requires at least 2 databases**: `CrossCaseEntityMatcher::match_entities_across_cases` returns an error with fewer than 2 `PathBuf` arguments. Single-case entity resolution uses the intra-case `EntityMergeEngine`, not the cross-case matcher.
+
+4. **STIX 2.1 export maps transport DTOs directly**: Functions in `exchange/src/stix.rs` (`indicator_from_lead`, `observed_data_from_artifact`, `observed_data_from_registry`, `observed_data_from_email`) consume DTO types from `crates/transport`. Adding fields to `CorrelationLeadDto`, `ArtifactRowDto`, `RegistryValueDto`, or `EmailMessageDto` requires updating the STIX export mappings in the exchange crate.
+
+5. **Ed25519 signing is deterministic and stateless**: `SigningEngine` uses Ed25519 — the same key and data always produce the same signature. The engine is a pure namespace (all methods take no `&self`), not a service with configuration or session state. The signing payload for case exports is `SHA-256(case_id || timestamp || case_content_hash)`.
+
+6. **Custody chain entries are sequentially linked by prev_hash**: `ChainOfCustody` entries form a hash chain via `prev_hash`. Appending an entry out of sequence or with an incorrect `prev_hash` causes `verify_chain` to fail. Always use `append_entry_after` with the verified previous entry hash. The Merkle tree (`MerkleTree`, `MerkleProof`) provides an independent batch verification path.
+
+7. **New filesystem crates share the evidence-core trait contract**: `fs-ext4`, `fs-xfs`, `fs-btrfs`, `fs-apfs`, and `fs-hfsplus` implement the `FileSystemReader` trait from `evidence-core`. When modifying parser behavior, ensure consistent metadata output (MIME types, timestamps, file sizes) across all filesystem crates. Test suites for these crates run on synthetic filesystem images (12 samples for HFS+/APFS/Btrfs, fewer for ext4/XFS).
 
 ## Key Design Documents
 

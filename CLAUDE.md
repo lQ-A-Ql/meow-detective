@@ -85,12 +85,12 @@ These PowerShell scripts encode important architectural/security boundaries. Run
 - `crates/app-services/` — use-case orchestration for cases, files, imports, jobs, search, timeline, reports, text, analysis, staging, streaming, and performance.
 - `crates/persistence-sqlite/` — SQLite connection/migration/repository layer. Keep SQL here or in lower repository/service layers, not in Tauri command handlers.
 - `crates/transport/` — command DTOs, event DTOs, paging, and error shapes shared across the IPC boundary.
-- `crates/evidence-core/`, `crates/image-raw/`, `crates/image-e01/`, `crates/fs-ntfs/`, `crates/fs-fat/`, `crates/fs-exfat/` — read-only evidence/image/filesystem abstractions and implementations.
+- `crates/evidence-core/`, `crates/image-raw/`, `crates/image-e01/`, `crates/fs-ntfs/`, `crates/fs-fat/`, `crates/fs-exfat/`, `crates/fs-ext4/`, `crates/fs-xfs/`, `crates/fs-btrfs/`, `crates/fs-apfs/`, `crates/fs-hfsplus/` — read-only evidence/image/filesystem abstractions and implementations.
 - `crates/containers-pst/` — PST/OST/mbox email container parsing (Unicode 32/64, RFC 4155 mbox variants).
 - `crates/artifacts-core/`, `crates/artifacts-windows/` — artifact extraction framework and Windows artifact parsers (Browser, EVTX, Prefetch, LNK, JumpList, Registry, RecycleBin, SRU, Thumbcache).
 - `crates/artifacts-linux/` — Linux artifact parsers (systemd journal, wtmp, bash history, apt/dpkg, cron, sudo).
 - `crates/artifacts-macos/` — macOS artifact parsers (plist, unified log, Spotlight, Quarantine, Launch Services, FSEvents).
-- `crates/search/`, `crates/timeline/`, `crates/catalog/`, `crates/reports/` — feature services for indexing/querying (tantivy), event projection, catalog management/projections, and report generation (HTML, CSV, JSON, evidence bundle).
+- `crates/search/`, `crates/timeline/`, `crates/catalog/`, `crates/reports/`, `crates/exchange/` — feature services for indexing/querying (tantivy), event projection, catalog management/projections, report generation (HTML, CSV, JSON, evidence bundle), and STIX 2.1 exchange with Ed25519 signing, chain-of-custody, and UCO case mapping.
 - `crates/ingest/` — ingestion pipeline orchestration: the `IngestPipeline` trait, `IngestConfig`, `IngestSink`, `IngestStats`.
 - `crates/infrastructure/` — cross-cutting utilities: logging, hashing, filesystem utils, text, clock, config.
 - `crates/runtime-cache/` — temporary runtime cache support; it must not become the source of truth.
@@ -116,7 +116,7 @@ API modules in `frontend/src/lib/api/` call a small client wrapper that chooses 
 
 `crates/transport/` is the single source of truth for the frontend↔backend boundary; there is no codegen, so the two sides are kept in sync manually:
 
-- DTOs live in per-domain files under `crates/transport/src/dto/` (case.rs, files.rs, search.rs, timeline.rs, artifacts.rs, jobs.rs, viewer.rs, reports.rs) and are re-exported from mod.rs. Never define serializable API types in other crates.
+- DTOs live in per-domain files under `crates/transport/src/dto/` (case.rs, files.rs, search.rs, timeline.rs, artifacts.rs, jobs.rs, viewer.rs, reports.rs, exchange.rs, entity_resolution.rs) and are re-exported from mod.rs. Never define serializable API types in other crates.
 - DTOs use `#[serde(rename_all = "camelCase")]`, so the frontend receives camelCase JSON; optional fields use `#[serde(skip_serializing_if = "Option::is_none")]`.
 - Tauri commands return `Result<T, String>`; the shared cross-crate error type is `transport::errors::ApiErrorDto`.
 - Event topics are string constants in `crates/transport/src/events/mod.rs`, mirrored as the `EventTopic` TypeScript union in `frontend/src/types/models.ts`. The frontend subscribes via `EventBus` (`src/lib/events/bus.ts`). Keep both sides in sync when changing topics or DTOs.

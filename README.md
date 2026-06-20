@@ -1,12 +1,12 @@
 # Forensics Workbench
 
-A Tauri 2 desktop application for disk image forensic analysis on Windows. 25 Rust crates, 10 frontend pages, 84 Tauri commands. MIT licensed.
+A Tauri 2 desktop application for disk image forensic analysis on Windows. 31 Rust crates, 10 frontend pages, 84 Tauri commands. MIT licensed.
 
 ## Architecture
 
 ```text
 React UI (frontend/) -> Tauri commands / events
-Tauri Command Layer (apps/desktop/src-tauri/) -> 80+ commands
+Tauri Command Layer (apps/desktop/src-tauri/) -> 84 commands
 Application Services (crates/app-services/) -> 25 source modules
 Core crates -> domain / evidence / persistence / search / timeline / artifacts / reports / MCP / graph
 ```
@@ -60,14 +60,17 @@ cd frontend && pnpm test
 | Directory | Description |
 |---|---|
 | `frontend/` | React 18 + TypeScript + Vite + Tailwind 4 |
-| `apps/desktop/src-tauri/` | Tauri 2 shell (73 commands) |
+| `apps/desktop/src-tauri/` | Tauri 2 shell (84 commands) |
 | `crates/app-services/` | Application orchestration (18 source modules) |
 | `crates/transport/` | Shared DTOs, commands, events, errors |
 | `crates/persistence-sqlite/` | SQLite repos (9) and migration scripts (23) |
 | `crates/evidence-core/` | Disk image probing and volume detection |
-| `crates/fs-ntfs/`, `fs-fat/`, `fs-exfat/` | Filesystem parsers (NTFS/FAT/ExFAT) |
+| `crates/fs-ntfs/`, `fs-fat/`, `fs-exfat/` | Filesystem parsers (NTFS/FAT/ExFAT/ext4/XFS/Btrfs/APFS/HFS+) |
 | `crates/image-e01/`, `image-raw/` | Image readers (E01/RAW) |
 | `crates/containers-pst/` | PST/OST/mbox email container parsers |
+| `crates/exchange/` | Entity resolution and cross-case entity matching |
+| `crates/ingest/` | Ingestion pipeline orchestration |
+| `crates/catalog/` | Catalog management and projections |
 | `crates/artifacts-windows/` | Windows artifact parsers (Browser/EVTX/Prefetch/LNK/Registry/SRU/Thumbcache/JumpList) |
 | `crates/artifacts-linux/` | Linux artifact parsers (journal/wtmp/bash/apt/cron/sudo) |
 | `crates/artifacts-macos/` | macOS artifact parsers (plist/unified_log/Spotlight/Quarantine/FSEvents) |
@@ -147,6 +150,33 @@ cd frontend && pnpm test
 ### Quality gates (all pass)
 
 cargo fmt ✓ | cargo clippy ✓ | 295 Rust tests ✓ | 228 frontend tests ✓ | cargo-deny ✓ | 6 guard scripts ✓
+
+## V4 Status
+
+**V4 core delivered.** 5 filesystem crates, entity resolution, STIX 2.1 export, Ed25519 signing, chain-of-custody.
+
+### New crates
+
+| Crate | Description |
+|---|---|
+| `crates/fs-ext4/` | ext4 filesystem parser |
+| `crates/fs-xfs/` | XFS filesystem parser |
+| `crates/fs-btrfs/` | Btrfs filesystem parser |
+| `crates/fs-apfs/` | APFS filesystem parser |
+| `crates/fs-hfsplus/` | HFS+ filesystem parser |
+| `crates/exchange/` | Entity resolution and cross-case entity matching |
+
+### New capabilities
+
+- **Filesystem parsers (ext4/XFS/Btrfs/APFS/HFS+)**: read-only evidence readers for Linux and macOS filesystems
+- **Entity resolution**: cross-case entity matching and canonicalization
+- **STIX 2.1 export**: structured threat information sharing with STIX 2.1 JSON format
+- **Ed25519 signing**: Ed25519 digital signature support for evidence integrity
+- **Chain-of-custody**: custody tracking and audit trail for evidence handling
+
+### Quality gates (all pass)
+
+cargo fmt ✓ | cargo clippy ✓ | 1,483 Rust tests ✓ | 228 frontend tests ✓ | 1,711 total ✓ | cargo-deny ✓ | 6 guard scripts ✓
 
 ## License
 

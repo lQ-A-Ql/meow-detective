@@ -47,6 +47,7 @@
 | macOS 制品覆盖 **(V3)** | `docs/mac-artifact-coverage.md` | macOS 解析器路线图、fixture 要求、已知缺口 |
 | PST/OST/mbox 支持 **(V3)** | `docs/pst-ost-mbox-support.md` | 容器邮件路线图、Outlook/Thunderbird 版本矩阵 |
 | V3 演练 **(V3)** | `docs/v3-walkthrough.md` | 端到端 V3 调查工作流演练：导入、图浏览、关联、笔记本、规则包、批处理 |
+| V4 执行计划 **(V4)** | `docs/v4-plan.md` | V4 阶段边界、测试矩阵、验收标准、评分机制 |
 
 ## 2. 当前事实快照
 
@@ -54,16 +55,18 @@
 
 | 事实 | 当前值 | 事实源 |
 |---|---:|---|
-| Rust workspace crate | 25 | `crates/` (新增: containers-pst, artifacts-linux, artifacts-macos) |
+| Rust workspace crate | 31 | `crates/` (新增 V4: fs-ext4, fs-xfs, fs-btrfs, fs-apfs, fs-hfsplus, exchange) |
 | Tauri commands | 84 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
 | app-services source modules | 25 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
 | SQLite repositories | 12 | `crates/persistence-sqlite/src/repositories/*_repo.rs` (新增: graph_repo, notebook_repo, batch_repo) |
-| SQLite migration scripts | 26 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` |
+| SQLite migration scripts | 31 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0030 + staging_001) |
 | frontend pages | 10 | `frontend/src/app/pages/*.tsx`，排除测试 (新增: V3Dashboard) |
 | frontend test files | 43 | `frontend/src/**/*.test.ts(x)` |
 | Mermaid 图块 | 15 | `docs/model-architecture-algorithm-diagrams.md` |
 | V3 参考文档 | 9 | `docs/v3-plan.md` 及 8 篇 V3 参考文档 (已实现) |
 | V3 新增 crate | 3 | `crates/containers-pst/`, `crates/artifacts-linux/`, `crates/artifacts-macos/` (已创建) |
+| V4 参考文档 | 1 | `docs/v4-plan.md`（V4 阶段边界、测试矩阵、验收标准、评分机制） |
+| V4 新增 crate | 6 | `crates/fs-ext4/`, `crates/fs-xfs/`, `crates/fs-btrfs/`, `crates/fs-apfs/`, `crates/fs-hfsplus/`, `crates/exchange/` (已创建) |
 
 ## 3. 路径级事实校准
 
@@ -72,10 +75,12 @@
 | `frontend/src/app/pages/*.tsx` | 10 | 页面入口文件，不含 `*.test.tsx` |
 | `frontend/src/**/*.test.ts(x)` | 43 | Vitest 测试文件总数 |
 | `apps/desktop/src-tauri/src/commands/**/*.rs` | 84 | Tauri command 定义数 |
-| `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 26 | SQLite migration 脚本 |
+| `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 31 | SQLite migration 脚本 (0001-0030 + staging_001) |
 | `docs/model-architecture-algorithm-diagrams.md` 中 Mermaid | 15 | Mermaid 图块总数 |
 | `docs/v3-*.md` | 1 | V3 阶段文档入口（主计划） |
 | `docs/` 中 V3 参考文档 | 9 | 证据图、笔记本、规则包、PST决策、批处理、Linux/macOS覆盖、PST支持、演练 |
+| `docs/v4-*.md` | 1 | V4 阶段文档入口（主计划） |
+| `docs/` 中 V4 参考文档 | 1 | V4 执行计划（待扩展为多份参考文档） |
 
 ## 4. 当前实现事实
 
@@ -133,6 +138,15 @@
 - V3 参考文档（规划中）：`docs/evidence-graph-design.md`、`docs/case-notebook-design.md`、`docs/rule-pack-spec.md`、`docs/pst-dependency-decision.md`、`docs/batch-processing-design.md`、`docs/linux-artifact-coverage.md`、`docs/mac-artifact-coverage.md`、`docs/pst-ost-mbox-support.md`
 - V3 将在 `docs/parser-support-matrix.md` 中新增 Linux/macOS 解析器条目，在 `docs/known-unsupported-formats.md` 中新增 Linux/macOS 文件系统与移动/云制品缺口
 - V3 治理工作台将替代 `/v2` 为 `/v3`，引入图统计、平台覆盖、规则包覆盖、批处理状态等信号
+
+### 4.3b V4 规划与当前状态
+
+- V4 主计划位于 `docs/v4-plan.md`，五支柱为：高级实体解析与跨案关联(Entity Resolution)、多OS原始磁盘镜像支持(Multi-OS Raw Disk)、AI辅助调查(AI-Assisted Investigation)、调查交换与保管链(STIX 2.1/CASE/UCO + 数字签名)、实时流式证据采集(Streaming Acquisition)
+- V4 阶段为 V4-1(实体规范化与合并引擎) → V4-2(多OS文件系统crate) → V4-3(AI辅助调查) → V4-4(调查交换与保管链) → V4-5(实时流式采集)
+- V4 已进入实施阶段：V4-1 实体规范化与合并引擎已完成；V4-2 已完成 ext4、XFS、Btrfs、APFS、HFS+ 五个文件系统 crate 和 exchange 交换 crate
+- V4 文档入口：`docs/v4-plan.md`（主计划）
+- V4 参考文档（待创建）：`docs/v4-entity-resolution.md`、`docs/v4-multi-os-filesystems.md`、`docs/v4-ai-models.md`、`docs/v4-ai-privacy.md`、`docs/v4-release-signing.md`、`docs/v4-release-checklist.md`
+- V4 将在完工后替代 V2 治理工作台为 `/v4`，引入实体解析统计、跨案关联指标、文件系统覆盖、AI使用审计、保管链验证、流式采集状态等信号
 
 ### 4.4 MCP 与安全边界
 
