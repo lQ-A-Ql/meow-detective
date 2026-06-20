@@ -8,6 +8,8 @@ V5 builds on V4 core: 31 crates, 1,483 Rust + 228 frontend tests, 8 filesystem r
 - Windows-primary, desktop-first, single-user, disk-forensic focused
 - No memory images, no PCAP, no live agent — pure disk forensics
 - All new parsers enter V2-1 trust framework (fixture + expected JSON + guarantee levels)
+- **iOS/Android 取证逻辑独立 crate**：禁止混入 app-services/artifacts-windows/artifacts-core
+- **云审计日志独立 crate**：禁止混入 app-services 或 exchange
 
 ---
 
@@ -119,23 +121,63 @@ Add deleted file recovery, snapshot analysis, and deep filesystem analysis acros
 #### Objective
 Add iOS/Android backup parsing from disk images and cloud audit log ingestion as file-based evidence.
 
-#### Stage boundaries
-**In scope**: iOS backup (Manifest.db, Contacts, Messages, Photos, Safari, Call Log, Notes from disk). Android backup (ADB .ab format from disk: contacts, SMS, Chrome, call log). Cloud audit logs ingested as files (AWS CloudTrail JSON, Azure JSON, GCP JSON, M365 CSV).
+#### Architecture constraint
+iOS 和 Android 取证核心逻辑**独立存放**，各自新建专属 crate，不杂糅进 `app-services` 或 `artifacts-windows`。遵循现有 artifacts-linux/artifacts-macos 的分 crate 模式：
 
-**Deferred**: Encrypted backups, physical extraction, cloud API access, real-time cloud.
+```
+crates/artifacts-ios/       ← iOS 独立 crate (备份解析、plist、SQLite)
+crates/artifacts-android/   ← Android 独立 crate (ADB 解析、SMS/MMS)
+crates/cloud-audit/         ← 云审计日志独立 crate (CloudTrail/Azure/GCP/M365)
+```
+
+禁止将 iOS/Android parser 放入 `app-services`、`artifacts-windows`、`artifacts-core`。
 
 #### Phase Tasks
-1. iOS backup parser crate (weeks 1-4)
-2. Android backup parser crate (weeks 4-7)
-3. Cloud audit log parsers (weeks 7-10)
-4. Multi-source timeline integration (weeks 10-12)
-5. Frontend + documentation (weeks 12-14)
+
+**Phase 1: crates/artifacts-ios (weeks 1-4)**
+- `crates/artifacts-ios/Cargo.toml` — workspace deps only
+- `crates/artifacts-ios/src/lib.rs` — module declarations
+- `crates/artifacts-ios/src/backup.rs` — Manifest.db parser, file listing
+- `crates/artifacts-ios/src/contacts.rs` — AddressBook.sqlitedb parser
+- `crates/artifacts-ios/src/messages.rs` — sms.db parser
+- `crates/artifacts-ios/src/photos.rs` — Photos.sqlite parser
+- `crates/artifacts-ios/src/safari.rs` — Safari History.db parser
+- `crates/artifacts-ios/src/calls.rs` — CallHistory.storedata parser
+- `crates/artifacts-ios/src/notes.rs` — Notes.sqlite parser
+- Transport DTOs: `crates/transport/src/dto/ios.rs`
+
+**Phase 2: crates/artifacts-android (weeks 4-7)**
+- `crates/artifacts-android/Cargo.toml`
+- `crates/artifacts-android/src/lib.rs`
+- `crates/artifacts-android/src/backup.rs` — ADB .ab format, tar decompress
+- `crates/artifacts-android/src/contacts.rs` — contacts2.db parser
+- `crates/artifacts-android/src/sms.rs` — mmssms.db parser
+- `crates/artifacts-android/src/chrome.rs` — Chrome History (similar to Windows)
+- `crates/artifacts-android/src/calls.rs` — calllog.db parser
+- Transport DTOs: `crates/transport/src/dto/android.rs`
+
+**Phase 3: crates/cloud-audit (weeks 7-10)**
+- `crates/cloud-audit/Cargo.toml`
+- `crates/cloud-audit/src/lib.rs`
+- `crates/cloud-audit/src/aws.rs` — CloudTrail JSON parser
+- `crates/cloud-audit/src/azure.rs` — Azure Activity Log JSON parser
+- `crates/cloud-audit/src/gcp.rs` — GCP Audit Log JSON parser
+- `crates/cloud-audit/src/m365.rs` — M365 Unified Audit Log CSV parser
+- `crates/cloud-audit/src/normalize.rs` — unified CloudAuditEntry
+- Transport DTOs: `crates/transport/src/dto/cloud_audit.rs`
+
+**Phase 4-5: Integration + Frontend (weeks 10-14)**
+- Ingest integration: detect backup/audit files, route to parser
+- Multi-source timeline: merge local + cloud events
+- Frontend: Mobile device view, cloud timeline panel
+- Documentation + fixtures
 
 #### Acceptance Criteria
-- iOS: 5+ artifact types parsed with public-small fixtures
-- Android: 4+ artifact types parsed with public-small fixtures
-- CloudTrail: entries normalized with principal/action/target
-- Multi-source timeline: local + cloud events merged
+- `crates/artifacts-ios/`: 5+ artifact types, public-small fixtures, expected JSON
+- `crates/artifacts-android/`: 4+ artifact types, public-small fixtures, expected JSON
+- `crates/cloud-audit/`: 4 cloud providers, normalized entries
+- All 3 crates are **fully independent** — zero coupling to app-services or each other
+- Multi-source timeline: local + cloud events in single view
 
 ---
 
