@@ -940,6 +940,16 @@ fn find_rid_in_sam_key(
                     .try_into()
                     .unwrap_or([0; 4]),
             );
+            // SAM stores the RID as the default value's data_type field
+            // (not in the value data). REG_NONE default value on Win10/11
+            // has data_type = RID (e.g., 500 = 0x1F4 for Administrator).
+            // This matches ForensicsTool Go implementation:
+            //   _, valType, _ := userKey.GetValue("(default)", []byte{})
+            //   rid := fmt.Sprintf("%08x", valType)
+            if data_type >= 500 && data_type < 2000 {
+                return Some(data_type);
+            }
+            // Also check REG_NONE (0) or REG_DWORD (4) as fallback
             let data_len_raw = u32::from_le_bytes(
                 hive.bytes[vk_abs + 0x08..vk_abs + 0x0C]
                     .try_into()
@@ -950,7 +960,6 @@ fn find_rid_in_sam_key(
                     .try_into()
                     .unwrap_or([0; 4]),
             );
-            // REG_NONE (0) or REG_DWORD (4) with inline flag set
             if (data_type == 0 || data_type == REG_DWORD)
                 && (data_len_raw & 0x7FFF_FFFF) <= 4
                 && raw_data_offset > 0
