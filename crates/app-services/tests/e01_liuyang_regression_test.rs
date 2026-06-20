@@ -1471,17 +1471,13 @@ fn liuyang_e01_lnk_extraction_and_correlation() {
 
             let lnk_entries: Vec<_> = all_entries
                 .iter()
-                .filter(|e| {
-                    e.path.contains("Users/")
-                        && e.extension()
-                            .map_or(false, |ext| ext.eq_ignore_ascii_case("lnk"))
-                })
+                .filter(|e| e.path.to_lowercase().ends_with(".lnk"))
                 .take(20)
                 .cloned()
                 .collect();
 
             eprintln!(
-                "Found {} LNK files in Users/ paths (scanned {} total entries)",
+                "Found {} LNK files (scanned {} total entries)",
                 lnk_entries.len(),
                 all_entries.len()
             );
