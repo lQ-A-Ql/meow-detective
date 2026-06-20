@@ -28,8 +28,11 @@ pub use lnk::parser::LnkExtractor;
 pub use prefetch::parser::PrefetchExtractor;
 pub use recycle_bin::parser::RecycleBinExtractor;
 pub use registry::lookup::{
-    extract_software_hive_fields, extract_system_hive_fields, ParsedRegistryField,
-    SoftwareHiveInfo, SystemHiveInfo,
+    extract_ntuser_fields, extract_ntuser_fields_with_txlog, extract_sam_fields,
+    extract_software_hive_fields, extract_software_hive_fields_with_txlog,
+    extract_system_hive_fields, extract_system_hive_fields_with_txlog, NtuserInfo,
+    ParsedRegistryField, SamGroup, SamInfo, SamUser, SoftwareHiveInfo, SystemHiveInfo,
+    UserAssistEntry,
 };
 pub use registry::parser::RegistryExtractor;
 pub use registry::recovery::{
