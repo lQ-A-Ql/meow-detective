@@ -1635,89 +1635,160 @@ fn liuyang_e01_browser_history_extraction() {
             );
             assert!(stats.file_count > 1000, "Should enumerate many files");
 
-            // Step 2: Scan file entries for browser databases
-            let repo = FileRepo::new(conn);
-            let all_entries = repo.find_by_data_source(&data_source_id)?;
-
-            let browser_entries: Vec<_> = all_entries
-                .iter()
-                .filter(|e| is_browser_history_db(&e.path))
-                .take(20)
-                .collect();
-
-            eprintln!(
-                "Found {} browser history databases out of {} total entries",
-                browser_entries.len(),
-                all_entries.len()
-            );
-            assert!(
-                !browser_entries.is_empty(),
-                "Should find at least one browser history database (Chrome History, Edge History, or Firefox places.sqlite)"
-            );
-
-            // Step 3: Open E01 FS reader, read each file, run extractors
+            // Step 2: Open NtfsReader and scan for browser databases via NTFS paths.
+            // MFT paths like "AppData/Local/Google/Chrome/User Data/Default/History"
+            // are partial and NtfsReader::open_file cannot resolve them. We bypass
+            // the MFT entirely and use NtfsReader directory listing with full NTFS paths.
             let boxed: Box<dyn EvidenceReader> =
                 Box::new(E01Reader::open(&fixture_path).unwrap());
             let fs = fs_ntfs::NtfsReader::open(boxed, ntfs.offset).unwrap();
             let mut all_artifacts: Vec<domain::Artifact> = Vec::new();
+            let mut db_count = 0u32;
 
-            for entry in &browser_entries {
-                let normalized = normalize_path_for_match(&entry.path);
-                let bytes = match fs.open_file(&entry.path) {
-                    Ok(mut reader) => {
-                        let mut buf = Vec::new();
-                        if reader.read_to_end(&mut buf).is_ok() {
-                            buf
-                        } else {
-                            eprintln!("  read error: {}", entry.path);
-                            continue;
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("  open error for {}: {e}", entry.path);
-                        continue;
-                    }
-                };
-                if bytes.is_empty() {
-                    continue;
-                }
+            // Enumerate user directories under Users/
+            let users_children = fs.list_children("Users").unwrap_or_else(|err| {
+                eprintln!("Warning: failed to list Users/: {err}");
+                Vec::new()
+            });
+            let user_dirs: Vec<_> = users_children.iter().filter(|c| c.is_dir).collect();
+            eprintln!(
+                "Found {} user directories under Users/",
+                user_dirs.len()
+            );
 
-                // Parse based on browser type
-                if normalized.contains("/mozilla/firefox/profiles/") && normalized.ends_with("/places.sqlite") {
-                    // Firefox
-                    match artifacts_windows::parse_firefox_history(&bytes) {
-                        Ok(visits) => {
-                            eprintln!("  Firefox: {} visits from {}", visits.len(), entry.path);
-                            let artifacts = firefox_visits_to_artifacts(
-                                &visits, entry, &data_source_id,
-                            );
-                            all_artifacts.extend(artifacts);
-                        }
-                        Err(e) => eprintln!("  Firefox parse error for {}: {e}", entry.path),
-                    }
-                } else {
-                    // Chrome or Edge (Chromium-based)
-                    let browser_name = if normalized.contains("/microsoft/edge/") {
-                        "Edge"
-                    } else {
-                        "Chrome"
+            // Known browser database paths (relative to user dir)
+            for user_dir in &user_dirs {
+                let username = &user_dir.name;
+
+                // --- Chrome History ---
+                let chrome_history_path = format!(
+                    "Users/{}/AppData/Local/Google/Chrome/User Data/Default/History",
+                    username
+                );
+                if let Ok(bytes) = read_fs_file_optional(&fs, &chrome_history_path) {
+                    let fe = domain::FileEntry {
+                        id: domain::FileEntryId(format!("chrome-history-{}", username)),
+                        parent_id: None,
+                        data_source_id: data_source_id.clone(),
+                        path: chrome_history_path.clone(),
+                        name: "History".to_string(),
+                        entry_type: domain::EntryType::File,
+                        size: Some(bytes.len() as u64),
+                        ext: None,
+                        deleted: false,
+                        hidden: false,
+                        system: false,
+                        created_at: None,
+                        modified_at: None,
+                        accessed_at: None,
+                        changed_at: None,
+                        hash_sha256: None,
                     };
-                    let profile = extract_browser_profile(&normalized, browser_name);
-                    match artifacts_windows::parse_chrome_history(&bytes, browser_name, Some(&profile)) {
+                    match artifacts_windows::parse_chrome_history(&bytes, "Chrome", Some("Default"))
+                    {
                         Ok(visits) => {
                             eprintln!(
-                                "  {}: {} visits from {} (profile={})",
-                                browser_name,
+                                "  Chrome: {} visits from {}",
                                 visits.len(),
-                                entry.path,
-                                profile,
+                                chrome_history_path
                             );
-                            let artifacts = chromium_visits_to_artifacts(
-                                &visits, entry, &data_source_id,
-                            );
-                            all_artifacts.extend(artifacts);
+                            all_artifacts.extend(chromium_visits_to_artifacts(
+                                &visits, &fe, &data_source_id,
+                            ));
+                            db_count += 1;
                         }
-                        Err(e) => eprintln!("  {} parse error for {}: {e}", browser_name, entry.path),
+                        Err(e) => eprintln!("  Chrome parse error for {}: {e}", chrome_history_path),
+                    }
+                }
+
+                // --- Edge History ---
+                let edge_history_path = format!(
+                    "Users/{}/AppData/Local/Microsoft/Edge/User Data/Default/History",
+                    username
+                );
+                if let Ok(bytes) = read_fs_file_optional(&fs, &edge_history_path) {
+                    let fe = domain::FileEntry {
+                        id: domain::FileEntryId(format!("edge-history-{}", username)),
+                        parent_id: None,
+                        data_source_id: data_source_id.clone(),
+                        path: edge_history_path.clone(),
+                        name: "History".to_string(),
+                        entry_type: domain::EntryType::File,
+                        size: Some(bytes.len() as u64),
+                        ext: None,
+                        deleted: false,
+                        hidden: false,
+                        system: false,
+                        created_at: None,
+                        modified_at: None,
+                        accessed_at: None,
+                        changed_at: None,
+                        hash_sha256: None,
+                    };
+                    match artifacts_windows::parse_chrome_history(&bytes, "Edge", Some("Default")) {
+                        Ok(visits) => {
+                            eprintln!(
+                                "  Edge: {} visits from {}",
+                                visits.len(),
+                                edge_history_path
+                            );
+                            all_artifacts.extend(chromium_visits_to_artifacts(
+                                &visits, &fe, &data_source_id,
+                            ));
+                            db_count += 1;
+                        }
+                        Err(e) => eprintln!("  Edge parse error for {}: {e}", edge_history_path),
+                    }
+                }
+
+                // --- Firefox places.sqlite ---
+                let firefox_profiles_path = format!(
+                    "Users/{}/AppData/Roaming/Mozilla/Firefox/Profiles",
+                    username
+                );
+                if let Ok(profile_dirs) = fs.list_children(&firefox_profiles_path) {
+                    for profile_dir in profile_dirs.iter().filter(|c| c.is_dir) {
+                        let places_path = format!(
+                            "{}/{}/places.sqlite",
+                            firefox_profiles_path, profile_dir.name
+                        );
+                        if let Ok(bytes) = read_fs_file_optional(&fs, &places_path) {
+                            let fe = domain::FileEntry {
+                                id: domain::FileEntryId(format!(
+                                    "firefox-places-{}-{}",
+                                    username, profile_dir.name
+                                )),
+                                parent_id: None,
+                                data_source_id: data_source_id.clone(),
+                                path: places_path.clone(),
+                                name: "places.sqlite".to_string(),
+                                entry_type: domain::EntryType::File,
+                                size: Some(bytes.len() as u64),
+                                ext: None,
+                                deleted: false,
+                                hidden: false,
+                                system: false,
+                                created_at: None,
+                                modified_at: None,
+                                accessed_at: None,
+                                changed_at: None,
+                                hash_sha256: None,
+                            };
+                            match artifacts_windows::parse_firefox_history(&bytes) {
+                                Ok(visits) => {
+                                    eprintln!(
+                                        "  Firefox: {} visits from {}",
+                                        visits.len(),
+                                        places_path
+                                    );
+                                    all_artifacts.extend(firefox_visits_to_artifacts(
+                                        &visits, &fe, &data_source_id,
+                                    ));
+                                    db_count += 1;
+                                }
+                                Err(e) => eprintln!("  Firefox parse error for {}: {e}", places_path),
+                            }
+                        }
                     }
                 }
             }
@@ -1725,12 +1796,12 @@ fn liuyang_e01_browser_history_extraction() {
             eprintln!(
                 "Extracted {} BrowserHistory artifacts from {} browser databases",
                 all_artifacts.len(),
-                browser_entries.len()
+                db_count
             );
             assert!(
                 !all_artifacts.is_empty(),
-                "Should extract at least some BrowserHistory artifacts from real browser databases; found {} databases",
-                browser_entries.len()
+                "Should extract at least some BrowserHistory artifacts from real browser databases; checked {} user directories",
+                user_dirs.len()
             );
 
             // Step 4: Store artifacts
@@ -2064,65 +2135,88 @@ fn liuyang_e01_recycle_bin_extraction() {
             );
             assert!(stats.file_count > 1000, "Should enumerate many files");
 
-            // Step 2: Scan file entries for Recycle Bin $I files
-            // Paths like "$Recycle.Bin/S-1-5-21-.../$IXXXXXX.xxx" are stored
-            // root-relative in file_entries and resolve via NtfsReader.
-            let repo = FileRepo::new(conn);
-            let all_entries = repo.find_by_data_source(&data_source_id)?;
-
-            let recycle_bin_entries: Vec<_> = all_entries
-                .iter()
-                .filter(|e| {
-                    e.path.contains("$Recycle.Bin")
-                        && e.name.starts_with("$I")
-                })
-                .take(20)
-                .collect();
-
-            eprintln!(
-                "Found {} Recycle Bin $I files out of {} total entries",
-                recycle_bin_entries.len(),
-                all_entries.len()
-            );
-            assert!(
-                !recycle_bin_entries.is_empty(),
-                "Should find at least one Recycle Bin $I file"
-            );
-
-            // Step 3: Open E01 FS reader, read each $I file, run extractors
+            // Step 2: Use NtfsReader to scan $Recycle.Bin directory for $I files
+            // Path format: "$Recycle.Bin/S-1-5-21-xxx/$IXXXXXX.xxx"
+            // These are root-relative paths that NtfsReader resolves directly.
             let boxed: Box<dyn EvidenceReader> =
                 Box::new(E01Reader::open(&fixture_path).unwrap());
             let fs = fs_ntfs::NtfsReader::open(boxed, ntfs.offset).unwrap();
-            let registry = artifact_service::create_registry();
-            let mut sink = artifacts_core::VecSink::new();
 
-            for entry in &recycle_bin_entries {
-                eprintln!("  opening Recycle Bin $I file: {}", entry.path);
-                match fs.open_file(&entry.path) {
-                    Ok(mut file_reader) => {
-                        let mut buf = Vec::new();
-                        if file_reader.read_to_end(&mut buf).is_ok() {
-                            let reader: Box<dyn Read> = Box::new(std::io::Cursor::new(buf));
-                            match artifact_service::run_extractors_on_file(
-                                &registry,
-                                &entry.id,
-                                &entry.path,
-                                reader,
-                                &mut sink,
-                            ) {
-                                Ok(_) => eprintln!("  extracted RecycleBin: {}", entry.path),
-                                Err(e) => eprintln!("  extraction error {}: {e}", entry.path),
+            let mut recycle_bin_paths: Vec<String> = Vec::new();
+            match fs.list_children("$Recycle.Bin") {
+                Ok(rb_children) => {
+                    for child in &rb_children {
+                        if !child.is_dir {
+                            continue;
+                        }
+                        if let Ok(sid_children) = fs.list_children(&child.path) {
+                            for f in &sid_children {
+                                if !f.is_dir && f.name.starts_with("$I") {
+                                    recycle_bin_paths.push(f.path.clone());
+                                    if recycle_bin_paths.len() >= 20 {
+                                        break;
+                                    }
+                                }
                             }
                         }
+                        if recycle_bin_paths.len() >= 20 {
+                            break;
+                        }
                     }
-                    Err(e) => eprintln!("  skip RecycleBin {}: {e}", entry.path),
+                }
+                Err(e) => eprintln!("  $Recycle.Bin directory cannot be listed: {e}"),
+            }
+
+            eprintln!(
+                "Found {} Recycle Bin $I files via NtfsReader directory scan",
+                recycle_bin_paths.len()
+            );
+            assert!(
+                !recycle_bin_paths.is_empty(),
+                "Should find at least one Recycle Bin $I file via NtfsReader scan"
+            );
+
+            // Step 3: Read each $I file and extract with RecycleBinExtractor
+            let registry = artifact_service::create_registry();
+            let mut sink = artifacts_core::VecSink::new();
+            let repo = FileRepo::new(conn);
+
+            for path in &recycle_bin_paths {
+                eprintln!("  opening Recycle Bin $I file: {path}");
+                let file_entry = repo
+                    .find_by_path_prefix(&data_source_id, path)
+                    .ok()
+                    .and_then(|mut v| if v.is_empty() { None } else { Some(v.remove(0)) });
+                match file_entry {
+                    Some(entry) => {
+                        match fs.open_file(path) {
+                            Ok(mut file_reader) => {
+                                let mut buf = Vec::new();
+                                if file_reader.read_to_end(&mut buf).is_ok() {
+                                    let reader: Box<dyn Read> = Box::new(std::io::Cursor::new(buf));
+                                    match artifact_service::run_extractors_on_file(
+                                        &registry,
+                                        &entry.id,
+                                        &entry.path,
+                                        reader,
+                                        &mut sink,
+                                    ) {
+                                        Ok(_) => eprintln!("  extracted RecycleBin: {path}"),
+                                        Err(e) => eprintln!("  extraction error {path}: {e}"),
+                                    }
+                                }
+                            }
+                            Err(e) => eprintln!("  skip RecycleBin {path}: {e}"),
+                        }
+                    }
+                    None => eprintln!("  skip RecycleBin {path}: no matching file entry in DB"),
                 }
             }
 
             eprintln!(
                 "Extracted {} total artifacts from {} Recycle Bin $I files",
                 sink.artifacts.len(),
-                recycle_bin_entries.len()
+                recycle_bin_paths.len()
             );
             assert!(
                 !sink.artifacts.is_empty(),
@@ -2292,50 +2386,6 @@ fn parse_mft_data_size(record: &[u8]) -> Option<u64> {
         pos += len;
     }
     None
-}
-
-// ── Browser history helpers ────────────────────────────────────────────────
-
-/// Check whether a file-system path (from MFT enumeration) points to a browser
-/// history database file we know how to parse.
-fn is_browser_history_db(path: &str) -> bool {
-    let normalized = path.to_lowercase().replace('\\', "/");
-    // Chrome / Chromium History or Archived History
-    if (normalized.contains("/google/chrome/user data/")
-        || normalized.contains("/microsoft/edge/user data/"))
-        && (normalized.ends_with("/history") || normalized.ends_with("/archived history"))
-    {
-        return true;
-    }
-    // Firefox places.sqlite
-    if normalized.contains("/mozilla/firefox/profiles/") && normalized.ends_with("/places.sqlite") {
-        return true;
-    }
-    false
-}
-
-/// Normalize a path to lower-case with forward-slashes for pattern matching.
-fn normalize_path_for_match(path: &str) -> String {
-    path.to_lowercase().replace('\\', "/")
-}
-
-/// Extract the profile directory name from a Chromium-browser path.
-///
-/// Example: `/google/chrome/user data/default/history` → `"default"`
-///          `/google/chrome/user data/profile 1/history` → `"Profile 1"`
-///          `/microsoft/edge/user data/default/history` → `"default"`
-fn extract_browser_profile(normalized: &str, browser: &str) -> String {
-    let marker = if browser == "Edge" {
-        "/microsoft/edge/user data/"
-    } else {
-        "/google/chrome/user data/"
-    };
-    normalized
-        .split_once(marker)
-        .map(|(_, rest)| rest.split('/').next().unwrap_or("default"))
-        .filter(|value| !value.is_empty())
-        .unwrap_or("default")
-        .to_string()
 }
 
 /// Convert Chrome/Edge `BrowserVisit` results into `domain::Artifact` entries.
