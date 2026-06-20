@@ -762,19 +762,24 @@ pub fn extract_sam_fields(bytes: &[u8], hive_path: &str) -> Result<SamInfo, Stri
                     let mut user_path: Vec<&str> = users_path.to_vec();
                     user_path.push(subkey_name.as_str());
 
-                    // Retrieve the username from the V value.
-                    let username = match hive.lookup_value(&user_path, "V") {
-                        Ok(Some(RegistryValue::Binary(v_data))) => {
-                            crate::registry::sam_structs::parse_username_from_v_record(&v_data)
+                    // Navigate to the user subkey to read V and F raw values
+                    let user_nk = match hive.navigate_to(&user_path) {
+                        Ok(Some(nk)) => nk,
+                        _ => continue,
+                    };
+
+                    // Read raw V bytes (binary blob with username at offsets)
+                    let username = match hive.read_raw_value_bytes(&user_nk, "V") {
+                        Ok(Some(data)) => {
+                            crate::registry::sam_structs::parse_username_from_v_record(&data)
                         }
                         _ => None,
                     };
 
-                    // Confirm the RID from the F blob.
-                    let f_rid = match hive.lookup_value(&user_path, "F") {
-                        Ok(Some(RegistryValue::Binary(f_data))) => {
-                            crate::registry::sam_structs::parse_user_f(&f_data)
-                                .map(|(rid, _, _)| rid)
+                    // Read raw F bytes (UserF struct with RID at offset 0x28)
+                    let f_rid = match hive.read_raw_value_bytes(&user_nk, "F") {
+                        Ok(Some(data)) => {
+                            crate::registry::sam_structs::parse_user_f(&data).map(|(rid, _, _)| rid)
                         }
                         _ => None,
                     };
@@ -1847,6 +1852,94 @@ impl<'a> RegistryHiveReader<'a> {
             if name.eq_ignore_ascii_case(value_name) {
                 return Ok(Some(value));
             }
+        }
+        Ok(None)
+    }
+
+    /// Read a named value's raw bytes directly, without type interpretation.
+    /// Used for SAM V/F binary blobs that parse_value_data misidentifies.
+    fn read_raw_value_bytes(
+        &self,
+        nk: &NkRecord,
+        value_name: &str,
+    ) -> Result<Option<Vec<u8>>, String> {
+        if nk.num_values == 0 || nk.values_list_offset == INVALID_OFFSET {
+            return Ok(None);
+        }
+        let list_abs = self.abs(nk.values_list_offset)?;
+        let cell_size = read_i32(self.bytes, list_abs)?;
+        if cell_size >= 0 {
+            return Ok(None);
+        }
+        let cell_len = cell_size
+            .checked_abs()
+            .ok_or_else(|| "invalid value list".to_string())? as usize;
+        self.require(list_abs, cell_len)?;
+        let list_len = (nk.num_values as usize)
+            .checked_mul(4)
+            .ok_or_else(|| "overflow".to_string())?;
+        let list_start = list_abs + 4;
+        if list_len > cell_len.saturating_sub(4) {
+            return Ok(None);
+        }
+        self.require(list_start, list_len)?;
+        for idx in 0..nk.num_values as usize {
+            let vk_off = read_u32(self.bytes, list_start + idx * 4)?;
+            if vk_off == INVALID_OFFSET {
+                continue;
+            }
+            let vk_abs = self.abs(vk_off)?;
+            // Read VK cell directly: check signature, name, then extract data bytes
+            if vk_abs + 0x18 > self.bytes.len() {
+                continue;
+            }
+            if &self.bytes[vk_abs + 4..vk_abs + 6] != VK_SIGNATURE {
+                continue;
+            }
+            let name_len = read_u16(self.bytes, vk_abs + 6)? as usize;
+            let data_len_raw = read_u32(self.bytes, vk_abs + 8)?;
+            let data_offset = read_u32(self.bytes, vk_abs + 0x0C)?;
+            let flags = read_u16(self.bytes, vk_abs + 0x14)?;
+            let name_start = vk_abs + 0x18;
+            if self.bytes.len() < name_start + name_len {
+                continue;
+            }
+            let name = decode_name(
+                &self.bytes[name_start..name_start + name_len],
+                flags & 0x01 != 0,
+            )?;
+            if !name.eq_ignore_ascii_case(value_name) {
+                continue;
+            }
+            // Extract raw bytes (skip RegistryValue type interpretation)
+            let data_len = (data_len_raw & 0x7FFF_FFFF) as usize;
+            let raw = if data_len_raw & 0x8000_0000 != 0 {
+                if data_len > 4 {
+                    return Err("inline value >4 bytes".into());
+                }
+                data_offset.to_le_bytes()[..data_len].to_vec()
+            } else if data_len == 0 {
+                // REG_NONE: the data_offset IS the value
+                data_offset.to_le_bytes().to_vec()
+            } else {
+                let data_abs = self.abs(data_offset)?;
+                let dcell = read_i32(self.bytes, data_abs)?;
+                if dcell >= 0 {
+                    return Ok(None);
+                }
+                let dlen = dcell
+                    .checked_abs()
+                    .ok_or_else(|| "invalid data cell".to_string())?
+                    as usize;
+                self.require(data_abs, dlen)?;
+                let dstart = data_abs + 4;
+                if data_len > dlen.saturating_sub(4) {
+                    return Ok(None);
+                }
+                self.require(dstart, data_len)?;
+                self.bytes[dstart..dstart + data_len].to_vec()
+            };
+            return Ok(Some(raw));
         }
         Ok(None)
     }
