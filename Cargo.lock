@@ -197,10 +197,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "artifacts-core",
+ "binread",
  "byteorder",
  "chrono",
  "domain",
  "evtx",
+ "hex",
  "lz4_flex",
  "rusqlite",
  "serde",
@@ -285,6 +287,28 @@ name = "base64ct"
 version = "1.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
+
+[[package]]
+name = "binread"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16598dfc8e6578e9b597d9910ba2e73618385dc9f4b1d43dd92c349d6be6418f"
+dependencies = [
+ "binread_derive",
+ "rustversion",
+]
+
+[[package]]
+name = "binread_derive"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d9672209df1714ee804b1f4d4f68c8eb2a90b1f7a07acf472f88ce198ef1fed"
+dependencies = [
+ "either",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
 
 [[package]]
 name = "bit-set"

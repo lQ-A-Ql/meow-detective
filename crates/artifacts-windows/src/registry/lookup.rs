@@ -125,6 +125,10 @@ pub struct NtuserInfo {
 pub struct SamUser {
     pub username: String,
     pub rid: u32,
+    pub full_name: String,
+    pub comment: String,
+    pub home_dir: String,
+    pub profile_path: String,
     pub last_login: Option<DateTime<Utc>>,
     pub password_last_set: Option<DateTime<Utc>>,
     pub account_disabled: bool,
@@ -146,6 +150,8 @@ pub struct SamGroup {
 pub struct SamInfo {
     pub users: Vec<SamUser>,
     pub groups: Vec<SamGroup>,
+    /// Domain-level password policy from `SAM\Domains\Account\F`.
+    pub password_policy: Option<crate::registry::sam_structs::SamPasswordPolicy>,
     pub warnings: Vec<String>,
 }
 
@@ -159,12 +165,12 @@ enum RegistryValue {
 }
 
 #[derive(Debug, Clone)]
-struct NkRecord {
-    name: String,
-    num_subkeys: u32,
-    subkeys_list_offset: u32,
-    num_values: u32,
-    values_list_offset: u32,
+pub(crate) struct NkRecord {
+    pub(crate) name: String,
+    pub(crate) num_subkeys: u32,
+    pub(crate) subkeys_list_offset: u32,
+    pub(crate) num_values: u32,
+    pub(crate) values_list_offset: u32,
 }
 
 pub fn extract_system_hive_fields(bytes: &[u8], hive_path: &str) -> Result<SystemHiveInfo, String> {
@@ -714,8 +720,9 @@ pub fn extract_sam_fields(bytes: &[u8], hive_path: &str) -> Result<SamInfo, Stri
         ));
     }
 
-    // Build a reverse RID → username map for group membership resolution
-    let rid_to_username: std::collections::HashMap<u32, String> = username_rid_map
+    // Build a reverse RID → username map for group membership resolution.
+    // Mutable so the Users\<RID_HEX> fallback below can extend it.
+    let mut rid_to_username: std::collections::HashMap<u32, String> = username_rid_map
         .iter()
         .map(|(name, rid)| (*rid, name.clone()))
         .collect();
@@ -727,6 +734,72 @@ pub fn extract_sam_fields(bytes: &[u8], hive_path: &str) -> Result<SamInfo, Stri
         }
     }
 
+    // ── FALLBACK: recover RIDs from Users\<RID_HEX> subkeys ──────────────────
+    // On Windows 10/11 the Names key default value is REG_NONE whose
+    // data_offset encodes the RID inline — find_rid_in_sam_key can miss
+    // these.  The Users subkeys are named by hex RID and each holds
+    // V (user record with username) and F (binary blob with RID).
+    // Iterate the Users subkeys and recover username↔RID mappings that
+    // were missed by the Names-key scan.
+    {
+        let users_path: &[&str] = &["SAM", "Domains", "Account", "Users"];
+        if let Ok(Some(users_nk)) = hive.navigate_to(users_path) {
+            if let Ok(subkey_names) = hive.read_subkey_names_from_nk(&users_nk) {
+                for subkey_name in &subkey_names {
+                    if subkey_name.eq_ignore_ascii_case("Names") {
+                        continue;
+                    }
+                    let hex_rid = u32::from_str_radix(subkey_name, 16).ok();
+                    let Some(hex_rid) = hex_rid else {
+                        continue;
+                    };
+
+                    // Already known from the Names-key pass — skip.
+                    if rid_to_username.contains_key(&hex_rid) {
+                        continue;
+                    }
+
+                    let mut user_path: Vec<&str> = users_path.to_vec();
+                    user_path.push(subkey_name.as_str());
+
+                    // Retrieve the username from the V value.
+                    let username = match hive.lookup_value(&user_path, "V") {
+                        Ok(Some(RegistryValue::Binary(v_data))) => {
+                            crate::registry::sam_structs::parse_username_from_v_record(&v_data)
+                        }
+                        _ => None,
+                    };
+
+                    // Confirm the RID from the F blob.
+                    let f_rid = match hive.lookup_value(&user_path, "F") {
+                        Ok(Some(RegistryValue::Binary(f_data))) => {
+                            crate::registry::sam_structs::parse_user_f(&f_data)
+                                .map(|(rid, _, _)| rid)
+                        }
+                        _ => None,
+                    };
+
+                    if let (Some(username), Some(f_rid)) = (username, f_rid) {
+                        if f_rid == hex_rid {
+                            rid_to_username.insert(hex_rid, username.clone());
+                            if let Some(user) =
+                                extract_sam_user(&hive, &username, hex_rid, &mut info.warnings)
+                            {
+                                info.users.push(user);
+                            }
+                            info.warnings.push(format!(
+                                "SAM: recovered user '{}' (RID={}) \
+                                 from Users\\{}\\F value \
+                                 (Names key REG_NONE fallback)",
+                                username, hex_rid, subkey_name
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Extract groups from Builtin\Aliases and Account\Aliases
     let alias_roots: &[&[&str]] = &[
         &["SAM", "Domains", "Builtin", "Aliases"],
@@ -734,6 +807,30 @@ pub fn extract_sam_fields(bytes: &[u8], hive_path: &str) -> Result<SamInfo, Stri
     ];
     for alias_root in alias_roots {
         extract_sam_aliases(&hive, alias_root, &rid_to_username, &mut info);
+    }
+
+    // ── Domain password policy ──────────────────────────────────────────────
+    // The Account key's F value contains the domain-wide password policy.
+    {
+        let account_path: &[&str] = &["SAM", "Domains", "Account"];
+        match hive.lookup_value(account_path, "F") {
+            Ok(Some(RegistryValue::Binary(f_data))) => {
+                info.password_policy =
+                    crate::registry::sam_structs::parse_domain_account_f(&f_data);
+            }
+            Ok(Some(_)) => {
+                info.warnings.push(
+                    "SAM\\Domains\\Account\\F: unexpected value type (expected binary)".into(),
+                );
+            }
+            // Missing F value is common for non-AD systems — not a warning.
+            Ok(None) => {}
+            Err(e) => {
+                info.warnings.push(format!(
+                    "SAM\\Domains\\Account\\F: failed to read value: {e}"
+                ));
+            }
+        }
     }
 
     // Cross-reference: populate user group memberships from group member lists
@@ -823,23 +920,38 @@ fn find_rid_in_sam_key(
     // SAM stores RID as the data_offset field (VK offset 0x0C) for REG_NONE.
     if let Ok(offsets) = hive.read_raw_vk_data_offsets(&nk) {
         for vk_offset in offsets {
-            let vk_abs = match hive.abs(vk_offset) { Ok(a) => a, Err(_) => continue };
-            if vk_abs + 0x14 > hive.bytes.len() { continue; }
-            if &hive.bytes[vk_abs + 4..vk_abs + 6] != VK_SIGNATURE { continue; }
+            let vk_abs = match hive.abs(vk_offset) {
+                Ok(a) => a,
+                Err(_) => continue,
+            };
+            if vk_abs + 0x14 > hive.bytes.len() {
+                continue;
+            }
+            if &hive.bytes[vk_abs + 4..vk_abs + 6] != VK_SIGNATURE {
+                continue;
+            }
             let data_type = u32::from_le_bytes(
-                hive.bytes[vk_abs + 0x10..vk_abs + 0x14].try_into().unwrap_or([0;4])
+                hive.bytes[vk_abs + 0x10..vk_abs + 0x14]
+                    .try_into()
+                    .unwrap_or([0; 4]),
             );
             let data_len_raw = u32::from_le_bytes(
-                hive.bytes[vk_abs + 0x08..vk_abs + 0x0C].try_into().unwrap_or([0;4])
+                hive.bytes[vk_abs + 0x08..vk_abs + 0x0C]
+                    .try_into()
+                    .unwrap_or([0; 4]),
             );
             let raw_data_offset = u32::from_le_bytes(
-                hive.bytes[vk_abs + 0x0C..vk_abs + 0x10].try_into().unwrap_or([0;4])
+                hive.bytes[vk_abs + 0x0C..vk_abs + 0x10]
+                    .try_into()
+                    .unwrap_or([0; 4]),
             );
             // REG_NONE (0) or REG_DWORD (4) with inline flag set
-            if (data_type == 0 || data_type == REG_DWORD) && (data_len_raw & 0x7FFF_FFFF) <= 4 {
-                if raw_data_offset > 0 && raw_data_offset < 0xFFFF {
-                    return Some(raw_data_offset);
-                }
+            if (data_type == 0 || data_type == REG_DWORD)
+                && (data_len_raw & 0x7FFF_FFFF) <= 4
+                && raw_data_offset > 0
+                && raw_data_offset < 0xFFFF
+            {
+                return Some(raw_data_offset);
             }
         }
     }
@@ -891,9 +1003,16 @@ fn extract_sam_user(
     let (last_login, password_last_set, _v_rid, account_control, admin_count) =
         parse_sam_v_record(&v_data, warnings)?;
 
+    // Parse the UserV blob for profile string fields.
+    let profile = crate::registry::sam_structs::parse_user_v(&v_data).unwrap_or_default();
+
     Some(SamUser {
         username: username.to_string(),
         rid,
+        full_name: profile.full_name,
+        comment: profile.comment,
+        home_dir: profile.home_dir,
+        profile_path: profile.profile_path,
         last_login: filetime_to_utc(last_login),
         password_last_set: filetime_to_utc(password_last_set),
         account_disabled: (account_control & SAM_ACCOUNT_DISABLED) != 0,
@@ -1585,13 +1704,13 @@ fn extract_utf16le_from_binary(data: &[u8]) -> Option<String> {
     Some(String::from_utf16_lossy(&units))
 }
 
-struct RegistryHiveReader<'a> {
+pub(crate) struct RegistryHiveReader<'a> {
     bytes: &'a [u8],
     root_cell_offset: u32,
 }
 
 impl<'a> RegistryHiveReader<'a> {
-    fn new(bytes: &'a [u8]) -> Result<Self, String> {
+    pub(crate) fn new(bytes: &'a [u8]) -> Result<Self, String> {
         if bytes.len() < BASE_BLOCK_SIZE {
             return Err("registry hive shorter than base block".to_string());
         }
@@ -1661,7 +1780,7 @@ impl<'a> RegistryHiveReader<'a> {
         Ok(None)
     }
 
-    fn control_set_candidates(&self, warnings: &mut Vec<String>) -> Vec<String> {
+    pub(crate) fn control_set_candidates(&self, warnings: &mut Vec<String>) -> Vec<String> {
         let mut candidates = Vec::new();
         match self.lookup_value(&["Select"], "Current") {
             Ok(Some(RegistryValue::Dword(value))) if (1..=999).contains(&value) => {
@@ -1888,7 +2007,7 @@ impl<'a> RegistryHiveReader<'a> {
     }
 
     /// Navigate to the NK record at `key_path` (empty slice = root).
-    fn navigate_to(&self, key_path: &[&str]) -> Result<Option<NkRecord>, String> {
+    pub(crate) fn navigate_to(&self, key_path: &[&str]) -> Result<Option<NkRecord>, String> {
         if key_path.len() > MAX_KEY_LOOKUP_DEPTH {
             return Err(format!(
                 "registry key path depth {} exceeds limit {}",
@@ -1960,23 +2079,33 @@ impl<'a> RegistryHiveReader<'a> {
         }
         let list_abs = self.abs(nk.values_list_offset)?;
         let cell_size = read_i32(self.bytes, list_abs)?;
-        if cell_size >= 0 { return Ok(Vec::new()); }
-        let cell_len = cell_size.checked_abs().ok_or_else(|| "invalid value list cell".to_string())? as usize;
+        if cell_size >= 0 {
+            return Ok(Vec::new());
+        }
+        let cell_len = cell_size
+            .checked_abs()
+            .ok_or_else(|| "invalid value list cell".to_string())? as usize;
         self.require(list_abs, cell_len)?;
-        let list_len = (nk.num_values as usize).checked_mul(4).ok_or_else(|| "overflow".to_string())?;
+        let list_len = (nk.num_values as usize)
+            .checked_mul(4)
+            .ok_or_else(|| "overflow".to_string())?;
         let list_start = list_abs + 4;
-        if list_len > cell_len.saturating_sub(4) { return Ok(Vec::new()); }
+        if list_len > cell_len.saturating_sub(4) {
+            return Ok(Vec::new());
+        }
         self.require(list_start, list_len)?;
         let mut offsets = Vec::with_capacity(nk.num_values as usize);
         for idx in 0..nk.num_values as usize {
             let vk_off = read_u32(self.bytes, list_start + idx * 4)?;
-            if vk_off != INVALID_OFFSET { offsets.push(vk_off); }
+            if vk_off != INVALID_OFFSET {
+                offsets.push(vk_off);
+            }
         }
         Ok(offsets)
     }
 
     /// Read the names of all subkeys of a given NK record.
-    fn read_subkey_names_from_nk(&self, nk: &NkRecord) -> Result<Vec<String>, String> {
+    pub(crate) fn read_subkey_names_from_nk(&self, nk: &NkRecord) -> Result<Vec<String>, String> {
         if nk.num_subkeys == 0 || nk.subkeys_list_offset == INVALID_OFFSET {
             return Ok(Vec::new());
         }
@@ -1988,6 +2117,97 @@ impl<'a> RegistryHiveReader<'a> {
             }
         }
         Ok(names)
+    }
+
+    /// Navigate to `key_path` and read the class name of that key.
+    /// Returns `None` when the key exists but has no class name.
+    pub(crate) fn read_class_name_at(&self, key_path: &[&str]) -> Result<Option<String>, String> {
+        if key_path.len() > MAX_KEY_LOOKUP_DEPTH {
+            return Err(format!(
+                "registry key path depth {} exceeds limit {}",
+                key_path.len(),
+                MAX_KEY_LOOKUP_DEPTH
+            ));
+        }
+        let mut nk_offset = self.root_cell_offset;
+        let mut nk = self.parse_nk(nk_offset)?;
+        for segment in key_path {
+            let Some(next_offset) = self.find_subkey_offset(&nk, segment)? else {
+                return Ok(None);
+            };
+            nk_offset = next_offset;
+            nk = self.parse_nk(nk_offset)?;
+        }
+        self.read_nk_class_name(nk_offset)
+    }
+
+    /// Read the class name from an NK cell at the given hive-relative offset.
+    fn read_nk_class_name(&self, nk_offset: u32) -> Result<Option<String>, String> {
+        let nk_abs = self.abs(nk_offset)?;
+        // Validate the cell is an NK record
+        let cell_size = read_i32(self.bytes, nk_abs)?;
+        if cell_size >= 0 {
+            return Err(format!("NK cell at {nk_offset:#x} is free"));
+        }
+        if self.bytes.get(nk_abs + 4..nk_abs + 6) != Some(NK_SIGNATURE) {
+            return Err("class name read target is not an NK cell".to_string());
+        }
+
+        let class_name_length = read_u16(self.bytes, nk_abs + 0x4E)? as usize;
+        if class_name_length == 0 {
+            return Ok(None);
+        }
+        if class_name_length > 4096 {
+            return Err(format!(
+                "class name length {class_name_length} at {nk_offset:#x} is implausibly large"
+            ));
+        }
+
+        let classname_offset = read_u32(self.bytes, nk_abs + 0x34)?;
+        let class_data: Vec<u8> = if classname_offset != INVALID_OFFSET && classname_offset != 0 {
+            // External class name: read from the data cell at classname_offset.
+            let data_abs = self.abs(classname_offset)?;
+            let dcell_size = read_i32(self.bytes, data_abs)?;
+            if dcell_size >= 0 {
+                return Err(format!(
+                    "class name data cell at {classname_offset:#x} is free"
+                ));
+            }
+            let dcell_len = dcell_size
+                .checked_abs()
+                .ok_or_else(|| "invalid class name data cell size".to_string())?
+                as usize;
+            self.require(data_abs, dcell_len)?;
+            let data_start = data_abs + 4;
+            self.require(data_start, class_name_length)?;
+            if class_name_length > dcell_len.saturating_sub(4) {
+                return Err(format!(
+                    "class name at {classname_offset:#x} length {class_name_length:#x} exceeds cell"
+                ));
+            }
+            self.bytes[data_start..data_start + class_name_length].to_vec()
+        } else {
+            // Inline class name: stored right after the key name in the NK cell.
+            let name_len = read_u16(self.bytes, nk_abs + 0x4C)? as usize;
+            let class_start = nk_abs + 0x50 + name_len;
+            self.require(class_start, class_name_length)?;
+            self.bytes[class_start..class_start + class_name_length].to_vec()
+        };
+
+        // Decode the class name bytes (always UTF-16LE in registry hives).
+        if class_data.len() < 2 || !class_data.len().is_multiple_of(2) {
+            return Ok(None);
+        }
+        let units: Vec<u16> = class_data
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
+        let s = String::from_utf16_lossy(&units);
+        let trimmed = s.trim_end_matches('\0');
+        if trimmed.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(trimmed.to_string()))
     }
 
     fn abs(&self, hive_offset: u32) -> Result<usize, String> {
@@ -3430,6 +3650,43 @@ mod tests {
         data
     }
 
+    /// Build a synthetic DomainAccountF binary blob with the given password
+    /// policy values.  Day-based values are converted to 100 ns ticks.
+    fn make_domain_account_f_blob(
+        max_pwd_age_days: u64,
+        min_pwd_age_days: u64,
+        min_pwd_length: u16,
+        pwd_history_length: u16,
+        lockout_threshold: u16,
+        lockout_duration_minutes: u64,
+        lockout_observation_window_minutes: u64,
+    ) -> Vec<u8> {
+        // 96-byte struct (0x60)
+        let mut data = vec![0u8; 96];
+        // revision at 0x00
+        data[0x00..0x04].copy_from_slice(&3u32.to_le_bytes());
+        // max_pwd_age at 0x18
+        let max_pwd_age_ticks = max_pwd_age_days * 864_000_000_000u64;
+        data[0x18..0x20].copy_from_slice(&max_pwd_age_ticks.to_le_bytes());
+        // min_pwd_age at 0x20
+        let min_pwd_age_ticks = min_pwd_age_days * 864_000_000_000u64;
+        data[0x20..0x28].copy_from_slice(&min_pwd_age_ticks.to_le_bytes());
+        // lockout_duration at 0x30
+        let lockout_duration_ticks = lockout_duration_minutes * 60 * 10_000_000u64;
+        data[0x30..0x38].copy_from_slice(&lockout_duration_ticks.to_le_bytes());
+        // lockout_observation_window at 0x38
+        let lockout_observation_window_ticks =
+            lockout_observation_window_minutes * 60 * 10_000_000u64;
+        data[0x38..0x40].copy_from_slice(&lockout_observation_window_ticks.to_le_bytes());
+        // min_pwd_length at 0x50
+        data[0x50..0x52].copy_from_slice(&min_pwd_length.to_le_bytes());
+        // pwd_history_length at 0x52
+        data[0x52..0x54].copy_from_slice(&pwd_history_length.to_le_bytes());
+        // lockout_threshold at 0x54
+        data[0x54..0x56].copy_from_slice(&lockout_threshold.to_le_bytes());
+        data
+    }
+
     /// Build a synthetic SAM hive with 2 users (Administrator, Guest) and
     /// groups from both Builtin\Aliases and Account\Aliases.
     ///
@@ -3458,14 +3715,25 @@ mod tests {
             &[("Account", 0x180), ("Builtin", 0x880)],
             &[],
         );
-        // Account(0x180) → Users(0x200), Aliases(0x500)
+        // Account(0x180) → Users(0x200), Aliases(0x500), and F value (password policy)
         write_nk(
             &mut data,
             0x180,
             "Account",
             &[("Users", 0x200), ("Aliases", 0x500)],
-            &[],
+            &[0x1240],
         );
+        // Account\F value: DomainAccountF password policy binary blob
+        let account_f = make_domain_account_f_blob(
+            42, // max password age days
+            1,  // min password age days
+            8,  // min password length
+            24, // password history length
+            5,  // lockout threshold
+            30, // lockout duration minutes
+            30, // lockout observation window minutes
+        );
+        write_binary_value(&mut data, 0x1240, "F", &account_f, 0x5400);
         // Users(0x200) → Names(0x280), 000001F4(0x400), 000001F5(0x480)
         write_nk(
             &mut data,
@@ -3787,6 +4055,48 @@ mod tests {
             "should warn about V value having unexpected type, got: {:?}",
             info.warnings
         );
+    }
+
+    #[test]
+    fn extract_sam_fields_password_policy() {
+        let data = synthetic_sam_hive();
+        let info = extract_sam_fields(&data, "Windows/System32/config/SAM").unwrap();
+
+        let policy = info
+            .password_policy
+            .expect("synthetic hive should have password policy");
+        assert_eq!(policy.max_password_age_days, 42);
+        assert_eq!(policy.min_password_age_days, 1);
+        assert_eq!(policy.min_password_length, 8);
+        assert_eq!(policy.password_history_length, 24);
+        assert_eq!(policy.lockout_threshold, 5);
+        assert_eq!(policy.lockout_duration_minutes, 30);
+        assert_eq!(policy.lockout_observation_window_minutes, 30);
+    }
+
+    #[test]
+    fn extract_sam_fields_password_policy_when_account_f_missing() {
+        // Build a SAM hive WITHOUT the Account F value.  Password policy
+        // should be None (not an error — common for non-AD workstations).
+        let mut data = synthetic_sam_hive();
+        // Overwrite the Account NK to remove the F value VK.
+        // Account is at offset 0x180. Re-write without values.
+        write_nk(
+            &mut data,
+            0x180,
+            "Account",
+            &[("Users", 0x200), ("Aliases", 0x500)],
+            &[], // no values → no F key
+        );
+
+        let info = extract_sam_fields(&data, "Windows/System32/config/SAM").unwrap();
+        assert!(
+            info.password_policy.is_none(),
+            "missing Account F should yield None password_policy"
+        );
+        // Users and groups should still be extracted normally.
+        assert_eq!(info.users.len(), 2);
+        assert_eq!(info.groups.len(), 4);
     }
 
     // ── Txlog-override tests ───────────────────────────────────────────────

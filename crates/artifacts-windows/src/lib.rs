@@ -39,6 +39,9 @@ pub use registry::recovery::{
     scan_deleted_registry_cells, scan_free_cells, FreeCell, HiveBin, RecoverResult, RecoveredKey,
     RecoveredValue,
 };
+pub use registry::sam_structs::{
+    extract_boot_key, parse_domain_account_f, parse_user_f, SamPasswordPolicy, UserFRaw,
+};
 pub use registry::txlog::{
     parse_transaction_log, RegistryTransaction, RegistryTransactionOperation, TxLogParseResult,
 };

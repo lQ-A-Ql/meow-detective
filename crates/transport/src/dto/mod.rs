@@ -93,8 +93,8 @@ pub use notebook::{
 pub use recovery::DeletedFileRecoveryDto;
 pub use registry::{
     MountPointDto, NtuserInfoDto, RecentDocDto, RegistryRunKeyDto, RegistryTransactionDto,
-    RegistryTransactionOperationDto, SamGroupDto, SamInfoDto, SamUserDto, TxLogParseResultDto,
-    UserAssistEntryDto,
+    RegistryTransactionOperationDto, SamGroupDto, SamInfoDto, SamPasswordPolicyDto, SamUserDto,
+    TxLogParseResultDto, UserAssistEntryDto,
 };
 pub use reports::{ReportHistoryItemDto, ReportTemplateDto};
 pub use search::{SearchHighlightDto, SearchHitDto, SearchResultPageDto, SearchSnippetDto};

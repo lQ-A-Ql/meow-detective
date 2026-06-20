@@ -19,6 +19,8 @@ evtx.workspace = true
 rusqlite = { version = "0.31", features = ["bundled"] }
 tempfile = "3"
 lz4_flex = { workspace = true }
+binread = { workspace = true }
+hex = "0.4"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_Compression"] }
