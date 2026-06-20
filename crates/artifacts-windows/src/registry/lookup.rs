@@ -1,4 +1,8 @@
-use chrono::{TimeZone, Utc};
+use chrono::{DateTime, TimeZone, Utc};
+
+use crate::registry::txlog::{
+    parse_transaction_log, RegistryTransaction, RegistryTransactionOperation,
+};
 
 const BASE_BLOCK_SIZE: usize = 0x1000;
 const NK_SIGNATURE: &[u8; 2] = b"nk";
@@ -19,10 +23,29 @@ pub struct ParsedRegistryField {
     pub parser: String,
 }
 
+/// Records which txlog entry (if any) was used to override a field value,
+/// and the timestamps from both the hive and the transaction log.
+#[derive(Debug, Clone)]
+pub struct TxlogTimestampInfo {
+    /// Human-readable name of the field (e.g. "ComputerName").
+    pub field_name: String,
+    /// Last-write timestamp from the hive record (currently always `None` because
+    /// the standard extractor does not read key timestamps).
+    pub hive_timestamp: Option<DateTime<Utc>>,
+    /// Timestamp from the matching transaction-log entry, when one was applied.
+    pub txlog_timestamp: Option<DateTime<Utc>>,
+    /// `true` when the field's value was updated from a txlog entry.
+    pub txlog_used: bool,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct SystemHiveInfo {
     pub computer_name: Option<ParsedRegistryField>,
     pub timezone: Option<ParsedRegistryField>,
+    /// Whether any field was updated from the transaction log.
+    pub txlog_applied: bool,
+    /// Per-field record of txlog override decisions and timestamps.
+    pub txlog_timestamps: Vec<TxlogTimestampInfo>,
     pub warnings: Vec<String>,
 }
 
@@ -36,6 +59,92 @@ pub struct SoftwareHiveInfo {
     pub registered_owner: Option<ParsedRegistryField>,
     pub registered_organization: Option<ParsedRegistryField>,
     pub product_id: Option<ParsedRegistryField>,
+    /// Whether any field was updated from the transaction log.
+    pub txlog_applied: bool,
+    /// Per-field record of txlog override decisions and timestamps.
+    pub txlog_timestamps: Vec<TxlogTimestampInfo>,
+    pub warnings: Vec<String>,
+}
+
+/// A single auto-start entry found under Run / RunOnce keys in NTUSER.DAT.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RegistryRunKey {
+    pub key_path: String,
+    pub value_name: String,
+    pub command: String,
+    pub timestamp: Option<String>,
+}
+
+/// A single entry from the Explorer RecentDocs MRU list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecentDoc {
+    pub file_name: String,
+    pub extension: String,
+    pub last_accessed: Option<String>,
+    pub lnk_target: Option<String>,
+}
+
+/// A single UserAssist entry (program execution tracking).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UserAssistEntry {
+    pub executable: String,
+    pub run_count: u32,
+    pub last_run: Option<String>,
+    pub focus_time_ms: u64,
+}
+
+/// A mount-point entry from Explorer MountPoints2.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MountPoint {
+    pub drive_letter: Option<String>,
+    pub volume_guid: Option<String>,
+    pub last_mounted: Option<String>,
+}
+
+/// Aggregated information extracted from an NTUSER.DAT hive.
+#[derive(Debug, Clone, Default)]
+pub struct NtuserInfo {
+    pub run_keys: Vec<RegistryRunKey>,
+    pub recent_docs: Vec<RecentDoc>,
+    pub user_assist: Vec<UserAssistEntry>,
+    pub typed_urls: Vec<String>,
+    pub word_wheel_query: Vec<String>,
+    pub mount_points: Vec<MountPoint>,
+    /// Whether any field was updated from the transaction log.
+    pub txlog_applied: bool,
+    /// Per-field record of txlog override decisions and timestamps.
+    pub txlog_timestamps: Vec<TxlogTimestampInfo>,
+    pub warnings: Vec<String>,
+}
+
+// ── SAM hive structs ─────────────────────────────────────────────────────────
+
+/// A local user account parsed from a SAM registry hive.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SamUser {
+    pub username: String,
+    pub rid: u32,
+    pub last_login: Option<DateTime<Utc>>,
+    pub password_last_set: Option<DateTime<Utc>>,
+    pub account_disabled: bool,
+    pub account_locked: bool,
+    pub admin_count: u32,
+    pub group_memberships: Vec<String>,
+}
+
+/// A local group parsed from a SAM registry hive.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SamGroup {
+    pub name: String,
+    pub rid: u32,
+    pub members: Vec<String>,
+}
+
+/// Aggregated information extracted from a SAM hive.
+#[derive(Debug, Clone, Default)]
+pub struct SamInfo {
+    pub users: Vec<SamUser>,
+    pub groups: Vec<SamGroup>,
     pub warnings: Vec<String>,
 }
 
@@ -293,6 +402,1098 @@ fn lookup_install_date_field(
             None
         }
     }
+}
+
+// ── NTUSER.DAT field extraction ──────────────────────────────────────────────
+
+pub fn extract_ntuser_fields(bytes: &[u8], hive_path: &str) -> Result<NtuserInfo, String> {
+    let hive = RegistryHiveReader::new(bytes)?;
+    let mut info = NtuserInfo::default();
+    let parser = "registry.ntuser";
+
+    info.run_keys = extract_run_keys(&hive, hive_path, parser, &mut info.warnings);
+    info.recent_docs = extract_recent_docs(&hive, hive_path, parser, &mut info.warnings);
+    info.user_assist = extract_user_assist(&hive, hive_path, parser, &mut info.warnings);
+    info.typed_urls = extract_typed_urls(&hive, hive_path, parser, &mut info.warnings);
+    info.word_wheel_query = extract_word_wheel_query(&hive, hive_path, parser, &mut info.warnings);
+    info.mount_points = extract_mount_points(&hive, hive_path, parser, &mut info.warnings);
+
+    Ok(info)
+}
+
+// ── Transaction-log-aware extractors ──────────────────────────────────────────
+
+/// Like [`extract_system_hive_fields`], but after standard extraction checks a
+/// transaction log for more recent writes.  When a txlog entry holds a newer
+/// value (higher sequence number), the field's value is overwritten.
+pub fn extract_system_hive_fields_with_txlog(
+    bytes: &[u8],
+    hive_path: &str,
+    txlog_data: &[u8],
+) -> Result<SystemHiveInfo, String> {
+    let mut info = extract_system_hive_fields(bytes, hive_path)?;
+    let txlog = parse_transaction_log(txlog_data)?;
+    let mut txlog_applied = false;
+    let mut ts_infos: Vec<TxlogTimestampInfo> = Vec::new();
+
+    if let Some(ref mut field) = info.computer_name {
+        let ts = apply_single_txlog_override(field, &txlog.transactions);
+        txlog_applied = txlog_applied || ts.txlog_used;
+        ts_infos.push(ts);
+    }
+    if let Some(ref mut field) = info.timezone {
+        let ts = apply_single_txlog_override(field, &txlog.transactions);
+        txlog_applied = txlog_applied || ts.txlog_used;
+        ts_infos.push(ts);
+    }
+
+    info.txlog_applied = txlog_applied;
+    info.txlog_timestamps = ts_infos;
+    Ok(info)
+}
+
+/// Like [`extract_software_hive_fields`], but after standard extraction checks a
+/// transaction log for more recent writes.
+pub fn extract_software_hive_fields_with_txlog(
+    bytes: &[u8],
+    hive_path: &str,
+    txlog_data: &[u8],
+) -> Result<SoftwareHiveInfo, String> {
+    let mut info = extract_software_hive_fields(bytes, hive_path)?;
+    let txlog = parse_transaction_log(txlog_data)?;
+    let mut txlog_applied = false;
+    let mut ts_infos: Vec<TxlogTimestampInfo> = Vec::new();
+
+    let fields: [&mut Option<ParsedRegistryField>; 8] = [
+        &mut info.product_name,
+        &mut info.current_build,
+        &mut info.current_version,
+        &mut info.display_version,
+        &mut info.install_date,
+        &mut info.registered_owner,
+        &mut info.registered_organization,
+        &mut info.product_id,
+    ];
+    for field in fields.into_iter().flatten() {
+        let ts = apply_single_txlog_override(field, &txlog.transactions);
+        txlog_applied = txlog_applied || ts.txlog_used;
+        ts_infos.push(ts);
+    }
+
+    info.txlog_applied = txlog_applied;
+    info.txlog_timestamps = ts_infos;
+    Ok(info)
+}
+
+/// Like [`extract_ntuser_fields`], but after standard extraction checks a
+/// transaction log for more recent writes to Run / RunOnce keys and TypedURLs.
+pub fn extract_ntuser_fields_with_txlog(
+    bytes: &[u8],
+    hive_path: &str,
+    txlog_data: &[u8],
+) -> Result<NtuserInfo, String> {
+    let mut info = extract_ntuser_fields(bytes, hive_path)?;
+    let txlog = parse_transaction_log(txlog_data)?;
+    let mut txlog_applied = false;
+    let mut ts_infos: Vec<TxlogTimestampInfo> = Vec::new();
+
+    // Override Run / RunOnce commands.
+    for run_key in &mut info.run_keys {
+        let best =
+            find_best_txlog_match(&txlog.transactions, &run_key.key_path, &run_key.value_name);
+        if let Some(txn) = best {
+            if let Some(new_cmd) = txn.data_after.as_deref().and_then(txlog_data_to_string) {
+                run_key.command = new_cmd;
+                run_key.timestamp = txn.timestamp.map(|dt| dt.to_rfc3339());
+                ts_infos.push(TxlogTimestampInfo {
+                    field_name: format!("RunKey[{}]", run_key.value_name),
+                    hive_timestamp: None,
+                    txlog_timestamp: txn.timestamp,
+                    txlog_used: true,
+                });
+                txlog_applied = true;
+            }
+        }
+    }
+
+    info.txlog_applied = txlog_applied;
+    info.txlog_timestamps = ts_infos;
+    Ok(info)
+}
+
+// ── Txlog helpers ─────────────────────────────────────────────────────────────
+
+/// Attempt to override a [`ParsedRegistryField`] with a more recent value from
+/// the transaction log.  Returns a [`TxlogTimestampInfo`] describing whether an
+/// override was applied.
+fn apply_single_txlog_override(
+    field: &mut ParsedRegistryField,
+    transactions: &[RegistryTransaction],
+) -> TxlogTimestampInfo {
+    let best = find_best_txlog_match(transactions, &field.key_path, &field.value_name);
+
+    match best {
+        Some(txn) => {
+            let old_value = field.value.clone();
+            field.value = txn
+                .data_after
+                .as_deref()
+                .and_then(txlog_data_to_string)
+                .unwrap_or(old_value);
+            TxlogTimestampInfo {
+                field_name: field.value_name.clone(),
+                hive_timestamp: None,
+                txlog_timestamp: txn.timestamp,
+                txlog_used: true,
+            }
+        }
+        None => TxlogTimestampInfo {
+            field_name: field.value_name.clone(),
+            hive_timestamp: None,
+            txlog_timestamp: None,
+            txlog_used: false,
+        },
+    }
+}
+
+/// Search transaction-log entries for the best `SetValue` matching `key_path`
+/// and `value_name`.  "Best" means the highest sequence number among matches.
+fn find_best_txlog_match<'a>(
+    transactions: &'a [RegistryTransaction],
+    key_path: &str,
+    value_name: &str,
+) -> Option<&'a RegistryTransaction> {
+    transactions
+        .iter()
+        .filter(|txn| {
+            txn.operation == RegistryTransactionOperation::SetValue
+                && txn.value_name.as_deref() == Some(value_name)
+                && txlog_key_path_matches(&txn.key_path, key_path)
+        })
+        .max_by_key(|txn| txn.sequence_number)
+}
+
+/// Check whether a transaction-log key path matches a hive-relative key path.
+///
+/// Registry hives are mounted at well-known roots (`\Registry\Machine\SYSTEM`,
+/// `\Registry\Machine\SOFTWARE`, `\Registry\User\...`).  The txlog records the
+/// full absolute path, while the hive extractor stores the path relative to the
+/// hive root.  This function strips common prefixes and compares suffixes
+/// case-insensitively.
+fn txlog_key_path_matches(txlog_path: &str, hive_key_path: &str) -> bool {
+    let tx = txlog_path.trim_matches('\\').to_lowercase();
+    let hi = hive_key_path.trim_matches('\\').to_lowercase();
+
+    if tx == hi {
+        return true;
+    }
+
+    // Suffix match: the hive-relative path should be a suffix of the absolute
+    // txlog path, separated by a backslash.
+    if tx.len() > hi.len() {
+        let split_at = tx.len() - hi.len();
+        if split_at > 0
+            && tx.as_bytes().get(split_at - 1) == Some(&b'\\')
+            && tx.as_bytes()[split_at..] == hi.as_bytes()[..]
+        {
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Convert raw registry-value bytes (as recorded in the transaction log) to a
+/// string.  Registry string types are stored as UTF-16LE; this attempts that
+/// decode first and falls back to UTF-8 / Latin-1.
+fn txlog_data_to_string(data: &[u8]) -> Option<String> {
+    if data.is_empty() {
+        return None;
+    }
+    // Primary path: UTF-16LE (registry REG_SZ / REG_EXPAND_SZ wire format).
+    if data.len() >= 2 && data.len().is_multiple_of(2) {
+        let units: Vec<u16> = data
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
+        let s = String::from_utf16_lossy(&units);
+        let trimmed = s.trim_end_matches('\0').to_string();
+        if !trimmed.is_empty() {
+            return Some(trimmed);
+        }
+    }
+    // Fallback: raw UTF-8.
+    String::from_utf8(data.to_vec()).ok()
+}
+
+// ── SAM hive field extraction ─────────────────────────────────────────────────
+
+/// User account control flags in the SAM V record.
+const SAM_ACCOUNT_DISABLED: u32 = 0x0001;
+const SAM_ACCOUNT_LOCKED: u32 = 0x0010;
+
+/// Extract local user accounts, groups, and memberships from a SAM registry hive.
+pub fn extract_sam_fields(bytes: &[u8], hive_path: &str) -> Result<SamInfo, String> {
+    let hive = RegistryHiveReader::new(bytes)?;
+    let mut info = SamInfo::default();
+
+    // Build username → RID map from SAM\Domains\Account\Users\Names
+    let names_path: &[&str] = &["SAM", "Domains", "Account", "Users", "Names"];
+    let username_rid_map = build_sam_name_to_rid(&hive, names_path, &mut info.warnings);
+
+    if username_rid_map.is_empty() {
+        info.warnings.push(format!(
+            "{}: no user names found (hive={})",
+            names_path.join("\\"),
+            hive_path
+        ));
+    }
+
+    // Build a reverse RID → username map for group membership resolution
+    let rid_to_username: std::collections::HashMap<u32, String> = username_rid_map
+        .iter()
+        .map(|(name, rid)| (*rid, name.clone()))
+        .collect();
+
+    // Extract user details from each user's V value
+    for (username, rid) in &username_rid_map {
+        if let Some(user) = extract_sam_user(&hive, username, *rid, &mut info.warnings) {
+            info.users.push(user);
+        }
+    }
+
+    // Extract groups from Builtin\Aliases and Account\Aliases
+    let alias_roots: &[&[&str]] = &[
+        &["SAM", "Domains", "Builtin", "Aliases"],
+        &["SAM", "Domains", "Account", "Aliases"],
+    ];
+    for alias_root in alias_roots {
+        extract_sam_aliases(&hive, alias_root, &rid_to_username, &mut info);
+    }
+
+    // Cross-reference: populate user group memberships from group member lists
+    for user in &mut info.users {
+        for group in &info.groups {
+            if group.members.contains(&user.username) {
+                user.group_memberships.push(group.name.clone());
+            }
+        }
+    }
+
+    Ok(info)
+}
+
+fn build_sam_name_to_rid(
+    hive: &RegistryHiveReader<'_>,
+    names_path: &[&str],
+    warnings: &mut Vec<String>,
+) -> Vec<(String, u32)> {
+    let names_nk = match hive.navigate_to(names_path) {
+        Ok(Some(nk)) => nk,
+        Ok(None) => return Vec::new(),
+        Err(err) => {
+            warnings.push(format!("SAM Users\\Names parse error: {err}"));
+            return Vec::new();
+        }
+    };
+
+    let subkey_names = match hive.read_subkey_names_from_nk(&names_nk) {
+        Ok(names) => names,
+        Err(err) => {
+            warnings.push(format!("SAM Users\\Names subkeys error: {err}"));
+            return Vec::new();
+        }
+    };
+
+    let mut result = Vec::new();
+    for username in subkey_names {
+        let mut user_path: Vec<&str> = names_path.to_vec();
+        user_path.push(username.as_str());
+        match find_rid_in_sam_key(hive, &user_path, warnings) {
+            Some(rid) => result.push((username, rid)),
+            None => {
+                warnings.push(format!("SAM user '{}' has no readable RID value", username));
+            }
+        }
+    }
+    result
+}
+
+fn find_rid_in_sam_key(
+    hive: &RegistryHiveReader<'_>,
+    key_path: &[&str],
+    warnings: &mut Vec<String>,
+) -> Option<u32> {
+    let nk = match hive.navigate_to(key_path) {
+        Ok(Some(nk)) => nk,
+        Err(err) => {
+            warnings.push(format!("{} parse error: {err}", key_path.join("\\")));
+            return None;
+        }
+        _ => return None,
+    };
+
+    let values = match hive.read_all_values_from_nk(&nk) {
+        Ok(values) => values,
+        Err(err) => {
+            warnings.push(format!("{} values parse error: {err}", key_path.join("\\")));
+            return None;
+        }
+    };
+
+    for (_name, value) in &values {
+        match value {
+            RegistryValue::Dword(v) => return Some(*v),
+            RegistryValue::Binary(data) if data.len() >= 4 => {
+                if let Some(rid) = data
+                    .get(..4)
+                    .and_then(|b| <[u8; 4]>::try_from(b).ok())
+                    .map(u32::from_le_bytes)
+                {
+                    return Some(rid);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    warnings.push(format!(
+        "SAM key {} has no DWORD or binary RID value (found {} values)",
+        key_path.join("\\"),
+        values.len()
+    ));
+    None
+}
+
+fn extract_sam_user(
+    hive: &RegistryHiveReader<'_>,
+    username: &str,
+    rid: u32,
+    warnings: &mut Vec<String>,
+) -> Option<SamUser> {
+    let rid_hex = format!("{:08X}", rid);
+    let user_key: &[&str] = &["SAM", "Domains", "Account", "Users"];
+
+    // Read the V value from the user's RID subkey.
+    // Build path: SAM\Domains\Account\Users\<RID_HEX>
+    let mut v_path: Vec<&str> = user_key.to_vec();
+    v_path.push(rid_hex.as_str());
+
+    let v_data = match hive.lookup_value(&v_path, "V") {
+        Ok(Some(RegistryValue::Binary(data))) => data,
+        Ok(Some(other)) => {
+            warnings.push(format!(
+                "SAM user {}\\V value has unexpected type: {:?}",
+                v_path.join("\\"),
+                other
+            ));
+            return None;
+        }
+        Ok(None) => {
+            warnings.push(format!("SAM user {}\\V not found", v_path.join("\\")));
+            return None;
+        }
+        Err(err) => {
+            warnings.push(format!(
+                "SAM user {}\\V parse error: {err}",
+                v_path.join("\\")
+            ));
+            return None;
+        }
+    };
+
+    let (last_login, password_last_set, _v_rid, account_control, admin_count) =
+        parse_sam_v_record(&v_data, warnings)?;
+
+    Some(SamUser {
+        username: username.to_string(),
+        rid,
+        last_login: filetime_to_utc(last_login),
+        password_last_set: filetime_to_utc(password_last_set),
+        account_disabled: (account_control & SAM_ACCOUNT_DISABLED) != 0,
+        account_locked: (account_control & SAM_ACCOUNT_LOCKED) != 0,
+        admin_count,
+        group_memberships: Vec::new(), // populated later via cross-reference
+    })
+}
+
+fn parse_sam_v_record(
+    data: &[u8],
+    warnings: &mut Vec<String>,
+) -> Option<(u64, u64, u32, u32, u32)> {
+    if data.len() < 0x50 {
+        warnings.push(format!(
+            "SAM V record is {} bytes, expected at least 0x50",
+            data.len()
+        ));
+        return None;
+    }
+
+    let last_login = u64::from_le_bytes(data.get(0x08..0x10)?.try_into().ok()?);
+    let password_last_set = u64::from_le_bytes(data.get(0x18..0x20)?.try_into().ok()?);
+    let rid = u32::from_le_bytes(data.get(0x28..0x2C)?.try_into().ok()?);
+    let account_control = u32::from_le_bytes(data.get(0x2C..0x30)?.try_into().ok()?);
+    let admin_count = data
+        .get(0x46..0x48)
+        .and_then(|b| <[u8; 2]>::try_from(b).ok())
+        .map(u16::from_le_bytes)
+        .unwrap_or(0) as u32;
+
+    Some((
+        last_login,
+        password_last_set,
+        rid,
+        account_control,
+        admin_count,
+    ))
+}
+
+fn extract_sam_aliases(
+    hive: &RegistryHiveReader<'_>,
+    alias_root: &[&str],
+    rid_to_username: &std::collections::HashMap<u32, String>,
+    info: &mut SamInfo,
+) {
+    let mut names_path: Vec<&str> = alias_root.to_vec();
+    names_path.push("Names");
+
+    let names_nk = match hive.navigate_to(&names_path) {
+        Ok(Some(nk)) => nk,
+        Err(err) => {
+            info.warnings
+                .push(format!("{} parse error: {err}", names_path.join("\\")));
+            return;
+        }
+        _ => return,
+    };
+
+    let subkey_names = match hive.read_subkey_names_from_nk(&names_nk) {
+        Ok(names) => names,
+        Err(err) => {
+            info.warnings
+                .push(format!("{} subkeys error: {err}", names_path.join("\\")));
+            return;
+        }
+    };
+
+    for group_name in subkey_names {
+        let mut group_path: Vec<&str> = names_path.to_vec();
+        group_path.push(group_name.as_str());
+
+        let group_rid = match find_rid_in_sam_key(hive, &group_path, &mut info.warnings) {
+            Some(rid) => rid,
+            None => continue,
+        };
+
+        // Parse the C value to get group members
+        let rid_hex = format!("{:08X}", group_rid);
+        let mut group_key: Vec<&str> = alias_root.to_vec();
+        group_key.push(rid_hex.as_str());
+
+        let members = match hive.lookup_value(&group_key, "C") {
+            Ok(Some(RegistryValue::Binary(data))) => {
+                parse_sam_c_members(&data, rid_to_username, &mut info.warnings)
+            }
+            Ok(Some(other)) => {
+                info.warnings.push(format!(
+                    "SAM group {}\\C value has unexpected type: {:?}",
+                    group_key.join("\\"),
+                    other
+                ));
+                Vec::new()
+            }
+            _ => Vec::new(),
+        };
+
+        info.groups.push(SamGroup {
+            name: group_name,
+            rid: group_rid,
+            members,
+        });
+    }
+}
+
+fn parse_sam_c_members(
+    data: &[u8],
+    rid_to_username: &std::collections::HashMap<u32, String>,
+    warnings: &mut Vec<String>,
+) -> Vec<String> {
+    if data.len() < 8 {
+        warnings.push(format!(
+            "SAM group C value is {} bytes, expected at least 8",
+            data.len()
+        ));
+        return Vec::new();
+    }
+
+    // C value structure: revision(2) + ?(2) + member_count(4) + member SIDs...
+    let member_count = data
+        .get(4..8)
+        .and_then(|b| <[u8; 4]>::try_from(b).ok())
+        .map(u32::from_le_bytes)
+        .unwrap_or(0) as usize;
+    if member_count == 0 {
+        return Vec::new();
+    }
+
+    let mut offset = 8usize;
+    let mut members = Vec::new();
+
+    for _ in 0..member_count {
+        if offset >= data.len() {
+            break;
+        }
+        let sid_remaining = &data[offset..];
+        if let Some((rid, sid_len)) = parse_sid_rid(sid_remaining) {
+            if let Some(username) = rid_to_username.get(&rid) {
+                members.push(username.clone());
+            } else {
+                // RID not in our user map — this may be a well-known local SID
+                // or a domain SID. Record it as a placeholder.
+                members.push(format!("rid-{rid}"));
+            }
+            offset = offset.saturating_add(sid_len);
+        } else {
+            break;
+        }
+    }
+
+    members
+}
+
+fn parse_sid_rid(data: &[u8]) -> Option<(u32, usize)> {
+    if data.len() < 8 {
+        return None;
+    }
+    let sub_auth_count = data[1] as usize;
+    if sub_auth_count == 0 || sub_auth_count > 15 {
+        return None;
+    }
+    let sid_len = 8usize.checked_add(sub_auth_count.checked_mul(4)?)?;
+    if data.len() < sid_len {
+        return None;
+    }
+    let last_sub_auth_offset = 8 + (sub_auth_count - 1) * 4;
+    let rid = u32::from_le_bytes(
+        data.get(last_sub_auth_offset..last_sub_auth_offset + 4)?
+            .try_into()
+            .ok()?,
+    );
+    Some((rid, sid_len))
+}
+
+fn filetime_to_utc(filetime: u64) -> Option<DateTime<Utc>> {
+    if filetime == 0 {
+        return None;
+    }
+    let unix_seconds = (filetime / 10_000_000).saturating_sub(11_644_473_600);
+    let nanos = ((filetime % 10_000_000) * 100) as u32;
+    Utc.timestamp_opt(unix_seconds as i64, nanos).single()
+}
+
+// ── Run / RunOnce ────────────────────────────────────────────────────────────
+
+fn extract_run_keys(
+    hive: &RegistryHiveReader<'_>,
+    hive_path: &str,
+    parser: &str,
+    warnings: &mut Vec<String>,
+) -> Vec<RegistryRunKey> {
+    let mut keys = Vec::new();
+    let base = &["Software", "Microsoft", "Windows", "CurrentVersion"];
+    for suffix in &["Run", "RunOnce"] {
+        let mut full: Vec<&str> = base.to_vec();
+        full.push(suffix);
+        keys.extend(extract_run_keys_at(
+            hive, hive_path, parser, &full, warnings,
+        ));
+    }
+    keys
+}
+
+fn extract_run_keys_at(
+    hive: &RegistryHiveReader<'_>,
+    _hive_path: &str,
+    _parser: &str,
+    key_path: &[&str],
+    warnings: &mut Vec<String>,
+) -> Vec<RegistryRunKey> {
+    let key_path_str = key_path.join("\\");
+    let nk = match hive.navigate_to(key_path) {
+        Ok(Some(nk)) => nk,
+        Ok(None) => return Vec::new(),
+        Err(err) => {
+            warnings.push(format!("{key_path_str} parse error: {err}"));
+            return Vec::new();
+        }
+    };
+    let values = match hive.read_all_values_from_nk(&nk) {
+        Ok(values) => values,
+        Err(err) => {
+            warnings.push(format!("{key_path_str} values parse error: {err}"));
+            return Vec::new();
+        }
+    };
+    values
+        .into_iter()
+        .filter_map(|(name, value)| match value {
+            RegistryValue::String(command) if !command.trim().is_empty() => Some(RegistryRunKey {
+                key_path: key_path_str.clone(),
+                value_name: name,
+                command,
+                timestamp: None,
+            }),
+            _ => None,
+        })
+        .collect()
+}
+
+// ── RecentDocs MRU ───────────────────────────────────────────────────────────
+
+fn extract_recent_docs(
+    hive: &RegistryHiveReader<'_>,
+    _hive_path: &str,
+    _parser: &str,
+    warnings: &mut Vec<String>,
+) -> Vec<RecentDoc> {
+    let recent_docs_path: &[&str] = &[
+        "Software",
+        "Microsoft",
+        "Windows",
+        "CurrentVersion",
+        "Explorer",
+        "RecentDocs",
+    ];
+    let nk = match hive.navigate_to(recent_docs_path) {
+        Ok(Some(nk)) => nk,
+        Ok(None) => {
+            warnings.push("RecentDocs key not found".to_string());
+            return Vec::new();
+        }
+        Err(err) => {
+            warnings.push(format!("RecentDocs parse error: {err}"));
+            return Vec::new();
+        }
+    };
+    let subkey_names = match hive.read_subkey_names_from_nk(&nk) {
+        Ok(names) => names,
+        Err(err) => {
+            warnings.push(format!("RecentDocs subkeys error: {err}"));
+            return Vec::new();
+        }
+    };
+    let mut docs = Vec::new();
+    for ext in subkey_names {
+        let mut ext_path: Vec<&str> = recent_docs_path.to_vec();
+        ext_path.push(ext.as_str());
+        docs.extend(parse_recent_docs_extension(hive, &ext_path, &ext, warnings));
+    }
+    docs
+}
+
+fn parse_recent_docs_extension(
+    hive: &RegistryHiveReader<'_>,
+    ext_path: &[&str],
+    ext: &str,
+    _warnings: &mut Vec<String>,
+) -> Vec<RecentDoc> {
+    let ext_nk = match hive.navigate_to(ext_path) {
+        Ok(Some(nk)) => nk,
+        _ => return Vec::new(),
+    };
+    let values = match hive.read_all_values_from_nk(&ext_nk) {
+        Ok(values) => values,
+        _ => return Vec::new(),
+    };
+
+    let mut ordered_indices: Vec<u32> = Vec::new();
+    for (name, value) in &values {
+        if name.eq_ignore_ascii_case("MRUListEx") {
+            if let RegistryValue::Binary(data) = value {
+                for chunk in data.chunks(4) {
+                    if chunk.len() == 4 {
+                        let idx = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                        if idx == 0xFFFF_FFFF {
+                            break;
+                        }
+                        ordered_indices.push(idx);
+                    }
+                }
+            }
+            break;
+        }
+    }
+
+    let mut entries: Vec<(u32, RecentDoc)> = Vec::new();
+    for (name, value) in &values {
+        if name.eq_ignore_ascii_case("MRUListEx") {
+            continue;
+        }
+        let Ok(index) = name.parse::<u32>() else {
+            continue;
+        };
+        match value {
+            RegistryValue::Binary(data) => {
+                if let Some(file_name) = extract_utf16le_from_binary(data) {
+                    entries.push((
+                        index,
+                        RecentDoc {
+                            file_name,
+                            extension: ext.to_string(),
+                            last_accessed: None,
+                            lnk_target: None,
+                        },
+                    ));
+                }
+            }
+            RegistryValue::String(s) => {
+                entries.push((
+                    index,
+                    RecentDoc {
+                        file_name: s.clone(),
+                        extension: ext.to_string(),
+                        last_accessed: None,
+                        lnk_target: None,
+                    },
+                ));
+            }
+            _ => {}
+        }
+    }
+
+    if !ordered_indices.is_empty() {
+        entries.sort_by_key(|(idx, _)| {
+            ordered_indices
+                .iter()
+                .position(|&i| i == *idx)
+                .unwrap_or(usize::MAX)
+        });
+    } else {
+        entries.sort_by_key(|(n, _)| *n);
+    }
+    entries.into_iter().map(|(_, doc)| doc).collect()
+}
+
+// ── UserAssist ───────────────────────────────────────────────────────────────
+
+const USER_ASSIST_ENTRY_SIZE: usize = 72;
+
+fn extract_user_assist(
+    hive: &RegistryHiveReader<'_>,
+    _hive_path: &str,
+    _parser: &str,
+    warnings: &mut Vec<String>,
+) -> Vec<UserAssistEntry> {
+    let ua_path: &[&str] = &[
+        "Software",
+        "Microsoft",
+        "Windows",
+        "CurrentVersion",
+        "Explorer",
+        "UserAssist",
+    ];
+    let ua_nk = match hive.navigate_to(ua_path) {
+        Ok(Some(nk)) => nk,
+        Ok(None) => return Vec::new(),
+        Err(err) => {
+            warnings.push(format!("UserAssist parse error: {err}"));
+            return Vec::new();
+        }
+    };
+    let guid_names = match hive.read_subkey_names_from_nk(&ua_nk) {
+        Ok(names) => names,
+        Err(err) => {
+            warnings.push(format!("UserAssist GUIDs error: {err}"));
+            return Vec::new();
+        }
+    };
+    let mut entries = Vec::new();
+    for guid in guid_names {
+        let mut count_path: Vec<&str> = ua_path.to_vec();
+        count_path.push(guid.as_str());
+        count_path.push("Count");
+        entries.extend(parse_user_assist_count_key(hive, &count_path, warnings));
+    }
+    entries
+}
+
+fn parse_user_assist_count_key(
+    hive: &RegistryHiveReader<'_>,
+    count_path: &[&str],
+    warnings: &mut Vec<String>,
+) -> Vec<UserAssistEntry> {
+    let count_nk = match hive.navigate_to(count_path) {
+        Ok(Some(nk)) => nk,
+        _ => return Vec::new(),
+    };
+    let values = match hive.read_all_values_from_nk(&count_nk) {
+        Ok(values) => values,
+        _ => return Vec::new(),
+    };
+    let mut entries = Vec::new();
+    for (name, value) in values {
+        if let RegistryValue::Binary(data) = value {
+            if data.len() < USER_ASSIST_ENTRY_SIZE {
+                warnings.push(format!(
+                    "UserAssist entry '{}' binary is {} bytes (expected {USER_ASSIST_ENTRY_SIZE}); skipping",
+                    name, data.len()
+                ));
+                continue;
+            }
+            let run_count = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
+            let focus_count = u32::from_le_bytes([data[8], data[9], data[10], data[11]]);
+            let filetime = u64::from_le_bytes([
+                data[60], data[61], data[62], data[63], data[64], data[65], data[66], data[67],
+            ]);
+            let executable = rot13_decrypt(&name);
+            let last_run = windows_filetime_to_rfc3339(filetime);
+            entries.push(UserAssistEntry {
+                executable,
+                run_count,
+                last_run,
+                focus_time_ms: focus_count as u64,
+            });
+        }
+    }
+    entries
+}
+
+// ── TypedURLs (IE) ──────────────────────────────────────────────────────────
+
+fn extract_typed_urls(
+    hive: &RegistryHiveReader<'_>,
+    _hive_path: &str,
+    _parser: &str,
+    warnings: &mut Vec<String>,
+) -> Vec<String> {
+    let typed_urls_path: &[&str] = &["Software", "Microsoft", "Internet Explorer", "TypedURLs"];
+    let nk = match hive.navigate_to(typed_urls_path) {
+        Ok(Some(nk)) => nk,
+        Ok(None) => return Vec::new(),
+        Err(err) => {
+            warnings.push(format!("TypedURLs parse error: {err}"));
+            return Vec::new();
+        }
+    };
+    let values = match hive.read_all_values_from_nk(&nk) {
+        Ok(values) => values,
+        Err(err) => {
+            warnings.push(format!("TypedURLs values error: {err}"));
+            return Vec::new();
+        }
+    };
+    let mut numbered: Vec<(u32, String)> = values
+        .into_iter()
+        .filter_map(|(name, value)| {
+            if let Some(num_str) = name.strip_prefix("url") {
+                if let Ok(num) = num_str.parse::<u32>() {
+                    if let RegistryValue::String(url) = value {
+                        if !url.trim().is_empty() {
+                            return Some((num, url));
+                        }
+                    }
+                }
+            }
+            None
+        })
+        .collect();
+    numbered.sort_by_key(|(n, _)| *n);
+    numbered.into_iter().map(|(_, url)| url).collect()
+}
+
+// ── WordWheelQuery ──────────────────────────────────────────────────────────
+
+fn extract_word_wheel_query(
+    hive: &RegistryHiveReader<'_>,
+    _hive_path: &str,
+    _parser: &str,
+    warnings: &mut Vec<String>,
+) -> Vec<String> {
+    let wwq_path: &[&str] = &[
+        "Software",
+        "Microsoft",
+        "Windows",
+        "CurrentVersion",
+        "Explorer",
+        "WordWheelQuery",
+    ];
+    let nk = match hive.navigate_to(wwq_path) {
+        Ok(Some(nk)) => nk,
+        Ok(None) => return Vec::new(),
+        Err(err) => {
+            warnings.push(format!("WordWheelQuery parse error: {err}"));
+            return Vec::new();
+        }
+    };
+    let values = match hive.read_all_values_from_nk(&nk) {
+        Ok(values) => values,
+        Err(err) => {
+            warnings.push(format!("WordWheelQuery values error: {err}"));
+            return Vec::new();
+        }
+    };
+
+    let mut ordered_indices: Vec<u32> = Vec::new();
+    for (name, value) in &values {
+        if name.eq_ignore_ascii_case("MRUListEx") {
+            if let RegistryValue::Binary(data) = value {
+                for chunk in data.chunks(4) {
+                    if chunk.len() == 4 {
+                        let idx = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                        if idx == 0xFFFF_FFFF {
+                            break;
+                        }
+                        ordered_indices.push(idx);
+                    }
+                }
+            }
+            break;
+        }
+    }
+
+    let mut queries: Vec<(u32, String)> = Vec::new();
+    for (name, value) in &values {
+        if name.eq_ignore_ascii_case("MRUListEx") {
+            continue;
+        }
+        let Ok(index) = name.parse::<u32>() else {
+            continue;
+        };
+        match value {
+            RegistryValue::Binary(data) => {
+                if let Some(query) = extract_utf16le_from_binary(data) {
+                    queries.push((index, query));
+                }
+            }
+            RegistryValue::String(s) if !s.trim().is_empty() => {
+                queries.push((index, s.clone()));
+            }
+            _ => {}
+        }
+    }
+    if !ordered_indices.is_empty() {
+        queries.sort_by_key(|(idx, _)| {
+            ordered_indices
+                .iter()
+                .position(|&i| i == *idx)
+                .unwrap_or(usize::MAX)
+        });
+    } else {
+        queries.sort_by_key(|(n, _)| *n);
+    }
+    queries.into_iter().map(|(_, q)| q).collect()
+}
+
+// ── MountPoints2 ────────────────────────────────────────────────────────────
+
+fn extract_mount_points(
+    hive: &RegistryHiveReader<'_>,
+    _hive_path: &str,
+    _parser: &str,
+    warnings: &mut Vec<String>,
+) -> Vec<MountPoint> {
+    let mp_path: &[&str] = &[
+        "Software",
+        "Microsoft",
+        "Windows",
+        "CurrentVersion",
+        "Explorer",
+        "MountPoints2",
+    ];
+    let nk = match hive.navigate_to(mp_path) {
+        Ok(Some(nk)) => nk,
+        Ok(None) => return Vec::new(),
+        Err(err) => {
+            warnings.push(format!("MountPoints2 parse error: {err}"));
+            return Vec::new();
+        }
+    };
+    let subkey_names = match hive.read_subkey_names_from_nk(&nk) {
+        Ok(names) => names,
+        Err(err) => {
+            warnings.push(format!("MountPoints2 subkeys error: {err}"));
+            return Vec::new();
+        }
+    };
+    let mut points = Vec::new();
+    for name in subkey_names {
+        let mut drive_letter = None;
+        let mut volume_guid = None;
+        if name.len() == 1 && name.chars().next().is_some_and(|c| c.is_ascii_alphabetic()) {
+            drive_letter = Some(format!("{name}:"));
+        } else if name.starts_with('{') && name.ends_with('}') {
+            volume_guid = Some(name.clone());
+        }
+        if drive_letter.is_some() || volume_guid.is_some() {
+            points.push(MountPoint {
+                drive_letter,
+                volume_guid,
+                last_mounted: None,
+            });
+        }
+    }
+    points
+}
+
+// ── Shared helpers ──────────────────────────────────────────────────────────
+
+/// Apply ROT-13 substitution (UserAssist value-name decryption).
+fn rot13_decrypt(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            'a'..='m' | 'A'..='M' => ((c as u8) + 13) as char,
+            'n'..='z' | 'N'..='Z' => ((c as u8) - 13) as char,
+            _ => c,
+        })
+        .collect()
+}
+
+/// Convert a Windows FILETIME (100-ns intervals since 1601-01-01) to an
+/// RFC 3339 timestamp string. Returns `None` for a zero timestamp or if the
+/// value falls outside `chrono`'s representable range.
+fn windows_filetime_to_rfc3339(filetime: u64) -> Option<String> {
+    if filetime == 0 {
+        return None;
+    }
+    let unix_seconds = (filetime / 10_000_000).saturating_sub(11_644_473_600);
+    let nanos = ((filetime % 10_000_000) * 100) as u32;
+    Utc.timestamp_opt(unix_seconds as i64, nanos)
+        .single()
+        .map(|dt| dt.to_rfc3339())
+}
+
+/// Extract a UTF-16LE null-terminated string from the beginning of a binary
+/// blob. Skips an optional 4-byte size header if the first u32 happens to
+/// equal the remaining length.
+fn extract_utf16le_from_binary(data: &[u8]) -> Option<String> {
+    if data.len() < 2 {
+        return None;
+    }
+    let payload = if data.len() >= 4 {
+        let header = u32::from_le_bytes([data[0], data[1], data[2], data[3]]) as usize;
+        if header > 0 && header.saturating_sub(4) <= data.len().saturating_sub(4) {
+            &data[4..]
+        } else {
+            data
+        }
+    } else {
+        data
+    };
+    let mut units = Vec::with_capacity(payload.len() / 2);
+    for chunk in payload.chunks(2) {
+        if chunk.len() < 2 {
+            break;
+        }
+        let unit = u16::from_le_bytes([chunk[0], chunk[1]]);
+        if unit == 0 {
+            break;
+        }
+        units.push(unit);
+    }
+    if units.is_empty() {
+        return None;
+    }
+    Some(String::from_utf16_lossy(&units))
 }
 
 struct RegistryHiveReader<'a> {
@@ -595,6 +1796,85 @@ impl<'a> RegistryHiveReader<'a> {
             }
         }
         Ok(offsets)
+    }
+
+    /// Navigate to the NK record at `key_path` (empty slice = root).
+    fn navigate_to(&self, key_path: &[&str]) -> Result<Option<NkRecord>, String> {
+        if key_path.len() > MAX_KEY_LOOKUP_DEPTH {
+            return Err(format!(
+                "registry key path depth {} exceeds limit {}",
+                key_path.len(),
+                MAX_KEY_LOOKUP_DEPTH
+            ));
+        }
+        let mut nk = self.parse_nk(self.root_cell_offset)?;
+        for segment in key_path {
+            let Some(next_offset) = self.find_subkey_offset(&nk, segment)? else {
+                return Ok(None);
+            };
+            nk = self.parse_nk(next_offset)?;
+        }
+        Ok(Some(nk))
+    }
+
+    /// Read all (name, value) pairs from a given NK record.
+    fn read_all_values_from_nk(
+        &self,
+        nk: &NkRecord,
+    ) -> Result<Vec<(String, RegistryValue)>, String> {
+        if nk.num_values == 0 || nk.values_list_offset == INVALID_OFFSET {
+            return Ok(Vec::new());
+        }
+        let list_abs = self.abs(nk.values_list_offset)?;
+        let cell_size = read_i32(self.bytes, list_abs)?;
+        if cell_size >= 0 {
+            return Err(format!(
+                "value list at {:#x} is free",
+                nk.values_list_offset
+            ));
+        }
+        let cell_len = cell_size
+            .checked_abs()
+            .ok_or_else(|| "invalid registry value list cell size".to_string())?
+            as usize;
+        self.require(list_abs, cell_len)?;
+        let list_len = (nk.num_values as usize)
+            .checked_mul(4)
+            .ok_or_else(|| "registry value list size overflow".to_string())?;
+        let list_start = list_abs + 4;
+        if list_len > cell_len.saturating_sub(4) {
+            return Err(format!(
+                "value list at {:#x} length {:#x} exceeds cell",
+                nk.values_list_offset, list_len
+            ));
+        }
+        self.require(list_start, list_len)?;
+        let mut result = Vec::with_capacity(nk.num_values as usize);
+        for index in 0..nk.num_values as usize {
+            let value_offset = read_u32(self.bytes, list_start + index * 4)?;
+            if value_offset == INVALID_OFFSET {
+                continue;
+            }
+            if let Some((name, value)) = self.parse_vk(value_offset)? {
+                result.push((name, value));
+            }
+        }
+        Ok(result)
+    }
+
+    /// Read the names of all subkeys of a given NK record.
+    fn read_subkey_names_from_nk(&self, nk: &NkRecord) -> Result<Vec<String>, String> {
+        if nk.num_subkeys == 0 || nk.subkeys_list_offset == INVALID_OFFSET {
+            return Ok(Vec::new());
+        }
+        let offsets = self.read_subkey_offsets(nk.subkeys_list_offset, 0)?;
+        let mut names = Vec::with_capacity(offsets.len());
+        for offset in offsets {
+            if let Ok(child) = self.parse_nk(offset) {
+                names.push(child.name);
+            }
+        }
+        Ok(names)
     }
 
     fn abs(&self, hive_offset: u32) -> Result<usize, String> {
@@ -1399,5 +2679,1225 @@ mod tests {
             .install_date
             .as_ref()
             .is_some_and(|field| field.value.starts_with("2023-")));
+    }
+
+    // ── NTUSER.DAT extraction tests ────────────────────────────────────────
+
+    fn write_binary_value(
+        data: &mut [u8],
+        offset: u32,
+        name: &str,
+        value_data: &[u8],
+        data_offset: u32,
+    ) {
+        let data_abs = BASE_BLOCK_SIZE + data_offset as usize;
+        data[data_abs..data_abs + 4].copy_from_slice(&(-128i32).to_le_bytes());
+        data[data_abs + 4..data_abs + 4 + value_data.len()].copy_from_slice(value_data);
+        write_vk(data, offset, name, 3, value_data.len() as u32, data_offset);
+    }
+
+    fn make_recent_doc_binary(file_name: &str) -> Vec<u8> {
+        let utf16: Vec<u8> = file_name
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect();
+        let total_size = (utf16.len() + 6) as u32; // size header + utf16 data + null term
+        let mut result = total_size.to_le_bytes().to_vec();
+        result.extend_from_slice(&utf16);
+        result.extend_from_slice(&[0x00, 0x00]);
+        result
+    }
+
+    fn make_user_assist_binary(run_count: u32, focus_count: u32, filetime: u64) -> Vec<u8> {
+        let mut data = vec![0u8; USER_ASSIST_ENTRY_SIZE];
+        data[4..8].copy_from_slice(&run_count.to_le_bytes());
+        data[8..12].copy_from_slice(&focus_count.to_le_bytes());
+        data[60..68].copy_from_slice(&filetime.to_le_bytes());
+        data
+    }
+
+    fn make_mru_list_ex(indices: &[u32]) -> Vec<u8> {
+        let mut data = Vec::with_capacity((indices.len() + 1) * 4);
+        for idx in indices {
+            data.extend_from_slice(&idx.to_le_bytes());
+        }
+        data.extend_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+        data
+    }
+
+    #[test]
+    fn rot13_decrypt_basic() {
+        assert_eq!(
+            rot13_decrypt("P:\\Jvaqbjf\\Flfgrz32\\abgrcnq.rkr"),
+            "C:\\Windows\\System32\\notepad.exe"
+        );
+        assert_eq!(rot13_decrypt("Hello"), "Uryyb");
+        assert_eq!(rot13_decrypt("Uryyb"), "Hello");
+        assert_eq!(rot13_decrypt("123"), "123");
+        assert_eq!(rot13_decrypt("!@#"), "!@#");
+    }
+
+    #[test]
+    fn windows_filetime_converts_to_rfc3339() {
+        let ft = 133_600_000_000_000_000u64;
+        let ts = windows_filetime_to_rfc3339(ft).expect("valid FILETIME");
+        assert!(
+            ts.starts_with("2024-") || ts.starts_with("2025-"),
+            "timestamp {ts} should be in the 2024-2025 range"
+        );
+    }
+
+    #[test]
+    fn windows_filetime_zero_returns_none() {
+        assert_eq!(windows_filetime_to_rfc3339(0), None);
+    }
+
+    #[test]
+    fn extract_ntuser_empty_hive() {
+        let data = empty_hive("NTUSER");
+        let info = extract_ntuser_fields(&data, "Users/Test/NTUSER.DAT").unwrap();
+        assert!(info.run_keys.is_empty());
+        assert!(info.recent_docs.is_empty());
+        assert!(info.user_assist.is_empty());
+        assert!(info.typed_urls.is_empty());
+        assert!(info.word_wheel_query.is_empty());
+        assert!(info.mount_points.is_empty());
+    }
+
+    #[test]
+    fn extract_ntuser_run_keys() {
+        let mut data = empty_hive("NTUSER");
+        write_nk(&mut data, 0x20, "NTUSER", &[("Software", 0x200)], &[]);
+        write_nk(&mut data, 0x200, "Software", &[("Microsoft", 0x300)], &[]);
+        write_nk(&mut data, 0x300, "Microsoft", &[("Windows", 0x400)], &[]);
+        write_nk(
+            &mut data,
+            0x400,
+            "Windows",
+            &[("CurrentVersion", 0x500)],
+            &[],
+        );
+        write_nk(&mut data, 0x500, "CurrentVersion", &[("Run", 0x600)], &[]);
+        write_nk(&mut data, 0x600, "Run", &[], &[0x700, 0x780]);
+        write_string_value(
+            &mut data,
+            0x700,
+            "OneDrive",
+            "C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe /background",
+            0x1000,
+        );
+        write_string_value(
+            &mut data,
+            0x780,
+            "SecurityHealth",
+            "%ProgramFiles%\\Windows Defender\\MSASCuiL.exe",
+            0x1100,
+        );
+
+        let info = extract_ntuser_fields(&data, "Users/Test/NTUSER.DAT").unwrap();
+        assert_eq!(info.run_keys.len(), 2);
+        let od = info
+            .run_keys
+            .iter()
+            .find(|k| k.value_name == "OneDrive")
+            .unwrap();
+        assert!(od.command.contains("OneDrive.exe"));
+        assert_eq!(
+            od.key_path,
+            "Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+        );
+    }
+
+    #[test]
+    fn extract_ntuser_run_once() {
+        let mut data = empty_hive("NTUSER");
+        write_nk(&mut data, 0x20, "NTUSER", &[("Software", 0x200)], &[]);
+        write_nk(&mut data, 0x200, "Software", &[("Microsoft", 0x300)], &[]);
+        write_nk(&mut data, 0x300, "Microsoft", &[("Windows", 0x400)], &[]);
+        write_nk(
+            &mut data,
+            0x400,
+            "Windows",
+            &[("CurrentVersion", 0x500)],
+            &[],
+        );
+        write_nk(
+            &mut data,
+            0x500,
+            "CurrentVersion",
+            &[("RunOnce", 0x600)],
+            &[],
+        );
+        write_nk(&mut data, 0x600, "RunOnce", &[], &[0x700]);
+        write_string_value(
+            &mut data,
+            0x700,
+            "Setup",
+            "C:\\Windows\\Setup.exe /silent",
+            0x1000,
+        );
+
+        let info = extract_ntuser_fields(&data, "Users/Test/NTUSER.DAT").unwrap();
+        assert_eq!(info.run_keys.len(), 1);
+        assert_eq!(info.run_keys[0].value_name, "Setup");
+        assert_eq!(
+            info.run_keys[0].key_path,
+            "Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce"
+        );
+    }
+
+    #[test]
+    fn extract_ntuser_recent_docs() {
+        let mut data = empty_hive("NTUSER");
+        write_nk(&mut data, 0x20, "NTUSER", &[("Software", 0x200)], &[]);
+        write_nk(&mut data, 0x200, "Software", &[("Microsoft", 0x300)], &[]);
+        write_nk(&mut data, 0x300, "Microsoft", &[("Windows", 0x400)], &[]);
+        write_nk(
+            &mut data,
+            0x400,
+            "Windows",
+            &[("CurrentVersion", 0x500)],
+            &[],
+        );
+        write_nk(
+            &mut data,
+            0x500,
+            "CurrentVersion",
+            &[("Explorer", 0x600)],
+            &[],
+        );
+        write_nk(&mut data, 0x600, "Explorer", &[("RecentDocs", 0x700)], &[]);
+        write_nk(&mut data, 0x700, "RecentDocs", &[(".pdf", 0x800)], &[]);
+        write_nk(&mut data, 0x800, ".pdf", &[], &[0x900, 0x980, 0xa00]);
+
+        let mru_list = make_mru_list_ex(&[1, 0]);
+        let doc0 = make_recent_doc_binary("report.pdf");
+        let doc1 = make_recent_doc_binary("invoice.pdf");
+
+        write_binary_value(&mut data, 0x900, "MRUListEx", &mru_list, 0x1200);
+        write_binary_value(&mut data, 0x980, "0", &doc0, 0x1300);
+        write_binary_value(&mut data, 0xa00, "1", &doc1, 0x1400);
+
+        let info = extract_ntuser_fields(&data, "Users/Test/NTUSER.DAT").unwrap();
+        assert_eq!(info.recent_docs.len(), 2);
+        // MRUListEx [1, 0] means index 1 is most recent
+        assert_eq!(info.recent_docs[0].file_name, "invoice.pdf");
+        assert_eq!(info.recent_docs[0].extension, ".pdf");
+        assert_eq!(info.recent_docs[1].file_name, "report.pdf");
+    }
+
+    #[test]
+    fn extract_ntuser_user_assist() {
+        let mut data = empty_hive("NTUSER");
+        write_nk(&mut data, 0x20, "NTUSER", &[("Software", 0x200)], &[]);
+        write_nk(&mut data, 0x200, "Software", &[("Microsoft", 0x300)], &[]);
+        write_nk(&mut data, 0x300, "Microsoft", &[("Windows", 0x400)], &[]);
+        write_nk(
+            &mut data,
+            0x400,
+            "Windows",
+            &[("CurrentVersion", 0x500)],
+            &[],
+        );
+        write_nk(
+            &mut data,
+            0x500,
+            "CurrentVersion",
+            &[("Explorer", 0x600)],
+            &[],
+        );
+        write_nk(&mut data, 0x600, "Explorer", &[("UserAssist", 0x700)], &[]);
+        write_nk(
+            &mut data,
+            0x700,
+            "UserAssist",
+            &[("{CEBFF5CD-ACE2-4F4F-9178-9926F41749EA}", 0x800)],
+            &[],
+        );
+        write_nk(
+            &mut data,
+            0x800,
+            "{CEBFF5CD-ACE2-4F4F-9178-9926F41749EA}",
+            &[("Count", 0x900)],
+            &[],
+        );
+        write_nk(&mut data, 0x900, "Count", &[], &[0xa00, 0xb00]);
+
+        let encrypted = "P:\\Jvaqbjf\\Flfgrz32\\abgrcnq.rkr";
+        let ft: u64 = 133_600_000_000_000_000;
+        let ua1 = make_user_assist_binary(42, 1500, ft);
+        write_binary_value(&mut data, 0xa00, encrypted, &ua1, 0x1200);
+
+        let encrypted2 = "P:\\Hfref\\Grfg\\Qrfxgbc\\pnyp.rkr";
+        let ua2 = make_user_assist_binary(7, 300, ft + 86_400_000_000_000);
+        write_binary_value(&mut data, 0xb00, encrypted2, &ua2, 0x1300);
+
+        let info = extract_ntuser_fields(&data, "Users/Test/NTUSER.DAT").unwrap();
+        assert_eq!(info.user_assist.len(), 2);
+
+        let notepad = info
+            .user_assist
+            .iter()
+            .find(|e| e.executable.contains("notepad"))
+            .unwrap();
+        assert_eq!(notepad.run_count, 42);
+        assert_eq!(notepad.focus_time_ms, 1500);
+        assert!(notepad.last_run.is_some());
+
+        let calc = info
+            .user_assist
+            .iter()
+            .find(|e| e.executable.contains("calc"))
+            .unwrap();
+        assert_eq!(calc.run_count, 7);
+        assert_eq!(calc.focus_time_ms, 300);
+    }
+
+    #[test]
+    fn extract_ntuser_typed_urls() {
+        let mut data = empty_hive("NTUSER");
+        write_nk(&mut data, 0x20, "NTUSER", &[("Software", 0x200)], &[]);
+        write_nk(&mut data, 0x200, "Software", &[("Microsoft", 0x300)], &[]);
+        write_nk(
+            &mut data,
+            0x300,
+            "Microsoft",
+            &[("Internet Explorer", 0x400)],
+            &[],
+        );
+        write_nk(
+            &mut data,
+            0x400,
+            "Internet Explorer",
+            &[("TypedURLs", 0x500)],
+            &[],
+        );
+        write_nk(&mut data, 0x500, "TypedURLs", &[], &[0x600, 0x680, 0x700]);
+
+        write_string_value(
+            &mut data,
+            0x600,
+            "url1",
+            "https://forensics.example.com",
+            0x1000,
+        );
+        write_string_value(&mut data, 0x680, "url2", "https://github.com", 0x1100);
+        write_string_value(&mut data, 0x700, "url3", "https://www.google.com", 0x1200);
+
+        let info = extract_ntuser_fields(&data, "Users/Test/NTUSER.DAT").unwrap();
+        assert_eq!(info.typed_urls.len(), 3);
+        assert_eq!(info.typed_urls[0], "https://forensics.example.com");
+        assert_eq!(info.typed_urls[1], "https://github.com");
+        assert_eq!(info.typed_urls[2], "https://www.google.com");
+    }
+
+    #[test]
+    fn extract_ntuser_word_wheel_query() {
+        let mut data = empty_hive("NTUSER");
+        write_nk(&mut data, 0x20, "NTUSER", &[("Software", 0x200)], &[]);
+        write_nk(&mut data, 0x200, "Software", &[("Microsoft", 0x300)], &[]);
+        write_nk(&mut data, 0x300, "Microsoft", &[("Windows", 0x400)], &[]);
+        write_nk(
+            &mut data,
+            0x400,
+            "Windows",
+            &[("CurrentVersion", 0x500)],
+            &[],
+        );
+        write_nk(
+            &mut data,
+            0x500,
+            "CurrentVersion",
+            &[("Explorer", 0x600)],
+            &[],
+        );
+        write_nk(
+            &mut data,
+            0x600,
+            "Explorer",
+            &[("WordWheelQuery", 0x700)],
+            &[],
+        );
+        write_nk(
+            &mut data,
+            0x700,
+            "WordWheelQuery",
+            &[],
+            &[0x800, 0x880, 0x900],
+        );
+
+        let wwq_mru = make_mru_list_ex(&[1, 0]);
+        write_binary_value(&mut data, 0x800, "MRUListEx", &wwq_mru, 0x1000);
+        write_string_value(&mut data, 0x880, "0", "forensics", 0x1100);
+        write_string_value(&mut data, 0x900, "1", "evidence", 0x1200);
+
+        let info = extract_ntuser_fields(&data, "Users/Test/NTUSER.DAT").unwrap();
+        assert_eq!(info.word_wheel_query.len(), 2);
+        // MRUListEx [1, 0] -> index 1 is most recent
+        assert_eq!(info.word_wheel_query[0], "evidence");
+        assert_eq!(info.word_wheel_query[1], "forensics");
+    }
+
+    #[test]
+    fn extract_ntuser_mount_points() {
+        let mut data = empty_hive("NTUSER");
+        write_nk(&mut data, 0x20, "NTUSER", &[("Software", 0x200)], &[]);
+        write_nk(&mut data, 0x200, "Software", &[("Microsoft", 0x300)], &[]);
+        write_nk(&mut data, 0x300, "Microsoft", &[("Windows", 0x400)], &[]);
+        write_nk(
+            &mut data,
+            0x400,
+            "Windows",
+            &[("CurrentVersion", 0x500)],
+            &[],
+        );
+        write_nk(
+            &mut data,
+            0x500,
+            "CurrentVersion",
+            &[("Explorer", 0x600)],
+            &[],
+        );
+        write_nk(
+            &mut data,
+            0x600,
+            "Explorer",
+            &[("MountPoints2", 0x700)],
+            &[],
+        );
+        write_nk(
+            &mut data,
+            0x700,
+            "MountPoints2",
+            &[
+                ("C", 0x800),
+                ("D", 0x900),
+                ("{ecf5d85e-1234-5678-abcd-123456789abc}", 0xa00),
+            ],
+            &[],
+        );
+        write_nk(&mut data, 0x800, "C", &[], &[]);
+        write_nk(&mut data, 0x900, "D", &[], &[]);
+        write_nk(
+            &mut data,
+            0xa00,
+            "{ecf5d85e-1234-5678-abcd-123456789abc}",
+            &[],
+            &[],
+        );
+
+        let info = extract_ntuser_fields(&data, "Users/Test/NTUSER.DAT").unwrap();
+        assert_eq!(info.mount_points.len(), 3);
+
+        let c = info
+            .mount_points
+            .iter()
+            .find(|m| m.drive_letter.as_deref() == Some("C:"))
+            .unwrap();
+        assert!(c.volume_guid.is_none());
+
+        let guid = info
+            .mount_points
+            .iter()
+            .find(|m| m.volume_guid.as_deref() == Some("{ecf5d85e-1234-5678-abcd-123456789abc}"))
+            .unwrap();
+        assert!(guid.drive_letter.is_none());
+    }
+
+    #[test]
+    fn extract_ntuser_combined() {
+        // Run + RecentDocs + UserAssist in one hive.
+        let mut data = empty_hive("NTUSER");
+        write_nk(&mut data, 0x020, "NTUSER", &[("Software", 0x200)], &[]);
+        write_nk(&mut data, 0x200, "Software", &[("Microsoft", 0x300)], &[]);
+        write_nk(&mut data, 0x300, "Microsoft", &[("Windows", 0x400)], &[]);
+        write_nk(
+            &mut data,
+            0x400,
+            "Windows",
+            &[("CurrentVersion", 0x600)],
+            &[],
+        );
+        write_nk(
+            &mut data,
+            0x600,
+            "CurrentVersion",
+            &[("Run", 0x700), ("Explorer", 0x800)],
+            &[],
+        );
+        // Run
+        write_nk(&mut data, 0x700, "Run", &[], &[0x780]);
+        write_string_value(&mut data, 0x780, "OneDrive", "C:\\OneDrive.exe /bg", 0x3000);
+        // Explorer
+        write_nk(
+            &mut data,
+            0x800,
+            "Explorer",
+            &[("RecentDocs", 0x900), ("UserAssist", 0xa00)],
+            &[],
+        );
+        // RecentDocs
+        write_nk(&mut data, 0x900, "RecentDocs", &[(".txt", 0xd00)], &[]);
+        write_nk(&mut data, 0xd00, ".txt", &[], &[0xd80, 0xdc0]);
+        let mru = make_mru_list_ex(&[0]);
+        let doc = make_recent_doc_binary("notes.txt");
+        write_binary_value(&mut data, 0xd80, "MRUListEx", &mru, 0x3100);
+        write_binary_value(&mut data, 0xdc0, "0", &doc, 0x3200);
+        // UserAssist
+        write_nk(&mut data, 0xa00, "UserAssist", &[("{GUID}", 0xe00)], &[]);
+        write_nk(&mut data, 0xe00, "{GUID}", &[("Count", 0xf00)], &[]);
+        write_nk(&mut data, 0xf00, "Count", &[], &[0xf80]);
+        let ua = make_user_assist_binary(99, 5000, 133_600_000_000_000_000);
+        write_binary_value(
+            &mut data,
+            0xf80,
+            "P:\\Hfref\\Grfg\\Qrfxgbc\\pnyp.rkr",
+            &ua,
+            0x3300,
+        );
+
+        let info = extract_ntuser_fields(&data, "Users/Test/NTUSER.DAT").unwrap();
+        assert_eq!(info.run_keys.len(), 1);
+        assert_eq!(info.recent_docs.len(), 1);
+        assert_eq!(info.user_assist.len(), 1);
+        assert_eq!(info.run_keys[0].value_name, "OneDrive");
+        assert_eq!(info.recent_docs[0].file_name, "notes.txt");
+        assert!(info.user_assist[0].executable.contains("calc"));
+        assert_eq!(info.user_assist[0].run_count, 99);
+    }
+
+    #[test]
+    fn extract_ntuser_combined_group2() {
+        // WordWheelQuery + MountPoints2 + TypedURLs in one hive.
+        let mut data = empty_hive("NTUSER");
+        write_nk(&mut data, 0x020, "NTUSER", &[("Software", 0x200)], &[]);
+        write_nk(&mut data, 0x200, "Software", &[("Microsoft", 0x300)], &[]);
+        write_nk(
+            &mut data,
+            0x300,
+            "Microsoft",
+            &[("Windows", 0x400), ("Internet Explorer", 0x500)],
+            &[],
+        );
+        write_nk(
+            &mut data,
+            0x400,
+            "Windows",
+            &[("CurrentVersion", 0x600)],
+            &[],
+        );
+        write_nk(
+            &mut data,
+            0x600,
+            "CurrentVersion",
+            &[("Explorer", 0x800)],
+            &[],
+        );
+        // Explorer
+        write_nk(
+            &mut data,
+            0x800,
+            "Explorer",
+            &[("WordWheelQuery", 0x900), ("MountPoints2", 0xa00)],
+            &[],
+        );
+        // WordWheelQuery
+        write_nk(&mut data, 0x900, "WordWheelQuery", &[], &[0x980, 0x9c0]);
+        let wwq_mru = make_mru_list_ex(&[0]);
+        write_string_value(&mut data, 0x980, "0", "search term", 0x3000);
+        write_binary_value(&mut data, 0x9c0, "MRUListEx", &wwq_mru, 0x3100);
+        // MountPoints2
+        write_nk(&mut data, 0xa00, "MountPoints2", &[("E", 0xb00)], &[]);
+        write_nk(&mut data, 0xb00, "E", &[], &[]);
+        // IE TypedURLs
+        write_nk(
+            &mut data,
+            0x500,
+            "Internet Explorer",
+            &[("TypedURLs", 0xc00)],
+            &[],
+        );
+        write_nk(&mut data, 0xc00, "TypedURLs", &[], &[0xc80]);
+        write_string_value(&mut data, 0xc80, "url1", "https://example.com", 0x3200);
+
+        let info = extract_ntuser_fields(&data, "Users/Test/NTUSER.DAT").unwrap();
+        assert_eq!(info.word_wheel_query.len(), 1);
+        assert_eq!(info.mount_points.len(), 1);
+        assert_eq!(info.typed_urls.len(), 1);
+        assert_eq!(info.word_wheel_query[0], "search term");
+        assert_eq!(info.mount_points[0].drive_letter.as_deref(), Some("E:"));
+        assert_eq!(info.typed_urls[0], "https://example.com");
+    }
+
+    #[test]
+    fn extract_ntuser_handles_missing_keys() {
+        let mut data = empty_hive("NTUSER");
+        write_nk(&mut data, 0x20, "NTUSER", &[("Software", 0x200)], &[]);
+        write_nk(&mut data, 0x200, "Software", &[("Unrelated", 0x300)], &[]);
+        write_nk(&mut data, 0x300, "Unrelated", &[], &[]);
+
+        let info = extract_ntuser_fields(&data, "Users/Test/NTUSER.DAT").unwrap();
+        assert!(info.run_keys.is_empty());
+        assert!(info.recent_docs.is_empty());
+        assert!(info.user_assist.is_empty());
+        assert!(info.typed_urls.is_empty());
+        assert!(info.word_wheel_query.is_empty());
+        assert!(info.mount_points.is_empty());
+    }
+
+    // ── SAM hive test helpers ─────────────────────────────────────────────
+
+    fn make_sam_v_record(
+        last_login_ft: u64,
+        pwd_last_set_ft: u64,
+        rid: u32,
+        account_control: u32,
+        admin_count: u16,
+    ) -> Vec<u8> {
+        let mut data = vec![0u8; 0x50];
+        data[0x08..0x10].copy_from_slice(&last_login_ft.to_le_bytes());
+        data[0x18..0x20].copy_from_slice(&pwd_last_set_ft.to_le_bytes());
+        data[0x28..0x2C].copy_from_slice(&rid.to_le_bytes());
+        data[0x2C..0x30].copy_from_slice(&account_control.to_le_bytes());
+        data[0x46..0x48].copy_from_slice(&admin_count.to_le_bytes());
+        data
+    }
+
+    /// Build a synthetic SID blob. `sub_authorities` includes the
+    /// domain-specific components and the final RID.
+    fn make_sid(sub_authorities: &[u32]) -> Vec<u8> {
+        let sa_count = sub_authorities.len() as u8;
+        let mut data = Vec::with_capacity(8 + sub_authorities.len() * 4);
+        data.push(1u8); // revision
+        data.push(sa_count);
+        // Identifier authority: NT Authority (5)
+        data.extend_from_slice(&[0u8, 0, 0, 0, 0, 5]);
+        for sa in sub_authorities {
+            data.extend_from_slice(&sa.to_le_bytes());
+        }
+        data
+    }
+
+    fn make_sam_c_value(member_sids: &[Vec<u8>]) -> Vec<u8> {
+        let mut data = Vec::new();
+        // Revision (2) + padding (2)
+        data.extend_from_slice(&1u16.to_le_bytes());
+        data.extend_from_slice(&0u16.to_le_bytes());
+        // Member count (4)
+        data.extend_from_slice(&(member_sids.len() as u32).to_le_bytes());
+        for sid in member_sids {
+            data.extend_from_slice(sid);
+        }
+        data
+    }
+
+    /// Build a synthetic SAM hive with 2 users (Administrator, Guest) and
+    /// groups from both Builtin\Aliases and Account\Aliases.
+    ///
+    /// Offset layout (0x80 apart to avoid NK record overlap):
+    ///   NK keys:  0x020–0xA00
+    ///   VK values: 0x1100–0x123F
+    ///   Binary data cells: 0x5000–0x53FF
+    fn synthetic_sam_hive() -> Vec<u8> {
+        let mut data = vec![0u8; 0x8000];
+        data[0..4].copy_from_slice(b"regf");
+        data[0x24..0x28].copy_from_slice(&0x20u32.to_le_bytes());
+        data[0x1000..0x1004].copy_from_slice(b"hbin");
+        data[0x1008..0x100c].copy_from_slice(&0x7000u32.to_le_bytes());
+
+        // ── NK key tree (spaced 0x80 apart) ──────────────────────────
+
+        // Root(0x020) → SAM(0x080)
+        write_nk(&mut data, 0x020, "ROOT", &[("SAM", 0x080)], &[]);
+        // SAM(0x080) → Domains(0x100)
+        write_nk(&mut data, 0x080, "SAM", &[("Domains", 0x100)], &[]);
+        // Domains(0x100) → Account(0x180), Builtin(0x880)
+        write_nk(
+            &mut data,
+            0x100,
+            "Domains",
+            &[("Account", 0x180), ("Builtin", 0x880)],
+            &[],
+        );
+        // Account(0x180) → Users(0x200), Aliases(0x500)
+        write_nk(
+            &mut data,
+            0x180,
+            "Account",
+            &[("Users", 0x200), ("Aliases", 0x500)],
+            &[],
+        );
+        // Users(0x200) → Names(0x280), 000001F4(0x400), 000001F5(0x480)
+        write_nk(
+            &mut data,
+            0x200,
+            "Users",
+            &[("Names", 0x280), ("000001F4", 0x400), ("000001F5", 0x480)],
+            &[],
+        );
+        // Names(0x280) → Administrator(0x300), Guest(0x380)
+        write_nk(
+            &mut data,
+            0x280,
+            "Names",
+            &[("Administrator", 0x300), ("Guest", 0x380)],
+            &[],
+        );
+
+        // Names\Administrator(0x300) → RID DWORD = 500
+        write_nk(&mut data, 0x300, "Administrator", &[], &[0x1100]);
+        write_dword_value(&mut data, 0x1100, "", 500);
+
+        // Names\Guest(0x380) → RID DWORD = 501
+        write_nk(&mut data, 0x380, "Guest", &[], &[0x1120]);
+        write_dword_value(&mut data, 0x1120, "", 501);
+
+        // Users\000001F4(0x400) → V value
+        write_nk(&mut data, 0x400, "000001F4", &[], &[0x1140]);
+        let admin_v = make_sam_v_record(
+            133_600_000_000_000_000,
+            133_500_000_000_000_000,
+            500,
+            0x0000,
+            3,
+        );
+        write_binary_value(&mut data, 0x1140, "V", &admin_v, 0x5000);
+
+        // Users\000001F5(0x480) → V value
+        write_nk(&mut data, 0x480, "000001F5", &[], &[0x1160]);
+        let guest_v = make_sam_v_record(0, 133_400_000_000_000_000, 501, SAM_ACCOUNT_DISABLED, 0);
+        write_binary_value(&mut data, 0x1160, "V", &guest_v, 0x5100);
+
+        // Account\Aliases(0x500) → Names(0x580), 00000220(0x700), 00000221(0x780)
+        write_nk(
+            &mut data,
+            0x500,
+            "Aliases",
+            &[("Names", 0x580), ("00000220", 0x700), ("00000221", 0x780)],
+            &[],
+        );
+        // Aliases\Names(0x580) → Administrators(0x600), Users(0x680)
+        write_nk(
+            &mut data,
+            0x580,
+            "Names",
+            &[("Administrators", 0x600), ("Users", 0x680)],
+            &[],
+        );
+
+        // Aliases\Names\Administrators(0x600) → RID DWORD = 544
+        write_nk(&mut data, 0x600, "Administrators", &[], &[0x1180]);
+        write_dword_value(&mut data, 0x1180, "", 544);
+
+        // Aliases\Names\Users(0x680) → RID DWORD = 545
+        write_nk(&mut data, 0x680, "Users", &[], &[0x11A0]);
+        write_dword_value(&mut data, 0x11A0, "", 545);
+
+        // Aliases\00000220(0x700) → C value with Admin RID=500
+        write_nk(&mut data, 0x700, "00000220", &[], &[0x11C0]);
+        let admin_sid = make_sid(&[21, 123456789, 123456789, 123456789, 500]);
+        let admin_c = make_sam_c_value(&[admin_sid]);
+        write_binary_value(&mut data, 0x11C0, "C", &admin_c, 0x5200);
+
+        // Aliases\00000221(0x780) → C value with Admin and Guest
+        write_nk(&mut data, 0x780, "00000221", &[], &[0x11E0]);
+        let users_c = make_sam_c_value(&[
+            make_sid(&[21, 123456789, 123456789, 123456789, 500]),
+            make_sid(&[21, 123456789, 123456789, 123456789, 501]),
+        ]);
+        write_binary_value(&mut data, 0x11E0, "C", &users_c, 0x5300);
+
+        // Builtin(0x880) → Aliases(0x900)
+        write_nk(&mut data, 0x880, "Builtin", &[("Aliases", 0x900)], &[]);
+        // Builtin\Aliases(0x900) → Names(0x980)
+        write_nk(&mut data, 0x900, "Aliases", &[("Names", 0x980)], &[]);
+        // Builtin\Aliases\Names(0x980) → Administrators(0xA00), Users(0xA80)
+        write_nk(
+            &mut data,
+            0x980,
+            "Names",
+            &[("Administrators", 0xA00), ("Users", 0xA80)],
+            &[],
+        );
+
+        // Builtin\Aliases\Names\Administrators(0xA00) → RID DWORD = 544
+        write_nk(&mut data, 0xA00, "Administrators", &[], &[0x1200]);
+        write_dword_value(&mut data, 0x1200, "", 544);
+
+        // Builtin\Aliases\Names\Users(0xA80) → RID DWORD = 545
+        write_nk(&mut data, 0xA80, "Users", &[], &[0x1220]);
+        write_dword_value(&mut data, 0x1220, "", 545);
+
+        data
+    }
+
+    // ── SAM extraction tests ──────────────────────────────────────────────
+
+    #[test]
+    fn extract_sam_fields_from_synthetic_hive() {
+        let data = synthetic_sam_hive();
+        let info = extract_sam_fields(&data, "Windows/System32/config/SAM").unwrap();
+
+        // Two users
+        assert_eq!(info.users.len(), 2, "expected 2 users");
+        let admin = info
+            .users
+            .iter()
+            .find(|u| u.username == "Administrator")
+            .unwrap();
+        let guest = info.users.iter().find(|u| u.username == "Guest").unwrap();
+
+        assert_eq!(admin.rid, 500);
+        assert_eq!(guest.rid, 501);
+
+        // Groups: 2 from Account\Aliases + 2 from Builtin\Aliases = 4
+        assert_eq!(info.groups.len(), 4, "expected 4 groups (2 per alias root)");
+
+        // No warnings expected for a well-formed synthetic hive
+        assert!(
+            info.warnings.is_empty(),
+            "unexpected warnings: {:?}",
+            info.warnings
+        );
+    }
+
+    #[test]
+    fn extract_sam_fields_user_account_control() {
+        let data = synthetic_sam_hive();
+        let info = extract_sam_fields(&data, "Windows/System32/config/SAM").unwrap();
+
+        let admin = info
+            .users
+            .iter()
+            .find(|u| u.username == "Administrator")
+            .unwrap();
+        assert!(!admin.account_disabled, "Administrator should be enabled");
+        assert!(!admin.account_locked, "Administrator should not be locked");
+
+        let guest = info.users.iter().find(|u| u.username == "Guest").unwrap();
+        assert!(guest.account_disabled, "Guest should be disabled");
+        assert!(
+            !guest.account_locked,
+            "Guest should not be locked (only disabled)"
+        );
+    }
+
+    #[test]
+    fn extract_sam_fields_timestamps() {
+        let data = synthetic_sam_hive();
+        let info = extract_sam_fields(&data, "Windows/System32/config/SAM").unwrap();
+
+        let admin = info
+            .users
+            .iter()
+            .find(|u| u.username == "Administrator")
+            .unwrap();
+        assert!(
+            admin.last_login.is_some(),
+            "Administrator should have last_login"
+        );
+        assert!(
+            admin.password_last_set.is_some(),
+            "Administrator should have password_last_set"
+        );
+
+        let guest = info.users.iter().find(|u| u.username == "Guest").unwrap();
+        assert!(
+            guest.last_login.is_none(),
+            "Guest should have no last_login (FT=0)"
+        );
+        assert!(
+            guest.password_last_set.is_some(),
+            "Guest should have password_last_set"
+        );
+    }
+
+    #[test]
+    fn extract_sam_fields_admin_count() {
+        let data = synthetic_sam_hive();
+        let info = extract_sam_fields(&data, "Windows/System32/config/SAM").unwrap();
+
+        let admin = info
+            .users
+            .iter()
+            .find(|u| u.username == "Administrator")
+            .unwrap();
+        assert_eq!(admin.admin_count, 3);
+
+        let guest = info.users.iter().find(|u| u.username == "Guest").unwrap();
+        assert_eq!(guest.admin_count, 0);
+    }
+
+    #[test]
+    fn extract_sam_fields_group_memberships() {
+        let data = synthetic_sam_hive();
+        let info = extract_sam_fields(&data, "Windows/System32/config/SAM").unwrap();
+
+        let admin = info
+            .users
+            .iter()
+            .find(|u| u.username == "Administrator")
+            .unwrap();
+        // Administrator should be member of Administrators and Users groups
+        assert!(
+            admin
+                .group_memberships
+                .contains(&"Administrators".to_string()),
+            "Administrator should be in Administrators group"
+        );
+        assert!(
+            admin.group_memberships.contains(&"Users".to_string()),
+            "Administrator should be in Users group"
+        );
+
+        let guest = info.users.iter().find(|u| u.username == "Guest").unwrap();
+        // Guest should be member of Users group
+        assert!(
+            guest.group_memberships.contains(&"Users".to_string()),
+            "Guest should be in Users group"
+        );
+
+        // Verify group member lists — use the group that actually has members
+        // (the one from Account\Aliases which has the C value)
+        let admins_group = info
+            .groups
+            .iter()
+            .find(|g| g.name == "Administrators" && !g.members.is_empty())
+            .unwrap();
+        assert!(
+            admins_group.members.contains(&"Administrator".to_string()),
+            "Administrators group should contain Administrator (groups with members: {:?})",
+            info.groups
+                .iter()
+                .filter(|g| !g.members.is_empty())
+                .collect::<Vec<_>>()
+        );
+
+        let users_group = info
+            .groups
+            .iter()
+            .find(|g| g.name == "Users" && !g.members.is_empty())
+            .unwrap();
+        assert!(
+            users_group.members.contains(&"Administrator".to_string()),
+            "Users group should contain Administrator"
+        );
+        assert!(
+            users_group.members.contains(&"Guest".to_string()),
+            "Users group should contain Guest"
+        );
+    }
+
+    #[test]
+    fn extract_sam_fields_empty_hive() {
+        // An empty hive (no SAM tree) should return empty users/groups with warnings
+        let mut data = vec![0u8; 0x4000];
+        data[0..4].copy_from_slice(b"regf");
+        data[0x24..0x28].copy_from_slice(&0x20u32.to_le_bytes());
+        data[0x1000..0x1004].copy_from_slice(b"hbin");
+        data[0x1008..0x100c].copy_from_slice(&0x3000u32.to_le_bytes());
+        write_nk(&mut data, 0x20, "NOTSAM", &[], &[]);
+
+        let info = extract_sam_fields(&data, "not/sam").unwrap();
+        assert!(info.users.is_empty());
+        assert!(info.groups.is_empty());
+        assert!(
+            !info.warnings.is_empty(),
+            "should warn about missing SAM tree"
+        );
+    }
+
+    #[test]
+    fn extract_sam_fields_v_record_too_short() {
+        // V record shorter than 0x50 bytes should generate a warning
+        let mut data = synthetic_sam_hive();
+
+        // Overwrite the Administrator V value with a truncated blob.
+        // Administrator V: VK at offset 0x1140, binary data at cell 0x5000.
+        let cell_abs = BASE_BLOCK_SIZE + 0x5000;
+        // Cell header: negative size. Set to -8 (4 header + 4 payload → very short)
+        data[cell_abs..cell_abs + 4].copy_from_slice(&(-8i32).to_le_bytes());
+        // Zero out the rest so we don't read junk
+        data[cell_abs + 4..cell_abs + 8].fill(0);
+
+        // Also update the VK record's data_len to match
+        let vk_abs = BASE_BLOCK_SIZE + 0x1140;
+        data[vk_abs + 8..vk_abs + 12].copy_from_slice(&4u32.to_le_bytes());
+
+        let info = extract_sam_fields(&data, "Windows/System32/config/SAM").unwrap();
+        assert!(
+            info.warnings
+                .iter()
+                .any(|w| w.contains("V record") && w.contains("expected at least")),
+            "should warn about short V record, got: {:?}",
+            info.warnings
+        );
+    }
+
+    #[test]
+    fn extract_sam_fields_v_record_unexpected_type() {
+        // V value stored as a string instead of binary should trigger a warning
+        let mut data = synthetic_sam_hive();
+
+        // Replace the Administrator V value VK (at offset 0x1140) with a REG_SZ
+        write_vk(&mut data, 0x1140, "V", REG_SZ, 0x8000_0004, 0x42424242);
+
+        let info = extract_sam_fields(&data, "Windows/System32/config/SAM").unwrap();
+        assert!(
+            info.warnings.iter().any(|w| w.contains("unexpected type")),
+            "should warn about V value having unexpected type, got: {:?}",
+            info.warnings
+        );
+    }
+
+    // ── Txlog-override tests ───────────────────────────────────────────────
+
+    use crate::registry::txlog::fixture::{build_synthetic_log1, SyntheticEntry};
+
+    /// Build a minimal synthetic SYSTEM hive that has a ComputerName value.
+    fn txlog_system_hive(computer_name: &str) -> Vec<u8> {
+        let mut data = empty_hive("SYSTEM");
+        write_nk(
+            &mut data,
+            0x20,
+            "SYSTEM",
+            &[("Select", 0x200), ("ControlSet001", 0x300)],
+            &[],
+        );
+        write_nk(&mut data, 0x200, "Select", &[], &[0x1200]);
+        write_dword_value(&mut data, 0x1200, "Current", 1);
+        write_nk(
+            &mut data,
+            0x300,
+            "ControlSet001",
+            &[("Control", 0x400)],
+            &[],
+        );
+        write_nk(&mut data, 0x400, "Control", &[("ComputerName", 0x600)], &[]);
+        write_nk(
+            &mut data,
+            0x600,
+            "ComputerName",
+            &[("ComputerName", 0x800)],
+            &[],
+        );
+        write_nk(&mut data, 0x800, "ComputerName", &[], &[0xc00]);
+        write_string_value(&mut data, 0xc00, "ComputerName", computer_name, 0x1800);
+        data
+    }
+
+    #[test]
+    fn system_hive_with_txlog_overrides_computer_name() {
+        let hive_bytes = txlog_system_hive("OLD-PC");
+
+        let txlog_bytes = build_synthetic_log1(&[SyntheticEntry {
+            operation: 2, // SetValue
+            sequence_number: 100,
+            timestamp: Some(0x01DB_9F8C_0000_0000), // 2026-06-14 approx
+            key_path:
+                "\\Registry\\Machine\\SYSTEM\\ControlSet001\\Control\\ComputerName\\ComputerName"
+                    .to_string(),
+            value_name: Some("ComputerName".to_string()),
+            data_before: Some(encode_utf16le("OLD-PC")),
+            data_after: Some(encode_utf16le("NEW-PC")),
+        }]);
+
+        let info = extract_system_hive_fields_with_txlog(
+            &hive_bytes,
+            "Windows/System32/config/SYSTEM",
+            &txlog_bytes,
+        )
+        .unwrap();
+
+        let cn = info.computer_name.as_ref().unwrap();
+        assert_eq!(
+            cn.value, "NEW-PC",
+            "ComputerName should be overridden by txlog"
+        );
+        assert!(info.txlog_applied, "txlog_applied should be true");
+        assert_eq!(info.txlog_timestamps.len(), 1);
+        let ts = &info.txlog_timestamps[0];
+        assert_eq!(ts.field_name, "ComputerName");
+        assert!(ts.txlog_used);
+        assert!(ts.txlog_timestamp.is_some());
+        assert!(ts.hive_timestamp.is_none());
+    }
+
+    #[test]
+    fn system_hive_with_txlog_no_match_leaves_field_unchanged() {
+        let hive_bytes = txlog_system_hive("ORIGINAL-PC");
+
+        // Txlog entry for a completely different key — should not match.
+        let txlog_bytes = build_synthetic_log1(&[SyntheticEntry {
+            operation: 2, // SetValue
+            sequence_number: 1,
+            timestamp: Some(0x01DB_9F8C_0000_0000),
+            key_path: "\\Registry\\Machine\\SOFTWARE\\Some\\Other\\Path".to_string(),
+            value_name: Some("Unrelated".to_string()),
+            data_before: None,
+            data_after: Some(encode_utf16le("ignored")),
+        }]);
+
+        let info = extract_system_hive_fields_with_txlog(
+            &hive_bytes,
+            "Windows/System32/config/SYSTEM",
+            &txlog_bytes,
+        )
+        .unwrap();
+
+        let cn = info.computer_name.as_ref().unwrap();
+        assert_eq!(
+            cn.value, "ORIGINAL-PC",
+            "ComputerName should stay unchanged"
+        );
+        assert!(!info.txlog_applied);
+        let ts = &info.txlog_timestamps[0];
+        assert_eq!(ts.field_name, "ComputerName");
+        assert!(!ts.txlog_used);
+        assert!(ts.txlog_timestamp.is_none());
+    }
+
+    #[test]
+    fn software_hive_with_txlog_overrides_product_name() {
+        // Build a SOFTWARE hive with ProductName = "Windows Old".
+        let mut data = empty_hive("SOFTWARE");
+        write_nk(&mut data, 0x20, "SOFTWARE", &[("Microsoft", 0x200)], &[]);
+        write_nk(&mut data, 0x200, "Microsoft", &[("Windows NT", 0x300)], &[]);
+        write_nk(
+            &mut data,
+            0x300,
+            "Windows NT",
+            &[("CurrentVersion", 0x400)],
+            &[],
+        );
+        write_nk(&mut data, 0x400, "CurrentVersion", &[], &[0x600, 0x680]);
+        write_string_value(&mut data, 0x600, "ProductName", "Windows Old", 0x900);
+        write_string_value(&mut data, 0x680, "CurrentBuild", "22000", 0x980);
+
+        let txlog_bytes = build_synthetic_log1(&[SyntheticEntry {
+            operation: 2, // SetValue
+            sequence_number: 50,
+            timestamp: Some(0x01DB_A000_0000_0000),
+            key_path: "\\Registry\\Machine\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"
+                .to_string(),
+            value_name: Some("ProductName".to_string()),
+            data_before: Some(encode_utf16le("Windows Old")),
+            data_after: Some(encode_utf16le("Windows New")),
+        }]);
+
+        let info = extract_software_hive_fields_with_txlog(
+            &data,
+            "Windows/System32/config/SOFTWARE",
+            &txlog_bytes,
+        )
+        .unwrap();
+
+        assert_eq!(info.product_name.as_ref().unwrap().value, "Windows New");
+        assert_eq!(
+            info.current_build.as_ref().unwrap().value,
+            "22000",
+            "CurrentBuild should be untouched"
+        );
+        assert!(info.txlog_applied);
+        assert_eq!(info.txlog_timestamps.len(), 2); // ProductName + CurrentBuild
+        let pn_ts = info
+            .txlog_timestamps
+            .iter()
+            .find(|ts| ts.field_name == "ProductName")
+            .unwrap();
+        assert!(pn_ts.txlog_used);
+        let cb_ts = info
+            .txlog_timestamps
+            .iter()
+            .find(|ts| ts.field_name == "CurrentBuild")
+            .unwrap();
+        assert!(!cb_ts.txlog_used);
+    }
+
+    #[test]
+    fn ntuser_hive_with_txlog_overrides_run_key_command() {
+        // Build an NTUSER hive with a single Run key.
+        let mut data = empty_hive("NTUSER");
+        write_nk(&mut data, 0x20, "NTUSER", &[("Software", 0x200)], &[]);
+        write_nk(&mut data, 0x200, "Software", &[("Microsoft", 0x300)], &[]);
+        write_nk(&mut data, 0x300, "Microsoft", &[("Windows", 0x400)], &[]);
+        write_nk(
+            &mut data,
+            0x400,
+            "Windows",
+            &[("CurrentVersion", 0x500)],
+            &[],
+        );
+        write_nk(&mut data, 0x500, "CurrentVersion", &[("Run", 0x600)], &[]);
+        write_nk(&mut data, 0x600, "Run", &[], &[0x700]);
+        write_string_value(&mut data, 0x700, "Malware", "C:\\temp\\old.exe", 0x1000);
+
+        let txlog_bytes = build_synthetic_log1(&[SyntheticEntry {
+            operation: 2, // SetValue
+            sequence_number: 200,
+            timestamp: Some(0x01DB_A100_0000_0000),
+            key_path:
+                "\\Registry\\User\\S-1-5-21-123\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+                    .to_string(),
+            value_name: Some("Malware".to_string()),
+            data_before: Some(encode_utf16le("C:\\temp\\old.exe")),
+            data_after: Some(encode_utf16le("C:\\temp\\new.exe")),
+        }]);
+
+        let info =
+            extract_ntuser_fields_with_txlog(&data, "Users/Test/NTUSER.DAT", &txlog_bytes).unwrap();
+
+        assert_eq!(info.run_keys.len(), 1);
+        assert_eq!(info.run_keys[0].value_name, "Malware");
+        assert_eq!(info.run_keys[0].command, "C:\\temp\\new.exe");
+        assert!(
+            info.run_keys[0].timestamp.is_some(),
+            "Run key should have timestamp from txlog"
+        );
+        assert!(info.txlog_applied);
+    }
+
+    #[test]
+    fn txlog_uses_highest_sequence_number() {
+        // When multiple txlog entries match the same field, use the one with
+        // the highest sequence number.
+        let hive_bytes = txlog_system_hive("V1");
+
+        let txlog_bytes = build_synthetic_log1(&[
+            SyntheticEntry {
+                operation: 2,
+                sequence_number: 10,
+                timestamp: Some(0x01DB_9F8C_0000_0000),
+                key_path: "\\Registry\\Machine\\SYSTEM\\ControlSet001\\Control\\ComputerName\\ComputerName".to_string(),
+                value_name: Some("ComputerName".to_string()),
+                data_before: Some(encode_utf16le("V1")),
+                data_after: Some(encode_utf16le("V2")),
+            },
+            SyntheticEntry {
+                operation: 2,
+                sequence_number: 20, // higher seq → should win
+                timestamp: Some(0x01DB_A000_0000_0000),
+                key_path: "\\Registry\\Machine\\SYSTEM\\ControlSet001\\Control\\ComputerName\\ComputerName".to_string(),
+                value_name: Some("ComputerName".to_string()),
+                data_before: Some(encode_utf16le("V2")),
+                data_after: Some(encode_utf16le("V3")),
+            },
+        ]);
+
+        let info = extract_system_hive_fields_with_txlog(
+            &hive_bytes,
+            "Windows/System32/config/SYSTEM",
+            &txlog_bytes,
+        )
+        .unwrap();
+
+        assert_eq!(info.computer_name.as_ref().unwrap().value, "V3");
+    }
+
+    /// Helper: encode a string as UTF-16LE bytes (null-terminated).
+    fn encode_utf16le(s: &str) -> Vec<u8> {
+        let mut out: Vec<u8> = s.encode_utf16().flat_map(u16::to_le_bytes).collect();
+        out.extend_from_slice(&[0x00, 0x00]); // null terminator
+        out
     }
 }

@@ -91,7 +91,11 @@ pub use notebook::{
     StepReplayDto, StepReplayFailDto, StepReplayMatchDto, StepReplayResultDto,
 };
 pub use recovery::DeletedFileRecoveryDto;
-pub use registry::{RegistryTransactionDto, RegistryTransactionOperationDto, TxLogParseResultDto};
+pub use registry::{
+    MountPointDto, NtuserInfoDto, RecentDocDto, RegistryRunKeyDto, RegistryTransactionDto,
+    RegistryTransactionOperationDto, SamGroupDto, SamInfoDto, SamUserDto, TxLogParseResultDto,
+    UserAssistEntryDto,
+};
 pub use reports::{ReportHistoryItemDto, ReportTemplateDto};
 pub use search::{SearchHighlightDto, SearchHitDto, SearchResultPageDto, SearchSnippetDto};
 pub use timeline::{

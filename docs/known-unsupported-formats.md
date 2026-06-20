@@ -21,8 +21,10 @@ V2 长期计划与能力评级请同时参考：
 | NTFS | 全量损坏恢复 | 不承诺 | 极端损坏、复杂修复场景仍缺样本与回归 |
 | FAT / exFAT | 已删除文件恢复 | 不承诺 | 本轮 deleted 重点仅覆盖 NTFS MFT |
 | FAT / exFAT | committed fixture | 缺失 | 无 fixture 文件。expected.json 待建 |
-| Registry | transaction log 完整重放 | 不承诺 | 当前以 hive 直接解析为主 |
-| Registry | private-real 回归 E01 | 缺失 | testdata/fixtures/private-real-regression/ 仅存 metadata.json，E01 镜像未提交 |
+| Registry | transaction log 完整重放 | 不承诺 | 当前以 hive 直接解析为主。txlog 集成仍为未完成项 |
+| Registry | private-real 回归 E01 | 部分完成 | liuyang_pc.E01 已验证 SYSTEM/SOFTWARE/NTUSER/SAM 提取；E01 镜像本身未提交至仓库 |
+| Registry | 已删除 cell 恢复 | 不承诺 | 当前不解析 hive bin 中未分配 cell。恢复已删除键值需要 cell 分配图与 txlog 交叉引用 |
+| Registry | 完整 registry browser | 不承诺 | 当前为定向字段提取，不提供交互式 key path 枚举与全 hive 浏览 |
 | Prefetch | committed fixture 文件 | 缺失 | testdata/artifacts/windows/prefetch/ 仅含 .gitkeep。public-medium/prefetch 尚空 |
 | Prefetch | 自动化测试 | 不足 | 仅 1 个 synthetic 单元测试 |
 | Prefetch | 全版本压缩变体 | 部分支持 | 需要继续补样本与 expected baseline |

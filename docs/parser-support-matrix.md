@@ -30,7 +30,7 @@ V2 长期执行与发布口径见：
 | EVTX | Windows | Beta | `system.evtx` | 10 个测试 | 基本事件抽取（boot/shutdown） | **planned** (2026-Q3) — `testdata/fixtures/public-medium/evtx/` larger multi-channel samples | 大样本待补。expected.json 接入校验待加强 |
 | Prefetch | Windows | Beta | 无 committed fixture | expected.json / 1 个 synthetic 测试 | executable、run_count 等核心字段 | **planned** (2026-Q3) — `testdata/fixtures/public-medium/prefetch/` historical + compressed .pf variants | testdata/artifacts/windows/prefetch/ 仅含 .gitkeep。历史版本与压缩变体覆盖不足 |
 | LNK | Windows | Beta | 无 committed fixture | expected.json（无自动化测试） | target path、时间（expected.json 契约内） | **planned** (2026-Q3) — `testdata/fixtures/public-medium/lnk/` complex shell item samples | testdata/artifacts/windows/lnk/ 仅含 .gitkeep。未发现 #[test]。复杂 shell item 待补 |
-| Registry | Windows | Beta | `tiny SYSTEM`、`tiny SOFTWARE` | expected.json / 32 个测试 | 系统信息、关键键值、provenance | **planned** (2026-Q3) — `testdata/fixtures/public-medium/registry/` full hive suite (SAM, SECURITY, NTUSER) | private-real 回归 E01 未提交。全 hive 覆盖不足 |
+| Registry | Windows | Beta | `tiny SYSTEM`、`tiny SOFTWARE`、`NTUSER` (liuyang_pc.E01)、`SAM` (liuyang_pc.E01) | expected.json / 32 个测试 | system info (computer_name, timezone, services, network_adapters), software info (product_name, build, version, registered_owner, install_date), NTUSER (user profiles, shell folders, recent files, typed paths, run MRU, mount points), SAM (local users, group membership, login counts, password policy) | **planned** (2026-Q3) — `testdata/fixtures/public-medium/registry/` full hive suite (SAM, SECURITY, NTUSER) | liuyang_pc.E01 回归已验证 SYSTEM/SOFTWARE/NTUSER/SAM 提取。SECURITY hive 与 txlog 完整重放仍未 commit |
 | Recycle Bin | Windows | Beta | 无 committed fixture | expected.json（无自动化测试） | 原路径、删除时间（expected.json 契约内） | **planned** (2026-Q3) — `testdata/fixtures/public-medium/recycle-bin/` $I/$R paired samples | testdata/artifacts/windows/recycle-bin/ 仅含 .gitkeep。未发现 #[test]。损坏恢复不承诺 |
 
 ## 3. 数据源分析补充链路 — Browser Medium Fixtures: `testdata/fixtures/public-medium/browser/`
@@ -94,7 +94,7 @@ V2 长期执行与发布口径见：
 | EVTX | Windows | Beta | Beta | 补真实样本与支持边界说明，不夸大为全覆盖。加固 expected.json 接入校验 |
 | Prefetch | Windows | Beta | Beta / 接近 GA | 需补 committed fixture 文件、medium fixture、压缩变体边界、自动化测试 |
 | LNK | Windows | Beta | Beta / 接近 GA | 需补 committed fixture 文件、自动化测试、复杂 shell item 边界说明 |
-| Registry | Windows | Beta | Beta | 保持定向分析链路可信，不宣称完整 hive browser。补齐 private-real 回归 E01 |
+| Registry | Windows | Beta | Beta / 接近 GA | NTUSER/SAM 提取已验证 (liuyang_pc.E01)。字段承诺已扩展至用户 profiles、shell folders、recent files、typed paths、run MRU、mount points、local users、group membership、login counts。不宣称完整 hive browser 或 txlog 完整重放 |
 | Recycle Bin | Windows | Beta | Beta / 接近 GA | 需补 committed fixture 文件、自动化测试、损坏恢复边界说明 |
 | JumpList | Windows | Experimental | Experimental / Beta | 需补 fixture、expected.json、自动化测试 |
 | SRU | Windows | Experimental | Experimental / Beta | 需补 fixture、expected.json、自动化测试 |

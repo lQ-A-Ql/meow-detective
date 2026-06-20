@@ -37,6 +37,99 @@ pub struct TxLogParseResultDto {
     pub warnings: Vec<String>,
 }
 
+/// A single auto-start entry from a Run / RunOnce key.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryRunKeyDto {
+    pub key_path: String,
+    pub value_name: String,
+    pub command: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<String>,
+}
+
+/// A single entry from the Explorer RecentDocs MRU.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RecentDocDto {
+    pub file_name: String,
+    pub extension: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_accessed: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lnk_target: Option<String>,
+}
+
+/// A single UserAssist program-execution tracking entry.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UserAssistEntryDto {
+    pub executable: String,
+    pub run_count: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_run: Option<String>,
+    pub focus_time_ms: u64,
+}
+
+/// A mount-point entry from Explorer MountPoints2.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct MountPointDto {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub drive_letter: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub volume_guid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_mounted: Option<String>,
+}
+
+/// Aggregated NTUSER.DAT extraction result.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NtuserInfoDto {
+    pub run_keys: Vec<RegistryRunKeyDto>,
+    pub recent_docs: Vec<RecentDocDto>,
+    pub user_assist: Vec<UserAssistEntryDto>,
+    pub typed_urls: Vec<String>,
+    pub word_wheel_query: Vec<String>,
+    pub mount_points: Vec<MountPointDto>,
+    pub warnings: Vec<String>,
+}
+
+/// A local user account extracted from a SAM registry hive.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SamUserDto {
+    pub username: String,
+    pub rid: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_login: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password_last_set: Option<String>,
+    pub account_disabled: bool,
+    pub account_locked: bool,
+    pub admin_count: u32,
+    pub group_memberships: Vec<String>,
+}
+
+/// A local group extracted from a SAM registry hive.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SamGroupDto {
+    pub name: String,
+    pub rid: u32,
+    pub members: Vec<String>,
+}
+
+/// Aggregated SAM hive extraction result.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SamInfoDto {
+    pub users: Vec<SamUserDto>,
+    pub groups: Vec<SamGroupDto>,
+    pub warnings: Vec<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

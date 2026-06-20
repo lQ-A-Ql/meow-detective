@@ -258,6 +258,43 @@ export interface RegistryValue {
   createdAt: string;
 }
 
+export interface RegistryRunKey {
+  keyPath: string;
+  valueName: string;
+  command: string;
+  timestamp?: string;
+}
+
+export interface RecentDoc {
+  fileName: string;
+  extension: string;
+  lastAccessed?: string;
+  lnkTarget?: string;
+}
+
+export interface UserAssistEntry {
+  executable: string;
+  runCount: number;
+  lastRun?: string;
+  focusTimeMs: number;
+}
+
+export interface MountPoint {
+  driveLetter?: string;
+  volumeGuid?: string;
+  lastMounted?: string;
+}
+
+export interface NtuserInfo {
+  runKeys: RegistryRunKey[];
+  recentDocs: RecentDoc[];
+  userAssist: UserAssistEntry[];
+  typedUrls: string[];
+  wordWheelQuery: string[];
+  mountPoints: MountPoint[];
+  warnings: string[];
+}
+
 export type BrowserKind = 'Chrome' | 'Edge' | 'Firefox' | string;
 
 export interface BrowserHistorySummary {
