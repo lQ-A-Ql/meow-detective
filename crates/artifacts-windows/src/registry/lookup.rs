@@ -798,34 +798,55 @@ fn find_rid_in_sam_key(
         _ => return None,
     };
 
-    let values = match hive.read_all_values_from_nk(&nk) {
-        Ok(values) => values,
-        Err(err) => {
-            warnings.push(format!("{} values parse error: {err}", key_path.join("\\")));
-            return None;
+    // Try parsed values first
+    if let Ok(values) = hive.read_all_values_from_nk(&nk) {
+        for (_name, value) in &values {
+            match value {
+                RegistryValue::Dword(v) => return Some(*v),
+                RegistryValue::Binary(data) if data.len() >= 4 => {
+                    if let Some(rid) = data
+                        .get(..4)
+                        .and_then(|b| <[u8; 4]>::try_from(b).ok())
+                        .map(u32::from_le_bytes)
+                    {
+                        return Some(rid);
+                    }
+                }
+                _ => {}
+            }
         }
-    };
+        // SAM on Win10/11 uses REG_NONE which parse_value_data maps to empty Binary.
+        // Fall through to raw VK scan below.
+    }
 
-    for (_name, value) in &values {
-        match value {
-            RegistryValue::Dword(v) => return Some(*v),
-            RegistryValue::Binary(data) if data.len() >= 4 => {
-                if let Some(rid) = data
-                    .get(..4)
-                    .and_then(|b| <[u8; 4]>::try_from(b).ok())
-                    .map(u32::from_le_bytes)
-                {
-                    return Some(rid);
+    // Fallback: scan raw VK cells for inline RID values.
+    // SAM stores RID as the data_offset field (VK offset 0x0C) for REG_NONE.
+    if let Ok(offsets) = hive.read_raw_vk_data_offsets(&nk) {
+        for vk_offset in offsets {
+            let vk_abs = match hive.abs(vk_offset) { Ok(a) => a, Err(_) => continue };
+            if vk_abs + 0x14 > hive.bytes.len() { continue; }
+            if &hive.bytes[vk_abs + 4..vk_abs + 6] != VK_SIGNATURE { continue; }
+            let data_type = u32::from_le_bytes(
+                hive.bytes[vk_abs + 0x10..vk_abs + 0x14].try_into().unwrap_or([0;4])
+            );
+            let data_len_raw = u32::from_le_bytes(
+                hive.bytes[vk_abs + 0x08..vk_abs + 0x0C].try_into().unwrap_or([0;4])
+            );
+            let raw_data_offset = u32::from_le_bytes(
+                hive.bytes[vk_abs + 0x0C..vk_abs + 0x10].try_into().unwrap_or([0;4])
+            );
+            // REG_NONE (0) or REG_DWORD (4) with inline flag set
+            if (data_type == 0 || data_type == REG_DWORD) && (data_len_raw & 0x7FFF_FFFF) <= 4 {
+                if raw_data_offset > 0 && raw_data_offset < 0xFFFF {
+                    return Some(raw_data_offset);
                 }
             }
-            _ => {}
         }
     }
 
     warnings.push(format!(
-        "SAM key {} has no DWORD or binary RID value (found {} values)",
+        "SAM key {} has no readable RID value (raw scan also failed)",
         key_path.join("\\"),
-        values.len()
     ));
     None
 }
@@ -1928,6 +1949,30 @@ impl<'a> RegistryHiveReader<'a> {
             }
         }
         Ok(result)
+    }
+
+    /// Read raw VK cell offsets from an NK record's value list.
+    /// Used by SAM RID extraction when REG_NONE values have empty data
+    /// but the data_offset field encodes the RID inline.
+    fn read_raw_vk_data_offsets(&self, nk: &NkRecord) -> Result<Vec<u32>, String> {
+        if nk.num_values == 0 || nk.values_list_offset == INVALID_OFFSET {
+            return Ok(Vec::new());
+        }
+        let list_abs = self.abs(nk.values_list_offset)?;
+        let cell_size = read_i32(self.bytes, list_abs)?;
+        if cell_size >= 0 { return Ok(Vec::new()); }
+        let cell_len = cell_size.checked_abs().ok_or_else(|| "invalid value list cell".to_string())? as usize;
+        self.require(list_abs, cell_len)?;
+        let list_len = (nk.num_values as usize).checked_mul(4).ok_or_else(|| "overflow".to_string())?;
+        let list_start = list_abs + 4;
+        if list_len > cell_len.saturating_sub(4) { return Ok(Vec::new()); }
+        self.require(list_start, list_len)?;
+        let mut offsets = Vec::with_capacity(nk.num_values as usize);
+        for idx in 0..nk.num_values as usize {
+            let vk_off = read_u32(self.bytes, list_start + idx * 4)?;
+            if vk_off != INVALID_OFFSET { offsets.push(vk_off); }
+        }
+        Ok(offsets)
     }
 
     /// Read the names of all subkeys of a given NK record.
