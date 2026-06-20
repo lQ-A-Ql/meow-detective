@@ -1403,6 +1403,822 @@ fn liuyang_e01_artifact_extraction_and_correlation_rules() {
         .unwrap();
 }
 
+#[test]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample"]
+fn liuyang_e01_lnk_extraction_and_correlation() {
+    let fixture_path = sample_path();
+    let start = Instant::now();
+
+    let mut reader = E01Reader::open(&fixture_path).unwrap();
+    let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
+    let ntfs = probe
+        .candidates
+        .iter()
+        .find(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
+        .expect("NTFS candidate required");
+
+    let (mft_cluster, cluster_size, record_size, bytes_per_sector, mft_data_size) =
+        read_mft_parameters(&fixture_path, ntfs.offset).unwrap();
+
+    let tmp = TempDir::new().unwrap();
+    let active = case_service::create_case(
+        &tmp.path().join("cases"),
+        "liuyang-lnk-extraction",
+        Some("tester"),
+    )
+    .unwrap();
+    let case_id = active.meta.id.clone();
+
+    active
+        .with_conn(|conn| {
+            let data_source_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
+            DataSourceRepo::new(conn).insert(
+                &case_id,
+                &domain::DataSource {
+                    id: data_source_id.clone(),
+                    name: "liuyang-lnk-test".into(),
+                    kind: domain::DataSourceKind::E01,
+                    source_path: fixture_path.clone(),
+                    imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
+                },
+            )?;
+
+            // Step 1: Import MFT
+            let stats = file_service::enumerate_filesystem_mft(
+                conn,
+                &data_source_id,
+                &fixture_path,
+                ntfs.offset,
+                mft_cluster,
+                cluster_size,
+                record_size,
+                bytes_per_sector,
+                mft_data_size,
+                Some(&|pct, msg| eprintln!("[MFT {pct}%] {msg}")),
+                None,
+            )?;
+            eprintln!(
+                "[BENCH-OUTPUT] scenario=lnk_mft_import dataset_level=large p95_ms={} file_count={}",
+                start.elapsed().as_millis(),
+                stats.file_count
+            );
+            assert!(stats.file_count > 1000, "Should enumerate many files");
+
+            // Step 2: Find .lnk files in Users/ paths
+            let repo = FileRepo::new(conn);
+            let all_entries = repo.find_by_data_source(&data_source_id)?;
+
+            let lnk_entries: Vec<_> = all_entries
+                .iter()
+                .filter(|e| {
+                    e.path.contains("Users/")
+                        && e.extension()
+                            .map_or(false, |ext| ext.eq_ignore_ascii_case("lnk"))
+                })
+                .take(20)
+                .cloned()
+                .collect();
+
+            eprintln!(
+                "Found {} LNK files in Users/ paths (scanned {} total entries)",
+                lnk_entries.len(),
+                all_entries.len()
+            );
+            assert!(
+                !lnk_entries.is_empty(),
+                "Should find at least one .lnk file under Users/"
+            );
+
+            // Step 3: Open E01 FS reader and extract LNK artifacts
+            let boxed: Box<dyn EvidenceReader> =
+                Box::new(E01Reader::open(&fixture_path).unwrap());
+            let fs = fs_ntfs::NtfsReader::open(boxed, ntfs.offset).unwrap();
+            let registry = artifact_service::create_registry();
+            let mut sink = artifacts_core::VecSink::new();
+
+            for entry in &lnk_entries {
+                match fs.open_file(&entry.path) {
+                    Ok(mut reader) => {
+                        let mut buf = Vec::new();
+                        if reader.read_to_end(&mut buf).is_ok() {
+                            let file_reader: Box<dyn Read> = Box::new(std::io::Cursor::new(buf));
+                            match artifact_service::run_extractors_on_file(
+                                &registry,
+                                &entry.id,
+                                &entry.path,
+                                file_reader,
+                                &mut sink,
+                            ) {
+                                Ok(_) => eprintln!("  extracted LNK: {}", entry.path),
+                                Err(e) => eprintln!("  extraction error {}: {e}", entry.path),
+                            }
+                        }
+                    }
+                    Err(e) => eprintln!("  skip LNK {}: {e}", entry.path),
+                }
+            }
+
+            eprintln!(
+                "Extracted {} total artifacts from {} LNK files",
+                sink.artifacts.len(),
+                lnk_entries.len()
+            );
+            assert!(
+                !sink.artifacts.is_empty(),
+                "Should extract at least one LNK artifact from Users/ directory"
+            );
+
+            // Step 4: Store artifacts
+            artifact_service::store_artifacts(
+                conn,
+                &sink.artifacts,
+                &case_id.0,
+                &data_source_id.0,
+            )
+            .unwrap();
+            eprintln!("Stored {} LNK artifacts", sink.artifacts.len());
+
+            // Step 5: Build timeline
+            timeline_service::ensure_macb_timeline_projected(conn).ok();
+
+            // Step 6: Run correlation
+            let corr_start = Instant::now();
+            let snapshot = correlation::get_correlation_snapshot(conn).unwrap();
+            eprintln!(
+                "[BENCH-OUTPUT] scenario=lnk_correlation dataset_level=large p95_ms={}",
+                corr_start.elapsed().as_millis()
+            );
+            eprintln!(
+                "correlation: nodes={} edges={} clusters={} leads={}",
+                snapshot.node_count, snapshot.edge_count,
+                snapshot.cluster_count, snapshot.lead_count
+            );
+
+            for fc in &snapshot.family_coverage {
+                eprintln!(
+                    "  family {}: status={:?} leads={} high_conf={} review={} clusters={}",
+                    fc.family, fc.status, fc.lead_count,
+                    fc.high_confidence_lead_count, fc.review_lead_count,
+                    fc.cluster_count
+                );
+            }
+
+            // Step 7: Assert LNK family has lead_count > 0
+            let lnk_family = snapshot
+                .family_coverage
+                .iter()
+                .find(|fc| fc.family.eq_ignore_ascii_case("LNK"));
+            assert!(
+                lnk_family.is_some(),
+                "Correlation snapshot should include LNK family coverage"
+            );
+            let lnk_fc = lnk_family.unwrap();
+            assert!(
+                lnk_fc.lead_count > 0,
+                "LNK family should produce at least one correlation lead after extraction; leads={}",
+                lnk_fc.lead_count
+            );
+
+            eprintln!(
+                "LNK family: leads={} high_conf={} review={} clusters={}",
+                lnk_fc.lead_count,
+                lnk_fc.high_confidence_lead_count,
+                lnk_fc.review_lead_count,
+                lnk_fc.cluster_count
+            );
+
+            let total_elapsed = start.elapsed();
+            eprintln!("=== LNK extraction + correlation test complete in {total_elapsed:?} ===");
+
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample"]
+fn liuyang_e01_browser_history_extraction() {
+    let fixture_path = sample_path();
+    let start = Instant::now();
+
+    let mut reader = E01Reader::open(&fixture_path).unwrap();
+    let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
+    let ntfs = probe
+        .candidates
+        .iter()
+        .find(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
+        .expect("NTFS candidate required");
+
+    let (mft_cluster, cluster_size, record_size, bytes_per_sector, mft_data_size) =
+        read_mft_parameters(&fixture_path, ntfs.offset).unwrap();
+
+    let tmp = TempDir::new().unwrap();
+    let active = case_service::create_case(
+        &tmp.path().join("cases"),
+        "liuyang-browser-extraction",
+        Some("tester"),
+    )
+    .unwrap();
+    let case_id = active.meta.id.clone();
+
+    active
+        .with_conn(|conn| {
+            let data_source_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
+            DataSourceRepo::new(conn).insert(
+                &case_id,
+                &domain::DataSource {
+                    id: data_source_id.clone(),
+                    name: "liuyang-browser-test".into(),
+                    kind: domain::DataSourceKind::E01,
+                    source_path: fixture_path.clone(),
+                    imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
+                },
+            )?;
+
+            // Step 1: Import MFT
+            let stats = file_service::enumerate_filesystem_mft(
+                conn,
+                &data_source_id,
+                &fixture_path,
+                ntfs.offset,
+                mft_cluster,
+                cluster_size,
+                record_size,
+                bytes_per_sector,
+                mft_data_size,
+                Some(&|pct, msg| eprintln!("[MFT {pct}%] {msg}")),
+                None,
+            )?;
+            eprintln!(
+                "[BENCH-OUTPUT] scenario=browser_mft_import dataset_level=large p95_ms={} file_count={}",
+                start.elapsed().as_millis(),
+                stats.file_count
+            );
+            assert!(stats.file_count > 1000, "Should enumerate many files");
+
+            // Step 2: Scan file entries for browser databases
+            let repo = FileRepo::new(conn);
+            let all_entries = repo.find_by_data_source(&data_source_id)?;
+
+            let browser_entries: Vec<_> = all_entries
+                .iter()
+                .filter(|e| is_browser_history_db(&e.path))
+                .take(20)
+                .collect();
+
+            eprintln!(
+                "Found {} browser history databases out of {} total entries",
+                browser_entries.len(),
+                all_entries.len()
+            );
+            assert!(
+                !browser_entries.is_empty(),
+                "Should find at least one browser history database (Chrome History, Edge History, or Firefox places.sqlite)"
+            );
+
+            // Step 3: Open E01 FS reader, read each file, run extractors
+            let boxed: Box<dyn EvidenceReader> =
+                Box::new(E01Reader::open(&fixture_path).unwrap());
+            let fs = fs_ntfs::NtfsReader::open(boxed, ntfs.offset).unwrap();
+            let mut all_artifacts: Vec<domain::Artifact> = Vec::new();
+
+            for entry in &browser_entries {
+                let normalized = normalize_path_for_match(&entry.path);
+                let bytes = match fs.open_file(&entry.path) {
+                    Ok(mut reader) => {
+                        let mut buf = Vec::new();
+                        if reader.read_to_end(&mut buf).is_ok() {
+                            buf
+                        } else {
+                            eprintln!("  read error: {}", entry.path);
+                            continue;
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("  open error for {}: {e}", entry.path);
+                        continue;
+                    }
+                };
+                if bytes.is_empty() {
+                    continue;
+                }
+
+                // Parse based on browser type
+                if normalized.contains("/mozilla/firefox/profiles/") && normalized.ends_with("/places.sqlite") {
+                    // Firefox
+                    match artifacts_windows::parse_firefox_history(&bytes) {
+                        Ok(visits) => {
+                            eprintln!("  Firefox: {} visits from {}", visits.len(), entry.path);
+                            let artifacts = firefox_visits_to_artifacts(
+                                &visits, entry, &data_source_id,
+                            );
+                            all_artifacts.extend(artifacts);
+                        }
+                        Err(e) => eprintln!("  Firefox parse error for {}: {e}", entry.path),
+                    }
+                } else {
+                    // Chrome or Edge (Chromium-based)
+                    let browser_name = if normalized.contains("/microsoft/edge/") {
+                        "Edge"
+                    } else {
+                        "Chrome"
+                    };
+                    let profile = extract_browser_profile(&normalized, browser_name);
+                    match artifacts_windows::parse_chrome_history(&bytes, browser_name, Some(&profile)) {
+                        Ok(visits) => {
+                            eprintln!(
+                                "  {}: {} visits from {} (profile={})",
+                                browser_name,
+                                visits.len(),
+                                entry.path,
+                                profile,
+                            );
+                            let artifacts = chromium_visits_to_artifacts(
+                                &visits, entry, &data_source_id,
+                            );
+                            all_artifacts.extend(artifacts);
+                        }
+                        Err(e) => eprintln!("  {} parse error for {}: {e}", browser_name, entry.path),
+                    }
+                }
+            }
+
+            eprintln!(
+                "Extracted {} BrowserHistory artifacts from {} browser databases",
+                all_artifacts.len(),
+                browser_entries.len()
+            );
+            assert!(
+                !all_artifacts.is_empty(),
+                "Should extract at least some BrowserHistory artifacts from real browser databases; found {} databases",
+                browser_entries.len()
+            );
+
+            // Step 4: Store artifacts
+            artifact_service::store_artifacts(
+                conn,
+                &all_artifacts,
+                &case_id.0,
+                &data_source_id.0,
+            )
+            .unwrap();
+            eprintln!("Stored {} BrowserHistory artifacts", all_artifacts.len());
+
+            // Step 5: Build timeline
+            timeline_service::ensure_macb_timeline_projected(conn).ok();
+
+            // Step 6: Run correlation
+            let corr_start = Instant::now();
+            let snapshot = correlation::get_correlation_snapshot(conn).unwrap();
+            eprintln!(
+                "[BENCH-OUTPUT] scenario=browser_correlation dataset_level=large p95_ms={}",
+                corr_start.elapsed().as_millis()
+            );
+            eprintln!(
+                "correlation: nodes={} edges={} clusters={} leads={}",
+                snapshot.node_count, snapshot.edge_count,
+                snapshot.cluster_count, snapshot.lead_count
+            );
+
+            for fc in &snapshot.family_coverage {
+                eprintln!(
+                    "  family {}: status={:?} leads={} high_conf={} review={} clusters={}",
+                    fc.family, fc.status, fc.lead_count,
+                    fc.high_confidence_lead_count, fc.review_lead_count,
+                    fc.cluster_count
+                );
+            }
+
+            // Step 7: Assert BrowserHistory family has lead_count > 0
+            let browser_family = snapshot
+                .family_coverage
+                .iter()
+                .find(|fc| fc.family.eq_ignore_ascii_case("BrowserHistory"));
+            assert!(
+                browser_family.is_some(),
+                "Correlation snapshot should include BrowserHistory family coverage"
+            );
+            let bh_fc = browser_family.unwrap();
+            assert!(
+                bh_fc.lead_count > 0,
+                "BrowserHistory family should produce at least one correlation lead after extraction; leads={}",
+                bh_fc.lead_count
+            );
+
+            eprintln!(
+                "BrowserHistory family: leads={} high_conf={} review={} clusters={}",
+                bh_fc.lead_count,
+                bh_fc.high_confidence_lead_count,
+                bh_fc.review_lead_count,
+                bh_fc.cluster_count
+            );
+
+            let total_elapsed = start.elapsed();
+            eprintln!("=== Browser history extraction + correlation test complete in {total_elapsed:?} ===");
+
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample"]
+fn liuyang_e01_prefetch_extraction() {
+    let fixture_path = sample_path();
+    let start = Instant::now();
+
+    let mut reader = E01Reader::open(&fixture_path).unwrap();
+    let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
+    let ntfs = probe
+        .candidates
+        .iter()
+        .find(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
+        .expect("NTFS candidate required");
+
+    let (mft_cluster, cluster_size, record_size, bytes_per_sector, mft_data_size) =
+        read_mft_parameters(&fixture_path, ntfs.offset).unwrap();
+
+    let tmp = TempDir::new().unwrap();
+    let active = case_service::create_case(
+        &tmp.path().join("cases"),
+        "liuyang-prefetch-extraction",
+        Some("tester"),
+    )
+    .unwrap();
+    let case_id = active.meta.id.clone();
+
+    active
+        .with_conn(|conn| {
+            let data_source_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
+            DataSourceRepo::new(conn).insert(
+                &case_id,
+                &domain::DataSource {
+                    id: data_source_id.clone(),
+                    name: "liuyang-prefetch-test".into(),
+                    kind: domain::DataSourceKind::E01,
+                    source_path: fixture_path.clone(),
+                    imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
+                },
+            )?;
+
+            // Step 1: Import MFT
+            let stats = file_service::enumerate_filesystem_mft(
+                conn,
+                &data_source_id,
+                &fixture_path,
+                ntfs.offset,
+                mft_cluster,
+                cluster_size,
+                record_size,
+                bytes_per_sector,
+                mft_data_size,
+                Some(&|pct, msg| eprintln!("[MFT {pct}%] {msg}")),
+                None,
+            )?;
+            eprintln!(
+                "[BENCH-OUTPUT] scenario=prefetch_mft_import dataset_level=large p95_ms={} file_count={}",
+                start.elapsed().as_millis(),
+                stats.file_count
+            );
+            assert!(stats.file_count > 1000, "Should enumerate many files");
+
+            // Step 2: Open NtfsReader directly and list Windows/Prefetch
+            // MFT stores paths like "Prefetch/FILE.pf" (without Windows/ prefix)
+            // which NtfsReader cannot resolve. We bypass this by using the
+            // full NTFS path "Windows/Prefetch" with the NtfsReader directly.
+            let boxed: Box<dyn EvidenceReader> =
+                Box::new(E01Reader::open(&fixture_path).unwrap());
+            let fs = fs_ntfs::NtfsReader::open(boxed, ntfs.offset).unwrap();
+
+            let prefetch_children = fs
+                .list_children("Windows/Prefetch")
+                .unwrap_or_else(|err| {
+                    eprintln!("Warning: failed to list Windows/Prefetch: {err}");
+                    Vec::new()
+                });
+
+            eprintln!(
+                "Found {} entries in Windows/Prefetch directory",
+                prefetch_children.len()
+            );
+
+            let pf_nodes: Vec<_> = prefetch_children
+                .iter()
+                .filter(|node| !node.is_dir && node.name.to_lowercase().ends_with(".pf"))
+                .take(20)
+                .collect();
+
+            eprintln!(
+                "Selected {} .pf files for extraction",
+                pf_nodes.len()
+            );
+            assert!(
+                !pf_nodes.is_empty(),
+                "Should find at least one .pf file in Windows/Prefetch directory"
+            );
+
+            // Step 3: Read and parse .pf files with PrefetchExtractor
+            let registry = artifact_service::create_registry();
+            let mut sink = artifacts_core::VecSink::new();
+
+            for node in &pf_nodes {
+                let pf_path = &node.path;
+                eprintln!("  opening Prefetch file via NTFS path: {pf_path}");
+                match fs.open_file(pf_path) {
+                    Ok(mut file_reader) => {
+                        let mut buf = Vec::new();
+                        if file_reader.read_to_end(&mut buf).is_ok() {
+                            let reader: Box<dyn Read> = Box::new(std::io::Cursor::new(buf));
+                            match artifact_service::run_extractors_on_file(
+                                &registry,
+                                &domain::FileEntryId(format!("prefetch:{}", node.name)),
+                                pf_path,
+                                reader,
+                                &mut sink,
+                            ) {
+                                Ok(_) => eprintln!("  extracted Prefetch: {}", pf_path),
+                                Err(e) => eprintln!("  extraction error {}: {e}", pf_path),
+                            }
+                        }
+                    }
+                    Err(e) => eprintln!("  skip Prefetch {}: {e}", pf_path),
+                }
+            }
+
+            eprintln!(
+                "Extracted {} total artifacts from {} .pf files",
+                sink.artifacts.len(),
+                pf_nodes.len()
+            );
+            assert!(
+                !sink.artifacts.is_empty(),
+                "Should extract at least one Prefetch artifact from Windows/Prefetch"
+            );
+
+            // Step 4: Store artifacts
+            artifact_service::store_artifacts(
+                conn,
+                &sink.artifacts,
+                &case_id.0,
+                &data_source_id.0,
+            )
+            .unwrap();
+            eprintln!("Stored {} Prefetch artifacts", sink.artifacts.len());
+
+            // Step 5: Build timeline
+            timeline_service::ensure_macb_timeline_projected(conn).ok();
+
+            // Step 6: Run correlation
+            let corr_start = Instant::now();
+            let snapshot = correlation::get_correlation_snapshot(conn).unwrap();
+            eprintln!(
+                "[BENCH-OUTPUT] scenario=prefetch_correlation dataset_level=large p95_ms={}",
+                corr_start.elapsed().as_millis()
+            );
+            eprintln!(
+                "correlation: nodes={} edges={} clusters={} leads={}",
+                snapshot.node_count, snapshot.edge_count,
+                snapshot.cluster_count, snapshot.lead_count
+            );
+
+            for fc in &snapshot.family_coverage {
+                eprintln!(
+                    "  family {}: status={:?} leads={} high_conf={} review={} clusters={}",
+                    fc.family, fc.status, fc.lead_count,
+                    fc.high_confidence_lead_count, fc.review_lead_count,
+                    fc.cluster_count
+                );
+            }
+
+            // Step 7: Assert Prefetch family has lead_count > 0
+            let prefetch_family = snapshot
+                .family_coverage
+                .iter()
+                .find(|fc| fc.family.eq_ignore_ascii_case("Prefetch"));
+            assert!(
+                prefetch_family.is_some(),
+                "Correlation snapshot should include Prefetch family coverage"
+            );
+            let pf_fc = prefetch_family.unwrap();
+            assert!(
+                pf_fc.lead_count > 0,
+                "Prefetch family should produce at least one correlation lead after extraction; leads={}",
+                pf_fc.lead_count
+            );
+
+            eprintln!(
+                "Prefetch family: leads={} high_conf={} review={} clusters={}",
+                pf_fc.lead_count,
+                pf_fc.high_confidence_lead_count,
+                pf_fc.review_lead_count,
+                pf_fc.cluster_count
+            );
+
+            let total_elapsed = start.elapsed();
+            eprintln!("=== Prefetch extraction + correlation test complete in {total_elapsed:?} ===");
+
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample"]
+fn liuyang_e01_recycle_bin_extraction() {
+    let fixture_path = sample_path();
+    let start = Instant::now();
+
+    let mut reader = E01Reader::open(&fixture_path).unwrap();
+    let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
+    let ntfs = probe
+        .candidates
+        .iter()
+        .find(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
+        .expect("NTFS candidate required");
+
+    let (mft_cluster, cluster_size, record_size, bytes_per_sector, mft_data_size) =
+        read_mft_parameters(&fixture_path, ntfs.offset).unwrap();
+
+    let tmp = TempDir::new().unwrap();
+    let active = case_service::create_case(
+        &tmp.path().join("cases"),
+        "liuyang-recycle-bin-extraction",
+        Some("tester"),
+    )
+    .unwrap();
+    let case_id = active.meta.id.clone();
+
+    active
+        .with_conn(|conn| {
+            let data_source_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
+            DataSourceRepo::new(conn).insert(
+                &case_id,
+                &domain::DataSource {
+                    id: data_source_id.clone(),
+                    name: "liuyang-recycle-bin-test".into(),
+                    kind: domain::DataSourceKind::E01,
+                    source_path: fixture_path.clone(),
+                    imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
+                },
+            )?;
+
+            // Step 1: Import MFT
+            let stats = file_service::enumerate_filesystem_mft(
+                conn,
+                &data_source_id,
+                &fixture_path,
+                ntfs.offset,
+                mft_cluster,
+                cluster_size,
+                record_size,
+                bytes_per_sector,
+                mft_data_size,
+                Some(&|pct, msg| eprintln!("[MFT {pct}%] {msg}")),
+                None,
+            )?;
+            eprintln!(
+                "[BENCH-OUTPUT] scenario=recycle_bin_mft_import dataset_level=large p95_ms={} file_count={}",
+                start.elapsed().as_millis(),
+                stats.file_count
+            );
+            assert!(stats.file_count > 1000, "Should enumerate many files");
+
+            // Step 2: Scan file entries for Recycle Bin $I files
+            // Paths like "$Recycle.Bin/S-1-5-21-.../$IXXXXXX.xxx" are stored
+            // root-relative in file_entries and resolve via NtfsReader.
+            let repo = FileRepo::new(conn);
+            let all_entries = repo.find_by_data_source(&data_source_id)?;
+
+            let recycle_bin_entries: Vec<_> = all_entries
+                .iter()
+                .filter(|e| {
+                    e.path.contains("$Recycle.Bin")
+                        && e.name.starts_with("$I")
+                })
+                .take(20)
+                .collect();
+
+            eprintln!(
+                "Found {} Recycle Bin $I files out of {} total entries",
+                recycle_bin_entries.len(),
+                all_entries.len()
+            );
+            assert!(
+                !recycle_bin_entries.is_empty(),
+                "Should find at least one Recycle Bin $I file"
+            );
+
+            // Step 3: Open E01 FS reader, read each $I file, run extractors
+            let boxed: Box<dyn EvidenceReader> =
+                Box::new(E01Reader::open(&fixture_path).unwrap());
+            let fs = fs_ntfs::NtfsReader::open(boxed, ntfs.offset).unwrap();
+            let registry = artifact_service::create_registry();
+            let mut sink = artifacts_core::VecSink::new();
+
+            for entry in &recycle_bin_entries {
+                eprintln!("  opening Recycle Bin $I file: {}", entry.path);
+                match fs.open_file(&entry.path) {
+                    Ok(mut file_reader) => {
+                        let mut buf = Vec::new();
+                        if file_reader.read_to_end(&mut buf).is_ok() {
+                            let reader: Box<dyn Read> = Box::new(std::io::Cursor::new(buf));
+                            match artifact_service::run_extractors_on_file(
+                                &registry,
+                                &entry.id,
+                                &entry.path,
+                                reader,
+                                &mut sink,
+                            ) {
+                                Ok(_) => eprintln!("  extracted RecycleBin: {}", entry.path),
+                                Err(e) => eprintln!("  extraction error {}: {e}", entry.path),
+                            }
+                        }
+                    }
+                    Err(e) => eprintln!("  skip RecycleBin {}: {e}", entry.path),
+                }
+            }
+
+            eprintln!(
+                "Extracted {} total artifacts from {} Recycle Bin $I files",
+                sink.artifacts.len(),
+                recycle_bin_entries.len()
+            );
+            assert!(
+                !sink.artifacts.is_empty(),
+                "Should extract at least one RecycleBin artifact from $Recycle.Bin"
+            );
+
+            // Step 4: Store artifacts
+            artifact_service::store_artifacts(
+                conn,
+                &sink.artifacts,
+                &case_id.0,
+                &data_source_id.0,
+            )
+            .unwrap();
+            eprintln!("Stored {} RecycleBin artifacts", sink.artifacts.len());
+
+            // Step 5: Build timeline
+            timeline_service::ensure_macb_timeline_projected(conn).ok();
+
+            // Step 6: Run correlation
+            let corr_start = Instant::now();
+            let snapshot = correlation::get_correlation_snapshot(conn).unwrap();
+            eprintln!(
+                "[BENCH-OUTPUT] scenario=recycle_bin_correlation dataset_level=large p95_ms={}",
+                corr_start.elapsed().as_millis()
+            );
+            eprintln!(
+                "correlation: nodes={} edges={} clusters={} leads={}",
+                snapshot.node_count, snapshot.edge_count,
+                snapshot.cluster_count, snapshot.lead_count
+            );
+
+            for fc in &snapshot.family_coverage {
+                eprintln!(
+                    "  family {}: status={:?} leads={} high_conf={} review={} clusters={}",
+                    fc.family, fc.status, fc.lead_count,
+                    fc.high_confidence_lead_count, fc.review_lead_count,
+                    fc.cluster_count
+                );
+            }
+
+            // Step 7: Assert RecycleBin family has lead_count > 0
+            let recycle_bin_family = snapshot
+                .family_coverage
+                .iter()
+                .find(|fc| fc.family.eq_ignore_ascii_case("RecycleBin"));
+            assert!(
+                recycle_bin_family.is_some(),
+                "Correlation snapshot should include RecycleBin family coverage"
+            );
+            let rb_fc = recycle_bin_family.unwrap();
+            assert!(
+                rb_fc.lead_count > 0,
+                "RecycleBin family should produce at least one correlation lead after extraction; leads={}",
+                rb_fc.lead_count
+            );
+
+            eprintln!(
+                "RecycleBin family: leads={} high_conf={} review={} clusters={}",
+                rb_fc.lead_count,
+                rb_fc.high_confidence_lead_count,
+                rb_fc.review_lead_count,
+                rb_fc.cluster_count
+            );
+
+            let total_elapsed = start.elapsed();
+            eprintln!("=== Recycle Bin extraction + correlation test complete in {total_elapsed:?} ===");
+
+            Ok(())
+        })
+        .unwrap();
+}
+
 fn read_fs_file_optional(fs: &fs_ntfs::NtfsReader, path: &str) -> Result<Vec<u8>, String> {
     let mut reader = fs
         .open_file(path)
@@ -1499,4 +2315,184 @@ fn parse_mft_data_size(record: &[u8]) -> Option<u64> {
         pos += len;
     }
     None
+}
+
+// ── Browser history helpers ────────────────────────────────────────────────
+
+/// Check whether a file-system path (from MFT enumeration) points to a browser
+/// history database file we know how to parse.
+fn is_browser_history_db(path: &str) -> bool {
+    let normalized = path.to_lowercase().replace('\\', "/");
+    // Chrome / Chromium History or Archived History
+    if (normalized.contains("/google/chrome/user data/")
+        || normalized.contains("/microsoft/edge/user data/"))
+        && (normalized.ends_with("/history") || normalized.ends_with("/archived history"))
+    {
+        return true;
+    }
+    // Firefox places.sqlite
+    if normalized.contains("/mozilla/firefox/profiles/") && normalized.ends_with("/places.sqlite") {
+        return true;
+    }
+    false
+}
+
+/// Normalize a path to lower-case with forward-slashes for pattern matching.
+fn normalize_path_for_match(path: &str) -> String {
+    path.to_lowercase().replace('\\', "/")
+}
+
+/// Extract the profile directory name from a Chromium-browser path.
+///
+/// Example: `/google/chrome/user data/default/history` → `"default"`
+///          `/google/chrome/user data/profile 1/history` → `"Profile 1"`
+///          `/microsoft/edge/user data/default/history` → `"default"`
+fn extract_browser_profile(normalized: &str, browser: &str) -> String {
+    let marker = if browser == "Edge" {
+        "/microsoft/edge/user data/"
+    } else {
+        "/google/chrome/user data/"
+    };
+    normalized
+        .split_once(marker)
+        .map(|(_, rest)| rest.split('/').next().unwrap_or("default"))
+        .filter(|value| !value.is_empty())
+        .unwrap_or("default")
+        .to_string()
+}
+
+/// Convert Chrome/Edge `BrowserVisit` results into `domain::Artifact` entries.
+fn chromium_visits_to_artifacts(
+    visits: &[artifacts_windows::BrowserVisit],
+    entry: &domain::FileEntry,
+    data_source_id: &domain::DataSourceId,
+) -> Vec<domain::Artifact> {
+    visits
+        .iter()
+        .filter_map(|visit| {
+            let title = if visit.title.as_ref().map_or(true, |t| t.trim().is_empty()) {
+                visit.url.clone()
+            } else {
+                visit.title.clone().unwrap_or_default()
+            };
+            let mut attrs: std::collections::BTreeMap<String, serde_json::Value> =
+                std::collections::BTreeMap::new();
+            attrs.insert(
+                "dataSourceId".to_string(),
+                serde_json::Value::String(data_source_id.0.clone()),
+            );
+            attrs.insert(
+                "sourcePath".to_string(),
+                serde_json::Value::String(entry.path.clone()),
+            );
+            attrs.insert(
+                "browser".to_string(),
+                serde_json::Value::String(visit.browser.clone()),
+            );
+            if let Some(ref profile) = visit.profile {
+                attrs.insert(
+                    "profile".to_string(),
+                    serde_json::Value::String(profile.clone()),
+                );
+            }
+            attrs.insert(
+                "url".to_string(),
+                serde_json::Value::String(visit.url.clone()),
+            );
+            attrs.insert(
+                "title".to_string(),
+                serde_json::Value::String(visit.title.clone().unwrap_or_default()),
+            );
+            attrs.insert(
+                "visitCount".to_string(),
+                serde_json::Value::Number(
+                    serde_json::Number::from(visit.visit_count.max(0) as u64),
+                ),
+            );
+            if let Some(dt) = visit.visit_time {
+                attrs.insert(
+                    "visitTime".to_string(),
+                    serde_json::Value::String(dt.to_rfc3339()),
+                );
+            }
+            Some(domain::Artifact {
+                id: domain::ArtifactId(uuid::Uuid::new_v4().to_string()),
+                family: "BrowserHistory".to_string(),
+                title: format!("{} visit: {}", visit.browser, title),
+                summary: visit.url.clone(),
+                source_object_id: Some(entry.id.clone()),
+                extractor_id: Some("browser.history".to_string()),
+                extractor_version: Some("1.0.0".to_string()),
+                confidence: Some(0.85),
+                source_attribution: Some(entry.path.clone()),
+                created_at: chrono::Utc::now(),
+                attrs,
+            })
+        })
+        .collect()
+}
+
+/// Convert Firefox `BrowserVisit` results into `domain::Artifact` entries.
+fn firefox_visits_to_artifacts(
+    visits: &[artifacts_windows::BrowserVisit],
+    entry: &domain::FileEntry,
+    data_source_id: &domain::DataSourceId,
+) -> Vec<domain::Artifact> {
+    visits
+        .iter()
+        .filter_map(|visit| {
+            let title = if visit.title.as_ref().map_or(true, |t| t.trim().is_empty()) {
+                visit.url.clone()
+            } else {
+                visit.title.clone().unwrap_or_default()
+            };
+            let mut attrs: std::collections::BTreeMap<String, serde_json::Value> =
+                std::collections::BTreeMap::new();
+            attrs.insert(
+                "dataSourceId".to_string(),
+                serde_json::Value::String(data_source_id.0.clone()),
+            );
+            attrs.insert(
+                "sourcePath".to_string(),
+                serde_json::Value::String(entry.path.clone()),
+            );
+            attrs.insert(
+                "browser".to_string(),
+                serde_json::Value::String(visit.browser.clone()),
+            );
+            attrs.insert(
+                "url".to_string(),
+                serde_json::Value::String(visit.url.clone()),
+            );
+            attrs.insert(
+                "title".to_string(),
+                serde_json::Value::String(visit.title.clone().unwrap_or_default()),
+            );
+            attrs.insert(
+                "visitCount".to_string(),
+                serde_json::Value::Number(
+                    serde_json::Number::from(visit.visit_count.max(0) as u64),
+                ),
+            );
+            if let Some(dt) = visit.visit_time {
+                attrs.insert(
+                    "visitTime".to_string(),
+                    serde_json::Value::String(dt.to_rfc3339()),
+                );
+            }
+            Some(domain::Artifact {
+                id: domain::ArtifactId(uuid::Uuid::new_v4().to_string()),
+                family: "BrowserHistory".to_string(),
+                title: format!("Firefox visit: {}", title),
+                summary: visit.url.clone(),
+                source_object_id: Some(entry.id.clone()),
+                extractor_id: Some("browser.history".to_string()),
+                extractor_version: Some("1.0.0".to_string()),
+                confidence: Some(0.85),
+                source_attribution: Some(entry.path.clone()),
+                created_at: chrono::Utc::now(),
+                attrs,
+            })
+        })
+        .collect()
 }
