@@ -87,10 +87,11 @@ pub struct RecentDoc {
 /// A single UserAssist entry (program execution tracking).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UserAssistEntry {
-    pub executable: String,
+    pub executable_path: String,
     pub run_count: u32,
     pub last_run: Option<String>,
     pub focus_time_ms: u64,
+    pub session_id: u32,
 }
 
 /// A mount-point entry from Explorer MountPoints2.
@@ -106,7 +107,7 @@ pub struct MountPoint {
 pub struct NtuserInfo {
     pub run_keys: Vec<RegistryRunKey>,
     pub recent_docs: Vec<RecentDoc>,
-    pub user_assist: Vec<UserAssistEntry>,
+    pub ua_entries: Vec<UserAssistEntry>,
     pub typed_urls: Vec<String>,
     pub word_wheel_query: Vec<String>,
     pub mount_points: Vec<MountPoint>,
@@ -413,7 +414,7 @@ pub fn extract_ntuser_fields(bytes: &[u8], hive_path: &str) -> Result<NtuserInfo
 
     info.run_keys = extract_run_keys(&hive, hive_path, parser, &mut info.warnings);
     info.recent_docs = extract_recent_docs(&hive, hive_path, parser, &mut info.warnings);
-    info.user_assist = extract_user_assist(&hive, hive_path, parser, &mut info.warnings);
+    info.ua_entries = extract_user_assist(&hive, hive_path, parser, &mut info.warnings);
     info.typed_urls = extract_typed_urls(&hive, hive_path, parser, &mut info.warnings);
     info.word_wheel_query = extract_word_wheel_query(&hive, hive_path, parser, &mut info.warnings);
     info.mount_points = extract_mount_points(&hive, hive_path, parser, &mut info.warnings);
@@ -516,6 +517,33 @@ pub fn extract_ntuser_fields_with_txlog(
         }
     }
 
+    // Apply txlog overrides to UserAssist entries.
+    for ua_entry in &mut info.ua_entries {
+        // ROT13 is its own inverse: the value name stored in the registry is
+        // the ROT13-encoded version of executable_path.
+        let encoded_name = rot13_decode(&ua_entry.executable_path);
+        let best = find_best_txlog_match_user_assist(&txlog.transactions, &encoded_name);
+        if let Some(txn) = best {
+            if let Some(data) = &txn.data_after {
+                if let Some((run_count, session_id, focus_time, filetime)) =
+                    parse_user_assist_binary(data)
+                {
+                    ua_entry.run_count = run_count;
+                    ua_entry.session_id = session_id;
+                    ua_entry.focus_time_ms = focus_time as u64;
+                    ua_entry.last_run = windows_filetime_to_rfc3339(filetime);
+                    ts_infos.push(TxlogTimestampInfo {
+                        field_name: format!("UserAssist[{}]", ua_entry.executable_path),
+                        hive_timestamp: None,
+                        txlog_timestamp: txn.timestamp,
+                        txlog_used: true,
+                    });
+                    txlog_applied = true;
+                }
+            }
+        }
+    }
+
     info.txlog_applied = txlog_applied;
     info.txlog_timestamps = ts_infos;
     Ok(info)
@@ -601,6 +629,43 @@ fn txlog_key_path_matches(txlog_path: &str, hive_key_path: &str) -> bool {
     }
 
     false
+}
+
+/// Search txlog entries for a match on a UserAssist Count subkey.
+///
+/// UserAssist txlog entries have key paths like
+/// `\Registry\User\...\UserAssist\{GUID}\Count` and value names that are the
+/// ROT13-encoded executable path.
+fn find_best_txlog_match_user_assist<'a>(
+    transactions: &'a [RegistryTransaction],
+    encoded_value_name: &str,
+) -> Option<&'a RegistryTransaction> {
+    transactions
+        .iter()
+        .filter(|txn| {
+            txn.operation == RegistryTransactionOperation::SetValue
+                && txn.value_name.as_deref() == Some(encoded_value_name)
+                && txn.key_path.to_lowercase().contains("\\userassist\\")
+                && txn.key_path.to_lowercase().ends_with("\\count")
+        })
+        .max_by_key(|txn| txn.sequence_number)
+}
+
+/// Parse a 72-byte UserAssist binary blob into its constituent fields.
+///
+/// Returns `(run_count, session_id, focus_time_ms, filetime)` on success, or
+/// `None` if the data is too short.
+fn parse_user_assist_binary(data: &[u8]) -> Option<(u32, u32, u32, u64)> {
+    if data.len() < USER_ASSIST_ENTRY_SIZE {
+        return None;
+    }
+    let run_count = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
+    let session_id = u32::from_le_bytes([data[8], data[9], data[10], data[11]]);
+    let focus_time_ms = u32::from_le_bytes([data[12], data[13], data[14], data[15]]);
+    let filetime = u64::from_le_bytes([
+        data[60], data[61], data[62], data[63], data[64], data[65], data[66], data[67],
+    ]);
+    Some((run_count, session_id, focus_time_ms, filetime))
 }
 
 /// Convert raw registry-value bytes (as recorded in the transaction log) to a
@@ -1241,17 +1306,19 @@ fn parse_user_assist_count_key(
                 continue;
             }
             let run_count = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
-            let focus_count = u32::from_le_bytes([data[8], data[9], data[10], data[11]]);
+            let session_id = u32::from_le_bytes([data[8], data[9], data[10], data[11]]);
+            let focus_time = u32::from_le_bytes([data[12], data[13], data[14], data[15]]);
             let filetime = u64::from_le_bytes([
                 data[60], data[61], data[62], data[63], data[64], data[65], data[66], data[67],
             ]);
-            let executable = rot13_decrypt(&name);
+            let executable_path = rot13_decode(&name);
             let last_run = windows_filetime_to_rfc3339(filetime);
             entries.push(UserAssistEntry {
-                executable,
+                executable_path,
                 run_count,
                 last_run,
-                focus_time_ms: focus_count as u64,
+                focus_time_ms: focus_time as u64,
+                session_id,
             });
         }
     }
@@ -1437,9 +1504,10 @@ fn extract_mount_points(
 
 // ── Shared helpers ──────────────────────────────────────────────────────────
 
-/// Apply ROT-13 substitution (UserAssist value-name decryption).
-fn rot13_decrypt(s: &str) -> String {
-    s.chars()
+/// Apply ROT-13 substitution (UserAssist value-name decoding).
+fn rot13_decode(encoded: &str) -> String {
+    encoded
+        .chars()
         .map(|c| match c {
             'a'..='m' | 'A'..='M' => ((c as u8) + 13) as char,
             'n'..='z' | 'N'..='Z' => ((c as u8) - 13) as char,
@@ -2708,10 +2776,16 @@ mod tests {
         result
     }
 
-    fn make_user_assist_binary(run_count: u32, focus_count: u32, filetime: u64) -> Vec<u8> {
+    fn make_user_assist_binary(
+        run_count: u32,
+        session_id: u32,
+        focus_time_ms: u32,
+        filetime: u64,
+    ) -> Vec<u8> {
         let mut data = vec![0u8; USER_ASSIST_ENTRY_SIZE];
         data[4..8].copy_from_slice(&run_count.to_le_bytes());
-        data[8..12].copy_from_slice(&focus_count.to_le_bytes());
+        data[8..12].copy_from_slice(&session_id.to_le_bytes());
+        data[12..16].copy_from_slice(&focus_time_ms.to_le_bytes());
         data[60..68].copy_from_slice(&filetime.to_le_bytes());
         data
     }
@@ -2726,15 +2800,31 @@ mod tests {
     }
 
     #[test]
-    fn rot13_decrypt_basic() {
+    fn test_rot13_decode_basic() {
         assert_eq!(
-            rot13_decrypt("P:\\Jvaqbjf\\Flfgrz32\\abgrcnq.rkr"),
+            rot13_decode("P:\\Jvaqbjf\\Flfgrz32\\abgrcnq.rkr"),
             "C:\\Windows\\System32\\notepad.exe"
         );
-        assert_eq!(rot13_decrypt("Hello"), "Uryyb");
-        assert_eq!(rot13_decrypt("Uryyb"), "Hello");
-        assert_eq!(rot13_decrypt("123"), "123");
-        assert_eq!(rot13_decrypt("!@#"), "!@#");
+        assert_eq!(rot13_decode("Hello"), "Uryyb");
+        assert_eq!(rot13_decode("Uryyb"), "Hello");
+        assert_eq!(rot13_decode("123"), "123");
+        assert_eq!(rot13_decode("!@#"), "!@#");
+    }
+
+    #[test]
+    fn test_rot13_decode_roundtrip() {
+        // ROT13 is its own inverse — decoding twice yields the original.
+        let original = "C:\\Users\\Admin\\Desktop\\calc.exe";
+        let encoded = rot13_decode(original);
+        assert_ne!(original, encoded, "encoded should differ from original");
+        assert_eq!(
+            rot13_decode(&encoded),
+            original,
+            "roundtrip should restore original"
+        );
+
+        let mixed = "Hello123!@#World";
+        assert_eq!(rot13_decode(&rot13_decode(mixed)), mixed);
     }
 
     #[test]
@@ -2753,12 +2843,12 @@ mod tests {
     }
 
     #[test]
-    fn extract_ntuser_empty_hive() {
+    fn test_empty_userassist_key() {
         let data = empty_hive("NTUSER");
         let info = extract_ntuser_fields(&data, "Users/Test/NTUSER.DAT").unwrap();
         assert!(info.run_keys.is_empty());
         assert!(info.recent_docs.is_empty());
-        assert!(info.user_assist.is_empty());
+        assert!(info.ua_entries.is_empty());
         assert!(info.typed_urls.is_empty());
         assert!(info.word_wheel_query.is_empty());
         assert!(info.mount_points.is_empty());
@@ -2887,7 +2977,7 @@ mod tests {
     }
 
     #[test]
-    fn extract_ntuser_user_assist() {
+    fn test_userassist_extraction() {
         let mut data = empty_hive("NTUSER");
         write_nk(&mut data, 0x20, "NTUSER", &[("Software", 0x200)], &[]);
         write_nk(&mut data, 0x200, "Software", &[("Microsoft", 0x300)], &[]);
@@ -2925,31 +3015,35 @@ mod tests {
 
         let encrypted = "P:\\Jvaqbjf\\Flfgrz32\\abgrcnq.rkr";
         let ft: u64 = 133_600_000_000_000_000;
-        let ua1 = make_user_assist_binary(42, 1500, ft);
+        // run_count=42, session_id=1, focus_time_ms=1500
+        let ua1 = make_user_assist_binary(42, 1, 1500, ft);
         write_binary_value(&mut data, 0xa00, encrypted, &ua1, 0x1200);
 
         let encrypted2 = "P:\\Hfref\\Grfg\\Qrfxgbc\\pnyp.rkr";
-        let ua2 = make_user_assist_binary(7, 300, ft + 86_400_000_000_000);
+        // run_count=7, session_id=2, focus_time_ms=300
+        let ua2 = make_user_assist_binary(7, 2, 300, ft + 86_400_000_000_000);
         write_binary_value(&mut data, 0xb00, encrypted2, &ua2, 0x1300);
 
         let info = extract_ntuser_fields(&data, "Users/Test/NTUSER.DAT").unwrap();
-        assert_eq!(info.user_assist.len(), 2);
+        assert_eq!(info.ua_entries.len(), 2);
 
         let notepad = info
-            .user_assist
+            .ua_entries
             .iter()
-            .find(|e| e.executable.contains("notepad"))
+            .find(|e| e.executable_path.contains("notepad"))
             .unwrap();
         assert_eq!(notepad.run_count, 42);
+        assert_eq!(notepad.session_id, 1);
         assert_eq!(notepad.focus_time_ms, 1500);
         assert!(notepad.last_run.is_some());
 
         let calc = info
-            .user_assist
+            .ua_entries
             .iter()
-            .find(|e| e.executable.contains("calc"))
+            .find(|e| e.executable_path.contains("calc"))
             .unwrap();
         assert_eq!(calc.run_count, 7);
+        assert_eq!(calc.session_id, 2);
         assert_eq!(calc.focus_time_ms, 300);
     }
 
@@ -3147,7 +3241,7 @@ mod tests {
         write_nk(&mut data, 0xa00, "UserAssist", &[("{GUID}", 0xe00)], &[]);
         write_nk(&mut data, 0xe00, "{GUID}", &[("Count", 0xf00)], &[]);
         write_nk(&mut data, 0xf00, "Count", &[], &[0xf80]);
-        let ua = make_user_assist_binary(99, 5000, 133_600_000_000_000_000);
+        let ua = make_user_assist_binary(99, 3, 5000, 133_600_000_000_000_000);
         write_binary_value(
             &mut data,
             0xf80,
@@ -3159,11 +3253,11 @@ mod tests {
         let info = extract_ntuser_fields(&data, "Users/Test/NTUSER.DAT").unwrap();
         assert_eq!(info.run_keys.len(), 1);
         assert_eq!(info.recent_docs.len(), 1);
-        assert_eq!(info.user_assist.len(), 1);
+        assert_eq!(info.ua_entries.len(), 1);
         assert_eq!(info.run_keys[0].value_name, "OneDrive");
         assert_eq!(info.recent_docs[0].file_name, "notes.txt");
-        assert!(info.user_assist[0].executable.contains("calc"));
-        assert_eq!(info.user_assist[0].run_count, 99);
+        assert!(info.ua_entries[0].executable_path.contains("calc"));
+        assert_eq!(info.ua_entries[0].run_count, 99);
     }
 
     #[test]
@@ -3239,7 +3333,7 @@ mod tests {
         let info = extract_ntuser_fields(&data, "Users/Test/NTUSER.DAT").unwrap();
         assert!(info.run_keys.is_empty());
         assert!(info.recent_docs.is_empty());
-        assert!(info.user_assist.is_empty());
+        assert!(info.ua_entries.is_empty());
         assert!(info.typed_urls.is_empty());
         assert!(info.word_wheel_query.is_empty());
         assert!(info.mount_points.is_empty());

@@ -32,6 +32,10 @@ pub use registry::lookup::{
     SoftwareHiveInfo, SystemHiveInfo,
 };
 pub use registry::parser::RegistryExtractor;
+pub use registry::recovery::{
+    scan_deleted_registry_cells, scan_free_cells, FreeCell, HiveBin, RecoverResult, RecoveredKey,
+    RecoveredValue,
+};
 pub use registry::txlog::{
     parse_transaction_log, RegistryTransaction, RegistryTransactionOperation, TxLogParseResult,
 };
