@@ -9,6 +9,7 @@ import {
   useEvidenceClassificationSummary,
   useGenerateAnalysisSummary,
   useRegistryExtractionSummary,
+  useRegistryStructuredSummary,
   useRunAnalysisExtraction,
   useRunEvidenceClassification,
 } from '@/features/analysis/hooks';
@@ -101,6 +102,7 @@ export function DataAnalysis() {
   const evidenceScan = useRunEvidenceClassification();
   const extractionRun = useRunAnalysisExtraction();
   const registrySummary = useRegistryExtractionSummary({ limit: 200 });
+  const registryStructured = useRegistryStructuredSummary();
   const browserSummary = useBrowserHistorySummary({ limit: 200 });
   const emailSummary = useEmailExtractionSummary({ limit: 200 });
   const classifications = useAnalysisClassifications(1000);
@@ -292,6 +294,7 @@ export function DataAnalysis() {
                   ) : (
                     <RegistryExtractionPanel
                       summary={registrySummary.data}
+                      structured={registryStructured.data}
                       progress={extractionProgress.Registry}
                     />
                   )}

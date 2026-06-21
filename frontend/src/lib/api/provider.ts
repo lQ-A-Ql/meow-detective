@@ -32,6 +32,7 @@ import {
   ReportHistoryItem,
   ReportTemplate,
   RegistryExtractionSummary,
+  RegistryStructuredSummary,
   RulePackSummary,
   RulePackValidationResult,
   SearchResultPage,
@@ -67,6 +68,7 @@ import {
   reportHistory,
   reportTemplates,
   registryExtractionSummary,
+  registryStructuredSummary,
   searchHits,
   timelineEvents,
   traces,
@@ -132,6 +134,7 @@ export interface ApiProvider {
   runEvidenceClassification(categories?: string[]): Promise<EvidenceClassificationSummary>;
   runAnalysisExtraction(request: AnalysisExtractionRequest): Promise<AnalysisExtractionRun>;
   getRegistryExtractionSummary(request?: AnalysisExtractionPageRequest): Promise<RegistryExtractionSummary>;
+  getRegistryStructuredSummary(): Promise<RegistryStructuredSummary>;
   getBrowserHistorySummary(request?: AnalysisExtractionPageRequest): Promise<BrowserHistorySummary>;
   getEmailExtractionSummary(request?: AnalysisExtractionPageRequest): Promise<EmailExtractionSummary>;
   getV2GovernanceSnapshot(): Promise<V2GovernanceSnapshot>;
@@ -373,6 +376,9 @@ export const mockProvider: ApiProvider = {
       ...registryExtractionSummary,
       values: registryExtractionSummary.values.slice(offset, offset + limit),
     };
+  },
+  async getRegistryStructuredSummary() {
+    return registryStructuredSummary;
   },
   async getBrowserHistorySummary(request?: AnalysisExtractionPageRequest) {
     const offset = request?.offset ?? 0;

@@ -258,6 +258,93 @@ export interface RegistryValue {
   createdAt: string;
 }
 
+// SAM User Account (structured view)
+export interface SamUserAccount {
+  username: string;
+  rid: number;
+  ridHex: string;
+  groups: string[];
+  loginCount: number;
+  lastLogin?: string;
+  accountCreated?: string;
+  accountStatus: 'enabled' | 'disabled' | 'locked';
+  profilePath?: string;
+  passwordHash?: string;
+  passwordHashType?: string; // 'NTLM' | 'LM' | 'Both'
+  passwordHint?: string;
+  dataSourceId: string;
+  hivePath: string;
+  keyPath: string;
+  parser: string;
+}
+
+// Registry Hive Overview
+export interface RegistryHiveOverview {
+  hiveName: string;
+  status: AnalysisParseStatus;
+  keyValueCount: number;
+  extractedAt: string;
+  dataSourceId: string;
+  sourcePath: string;
+  txlogMerged: boolean;
+  deletedKeysFound: number;
+}
+
+// UserAssist Entry (structured view)
+export interface UserAssistEntry {
+  programPath: string;
+  execCount: number;
+  lastExecTime?: string;
+  isSuspicious?: boolean;
+  suspiciousReason?: string;
+}
+
+// Network Profile (structured view)
+export interface NetworkProfile {
+  ssid: string;
+  firstConnect?: string;
+  lastConnect?: string;
+  connectCount: number;
+  description?: string;
+}
+
+// Installed Software (structured view)
+export interface InstalledSoftware {
+  displayName: string;
+  version: string;
+  publisher?: string;
+  installDate?: string;
+  estimatedSize?: string;
+  isSuspicious?: boolean;
+}
+
+// USB Device History (structured view)
+export interface UsbDeviceHistory {
+  deviceName: string;
+  serialNumber: string;
+  firstConnect?: string;
+  lastConnect?: string;
+  volumeLabel?: string;
+  driveLetter?: string;
+  fileSystem?: string;
+  capacity?: string;
+  isSuspicious?: boolean;
+  suspiciousReason?: string;
+}
+
+// Registry Structured Summary (aggregates all structured views)
+export interface RegistryStructuredSummary {
+  hiveOverviews: RegistryHiveOverview[];
+  samUsers: SamUserAccount[];
+  userAssistEntries: UserAssistEntry[];
+  networkProfiles: NetworkProfile[];
+  installedSoftware: InstalledSoftware[];
+  usbDevices: UsbDeviceHistory[];
+  status: AnalysisParseStatus;
+  generatedAt: string;
+  warnings: string[];
+}
+
 export interface RegistryRunKey {
   keyPath: string;
   valueName: string;
@@ -270,13 +357,6 @@ export interface RecentDoc {
   extension: string;
   lastAccessed?: string;
   lnkTarget?: string;
-}
-
-export interface UserAssistEntry {
-  executable: string;
-  runCount: number;
-  lastRun?: string;
-  focusTimeMs: number;
 }
 
 export interface MountPoint {

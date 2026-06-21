@@ -197,6 +197,131 @@ pub struct RegistryValueDto {
     pub created_at: String,
 }
 
+// SAM User Account (structured view)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SamUserAccountDto {
+    pub username: String,
+    pub rid: u32,
+    pub rid_hex: String,
+    pub groups: Vec<String>,
+    pub login_count: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_login: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_created: Option<String>,
+    pub account_status: String, // "enabled" | "disabled" | "locked"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password_hash_type: Option<String>, // "NTLM" | "LM" | "Both"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password_hint: Option<String>,
+    pub data_source_id: String,
+    pub hive_path: String,
+    pub key_path: String,
+    pub parser: String,
+}
+
+// Registry Hive Overview
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryHiveOverviewDto {
+    pub hive_name: String,
+    pub status: AnalysisParseStatusDto,
+    pub key_value_count: u64,
+    pub extracted_at: String,
+    pub data_source_id: String,
+    pub source_path: String,
+    pub txlog_merged: bool,
+    pub deleted_keys_found: u32,
+}
+
+// UserAssist Entry (structured view)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserAssistEntryDto {
+    pub program_path: String,
+    pub exec_count: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_exec_time: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_suspicious: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suspicious_reason: Option<String>,
+}
+
+// Network Profile (structured view)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkProfileDto {
+    pub ssid: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_connect: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_connect: Option<String>,
+    pub connect_count: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+// Installed Software (structured view)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstalledSoftwareDto {
+    pub display_name: String,
+    pub version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub publisher: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub install_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_size: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_suspicious: Option<bool>,
+}
+
+// USB Device History (structured view)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsbDeviceHistoryDto {
+    pub device_name: String,
+    pub serial_number: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_connect: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_connect: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub volume_label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub drive_letter: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_system: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub capacity: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_suspicious: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suspicious_reason: Option<String>,
+}
+
+// Registry Structured Summary (aggregates all structured views)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryStructuredSummaryDto {
+    pub hive_overviews: Vec<RegistryHiveOverviewDto>,
+    pub sam_users: Vec<SamUserAccountDto>,
+    pub user_assist_entries: Vec<UserAssistEntryDto>,
+    pub network_profiles: Vec<NetworkProfileDto>,
+    pub installed_software: Vec<InstalledSoftwareDto>,
+    pub usb_devices: Vec<UsbDeviceHistoryDto>,
+    pub status: AnalysisParseStatusDto,
+    pub generated_at: String,
+    pub warnings: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BrowserHistorySummaryDto {

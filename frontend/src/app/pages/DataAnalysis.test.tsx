@@ -29,6 +29,7 @@ vi.mock('@/features/analysis/hooks', () => ({
   useRunEvidenceClassification: mocks.evidenceScan,
   useRunAnalysisExtraction: mocks.extractionRun,
   useRegistryExtractionSummary: mocks.registrySummary,
+  useRegistryStructuredSummary: () => ({ data: undefined, error: null, isLoading: false }),
   useBrowserHistorySummary: mocks.browserSummary,
   useEmailExtractionSummary: mocks.emailSummary,
   useAnalysisClassifications: mocks.classifications,
@@ -525,8 +526,9 @@ describe('DataAnalysis page', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /注册表/ }));
     expect(screen.getAllByText('注册表提取').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('ComputerName').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('registry.key_values').length).toBeGreaterThan(0);
+    // registry panel renders sub-tabs for structured views
+    expect(screen.getByText('用户账户')).toBeDefined();
+    expect(screen.getByText('原始键值')).toBeDefined();
 
     fireEvent.click(screen.getByRole('tab', { name: /浏览器记录/ }));
     expect(screen.getAllByText('浏览器记录').length).toBeGreaterThan(0);

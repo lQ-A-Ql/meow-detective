@@ -19,6 +19,7 @@ import {
   JobSnapshot,
   RecentCase,
   RecentObject,
+  RegistryStructuredSummary,
   ReportHistoryItem,
   ReportTemplate,
   RegistryExtractionSummary,
@@ -618,6 +619,54 @@ export const analysisExtractionRun: AnalysisExtractionRun = {
   timelineEventCount: 5,
   generatedAt: '2026-06-01T10:15:00Z',
   warnings: ['MOCK DATA: 缁撴瀯鍖栨彁鍙栫粨鏋滅敤浜庡墠绔泦鎴愰瑙堛€?'],
+};
+
+export const registryStructuredSummary: RegistryStructuredSummary = {
+  status: 'parsed',
+  generatedAt: '2026-06-01T10:10:00Z',
+  warnings: [],
+  hiveOverviews: [
+    { hiveName: 'SYSTEM', status: 'parsed', keyValueCount: 42, extractedAt: '2026-06-01T10:08:00Z', dataSourceId: 'ds-001', sourcePath: 'Windows/System32/config/SYSTEM', txlogMerged: true, deletedKeysFound: 2 },
+    { hiveName: 'SOFTWARE', status: 'parsed', keyValueCount: 89, extractedAt: '2026-06-01T10:09:00Z', dataSourceId: 'ds-001', sourcePath: 'Windows/System32/config/SOFTWARE', txlogMerged: true, deletedKeysFound: 1 },
+    { hiveName: 'SAM', status: 'parsed', keyValueCount: 5, extractedAt: '2026-06-01T10:09:30Z', dataSourceId: 'ds-001', sourcePath: 'Windows/System32/config/SAM', txlogMerged: true, deletedKeysFound: 0 },
+    { hiveName: 'NTUSER.DAT', status: 'parsed', keyValueCount: 27, extractedAt: '2026-06-01T10:10:00Z', dataSourceId: 'ds-001', sourcePath: 'Users/刘洋/NTUSER.DAT', txlogMerged: false, deletedKeysFound: 0 },
+  ],
+  samUsers: [
+    { username: 'Administrator', rid: 500, ridHex: '0x1F4', groups: ['Administrators'], loginCount: 142, lastLogin: '2025-03-15T09:12:18Z', accountCreated: '2024-08-10T15:30:00Z', accountStatus: 'enabled', profilePath: 'C:\\Users\\Administrator', passwordHash: 'aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0', passwordHashType: 'NTLM', dataSourceId: 'ds-001', hivePath: 'SAM', keyPath: 'SAM\\Domains\\Account\\Users\\000001F4', parser: 'registry.sam' },
+    { username: '刘洋', rid: 1001, ridHex: '0x3E9', groups: ['Administrators', 'Users'], loginCount: 2456, lastLogin: '2025-03-16T18:45:32Z', accountCreated: '2024-08-12T10:23:11Z', accountStatus: 'enabled', profilePath: 'C:\\Users\\刘洋', passwordHash: 'aad3b435b51404eeaad3b435b51404ee:8846f7eaee8fb117ad06bdd830b7586c', passwordHashType: 'NTLM', passwordHint: '生日+名字', dataSourceId: 'ds-001', hivePath: 'SAM', keyPath: 'SAM\\Domains\\Account\\Users\\000003E9', parser: 'registry.sam' },
+    { username: 'Guest', rid: 501, ridHex: '0x1F5', groups: ['Guests'], loginCount: 0, accountStatus: 'disabled', dataSourceId: 'ds-001', hivePath: 'SAM', keyPath: 'SAM\\Domains\\Account\\Users\\000001F5', parser: 'registry.sam' },
+    { username: 'DefaultAccount', rid: 503, ridHex: '0x1F7', groups: ['System Reserved'], loginCount: 0, accountStatus: 'disabled', dataSourceId: 'ds-001', hivePath: 'SAM', keyPath: 'SAM\\Domains\\Account\\Users\\000001F7', parser: 'registry.sam' },
+    { username: 'WDAGUtilityAccount', rid: 504, ridHex: '0x1F8', groups: ['System Reserved'], loginCount: 0, accountStatus: 'disabled', dataSourceId: 'ds-001', hivePath: 'SAM', keyPath: 'SAM\\Domains\\Account\\Users\\000001F8', parser: 'registry.sam' },
+  ],
+  userAssistEntries: [
+    { programPath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', execCount: 342, lastExecTime: '2025-03-16T18:42:15Z' },
+    { programPath: 'C:\\Windows\\explorer.exe', execCount: 156, lastExecTime: '2025-03-16T18:40:22Z' },
+    { programPath: 'D:\\Tools\\WinRAR\\WinRAR.exe', execCount: 89, lastExecTime: '2025-03-15T14:23:45Z' },
+    { programPath: 'C:\\Program Files\\WeChat\\WeChat.exe', execCount: 67, lastExecTime: '2025-03-16T17:30:12Z' },
+    { programPath: 'D:\\工作文件\\财务软件.exe', execCount: 23, lastExecTime: '2025-03-14T10:15:33Z' },
+    { programPath: 'C:\\Windows\\System32\\cmd.exe', execCount: 12, lastExecTime: '2025-03-13T22:45:18Z' },
+    { programPath: 'D:\\下载\\suspicious_file.exe', execCount: 1, lastExecTime: '2025-03-12T03:18:42Z', isSuspicious: true, suspiciousReason: '凌晨3点执行下载目录中的可疑文件' },
+  ],
+  networkProfiles: [
+    { ssid: 'Home-WiFi-5G', firstConnect: '2024-08-12T08:00:00Z', lastConnect: '2025-03-16T18:30:00Z', connectCount: 456, description: '家庭' },
+    { ssid: 'Office-Corp', firstConnect: '2024-08-15T09:00:00Z', lastConnect: '2025-03-15T17:00:00Z', connectCount: 234, description: '办公室' },
+    { ssid: 'Starbucks-Guest', firstConnect: '2025-01-20T14:30:00Z', lastConnect: '2025-03-10T15:45:00Z', connectCount: 12, description: '咖啡厅' },
+    { ssid: 'Hotel-Beijing', firstConnect: '2025-02-05T20:00:00Z', lastConnect: '2025-02-08T10:00:00Z', connectCount: 5, description: '酒店' },
+  ],
+  installedSoftware: [
+    { displayName: 'Google Chrome', version: '122.0.6261.112', publisher: 'Google LLC', installDate: '2024-08-12', estimatedSize: '342 MB' },
+    { displayName: 'WeChat', version: '3.9.2.23', publisher: 'Tencent', installDate: '2024-08-15', estimatedSize: '256 MB' },
+    { displayName: 'WinRAR', version: '6.24', publisher: 'RARLAB', installDate: '2024-09-01', estimatedSize: '12 MB' },
+    { displayName: 'Python 3.11', version: '3.11.8', publisher: 'Python Software Foundation', installDate: '2024-10-15', estimatedSize: '89 MB' },
+    { displayName: 'Visual Studio Code', version: '1.87.2', publisher: 'Microsoft Corporation', installDate: '2024-11-20', estimatedSize: '432 MB' },
+    { displayName: 'Unknown Tool', version: '1.0.0', installDate: '2025-03-12', estimatedSize: '2 MB', isSuspicious: true },
+  ],
+  usbDevices: [
+    { deviceName: 'Kingston DT101 G2', serialNumber: '0019E06B9C9BF971', firstConnect: '2024-09-12T14:30:00Z', lastConnect: '2025-03-10T16:45:00Z', volumeLabel: 'KINGSTON', driveLetter: 'E:', fileSystem: 'FAT32', capacity: '16 GB' },
+    { deviceName: 'SanDisk Ultra', serialNumber: '4C530001190212', firstConnect: '2024-11-05T10:20:00Z', lastConnect: '2025-02-28T15:30:00Z', volumeLabel: 'SANDISK', driveLetter: 'F:', fileSystem: 'exFAT', capacity: '64 GB' },
+    { deviceName: 'WD My Passport', serialNumber: '575831314138305A', firstConnect: '2024-08-20T09:00:00Z', lastConnect: '2025-01-15T14:22:00Z', volumeLabel: 'WD Backup', driveLetter: 'G:', fileSystem: 'NTFS', capacity: '1 TB' },
+    { deviceName: 'Generic Flash Disk', serialNumber: '07BC12EF00000001', firstConnect: '2025-03-12T03:15:22Z', lastConnect: '2025-03-12T03:28:45Z', driveLetter: 'H:', fileSystem: 'NTFS', capacity: '8 GB', isSuspicious: true, suspiciousReason: '凌晨时段连接 + 通用序列号 + 仅13分钟后移除' },
+  ],
 };
 
 export const registryExtractionSummary: RegistryExtractionSummary = {

@@ -7,6 +7,7 @@ import {
   getEmailExtractionSummary,
   getEvidenceClassificationSummary,
   getRegistryExtractionSummary,
+  getRegistryStructuredSummary,
   getSystemInfo,
   getV2GovernanceSnapshot,
   getV3GovernanceSnapshot,
@@ -54,6 +55,16 @@ export function useRegistryExtractionSummary(request: AnalysisExtractionPageRequ
   return useQuery({
     queryKey: ['analysis', 'registry-extraction', currentCase.data?.id ?? null, offset, limit],
     queryFn: () => getRegistryExtractionSummary({ offset, limit }),
+    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+    retry: false,
+  });
+}
+
+export function useRegistryStructuredSummary() {
+  const currentCase = useCurrentCase();
+  return useQuery({
+    queryKey: ['analysis', 'registry-structured', currentCase.data?.id ?? null],
+    queryFn: getRegistryStructuredSummary,
     enabled: currentCase.isSuccess && Boolean(currentCase.data),
     retry: false,
   });

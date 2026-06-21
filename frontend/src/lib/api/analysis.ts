@@ -9,6 +9,7 @@ import {
   EmailExtractionSummary,
   EvidenceClassificationSummary,
   RegistryExtractionSummary,
+  RegistryStructuredSummary,
   V2GovernanceSnapshot,
   V3GovernanceSnapshot,
 } from '@/types/models';
@@ -61,6 +62,13 @@ export async function getRegistryExtractionSummary(
     'get_registry_extraction_summary',
     () => apiClient.getMockProvider().getRegistryExtractionSummary(request),
     { request },
+  );
+}
+
+export async function getRegistryStructuredSummary(): Promise<RegistryStructuredSummary> {
+  return apiClient.request(
+    'get_registry_structured_summary',
+    () => apiClient.getMockProvider().getRegistryStructuredSummary(),
   );
 }
 

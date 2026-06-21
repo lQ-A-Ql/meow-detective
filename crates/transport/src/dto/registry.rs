@@ -118,6 +118,12 @@ pub struct SamUserDto {
     pub account_locked: bool,
     pub admin_count: u32,
     pub group_memberships: Vec<String>,
+    /// NTLM hash in "lm_hash:nt_hash" format; only present when extracted from SAM+SYSTEM BootKey.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password_hash: Option<String>,
+    /// Hash type present: "NTLM", "LM", "Both", or absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password_hash_type: Option<String>,
 }
 
 /// A local group extracted from a SAM registry hive.
