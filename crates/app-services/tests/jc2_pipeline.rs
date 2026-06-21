@@ -4,7 +4,7 @@ use app_services::{
 };
 use evidence_core::FileSystemReader;
 use image_e01::E01Reader;
-use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 /// Full V2/V3 pipeline for 检材2.E01 (MBR, 3 NTFS partitions)
 /// Run: cargo test -p app-services --test jc2_pipeline -- --nocapture
 use std::collections::BTreeMap;

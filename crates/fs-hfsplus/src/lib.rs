@@ -687,10 +687,7 @@ impl HfsPlusReader {
                     }
                     if parent_cnid == key_parent {
                         // Exact match on parentCNID 鈥?descend into this child.
-                        match self.find_records_for_parent(child_node, parent_cnid) {
-                            Ok(recs) => results.extend(recs),
-                            Err(_) => {}
-                        }
+                        if let Ok(recs) = self.find_records_for_parent(child_node, parent_cnid) { results.extend(recs) }
                     } else {
                         // parent_cnid > key_parent: this child might still contain
                         // records for our parent_cnid if this is the last entry.
@@ -1180,6 +1177,7 @@ mod tests {
             cursor + FOLDER_RECORD_SIZE
         }
 
+        #[allow(clippy::too_many_arguments)]
         fn write_file_body(
             buf: &mut [u8],
             cursor: usize,

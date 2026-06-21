@@ -436,7 +436,7 @@ mod tests {
 
         let changes = build_file_change_history(&log_data);
         assert!(
-            changes.len() >= 1,
+            !changes.is_empty(),
             "expected at least 1 change, got {}",
             changes.len()
         );

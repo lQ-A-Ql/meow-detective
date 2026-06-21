@@ -2399,8 +2399,8 @@ fn chromium_visits_to_artifacts(
 ) -> Vec<domain::Artifact> {
     visits
         .iter()
-        .filter_map(|visit| {
-            let title = if visit.title.as_ref().map_or(true, |t| t.trim().is_empty()) {
+        .map(|visit| {
+            let title = if visit.title.as_ref().is_none_or(|t| t.trim().is_empty()) {
                 visit.url.clone()
             } else {
                 visit.title.clone().unwrap_or_default()
@@ -2445,7 +2445,7 @@ fn chromium_visits_to_artifacts(
                     serde_json::Value::String(dt.to_rfc3339()),
                 );
             }
-            Some(domain::Artifact {
+            domain::Artifact {
                 id: domain::ArtifactId(uuid::Uuid::new_v4().to_string()),
                 family: "BrowserHistory".to_string(),
                 title: format!("{} visit: {}", visit.browser, title),
@@ -2457,7 +2457,7 @@ fn chromium_visits_to_artifacts(
                 source_attribution: Some(entry.path.clone()),
                 created_at: chrono::Utc::now(),
                 attrs,
-            })
+            }
         })
         .collect()
 }
@@ -2470,8 +2470,8 @@ fn firefox_visits_to_artifacts(
 ) -> Vec<domain::Artifact> {
     visits
         .iter()
-        .filter_map(|visit| {
-            let title = if visit.title.as_ref().map_or(true, |t| t.trim().is_empty()) {
+        .map(|visit| {
+            let title = if visit.title.as_ref().is_none_or(|t| t.trim().is_empty()) {
                 visit.url.clone()
             } else {
                 visit.title.clone().unwrap_or_default()
@@ -2510,7 +2510,7 @@ fn firefox_visits_to_artifacts(
                     serde_json::Value::String(dt.to_rfc3339()),
                 );
             }
-            Some(domain::Artifact {
+            domain::Artifact {
                 id: domain::ArtifactId(uuid::Uuid::new_v4().to_string()),
                 family: "BrowserHistory".to_string(),
                 title: format!("Firefox visit: {}", title),
@@ -2522,7 +2522,7 @@ fn firefox_visits_to_artifacts(
                 source_attribution: Some(entry.path.clone()),
                 created_at: chrono::Utc::now(),
                 attrs,
-            })
+            }
         })
         .collect()
 }

@@ -193,7 +193,7 @@ fn capture_sanitized_backtrace() -> Vec<String> {
                 // application code (not std / third-party crates).
                 line.contains("forensic") || line.contains("evidence")
             })
-            .map(|line| sanitize_path(line))
+            .map(sanitize_path)
             .collect();
     }
 
@@ -222,7 +222,7 @@ fn sanitize_path(raw: &str) -> String {
     // Further shorten long absolute paths: keep only the last two components
     // after the drive letter or root.
     if sanitized.starts_with("\\\\?\\") {
-        return format!("<long-path>");
+        return "<long-path>".to_string();
     }
 
     sanitized

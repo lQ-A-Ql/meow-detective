@@ -57,10 +57,7 @@ fn fat_exfat_candidates_are_probed_and_openable() {
                 .filter(|c| matches!(c.kind, ImageFilesystemKind::Ntfs))
                 .count()
         );
-        assert!(
-            true,
-            "no FAT found is acceptable — most E01 samples are NTFS-only"
-        );
+        // no FAT found is acceptable — most E01 samples are NTFS-only
         return;
     }
 

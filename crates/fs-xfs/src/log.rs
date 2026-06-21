@@ -499,7 +499,7 @@ fn compute_log_confidence(ic: &LoggedInodeCore, num_buf_blocks: u64) -> f64 {
     }
     if num_buf_blocks > 0 {
         c += 0.25;
-        let expected = (ic.size + 4095) / 4096;
+        let expected = ic.size.div_ceil(4096);
         if expected > 0 && num_buf_blocks >= expected {
             c += 0.25;
         }

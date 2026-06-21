@@ -471,10 +471,9 @@ fn spotlight_handles_empty_database() {
     // Should not panic; should handle gracefully
     let result = artifacts_macos::parse_spotlight_store(&data);
     // Either returns Ok with empty vec, or Err — both are graceful
-    match result {
-        Ok(entries) => assert!(entries.is_empty(), "empty DB should yield empty entries"),
-        Err(_) => {} // Error is also graceful
-    }
+    if let Ok(entries) = result {
+        assert!(entries.is_empty(), "empty DB should yield empty entries");
+    } // Err is also graceful
 }
 
 #[test]

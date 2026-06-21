@@ -115,7 +115,7 @@ mod tests {
         assert!(!sm
             .tier_results
             .get(&Tier::Catalog)
-            .map_or(false, |r| r.completed));
+            .is_some_and(|r| r.completed));
 
         // After MFT enumeration, advance again.
         let tier = advance_tier(&mut sm);
@@ -146,7 +146,7 @@ mod tests {
         assert!(!sm
             .tier_results
             .get(&Tier::ExtractArtifacts)
-            .map_or(false, |r| r.completed));
+            .is_some_and(|r| r.completed));
     }
 
     #[test]

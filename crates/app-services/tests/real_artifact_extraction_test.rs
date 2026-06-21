@@ -106,7 +106,7 @@ fn real_e01_lnk_browser_prefetch_artifact_extraction() {
 
             let lnk: Vec<_> = all_entries
                 .iter()
-                .filter(|e| e.extension().map_or(false, |ext| ext.eq_ignore_ascii_case("lnk")))
+                .filter(|e| e.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("lnk")))
                 .take(10)
                 .cloned()
                 .collect();
@@ -123,7 +123,7 @@ fn real_e01_lnk_browser_prefetch_artifact_extraction() {
 
             let prefetch: Vec<_> = all_entries
                 .iter()
-                .filter(|e| e.extension().map_or(false, |ext| ext.eq_ignore_ascii_case("pf")))
+                .filter(|e| e.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("pf")))
                 .take(10)
                 .cloned()
                 .collect();

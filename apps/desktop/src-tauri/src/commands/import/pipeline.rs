@@ -308,11 +308,11 @@ fn execute_import_job_with_counts(
                     .candidates
                     .iter()
                     .enumerate()
-                    .filter_map(|(i, candidate)| {
+                    .map(|(i, candidate)| {
                         let index = candidate
                             .partition_index
                             .unwrap_or_else(|| *candidate_index_map.get(&i).unwrap_or(&0));
-                        Some((index, format_partition_root_name(candidate)))
+                        (index, format_partition_root_name(candidate))
                     })
                     .collect::<std::collections::HashMap<usize, String>>();
 
@@ -1263,7 +1263,7 @@ fn build_partition_work(
         .iter()
         .enumerate()
         .find(|(i, c)| {
-            let idx = c.partition_index.unwrap_or_else(|| {
+            let idx = c.partition_index.unwrap_or({
                 // MBR fallback: assign unique index by candidate offset order.
                 // This mirrors the index assignment in the probe/import flow above.
                 *i

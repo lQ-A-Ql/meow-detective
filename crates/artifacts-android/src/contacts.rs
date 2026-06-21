@@ -14,6 +14,11 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+/// Row from the contacts data table: (mimetype, data1, data2, data3, data4)
+type ContactDataRow = (String, Option<String>, Option<String>, Option<String>, Option<String>);
+/// Contact data grouped by raw_contact_id
+type ContactDataGroups = HashMap<i64, Vec<ContactDataRow>>;
 use std::io::Write;
 
 /// A parsed Android contact entry.
@@ -95,16 +100,7 @@ fn query_contacts(conn: &rusqlite::Connection) -> Result<Vec<AndroidContact>, St
         .map_err(|e| format!("Failed to query contacts data: {}", e))?;
 
     // Group by raw_contact_id
-    let mut groups: HashMap<
-        i64,
-        Vec<(
-            String,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-        )>,
-    > = HashMap::new();
+    let mut groups: ContactDataGroups = HashMap::new();
     for row in rows {
         let (raw_id, mimetype, d1, d2, d3, d4) =
             row.map_err(|e| format!("Failed to read contact row: {}", e))?;

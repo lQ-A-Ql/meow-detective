@@ -1,5 +1,5 @@
-use artifacts_windows;
 use evidence_core::EvidenceReader;
+use evidence_core::FileSystemReader;
 use fs_ntfs::NtfsReader;
 use image_e01::E01Reader;
 use std::io::Read;
@@ -17,6 +17,7 @@ fn sample_path() -> std::path::PathBuf {
 //   $env:FORENSICS_LIUYANG_E01_FIXTURE='<path-to-liuyang-sample.E01>'
 //   cargo test -p app-services --test sam_check2 -- --nocapture
 #[test]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample"]
 fn sam_extraction_from_liuyang_e01() {
     let fixture_path = sample_path();
     eprintln!("Opening E01: {}", fixture_path.display());

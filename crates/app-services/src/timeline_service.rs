@@ -904,7 +904,7 @@ mod tests {
             let et = event_types[(i as usize) % event_types.len()];
             let desc_idx = i % 100;
             let desc = format!("Test: /path/{desc_idx}.txt");
-            let hour = (i % 24) as u32;
+            let hour = i % 24;
             let ts = format!("2025-06-01T{hour:02}:00:00Z");
             events.push(domain::TimelineEvent {
                 id: domain::TimelineEventId(format!("e{i:05}")),

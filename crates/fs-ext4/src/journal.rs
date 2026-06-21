@@ -311,9 +311,7 @@ pub fn collect_descriptor_blocks(
             let descriptor = parse_descriptor_block(&journal_data[offset..end], block_size)?;
             blocks.push(descriptor);
             offset += block_size;
-        } else if header.is_commit() {
-            offset += block_size;
-        } else if header.is_revoke() {
+        } else if header.is_commit() || header.is_revoke() {
             offset += block_size;
         } else if header.magic == JBD2_MAGIC {
             // Journal superblock — skip.
@@ -449,7 +447,7 @@ pub fn recover_deleted_inodes(
 
 /// Align a value up to the given boundary.
 fn align_up(val: u64, align: u64) -> u64 {
-    (val + align - 1) / align * align
+    val.div_ceil(align) * align
 }
 
 /// Heuristic: does the block number suggest an inode table block?
@@ -510,7 +508,7 @@ fn compute_confidence(inode: &[u8], num_data_blocks_found: u64) -> f64 {
     if num_data_blocks_found > 0 {
         confidence += 0.2;
         // Cap at fraction of expected blocks.
-        let expected_blocks = (size_lo + 4095) / 4096;
+        let expected_blocks = size_lo.div_ceil(4096);
         if expected_blocks > 0 && num_data_blocks_found >= expected_blocks {
             confidence += 0.2;
         }

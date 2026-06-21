@@ -135,7 +135,7 @@ impl CrossCaseEntityMatcher {
                 .collect();
 
             let id =
-                Self::cross_case_match_id(&entity_type, &canonical_value, &MatchStrategy::Exact);
+                Self::cross_case_match_id(entity_type, canonical_value, &MatchStrategy::Exact);
 
             // Mark all these entities as claimed
             for &i in indices {
@@ -190,7 +190,7 @@ impl CrossCaseEntityMatcher {
                     .collect();
 
                 let id = Self::cross_case_match_id(
-                    &entity_type,
+                    entity_type,
                     &entities[0].2,
                     &MatchStrategy::Normalized,
                 );
@@ -243,7 +243,7 @@ impl CrossCaseEntityMatcher {
                     })
                     .collect();
 
-                let id = Self::cross_case_match_id(&entity_type, "fuzzy", &MatchStrategy::Fuzzy);
+                let id = Self::cross_case_match_id(entity_type, "fuzzy", &MatchStrategy::Fuzzy);
 
                 fuzzy_matches.push(CrossCaseMatch {
                     id,

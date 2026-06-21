@@ -236,11 +236,11 @@ pub fn relationship(
 /// Takes a case identifier and four lists of case data:
 /// - `leads`          — correlation leads (become STIX indicators)
 /// - `artifacts`      — artifact rows (become STIX observed-data for LNK /
-///                       BrowserDownload)
+///   BrowserDownload)
 /// - `registry_values`— registry values (become STIX observed-data for
-///                       windows-registry-key)
+///   windows-registry-key)
 /// - `emails`         — email messages (become STIX observed-data for
-///                       email-message)
+///   email-message)
 ///
 /// Relationships are automatically created between indicators (from leads)
 /// and the observed-data objects they reference via `supporting_node_ids`.
