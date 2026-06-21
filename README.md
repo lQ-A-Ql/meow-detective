@@ -71,7 +71,7 @@ cd frontend && pnpm test
 | `crates/exchange/` | Entity resolution and cross-case entity matching |
 | `crates/ingest/` | Ingestion pipeline orchestration |
 | `crates/catalog/` | Catalog management and projections |
-| `crates/artifacts-windows/` | Windows artifact parsers (Browser/EVTX/Prefetch/LNK/Registry/SRU/Thumbcache/JumpList) |
+| `crates/artifacts-windows/` | Windows artifact parsers (Browser/EVTX/Prefetch/LNK/Registry[SYSTEM/SOFTWARE/NTUSER/SAM/txlog]/SRU/Thumbcache/JumpList) |
 | `crates/artifacts-linux/` | Linux artifact parsers (journal/wtmp/bash/apt/cron/sudo) |
 | `crates/artifacts-macos/` | macOS artifact parsers (plist/unified_log/Spotlight/Quarantine/FSEvents) |
 | `crates/search/` | Full-text indexing (tantivy) |
@@ -176,7 +176,7 @@ cargo fmt ✓ | cargo clippy ✓ | 295 Rust tests ✓ | 228 frontend tests ✓ |
 
 ### Quality gates (all pass)
 
-cargo fmt ✓ | cargo clippy ✓ | 1,483 Rust tests ✓ | 228 frontend tests ✓ | 1,711 total ✓ | cargo-deny ✓ | 6 guard scripts ✓
+cargo fmt ✓ | cargo clippy ✓ | 1,757 Rust tests ✓ | 228 frontend tests ✓ | 1,985 total ✓ | cargo-deny ✓ | 6 guard scripts ✓
 
 ## License
 

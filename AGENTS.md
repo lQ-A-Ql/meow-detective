@@ -91,6 +91,21 @@ Backend → Frontend via Tauri `emit`. Topics defined as constants in `crates/tr
 | `infrastructure` | Cross-cutting: logging, hashing, filesystem utils, text, clock, config |
 | `testing` | Test builders and fixtures |
 
+### Registry Module Structure (`crates/artifacts-windows/src/registry/`)
+
+```
+lookup/
+  mod.rs           — module root and re-exports
+  types.rs         — hive cell types (HBIN, NK, VK, SK, LF, LH, RI, LI), value types, F struct
+  reader.rs        — registry hive file reader, cell navigation, dirty page merging
+  txlog_util.rs    — .LOG1/.LOG2 transaction log parser, dirty page bitmap, page recovery
+  utf16.rs         — UTF-16LE key/value name decoding from hive cells
+  system.rs        — SYSTEM hive extractor (computer_name, timezone, services, network_adapters)
+  software.rs      — SOFTWARE hive extractor (product_name, build, version, registered_owner, install_date)
+  ntuser.rs        — NTUSER.DAT extractor (profiles, shell_folders, recent_files, typed_paths, run_mru, mount_points, user_assist)
+  sam.rs           — SAM hive extractor (local_users with RID, group_membership, login_counts, password_policy)
+```
+
 ## Conventions
 
 ### Rust
@@ -144,6 +159,8 @@ All app-shell layout components live in `src/components/layout/`: AppShell, Layo
 7. **Event topics are string constants**: Defined in `crates/transport/src/events/mod.rs` and mirrored as a TypeScript union type `EventTopic` in `src/types/models.ts`. Keep them in sync.
 
 8. **Tauri 2**: This project uses Tauri v2 (not v1). Commands use `#[tauri::command]` with the v2 handler registration pattern. The `Emitter` trait is used for events.
+
+9. **SAM RID is stored in VK cell data_type field, not value data**: When extracting SAM user information, the RID (Relative Identifier) for each user is stored in the VK (value key) cell's `data_type` field — a 4-byte DWORD — not in the value data payload. This is a registry format quirk specific to SAM: do not look for RID in the value data bytes. The VK cell structure places the RID in the header (offset 0x04 of the VK record), before the value name and data sections.
 
 ## V2 Specific Gotchas
 

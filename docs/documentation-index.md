@@ -67,6 +67,7 @@
 | V3 新增 crate | 3 | `crates/containers-pst/`, `crates/artifacts-linux/`, `crates/artifacts-macos/` (已创建) |
 | V4 参考文档 | 1 | `docs/v4-plan.md`（V4 阶段边界、测试矩阵、验收标准、评分机制） |
 | V4 新增 crate | 6 | `crates/fs-ext4/`, `crates/fs-xfs/`, `crates/fs-btrfs/`, `crates/fs-apfs/`, `crates/fs-hfsplus/`, `crates/exchange/` (已创建) |
+| Rust tests | 1,757 | `cargo test --workspace` 汇总 (2026-06 校准) |
 
 ## 3. 路径级事实校准
 
