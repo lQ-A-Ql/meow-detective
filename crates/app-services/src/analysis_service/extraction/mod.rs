@@ -1,9 +1,11 @@
 pub(crate) mod browser;
 pub(crate) mod email;
+pub(crate) mod evtx;
 pub(crate) mod registry;
 
 use self::browser::extract_browser_candidate;
 use self::email::extract_email_candidate;
+use self::evtx::extract_evtx_candidate;
 pub use self::registry::extract_registry_candidate;
 use crate::analysis_service::candidates::{
     evidence_candidates_for_categories, normalize_evidence_path, EvidenceCandidate,
@@ -119,7 +121,7 @@ pub fn run_analysis_extraction(
     for candidate in candidates {
         if !matches!(
             candidate.category.as_str(),
-            "Registry" | "BrowserHistory" | "Email"
+            "Registry" | "BrowserHistory" | "Email" | "EventLogs"
         ) {
             continue;
         }
@@ -145,7 +147,7 @@ pub fn run_analysis_extraction(
                 scanned_count += 1;
                 extract_registry_candidate(&candidate, bytes, boot_key, txlog1, txlog2)
             }
-            "BrowserHistory" | "Email" => {
+            "BrowserHistory" | "Email" | "EventLogs" => {
                 let mut reader = match file_reader(&candidate.file_id) {
                     Ok(reader) => reader,
                     Err(err) => {
@@ -166,6 +168,7 @@ pub fn run_analysis_extraction(
                 match candidate.category.as_str() {
                     "BrowserHistory" => extract_browser_candidate(&candidate, &bytes),
                     "Email" => extract_email_candidate(&candidate, &bytes),
+                    "EventLogs" => extract_evtx_candidate(&candidate, &bytes),
                     _ => ExtractionOutcome::default(),
                 }
             }

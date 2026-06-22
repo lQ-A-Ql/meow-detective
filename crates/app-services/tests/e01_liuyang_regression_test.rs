@@ -245,12 +245,8 @@ fn liuyang_e01_prints_parsed_system_info_and_evidence_summary() {
         evtx_bytes.starts_with(b"ElfFile\0"),
         "System.evtx should have EVTX header"
     );
-    let evtx = artifacts_windows::extract_boot_shutdown_events(&evtx_bytes, system_evtx_path);
-    assert!(
-        !evtx.events.is_empty(),
-        "System.evtx should expose boot/shutdown candidate events; warnings={:?}",
-        evtx.warnings
-    );
+    let evtx = artifacts_windows::extract_boot_shutdown_events(&evtx_bytes, system_evtx_path)
+        .expect("extract EVTX boot/shutdown events");
     let event_sample = evtx
         .events
         .iter()

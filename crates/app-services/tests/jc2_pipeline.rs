@@ -763,15 +763,16 @@ fn jc2_artifact_extraction() {
                     .and_then(|mut f| f.read_to_end(&mut buf))
                     .is_ok()
                 {
-                    let extraction =
-                        artifacts_windows::extract_boot_shutdown_events(&buf, evtx_path);
-                    println!(
-                        "  EVTX {}: {} events, {} warnings",
-                        evtx_path,
-                        extraction.events.len(),
-                        extraction.warnings.len()
-                    );
-                    for event in &extraction.events {
+                    if let Ok(extraction) =
+                        artifacts_windows::extract_boot_shutdown_events(&buf, evtx_path)
+                    {
+                        println!(
+                            "  EVTX {}: {} events, {} warnings",
+                            evtx_path,
+                            extraction.events.len(),
+                            extraction.warnings.len()
+                        );
+                        for event in &extraction.events {
                         let mut attrs = BTreeMap::new();
                         attrs.insert(
                             "eventId".to_string(),
@@ -815,6 +816,7 @@ fn jc2_artifact_extraction() {
                             attrs,
                         });
                     }
+                }
                 }
             }
             if !evtx_artifacts.is_empty() {

@@ -5,15 +5,20 @@
 //! with provenance.
 
 use super::capability::supports_evtx_boot_shutdown_path;
+use super::error::EvtxBootError;
 use chrono::{DateTime, Utc};
 use evtx::{err::EvtxError, EvtxParser};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeSet;
 
 pub const MAX_EVTX_ANALYSIS_BYTES: usize = 16 * 1024 * 1024;
 const EVTX_FILE_HEADER_SIZE: u64 = 4096;
 const EVTX_CHUNK_SIZE: u64 = 65536;
+const MAX_EVTX_WARNINGS: usize = 64;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum EvtxBootEventKind {
     EventLogStarted,
     EventLogStopped,
@@ -49,7 +54,8 @@ impl EvtxBootEventKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EvtxBootEvent {
     pub timestamp: String,
     pub event_id: u32,
@@ -60,45 +66,41 @@ pub struct EvtxBootEvent {
     pub note: String,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EvtxBootExtraction {
     pub events: Vec<EvtxBootEvent>,
     pub warnings: Vec<String>,
 }
 
-pub fn extract_boot_shutdown_events(bytes: &[u8], source_path: &str) -> EvtxBootExtraction {
+pub fn extract_boot_shutdown_events(
+    bytes: &[u8],
+    source_path: &str,
+) -> Result<EvtxBootExtraction, EvtxBootError> {
     if !supports_evtx_boot_shutdown_path(source_path) {
-        return EvtxBootExtraction {
-            events: Vec::new(),
-            warnings: vec![format!(
-                "{source_path} is outside bounded System.evtx boot/shutdown parser scope"
-            )],
-        };
+        return Err(EvtxBootError::UnsupportedPath {
+            path: source_path.to_string(),
+        });
     }
 
     if bytes.len() > MAX_EVTX_ANALYSIS_BYTES {
-        return EvtxBootExtraction {
-            events: Vec::new(),
-            warnings: vec![format!(
-                "{source_path} exceeds bounded EVTX parser limit of {MAX_EVTX_ANALYSIS_BYTES} bytes"
-            )],
-        };
+        return Err(EvtxBootError::InputTooLarge {
+            path: source_path.to_string(),
+            size: bytes.len(),
+            max: MAX_EVTX_ANALYSIS_BYTES,
+        });
     }
 
     let parser_bytes = bounded_clean_evtx_bytes(bytes);
-    let mut parser = match EvtxParser::from_buffer(parser_bytes.to_vec()) {
-        Ok(parser) => parser,
-        Err(err) => {
-            return EvtxBootExtraction {
-                events: Vec::new(),
-                warnings: vec![format!(
-                    "{source_path} EVTX parser initialization failed: {err}"
-                )],
-            };
+    let mut parser = EvtxParser::from_buffer(parser_bytes.to_vec()).map_err(|err| {
+        EvtxBootError::ParserInit {
+            path: source_path.to_string(),
+            detail: err.to_string(),
         }
-    };
+    })?;
 
-    let mut extraction = EvtxBootExtraction::default();
+    let mut raw_warnings = Vec::new();
+    let mut events = Vec::new();
     for record in parser.records_json_value() {
         match record {
             Ok(record) => {
@@ -108,21 +110,52 @@ pub fn extract_boot_shutdown_events(bytes: &[u8], source_path: &str) -> EvtxBoot
                     Some(record.timestamp.to_string()),
                     source_path,
                 ) {
-                    extraction.events.push(event);
+                    events.push(event);
                 }
             }
-            Err(err) => extraction
-                .warnings
-                .push(format_evtx_warning(source_path, &err)),
+            Err(err) => raw_warnings.push(format_evtx_warning(source_path, &err)),
         }
     }
 
-    if extraction.events.is_empty() && extraction.warnings.is_empty() {
-        extraction.warnings.push(format!(
+    if events.is_empty() && raw_warnings.is_empty() {
+        raw_warnings.push(format!(
             "{source_path} contains no supported boot/shutdown candidate events"
         ));
     }
-    extraction
+
+    Ok(EvtxBootExtraction {
+        events,
+        warnings: govern_evtx_warnings(source_path, raw_warnings),
+    })
+}
+
+pub fn extract_boot_shutdown_events_from_json_records(
+    records: &[Value],
+    source_path: &str,
+) -> Result<EvtxBootExtraction, EvtxBootError> {
+    if !supports_evtx_boot_shutdown_path(source_path) {
+        return Err(EvtxBootError::UnsupportedPath {
+            path: source_path.to_string(),
+        });
+    }
+
+    let mut raw_warnings = Vec::new();
+    let mut events = Vec::new();
+    for record in records {
+        if let Some(event) = boot_event_from_json(record, None, None, source_path) {
+            events.push(event);
+        }
+    }
+    if events.is_empty() {
+        raw_warnings.push(format!(
+            "{source_path} contains no supported boot/shutdown candidate events"
+        ));
+    }
+
+    Ok(EvtxBootExtraction {
+        events,
+        warnings: govern_evtx_warnings(source_path, raw_warnings),
+    })
 }
 
 fn bounded_clean_evtx_bytes(bytes: &[u8]) -> &[u8] {
@@ -149,43 +182,76 @@ fn bounded_clean_evtx_bytes(bytes: &[u8]) -> &[u8] {
 fn format_evtx_warning(source_path: &str, err: &EvtxError) -> String {
     match err {
         EvtxError::FailedToParseChunk { chunk_id, source } => {
-            let offset = EVTX_FILE_HEADER_SIZE + chunk_id.saturating_mul(EVTX_CHUNK_SIZE);
-            format!(
-                "{source_path} EVTX chunk parse warning: chunk={chunk_id} offset=0x{offset:08X} reason={source}"
-            )
+            let offset = EVTX_FILE_HEADER_SIZE + (*chunk_id).saturating_mul(EVTX_CHUNK_SIZE);
+            EvtxBootError::ChunkParse {
+                path: source_path.to_string(),
+                chunk_id: *chunk_id,
+                offset,
+                detail: source.to_string(),
+            }
+            .to_string()
         }
-        EvtxError::FailedToParseRecord { record_id, source } => {
-            format!("{source_path} EVTX record parse warning: record={record_id} reason={source}")
+        EvtxError::FailedToParseRecord { record_id, source } => EvtxBootError::RecordParse {
+            path: source_path.to_string(),
+            record_id: Some(*record_id),
+            detail: source.to_string(),
         }
-        other => format!("{source_path} EVTX record parse warning: {other}"),
+        .to_string(),
+        other => EvtxBootError::RecordParse {
+            path: source_path.to_string(),
+            record_id: None,
+            detail: other.to_string(),
+        }
+        .to_string(),
     }
 }
 
-pub fn extract_boot_shutdown_events_from_json_records(
-    records: &[Value],
-    source_path: &str,
-) -> EvtxBootExtraction {
-    if !supports_evtx_boot_shutdown_path(source_path) {
-        return EvtxBootExtraction {
-            events: Vec::new(),
-            warnings: vec![format!(
-                "{source_path} is outside bounded System.evtx boot/shutdown parser scope"
-            )],
-        };
-    }
-
-    let mut extraction = EvtxBootExtraction::default();
-    for record in records {
-        if let Some(event) = boot_event_from_json(record, None, None, source_path) {
-            extraction.events.push(event);
+fn govern_evtx_warnings(path: &str, raw: Vec<String>) -> Vec<String> {
+    let sanitized = sanitize_evtx_path(path);
+    let mut seen = BTreeSet::new();
+    let mut governed = Vec::with_capacity(raw.len().min(MAX_EVTX_WARNINGS));
+    for message in raw {
+        let code = evtx_warning_code_for(&message);
+        let entry = format!("[{code}] {sanitized}: {message}");
+        if !seen.insert(entry.clone()) {
+            continue;
         }
+        if governed.len() >= MAX_EVTX_WARNINGS {
+            let cap = format!("[EVTX-WARN-CAP] {sanitized}: additional EVTX warnings suppressed");
+            if seen.insert(cap.clone()) {
+                governed.push(cap);
+            }
+            break;
+        }
+        governed.push(entry);
     }
-    if extraction.events.is_empty() {
-        extraction.warnings.push(format!(
-            "{source_path} contains no supported boot/shutdown candidate events"
-        ));
+    governed
+}
+
+fn evtx_warning_code_for(message: &str) -> &'static str {
+    if message.contains("parser initialization failed") {
+        "EVTX-INIT"
+    } else if message.contains("chunk parse warning") {
+        "EVTX-CHUNK"
+    } else if message.contains("record parse warning") {
+        "EVTX-RECORD"
+    } else if message.contains("no supported") {
+        "EVTX-EMPTY"
+    } else if message.contains("exceeds bounded EVTX parser limit") {
+        "EVTX-LIMIT"
+    } else if message.contains("outside bounded") {
+        "EVTX-SCOPE"
+    } else {
+        "EVTX-WARN"
     }
-    extraction
+}
+
+fn sanitize_evtx_path(path: &str) -> String {
+    path.replace('\\', "/")
+        .rsplit('/')
+        .next()
+        .unwrap_or(path)
+        .to_string()
 }
 
 fn boot_event_from_json(
@@ -302,7 +368,8 @@ mod tests {
                 }
             })],
             "Windows/System32/winevt/Logs/System.evtx",
-        );
+        )
+        .expect("json extraction should succeed");
 
         assert!(extraction.warnings.is_empty());
         assert_eq!(extraction.events.len(), 1);
@@ -324,7 +391,8 @@ mod tests {
                 json!({"Event":{"System":{"EventID":"1074","TimeCreated":{"@SystemTime":"2026-01-01T03:00:00Z"}}}}),
             ],
             "Windows/System32/winevt/Logs/System.evtx",
-        );
+        )
+        .expect("json extraction should succeed");
 
         let kinds = extraction
             .events
@@ -342,34 +410,31 @@ mod tests {
         let extraction = extract_boot_shutdown_events_from_json_records(
             &[json!({"Event":{"System":{"EventID":7045}}})],
             "Windows/System32/winevt/Logs/System.evtx",
-        );
+        )
+        .expect("json extraction should succeed");
 
         assert!(extraction.events.is_empty());
         assert!(extraction.warnings[0].contains("no supported"));
     }
 
     #[test]
-    fn malformed_evtx_returns_warning_not_panic() {
-        let extraction = extract_boot_shutdown_events(
+    fn malformed_evtx_returns_error_not_panic() {
+        let result = extract_boot_shutdown_events(
             b"not an evtx",
             "Windows/System32/winevt/Logs/System.evtx",
         );
-
-        assert!(extraction.events.is_empty());
-        assert!(extraction.warnings[0].contains("parser initialization failed"));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("parser initialization failed"));
     }
 
     #[test]
-    fn truncated_evtx_magic_returns_warning_not_panic() {
-        let extraction =
+    fn truncated_evtx_magic_returns_error_not_panic() {
+        let result =
             extract_boot_shutdown_events(b"ElfFile\0", "Windows/System32/winevt/Logs/System.evtx");
-
-        assert!(extraction.events.is_empty());
-        assert!(!extraction.warnings.is_empty());
-        assert!(extraction
-            .warnings
-            .iter()
-            .any(|warning| warning.contains("parser") || warning.contains("parse")));
+        assert!(result.is_err());
     }
 
     #[test]
@@ -411,13 +476,12 @@ mod tests {
     }
 
     #[test]
-    fn oversized_evtx_returns_not_parsed_warning() {
+    fn oversized_evtx_returns_error() {
         let bytes = vec![0u8; MAX_EVTX_ANALYSIS_BYTES + 1];
-        let extraction =
+        let result =
             extract_boot_shutdown_events(&bytes, "Windows/System32/winevt/Logs/System.evtx");
 
-        assert!(extraction.events.is_empty());
-        assert!(extraction.warnings[0].contains("exceeds bounded EVTX parser limit"));
+        assert!(matches!(result, Err(EvtxBootError::InputTooLarge { .. })));
     }
 
     #[test]
@@ -425,7 +489,8 @@ mod tests {
         let path = testing::fixtures::tiny_system_evtx();
         let bytes = std::fs::read(&path).expect("read tiny System.evtx fixture");
         let extraction =
-            extract_boot_shutdown_events(&bytes, "Windows/System32/winevt/Logs/System.evtx");
+            extract_boot_shutdown_events(&bytes, "Windows/System32/winevt/Logs/System.evtx")
+                .expect("fixture extraction should succeed");
 
         assert!(
             !extraction.events.is_empty(),
@@ -444,5 +509,32 @@ mod tests {
                 && !event.timestamp.trim().is_empty()
                 && !event.note.trim().is_empty()
         }));
+    }
+
+    #[test]
+    fn unsupported_path_returns_error() {
+        let result = extract_boot_shutdown_events(
+            b"ElfFile\0",
+            "Windows/System32/winevt/Logs/Security.evtx",
+        );
+        assert!(matches!(result, Err(EvtxBootError::UnsupportedPath { .. })));
+    }
+
+    #[test]
+    #[ignore = "manual fixture regeneration helper"]
+    fn dump_fixture_to_expected_json() {
+        use std::path::Path;
+
+        let manifest = env!("CARGO_MANIFEST_DIR");
+        let out =
+            Path::new(manifest).join("../../testdata/fixtures/public-small/evtx/expected.json");
+        let path = testing::fixtures::tiny_system_evtx();
+        let bytes = std::fs::read(&path).expect("read tiny System.evtx fixture");
+        let extraction =
+            extract_boot_shutdown_events(&bytes, "Windows/System32/winevt/Logs/System.evtx")
+                .expect("fixture extraction should succeed");
+        std::fs::write(&out, serde_json::to_string_pretty(&extraction).unwrap())
+            .expect("write expected.json");
+        println!("written expected.json to {}", out.display());
     }
 }

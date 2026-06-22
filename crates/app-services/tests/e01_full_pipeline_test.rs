@@ -211,15 +211,16 @@ fn e01_ntfs_windows_config_listing_and_hive_headers() {
                     chunk.len()
                 );
             }
-            let extraction = artifacts_windows::extract_boot_shutdown_events(
+            if let Ok(extraction) = artifacts_windows::extract_boot_shutdown_events(
                 &bytes,
                 "Windows/System32/winevt/Logs/System.evtx",
-            );
-            eprintln!(
-                "System.evtx parser events={} warnings={:?}",
-                extraction.events.len(),
-                extraction.warnings
-            );
+            ) {
+                eprintln!(
+                    "System.evtx parser events={} warnings={:?}",
+                    extraction.events.len(),
+                    extraction.warnings
+                );
+            }
         }
         Err(error) => eprintln!("System.evtx open error: {error}"),
     }

@@ -325,30 +325,33 @@ fn inspect_evtx_boot_source(
             let mut parsed_any = false;
             match read_header_fn(&entry.id, artifacts_windows::MAX_EVTX_ANALYSIS_BYTES) {
                 Ok(bytes) => {
-                    let extraction =
-                        artifacts_windows::extract_boot_shutdown_events(&bytes, &entry.path);
-                    parser_warnings.extend(extraction.warnings);
-                    if !extraction.events.is_empty() {
-                        parsed_any = true;
-                    }
-                    let event_provenance = entry_provenance(
-                        entry,
-                        EVTX_BOOT_SHUTDOWN_PARSER,
-                        parsed_at,
-                        AnalysisParseStatusDto::Parsed,
-                        Vec::new(),
-                    );
-                    boot_history.extend(extraction.events.into_iter().map(|event| {
-                        AnalysisBootRecordDto {
-                            timestamp: event.timestamp,
-                            boot_type: event.kind.as_str().to_string(),
-                            source: event.source_path,
-                            event_id: Some(event.event_id),
-                            record_id: event.record_id,
-                            note: Some(event.note),
-                            provenance: event_provenance.clone(),
+                    match artifacts_windows::extract_boot_shutdown_events(&bytes, &entry.path) {
+                        Ok(extraction) => {
+                            parser_warnings.extend(extraction.warnings);
+                            if !extraction.events.is_empty() {
+                                parsed_any = true;
+                            }
+                            let event_provenance = entry_provenance(
+                                entry,
+                                EVTX_BOOT_SHUTDOWN_PARSER,
+                                parsed_at,
+                                AnalysisParseStatusDto::Parsed,
+                                Vec::new(),
+                            );
+                            boot_history.extend(extraction.events.into_iter().map(|event| {
+                                AnalysisBootRecordDto {
+                                    timestamp: event.timestamp,
+                                    boot_type: event.kind.as_str().to_string(),
+                                    source: event.source_path,
+                                    event_id: Some(event.event_id),
+                                    record_id: event.record_id,
+                                    note: Some(event.note),
+                                    provenance: event_provenance.clone(),
+                                }
+                            }));
                         }
-                    }));
+                        Err(err) => parser_warnings.push(err.to_string()),
+                    }
                 }
                 Err(err) => parser_warnings.push(format!("{} 读取失败: {}", entry.path, err)),
             }

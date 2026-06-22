@@ -276,7 +276,8 @@ fn evtx_json_records_extract_boot_shutdown_candidates() {
             json!({"Event":{"System":{"EventID":7045}}}),
         ],
         "Windows/System32/winevt/Logs/System.evtx",
-    );
+    )
+    .expect("json extraction should succeed");
 
     assert!(extraction.warnings.is_empty());
     assert_eq!(extraction.events.len(), 3);
@@ -298,7 +299,7 @@ fn evtx_json_records_extract_boot_shutdown_candidates() {
 
 #[test]
 fn evtx_json_records_fail_closed_for_non_system_log_path() {
-    let extraction = extract_boot_shutdown_events_from_json_records(
+    let result = extract_boot_shutdown_events_from_json_records(
         &[json!({
             "Event": {
                 "System": {
@@ -311,25 +312,25 @@ fn evtx_json_records_fail_closed_for_non_system_log_path() {
         "Windows/System32/winevt/Logs/Security.evtx",
     );
 
-    assert!(extraction.events.is_empty());
-    assert_eq!(
-        extraction.warnings,
-        vec!["Windows/System32/winevt/Logs/Security.evtx is outside bounded System.evtx boot/shutdown parser scope"]
-    );
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("outside bounded System.evtx"));
 }
 
 #[test]
 fn evtx_binary_parser_fail_closed_for_non_system_log_path() {
-    let extraction = extract_boot_shutdown_events(
+    let result = extract_boot_shutdown_events(
         b"ElfFile\0",
         "Windows/System32/winevt/Logs/Application.evtx",
     );
 
-    assert!(extraction.events.is_empty());
-    assert_eq!(
-        extraction.warnings,
-        vec!["Windows/System32/winevt/Logs/Application.evtx is outside bounded System.evtx boot/shutdown parser scope"]
-    );
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("outside bounded System.evtx"));
 }
 
 #[test]

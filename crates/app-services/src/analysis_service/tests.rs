@@ -681,6 +681,52 @@ fn run_analysis_extraction_extracts_registry_browser_email_and_persists() {
 }
 
 #[test]
+fn run_analysis_extraction_extracts_eventlogs_and_persists() {
+    let (conn, _tmp, ds_id) = setup_case_db();
+    let evtx_bytes = std::fs::read(fixtures::tiny_system_evtx()).unwrap();
+    let mut contents: HashMap<String, Vec<u8>> = HashMap::new();
+    contents.insert("system-evtx".to_string(), evtx_bytes);
+    FileRepo::new(&conn)
+        .insert_batch(&[file_with_ds(
+            "system-evtx",
+            &ds_id,
+            "Windows/System32/winevt/Logs/System.evtx",
+            1024,
+        )])
+        .unwrap();
+
+    let run = run_analysis_extraction(&conn, "case-analysis", &["EventLogs"], |file_id| {
+        contents
+            .get(&file_id.0)
+            .cloned()
+            .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
+            .ok_or_else(|| format!("missing bytes for {}", file_id.0))
+    })
+    .unwrap();
+
+    assert_eq!(run.scanned_count, 1);
+    let artifact_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM artifacts WHERE case_id = 'case-analysis'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let timeline_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM timeline_events WHERE case_id = 'case-analysis'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(artifact_count > 0, "expected EVTX artifacts");
+    assert_eq!(
+        artifact_count, timeline_count,
+        "each EVTX boot/shutdown event should produce one artifact and one timeline event"
+    );
+}
+
+#[test]
 fn evidence_summary_reports_candidate_found_without_parser_run() {
     let (conn, _tmp, ds_id) = setup_case_db();
     FileRepo::new(&conn)
