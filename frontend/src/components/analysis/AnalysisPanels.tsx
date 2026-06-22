@@ -32,7 +32,7 @@ import {
   EmailMessage,
   EvidenceClassificationSummary,
   InstalledSoftware,
-  NetworkProfile,
+  NetworkProfileEntry,
   RegistryExtractionSummary,
   RegistryHiveOverview,
   RegistryStructuredSummary,
@@ -570,6 +570,7 @@ export function RegistryExtractionPanel({
       ),
     },
     { key: 'rid', title: 'RID', className: 'w-[60px] font-mono text-[10px]', render: (row) => row.ridHex },
+    { key: 'sid', title: 'SID', className: 'min-w-[220px] font-mono text-[10px]', render: (row) => row.sid || '-' },
     {
       key: 'accountStatus', title: '状态', className: 'w-[60px]',
       render: (row) => (
@@ -583,7 +584,7 @@ export function RegistryExtractionPanel({
     { key: 'lastLogin', title: '最后登录', className: 'w-[160px] font-mono text-[10px]', render: (row) => row.lastLogin ? row.lastLogin.replace('T', ' ').replace('Z', '') : '从未登录' },
     { key: 'profilePath', title: 'Profile 路径', className: 'min-w-[200px] font-mono text-[10px]', render: (row) => row.profilePath ?? '-' },
     {
-      key: 'passwordHash', title: '密码哈希 (NTLM)', className: 'min-w-[340px] font-mono text-[10px]',
+      key: 'passwordHash', title: '密码哈希 (LM:NT)', className: 'min-w-[340px] font-mono text-[10px]',
       render: (row) => row.passwordHash
         ? <span className="select-all text-[#b42318]">{row.passwordHash}</span>
         : <span className="text-[#999]">—</span>,
@@ -606,13 +607,17 @@ export function RegistryExtractionPanel({
     { key: 'suspiciousReason', title: '备注', className: 'min-w-[200px]', render: (row) => row.suspiciousReason ?? '' },
   ];
 
-  // Network profile columns
-  const networkColumns: DenseColumn<NetworkProfile>[] = [
-    { key: 'ssid', title: 'SSID', className: 'min-w-[180px] font-mono', render: (row) => row.ssid },
-    { key: 'connectCount', title: '连接次数', className: 'w-[80px] text-right', render: (row) => row.connectCount.toLocaleString() },
-    { key: 'firstConnect', title: '首次连接', className: 'w-[110px] font-mono text-[10px]', render: (row) => row.firstConnect?.slice(0, 10) ?? '-' },
-    { key: 'lastConnect', title: '最后连接', className: 'w-[110px] font-mono text-[10px]', render: (row) => row.lastConnect?.slice(0, 10) ?? '-' },
-    { key: 'description', title: '备注', className: 'w-[100px]', render: (row) => row.description ?? '-' },
+  // Network profile columns (SOFTWARE\NetworkList)
+  const networkColumns: DenseColumn<NetworkProfileEntry>[] = [
+    { key: 'profileName', title: '配置文件名称', className: 'min-w-[180px]', render: (row) => row.profileName },
+    { key: 'profileGuid', title: 'GUID', className: 'w-[220px] font-mono text-[10px]', render: (row) => row.profileGuid },
+    { key: 'managed', title: '托管', className: 'w-[60px] text-center', render: (row) => (row.managed ? '是' : '否') },
+    { key: 'firstNetwork', title: '首次网络', className: 'min-w-[160px]', render: (row) => row.firstNetwork ?? '-' },
+    { key: 'defaultGatewayMacHex', title: '网关 MAC', className: 'w-[140px] font-mono text-[10px]', render: (row) => row.defaultGatewayMacHex ?? '-' },
+    { key: 'dnsSuffix', title: 'DNS 后缀', className: 'w-[120px]', render: (row) => row.dnsSuffix ?? '-' },
+    { key: 'dateCreated', title: '创建时间', className: 'w-[110px] font-mono text-[10px]', render: (row) => row.dateCreated?.slice(0, 10) ?? '-' },
+    { key: 'dateLastConnected', title: '最后连接', className: 'w-[110px] font-mono text-[10px]', render: (row) => row.dateLastConnected?.slice(0, 10) ?? '-' },
+    { key: 'description', title: '备注', className: 'w-[120px]', render: (row) => row.description ?? '-' },
   ];
 
   // Installed software columns
@@ -728,9 +733,9 @@ export function RegistryExtractionPanel({
           <DenseDataTable
             rows={s?.networkProfiles ?? []}
             columns={networkColumns}
-            getRowKey={(row) => row.ssid}
+            getRowKey={(row) => row.profileGuid}
             emptyTitle="暂无网络配置数据"
-            emptyDescription="从 SYSTEM hive NetworkList 提取 Wi-Fi 连接历史。"
+            emptyDescription="从 SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\NetworkList 提取网络配置文件及 Wi-Fi 连接历史。"
           />
         )}
         {activeTab === 'software' && (

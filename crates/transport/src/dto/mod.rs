@@ -24,22 +24,26 @@ pub mod v3_governance;
 pub mod viewer;
 
 pub use analysis::{
-    AnalysisBootRecordDto, AnalysisClassifiedFileDto, AnalysisExtractionRunDto,
-    AnalysisFieldProvenanceDto, AnalysisFileClassificationDto, AnalysisNetworkAdapterDto,
-    AnalysisParseStatusDto, AnalysisProvenanceDto, AnalysisSystemInfoDto,
-    BenchmarkRequiredCheckDto, BenchmarkRequirementStatusDto, BenchmarkSnapshotDto,
-    BenchmarkSummaryDto, BrowserCookieDto, BrowserDownloadDto, BrowserHistorySummaryDto,
-    BrowserSessionTabDto, BrowserVisitDto, CorrelationCoverageStatusDto,
-    CorrelationFamilyCoverageDto, EmailExtractionSummaryDto, EmailMessageDto,
-    ErrorTaxonomyEntryDto, EvidenceCategoryDto, EvidenceClassificationSummaryDto,
-    EvidenceClassificationTotalsDto, EvidenceSourceDto, GovernanceFactSourceDto,
-    GovernanceRuntimeCheckDto, GovernanceRuntimeResultsDto, GovernanceRuntimeSignalsDto,
-    GovernanceRuntimeSubcheckDto, KnownLimitationDto, KnownLimitationStatusDto,
+    AmcacheApplicationDto, AmcacheApplicationFileDto, AnalysisBootRecordDto,
+    AnalysisClassifiedFileDto, AnalysisExtractionRunDto, AnalysisFieldProvenanceDto,
+    AnalysisFileClassificationDto, AnalysisNetworkAdapterDto, AnalysisParseStatusDto,
+    AnalysisProvenanceDto, AnalysisSystemInfoDto, AppCompatLayerDto, BenchmarkRequiredCheckDto,
+    BenchmarkRequirementStatusDto, BenchmarkSnapshotDto, BenchmarkSummaryDto, BrowserCookieDto,
+    BrowserDownloadDto, BrowserHistorySummaryDto, BrowserSessionTabDto, BrowserVisitDto,
+    CachedCredentialDto, CorrelationCoverageStatusDto, CorrelationFamilyCoverageDto,
+    EmailExtractionSummaryDto, EmailMessageDto, ErrorTaxonomyEntryDto, EvidenceCategoryDto,
+    EvidenceClassificationSummaryDto, EvidenceClassificationTotalsDto, EvidenceSourceDto,
+    GovernanceFactSourceDto, GovernanceRuntimeCheckDto, GovernanceRuntimeResultsDto,
+    GovernanceRuntimeSignalsDto, GovernanceRuntimeSubcheckDto, InstalledSoftwareDto,
+    KnownLimitationDto, KnownLimitationStatusDto, LastVisitedMruEntryDto, LsaPackageDto,
+    LsaSecretDto, MountedDeviceDto, MuiCacheEntryDto, NetworkProfileDto, OpenSaveMruEntryDto,
     ParserSupportMatrixEntryDto, ParserSupportMatrixSummaryDto, RegistryExtractionSummaryDto,
-    RegistryValueDto, ReleaseGateEntryDto, ReleaseGateStatusDto, ReleaseScoreBreakdownEntryDto,
-    ReleaseScorecardDto, SecurityAuditEntryDto, SecurityAuditSummaryDto, SupportMaturityDto,
-    V2GovernanceSnapshotDto, VerificationChainStatusDto, VerificationGuaranteeLevelDto,
-    VerificationResultDto,
+    RegistryHiveOverviewDto, RegistryStructuredSummaryDto, RegistryValueDto, ReleaseGateEntryDto,
+    ReleaseGateStatusDto, ReleaseScoreBreakdownEntryDto, ReleaseScorecardDto, RunMruEntryDto,
+    SamUserAccountDto, SecurityAuditEntryDto, SecurityAuditSummaryDto, SecurityPolicyDto,
+    ShellbagEntryDto, ShimCacheEntryDto, ShutdownTimeDto, SupportMaturityDto, SystemServiceDto,
+    UsbDeviceHistoryDto, UserAssistEntryDto, V2GovernanceSnapshotDto, VerificationChainStatusDto,
+    VerificationGuaranteeLevelDto, VerificationResultDto, WinlogonConfigDto,
 };
 pub use android::{
     AndroidBackupDto, AndroidCallDto, AndroidChromeVisitDto, AndroidContactDto, AndroidSmsDto,
@@ -94,7 +98,7 @@ pub use recovery::DeletedFileRecoveryDto;
 pub use registry::{
     MountPointDto, NtuserInfoDto, RecentDocDto, RegistryRunKeyDto, RegistryTransactionDto,
     RegistryTransactionOperationDto, SamGroupDto, SamInfoDto, SamPasswordPolicyDto, SamUserDto,
-    TxLogParseResultDto, UserAssistEntryDto,
+    TxLogParseResultDto,
 };
 pub use reports::{ReportHistoryItemDto, ReportTemplateDto};
 pub use search::{SearchHighlightDto, SearchHitDto, SearchResultPageDto, SearchSnippetDto};

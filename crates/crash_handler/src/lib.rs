@@ -231,6 +231,10 @@ fn sanitize_path(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    // Serialize tests that mutate process environment variables.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     // -----------------------------------------------------------------------
     // Original tests (kept)
@@ -264,6 +268,7 @@ mod tests {
     /// Path containing USERPROFILE is replaced with `~`.
     #[test]
     fn test_sanitize_path_removes_user_profile() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let saved = std::env::var("USERPROFILE").ok();
         std::env::set_var("USERPROFILE", "C:\\Users\\Investigator");
 
@@ -291,6 +296,7 @@ mod tests {
     /// user-identifiable directory appears verbatim.
     #[test]
     fn test_sanitize_path_removes_case_path() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let saved = std::env::var("USERPROFILE").ok();
         std::env::set_var("USERPROFILE", "C:\\Users\\QAQ");
 

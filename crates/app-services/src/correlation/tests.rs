@@ -799,3 +799,77 @@ fn second_call_under_200ms() {
         second_duration.as_millis()
     );
 }
+
+#[test]
+fn artifact_family_maps_all_registry_families_to_registry() {
+    assert_eq!(
+        artifact_family("RegistrySamUser"),
+        Some("Registry".to_string())
+    );
+    assert_eq!(
+        artifact_family("RegistryUserAssist"),
+        Some("Registry".to_string())
+    );
+    assert_eq!(
+        artifact_family("RegistryShutdownTime"),
+        Some("Registry".to_string())
+    );
+    assert_eq!(
+        artifact_family("RegistryValue"),
+        Some("Registry".to_string())
+    );
+    // Non-registry families stay unchanged.
+    assert_eq!(artifact_family("Prefetch"), Some("Prefetch".to_string()));
+    assert_eq!(artifact_family("LNK"), Some("LNK".to_string()));
+}
+
+#[test]
+fn correlation_groups_registry_sam_and_timeline_into_registry_family() {
+    let conn = setup_case_db();
+    insert_file(&conn, "file-sam", "C:/Windows/System32/config/SAM", false);
+
+    let mut attrs = BTreeMap::new();
+    attrs.insert(
+        "subjectSid".to_string(),
+        Value::String("S-1-5-21-1-2-3-1001".to_string()),
+    );
+    attrs.insert(
+        "subjectUsername".to_string(),
+        Value::String("alice".to_string()),
+    );
+    insert_artifact(
+        &conn,
+        "artifact-sam",
+        "RegistrySamUser",
+        Some("file-sam"),
+        attrs,
+    );
+
+    TimelineRepo::new(&conn)
+        .insert_batch_with_case(
+            &[TimelineEvent {
+                id: TimelineEventId("timeline-sam-login".to_string()),
+                source_object_id: "file-sam".to_string(),
+                event_type: "REGISTRY_LAST_LOGIN".to_string(),
+                timestamp: Utc::now(),
+                title: "SAM last login".to_string(),
+                description: "alice logged in".to_string(),
+                parser_id: Some("registry.sam.v1".to_string()),
+                parser_version: Some("1.0.0".to_string()),
+                confidence: Some(0.85),
+                source_attribution: None,
+                attrs: BTreeMap::new(),
+            }],
+            "case-1",
+        )
+        .unwrap();
+
+    let snapshot = get_correlation_snapshot(&conn).unwrap();
+    let lead = snapshot
+        .leads
+        .iter()
+        .find(|item| item.primary_file_id == "file-sam")
+        .unwrap();
+    assert!(lead.families.iter().any(|f| f == "Registry"));
+    assert!(lead.summary.contains("痕迹记录"));
+}

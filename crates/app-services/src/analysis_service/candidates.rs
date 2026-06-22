@@ -55,11 +55,10 @@ const EVIDENCE_CATEGORY_DEFS: &[EvidenceCategoryDef] = &[
             EvidencePathPattern::Suffix("/windows/system32/config/software"),
             EvidencePathPattern::Suffix("/windows/system32/config/sam"),
             EvidencePathPattern::Suffix("/windows/system32/config/security"),
+            EvidencePathPattern::Suffix("/windows/system32/config/default"),
             EvidencePathPattern::Suffix("/ntuser.dat"),
             EvidencePathPattern::Suffix("/usrclass.dat"),
-            EvidencePathPattern::Contains("/registry/"),
-            EvidencePathPattern::Suffix(".reg"),
-            EvidencePathPattern::Suffix(".hive"),
+            EvidencePathPattern::Suffix("/windows/appcompat/programs/amcache.hve"),
         ],
     },
     EvidenceCategoryDef {
@@ -75,7 +74,11 @@ const EVIDENCE_CATEGORY_DEFS: &[EvidenceCategoryDef] = &[
         display_name: "Program execution",
         evidence_kind: "execution_artifact",
         parser: "prefetch.amcache.shimcache",
-        artifact_families: &["Prefetch"],
+        artifact_families: &[
+            "Prefetch",
+            "RegistryAmcacheApplication",
+            "RegistryAmcacheApplicationFile",
+        ],
         patterns: &[
             EvidencePathPattern::Suffix(".pf"),
             EvidencePathPattern::Suffix("/windows/appcompat/programs/amcache.hve"),

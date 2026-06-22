@@ -134,8 +134,7 @@ impl CrossCaseEntityMatcher {
                 })
                 .collect();
 
-            let id =
-                Self::cross_case_match_id(entity_type, canonical_value, &MatchStrategy::Exact);
+            let id = Self::cross_case_match_id(entity_type, canonical_value, &MatchStrategy::Exact);
 
             // Mark all these entities as claimed
             for &i in indices {

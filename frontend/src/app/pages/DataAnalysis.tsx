@@ -129,6 +129,7 @@ export function DataAnalysis() {
       systemInfo.refetch(),
       evidenceSummary.refetch(),
       registrySummary.refetch(),
+      registryStructured.refetch(),
       browserSummary.refetch(),
       emailSummary.refetch(),
       classifications.refetch(),
@@ -147,6 +148,10 @@ export function DataAnalysis() {
       Registry: registrySummary.refetch,
       BrowserHistory: browserSummary.refetch,
       Email: emailSummary.refetch,
+    };
+
+    const refetchRegistryStructured = async () => {
+      await registryStructured.refetch();
     };
 
     try {
@@ -175,6 +180,9 @@ export function DataAnalysis() {
             },
           }));
           await refetchByCategory[category.key]();
+          if (category.key === 'Registry') {
+            await refetchRegistryStructured();
+          }
         } catch (err) {
           setExtractionProgress((current) => ({
             ...current,

@@ -3,7 +3,7 @@ use super::types::{
     NkRecord, RegistryValue, BASE_BLOCK_SIZE, HBIN_MAGIC, INVALID_OFFSET, MAX_KEY_LOOKUP_DEPTH,
     NK_SIGNATURE, VK_SIGNATURE,
 };
-use super::utf16::{decode_name, read_i32, read_u16, read_u32};
+use super::utf16::{decode_name, read_i32, read_le_array, read_u16, read_u32};
 
 // ── RegistryHiveReader ──────────────────────────────────────────────────────
 
@@ -111,7 +111,11 @@ impl<'a> RegistryHiveReader<'a> {
         candidates
     }
 
-    fn read_value(&self, nk: &NkRecord, value_name: &str) -> Result<Option<RegistryValue>, String> {
+    fn read_value_internal(
+        &self,
+        nk: &NkRecord,
+        value_name: &str,
+    ) -> Result<Option<RegistryValue>, String> {
         if nk.num_values == 0 || nk.values_list_offset == INVALID_OFFSET {
             return Ok(None);
         }
@@ -257,6 +261,9 @@ impl<'a> RegistryHiveReader<'a> {
             return Err(format!("cell at {cell_offset:#x} is not nk"));
         }
         let flags = read_u16(self.bytes, abs + 6)?;
+        let last_write_time = read_le_array::<8>(&self.bytes[abs + 0x08..])
+            .map(u64::from_le_bytes)
+            .filter(|ft| *ft != 0);
         let num_subkeys = read_u32(self.bytes, abs + 0x18)?;
         let subkeys_list_offset = read_u32(self.bytes, abs + 0x20)?;
         let num_values = read_u32(self.bytes, abs + 0x28)?;
@@ -270,6 +277,7 @@ impl<'a> RegistryHiveReader<'a> {
         )?;
         Ok(NkRecord {
             name,
+            last_write_time,
             num_subkeys,
             subkeys_list_offset,
             num_values,
@@ -496,6 +504,33 @@ impl<'a> RegistryHiveReader<'a> {
             }
         }
         Ok(offsets)
+    }
+
+    /// Read all direct subkey NK records of a given NK record.
+    pub(crate) fn read_subkeys_from_nk(
+        &self,
+        nk: &NkRecord,
+    ) -> Result<Vec<(String, NkRecord)>, String> {
+        if nk.num_subkeys == 0 || nk.subkeys_list_offset == INVALID_OFFSET {
+            return Ok(Vec::new());
+        }
+        let offsets = self.read_subkey_offsets(nk.subkeys_list_offset, 0)?;
+        let mut result = Vec::with_capacity(offsets.len());
+        for offset in offsets {
+            if let Ok(child) = self.parse_nk(offset) {
+                result.push((child.name.clone(), child));
+            }
+        }
+        Ok(result)
+    }
+
+    /// Read a single named value from an NK record.
+    pub(crate) fn read_value(
+        &self,
+        nk: &NkRecord,
+        value_name: &str,
+    ) -> Result<Option<RegistryValue>, String> {
+        self.read_value_internal(nk, value_name)
     }
 
     /// Read the names of all subkeys of a given NK record.

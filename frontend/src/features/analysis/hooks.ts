@@ -146,6 +146,7 @@ export function useRunAnalysisExtraction() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['analysis', 'evidence-classification', currentCase.data?.id ?? null] });
       qc.invalidateQueries({ queryKey: ['analysis', 'registry-extraction', currentCase.data?.id ?? null] });
+      qc.invalidateQueries({ queryKey: ['analysis', 'registry-structured', currentCase.data?.id ?? null] });
       qc.invalidateQueries({ queryKey: ['analysis', 'browser-history', currentCase.data?.id ?? null] });
       qc.invalidateQueries({ queryKey: ['analysis', 'email-extraction', currentCase.data?.id ?? null] });
       qc.invalidateQueries({ queryKey: ['artifacts'] });

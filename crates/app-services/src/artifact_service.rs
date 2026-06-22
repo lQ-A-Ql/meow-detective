@@ -31,7 +31,8 @@ pub fn create_registry() -> ExtractorRegistry {
     registry.register(Box::new(artifacts_windows::PrefetchExtractor));
     registry.register(Box::new(artifacts_windows::LnkExtractor));
     registry.register(Box::new(artifacts_windows::RecycleBinExtractor));
-    registry.register(Box::new(artifacts_windows::RegistryExtractor));
+    // Registry hives are handled by the canonical analysis_service lookup path
+    // (extract_registry_candidate) rather than the legacy base-block extractor.
     registry.register(Box::new(artifacts_windows::JumpListExtractor));
     registry.register(Box::new(artifacts_windows::SruExtractor));
     registry.register(Box::new(artifacts_windows::ThumbcacheExtractor));
@@ -468,7 +469,7 @@ mod tests {
     #[test]
     fn create_registry_returns_extractors() {
         let registry = create_registry();
-        assert!(registry.all().len() >= 7);
+        assert!(registry.all().len() >= 6);
     }
 
     #[test]

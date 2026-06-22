@@ -1,7 +1,11 @@
-//! Simplified Windows Registry hive reader.
-//! Extracts base block metadata (last_written timestamp) and attempts to read
-//! the root NK cell key name. Field offsets for NK cells are approximate;
-//! full hive traversal requires proper cell/bin parsing (python-registry reference).
+//! Deprecated simplified Windows Registry hive reader.
+//!
+//! This base-block-only extractor is kept as a fallback for legacy tests.  The
+//! canonical production path for registry extraction is the `lookup` module
+//! together with `app_services::analysis_service::extraction::registry::
+//! extract_registry_candidate`, which provides SYSTEM/SOFTWARE/SAM/NTUSER/
+//! USRCLASS/Amcache/SECURITY field extraction, transaction-log merge, and
+//! structured warnings.
 
 use artifacts_core::{
     new_artifact, new_timeline_event, ArtifactContext, ArtifactExtractor, ArtifactSink,

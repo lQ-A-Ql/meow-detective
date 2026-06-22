@@ -1,4 +1,5 @@
 use app_services::{
+    analysis_service::{extract_registry_candidate, EvidenceCandidate},
     artifact_service, case_service, correlation, datasource_service, file_service, import_analysis,
     search_service, timeline_service, v2_governance_service,
 };
@@ -150,7 +151,7 @@ fn jc2_full_pipeline() {
                 Box::new(E01Reader::open(path).unwrap());
             let fs = fs_ntfs::NtfsReader::open(boxed, MAIN_NTFS_OFFSET).unwrap();
 
-            // Extract Registry hives
+            // Extract Registry hives via canonical analysis_service lookup path.
             let hives = [
                 ("SYSTEM", "Windows/System32/config/SYSTEM"),
                 ("SOFTWARE", "Windows/System32/config/SOFTWARE"),
@@ -158,6 +159,18 @@ fn jc2_full_pipeline() {
                 ("SECURITY", "Windows/System32/config/SECURITY"),
             ];
             let mut total_artifacts = 0u32;
+
+            // Pre-load SYSTEM so SAM/SECURITY can reuse the BootKey.
+            let mut system_bytes = Vec::new();
+            if fs
+                .open_file("Windows/System32/config/SYSTEM")
+                .and_then(|mut f| f.read_to_end(&mut system_bytes))
+                .is_ok()
+            {
+                let _ = &system_bytes;
+            }
+            let boot_key = artifacts_windows::extract_boot_key(&system_bytes);
+
             for (name, hive_path) in &hives {
                 let mut buf = Vec::new();
                 if fs
@@ -165,27 +178,32 @@ fn jc2_full_pipeline() {
                     .and_then(|mut f| f.read_to_end(&mut buf))
                     .is_ok()
                 {
-                    let mut sink = artifacts_core::VecSink::new();
-                    let reader: Box<dyn std::io::Read> = Box::new(std::io::Cursor::new(buf));
-                    if artifact_service::run_extractors_on_file(
-                        &registry,
-                        &domain::FileEntryId(format!("jc2-{name}")),
-                        hive_path,
-                        reader,
-                        &mut sink,
-                    )
-                    .is_ok()
-                        && !sink.artifacts.is_empty()
-                    {
+                    let candidate = EvidenceCandidate {
+                        file_id: domain::FileEntryId(format!("jc2-{name}")),
+                        data_source_id: ds_id.0.clone(),
+                        path: hive_path.to_string(),
+                        size: buf.len() as u64,
+                        evidence_kind: "registry_hive".to_string(),
+                        parser: "registry.hive".to_string(),
+                        category: "Registry".to_string(),
+                    };
+                    let outcome = extract_registry_candidate(
+                        &candidate,
+                        &buf,
+                        boot_key,
+                        None,
+                        None,
+                    );
+                    if !outcome.artifacts.is_empty() {
                         artifact_service::store_artifacts(
                             conn,
-                            &sink.artifacts,
+                            &outcome.artifacts,
                             &case_id.0,
                             &ds_id.0,
                         )
                         .unwrap();
-                        total_artifacts += sink.artifacts.len() as u32;
-                        println!("  extracted {}: {} artifacts", name, sink.artifacts.len());
+                        total_artifacts += outcome.artifacts.len() as u32;
+                        println!("  extracted {}: {} artifacts", name, outcome.artifacts.len());
                     }
                 }
             }
@@ -673,7 +691,6 @@ fn jc2_artifact_extraction() {
                 Box::new(E01Reader::open(path).unwrap());
             let fs = fs_ntfs::NtfsReader::open(boxed, system_offset).unwrap();
 
-            let registry = artifact_service::create_registry();
             let mut total_artifacts = 0u32;
 
             // ── Extract Registry hives ────────────────────────────────────
@@ -683,6 +700,18 @@ fn jc2_artifact_extraction() {
                 ("SAM", "Windows/System32/config/SAM"),
                 ("SECURITY", "Windows/System32/config/SECURITY"),
             ];
+
+            // Pre-load SYSTEM so SAM/SECURITY can reuse the BootKey.
+            let mut system_bytes = Vec::new();
+            if fs
+                .open_file("Windows/System32/config/SYSTEM")
+                .and_then(|mut f| f.read_to_end(&mut system_bytes))
+                .is_ok()
+            {
+                let _ = &system_bytes;
+            }
+            let boot_key = artifacts_windows::extract_boot_key(&system_bytes);
+
             for (name, hive_path) in &hives {
                 let mut buf = Vec::new();
                 if fs
@@ -690,27 +719,32 @@ fn jc2_artifact_extraction() {
                     .and_then(|mut f| f.read_to_end(&mut buf))
                     .is_ok()
                 {
-                    let mut sink = artifacts_core::VecSink::new();
-                    let reader: Box<dyn std::io::Read> = Box::new(std::io::Cursor::new(buf));
-                    if artifact_service::run_extractors_on_file(
-                        &registry,
-                        &domain::FileEntryId(format!("jc2-art-{name}")),
-                        hive_path,
-                        reader,
-                        &mut sink,
-                    )
-                    .is_ok()
-                        && !sink.artifacts.is_empty()
-                    {
+                    let candidate = EvidenceCandidate {
+                        file_id: domain::FileEntryId(format!("jc2-art-{name}")),
+                        data_source_id: ds_id.0.clone(),
+                        path: hive_path.to_string(),
+                        size: buf.len() as u64,
+                        evidence_kind: "registry_hive".to_string(),
+                        parser: "registry.hive".to_string(),
+                        category: "Registry".to_string(),
+                    };
+                    let outcome = extract_registry_candidate(
+                        &candidate,
+                        &buf,
+                        boot_key,
+                        None,
+                        None,
+                    );
+                    if !outcome.artifacts.is_empty() {
                         artifact_service::store_artifacts(
                             conn,
-                            &sink.artifacts,
+                            &outcome.artifacts,
                             &case_id.0,
                             &ds_id.0,
                         )
                         .unwrap();
-                        total_artifacts += sink.artifacts.len() as u32;
-                        println!("  registry {name}: {} artifacts", sink.artifacts.len());
+                        total_artifacts += outcome.artifacts.len() as u32;
+                        println!("  registry {name}: {} artifacts", outcome.artifacts.len());
                     }
                 }
             }

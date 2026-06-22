@@ -29,7 +29,7 @@ vi.mock('@/features/analysis/hooks', () => ({
   useRunEvidenceClassification: mocks.evidenceScan,
   useRunAnalysisExtraction: mocks.extractionRun,
   useRegistryExtractionSummary: mocks.registrySummary,
-  useRegistryStructuredSummary: () => ({ data: undefined, error: null, isLoading: false }),
+  useRegistryStructuredSummary: () => ({ data: undefined, error: null, isLoading: false, refetch: vi.fn() }),
   useBrowserHistorySummary: mocks.browserSummary,
   useEmailExtractionSummary: mocks.emailSummary,
   useAnalysisClassifications: mocks.classifications,

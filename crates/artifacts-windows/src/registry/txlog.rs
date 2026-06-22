@@ -32,6 +32,8 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use chrono::{DateTime, TimeZone, Utc};
 use std::io::{Cursor, Read, Seek, SeekFrom};
 
+use crate::registry::RegistryError;
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -125,12 +127,12 @@ pub struct TxLogParseResult {
 ///
 /// Returns `Err(...)` if the header magic is unrecognised or the data is too
 /// short to contain even a header.
-pub fn parse_transaction_log(data: &[u8]) -> Result<TxLogParseResult, String> {
+pub fn parse_transaction_log(data: &[u8]) -> Result<TxLogParseResult, RegistryError> {
     if (data.len() as u64) < HEADER_SIZE {
-        return Err(format!(
+        return Err(RegistryError::other(format!(
             "transaction log too short: {} bytes (minimum {HEADER_SIZE})",
             data.len()
-        ));
+        )));
     }
 
     let mut cursor = Cursor::new(data);
@@ -149,10 +151,10 @@ pub fn parse_transaction_log(data: &[u8]) -> Result<TxLogParseResult, String> {
     } else if &magic == MAGIC_DIRT {
         false
     } else {
-        return Err(format!(
+        return Err(RegistryError::other(format!(
             "unrecognised transaction-log magic: {:02X?} (expected {:02X?} or {:02X?})",
             magic, MAGIC_HVLE, MAGIC_DIRT
-        ));
+        )));
     };
 
     let seq1 = cursor.read_u32::<LittleEndian>().unwrap_or(0);
@@ -359,6 +361,42 @@ pub fn parse_transaction_log(data: &[u8]) -> Result<TxLogParseResult, String> {
     })
 }
 
+/// Parse optional .LOG1 and .LOG2 transaction logs and merge their entries.
+///
+/// Returns the combined, sequence-number-sorted transactions plus any parse
+/// warnings.  A missing log is silently ignored; a corrupt log produces a
+/// warning and is skipped so the caller can fall back to the base hive.
+pub fn parse_and_merge_txlogs(
+    log1: Option<&[u8]>,
+    log2: Option<&[u8]>,
+) -> (Vec<RegistryTransaction>, Vec<String>) {
+    let mut transactions: Vec<RegistryTransaction> = Vec::new();
+    let mut warnings: Vec<String> = Vec::new();
+
+    if let Some(data) = log1 {
+        match parse_transaction_log(data) {
+            Ok(result) => {
+                warnings.extend(result.warnings);
+                transactions.extend(result.transactions);
+            }
+            Err(err) => warnings.push(format!("SAM/SECURITY LOG1 parse failed: {err}")),
+        }
+    }
+
+    if let Some(data) = log2 {
+        match parse_transaction_log(data) {
+            Ok(result) => {
+                warnings.extend(result.warnings);
+                transactions.extend(result.transactions);
+            }
+            Err(err) => warnings.push(format!("SAM/SECURITY LOG2 parse failed: {err}")),
+        }
+    }
+
+    transactions.sort_by_key(|txn| txn.sequence_number);
+    (transactions, warnings)
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -545,7 +583,7 @@ mod tests {
     #[test]
     fn reject_too_short() {
         let err = parse_transaction_log(&[0u8; 100]).unwrap_err();
-        assert!(err.contains("too short"));
+        assert!(err.to_string().contains("too short"));
     }
 
     #[test]
@@ -553,7 +591,7 @@ mod tests {
         let mut data = vec![0u8; 5000];
         data[0..4].copy_from_slice(b"BEEF");
         let err = parse_transaction_log(&data).unwrap_err();
-        assert!(err.contains("unrecognised"));
+        assert!(err.to_string().contains("unrecognised"));
     }
 
     #[test]

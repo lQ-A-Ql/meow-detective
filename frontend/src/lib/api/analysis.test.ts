@@ -69,9 +69,9 @@ describe('analysis API (mock mode)', () => {
     const browser = await getBrowserHistorySummary({ limit: 3 });
     const email = await getEmailExtractionSummary({ limit: 2 });
 
-    expect(registry.total).toBeGreaterThan(0);
-    expect(registry.values[0].keyPath).toContain('ComputerName');
-    expect(registry.values[0].valueName).toBe('ComputerName');
+    expect(registry.status).toBe('notFound');
+    expect(registry.total).toBe(0);
+    expect(registry.values).toHaveLength(0);
 
     expect(browser.visitTotal).toBeGreaterThan(0);
     expect(browser.visits.map((item) => item.browser)).toEqual(expect.arrayContaining(['Chrome', 'Edge', 'Firefox']));

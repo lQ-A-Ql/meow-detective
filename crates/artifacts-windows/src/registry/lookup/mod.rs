@@ -4,9 +4,13 @@ use crate::registry::txlog::parse_transaction_log;
 
 // ── Submodules ───────────────────────────────────────────────────────────────
 
+pub mod amcache;
+pub mod muicache;
 pub mod ntuser;
 pub(crate) mod reader;
 pub mod sam;
+pub mod security;
+pub mod shellbags;
 pub mod software;
 pub mod system;
 pub(crate) mod txlog_util;
@@ -15,11 +19,33 @@ pub(crate) mod utf16;
 
 // ── Re-exports from submodules ───────────────────────────────────────────────
 
-pub use ntuser::{extract_ntuser_fields, extract_ntuser_fields_with_txlog};
+pub use amcache::{extract_amcache_entries, AmcacheInfo};
+pub use muicache::extract_muicache_from_usrclass_hive;
+pub use ntuser::{
+    extract_appcompat_layers_from_ntuser_hive, extract_ntuser_fields,
+    extract_ntuser_fields_with_txlog,
+};
 pub(crate) use reader::RegistryHiveReader;
-pub use sam::extract_sam_fields;
-pub use software::{extract_software_hive_fields, extract_software_hive_fields_with_txlog};
-pub use system::{extract_system_hive_fields, extract_system_hive_fields_with_txlog};
+pub use sam::{extract_sam_fields, extract_sam_fields_with_txlog};
+pub use security::{
+    extract_cached_credentials_from_security_hive, extract_lsa_secrets_from_security_hive,
+    extract_security_policy_from_security_hive,
+    extract_security_policy_from_security_hive_with_txlog,
+};
+pub use shellbags::extract_shellbags_from_usrclass_hive;
+pub use software::{
+    extract_appcompat_layers_from_software_hive, extract_installed_software,
+    extract_machine_run_keys_from_software_hive, extract_network_profiles_from_software_hive,
+    extract_software_hive_fields, extract_software_hive_fields_with_txlog,
+    extract_winlogon_fields_from_software_hive,
+};
+pub use system::{
+    extract_lsa_packages_from_system_hive, extract_mounted_devices_from_system_hive,
+    extract_network_adapters_from_system_hive, extract_services_from_system_hive,
+    extract_shimcache_from_system_hive, extract_shutdown_time_from_system_hive,
+    extract_system_hive_fields, extract_system_hive_fields_with_txlog,
+    extract_usb_devices_from_system_hive,
+};
 pub use types::*;
 
 // ── Low-level parse utilities ───────────────────────────────────────────────
@@ -67,6 +93,12 @@ pub(crate) fn lookup_string_field(
                 value_name: value_name.to_string(),
                 parser: parser.to_string(),
             })
+        }
+        Ok(Some(RegistryValue::String(_))) => {
+            // Empty or whitespace-only string values are common in registry
+            // hives (e.g. RegisteredOrganization). Treat them as absent rather
+            // than unsupported types to avoid noisy warnings.
+            None
         }
         Ok(Some(other)) => {
             warnings.push(format!(
@@ -609,13 +641,13 @@ pub(crate) mod test_common {
             &[("Account", 0x180), ("Builtin", 0x880)],
             &[],
         );
-        // Account(0x180) → Users(0x200), Aliases(0x500), and F value (password policy)
+        // Account(0x180) → Users(0x200), Aliases(0x500), and F/V values
         write_nk(
             &mut data,
             0x180,
             "Account",
             &[("Users", 0x200), ("Aliases", 0x500)],
-            &[0x1240],
+            &[0x1240, 0x1260],
         );
         // Account\F value: DomainAccountF password policy binary blob
         let account_f = make_domain_account_f_blob(
@@ -628,6 +660,27 @@ pub(crate) mod test_common {
             30, // lockout observation window minutes
         );
         write_binary_value(&mut data, 0x1240, "F", &account_f, 0x5400);
+        // Account\V value: machine SID blob used by extract_machine_sid.
+        // Written manually because the payload is larger than the default cell
+        // size used by write_binary_value.
+        let account_v_len = 0x1c0usize; // 448 bytes, plenty for offset 408 + 16
+        let mut account_v = vec![0u8; account_v_len];
+        account_v[0x198..0x19c].copy_from_slice(&21u32.to_le_bytes());
+        account_v[0x19c..0x1a0].copy_from_slice(&123_456_789u32.to_le_bytes());
+        account_v[0x1a0..0x1a4].copy_from_slice(&123_456_789u32.to_le_bytes());
+        account_v[0x1a4..0x1a8].copy_from_slice(&123_456_789u32.to_le_bytes());
+        let v_cell_abs = BASE_BLOCK_SIZE + 0x5500;
+        let v_cell_size = 0x200i32; // 512-byte cell
+        data[v_cell_abs..v_cell_abs + 4].copy_from_slice(&(-v_cell_size).to_le_bytes());
+        data[v_cell_abs + 4..v_cell_abs + 4 + account_v_len].copy_from_slice(&account_v);
+        write_vk(
+            &mut data,
+            0x1260,
+            "V",
+            REG_BINARY,
+            account_v_len as u32,
+            0x5500,
+        );
         // Users(0x200) → Names(0x280), 000001F4(0x400), 000001F5(0x480)
         write_nk(
             &mut data,

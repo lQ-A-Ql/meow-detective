@@ -27,12 +27,29 @@ pub use jumplist::JumpListExtractor;
 pub use lnk::parser::LnkExtractor;
 pub use prefetch::parser::PrefetchExtractor;
 pub use recycle_bin::parser::RecycleBinExtractor;
+pub use registry::hash_decrypt::{decrypt_user_hashes, derive_hashed_boot_key, SamHashes};
 pub use registry::lookup::{
+    extract_amcache_entries, extract_appcompat_layers_from_ntuser_hive,
+    extract_appcompat_layers_from_software_hive, extract_cached_credentials_from_security_hive,
+    extract_installed_software, extract_lsa_packages_from_system_hive,
+    extract_lsa_secrets_from_security_hive, extract_machine_run_keys_from_software_hive,
+    extract_mounted_devices_from_system_hive, extract_muicache_from_usrclass_hive,
+    extract_network_adapters_from_system_hive, extract_network_profiles_from_software_hive,
     extract_ntuser_fields, extract_ntuser_fields_with_txlog, extract_sam_fields,
-    extract_software_hive_fields, extract_software_hive_fields_with_txlog,
-    extract_system_hive_fields, extract_system_hive_fields_with_txlog, NtuserInfo,
-    ParsedRegistryField, SamGroup, SamInfo, SamUser, SoftwareHiveInfo, SystemHiveInfo,
-    UserAssistEntry,
+    extract_sam_fields_with_txlog, extract_security_policy_from_security_hive,
+    extract_security_policy_from_security_hive_with_txlog, extract_services_from_system_hive,
+    extract_shellbags_from_usrclass_hive, extract_shimcache_from_system_hive,
+    extract_shutdown_time_from_system_hive, extract_software_hive_fields,
+    extract_software_hive_fields_with_txlog, extract_system_hive_fields,
+    extract_system_hive_fields_with_txlog, extract_usb_devices_from_system_hive,
+    extract_winlogon_fields_from_software_hive, AmcacheApplicationEntry,
+    AmcacheApplicationFileEntry, AmcacheInfo, AppCompatLayerEntry, CachedCredentialEntry,
+    InstalledSoftwareInfo, LastVisitedMruEntry, LsaPackages, LsaSecretEntry, MountedDeviceEntry,
+    MuiCacheEntry, NetworkAdapterInfo, NetworkProfileEntry, NtuserInfo, OpenSaveMruEntry,
+    ParsedRegistryField, RegistryRunKey, RunMruEntry, SamGroup, SamInfo, SamUser,
+    SecurityPolicyEntry, ServiceStartType, ServiceType, ShellbagEntry, ShimCacheEntry,
+    ShutdownTimeEntry, SoftwareHiveInfo, SystemHiveInfo, SystemServiceEntry, SystemServiceInfo,
+    UsbDeviceHistoryEntry, UserAssistEntry, WinlogonConfig,
 };
 pub use registry::parser::RegistryExtractor;
 pub use registry::recovery::{

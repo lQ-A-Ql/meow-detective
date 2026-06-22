@@ -105,7 +105,7 @@ function simpleMarkdownToHtml(md: string): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
-  let html = escaped
+  const html = escaped
     .replace(/^### (.+)$/gm, '<h4 class="text-[13px] font-semibold mt-3 mb-1">$1</h4>')
     .replace(/^## (.+)$/gm, '<h3 class="text-[14px] font-semibold mt-3 mb-1">$1</h3>')
     .replace(/^# (.+)$/gm, '<h2 class="text-[15px] font-semibold mt-3 mb-1">$1</h2>')

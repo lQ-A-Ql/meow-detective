@@ -46,6 +46,8 @@ pub struct RegistryRunKeyDto {
     pub command: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<String>,
+    /// "machine" for HKLM Run/RunOnce, "user" for HKCU Run/RunOnce.
+    pub scope: String,
 }
 
 /// A single entry from the Explorer RecentDocs MRU.
@@ -60,10 +62,11 @@ pub struct RecentDocDto {
     pub lnk_target: Option<String>,
 }
 
-/// A single UserAssist program-execution tracking entry.
+/// A single UserAssist program-execution tracking entry from an NTUSER.DAT hive.
+/// Renamed to avoid collision with the structured-summary `UserAssistEntryDto` in `analysis.rs`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct UserAssistEntryDto {
+pub struct NtuserUserAssistEntryDto {
     pub executable: String,
     pub run_count: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -89,7 +92,7 @@ pub struct MountPointDto {
 pub struct NtuserInfoDto {
     pub run_keys: Vec<RegistryRunKeyDto>,
     pub recent_docs: Vec<RecentDocDto>,
-    pub user_assist: Vec<UserAssistEntryDto>,
+    pub user_assist: Vec<NtuserUserAssistEntryDto>,
     pub typed_urls: Vec<String>,
     pub word_wheel_query: Vec<String>,
     pub mount_points: Vec<MountPointDto>,
@@ -102,6 +105,7 @@ pub struct NtuserInfoDto {
 pub struct SamUserDto {
     pub username: String,
     pub rid: u32,
+    pub sid: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub full_name: String,
     #[serde(skip_serializing_if = "String::is_empty")]

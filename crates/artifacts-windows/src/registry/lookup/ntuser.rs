@@ -4,10 +4,11 @@ use super::txlog_util::{
     txlog_data_to_string,
 };
 use super::*;
+use crate::registry::RegistryError;
 
 // ── NTUSER.DAT field extraction ──────────────────────────────────────────────
 
-pub fn extract_ntuser_fields(bytes: &[u8], hive_path: &str) -> Result<NtuserInfo, String> {
+pub fn extract_ntuser_fields(bytes: &[u8], hive_path: &str) -> Result<NtuserInfo, RegistryError> {
     let hive = RegistryHiveReader::new(bytes)?;
     let mut info = NtuserInfo::default();
     let parser = "registry.ntuser";
@@ -18,6 +19,10 @@ pub fn extract_ntuser_fields(bytes: &[u8], hive_path: &str) -> Result<NtuserInfo
     info.typed_urls = extract_typed_urls(&hive, hive_path, parser, &mut info.warnings);
     info.word_wheel_query = extract_word_wheel_query(&hive, hive_path, parser, &mut info.warnings);
     info.mount_points = extract_mount_points(&hive, hive_path, parser, &mut info.warnings);
+    info.open_save_mru = extract_open_save_mru(&hive, hive_path, parser, &mut info.warnings);
+    info.last_visited_mru = extract_last_visited_mru(&hive, hive_path, parser, &mut info.warnings);
+    info.run_mru = extract_run_mru(&hive, hive_path, parser, &mut info.warnings);
+    info.default_browser = extract_default_browser(&hive);
 
     Ok(info)
 }
@@ -28,7 +33,7 @@ pub fn extract_ntuser_fields_with_txlog(
     bytes: &[u8],
     hive_path: &str,
     txlog_data: &[u8],
-) -> Result<NtuserInfo, String> {
+) -> Result<NtuserInfo, RegistryError> {
     let mut info = extract_ntuser_fields(bytes, hive_path)?;
     let txlog = parse_transaction_log(txlog_data)?;
     let mut txlog_applied = false;
@@ -136,6 +141,7 @@ fn extract_run_keys_at(
                 value_name: name,
                 command,
                 timestamp: None,
+                scope: "user".to_string(),
             }),
             _ => None,
         })
@@ -160,10 +166,9 @@ fn extract_recent_docs(
     ];
     let nk = match hive.navigate_to(recent_docs_path) {
         Ok(Some(nk)) => nk,
-        Ok(None) => {
-            warnings.push("RecentDocs key not found".to_string());
-            return Vec::new();
-        }
+        // A missing RecentDocs key is normal for the Default profile or
+        // freshly-created user accounts; do not surface it as a warning.
+        Ok(None) => return Vec::new(),
         Err(err) => {
             warnings.push(format!("RecentDocs parse error: {err}"));
             return Vec::new();
@@ -478,6 +483,376 @@ fn extract_word_wheel_query(
     queries.into_iter().map(|(_, q)| q).collect()
 }
 
+// ── OpenSavePidlMRU ─────────────────────────────────────────────────────────
+
+fn extract_open_save_mru(
+    hive: &RegistryHiveReader<'_>,
+    _hive_path: &str,
+    _parser: &str,
+    warnings: &mut Vec<String>,
+) -> Vec<OpenSaveMruEntry> {
+    let base_path: &[&str] = &[
+        "Software",
+        "Microsoft",
+        "Windows",
+        "CurrentVersion",
+        "Explorer",
+        "ComDlg32",
+        "OpenSavePidlMRU",
+    ];
+    let base_nk = match hive.navigate_to(base_path) {
+        Ok(Some(nk)) => nk,
+        Ok(None) => return Vec::new(),
+        Err(err) => {
+            warnings.push(format!("OpenSavePidlMRU parse error: {err}"));
+            return Vec::new();
+        }
+    };
+    let ext_names = match hive.read_subkey_names_from_nk(&base_nk) {
+        Ok(names) => names,
+        Err(err) => {
+            warnings.push(format!("OpenSavePidlMRU subkeys error: {err}"));
+            return Vec::new();
+        }
+    };
+
+    let mut entries = Vec::new();
+    for ext in ext_names {
+        let mut ext_path: Vec<&str> = base_path.to_vec();
+        ext_path.push(ext.as_str());
+        let ext_nk = match hive.navigate_to(&ext_path) {
+            Ok(Some(nk)) => nk,
+            _ => continue,
+        };
+        let last_write = ext_nk.last_write_time.and_then(windows_filetime_to_rfc3339);
+        let source_key_path = ext_path.join("\\");
+        let values = match hive.read_all_values_from_nk(&ext_nk) {
+            Ok(values) => values,
+            _ => continue,
+        };
+        for (name, value) in values {
+            if name.eq_ignore_ascii_case("MRUListEx") {
+                continue;
+            }
+            if let RegistryValue::Binary(data) = value {
+                let file_name = decode_pidl_file_name(&data).unwrap_or_default();
+                entries.push(OpenSaveMruEntry {
+                    extension: ext.clone(),
+                    value_name: name,
+                    file_name,
+                    raw_pidl_hex: hex::encode(&data),
+                    source_key_path: source_key_path.clone(),
+                    last_write: last_write.clone(),
+                });
+            }
+        }
+    }
+    entries
+}
+
+// ── LastVisitedPidlMRU ──────────────────────────────────────────────────────
+
+fn extract_last_visited_mru(
+    hive: &RegistryHiveReader<'_>,
+    _hive_path: &str,
+    _parser: &str,
+    warnings: &mut Vec<String>,
+) -> Vec<LastVisitedMruEntry> {
+    let key_path: &[&str] = &[
+        "Software",
+        "Microsoft",
+        "Windows",
+        "CurrentVersion",
+        "Explorer",
+        "ComDlg32",
+        "LastVisitedPidlMRU",
+    ];
+    let nk = match hive.navigate_to(key_path) {
+        Ok(Some(nk)) => nk,
+        Ok(None) => return Vec::new(),
+        Err(err) => {
+            warnings.push(format!("LastVisitedPidlMRU parse error: {err}"));
+            return Vec::new();
+        }
+    };
+    let last_write = nk.last_write_time.and_then(windows_filetime_to_rfc3339);
+    let source_key_path = key_path.join("\\");
+    let values = match hive.read_all_values_from_nk(&nk) {
+        Ok(values) => values,
+        Err(err) => {
+            warnings.push(format!("LastVisitedPidlMRU values error: {err}"));
+            return Vec::new();
+        }
+    };
+
+    let mut entries = Vec::new();
+    for (name, value) in values {
+        if name.eq_ignore_ascii_case("MRUListEx") {
+            continue;
+        }
+        if let RegistryValue::Binary(data) = value {
+            let path = decode_pidl_path(&data).unwrap_or_default();
+            entries.push(LastVisitedMruEntry {
+                value_name: name,
+                path,
+                raw_pidl_hex: hex::encode(&data),
+                source_key_path: source_key_path.clone(),
+                last_write: last_write.clone(),
+            });
+        }
+    }
+    entries
+}
+
+// ── RunMRU ──────────────────────────────────────────────────────────────────
+
+fn extract_run_mru(
+    hive: &RegistryHiveReader<'_>,
+    _hive_path: &str,
+    _parser: &str,
+    warnings: &mut Vec<String>,
+) -> Vec<RunMruEntry> {
+    let key_path: &[&str] = &[
+        "Software",
+        "Microsoft",
+        "Windows",
+        "CurrentVersion",
+        "Explorer",
+        "RunMRU",
+    ];
+    let nk = match hive.navigate_to(key_path) {
+        Ok(Some(nk)) => nk,
+        Ok(None) => return Vec::new(),
+        Err(err) => {
+            warnings.push(format!("RunMRU parse error: {err}"));
+            return Vec::new();
+        }
+    };
+    let last_write = nk.last_write_time.and_then(windows_filetime_to_rfc3339);
+    let source_key_path = key_path.join("\\");
+    let values = match hive.read_all_values_from_nk(&nk) {
+        Ok(values) => values,
+        Err(err) => {
+            warnings.push(format!("RunMRU values error: {err}"));
+            return Vec::new();
+        }
+    };
+
+    values
+        .into_iter()
+        .filter_map(|(name, value)| {
+            if name.eq_ignore_ascii_case("MRUList") || name.eq_ignore_ascii_case("MRUListEx") {
+                return None;
+            }
+            if let RegistryValue::String(command) = value {
+                if !command.trim().is_empty() {
+                    return Some(RunMruEntry {
+                        value_name: name,
+                        command,
+                        source_key_path: source_key_path.clone(),
+                        last_write: last_write.clone(),
+                    });
+                }
+            }
+            None
+        })
+        .collect()
+}
+
+/// Returns true for characters that are reasonable inside a decoded file name
+/// or path extracted from a PIDL blob. Restricting the set avoids capturing
+/// PIDL structural bytes as part of the string.
+fn is_reasonable_path_char(c: char) -> bool {
+    matches!(
+        c,
+        'A'..='Z'
+            | 'a'..='z'
+            | '0'..='9'
+            | ' '
+            | '.'
+            | '_'
+            | '-'
+            | '~'
+            | '\\'
+            | '/'
+            | ':'
+            | '['
+            | ']'
+            | '('
+            | ')'
+            | '{'
+            | '}'
+            | '#'
+            | '%'
+            | '&'
+            | '\''
+            | '@'
+            | '!'
+            | '$'
+            | '^'
+            | '+'
+            | '='
+            | ','
+            | ';'
+    )
+}
+
+/// Decode a best-effort file name from a PIDL binary blob.
+/// Looks for a UTF-16LE string that starts with a file-name character,
+/// contains a period (extension), has only reasonable path characters, and
+/// has at least one alphanumeric character, returning the longest match.
+fn decode_pidl_file_name(data: &[u8]) -> Option<String> {
+    if data.len() < 4 {
+        return None;
+    }
+    let mut best: Option<String> = None;
+    for start in (0..data.len() - 1).step_by(2) {
+        let mut units = Vec::new();
+        let mut pos = start;
+        while pos + 1 < data.len() {
+            let unit = u16::from_le_bytes([data[pos], data[pos + 1]]);
+            pos += 2;
+            if unit == 0 {
+                break;
+            }
+            units.push(unit);
+        }
+        if units.len() >= 2 {
+            let s = String::from_utf16_lossy(&units);
+            let starts_ok = s
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '[' || c == '(');
+            if starts_ok
+                && s.chars().any(|c| c == '.')
+                && s.chars().any(|c| c.is_alphanumeric())
+                && s.chars().all(is_reasonable_path_char)
+                && best.as_ref().is_none_or(|b| s.len() > b.len())
+            {
+                best = Some(s);
+            }
+        }
+    }
+    best
+}
+
+/// Decode a best-effort directory path from a PIDL binary blob.
+/// Looks for the longest UTF-16LE string that starts with a drive letter or
+/// path separator, contains path separators or a drive-letter colon, and only
+/// contains reasonable path characters.
+pub(crate) fn decode_pidl_path(data: &[u8]) -> Option<String> {
+    if data.len() < 6 {
+        return None;
+    }
+    let mut best: Option<String> = None;
+    for start in (0..data.len() - 1).step_by(2) {
+        let mut units = Vec::new();
+        let mut pos = start;
+        while pos + 1 < data.len() {
+            let unit = u16::from_le_bytes([data[pos], data[pos + 1]]);
+            pos += 2;
+            if unit == 0 {
+                break;
+            }
+            units.push(unit);
+        }
+        if units.len() >= 3 {
+            let s = String::from_utf16_lossy(&units);
+            let starts_ok = s
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic() || c == '\\' || c == '/');
+            if starts_ok
+                && (s.contains('\\') || s.contains('/') || s.contains(':'))
+                && s.chars().all(is_reasonable_path_char)
+                && best.as_ref().is_none_or(|b| s.len() > b.len())
+            {
+                best = Some(s);
+            }
+        }
+    }
+    best
+}
+
+// ── Default Browser ─────────────────────────────────────────────────────────
+
+fn extract_default_browser(hive: &RegistryHiveReader<'_>) -> Option<String> {
+    let path: &[&str] = &[
+        "Software",
+        "Microsoft",
+        "Windows",
+        "Shell",
+        "Associations",
+        "UrlAssociations",
+        "http",
+        "UserChoice",
+    ];
+    let Ok(Some(nk)) = hive.navigate_to(path) else {
+        return None;
+    };
+    let Ok(values) = hive.read_all_values_from_nk(&nk) else {
+        return None;
+    };
+    values
+        .into_iter()
+        .find_map(|(name, value)| {
+            if name.eq_ignore_ascii_case("ProgId") {
+                if let RegistryValue::String(prog_id) = value {
+                    return Some(prog_id);
+                }
+            }
+            None
+        })
+        .filter(|s| !s.trim().is_empty())
+}
+
+/// Extract program compatibility / elevation flags from
+/// `Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers` in
+/// an NTUSER.DAT hive.
+pub fn extract_appcompat_layers_from_ntuser_hive(
+    bytes: &[u8],
+    hive_path: &str,
+) -> Result<Vec<AppCompatLayerEntry>, RegistryError> {
+    let hive = RegistryHiveReader::new(bytes)?;
+    let key_path: &[&str] = &[
+        "Software",
+        "Microsoft",
+        "Windows NT",
+        "CurrentVersion",
+        "AppCompatFlags",
+        "Layers",
+    ];
+
+    let nk = match hive.navigate_to(key_path) {
+        Ok(Some(nk)) => nk,
+        Ok(None) => return Ok(Vec::new()),
+        Err(err) => return Err(err.into()),
+    };
+
+    let last_write = nk
+        .last_write_time
+        .and_then(super::windows_filetime_to_rfc3339);
+    let source_key_path = key_path.join("\\");
+    let values = hive.read_all_values_from_nk(&nk)?;
+    let mut entries = Vec::new();
+
+    for (name, value) in values {
+        if let RegistryValue::String(layer_string) = value {
+            if !name.trim().is_empty() || !layer_string.trim().is_empty() {
+                entries.push(AppCompatLayerEntry {
+                    executable_path: name,
+                    layer_string,
+                    source_hive_path: hive_path.to_string(),
+                    source_key_path: source_key_path.clone(),
+                    last_write: last_write.clone(),
+                });
+            }
+        }
+    }
+
+    Ok(entries)
+}
+
 // ── MountPoints2 ────────────────────────────────────────────────────────────
 
 fn extract_mount_points(
@@ -590,6 +965,7 @@ mod tests {
         assert!(info.typed_urls.is_empty());
         assert!(info.word_wheel_query.is_empty());
         assert!(info.mount_points.is_empty());
+        assert!(info.default_browser.is_none());
     }
 
     #[test]
@@ -1118,5 +1494,199 @@ mod tests {
             "Run key should have timestamp from txlog"
         );
         assert!(info.txlog_applied);
+    }
+
+    #[test]
+    fn extract_run_mru_from_fixture() {
+        let mut data = empty_hive("NTUSER");
+        write_nk(&mut data, 0x20, "NTUSER", &[("Software", 0x200)], &[]);
+        write_nk(&mut data, 0x200, "Software", &[("Microsoft", 0x300)], &[]);
+        write_nk(&mut data, 0x300, "Microsoft", &[("Windows", 0x400)], &[]);
+        write_nk(
+            &mut data,
+            0x400,
+            "Windows",
+            &[("CurrentVersion", 0x500)],
+            &[],
+        );
+        write_nk(
+            &mut data,
+            0x500,
+            "CurrentVersion",
+            &[("Explorer", 0x600)],
+            &[],
+        );
+        write_nk(&mut data, 0x600, "Explorer", &[("RunMRU", 0x700)], &[]);
+        write_nk(&mut data, 0x700, "RunMRU", &[], &[0x800, 0x880, 0x900]);
+        write_string_value(&mut data, 0x800, "MRUList", "acb", 0x4000);
+        write_string_value(&mut data, 0x880, "a", "cmd.exe", 0x4100);
+        write_string_value(&mut data, 0x900, "b", "powershell.exe", 0x4200);
+
+        let info = extract_ntuser_fields(&data, "Users/Test/NTUSER.DAT").unwrap();
+        assert_eq!(info.run_mru.len(), 2);
+        let a = info.run_mru.iter().find(|e| e.value_name == "a").unwrap();
+        assert_eq!(a.command, "cmd.exe");
+        assert_eq!(
+            a.source_key_path,
+            "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\RunMRU"
+        );
+        let b = info.run_mru.iter().find(|e| e.value_name == "b").unwrap();
+        assert_eq!(b.command, "powershell.exe");
+    }
+
+    #[test]
+    fn extract_open_save_mru_from_fixture() {
+        let mut data = empty_hive("NTUSER");
+        write_nk(&mut data, 0x20, "NTUSER", &[("Software", 0x200)], &[]);
+        write_nk(&mut data, 0x200, "Software", &[("Microsoft", 0x300)], &[]);
+        write_nk(&mut data, 0x300, "Microsoft", &[("Windows", 0x400)], &[]);
+        write_nk(
+            &mut data,
+            0x400,
+            "Windows",
+            &[("CurrentVersion", 0x500)],
+            &[],
+        );
+        write_nk(
+            &mut data,
+            0x500,
+            "CurrentVersion",
+            &[("Explorer", 0x600)],
+            &[],
+        );
+        write_nk(&mut data, 0x600, "Explorer", &[("ComDlg32", 0x700)], &[]);
+        write_nk(
+            &mut data,
+            0x700,
+            "ComDlg32",
+            &[("OpenSavePidlMRU", 0x800)],
+            &[],
+        );
+        write_nk(&mut data, 0x800, "OpenSavePidlMRU", &[("txt", 0x900)], &[]);
+        write_nk(&mut data, 0x900, "txt", &[], &[0x980, 0xa00]);
+        let mru_list = make_mru_list_ex(&[0]);
+        let pidl = make_pidl_blob_with_string("report.txt");
+        write_binary_value(&mut data, 0x980, "MRUListEx", &mru_list, 0x4000);
+        write_binary_value(&mut data, 0xa00, "0", &pidl, 0x4100);
+
+        let info = extract_ntuser_fields(&data, "Users/Test/NTUSER.DAT").unwrap();
+        assert_eq!(info.open_save_mru.len(), 1);
+        let entry = &info.open_save_mru[0];
+        assert_eq!(entry.extension, "txt");
+        assert_eq!(entry.value_name, "0");
+        assert_eq!(entry.file_name, "report.txt");
+        assert_eq!(entry.raw_pidl_hex, hex::encode(&pidl));
+        assert!(entry.source_key_path.ends_with("OpenSavePidlMRU\\txt"));
+    }
+
+    #[test]
+    fn extract_last_visited_mru_from_fixture() {
+        let mut data = empty_hive("NTUSER");
+        write_nk(&mut data, 0x20, "NTUSER", &[("Software", 0x200)], &[]);
+        write_nk(&mut data, 0x200, "Software", &[("Microsoft", 0x300)], &[]);
+        write_nk(&mut data, 0x300, "Microsoft", &[("Windows", 0x400)], &[]);
+        write_nk(
+            &mut data,
+            0x400,
+            "Windows",
+            &[("CurrentVersion", 0x500)],
+            &[],
+        );
+        write_nk(
+            &mut data,
+            0x500,
+            "CurrentVersion",
+            &[("Explorer", 0x600)],
+            &[],
+        );
+        write_nk(&mut data, 0x600, "Explorer", &[("ComDlg32", 0x700)], &[]);
+        write_nk(
+            &mut data,
+            0x700,
+            "ComDlg32",
+            &[("LastVisitedPidlMRU", 0x800)],
+            &[],
+        );
+        write_nk(&mut data, 0x800, "LastVisitedPidlMRU", &[], &[0x880, 0x900]);
+        let mru_list = make_mru_list_ex(&[0]);
+        let pidl = make_pidl_blob_with_string("C:\\Users\\Test\\Documents");
+        write_binary_value(&mut data, 0x880, "MRUListEx", &mru_list, 0x4000);
+        write_binary_value(&mut data, 0x900, "0", &pidl, 0x4100);
+
+        let info = extract_ntuser_fields(&data, "Users/Test/NTUSER.DAT").unwrap();
+        assert_eq!(info.last_visited_mru.len(), 1);
+        let entry = &info.last_visited_mru[0];
+        assert_eq!(entry.value_name, "0");
+        assert_eq!(entry.path, "C:\\Users\\Test\\Documents");
+        assert_eq!(entry.raw_pidl_hex, hex::encode(&pidl));
+        assert!(entry.source_key_path.ends_with("LastVisitedPidlMRU"));
+    }
+
+    #[test]
+    fn extract_appcompat_layers_from_ntuser_fixture() {
+        let mut data = empty_hive("NTUSER");
+        write_nk(&mut data, 0x20, "NTUSER", &[("Software", 0x200)], &[]);
+        write_nk(&mut data, 0x200, "Software", &[("Microsoft", 0x300)], &[]);
+        write_nk(&mut data, 0x300, "Microsoft", &[("Windows NT", 0xb00)], &[]);
+        write_nk(
+            &mut data,
+            0xb00,
+            "Windows NT",
+            &[("CurrentVersion", 0xc00)],
+            &[],
+        );
+        write_nk(
+            &mut data,
+            0xc00,
+            "CurrentVersion",
+            &[("AppCompatFlags", 0xd00)],
+            &[],
+        );
+        write_nk(
+            &mut data,
+            0xd00,
+            "AppCompatFlags",
+            &[("Layers", 0xe00)],
+            &[],
+        );
+        write_nk(&mut data, 0xe00, "Layers", &[], &[0x1500, 0x1580]);
+        write_string_value(&mut data, 0x1500, "calc.exe", "WIN7RTM", 0x4000);
+        write_string_value(
+            &mut data,
+            0x1580,
+            "C:\\Windows\\System32\\notepad.exe",
+            "WINXPSP3 RUNASADMIN",
+            0x4100,
+        );
+
+        let entries =
+            extract_appcompat_layers_from_ntuser_hive(&data, "Users/Test/NTUSER.DAT").unwrap();
+
+        assert_eq!(entries.len(), 2);
+        let calc = entries
+            .iter()
+            .find(|e| e.executable_path == "calc.exe")
+            .unwrap();
+        assert_eq!(calc.layer_string, "WIN7RTM");
+        assert_eq!(
+            calc.source_key_path,
+            "Software\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers"
+        );
+        assert_eq!(calc.source_hive_path, "Users/Test/NTUSER.DAT");
+
+        let notepad = entries
+            .iter()
+            .find(|e| e.executable_path.contains("notepad.exe"))
+            .unwrap();
+        assert_eq!(notepad.layer_string, "WINXPSP3 RUNASADMIN");
+    }
+
+    fn make_pidl_blob_with_string(s: &str) -> Vec<u8> {
+        let mut blob = vec![0x14, 0x00, 0x1f, 0x00, 0xe0, 0x00]; // synthetic PIDL prefix
+        let utf16: Vec<u8> = s.encode_utf16().flat_map(u16::to_le_bytes).collect();
+        blob.extend_from_slice(&utf16);
+        blob.extend_from_slice(&[0x00, 0x00]); // null terminator
+        blob.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // trailing padding
+        blob
     }
 }

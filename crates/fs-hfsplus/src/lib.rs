@@ -687,7 +687,9 @@ impl HfsPlusReader {
                     }
                     if parent_cnid == key_parent {
                         // Exact match on parentCNID 鈥?descend into this child.
-                        if let Ok(recs) = self.find_records_for_parent(child_node, parent_cnid) { results.extend(recs) }
+                        if let Ok(recs) = self.find_records_for_parent(child_node, parent_cnid) {
+                            results.extend(recs)
+                        }
                     } else {
                         // parent_cnid > key_parent: this child might still contain
                         // records for our parent_cnid if this is the last entry.

@@ -95,13 +95,14 @@ pub(crate) fn has_family(families: &[String], family: &str) -> bool {
 }
 
 pub(crate) fn artifact_family(artifact_type: &str) -> Option<String> {
-    match artifact_type {
-        "RegistryValue" => Some("Registry".to_string()),
-        value => CORRELATION_RULE_FAMILIES
-            .iter()
-            .find(|(family, _)| family.eq_ignore_ascii_case(value))
-            .map(|(family, _)| (*family).to_string()),
+    if artifact_type.eq_ignore_ascii_case("RegistryValue") || artifact_type.starts_with("Registry")
+    {
+        return Some("Registry".to_string());
     }
+    CORRELATION_RULE_FAMILIES
+        .iter()
+        .find(|(family, _)| family.eq_ignore_ascii_case(artifact_type))
+        .map(|(family, _)| (*family).to_string())
 }
 
 pub(crate) fn insert_node(

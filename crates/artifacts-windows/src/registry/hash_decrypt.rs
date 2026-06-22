@@ -1,0 +1,546 @@
+//! SAM password-hash decryption.
+//!
+//! Implements the pypykatz/ForensicsTool-style decryption pipeline:
+//!
+//! 1. Extract the BootKey (SysKey) from the SYSTEM hive.
+//! 2. Use the BootKey to decrypt the `SAM\Domains\Account\F` key into the
+//!    hashed boot key (`hbootkey`).
+//! 3. For each local user, decrypt the LM/NT hashes stored in the user's `V`
+//!    value using the hashed boot key and the user's RID.
+//!
+//! This module intentionally keeps all crypto primitives explicit and
+//! dependency-only for the block/stream ciphers and MD5, so the registry
+//! format logic stays readable and testable.
+
+use aes::cipher::{BlockDecrypt, KeyInit};
+use cipher::generic_array::GenericArray;
+use des::Des;
+use md5::{Digest, Md5};
+
+// ── Constants ────────────────────────────────────────────────────────────────
+
+const QWERTY: &[u8] = b"!@#$%^&*()qwertyUIOPAzxcvbnmQQQQQQQQQQQQ)(*@&%\0";
+const DIGITS: &[u8] = b"0123456789012345678901234567890123456789\0";
+
+const NTPASSWORD: &[u8] = b"NTPASSWORD\0";
+const LMPASSWORD: &[u8] = b"LMPASSWORD\0";
+
+pub(crate) const LM_HASH_EMPTY: &str = "aad3b435b51404eeaad3b435b51404ee";
+pub(crate) const NT_HASH_EMPTY: &str = "31d6cfe0d16ae931b73c59d7e0c089c0";
+
+// ── Public types ─────────────────────────────────────────────────────────────
+
+/// Decrypted LM and NT hashes for a single SAM account.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SamHashes {
+    /// Hex-encoded LM hash, or the canonical empty-LM value if no LM hash
+    /// is stored.
+    pub lm: String,
+    /// Hex-encoded NT hash, or the canonical empty-NT value if no NT hash
+    /// is stored.
+    pub nt: String,
+}
+
+// ── Public API ───────────────────────────────────────────────────────────────
+
+/// Derive the SAM hashed boot key from the SYSTEM BootKey and the raw
+/// `SAM\Domains\Account\F` value.
+///
+/// Returns `None` when the domain key structure is unrecognized, the data is
+/// too short, or the RC4 checksum / AES padding is invalid.
+pub fn derive_hashed_boot_key(boot_key: [u8; 16], account_f: &[u8]) -> Option<[u8; 32]> {
+    match parse_domain_key_data(account_f)? {
+        DomainKeyData::Rc4 {
+            salt,
+            key,
+            checksum,
+        } => derive_hashed_boot_key_rc4(boot_key, salt, key, checksum),
+        DomainKeyData::Aes { salt, data } => derive_hashed_boot_key_aes(boot_key, salt, &data),
+    }
+}
+
+/// Decrypt the LM and NT hashes for a user given the hashed boot key, the
+/// user's RID, and the raw `V` value bytes.
+pub fn decrypt_user_hashes(
+    hashed_boot_key: [u8; 32],
+    rid: u32,
+    user_v: &[u8],
+) -> Option<SamHashes> {
+    let hashes = parse_user_v_hashes(user_v)?;
+    let lm = decrypt_hash(&hashed_boot_key, rid, hashes.lm.as_ref(), LMPASSWORD)
+        .map(hex::encode)
+        .unwrap_or_else(|| LM_HASH_EMPTY.to_string());
+    let nt = decrypt_hash(&hashed_boot_key, rid, hashes.nt.as_ref(), NTPASSWORD)
+        .map(hex::encode)
+        .unwrap_or_else(|| NT_HASH_EMPTY.to_string());
+    Some(SamHashes { lm, nt })
+}
+
+// ── Domain key parsing ───────────────────────────────────────────────────────
+
+enum DomainKeyData {
+    /// RC4-protected domain key (older Windows versions).
+    Rc4 {
+        salt: [u8; 16],
+        key: [u8; 16],
+        checksum: [u8; 16],
+    },
+    /// AES-CBC-protected domain key (Windows 10 1903+).
+    Aes { salt: [u8; 16], data: Vec<u8> },
+}
+
+/// The encryption key data lives after a fixed-size header in
+/// `SAM\Domains\Account\F`. The marker byte at this offset selects the
+/// key format.
+const DOMAIN_KEY_OFFSET: usize = 0x68;
+
+fn parse_domain_key_data(data: &[u8]) -> Option<DomainKeyData> {
+    if data.len() < DOMAIN_KEY_OFFSET + 4 {
+        return None;
+    }
+    let marker = data[DOMAIN_KEY_OFFSET];
+    match marker {
+        1 => {
+            // RC4 variant: Revision(4) + Length(4) + Salt(16) + Key(16) +
+            // CheckSum(16) + Reserved(8) = 64 bytes total.
+            if data.len() < DOMAIN_KEY_OFFSET + 64 {
+                return None;
+            }
+            let salt = data[DOMAIN_KEY_OFFSET + 8..DOMAIN_KEY_OFFSET + 24]
+                .try_into()
+                .ok()?;
+            let key = data[DOMAIN_KEY_OFFSET + 24..DOMAIN_KEY_OFFSET + 40]
+                .try_into()
+                .ok()?;
+            let checksum = data[DOMAIN_KEY_OFFSET + 40..DOMAIN_KEY_OFFSET + 56]
+                .try_into()
+                .ok()?;
+            Some(DomainKeyData::Rc4 {
+                salt,
+                key,
+                checksum,
+            })
+        }
+        2 => {
+            // AES variant: Revision(4) + Length(4) + CheckSumLength(4) +
+            // DataLength(4) + Salt(16) + Data(DataLength).
+            if data.len() < DOMAIN_KEY_OFFSET + 24 {
+                return None;
+            }
+            let data_length = u32::from_le_bytes(
+                data[DOMAIN_KEY_OFFSET + 12..DOMAIN_KEY_OFFSET + 16]
+                    .try_into()
+                    .ok()?,
+            ) as usize;
+            let end = DOMAIN_KEY_OFFSET
+                .checked_add(32)
+                .and_then(|o| o.checked_add(data_length))?;
+            if data.len() < end {
+                return None;
+            }
+            let salt = data[DOMAIN_KEY_OFFSET + 16..DOMAIN_KEY_OFFSET + 32]
+                .try_into()
+                .ok()?;
+            let enc_data = data[DOMAIN_KEY_OFFSET + 32..end].to_vec();
+            Some(DomainKeyData::Aes {
+                salt,
+                data: enc_data,
+            })
+        }
+        _ => None,
+    }
+}
+
+fn derive_hashed_boot_key_rc4(
+    boot_key: [u8; 16],
+    salt: [u8; 16],
+    key: [u8; 16],
+    checksum: [u8; 16],
+) -> Option<[u8; 32]> {
+    let mut rc4_key_input = Vec::with_capacity(salt.len() + QWERTY.len() + 16 + DIGITS.len());
+    rc4_key_input.extend_from_slice(&salt);
+    rc4_key_input.extend_from_slice(QWERTY);
+    rc4_key_input.extend_from_slice(&boot_key);
+    rc4_key_input.extend_from_slice(DIGITS);
+    let rc4_key = md5(&rc4_key_input);
+
+    let mut encrypted = [0u8; 32];
+    encrypted[..16].copy_from_slice(&key);
+    encrypted[16..].copy_from_slice(&checksum);
+    let decrypted = rc4_decrypt(&rc4_key, &encrypted)?;
+    if decrypted.len() != 32 {
+        return None;
+    }
+
+    let first16: [u8; 16] = decrypted[..16].try_into().ok()?;
+    let mut check_input = Vec::with_capacity(16 + DIGITS.len() + 16 + QWERTY.len());
+    check_input.extend_from_slice(&first16);
+    check_input.extend_from_slice(DIGITS);
+    check_input.extend_from_slice(&first16);
+    check_input.extend_from_slice(QWERTY);
+    let expected = md5(&check_input);
+
+    if expected != decrypted[16..32] {
+        return None;
+    }
+
+    let mut out = [0u8; 32];
+    out[..16].copy_from_slice(&first16);
+    out[16..].copy_from_slice(&decrypted[16..32]);
+    Some(out)
+}
+
+fn derive_hashed_boot_key_aes(boot_key: [u8; 16], salt: [u8; 16], data: &[u8]) -> Option<[u8; 32]> {
+    if data.is_empty() || !data.len().is_multiple_of(16) {
+        return None;
+    }
+    let plaintext = aes128_cbc_decrypt(&boot_key, &salt, data)?;
+    if plaintext.len() < 32 {
+        return None;
+    }
+    plaintext[..32].try_into().ok()
+}
+
+// ── User V hash parsing ──────────────────────────────────────────────────────
+
+const USER_V_HEADER_LEN: usize = 204;
+
+enum EncryptedHash {
+    /// RC4-protected hash: PekID(2) + Revision(2) + Hash(16).
+    Rc4([u8; 16]),
+    /// AES-CBC-protected hash: PekID(2) + Revision(2) + DataOffset(4) +
+    /// DataLength(4) + Salt(16) + Data(...).
+    Aes { salt: [u8; 16], data: Vec<u8> },
+}
+
+struct UserHashes {
+    lm: Option<EncryptedHash>,
+    nt: Option<EncryptedHash>,
+}
+
+fn parse_user_v_hashes(v_data: &[u8]) -> Option<UserHashes> {
+    if v_data.len() < USER_V_HEADER_LEN {
+        return None;
+    }
+
+    let lm_offset = u32::from_le_bytes(v_data[0x9C..0xA0].try_into().ok()?) as usize;
+    let lm_length = u32::from_le_bytes(v_data[0xA0..0xA4].try_into().ok()?) as usize;
+    let nt_offset = u32::from_le_bytes(v_data[0xA8..0xAC].try_into().ok()?) as usize;
+    let nt_length = u32::from_le_bytes(v_data[0xAC..0xB0].try_into().ok()?) as usize;
+
+    let base = USER_V_HEADER_LEN;
+    let lm = parse_encrypted_hash(v_data, base.checked_add(lm_offset)?, lm_length);
+    let nt = parse_encrypted_hash(v_data, base.checked_add(nt_offset)?, nt_length);
+    Some(UserHashes { lm, nt })
+}
+
+fn parse_encrypted_hash(data: &[u8], offset: usize, length: usize) -> Option<EncryptedHash> {
+    if length == 0 {
+        return None;
+    }
+    let end = offset.checked_add(length)?;
+    if data.len() < end {
+        return None;
+    }
+    let blob = &data[offset..end];
+    let marker = blob.first()?;
+
+    if *marker == 1 && length >= 20 {
+        let mut hash = [0u8; 16];
+        hash.copy_from_slice(&blob[4..20]);
+        return Some(EncryptedHash::Rc4(hash));
+    }
+
+    // AES variant: marker != 1 and length is at least the fixed header.
+    if length >= 24 {
+        let data_length = u32::from_le_bytes(blob[12..16].try_into().ok()?) as usize;
+        if length >= 24 + data_length {
+            let mut salt = [0u8; 16];
+            salt.copy_from_slice(&blob[16..32]);
+            return Some(EncryptedHash::Aes {
+                salt,
+                data: blob[32..32 + data_length].to_vec(),
+            });
+        }
+    }
+
+    None
+}
+
+// ── Per-hash decryption ──────────────────────────────────────────────────────
+
+fn decrypt_hash(
+    hashed_boot_key: &[u8; 32],
+    rid: u32,
+    enc: Option<&EncryptedHash>,
+    constant: &[u8],
+) -> Option<[u8; 16]> {
+    let enc = enc?;
+    let intermediate: [u8; 16] = match enc {
+        EncryptedHash::Rc4(hash16) => {
+            let mut rc4_key_input = Vec::with_capacity(16 + 4 + constant.len());
+            rc4_key_input.extend_from_slice(&hashed_boot_key[..16]);
+            rc4_key_input.extend_from_slice(&rid.to_le_bytes());
+            rc4_key_input.extend_from_slice(constant);
+            let rc4_key = md5(&rc4_key_input);
+            let pt = rc4_decrypt(&rc4_key, hash16)?;
+            pt.try_into().ok()?
+        }
+        EncryptedHash::Aes { salt, data } => {
+            let pt = aes128_cbc_decrypt(&hashed_boot_key[..16], salt, data)?;
+            if pt.len() < 16 {
+                return None;
+            }
+            pt[..16].try_into().ok()?
+        }
+    };
+
+    let (k1, k2) = rid_to_des_keys(rid);
+    Some(des_decrypt_16(&k1, &k2, &intermediate))
+}
+
+// ── Crypto primitives ────────────────────────────────────────────────────────
+
+fn md5(data: &[u8]) -> [u8; 16] {
+    let mut hasher = Md5::new();
+    hasher.update(data);
+    hasher.finalize().into()
+}
+
+fn rc4_decrypt(key: &[u8; 16], ciphertext: &[u8]) -> Option<Vec<u8>> {
+    Some(rc4_crypt(key, ciphertext))
+}
+
+/// Pure-Rust RC4 keystream generator (avoids a separate rc4 crate and keeps
+/// the cipher dependency set on cipher 0.4 / aes / des only).
+fn rc4_crypt(key: &[u8], data: &[u8]) -> Vec<u8> {
+    let mut s: [u8; 256] = std::array::from_fn(|i| i as u8);
+    let mut j: u8 = 0;
+    for i in 0..256 {
+        j = j.wrapping_add(s[i]).wrapping_add(key[i % key.len()]);
+        s.swap(i, j as usize);
+    }
+
+    let mut i: u8 = 0;
+    let mut j: u8 = 0;
+    data.iter()
+        .map(|b| {
+            i = i.wrapping_add(1);
+            j = j.wrapping_add(s[i as usize]);
+            s.swap(i as usize, j as usize);
+            let k = s[(s[i as usize].wrapping_add(s[j as usize])) as usize];
+            b ^ k
+        })
+        .collect()
+}
+
+fn rid_to_des_keys(rid: u32) -> ([u8; 8], [u8; 8]) {
+    let rid_bytes = rid.to_le_bytes();
+    let key1 = expand_des_key(&[
+        rid_bytes[0],
+        rid_bytes[1],
+        rid_bytes[2],
+        rid_bytes[3],
+        rid_bytes[0],
+        rid_bytes[1],
+        rid_bytes[2],
+    ]);
+    let key2 = expand_des_key(&[
+        rid_bytes[3],
+        rid_bytes[0],
+        rid_bytes[1],
+        rid_bytes[2],
+        rid_bytes[3],
+        rid_bytes[0],
+        rid_bytes[1],
+    ]);
+    (key1, key2)
+}
+
+fn expand_des_key(key: &[u8]) -> [u8; 8] {
+    let mut k = [0u8; 7];
+    let len = key.len().min(7);
+    k[..len].copy_from_slice(&key[..len]);
+
+    let mut result = [0u8; 8];
+    result[0] = ((k[0] >> 1) & 0x7f) << 1;
+    result[1] = ((k[0] & 0x01) << 6 | (k[1] >> 2) & 0x3f) << 1;
+    result[2] = ((k[1] & 0x03) << 5 | (k[2] >> 3) & 0x1f) << 1;
+    result[3] = ((k[2] & 0x07) << 4 | (k[3] >> 4) & 0x0f) << 1;
+    result[4] = ((k[3] & 0x0f) << 3 | (k[4] >> 5) & 0x07) << 1;
+    result[5] = ((k[4] & 0x1f) << 2 | (k[5] >> 6) & 0x03) << 1;
+    result[6] = ((k[5] & 0x3f) << 1 | (k[6] >> 7) & 0x01) << 1;
+    result[7] = (k[6] & 0x7f) << 1;
+    result
+}
+
+fn des_decrypt_16(key1: &[u8; 8], key2: &[u8; 8], ciphertext: &[u8; 16]) -> [u8; 16] {
+    let mut plaintext = [0u8; 16];
+    plaintext[..8].copy_from_slice(&des_decrypt_block(
+        key1,
+        ciphertext[..8].try_into().unwrap(),
+    ));
+    plaintext[8..].copy_from_slice(&des_decrypt_block(
+        key2,
+        ciphertext[8..16].try_into().unwrap(),
+    ));
+    plaintext
+}
+
+fn des_decrypt_block(key: &[u8; 8], ciphertext: &[u8; 8]) -> [u8; 8] {
+    let cipher = Des::new_from_slice(key).expect("DES key length is 8 bytes");
+    let mut block = GenericArray::clone_from_slice(ciphertext);
+    cipher.decrypt_block(&mut block);
+    let mut out = [0u8; 8];
+    out.copy_from_slice(&block);
+    out
+}
+
+fn aes128_cbc_decrypt(key: &[u8], iv: &[u8; 16], ciphertext: &[u8]) -> Option<Vec<u8>> {
+    if key.len() != 16 || !ciphertext.len().is_multiple_of(16) {
+        return None;
+    }
+    let cipher = aes::Aes128::new_from_slice(key).ok()?;
+    let mut prev: [u8; 16] = *iv;
+    let mut plaintext = vec![0u8; ciphertext.len()];
+
+    for (i, chunk) in ciphertext.chunks_exact(16).enumerate() {
+        let mut block = GenericArray::clone_from_slice(chunk);
+        cipher.decrypt_block(&mut block);
+        for j in 0..16 {
+            block[j] ^= prev[j];
+        }
+        plaintext[i * 16..(i + 1) * 16].copy_from_slice(&block);
+        prev = chunk.try_into().ok()?;
+    }
+    Some(plaintext)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aes::cipher::BlockEncrypt;
+
+    #[test]
+    fn rc4_crypt_known_vector() {
+        let key = [1u8, 2, 3, 4, 5];
+        let plaintext = [0u8; 8];
+        let ciphertext = rc4_crypt(&key, &plaintext);
+        assert_eq!(hex::encode(ciphertext), "b2396305f03dc027");
+    }
+
+    #[test]
+    fn aes128_cbc_decrypt_known_vector() {
+        let key = hex::decode("2b7e151628aed2a6abf7158809cf4f3c").unwrap();
+        let iv = hex::decode("000102030405060708090a0b0c0d0e0f").unwrap();
+        let ciphertext = hex::decode("7649abac8119b246cee98e9b12e9197d").unwrap();
+        let plaintext = aes128_cbc_decrypt(&key, &iv.try_into().unwrap(), &ciphertext)
+            .expect("decryption failed");
+        assert_eq!(hex::encode(plaintext), "6bc1bee22e409f96e93d7e117393172a");
+    }
+
+    #[test]
+    fn expand_des_key_known_vector() {
+        assert_eq!(
+            hex::encode(expand_des_key(&[1, 2, 3, 4, 5, 6, 7])),
+            "008080604028180e"
+        );
+        assert_eq!(hex::encode(expand_des_key(&[0; 7])), "0000000000000000");
+    }
+
+    #[test]
+    fn rid_to_des_keys_known_vector() {
+        let (k1, k2) = rid_to_des_keys(500);
+        assert_eq!(hex::encode(k1), "f40040000ea00400");
+        assert_eq!(hex::encode(k2), "007a00200006d002");
+    }
+
+    fn aes128_cbc_encrypt(key: &[u8], iv: &[u8; 16], plaintext: &[u8]) -> Vec<u8> {
+        assert!(key.len() == 16 && plaintext.len().is_multiple_of(16));
+        let cipher = aes::Aes128::new_from_slice(key).unwrap();
+        let mut prev: [u8; 16] = *iv;
+        let mut ciphertext = vec![0u8; plaintext.len()];
+        for (i, chunk) in plaintext.chunks_exact(16).enumerate() {
+            let mut block = [0u8; 16];
+            for j in 0..16 {
+                block[j] = chunk[j] ^ prev[j];
+            }
+            let mut ga = GenericArray::clone_from_slice(&block);
+            cipher.encrypt_block(&mut ga);
+            ciphertext[i * 16..(i + 1) * 16].copy_from_slice(&ga);
+            prev = ga.into();
+        }
+        ciphertext
+    }
+
+    fn des_encrypt_block(key: &[u8; 8], plaintext: &[u8; 8]) -> [u8; 8] {
+        let cipher = Des::new_from_slice(key).expect("DES key length is 8 bytes");
+        let mut block = GenericArray::clone_from_slice(plaintext);
+        cipher.encrypt_block(&mut block);
+        let mut out = [0u8; 8];
+        out.copy_from_slice(&block);
+        out
+    }
+
+    fn des_encrypt_16(key1: &[u8; 8], key2: &[u8; 8], plaintext: &[u8; 16]) -> [u8; 16] {
+        let mut ciphertext = [0u8; 16];
+        ciphertext[..8]
+            .copy_from_slice(&des_encrypt_block(key1, plaintext[..8].try_into().unwrap()));
+        ciphertext[8..]
+            .copy_from_slice(&des_encrypt_block(key2, plaintext[8..].try_into().unwrap()));
+        ciphertext
+    }
+
+    #[test]
+    fn derive_hashed_boot_key_aes_roundtrip() {
+        let boot_key: [u8; 16] = *b"0123456789abcdef";
+        let salt: [u8; 16] = *b"abcdefghijklmnop";
+        let secret: [u8; 32] = *b"0123456789abcdef0123456789abcdef";
+        let encrypted = aes128_cbc_encrypt(&boot_key, &salt, &secret);
+        let mut account_f = vec![0u8; DOMAIN_KEY_OFFSET + 32 + encrypted.len()];
+        account_f[DOMAIN_KEY_OFFSET] = 2; // AES marker
+        account_f[DOMAIN_KEY_OFFSET + 4..DOMAIN_KEY_OFFSET + 8].copy_from_slice(&[2, 0, 0, 0]); // revision
+        account_f[DOMAIN_KEY_OFFSET + 8..DOMAIN_KEY_OFFSET + 12]
+            .copy_from_slice(&(encrypted.len() as u32).to_le_bytes()); // length
+        account_f[DOMAIN_KEY_OFFSET + 12..DOMAIN_KEY_OFFSET + 16]
+            .copy_from_slice(&(encrypted.len() as u32).to_le_bytes()); // data length
+        account_f[DOMAIN_KEY_OFFSET + 16..DOMAIN_KEY_OFFSET + 32].copy_from_slice(&salt);
+        account_f[DOMAIN_KEY_OFFSET + 32..].copy_from_slice(&encrypted);
+
+        let derived = derive_hashed_boot_key(boot_key, &account_f).expect("derive failed");
+        assert_eq!(derived, secret);
+    }
+
+    #[test]
+    fn decrypt_user_hashes_aes_roundtrip() {
+        let hashed_boot_key: [u8; 32] = *b"0123456789abcdef0123456789abcdef";
+        let rid = 500u32;
+        let salt: [u8; 16] = *b"saltsaltsaltsalt";
+
+        // Final NT hash (empty-password canonical value).
+        let final_nt = hex::decode(NT_HASH_EMPTY).unwrap();
+        let final_nt: [u8; 16] = final_nt.try_into().unwrap();
+
+        // SAM stores the DES-encrypted hash; AES protects that intermediate value.
+        let (k1, k2) = rid_to_des_keys(rid);
+        let intermediate = des_encrypt_16(&k1, &k2, &final_nt);
+        let encrypted = aes128_cbc_encrypt(&hashed_boot_key[..16], &salt, &intermediate);
+
+        // Build a minimal user V value pointing at the AES NT hash blob.
+        let mut user_v = vec![0u8; USER_V_HEADER_LEN + 48];
+        let nt_offset: u32 = 0;
+        let nt_length: u32 = 48;
+        user_v[0xA8..0xAC].copy_from_slice(&nt_offset.to_le_bytes());
+        user_v[0xAC..0xB0].copy_from_slice(&nt_length.to_le_bytes());
+
+        let blob_offset = USER_V_HEADER_LEN;
+        let data_length = 16u32;
+        user_v[blob_offset + 12..blob_offset + 16].copy_from_slice(&data_length.to_le_bytes());
+        user_v[blob_offset + 16..blob_offset + 32].copy_from_slice(&salt);
+        user_v[blob_offset + 32..blob_offset + 48].copy_from_slice(&encrypted);
+
+        let hashes = decrypt_user_hashes(hashed_boot_key, rid, &user_v).expect("decrypt failed");
+        assert_eq!(hashes.nt, NT_HASH_EMPTY);
+        assert_eq!(hashes.lm, LM_HASH_EMPTY);
+    }
+}

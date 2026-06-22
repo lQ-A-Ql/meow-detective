@@ -7,6 +7,8 @@
 
 use chrono::{DateTime, TimeZone, Utc};
 
+use crate::registry::RegistryError;
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -183,13 +185,20 @@ pub fn scan_free_cells(bytes: &[u8]) -> Vec<FreeCell> {
 /// that appear well-formed are returned with `"high"` confidence; records
 /// whose data appears partially overwritten or corrupted are returned with
 /// `"low"` confidence.
-pub fn scan_deleted_registry_cells(bytes: &[u8], hive_path: &str) -> Result<RecoverResult, String> {
+pub fn scan_deleted_registry_cells(
+    bytes: &[u8],
+    hive_path: &str,
+) -> Result<RecoverResult, RegistryError> {
     // Validate base block magic.
     if bytes.len() < BASE_BLOCK_SIZE {
-        return Err("registry hive too short for base block".to_string());
+        return Err(RegistryError::invalid_cell(
+            "registry hive too short for base block",
+        ));
     }
     if bytes.get(0..4) != Some(b"regf") {
-        return Err("not a valid registry hive (missing 'regf' magic)".to_string());
+        return Err(RegistryError::invalid_cell(
+            "not a valid registry hive (missing 'regf' magic)",
+        ));
     }
 
     let free_cells = scan_free_cells(bytes);
@@ -973,7 +982,8 @@ mod tests {
     fn test_invalid_hive_rejected() {
         let data = vec![0u8; 100];
         let err = scan_deleted_registry_cells(&data, "bad").unwrap_err();
-        assert!(err.contains("too short") || err.contains("regf"));
+        let msg = err.to_string();
+        assert!(msg.contains("too short") || msg.contains("regf"));
     }
 
     // ── Test: recover_multiple_cells ─────────────────────────────────────

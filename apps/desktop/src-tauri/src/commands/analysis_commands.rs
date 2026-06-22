@@ -10,8 +10,8 @@ use transport::{
     dto::{
         AnalysisExtractionRunDto, AnalysisFileClassificationDto, AnalysisSystemInfoDto,
         BrowserHistorySummaryDto, CorrelationSnapshotDto, EmailExtractionSummaryDto,
-        EvidenceClassificationSummaryDto, RegistryExtractionSummaryDto, V2GovernanceSnapshotDto,
-        V3GovernanceSnapshotDto,
+        EvidenceClassificationSummaryDto, RegistryExtractionSummaryDto,
+        RegistryStructuredSummaryDto, V2GovernanceSnapshotDto, V3GovernanceSnapshotDto,
     },
     CommandError,
 };
@@ -156,6 +156,23 @@ pub async fn get_registry_extraction_summary(
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         analysis_service::get_registry_extraction_summary(&conn, req.offset, req.limit)
+            .map_err(CommandError::from_service_error)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+/// Get structured registry summary (SAM users, UserAssist, hive overview).
+#[tauri::command]
+pub async fn get_registry_structured_summary(
+    state: State<'_, AppState>,
+) -> Result<RegistryStructuredSummaryDto, CommandError> {
+    let app_state = state.inner().clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        require_active_case(&app_state)?;
+        let conn = get_case_connection(&app_state)?;
+        analysis_service::get_registry_structured_summary(&conn)
             .map_err(CommandError::from_service_error)
     })
     .await

@@ -1,5 +1,6 @@
 import {
   AddCitationRequest,
+  AnalysisParseStatus,
   ArtifactRow,
   AnalysisExtractionPageRequest,
   BatchJob,
@@ -67,8 +68,6 @@ import {
   recentObjects,
   reportHistory,
   reportTemplates,
-  registryExtractionSummary,
-  registryStructuredSummary,
   searchHits,
   timelineEvents,
   traces,
@@ -369,16 +368,44 @@ export const mockProvider: ApiProvider = {
   async runAnalysisExtraction(_request: AnalysisExtractionRequest) {
     return analysisExtractionRun;
   },
-  async getRegistryExtractionSummary(request?: AnalysisExtractionPageRequest) {
-    const offset = request?.offset ?? 0;
-    const limit = request?.limit ?? registryExtractionSummary.values.length;
+  async getRegistryExtractionSummary(_request?: AnalysisExtractionPageRequest) {
     return {
-      ...registryExtractionSummary,
-      values: registryExtractionSummary.values.slice(offset, offset + limit),
+      status: 'notFound' as AnalysisParseStatus,
+      total: 0,
+      values: [],
+      generatedAt: new Date().toISOString(),
+      warnings: [],
     };
   },
   async getRegistryStructuredSummary() {
-    return registryStructuredSummary;
+    return {
+      status: 'notFound' as AnalysisParseStatus,
+      generatedAt: new Date().toISOString(),
+      warnings: [],
+      hiveOverviews: [],
+      samUsers: [],
+      userAssistEntries: [],
+      networkProfiles: [],
+      installedSoftware: [],
+      usbDevices: [],
+      mountedDevices: [],
+      systemServices: [],
+      shutdownTimes: [],
+      shimcacheEntries: [],
+      runKeys: [],
+      openSaveMru: [],
+      lastVisitedMru: [],
+      runMru: [],
+      shellbagEntries: [],
+      muicacheEntries: [],
+      amcacheApplications: [],
+      amcacheApplicationFiles: [],
+      lsaPackages: [],
+      appCompatLayers: [],
+      securityPolicies: [],
+      lsaSecrets: [],
+      cachedCredentials: [],
+    };
   },
   async getBrowserHistorySummary(request?: AnalysisExtractionPageRequest) {
     const offset = request?.offset ?? 0;

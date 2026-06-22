@@ -563,13 +563,10 @@ fn run_analysis_extraction_extracts_registry_browser_email_and_persists() {
     })
     .unwrap();
 
-    assert_eq!(run.status, AnalysisParseStatusDto::Partial);
-    assert!(run
-        .warnings
-        .iter()
-        .any(|warning| warning.contains("CurrentVersion")));
+    assert_eq!(run.status, AnalysisParseStatusDto::Parsed);
+    assert!(run.warnings.is_empty());
     assert_eq!(run.scanned_count, 6);
-    assert_eq!(run.artifact_count, 14);
+    assert_eq!(run.artifact_count, 16);
     assert_eq!(run.timeline_event_count, 6);
 
     let mut stmt = conn
@@ -588,6 +585,7 @@ fn run_analysis_extraction_extracts_registry_browser_email_and_persists() {
         .collect::<Result<HashMap<_, _>, _>>()
         .unwrap();
     assert_eq!(counts.get("RegistryValue").copied(), Some(8));
+    assert_eq!(counts.get("RegistryHive").copied(), Some(2));
     assert_eq!(counts.get("BrowserHistory").copied(), Some(3));
     assert_eq!(counts.get("BrowserDownload").copied(), Some(2));
     assert_eq!(counts.get("EmailMessage").copied(), Some(1));
@@ -609,6 +607,18 @@ fn run_analysis_extraction_extracts_registry_browser_email_and_persists() {
             && value.value_name == "ComputerName"
             && value.data == registry::SYSTEM_COMPUTER_NAME
     }));
+
+    let structured = get_registry_structured_summary(&conn).unwrap();
+    assert_eq!(structured.status, AnalysisParseStatusDto::Parsed);
+    let hive_names: Vec<&str> = structured
+        .hive_overviews
+        .iter()
+        .map(|h| h.hive_name.as_str())
+        .collect();
+    assert!(hive_names.contains(&"SYSTEM"));
+    assert!(hive_names.contains(&"SOFTWARE"));
+    assert!(structured.sam_users.is_empty());
+    assert!(structured.user_assist_entries.is_empty());
 
     let browser = get_browser_history_summary(&conn, 0, 20).unwrap();
     assert_eq!(browser.visit_total, 3);
@@ -659,14 +669,14 @@ fn run_analysis_extraction_extracts_registry_browser_email_and_persists() {
     })
     .unwrap();
     assert_eq!(second_run.scanned_count, 0);
-    assert_eq!(second_run.artifact_count, 14);
+    assert_eq!(second_run.artifact_count, 16);
     let artifact_count: i64 = conn
         .query_row("SELECT COUNT(*) FROM artifacts", [], |row| row.get(0))
         .unwrap();
     let timeline_count: i64 = conn
         .query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(artifact_count, 14);
+    assert_eq!(artifact_count, 16);
     assert_eq!(timeline_count, 6);
 }
 

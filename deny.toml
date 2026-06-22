@@ -53,6 +53,9 @@ allow = [
     "BSD-2-Clause",
     "BSD-3-Clause",
     "CC0-1.0",
+    # CDLA-Permissive-2.0 is used by webpki-root-certs / webpki-roots (transitive via rustls/Tauri).
+    # Owner: Registry Quality Maintenance; reviewed: 2026-06-21; acceptable for root-CA data bundles.
+    "CDLA-Permissive-2.0",
     "ISC",
     "MIT",
     "MPL-2.0",

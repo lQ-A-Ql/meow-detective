@@ -55,9 +55,9 @@
 
 | 事实 | 当前值 | 事实源 |
 |---|---:|---|
-| Rust workspace crate | 31 | `crates/` (新增 V4: fs-ext4, fs-xfs, fs-btrfs, fs-apfs, fs-hfsplus, exchange) |
-| Tauri commands | 84 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
-| app-services source modules | 25 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
+| Rust workspace crate | 37 | `crates/` (新增 V4: fs-ext4, fs-xfs, fs-btrfs, fs-apfs, fs-hfsplus, exchange) |
+| Tauri commands | 85 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
+| app-services source modules | 24 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
 | SQLite repositories | 12 | `crates/persistence-sqlite/src/repositories/*_repo.rs` (新增: graph_repo, notebook_repo, batch_repo) |
 | SQLite migration scripts | 31 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0030 + staging_001) |
 | frontend pages | 10 | `frontend/src/app/pages/*.tsx`，排除测试 (新增: V3Dashboard) |

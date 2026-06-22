@@ -1,13 +1,15 @@
 {
   "lastVerifiedAt": "2026-06-13T00:00:00Z",
-  "documentedLimitCount": 18,
+  "documentedLimitCount": 36,
   "items": [
     {
       "category": "E01",
       "item": "多段复杂样本",
       "status": "partial",
       "summary": "当前公开样本仅 tiny.E01 单段。public-medium/e01 尚空",
-      "affectedChains": ["E01"],
+      "affectedChains": [
+        "E01"
+      ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
@@ -15,39 +17,71 @@
       "item": "全量损坏恢复",
       "status": "notGuaranteed",
       "summary": "极端损坏、复杂修复场景仍缺样本与回归",
-      "affectedChains": ["NTFS"],
+      "affectedChains": [
+        "NTFS"
+      ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
-      "category": "FAT/exFAT",
+      "category": "FAT / exFAT",
       "item": "已删除文件恢复",
       "status": "notGuaranteed",
       "summary": "本轮 deleted 重点仅覆盖 NTFS MFT",
-      "affectedChains": ["FAT", "exFAT"],
+      "affectedChains": [
+        "FAT",
+        "exFAT"
+      ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
-      "category": "FAT/exFAT",
+      "category": "FAT / exFAT",
       "item": "committed fixture",
       "status": "unsupported",
       "summary": "无 fixture 文件。expected.json 待建",
-      "affectedChains": ["FAT", "exFAT"],
+      "affectedChains": [
+        "FAT",
+        "exFAT"
+      ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
       "category": "Registry",
       "item": "transaction log 完整重放",
       "status": "notGuaranteed",
-      "summary": "当前以 hive 直接解析为主",
-      "affectedChains": ["Registry"],
+      "summary": "当前以 hive 直接解析为主。txlog 集成仍为未完成项",
+      "affectedChains": [
+        "Registry"
+      ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
       "category": "Registry",
       "item": "private-real 回归 E01",
       "status": "unsupported",
-      "summary": "testdata/fixtures/private-real-regression/ 仅存 metadata.json，E01 镜像未提交",
-      "affectedChains": ["Registry"],
+      "summary": "liuyang_pc.E01 已验证 SYSTEM/SOFTWARE/NTUSER/SAM 提取；E01 镜像本身未提交至仓库",
+      "affectedChains": [
+        "Registry"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Registry",
+      "item": "已删除 cell 恢复",
+      "status": "notGuaranteed",
+      "summary": "当前不解析 hive bin 中未分配 cell。恢复已删除键值需要 cell 分配图与 txlog 交叉引用",
+      "affectedChains": [
+        "Registry"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Registry",
+      "item": "完整 registry browser",
+      "status": "notGuaranteed",
+      "summary": "当前为定向字段提取，不提供交互式 key path 枚举与全 hive 浏览",
+      "affectedChains": [
+        "Registry"
+      ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
@@ -55,7 +89,9 @@
       "item": "committed fixture 文件",
       "status": "unsupported",
       "summary": "testdata/artifacts/windows/prefetch/ 仅含 .gitkeep。public-medium/prefetch 尚空",
-      "affectedChains": ["Prefetch"],
+      "affectedChains": [
+        "Prefetch"
+      ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
@@ -63,7 +99,9 @@
       "item": "自动化测试",
       "status": "partial",
       "summary": "仅 1 个 synthetic 单元测试",
-      "affectedChains": ["Prefetch"],
+      "affectedChains": [
+        "Prefetch"
+      ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
@@ -71,7 +109,9 @@
       "item": "全版本压缩变体",
       "status": "partial",
       "summary": "需要继续补样本与 expected baseline",
-      "affectedChains": ["Prefetch"],
+      "affectedChains": [
+        "Prefetch"
+      ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
@@ -79,7 +119,9 @@
       "item": "committed fixture 文件",
       "status": "unsupported",
       "summary": "testdata/artifacts/windows/lnk/ 仅含 .gitkeep。无自动化测试",
-      "affectedChains": ["LNK"],
+      "affectedChains": [
+        "LNK"
+      ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
@@ -87,7 +129,9 @@
       "item": "全量复杂 shell item",
       "status": "partial",
       "summary": "当前重点是 target path 与核心时间字段",
-      "affectedChains": ["LNK"],
+      "affectedChains": [
+        "LNK"
+      ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
@@ -95,7 +139,9 @@
       "item": "committed fixture 文件",
       "status": "unsupported",
       "summary": "testdata/artifacts/windows/recycle-bin/ 仅含 .gitkeep。无自动化测试",
-      "affectedChains": ["RecycleBin"],
+      "affectedChains": [
+        "RecycleBin"
+      ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
@@ -103,7 +149,9 @@
       "item": "全损坏恢复场景",
       "status": "notGuaranteed",
       "summary": "当前以标准结构提取为主",
-      "affectedChains": ["RecycleBin"],
+      "affectedChains": [
+        "RecycleBin"
+      ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
@@ -111,7 +159,9 @@
       "item": "committed fixture",
       "status": "unsupported",
       "summary": "有实现 (2 测试)，无 fixture，无 expected.json",
-      "affectedChains": ["JumpList"],
+      "affectedChains": [
+        "JumpList"
+      ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
@@ -119,7 +169,9 @@
       "item": "committed fixture",
       "status": "unsupported",
       "summary": "有实现 (4 测试)，无 fixture，无 expected.json",
-      "affectedChains": ["SRU"],
+      "affectedChains": [
+        "SRU"
+      ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
@@ -127,7 +179,9 @@
       "item": "committed fixture",
       "status": "unsupported",
       "summary": "有实现 (3 测试)，无 fixture，无 expected.json",
-      "affectedChains": ["Thumbcache"],
+      "affectedChains": [
+        "Thumbcache"
+      ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
@@ -135,15 +189,192 @@
       "item": "全部",
       "status": "unsupported",
       "summary": "artifacts-windows 中无浏览器模块。Chrome/Edge/Firefox 均无代码、无 fixture、无 expected.json",
-      "affectedChains": ["ChromeHistory", "EdgeHistory", "FirefoxHistory"],
+      "affectedChains": [
+        "ChromeHistory",
+        "EdgeHistory",
+        "FirefoxHistory"
+      ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
       "category": "Email",
       "item": "全部",
       "status": "unsupported",
-      "summary": "artifacts-windows 中无邮件模块。EML/EMLX/PST/OST/mbox 均无实现",
-      "affectedChains": ["Email"],
+      "summary": "artifacts-windows 中无邮件模块。EML/EMLX/PST/OST/mbox 均无实现。PST/OST/mbox 规划于 V3-2",
+      "affectedChains": [
+        "Email"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Linux 文件系统",
+      "item": "ext4 raw disk",
+      "status": "unsupported",
+      "summary": "当前仅支持从已挂载或导入的 Linux 文件树提取制品。ext4 原始磁盘镜像解析规划于 V4",
+      "affectedChains": [
+        "ext4",
+        "XFS",
+        "Btrfs"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Linux 文件系统",
+      "item": "XFS raw disk",
+      "status": "unsupported",
+      "summary": "XFS 原始磁盘镜像解析规划于 V4",
+      "affectedChains": [
+        "ext4",
+        "XFS",
+        "Btrfs"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Linux 文件系统",
+      "item": "Btrfs raw disk",
+      "status": "unsupported",
+      "summary": "Btrfs 原始磁盘镜像解析规划于 V4",
+      "affectedChains": [
+        "ext4",
+        "XFS",
+        "Btrfs"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Linux 文件系统",
+      "item": "已删除文件恢复 (ext4/XFS/Btrfs)",
+      "status": "notGuaranteed",
+      "summary": "文件雕刻与已删除恢复规划于 V4",
+      "affectedChains": [
+        "ext4",
+        "XFS",
+        "Btrfs"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "macOS 文件系统",
+      "item": "APFS raw disk",
+      "status": "unsupported",
+      "summary": "当前仅支持从已挂载或导入的 macOS 文件树提取制品。APFS 原始磁盘镜像解析规划于 V4",
+      "affectedChains": [
+        "APFS",
+        "HFS+"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "macOS 文件系统",
+      "item": "HFS+ raw disk",
+      "status": "unsupported",
+      "summary": "HFS+ 原始磁盘镜像解析规划于 V4",
+      "affectedChains": [
+        "APFS",
+        "HFS+"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "macOS 文件系统",
+      "item": "已删除文件恢复 (APFS/HFS+)",
+      "status": "notGuaranteed",
+      "summary": "文件雕刻与已删除恢复规划于 V4",
+      "affectedChains": [
+        "APFS",
+        "HFS+"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "移动设备",
+      "item": "iOS 制品",
+      "status": "unsupported",
+      "summary": "iOS 备份/镜像解析（Contacts、Messages、Photos、Safari 等）规划于 V4",
+      "affectedChains": [
+        "iOS"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "移动设备",
+      "item": "Android 制品",
+      "status": "unsupported",
+      "summary": "Android 备份/镜像解析（SMS/MMS、联系人、应用数据、Chrome 历史）规划于 V4",
+      "affectedChains": [
+        "Android"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "云",
+      "item": "AWS CloudTrail",
+      "status": "unsupported",
+      "summary": "云审计日志采集与关联规划于 V4",
+      "affectedChains": [
+        "CloudAudit"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "云",
+      "item": "Azure Audit Logs",
+      "status": "unsupported",
+      "summary": "云审计日志采集与关联规划于 V4",
+      "affectedChains": [
+        "CloudAudit"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "云",
+      "item": "GCP Audit Logs",
+      "status": "unsupported",
+      "summary": "云审计日志采集与关联规划于 V4",
+      "affectedChains": [
+        "CloudAudit"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "云",
+      "item": "Google Workspace Logs",
+      "status": "unsupported",
+      "summary": "云工作空间日志规划于 V4",
+      "affectedChains": [
+        "CloudAudit"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "云",
+      "item": "Microsoft 365 Unified Audit Log",
+      "status": "unsupported",
+      "summary": "云审计日志规划于 V4",
+      "affectedChains": [
+        "CloudAudit"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "网络",
+      "item": "PCAP/网络捕获",
+      "status": "unsupported",
+      "summary": "网络数据包捕获摄入与流记录解析规划于 V4",
+      "affectedChains": [
+        "PCAP"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "内存",
+      "item": "内存镜像采集与分析",
+      "status": "unsupported",
+      "summary": "实时响应采集与内存镜像集成规划于 V4",
+      "affectedChains": [
+        "Memory"
+      ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     }
   ]

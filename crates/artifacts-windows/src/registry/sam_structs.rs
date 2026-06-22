@@ -106,25 +106,27 @@ pub fn extract_boot_key(system_hive: &[u8]) -> Option<[u8; 16]> {
 #[derive(BinRead, Debug)]
 #[br(little)]
 pub struct UserFRaw {
+    /// Unknown 8-byte header observed in Windows 10/11 SAM hives.
+    _unknown1: u64,
     /// Last login time as Windows FILETIME (100 ns since 1601-01-01).
     pub last_login_time: u64,
-    _pad1: u64,
+    /// Unknown 8-byte field.
+    _unknown2: u64,
     /// Last password change time as Windows FILETIME.
     pub last_pwd_change_time: u64,
-    _pad2: u64,
+    /// Unknown 8-byte field.
+    _unknown3: u64,
     /// Last failed login time as Windows FILETIME.
     pub last_failed_login_time: u64,
     /// Relative Identifier (RID) of the user account.
     pub rid: u32,
-    _pad3: u32,
     /// User account attribute flags (e.g. user vs. machine account).
     pub user_attribute: u32,
-    _pad4: u32,
     /// Number of successful logons.
     pub logon_count: u16,
     /// Number of failed logon attempts.
     pub invalid_login_count: u16,
-    _pad5: [u8; 12],
+    _unknown4: [u8; 20],
 }
 
 /// Parse a SAM UserF binary blob and extract the RID, logon count, and user
@@ -386,15 +388,14 @@ mod tests {
 
     fn make_user_f(rid: u32, logon_count: u16, user_attribute: u32) -> Vec<u8> {
         let mut data = vec![0u8; 80];
-        // last_login_time at 0x00: leave as 0
-        // _pad1 at 0x08: leave as 0
-        // last_pwd_change_time at 0x10: leave as 0
-        // _pad2 at 0x18: leave as 0
-        // last_failed_login_time at 0x20: leave as 0
-        data[0x28..0x2C].copy_from_slice(&rid.to_le_bytes());
-        // _pad3 at 0x2C: leave as 0
-        data[0x30..0x34].copy_from_slice(&user_attribute.to_le_bytes());
-        // _pad4 at 0x34: leave as 0
+        // _unknown1 at 0x00: leave as 0
+        // last_login_time at 0x08: leave as 0
+        // _unknown2 at 0x10: leave as 0
+        // last_pwd_change_time at 0x18: leave as 0
+        // _unknown3 at 0x20: leave as 0
+        // last_failed_login_time at 0x28: leave as 0
+        data[0x30..0x34].copy_from_slice(&rid.to_le_bytes());
+        data[0x34..0x38].copy_from_slice(&user_attribute.to_le_bytes());
         data[0x38..0x3A].copy_from_slice(&logon_count.to_le_bytes());
         // invalid_login_count at 0x3A: leave as 0
         data

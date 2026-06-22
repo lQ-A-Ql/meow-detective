@@ -17,8 +17,8 @@ pub use candidates::{
 };
 pub use classification::{classify_files_by_magic, classify_files_by_metadata};
 pub use extraction::{
-    get_browser_history_summary, get_email_extraction_summary, get_registry_extraction_summary,
-    run_analysis_extraction,
+    extract_registry_candidate, get_browser_history_summary, get_email_extraction_summary,
+    get_registry_extraction_summary, get_registry_structured_summary, run_analysis_extraction,
 };
 pub use summary::generate_analysis_summary;
 pub use system_info::extract_system_info_for_case;

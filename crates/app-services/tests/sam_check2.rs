@@ -102,7 +102,7 @@ fn sam_extraction_from_liuyang_e01() {
     eprintln!("Using SAM from NTFS at offset: {}", chosen_offset);
 
     // Step 3: Extract SAM fields
-    let info = artifacts_windows::extract_sam_fields(&sam_bytes, sam_path).unwrap();
+    let info = artifacts_windows::extract_sam_fields(&sam_bytes, sam_path, None).unwrap();
 
     // Print results
     eprintln!(

@@ -38,7 +38,7 @@ export function BatchHistory({ jobs, onSelectJob }: BatchHistoryProps) {
   const sortedJobs = useMemo(() => {
     const sorted = [...jobs];
     sorted.sort((a, b) => {
-      let comparison = 0;
+      let comparison;
       switch (sortKey) {
         case 'name':
           comparison = a.name.localeCompare(b.name);

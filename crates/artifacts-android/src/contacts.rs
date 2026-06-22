@@ -16,7 +16,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Row from the contacts data table: (mimetype, data1, data2, data3, data4)
-type ContactDataRow = (String, Option<String>, Option<String>, Option<String>, Option<String>);
+type ContactDataRow = (
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
 /// Contact data grouped by raw_contact_id
 type ContactDataGroups = HashMap<i64, Vec<ContactDataRow>>;
 use std::io::Write;
