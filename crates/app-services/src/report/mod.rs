@@ -171,7 +171,7 @@ pub(crate) fn current_analysis(conn: &Connection) -> Result<ReportAnalysis, Stri
 
 pub(crate) fn current_correlation(conn: &Connection) -> Result<ReportCorrelation, String> {
     Ok(ReportCorrelation {
-        snapshot: crate::correlation::get_correlation_snapshot(conn)?,
+        snapshot: crate::correlation::get_correlation_snapshot(conn).map_err(|e| e.to_string())?,
     })
 }
 

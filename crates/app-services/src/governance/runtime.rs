@@ -77,8 +77,8 @@ pub(crate) fn build_runtime_signals(
 pub(crate) fn correlation_runtime_snapshot(
     conn: &Connection,
 ) -> Result<CorrelationRuntimeSnapshot, GovernanceError> {
-    let snapshot =
-        crate::correlation::get_correlation_snapshot(conn).map_err(GovernanceError::Internal)?;
+    let snapshot = crate::correlation::get_correlation_snapshot(conn)
+        .map_err(|e| GovernanceError::Internal(e.to_string()))?;
     let high_confidence_lead_count = snapshot
         .leads
         .iter()

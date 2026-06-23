@@ -51,7 +51,8 @@ pub fn get_v3_governance_snapshot(
 // ── Graph Statistics ───────────────────────────────────────────────────────
 
 fn build_graph_stats(conn: &Connection, case_id: &str) -> Result<GraphStatsDto, String> {
-    let graph_snapshot = crate::graph_service::get_graph_snapshot(conn, case_id)?;
+    let graph_snapshot =
+        crate::graph_service::get_graph_snapshot(conn, case_id).map_err(|e| e.to_string())?;
     Ok(GraphStatsDto {
         node_count_by_type: graph_snapshot.node_count_by_type,
         edge_count_by_type: graph_snapshot.edge_count_by_type,

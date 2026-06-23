@@ -1,19 +1,43 @@
 use domain::{EdgeType, GraphEdge, GraphNode, NodeType};
 use persistence_sqlite::repositories::graph_repo::GraphRepo;
 use rusqlite::Connection;
+use thiserror::Error;
 use transport::dto::{
     GraphEdgeDto, GraphEdgeTypeDto, GraphNodeDto, GraphNodeTypeDto, GraphProvenanceEntryDto,
     GraphQueryDto, GraphQueryResultDto, GraphSnapshotDto,
 };
 
+#[derive(Debug, Error)]
+pub enum GraphServiceError {
+    #[error("database error: {0}")]
+    Db(#[from] persistence_sqlite::DbError),
+    #[error("serialization error: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error("not found: {0}")]
+    NotFound(String),
+    #[error("invalid input: {0}")]
+    InvalidInput(String),
+    #[error("{0}")]
+    Other(String),
+}
+
+impl From<rusqlite::Error> for GraphServiceError {
+    fn from(e: rusqlite::Error) -> Self {
+        Self::Db(persistence_sqlite::DbError::from(e))
+    }
+}
+
 // ── Public API ──
 
 /// Gather aggregate statistics for the investigative graph in the given case.
-pub fn get_graph_snapshot(conn: &Connection, case_id: &str) -> Result<GraphSnapshotDto, String> {
+pub fn get_graph_snapshot(
+    conn: &Connection,
+    case_id: &str,
+) -> Result<GraphSnapshotDto, GraphServiceError> {
     let repo = GraphRepo::new(conn);
     let snapshot = repo
         .get_snapshot(case_id)
-        .map_err(|e| format!("graph snapshot query: {e}"))?;
+        .map_err(|e| GraphServiceError::Other(format!("graph snapshot query: {e}")))?;
 
     let total_nodes = snapshot.total_nodes;
     let total_edges = snapshot.total_edges;
@@ -44,13 +68,16 @@ pub fn get_graph_snapshot(conn: &Connection, case_id: &str) -> Result<GraphSnaps
 }
 
 /// Execute a graph traversal query and return the matching subgraph.
-pub fn query_graph(conn: &Connection, query: GraphQueryDto) -> Result<GraphQueryResultDto, String> {
+pub fn query_graph(
+    conn: &Connection,
+    query: GraphQueryDto,
+) -> Result<GraphQueryResultDto, GraphServiceError> {
     let edge_types = parse_edge_types(&query.edge_types);
     let repo = GraphRepo::new(conn);
 
     let (domain_nodes, domain_edges) = repo
         .traverse(&query.start_ids, &edge_types, query.max_depth, query.limit)
-        .map_err(|e| format!("graph traversal: {e}"))?;
+        .map_err(|e| GraphServiceError::Other(format!("graph traversal: {e}")))?;
 
     // Apply confidence floor filter if specified
     let (domain_nodes, domain_edges) = if let Some(floor) = query.confidence_floor {
@@ -84,7 +111,7 @@ pub fn get_node_neighborhood(
     conn: &Connection,
     node_id: &str,
     depth: u32,
-) -> Result<GraphQueryResultDto, String> {
+) -> Result<GraphQueryResultDto, GraphServiceError> {
     use persistence_sqlite::repositories::graph_repo::Direction;
     use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -94,7 +121,7 @@ pub fn get_node_neighborhood(
     // Load the center node
     let center = repo
         .get_node(node_id)
-        .map_err(|e| format!("get center node: {e}"))?;
+        .map_err(|e| GraphServiceError::Other(format!("get center node: {e}")))?;
     let center = match center {
         Some(n) => n,
         None => {
@@ -126,7 +153,7 @@ pub fn get_node_neighborhood(
         // Fetch all neighbors (both incoming and outgoing)
         let neighbors = repo
             .get_neighbors(&current_id, &[], Direction::Both)
-            .map_err(|e| format!("get neighbors: {e}"))?;
+            .map_err(|e| GraphServiceError::Other(format!("get neighbors: {e}")))?;
 
         for (edge, neighbor) in neighbors {
             // Record the edge
@@ -164,14 +191,14 @@ pub fn get_node_neighborhood(
 pub fn get_provenance_chain(
     conn: &Connection,
     edge_id: &str,
-) -> Result<Vec<GraphProvenanceEntryDto>, String> {
+) -> Result<Vec<GraphProvenanceEntryDto>, GraphServiceError> {
     // Fetch the edge. Use a direct query since GraphRepo doesn't expose get_edge_by_id.
     let mut stmt = conn
         .prepare(
             "SELECT id, case_id, source_id, target_id, edge_type, confidence, provenance, created_at
              FROM graph_edges WHERE id = ?1",
         )
-        .map_err(|e| format!("prepare edge query: {e}"))?;
+        .map_err(|e| GraphServiceError::Other(format!("prepare edge query: {e}")))?;
 
     let edge: GraphEdge = stmt
         .query_row(rusqlite::params![edge_id], |row| {
@@ -186,7 +213,7 @@ pub fn get_provenance_chain(
                 created_at: row.get(7)?,
             })
         })
-        .map_err(|e| format!("edge not found: {e}"))?;
+        .map_err(|e| GraphServiceError::Other(format!("edge not found: {e}")))?;
 
     // Parse provenance JSON to extract rule metadata
     let provenance_json: Option<serde_json::Value> = edge
@@ -346,7 +373,7 @@ fn estimate_largest_component(
     _repo: &GraphRepo,
     _case_id: &str,
     total_nodes: u64,
-) -> Result<u64, String> {
+) -> Result<u64, GraphServiceError> {
     // For small graphs, total_nodes is a reasonable upper bound.
     // For larger graphs, a full connected-component decomposition would
     // require loading all nodes/edges into memory. Return total_nodes as
@@ -359,7 +386,7 @@ fn estimate_largest_component(
 fn enrich_parser_versions(
     conn: &Connection,
     entries: &mut [GraphProvenanceEntryDto],
-) -> Result<(), String> {
+) -> Result<(), GraphServiceError> {
     if entries.is_empty() {
         return Ok(());
     }
@@ -380,7 +407,7 @@ fn enrich_parser_versions(
              WHERE LOWER(extractor_id) = LOWER(?1) AND extractor_version IS NOT NULL
              LIMIT 1",
         )
-        .map_err(|e| format!("prepare artifact version query: {e}"))?;
+        .map_err(|e| GraphServiceError::Other(format!("prepare artifact version query: {e}")))?;
 
     for entry in entries.iter_mut() {
         if let Some(ref parser) = entry.source_parser {

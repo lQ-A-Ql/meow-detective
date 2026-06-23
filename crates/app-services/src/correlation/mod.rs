@@ -6,7 +6,26 @@ mod tests;
 use chrono::Utc;
 use serde_json::Value;
 use std::collections::BTreeMap;
+use thiserror::Error;
 use transport::dto::{CorrelationConfidenceDto, CorrelationEdgeKindDto, CorrelationNodeDto};
+
+#[derive(Debug, Error)]
+pub enum CorrelationError {
+    #[error("database error: {0}")]
+    Db(#[from] persistence_sqlite::DbError),
+    #[error("serialization error: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error("invalid input: {0}")]
+    InvalidInput(String),
+    #[error("{0}")]
+    Other(String),
+}
+
+impl From<rusqlite::Error> for CorrelationError {
+    fn from(e: rusqlite::Error) -> Self {
+        Self::Db(persistence_sqlite::DbError::from(e))
+    }
+}
 
 pub use self::graph::{
     get_correlation_snapshot, get_correlation_snapshot_incremental, invalidate_correlation_cache,
