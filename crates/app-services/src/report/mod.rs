@@ -180,7 +180,8 @@ pub(crate) fn current_governance(
     case_id: &str,
 ) -> Result<ReportGovernance, String> {
     Ok(ReportGovernance {
-        snapshot: crate::v2_governance_service::get_v2_governance_snapshot(conn, case_id)?,
+        snapshot: crate::v2_governance_service::get_v2_governance_snapshot(conn, case_id)
+            .map_err(|e| e.to_string())?,
     })
 }
 

@@ -1,0 +1,57 @@
+export interface FileTreeNode {
+  id: string;
+  name: string;
+  depth: number;
+  hasChildren: boolean;
+  entryType?: 'file' | 'directory';
+  size?: number;
+  deleted?: boolean;
+  hidden: boolean;
+  system: boolean;
+  nodeType?: string;
+  status?: string;
+  expanded?: boolean;
+  active?: boolean;
+}
+
+export interface FileChildrenPage {
+  children: FileTreeNode[];
+  totalCount: number;
+  offset?: number;
+  limit?: number;
+  truncated?: boolean;
+}
+
+export interface FileEntryRow {
+  id: string;
+  parentId?: string;
+  path: string;
+  name: string;
+  entryType: 'file' | 'directory';
+  size?: number;
+  ext?: string;
+  deleted: boolean;
+  hidden: boolean;
+  system: boolean;
+  createdAt?: string;
+  modifiedAt?: string;
+  accessedAt?: string;
+  changedAt?: string;
+  hashSha256?: string;
+}
+
+export interface FileRowsPage {
+  rows: FileEntryRow[];
+  totalCount: number;
+  offset: number;
+  limit: number;
+  truncated: boolean;
+}
+
+export interface FileJumpContext {
+  target: FileEntryRow;
+  directory: FileEntryRow;
+  ancestorDirectoryIds: string[];
+  rowOffset: number;
+  requiresShowHidden: boolean;
+}

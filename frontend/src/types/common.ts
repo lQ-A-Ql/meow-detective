@@ -1,0 +1,27 @@
+export interface ApiErrorDto {
+  code: string;
+  message: string;
+  category?: ErrorCategory;
+  details?: unknown;
+  recoverable: boolean;
+}
+
+export type ErrorCategory =
+  | 'validation'
+  | 'unsupported'
+  | 'io'
+  | 'parser'
+  | 'security'
+  | 'external'
+  | 'timeout'
+  | 'internal';
+
+export interface AppSettings {
+  caseRoot: string;
+  imageSearchPaths: string[];
+  theme: 'light' | 'dark';
+  devEventTrace: boolean;
+  maxImportWorkers?: number;
+  maxAnalysisWorkers?: number;
+  importAnalysisMode?: 'metadataOnly' | 'budgetedContent' | 'fullContent';
+}

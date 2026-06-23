@@ -29,7 +29,8 @@ pub fn get_v3_governance_snapshot(
     conn: &Connection,
     case_id: &str,
 ) -> Result<V3GovernanceSnapshotDto, String> {
-    let v2 = crate::v2_governance_service::get_v2_governance_snapshot(conn, case_id)?;
+    let v2 = crate::v2_governance_service::get_v2_governance_snapshot(conn, case_id)
+        .map_err(|e| e.to_string())?;
 
     let graph_statistics = build_graph_stats(conn, case_id)?;
     let platform_coverage = build_platform_coverage(conn)?;

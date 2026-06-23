@@ -1,4 +1,10 @@
 pub mod analysis;
+mod analysis_base;
+mod analysis_browser;
+mod analysis_classification;
+mod analysis_email;
+mod analysis_registry;
+mod analysis_system;
 pub mod android;
 pub mod artifacts;
 pub mod batch;
@@ -8,6 +14,7 @@ pub mod correlation;
 pub mod entity_resolution;
 pub mod exchange;
 pub mod files;
+mod governance;
 pub mod graph;
 pub mod import;
 pub mod ios;

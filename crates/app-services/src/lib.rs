@@ -11,6 +11,7 @@ pub mod entity_resolution;
 pub mod error_ext;
 pub mod file_carving;
 pub mod file_service;
+pub mod governance;
 pub mod graph_service;
 pub mod hash_service;
 pub mod import_analysis;
