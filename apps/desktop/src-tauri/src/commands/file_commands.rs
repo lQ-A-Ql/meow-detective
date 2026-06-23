@@ -86,28 +86,16 @@ pub async fn get_file_children_request(
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        // Short lock: extract db_path, then release
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            match guard.as_ref() {
-                Some(active) => active.db_path(),
-                None => {
-                    return Ok(FileChildrenDto {
-                        children: vec![],
-                        total_count: 0,
-                        offset: Some(request.offset),
-                        limit: Some(request.limit),
-                        truncated: Some(false),
-                    })
-                }
-            }
-        };
-        // Guard is now dropped — query with released lock
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        if crate::commands::command_support::snapshot_active_case(&app_state)?.is_none() {
+            return Ok(FileChildrenDto {
+                children: vec![],
+                total_count: 0,
+                offset: Some(request.offset),
+                limit: Some(request.limit),
+                truncated: Some(false),
+            });
+        }
+        let conn = crate::commands::command_support::get_case_connection(&app_state)?;
         file_service::get_file_children_lazy_with_visibility(
             &conn,
             &request.parent_id,
@@ -138,20 +126,10 @@ pub async fn get_file_tree_request(
 ) -> Result<Vec<FileTreeNodeDto>, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        // Short lock: extract db_path, then release
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            match guard.as_ref() {
-                Some(active) => active.db_path(),
-                None => return Ok(vec![]),
-            }
-        };
-        // Guard is now dropped — query with released lock
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        if crate::commands::command_support::snapshot_active_case(&app_state)?.is_none() {
+            return Ok(vec![]);
+        }
+        let conn = crate::commands::command_support::get_case_connection(&app_state)?;
         file_service::get_file_tree_real_with_visibility(&conn, request.show_hidden)
             .map_err(CommandError::from_service_error)
     })
@@ -177,28 +155,16 @@ pub async fn get_file_rows_request(
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        // Short lock: extract db_path, then release
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            match guard.as_ref() {
-                Some(active) => active.db_path(),
-                None => {
-                    return Ok(FileRowsPageDto {
-                        rows: vec![],
-                        total_count: 0,
-                        offset: request.offset,
-                        limit: request.limit,
-                        truncated: false,
-                    })
-                }
-            }
-        };
-        // Guard is now dropped — query with released lock
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        if crate::commands::command_support::snapshot_active_case(&app_state)?.is_none() {
+            return Ok(FileRowsPageDto {
+                rows: vec![],
+                total_count: 0,
+                offset: request.offset,
+                limit: request.limit,
+                truncated: false,
+            });
+        }
+        let conn = crate::commands::command_support::get_case_connection(&app_state)?;
         file_service::get_file_rows_for_request(&conn, &request)
             .map_err(CommandError::from_service_error)
     })
@@ -215,18 +181,9 @@ pub async fn get_file_jump_context(
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-            active.db_path()
-        };
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        let conn = crate::commands::command_support::get_case_connection(&app_state)?;
         file_service::get_file_jump_context(&conn, &request).map_err(|err| {
-            if err.contains("not found") {
+            if err.to_string().contains("not found") {
                 CommandError::not_found("File")
             } else {
                 CommandError::from_service_error(err)
@@ -245,18 +202,7 @@ pub async fn open_file_handle(
 ) -> Result<ViewerHandleDto, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        // Short lock: extract db_path, then release
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-            active.db_path()
-        };
-        // Guard is now dropped — query with released lock
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        let conn = crate::commands::command_support::get_case_connection(&app_state)?;
         file_service::open_file_handle_real(&conn, &file_id)
             .map_err(CommandError::from_service_error)
     })
@@ -273,18 +219,7 @@ pub async fn open_file_handle_request(
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        // Short lock: extract db_path, then release
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-            active.db_path()
-        };
-        // Guard is now dropped — query with released lock
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        let conn = crate::commands::command_support::get_case_connection(&app_state)?;
         file_service::open_file_handle_real(&conn, &request.file_id)
             .map_err(CommandError::from_service_error)
     })
@@ -301,20 +236,10 @@ pub async fn read_file_range(
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        // Short lock: extract db_path, then release
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            match guard.as_ref() {
-                Some(active) => active.db_path(),
-                None => return Ok(file_service::read_file_range_real(&request)),
-            }
-        };
-        // Guard is now dropped — query with released lock
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        if crate::commands::command_support::snapshot_active_case(&app_state)?.is_none() {
+            return Ok(file_service::read_file_range_real(&request));
+        }
+        let conn = crate::commands::command_support::get_case_connection(&app_state)?;
         file_service::read_file_range_for_case(&conn, &request)
             .map_err(CommandError::from_service_error)
     })
@@ -337,20 +262,7 @@ pub async fn get_text_preview(
         let max =
             max_bytes.unwrap_or(infrastructure::constants::DEFAULT_TEXT_PREVIEW_MAX_BYTES) as u32;
 
-        // Short lock: extract db_path, then release
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            match guard.as_ref() {
-                Some(active) => active.db_path(),
-                None => return Err(CommandError::no_active_case()),
-            }
-        };
-
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        let conn = crate::commands::command_support::get_case_connection(&app_state)?;
 
         let content_bytes = file_service::read_file_header_by_id(
             &conn,
@@ -389,20 +301,7 @@ pub async fn get_image_preview(
 ) -> Result<ImagePreviewDto, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        // Short lock: extract db_path, then release
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            match guard.as_ref() {
-                Some(active) => active.db_path(),
-                None => return Err(CommandError::no_active_case()),
-            }
-        };
-
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        let conn = crate::commands::command_support::get_case_connection(&app_state)?;
 
         // Get file handle
         let handle = file_service::open_file_handle_real(&conn, &file_id)
@@ -455,20 +354,7 @@ pub async fn get_media_url(
 ) -> Result<MediaUrlDto, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        // Short lock: extract db_path, then release
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            match guard.as_ref() {
-                Some(active) => active.db_path(),
-                None => return Err(CommandError::no_active_case()),
-            }
-        };
-
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        let conn = crate::commands::command_support::get_case_connection(&app_state)?;
 
         media_data_url_for_file(&app_state, &conn, &file_id)
     })
@@ -485,19 +371,7 @@ pub async fn read_media_range(
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            match guard.as_ref() {
-                Some(active) => active.db_path(),
-                None => return Err(CommandError::no_active_case()),
-            }
-        };
-
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        let conn = crate::commands::command_support::get_case_connection(&app_state)?;
 
         media_range_for_file(&app_state, &conn, &request)
     })
@@ -517,16 +391,7 @@ pub async fn extract_file(
     let audit_destination = request.destination_path.clone();
     let overwrite = request.overwrite;
     tauri::async_runtime::spawn_blocking(move || {
-        let db_path = {
-            let guard = app_state
-                .active_case
-                .lock()
-                .map_err(|e| CommandError::from_lock_error("Case", e))?;
-            let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-            active.db_path()
-        };
-        let conn = persistence_sqlite::open_or_create(&db_path)
-            .map_err(CommandError::from_service_error)?;
+        let conn = crate::commands::command_support::get_case_connection(&app_state)?;
         let result = extract_file_for_case(&conn, &request);
         match &result {
             Ok(message) => write_file_audit(

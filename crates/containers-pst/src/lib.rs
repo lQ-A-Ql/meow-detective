@@ -1,3 +1,8 @@
+mod header;
+mod props;
+mod reader;
+mod synthetic;
+
 pub mod error;
 pub mod mbox;
 pub mod ost;

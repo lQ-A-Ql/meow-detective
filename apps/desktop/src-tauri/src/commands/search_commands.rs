@@ -84,7 +84,7 @@ pub async fn search_files_request(
 
         // Record investigation step for provenance
         if let (Some(db_path), Some(case_id)) = (&db_path, &case_id) {
-            if let Ok(conn) = persistence_sqlite::open_or_create(db_path) {
+            if let Ok(conn) = app_services::connection::open_case_db(db_path) {
                 let params_json = serde_json::json!({
                     "query": &query_for_step,
                     "offset": request.offset,

@@ -20,10 +20,10 @@ pub(crate) fn registry_field_provenance(
     }
 }
 
-pub(crate) fn file_classification_provenance(
+pub(crate) fn file_classification_provenance<E: std::fmt::Display>(
     entry: &FileEntry,
     parsed_at: &str,
-    read_result: &Result<Vec<u8>, String>,
+    read_result: &Result<Vec<u8>, E>,
 ) -> AnalysisProvenanceDto {
     let (status, warnings) = match read_result {
         Ok(_) => (AnalysisParseStatusDto::Parsed, Vec::new()),

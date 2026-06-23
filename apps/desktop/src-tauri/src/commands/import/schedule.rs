@@ -104,8 +104,8 @@ pub fn schedule_import_for_active_case(
         .map_err(import_config_error_to_command_error)?;
     let source_name = import_config.source_name.clone();
 
-    let conn =
-        persistence_sqlite::open_or_create(&db_path).map_err(CommandError::from_service_error)?;
+    let conn = app_services::connection::open_case_db(&db_path)
+        .map_err(CommandError::from_service_error)?;
     let job_repo = JobRepo::new(&conn);
     let job_id = job_repo
         .create(&case_id.0, "Import data source")

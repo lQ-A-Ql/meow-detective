@@ -186,11 +186,13 @@ fn exact_length_magic_signatures_are_detected() {
         file("zip", "archive.bin", 4),
         file("reg", "NTUSER.DAT", 4),
     ];
-    let classifications = classify_files_by_magic(&files, 100, |id| match id.0.as_str() {
-        "pdf" => Ok(b"%PDF".to_vec()),
-        "zip" => Ok(b"PK\x03\x04".to_vec()),
-        "reg" => Ok(b"regf".to_vec()),
-        _ => Ok(Vec::new()),
+    let classifications = classify_files_by_magic(&files, 100, |id| -> Result<Vec<u8>, String> {
+        match id.0.as_str() {
+            "pdf" => Ok(b"%PDF".to_vec()),
+            "zip" => Ok(b"PK\x03\x04".to_vec()),
+            "reg" => Ok(b"regf".to_vec()),
+            _ => Ok(Vec::new()),
+        }
     });
 
     let detected = classifications
@@ -206,9 +208,10 @@ fn exact_length_magic_signatures_are_detected() {
 #[test]
 fn system_info_is_not_fabricated_without_parsers() {
     let (conn, _tmp, _ds_id) = setup_case_db();
-    let info = extract_system_info_for_case(&conn, |_file_id, _max_bytes| {
-        panic!("no files should be read when hives are missing")
-    });
+    let info =
+        extract_system_info_for_case(&conn, |_file_id, _max_bytes| -> Result<Vec<u8>, String> {
+            panic!("no files should be read when hives are missing")
+        });
     assert_eq!(info.status, AnalysisParseStatusDto::NotParsed);
     assert!(info.computer_name.is_none());
     assert!(info.os_version.is_none());
@@ -226,9 +229,10 @@ fn system_info_is_not_fabricated_without_parsers() {
 #[test]
 fn summary_does_not_emit_fake_default_facts() {
     let (conn, _tmp, _ds_id) = setup_case_db();
-    let info = extract_system_info_for_case(&conn, |_file_id, _max_bytes| {
-        Err("unexpected read".to_string())
-    });
+    let info =
+        extract_system_info_for_case(&conn, |_file_id, _max_bytes| -> Result<Vec<u8>, String> {
+            Err("unexpected read".to_string())
+        });
     let summary = generate_analysis_summary(&info, &[]);
 
     assert!(summary.contains("未解析"));
@@ -241,7 +245,7 @@ fn summary_does_not_emit_fake_default_facts() {
 fn classification_uses_file_id_reader_and_limits_sample() {
     let files = vec![file("a", "a.exe", 2), file("b", "b.pdf", 4)];
     let mut requested = Vec::new();
-    let classifications = classify_files_by_magic(&files, 1, |id| {
+    let classifications = classify_files_by_magic(&files, 1, |id| -> Result<Vec<u8>, String> {
         requested.push(id.0.clone());
         Ok(b"MZ".to_vec())
     });
@@ -382,7 +386,10 @@ fn corrupted_registry_hive_records_warning_without_facts() {
         )])
         .unwrap();
 
-    let info = extract_system_info_for_case(&conn, |_file_id, _max_bytes| Ok(b"BAD!".to_vec()));
+    let info =
+        extract_system_info_for_case(&conn, |_file_id, _max_bytes| -> Result<Vec<u8>, String> {
+            Ok(b"BAD!".to_vec())
+        });
 
     assert!(info.computer_name.is_none());
     assert!(info.boot_history.is_empty());
@@ -404,9 +411,10 @@ fn malformed_evtx_source_is_not_parsed_and_generates_no_boot_records() {
         )])
         .unwrap();
 
-    let info = extract_system_info_for_case(&conn, |_file_id, _max_bytes| {
-        Ok(vec![0x45, 0x6c, 0x66, 0x46])
-    });
+    let info =
+        extract_system_info_for_case(&conn, |_file_id, _max_bytes| -> Result<Vec<u8>, String> {
+            Ok(vec![0x45, 0x6c, 0x66, 0x46])
+        });
 
     assert!(info.boot_history.is_empty());
     assert!(info

@@ -62,7 +62,8 @@ pub fn get_correlation_snapshot(conn: &Connection) -> Result<CorrelationSnapshot
 /// Full uncached correlation computation (shared by get_correlation_snapshot and the incremental
 /// path when incremental is not applicable).
 fn compute_correlation_snapshot(conn: &Connection) -> Result<CorrelationSnapshotDto, String> {
-    let artifacts = crate::artifact_service::get_artifact_rows_from_db(conn, None)?
+    let artifacts = crate::artifact_service::get_artifact_rows_from_db(conn, None)
+        .map_err(|e| e.to_string())?
         .into_iter()
         .take(MAX_CORRELATION_ARTIFACTS)
         .collect::<Vec<_>>();
@@ -125,7 +126,8 @@ pub fn get_correlation_snapshot_incremental(
 
     // ── Incremental path: only process new artifacts ──
     let new_artifacts: Vec<ArtifactRowDto> =
-        crate::artifact_service::get_artifact_rows_from_db(conn, None)?
+        crate::artifact_service::get_artifact_rows_from_db(conn, None)
+            .map_err(|e| e.to_string())?
             .into_iter()
             .filter(|a| new_ids.contains(&a.id))
             .take(MAX_CORRELATION_ARTIFACTS)

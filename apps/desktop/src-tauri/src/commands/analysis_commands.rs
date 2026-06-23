@@ -107,7 +107,10 @@ pub async fn run_evidence_classification(
             &conn,
             &active.case_id,
             &categories,
-            |file_id| file_service::open_file_content_by_id(&conn, file_id),
+            |file_id| {
+                file_service::open_file_content_by_id(&conn, file_id)
+                    .map_err(app_services::artifact_service::ArtifactServiceError::from)
+            },
         )
         .map_err(CommandError::from_service_error)?;
         analysis_service::get_evidence_classification_summary(&conn)

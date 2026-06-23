@@ -90,12 +90,13 @@ fn directory_tree_and_children_return_only_directories() {
     active
         .with_conn(|conn| {
             let tree = file_service::get_file_tree_real(conn)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert_eq!(tree.len(), 1);
             assert_eq!(tree[0].depth, 0);
 
-            let children_result = file_service::get_file_children_lazy(conn, &tree[0].id, 0, 500)
-                .map_err(persistence_sqlite::DbError::System)?;
+            let children_result =
+                file_service::get_file_children_lazy(conn, &tree[0].id, 0, 500)
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             let child_names: Vec<&str> = children_result
                 .children
                 .iter()
@@ -111,7 +112,7 @@ fn directory_tree_and_children_return_only_directories() {
                     ..Default::default()
                 },
             )
-            .map_err(persistence_sqlite::DbError::System)?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             let row_names: Vec<&str> = rows.rows.iter().map(|row| row.name.as_str()).collect();
             assert_eq!(row_names, vec!["emptydir", "subdir", "root.txt"]);
 
@@ -123,7 +124,7 @@ fn directory_tree_and_children_return_only_directories() {
                 .unwrap();
             let no_directory_children =
                 file_service::get_file_children_lazy(conn, &file_id, 0, 500)
-                    .map_err(persistence_sqlite::DbError::System)?;
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(no_directory_children.children.is_empty());
 
             Ok(())
@@ -139,15 +140,16 @@ fn file_tree_real_contains_nested_directories_for_navigation() {
     active
         .with_conn(|conn| {
             let tree = file_service::get_file_tree_real(conn)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             let names: Vec<&str> = tree.iter().map(|node| node.name.as_str()).collect();
             assert_eq!(names, vec!["evidence"]);
             assert_eq!(tree[0].depth, 0);
             assert_eq!(tree[0].expanded, Some(true));
 
-            let children_result = file_service::get_file_children_lazy(conn, &tree[0].id, 0, 500)
-                .map_err(persistence_sqlite::DbError::System)?;
+            let children_result =
+                file_service::get_file_children_lazy(conn, &tree[0].id, 0, 500)
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             let child_names: Vec<&str> = children_result
                 .children
                 .iter()
@@ -173,7 +175,7 @@ fn file_rows_request_returns_direct_children_for_parent() {
     active
         .with_conn(|conn| {
             let root = file_service::get_file_tree_real(conn)
-                .map_err(persistence_sqlite::DbError::System)?
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?
                 .pop()
                 .unwrap();
             let root_rows = file_service::get_file_rows_for_request(
@@ -183,7 +185,7 @@ fn file_rows_request_returns_direct_children_for_parent() {
                     ..Default::default()
                 },
             )
-            .map_err(persistence_sqlite::DbError::System)?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             let subdir = root_rows
                 .rows
                 .iter()
@@ -198,7 +200,7 @@ fn file_rows_request_returns_direct_children_for_parent() {
                     ..Default::default()
                 },
             )
-            .map_err(persistence_sqlite::DbError::System)?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             assert_eq!(subdir_rows.rows.len(), 1);
             assert_eq!(subdir_rows.rows[0].name, "nested.bin");
@@ -217,12 +219,12 @@ fn file_rows_and_children_are_limited_for_lazy_loading() {
     active
         .with_conn(|conn| {
             let root = file_service::get_file_tree_real(conn)
-                .map_err(persistence_sqlite::DbError::System)?
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?
                 .pop()
                 .unwrap();
 
             let first_dir = file_service::get_file_children_lazy(conn, &root.id, 0, 1)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert_eq!(first_dir.children.len(), 1);
             assert_eq!(first_dir.total_count, 2);
             assert_eq!(first_dir.truncated, Some(true));
@@ -237,7 +239,7 @@ fn file_rows_and_children_are_limited_for_lazy_loading() {
                     ..Default::default()
                 },
             )
-            .map_err(persistence_sqlite::DbError::System)?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert_eq!(first_rows.rows.len(), 2);
             assert_eq!(first_rows.total_count, 3);
             assert!(first_rows.truncated);
@@ -255,13 +257,13 @@ fn file_browser_visibility_respects_show_hidden_for_rows_and_tree() {
     active
         .with_conn(|conn| {
             let root = file_service::get_file_tree_real_with_visibility(conn, false)
-                .map_err(persistence_sqlite::DbError::System)?
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?
                 .pop()
                 .unwrap();
 
             let visible_tree =
                 file_service::get_file_children_lazy_with_visibility(conn, &root.id, 0, 50, false)
-                    .map_err(persistence_sqlite::DbError::System)?;
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             let visible_tree_names: Vec<&str> = visible_tree
                 .children
                 .iter()
@@ -279,7 +281,7 @@ fn file_browser_visibility_respects_show_hidden_for_rows_and_tree() {
                     ..Default::default()
                 },
             )
-            .map_err(persistence_sqlite::DbError::System)?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             let visible_row_names: Vec<&str> = visible_rows
                 .rows
                 .iter()
@@ -290,7 +292,7 @@ fn file_browser_visibility_respects_show_hidden_for_rows_and_tree() {
 
             let all_tree =
                 file_service::get_file_children_lazy_with_visibility(conn, &root.id, 0, 50, true)
-                    .map_err(persistence_sqlite::DbError::System)?;
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             let svi = all_tree
                 .children
                 .iter()
@@ -317,7 +319,7 @@ fn file_browser_visibility_respects_show_hidden_for_rows_and_tree() {
                     ..Default::default()
                 },
             )
-            .map_err(persistence_sqlite::DbError::System)?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(all_rows.total_count > visible_rows.total_count);
 
             let hidden_file = all_rows
@@ -349,7 +351,7 @@ fn deterministic_handle_reads_real_logical_file_bytes_as_hex() {
     active
         .with_conn(|conn| {
             let root = file_service::get_file_tree_real(conn)
-                .map_err(persistence_sqlite::DbError::System)?
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?
                 .pop()
                 .unwrap();
             let rows = file_service::get_file_rows_for_request(
@@ -359,7 +361,7 @@ fn deterministic_handle_reads_real_logical_file_bytes_as_hex() {
                     ..Default::default()
                 },
             )
-            .map_err(persistence_sqlite::DbError::System)?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             let file_id = rows
                 .rows
                 .iter()
@@ -368,7 +370,7 @@ fn deterministic_handle_reads_real_logical_file_bytes_as_hex() {
                 .unwrap();
 
             let handle = file_service::open_file_handle_real(conn, &file_id)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert_eq!(handle.handle_id, format!("file:{file_id}"));
             assert_eq!(handle.size, 16);
             assert_eq!(handle.mime.as_deref(), Some("text/plain"));
@@ -381,7 +383,7 @@ fn deterministic_handle_reads_real_logical_file_bytes_as_hex() {
                     length: 5,
                 },
             )
-            .map_err(persistence_sqlite::DbError::System)?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             assert_eq!(range.kind, "hex");
             assert_eq!(range.lines, vec!["00000001  31 32 33 34 35"]);
@@ -407,7 +409,7 @@ fn read_file_range_rejects_invalid_handles_instead_of_faking_bytes() {
                 },
             )
             .unwrap_err();
-            assert_eq!(err, "Invalid file handle");
+            assert!(err.to_string().contains("Invalid file handle"));
             Ok(())
         })
         .unwrap();
@@ -421,7 +423,7 @@ fn open_file_content_by_id_reads_uuid_backed_logical_file() {
     active
         .with_conn(|conn| {
             let root = file_service::get_file_tree_real(conn)
-                .map_err(persistence_sqlite::DbError::System)?
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?
                 .pop()
                 .unwrap();
             let rows = file_service::get_file_rows_for_request(
@@ -431,7 +433,7 @@ fn open_file_content_by_id_reads_uuid_backed_logical_file() {
                     ..Default::default()
                 },
             )
-            .map_err(persistence_sqlite::DbError::System)?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             let file_id = rows
                 .rows
                 .iter()
@@ -440,7 +442,7 @@ fn open_file_content_by_id_reads_uuid_backed_logical_file() {
                 .unwrap();
 
             let bytes = file_service::read_file_header_by_id(conn, &file_id, 4)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert_eq!(bytes, b"0123");
 
             Ok(())
@@ -456,7 +458,7 @@ fn open_file_content_rejects_traversal_paths_from_database() {
     active
         .with_conn(|conn| {
             let root = file_service::get_file_tree_real(conn)
-                .map_err(persistence_sqlite::DbError::System)?
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?
                 .pop()
                 .unwrap();
             let rows = file_service::get_file_rows_for_request(
@@ -466,7 +468,7 @@ fn open_file_content_rejects_traversal_paths_from_database() {
                     ..Default::default()
                 },
             )
-            .map_err(persistence_sqlite::DbError::System)?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             let file_id = rows
                 .rows
                 .iter()
@@ -481,7 +483,7 @@ fn open_file_content_rejects_traversal_paths_from_database() {
 
             let err = file_service::read_file_header_by_id(conn, &domain::FileEntryId(file_id), 16)
                 .unwrap_err();
-            assert!(err.contains("Unsafe file path"));
+            assert!(err.to_string().contains("Unsafe file path"));
 
             Ok(())
         })

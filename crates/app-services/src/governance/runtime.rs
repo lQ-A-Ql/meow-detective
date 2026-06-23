@@ -27,7 +27,8 @@ pub(crate) fn build_runtime_signals(
 ) -> Result<GovernanceRuntimeSignalsDto, GovernanceError> {
     let data_sources =
         DataSourceRepo::new(conn).find_by_case(&domain::CaseId(case_id.to_string()))?;
-    let jobs = crate::job_service::get_jobs_from_db(conn).map_err(GovernanceError::Internal)?;
+    let jobs = crate::job_service::get_jobs_from_db(conn)
+        .map_err(|e| GovernanceError::Internal(e.to_string()))?;
     let reports = crate::report::get_report_history(conn, case_id);
 
     let hashed_data_source_count = data_sources

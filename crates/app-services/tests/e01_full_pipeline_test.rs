@@ -313,7 +313,7 @@ fn e01_ntfs_mft_enumeration_builds_navigable_tree() {
 
             // Verify tree
             let tree = file_service::get_file_tree_real(conn)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(!tree.is_empty());
             assert_eq!(tree.len(), 1, "MFT tree should have one anchored root");
 
@@ -323,7 +323,7 @@ fn e01_ntfs_mft_enumeration_builds_navigable_tree() {
                 .unwrap_or(&tree[0]);
             assert_eq!(root.id, "mft:5");
             let children = file_service::get_file_children_lazy(conn, &root.id, 0, 500)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(!children.children.is_empty());
             eprintln!(
                 "Tree: {} roots, {} children",
@@ -465,20 +465,20 @@ fn e01_timeline_projection() {
 
             // Project timeline
             let tl_count = timeline_service::project_and_store_macb(conn, &all_files)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             // Query and verify pagination
             let timeline_repo = TimelineRepo::new(conn);
             let total = timeline_repo.count()?;
 
             let page1 = timeline_service::query_timeline(conn, 0, 10)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert_eq!(page1.total, total);
             assert_eq!(page1.items.len(), 10.min(total as usize));
 
             if total > 10 {
                 let page2 = timeline_service::query_timeline(conn, 10, 10)
-                    .map_err(persistence_sqlite::DbError::System)?;
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
                 assert_eq!(page2.total, total);
                 // No overlap
                 let ids1: Vec<&str> = page1.items.iter().map(|e| e.id.as_str()).collect();

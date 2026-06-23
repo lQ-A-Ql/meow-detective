@@ -293,10 +293,10 @@ fn classify_files_by_extension_path(
 
 /// Classify files by magic bytes. The reader receives a FileEntryId and must
 /// return a bounded header buffer, not a whole-file read.
-pub fn classify_files_by_magic(
+pub fn classify_files_by_magic<E: std::fmt::Display>(
     files: &[FileEntry],
     sample_size: u32,
-    mut read_header_fn: impl FnMut(&FileEntryId) -> Result<Vec<u8>, String>,
+    mut read_header_fn: impl FnMut(&FileEntryId) -> Result<Vec<u8>, E>,
 ) -> Vec<AnalysisFileClassificationDto> {
     let parsed_at = chrono::Utc::now().to_rfc3339();
     let mut categories: HashMap<String, AnalysisFileClassificationDto> = HashMap::new();

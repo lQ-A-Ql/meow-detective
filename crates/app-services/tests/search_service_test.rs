@@ -85,13 +85,13 @@ fn index_and_search_basic() {
                         .ok()
                         .map(|r| Box::new(r) as Box<dyn std::io::Read>)
                 })
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             assert!(idx_result.indexed_count > 0, "Expected indexed files");
 
             // Search for "forensics"
             let results = search_service::search_files_real(&index_dir, "forensics", 0, 50)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(results.total > 0, "Expected search results");
             assert!(!results.items.is_empty());
 
@@ -167,17 +167,17 @@ fn search_with_pagination() {
                     .ok()
                     .map(|r| Box::new(r) as Box<dyn std::io::Read>)
             })
-            .map_err(persistence_sqlite::DbError::System)?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             // Search with limit
             let results = search_service::search_files_real(&index_dir, "forensics", 0, 1)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(results.total > 0, "Expected total > 0");
             assert!(results.items.len() <= 1, "Expected at most 1 item");
 
             // Search with offset
             let results2 = search_service::search_files_real(&index_dir, "forensics", 1, 50)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             // Items may be empty if total is 1
             assert!(results2.total == results.total, "Total should be same");
 
@@ -241,12 +241,12 @@ fn search_no_results() {
                     .ok()
                     .map(|r| Box::new(r) as Box<dyn std::io::Read>)
             })
-            .map_err(persistence_sqlite::DbError::System)?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             // Search for non-existent term
             let results =
                 search_service::search_files_real(&index_dir, "nonexistent_xyz_12345", 0, 50)
-                    .map_err(persistence_sqlite::DbError::System)?;
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert_eq!(results.total, 0, "Expected 0 results");
             assert!(results.items.is_empty(), "Expected empty items");
 
@@ -314,10 +314,10 @@ fn reindex_keeps_existing_documents_for_unmodified_files() {
                         .map(|r| Box::new(r) as Box<dyn std::io::Read>)
                 }
             })
-            .map_err(persistence_sqlite::DbError::System)?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             let first_results = search_service::search_files_real(&index_dir, "forensics", 0, 50)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(first_results.total >= 2);
 
             let readme_id = all_files
@@ -337,10 +337,10 @@ fn reindex_keeps_existing_documents_for_unmodified_files() {
                         .map(|r| Box::new(r) as Box<dyn std::io::Read>)
                 }
             })
-            .map_err(persistence_sqlite::DbError::System)?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             let second_results = search_service::search_files_real(&index_dir, "forensics", 0, 50)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert_eq!(second_results.total, first_results.total);
             assert!(second_results
                 .items

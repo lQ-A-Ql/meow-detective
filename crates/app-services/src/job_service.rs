@@ -1,13 +1,24 @@
 use domain::JobId;
 use persistence_sqlite::repositories::job_repo::JobRepo;
 use rusqlite::Connection;
+use thiserror::Error;
 use transport::dto::JobSnapshotDto;
 
-pub fn get_jobs_from_db(conn: &Connection) -> Result<Vec<JobSnapshotDto>, String> {
+#[derive(Debug, Error)]
+pub enum JobServiceError {
+    #[error("database error: {0}")]
+    Db(#[from] persistence_sqlite::DbError),
+    #[error("not found: {0}")]
+    NotFound(String),
+    #[error("invalid state: {0}")]
+    InvalidState(String),
+    #[error("other error: {0}")]
+    Other(String),
+}
+
+pub fn get_jobs_from_db(conn: &Connection) -> Result<Vec<JobSnapshotDto>, JobServiceError> {
     let repo = JobRepo::new(conn);
-    let jobs = repo
-        .list_recent(infrastructure::constants::JOB_LIST_LIMIT)
-        .map_err(|e| e.to_string())?;
+    let jobs = repo.list_recent(infrastructure::constants::JOB_LIST_LIMIT)?;
     let dtos = jobs
         .into_iter()
         .map(|job| {
@@ -121,9 +132,10 @@ pub struct RecoveryResult {
 ///
 /// This function is used when the cancel token has already been set and the
 /// task has finished draining.  It finalises the job status to `cancelled`.
-pub fn cancel_job(conn: &Connection, job_id: &JobId, reason: &str) -> Result<(), String> {
+pub fn cancel_job(conn: &Connection, job_id: &JobId, reason: &str) -> Result<(), JobServiceError> {
     let repo = JobRepo::new(conn);
-    repo.cancel(job_id, reason).map_err(|e| e.to_string())
+    repo.cancel(job_id, reason)?;
+    Ok(())
 }
 
 /// On app restart, detect jobs that were left in `running` or `cancelling`
@@ -132,11 +144,11 @@ pub fn cancel_job(conn: &Connection, job_id: &JobId, reason: &str) -> Result<(),
 /// This prevents stale jobs from appearing active after a crash or unexpected
 /// shutdown.  Partial results (warning/skipped/failed counts) are preserved
 /// so the user can decide whether to retry or discard the data source.
-pub fn recover_interrupted_jobs(conn: &Connection) -> Result<RecoveryResult, String> {
+pub fn recover_interrupted_jobs(conn: &Connection) -> Result<RecoveryResult, JobServiceError> {
     let repo = JobRepo::new(conn);
     let interrupted_ids = repo
         .find_interrupted()
-        .map_err(|e| format!("Failed to query interrupted jobs: {e}"))?;
+        .map_err(|e| JobServiceError::Other(format!("Failed to query interrupted jobs: {e}")))?;
 
     let recovered_job_ids: Vec<String> = interrupted_ids
         .into_iter()

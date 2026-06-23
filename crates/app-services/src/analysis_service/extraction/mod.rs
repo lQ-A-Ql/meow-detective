@@ -31,11 +31,11 @@ use transport::dto::{
 
 type TxlogBytes = (Option<Vec<u8>>, Option<Vec<u8>>);
 
-pub fn run_analysis_extraction(
+pub fn run_analysis_extraction<E: std::fmt::Display>(
     conn: &Connection,
     case_id: &str,
     categories: &[&str],
-    mut file_reader: impl FnMut(&FileEntryId) -> Result<Box<dyn Read>, String>,
+    mut file_reader: impl FnMut(&FileEntryId) -> Result<Box<dyn Read>, E>,
 ) -> Result<AnalysisExtractionRunDto, String> {
     let generated_at = Utc::now().to_rfc3339();
     let selected = if categories.is_empty() {
@@ -927,8 +927,8 @@ fn find_file_entry_id_by_path(
 
 /// Read the contents of a companion file (e.g. a transaction log) using the
 /// same size-bounded reader used for primary evidence sources.
-fn read_file_entry_bytes(
-    file_reader: &mut impl FnMut(&domain::FileEntryId) -> Result<Box<dyn std::io::Read>, String>,
+fn read_file_entry_bytes<E: std::fmt::Display>(
+    file_reader: &mut impl FnMut(&domain::FileEntryId) -> Result<Box<dyn std::io::Read>, E>,
     file_id: &domain::FileEntryId,
     hive_path: &str,
     label: &str,

@@ -62,12 +62,12 @@ fn project_and_query_timeline() {
 
             // Project timeline
             let tl_count = timeline_service::project_and_store_macb(conn, &all_files)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(tl_count > 0, "Expected timeline events");
 
             // Query timeline
             let result = timeline_service::query_timeline(conn, 0, 100)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(result.total > 0, "Expected total > 0");
             assert!(!result.items.is_empty(), "Expected items");
 
@@ -124,17 +124,17 @@ fn timeline_pagination() {
             }
 
             let tl_count = timeline_service::project_and_store_macb(conn, &all_files)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             // Query with limit
             let result1 = timeline_service::query_timeline(conn, 0, 2)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert_eq!(result1.items.len(), 2.min(tl_count as usize));
             assert_eq!(result1.total, tl_count);
 
             // Query with offset
             let result2 = timeline_service::query_timeline(conn, 2, 100)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert_eq!(result2.total, tl_count);
             // Items may be empty if total <= 2
 
@@ -182,11 +182,11 @@ fn timeline_filtered_by_event_type() {
             }
 
             timeline_service::project_and_store_macb(conn, &all_files)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             // Query all events
             let all = timeline_service::query_timeline(conn, 0, 1000)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             // Query filtered by FILE_CREATED
             let filtered = timeline_service::query_timeline_filtered(
@@ -197,7 +197,7 @@ fn timeline_filtered_by_event_type() {
                 None,
                 Some("FILE_CREATED"),
             )
-            .map_err(persistence_sqlite::DbError::System)?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             // Should have fewer or equal events
             assert!(

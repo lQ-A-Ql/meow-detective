@@ -1,4 +1,7 @@
-use crate::datasource_service::{self, ImageFilesystemKind};
+use crate::{
+    datasource_service::{self, ImageFilesystemKind},
+    file_service::FileServiceError,
+};
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
 use persistence_sqlite::{
     repositories::{file_repo::FileRepo, partition_repo::PartitionRepo},
@@ -184,7 +187,7 @@ pub fn store_data_source_partitions(
     conn: &Connection,
     data_source_id: &DataSourceId,
     partitions: &[crate::datasource_service::PartitionRecord],
-) -> Result<(), String> {
+) -> Result<(), FileServiceError> {
     let repo = PartitionRepo::new(conn);
     let records = partitions
         .iter()
@@ -205,8 +208,8 @@ pub fn store_data_source_partitions(
         })
         .collect::<Vec<_>>();
 
-    repo.replace_for_data_source(&data_source_id.0, &records)
-        .map_err(|e| e.to_string())
+    repo.replace_for_data_source(&data_source_id.0, &records)?;
+    Ok(())
 }
 
 fn partition_status_label(status: crate::datasource_service::PartitionStatus) -> &'static str {

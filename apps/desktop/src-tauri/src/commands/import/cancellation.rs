@@ -2,10 +2,7 @@
 
 use persistence_sqlite::repositories::job_repo::JobRepo;
 use tauri::{AppHandle, State};
-use transport::{
-    dto::{CancellationStateDto, JobCancellationDto},
-    CommandError,
-};
+use transport::{dto::CancellationStateDto, dto::JobCancellationDto, CommandError};
 
 use crate::events::event_bridge;
 use crate::state::AppState;
@@ -22,7 +19,7 @@ pub async fn cancel_import(
             tracing::info!("Cancel requested for job {}", job_id);
             if let Ok(guard) = app_state.active_case.lock() {
                 if let Some(active) = guard.as_ref() {
-                    match persistence_sqlite::open_or_create(&active.db_path()) {
+                    match app_services::connection::open_case_db(&active.db_path()) {
                         Ok(conn) => {
                             let repo = JobRepo::new(&conn);
                             if let Err(error) = repo.mark_cancelling(
@@ -63,21 +60,6 @@ pub async fn cancel_import(
     .map_err(CommandError::from_join_error)?
 }
 
-pub(crate) fn emit_import_cancellation_state(
-    app: Option<&AppHandle>,
-    job_id: &domain::JobId,
-    state: CancellationStateDto,
-    safe_to_close: bool,
-    detail: &str,
-) {
-    if let Some(app) = app {
-        event_bridge::emit_job_cancellation(
-            app,
-            &job_cancellation_dto(&job_id.0, state, safe_to_close, detail),
-        );
-    }
-}
-
 pub(crate) fn job_cancellation_dto(
     job_id: &str,
     state: CancellationStateDto,
@@ -99,12 +81,6 @@ pub(crate) fn job_cancellation_dto(
         state,
         safe_to_close,
         detail: detail.to_string(),
-    }
-}
-
-pub(crate) fn mark_import_cancelling(job_repo: &JobRepo<'_>, job_id: &domain::JobId, detail: &str) {
-    if let Err(error) = job_repo.mark_cancelling(job_id, detail) {
-        tracing::warn!("Failed to mark job {} as cancelling: {}", job_id.0, error);
     }
 }
 

@@ -115,7 +115,7 @@ fn liuyang_e01_mft_enumeration_surfaces_expected_path() {
             );
 
             let tree = file_service::get_file_tree_real(conn)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(!tree.is_empty(), "MFT enumeration should build a browsable tree");
 
             eprintln!(
@@ -329,7 +329,7 @@ fn liuyang_e01_prints_parsed_system_info_and_evidence_summary() {
             );
 
             let summary = analysis_service::get_evidence_classification_summary(conn)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(
                 summary.totals.candidate_file_count > 0,
                 "evidence summary should find Windows evidence candidates"
@@ -533,7 +533,7 @@ fn liuyang_e01_parallel_mft_backfill_surfaces_users_tree() {
                 &manifest,
                 None,
             )
-            .map_err(persistence_sqlite::DbError::System)?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(merged > 1000, "merge should copy enumerated NTFS rows");
 
             let repo = FileRepo::new(conn);
@@ -772,7 +772,7 @@ fn liuyang_e01_parallel_mft_backfill_surfaces_system_volume_information_children
                 &manifest,
                 None,
             )
-            .map_err(persistence_sqlite::DbError::System)?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(merged > 1000, "merge should copy enumerated NTFS rows");
 
             let repo = FileRepo::new(conn);
@@ -888,7 +888,7 @@ fn liuyang_e01_visibility_filters_surface_hidden_system_entries_only_when_reques
             assert!(stats.dir_count > 10, "Should enumerate many Liu Yang directories");
 
             let visible_root = file_service::get_file_tree_real_with_visibility(conn, false)
-                .map_err(persistence_sqlite::DbError::System)?
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?
                 .into_iter()
                 .find(|node| node.id == "mft:5")
                 .expect("visible tree should contain NTFS root");
@@ -899,7 +899,7 @@ fn liuyang_e01_visibility_filters_surface_hidden_system_entries_only_when_reques
                 500,
                 false,
             )
-            .map_err(persistence_sqlite::DbError::System)?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(
                 visible_children
                     .children
@@ -909,7 +909,7 @@ fn liuyang_e01_visibility_filters_surface_hidden_system_entries_only_when_reques
             );
 
             let all_root = file_service::get_file_tree_real_with_visibility(conn, true)
-                .map_err(persistence_sqlite::DbError::System)?
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?
                 .into_iter()
                 .find(|node| node.id == "mft:5")
                 .expect("all tree should contain NTFS root");
@@ -920,7 +920,7 @@ fn liuyang_e01_visibility_filters_surface_hidden_system_entries_only_when_reques
                 500,
                 true,
             )
-            .map_err(persistence_sqlite::DbError::System)?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             let repo = FileRepo::new(conn);
             let svi_entry = repo
                 .find_children(&domain::FileEntryId("mft:5".to_string()))?
@@ -947,7 +947,7 @@ fn liuyang_e01_visibility_filters_surface_hidden_system_entries_only_when_reques
                     ..Default::default()
                 },
             )
-            .map_err(persistence_sqlite::DbError::System)?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(
                 visible_rows
                     .rows
@@ -966,7 +966,7 @@ fn liuyang_e01_visibility_filters_surface_hidden_system_entries_only_when_reques
                     ..Default::default()
                 },
             )
-            .map_err(persistence_sqlite::DbError::System)?;
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(
                 all_rows.total_count > visible_rows.total_count,
                 "show_hidden=true should expand the row total when hidden/system children exist"

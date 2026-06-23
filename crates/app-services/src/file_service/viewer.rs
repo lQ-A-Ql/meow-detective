@@ -1,6 +1,6 @@
 use crate::{
     datasource_service::{self, ImageFilesystemKind},
-    file_service::mapping::mime_for_entry,
+    file_service::{mapping::mime_for_entry, FileServiceError},
 };
 use domain::{EntryType, FileEntry, FileEntryId};
 use evidence_core::{EvidenceReader, FileSystemReader, RawImageReader};
@@ -80,15 +80,19 @@ fn open_e01_reader_cached(source_path: &Path) -> std::io::Result<E01Reader> {
         .get_or_open(source_path)
 }
 
-pub fn open_file_handle_real(conn: &Connection, file_id: &str) -> Result<ViewerHandleDto, String> {
+pub fn open_file_handle_real(
+    conn: &Connection,
+    file_id: &str,
+) -> Result<ViewerHandleDto, FileServiceError> {
     let repo = FileRepo::new(conn);
     let entry = repo
-        .find_by_id(&FileEntryId(file_id.to_string()))
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "File not found".to_string())?;
+        .find_by_id(&FileEntryId(file_id.to_string()))?
+        .ok_or_else(|| FileServiceError::not_found("File not found"))?;
 
     if entry.entry_type != EntryType::File {
-        return Err("Cannot open a directory as a file".to_string());
+        return Err(FileServiceError::invalid_input(
+            "Cannot open a directory as a file",
+        ));
     }
 
     Ok(ViewerHandleDto {
@@ -101,16 +105,16 @@ pub fn open_file_handle_real(conn: &Connection, file_id: &str) -> Result<ViewerH
 pub fn read_file_range_for_case(
     conn: &Connection,
     request: &ViewerRangeRequestDto,
-) -> Result<ViewerRangeResponseDto, String> {
+) -> Result<ViewerRangeResponseDto, FileServiceError> {
     let mut request = request.clone();
-    request.validate()?;
+    request.validate().map_err(FileServiceError::InvalidInput)?;
     let file_id = file_id_from_handle(&request.handle_id)?;
     let mut file = open_file_content_by_id(conn, &FileEntryId(file_id.to_string()))?;
 
     skip_reader_bytes(file.as_mut(), request.offset)?;
     let length = (request.length as usize).min(infrastructure::constants::MAX_RANGE_LENGTH);
     let mut bytes = vec![0u8; length];
-    let read = file.read(&mut bytes).map_err(|e| e.to_string())?;
+    let read = file.read(&mut bytes)?;
     bytes.truncate(read);
 
     Ok(ViewerRangeResponseDto {
@@ -127,12 +131,11 @@ pub fn read_file_range_real(_request: &ViewerRangeRequestDto) -> ViewerRangeResp
 pub fn open_file_content_by_id(
     conn: &Connection,
     file_id: &FileEntryId,
-) -> Result<Box<dyn Read>, String> {
+) -> Result<Box<dyn Read>, FileServiceError> {
     let repo = FileRepo::new(conn);
     let entry = repo
-        .find_by_id(file_id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "File not found".to_string())?;
+        .find_by_id(file_id)?
+        .ok_or_else(|| FileServiceError::not_found("File not found"))?;
 
     open_file_content_for_entry(&repo, &entry)
 }
@@ -141,66 +144,69 @@ pub fn read_file_header_by_id(
     conn: &Connection,
     file_id: &FileEntryId,
     max_bytes: usize,
-) -> Result<Vec<u8>, String> {
+) -> Result<Vec<u8>, FileServiceError> {
     let mut reader = open_file_content_by_id(conn, file_id)?;
     let mut limited = reader.by_ref().take(max_bytes as u64);
     let mut bytes = Vec::new();
-    limited.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+    limited.read_to_end(&mut bytes)?;
     Ok(bytes)
 }
 
-pub fn get_file_path_for_entry(conn: &Connection, file_id: &str) -> Result<PathBuf, String> {
+pub fn get_file_path_for_entry(
+    conn: &Connection,
+    file_id: &str,
+) -> Result<PathBuf, FileServiceError> {
     let repo = FileRepo::new(conn);
     let entry = repo
-        .find_by_id(&FileEntryId(file_id.to_string()))
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "File not found".to_string())?;
+        .find_by_id(&FileEntryId(file_id.to_string()))?
+        .ok_or_else(|| FileServiceError::not_found("File not found"))?;
 
     let (kind, source_path) = repo
-        .find_data_source_location(&entry.data_source_id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "Data source not found".to_string())?;
+        .find_data_source_location(&entry.data_source_id)?
+        .ok_or_else(|| FileServiceError::not_found("Data source not found"))?;
 
     if kind == "logical_directory" {
-        let root = PathBuf::from(&source_path)
-            .canonicalize()
-            .map_err(|e| format!("Cannot access data source root: {}", e))?;
+        let root = PathBuf::from(&source_path).canonicalize()?;
         let relative_path = safe_relative_path(&entry.path)?;
         Ok(root.join(relative_path))
     } else {
-        Err("File path only available for logical directories".to_string())
+        Err(FileServiceError::other(
+            "File path only available for logical directories",
+        ))
     }
 }
 
 fn open_file_content_for_entry(
     repo: &FileRepo<'_>,
     entry: &FileEntry,
-) -> Result<Box<dyn Read>, String> {
+) -> Result<Box<dyn Read>, FileServiceError> {
     if entry.entry_type != EntryType::File {
-        return Err("Cannot read a directory as a file".to_string());
+        return Err(FileServiceError::invalid_input(
+            "Cannot read a directory as a file",
+        ));
     }
 
     let (kind, source_path) = repo
-        .find_data_source_location(&entry.data_source_id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "Data source not found".to_string())?;
+        .find_data_source_location(&entry.data_source_id)?
+        .ok_or_else(|| FileServiceError::not_found("Data source not found"))?;
     let expected_partition_index = root_partition_index_for_entry(repo, entry);
 
     match kind.as_str() {
         "logical_directory" => open_logical_file(&source_path, entry),
         "e01" => open_e01_file(&source_path, entry, expected_partition_index),
         "raw" => open_raw_file(&source_path, entry, expected_partition_index),
-        other => Err(format!(
+        other => Err(FileServiceError::other(format!(
             "Range reading is not yet wired for data source kind '{}'",
             other
-        )),
+        ))),
     }
 }
 
-fn open_logical_file(source_path: &str, entry: &FileEntry) -> Result<Box<dyn Read>, String> {
-    let root = PathBuf::from(source_path)
-        .canonicalize()
-        .map_err(|e| format!("Cannot access data source root: {}", e))?;
+fn open_logical_file(
+    source_path: &str,
+    entry: &FileEntry,
+) -> Result<Box<dyn Read>, FileServiceError> {
+    let root = PathBuf::from(source_path).canonicalize()?;
     let relative_path = safe_relative_path(&entry.path)?;
     let full_path = root.join(relative_path);
 
@@ -208,36 +214,36 @@ fn open_logical_file(source_path: &str, entry: &FileEntry) -> Result<Box<dyn Rea
     for component in full_path.components() {
         check_path.push(component);
         if check_path.is_symlink() {
-            return Err(format!(
+            return Err(FileServiceError::other(format!(
                 "Symlink detected in path at '{}' - rejected for security",
                 check_path.display()
-            ));
+            )));
         }
     }
 
-    let canonical = full_path
-        .canonicalize()
-        .map_err(|e| format!("Cannot access file '{}': {}", entry.path, e))?;
+    let canonical = full_path.canonicalize()?;
 
     if !canonical.starts_with(&root) {
-        return Err("File path escapes data source root".to_string());
+        return Err(FileServiceError::path_traversal(
+            "File path escapes data source root",
+        ));
     }
 
     if !canonical.is_file() {
-        return Err("File entry does not point to a regular file".to_string());
+        return Err(FileServiceError::other(
+            "File entry does not point to a regular file",
+        ));
     }
 
-    std::fs::File::open(canonical)
-        .map(|file| Box::new(file) as Box<dyn Read>)
-        .map_err(|e| e.to_string())
+    Ok(Box::new(std::fs::File::open(canonical)?) as Box<dyn Read>)
 }
 
 fn open_raw_file(
     source_path: &str,
     entry: &FileEntry,
     expected_partition_index: Option<usize>,
-) -> Result<Box<dyn Read>, String> {
-    let reader = RawImageReader::open(Path::new(source_path)).map_err(|e| e.to_string())?;
+) -> Result<Box<dyn Read>, FileServiceError> {
+    let reader = RawImageReader::open(Path::new(source_path))?;
     open_image_file(entry, reader, expected_partition_index)
 }
 
@@ -245,8 +251,8 @@ fn open_e01_file(
     source_path: &str,
     entry: &FileEntry,
     expected_partition_index: Option<usize>,
-) -> Result<Box<dyn Read>, String> {
-    let reader = open_e01_reader_cached(Path::new(source_path)).map_err(|e| e.to_string())?;
+) -> Result<Box<dyn Read>, FileServiceError> {
+    let reader = open_e01_reader_cached(Path::new(source_path))?;
     open_image_file(entry, reader, expected_partition_index)
 }
 
@@ -254,19 +260,20 @@ fn open_image_file<R>(
     entry: &FileEntry,
     mut reader: R,
     expected_partition_index: Option<usize>,
-) -> Result<Box<dyn Read>, String>
+) -> Result<Box<dyn Read>, FileServiceError>
 where
     R: EvidenceReader + Read + std::io::Seek + 'static,
 {
-    let probe =
-        datasource_service::detect_image_filesystem(&mut reader).map_err(|e| e.to_string())?;
+    let probe = datasource_service::detect_image_filesystem(&mut reader).map_err(|e| {
+        FileServiceError::other(format!("Failed to detect image filesystem: {}", e))
+    })?;
     if probe.candidates.is_empty() {
         let detail = if probe.warnings.is_empty() {
             "No supported NTFS/FAT filesystem detected".to_string()
         } else {
             probe.warnings.join("; ")
         };
-        return Err(detail);
+        return Err(FileServiceError::other(detail));
     }
 
     let source_path = reader.info().path.clone();
@@ -302,27 +309,35 @@ where
         }
 
         let boxed_reader: Box<dyn EvidenceReader> = match source_kind.as_str() {
-            "e01" => Box::new(open_e01_reader_cached(&source_path).map_err(|e| e.to_string())?),
-            _ => Box::new(RawImageReader::open(&source_path).map_err(|e| e.to_string())?),
+            "e01" => Box::new(open_e01_reader_cached(&source_path)?),
+            _ => Box::new(RawImageReader::open(&source_path)?),
         };
 
         let result = match candidate.kind {
             ImageFilesystemKind::Ntfs => {
-                let fs = fs_ntfs::NtfsReader::open(boxed_reader, candidate.offset)
-                    .map_err(|e| e.to_string())?;
-                fs.open_file(&entry.path)
-                    .map_err(|e| format!("Cannot open NTFS file '{}': {}", entry.path, e))
+                let fs =
+                    fs_ntfs::NtfsReader::open(boxed_reader, candidate.offset).map_err(|e| {
+                        FileServiceError::other(format!("Cannot open NTFS filesystem: {}", e))
+                    })?;
+                fs.open_file(&entry.path).map_err(|e| {
+                    FileServiceError::other(format!(
+                        "Cannot open NTFS file '{}': {}",
+                        entry.path, e
+                    ))
+                })
             }
             ImageFilesystemKind::Fat => {
-                let fs = fs_fat::FatReader::open(boxed_reader, candidate.offset)
-                    .map_err(|e| e.to_string())?;
-                fs.open_file(&entry.path)
-                    .map_err(|e| format!("Cannot open FAT file '{}': {}", entry.path, e))
+                let fs = fs_fat::FatReader::open(boxed_reader, candidate.offset).map_err(|e| {
+                    FileServiceError::other(format!("Cannot open FAT filesystem: {}", e))
+                })?;
+                fs.open_file(&entry.path).map_err(|e| {
+                    FileServiceError::other(format!("Cannot open FAT file '{}': {}", entry.path, e))
+                })
             }
-            ImageFilesystemKind::BitLocker => Err(format!(
+            ImageFilesystemKind::BitLocker => Err(FileServiceError::other(format!(
                 "Cannot open '{}' from locked BitLocker partition",
                 entry.path
-            )),
+            ))),
         };
 
         if result.is_ok() {
@@ -330,10 +345,10 @@ where
         }
     }
 
-    Err(format!(
+    Err(FileServiceError::other(format!(
         "Cannot open image-backed file '{}' from any detected partition",
         entry.path
-    ))
+    )))
 }
 
 fn root_partition_index_for_entry(repo: &FileRepo<'_>, entry: &FileEntry) -> Option<usize> {
@@ -365,35 +380,42 @@ pub(crate) fn mft_partition_index_from_entry_id(entry_id: &str) -> Option<usize>
     }
 }
 
-fn file_id_from_handle(handle_id: &str) -> Result<&str, String> {
+fn file_id_from_handle(handle_id: &str) -> Result<&str, FileServiceError> {
     handle_id
         .strip_prefix(FILE_HANDLE_PREFIX)
         .filter(|file_id| !file_id.is_empty())
-        .ok_or_else(|| "Invalid file handle".to_string())
+        .ok_or_else(|| FileServiceError::invalid_input("Invalid file handle"))
 }
 
-pub fn safe_relative_path(path: &str) -> Result<PathBuf, String> {
+pub fn safe_relative_path(path: &str) -> Result<PathBuf, FileServiceError> {
     if path.is_empty() {
-        return Err("Empty file path".to_string());
+        return Err(FileServiceError::invalid_input("Empty file path"));
     }
 
     let decoded = urlencoding_decode(path);
     if decoded != path
         && (decoded.contains("..") || decoded.contains('/') || decoded.contains('\\'))
     {
-        return Err("URL-encoded traversal detected".to_string());
+        return Err(FileServiceError::path_traversal(
+            "URL-encoded traversal detected",
+        ));
     }
 
     let mut safe = PathBuf::new();
     for component in Path::new(path).components() {
         match component {
             std::path::Component::Normal(part) => {
-                let s = part.to_str().ok_or("Invalid UTF-8 in path")?;
+                let s = part
+                    .to_str()
+                    .ok_or_else(|| FileServiceError::path_traversal("Invalid UTF-8 in path"))?;
                 if s.contains('\0') {
-                    return Err("Null byte in path".to_string());
+                    return Err(FileServiceError::path_traversal("Null byte in path"));
                 }
                 if is_windows_reserved_name(s) {
-                    return Err(format!("Reserved name: {}", s));
+                    return Err(FileServiceError::path_traversal(format!(
+                        "Reserved name: {}",
+                        s
+                    )));
                 }
                 safe.push(part);
             }
@@ -401,13 +423,15 @@ pub fn safe_relative_path(path: &str) -> Result<PathBuf, String> {
             std::path::Component::ParentDir
             | std::path::Component::RootDir
             | std::path::Component::Prefix(_) => {
-                return Err("Unsafe file path in catalog".to_string())
+                return Err(FileServiceError::path_traversal(
+                    "Unsafe file path in catalog",
+                ))
             }
         }
     }
 
     if safe.as_os_str().len() > infrastructure::constants::MAX_PATH_LENGTH {
-        return Err("Path too long".to_string());
+        return Err(FileServiceError::path_traversal("Path too long"));
     }
 
     Ok(safe)
@@ -442,15 +466,16 @@ fn is_windows_reserved_name(name: &str) -> bool {
     RESERVED.contains(&stem)
 }
 
-pub fn skip_reader_bytes(reader: &mut dyn Read, mut remaining: u64) -> Result<(), String> {
+pub fn skip_reader_bytes(
+    reader: &mut dyn Read,
+    mut remaining: u64,
+) -> Result<(), FileServiceError> {
     let mut buffer = vec![0u8; 65536];
     while remaining > 0 {
         let chunk_len = remaining.min(buffer.len() as u64) as usize;
-        let read = reader
-            .read(&mut buffer[..chunk_len])
-            .map_err(|e| e.to_string())?;
+        let read = reader.read(&mut buffer[..chunk_len])?;
         if read == 0 {
-            return Err("Read offset exceeds file size".to_string());
+            return Err(FileServiceError::other("Read offset exceeds file size"));
         }
         remaining -= read as u64;
     }

@@ -1,4 +1,4 @@
-use crate::file_service::{mapping::file_entry_to_dto, sort::sort_entries};
+use crate::file_service::{mapping::file_entry_to_dto, sort::sort_entries, FileServiceError};
 use domain::FileEntryId;
 use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
@@ -7,26 +7,22 @@ use transport::{commands::GetFileRowsRequest, dto::FileRowsPageDto};
 pub fn get_file_rows_for_request(
     conn: &Connection,
     request: &GetFileRowsRequest,
-) -> Result<FileRowsPageDto, String> {
+) -> Result<FileRowsPageDto, FileServiceError> {
     let mut request = request.clone();
-    request.validate()?;
+    request.validate().map_err(FileServiceError::InvalidInput)?;
     let repo = FileRepo::new(conn);
 
     let mut entries = match request.parent_id.as_deref() {
         Some(parent_id) => {
-            let parent = repo
-                .find_by_id(&FileEntryId(parent_id.to_string()))
-                .map_err(|e| e.to_string())?;
+            let parent = repo.find_by_id(&FileEntryId(parent_id.to_string()))?;
             match parent {
-                Some(entry) if entry.entry_type == domain::EntryType::Directory => repo
-                    .find_children_visible(&entry.id, request.show_hidden)
-                    .map_err(|e| e.to_string())?,
+                Some(entry) if entry.entry_type == domain::EntryType::Directory => {
+                    repo.find_children_visible(&entry.id, request.show_hidden)?
+                }
                 _ => Vec::new(),
             }
         }
-        None => repo
-            .find_root_entries_visible(request.show_hidden)
-            .map_err(|e| e.to_string())?,
+        None => repo.find_root_entries_visible(request.show_hidden)?,
     };
 
     let total_count = entries.len() as u64;

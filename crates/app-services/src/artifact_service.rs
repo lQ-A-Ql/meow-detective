@@ -1,12 +1,55 @@
 use chrono::Utc;
 use rayon::prelude::*;
 use std::io::Read;
+use thiserror::Error;
 use transport::dto::{ArtifactRowDto, FamilyCountDto};
 
+use crate::file_service::FileServiceError;
 use artifacts_core::{ArtifactContext, ExtractorRegistry, VecSink};
 use domain::{EdgeType, FileEntryId, GraphEdge, GraphNode, NodeType};
 use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, graph_repo::GraphRepo};
 use rusqlite::Connection;
+
+#[derive(Debug, Error)]
+pub enum ArtifactServiceError {
+    #[error("database error: {0}")]
+    Db(#[from] persistence_sqlite::DbError),
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("extractor error: {0}")]
+    Extractor(String),
+    #[error("not found: {0}")]
+    NotFound(String),
+    #[error("other error: {0}")]
+    Other(String),
+}
+
+impl ArtifactServiceError {
+    pub fn extractor(message: impl Into<String>) -> Self {
+        Self::Extractor(message.into())
+    }
+
+    pub fn not_found(message: impl Into<String>) -> Self {
+        Self::NotFound(message.into())
+    }
+
+    pub fn other(message: impl Into<String>) -> Self {
+        Self::Other(message.into())
+    }
+}
+
+impl From<FileServiceError> for ArtifactServiceError {
+    fn from(err: FileServiceError) -> Self {
+        match err {
+            FileServiceError::Db(e) => Self::Db(e),
+            FileServiceError::Io(e) => Self::Io(e),
+            FileServiceError::NotFound(msg) => Self::NotFound(msg),
+            FileServiceError::InvalidInput(msg)
+            | FileServiceError::PathTraversal(msg)
+            | FileServiceError::Other(msg) => Self::Other(msg),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ArtifactExtractionStats {
@@ -45,7 +88,7 @@ pub fn run_extractors_on_file(
     file_path: &str,
     reader: Box<dyn Read>,
     sink: &mut VecSink,
-) -> Result<ArtifactExtractionStats, String> {
+) -> Result<ArtifactExtractionStats, ArtifactServiceError> {
     let mut stats = ArtifactExtractionStats::default();
     let extractors = registry.find_for_path(file_path);
     if extractors.is_empty() {
@@ -55,8 +98,7 @@ pub fn run_extractors_on_file(
     let mut buf = Vec::new();
     let bytes_read = reader
         .take(infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES)
-        .read_to_end(&mut buf)
-        .map_err(|e| e.to_string())?;
+        .read_to_end(&mut buf)?;
     if bytes_read as u64 >= infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES {
         stats.warning_count += 1;
         stats.skipped_count += 1;
@@ -89,13 +131,12 @@ pub fn store_artifacts(
     artifacts: &[domain::Artifact],
     case_id: &str,
     data_source_id: &str,
-) -> Result<(), String> {
+) -> Result<(), ArtifactServiceError> {
     if artifacts.is_empty() {
         return Ok(());
     }
     let repo = ArtifactRepo::new(conn);
-    repo.insert_batch(artifacts, case_id, data_source_id)
-        .map_err(|e| e.to_string())?;
+    repo.insert_batch(artifacts, case_id, data_source_id)?;
 
     // Populate investigative graph: Artifact nodes and References edges.
     // Non-fatal: graph population is a best-effort side effect (the graph
@@ -110,7 +151,7 @@ fn populate_artifact_graph(
     conn: &Connection,
     artifacts: &[domain::Artifact],
     case_id: &str,
-) -> Result<(), String> {
+) -> Result<(), ArtifactServiceError> {
     if artifacts.is_empty() {
         return Ok(());
     }
@@ -149,7 +190,7 @@ fn populate_artifact_graph(
     if !nodes.is_empty() {
         graph_repo
             .insert_nodes_batch(&nodes)
-            .map_err(|e| format!("graph node insert: {e}"))?;
+            .map_err(|e| ArtifactServiceError::other(format!("graph node insert: {e}")))?;
     }
     if !edges.is_empty() {
         // Non-fatal: graph edges may reference nodes that are not yet populated
@@ -167,8 +208,8 @@ pub fn run_targeted_evidence_scan(
     conn: &Connection,
     case_id: &str,
     categories: &[&str],
-    file_reader: impl Fn(&FileEntryId) -> Result<Box<dyn Read>, String>,
-) -> Result<EvidenceScanStats, String> {
+    file_reader: impl Fn(&FileEntryId) -> Result<Box<dyn Read>, ArtifactServiceError>,
+) -> Result<EvidenceScanStats, ArtifactServiceError> {
     let registry = create_registry();
     let selected_categories = if categories.is_empty() {
         crate::analysis_service::evidence_category_defs()
@@ -180,7 +221,8 @@ pub fn run_targeted_evidence_scan(
         categories.to_vec()
     };
     let candidates =
-        crate::analysis_service::evidence_candidates_for_categories(conn, &selected_categories)?;
+        crate::analysis_service::evidence_candidates_for_categories(conn, &selected_categories)
+            .map_err(ArtifactServiceError::other)?;
     let mut stats = EvidenceScanStats {
         candidate_count: candidates.len() as u32,
         ..EvidenceScanStats::default()
@@ -229,14 +271,14 @@ pub fn run_targeted_evidence_scan(
 fn already_has_artifact_for_source(
     conn: &Connection,
     source_object_id: &str,
-) -> Result<bool, String> {
+) -> Result<bool, ArtifactServiceError> {
     let count: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM artifacts WHERE source_object_id = ?1",
             [source_object_id],
             |row| row.get(0),
         )
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| ArtifactServiceError::Db(persistence_sqlite::DbError::from(e)))?;
     Ok(count > 0)
 }
 
@@ -247,12 +289,15 @@ fn already_has_artifact_for_source(
 /// are fast and the extractor CPU work is the bottleneck.
 ///
 /// Returns (all_extracted_artifacts, aggregated_stats).
-pub fn run_extractors_parallel(
+pub fn run_extractors_parallel<F>(
     registry: &ExtractorRegistry,
     files: &[domain::FileEntry],
-    file_reader: &(dyn Fn(&FileEntryId) -> Option<Box<dyn Read>> + Sync),
+    file_reader: F,
     limit: usize,
-) -> (Vec<domain::Artifact>, ArtifactExtractionStats) {
+) -> (Vec<domain::Artifact>, ArtifactExtractionStats)
+where
+    F: Fn(&FileEntryId) -> Result<Box<dyn Read>, ArtifactServiceError> + Sync + Send,
+{
     let to_process: Vec<&domain::FileEntry> = files
         .iter()
         .filter(|file| !registry.find_for_path(&file.path).is_empty())
@@ -265,11 +310,18 @@ pub fn run_extractors_parallel(
             let extractors = registry.find_for_path(&file.path);
             let mut sink = VecSink::new();
             let mut stats = ArtifactExtractionStats::default();
-            let Some(reader) = file_reader(&file.id) else {
-                stats.warning_count += 1;
-                stats.skipped_count += 1;
-                tracing::warn!("Artifact extraction skipped unreadable file: {}", file.path);
-                return (Vec::new(), stats);
+            let reader = match file_reader(&file.id) {
+                Ok(reader) => reader,
+                Err(err) => {
+                    stats.warning_count += 1;
+                    stats.skipped_count += 1;
+                    tracing::warn!(
+                        "Artifact extraction skipped unreadable file {}: {}",
+                        file.path,
+                        err
+                    );
+                    return (Vec::new(), stats);
+                }
             };
 
             let mut buf = Vec::new();
@@ -322,32 +374,36 @@ pub fn run_extractors_parallel(
 
 const ARTIFACT_FILE_LIMIT_BYTES: u64 = infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES;
 
-pub fn get_artifact_families_from_db(conn: &Connection) -> Result<Vec<String>, String> {
+pub fn get_artifact_families_from_db(
+    conn: &Connection,
+) -> Result<Vec<String>, ArtifactServiceError> {
     let repo = ArtifactRepo::new(conn);
-    repo.families().map_err(|e| e.to_string())
+    repo.families().map_err(ArtifactServiceError::from)
 }
 
 pub fn get_artifact_rows_from_db(
     conn: &Connection,
     family: Option<&str>,
-) -> Result<Vec<ArtifactRowDto>, String> {
+) -> Result<Vec<ArtifactRowDto>, ArtifactServiceError> {
     let repo = ArtifactRepo::new(conn);
-    let artifacts = repo.list_by_family(family).map_err(|e| e.to_string())?;
+    let artifacts = repo.list_by_family(family)?;
     Ok(artifacts.iter().map(artifact_to_dto).collect())
 }
 
 pub fn get_artifact_row_by_id(
     conn: &Connection,
     artifact_id: &str,
-) -> Result<Option<ArtifactRowDto>, String> {
+) -> Result<Option<ArtifactRowDto>, ArtifactServiceError> {
     let repo = ArtifactRepo::new(conn);
-    let artifact = repo.find_by_id(artifact_id).map_err(|e| e.to_string())?;
+    let artifact = repo.find_by_id(artifact_id)?;
     Ok(artifact.as_ref().map(artifact_to_dto))
 }
 
-pub fn get_artifact_family_counts(conn: &Connection) -> Result<Vec<FamilyCountDto>, String> {
+pub fn get_artifact_family_counts(
+    conn: &Connection,
+) -> Result<Vec<FamilyCountDto>, ArtifactServiceError> {
     let repo = ArtifactRepo::new(conn);
-    let counts = repo.count_by_family().map_err(|e| e.to_string())?;
+    let counts = repo.count_by_family()?;
     Ok(counts
         .into_iter()
         .map(|(family, count)| FamilyCountDto { family, count })
@@ -581,9 +637,9 @@ mod tests {
         let (artifacts, stats) = run_extractors_parallel(
             &registry,
             &files,
-            &|_| {
+            |_| {
                 reads.fetch_add(1, Ordering::Relaxed);
-                Some(Box::new(std::io::Cursor::new(Vec::<u8>::new())) as Box<dyn std::io::Read>)
+                Ok(Box::new(std::io::Cursor::new(Vec::<u8>::new())) as Box<dyn std::io::Read>)
             },
             10,
         );
@@ -599,7 +655,12 @@ mod tests {
         let registry = create_registry();
         let files = vec![make_file("pf-1", "/Windows/Prefetch/CMD.EXE-DEADBEEF.pf")];
 
-        let (artifacts, stats) = run_extractors_parallel(&registry, &files, &|_| None, 10);
+        let (artifacts, stats) = run_extractors_parallel(
+            &registry,
+            &files,
+            |_| Err(ArtifactServiceError::other("reader unavailable")),
+            10,
+        );
 
         assert!(artifacts.is_empty());
         assert_eq!(stats.warning_count, 1);
@@ -619,9 +680,9 @@ mod tests {
         let (_artifacts, _stats) = run_extractors_parallel(
             &registry,
             &files,
-            &|_| {
+            |_| {
                 reads.fetch_add(1, Ordering::Relaxed);
-                Some(Box::new(std::io::Cursor::new(Vec::<u8>::new())) as Box<dyn std::io::Read>)
+                Ok(Box::new(std::io::Cursor::new(Vec::<u8>::new())) as Box<dyn std::io::Read>)
             },
             1,
         );
@@ -662,7 +723,7 @@ mod tests {
         );
 
         let stats = run_targeted_evidence_scan(&conn, "case-1", &["ProgramExecution"], |_| {
-            Err("reader unavailable".to_string())
+            Err(ArtifactServiceError::other("reader unavailable"))
         })
         .unwrap();
 

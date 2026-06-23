@@ -32,7 +32,7 @@ pub(crate) fn run_background_import_job(
     app: Option<&AppHandle>,
     cancel_token: Arc<AtomicBool>,
 ) -> Result<(), CommandError> {
-    let conn = persistence_sqlite::open_or_create(&job.db_path)
+    let conn = app_services::connection::open_case_db(&job.db_path)
         .map_err(CommandError::from_service_error)?;
     let job_repo = JobRepo::new(&conn);
 

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Forensics Workbench** is a Windows-first, single-user desktop digital-forensics application built with **Tauri 2**. It is backend-led: a Rust workspace of 37 crates performs evidence processing (disk images, volume detection, file systems, Windows/Linux/macOS artifacts, search indexing, timeline generation, entity resolution, STIX 2.1 exchange), while a **React 18 + TypeScript + Vite + Tailwind 4** frontend provides the investigator UI.
+**Forensics Workbench** is a Windows-first, single-user desktop digital-forensics application built with **Tauri 2**. It is backend-led: a Rust workspace of 38 crates performs evidence processing (disk images, volume detection, file systems, Windows/Linux/macOS artifacts, search indexing, timeline generation, entity resolution, STIX 2.1 exchange), while a **React 18 + TypeScript + Vite + Tailwind 4** frontend provides the investigator UI.
 
 - **Runtime**: Tauri 2 desktop shell. No HTTP server. All frontend↔backend communication goes through Tauri commands and events.
 - **Primary platform**: `x86_64-pc-windows-msvc` (Windows-primary, desktop-first, single-user).
@@ -267,7 +267,7 @@ Backend → Frontend via Tauri `emit`. Topics are string constants in `crates/tr
 
 | Count | Location | Notes |
 |-------|----------|-------|
-| 37 crates | `Cargo.toml` workspace members + `apps/desktop/src-tauri` | Includes 31 library crates and the Tauri shell |
+| 38 crates | `Cargo.toml` workspace members + `apps/desktop/src-tauri` | Includes 37 library crates and the Tauri shell |
 | 85 Tauri commands | `apps/desktop/src-tauri/src/commands/**/*.rs` | Registered in `src/lib.rs` |
 | 12 SQLite repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` | |
 | 31 migration scripts | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | `0001`–`0030` plus `staging_001.sql` |

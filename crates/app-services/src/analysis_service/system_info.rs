@@ -43,9 +43,9 @@ impl SystemInfoExtraction {
 /// EVTX boot/shutdown records are reported as EventLog/User32 candidates, not as
 /// direct boot assertions. This service never manufactures host facts from file
 /// presence alone.
-pub fn extract_system_info_for_case(
+pub fn extract_system_info_for_case<E: std::fmt::Display>(
     conn: &Connection,
-    mut read_header_fn: impl FnMut(&FileEntryId, usize) -> Result<Vec<u8>, String>,
+    mut read_header_fn: impl FnMut(&FileEntryId, usize) -> Result<Vec<u8>, E>,
 ) -> AnalysisSystemInfoDto {
     let parsed_at = chrono::Utc::now().to_rfc3339();
     let mut warnings = Vec::new();
@@ -139,11 +139,11 @@ fn find_system_info_candidates(conn: &Connection) -> Result<SystemInfoCandidates
     })
 }
 
-fn inspect_registry_hive(
+fn inspect_registry_hive<E: std::fmt::Display>(
     entry: Option<&FileEntry>,
     parser: &str,
     parsed_at: &str,
-    read_header_fn: &mut impl FnMut(&FileEntryId, usize) -> Result<Vec<u8>, String>,
+    read_header_fn: &mut impl FnMut(&FileEntryId, usize) -> Result<Vec<u8>, E>,
     warnings: &mut Vec<String>,
     provenance: &mut Vec<AnalysisProvenanceDto>,
     extraction: &mut SystemInfoExtraction,
@@ -311,10 +311,10 @@ fn assign_registry_field(
     true
 }
 
-fn inspect_evtx_boot_source(
+fn inspect_evtx_boot_source<E: std::fmt::Display>(
     entry: Option<&FileEntry>,
     parsed_at: &str,
-    read_header_fn: &mut impl FnMut(&FileEntryId, usize) -> Result<Vec<u8>, String>,
+    read_header_fn: &mut impl FnMut(&FileEntryId, usize) -> Result<Vec<u8>, E>,
     warnings: &mut Vec<String>,
     provenance: &mut Vec<AnalysisProvenanceDto>,
     boot_history: &mut Vec<AnalysisBootRecordDto>,

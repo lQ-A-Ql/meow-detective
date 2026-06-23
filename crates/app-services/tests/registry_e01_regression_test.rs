@@ -178,7 +178,7 @@ fn jc2_registry_extractors_surface_new_families() {
             }
 
             let summary = analysis_service::get_registry_structured_summary(conn)
-                .map_err(persistence_sqlite::DbError::System)?;
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             eprintln!(
                 "Structured summary: services={} usb={} mounted={} shutdown={} shimcache={} run_keys={} winlogon={} lsa_packages={} network={} shellbags={} muicache={} amcache_apps={} amcache_files={} appcompat={} sec_policy={} lsa_secrets={} cached_creds={}",
                 summary.system_services.len(),

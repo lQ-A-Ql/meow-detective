@@ -251,7 +251,7 @@ pub async fn get_case_metrics(state: State<'_, AppState>) -> Result<CaseMetricsD
             }
         };
         // Guard is now dropped — query with a fresh connection
-        let conn = persistence_sqlite::open_or_create(&db_path)
+        let conn = app_services::connection::open_case_db(&db_path)
             .map_err(CommandError::from_service_error)?;
         let repo = persistence_sqlite::repositories::case_repo::CaseRepo::new(&conn);
         let metrics = repo
@@ -284,7 +284,7 @@ pub async fn get_recent_objects(
                 None => return Ok(vec![]),
             }
         };
-        let conn = persistence_sqlite::open_or_create(&db_path)
+        let conn = app_services::connection::open_case_db(&db_path)
             .map_err(CommandError::from_service_error)?;
         app_services::file_service::get_recent_objects_real(&conn)
             .map_err(CommandError::from_service_error)
@@ -309,7 +309,7 @@ pub async fn get_data_sources(
                 None => return Ok(vec![]),
             }
         };
-        let conn = persistence_sqlite::open_or_create(&db_path)
+        let conn = app_services::connection::open_case_db(&db_path)
             .map_err(CommandError::from_service_error)?;
         app_services::file_service::get_data_sources_real(&conn, &case_id)
             .map_err(CommandError::from_service_error)
@@ -336,7 +336,7 @@ pub async fn rename_data_source(
             active.db_path()
         };
         // Guard is now dropped — query with released lock
-        let conn = persistence_sqlite::open_or_create(&db_path)
+        let conn = app_services::connection::open_case_db(&db_path)
             .map_err(CommandError::from_service_error)?;
         app_services::file_service::rename_data_source_real(
             &conn,
@@ -437,7 +437,7 @@ pub async fn delete_data_source(
             active.db_path()
         };
         // Guard is now dropped — query with released lock
-        let conn = persistence_sqlite::open_or_create(&db_path)
+        let conn = app_services::connection::open_case_db(&db_path)
             .map_err(CommandError::from_service_error)?;
         case_service::delete_data_source(&conn, &ds_id)
             .map_err(CommandError::from_service_error)?;

@@ -4,24 +4,23 @@ use crate::file_service::{
         directory_depth, looks_like_raw_fs_root_name, normalized_bare_root_name_from_partitions,
     },
     sort::sort_directories_for_tree,
+    FileServiceError,
 };
 use domain::{EntryType, FileEntryId};
 use persistence_sqlite::repositories::{file_repo::FileRepo, partition_repo::PartitionRepo};
 use rusqlite::Connection;
 use transport::dto::{FileChildrenDto, FileTreeNodeDto};
 
-pub fn get_file_tree_real(conn: &Connection) -> Result<Vec<FileTreeNodeDto>, String> {
+pub fn get_file_tree_real(conn: &Connection) -> Result<Vec<FileTreeNodeDto>, FileServiceError> {
     get_file_tree_real_with_visibility(conn, false)
 }
 
 pub fn get_file_tree_real_with_visibility(
     conn: &Connection,
     show_hidden: bool,
-) -> Result<Vec<FileTreeNodeDto>, String> {
+) -> Result<Vec<FileTreeNodeDto>, FileServiceError> {
     let repo = FileRepo::new(conn);
-    let mut roots = repo
-        .find_root_directories_visible(show_hidden)
-        .map_err(|e| e.to_string())?;
+    let mut roots = repo.find_root_directories_visible(show_hidden)?;
     sort_directories_for_tree(&mut roots);
 
     let child_counts = repo
@@ -73,7 +72,7 @@ pub fn get_file_children_lazy(
     parent_id: &str,
     offset: u64,
     limit: u32,
-) -> Result<FileChildrenDto, String> {
+) -> Result<FileChildrenDto, FileServiceError> {
     get_file_children_lazy_with_visibility(conn, parent_id, offset, limit, false)
 }
 
@@ -83,12 +82,9 @@ pub fn get_file_children_lazy_with_visibility(
     offset: u64,
     limit: u32,
     show_hidden: bool,
-) -> Result<FileChildrenDto, String> {
+) -> Result<FileChildrenDto, FileServiceError> {
     let repo = FileRepo::new(conn);
-    let parent = match repo
-        .find_by_id(&FileEntryId(parent_id.to_string()))
-        .map_err(|e| e.to_string())?
-    {
+    let parent = match repo.find_by_id(&FileEntryId(parent_id.to_string()))? {
         Some(entry) if entry.entry_type == EntryType::Directory => entry,
         _ => {
             return Ok(FileChildrenDto {
@@ -101,9 +97,7 @@ pub fn get_file_children_lazy_with_visibility(
         }
     };
 
-    let mut directories = repo
-        .find_child_directories_visible(&parent.id, show_hidden)
-        .map_err(|e| e.to_string())?;
+    let mut directories = repo.find_child_directories_visible(&parent.id, show_hidden)?;
     let total_count = directories.len() as u64;
     sort_directories_for_tree(&mut directories);
 

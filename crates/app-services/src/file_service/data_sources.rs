@@ -1,3 +1,4 @@
+use crate::file_service::FileServiceError;
 use domain::{
     DataSourceHashStatus, DataSourceId, DataSourceProvenanceStatus, EntryType, FileEntry,
 };
@@ -10,11 +11,11 @@ use transport::dto::{DataSourcePartitionDto, DataSourceSummaryDto, RecentObjectD
 pub fn get_data_sources_real(
     conn: &Connection,
     case_id: &domain::CaseId,
-) -> Result<Vec<DataSourceSummaryDto>, String> {
+) -> Result<Vec<DataSourceSummaryDto>, FileServiceError> {
     let ds_repo = DataSourceRepo::new(conn);
     let file_repo = FileRepo::new(conn);
     let partition_repo = PartitionRepo::new(conn);
-    let sources = ds_repo.find_by_case(case_id).map_err(|e| e.to_string())?;
+    let sources = ds_repo.find_by_case(case_id)?;
 
     Ok(sources
         .into_iter()
@@ -91,28 +92,29 @@ pub fn rename_data_source_real(
     conn: &Connection,
     data_source_id: &str,
     name: &str,
-) -> Result<(), String> {
+) -> Result<(), FileServiceError> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
-        return Err("Data source name cannot be empty".to_string());
+        return Err(FileServiceError::invalid_input(
+            "Data source name cannot be empty",
+        ));
     }
 
-    DataSourceRepo::new(conn)
-        .rename(&DataSourceId(data_source_id.to_string()), trimmed)
-        .map_err(|e| e.to_string())
+    DataSourceRepo::new(conn).rename(&DataSourceId(data_source_id.to_string()), trimmed)?;
+    Ok(())
 }
 
-pub fn get_recent_objects_real(conn: &Connection) -> Result<Vec<RecentObjectDto>, String> {
+pub fn get_recent_objects_real(
+    conn: &Connection,
+) -> Result<Vec<RecentObjectDto>, FileServiceError> {
     let file_repo = FileRepo::new(conn);
-    let roots = file_repo.find_root_entries().map_err(|e| e.to_string())?;
+    let roots = file_repo.find_root_entries()?;
     let mut recent = Vec::new();
     let mut queue: std::collections::VecDeque<FileEntry> = roots.into();
 
     while let Some(entry) = queue.pop_front() {
         if entry.entry_type == EntryType::Directory {
-            let children = file_repo
-                .find_children(&entry.id)
-                .map_err(|e| e.to_string())?;
+            let children = file_repo.find_children(&entry.id)?;
             queue.extend(children);
             continue;
         }
