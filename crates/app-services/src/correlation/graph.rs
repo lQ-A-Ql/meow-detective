@@ -476,7 +476,7 @@ pub(crate) fn build_rule_groups(
     artifacts: &[ArtifactRowDto],
     timelines: &[TimelineEventDto],
 ) -> Result<Vec<CorrelationRuleGroup>, String> {
-    let files = crate::analysis_service::collect_file_entries(conn)?;
+    let files = crate::analysis_service::collect_file_entries(conn).map_err(|e| e.to_string())?;
     let timeline_map = timelines.iter().fold(
         BTreeMap::<String, Vec<TimelineEventDto>>::new(),
         |mut acc, item| {

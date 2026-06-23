@@ -10,6 +10,7 @@ pub use self::registry::extract_registry_candidate;
 use crate::analysis_service::candidates::{
     evidence_candidates_for_categories, normalize_evidence_path, EvidenceCandidate,
 };
+use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::MAX_ANALYSIS_SOURCE_BYTES;
 use chrono::Utc;
 use domain::{Artifact, FileEntryId, TimelineEvent};
@@ -36,7 +37,7 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
     case_id: &str,
     categories: &[&str],
     mut file_reader: impl FnMut(&FileEntryId) -> Result<Box<dyn Read>, E>,
-) -> Result<AnalysisExtractionRunDto, String> {
+) -> Result<AnalysisExtractionRunDto, AnalysisServiceError> {
     let generated_at = Utc::now().to_rfc3339();
     let selected = if categories.is_empty() {
         vec!["Registry", "BrowserHistory", "Email"]
@@ -183,14 +184,11 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
         let by_source = artifacts_by_data_source(artifacts);
         let repo = ArtifactRepo::new(conn);
         for (data_source_id, group) in by_source {
-            repo.insert_batch(&group, case_id, &data_source_id)
-                .map_err(|e| e.to_string())?;
+            repo.insert_batch(&group, case_id, &data_source_id)?;
         }
     }
     if !events.is_empty() {
-        TimelineRepo::new(conn)
-            .insert_batch_with_case(&events, case_id)
-            .map_err(|e| e.to_string())?;
+        TimelineRepo::new(conn).insert_batch_with_case(&events, case_id)?;
     }
 
     let artifact_count = count_analysis_artifacts(conn)?;
@@ -214,7 +212,7 @@ pub fn get_registry_extraction_summary(
     conn: &Connection,
     offset: u64,
     limit: u32,
-) -> Result<RegistryExtractionSummaryDto, String> {
+) -> Result<RegistryExtractionSummaryDto, AnalysisServiceError> {
     let total = count_artifacts_by_type(conn, "RegistryValue")?;
     let rows = query_artifact_rows(conn, &["RegistryValue"], offset, limit)?;
     let values = rows
@@ -245,7 +243,7 @@ pub fn get_registry_extraction_summary(
 
 pub fn get_registry_structured_summary(
     conn: &Connection,
-) -> Result<RegistryStructuredSummaryDto, String> {
+) -> Result<RegistryStructuredSummaryDto, AnalysisServiceError> {
     let sam_rows = query_artifact_rows(conn, &["RegistrySamUser"], 0, 10_000)?;
     let sam_users = sam_rows
         .into_iter()
@@ -654,7 +652,7 @@ pub fn get_browser_history_summary(
     conn: &Connection,
     offset: u64,
     limit: u32,
-) -> Result<BrowserHistorySummaryDto, String> {
+) -> Result<BrowserHistorySummaryDto, AnalysisServiceError> {
     let visit_total = count_artifacts_by_type(conn, "BrowserHistory")?;
     let download_total = count_artifacts_by_type(conn, "BrowserDownload")?;
     let visit_rows = query_artifact_rows(conn, &["BrowserHistory"], offset, limit)?;
@@ -702,7 +700,7 @@ pub fn get_email_extraction_summary(
     conn: &Connection,
     offset: u64,
     limit: u32,
-) -> Result<EmailExtractionSummaryDto, String> {
+) -> Result<EmailExtractionSummaryDto, AnalysisServiceError> {
     let total = count_artifacts_by_type(conn, "EmailMessage")?;
     let rows = query_artifact_rows(conn, &["EmailMessage"], offset, limit)?;
     let messages = rows
@@ -749,7 +747,7 @@ struct AnalysisArtifactRow {
 fn already_has_v1_artifacts(
     conn: &Connection,
     candidate: &EvidenceCandidate,
-) -> Result<bool, String> {
+) -> Result<bool, AnalysisServiceError> {
     let families = match candidate.category.as_str() {
         "Registry" => &[
             "RegistryValue",
@@ -803,9 +801,7 @@ fn already_has_v1_artifacts(
         .iter()
         .map(|param| param.as_ref())
         .collect::<Vec<&dyn rusqlite::types::ToSql>>();
-    let count: i64 = conn
-        .query_row(&sql, params_refs.as_slice(), |row| row.get(0))
-        .map_err(|e| e.to_string())?;
+    let count: i64 = conn.query_row(&sql, params_refs.as_slice(), |row| row.get(0))?;
     Ok(count > 0)
 }
 
@@ -823,25 +819,26 @@ fn artifacts_by_data_source(artifacts: Vec<Artifact>) -> HashMap<String, Vec<Art
     grouped
 }
 
-fn count_analysis_artifacts(conn: &Connection) -> Result<u64, String> {
+fn count_analysis_artifacts(conn: &Connection) -> Result<u64, AnalysisServiceError> {
     let count: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM artifacts WHERE artifact_type IN ('RegistryValue', 'RegistrySamUser', 'RegistryUserAssist', 'RegistryHive', 'RegistryNetworkAdapter', 'RegistryNetworkProfile', 'RegistryInstalledSoftware', 'RegistrySystemService', 'RegistryUsbDevice', 'RegistryMountedDevice', 'RegistryShutdownTime', 'RegistryShimCache', 'RegistryMachineRunKey', 'RegistryWinlogonConfig', 'RegistryLsaPackage', 'RegistryOpenSaveMru', 'RegistryLastVisitedMru', 'RegistryRunMru', 'RegistryShellbag', 'RegistryMuiCache', 'RegistryAmcacheApplication', 'RegistryAmcacheApplicationFile', 'RegistryAppCompatLayer', 'RegistrySecurityPolicy', 'RegistryLsaSecret', 'RegistryCachedCredential', 'BrowserHistory', 'BrowserDownload', 'EmailMessage')",
             [],
             |row| row.get(0),
         )
-        .map_err(|e| e.to_string())?;
+        ?;
     Ok(count as u64)
 }
 
-fn count_artifacts_by_type(conn: &Connection, artifact_type: &str) -> Result<u64, String> {
-    let count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM artifacts WHERE artifact_type = ?1",
-            [artifact_type],
-            |row| row.get(0),
-        )
-        .map_err(|e| e.to_string())?;
+fn count_artifacts_by_type(
+    conn: &Connection,
+    artifact_type: &str,
+) -> Result<u64, AnalysisServiceError> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM artifacts WHERE artifact_type = ?1",
+        [artifact_type],
+        |row| row.get(0),
+    )?;
     Ok(count as u64)
 }
 
@@ -850,7 +847,7 @@ fn query_artifact_rows(
     families: &[&str],
     offset: u64,
     limit: u32,
-) -> Result<Vec<AnalysisArtifactRow>, String> {
+) -> Result<Vec<AnalysisArtifactRow>, AnalysisServiceError> {
     if families.is_empty() {
         return Ok(Vec::new());
     }
@@ -878,22 +875,20 @@ fn query_artifact_rows(
         .iter()
         .map(|param| param.as_ref())
         .collect::<Vec<&dyn rusqlite::types::ToSql>>();
-    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
-    let rows = stmt
-        .query_map(params_refs.as_slice(), |row| {
-            let attrs_text: String = row.get(4)?;
-            Ok(AnalysisArtifactRow {
-                id: row.get(0)?,
-                source_object_id: row.get(1)?,
-                extractor_id: row.get(2)?,
-                created_at: row.get(3)?,
-                attrs: serde_json::from_str(&attrs_text).unwrap_or_default(),
-            })
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(params_refs.as_slice(), |row| {
+        let attrs_text: String = row.get(4)?;
+        Ok(AnalysisArtifactRow {
+            id: row.get(0)?,
+            source_object_id: row.get(1)?,
+            extractor_id: row.get(2)?,
+            created_at: row.get(3)?,
+            attrs: serde_json::from_str(&attrs_text).unwrap_or_default(),
         })
-        .map_err(|e| e.to_string())?;
+    })?;
     let mut result = Vec::new();
     for row in rows {
-        result.push(row.map_err(|e| e.to_string())?);
+        result.push(row?);
     }
     Ok(result)
 }

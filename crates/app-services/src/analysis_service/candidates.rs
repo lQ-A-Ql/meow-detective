@@ -1,4 +1,5 @@
 use crate::analysis_service::classification::metadata_category_stats;
+use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::provenance::unknown_provenance;
 use domain::{EntryType, FileEntry, FileEntryId};
 use persistence_sqlite::repositories::file_repo::FileRepo;
@@ -195,18 +196,16 @@ pub struct EvidenceCandidate {
     pub category: String,
 }
 
-pub fn collect_file_entries(conn: &Connection) -> Result<Vec<FileEntry>, String> {
+pub fn collect_file_entries(conn: &Connection) -> Result<Vec<FileEntry>, AnalysisServiceError> {
     let file_repo = FileRepo::new(conn);
-    let roots = file_repo.find_root_entries().map_err(|e| e.to_string())?;
+    let roots = file_repo.find_root_entries()?;
 
     let mut all_files = Vec::new();
     let mut queue = roots;
 
     while let Some(entry) = queue.pop() {
         if entry.entry_type == EntryType::Directory {
-            let children = file_repo
-                .find_children(&entry.id)
-                .map_err(|e| e.to_string())?;
+            let children = file_repo.find_children(&entry.id)?;
             queue.extend(children);
         } else {
             all_files.push(entry);
@@ -219,20 +218,20 @@ pub fn collect_file_entries(conn: &Connection) -> Result<Vec<FileEntry>, String>
 pub(crate) fn find_candidate_by_path_suffix(
     conn: &Connection,
     suffix: &str,
-) -> Result<Option<FileEntry>, String> {
-    conn.query_row(
-        "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted,
-                hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256
-         FROM file_entries
-         WHERE entry_type = 'file' COLLATE NOCASE
-           AND REPLACE(LOWER(path), '\\', '/') LIKE ?1
-         ORDER BY LENGTH(path) ASC
-         LIMIT 1",
-        params![format!("%{suffix}")],
-        row_to_file_entry_for_analysis,
-    )
-    .optional()
-    .map_err(|e| e.to_string())
+) -> Result<Option<FileEntry>, AnalysisServiceError> {
+    Ok(conn
+        .query_row(
+            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted,
+                    hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256
+             FROM file_entries
+             WHERE entry_type = 'file' COLLATE NOCASE
+               AND REPLACE(LOWER(path), '\\', '/') LIKE ?1
+             ORDER BY LENGTH(path) ASC
+             LIMIT 1",
+            params![format!("%{suffix}")],
+            row_to_file_entry_for_analysis,
+        )
+        .optional()?)
 }
 
 pub(crate) fn row_to_file_entry_for_analysis(row: &rusqlite::Row) -> rusqlite::Result<FileEntry> {
@@ -279,25 +278,23 @@ pub fn evidence_category_defs() -> &'static [EvidenceCategoryDef] {
 
 pub fn discover_evidence_candidates(
     conn: &Connection,
-) -> Result<HashMap<String, Vec<EvidenceCandidate>>, String> {
+) -> Result<HashMap<String, Vec<EvidenceCandidate>>, AnalysisServiceError> {
     let mut map: HashMap<String, Vec<EvidenceCandidate>> = EVIDENCE_CATEGORY_DEFS
         .iter()
         .map(|def| (def.category.to_string(), Vec::new()))
         .collect();
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, data_source_id, path, COALESCE(size, 0)
+    let mut stmt = conn.prepare(
+        "SELECT id, data_source_id, path, COALESCE(size, 0)
              FROM file_entries
              WHERE entry_type = 'file' COLLATE NOCASE",
-        )
-        .map_err(|e| e.to_string())?;
-    let mut rows = stmt.query([]).map_err(|e| e.to_string())?;
-    while let Some(row) = rows.next().map_err(|e| e.to_string())? {
-        let file_id: String = row.get(0).map_err(|e| e.to_string())?;
-        let data_source_id: String = row.get(1).map_err(|e| e.to_string())?;
-        let path: String = row.get(2).map_err(|e| e.to_string())?;
-        let size: u64 = row.get(3).map_err(|e| e.to_string())?;
+    )?;
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        let file_id: String = row.get(0)?;
+        let data_source_id: String = row.get(1)?;
+        let path: String = row.get(2)?;
+        let size: u64 = row.get(3)?;
         let normalized = normalize_evidence_path(&path);
 
         for def in EVIDENCE_CATEGORY_DEFS {
@@ -327,7 +324,7 @@ pub fn discover_evidence_candidates(
 pub fn evidence_candidates_for_categories(
     conn: &Connection,
     categories: &[&str],
-) -> Result<Vec<EvidenceCandidate>, String> {
+) -> Result<Vec<EvidenceCandidate>, AnalysisServiceError> {
     let discovered = discover_evidence_candidates(conn)?;
     let mut candidates = Vec::new();
     for category in categories {
@@ -340,7 +337,7 @@ pub fn evidence_candidates_for_categories(
 
 pub fn get_evidence_classification_summary(
     conn: &Connection,
-) -> Result<EvidenceClassificationSummaryDto, String> {
+) -> Result<EvidenceClassificationSummaryDto, AnalysisServiceError> {
     let generated_at = chrono::Utc::now().to_rfc3339();
     let candidates = discover_evidence_candidates(conn)?;
     let artifact_counts = artifact_counts_by_family(conn)?;
@@ -520,40 +517,37 @@ pub(crate) fn is_browser_history_path(normalized: &str) -> bool {
             && normalized.contains("/mozilla/firefox/profiles/"))
 }
 
-fn artifact_counts_by_family(conn: &Connection) -> Result<HashMap<String, u64>, String> {
-    let mut stmt = conn
-        .prepare("SELECT artifact_type, COUNT(*) FROM artifacts GROUP BY artifact_type")
-        .map_err(|e| e.to_string())?;
-    let rows = stmt
-        .query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
-        })
-        .map_err(|e| e.to_string())?;
+fn artifact_counts_by_family(
+    conn: &Connection,
+) -> Result<HashMap<String, u64>, AnalysisServiceError> {
+    let mut stmt =
+        conn.prepare("SELECT artifact_type, COUNT(*) FROM artifacts GROUP BY artifact_type")?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
+    })?;
     let mut counts = HashMap::new();
     for row in rows {
-        let (family, count) = row.map_err(|e| e.to_string())?;
+        let (family, count) = row?;
         counts.insert(family, count);
     }
     Ok(counts)
 }
 
-fn artifact_counts_by_source(conn: &Connection) -> Result<HashMap<String, u64>, String> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT source_object_id, COUNT(*)
+fn artifact_counts_by_source(
+    conn: &Connection,
+) -> Result<HashMap<String, u64>, AnalysisServiceError> {
+    let mut stmt = conn.prepare(
+        "SELECT source_object_id, COUNT(*)
              FROM artifacts
              WHERE source_object_id IS NOT NULL
              GROUP BY source_object_id",
-        )
-        .map_err(|e| e.to_string())?;
-    let rows = stmt
-        .query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
-        })
-        .map_err(|e| e.to_string())?;
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
+    })?;
     let mut counts = HashMap::new();
     for row in rows {
-        let (source_id, count) = row.map_err(|e| e.to_string())?;
+        let (source_id, count) = row?;
         counts.insert(source_id, count);
     }
     Ok(counts)

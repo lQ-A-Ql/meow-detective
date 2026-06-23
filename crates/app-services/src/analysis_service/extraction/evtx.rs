@@ -6,6 +6,7 @@
 
 use crate::analysis_service::artifact_builders::{base_attrs, make_artifact, make_timeline_event};
 use crate::analysis_service::candidates::EvidenceCandidate;
+use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::extraction::ExtractionOutcome;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
@@ -74,11 +75,11 @@ pub fn extract_evtx_candidate(candidate: &EvidenceCandidate, bytes: &[u8]) -> Ex
     outcome
 }
 
-fn parse_event_timestamp(raw: &str) -> Result<DateTime<Utc>, String> {
+fn parse_event_timestamp(raw: &str) -> Result<DateTime<Utc>, AnalysisServiceError> {
     if raw == "unknown" {
-        return Err("unknown timestamp".to_string());
+        return Err(AnalysisServiceError::Other("unknown timestamp".to_string()));
     }
     DateTime::parse_from_rfc3339(raw)
         .map(|dt| dt.with_timezone(&Utc))
-        .map_err(|err| format!("parse EVTX timestamp {raw}: {err}"))
+        .map_err(|err| AnalysisServiceError::Other(format!("parse EVTX timestamp {raw}: {err}")))
 }

@@ -51,6 +51,20 @@ impl From<FileServiceError> for ArtifactServiceError {
     }
 }
 
+impl From<crate::analysis_service::AnalysisServiceError> for ArtifactServiceError {
+    fn from(err: crate::analysis_service::AnalysisServiceError) -> Self {
+        match err {
+            crate::analysis_service::AnalysisServiceError::Db(e) => Self::Db(e),
+            crate::analysis_service::AnalysisServiceError::Io(e) => Self::Io(e),
+            crate::analysis_service::AnalysisServiceError::Read(msg)
+            | crate::analysis_service::AnalysisServiceError::Extraction(msg)
+            | crate::analysis_service::AnalysisServiceError::NotFound(_, msg)
+            | crate::analysis_service::AnalysisServiceError::InvalidInput(msg)
+            | crate::analysis_service::AnalysisServiceError::Other(msg) => Self::Other(msg),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ArtifactExtractionStats {
     pub warning_count: u32,
@@ -221,8 +235,7 @@ pub fn run_targeted_evidence_scan(
         categories.to_vec()
     };
     let candidates =
-        crate::analysis_service::evidence_candidates_for_categories(conn, &selected_categories)
-            .map_err(ArtifactServiceError::other)?;
+        crate::analysis_service::evidence_candidates_for_categories(conn, &selected_categories)?;
     let mut stats = EvidenceScanStats {
         candidate_count: candidates.len() as u32,
         ..EvidenceScanStats::default()

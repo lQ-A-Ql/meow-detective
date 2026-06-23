@@ -5,6 +5,7 @@
 mod artifact_builders;
 mod candidates;
 mod classification;
+mod error;
 mod extraction;
 mod provenance;
 mod summary;
@@ -16,6 +17,7 @@ pub use candidates::{
     EvidenceCategoryDef,
 };
 pub use classification::{classify_files_by_magic, classify_files_by_metadata};
+pub use error::AnalysisServiceError;
 pub use extraction::{
     extract_registry_candidate, get_browser_history_summary, get_email_extraction_summary,
     get_registry_extraction_summary, get_registry_structured_summary, run_analysis_extraction,

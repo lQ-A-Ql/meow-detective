@@ -1,4 +1,5 @@
 use crate::analysis_service::candidates::find_candidate_by_path_suffix;
+use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::provenance::{
     entry_provenance, registry_field_provenance, unknown_provenance, EVTX_BOOT_SHUTDOWN_PARSER,
     REGISTRY_SOFTWARE_PARSER, REGISTRY_SYSTEM_PARSER,
@@ -128,7 +129,9 @@ struct SystemInfoCandidates {
     system_evtx: Option<FileEntry>,
 }
 
-fn find_system_info_candidates(conn: &Connection) -> Result<SystemInfoCandidates, String> {
+fn find_system_info_candidates(
+    conn: &Connection,
+) -> Result<SystemInfoCandidates, AnalysisServiceError> {
     Ok(SystemInfoCandidates {
         system_hive: find_candidate_by_path_suffix(conn, "windows/system32/config/system")?,
         software_hive: find_candidate_by_path_suffix(conn, "windows/system32/config/software")?,

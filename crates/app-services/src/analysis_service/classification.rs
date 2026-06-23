@@ -1,4 +1,5 @@
 use crate::analysis_service::candidates::row_to_file_entry_for_analysis;
+use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::provenance::{
     file_classification_provenance, metadata_classification_provenance,
 };
@@ -146,24 +147,20 @@ const MAGIC_SIGNATURES: &[MagicSignature] = &[
 pub fn classify_files_by_metadata(
     conn: &Connection,
     sample_size: u32,
-) -> Result<Vec<AnalysisFileClassificationDto>, String> {
+) -> Result<Vec<AnalysisFileClassificationDto>, AnalysisServiceError> {
     let category_stats = metadata_category_stats(conn)?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted,
+    let mut stmt = conn.prepare(
+        "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted,
                     hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256
              FROM file_entries
              WHERE entry_type = 'file' COLLATE NOCASE
              ORDER BY size DESC, path ASC
              LIMIT ?1",
-        )
-        .map_err(|e| e.to_string())?;
-    let rows = stmt
-        .query_map(params![sample_size as i64], row_to_file_entry_for_analysis)
-        .map_err(|e| e.to_string())?;
+    )?;
+    let rows = stmt.query_map(params![sample_size as i64], row_to_file_entry_for_analysis)?;
     let mut files = Vec::new();
     for row in rows {
-        files.push(row.map_err(|e| e.to_string())?);
+        files.push(row?);
     }
 
     let mut classifications = classify_files_by_extension_path(&files, sample_size);
@@ -173,19 +170,17 @@ pub fn classify_files_by_metadata(
 
 pub(crate) fn metadata_category_stats(
     conn: &Connection,
-) -> Result<HashMap<String, (u64, u64)>, String> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT path, COALESCE(size, 0)
+) -> Result<HashMap<String, (u64, u64)>, AnalysisServiceError> {
+    let mut stmt = conn.prepare(
+        "SELECT path, COALESCE(size, 0)
              FROM file_entries
              WHERE entry_type = 'file' COLLATE NOCASE",
-        )
-        .map_err(|e| e.to_string())?;
-    let mut rows = stmt.query([]).map_err(|e| e.to_string())?;
+    )?;
+    let mut rows = stmt.query([])?;
     let mut stats: HashMap<String, (u64, u64)> = HashMap::new();
-    while let Some(row) = rows.next().map_err(|e| e.to_string())? {
-        let path: String = row.get(0).map_err(|e| e.to_string())?;
-        let size: u64 = row.get(1).map_err(|e| e.to_string())?;
+    while let Some(row) = rows.next()? {
+        let path: String = row.get(0)?;
+        let size: u64 = row.get(1)?;
         let category = detect_file_type(&path, None)
             .map(|(_, category, _)| category)
             .unwrap_or("Other");

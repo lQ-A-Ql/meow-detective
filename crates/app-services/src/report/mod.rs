@@ -150,7 +150,7 @@ pub(crate) fn current_analysis(conn: &Connection) -> Result<ReportAnalysis, Stri
         crate::analysis_service::extract_system_info_for_case(conn, |file_id, max_bytes| {
             crate::file_service::read_file_header_by_id(conn, file_id, max_bytes)
         });
-    let files = crate::analysis_service::collect_file_entries(conn)?;
+    let files = crate::analysis_service::collect_file_entries(conn).map_err(|e| e.to_string())?;
     let classifications = crate::analysis_service::classify_files_by_magic(
         &files,
         crate::analysis_service::DEFAULT_SAMPLE_SIZE,
