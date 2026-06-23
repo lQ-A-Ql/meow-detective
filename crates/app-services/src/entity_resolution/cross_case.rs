@@ -7,6 +7,7 @@
 //! `resolved_entities` from two or more case databases and matches entities
 //! that share a canonical value and entity type.
 
+use super::EntityResolutionError;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
@@ -65,9 +66,11 @@ impl CrossCaseEntityMatcher {
     /// or if fewer than 2 database paths are provided.
     pub fn match_entities_across_cases(
         db_paths: &[PathBuf],
-    ) -> Result<Vec<CrossCaseMatch>, String> {
+    ) -> Result<Vec<CrossCaseMatch>, EntityResolutionError> {
         if db_paths.len() < 2 {
-            return Err("cross_case: at least 2 database paths are required".into());
+            return Err(EntityResolutionError::InvalidInput(
+                "cross_case: at least 2 database paths are required".into(),
+            ));
         }
 
         // ── Step 1: Read resolved_entities from every database ──────
@@ -75,15 +78,14 @@ impl CrossCaseEntityMatcher {
         let mut all_entities: Vec<(String, String, String, String, usize)> = Vec::new();
 
         for (db_idx, path) in db_paths.iter().enumerate() {
-            let conn = persistence_sqlite::connection::open_existing(path)
-                .map_err(|e| format!("failed to open {}: {e}", path.display()))?;
+            let conn = persistence_sqlite::connection::open_existing(path).map_err(|e| {
+                EntityResolutionError::Other(format!("failed to open {}: {e}", path.display()))
+            })?;
 
-            let mut stmt = conn
-                .prepare(
-                    "SELECT id, case_id, entity_type, canonical_value
-                     FROM resolved_entities",
-                )
-                .map_err(|e| format!("failed to query resolved_entities: {e}"))?;
+            let mut stmt = conn.prepare(
+                "SELECT id, case_id, entity_type, canonical_value
+                 FROM resolved_entities",
+            )?;
 
             let rows: Vec<(String, String, String, String)> = stmt
                 .query_map([], |row| {
@@ -93,10 +95,9 @@ impl CrossCaseEntityMatcher {
                         row.get::<_, String>(2)?,
                         row.get::<_, String>(3)?,
                     ))
-                })
-                .map_err(|e| e.to_string())?
+                })?
                 .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| e.to_string())?;
+                .map_err(EntityResolutionError::from)?;
 
             for (entity_id, case_id, entity_type, canonical_value) in rows {
                 all_entities.push((case_id, entity_id, canonical_value, entity_type, db_idx));

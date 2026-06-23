@@ -1,6 +1,7 @@
 //! Entity merge engine — canonicalization, grouping, confidence scoring,
 //! and graph-level deduplication of extracted entity nodes.
 
+use super::EntityResolutionError;
 use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
@@ -70,14 +71,15 @@ impl EntityMergeEngine {
     /// # Errors
     ///
     /// Returns an error string if the database query fails.
-    pub fn merge_entities(conn: &Connection, case_id: &str) -> Result<Vec<ResolvedEntity>, String> {
+    pub fn merge_entities(
+        conn: &Connection,
+        case_id: &str,
+    ) -> Result<Vec<ResolvedEntity>, EntityResolutionError> {
         // ── Query all entity nodes for this case ──
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, label, tags FROM graph_nodes
+        let mut stmt = conn.prepare(
+            "SELECT id, label, tags FROM graph_nodes
                  WHERE case_id = ?1 AND node_type = 'entity'",
-            )
-            .map_err(|e| e.to_string())?;
+        )?;
 
         let rows: Vec<(String, String, String)> = stmt
             .query_map(rusqlite::params![case_id], |row| {
@@ -86,10 +88,8 @@ impl EntityMergeEngine {
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?,
                 ))
-            })
-            .map_err(|e| e.to_string())?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
 
         if rows.is_empty() {
             return Ok(Vec::new());
@@ -158,7 +158,10 @@ impl EntityMergeEngine {
     /// # Errors
     ///
     /// Returns an error string if database mutations fail.
-    pub fn deduplicate_entity_nodes(conn: &Connection, case_id: &str) -> Result<u64, String> {
+    pub fn deduplicate_entity_nodes(
+        conn: &Connection,
+        case_id: &str,
+    ) -> Result<u64, EntityResolutionError> {
         let resolved = Self::merge_entities(conn, case_id)?;
         let now = chrono::Utc::now().to_rfc3339();
         let mut merged_count = 0u64;
@@ -177,16 +180,14 @@ impl EntityMergeEngine {
                     "UPDATE graph_edges SET source_id = ?1
                      WHERE source_id = ?2 AND case_id = ?3",
                     rusqlite::params![kept_id, merged_id, case_id],
-                )
-                .map_err(|e| e.to_string())?;
+                )?;
 
                 // Re-point incoming edges (target) from merged → kept
                 conn.execute(
                     "UPDATE graph_edges SET target_id = ?1
                      WHERE target_id = ?2 AND case_id = ?3",
                     rusqlite::params![kept_id, merged_id, case_id],
-                )
-                .map_err(|e| e.to_string())?;
+                )?;
 
                 // Log the merge for auditability (must happen before
                 // deletion so the merged entity ID is still valid).
@@ -204,16 +205,14 @@ impl EntityMergeEngine {
                         entity.confidence,
                         now,
                     ],
-                )
-                .map_err(|e| e.to_string())?;
+                )?;
 
                 // Delete the merged node (CASCADE cleans up any edges
                 // that still reference it)
                 conn.execute(
                     "DELETE FROM graph_nodes WHERE id = ?1 AND case_id = ?2",
                     rusqlite::params![merged_id, case_id],
-                )
-                .map_err(|e| e.to_string())?;
+                )?;
 
                 merged_count += 1;
             }
@@ -236,8 +235,7 @@ impl EntityMergeEngine {
                     entity.confidence,
                     attrs_json,
                 ],
-            )
-            .map_err(|e| e.to_string())?;
+            )?;
         }
 
         Ok(merged_count)

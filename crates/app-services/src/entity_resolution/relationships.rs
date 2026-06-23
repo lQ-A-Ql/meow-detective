@@ -5,6 +5,7 @@
 //! engine walks the investigative graph to discover how entities relate
 //! to one another (CommunicatesWith, Owns, LoggedInto, Executed, etc.).
 
+use super::EntityResolutionError;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -63,7 +64,7 @@ impl EntityRelationshipEngine {
     pub fn infer_relationships(
         conn: &Connection,
         case_id: &str,
-    ) -> Result<Vec<EntityRelationship>, String> {
+    ) -> Result<Vec<EntityRelationship>, EntityResolutionError> {
         let mut relationships: Vec<EntityRelationship> = Vec::new();
 
         relationships.extend(Self::infer_communicates_with(conn, case_id)?);
@@ -89,25 +90,23 @@ impl EntityRelationshipEngine {
         conn: &Connection,
         case_id: &str,
         relationships: &[EntityRelationship],
-    ) -> Result<u64, String> {
+    ) -> Result<u64, EntityResolutionError> {
         if relationships.is_empty() {
             return Ok(0);
         }
 
-        let tx = conn
-            .unchecked_transaction()
-            .map_err(|e| format!("failed to begin transaction: {e}"))?;
+        let tx = conn.unchecked_transaction().map_err(|e| {
+            EntityResolutionError::Other(format!("failed to begin transaction: {e}"))
+        })?;
 
         let mut count = 0u64;
         {
-            let mut stmt = tx
-                .prepare(
-                    "INSERT OR REPLACE INTO entity_relationships
-                     (id, case_id, source_entity_id, target_entity_id,
-                      relationship_type, confidence, evidence_edge_ids, created_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                )
-                .map_err(|e| format!("failed to prepare insert: {e}"))?;
+            let mut stmt = tx.prepare(
+                "INSERT OR REPLACE INTO entity_relationships
+                 (id, case_id, source_entity_id, target_entity_id,
+                  relationship_type, confidence, evidence_edge_ids, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            )?;
 
             for r in relationships {
                 if r.case_id != case_id {
@@ -124,13 +123,19 @@ impl EntityRelationshipEngine {
                     edge_json,
                     r.created_at,
                 ])
-                .map_err(|e| format!("failed to insert relationship {}: {e}", r.id))?;
+                .map_err(|e| {
+                    EntityResolutionError::Other(format!(
+                        "failed to insert relationship {}: {e}",
+                        r.id
+                    ))
+                })?;
                 count += 1;
             }
         } // stmt goes out of scope here
 
-        tx.commit()
-            .map_err(|e| format!("failed to commit relationships: {e}"))?;
+        tx.commit().map_err(|e| {
+            EntityResolutionError::Other(format!("failed to commit relationships: {e}"))
+        })?;
 
         Ok(count)
     }
@@ -145,30 +150,28 @@ impl EntityRelationshipEngine {
     fn infer_communicates_with(
         conn: &Connection,
         case_id: &str,
-    ) -> Result<Vec<EntityRelationship>, String> {
-        let mut stmt = conn
-            .prepare(
-                "SELECT e1.id, e2.id, GROUP_CONCAT(DISTINCT ge1.id), GROUP_CONCAT(DISTINCT ge2.id)
-                 FROM graph_nodes e1
-                 JOIN graph_edges ge1 ON ge1.source_id = e1.id
-                     AND ge1.edge_type = 'correlates_with'
-                 JOIN graph_nodes art ON art.id = ge1.target_id
-                     AND art.node_type = 'artifact'
-                 JOIN graph_edges ge2 ON ge2.target_id = art.id
-                     AND ge2.edge_type = 'correlates_with'
-                     AND ge2.source_id != e1.id
-                 JOIN graph_nodes e2 ON e2.id = ge2.source_id
-                     AND e2.node_type = 'entity'
-                 WHERE e1.case_id = ?1
-                   AND e1.node_type = 'entity'
-                   AND e1.tags LIKE '%\"person\"%'
-                   AND e2.tags LIKE '%\"person\"%'
-                   AND e1.id < e2.id
-                   AND (art.tags LIKE '%\"EmailMessage\"%'
-                        OR LOWER(art.label) LIKE '%email%')
-                 GROUP BY e1.id, e2.id",
-            )
-            .map_err(|e| e.to_string())?;
+    ) -> Result<Vec<EntityRelationship>, EntityResolutionError> {
+        let mut stmt = conn.prepare(
+            "SELECT e1.id, e2.id, GROUP_CONCAT(DISTINCT ge1.id), GROUP_CONCAT(DISTINCT ge2.id)
+             FROM graph_nodes e1
+             JOIN graph_edges ge1 ON ge1.source_id = e1.id
+                 AND ge1.edge_type = 'correlates_with'
+             JOIN graph_nodes art ON art.id = ge1.target_id
+                 AND art.node_type = 'artifact'
+             JOIN graph_edges ge2 ON ge2.target_id = art.id
+                 AND ge2.edge_type = 'correlates_with'
+                 AND ge2.source_id != e1.id
+             JOIN graph_nodes e2 ON e2.id = ge2.source_id
+                 AND e2.node_type = 'entity'
+             WHERE e1.case_id = ?1
+               AND e1.node_type = 'entity'
+               AND e1.tags LIKE '%\"person\"%'
+               AND e2.tags LIKE '%\"person\"%'
+               AND e1.id < e2.id
+               AND (art.tags LIKE '%\"EmailMessage\"%'
+                    OR LOWER(art.label) LIKE '%email%')
+             GROUP BY e1.id, e2.id",
+        )?;
 
         let rows: Vec<(String, String, String, String)> = stmt
             .query_map(rusqlite::params![case_id], |row| {
@@ -178,10 +181,8 @@ impl EntityRelationshipEngine {
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
                 ))
-            })
-            .map_err(|e| e.to_string())?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
 
         Self::build_relationships(case_id, rows, RelationshipType::CommunicatesWith)
     }
@@ -194,10 +195,9 @@ impl EntityRelationshipEngine {
     fn infer_ownership(
         conn: &Connection,
         case_id: &str,
-    ) -> Result<Vec<EntityRelationship>, String> {
-        let mut stmt = conn
-            .prepare(
-                "SELECT e1.id, e2.id,
+    ) -> Result<Vec<EntityRelationship>, EntityResolutionError> {
+        let mut stmt = conn.prepare(
+            "SELECT e1.id, e2.id,
                         GROUP_CONCAT(DISTINCT ge1.id),
                         GROUP_CONCAT(DISTINCT ge2.id || ',' || ge3.id)
                  FROM graph_nodes e1
@@ -227,8 +227,7 @@ impl EntityRelationshipEngine {
                         OR LOWER(reg.label) LIKE '%registry%')
                    AND e1.id != e2.id
                  GROUP BY e1.id, e2.id",
-            )
-            .map_err(|e| e.to_string())?;
+        )?;
 
         let rows: Vec<(String, String, String, String)> = stmt
             .query_map(rusqlite::params![case_id], |row| {
@@ -238,10 +237,8 @@ impl EntityRelationshipEngine {
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
                 ))
-            })
-            .map_err(|e| e.to_string())?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
 
         Self::build_relationships(case_id, rows, RelationshipType::Owns)
     }
@@ -254,10 +251,9 @@ impl EntityRelationshipEngine {
     fn infer_logged_into(
         conn: &Connection,
         case_id: &str,
-    ) -> Result<Vec<EntityRelationship>, String> {
-        let mut stmt = conn
-            .prepare(
-                "SELECT e1.id, e2.id,
+    ) -> Result<Vec<EntityRelationship>, EntityResolutionError> {
+        let mut stmt = conn.prepare(
+            "SELECT e1.id, e2.id,
                         GROUP_CONCAT(DISTINCT ge1.id),
                         GROUP_CONCAT(DISTINCT ge2.id || ',' || ge3.id)
                  FROM graph_nodes e1
@@ -287,8 +283,7 @@ impl EntityRelationshipEngine {
                         OR LOWER(art.label) LIKE '%wtmp%')
                    AND e1.id != e2.id
                  GROUP BY e1.id, e2.id",
-            )
-            .map_err(|e| e.to_string())?;
+        )?;
 
         let rows: Vec<(String, String, String, String)> = stmt
             .query_map(rusqlite::params![case_id], |row| {
@@ -298,10 +293,8 @@ impl EntityRelationshipEngine {
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
                 ))
-            })
-            .map_err(|e| e.to_string())?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
 
         Self::build_relationships(case_id, rows, RelationshipType::LoggedInto)
     }
@@ -311,15 +304,17 @@ impl EntityRelationshipEngine {
     ///
     /// Pattern: Entity(Person) --[derives_from]--> Prefetch
     ///          --[references]--> File (executable)
-    fn infer_executed(conn: &Connection, case_id: &str) -> Result<Vec<EntityRelationship>, String> {
+    fn infer_executed(
+        conn: &Connection,
+        case_id: &str,
+    ) -> Result<Vec<EntityRelationship>, EntityResolutionError> {
         // Executed is a special case: it relates a Person entity to an
         // executable File, not another entity. We infer it when a Person
         // entity derives from a Prefetch artifact that references a file.
         // The relationship target is the file node — the caller/UI can
         // associate that file with a Device entity if needed.
-        let mut stmt = conn
-            .prepare(
-                "SELECT e1.id, f.id,
+        let mut stmt = conn.prepare(
+            "SELECT e1.id, f.id,
                         GROUP_CONCAT(DISTINCT ge1.id),
                         GROUP_CONCAT(DISTINCT ge2.id)
                  FROM graph_nodes e1
@@ -337,8 +332,7 @@ impl EntityRelationshipEngine {
                    AND (art.tags LIKE '%\"Prefetch\"%'
                         OR LOWER(art.label) LIKE '%prefetch%')
                  GROUP BY e1.id, f.id",
-            )
-            .map_err(|e| e.to_string())?;
+        )?;
 
         let rows: Vec<(String, String, String, String)> = stmt
             .query_map(rusqlite::params![case_id], |row| {
@@ -348,10 +342,8 @@ impl EntityRelationshipEngine {
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
                 ))
-            })
-            .map_err(|e| e.to_string())?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
 
         Self::build_relationships(case_id, rows, RelationshipType::Executed)
     }
@@ -364,7 +356,7 @@ impl EntityRelationshipEngine {
         case_id: &str,
         rows: Vec<(String, String, String, String)>,
         rel_type: RelationshipType,
-    ) -> Result<Vec<EntityRelationship>, String> {
+    ) -> Result<Vec<EntityRelationship>, EntityResolutionError> {
         let now = chrono::Utc::now().to_rfc3339();
         let mut results = Vec::with_capacity(rows.len());
 
