@@ -1,6 +1,7 @@
 mod commands;
 pub mod events;
 mod media_protocol;
+mod platform_security;
 pub mod state;
 
 use commands::{

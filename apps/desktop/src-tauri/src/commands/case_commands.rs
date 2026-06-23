@@ -132,7 +132,7 @@ pub fn create_analysis_demo_case(
 
     let active = case_service::create_case(&case_root, "Analysis Demo", Some("Codex Demo"))
         .map_err(CommandError::from_service_error)?;
-    seed_analysis_demo(&active).map_err(CommandError::from_service_error)?;
+    seed_analysis_demo(&active)?;
     let db_path = active.db_path();
     activate_case_pool(&state, &db_path)?;
 
@@ -451,8 +451,10 @@ const RECENT_CASES_FILE: &str = "forensics-recent-cases.json";
 const MAX_RECENT_CASES: usize = 8;
 
 fn recent_cases_path() -> Result<PathBuf, CommandError> {
-    let base = std::env::var_os("APPDATA")
+    // FORENSICS_RECENT_CASES_DIR is intended for tests; in production it is not set.
+    let base = std::env::var_os("FORENSICS_RECENT_CASES_DIR")
         .map(PathBuf::from)
+        .or_else(|| std::env::var_os("APPDATA").map(PathBuf::from))
         .or_else(|| std::env::var_os("LOCALAPPDATA").map(PathBuf::from))
         .ok_or_else(|| CommandError::internal("Cannot resolve APPDATA for recent cases"))?;
     Ok(base.join("ForensicsWorkbench").join(RECENT_CASES_FILE))
@@ -475,24 +477,9 @@ fn save_recent_cases(recent: &[RecentCaseDto]) -> Result<(), CommandError> {
         CommandError::internal("Failed to save recent cases")
     })?;
 
-    // Set restrictive permissions (Windows: current user only)
-    #[cfg(target_os = "windows")]
-    {
-        // On Windows, we rely on NTFS permissions inherited from %APPDATA%
-        // which is already user-specific. Log if we can't verify.
-        tracing::debug!("Recent cases file saved to user-specific APPDATA directory");
-    }
-
-    // Set restrictive permissions (Unix: 0o600)
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if let Err(e) = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)) {
-            tracing::warn!(
-                "Failed to set restrictive permissions on recent cases file: {}",
-                e
-            );
-        }
+    if let Err(e) = crate::platform_security::restrict_file_to_current_user(&path) {
+        tracing::error!("Failed to restrict recent cases file ACL: {}", e);
+        return Err(CommandError::security("Failed to secure recent cases file"));
     }
 
     Ok(())
@@ -540,12 +527,12 @@ fn read_recent_cases() -> Result<Vec<RecentCaseDto>, CommandError> {
         .collect())
 }
 
-fn seed_analysis_demo(active: &app_services::active_case::ActiveCase) -> Result<(), String> {
+fn seed_analysis_demo(active: &app_services::active_case::ActiveCase) -> Result<(), CommandError> {
     let evidence_root = active.case_root.join("evidence").join("analysis-demo");
     if evidence_root.exists() {
-        std::fs::remove_dir_all(&evidence_root).map_err(|e| e.to_string())?;
+        std::fs::remove_dir_all(&evidence_root)?;
     }
-    std::fs::create_dir_all(&evidence_root).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&evidence_root)?;
 
     let fixture_root = repo_root()
         .join("testdata")
@@ -560,10 +547,12 @@ fn seed_analysis_demo(active: &app_services::active_case::ActiveCase) -> Result<
         .join("Logs")
         .join("System.evtx");
     if let Some(parent) = evtx_dest.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(parent)?;
     }
-    std::fs::copy(&evtx_src, &evtx_dest)
-        .map_err(|e| format!("copy public-small System.evtx fixture: {e}"))?;
+    std::fs::copy(&evtx_src, &evtx_dest).map_err(|e| {
+        tracing::error!("Failed to copy public-small System.evtx fixture: {}", e);
+        CommandError::io("Failed to copy demo fixture")
+    })?;
 
     write_demo_file(
         &evidence_root.join("Users").join("alice").join("report.pdf"),
@@ -603,7 +592,7 @@ fn seed_analysis_demo(active: &app_services::active_case::ActiveCase) -> Result<
             FileRepo::new(conn).insert_batch(&entries)?;
             Ok(())
         })
-        .map_err(|e| e.to_string())?;
+        .map_err(CommandError::from_service_error)?;
     Ok(())
 }
 
@@ -614,29 +603,30 @@ fn repo_root() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.."))
 }
 
-fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> Result<(), String> {
+fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> Result<(), CommandError> {
     if !src.is_dir() {
-        return Err(format!("analysis demo fixture missing: {}", src.display()));
+        return Err(CommandError::invalid_input("analysis demo fixture missing"));
     }
-    std::fs::create_dir_all(dst).map_err(|e| e.to_string())?;
-    for entry in std::fs::read_dir(src).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let file_type = entry.file_type().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
         let target = dst.join(entry.file_name());
         if file_type.is_dir() {
             copy_dir_all(&entry.path(), &target)?;
         } else if file_type.is_file() {
-            std::fs::copy(entry.path(), target).map_err(|e| e.to_string())?;
+            std::fs::copy(entry.path(), target)?;
         }
     }
     Ok(())
 }
 
-fn write_demo_file(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
+fn write_demo_file(path: &std::path::Path, bytes: &[u8]) -> Result<(), CommandError> {
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(parent)?;
     }
-    std::fs::write(path, bytes).map_err(|e| e.to_string())
+    std::fs::write(path, bytes)?;
+    Ok(())
 }
 
 fn collect_demo_entries(
@@ -645,19 +635,16 @@ fn collect_demo_entries(
     data_source_id: &DataSourceId,
     parent_id: Option<FileEntryId>,
     entries: &mut Vec<FileEntry>,
-) -> Result<(), String> {
-    let mut children = std::fs::read_dir(path)
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
+) -> Result<(), CommandError> {
+    let mut children = std::fs::read_dir(path)?.collect::<Result<Vec<_>, _>>()?;
     children.sort_by_key(|entry| entry.path());
 
     for child in children {
         let child_path = child.path();
-        let metadata = child.metadata().map_err(|e| e.to_string())?;
+        let metadata = child.metadata()?;
         let relative = child_path
             .strip_prefix(root)
-            .map_err(|e| e.to_string())?
+            .map_err(|_| CommandError::invalid_input("demo entry path is outside evidence root"))?
             .to_string_lossy()
             .replace('\\', "/");
         let id = FileEntryId(format!("demo-file-{}", Uuid::new_v4()));
@@ -862,5 +849,62 @@ mod tests {
         remaining.retain(|item| item.case_root != actual_case_root.display().to_string());
         save_recent_cases(&remaining).expect("restore recent cases");
         std::fs::remove_dir_all(parent).ok();
+    }
+
+    #[test]
+    fn recent_cases_file_is_restricted_and_round_trips() {
+        use std::sync::Mutex;
+
+        static LOCK: Mutex<()> = Mutex::new(());
+        let _lock = LOCK.lock().unwrap();
+
+        let dir = std::env::temp_dir().join(format!(
+            "forensics-recent-cases-security-test-{}",
+            Uuid::new_v4()
+        ));
+        let previous = std::env::var_os("FORENSICS_RECENT_CASES_DIR");
+        std::env::set_var("FORENSICS_RECENT_CASES_DIR", &dir);
+
+        let active =
+            case_service::create_case(&dir, "Secure Case", Some("tester")).expect("create case");
+        let summary = meta_to_dto(&active.meta);
+        let cases = vec![RecentCaseDto {
+            case_root: active.case_root.display().to_string(),
+            name: summary.name,
+            opened_at: chrono::Utc::now().to_rfc3339(),
+        }];
+
+        let saved = save_recent_cases(&cases);
+        assert!(saved.is_ok(), "save_recent_cases failed: {saved:?}");
+
+        let path = recent_cases_path().expect("resolve recent cases path");
+        assert!(path.exists(), "recent cases file should exist");
+
+        let loaded = read_recent_cases().expect("read recent cases");
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].name, "Secure Case");
+
+        match previous {
+            Some(v) => std::env::set_var("FORENSICS_RECENT_CASES_DIR", v),
+            None => std::env::remove_var("FORENSICS_RECENT_CASES_DIR"),
+        }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn demo_helpers_return_sanitized_command_errors() {
+        use std::path::Path;
+
+        let missing = Path::new("/definitely/missing/demo-fixture");
+        let dst =
+            std::env::temp_dir().join(format!("forensics-demo-helper-test-{}", Uuid::new_v4()));
+        let err = copy_dir_all(missing, &dst).expect_err("should fail for missing source");
+        assert_eq!(err.code, "INVALID_INPUT");
+        assert!(
+            !err.message.contains("/definitely/missing"),
+            "error message should not leak internal path: {}",
+            err.message
+        );
+        std::fs::remove_dir_all(&dst).ok();
     }
 }
