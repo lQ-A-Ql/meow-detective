@@ -1,14 +1,5 @@
-import { invoke, isTauri } from '@tauri-apps/api/core';
-import { ApiErrorDto, ApiMode } from '@/types/models';
-import { ApiProvider, mockProvider } from './provider';
-
-export function getApiMode(): ApiMode {
-  if (import.meta.env.VITE_API_MODE === 'tauri') {
-    return 'tauri';
-  }
-
-  return isTauri() ? 'tauri' : 'mock';
-}
+import { invoke } from '@tauri-apps/api/core';
+import { ApiErrorDto } from '@/types/models';
 
 function toApiError(error: unknown, fallbackCode: string): ApiErrorDto {
   if (isApiErrorDto(error)) {
@@ -62,32 +53,16 @@ async function invokeTauriCommand<T>(
 }
 
 class ApiClient {
-  private provider: ApiProvider = mockProvider;
-
-  get mode() {
-    return getApiMode();
-  }
-
   async request<T>(
     command: string,
-    mockCall: () => Promise<T>,
     payload?: Record<string, unknown>,
   ) {
-    if (getApiMode() === 'mock') {
-      return mockCall();
-    }
-
     try {
       return await invokeTauriCommand<T>(command, payload);
     } catch (error) {
       throw toApiError(error, `COMMAND_${command.toUpperCase()}_FAILED`);
     }
   }
-
-  getMockProvider() {
-    return this.provider;
-  }
 }
 
 export const apiClient = new ApiClient();
-export const apiMode = () => getApiMode();

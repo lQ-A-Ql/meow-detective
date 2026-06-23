@@ -12,7 +12,6 @@ import {
 } from '@/features/jobs/import-event-state';
 import { useDataSources } from '@/features/case/hooks';
 import { useJobsSnapshot, useTraceItems, useWarnings } from '@/features/jobs/hooks';
-import { apiMode } from '@/lib/api/client';
 import { useUiStore } from '@/stores/ui-store';
 import type { JobSnapshot } from '@/types/models';
 
@@ -33,7 +32,6 @@ export function BottomDrawer() {
   const jobSkippedCount = jobs?.reduce((sum, job) => sum + job.skippedCount, 0) ?? 0;
   const runningCount = runningJobs.length;
   const evidenceHashStatus = deriveEvidenceHashStatus(importSignals.partialResults, dataSources ?? []);
-  const currentApiMode = apiMode();
   const typedHeadline = importSignals.latestCancellation
     ? `${importSignals.latestCancellation.safeToClose ? 'Safe To Close' : getCacheStateLabel(importSignals.latestCancellation.state)} · ${importSignals.latestCancellation.detail}`
     : importSignals.latestPhase
@@ -76,9 +74,6 @@ export function BottomDrawer() {
             <span>{drawerOpen ? '收起任务抽屉' : '展开任务抽屉'}</span>
             {drawerOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
           </button>
-          <div>
-            API: <span className="text-[#111] uppercase">{currentApiMode}</span>
-          </div>
           <div className="border-l border-[#e0e0e0] pl-4">
             最近状态: <span className="text-[#111]">{runningJobs[0]?.scope || failedJobs[0]?.scope || completedJobs[0]?.scope || '空闲'}</span>
           </div>

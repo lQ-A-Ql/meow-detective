@@ -25,6 +25,12 @@ pub const MAX_INLINE_IMAGE_PREVIEW_BYTES: u64 = 5 * 1024 * 1024;
 /// Maximum inline media preview size before scoped range streaming is required.
 pub const MAX_INLINE_MEDIA_PREVIEW_BYTES: u64 = 20 * 1024 * 1024;
 
+/// Bytes in one megabyte (useful for user-facing size conversions).
+pub const BYTES_PER_MB: u64 = 1024 * 1024;
+
+/// Default maximum bytes to return for a text preview.
+pub const DEFAULT_TEXT_PREVIEW_MAX_BYTES: usize = 1024 * 1024;
+
 /// Maximum bytes artifact extractors may read from one file.
 pub const ARTIFACT_FILE_LIMIT_BYTES: u64 = 50 * 1024 * 1024;
 

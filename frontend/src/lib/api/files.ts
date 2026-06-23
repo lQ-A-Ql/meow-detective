@@ -5,20 +5,19 @@ import {
   FileJumpContext,
   FileRowsPage,
   FileTreeNode,
+  ImagePreviewResponse,
   MediaRangeRequest,
   MediaRangeResponse,
   MediaUrl,
+  TextPreviewResponse,
+  ViewerHandle,
   ViewerRangeRequest,
 } from '@/types/models';
-import { sortFileEntries, type FileSortKey, type FileSortDirection } from '@/lib/file-sort';
+import { type FileSortKey, type FileSortDirection } from '@/lib/file-sort';
 import { apiClient } from './client';
 
 export async function getFileTree(showHidden = false) {
-  return apiClient.request(
-    'get_file_tree_request',
-    () => apiClient.getMockProvider().getFileTree(showHidden),
-    { request: { showHidden } },
-  );
+  return apiClient.request<FileTreeNode[]>('get_file_tree_request', { request: { showHidden } });
 }
 
 export async function getFileRows(parentId?: string, showHidden = false) {
@@ -34,28 +33,20 @@ export async function getFileRowsPage(
   sortKey: FileSortKey = 'name',
   sortDirection: FileSortDirection = 'asc',
 ): Promise<FileRowsPage> {
-  return apiClient.request(
-    'get_file_rows_request',
-    async () => {
-      const rows = await apiClient.getMockProvider().getFileRows(parentId, showHidden);
-      // Mock mode mirrors the backend's directory-first + status-last + natural
-      // sort so the standalone UI matches live behavior.
-      const sorted = sortFileEntries(rows, sortKey, sortDirection);
-      return {
-        rows: sorted.slice(offset, offset + limit),
-        totalCount: sorted.length,
-        offset,
-        limit,
-        truncated: offset + limit < sorted.length,
-      };
+  return apiClient.request<FileRowsPage>('get_file_rows_request', {
+    request: {
+      parentId: parentId ?? null,
+      offset,
+      limit,
+      showHidden,
+      sortKey,
+      sortDirection,
     },
-    { request: { parentId: parentId ?? null, offset, limit, showHidden, sortKey, sortDirection } },
-  );
+  });
 }
 
-export async function importDataSource(sourcePath: string) {
-  return apiClient.request('import_data_source', () =>
-    apiClient.getMockProvider().importDataSource(sourcePath), { request: { sourcePath } });
+export async function importDataSource(sourcePath: string): Promise<string> {
+  return apiClient.request('import_data_source', { request: { sourcePath } });
 }
 
 export async function getFileChildren(parentId: string, showHidden = false): Promise<FileTreeNode[]> {
@@ -69,71 +60,37 @@ export async function getFileChildrenPage(
   limit = 500,
   showHidden = false,
 ): Promise<FileChildrenPage> {
-  return apiClient.request('get_file_children_request', () =>
-    apiClient.getMockProvider().getFileChildren(parentId, showHidden).then((children) => ({
-      children: children.slice(offset, offset + limit),
-      totalCount: children.length,
-      offset,
-      limit,
-      truncated: offset + limit < children.length,
-    })), { request: { parentId, offset, limit, showHidden } });
+  return apiClient.request<FileChildrenPage>('get_file_children_request', {
+    request: { parentId, offset, limit, showHidden },
+  });
 }
 
-export async function openFileHandle(fileId: string) {
-  return apiClient.request(
-    'open_file_handle_request',
-    () => apiClient.getMockProvider().openFileHandle(fileId),
-    { request: { fileId } },
-  );
+export async function openFileHandle(fileId: string): Promise<ViewerHandle> {
+  return apiClient.request('open_file_handle_request', { request: { fileId } });
 }
 
-export async function readFileRange(request: ViewerRangeRequest) {
-  return apiClient.request(
-    'read_file_range',
-    () => apiClient.getMockProvider().readFileRange(request),
-    { request },
-  );
+export async function readFileRange(request: ViewerRangeRequest): Promise<import('@/types/models').ViewerRangeResponse> {
+  return apiClient.request('read_file_range', { request });
 }
 
 export async function cancelImport(jobId: string) {
-  return apiClient.request('cancel_import', () => Promise.resolve('Cancel not available in mock mode'), { jobId });
+  return apiClient.request('cancel_import', { jobId });
 }
 
 /**
  * Get text preview for a file.
  * Returns text content with encoding detection.
  */
-export async function getTextPreview(fileId: string, maxBytes?: number) {
-  return apiClient.request(
-    'get_text_preview',
-    () => Promise.resolve({
-      content: '',
-      encoding: 'UTF-8',
-      isTruncated: false,
-      lineNumber: 0,
-      isBinary: false,
-      language: null,
-    }),
-    { fileId, maxBytes: maxBytes ?? 1024 * 1024 },
-  );
+export async function getTextPreview(fileId: string, maxBytes?: number): Promise<TextPreviewResponse> {
+  return apiClient.request('get_text_preview', { fileId, maxBytes: maxBytes ?? 1024 * 1024 });
 }
 
 /**
  * Get image preview for a file.
  * Returns base64-encoded image data.
  */
-export async function getImagePreview(fileId: string) {
-  return apiClient.request(
-    'get_image_preview',
-    () => Promise.resolve({
-      dataUrl: '',
-      mimeType: 'image/png',
-      width: 0,
-      height: 0,
-      size: 0,
-    }),
-    { fileId },
-  );
+export async function getImagePreview(fileId: string): Promise<ImagePreviewResponse> {
+  return apiClient.request('get_image_preview', { fileId });
 }
 
 /**
@@ -141,66 +98,21 @@ export async function getImagePreview(fileId: string) {
  * Returns an opaque media handle and, for small media only, an inline data URL.
  */
 export async function getMediaUrl(fileId: string): Promise<MediaUrl> {
-  return apiClient.request(
-    'get_media_url',
-    () => Promise.resolve({
-      url: '',
-      handleId: `file:${fileId}`,
-      mimeType: 'video/mp4',
-      size: 0,
-      canReadRanges: false,
-      mode: 'inline',
-      previewMode: 'inline',
-    }),
-    { fileId },
-  );
+  return apiClient.request<MediaUrl>('get_media_url', { fileId });
 }
 
 export async function readMediaRange(request: MediaRangeRequest): Promise<MediaRangeResponse> {
-  return apiClient.request(
-    'read_media_range',
-    () => Promise.resolve({
-      offset: request.offset,
-      bytesBase64: '',
-      bytesRead: 0,
-      eof: true,
-    }),
-    { request },
-  );
+  return apiClient.request<MediaRangeResponse>('read_media_range', { request });
 }
 
 export async function extractFile(file: FileEntryRow) {
-  if (apiClient.mode === 'mock') {
-    const content = [
-      'Forensics Workbench mock export',
-      `fileId: ${file.id}`,
-      `path: ${file.path}`,
-      `name: ${file.name}`,
-    ].join('\n');
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    try {
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = file.name || `${file.id}.txt`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-    return 'Mock file exported';
-  }
-
   const destinationPath = await save({ defaultPath: file.name || file.id });
   if (!destinationPath) {
     return 'Export cancelled';
   }
-  return apiClient.request(
-    'extract_file',
-    () => Promise.resolve('Mock file exported'),
-    { request: { fileId: file.id, destinationPath, overwrite: false } },
-  );
+  return apiClient.request('extract_file', {
+    request: { fileId: file.id, destinationPath, overwrite: false },
+  });
 }
 
 export async function getFileJumpContext(
@@ -218,15 +130,7 @@ export async function getFileJumpContext(
     sortKey = 'name',
     sortDirection = 'asc',
   } = options;
-  return apiClient.request(
-    'get_file_jump_context',
-    () =>
-      apiClient.getMockProvider().getFileJumpContext(fileId, {
-        showHidden,
-        pageLimit,
-        sortKey,
-        sortDirection,
-      }),
-    { request: { fileId, showHidden, pageLimit, sortKey, sortDirection } },
-  );
+  return apiClient.request<FileJumpContext>('get_file_jump_context', {
+    request: { fileId, showHidden, pageLimit, sortKey, sortDirection },
+  });
 }

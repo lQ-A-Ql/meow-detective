@@ -18,7 +18,7 @@ pub async fn search_files(
         SearchFilesRequest {
             query,
             offset: 0,
-            limit: 50,
+            limit: infrastructure::constants::SEARCH_PAGE_SIZE as u32,
         },
     )
     .await

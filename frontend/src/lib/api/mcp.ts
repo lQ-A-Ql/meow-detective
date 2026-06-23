@@ -372,15 +372,12 @@ function normalizeToolCall(value: unknown): McpToolCallResponse {
 }
 
 export async function getMcpConfig() {
-  const response = await apiClient.request<McpConfigProtocolDto>(
-    'get_mcp_config',
-    () => Promise.resolve({ servers: [], resources: {}, tools: {} })
-  );
+  const response = await apiClient.request<McpConfigProtocolDto>('get_mcp_config');
   return normalizeConfig(response);
 }
 
 export function saveMcpConfig(servers: McpServerConfigInput[]) {
-  return apiClient.request('save_mcp_config', () => Promise.resolve(), {
+  return apiClient.request('save_mcp_config', {
     config: {
       servers: servers.map(toProtocolServerConfig),
       resources: {},
@@ -390,35 +387,23 @@ export function saveMcpConfig(servers: McpServerConfigInput[]) {
 }
 
 export async function addMcpServer(server: McpServerConfigInput) {
-  const response = await apiClient.request<McpServerStatusProtocolDto>('add_mcp_server', () => Promise.resolve({
-    id: server.id,
-    name: server.name,
-    connected: false,
-    has_resources: false,
-    has_tools: false,
-    has_prompts: false,
-  }), { server: toProtocolServerConfig(server) });
+  const response = await apiClient.request<McpServerStatusProtocolDto>('add_mcp_server', {
+    server: toProtocolServerConfig(server),
+  });
   return normalizeStatus(response);
 }
 
 export function removeMcpServer(serverId: string) {
-  return apiClient.request('remove_mcp_server', () => Promise.resolve(), { serverId });
+  return apiClient.request('remove_mcp_server', { serverId });
 }
 
 export async function connectMcpServer(serverId: string) {
-  const response = await apiClient.request<McpServerStatusProtocolDto>('connect_mcp_server', () => Promise.resolve({
-    id: serverId,
-    name: '',
-    connected: false,
-    has_resources: false,
-    has_tools: false,
-    has_prompts: false,
-  }), { serverId });
+  const response = await apiClient.request<McpServerStatusProtocolDto>('connect_mcp_server', { serverId });
   return normalizeStatus(response);
 }
 
 export function disconnectMcpServer(serverId: string) {
-  return apiClient.request('disconnect_mcp_server', () => Promise.resolve(), { serverId });
+  return apiClient.request('disconnect_mcp_server', { serverId });
 }
 
 export async function testMcpConnection(
@@ -428,7 +413,7 @@ export async function testMcpConnection(
   args?: string[],
   permissions?: McpPermissionProfile,
 ) {
-  const response = await apiClient.request<McpTestConnectionProtocolDto>('test_mcp_connection', () => Promise.resolve({ success: false }), {
+  const response = await apiClient.request<McpTestConnectionProtocolDto>('test_mcp_connection', {
     request: {
       transport_type: transportType,
       url,
@@ -448,17 +433,17 @@ export async function testMcpConnection(
 }
 
 export async function listMcpResources(serverId: string) {
-  const response = await apiClient.request<unknown>('list_mcp_resources', () => Promise.resolve([]), { serverId });
+  const response = await apiClient.request<unknown>('list_mcp_resources', { serverId });
   return normalizeList(response, normalizeResource);
 }
 
 export async function listMcpTools(serverId: string) {
-  const response = await apiClient.request<unknown>('list_mcp_tools', () => Promise.resolve([]), { serverId });
+  const response = await apiClient.request<unknown>('list_mcp_tools', { serverId });
   return normalizeList(response, normalizeTool);
 }
 
 export async function callMcpTool(serverId: string, toolName: string, args: unknown) {
-  const response = await apiClient.request<McpToolCallProtocolDto>('call_mcp_tool', () => Promise.resolve({ success: false }), {
+  const response = await apiClient.request<McpToolCallProtocolDto>('call_mcp_tool', {
     request: {
       server_id: serverId,
       tool_name: toolName,
@@ -469,12 +454,12 @@ export async function callMcpTool(serverId: string, toolName: string, args: unkn
 }
 
 export async function listMcpPrompts(serverId: string) {
-  const response = await apiClient.request<unknown>('list_mcp_prompts', () => Promise.resolve([]), { serverId });
+  const response = await apiClient.request<unknown>('list_mcp_prompts', { serverId });
   return normalizeList(response, normalizePrompt);
 }
 
 export function getMcpPrompt(serverId: string, promptName: string, args?: Record<string, string>) {
-  return apiClient.request<string>('get_mcp_prompt', () => Promise.resolve(''), {
+  return apiClient.request<string>('get_mcp_prompt', {
     serverId,
     promptName,
     arguments: args,

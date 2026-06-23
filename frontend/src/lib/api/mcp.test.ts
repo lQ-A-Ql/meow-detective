@@ -46,7 +46,7 @@ describe('mcp API layer', () => {
 
     const result = await getMcpConfig();
 
-    expect(requestMock).toHaveBeenCalledWith('get_mcp_config', expect.any(Function));
+    expect(requestMock).toHaveBeenCalledWith('get_mcp_config');
     expect(result).toEqual({
       servers: [
         {
@@ -96,7 +96,7 @@ describe('mcp API layer', () => {
       },
     ]);
 
-    expect(requestMock).toHaveBeenCalledWith('save_mcp_config', expect.any(Function), {
+    expect(requestMock).toHaveBeenCalledWith('save_mcp_config', {
       config: {
         servers: [
           {
@@ -151,7 +151,7 @@ describe('mcp API layer', () => {
       },
     });
 
-    expect(requestMock).toHaveBeenCalledWith('add_mcp_server', expect.any(Function), {
+    expect(requestMock).toHaveBeenCalledWith('add_mcp_server', {
       server: {
         id: 'srv-1',
         name: 'Remote MCP',
@@ -184,12 +184,12 @@ describe('mcp API layer', () => {
       has_prompts: false,
     });
     const status = await connectMcpServer('srv-1');
-    expect(requestMock).toHaveBeenLastCalledWith('connect_mcp_server', expect.any(Function), { serverId: 'srv-1' });
+    expect(requestMock).toHaveBeenLastCalledWith('connect_mcp_server', { serverId: 'srv-1' });
     expect(status).toMatchObject({ id: 'srv-1', connected: false, hasResources: false });
 
     requestMock.mockResolvedValueOnce(undefined);
     await removeMcpServer('srv-1');
-    expect(requestMock).toHaveBeenLastCalledWith('remove_mcp_server', expect.any(Function), { serverId: 'srv-1' });
+    expect(requestMock).toHaveBeenLastCalledWith('remove_mcp_server', { serverId: 'srv-1' });
   });
 
   it('keeps nested snake_case request fields for test connection and normalizes capabilities', async () => {
@@ -201,7 +201,7 @@ describe('mcp API layer', () => {
 
     const result = await testMcpConnection('stdio', undefined, 'node', ['server.js']);
 
-    expect(requestMock).toHaveBeenCalledWith('test_mcp_connection', expect.any(Function), {
+    expect(requestMock).toHaveBeenCalledWith('test_mcp_connection', {
       request: {
         transport_type: 'stdio',
         url: undefined,
@@ -227,17 +227,17 @@ describe('mcp API layer', () => {
   it('uses camelCase top-level serverId args for list commands', async () => {
     requestMock.mockResolvedValueOnce([{ uri: 'file:///case', name: 'Case', description: 5, mime_type: 'text/plain' }]);
     const resources = await listMcpResources('srv-1');
-    expect(requestMock).toHaveBeenLastCalledWith('list_mcp_resources', expect.any(Function), { serverId: 'srv-1' });
+    expect(requestMock).toHaveBeenLastCalledWith('list_mcp_resources', { serverId: 'srv-1' });
     expect(resources).toEqual([{ uri: 'file:///case', name: 'Case', description: undefined, mimeType: 'text/plain' }]);
 
     requestMock.mockResolvedValueOnce([{ name: 'lookup', description: 'Lookup evidence', input_schema: { type: 'object' } }]);
     const tools = await listMcpTools('srv-1');
-    expect(requestMock).toHaveBeenLastCalledWith('list_mcp_tools', expect.any(Function), { serverId: 'srv-1' });
+    expect(requestMock).toHaveBeenLastCalledWith('list_mcp_tools', { serverId: 'srv-1' });
     expect(tools).toEqual([{ name: 'lookup', description: 'Lookup evidence', inputSchema: { type: 'object' } }]);
 
     requestMock.mockResolvedValueOnce([{ name: 'summarize', description: 'Summarize', arguments: [{ name: 'file', required: true }, 'bad'] }]);
     const prompts = await listMcpPrompts('srv-1');
-    expect(requestMock).toHaveBeenLastCalledWith('list_mcp_prompts', expect.any(Function), { serverId: 'srv-1' });
+    expect(requestMock).toHaveBeenLastCalledWith('list_mcp_prompts', { serverId: 'srv-1' });
     expect(prompts).toEqual([{ name: 'summarize', description: 'Summarize', arguments: [{ name: 'file', description: undefined, required: true }] }]);
   });
 
@@ -246,7 +246,7 @@ describe('mcp API layer', () => {
 
     const result = await callMcpTool('srv-1', 'queryTimeline', { limit: 3 });
 
-    expect(requestMock).toHaveBeenCalledWith('call_mcp_tool', expect.any(Function), {
+    expect(requestMock).toHaveBeenCalledWith('call_mcp_tool', {
       request: {
         server_id: 'srv-1',
         tool_name: 'queryTimeline',
@@ -261,7 +261,7 @@ describe('mcp API layer', () => {
 
     await getMcpPrompt('srv-1', 'summarize', { file: 'mft.csv' });
 
-    expect(requestMock).toHaveBeenCalledWith('get_mcp_prompt', expect.any(Function), {
+    expect(requestMock).toHaveBeenCalledWith('get_mcp_prompt', {
       serverId: 'srv-1',
       promptName: 'summarize',
       arguments: { file: 'mft.csv' },

@@ -69,7 +69,7 @@ pub async fn get_file_children(
         GetFileChildrenRequest {
             parent_id,
             offset: 0,
-            limit: 500,
+            limit: infrastructure::constants::MAX_PAGE_LIMIT,
             show_hidden: false,
         },
     )
@@ -334,7 +334,8 @@ pub async fn get_text_preview(
 ) -> Result<TextPreviewDto, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let max = max_bytes.unwrap_or(1024 * 1024) as u32; // 默认 1MB
+        let max =
+            max_bytes.unwrap_or(infrastructure::constants::DEFAULT_TEXT_PREVIEW_MAX_BYTES) as u32;
 
         // Short lock: extract db_path, then release
         let db_path = {
@@ -416,7 +417,8 @@ pub async fn get_image_preview(
         if handle.size > infrastructure::constants::MAX_INLINE_IMAGE_PREVIEW_BYTES {
             return Err(CommandError::invalid_input(format!(
                 "Image preview is limited to {} MB",
-                infrastructure::constants::MAX_INLINE_IMAGE_PREVIEW_BYTES / (1024 * 1024)
+                infrastructure::constants::MAX_INLINE_IMAGE_PREVIEW_BYTES
+                    / infrastructure::constants::BYTES_PER_MB
             )));
         }
 

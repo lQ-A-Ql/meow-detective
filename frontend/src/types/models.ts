@@ -1,5 +1,3 @@
-export type ApiMode = 'mock' | 'tauri';
-
 export interface ApiErrorDto {
   code: string;
   message: string;
@@ -1358,6 +1356,23 @@ export interface MediaRangeResponse {
   bytesBase64: string;
   bytesRead: number;
   eof: boolean;
+}
+
+export interface TextPreviewResponse {
+  content: string;
+  encoding: string;
+  isTruncated: boolean;
+  isBinary: boolean;
+  lineNumber: number;
+  language: string | null;
+}
+
+export interface ImagePreviewResponse {
+  dataUrl: string;
+  mimeType: string;
+  width: number;
+  height: number;
+  size: number;
 }
 
 export interface AppSettings {

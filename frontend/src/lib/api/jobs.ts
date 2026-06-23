@@ -1,13 +1,14 @@
+import { JobSnapshot, TraceItem, WarningItem } from '@/types/models';
 import { apiClient } from './client';
 
-export async function getJobsSnapshot() {
-  return apiClient.request('get_jobs_snapshot', () => apiClient.getMockProvider().getJobsSnapshot());
+export async function getJobsSnapshot(): Promise<JobSnapshot[]> {
+  return apiClient.request('get_jobs_snapshot');
 }
 
-export async function getWarnings() {
-  return apiClient.request('get_warnings', () => apiClient.getMockProvider().getWarnings());
+export async function getWarnings(): Promise<WarningItem[]> {
+  return apiClient.request('get_warnings');
 }
 
-export async function getTraceItems() {
-  return apiClient.request('get_trace_items', () => apiClient.getMockProvider().getTraceItems());
+export async function getTraceItems(): Promise<TraceItem[]> {
+  return apiClient.request('get_trace_items');
 }

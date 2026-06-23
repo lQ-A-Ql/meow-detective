@@ -251,7 +251,7 @@ export function AnalysisHeader({
       </div>
       <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto]">
         <div className="rounded border border-[#e0e0e0] bg-white px-3 py-2 text-[11px] leading-5 text-[#666]">
-          数据源分析保持只读读取，结构化结果通过 Tauri commands 获取；mock mode 会展示 Registry、Chrome/Edge/Firefox、EML/EMLX 示例。
+          数据源分析保持只读读取，结构化结果通过 Tauri commands 获取。
         </div>
         {extractionRun ? (
           <div className="grid min-w-[360px] grid-cols-3 rounded border border-[#e0e0e0] bg-white text-center">

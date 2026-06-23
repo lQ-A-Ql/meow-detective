@@ -52,7 +52,7 @@ use state::AppState;
 
 pub fn run() {
     let builder = tauri::Builder::default();
-    media_protocol::register(builder)
+    match media_protocol::register(builder)
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
@@ -145,5 +145,11 @@ pub fn run() {
             list_investigation_steps,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+    {
+        Ok(_) => {}
+        Err(e) => {
+            tracing::error!("Failed to run Tauri application: {e}");
+            std::process::exit(1);
+        }
+    }
 }

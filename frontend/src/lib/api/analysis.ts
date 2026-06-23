@@ -16,106 +16,61 @@ import {
 import { apiClient } from './client';
 
 export async function getSystemInfo(): Promise<AnalysisSystemInfo> {
-  return apiClient.request(
-    'get_system_info',
-    () => apiClient.getMockProvider().getSystemInfo(),
-  );
+  return apiClient.request('get_system_info');
 }
 
 export async function classifyFiles(sampleSize = 1000): Promise<AnalysisFileClassification[]> {
-  return apiClient.request(
-    'classify_files',
-    () => apiClient.getMockProvider().classifyFiles(sampleSize),
-    { request: { sampleSize } },
-  );
+  return apiClient.request('classify_files', { request: { sampleSize } });
 }
 
 export async function getEvidenceClassificationSummary(): Promise<EvidenceClassificationSummary> {
-  return apiClient.request(
-    'get_evidence_classification_summary',
-    () => apiClient.getMockProvider().getEvidenceClassificationSummary(),
-  );
+  return apiClient.request('get_evidence_classification_summary');
 }
 
 export async function runEvidenceClassification(categories: string[] = []): Promise<EvidenceClassificationSummary> {
-  return apiClient.request(
-    'run_evidence_classification',
-    () => apiClient.getMockProvider().runEvidenceClassification(categories),
-    { request: { categories } },
-  );
+  return apiClient.request('run_evidence_classification', { request: { categories } });
 }
 
 export async function runAnalysisExtraction(
   request: AnalysisExtractionRequest = { categories: [] },
 ): Promise<AnalysisExtractionRun> {
-  return apiClient.request(
-    'run_analysis_extraction',
-    () => apiClient.getMockProvider().runAnalysisExtraction(request),
-    { request },
-  );
+  return apiClient.request('run_analysis_extraction', { request });
 }
 
 export async function getRegistryExtractionSummary(
   request: AnalysisExtractionPageRequest = {},
 ): Promise<RegistryExtractionSummary> {
-  return apiClient.request(
-    'get_registry_extraction_summary',
-    () => apiClient.getMockProvider().getRegistryExtractionSummary(request),
-    { request },
-  );
+  return apiClient.request('get_registry_extraction_summary', { request });
 }
 
 export async function getRegistryStructuredSummary(): Promise<RegistryStructuredSummary> {
-  return apiClient.request(
-    'get_registry_structured_summary',
-    () => apiClient.getMockProvider().getRegistryStructuredSummary(),
-  );
+  return apiClient.request('get_registry_structured_summary');
 }
 
 export async function getBrowserHistorySummary(
   request: AnalysisExtractionPageRequest = {},
 ): Promise<BrowserHistorySummary> {
-  return apiClient.request(
-    'get_browser_history_summary',
-    () => apiClient.getMockProvider().getBrowserHistorySummary(request),
-    { request },
-  );
+  return apiClient.request('get_browser_history_summary', { request });
 }
 
 export async function getEmailExtractionSummary(
   request: AnalysisExtractionPageRequest = {},
 ): Promise<EmailExtractionSummary> {
-  return apiClient.request(
-    'get_email_extraction_summary',
-    () => apiClient.getMockProvider().getEmailExtractionSummary(request),
-    { request },
-  );
+  return apiClient.request('get_email_extraction_summary', { request });
 }
 
 export async function getV2GovernanceSnapshot(): Promise<V2GovernanceSnapshot> {
-  return apiClient.request(
-    'get_v2_governance_snapshot',
-    () => apiClient.getMockProvider().getV2GovernanceSnapshot(),
-  );
+  return apiClient.request('get_v2_governance_snapshot');
 }
 
 export async function getV3GovernanceSnapshot(): Promise<V3GovernanceSnapshot> {
-  return apiClient.request(
-    'get_v3_governance_snapshot',
-    () => apiClient.getMockProvider().getV3GovernanceSnapshot(),
-  );
+  return apiClient.request('get_v3_governance_snapshot');
 }
 
 export async function getCorrelationSnapshot(): Promise<CorrelationSnapshot> {
-  return apiClient.request(
-    'get_correlation_snapshot',
-    () => apiClient.getMockProvider().getCorrelationSnapshot(),
-  );
+  return apiClient.request('get_correlation_snapshot');
 }
 
 export async function generateAnalysisSummary(): Promise<string> {
-  return apiClient.request(
-    'generate_analysis_summary',
-    () => apiClient.getMockProvider().generateAnalysisSummary(),
-  );
+  return apiClient.request('generate_analysis_summary');
 }

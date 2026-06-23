@@ -15,7 +15,6 @@ const mocks = vi.hoisted(() => ({
     setGlobalSearchQuery: vi.fn(),
     toggleDrawer: vi.fn(),
   },
-  apiMode: vi.fn(),
   importSignals: vi.fn(),
 }));
 
@@ -31,10 +30,6 @@ vi.mock('@/features/jobs/hooks', () => ({
 
 vi.mock('@/stores/ui-store', () => ({
   useUiStore: (selector: (state: typeof mocks.uiState) => unknown) => selector(mocks.uiState),
-}));
-
-vi.mock('@/lib/api/client', () => ({
-  apiMode: () => mocks.apiMode(),
 }));
 
 vi.mock('@/features/jobs/import-event-state', () => ({
@@ -65,7 +60,7 @@ function queryState(data: unknown) {
   };
 }
 
-describe('TopBar mock mode label', () => {
+describe('TopBar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.currentCase.mockReturnValue(queryState({
@@ -77,7 +72,6 @@ describe('TopBar mock mode label', () => {
     mocks.jobs.mockReturnValue(queryState([]));
     mocks.warnings.mockReturnValue(queryState([]));
     mocks.dataSources.mockReturnValue(queryState([]));
-    mocks.apiMode.mockReturnValue('mock');
     mocks.importSignals.mockReturnValue({
       latestPhase: undefined,
       latestCancellation: undefined,
@@ -87,31 +81,6 @@ describe('TopBar mock mode label', () => {
     });
     mocks.uiState.currentPage = 'home';
     mocks.uiState.globalSearchQuery = '';
-  });
-
-  it('shows an accessible mock data label in mock mode', () => {
-    render(
-      <MemoryRouter>
-        <TopBar />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByRole('status', { name: 'Mock mode data label' })).toBeDefined();
-    expect(screen.getByText('Mock Mode')).toBeDefined();
-    expect(screen.getByText('显示演示取证数据')).toBeDefined();
-    expect(screen.getByText('V2 治理')).toBeDefined();
-  });
-
-  it('hides the mock data label in tauri mode', () => {
-    mocks.apiMode.mockReturnValue('tauri');
-
-    render(
-      <MemoryRouter>
-        <TopBar />
-      </MemoryRouter>,
-    );
-
-    expect(screen.queryByRole('status', { name: 'Mock mode data label' })).toBeNull();
   });
 
   it('renders typed import status chips when event signals are present', () => {

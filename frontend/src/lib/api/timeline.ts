@@ -17,25 +17,15 @@ export interface TimelineRequest {
 export async function getTimelineEvents(
   request?: TimelineRequest,
 ): Promise<PagedResponse<TimelineEventDto>> {
-  return apiClient.request('get_timeline_events', () =>
-    apiClient.getMockProvider().getTimelineEvents().then((items) => ({
-      total: items.length,
-      items,
-    })),
-    request ? { request: {
+  return apiClient.request('get_timeline_events', request ? { request: {
       offset: request.offset ?? 0,
       limit: request.limit ?? 100,
       timeStart: request.timeStart,
       timeEnd: request.timeEnd,
       eventType: request.eventType,
-    } } : undefined,
-  );
+    } } : undefined);
 }
 
 export async function getTimelineEventById(eventId: string): Promise<TimelineEventDto | null> {
-  return apiClient.request(
-    'get_timeline_event_by_id',
-    () => apiClient.getMockProvider().getTimelineEventById(eventId),
-    { request: { eventId } },
-  );
+  return apiClient.request('get_timeline_event_by_id', { request: { eventId } });
 }

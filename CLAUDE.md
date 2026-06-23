@@ -50,7 +50,7 @@ The frontend package lives in `frontend/` and uses pnpm (version pinned in `pack
 - Tauri config is at `apps/desktop/src-tauri/tauri.conf.json`; it points `frontendDist` to `frontend/dist` (hardcoded as `../../../frontend/dist`).
 - Full app with hot-reload (from `apps/desktop/src-tauri/`): `cargo tauri dev`. Release bundle: `cargo tauri build`.
 - For a production desktop build path, build the frontend first, then run/check the Tauri crate as needed.
-- The frontend runs standalone with mock data by default; set `VITE_API_MODE=tauri` to hit real Rust commands (the `ApiClient` switches on this at build time).
+- The frontend always invokes real Tauri commands; use `cargo tauri dev` for a full desktop development loop.
 
 ### Repository guard scripts
 
@@ -111,7 +111,7 @@ Long-running operations are represented as jobs/tasks and surfaced through job s
 
 The frontend uses React Router (`frontend/src/app/routes.tsx`) with lazy page modules for Case Home, Data Analysis, Files, Search, Timeline, Artifacts, Reports, and Settings. React Query is the default server-state layer (`frontend/src/app/providers.tsx`) with a 30 second stale time and no refetch on window focus. Zustand stores hold local UI/selection/MCP state.
 
-API modules in `frontend/src/lib/api/` call a small client wrapper that chooses live Tauri IPC when `VITE_API_MODE=tauri` or `isTauri()` is true, otherwise mock data. Feature hooks in `frontend/src/features/*/hooks.ts` wrap API calls and cache invalidation; prefer adding new calls there rather than invoking Tauri directly from page components.
+API modules in `frontend/src/lib/api/` call a small client wrapper that invokes Tauri IPC via `@tauri-apps/api/core`. Feature hooks in `frontend/src/features/*/hooks.ts` wrap API calls and cache invalidation; prefer adding new calls there rather than invoking Tauri directly from page components.
 
 ### The transport crate is the IPC contract
 
@@ -122,7 +122,7 @@ API modules in `frontend/src/lib/api/` call a small client wrapper that chooses 
 - Tauri commands return `Result<T, String>`; the shared cross-crate error type is `transport::errors::ApiErrorDto`.
 - Event topics are string constants in `crates/transport/src/events/mod.rs`, mirrored as the `EventTopic` TypeScript union in `frontend/src/types/models.ts`. The frontend subscribes via `EventBus` (`src/lib/events/bus.ts`). Keep both sides in sync when changing topics or DTOs.
 
-A typical end-to-end feature touches, in order: transport DTO/command → `app-services/src/<domain>_service.rs` → `apps/desktop/src-tauri/src/commands/<domain>_commands.rs` → register in `src/lib.rs` `invoke_handler` → mirror DTO in `frontend/src/types/models.ts` → API fn in `src/lib/api/<domain>.ts` → mock data in `src/lib/api/mock-data.ts` → hook in `src/features/<domain>/hooks.ts` → page/component.
+A typical end-to-end feature touches, in order: transport DTO/command → `app-services/src/<domain>_service.rs` → `apps/desktop/src-tauri/src/commands/<domain>_commands.rs` → register in `src/lib.rs` `invoke_handler` → mirror DTO in `frontend/src/types/models.ts` → API fn in `src/lib/api/<domain>.ts` → hook in `src/features/<domain>/hooks.ts` → page/component.
 
 App-shell layout components (AppShell, Layout, TopBar, BottomDrawer, InspectorPane, PageSubbar) live in `frontend/src/components/layout/`; shadcn/radix UI primitives live in `frontend/src/app/components/ui/`. Tailwind 4 is CSS-first via `@tailwindcss/vite` — there is no `tailwind.config.js`; configuration lives in CSS with `@source` directives. The `@/` path alias maps to `frontend/src/`.
 
@@ -143,9 +143,9 @@ Media preview has a guarded split path: small content may be returned as bounded
 
 ## Gotchas
 
-1. **Mock vs Tauri mode**: `pnpm dev` runs the frontend standalone with mock data. Set `VITE_API_MODE=tauri` to target real Rust commands. The `ApiClient` switches at build time based on this env var. When running via `cargo tauri dev`, Tauri sets this automatically.
+1. **Transport crate is the manual contract**: There is no codegen. DTO changes in `crates/transport/src/dto/` must be manually mirrored in `frontend/src/types/models.ts`. Event topics in `crates/transport/src/events/mod.rs` must stay in sync with the `EventTopic` TypeScript union.
 
-2. **Transport crate is the manual contract**: There is no codegen. DTO changes in `crates/transport/src/dto/` must be manually mirrored in `frontend/src/types/models.ts`. Event topics in `crates/transport/src/events/mod.rs` must stay in sync with the `EventTopic` TypeScript union.
+2. **No mock mode**: The frontend always invokes real Tauri commands. `pnpm dev` requires the Tauri environment to function; use `cargo tauri dev` for a full desktop development loop.
 
 3. **Tauri 2, not v1**: Commands use `#[tauri::command]` with v2 handler registration. Events use the `Emitter` trait. Do not use v1 patterns.
 

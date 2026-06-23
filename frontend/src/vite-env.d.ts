@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_API_MODE?: 'mock' | 'tauri';
+  // Intentionally empty: the application no longer supports a mock API mode.
 }
 
 interface ImportMeta {

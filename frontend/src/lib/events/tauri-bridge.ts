@@ -1,17 +1,16 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { eventBus } from './bus';
 import type { EventEnvelope, EventTopic } from '@/types/models';
-import { getApiMode } from '@/lib/api/client';
 
 let unlisteners: UnlistenFn[] = [];
 let started = false;
 
 /**
  * Start listening to Tauri backend events and bridge them to the frontend EventBus.
- * Only activates in Tauri mode. Safe to call multiple times (idempotent).
+ * Safe to call multiple times (idempotent).
  */
 export async function startTauriEventBridge(): Promise<void> {
-  if (started || getApiMode() !== 'tauri') {
+  if (started) {
     return;
   }
   started = true;

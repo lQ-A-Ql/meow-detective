@@ -21,10 +21,6 @@ vi.mock('@/features/case/hooks', () => ({
   useDataSources: mocks.dataSources,
 }));
 
-vi.mock('@/lib/api/client', () => ({
-  apiMode: () => 'mock',
-}));
-
 vi.mock('@/stores/ui-store', () => ({
   useUiStore: (selector: (state: { drawerOpen: boolean; toggleDrawer: () => void }) => unknown) =>
     selector(mocks.uiStore()),
