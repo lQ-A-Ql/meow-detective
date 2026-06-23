@@ -1,5 +1,6 @@
 use chrono::Utc;
 use std::collections::HashMap;
+use thiserror::Error;
 use transport::{
     dto::{
         PerformanceReportDto, TimelineAggregatedDto, TimelineClusterDto, TimelineEventDto,
@@ -17,6 +18,24 @@ use std::time::Instant;
 
 const MACB_PROJECTION_KEY: &str = "macb";
 
+#[derive(Debug, Error)]
+pub enum TimelineServiceError {
+    #[error("database error: {0}")]
+    Db(#[from] persistence_sqlite::DbError),
+    #[error("not found: {0}")]
+    NotFound(String),
+    #[error("invalid input: {0}")]
+    InvalidInput(String),
+    #[error("{0}")]
+    Other(String),
+}
+
+impl From<rusqlite::Error> for TimelineServiceError {
+    fn from(e: rusqlite::Error) -> Self {
+        Self::Db(persistence_sqlite::DbError::from(e))
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct TimelineProjectionStats {
     pub inserted_count: u64,
@@ -30,7 +49,10 @@ pub struct InstrumentedPage<T> {
     pub performance_report: PerformanceReportDto,
 }
 
-pub fn project_and_store_macb(conn: &Connection, files: &[FileEntry]) -> Result<u64, String> {
+pub fn project_and_store_macb(
+    conn: &Connection,
+    files: &[FileEntry],
+) -> Result<u64, TimelineServiceError> {
     let repo = TimelineRepo::new(conn);
 
     // Parallel: generate events from all files concurrently
@@ -41,14 +63,14 @@ pub fn project_and_store_macb(conn: &Connection, files: &[FileEntry]) -> Result<
 
     let count = all_events.len() as u64;
     if !all_events.is_empty() {
-        repo.insert_batch(&all_events).map_err(|e| e.to_string())?;
+        repo.insert_batch(&all_events)?;
     }
     Ok(count)
 }
 
 pub fn ensure_macb_timeline_projected(
     conn: &Connection,
-) -> Result<TimelineProjectionStats, String> {
+) -> Result<TimelineProjectionStats, TimelineServiceError> {
     if !timeline_projection_source_tables_present(conn)? {
         return Ok(TimelineProjectionStats {
             already_projected: true,
@@ -79,15 +101,15 @@ pub fn ensure_macb_timeline_projected(
     })
 }
 
-fn timeline_projection_source_tables_present(conn: &Connection) -> Result<bool, String> {
-    let count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM sqlite_master
+fn timeline_projection_source_tables_present(
+    conn: &Connection,
+) -> Result<bool, TimelineServiceError> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master
              WHERE type='table' AND name IN ('file_entries', 'data_sources')",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(|e| e.to_string())?;
+        [],
+        |row| row.get(0),
+    )?;
     Ok(count == 2)
 }
 
@@ -96,11 +118,11 @@ pub fn query_timeline(
     conn: &Connection,
     offset: u64,
     limit: u32,
-) -> Result<PageResponse<TimelineEventDto>, String> {
+) -> Result<PageResponse<TimelineEventDto>, TimelineServiceError> {
     ensure_macb_timeline_projected(conn)?;
     let repo = TimelineRepo::new(conn);
-    let total = repo.count().map_err(|e| e.to_string())?;
-    let events = repo.query(offset, limit).map_err(|e| e.to_string())?;
+    let total = repo.count()?;
+    let events = repo.query(offset, limit)?;
     let items: Vec<TimelineEventDto> = events
         .into_iter()
         .map(|ev| TimelineEventDto {
@@ -124,7 +146,7 @@ pub fn query_timeline_instrumented(
     conn: &Connection,
     offset: u64,
     limit: u32,
-) -> Result<InstrumentedPage<TimelineEventDto>, String> {
+) -> Result<InstrumentedPage<TimelineEventDto>, TimelineServiceError> {
     let (page, sample) = measure_rows(0, || query_timeline(conn, offset, limit));
     let page = page?;
     let sample = PerfSample {
@@ -146,15 +168,11 @@ pub fn query_timeline_filtered(
     time_start: Option<&str>,
     time_end: Option<&str>,
     event_type: Option<&str>,
-) -> Result<PageResponse<TimelineEventDto>, String> {
+) -> Result<PageResponse<TimelineEventDto>, TimelineServiceError> {
     ensure_macb_timeline_projected(conn)?;
     let repo = TimelineRepo::new(conn);
-    let total = repo
-        .count_filtered(time_start, time_end, event_type)
-        .map_err(|e| e.to_string())?;
-    let events = repo
-        .query_filtered(offset, limit, time_start, time_end, event_type)
-        .map_err(|e| e.to_string())?;
+    let total = repo.count_filtered(time_start, time_end, event_type)?;
+    let events = repo.query_filtered(offset, limit, time_start, time_end, event_type)?;
     let items: Vec<TimelineEventDto> = events
         .into_iter()
         .map(|ev| TimelineEventDto {
@@ -181,7 +199,7 @@ pub fn query_timeline_filtered_instrumented(
     time_start: Option<&str>,
     time_end: Option<&str>,
     event_type: Option<&str>,
-) -> Result<InstrumentedPage<TimelineEventDto>, String> {
+) -> Result<InstrumentedPage<TimelineEventDto>, TimelineServiceError> {
     let (page, sample) = measure_rows(0, || {
         query_timeline_filtered(conn, offset, limit, time_start, time_end, event_type)
     });
@@ -206,22 +224,20 @@ pub fn query_timeline_aggregated(
     conn: &Connection,
     offset: u64,
     limit: u32,
-) -> Result<TimelineAggregatedDto, String> {
+) -> Result<TimelineAggregatedDto, TimelineServiceError> {
     ensure_macb_timeline_projected(conn)?;
 
     // Query clusters: group by (event_type, description), paginate cluster count
     let cluster_rows: Vec<(String, String, i64, String, String, String)> = {
-        let mut stmt = conn
-            .prepare(
-                "SELECT event_type, description, COUNT(*) AS cnt,
+        let mut stmt = conn.prepare(
+            "SELECT event_type, description, COUNT(*) AS cnt,
                         MIN(ts) AS first_ts, MAX(ts) AS last_ts,
                         GROUP_CONCAT(id, ',') AS sample_ids
                  FROM timeline_events
                  GROUP BY event_type, description
                  ORDER BY cnt DESC, event_type ASC, description ASC
                  LIMIT ?1 OFFSET ?2",
-            )
-            .map_err(|e| e.to_string())?;
+        )?;
         let rows = stmt
             .query_map(params![limit, offset], |row| {
                 Ok((
@@ -232,10 +248,8 @@ pub fn query_timeline_aggregated(
                     row.get::<_, String>(4)?,
                     row.get::<_, String>(5)?,
                 ))
-            })
-            .map_err(|e| e.to_string())?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?;
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
         rows
     };
 
@@ -295,7 +309,7 @@ pub fn query_timeline_aggregated(
 fn query_totals_by_type(
     conn: &Connection,
     event_types: &[String],
-) -> Result<Vec<(String, u64)>, String> {
+) -> Result<Vec<(String, u64)>, TimelineServiceError> {
     if event_types.is_empty() {
         return Ok(Vec::new());
     }
@@ -309,7 +323,7 @@ fn query_totals_by_type(
          GROUP BY event_type"
     );
 
-    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare(&sql)?;
     let params_refs: Vec<&dyn rusqlite::types::ToSql> = event_types
         .iter()
         .map(|s| s as &dyn rusqlite::types::ToSql)
@@ -318,10 +332,8 @@ fn query_totals_by_type(
     let rows = stmt
         .query_map(params_refs.as_slice(), |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(rows)
 }
@@ -329,10 +341,10 @@ fn query_totals_by_type(
 pub fn get_timeline_event_by_id(
     conn: &Connection,
     event_id: &str,
-) -> Result<Option<TimelineEventDto>, String> {
+) -> Result<Option<TimelineEventDto>, TimelineServiceError> {
     ensure_macb_timeline_projected(conn)?;
     let repo = TimelineRepo::new(conn);
-    let event = repo.find_by_id(event_id).map_err(|e| e.to_string())?;
+    let event = repo.find_by_id(event_id)?;
     Ok(event.map(|ev| TimelineEventDto {
         id: ev.id.0,
         source_object_id: ev.source_object_id,
@@ -377,31 +389,33 @@ fn timeline_query_report(prefix: &str, sample: PerfSample, total: u64) -> Perfor
     )
 }
 
-fn ensure_projection_meta_table(conn: &Connection) -> Result<(), String> {
-    conn.execute_batch(
+fn ensure_projection_meta_table(conn: &Connection) -> Result<(), TimelineServiceError> {
+    Ok(conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS timeline_projection_meta (
             projection_key TEXT PRIMARY KEY NOT NULL,
             status TEXT NOT NULL,
             inserted_count INTEGER NOT NULL DEFAULT 0,
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );",
-    )
-    .map_err(|e| e.to_string())
+    )?)
 }
 
-fn is_projection_done(conn: &Connection, key: &str) -> Result<bool, String> {
+fn is_projection_done(conn: &Connection, key: &str) -> Result<bool, TimelineServiceError> {
     let status: Option<String> = conn
         .query_row(
             "SELECT status FROM timeline_projection_meta WHERE projection_key = ?1",
             params![key],
             |row| row.get(0),
         )
-        .optional()
-        .map_err(|e| e.to_string())?;
+        .optional()?;
     Ok(status.as_deref() == Some("done"))
 }
 
-fn mark_projection_done(conn: &Connection, key: &str, inserted_count: u64) -> Result<(), String> {
+fn mark_projection_done(
+    conn: &Connection,
+    key: &str,
+    inserted_count: u64,
+) -> Result<(), TimelineServiceError> {
     conn.execute(
         "INSERT INTO timeline_projection_meta (projection_key, status, inserted_count, updated_at)
          VALUES (?1, 'done', ?2, datetime('now'))
@@ -410,15 +424,14 @@ fn mark_projection_done(conn: &Connection, key: &str, inserted_count: u64) -> Re
             inserted_count = excluded.inserted_count,
             updated_at = excluded.updated_at",
         params![key, inserted_count as i64],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     Ok(())
 }
 
-fn project_macb_timeline_sql(conn: &Connection) -> Result<u64, String> {
+fn project_macb_timeline_sql(conn: &Connection) -> Result<u64, TimelineServiceError> {
     let tx = conn
         .unchecked_transaction()
-        .map_err(|e| format!("Begin MACB timeline projection: {e}"))?;
+        .map_err(|e| TimelineServiceError::Other(format!("Begin MACB timeline projection: {e}")))?;
     let mut inserted = 0u64;
     inserted += insert_macb_kind_sql(
         &tx,
@@ -448,8 +461,9 @@ fn project_macb_timeline_sql(conn: &Connection) -> Result<u64, String> {
         "File metadata changed: ",
         " metadata changed",
     )?;
-    tx.commit()
-        .map_err(|e| format!("Commit MACB timeline projection: {e}"))?;
+    tx.commit().map_err(|e| {
+        TimelineServiceError::Other(format!("Commit MACB timeline projection: {e}"))
+    })?;
     Ok(inserted)
 }
 
@@ -459,7 +473,7 @@ fn insert_macb_kind_sql(
     event_type: &str,
     title_prefix: &str,
     description_suffix: &str,
-) -> Result<u64, String> {
+) -> Result<u64, TimelineServiceError> {
     let sql = format!(
         "INSERT OR IGNORE INTO timeline_events
          (id, case_id, source_object_id, event_type, ts, title, description, parser_id, source_attribution, attrs)
@@ -487,19 +501,23 @@ fn insert_macb_kind_sql(
     );
     conn.execute(&sql, params![title_prefix, description_suffix])
         .map(|count| count as u64)
-        .map_err(|e| format!("Insert {event_type} timeline projection: {e}"))
+        .map_err(|e| {
+            TimelineServiceError::Other(format!("Insert {event_type} timeline projection: {e}"))
+        })
 }
 
 /// Write TimelineEvent graph nodes and References edges for all timeline events
 /// in the current case. Called after MACB timeline projection inserts new events.
-fn populate_timeline_event_graph(conn: &Connection) -> Result<(), String> {
+fn populate_timeline_event_graph(conn: &Connection) -> Result<(), TimelineServiceError> {
     let case_id: String = conn
         .query_row(
             "SELECT DISTINCT case_id FROM timeline_events LIMIT 1",
             [],
             |row| row.get(0),
         )
-        .map_err(|e| format!("resolve case_id for timeline graph: {e}"))?;
+        .map_err(|e| {
+            TimelineServiceError::Other(format!("resolve case_id for timeline graph: {e}"))
+        })?;
 
     let graph_repo = GraphRepo::new(conn);
     let now = Utc::now().to_rfc3339();
@@ -516,7 +534,9 @@ fn populate_timeline_event_graph(conn: &Connection) -> Result<(), String> {
                  WHERE case_id = ?1
                  LIMIT ?2 OFFSET ?3",
             )
-            .map_err(|e| format!("prepare timeline graph query: {e}"))?;
+            .map_err(|e| {
+                TimelineServiceError::Other(format!("prepare timeline graph query: {e}"))
+            })?;
 
         #[allow(clippy::type_complexity)]
         let rows: Vec<(
@@ -542,9 +562,11 @@ fn populate_timeline_event_graph(conn: &Connection) -> Result<(), String> {
                     ))
                 },
             )
-            .map_err(|e| format!("query timeline events for graph: {e}"))?
+            .map_err(|e| {
+                TimelineServiceError::Other(format!("query timeline events for graph: {e}"))
+            })?
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("collect timeline rows: {e}"))?;
+            .map_err(|e| TimelineServiceError::Other(format!("collect timeline rows: {e}")))?;
 
         if rows.is_empty() {
             break;
@@ -582,14 +604,14 @@ fn populate_timeline_event_graph(conn: &Connection) -> Result<(), String> {
         }
 
         for node_chunk in nodes.chunks(GRAPH_WRITE_CHUNK) {
-            graph_repo
-                .insert_nodes_batch(node_chunk)
-                .map_err(|e| format!("timeline graph node insert: {e}"))?;
+            graph_repo.insert_nodes_batch(node_chunk).map_err(|e| {
+                TimelineServiceError::Other(format!("timeline graph node insert: {e}"))
+            })?;
         }
         for edge_chunk in edges.chunks(GRAPH_WRITE_CHUNK) {
-            graph_repo
-                .insert_edges_batch(edge_chunk)
-                .map_err(|e| format!("timeline graph edge insert: {e}"))?;
+            graph_repo.insert_edges_batch(edge_chunk).map_err(|e| {
+                TimelineServiceError::Other(format!("timeline graph edge insert: {e}"))
+            })?;
         }
 
         offset += row_count;

@@ -67,12 +67,12 @@ fn compute_correlation_snapshot(conn: &Connection) -> Result<CorrelationSnapshot
         .into_iter()
         .take(MAX_CORRELATION_ARTIFACTS)
         .collect::<Vec<_>>();
-    let timelines =
-        crate::timeline_service::query_timeline(conn, 0, MAX_CORRELATION_TIMELINE_ROWS)?
-            .items
-            .into_iter()
-            .filter(|row| !row.source_object_id.trim().is_empty())
-            .collect::<Vec<_>>();
+    let timelines = crate::timeline_service::query_timeline(conn, 0, MAX_CORRELATION_TIMELINE_ROWS)
+        .map_err(|e| e.to_string())?
+        .items
+        .into_iter()
+        .filter(|row| !row.source_object_id.trim().is_empty())
+        .collect::<Vec<_>>();
 
     build_snapshot_from(conn, &artifacts, &timelines)
 }
@@ -133,12 +133,12 @@ pub fn get_correlation_snapshot_incremental(
             .take(MAX_CORRELATION_ARTIFACTS)
             .collect();
 
-    let timelines =
-        crate::timeline_service::query_timeline(conn, 0, MAX_CORRELATION_TIMELINE_ROWS)?
-            .items
-            .into_iter()
-            .filter(|row| !row.source_object_id.trim().is_empty())
-            .collect::<Vec<_>>();
+    let timelines = crate::timeline_service::query_timeline(conn, 0, MAX_CORRELATION_TIMELINE_ROWS)
+        .map_err(|e| e.to_string())?
+        .items
+        .into_iter()
+        .filter(|row| !row.source_object_id.trim().is_empty())
+        .collect::<Vec<_>>();
 
     // Build source groups and rule groups from new artifacts only.
     // Order matters: build_rule_groups borrows, build_source_groups takes ownership.

@@ -1,13 +1,36 @@
 use domain::batch::{BatchPlan, BatchResourceLimits, PhaseKind};
 use persistence_sqlite::repositories::batch_repo::BatchRepo;
 use rusqlite::Connection;
+use thiserror::Error;
 use transport::dto::batch::{
     BatchJobDto, BatchPhaseDto, BatchPlanDto, BatchResourceLimitsDto, BatchResumeDto,
 };
 use uuid::Uuid;
 
+#[derive(Debug, Error)]
+pub enum BatchServiceError {
+    #[error("database error: {0}")]
+    Db(#[from] persistence_sqlite::DbError),
+    #[error("serialization error: {0}")]
+    Serialization(String),
+    #[error("not found: {0}")]
+    NotFound(String),
+    #[error("invalid input: {0}")]
+    InvalidInput(String),
+    #[error("unsupported: {0}")]
+    Unsupported(String),
+    #[error("{0}")]
+    Other(String),
+}
+
+impl From<rusqlite::Error> for BatchServiceError {
+    fn from(e: rusqlite::Error) -> Self {
+        Self::Db(persistence_sqlite::DbError::from(e))
+    }
+}
+
 /// Build a `BatchPlan` from a request DTO.
-pub fn create_batch_plan(dto: BatchPlanDto) -> Result<BatchPlan, String> {
+pub fn create_batch_plan(dto: BatchPlanDto) -> Result<BatchPlan, BatchServiceError> {
     let phases: Vec<PhaseKind> = dto
         .phases
         .iter()
@@ -31,38 +54,39 @@ pub fn create_and_persist_batch(
     case_id: &str,
     label: &str,
     plan_dto: BatchPlanDto,
-) -> Result<BatchJobDto, String> {
+) -> Result<BatchJobDto, BatchServiceError> {
     let plan = create_batch_plan(plan_dto)?;
-    let plan_json =
-        serde_json::to_string(&plan).map_err(|e| format!("Failed to serialize plan: {e}"))?;
+    let plan_json = serde_json::to_string(&plan)
+        .map_err(|e| BatchServiceError::Serialization(format!("Failed to serialize plan: {e}")))?;
 
     let batch_id = Uuid::new_v4().to_string();
 
     let repo = BatchRepo::new(conn);
-    repo.create_job(&batch_id, case_id, label, &plan_json)
-        .map_err(|e| e.to_string())?;
+    repo.create_job(&batch_id, case_id, label, &plan_json)?;
 
     for kind in &plan.phases {
-        repo.upsert_phase(&batch_id, &phase_kind_to_str(kind), "queued", 0.0, 0, "[]")
-            .map_err(|e| e.to_string())?;
+        repo.upsert_phase(&batch_id, &phase_kind_to_str(kind), "queued", 0.0, 0, "[]")?;
     }
 
     get_batch_status(conn, &batch_id)
 }
 
 /// Retrieve the full status of a batch job, including all phases.
-pub fn get_batch_status(conn: &Connection, batch_id: &str) -> Result<BatchJobDto, String> {
+pub fn get_batch_status(
+    conn: &Connection,
+    batch_id: &str,
+) -> Result<BatchJobDto, BatchServiceError> {
     let repo = BatchRepo::new(conn);
 
     let job_row = repo
-        .get_job(batch_id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("Batch job not found: {batch_id}"))?;
+        .get_job(batch_id)?
+        .ok_or_else(|| BatchServiceError::NotFound(format!("Batch job not found: {batch_id}")))?;
 
-    let plan: BatchPlan = serde_json::from_str(&job_row.plan_json)
-        .map_err(|e| format!("Failed to deserialize plan: {e}"))?;
+    let plan: BatchPlan = serde_json::from_str(&job_row.plan_json).map_err(|e| {
+        BatchServiceError::Serialization(format!("Failed to deserialize plan: {e}"))
+    })?;
 
-    let phase_rows = repo.get_phases(batch_id).map_err(|e| e.to_string())?;
+    let phase_rows = repo.get_phases(batch_id)?;
 
     let phases: Vec<BatchPhaseDto> = phase_rows
         .into_iter()
@@ -101,9 +125,12 @@ pub fn get_batch_status(conn: &Connection, batch_id: &str) -> Result<BatchJobDto
 }
 
 /// List all batch jobs for a case.
-pub fn list_batch_jobs(conn: &Connection, case_id: &str) -> Result<Vec<BatchJobDto>, String> {
+pub fn list_batch_jobs(
+    conn: &Connection,
+    case_id: &str,
+) -> Result<Vec<BatchJobDto>, BatchServiceError> {
     let repo = BatchRepo::new(conn);
-    let rows = repo.list_jobs(case_id).map_err(|e| e.to_string())?;
+    let rows = repo.list_jobs(case_id)?;
     rows.into_iter()
         .map(|row| get_batch_status(conn, &row.id))
         .collect()
@@ -112,32 +139,43 @@ pub fn list_batch_jobs(conn: &Connection, case_id: &str) -> Result<Vec<BatchJobD
 // --- Stubs (MVP: create_plan + get_status are real; start/pause/resume are stubs) ---
 
 /// Start a queued batch job.  MVP stub.
-pub fn start_batch(_conn: &Connection, _batch_id: &str) -> Result<BatchJobDto, String> {
+pub fn start_batch(_conn: &Connection, _batch_id: &str) -> Result<BatchJobDto, BatchServiceError> {
     // TODO: spawn async task that iterates phases, setting status to running/completed.
-    Err("batch start is not yet implemented (MVP stub)".to_string())
+    Err(BatchServiceError::Unsupported(
+        "batch start is not yet implemented (MVP stub)".to_string(),
+    ))
 }
 
 /// Pause a running batch job.  MVP stub.
-pub fn pause_batch(_conn: &Connection, _batch_id: &str) -> Result<BatchJobDto, String> {
+pub fn pause_batch(_conn: &Connection, _batch_id: &str) -> Result<BatchJobDto, BatchServiceError> {
     // TODO: signal the running task to pause at the next checkpoint boundary.
-    Err("batch pause is not yet implemented (MVP stub)".to_string())
+    Err(BatchServiceError::Unsupported(
+        "batch pause is not yet implemented (MVP stub)".to_string(),
+    ))
 }
 
 /// Resume a paused batch job.  MVP stub.
-pub fn resume_batch(_conn: &Connection, _resume: BatchResumeDto) -> Result<BatchJobDto, String> {
+pub fn resume_batch(
+    _conn: &Connection,
+    _resume: BatchResumeDto,
+) -> Result<BatchJobDto, BatchServiceError> {
     // TODO: restart the task from the last checkpoint of the paused phase.
-    Err("batch resume is not yet implemented (MVP stub)".to_string())
+    Err(BatchServiceError::Unsupported(
+        "batch resume is not yet implemented (MVP stub)".to_string(),
+    ))
 }
 
 /// Cancel a batch job (queued or running).  MVP stub.
-pub fn cancel_batch(_conn: &Connection, _batch_id: &str) -> Result<BatchJobDto, String> {
+pub fn cancel_batch(_conn: &Connection, _batch_id: &str) -> Result<BatchJobDto, BatchServiceError> {
     // TODO: signal cancellation and roll back to last checkpoint.
-    Err("batch cancel is not yet implemented (MVP stub)".to_string())
+    Err(BatchServiceError::Unsupported(
+        "batch cancel is not yet implemented (MVP stub)".to_string(),
+    ))
 }
 
 // --- helpers ---
 
-fn parse_phase_kind(s: &str) -> Result<PhaseKind, String> {
+fn parse_phase_kind(s: &str) -> Result<PhaseKind, BatchServiceError> {
     match s {
         "Mount" => Ok(PhaseKind::Mount),
         "Catalog" => Ok(PhaseKind::Catalog),
@@ -145,7 +183,9 @@ fn parse_phase_kind(s: &str) -> Result<PhaseKind, String> {
         "Index" => Ok(PhaseKind::Index),
         "Correlate" => Ok(PhaseKind::Correlate),
         "Export" => Ok(PhaseKind::Export),
-        other => Err(format!("Unknown phase kind: {other}")),
+        other => Err(BatchServiceError::InvalidInput(format!(
+            "Unknown phase kind: {other}"
+        ))),
     }
 }
 
