@@ -10,11 +10,12 @@ use mcp_client::{
     McpPermissionProfile, McpPromptAccess, McpResourceAccess, McpServerConfig, McpToolAccess,
     McpTransport,
 };
-use persistence_sqlite::repositories::audit_repo::{AuditAction, AuditRepo};
+use persistence_sqlite::repositories::audit_repo::AuditAction;
 use tauri::State;
 use transport::dto::mcp::*;
 use transport::CommandError;
 
+use super::command_support::write_audit_log;
 use crate::state::{app_state::SharedMcpClient, AppState};
 
 async fn get_connected_mcp_client(
@@ -199,34 +200,6 @@ fn summarize_test_transport(config: &McpServerConfig) -> serde_json::Value {
     }
 }
 
-fn current_case_id(state: &AppState) -> Option<String> {
-    state
-        .active_case
-        .lock()
-        .ok()
-        .and_then(|guard| guard.as_ref().map(|active| active.meta.id.0.clone()))
-}
-
-fn write_mcp_audit(
-    state: &AppState,
-    action: AuditAction,
-    resource_id: Option<&str>,
-    details: serde_json::Value,
-) {
-    let Ok(conn) = state.get_connection() else {
-        return;
-    };
-    let case_id = current_case_id(state);
-    let details_str = serde_json::to_string(&details).unwrap_or_else(|_| "{}".to_string());
-    let _ = AuditRepo::new(&conn).log(
-        case_id.as_deref(),
-        "system",
-        &action,
-        resource_id,
-        &details_str,
-    );
-}
-
 #[tauri::command]
 pub async fn get_mcp_config(state: State<'_, AppState>) -> Result<McpConfigDto, CommandError> {
     let guard = state
@@ -303,7 +276,7 @@ pub async fn add_mcp_server(
         .add_mcp_server(config.clone())
         .map_err(CommandError::from_service_error)?;
 
-    write_mcp_audit(
+    write_audit_log(
         state.inner(),
         AuditAction::McpConnect,
         Some(&server.id),
@@ -339,7 +312,7 @@ pub async fn remove_mcp_server(
         .remove_mcp_server(&server_id)
         .map_err(CommandError::from_service_error)?;
 
-    write_mcp_audit(
+    write_audit_log(
         state.inner(),
         AuditAction::McpDisconnect,
         Some(&server_id),
@@ -378,7 +351,7 @@ pub async fn connect_mcp_server(
         .get_mcp_server_status(&server_id)
         .ok_or_else(|| CommandError::not_found("Server"))?;
 
-    write_mcp_audit(
+    write_audit_log(
         state.inner(),
         AuditAction::McpConnect,
         Some(&server_id),
@@ -408,7 +381,7 @@ pub async fn disconnect_mcp_server(
         .await
         .map_err(CommandError::from_service_error)?;
 
-    write_mcp_audit(
+    write_audit_log(
         state.inner(),
         AuditAction::McpDisconnect,
         Some(&server_id_for_audit),
@@ -424,8 +397,8 @@ pub async fn disconnect_mcp_server(
 #[tauri::command]
 pub async fn test_mcp_connection(
     state: State<'_, AppState>,
-    request: McpTestConnectionRequest,
-) -> Result<McpTestConnectionResult, CommandError> {
+    request: McpTestConnectionRequestDto,
+) -> Result<McpTestConnectionResultDto, CommandError> {
     let transport = match request.transport_type.as_str() {
         "sse" => McpTransport::Sse {
             url: request.url.unwrap_or_default(),
@@ -435,12 +408,12 @@ pub async fn test_mcp_connection(
             args: request.args.unwrap_or_default(),
         },
         _ => {
-            let result = McpTestConnectionResult {
+            let result = McpTestConnectionResultDto {
                 success: false,
                 error: Some("Invalid transport type".to_string()),
                 capabilities: None,
             };
-            write_mcp_audit(
+            write_audit_log(
                 state.inner(),
                 AuditAction::McpTest,
                 Some("test"),
@@ -465,12 +438,12 @@ pub async fn test_mcp_connection(
         permissions: permissions_from_dto(&request.permissions),
     };
     if let Err(err) = validate_mcp_server_config(&mut config) {
-        let result = McpTestConnectionResult {
+        let result = McpTestConnectionResultDto {
             success: false,
             error: Some(err.to_string()),
             capabilities: None,
         };
-        write_mcp_audit(
+        write_audit_log(
             state.inner(),
             AuditAction::McpTest,
             Some("test"),
@@ -487,7 +460,7 @@ pub async fn test_mcp_connection(
     match client.connect().await {
         Ok(capabilities) => {
             let _ = client.disconnect().await;
-            let result = McpTestConnectionResult {
+            let result = McpTestConnectionResultDto {
                 success: true,
                 error: None,
                 capabilities: Some(McpCapabilitiesDto {
@@ -496,7 +469,7 @@ pub async fn test_mcp_connection(
                     prompts: capabilities.prompts,
                 }),
             };
-            write_mcp_audit(
+            write_audit_log(
                 state.inner(),
                 AuditAction::McpTest,
                 Some("test"),
@@ -513,12 +486,12 @@ pub async fn test_mcp_connection(
             Ok(result)
         }
         Err(err) => {
-            let result = McpTestConnectionResult {
+            let result = McpTestConnectionResultDto {
                 success: false,
                 error: Some(err.to_string()),
                 capabilities: None,
             };
-            write_mcp_audit(
+            write_audit_log(
                 state.inner(),
                 AuditAction::McpTest,
                 Some("test"),
@@ -548,7 +521,7 @@ pub async fn list_mcp_resources(
             .map_err(CommandError::from_service_error)?
     };
 
-    write_mcp_audit(
+    write_audit_log(
         state.inner(),
         AuditAction::McpResourceList,
         Some(&server_id_for_audit),
@@ -584,7 +557,7 @@ pub async fn list_mcp_tools(
             .map_err(CommandError::from_service_error)?
     };
 
-    write_mcp_audit(
+    write_audit_log(
         state.inner(),
         AuditAction::McpToolList,
         Some(&server_id_for_audit),
@@ -607,8 +580,8 @@ pub async fn list_mcp_tools(
 #[tauri::command]
 pub async fn call_mcp_tool(
     state: State<'_, AppState>,
-    request: McpToolCallRequest,
-) -> Result<McpToolCallResult, CommandError> {
+    request: McpToolCallRequestDto,
+) -> Result<McpToolCallResultDto, CommandError> {
     let audit_server_id = request.server_id.clone();
     let audit_tool_name = request.tool_name.clone();
     let client = get_connected_mcp_client(state.inner(), &request.server_id).await?;
@@ -619,12 +592,12 @@ pub async fn call_mcp_tool(
             .await
             .map_err(CommandError::from_service_error)
         {
-            Ok(data) => McpToolCallResult {
+            Ok(data) => McpToolCallResultDto {
                 success: true,
                 data: Some(data),
                 error: None,
             },
-            Err(err) => McpToolCallResult {
+            Err(err) => McpToolCallResultDto {
                 success: false,
                 data: None,
                 error: Some(err.to_string()),
@@ -632,7 +605,7 @@ pub async fn call_mcp_tool(
         }
     };
 
-    write_mcp_audit(
+    write_audit_log(
         state.inner(),
         AuditAction::McpToolCall,
         Some(&audit_server_id),
@@ -662,7 +635,7 @@ pub async fn list_mcp_prompts(
             .map_err(CommandError::from_service_error)?
     };
 
-    write_mcp_audit(
+    write_audit_log(
         state.inner(),
         AuditAction::McpPromptList,
         Some(&server_id_for_audit),
@@ -708,7 +681,7 @@ pub async fn get_mcp_prompt(
             .map_err(CommandError::from_service_error)?
     };
 
-    write_mcp_audit(
+    write_audit_log(
         state.inner(),
         AuditAction::McpPromptGet,
         Some(&audit_server_id),

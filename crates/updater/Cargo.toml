@@ -11,14 +11,14 @@ serde_json.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-tempfile = "3"
-sha2 = { workspace = true }
-hex = "0.4"
+reqwest = { workspace = true, features = ["json", "rustls-tls"] }
+tempfile.workspace = true
+sha2.workspace = true
+hex.workspace = true
 tauri-plugin-updater = "2"
 
 [dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt"] }
+tokio = { workspace = true, features = ["macros", "rt"] }
 wiremock = "0.6"
 
 [build-dependencies]

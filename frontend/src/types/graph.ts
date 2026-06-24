@@ -1,6 +1,6 @@
-export type EdgeType = 'Contains' | 'References' | 'CorrelatesWith' | 'DerivesFrom' | 'Precedes' | 'Cites' | 'Annotates';
+export type EdgeType = 'contains' | 'references' | 'correlatesWith' | 'derivesFrom' | 'precedes' | 'cites' | 'annotates';
 
-export type NodeType = 'File' | 'Artifact' | 'TimelineEvent' | 'Entity' | 'Lead' | 'NotebookEntry';
+export type NodeType = 'file' | 'artifact' | 'timelineEvent' | 'entity' | 'lead' | 'notebookEntry';
 
 export interface GraphEdge {
   id: string;
@@ -54,4 +54,12 @@ export interface GraphStats {
   totalEdges: number;
   density: number;
   largestComponentSize: number;
+}
+
+export interface GraphProvenanceEntry {
+  edgeId: string;
+  sourceRuleId?: string;
+  sourceParser?: string;
+  extractionTimestamp?: string;
+  parserVersion?: string;
 }

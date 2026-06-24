@@ -5,7 +5,7 @@ import { GraphQuery } from '@/types/models';
 export function useGraphSnapshot(caseId: string) {
   return useQuery({
     queryKey: ['graph', 'snapshot', caseId],
-    queryFn: () => getGraphSnapshot(caseId),
+    queryFn: () => getGraphSnapshot(),
     enabled: Boolean(caseId),
     retry: false,
   });

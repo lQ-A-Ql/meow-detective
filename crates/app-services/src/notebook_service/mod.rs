@@ -2,6 +2,9 @@
 //! and record/list investigation steps. Uses `NotebookRepo` for persistence and
 //! converts between domain types and transport DTOs.
 
+pub mod error;
+pub use error::NotebookError;
+
 use domain::{EntryStatus, EvidenceCitation, NodeType, NotebookEntry, NotebookEntryType};
 use persistence_sqlite::repositories::notebook_repo::{
     InvestigationStep, NotebookEntryFilters, NotebookRepo, StepFilters,
@@ -129,7 +132,7 @@ pub fn create_entry(
     tags: &[String],
     status: &NotebookEntryStatusDto,
     parent_id: Option<&str>,
-) -> Result<NotebookEntryDto, String> {
+) -> Result<NotebookEntryDto, NotebookError> {
     let now = chrono::Utc::now().to_rfc3339();
     let id = Uuid::new_v4().to_string();
 
@@ -148,13 +151,11 @@ pub fn create_entry(
     };
 
     let repo = NotebookRepo::new(conn);
-    repo.create_entry(&entry)
-        .map_err(|e| format!("create notebook entry: {e}"))?;
+    repo.create_entry(&entry)?;
 
     let created = repo
-        .get_entry(&entry.id)
-        .map_err(|e| format!("fetch created entry: {e}"))?
-        .ok_or_else(|| "entry not found after creation".to_string())?;
+        .get_entry(&entry.id)?
+        .ok_or_else(|| NotebookError::NotFound("entry not found after creation".to_string()))?;
 
     Ok(entry_to_dto(&created))
 }
@@ -169,7 +170,7 @@ pub fn update_entry(
     body_markdown: Option<&str>,
     tags: Option<&[String]>,
     status: Option<&NotebookEntryStatusDto>,
-) -> Result<NotebookEntryDto, String> {
+) -> Result<NotebookEntryDto, NotebookError> {
     let now = chrono::Utc::now().to_rfc3339();
     let repo = NotebookRepo::new(conn);
 
@@ -182,13 +183,11 @@ pub fn update_entry(
         tags,
         domain_status.as_ref(),
         &now,
-    )
-    .map_err(|e| format!("update notebook entry: {e}"))?;
+    )?;
 
     let updated = repo
-        .get_entry(entry_id)
-        .map_err(|e| format!("fetch updated entry: {e}"))?
-        .ok_or_else(|| format!("entry not found: {entry_id}"))?;
+        .get_entry(entry_id)?
+        .ok_or_else(|| NotebookError::NotFound(format!("entry not found: {entry_id}")))?;
 
     Ok(entry_to_dto(&updated))
 }
@@ -198,11 +197,9 @@ pub fn list_entries(
     conn: &Connection,
     case_id: &str,
     filters: &NotebookEntryFilters,
-) -> Result<Vec<NotebookEntryDto>, String> {
+) -> Result<Vec<NotebookEntryDto>, NotebookError> {
     let repo = NotebookRepo::new(conn);
-    let entries = repo
-        .list_entries(case_id, filters)
-        .map_err(|e| format!("list notebook entries: {e}"))?;
+    let entries = repo.list_entries(case_id, filters)?;
     Ok(entries.iter().map(entry_to_dto).collect())
 }
 
@@ -210,13 +207,14 @@ pub fn list_entries(
 ///
 /// Walks up to find the root entry, then uses a recursive CTE to fetch
 /// the entire thread (root + all descendants in depth-first order).
-pub fn get_thread(conn: &Connection, entry_id: &str) -> Result<Vec<NotebookEntryDto>, String> {
+pub fn get_thread(
+    conn: &Connection,
+    entry_id: &str,
+) -> Result<Vec<NotebookEntryDto>, NotebookError> {
     let repo = NotebookRepo::new(conn);
 
     let root_id = find_root_id(&repo, entry_id)?;
-    let entries = repo
-        .get_thread(&root_id)
-        .map_err(|e| format!("get notebook thread: {e}"))?;
+    let entries = repo.get_thread(&root_id)?;
 
     Ok(entries.iter().map(entry_to_dto).collect())
 }
@@ -229,7 +227,7 @@ pub fn add_citation(
     target_node_id: &str,
     display_label: &str,
     snippet: Option<&str>,
-) -> Result<EvidenceCitationDto, String> {
+) -> Result<EvidenceCitationDto, NotebookError> {
     let now = chrono::Utc::now().to_rfc3339();
     let id = Uuid::new_v4().to_string();
 
@@ -244,8 +242,7 @@ pub fn add_citation(
     };
 
     let repo = NotebookRepo::new(conn);
-    repo.add_citation(&citation)
-        .map_err(|e| format!("add evidence citation: {e}"))?;
+    repo.add_citation(&citation)?;
 
     Ok(citation_to_dto(&citation))
 }
@@ -264,7 +261,7 @@ pub fn record_step(
     success: bool,
     error_code: Option<&str>,
     case_state_hash: Option<&str>,
-) -> Result<InvestigationStepDto, String> {
+) -> Result<InvestigationStepDto, NotebookError> {
     let id = Uuid::new_v4().to_string();
 
     let step = InvestigationStep {
@@ -280,8 +277,7 @@ pub fn record_step(
     };
 
     let repo = NotebookRepo::new(conn);
-    repo.record_step(&step)
-        .map_err(|e| format!("record investigation step: {e}"))?;
+    repo.record_step(&step)?;
 
     Ok(step_to_dto(&step))
 }
@@ -291,24 +287,21 @@ pub fn list_steps(
     conn: &Connection,
     case_id: &str,
     filters: &StepFilters,
-) -> Result<Vec<InvestigationStepDto>, String> {
+) -> Result<Vec<InvestigationStepDto>, NotebookError> {
     let repo = NotebookRepo::new(conn);
-    let steps = repo
-        .list_steps(case_id, filters)
-        .map_err(|e| format!("list investigation steps: {e}"))?;
+    let steps = repo.list_steps(case_id, filters)?;
     Ok(steps.iter().map(step_to_dto).collect())
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 /// Walk up the parent chain to find the root entry id.
-fn find_root_id(repo: &NotebookRepo, entry_id: &str) -> Result<String, String> {
+fn find_root_id(repo: &NotebookRepo, entry_id: &str) -> Result<String, NotebookError> {
     let mut current = entry_id.to_string();
     loop {
         let entry = repo
-            .get_entry(&current)
-            .map_err(|e| format!("get entry for thread: {e}"))?
-            .ok_or_else(|| format!("entry not found: {current}"))?;
+            .get_entry(&current)?
+            .ok_or_else(|| NotebookError::NotFound(format!("entry not found: {current}")))?;
         match entry.parent_id {
             Some(parent_id) => current = parent_id,
             None => return Ok(current),

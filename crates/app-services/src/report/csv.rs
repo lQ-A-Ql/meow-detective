@@ -1,6 +1,6 @@
 use super::{
     correlation_confidence_str, current_analysis, current_correlation, current_governance, html,
-    persist_report_record, prepare_report_output, write_report_atomically,
+    persist_report_record, prepare_report_output, write_report_atomically, ReportError,
 };
 use reports::CsvExporter;
 use rusqlite::Connection;
@@ -13,10 +13,10 @@ pub fn generate_csv_artifacts(
     case_id: &str,
     output_dir: &Path,
     scope: &ExportScopeDto,
-) -> Result<String, String> {
+) -> Result<String, ReportError> {
     let mut stmt = conn.prepare(
         "SELECT artifact_type, title, summary, extractor_id, extractor_version, confidence, source_attribution FROM artifacts ORDER BY created_at DESC LIMIT 1000"
-    ).map_err(|e| e.to_string())?;
+    )?;
     let rows_data: Vec<Vec<String>> = stmt
         .query_map([], |row| {
             Ok(vec![
@@ -30,10 +30,8 @@ pub fn generate_csv_artifacts(
                     .unwrap_or_default(),
                 row.get::<_, Option<String>>(6)?.unwrap_or_default(),
             ])
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<Vec<String>>, rusqlite::Error>>()
-        .map_err(|e| e.to_string())?;
+        })?
+        .collect::<Result<Vec<Vec<String>>, rusqlite::Error>>()?;
     let mut rows_data = rows_data;
     let analysis = current_analysis(conn)?;
     let governance = current_governance(conn, case_id)?;
@@ -100,7 +98,7 @@ pub fn generate_csv_artifacts(
             ],
             &rows_data,
         )
-        .map_err(|e| e.to_string())
+        .map_err(|e| ReportError::Other(e.to_string()))
     })?;
 
     persist_report_record(conn, case_id, "report-files", &file_name, "completed")?;
@@ -112,7 +110,7 @@ pub fn generate_csv_correlation(
     case_id: &str,
     output_dir: &Path,
     scope: &ExportScopeDto,
-) -> Result<String, String> {
+) -> Result<String, ReportError> {
     let correlation = current_correlation(conn)?;
 
     let rows: Vec<Vec<String>> = correlation
@@ -151,7 +149,8 @@ pub fn generate_csv_correlation(
     let file_name = format!("correlation-{}.csv", Uuid::new_v4());
     let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
     write_report_atomically(&path, scope.overwrite, |file| {
-        CsvExporter::export_correlation_leads(file, &rows).map_err(|e| e.to_string())
+        CsvExporter::export_correlation_leads(file, &rows)
+            .map_err(|e| ReportError::Other(e.to_string()))
     })?;
 
     persist_report_record(conn, case_id, "report-correlation", &file_name, "completed")?;

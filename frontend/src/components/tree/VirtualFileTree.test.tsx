@@ -26,6 +26,7 @@ describe('VirtualFileTree', () => {
       entryType: index % 7 === 0 ? 'directory' : 'file',
       hidden: false,
       system: false,
+      deleted: false,
       expanded: index % 7 === 0,
     }));
 

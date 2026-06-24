@@ -1,3 +1,4 @@
+use super::error::ImportAnalysisError;
 use super::options::ImportAnalysisOptions;
 use super::priority_queue::{PriorityTaskQueue, TaskPriority};
 use super::worker_runtime::{should_extract_artifact, FileTask, SharedAnalysisState};
@@ -19,16 +20,14 @@ pub(super) fn analysis_task_queue_bound(worker_count: usize) -> usize {
 pub(super) fn count_analysis_file_tasks(
     db_path: &Path,
     data_source_id: &DataSourceId,
-) -> Result<u64, String> {
-    let conn = persistence_sqlite::open_or_create(db_path).map_err(|e| e.to_string())?;
-    let count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM file_entries
+) -> Result<u64, ImportAnalysisError> {
+    let conn = persistence_sqlite::open_or_create(db_path)?;
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM file_entries
              WHERE data_source_id = ?1 AND LOWER(entry_type) = 'file'",
-            params![data_source_id.0],
-            |row| row.get(0),
-        )
-        .map_err(|e| e.to_string())?;
+        params![data_source_id.0],
+        |row| row.get(0),
+    )?;
     Ok(count as u64)
 }
 
@@ -37,7 +36,7 @@ pub(super) fn fetch_analysis_file_page(
     data_source_id: &DataSourceId,
     offset: u64,
     limit: u64,
-) -> Result<Vec<FileTask>, String> {
+) -> Result<Vec<FileTask>, ImportAnalysisError> {
     let mut stmt = conn
         .prepare(
             "SELECT id, parent_id, data_source_id, path, name, entry_type,
@@ -46,14 +45,11 @@ pub(super) fn fetch_analysis_file_page(
              WHERE data_source_id = ?1 AND LOWER(entry_type) = 'file'
              ORDER BY path ASC
              LIMIT ?2 OFFSET ?3",
-        )
-        .map_err(|e| e.to_string())?;
-    let rows = stmt
-        .query_map(params![data_source_id.0, limit, offset], row_to_file_task)
-        .map_err(|e| e.to_string())?;
+        )?;
+    let rows = stmt.query_map(params![data_source_id.0, limit, offset], row_to_file_task)?;
     let mut files = Vec::new();
     for row in rows {
-        files.push(row.map_err(|e| e.to_string())?);
+        files.push(row?);
     }
     Ok(files)
 }
@@ -75,8 +71,8 @@ pub(super) fn enqueue_analysis_tasks_prioritized(
     options: &ImportAnalysisOptions,
     task_tx: &Sender<FileTask>,
     shared: Arc<SharedAnalysisState>,
-) -> Result<(), String> {
-    let conn = persistence_sqlite::open_or_create(&options.db_path).map_err(|e| e.to_string())?;
+) -> Result<(), ImportAnalysisError> {
+    let conn = persistence_sqlite::open_or_create(&options.db_path)?;
     let registry = artifact_service::create_registry();
     let mut offset = 0u64;
 
@@ -111,7 +107,7 @@ pub(super) fn enqueue_analysis_tasks_prioritized(
         while let Some(task) = pq.pop() {
             task_tx
                 .send(task)
-                .map_err(|e| format!("Queue analysis task: {e}"))?;
+                .map_err(|e| ImportAnalysisError::Other(format!("Queue analysis task: {e}")))?;
             shared.queued_total.fetch_add(1, Ordering::Relaxed);
         }
 

@@ -3,8 +3,8 @@ use persistence_sqlite::DbResult;
 use rusqlite::{params, Connection};
 use std::path::Path;
 
-pub(super) const STAGING_CACHE_SIZE_KIB: i64 = 256 * 1024;
-const STAGING_MMAP_SIZE_BYTES: i64 = 256 * 1024 * 1024;
+pub(super) const STAGING_CACHE_SIZE_KIB: i64 = 16 * 1024;
+const STAGING_MMAP_SIZE_BYTES: i64 = 64 * 1024 * 1024;
 
 /// Open (or create) a staging DB for a partition.
 pub fn open_partition_staging(
@@ -53,14 +53,19 @@ fn open_staging_with_schema(path: &Path, schema: &str) -> DbResult<Connection> {
 }
 
 fn apply_staging_connection_pragmas(conn: &Connection) -> DbResult<()> {
+    // page_size must be set before the first write (journal_mode=WAL may write).
+    // locking_mode=EXCLUSIVE avoids per-transaction file lock overhead on the
+    // single-connection staging DB.
     conn.execute_batch(&format!(
-        "PRAGMA journal_mode=WAL;
+        "PRAGMA page_size=8192;
+         PRAGMA journal_mode=WAL;
          PRAGMA synchronous=OFF;
          PRAGMA temp_store=MEMORY;
          PRAGMA foreign_keys=ON;
          PRAGMA busy_timeout=5000;
          PRAGMA cache_size=-{STAGING_CACHE_SIZE_KIB};
-         PRAGMA mmap_size={STAGING_MMAP_SIZE_BYTES};"
+         PRAGMA mmap_size={STAGING_MMAP_SIZE_BYTES};
+         PRAGMA locking_mode=EXCLUSIVE;"
     ))?;
     Ok(())
 }

@@ -1,4 +1,4 @@
-export interface TimelineEventDto {
+export interface TimelineEvent {
   id: string;
   sourceObjectId: string;
   eventType: string;

@@ -12,4 +12,4 @@ thiserror.workspace = true
 domain.workspace = true
 transport.workspace = true
 persistence-sqlite.workspace = true
-rusqlite = { version = "0.31", features = ["bundled"] }
+rusqlite.workspace = true

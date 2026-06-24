@@ -7,12 +7,13 @@
 //! USRCLASS/Amcache/SECURITY field extraction, transaction-log merge, and
 //! structured warnings.
 
+use crate::registry::util::filetime_to_dt;
 use artifacts_core::{
     new_artifact, new_timeline_event, ArtifactContext, ArtifactExtractor, ArtifactSink,
     ExtractorReport,
 };
 use byteorder::{LittleEndian, ReadBytesExt};
-use chrono::{DateTime, Datelike, TimeZone, Utc};
+use chrono::Datelike;
 use domain::ArtifactFamily;
 use std::collections::BTreeMap;
 use std::io::{Read, Seek, SeekFrom};
@@ -25,15 +26,6 @@ struct RegistryHive {
 }
 
 impl RegistryExtractor {
-    fn filetime_to_dt(ft: u64) -> Option<DateTime<Utc>> {
-        if ft == 0 {
-            return None;
-        }
-        let secs = (ft / 10_000_000) as i64 - 11_644_473_600;
-        Utc.timestamp_opt(secs, ((ft % 10_000_000) * 100) as u32)
-            .single()
-    }
-
     fn parse_base_block(reader: &mut (impl Read + Seek)) -> Result<RegistryHive, String> {
         let mut magic = [0u8; 4];
         reader.read_exact(&mut magic).map_err(|e| e.to_string())?;
@@ -183,7 +175,7 @@ impl ArtifactExtractor for RegistryExtractor {
         attrs.insert("hive_name".into(), serde_json::Value::String(name.clone()));
 
         let mut timeline_events = 0;
-        if let Some(dt) = Self::filetime_to_dt(hive.last_written) {
+        if let Some(dt) = filetime_to_dt(hive.last_written) {
             if dt.year() > 2000 {
                 attrs.insert(
                     "last_written".into(),

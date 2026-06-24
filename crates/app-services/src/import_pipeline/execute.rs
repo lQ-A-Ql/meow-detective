@@ -183,33 +183,19 @@ pub fn execute_import_job_with_counts(
                 file_service::store_data_source_partitions(conn, &ds.id, &probe.partitions)
                     .map_err(CommandError::from_service_error)?;
 
-                // For MBR disks, partition_index is None. Assign unique indices based on
-                // candidate position (by offset) so that parallel enum and merge don't collide.
-                let candidate_index_map = {
-                    let mut offsets: Vec<(usize, u64)> = probe
-                        .candidates
-                        .iter()
-                        .enumerate()
-                        .map(|(i, c)| (i, c.offset))
-                        .collect();
-                    offsets.sort_by_key(|(_, o)| *o);
-                    let mut map = std::collections::HashMap::new();
-                    for (unique_idx, (orig_pos, _)) in offsets.iter().enumerate() {
-                        if probe.candidates[*orig_pos].partition_index.is_none() {
-                            map.insert(*orig_pos, unique_idx);
-                        }
-                    }
-                    map
-                };
+                let candidate_index_map =
+                    datasource_service::assign_effective_partition_indices(&probe.candidates);
 
                 let candidate_root_names = probe
                     .candidates
                     .iter()
                     .enumerate()
                     .map(|(i, candidate)| {
-                        let index = candidate
-                            .partition_index
-                            .unwrap_or_else(|| *candidate_index_map.get(&i).unwrap_or(&0));
+                        let index = datasource_service::effective_partition_index(
+                            candidate,
+                            i,
+                            &candidate_index_map,
+                        );
                         (index, format_partition_root_name(candidate))
                     })
                     .collect::<std::collections::HashMap<usize, String>>();
@@ -236,9 +222,11 @@ pub fn execute_import_job_with_counts(
 
                 // Build manifest entries for supported partitions
                 for (i, candidate) in probe.candidates.iter().enumerate() {
-                    let index = candidate
-                        .partition_index
-                        .unwrap_or_else(|| *candidate_index_map.get(&i).unwrap_or(&0));
+                    let index = datasource_service::effective_partition_index(
+                        candidate,
+                        i,
+                        &candidate_index_map,
+                    );
                     let name = format_partition_root_name(candidate);
                     manifest.partitions.push(staging::PartitionEntry {
                         index,

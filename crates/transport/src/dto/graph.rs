@@ -128,6 +128,26 @@ pub struct GraphSnapshotDto {
     pub largest_component_size: u64,
 }
 
+/// Request DTO for `get_node_neighborhood`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetNodeNeighborhoodRequest {
+    pub node_id: String,
+    #[serde(default = "default_depth")]
+    pub depth: u32,
+}
+
+fn default_depth() -> u32 {
+    1
+}
+
+/// Request DTO for `get_provenance_chain`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetProvenanceChainRequest {
+    pub edge_id: String,
+}
+
 /// Provenance entry tracing how a graph edge was created by a specific rule/parser.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]

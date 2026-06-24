@@ -1,14 +1,19 @@
-import { GraphQuery, GraphQueryResult, GraphSnapshot } from '@/types/models';
+import { GraphProvenanceEntry, GraphQuery, GraphQueryResult, GraphSnapshot } from '@/types/models';
+import { COMMANDS } from './commands';
 import { apiClient } from './client';
 
-export async function getGraphSnapshot(caseId: string): Promise<GraphSnapshot> {
-  return apiClient.request('get_graph_snapshot', { request: { caseId } });
+export async function getGraphSnapshot(): Promise<GraphSnapshot> {
+  return apiClient.request(COMMANDS.graph.GET_GRAPH_SNAPSHOT, {});
 }
 
 export async function queryGraph(query: GraphQuery): Promise<GraphQueryResult> {
-  return apiClient.request('query_graph', { request: query });
+  return apiClient.request(COMMANDS.graph.QUERY_GRAPH, { query });
 }
 
 export async function getNodeNeighborhood(nodeId: string, depth?: number): Promise<GraphQueryResult> {
-  return apiClient.request('get_node_neighborhood', { request: { nodeId, depth: depth ?? 1 } });
+  return apiClient.request(COMMANDS.graph.GET_NODE_NEIGHBORHOOD, { nodeId, depth: depth ?? 1 });
+}
+
+export async function getProvenanceChain(edgeId: string): Promise<GraphProvenanceEntry[]> {
+  return apiClient.request(COMMANDS.graph.GET_PROVENANCE_CHAIN, { edgeId });
 }

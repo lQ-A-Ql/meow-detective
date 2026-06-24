@@ -452,10 +452,11 @@ fn jc2_visibility_and_partitions() {
         "expected 3 NTFS candidates in jc2 MBR layout, got {ntfs_count}"
     );
 
-    // MBR-specific: probe.partitions is empty (partitions are not PartitionRecord entries)
-    assert!(
-        probe.partitions.is_empty(),
-        "MBR probe should have no PartitionRecord entries (GPT-only feature), got {}",
+    // MBR probe now also produces PartitionRecord entries for non-empty, non-extended partitions
+    assert_eq!(
+        probe.partitions.len(),
+        4,
+        "MBR probe should have 4 PartitionRecord entries (3 NTFS + 1 BitLocker), got {}",
         probe.partitions.len()
     );
 
@@ -630,16 +631,13 @@ fn jc2_artifact_extraction() {
         "need at least 3 NTFS partitions"
     );
 
-    // Partition index 1 is the main system drive (~580 MB offset)
-    let system = ntfs_candidates[1];
-    let system_offset = system.offset;
+    // Identify the system partition (index 1 = main system drive at ~580 MB offset)
+    let system_idx = 1usize;
+    let system_offset = ntfs_candidates[system_idx].offset;
     println!(
         "System partition: offset={} partition_index={:?}",
-        system_offset, system.partition_index
+        system_offset, ntfs_candidates[system_idx].partition_index
     );
-
-    let (mc, cs, rs, bps, mft_size) = read_mft_params_for_partition(path, system_offset);
-    println!("MFT params: cluster={mc} cs={cs} rs={rs} bps={bps} mft_size={mft_size}");
 
     // ── Create case ────────────────────────────────────────────────────────
     let tmp = TempDir::new().unwrap();
@@ -650,43 +648,59 @@ fn jc2_artifact_extraction() {
 
     active
         .with_conn(|conn| {
-            let ds_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
-            DataSourceRepo::new(conn).insert(
-                &case_id,
-                &domain::DataSource {
-                    id: ds_id.clone(),
-                    name: "jc2-system".into(),
-                    kind: domain::DataSourceKind::E01,
-                    source_path: path.to_path_buf(),
-                    imported_at: chrono::Utc::now(),
-                    provenance: domain::DataSourceProvenance::unknown(),
-                },
-            )?;
+            // ── Import MFT for ALL NTFS partitions ─────────────────────────
+            let mut ds_ids: Vec<domain::DataSourceId> = Vec::new();
+            let mut system_files = 0u64;
+            for (i, candidate) in ntfs_candidates.iter().enumerate() {
+                let ds_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
+                DataSourceRepo::new(conn).insert(
+                    &case_id,
+                    &domain::DataSource {
+                        id: ds_id.clone(),
+                        name: format!("jc2-part{i}"),
+                        kind: domain::DataSourceKind::E01,
+                        source_path: path.to_path_buf(),
+                        imported_at: chrono::Utc::now(),
+                        provenance: domain::DataSourceProvenance::unknown(),
+                    },
+                )?;
+                let (mc, cs, rs, bps, mft_size) =
+                    read_mft_params_for_partition(path, candidate.offset);
+                if i == system_idx {
+                    println!("MFT params: cluster={mc} cs={cs} rs={rs} bps={bps} mft_size={mft_size}");
+                }
+                let t0 = Instant::now();
+                let stats = file_service::enumerate_filesystem_mft(
+                    conn,
+                    &ds_id,
+                    path,
+                    candidate.offset,
+                    mc,
+                    cs,
+                    rs,
+                    bps,
+                    mft_size,
+                    Some(&|pct, msg| eprintln!("[part{i} MFT {pct}%] {msg}")),
+                    None,
+                )?;
+                println!(
+                    "MFT import part{i}: files={} dirs={} in {}ms (offset={})",
+                    stats.file_count,
+                    stats.dir_count,
+                    t0.elapsed().as_millis(),
+                    candidate.offset,
+                );
+                if i == system_idx {
+                    system_files = stats.file_count;
+                }
+                ds_ids.push(ds_id);
+            }
+            assert!(system_files > 50_000, "system partition should be large");
 
-            // ── Import MFT ────────────────────────────────────────────────
-            let t0 = Instant::now();
-            let stats = file_service::enumerate_filesystem_mft(
-                conn,
-                &ds_id,
-                path,
-                system_offset,
-                mc,
-                cs,
-                rs,
-                bps,
-                mft_size,
-                Some(&|pct, msg| eprintln!("[MFT {pct}%] {msg}")),
-                None,
-            )?;
-            println!(
-                "MFT import: files={} dirs={} in {}ms",
-                stats.file_count,
-                stats.dir_count,
-                t0.elapsed().as_millis()
-            );
-            assert!(stats.file_count > 50_000, "system partition should be large");
+            // Alias system ds_id for registry/EVTX extraction below
+            let ds_id = domain::DataSourceId(ds_ids[system_idx].0.clone());
 
-            // ── Open filesystem ────────────────────────────────────────────
+            // ── Open system filesystem for registry/EVTX ───────────────────
             let boxed: Box<dyn evidence_core::EvidenceReader> =
                 Box::new(E01Reader::open(path).unwrap());
             let fs = fs_ntfs::NtfsReader::open(boxed, system_offset).unwrap();
@@ -831,11 +845,27 @@ fn jc2_artifact_extraction() {
                 println!("  stored {} EVTX boot/shutdown artifacts", evtx_artifacts.len());
             }
 
-            // ── Extract Browser history artifacts ─────────────────────────
+            // ── Extract Browser history artifacts across ALL partitions ───
             let mut browser_artifacts: Vec<domain::Artifact> = Vec::new();
 
-            // Walk Users directory for browser history databases
-            if let Ok(users_children) = fs.list_children("Users") {
+            // Scan each NTFS partition for user browser databases
+            for (part_idx, candidate) in ntfs_candidates.iter().enumerate() {
+                let part_fs = match fs_ntfs::NtfsReader::open(
+                    Box::new(E01Reader::open(path).unwrap()) as Box<dyn evidence_core::EvidenceReader>,
+                    candidate.offset,
+                ) {
+                    Ok(f) => f,
+                    Err(_) => continue, // skip non-NTFS or unreadable partitions
+                };
+                let users_children = match part_fs.list_children("Users") {
+                    Ok(u) => u,
+                    Err(_) => continue, // no Users directory on this partition
+                };
+                println!(
+                    "  scanning partition {part_idx} (offset={}) for browser databases",
+                    candidate.offset
+                );
+
                 for user_entry in &users_children {
                     if !user_entry.is_dir
                         || user_entry.name == "Public"
@@ -851,7 +881,7 @@ fn jc2_artifact_extraction() {
                     );
 
                     let mut buf = Vec::new();
-                    if fs
+                    if part_fs
                         .open_file(&chrome_history)
                         .and_then(|mut f| f.read_to_end(&mut buf))
                         .is_ok()
@@ -899,7 +929,7 @@ fn jc2_artifact_extraction() {
                                         visit.url, visit.visit_count
                                     ),
                                     source_object_id: Some(domain::FileEntryId(
-                                        "jc2-browser-chrome".to_string(),
+                                        format!("jc2-part{part_idx}-browser-chrome"),
                                     )),
                                     extractor_id: Some("browser.chromium.history".to_string()),
                                     extractor_version: Some("1.0".to_string()),
@@ -925,7 +955,7 @@ fn jc2_artifact_extraction() {
                         user_entry.path
                     );
                     buf.clear();
-                    if fs
+                    if part_fs
                         .open_file(&edge_history)
                         .and_then(|mut f| f.read_to_end(&mut buf))
                         .is_ok()
@@ -973,7 +1003,7 @@ fn jc2_artifact_extraction() {
                                         visit.url, visit.visit_count
                                     ),
                                     source_object_id: Some(domain::FileEntryId(
-                                        "jc2-browser-edge".to_string(),
+                                        format!("jc2-part{part_idx}-browser-edge"),
                                     )),
                                     extractor_id: Some("browser.chromium.history".to_string()),
                                     extractor_version: Some("1.0".to_string()),
@@ -993,10 +1023,13 @@ fn jc2_artifact_extraction() {
                         }
                     }
 
-                    // Early limit per user to avoid excessive memory
+                    // Early limit to avoid excessive memory
                     if browser_artifacts.len() > 5000 {
                         break;
                     }
+                }
+                if browser_artifacts.len() > 5000 {
+                    break;
                 }
             }
 

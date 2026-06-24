@@ -1,3 +1,4 @@
+use super::error::ImportAnalysisError;
 use super::options::{AnalysisProgressCallback, ImportAnalysisOptions, ImportAnalysisStats};
 use super::progress::{current_rss_mb, rows_per_sec};
 use super::worker_runtime::clear_analysis_worker_rows;
@@ -16,7 +17,7 @@ pub(super) fn merge_finished_analysis_staging(
     mut stats: ImportAnalysisStats,
     progress_cb: Option<AnalysisProgressCallback<'_>>,
     analysis_started: Instant,
-) -> Result<ImportAnalysisStats, String> {
+) -> Result<ImportAnalysisStats, ImportAnalysisError> {
     if let Some(cb) = progress_cb {
         cb(
             84,
@@ -35,7 +36,7 @@ pub(super) fn merge_finished_analysis_staging(
     }
     let merge_started = Instant::now();
     let merge_stats = staging::merge_analysis_staging_to_main(
-        &persistence_sqlite::open_or_create(&options.db_path).map_err(|e| e.to_string())?,
+        &persistence_sqlite::open_or_create(&options.db_path)?,
         &options.case_root,
         &options.data_source_id.0,
         worker_ids,
@@ -56,7 +57,8 @@ pub(super) fn merge_finished_analysis_staging(
                 );
             }
         }),
-    )?;
+    )
+    .map_err(ImportAnalysisError::Staging)?;
     stats.artifact_count = merge_stats.artifact_count;
     stats.timeline_count = merge_stats.timeline_count;
     stats.indexed_count = merge_stats.indexed_count;
@@ -84,7 +86,7 @@ pub(super) fn prepare_analysis_staging_startup(
     worker_ids: &[usize],
     worker_count: usize,
     progress_cb: Option<AnalysisProgressCallback<'_>>,
-) -> Result<AnalysisStartupAction, String> {
+) -> Result<AnalysisStartupAction, ImportAnalysisError> {
     let existing_ids = discover_analysis_worker_ids(&options.case_root, &options.data_source_id.0)?;
     let existing = load_existing_analysis_workers(options, &existing_ids)?;
 
@@ -144,7 +146,9 @@ pub(super) fn prepare_analysis_staging_startup(
     }
     for worker_id in stale_extra_ids {
         remove_analysis_worker_db_files(&options.case_root, &options.data_source_id.0, worker_id)
-            .map_err(|e| format!("Remove stale analysis staging {worker_id}: {e}"))?;
+            .map_err(|e| {
+            ImportAnalysisError::Other(format!("Remove stale analysis staging {worker_id}: {e}"))
+        })?;
     }
 
     for worker_id in worker_ids {
@@ -153,11 +157,15 @@ pub(super) fn prepare_analysis_staging_startup(
             &options.data_source_id.0,
             *worker_id,
         )
-        .map_err(|e| format!("Open analysis staging {worker_id}: {e}"))?;
-        clear_analysis_worker_rows(&conn)
-            .map_err(|e| format!("Clear analysis staging {worker_id}: {e}"))?;
-        init_analysis_worker_meta(&conn, worker_count, "pending")
-            .map_err(|e| format!("Init analysis staging {worker_id}: {e}"))?;
+        .map_err(|e| {
+            ImportAnalysisError::Staging(format!("Open analysis staging {worker_id}: {e}"))
+        })?;
+        clear_analysis_worker_rows(&conn).map_err(|e| {
+            ImportAnalysisError::Staging(format!("Clear analysis staging {worker_id}: {e}"))
+        })?;
+        init_analysis_worker_meta(&conn, worker_count, "pending").map_err(|e| {
+            ImportAnalysisError::Staging(format!("Init analysis staging {worker_id}: {e}"))
+        })?;
     }
 
     Ok(AnalysisStartupAction::RunWorkers)
@@ -166,15 +174,18 @@ pub(super) fn prepare_analysis_staging_startup(
 pub(super) fn discover_analysis_worker_ids(
     case_root: &Path,
     data_source_id: &str,
-) -> Result<Vec<usize>, String> {
+) -> Result<Vec<usize>, ImportAnalysisError> {
     let dir = staging::staging_dir(case_root, data_source_id);
     if !dir.exists() {
         return Ok(Vec::new());
     }
 
     let mut worker_ids = Vec::new();
-    for entry in std::fs::read_dir(&dir).map_err(|e| format!("Read staging dir: {e}"))? {
-        let entry = entry.map_err(|e| format!("Read staging entry: {e}"))?;
+    for entry in std::fs::read_dir(&dir)
+        .map_err(|e| ImportAnalysisError::Other(format!("Read staging dir: {e}")))?
+    {
+        let entry =
+            entry.map_err(|e| ImportAnalysisError::Other(format!("Read staging entry: {e}")))?;
         let file_name = entry.file_name();
         let Some(file_name) = file_name.to_str() else {
             continue;
@@ -197,7 +208,7 @@ pub(super) fn discover_analysis_worker_ids(
 fn load_existing_analysis_workers(
     options: &ImportAnalysisOptions,
     worker_ids: &[usize],
-) -> Result<Vec<ExistingAnalysisWorker>, String> {
+) -> Result<Vec<ExistingAnalysisWorker>, ImportAnalysisError> {
     let mut workers = Vec::with_capacity(worker_ids.len());
     for worker_id in worker_ids {
         let conn = staging::open_analysis_staging(
@@ -205,15 +216,26 @@ fn load_existing_analysis_workers(
             &options.data_source_id.0,
             *worker_id,
         )
-        .map_err(|e| format!("Open analysis staging {worker_id}: {e}"))?;
-        let status = staging::get_worker_meta(&conn, "status")
-            .map_err(|e| format!("Read analysis staging status {worker_id}: {e}"))?;
+        .map_err(|e| {
+            ImportAnalysisError::Staging(format!("Open analysis staging {worker_id}: {e}"))
+        })?;
+        let status = staging::get_worker_meta(&conn, "status").map_err(|e| {
+            ImportAnalysisError::Staging(format!("Read analysis staging status {worker_id}: {e}"))
+        })?;
         let merged = staging::get_worker_meta(&conn, "merged")
-            .map_err(|e| format!("Read analysis staging merge flag {worker_id}: {e}"))?
+            .map_err(|e| {
+                ImportAnalysisError::Staging(format!(
+                    "Read analysis staging merge flag {worker_id}: {e}"
+                ))
+            })?
             .as_deref()
             == Some("true");
         let worker_count = staging::get_worker_meta(&conn, "worker_count")
-            .map_err(|e| format!("Read analysis staging worker count {worker_id}: {e}"))?
+            .map_err(|e| {
+                ImportAnalysisError::Staging(format!(
+                    "Read analysis staging worker count {worker_id}: {e}"
+                ))
+            })?
             .and_then(|value| value.parse::<usize>().ok());
         workers.push(ExistingAnalysisWorker {
             worker_id: *worker_id,
@@ -255,7 +277,7 @@ fn remove_analysis_worker_db_files(
 pub(super) fn collect_done_worker_stats(
     options: &ImportAnalysisOptions,
     worker_ids: &[usize],
-) -> Result<ImportAnalysisStats, String> {
+) -> Result<ImportAnalysisStats, ImportAnalysisError> {
     let mut stats = ImportAnalysisStats {
         worker_ids: worker_ids.to_vec(),
         ..ImportAnalysisStats::default()
@@ -274,7 +296,9 @@ pub(super) fn collect_done_worker_stats(
             &options.data_source_id.0,
             *worker_id,
         )
-        .map_err(|e| format!("Open analysis staging {worker_id}: {e}"))?;
+        .map_err(|e| {
+            ImportAnalysisError::Staging(format!("Open analysis staging {worker_id}: {e}"))
+        })?;
         stats.processed_count += worker_meta_u64(&conn, "processed_count")?;
         stats.warning_count = stats
             .warning_count
@@ -292,13 +316,13 @@ pub(super) fn collect_done_worker_stats(
     Ok(stats)
 }
 
-fn worker_meta_u64(conn: &Connection, key: &str) -> Result<u64, String> {
+fn worker_meta_u64(conn: &Connection, key: &str) -> Result<u64, ImportAnalysisError> {
     Ok(staging::get_worker_meta(conn, key)
-        .map_err(|e| format!("Read worker meta {key}: {e}"))?
+        .map_err(|e| ImportAnalysisError::Staging(format!("Read worker meta {key}: {e}")))?
         .and_then(|value| value.parse::<u64>().ok())
         .unwrap_or(0))
 }
 
-fn worker_meta_u32(conn: &Connection, key: &str) -> Result<u32, String> {
+fn worker_meta_u32(conn: &Connection, key: &str) -> Result<u32, ImportAnalysisError> {
     Ok(worker_meta_u64(conn, key)?.min(u32::MAX as u64) as u32)
 }

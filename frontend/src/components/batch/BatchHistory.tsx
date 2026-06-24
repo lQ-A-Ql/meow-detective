@@ -5,7 +5,7 @@ import { Badge } from '@/app/components/ui/badge';
 import { Progress } from '@/app/components/ui/progress';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { DenseDataTable, type DenseColumn } from '@/components/tables/DenseDataTable';
-import type { BatchJob, BatchJobStatus } from '@/types/models';
+import type { BatchJob, BatchJobStatus, BatchPhaseState } from '@/types/models';
 
 interface BatchHistoryProps {
   jobs: BatchJob[];
@@ -21,14 +21,13 @@ const STATUS_CONFIG: Record<BatchJobStatus, { badge: 'default' | 'secondary' | '
   cancelled: { badge: 'secondary' as const, label: 'Cancelled', icon: <AlertTriangle size={12} /> },
 };
 
-function formatDurationMs(ms?: number): string {
-  if (ms == null) return '--';
-  const seconds = Math.floor(ms / 1000);
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
-}
+const PHASE_STATE_CONFIG: Record<BatchPhaseState, { badge: 'default' | 'secondary' | 'destructive' | 'outline'; label: string; icon: React.ReactNode }> = {
+  pending: { badge: 'secondary' as const, label: 'Pending', icon: <Clock size={12} /> },
+  running: { badge: 'default' as const, label: 'Running', icon: <Clock size={12} /> },
+  completed: { badge: 'outline' as const, label: 'Completed', icon: <CheckCircle2 size={12} className="text-green-600" /> },
+  failed: { badge: 'destructive' as const, label: 'Failed', icon: <XCircle size={12} className="text-destructive" /> },
+  skipped: { badge: 'secondary' as const, label: 'Skipped', icon: <AlertTriangle size={12} /> },
+};
 
 export function BatchHistory({ jobs, onSelectJob }: BatchHistoryProps) {
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
@@ -40,20 +39,11 @@ export function BatchHistory({ jobs, onSelectJob }: BatchHistoryProps) {
     sorted.sort((a, b) => {
       let comparison;
       switch (sortKey) {
-        case 'name':
-          comparison = a.name.localeCompare(b.name);
+        case 'label':
+          comparison = a.label.localeCompare(b.label);
           break;
         case 'status':
           comparison = a.status.localeCompare(b.status);
-          break;
-        case 'duration':
-          comparison = (a.elapsedMs ?? 0) - (b.elapsedMs ?? 0);
-          break;
-        case 'fileCount':
-          comparison = a.fileCount - b.fileCount;
-          break;
-        case 'artifactCount':
-          comparison = a.artifactCount - b.artifactCount;
           break;
         case 'createdAt':
         default:
@@ -67,14 +57,14 @@ export function BatchHistory({ jobs, onSelectJob }: BatchHistoryProps) {
 
   const columns: DenseColumn<BatchJob>[] = [
     {
-      key: 'name',
+      key: 'label',
       title: 'Name',
       sortable: true,
-      sortKey: 'name',
+      sortKey: 'label',
       className: 'w-[240px]',
       render: (row) => (
         <div className="flex items-center gap-1.5">
-          <span className="truncate font-medium">{row.name}</span>
+          <span className="truncate font-medium">{row.label}</span>
         </div>
       ),
     },
@@ -93,32 +83,6 @@ export function BatchHistory({ jobs, onSelectJob }: BatchHistoryProps) {
           </Badge>
         );
       },
-    },
-    {
-      key: 'duration',
-      title: 'Duration',
-      sortable: true,
-      sortKey: 'duration',
-      className: 'w-[90px]',
-      render: (row) => (
-        <span className="font-mono text-[11px]">{formatDurationMs(row.elapsedMs)}</span>
-      ),
-    },
-    {
-      key: 'fileCount',
-      title: 'Files',
-      sortable: true,
-      sortKey: 'fileCount',
-      className: 'w-[80px]',
-      render: (row) => <span className="font-mono text-[11px]">{row.fileCount.toLocaleString()}</span>,
-    },
-    {
-      key: 'artifactCount',
-      title: 'Artifacts',
-      sortable: true,
-      sortKey: 'artifactCount',
-      className: 'w-[80px]',
-      render: (row) => <span className="font-mono text-[11px]">{row.artifactCount.toLocaleString()}</span>,
     },
     {
       key: 'createdAt',
@@ -185,29 +149,27 @@ export function BatchHistory({ jobs, onSelectJob }: BatchHistoryProps) {
           <div className="border-t px-6 pb-4 pt-3">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[12px] font-medium">{expandedJob.name} - Phases</span>
+                <span className="text-[12px] font-medium">{expandedJob.label} - Phases</span>
                 <span className="font-mono text-[11px] text-muted-foreground">
-                  {expandedJob.plan.dataSourceCount} source{expandedJob.plan.dataSourceCount !== 1 ? 's' : ''}
+                  {expandedJob.plan.dataSourceRefs.length} source
+                  {expandedJob.plan.dataSourceRefs.length !== 1 ? 's' : ''}
                   {' · '}
-                  {expandedJob.plan.resourceLimits.memoryMb} MB / {expandedJob.plan.resourceLimits.threadCount} threads
+                  {expandedJob.plan.resourceLimits.maxMemoryMb} MB / {expandedJob.plan.resourceLimits.maxThreads} threads
                 </span>
               </div>
               <ScrollArea className="max-h-48">
                 <div className="space-y-1.5">
                   {expandedJob.phases.map((phase) => {
-                    const config = STATUS_CONFIG[phase.state as BatchJobStatus] ?? STATUS_CONFIG.pending;
+                    const config = PHASE_STATE_CONFIG[phase.state];
                     return (
                       <div
-                        key={phase.phase}
+                        key={phase.kind}
                         className="flex items-center gap-3 rounded border px-3 py-2"
                       >
                         <div className="shrink-0">{config.icon}</div>
-                        <div className="min-w-[100px] text-[12px] font-medium">{phase.phase}</div>
+                        <div className="min-w-[100px] text-[12px] font-medium">{phase.kind}</div>
                         <div className="flex-1 space-y-1">
                           <Progress value={phase.progress} className="h-1" />
-                          {phase.detail && (
-                            <p className="truncate text-[11px] text-muted-foreground">{phase.detail}</p>
-                          )}
                         </div>
                         <Badge variant={config.badge} className="shrink-0 text-[10px]">
                           {config.label}

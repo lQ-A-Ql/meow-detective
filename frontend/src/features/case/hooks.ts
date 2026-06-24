@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import {
   closeCase,
   createAnalysisDemoCase,
@@ -102,7 +103,7 @@ export function useDeleteCase() {
       qc.invalidateQueries();
     },
     onError: (error: Error) => {
-      alert(`删除案件失败: ${error.message}`);
+      toast.error(`删除案件失败: ${error.message}`);
     },
   });
 }
@@ -122,7 +123,7 @@ export function useDeleteDataSource() {
       qc.invalidateQueries({ queryKey: ['search'] });
     },
     onError: (error: Error) => {
-      alert(`删除数据源失败: ${error.message}`);
+      toast.error(`删除数据源失败: ${error.message}`);
     },
   });
 }

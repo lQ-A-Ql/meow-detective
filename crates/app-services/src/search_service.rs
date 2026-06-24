@@ -9,6 +9,17 @@ use transport::dto::{
 
 use crate::performance::{measure_rows, metric, report, PerfSample};
 
+/// Typed error for search service operations.
+#[derive(Debug, thiserror::Error)]
+pub enum SearchError {
+    #[error("database error: {0}")]
+    Db(#[from] persistence_sqlite::DbError),
+    #[error("search index error: {0}")]
+    Index(String),
+    #[error("{0}")]
+    Other(String),
+}
+
 #[derive(Debug, Clone)]
 pub struct IndexStats {
     pub indexed_count: u64,
@@ -34,7 +45,7 @@ pub fn index_files(
     index_dir: &Path,
     file_ids: &[FileEntryId],
     reader_fn: impl Fn(&FileEntryId) -> Option<Box<dyn std::io::Read>>,
-) -> Result<IndexStats, String> {
+) -> Result<IndexStats, SearchError> {
     let repo = FileRepo::new(conn);
     let mut texts = Vec::new();
     let mut paths = Vec::new();
@@ -43,10 +54,7 @@ pub fn index_files(
     let failed_count = 0u32;
 
     for file_id in file_ids {
-        let entry = match repo.find_by_id(file_id) {
-            Ok(entry) => entry,
-            Err(e) => return Err(e.to_string()),
-        };
+        let entry = repo.find_by_id(file_id)?;
         if let Some(entry) = entry {
             if entry.entry_type == EntryType::Directory {
                 continue;
@@ -81,10 +89,10 @@ pub fn index_files(
         });
     }
 
-    let index = SearchIndex::create(index_dir).map_err(|e| e.to_string())?;
+    let index = SearchIndex::create(index_dir).map_err(|e| SearchError::Index(e.to_string()))?;
     let count = index
         .index_documents(&texts, &paths)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| SearchError::Index(e.to_string()))?;
 
     Ok(IndexStats {
         indexed_count: count,
@@ -99,7 +107,7 @@ pub fn index_files_instrumented(
     index_dir: &Path,
     file_ids: &[FileEntryId],
     reader_fn: impl Fn(&FileEntryId) -> Option<Box<dyn std::io::Read>>,
-) -> Result<InstrumentedIndexStats, String> {
+) -> Result<InstrumentedIndexStats, SearchError> {
     let (stats, sample) = measure_rows(file_ids.len() as u64, || {
         index_files(conn, index_dir, file_ids, reader_fn)
     });
@@ -120,14 +128,14 @@ pub fn search_files_real(
     query: &str,
     offset: u64,
     limit: u32,
-) -> Result<SearchResultPageDto, String> {
-    let index = SearchIndex::open(index_dir).map_err(|e| e.to_string())?;
+) -> Result<SearchResultPageDto, SearchError> {
+    let index = SearchIndex::open(index_dir).map_err(|e| SearchError::Index(e.to_string()))?;
     let start = std::time::Instant::now();
     // Request more results than needed to support offset
     let search_limit = (offset + limit as u64).min(1000) as usize;
     let SearchResult { hits, total_count } = index
         .search(query, search_limit)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| SearchError::Index(e.to_string()))?;
     let took_ms = start.elapsed().as_millis() as u64;
 
     // Apply offset
@@ -179,7 +187,7 @@ pub fn search_files_real_instrumented(
     query: &str,
     offset: u64,
     limit: u32,
-) -> Result<InstrumentedSearchResult, String> {
+) -> Result<InstrumentedSearchResult, SearchError> {
     let (page, sample) = measure_rows(0, || search_files_real(index_dir, query, offset, limit));
     let page = page?;
     let sample = PerfSample {

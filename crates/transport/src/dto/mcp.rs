@@ -74,21 +74,21 @@ pub struct McpPromptArgumentDto {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct McpToolCallRequest {
+pub struct McpToolCallRequestDto {
     pub server_id: String,
     pub tool_name: String,
     pub arguments: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct McpToolCallResult {
+pub struct McpToolCallResultDto {
     pub success: bool,
     pub data: Option<serde_json::Value>,
     pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct McpTestConnectionRequest {
+pub struct McpTestConnectionRequestDto {
     pub transport_type: String,
     pub url: Option<String>,
     pub command: Option<String>,
@@ -98,7 +98,7 @@ pub struct McpTestConnectionRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct McpTestConnectionResult {
+pub struct McpTestConnectionResultDto {
     pub success: bool,
     pub error: Option<String>,
     pub capabilities: Option<McpCapabilitiesDto>,
@@ -178,7 +178,7 @@ mod tests {
             "arguments": { "query": "mft" }
         });
 
-        let request: McpToolCallRequest =
+        let request: McpToolCallRequestDto =
             serde_json::from_value(value).expect("deserialize tool call request");
 
         assert_eq!(request.server_id, "srv-1");
@@ -194,7 +194,7 @@ mod tests {
             "arguments": { "query": "mft" }
         });
 
-        let request: McpToolCallRequest =
+        let request: McpToolCallRequestDto =
             serde_json::from_value(value).expect("deserialize tool call request");
 
         assert_eq!(request.server_id, "srv-1");
@@ -217,7 +217,7 @@ mod tests {
             }
         });
 
-        let request: McpTestConnectionRequest =
+        let request: McpTestConnectionRequestDto =
             serde_json::from_value(value).expect("deserialize test connection request");
 
         assert_eq!(request.transport_type, "sse");

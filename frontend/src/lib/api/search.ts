@@ -1,3 +1,4 @@
+import { COMMANDS } from './commands';
 import { apiClient } from './client';
 import { SearchResultPage } from '@/types/models';
 
@@ -12,5 +13,5 @@ export async function searchFiles(
   offset: number = 0,
   limit: number = 50,
 ): Promise<SearchResultPage> {
-  return apiClient.request('search_files_request', { request: { query, offset, limit } });
+  return apiClient.request(COMMANDS.search.SEARCH_FILES_REQUEST, { request: { query, offset, limit } });
 }

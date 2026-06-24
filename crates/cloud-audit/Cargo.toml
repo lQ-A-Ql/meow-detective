@@ -11,4 +11,4 @@ serde_json.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
-csv = "1"
+csv.workspace = true

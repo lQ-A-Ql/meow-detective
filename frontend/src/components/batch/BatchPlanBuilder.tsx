@@ -6,7 +6,7 @@ import { Checkbox } from '@/app/components/ui/checkbox';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Badge } from '@/app/components/ui/badge';
-import type { BatchPhaseName, BatchPlan, DataSourceSummary, ResourceLimits } from '@/types/models';
+import type { BatchPhaseName, BatchPlanInput, DataSourceSummary, BatchResourceLimits } from '@/types/models';
 
 const ALL_PHASES: { key: BatchPhaseName; label: string; description: string }[] = [
   { key: 'Mount', label: 'Mount', description: 'Attach and mount evidence data sources' },
@@ -17,14 +17,14 @@ const ALL_PHASES: { key: BatchPhaseName; label: string; description: string }[] 
   { key: 'Export', label: 'Export', description: 'Generate and export reports' },
 ];
 
-const DEFAULT_RESOURCE_LIMITS: ResourceLimits = {
-  memoryMb: 4096,
-  threadCount: 4,
+const DEFAULT_RESOURCE_LIMITS: BatchResourceLimits = {
+  maxMemoryMb: 4096,
+  maxThreads: 4,
 };
 
 interface BatchPlanBuilderProps {
   dataSources: DataSourceSummary[];
-  onStart: (plan: BatchPlan) => void;
+  onStart: (plan: BatchPlanInput) => void;
   onCancel: () => void;
   isStarting?: boolean;
 }
@@ -37,7 +37,7 @@ export function BatchPlanBuilder({ dataSources, onStart, onCancel, isStarting }:
   const [selectedPhases, setSelectedPhases] = useState<Set<BatchPhaseName>>(
     new Set<BatchPhaseName>(['Mount', 'Catalog', 'ExtractArtifacts', 'Index', 'Correlate', 'Export']),
   );
-  const [resourceLimits, setResourceLimits] = useState<ResourceLimits>(DEFAULT_RESOURCE_LIMITS);
+  const [resourceLimits, setResourceLimits] = useState<BatchResourceLimits>(DEFAULT_RESOURCE_LIMITS);
   const [planName, setPlanName] = useState('');
 
   const toggleDataSource = useCallback((id: string) => {
@@ -89,14 +89,14 @@ export function BatchPlanBuilder({ dataSources, onStart, onCancel, isStarting }:
       case 2:
         return selectedPhases.size > 0;
       case 3:
-        return resourceLimits.memoryMb >= 256 && resourceLimits.threadCount >= 1;
+        return (resourceLimits.maxMemoryMb ?? 0) >= 256 && (resourceLimits.maxThreads ?? 0) >= 1;
       default:
         return true;
     }
   };
 
   const handleStart = () => {
-    const plan: BatchPlan = {
+    const plan: BatchPlanInput = {
       name: planName.trim(),
       dataSourceIds: Array.from(selectedDataSourceIds),
       phases: Array.from(selectedPhases),
@@ -234,11 +234,11 @@ export function BatchPlanBuilder({ dataSources, onStart, onCancel, isStarting }:
                 type="number"
                 min={256}
                 step={256}
-                value={resourceLimits.memoryMb}
+                value={resourceLimits.maxMemoryMb ?? ''}
                 onChange={(e) =>
                   setResourceLimits((prev) => ({
                     ...prev,
-                    memoryMb: Math.max(256, parseInt(e.target.value, 10) || 256),
+                    maxMemoryMb: Math.max(256, parseInt(e.target.value, 10) || 256),
                   }))
                 }
                 className="text-[12px]"
@@ -257,11 +257,11 @@ export function BatchPlanBuilder({ dataSources, onStart, onCancel, isStarting }:
                 min={1}
                 max={64}
                 step={1}
-                value={resourceLimits.threadCount}
+                value={resourceLimits.maxThreads ?? ''}
                 onChange={(e) =>
                   setResourceLimits((prev) => ({
                     ...prev,
-                    threadCount: Math.min(64, Math.max(1, parseInt(e.target.value, 10) || 1)),
+                    maxThreads: Math.min(64, Math.max(1, parseInt(e.target.value, 10) || 1)),
                   }))
                 }
                 className="text-[12px]"
@@ -299,11 +299,11 @@ export function BatchPlanBuilder({ dataSources, onStart, onCancel, isStarting }:
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-muted-foreground">Memory</span>
-                <span className="text-[12px] font-mono">{resourceLimits.memoryMb} MB</span>
+                <span className="text-[12px] font-mono">{resourceLimits.maxMemoryMb} MB</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-muted-foreground">Threads</span>
-                <span className="text-[12px] font-mono">{resourceLimits.threadCount}</span>
+                <span className="text-[12px] font-mono">{resourceLimits.maxThreads}</span>
               </div>
             </div>
             <div className="rounded bg-muted/50 p-3 text-[11px] text-muted-foreground">

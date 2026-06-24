@@ -5,7 +5,7 @@ export interface FileTreeNode {
   hasChildren: boolean;
   entryType?: 'file' | 'directory';
   size?: number;
-  deleted?: boolean;
+  deleted: boolean;
   hidden: boolean;
   system: boolean;
   nodeType?: string;

@@ -14,23 +14,23 @@ anyhow.workspace = true
 domain.workspace = true
 artifacts-core.workspace = true
 tracing.workspace = true
-byteorder = "1"
+byteorder.workspace = true
 evtx.workspace = true
-rusqlite = { version = "0.31", features = ["bundled"] }
-tempfile = "3"
+rusqlite.workspace = true
+tempfile.workspace = true
 lz4_flex = { workspace = true }
 binread = { workspace = true }
-hex = "0.4"
+hex.workspace = true
 md-5 = { workspace = true }
 des = { workspace = true }
 aes = { workspace = true }
 cipher = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_Compression"] }
+windows-sys.workspace = true
 
 [dev-dependencies]
-tempfile = "3"
+tempfile.workspace = true
 serde = { workspace = true }
 serde_json = { workspace = true }
 testing = { workspace = true }

@@ -111,7 +111,7 @@ powershell -ExecutionPolicy Bypass -File scripts/check-deny-exceptions.ps1
   - All serializable API types live in `crates/transport/src/dto/`. Never define them in other crates.
   - DTOs use `#[serde(rename_all = "camelCase")]`.
   - Optional fields use `#[serde(skip_serializing_if = "Option::is_none")]`.
-  - Rust DTO types end in `Dto` (`CaseSummaryDto`); frontend interfaces usually drop the suffix (`CaseSummary`), except `TimelineEventDto` which kept it.
+  - Rust DTO types end in `Dto` (`CaseSummaryDto`); frontend interfaces drop the suffix (`CaseSummary`).
 
 ### Frontend
 
@@ -268,14 +268,14 @@ Backend → Frontend via Tauri `emit`. Topics are string constants in `crates/tr
 | Count | Location | Notes |
 |-------|----------|-------|
 | 38 crates | `Cargo.toml` workspace members + `apps/desktop/src-tauri` | Includes 37 library crates and the Tauri shell |
-| 85 Tauri commands | `apps/desktop/src-tauri/src/commands/**/*.rs` | Registered in `src/lib.rs` |
+| 93 Tauri commands | `apps/desktop/src-tauri/src/commands/**/*.rs` | Registered in `src/lib.rs` |
 | 12 SQLite repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` | |
 | 31 migration scripts | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | `0001`–`0030` plus `staging_001.sql` |
 | 10 frontend pages | `frontend/src/app/pages/*.tsx` (excluding `*.test.tsx`) | Includes V2 Workbench and V3 Dashboard |
-| 32 frontend test files | `frontend/src/**/*.test.{ts,tsx}` | |
-| ~1,757 Rust tests | `cargo test --workspace` (calibrated 2026-06) | |
+| 36 frontend test files | `frontend/src/**/*.test.{ts,tsx}` | |
+| ~1,876 Rust tests | `cargo test --workspace` (calibrated 2026-06) | |
 | 18 event topics | `crates/transport/src/events/mod.rs` | |
-| 25 DTO domain files | `crates/transport/src/dto/*.rs` | |
+| 32 DTO domain files | `crates/transport/src/dto/*.rs` | |
 
 ### Crate roles
 
@@ -433,3 +433,5 @@ Governance fact sources (embedded at compile time, drive `/v2` governance snapsh
 19. **No direct SQL in commands**: Keep SQL in repositories / services. `check-command-sql-boundary.ps1` enforces this.
 
 20. **Chinese docs are authoritative for several topics**: `docs/development-engineering-guide.md`, `docs/design-constraints.md`, `docs/engineering-audit-plan.md`, and `docs/documentation-index.md` contain authoritative engineering constraints. If a Chinese doc conflicts with an older English doc, the Chinese engineering doc and `AGENTS.md` take precedence.
+
+21. **MCP DTOs use snake_case intentionally**: The 12 DTOs in `crates/transport/src/dto/mcp.rs` intentionally lack `#[serde(rename_all = "camelCase")]`. This is guarded by `check-stage5-regression-guard.ps1`. Frontend uses `*ProtocolDto` interfaces to adapt. Do NOT add camelCase to MCP DTOs without updating the regression guard and frontend normalizer.

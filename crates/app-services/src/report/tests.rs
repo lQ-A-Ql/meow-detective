@@ -309,7 +309,7 @@ fn report_export_returns_error_when_history_insert_fails() {
     let error =
         generate_html_report(&conn, &case, tmp.path(), &ExportScopeDto::default()).unwrap_err();
 
-    assert!(error.contains("reports"));
+    assert!(error.to_string().contains("reports"));
 }
 
 #[test]

@@ -29,9 +29,10 @@
 //! Windows-version-specific extensions; the parser is lenient where possible.
 
 use byteorder::{LittleEndian, ReadBytesExt};
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 use std::io::{Cursor, Read, Seek, SeekFrom};
 
+use crate::registry::util::filetime_to_dt;
 use crate::registry::RegistryError;
 
 // ---------------------------------------------------------------------------
@@ -400,12 +401,6 @@ pub fn parse_and_merge_txlogs(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-fn filetime_to_dt(ft: u64) -> Option<DateTime<Utc>> {
-    let secs = (ft / 10_000_000) as i64 - 11_644_473_600;
-    Utc.timestamp_opt(secs, ((ft % 10_000_000) * 100) as u32)
-        .single()
-}
 
 fn read_utf16_string(cursor: &mut Cursor<&[u8]>, code_units: usize) -> Result<String, String> {
     let byte_len = code_units

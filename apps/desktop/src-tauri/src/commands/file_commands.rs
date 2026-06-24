@@ -8,7 +8,7 @@
 
 use app_services::{file_service, text_service::TextService};
 use base64::Engine;
-use persistence_sqlite::repositories::audit_repo::{AuditAction, AuditRepo};
+use persistence_sqlite::repositories::audit_repo::AuditAction;
 use std::io::Read;
 use std::io::Write;
 use tauri::State;
@@ -28,35 +28,8 @@ use transport::{
 #[cfg(test)]
 use transport::dto::MAX_VIEWER_RANGE_LENGTH;
 
+use super::command_support::write_audit_log;
 use crate::state::AppState;
-
-fn current_case_id(state: &AppState) -> Option<String> {
-    state
-        .active_case
-        .lock()
-        .ok()
-        .and_then(|guard| guard.as_ref().map(|active| active.meta.id.0.clone()))
-}
-
-fn write_file_audit(
-    state: &AppState,
-    action: AuditAction,
-    resource_id: Option<&str>,
-    details: serde_json::Value,
-) {
-    let Ok(conn) = state.get_connection() else {
-        return;
-    };
-    let case_id = current_case_id(state);
-    let details_str = serde_json::to_string(&details).unwrap_or_else(|_| "{}".to_string());
-    let _ = AuditRepo::new(&conn).log(
-        case_id.as_deref(),
-        "system",
-        &action,
-        resource_id,
-        &details_str,
-    );
-}
 
 /// Get children of a file tree node (lazy loading).
 #[tauri::command]
@@ -394,7 +367,7 @@ pub async fn extract_file(
         let conn = crate::commands::command_support::get_case_connection(&app_state)?;
         let result = extract_file_for_case(&conn, &request);
         match &result {
-            Ok(message) => write_file_audit(
+            Ok(message) => write_audit_log(
                 &app_state,
                 AuditAction::FileExtract,
                 Some(&audit_file_id),
@@ -408,7 +381,7 @@ pub async fn extract_file(
                     "message": message,
                 }),
             ),
-            Err(err) => write_file_audit(
+            Err(err) => write_audit_log(
                 &app_state,
                 AuditAction::FileExtract,
                 Some(&audit_file_id),

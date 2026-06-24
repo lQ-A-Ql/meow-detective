@@ -13,64 +13,65 @@ import {
   V2GovernanceSnapshot,
   V3GovernanceSnapshot,
 } from '@/types/models';
+import { COMMANDS } from './commands';
 import { apiClient } from './client';
 
 export async function getSystemInfo(): Promise<AnalysisSystemInfo> {
-  return apiClient.request('get_system_info');
+  return apiClient.request(COMMANDS.analysis.GET_SYSTEM_INFO);
 }
 
 export async function classifyFiles(sampleSize = 1000): Promise<AnalysisFileClassification[]> {
-  return apiClient.request('classify_files', { request: { sampleSize } });
+  return apiClient.request(COMMANDS.analysis.CLASSIFY_FILES, { request: { sampleSize } });
 }
 
 export async function getEvidenceClassificationSummary(): Promise<EvidenceClassificationSummary> {
-  return apiClient.request('get_evidence_classification_summary');
+  return apiClient.request(COMMANDS.analysis.GET_EVIDENCE_CLASSIFICATION_SUMMARY);
 }
 
 export async function runEvidenceClassification(categories: string[] = []): Promise<EvidenceClassificationSummary> {
-  return apiClient.request('run_evidence_classification', { request: { categories } });
+  return apiClient.request(COMMANDS.analysis.RUN_EVIDENCE_CLASSIFICATION, { request: { categories } });
 }
 
 export async function runAnalysisExtraction(
   request: AnalysisExtractionRequest = { categories: [] },
 ): Promise<AnalysisExtractionRun> {
-  return apiClient.request('run_analysis_extraction', { request });
+  return apiClient.request(COMMANDS.analysis.RUN_ANALYSIS_EXTRACTION, { request });
 }
 
 export async function getRegistryExtractionSummary(
   request: AnalysisExtractionPageRequest = {},
 ): Promise<RegistryExtractionSummary> {
-  return apiClient.request('get_registry_extraction_summary', { request });
+  return apiClient.request(COMMANDS.analysis.GET_REGISTRY_EXTRACTION_SUMMARY, { request });
 }
 
 export async function getRegistryStructuredSummary(): Promise<RegistryStructuredSummary> {
-  return apiClient.request('get_registry_structured_summary');
+  return apiClient.request(COMMANDS.analysis.GET_REGISTRY_STRUCTURED_SUMMARY);
 }
 
 export async function getBrowserHistorySummary(
   request: AnalysisExtractionPageRequest = {},
 ): Promise<BrowserHistorySummary> {
-  return apiClient.request('get_browser_history_summary', { request });
+  return apiClient.request(COMMANDS.analysis.GET_BROWSER_HISTORY_SUMMARY, { request });
 }
 
 export async function getEmailExtractionSummary(
   request: AnalysisExtractionPageRequest = {},
 ): Promise<EmailExtractionSummary> {
-  return apiClient.request('get_email_extraction_summary', { request });
+  return apiClient.request(COMMANDS.analysis.GET_EMAIL_EXTRACTION_SUMMARY, { request });
 }
 
 export async function getV2GovernanceSnapshot(): Promise<V2GovernanceSnapshot> {
-  return apiClient.request('get_v2_governance_snapshot');
+  return apiClient.request(COMMANDS.analysis.GET_V2_GOVERNANCE_SNAPSHOT);
 }
 
 export async function getV3GovernanceSnapshot(): Promise<V3GovernanceSnapshot> {
-  return apiClient.request('get_v3_governance_snapshot');
+  return apiClient.request(COMMANDS.analysis.GET_V3_GOVERNANCE_SNAPSHOT);
 }
 
 export async function getCorrelationSnapshot(): Promise<CorrelationSnapshot> {
-  return apiClient.request('get_correlation_snapshot');
+  return apiClient.request(COMMANDS.analysis.GET_CORRELATION_SNAPSHOT);
 }
 
 export async function generateAnalysisSummary(): Promise<string> {
-  return apiClient.request('generate_analysis_summary');
+  return apiClient.request(COMMANDS.analysis.GENERATE_ANALYSIS_SUMMARY);
 }

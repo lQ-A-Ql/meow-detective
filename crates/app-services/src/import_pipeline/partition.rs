@@ -382,15 +382,12 @@ pub fn build_partition_work(
     fs_kind: &str,
     probe_candidates: &[datasource_service::ImageFilesystemCandidate],
 ) -> Option<parallel_enum::PartitionWork> {
+    let index_map = datasource_service::assign_effective_partition_indices(probe_candidates);
     let candidate = probe_candidates
         .iter()
         .enumerate()
         .find(|(i, c)| {
-            let idx = c.partition_index.unwrap_or({
-                // MBR fallback: assign unique index by candidate offset order.
-                // This mirrors the index assignment in the probe/import flow above.
-                *i
-            });
+            let idx = datasource_service::effective_partition_index(c, *i, &index_map);
             idx == partition_index
         })
         .map(|(_, c)| c)?;

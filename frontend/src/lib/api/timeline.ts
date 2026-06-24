@@ -1,5 +1,6 @@
+import { COMMANDS } from './commands';
 import { apiClient } from './client';
-import { TimelineEventDto } from '@/types/models';
+import { TimelineEvent } from '@/types/models';
 
 export interface PagedResponse<T> {
   total: number;
@@ -16,8 +17,8 @@ export interface TimelineRequest {
 
 export async function getTimelineEvents(
   request?: TimelineRequest,
-): Promise<PagedResponse<TimelineEventDto>> {
-  return apiClient.request('get_timeline_events', request ? { request: {
+): Promise<PagedResponse<TimelineEvent>> {
+  return apiClient.request(COMMANDS.timeline.GET_TIMELINE_EVENTS, request ? { request: {
       offset: request.offset ?? 0,
       limit: request.limit ?? 100,
       timeStart: request.timeStart,
@@ -26,6 +27,6 @@ export async function getTimelineEvents(
     } } : undefined);
 }
 
-export async function getTimelineEventById(eventId: string): Promise<TimelineEventDto | null> {
-  return apiClient.request('get_timeline_event_by_id', { request: { eventId } });
+export async function getTimelineEventById(eventId: string): Promise<TimelineEvent | null> {
+  return apiClient.request(COMMANDS.timeline.GET_TIMELINE_EVENT_BY_ID, { request: { eventId } });
 }

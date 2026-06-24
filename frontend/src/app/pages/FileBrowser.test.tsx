@@ -130,6 +130,7 @@ const rootTree = [
     expanded: true,
     hidden: false,
     system: false,
+    deleted: false,
   },
 ];
 
@@ -360,6 +361,7 @@ describe('FileBrowser media preview', () => {
       hasChildren: false,
       hidden: false,
       system: false,
+      deleted: false,
     }));
     const nextChildren = [
       {
@@ -369,6 +371,7 @@ describe('FileBrowser media preview', () => {
         hasChildren: true,
         hidden: true,
         system: true,
+        deleted: false,
       },
     ];
 
@@ -454,6 +457,7 @@ describe('FileBrowser media preview', () => {
           expanded: true,
           hidden: false,
           system: false,
+          deleted: false,
         },
       ]),
     );

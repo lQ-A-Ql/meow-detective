@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use persistence_sqlite::repositories::audit_repo::{AuditAction, AuditRepo};
 use r2d2::PooledConnection;
 use r2d2_sqlite::SqliteConnectionManager;
 use transport::CommandError;
@@ -46,6 +47,36 @@ pub(crate) fn get_case_connection(
             CommandError::from_service_error(error)
         }
     })
+}
+
+/// Get the case ID from the active case (if any).
+pub fn current_case_id(state: &AppState) -> Option<String> {
+    state
+        .active_case
+        .lock()
+        .ok()
+        .and_then(|guard| guard.as_ref().map(|active| active.meta.id.0.clone()))
+}
+
+/// Write an audit log entry for the active case.
+pub fn write_audit_log(
+    state: &AppState,
+    action: AuditAction,
+    resource_id: Option<&str>,
+    details: serde_json::Value,
+) {
+    let Ok(conn) = state.get_connection() else {
+        return;
+    };
+    let case_id = current_case_id(state);
+    let details_str = serde_json::to_string(&details).unwrap_or_else(|_| "{}".to_string());
+    let _ = AuditRepo::new(&conn).log(
+        case_id.as_deref(),
+        "system",
+        &action,
+        resource_id,
+        &details_str,
+    );
 }
 
 #[cfg(test)]

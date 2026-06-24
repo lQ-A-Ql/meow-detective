@@ -14,5 +14,5 @@ anyhow.workspace = true
 domain.workspace = true
 artifacts-core.workspace = true
 tracing.workspace = true
-rusqlite = { version = "0.31", features = ["bundled"] }
-tempfile = "3"
+rusqlite.workspace = true
+tempfile.workspace = true

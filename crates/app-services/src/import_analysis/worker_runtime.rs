@@ -1,4 +1,5 @@
 use super::budget::ContentBudget;
+use super::error::ImportAnalysisError;
 use super::options::{ImportAnalysisOptions, ImportAnalysisStats};
 use crate::{artifact_service, file_service, staging};
 use artifacts_core::VecSink;
@@ -94,13 +95,11 @@ pub(super) fn run_analysis_worker(
     options: ImportAnalysisOptions,
     task_rx: Receiver<FileTask>,
     shared: Arc<SharedAnalysisState>,
-) -> Result<WorkerStats, String> {
-    let main_conn =
-        persistence_sqlite::open_or_create(&options.db_path).map_err(|e| e.to_string())?;
+) -> Result<WorkerStats, ImportAnalysisError> {
+    let main_conn = persistence_sqlite::open_or_create(&options.db_path)?;
     let staging_conn =
-        staging::open_analysis_staging(&options.case_root, &options.data_source_id.0, worker_id)
-            .map_err(|e| e.to_string())?;
-    staging::set_worker_meta(&staging_conn, "status", "running").map_err(|e| e.to_string())?;
+        staging::open_analysis_staging(&options.case_root, &options.data_source_id.0, worker_id)?;
+    staging::set_worker_meta(&staging_conn, "status", "running")?;
 
     let mut stats = WorkerStats::default();
     let registry = artifact_service::create_registry();
@@ -235,9 +234,9 @@ pub(super) fn run_analysis_worker(
     } else {
         "done"
     };
-    staging::set_worker_meta(&staging_conn, "status", status).map_err(|e| e.to_string())?;
+    staging::set_worker_meta(&staging_conn, "status", status)?;
     if status == "cancelled" {
-        staging::set_worker_meta(&staging_conn, "error", "cancelled").map_err(|e| e.to_string())?;
+        staging::set_worker_meta(&staging_conn, "error", "cancelled")?;
     }
     Ok(stats)
 }
@@ -250,21 +249,15 @@ pub(super) fn clear_analysis_worker_rows(conn: &Connection) -> rusqlite::Result<
     )
 }
 
-fn persist_worker_stats(conn: &Connection, stats: &WorkerStats) -> Result<(), String> {
-    staging::set_worker_meta(conn, "processed_count", &stats.processed_count.to_string())
-        .map_err(|e| e.to_string())?;
-    staging::set_worker_meta(conn, "artifact_count", &stats.artifact_count.to_string())
-        .map_err(|e| e.to_string())?;
-    staging::set_worker_meta(conn, "timeline_count", &stats.timeline_count.to_string())
-        .map_err(|e| e.to_string())?;
-    staging::set_worker_meta(conn, "indexed_count", &stats.indexed_count.to_string())
-        .map_err(|e| e.to_string())?;
-    staging::set_worker_meta(conn, "warning_count", &stats.warning_count.to_string())
-        .map_err(|e| e.to_string())?;
-    staging::set_worker_meta(conn, "skipped_count", &stats.skipped_count.to_string())
-        .map_err(|e| e.to_string())?;
-    staging::set_worker_meta(conn, "failed_count", &stats.failed_count.to_string())
-        .map_err(|e| e.to_string())
+fn persist_worker_stats(conn: &Connection, stats: &WorkerStats) -> Result<(), ImportAnalysisError> {
+    staging::set_worker_meta(conn, "processed_count", &stats.processed_count.to_string())?;
+    staging::set_worker_meta(conn, "artifact_count", &stats.artifact_count.to_string())?;
+    staging::set_worker_meta(conn, "timeline_count", &stats.timeline_count.to_string())?;
+    staging::set_worker_meta(conn, "indexed_count", &stats.indexed_count.to_string())?;
+    staging::set_worker_meta(conn, "warning_count", &stats.warning_count.to_string())?;
+    staging::set_worker_meta(conn, "skipped_count", &stats.skipped_count.to_string())?;
+    staging::set_worker_meta(conn, "failed_count", &stats.failed_count.to_string())?;
+    Ok(())
 }
 
 fn flush_worker_rows(
@@ -272,13 +265,13 @@ fn flush_worker_rows(
     artifacts: &mut Vec<domain::Artifact>,
     timeline_events: &mut Vec<domain::TimelineEvent>,
     index_docs: &mut Vec<IndexDocRow>,
-) -> Result<(), String> {
+) -> Result<(), ImportAnalysisError> {
     if artifacts.is_empty() && timeline_events.is_empty() && index_docs.is_empty() {
         return Ok(());
     }
     let tx = conn
         .unchecked_transaction()
-        .map_err(|e| format!("Begin worker staging tx: {e}"))?;
+        .map_err(|e| ImportAnalysisError::Staging(format!("Begin worker staging tx: {e}")))?;
     {
         let mut artifact_stmt = tx
             .prepare_cached(
@@ -286,7 +279,7 @@ fn flush_worker_rows(
                  (id, file_id, artifact_type, extractor_id, extractor_version, confidence, source_attribution, display_name, summary, data_json, source_path, created_at)
                   VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             )
-            .map_err(|e| format!("Prepare artifact staging insert: {e}"))?;
+            .map_err(|e| ImportAnalysisError::Staging(format!("Prepare artifact staging insert: {e}")))?;
         for artifact in artifacts.iter() {
             artifact_stmt
                 .execute(params![
@@ -303,7 +296,9 @@ fn flush_worker_rows(
                     "",
                     artifact.created_at.to_rfc3339(),
                 ])
-                .map_err(|e| format!("Insert artifact staging row: {e}"))?;
+                .map_err(|e| {
+                    ImportAnalysisError::Staging(format!("Insert artifact staging row: {e}"))
+                })?;
         }
     }
     {
@@ -313,7 +308,7 @@ fn flush_worker_rows(
                  (id, file_id, timestamp, event_type, parser_id, parser_version, confidence, source_attribution, title, description, data_json)
                   VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             )
-            .map_err(|e| format!("Prepare timeline staging insert: {e}"))?;
+            .map_err(|e| ImportAnalysisError::Staging(format!("Prepare timeline staging insert: {e}")))?;
         for event in timeline_events.iter() {
             timeline_stmt
                 .execute(params![
@@ -329,7 +324,9 @@ fn flush_worker_rows(
                     event.description,
                     serde_json::to_string(&event.attrs).unwrap_or_else(|_| "{}".to_string()),
                 ])
-                .map_err(|e| format!("Insert timeline staging row: {e}"))?;
+                .map_err(|e| {
+                    ImportAnalysisError::Staging(format!("Insert timeline staging row: {e}"))
+                })?;
         }
     }
     {
@@ -339,7 +336,9 @@ fn flush_worker_rows(
                  (file_id, path, text, language, truncated)
                  VALUES (?1, ?2, ?3, ?4, ?5)",
             )
-            .map_err(|e| format!("Prepare index staging insert: {e}"))?;
+            .map_err(|e| {
+                ImportAnalysisError::Staging(format!("Prepare index staging insert: {e}"))
+            })?;
         for doc in index_docs.iter() {
             index_stmt
                 .execute(params![
@@ -349,11 +348,13 @@ fn flush_worker_rows(
                     doc.language,
                     doc.truncated as i32,
                 ])
-                .map_err(|e| format!("Insert index staging row: {e}"))?;
+                .map_err(|e| {
+                    ImportAnalysisError::Staging(format!("Insert index staging row: {e}"))
+                })?;
         }
     }
     tx.commit()
-        .map_err(|e| format!("Commit worker staging tx: {e}"))?;
+        .map_err(|e| ImportAnalysisError::Staging(format!("Commit worker staging tx: {e}")))?;
     artifacts.clear();
     timeline_events.clear();
     index_docs.clear();

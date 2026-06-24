@@ -1,4 +1,5 @@
 pub mod csv;
+pub mod error;
 pub mod html;
 pub mod json;
 
@@ -6,6 +7,7 @@ pub mod json;
 mod tests;
 
 pub use csv::{generate_csv_artifacts, generate_csv_correlation};
+pub use error::ReportError;
 pub use json::generate_json_export;
 
 use domain::CaseMeta;
@@ -51,13 +53,13 @@ pub fn generate_html_report(
     case: &CaseMeta,
     output_dir: &Path,
     scope: &ExportScopeDto,
-) -> Result<String, String> {
+) -> Result<String, ReportError> {
     let file_repo = FileRepo::new(conn);
     let tl_repo = TimelineRepo::new(conn);
 
     let file_count = file_repo.count_all().unwrap_or(0);
 
-    let tl_count = tl_repo.count().map_err(|e| e.to_string())?;
+    let tl_count = tl_repo.count()?;
 
     let files = if scope.file_system_metadata {
         vec![format!("{} files indexed", file_count)]
@@ -66,16 +68,14 @@ pub fn generate_html_report(
     };
     let artifacts = if scope.full_timeline {
         let mut rows = ArtifactRepo::new(conn)
-            .list_by_family(None)
-            .map_err(|e| e.to_string())?
+            .list_by_family(None)?
             .into_iter()
             .map(|artifact| html::format_artifact_report_row(&artifact))
             .collect::<Vec<_>>();
         rows.push(format!("{} timeline events", tl_count));
         rows.extend(
             TimelineRepo::new(conn)
-                .query(0, 500)
-                .map_err(|e| e.to_string())?
+                .query(0, 500)?
                 .into_iter()
                 .map(|event| html::format_timeline_report_row(&event)),
         );
@@ -104,7 +104,7 @@ pub fn generate_html_report(
             &correlation_rows,
             &correlation_leads,
         )
-        .map_err(|e| e.to_string())
+        .map_err(|e| ReportError::Other(e.to_string()))
     })?;
 
     persist_report_record(conn, &case.id.0, "report-summary", &file_name, "completed")?;
@@ -145,12 +145,13 @@ pub fn get_report_history(conn: &Connection, case_id: &str) -> Vec<ReportHistory
         .collect()
 }
 
-pub(crate) fn current_analysis(conn: &Connection) -> Result<ReportAnalysis, String> {
+pub(crate) fn current_analysis(conn: &Connection) -> Result<ReportAnalysis, ReportError> {
     let system_info =
         crate::analysis_service::extract_system_info_for_case(conn, |file_id, max_bytes| {
             crate::file_service::read_file_header_by_id(conn, file_id, max_bytes)
         });
-    let files = crate::analysis_service::collect_file_entries(conn).map_err(|e| e.to_string())?;
+    let files = crate::analysis_service::collect_file_entries(conn)
+        .map_err(|e| ReportError::Other(e.to_string()))?;
     let classifications = crate::analysis_service::classify_files_by_magic(
         &files,
         crate::analysis_service::DEFAULT_SAMPLE_SIZE,
@@ -169,19 +170,20 @@ pub(crate) fn current_analysis(conn: &Connection) -> Result<ReportAnalysis, Stri
     })
 }
 
-pub(crate) fn current_correlation(conn: &Connection) -> Result<ReportCorrelation, String> {
+pub(crate) fn current_correlation(conn: &Connection) -> Result<ReportCorrelation, ReportError> {
     Ok(ReportCorrelation {
-        snapshot: crate::correlation::get_correlation_snapshot(conn).map_err(|e| e.to_string())?,
+        snapshot: crate::correlation::get_correlation_snapshot(conn)
+            .map_err(|e| ReportError::Other(e.to_string()))?,
     })
 }
 
 pub(crate) fn current_governance(
     conn: &Connection,
     case_id: &str,
-) -> Result<ReportGovernance, String> {
+) -> Result<ReportGovernance, ReportError> {
     Ok(ReportGovernance {
         snapshot: crate::v2_governance_service::get_v2_governance_snapshot(conn, case_id)
-            .map_err(|e| e.to_string())?,
+            .map_err(|e| ReportError::Other(e.to_string()))?,
     })
 }
 
@@ -200,14 +202,14 @@ pub(crate) fn prepare_report_output(
     output_dir: &Path,
     file_name: &str,
     overwrite: bool,
-) -> Result<PathBuf, String> {
-    fs::create_dir_all(output_dir).map_err(|e| e.to_string())?;
+) -> Result<PathBuf, ReportError> {
+    fs::create_dir_all(output_dir)?;
     let path = output_dir.join(file_name);
     if path.exists() && !overwrite {
-        return Err(format!(
+        return Err(ReportError::Other(format!(
             "report output already exists: {} (set overwrite=true to replace it)",
             file_name
-        ));
+        )));
     }
     Ok(path)
 }
@@ -215,11 +217,11 @@ pub(crate) fn prepare_report_output(
 pub(crate) fn write_report_atomically(
     final_path: &Path,
     overwrite: bool,
-    write_fn: impl FnOnce(&mut std::fs::File) -> Result<(), String>,
-) -> Result<(), String> {
-    let parent = final_path
-        .parent()
-        .ok_or_else(|| "report output path must have a parent directory".to_string())?;
+    write_fn: impl FnOnce(&mut std::fs::File) -> Result<(), ReportError>,
+) -> Result<(), ReportError> {
+    let parent = final_path.parent().ok_or_else(|| {
+        ReportError::Other("report output path must have a parent directory".to_string())
+    })?;
     let temp_name = format!(
         ".{}.{}.tmp",
         final_path
@@ -232,12 +234,11 @@ pub(crate) fn write_report_atomically(
     let mut temp_file = OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(&temp_path)
-        .map_err(|e| e.to_string())?;
+        .open(&temp_path)?;
 
     let write_result = write_fn(&mut temp_file)
-        .and_then(|_| temp_file.flush().map_err(|e| e.to_string()))
-        .and_then(|_| temp_file.sync_all().map_err(|e| e.to_string()));
+        .and_then(|_| temp_file.flush().map_err(ReportError::Io))
+        .and_then(|_| temp_file.sync_all().map_err(ReportError::Io));
 
     if let Err(err) = write_result {
         let _ = fs::remove_file(&temp_path);
@@ -248,13 +249,13 @@ pub(crate) fn write_report_atomically(
     if overwrite && final_path.exists() {
         fs::remove_file(final_path).map_err(|e| {
             let _ = fs::remove_file(&temp_path);
-            e.to_string()
+            ReportError::Io(e)
         })?;
     }
 
     fs::rename(&temp_path, final_path).map_err(|e| {
         let _ = fs::remove_file(&temp_path);
-        e.to_string()
+        ReportError::Io(e)
     })
 }
 
@@ -264,7 +265,7 @@ pub(crate) fn persist_report_record(
     template_id: &str,
     file_name: &str,
     status: &str,
-) -> Result<(), String> {
+) -> Result<(), ReportError> {
     let repo = ReportRepo::new(conn);
     let record = persistence_sqlite::repositories::report_repo::ReportRecord {
         id: Uuid::new_v4().to_string(),
@@ -276,7 +277,8 @@ pub(crate) fn persist_report_record(
         progress: None,
         created_at: chrono::Utc::now().to_rfc3339(),
     };
-    repo.insert(&record).map_err(|e| e.to_string())
+    repo.insert(&record)?;
+    Ok(())
 }
 
 pub(crate) fn report_scope_warnings(

@@ -628,7 +628,8 @@ mod tests {
             volume_offset: ntfs.offset,
         };
 
-        let params = read_ntfs_mft_parameters(&partition).unwrap();
+        let mut evidence_reader = open_partition_evidence_reader(&partition).unwrap();
+        let params = read_ntfs_mft_parameters(&partition, &mut *evidence_reader).unwrap();
         eprintln!(
             "mft cluster={} record_size={} data_size={} runs={:?}",
             params.mft_cluster,
@@ -675,7 +676,8 @@ mod tests {
             source_kind: "e01".to_string(),
             volume_offset: ntfs.offset,
         };
-        let params = read_ntfs_mft_parameters(&partition).unwrap();
+        let mut evidence_reader = open_partition_evidence_reader(&partition).unwrap();
+        let params = read_ntfs_mft_parameters(&partition, &mut *evidence_reader).unwrap();
         let scanner = MftScanner::new(
             params.volume_offset,
             params.mft_cluster,
@@ -684,10 +686,9 @@ mod tests {
             params.bytes_per_sector,
             params.mft_data_size,
         );
-        let mut reader = open_partition_evidence_reader(&partition).unwrap();
         let mut buf = vec![0u8; scanner.total_records() as usize * scanner.record_size() as usize];
         read_ntfs_mft_stream(
-            &mut *reader,
+            &mut *evidence_reader,
             params.volume_offset,
             params.cluster_size,
             &params.mft_data_runs,

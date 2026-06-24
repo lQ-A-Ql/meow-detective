@@ -24,6 +24,12 @@ pub fn restrict_file_to_current_user(path: &Path) -> std::io::Result<()> {
         std::io::Error::from_raw_os_error(e.code().0)
     }
 
+    // SAFETY: All Win32 API calls use stack-allocated or LocalAlloc'd buffers
+    // whose sizes are queried from the Windows API itself (GetTokenInformation
+    // reports the required buffer size). The HANDLE obtained from
+    // OpenProcessToken is a pseudo-handle from GetCurrentProcess, so it does
+    // not require explicit close. All error paths invoke the `cleanup` closure
+    // to free LocalAlloc'd memory before returning.
     unsafe {
         // Open the current process token with query access.
         let mut token = HANDLE::default();

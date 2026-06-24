@@ -166,6 +166,89 @@ pub struct StepReplayFailDto {
     pub error: String,
 }
 
+// ── Request DTOs for Tauri command parameters ─────────────────────────
+
+/// Request payload for creating a new notebook entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateNotebookEntryRequest {
+    pub author: String,
+    pub entry_type: NotebookEntryTypeDto,
+    pub title: String,
+    pub body_markdown: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+    pub status: NotebookEntryStatusDto,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+}
+
+/// Request payload for updating an existing notebook entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateNotebookEntryRequest {
+    pub entry_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body_markdown: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<NotebookEntryStatusDto>,
+}
+
+/// Request payload for listing notebook entries with filters.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListNotebookEntriesRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entry_type: Option<NotebookEntryTypeDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<NotebookEntryStatusDto>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub search: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offset: Option<u32>,
+}
+
+/// Request payload for retrieving a notebook thread.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetNotebookThreadRequest {
+    pub entry_id: String,
+}
+
+/// Request payload for adding an evidence citation to a notebook entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddEvidenceCitationRequest {
+    pub entry_id: String,
+    pub target_node_type: GraphNodeTypeDto,
+    pub target_node_id: String,
+    pub display_label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snippet: Option<String>,
+}
+
+/// Request payload for listing investigation steps with filters.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListInvestigationStepsRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step_kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub success: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offset: Option<u32>,
+}
+
 /// A directed edge in the notebook entry thread graph (parent-child relationships).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]

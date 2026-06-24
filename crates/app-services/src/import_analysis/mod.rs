@@ -4,6 +4,7 @@
 //! to per-worker temp DBs, then the caller merges those temp DBs with one writer.
 
 mod budget;
+pub mod error;
 mod finalize;
 mod options;
 pub mod priority_queue;
@@ -12,6 +13,8 @@ mod task_feed;
 pub mod tier;
 mod worker_pool;
 mod worker_runtime;
+
+pub use error::ImportAnalysisError;
 
 pub use budget::{
     content_budget_for_mode, default_memory_hard_limit_mb, default_memory_soft_limit_mb,
@@ -304,11 +307,13 @@ mod tests {
         let worker_conn = staging::open_analysis_staging(tmp.path(), &ds_id.0, 0).unwrap();
         insert_staged_index_doc(&worker_conn, "already-merged", "keep me");
         set_done_worker_meta(&worker_conn, 1, true, 7);
+        drop(worker_conn);
 
         let action =
             prepare_analysis_staging_startup(&options, &[0], 1, None).expect("startup plan");
 
         assert_eq!(action, AnalysisStartupAction::AlreadyMerged);
+        let worker_conn = staging::open_analysis_staging(tmp.path(), &ds_id.0, 0).unwrap();
         let (_artifacts, _timeline, index) =
             staging::analysis_staging_counts(&worker_conn).unwrap();
         assert_eq!(index, 1);
@@ -383,11 +388,13 @@ mod tests {
         let worker_conn = staging::open_analysis_staging(tmp.path(), &ds_id.0, 0).unwrap();
         insert_staged_index_doc(&worker_conn, "ready-to-merge", "keep for merge");
         set_done_worker_meta(&worker_conn, 1, false, 5);
+        drop(worker_conn);
 
         let action =
             prepare_analysis_staging_startup(&options, &[0], 1, None).expect("startup plan");
 
         assert_eq!(action, AnalysisStartupAction::MergeOnly);
+        let worker_conn = staging::open_analysis_staging(tmp.path(), &ds_id.0, 0).unwrap();
         let (_artifacts, _timeline, index) =
             staging::analysis_staging_counts(&worker_conn).unwrap();
         assert_eq!(index, 1);
@@ -675,7 +682,7 @@ mod tests {
 
         let result = run_import_analysis_staging(options, None);
 
-        assert!(matches!(result, Err(ref error) if error.contains("cancelled")));
+        assert!(matches!(result, Err(ref error) if error.to_string().contains("cancelled")));
         let worker_conn = staging::open_analysis_staging(tmp.path(), &ds_id.0, 0).unwrap();
         assert_eq!(
             staging::get_worker_meta(&worker_conn, "status")

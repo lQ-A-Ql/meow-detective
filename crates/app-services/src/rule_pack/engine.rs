@@ -5,6 +5,7 @@ use rusqlite::Connection;
 use serde_json::Value;
 use std::collections::BTreeMap;
 
+use super::error::RulePackError;
 use super::parser::{Operator, RulePack};
 
 // ── Public API ──
@@ -16,7 +17,11 @@ use super::parser::{Operator, RulePack};
 /// entries), and creates `CorrelatesWith` graph edges with provenance metadata.
 ///
 /// Returns the total number of graph edges created across all rules.
-pub fn execute_rule_pack(conn: &Connection, case_id: &str, pack: &RulePack) -> Result<u64, String> {
+pub fn execute_rule_pack(
+    conn: &Connection,
+    case_id: &str,
+    pack: &RulePack,
+) -> Result<u64, RulePackError> {
     let mut total_edges: u64 = 0;
 
     for rule in &pack.rules {
@@ -38,7 +43,7 @@ pub fn execute_rule_pack_incremental(
     conn: &Connection,
     case_id: &str,
     pack: &RulePack,
-) -> Result<u64, String> {
+) -> Result<u64, RulePackError> {
     let executed_rule_ids = get_executed_rule_ids(conn, case_id, &pack.manifest.name)?;
     let mut total_edges: u64 = 0;
 
@@ -60,7 +65,7 @@ fn execute_rule(
     case_id: &str,
     pack: &RulePack,
     rule: &super::parser::RuleDefinition,
-) -> Result<u64, String> {
+) -> Result<u64, RulePackError> {
     match rule.source_type {
         super::parser::NodeType::Artifact => execute_artifact_rule(conn, case_id, pack, rule),
         super::parser::NodeType::TimelineEvent => {
@@ -81,7 +86,7 @@ fn execute_artifact_rule(
     case_id: &str,
     pack: &RulePack,
     rule: &super::parser::RuleDefinition,
-) -> Result<u64, String> {
+) -> Result<u64, RulePackError> {
     // 1. Load source artifacts of the matching family
     let artifacts = load_artifacts_by_family(conn, &rule.source_family)?;
     if artifacts.is_empty() {
@@ -200,9 +205,9 @@ fn execute_artifact_rule(
     }
 
     let count = edges.len() as u64;
-    graph_repo
-        .insert_edges_batch(&edges)
-        .map_err(|e| format!("insert rule pack edges for '{}': {e}", rule.id))?;
+    graph_repo.insert_edges_batch(&edges).map_err(|e| {
+        RulePackError::Other(format!("insert rule pack edges for '{}': {e}", rule.id))
+    })?;
 
     Ok(count)
 }
@@ -214,23 +219,22 @@ struct ArtifactRow {
     attrs: String,
 }
 
-fn load_artifacts_by_family(conn: &Connection, family: &str) -> Result<Vec<ArtifactRow>, String> {
-    let mut stmt = conn
-        .prepare("SELECT id, attrs FROM artifacts WHERE artifact_type = ?1")
-        .map_err(|e| format!("prepare artifacts query: {e}"))?;
+fn load_artifacts_by_family(
+    conn: &Connection,
+    family: &str,
+) -> Result<Vec<ArtifactRow>, RulePackError> {
+    let mut stmt = conn.prepare("SELECT id, attrs FROM artifacts WHERE artifact_type = ?1")?;
 
-    let rows = stmt
-        .query_map(rusqlite::params![family], |row| {
-            Ok(ArtifactRow {
-                id: row.get(0)?,
-                attrs: row.get::<_, String>(1)?,
-            })
+    let rows = stmt.query_map(rusqlite::params![family], |row| {
+        Ok(ArtifactRow {
+            id: row.get(0)?,
+            attrs: row.get::<_, String>(1)?,
         })
-        .map_err(|e| format!("query artifacts for family '{family}': {e}"))?;
+    })?;
 
     let mut artifacts = Vec::new();
     for row in rows {
-        artifacts.push(row.map_err(|e| e.to_string())?);
+        artifacts.push(row?);
     }
 
     Ok(artifacts)
@@ -246,25 +250,23 @@ fn load_nodes_by_type(
     conn: &Connection,
     case_id: &str,
     node_type: &NodeType,
-) -> Result<Vec<NodeRow>, String> {
+) -> Result<Vec<NodeRow>, RulePackError> {
     let type_str = node_type_str(node_type);
-    let mut stmt = conn
-        .prepare("SELECT id, label, summary FROM graph_nodes WHERE case_id = ?1 AND node_type = ?2")
-        .map_err(|e| format!("prepare nodes query: {e}"))?;
+    let mut stmt = conn.prepare(
+        "SELECT id, label, summary FROM graph_nodes WHERE case_id = ?1 AND node_type = ?2",
+    )?;
 
-    let rows = stmt
-        .query_map(rusqlite::params![case_id, type_str], |row| {
-            Ok(NodeRow {
-                id: row.get(0)?,
-                label: row.get(1)?,
-                summary: row.get(2)?,
-            })
+    let rows = stmt.query_map(rusqlite::params![case_id, type_str], |row| {
+        Ok(NodeRow {
+            id: row.get(0)?,
+            label: row.get(1)?,
+            summary: row.get(2)?,
         })
-        .map_err(|e| format!("query nodes of type '{type_str}': {e}"))?;
+    })?;
 
     let mut nodes = Vec::new();
     for row in rows {
-        nodes.push(row.map_err(|e| e.to_string())?);
+        nodes.push(row?);
     }
 
     Ok(nodes)
@@ -276,24 +278,21 @@ struct FileEntryRow {
     name: String,
 }
 
-fn load_file_entries(conn: &Connection) -> Result<Vec<FileEntryRow>, String> {
-    let mut stmt = conn
-        .prepare("SELECT id, path, name FROM file_entries WHERE entry_type = 'file'")
-        .map_err(|e| format!("prepare file_entries query: {e}"))?;
+fn load_file_entries(conn: &Connection) -> Result<Vec<FileEntryRow>, RulePackError> {
+    let mut stmt =
+        conn.prepare("SELECT id, path, name FROM file_entries WHERE entry_type = 'file'")?;
 
-    let rows = stmt
-        .query_map([], |row| {
-            Ok(FileEntryRow {
-                id: row.get(0)?,
-                path: row.get(1)?,
-                name: row.get(2)?,
-            })
+    let rows = stmt.query_map([], |row| {
+        Ok(FileEntryRow {
+            id: row.get(0)?,
+            path: row.get(1)?,
+            name: row.get(2)?,
         })
-        .map_err(|e| format!("query file_entries: {e}"))?;
+    })?;
 
     let mut files = Vec::new();
     for row in rows {
-        files.push(row.map_err(|e| e.to_string())?);
+        files.push(row?);
     }
 
     Ok(files)
@@ -501,22 +500,18 @@ fn get_executed_rule_ids(
     conn: &Connection,
     case_id: &str,
     pack_id: &str,
-) -> Result<std::collections::HashSet<String>, String> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT DISTINCT provenance FROM graph_edges
+) -> Result<std::collections::HashSet<String>, RulePackError> {
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT provenance FROM graph_edges
              WHERE case_id = ?1 AND edge_type = 'correlates_with'
              AND provenance IS NOT NULL",
-        )
-        .map_err(|e| format!("prepare executed rules query: {e}"))?;
+    )?;
 
-    let rows = stmt
-        .query_map(rusqlite::params![case_id], |row| row.get::<_, String>(0))
-        .map_err(|e| format!("query executed rules: {e}"))?;
+    let rows = stmt.query_map(rusqlite::params![case_id], |row| row.get::<_, String>(0))?;
 
     let mut rule_ids = std::collections::HashSet::new();
     for row in rows {
-        let provenance = row.map_err(|e| e.to_string())?;
+        let provenance = row?;
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&provenance) {
             if json.get("pack_id").and_then(|v| v.as_str()) == Some(pack_id) {
                 if let Some(rule_id) = json.get("rule_id").and_then(|v| v.as_str()) {

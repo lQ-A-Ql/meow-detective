@@ -11,9 +11,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-const MFT_CHUNK_RECORDS: u64 = 25_000;
+const MFT_CHUNK_RECORDS: u64 = 10_000;
 const MFT_FALLBACK_SIZE: u64 = 100 * 1024 * 1024;
-const MFT_HASHMAP_PATH_LIMIT: usize = 100_000;
 
 pub(super) fn enumerate_ntfs_mft_to_staging(
     conn: &rusqlite::Connection,
@@ -26,7 +25,8 @@ pub(super) fn enumerate_ntfs_mft_to_staging(
         return Err("Cancelled".to_string());
     }
 
-    let params = read_ntfs_mft_parameters(partition)?;
+    let mut reader = open_partition_evidence_reader(partition)?;
+    let params = read_ntfs_mft_parameters(partition, &mut *reader)?;
     if params.mft_data_size == 0 {
         return Err("MFT data size is zero".to_string());
     }
@@ -54,8 +54,6 @@ pub(super) fn enumerate_ntfs_mft_to_staging(
                  VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, NULL)",
             )
             .map_err(|e| format!("Prepare MFT staging insert: {e}"))?;
-
-        let mut reader = open_partition_evidence_reader(partition)?;
         let mut start_record = 0u64;
         let mut file_count = 0u64;
         let mut dir_count = 0u64;
@@ -114,9 +112,12 @@ pub(super) fn enumerate_ntfs_mft_to_staging(
         }
 
         drop(stmt);
+        // Drop the read buffer — not needed after chunk processing
+        drop(buf);
         backfill_ntfs_directory_index_entries(
             conn,
             ds_id,
+            reader,
             partition,
             partition.index,
             &mut path_map,
@@ -124,25 +125,18 @@ pub(super) fn enumerate_ntfs_mft_to_staging(
             &mut dir_count,
         )
         .map_err(|e| format!("Backfill NTFS directory index entries: {e}"))?;
-        if path_map.len() > MFT_HASHMAP_PATH_LIMIT {
-            update_mft_staging_paths_via_sqlite(
-                conn,
-                ds_id,
-                partition.index,
-                &path_map,
-                &deleted_records,
-            )
-            .map_err(|e| format!("Update large MFT staging paths: {e}"))?;
-        } else {
-            update_mft_staging_paths_and_parent_ids(
-                conn,
-                ds_id,
-                partition.index,
-                &path_map,
-                &deleted_records,
-            )
-            .map_err(|e| format!("Update MFT staging paths/parents: {e}"))?;
-        }
+        // Capture result before dropping large structures
+        let staging_result = update_mft_staging_paths_via_sqlite(
+            conn,
+            ds_id,
+            partition.index,
+            &path_map,
+            &deleted_records,
+        );
+        // Free large in-memory structures after path resolution is complete
+        drop(path_map); // ~20MB per worker
+        drop(deleted_records); // ~3MB per worker
+        staging_result.map_err(|e| format!("Update MFT staging paths: {e}"))?;
         validate_mft_staging_shape(conn, ds_id, partition.index)?;
         Ok((file_count, dir_count, total_size))
     })();
@@ -233,8 +227,10 @@ pub(super) struct NtfsMftParams {
     pub(super) mft_data_runs: Vec<(i64, u64)>,
 }
 
-pub(super) fn read_ntfs_mft_parameters(partition: &PartitionWork) -> Result<NtfsMftParams, String> {
-    let mut reader = open_partition_evidence_reader(partition)?;
+pub(super) fn read_ntfs_mft_parameters(
+    partition: &PartitionWork,
+    reader: &mut dyn EvidenceReader,
+) -> Result<NtfsMftParams, String> {
     reader
         .seek(SeekFrom::Start(partition_offset(partition)))
         .map_err(|e| format!("Seek NTFS boot sector: {e}"))?;
@@ -534,17 +530,18 @@ fn read_sized_le_signed(bytes: &[u8]) -> i64 {
     value as i64
 }
 
+#[allow(clippy::too_many_arguments)]
 fn backfill_ntfs_directory_index_entries(
     conn: &rusqlite::Connection,
     ds_id: &str,
+    evidence_reader: Box<dyn EvidenceReader>,
     partition: &PartitionWork,
     partition_index: usize,
     path_map: &mut HashMap<String, (Option<String>, String, bool)>,
     file_count: &mut u64,
     dir_count: &mut u64,
 ) -> Result<(), String> {
-    let reader = open_partition_evidence_reader(partition)?;
-    let ntfs = NtfsReader::open(reader, partition_offset(partition))
+    let ntfs = NtfsReader::open(evidence_reader, partition_offset(partition))
         .map_err(|e| format!("Open NTFS reader for directory indexes: {e}"))?;
 
     let mut stmt = conn
@@ -929,6 +926,7 @@ pub(super) fn update_mft_staging_paths(
     Ok(())
 }
 
+#[cfg(test)]
 pub(super) fn update_mft_staging_paths_and_parent_ids(
     conn: &rusqlite::Connection,
     ds_id: &str,
@@ -979,39 +977,69 @@ fn resolve_mft_path(
     path_map: &HashMap<String, (Option<String>, String, bool)>,
     deleted_records: &HashSet<String>,
     resolved: &mut HashMap<String, String>,
-    visiting: &mut HashSet<String>,
+    _visiting: &mut HashSet<String>,
 ) -> String {
     if let Some(path) = resolved.get(record) {
         return path.clone();
     }
-    if !visiting.insert(record.to_string()) {
-        return String::new();
-    }
-    let (parent, name, _) = match path_map.get(record) {
-        Some(value) => value,
-        None => {
-            visiting.remove(record);
-            return String::new();
+
+    // Walk up the parent chain iteratively, collecting segments.
+    let mut chain: Vec<(String, Option<String>, String)> = Vec::new(); // (id, parent, name)
+    let mut current = record.to_string();
+    let mut seen: HashSet<String> = HashSet::new();
+    seen.insert(current.clone());
+    let final_path = loop {
+        if let Some(cached) = resolved.get(&current) {
+            // Build path from cached root down through the collected chain.
+            let mut path = cached.clone();
+            for (id, _parent, name) in chain.iter().rev() {
+                if path.is_empty() {
+                    path = name.clone();
+                } else {
+                    path.push('/');
+                    path.push_str(name);
+                }
+                resolved.insert(id.clone(), path.clone());
+            }
+            break resolved.get(record).cloned().unwrap_or_default();
         }
-    };
-    let path = match parent {
-        Some(parent) if parent != "5" && path_map.contains_key(parent) => {
-            let parent_path =
-                resolve_mft_path(parent, path_map, deleted_records, resolved, visiting);
-            if parent_path.is_empty() {
-                name.clone()
-            } else {
-                format!("{parent_path}/{name}")
+        match path_map.get(&current) {
+            Some((Some(parent), name, _))
+                if parent != "5"
+                    && parent != &current
+                    && path_map.contains_key(parent)
+                    && seen.insert(parent.clone()) =>
+            {
+                chain.push((current.clone(), Some(parent.clone()), name.clone()));
+                current = parent.clone();
+            }
+            Some((_, name, _)) => {
+                // Reached root, dangling parent, or cycle.
+                let base = if current != "5" && deleted_records.contains(&current) {
+                    format!("/$DeletedOrphans/{current}-{name}")
+                } else {
+                    name.clone()
+                };
+                // Walk the chain in reverse to build full paths and cache them.
+                let mut path = base;
+                resolved.insert(current.clone(), path.clone());
+                for (id, _parent, name) in chain.iter().rev() {
+                    path = format!("{path}/{name}");
+                    resolved.insert(id.clone(), path.clone());
+                }
+                break resolved.get(record).cloned().unwrap_or_default();
+            }
+            None => {
+                // Record not in path_map — propagate empty for everything in chain.
+                for (id, _, _) in &chain {
+                    resolved.insert(id.clone(), String::new());
+                }
+                resolved.insert(record.to_string(), String::new());
+                break String::new();
             }
         }
-        _ if record != "5" && deleted_records.contains(record) => {
-            format!("/$DeletedOrphans/{record}-{name}")
-        }
-        _ => name.clone(),
     };
-    resolved.insert(record.to_string(), path.clone());
-    visiting.remove(record);
-    path
+    final_path
 }
 
 #[cfg(test)]
@@ -1086,6 +1114,9 @@ pub(super) fn update_mft_staging_paths_via_sqlite(
             &mut visiting,
         );
     }
+    // All paths resolved — records list no longer needed
+    drop(records);
+    drop(stmt);
     {
         let mut stmt = conn.prepare_cached(
             "UPDATE mft_path_records SET resolved_path = ?1 WHERE record_num = ?2",
@@ -1094,6 +1125,9 @@ pub(super) fn update_mft_staging_paths_via_sqlite(
             stmt.execute(params![path, record])?;
         }
     }
+    // Resolved paths written to temp table — in-memory map no longer needed (~25MB per worker)
+    drop(resolved);
+    drop(visiting);
     conn.execute(
         "UPDATE file_entries
          SET path = (

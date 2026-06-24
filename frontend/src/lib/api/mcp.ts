@@ -1,3 +1,4 @@
+import { COMMANDS } from './commands';
 import { apiClient } from './client';
 
 export interface JsonSchema {
@@ -372,12 +373,12 @@ function normalizeToolCall(value: unknown): McpToolCallResponse {
 }
 
 export async function getMcpConfig() {
-  const response = await apiClient.request<McpConfigProtocolDto>('get_mcp_config');
+  const response = await apiClient.request<McpConfigProtocolDto>(COMMANDS.mcp.GET_MCP_CONFIG);
   return normalizeConfig(response);
 }
 
 export function saveMcpConfig(servers: McpServerConfigInput[]) {
-  return apiClient.request('save_mcp_config', {
+  return apiClient.request(COMMANDS.mcp.SAVE_MCP_CONFIG, {
     config: {
       servers: servers.map(toProtocolServerConfig),
       resources: {},
@@ -387,23 +388,23 @@ export function saveMcpConfig(servers: McpServerConfigInput[]) {
 }
 
 export async function addMcpServer(server: McpServerConfigInput) {
-  const response = await apiClient.request<McpServerStatusProtocolDto>('add_mcp_server', {
+  const response = await apiClient.request<McpServerStatusProtocolDto>(COMMANDS.mcp.ADD_MCP_SERVER, {
     server: toProtocolServerConfig(server),
   });
   return normalizeStatus(response);
 }
 
 export function removeMcpServer(serverId: string) {
-  return apiClient.request('remove_mcp_server', { serverId });
+  return apiClient.request(COMMANDS.mcp.REMOVE_MCP_SERVER, { serverId });
 }
 
 export async function connectMcpServer(serverId: string) {
-  const response = await apiClient.request<McpServerStatusProtocolDto>('connect_mcp_server', { serverId });
+  const response = await apiClient.request<McpServerStatusProtocolDto>(COMMANDS.mcp.CONNECT_MCP_SERVER, { serverId });
   return normalizeStatus(response);
 }
 
 export function disconnectMcpServer(serverId: string) {
-  return apiClient.request('disconnect_mcp_server', { serverId });
+  return apiClient.request(COMMANDS.mcp.DISCONNECT_MCP_SERVER, { serverId });
 }
 
 export async function testMcpConnection(
@@ -413,7 +414,7 @@ export async function testMcpConnection(
   args?: string[],
   permissions?: McpPermissionProfile,
 ) {
-  const response = await apiClient.request<McpTestConnectionProtocolDto>('test_mcp_connection', {
+  const response = await apiClient.request<McpTestConnectionProtocolDto>(COMMANDS.mcp.TEST_MCP_CONNECTION, {
     request: {
       transport_type: transportType,
       url,
@@ -433,17 +434,17 @@ export async function testMcpConnection(
 }
 
 export async function listMcpResources(serverId: string) {
-  const response = await apiClient.request<unknown>('list_mcp_resources', { serverId });
+  const response = await apiClient.request<unknown>(COMMANDS.mcp.LIST_MCP_RESOURCES, { serverId });
   return normalizeList(response, normalizeResource);
 }
 
 export async function listMcpTools(serverId: string) {
-  const response = await apiClient.request<unknown>('list_mcp_tools', { serverId });
+  const response = await apiClient.request<unknown>(COMMANDS.mcp.LIST_MCP_TOOLS, { serverId });
   return normalizeList(response, normalizeTool);
 }
 
 export async function callMcpTool(serverId: string, toolName: string, args: unknown) {
-  const response = await apiClient.request<McpToolCallProtocolDto>('call_mcp_tool', {
+  const response = await apiClient.request<McpToolCallProtocolDto>(COMMANDS.mcp.CALL_MCP_TOOL, {
     request: {
       server_id: serverId,
       tool_name: toolName,
@@ -454,12 +455,12 @@ export async function callMcpTool(serverId: string, toolName: string, args: unkn
 }
 
 export async function listMcpPrompts(serverId: string) {
-  const response = await apiClient.request<unknown>('list_mcp_prompts', { serverId });
+  const response = await apiClient.request<unknown>(COMMANDS.mcp.LIST_MCP_PROMPTS, { serverId });
   return normalizeList(response, normalizePrompt);
 }
 
 export function getMcpPrompt(serverId: string, promptName: string, args?: Record<string, string>) {
-  return apiClient.request<string>('get_mcp_prompt', {
+  return apiClient.request<string>(COMMANDS.mcp.GET_MCP_PROMPT, {
     serverId,
     promptName,
     arguments: args,

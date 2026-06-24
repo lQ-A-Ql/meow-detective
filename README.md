@@ -1,12 +1,12 @@
 # Forensics Workbench
 
-A Tauri 2 desktop application for disk image forensic analysis on Windows. 37 Rust crates, 10 frontend pages, 85 Tauri commands. MIT licensed.
+A Tauri 2 desktop application for disk image forensic analysis on Windows. 38 Rust crates, 10 frontend pages, 96 Tauri commands. MIT licensed.
 
 ## Architecture
 
 ```text
 React UI (frontend/) -> Tauri commands / events
-Tauri Command Layer (apps/desktop/src-tauri/) -> 85 commands
+Tauri Command Layer (apps/desktop/src-tauri/) -> 96 commands
 Application Services (crates/app-services/) -> 24 source modules
 Core crates -> domain / evidence / persistence / search / timeline / artifacts / reports / MCP / graph
 ```
@@ -39,8 +39,7 @@ cd apps/desktop/src-tauri && cargo tauri build
 
 ```bash
 cargo test --workspace
-cd frontend && pnpm test            # Frontend (43 test files)
-cd frontend && pnpm test
+cd frontend && pnpm test            # Frontend (33 test files)
 cd frontend && pnpm test:coverage
 ```
 
@@ -60,7 +59,7 @@ cd frontend && pnpm test
 | Directory | Description |
 |---|---|
 | `frontend/` | React 18 + TypeScript + Vite + Tailwind 4 |
-| `apps/desktop/src-tauri/` | Tauri 2 shell (85 commands) |
+| `apps/desktop/src-tauri/` | Tauri 2 shell (96 commands) |
 | `crates/app-services/` | Application orchestration (24 source modules) |
 | `crates/transport/` | Shared DTOs, commands, events, errors |
 | `crates/persistence-sqlite/` | SQLite repos (12) and migration scripts (31) |

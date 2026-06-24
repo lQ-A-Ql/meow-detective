@@ -30,9 +30,9 @@ doctest = false
 ahash = "0.8"
 bitflags = "2"
 bumpalo = { version = "3.19.1", features = ["collections"] }
-byteorder = "1"
+byteorder.workspace = true
 crc32fast = "1"
-encoding_rs = "0.8"
+encoding_rs.workspace = true
 glob = { version = "0.3", optional = true }
 goblin = { version = "0.10", optional = true }
 jiff = { version = "0.2.17", features = ["logging", "serde"] }

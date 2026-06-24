@@ -1,24 +1,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router';
-import { ChevronDown, ChevronRight, HardDrive } from 'lucide-react';
-import { Button } from '@/app/components/ui/button';
+import { ChevronRight, HardDrive } from 'lucide-react';
 import { PageSubbar } from '@/components/layout/PageSubbar';
 import { useResizablePanel } from '@/hooks/use-resizable-panel';
-import {
-  InspectorPane,
-  InspectorSection,
-  InspectorValue,
-} from '@/components/layout/InspectorPane';
-import { DenseDataTable } from '@/components/tables/DenseDataTable';
-import { ViewerTabs } from '@/components/viewers/ViewerTabs';
-import { HexViewer } from '@/components/viewers/HexViewer';
-import { TextViewer } from '@/components/viewers/TextViewer';
-import { ImageViewer } from '@/components/viewers/ImageViewer';
-import { VideoViewer } from '@/components/viewers/VideoViewer';
-import { AudioViewer } from '@/components/viewers/AudioViewer';
-import { TreeConnector } from '@/components/tree/TreeConnector';
-import { TreeSearch } from '@/components/tree/TreeSearch';
-import { FileIconWithStatusOverlay } from '@/components/files/FileIconWithStatusOverlay';
 import { FileVisibilityToggle } from '@/components/files/FileVisibilityToggle';
 import { useFileTreeKeyboard } from '@/hooks/use-file-tree-keyboard';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
@@ -38,110 +21,12 @@ import { useUiStore } from '@/stores/ui-store';
 import { formatPartitionRootDisplayName } from '@/lib/partition-display';
 import {
   DataSourcePartition,
-  FileEntryRow,
   FileTreeNode,
 } from '@/types/models';
-
-function sameTreeNode(left: FileTreeNode, right: FileTreeNode) {
-  return (
-    left.id === right.id &&
-    left.name === right.name &&
-    left.depth === right.depth &&
-    left.hasChildren === right.hasChildren &&
-    left.entryType === right.entryType &&
-    left.status === right.status &&
-    left.expanded === right.expanded &&
-    left.deleted === right.deleted &&
-    left.hidden === right.hidden &&
-    left.system === right.system
-  );
-}
-
-function sameTreeNodeList(left: FileTreeNode[], right: FileTreeNode[]) {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  for (let index = 0; index < left.length; index += 1) {
-    if (!sameTreeNode(left[index], right[index])) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-function mergeTreeNodePages(
-  existing: FileTreeNode[],
-  incoming: FileTreeNode[],
-) {
-  const merged = [...existing];
-  const indexById = new Map(existing.map((node, index) => [node.id, index]));
-  let changed = false;
-
-  for (const node of incoming) {
-    const existingIndex = indexById.get(node.id);
-    if (existingIndex === undefined) {
-      merged.push(node);
-      indexById.set(node.id, merged.length - 1);
-      changed = true;
-      continue;
-    }
-
-    if (!sameTreeNode(merged[existingIndex], node)) {
-      merged[existingIndex] = node;
-      changed = true;
-    }
-  }
-
-  return changed ? merged : existing;
-}
-
-function formatBytes(bytes?: number) {
-  if (!bytes) {
-    return '0 B';
-  }
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let value = bytes;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-  return `${value >= 10 || unitIndex === 0 ? Math.round(value) : value.toFixed(1)} ${units[unitIndex]}`;
-}
-
-function LargeMediaFallback({
-  mediaType,
-  previewBytes,
-  totalBytes,
-  protocol,
-}: {
-  mediaType: '视频' | '音频';
-  previewBytes?: number;
-  totalBytes?: number;
-  protocol?: boolean;
-}) {
-  const title = protocol ? `大${mediaType}使用受控流式预览` : `大${mediaType}使用受控分块预览`;
-  const detail = protocol
-    ? '当前通过 evidence-media 受控协议提供按需 Range 读取；若播放器不支持该协议，可提取文件后在本机播放器查看。'
-    : `当前只读取首个 ${formatBytes(previewBytes)} 片段进行安全预览；完整播放需要先使用右侧“提取文件”导出后在本机播放器查看。`;
-  return (
-    <div className="flex h-full items-center justify-center px-6 text-center text-[#555]">
-      <div className="max-w-md space-y-2">
-        <div className="text-[12px] font-semibold text-[#222]">
-          {title}
-        </div>
-        <div className="text-[11px] leading-5">
-          {detail}
-        </div>
-        <div className="font-mono text-[10px] text-[#888]">
-          total={formatBytes(totalBytes)} / source=opaque handle
-        </div>
-      </div>
-    </div>
-  );
-}
+import { FileTreePanel } from './FileTreePanel';
+import { FileListPanel } from './FileListPanel';
+import { FilePreviewPanel } from './FilePreviewPanel';
+import { sameTreeNodeList, mergeTreeNodePages } from './file-tree-utils';
 
 export function FileBrowser() {
   const { data: currentCase } = useCurrentCase();
@@ -164,7 +49,6 @@ export function FileBrowser() {
   const toggleFileSortDirection = useUiStore(
     (state) => state.toggleFileSortDirection
   );
-  const navigate = useNavigate();
   const [expandedDirectoryIds, setExpandedDirectoryIds] = useState<string[]>(
     []
   );
@@ -237,14 +121,10 @@ export function FileBrowser() {
     setRowsOffset(0);
   }, [showHidden]);
 
+  // 目录切换或排序变化时回到第一页
   useEffect(() => {
     setRowsOffset(0);
-  }, [activeDirectoryId]);
-
-  // 排序变化时回到第一页：排序由后端在完整可见集合上完成，分页随之失效。
-  useEffect(() => {
-    setRowsOffset(0);
-  }, [fileSortKey, fileSortDirection]);
+  }, [activeDirectoryId, fileSortKey, fileSortDirection]);
 
   useEffect(() => {
     if (!activeDirectoryId || !activeChildren) {
@@ -616,525 +496,54 @@ export function FileBrowser() {
 
       <div className="flex-1 flex overflow-hidden min-h-0">
         {/* 左侧文件树 */}
-        <div
-          className="border-r border-[#e0e0e0] bg-[#fafafa] flex flex-col shrink-0 relative"
-          style={{ width: `${treeWidth}px` }}
-        >
-          {/* 拖拽调整宽度的手柄 */}
-          <div
-            className={`absolute right-0 top-0 bottom-0 w-1 cursor-col-resize z-10 transition-colors ${
-              isResizing ? 'bg-blue-400' : 'hover:bg-blue-200'
-            }`}
-            onMouseDown={onResizeStart}
-            title="拖拽调整宽度"
-          />
-          <div className="h-7 border-b border-[#e0e0e0] flex items-center px-3 text-[10px] font-semibold text-[#555] uppercase tracking-wider bg-[#f5f5f5]">
-            目录树
-          </div>
-          <TreeSearch onFilter={setFilterQuery} />
-          <div
-            ref={treeContainerRef}
-            className="flex-1 overflow-auto py-1 font-mono text-[11px] select-none"
-            tabIndex={0}
-          >
-            {filteredTreeNodes.length === 0 ? (
-              <div className="px-3 py-4 text-[#888]">
-                {filterQuery ? '没有匹配的目录。' : '导入数据源后显示目录树。'}
-              </div>
-            ) : null}
-            {activeChildrenPage?.truncated ? (
-              <div className="mx-2 mb-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] leading-4 text-amber-800">
-                当前目录子目录很多，仅加载前 {activeChildrenPage.limit ?? FILE_BROWSER_PAGE_LIMIT} 个；请用右侧列表或搜索继续定位。
-              </div>
-            ) : null}
-            {filteredTreeNodes.map((node, index) => {
-              // 判断是否是父节点的最后一个子节点
-              const isLast =
-                index === filteredTreeNodes.length - 1 ||
-                (filteredTreeNodes[index + 1]?.depth ?? 0) < node.depth;
-
-              return (
-                <button
-                  key={node.id}
-                  type="button"
-                  onClick={() => toggleDirectory(node)}
-                  className={`w-full flex items-center gap-1 px-2 py-1 cursor-pointer text-left relative ${
-                    node.active
-                      ? 'bg-[#e0e8f0] text-[#111] font-medium'
-                      : 'text-[#555] hover:bg-[#eaeaea]'
-                  }`}
-                  style={{ paddingLeft: `${8 + node.depth * 16}px` }}
-                >
-                  {/* 层级连接线 */}
-                  {node.depth > 0 && (
-                    <TreeConnector depth={node.depth} isLast={isLast} />
-                  )}
-
-                  {/* 展开/折叠箭头 */}
-                  {node.hasChildren ? (
-                    node.expanded ? (
-                      <ChevronDown
-                        size={12}
-                        className="text-[#888] shrink-0"
-                      />
-                    ) : (
-                      <ChevronRight
-                        size={12}
-                        className="text-[#aaa] shrink-0"
-                      />
-                    )
-                  ) : (
-                    <span className="w-3 shrink-0" />
-                  )}
-
-                  {/* 文件类型图标 */}
-                  <FileIconWithStatusOverlay
-                    name={node.name}
-                    entryType={node.entryType}
-                    status={node.status}
-                    expanded={node.expanded}
-                    deleted={node.deleted}
-                    hidden={node.hidden}
-                    system={node.system}
-                    size={12}
-                  />
-
-                  {/* 文件名 */}
-                  <span className="truncate">{displayNodeName(node.name, node.depth)}</span>
-
-                  {/* 状态标签 */}
-                  {node.status && node.status !== 'ready' ? (
-                    <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-[#888]">
-                      {node.status}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-            {canLoadMoreTreeChildren ? (
-              <div className="px-2 py-2">
-                <div className="flex items-center justify-between rounded border border-[#e0e0e0] bg-white px-2 py-1.5 text-[10px] text-[#666]">
-                  <span>
-                    已加载 {activeTreeChildrenLoaded} / {activeChildrenPage?.totalCount ?? activeTreeChildrenLoaded} 个子目录
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-6 px-2 text-[10px]"
-                    onClick={loadMoreActiveTreeChildren}
-                    data-testid="load-more-tree-children"
-                  >
-                    加载更多子目录
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </div>
+        <FileTreePanel
+          filteredTreeNodes={filteredTreeNodes}
+          activeChildrenPage={activeChildrenPage}
+          activeTreeChildrenLoaded={activeTreeChildrenLoaded}
+          canLoadMoreTreeChildren={canLoadMoreTreeChildren}
+          loadMoreActiveTreeChildren={loadMoreActiveTreeChildren}
+          toggleDirectory={toggleDirectory}
+          displayNodeName={displayNodeName}
+          filterQuery={filterQuery}
+          setFilterQuery={setFilterQuery}
+          treeWidth={treeWidth}
+          isResizing={isResizing}
+          onResizeStart={onResizeStart}
+          treeContainerRef={treeContainerRef}
+          FILE_BROWSER_PAGE_LIMIT={FILE_BROWSER_PAGE_LIMIT}
+        />
 
         {/* 右侧内容区 */}
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
-          <div className="flex-1 flex flex-col border-b border-[#e0e0e0] bg-white min-h-0">
-            <DenseDataTable<FileEntryRow>
-              rows={sortedRows}
-              getRowKey={(row) => row.id}
-              selectedRowKey={selectedFile?.id}
-              onRowClick={(row) => {
-                if (row.entryType === 'directory') {
-                  setSelectedDirectoryId(row.id);
-                  setSelectedFileId(undefined);
-                  setExpandedDirectoryIds((current) =>
-                    current.includes(row.id)
-                      ? current
-                      : [...current, row.id]
-                  );
-                  return;
-                }
-                setSelectedFileId(row.id);
-              }}
-              emptyTitle="当前目录为空"
-              emptyDescription={
-                rowsPage?.truncated
-                  ? `当前仅加载前 ${rowsPage.limit} 项，共 ${rowsPage.totalCount} 项。`
-                  : '所选路径下没有可展示的文件对象。'
-              }
-              sortKey={fileSortKey}
-              sortDirection={fileSortDirection}
-              onSort={handleSort}
-              columns={[
-                {
-                  key: 'name',
-                  title: '名称',
-                  className: 'w-[34%]',
-                  sortable: true,
-                  sortKey: 'name',
-                  render: (row) => {
-                    return (
-                      <div className="flex items-center gap-2 min-w-0">
-                        <FileIconWithStatusOverlay
-                          name={row.name}
-                          entryType={row.entryType}
-                          deleted={row.deleted}
-                          hidden={row.hidden}
-                          system={row.system}
-                          size={12}
-                        />
-                        <span className="truncate">{row.name}</span>
-                      </div>
-                    );
-                  },
-                },
-                {
-                  key: 'size',
-                  title: '大小',
-                  className: 'w-28 text-[#666]',
-                  sortable: true,
-                  sortKey: 'size',
-                  render: (row) =>
-                    row.entryType === 'directory'
-                      ? '-'
-                      : row.size
-                        ? `${Math.round(row.size / 1000)} KB`
-                        : '0 KB',
-                },
-                {
-                  key: 'modifiedAt',
-                  title: '修改时间',
-                  className: 'w-44 text-[#666]',
-                  sortable: true,
-                  sortKey: 'modifiedAt',
-                  render: (row) => row.modifiedAt ?? '-',
-                },
-                {
-                  key: 'attr',
-                  title: '属性',
-                  className: 'text-[#888]',
-                  render: (row) =>
-                    row.entryType === 'directory'
-                      ? 'DIR'
-                      : 'A--',
-                },
-              ]}
-            />
-            {rowsPage ? (
-              <div className="flex items-center justify-between border-t border-[#e0e0e0] bg-[#fafafa] px-3 py-2 text-[11px] text-[#666]">
-                <span>
-                  显示第 {rowsPage.totalCount === 0 ? 0 : rowsPage.offset + 1} - {Math.min(rowsPage.offset + rowsPage.rows.length, rowsPage.totalCount)} 项，共 {rowsPage.totalCount} 项
-                </span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-[11px]"
-                    onClick={goToPreviousRows}
-                    disabled={!canGoToPreviousRows}
-                  >
-                    上一页
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-[11px]"
-                    onClick={goToNextRows}
-                    disabled={!canGoToNextRows}
-                  >
-                    下一页
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-          </div>
+          <FileListPanel
+            sortedRows={sortedRows}
+            selectedFileId={selectedFileId}
+            fileSortKey={fileSortKey}
+            fileSortDirection={fileSortDirection}
+            handleSort={handleSort}
+            setSelectedDirectoryId={setSelectedDirectoryId}
+            setSelectedFileId={setSelectedFileId}
+            setExpandedDirectoryIds={setExpandedDirectoryIds}
+            rowsPage={rowsPage}
+            canGoToPreviousRows={canGoToPreviousRows}
+            canGoToNextRows={canGoToNextRows}
+            goToPreviousRows={goToPreviousRows}
+            goToNextRows={goToNextRows}
+          />
 
-          <div className="h-72 bg-[#fcfcfc] shrink-0 min-h-0">
-            <ViewerTabs
-              value={viewerTab}
-              onValueChange={(value) =>
-                setViewerTab(
-                  value as 'metadata' | 'text' | 'hex' | 'preview'
-                )
-              }
-              tabs={[
-                {
-                  value: 'hex',
-                  label: '十六进制',
-                  content: viewer?.range.lines?.length ? (
-                    <HexViewer lines={viewer.range.lines} />
-                  ) : (
-                    <div className="text-[#666]">
-                      选择文件后显示十六进制预览。
-                    </div>
-                  ),
-                },
-                {
-                  value: 'text',
-                  label: '文本',
-                  content: textPreview && !textPreview.isBinary ? (
-                    <TextViewer
-                      content={textPreview.content}
-                      encoding={textPreview.encoding}
-                      extension={selectedFile?.ext}
-                      isTruncated={textPreview.isTruncated}
-                    />
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-[#888]">
-                      {textPreview?.isBinary ? '二进制文件，无法预览文本' : '选择文本文件后显示预览'}
-                    </div>
-                  ),
-                },
-                {
-                  value: 'preview',
-                  label: '预览',
-                  content: (() => {
-                    const mime = viewer?.handle.mime?.toLowerCase() ?? '';
-                    const ext = (selectedFile?.ext ?? selectedFile?.name.split('.').pop() ?? '').toLowerCase().replace(/^\./, '');
-                    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
-                    const videoExts = ['mp4', 'webm', 'avi', 'mkv'];
-                    const audioExts = ['mp3', 'wav', 'flac', 'aac', 'ogg'];
-                    
-                    // 图片预览
-                    if (mime.startsWith('image/') || imageExts.includes(ext)) {
-                      if (imagePreview?.dataUrl) {
-                        return (
-                          <ImageViewer
-                            src={imagePreview.dataUrl}
-                            mimeType={imagePreview.mimeType}
-                            fileName={selectedFile?.name}
-                          />
-                        );
-                      }
-                      return <div className="flex items-center justify-center h-full text-[#888]">加载图片预览...</div>;
-                    }
-                    
-                    // 视频预览
-                    if (mime.startsWith('video/') || videoExts.includes(ext)) {
-                      if (mediaUrl?.url) {
-                        return mediaUrl.previewMode === 'rangeFallback' || mediaUrl.previewMode === 'range' ? (
-                          <div className="h-full flex flex-col">
-                            <div className="flex-1 min-h-0">
-                              <VideoViewer
-                                src={mediaUrl.url}
-                                mimeType={mediaUrl.mimeType}
-                                fileName={selectedFile?.name}
-                              />
-                            </div>
-                            <div className="border-t border-[#e0e0e0] bg-[#f8f8f8] px-3 py-1 text-[10px] text-[#666]">
-                              受控分块预览: 已读取 {formatBytes(mediaUrl.previewBytes)}，完整播放请提取文件后查看。
-                            </div>
-                          </div>
-                        ) : mediaUrl.previewMode === 'protocol' ? (
-                          <div className="h-full flex flex-col">
-                            <div className="flex-1 min-h-0">
-                              <VideoViewer
-                                src={mediaUrl.url}
-                                mimeType={mediaUrl.mimeType}
-                                fileName={selectedFile?.name}
-                              />
-                            </div>
-                            <div className="border-t border-[#e0e0e0] bg-[#f8f8f8] px-3 py-1 text-[10px] text-[#666]">
-                              受控流式预览: evidence-media range 读取，不暴露宿主证据路径。
-                            </div>
-                          </div>
-                        ) : (
-                          <VideoViewer
-                            src={mediaUrl.url}
-                            mimeType={mediaUrl.mimeType}
-                            fileName={selectedFile?.name}
-                          />
-                        );
-                      }
-                      if (mediaUrl?.canReadRanges || mediaUrl?.handleId) {
-                        return (
-                          <LargeMediaFallback
-                            mediaType="视频"
-                            previewBytes={mediaUrl.previewBytes}
-                            totalBytes={mediaUrl.size}
-                            protocol={mediaUrl.previewMode === 'protocol'}
-                          />
-                        );
-                      }
-                      return <div className="flex items-center justify-center h-full text-[#888]">加载视频预览...</div>;
-                    }
-                    
-                    // 音频预览
-                    if (mime.startsWith('audio/') || audioExts.includes(ext)) {
-                      if (mediaUrl?.url) {
-                        return mediaUrl.previewMode === 'rangeFallback' || mediaUrl.previewMode === 'range' ? (
-                          <div className="h-full flex flex-col">
-                            <div className="flex-1 min-h-0">
-                              <AudioViewer
-                                src={mediaUrl.url}
-                                mimeType={mediaUrl.mimeType}
-                                fileName={selectedFile?.name}
-                              />
-                            </div>
-                            <div className="border-t border-[#333] bg-[#111] px-3 py-1 text-[10px] text-[#aaa]">
-                              受控分块预览: 已读取 {formatBytes(mediaUrl.previewBytes)}，完整播放请提取文件后查看。
-                            </div>
-                          </div>
-                        ) : mediaUrl.previewMode === 'protocol' ? (
-                          <div className="h-full flex flex-col">
-                            <div className="flex-1 min-h-0">
-                              <AudioViewer
-                                src={mediaUrl.url}
-                                mimeType={mediaUrl.mimeType}
-                                fileName={selectedFile?.name}
-                              />
-                            </div>
-                            <div className="border-t border-[#333] bg-[#111] px-3 py-1 text-[10px] text-[#aaa]">
-                              受控流式预览: evidence-media range 读取，不暴露宿主证据路径。
-                            </div>
-                          </div>
-                        ) : (
-                          <AudioViewer
-                            src={mediaUrl.url}
-                            mimeType={mediaUrl.mimeType}
-                            fileName={selectedFile?.name}
-                          />
-                        );
-                      }
-                      if (mediaUrl?.canReadRanges || mediaUrl?.handleId) {
-                        return (
-                          <LargeMediaFallback
-                            mediaType="音频"
-                            previewBytes={mediaUrl.previewBytes}
-                            totalBytes={mediaUrl.size}
-                            protocol={mediaUrl.previewMode === 'protocol'}
-                          />
-                        );
-                      }
-                      return <div className="flex items-center justify-center h-full text-[#888]">加载音频预览...</div>;
-                    }
-                    
-                    // 默认
-                    return (
-                      <div className="flex items-center justify-center h-full text-[#888]">
-                        选择图片、视频或音频文件后显示预览
-                      </div>
-                    );
-                  })(),
-                },
-                {
-                  value: 'metadata',
-                  label: '元数据',
-                  content: (
-                    <div className="space-y-2 font-mono text-[11px] text-[#444]">
-                      <div>
-                        handle_id: {viewer?.handle.handleId ?? '-'}
-                      </div>
-                      <div>size: {viewer?.handle.size ?? '-'}</div>
-                      <div>mime: {viewer?.handle.mime ?? '-'}</div>
-                      <div>path: {selectedFile?.path ?? '-'}</div>
-                    </div>
-                  ),
-                },
-              ]}
-            />
-          </div>
+          <FilePreviewPanel
+            viewerTab={viewerTab}
+            setViewerTab={setViewerTab}
+            viewer={viewer}
+            textPreview={textPreview}
+            imagePreview={imagePreview}
+            mediaUrl={mediaUrl}
+            selectedFile={selectedFile}
+            activeDirectoryPath={activeDirectoryPath}
+            currentDirectory={currentDirectory}
+            extractFile={extractFile}
+          />
         </div>
-
-        <InspectorPane
-          title="对象检查器"
-          subtitle={
-            selectedFile
-              ? `已选对象 ${selectedFile.name}`
-              : '未选中文件对象'
-          }
-          widthClassName="w-80"
-        >
-          <div className="space-y-5">
-            <InspectorSection title="对象标识">
-              <InspectorValue
-                value={selectedFile?.name ?? '-'}
-                mono
-                strong
-              />
-            </InspectorSection>
-
-            <InspectorSection title="来源路径">
-              <InspectorValue
-                value={
-                  selectedFile?.path ??
-                  activeDirectoryPath ??
-                  currentDirectory?.name ??
-                  '-'
-                }
-                mono
-              />
-            </InspectorSection>
-
-            <InspectorSection title="时间戳 (MACB)">
-              <div className="font-mono text-[11px] grid grid-cols-[30px_1fr] gap-1">
-                <div className="text-[#888]">M</div>
-                <div className="text-[#333]">
-                  {selectedFile?.modifiedAt ?? '-'}
-                </div>
-                <div className="text-[#888]">A</div>
-                <div className="text-[#333]">
-                  {selectedFile?.accessedAt ?? '-'}
-                </div>
-                <div className="text-[#888]">C</div>
-                <div className="text-[#333]">
-                  {selectedFile?.changedAt ?? '-'}
-                </div>
-                <div className="text-[#888]">B</div>
-                <div className="text-[#333]">
-                  {selectedFile?.createdAt ?? '-'}
-                </div>
-              </div>
-            </InspectorSection>
-
-            <InspectorSection title="摘要字段">
-              <InspectorValue
-                value={selectedFile?.hashSha256 ?? '-'}
-                mono
-              />
-            </InspectorSection>
-
-            <InspectorSection title="对象状态">
-              <div className="font-mono text-[11px] grid grid-cols-[60px_1fr] gap-1">
-                <div className="text-[#888]">deleted</div>
-                <div className="text-[#333]">{selectedFile?.deleted ? 'true' : 'false'}</div>
-                <div className="text-[#888]">hidden</div>
-                <div className="text-[#333]">{selectedFile?.hidden ? 'true' : 'false'}</div>
-                <div className="text-[#888]">system</div>
-                <div className="text-[#333]">{selectedFile?.system ? 'true' : 'false'}</div>
-              </div>
-            </InspectorSection>
-
-            <InspectorSection title="操作">
-              <div className="flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (selectedFile) {
-                      extractFile.mutate(selectedFile);
-                    }
-                  }}
-                  disabled={!selectedFile || extractFile.isPending}
-                  className="w-full border border-[#ccc] bg-white text-[#111] hover:bg-[#f0f0f0] py-1.5 text-center text-[11px] rounded-[2px] cursor-pointer font-medium disabled:opacity-50"
-                >
-                  {extractFile.isPending ? '提取中...' : '提取文件'}
-                </button>
-                <button
-                  onClick={() => {
-                    if (selectedFile) {
-                      useSelectionStore
-                        .getState()
-                        .setSelectedTimelineId(selectedFile.id);
-                      navigate('/timeline');
-                    }
-                  }}
-                  className="w-full border border-transparent text-[#666] hover:text-[#111] py-1.5 text-center text-[11px] cursor-pointer underline hover:no-underline"
-                >
-                  在时间线中查看
-                </button>
-              </div>
-            </InspectorSection>
-          </div>
-        </InspectorPane>
       </div>
     </div>
   );

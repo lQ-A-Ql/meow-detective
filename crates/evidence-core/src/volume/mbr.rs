@@ -3,6 +3,115 @@
 /// For extended/logical partitions, use `parse_mbr_full` which walks the EBR chain.
 use std::io::{Read, Seek, SeekFrom};
 
+/// MBR partition type classification for display and status.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MbrPartitionStatus {
+    Supported,
+    EncryptedBitLocker,
+    Unsupported,
+}
+
+/// Result of classifying an MBR type code.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MbrPartitionClass {
+    pub name: &'static str,
+    pub status: MbrPartitionStatus,
+}
+
+/// Map an MBR type code to a human-readable name and support status.
+pub fn classify_mbr_partition_type(type_code: u8) -> MbrPartitionClass {
+    match type_code {
+        0x01 => MbrPartitionClass {
+            name: "FAT12",
+            status: MbrPartitionStatus::Supported,
+        },
+        0x04 => MbrPartitionClass {
+            name: "FAT16",
+            status: MbrPartitionStatus::Supported,
+        },
+        0x06 => MbrPartitionClass {
+            name: "FAT16B",
+            status: MbrPartitionStatus::Supported,
+        },
+        0x07 => MbrPartitionClass {
+            name: "NTFS/exFAT/HPFS",
+            status: MbrPartitionStatus::Supported,
+        },
+        0x0B => MbrPartitionClass {
+            name: "FAT32 (CHS)",
+            status: MbrPartitionStatus::Supported,
+        },
+        0x0C => MbrPartitionClass {
+            name: "FAT32 (LBA)",
+            status: MbrPartitionStatus::Supported,
+        },
+        0x0E => MbrPartitionClass {
+            name: "FAT16B (LBA)",
+            status: MbrPartitionStatus::Supported,
+        },
+        0x17 => MbrPartitionClass {
+            name: "Hidden NTFS",
+            status: MbrPartitionStatus::Supported,
+        },
+        0x1B => MbrPartitionClass {
+            name: "Hidden FAT32",
+            status: MbrPartitionStatus::Supported,
+        },
+        0x1C => MbrPartitionClass {
+            name: "Hidden FAT32 (LBA)",
+            status: MbrPartitionStatus::Supported,
+        },
+        0x42 => MbrPartitionClass {
+            name: "BitLocker",
+            status: MbrPartitionStatus::EncryptedBitLocker,
+        },
+        0x82 => MbrPartitionClass {
+            name: "Linux swap",
+            status: MbrPartitionStatus::Unsupported,
+        },
+        0x83 => MbrPartitionClass {
+            name: "Linux",
+            status: MbrPartitionStatus::Unsupported,
+        },
+        0x8E => MbrPartitionClass {
+            name: "Linux LVM",
+            status: MbrPartitionStatus::Unsupported,
+        },
+        0xA5 => MbrPartitionClass {
+            name: "FreeBSD",
+            status: MbrPartitionStatus::Unsupported,
+        },
+        0xA8 => MbrPartitionClass {
+            name: "macOS HFS+",
+            status: MbrPartitionStatus::Unsupported,
+        },
+        0xAF => MbrPartitionClass {
+            name: "macOS HFS+",
+            status: MbrPartitionStatus::Unsupported,
+        },
+        0xEE => MbrPartitionClass {
+            name: "GPT Protective",
+            status: MbrPartitionStatus::Unsupported,
+        },
+        0xEF => MbrPartitionClass {
+            name: "EFI System",
+            status: MbrPartitionStatus::Unsupported,
+        },
+        0x05 | 0x0F => MbrPartitionClass {
+            name: "Extended",
+            status: MbrPartitionStatus::Unsupported,
+        },
+        0x00 => MbrPartitionClass {
+            name: "Empty",
+            status: MbrPartitionStatus::Unsupported,
+        },
+        _ => MbrPartitionClass {
+            name: "Unknown",
+            status: MbrPartitionStatus::Unsupported,
+        },
+    }
+}
+
 /// Extended partition type codes indicating an EBR chain.
 pub const EXTENDED_TYPES: &[u8] = &[0x05, 0x0F];
 
@@ -264,6 +373,109 @@ mod tests {
         assert_eq!(entries[3].partition_number, 3);
         assert!(entries[3].is_logical);
         assert_eq!(entries[3].lba_start, 200000 + 20063 + 63);
+    }
+
+    #[test]
+    fn classify_mbr_partition_type_known_types() {
+        // Supported types
+        assert_eq!(classify_mbr_partition_type(0x01).name, "FAT12");
+        assert_eq!(
+            classify_mbr_partition_type(0x01).status,
+            MbrPartitionStatus::Supported
+        );
+        assert_eq!(classify_mbr_partition_type(0x07).name, "NTFS/exFAT/HPFS");
+        assert_eq!(
+            classify_mbr_partition_type(0x07).status,
+            MbrPartitionStatus::Supported
+        );
+        assert_eq!(classify_mbr_partition_type(0x0C).name, "FAT32 (LBA)");
+        assert_eq!(
+            classify_mbr_partition_type(0x0C).status,
+            MbrPartitionStatus::Supported
+        );
+
+        // BitLocker
+        assert_eq!(classify_mbr_partition_type(0x42).name, "BitLocker");
+        assert_eq!(
+            classify_mbr_partition_type(0x42).status,
+            MbrPartitionStatus::EncryptedBitLocker
+        );
+
+        // Unsupported Linux
+        assert_eq!(classify_mbr_partition_type(0x83).name, "Linux");
+        assert_eq!(
+            classify_mbr_partition_type(0x83).status,
+            MbrPartitionStatus::Unsupported
+        );
+
+        // Extended
+        assert_eq!(classify_mbr_partition_type(0x05).name, "Extended");
+        assert_eq!(classify_mbr_partition_type(0x0F).name, "Extended");
+
+        // Empty
+        assert_eq!(classify_mbr_partition_type(0x00).name, "Empty");
+
+        // Unknown
+        assert_eq!(classify_mbr_partition_type(0xFE).name, "Unknown");
+    }
+
+    #[test]
+    fn parse_mbr_full_excludes_empty_and_extended_from_partition_records() {
+        use std::io::Cursor;
+        // Build a disk with: 1 NTFS primary, 1 empty, 1 extended (with 1 logical)
+        let mut disk = vec![0u8; 512 * 1000];
+        disk[510] = 0x55;
+        disk[511] = 0xAA;
+
+        // Entry 0: NTFS at LBA 63, 500 sectors
+        let base0 = 446;
+        disk[base0] = 0x80;
+        disk[base0 + 4] = 0x07;
+        disk[base0 + 8..base0 + 12].copy_from_slice(&63u32.to_le_bytes());
+        disk[base0 + 12..base0 + 16].copy_from_slice(&500u32.to_le_bytes());
+
+        // Entry 1: empty (type 0x00) — should be filtered out
+        // (already zeroed)
+
+        // Entry 2: extended at LBA 600
+        let base2 = 446 + 2 * 16;
+        disk[base2 + 4] = 0x0F;
+        disk[base2 + 8..base2 + 12].copy_from_slice(&600u32.to_le_bytes());
+        disk[base2 + 12..base2 + 16].copy_from_slice(&300u32.to_le_bytes());
+
+        // EBR at sector 600: logical volume at relative LBA 63
+        let ebr_off = 600 * 512;
+        disk[ebr_off + 510] = 0x55;
+        disk[ebr_off + 511] = 0xAA;
+        disk[ebr_off + 446 + 4] = 0x07; // NTFS logical
+        disk[ebr_off + 446 + 8..ebr_off + 446 + 12].copy_from_slice(&63u32.to_le_bytes());
+        disk[ebr_off + 446 + 12..ebr_off + 446 + 16].copy_from_slice(&200u32.to_le_bytes());
+
+        let mut cursor = Cursor::new(&disk);
+        let entries = parse_mbr_full(&mut cursor).unwrap();
+
+        // Should have 3 entries: NTFS primary + extended + 1 logical
+        assert_eq!(entries.len(), 3);
+        assert_eq!(entries[0].partition_type, 0x07);
+        assert!(entries[1].is_extended());
+        assert!(entries[2].is_logical);
+        assert_eq!(entries[2].partition_type, 0x07);
+
+        // The non-empty, non-extended entries suitable for PartitionRecord: 2 data partitions
+        let data_partitions: Vec<_> = entries
+            .iter()
+            .filter(|e| !e.is_extended() && e.partition_type != 0)
+            .collect();
+        assert_eq!(data_partitions.len(), 2);
+        assert_eq!(data_partitions[0].partition_type, 0x07);
+        assert!(!data_partitions[0].is_logical);
+        assert_eq!(data_partitions[1].partition_type, 0x07);
+        assert!(data_partitions[1].is_logical);
+
+        // Verify the classification maps correctly
+        let class = classify_mbr_partition_type(data_partitions[0].partition_type);
+        assert_eq!(class.name, "NTFS/exFAT/HPFS");
+        assert_eq!(class.status, MbrPartitionStatus::Supported);
     }
 
     #[test]

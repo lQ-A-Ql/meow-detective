@@ -12,7 +12,7 @@ export interface DataSourceSummary {
   readerKind?: string;
   provenanceStatus?: string;
   warnings?: string[];
-  partitions: DataSourcePartition[];
+  partitions?: DataSourcePartition[];
 }
 
 export interface DataSourcePartition {

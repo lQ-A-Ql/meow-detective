@@ -25,6 +25,7 @@ pub mod notebook;
 pub mod recovery;
 pub mod registry;
 pub mod reports;
+pub mod rule_pack;
 pub mod search;
 pub mod timeline;
 pub mod v3_governance;
@@ -73,8 +74,9 @@ pub use files::{
     FileChildrenDto, FileEntryRowDto, FileJumpContextDto, FileRowsPageDto, FileTreeNodeDto,
 };
 pub use graph::{
-    GraphEdgeDto, GraphEdgeTypeDto, GraphNodeDto, GraphNodeTypeDto, GraphProvenanceEntryDto,
-    GraphQueryDto, GraphQueryResultDto, GraphSnapshotDto,
+    GetNodeNeighborhoodRequest, GetProvenanceChainRequest, GraphEdgeDto, GraphEdgeTypeDto,
+    GraphNodeDto, GraphNodeTypeDto, GraphProvenanceEntryDto, GraphQueryDto, GraphQueryResultDto,
+    GraphSnapshotDto,
 };
 pub use import::{
     CancelJobRequestDto, CancelReasonDto, CancellationStateDto, ImportPhaseDto,
@@ -93,13 +95,15 @@ pub use macos::{
 };
 pub use mcp::{
     McpCapabilitiesDto, McpConfigDto, McpPromptArgumentDto, McpPromptDto, McpResourceDto,
-    McpServerConfigDto, McpServerStatusDto, McpTestConnectionRequest, McpTestConnectionResult,
-    McpToolCallRequest, McpToolCallResult, McpToolDto,
+    McpServerConfigDto, McpServerStatusDto, McpTestConnectionRequestDto,
+    McpTestConnectionResultDto, McpToolCallRequestDto, McpToolCallResultDto, McpToolDto,
 };
 pub use notebook::{
-    EvidenceCitationDto, InvestigationStepDto, NotebookEntryDto, NotebookEntryStatusDto,
-    NotebookEntryTypeDto, NotebookExportDto, NotebookThreadEdgeDto, StepReplayDifferDto,
-    StepReplayDto, StepReplayFailDto, StepReplayMatchDto, StepReplayResultDto,
+    AddEvidenceCitationRequest, CreateNotebookEntryRequest, EvidenceCitationDto,
+    GetNotebookThreadRequest, InvestigationStepDto, ListInvestigationStepsRequest,
+    ListNotebookEntriesRequest, NotebookEntryDto, NotebookEntryStatusDto, NotebookEntryTypeDto,
+    NotebookExportDto, NotebookThreadEdgeDto, StepReplayDifferDto, StepReplayDto,
+    StepReplayFailDto, StepReplayMatchDto, StepReplayResultDto, UpdateNotebookEntryRequest,
 };
 pub use recovery::DeletedFileRecoveryDto;
 pub use registry::{
@@ -108,6 +112,7 @@ pub use registry::{
     TxLogParseResultDto,
 };
 pub use reports::{ReportHistoryItemDto, ReportTemplateDto};
+pub use rule_pack::{RulePackCoverageDto, RulePackSummaryDto, RulePackValidationResultDto};
 pub use search::{SearchHighlightDto, SearchHitDto, SearchResultPageDto, SearchSnippetDto};
 pub use timeline::{
     TimelineAggregatedDto, TimelineClusterDto, TimelineEventDto, TimelineStripeDto,

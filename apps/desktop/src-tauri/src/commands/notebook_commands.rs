@@ -1,8 +1,10 @@
 use tauri::State;
 use transport::{
     dto::{
-        EvidenceCitationDto, GraphNodeTypeDto, InvestigationStepDto, NotebookEntryDto,
-        NotebookEntryStatusDto, NotebookEntryTypeDto,
+        AddEvidenceCitationRequest, CreateNotebookEntryRequest, EvidenceCitationDto,
+        GetNotebookThreadRequest, InvestigationStepDto, ListInvestigationStepsRequest,
+        ListNotebookEntriesRequest, NotebookEntryDto, NotebookEntryStatusDto, NotebookEntryTypeDto,
+        UpdateNotebookEntryRequest,
     },
     CommandError,
 };
@@ -13,32 +15,25 @@ use crate::state::AppState;
 // ── Notebook entry commands ──────────────────────────────────────────────
 
 #[tauri::command]
-#[allow(clippy::too_many_arguments)]
 pub async fn create_notebook_entry(
     state: State<'_, AppState>,
-    case_id: String,
-    author: String,
-    entry_type: NotebookEntryTypeDto,
-    title: String,
-    body_markdown: String,
-    tags: Vec<String>,
-    status: NotebookEntryStatusDto,
-    parent_id: Option<String>,
+    request: CreateNotebookEntryRequest,
 ) -> Result<NotebookEntryDto, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        require_active_case(&app_state)?;
+        let active = require_active_case(&app_state)?;
+        let case_id = active.case_id;
         let conn = get_case_connection(&app_state)?;
         app_services::notebook_service::create_entry(
             &conn,
             &case_id,
-            &author,
-            &entry_type,
-            &title,
-            &body_markdown,
-            &tags,
-            &status,
-            parent_id.as_deref(),
+            &request.author,
+            &request.entry_type,
+            &request.title,
+            &request.body_markdown,
+            &request.tags,
+            &request.status,
+            request.parent_id.as_deref(),
         )
         .map_err(CommandError::from_service_error)
     })
@@ -49,11 +44,7 @@ pub async fn create_notebook_entry(
 #[tauri::command]
 pub async fn update_notebook_entry(
     state: State<'_, AppState>,
-    entry_id: String,
-    title: Option<String>,
-    body_markdown: Option<String>,
-    tags: Option<Vec<String>>,
-    status: Option<NotebookEntryStatusDto>,
+    request: UpdateNotebookEntryRequest,
 ) -> Result<NotebookEntryDto, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -61,11 +52,11 @@ pub async fn update_notebook_entry(
         let conn = get_case_connection(&app_state)?;
         app_services::notebook_service::update_entry(
             &conn,
-            &entry_id,
-            title.as_deref(),
-            body_markdown.as_deref(),
-            tags.as_deref(),
-            status.as_ref(),
+            &request.entry_id,
+            request.title.as_deref(),
+            request.body_markdown.as_deref(),
+            request.tags.as_deref(),
+            request.status.as_ref(),
         )
         .map_err(CommandError::from_service_error)
     })
@@ -74,39 +65,33 @@ pub async fn update_notebook_entry(
 }
 
 #[tauri::command]
-#[allow(clippy::too_many_arguments)]
 pub async fn list_notebook_entries(
     state: State<'_, AppState>,
-    case_id: String,
-    entry_type: Option<NotebookEntryTypeDto>,
-    status: Option<NotebookEntryStatusDto>,
-    tags: Option<Vec<String>>,
-    search: Option<String>,
-    limit: Option<u32>,
-    offset: Option<u32>,
+    request: ListNotebookEntriesRequest,
 ) -> Result<Vec<NotebookEntryDto>, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        require_active_case(&app_state)?;
+        let active = require_active_case(&app_state)?;
+        let case_id = active.case_id;
         let conn = get_case_connection(&app_state)?;
 
         let filters = persistence_sqlite::repositories::notebook_repo::NotebookEntryFilters {
-            entry_type: entry_type.map(|et| match et {
+            entry_type: request.entry_type.map(|et| match et {
                 NotebookEntryTypeDto::Observation => domain::NotebookEntryType::Observation,
                 NotebookEntryTypeDto::Hypothesis => domain::NotebookEntryType::Hypothesis,
                 NotebookEntryTypeDto::Finding => domain::NotebookEntryType::Finding,
                 NotebookEntryTypeDto::ActionItem => domain::NotebookEntryType::ActionItem,
                 NotebookEntryTypeDto::Conclusion => domain::NotebookEntryType::Conclusion,
             }),
-            status: status.map(|s| match s {
+            status: request.status.map(|s| match s {
                 NotebookEntryStatusDto::Draft => domain::EntryStatus::Draft,
                 NotebookEntryStatusDto::Reviewed => domain::EntryStatus::Reviewed,
                 NotebookEntryStatusDto::Final => domain::EntryStatus::Final,
             }),
-            tags,
-            search,
-            limit,
-            offset,
+            tags: Some(request.tags),
+            search: request.search,
+            limit: request.limit,
+            offset: request.offset,
         };
 
         app_services::notebook_service::list_entries(&conn, &case_id, &filters)
@@ -119,13 +104,13 @@ pub async fn list_notebook_entries(
 #[tauri::command]
 pub async fn get_notebook_thread(
     state: State<'_, AppState>,
-    entry_id: String,
+    request: GetNotebookThreadRequest,
 ) -> Result<Vec<NotebookEntryDto>, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
-        app_services::notebook_service::get_thread(&conn, &entry_id)
+        app_services::notebook_service::get_thread(&conn, &request.entry_id)
             .map_err(CommandError::from_service_error)
     })
     .await
@@ -137,11 +122,7 @@ pub async fn get_notebook_thread(
 #[tauri::command]
 pub async fn add_evidence_citation(
     state: State<'_, AppState>,
-    entry_id: String,
-    target_node_type: GraphNodeTypeDto,
-    target_node_id: String,
-    display_label: String,
-    snippet: Option<String>,
+    request: AddEvidenceCitationRequest,
 ) -> Result<EvidenceCitationDto, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -149,11 +130,11 @@ pub async fn add_evidence_citation(
         let conn = get_case_connection(&app_state)?;
         app_services::notebook_service::add_citation(
             &conn,
-            &entry_id,
-            &target_node_type,
-            &target_node_id,
-            &display_label,
-            snippet.as_deref(),
+            &request.entry_id,
+            &request.target_node_type,
+            &request.target_node_id,
+            &request.display_label,
+            request.snippet.as_deref(),
         )
         .map_err(CommandError::from_service_error)
     })
@@ -166,22 +147,19 @@ pub async fn add_evidence_citation(
 #[tauri::command]
 pub async fn list_investigation_steps(
     state: State<'_, AppState>,
-    case_id: String,
-    step_kind: Option<String>,
-    success: Option<bool>,
-    limit: Option<u32>,
-    offset: Option<u32>,
+    request: ListInvestigationStepsRequest,
 ) -> Result<Vec<InvestigationStepDto>, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        require_active_case(&app_state)?;
+        let active = require_active_case(&app_state)?;
+        let case_id = active.case_id;
         let conn = get_case_connection(&app_state)?;
 
         let filters = persistence_sqlite::repositories::notebook_repo::StepFilters {
-            step_kind,
-            success,
-            limit,
-            offset,
+            step_kind: request.step_kind,
+            success: request.success,
+            limit: request.limit,
+            offset: request.offset,
         };
 
         app_services::notebook_service::list_steps(&conn, &case_id, &filters)

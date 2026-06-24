@@ -4,6 +4,15 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Typed error for import state persistence operations.
+#[derive(Debug, thiserror::Error)]
+pub enum ImportStateError {
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("serialization error: {0}")]
+    Serde(#[from] serde_json::Error),
+}
+
 /// Import phase
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ImportPhase {
@@ -143,18 +152,16 @@ impl ImportState {
     }
 
     /// Save state to file
-    pub fn save(&self, path: &Path) -> Result<(), String> {
-        let json = serde_json::to_string_pretty(self)
-            .map_err(|e| format!("Failed to serialize state: {}", e))?;
-        std::fs::write(path, json).map_err(|e| format!("Failed to write state file: {}", e))?;
+    pub fn save(&self, path: &Path) -> Result<(), ImportStateError> {
+        let json = serde_json::to_string_pretty(self)?;
+        std::fs::write(path, json)?;
         Ok(())
     }
 
     /// Load state from file
-    pub fn load(path: &Path) -> Result<Self, String> {
-        let json = std::fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read state file: {}", e))?;
-        serde_json::from_str(&json).map_err(|e| format!("Failed to parse state file: {}", e))
+    pub fn load(path: &Path) -> Result<Self, ImportStateError> {
+        let json = std::fs::read_to_string(path)?;
+        Ok(serde_json::from_str(&json)?)
     }
 }
 

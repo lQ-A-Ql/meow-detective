@@ -21,7 +21,7 @@ pub struct E01Reader {
     info: ReaderInfo,
     total_bytes: u64,
     chunk_size_sectors: u32,
-    chunk_table: Vec<(usize, u64, bool, u64)>, // (segment, offset, compressed, stored_size)
+    chunk_table: Arc<Vec<(usize, u64, bool, u64)>>, // (segment, offset, compressed, stored_size)
     segment_files: Vec<std::fs::File>,
     cursor: u64,
     chunk_cache: VecDeque<CachedChunk>,
@@ -41,7 +41,7 @@ impl E01Reader {
             info: self.info.clone(),
             total_bytes: self.total_bytes,
             chunk_size_sectors: self.chunk_size_sectors,
-            chunk_table: self.chunk_table.clone(),
+            chunk_table: Arc::clone(&self.chunk_table),
             segment_files: segment_files?,
             cursor: 0,
             chunk_cache: VecDeque::new(),
@@ -140,6 +140,8 @@ impl E01Reader {
             .map(|(stype, _start, _next, content)| (stype.clone(), content.clone()))
             .collect();
         let (sectors_count, chunk_size_sectors) = find_geometry(&section_views, file_len)?;
+        // Free cloned section content (potentially hundreds of MB) before building chunk table.
+        drop(section_views);
         let total_bytes = sectors_count * 512;
         let cks = if chunk_size_sectors > 0 {
             chunk_size_sectors
@@ -183,7 +185,7 @@ impl E01Reader {
             },
             total_bytes,
             chunk_size_sectors: cks,
-            chunk_table,
+            chunk_table: Arc::new(chunk_table),
             segment_files,
             cursor: 0,
             chunk_cache: VecDeque::new(),

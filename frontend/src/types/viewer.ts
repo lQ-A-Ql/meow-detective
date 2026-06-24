@@ -45,7 +45,7 @@ export interface TextPreviewResponse {
   encoding: string;
   isTruncated: boolean;
   isBinary: boolean;
-  lineNumber: number;
+  lineCount: number;
   language: string | null;
 }
 

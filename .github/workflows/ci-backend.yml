@@ -58,6 +58,12 @@ jobs:
       - name: EVTX dependency decision guard
         shell: pwsh
         run: ./scripts/check-evtx-dependency-decision.ps1
+      - name: Stage 5 regression guard
+        shell: pwsh
+        run: ./scripts/check-stage5-regression-guard.ps1
+      - name: Import optimization guard
+        shell: pwsh
+        run: ./scripts/check-import-optimization-guard.ps1
       - name: Install cargo-deny
         run: cargo install cargo-deny --locked
       - name: Dependency policy

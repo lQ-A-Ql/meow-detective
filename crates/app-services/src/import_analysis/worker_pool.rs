@@ -1,6 +1,7 @@
 use super::budget::{
     content_budget_for_mode, default_memory_hard_limit_mb, default_memory_soft_limit_mb,
 };
+use super::error::ImportAnalysisError;
 use super::finalize::{
     collect_done_worker_stats, discover_analysis_worker_ids, merge_finished_analysis_staging,
     prepare_analysis_staging_startup, AnalysisStartupAction,
@@ -45,7 +46,10 @@ pub fn run_post_import_pipeline_with_counts(
         }
         // All tiers skipped — mark them done for consistent inspection.
         {
-            let mut ts = tier_state.lock().unwrap();
+            let mut ts = tier_state.lock().map_err(|_| PostImportPipelineError {
+                message: "tier state lock poisoned".to_string(),
+                counts: counts.clone(),
+            })?;
             while advance_tier(&mut ts).is_some() {}
         }
         return Ok((
@@ -93,8 +97,9 @@ pub fn run_post_import_pipeline_with_counts(
         progress_cb,
     ) {
         Ok(stats) => stats,
-        Err(message) => {
+        Err(error) => {
             counts.add_warnings(1);
+            let message = error.to_string();
             if message.to_ascii_lowercase().contains("cancel") {
                 counts.add_skipped(1);
             } else {
@@ -106,7 +111,10 @@ pub fn run_post_import_pipeline_with_counts(
 
     // All tiers complete — advance to None (marks CorrelateAndIndex as done).
     {
-        let mut ts = tier_state.lock().unwrap();
+        let mut ts = tier_state.lock().map_err(|_| PostImportPipelineError {
+            message: "tier state lock poisoned".to_string(),
+            counts: counts.clone(),
+        })?;
         while advance_tier(&mut ts).is_some() {}
     }
 
@@ -130,7 +138,7 @@ pub fn run_post_import_pipeline_with_counts(
 
 pub fn default_analysis_worker_count() -> usize {
     std::thread::available_parallelism()
-        .map(|n| n.get())
+        .map(|n| n.get().min(4))
         .unwrap_or(4)
 }
 
@@ -144,7 +152,7 @@ pub fn resolve_analysis_worker_count(max_analysis_workers: Option<usize>) -> usi
 pub fn run_import_analysis_staging(
     options: ImportAnalysisOptions,
     progress_cb: Option<AnalysisProgressCallback<'_>>,
-) -> Result<ImportAnalysisStats, String> {
+) -> Result<ImportAnalysisStats, ImportAnalysisError> {
     let analysis_started = Instant::now();
     let worker_count = resolve_analysis_worker_count(options.max_analysis_workers).max(1);
     let worker_ids: Vec<usize> = (0..worker_count).collect();
@@ -171,7 +179,10 @@ pub fn run_import_analysis_staging(
         }
         // All tiers were completed in a previous run.
         {
-            let mut ts = options.tier_state.lock().unwrap();
+            let mut ts = options
+                .tier_state
+                .lock()
+                .map_err(|_| ImportAnalysisError::Other("tier state lock poisoned".to_string()))?;
             while advance_tier(&mut ts).is_some() {}
         }
         let merged_worker_ids =
@@ -182,11 +193,11 @@ pub fn run_import_analysis_staging(
     let estimated = count_analysis_file_tasks(&options.db_path, &options.data_source_id)?;
     if memory_hard_limit_exceeded(memory_hard_limit_mb) {
         options.cancel_token.store(true, Ordering::Relaxed);
-        return Err(format!(
+        return Err(ImportAnalysisError::Other(format!(
             "Import analysis memory hard limit exceeded before start: rssMb={} hardLimitMb={}",
             current_rss_mb(),
             memory_hard_limit_mb
-        ));
+        )));
     }
     if let Some(cb) = progress_cb {
         cb(
@@ -217,14 +228,20 @@ pub fn run_import_analysis_staging(
 
     // Begin Catalog tier (MFT enumeration / file counting).
     {
-        let mut ts = options.tier_state.lock().unwrap();
+        let mut ts = options
+            .tier_state
+            .lock()
+            .map_err(|_| ImportAnalysisError::Other("tier state lock poisoned".to_string()))?;
         advance_tier(&mut ts);
     }
 
     if startup_action == AnalysisStartupAction::MergeOnly {
         // Producer and workers completed in a previous run.
         {
-            let mut ts = options.tier_state.lock().unwrap();
+            let mut ts = options
+                .tier_state
+                .lock()
+                .map_err(|_| ImportAnalysisError::Other("tier state lock poisoned".to_string()))?;
             advance_tier(&mut ts); // → Catalog
             advance_tier(&mut ts); // → ExtractArtifacts
         }
@@ -238,7 +255,10 @@ pub fn run_import_analysis_staging(
         )?;
         // Merge done — advance to CorrelateAndIndex.
         {
-            let mut ts = options.tier_state.lock().unwrap();
+            let mut ts = options
+                .tier_state
+                .lock()
+                .map_err(|_| ImportAnalysisError::Other("tier state lock poisoned".to_string()))?;
             advance_tier(&mut ts);
         }
         return Ok(result);
@@ -259,7 +279,7 @@ pub fn run_import_analysis_staging(
             drop(task_tx);
             result
         })
-        .map_err(|e| format!("Spawn analysis producer: {e}"))?;
+        .map_err(|e| ImportAnalysisError::Other(format!("Spawn analysis producer: {e}")))?;
 
     let mut handles = Vec::with_capacity(worker_count);
     for worker_id in worker_ids.iter().copied() {
@@ -275,7 +295,9 @@ pub fn run_import_analysis_staging(
                 shared.active_workers.fetch_sub(1, Ordering::Relaxed);
                 let _ = tx.send((worker_id, result));
             })
-            .map_err(|e| format!("Spawn analysis worker {worker_id}: {e}"))?;
+            .map_err(|e| {
+                ImportAnalysisError::Other(format!("Spawn analysis worker {worker_id}: {e}"))
+            })?;
         handles.push(handle);
     }
     drop(task_rx);
@@ -383,7 +405,7 @@ pub fn run_import_analysis_staging(
 
     let producer_result = producer
         .join()
-        .map_err(|_| "Analysis task producer panicked".to_string())?;
+        .map_err(|_| ImportAnalysisError::Other("Analysis task producer panicked".to_string()))?;
     if let Err(error) = producer_result {
         stats.warning_count = stats.warning_count.saturating_add(1);
         stats.failed_count = stats.failed_count.saturating_add(1);
@@ -393,18 +415,23 @@ pub fn run_import_analysis_staging(
     for handle in handles {
         handle
             .join()
-            .map_err(|_| "Analysis worker panicked".to_string())?;
+            .map_err(|_| ImportAnalysisError::Other("Analysis worker panicked".to_string()))?;
     }
 
     // MFT enumeration done — advance to ExtractArtifacts tier.
     {
-        let mut ts = options.tier_state.lock().unwrap();
+        let mut ts = options
+            .tier_state
+            .lock()
+            .map_err(|_| ImportAnalysisError::Other("tier state lock poisoned".to_string()))?;
         advance_tier(&mut ts);
     }
 
     if options.cancel_token.load(Ordering::Relaxed) {
         stats.warning_count = stats.warning_count.saturating_add(1);
-        return Err("Import analysis cancelled by user".to_string());
+        return Err(ImportAnalysisError::Other(
+            "Import analysis cancelled by user".to_string(),
+        ));
     }
 
     let result = merge_finished_analysis_staging(
@@ -416,7 +443,10 @@ pub fn run_import_analysis_staging(
     )?;
     // Merge (correlation + index) done — advance to CorrelateAndIndex.
     {
-        let mut ts = options.tier_state.lock().unwrap();
+        let mut ts = options
+            .tier_state
+            .lock()
+            .map_err(|_| ImportAnalysisError::Other("tier state lock poisoned".to_string()))?;
         advance_tier(&mut ts);
     }
     Ok(result)

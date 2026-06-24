@@ -242,6 +242,8 @@ where
         .map(|entry| format!("{:02X}", entry.partition_type))
         .collect();
 
+    let is_gpt_protective = mbr_entries.iter().any(|entry| entry.partition_type == 0xEE);
+
     // Push filesystem candidates from primary + logical partitions
     for entry in &mbr_entries {
         if entry.is_extended() || entry.lba_start == 0 {
@@ -265,7 +267,70 @@ where
         }
     }
 
-    if mbr_entries.iter().any(|entry| entry.partition_type == 0xEE) {
+    // Build PartitionRecord entries for non-empty, non-extended MBR partitions
+    // (only when not falling through to GPT — GPT produces its own records)
+    if !is_gpt_protective {
+        for entry in &mbr_entries {
+            if entry.is_extended() || entry.partition_type == 0 {
+                continue;
+            }
+            let offset = entry.lba_start as u64 * SECTOR_SIZE;
+            let length = entry.sector_count as u64 * SECTOR_SIZE;
+            let class =
+                evidence_core::volume::mbr::classify_mbr_partition_type(entry.partition_type);
+            let fs_kind = read_boot_filesystem(reader, offset)?;
+            let kind_label = fs_kind
+                .map(kind_label)
+                .unwrap_or_else(|| class.name.to_string());
+            let status = if let Some(kind) = fs_kind {
+                match kind {
+                    ImageFilesystemKind::Ntfs | ImageFilesystemKind::Fat => {
+                        PartitionStatus::Supported
+                    }
+                    ImageFilesystemKind::BitLocker => PartitionStatus::EncryptedBitLocker,
+                }
+            } else {
+                match class.status {
+                    evidence_core::volume::mbr::MbrPartitionStatus::Supported => {
+                        PartitionStatus::Supported
+                    }
+                    evidence_core::volume::mbr::MbrPartitionStatus::EncryptedBitLocker => {
+                        PartitionStatus::EncryptedBitLocker
+                    }
+                    evidence_core::volume::mbr::MbrPartitionStatus::Unsupported => {
+                        PartitionStatus::Unsupported
+                    }
+                }
+            };
+            let display_name =
+                partition_display_name(entry.partition_number, &kind_label, None, Some(class.name));
+
+            if status == PartitionStatus::EncryptedBitLocker {
+                warnings.push(format!(
+                    "Partition {} '{}' is BitLocker-encrypted",
+                    entry.partition_number, display_name,
+                ));
+            } else if status == PartitionStatus::Unsupported {
+                warnings.push(format!(
+                    "Partition {} '{}' is not yet supported (type 0x{:02X})",
+                    entry.partition_number, display_name, entry.partition_type,
+                ));
+            }
+
+            partitions.push(PartitionRecord {
+                index: entry.partition_number,
+                name: display_name,
+                kind_label,
+                type_guid: None,
+                offset,
+                length,
+                status,
+                filesystem: fs_kind,
+            });
+        }
+    }
+
+    if is_gpt_protective {
         let gpt_probe = detect_gpt_filesystems(reader)?;
         for candidate in gpt_probe.candidates {
             push_candidate(
@@ -479,6 +544,41 @@ where
         partitions: records,
         warnings,
     })
+}
+
+/// Assign effective partition indices for candidates where `partition_index` is `None`
+/// (typical for MBR disks). Candidates are sorted by offset so that indices are
+/// deterministic and consistent across probe, import, and viewer paths.
+///
+/// Returns a map from candidate position → effective index. Candidates that already
+/// have a `partition_index` are left unchanged (not included in the map).
+pub fn assign_effective_partition_indices(
+    candidates: &[ImageFilesystemCandidate],
+) -> std::collections::HashMap<usize, usize> {
+    let mut offsets: Vec<(usize, u64)> = candidates
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| c.partition_index.is_none())
+        .map(|(i, c)| (i, c.offset))
+        .collect();
+    offsets.sort_by_key(|(_, o)| *o);
+    let mut map = std::collections::HashMap::new();
+    for (unique_idx, (orig_pos, _)) in offsets.iter().enumerate() {
+        map.insert(*orig_pos, unique_idx);
+    }
+    map
+}
+
+/// Resolve the effective partition index for a candidate, using the precomputed
+/// map from `assign_effective_partition_indices`.
+pub fn effective_partition_index(
+    candidate: &ImageFilesystemCandidate,
+    candidate_pos: usize,
+    index_map: &std::collections::HashMap<usize, usize>,
+) -> usize {
+    candidate
+        .partition_index
+        .unwrap_or_else(|| *index_map.get(&candidate_pos).unwrap_or(&0))
 }
 
 fn kind_label(kind: ImageFilesystemKind) -> String {
@@ -709,5 +809,58 @@ mod tests {
             Some(std::fs::canonicalize(&source_path).unwrap())
         );
         assert!(stored.provenance.warnings.is_empty());
+    }
+
+    fn candidate(offset: u64, partition_index: Option<usize>) -> ImageFilesystemCandidate {
+        ImageFilesystemCandidate {
+            partition_index,
+            partition_name: None,
+            kind: ImageFilesystemKind::Ntfs,
+            offset,
+            source: ImageFilesystemSource::MbrPartition,
+        }
+    }
+
+    #[test]
+    fn assign_indices_sorts_by_offset() {
+        let candidates = vec![
+            candidate(3000, None),
+            candidate(1000, None),
+            candidate(2000, None),
+        ];
+        let map = assign_effective_partition_indices(&candidates);
+        // sorted by offset: 1000→idx0, 2000→idx1, 3000→idx2
+        assert_eq!(effective_partition_index(&candidates[0], 0, &map), 2);
+        assert_eq!(effective_partition_index(&candidates[1], 1, &map), 0);
+        assert_eq!(effective_partition_index(&candidates[2], 2, &map), 1);
+    }
+
+    #[test]
+    fn assign_indices_preserves_existing() {
+        let candidates = vec![
+            candidate(2000, Some(5)),
+            candidate(1000, None),
+            candidate(3000, None),
+        ];
+        let map = assign_effective_partition_indices(&candidates);
+        // existing index preserved
+        assert_eq!(effective_partition_index(&candidates[0], 0, &map), 5);
+        // sorted by offset: 1000→idx0, 3000→idx1
+        assert_eq!(effective_partition_index(&candidates[1], 1, &map), 0);
+        assert_eq!(effective_partition_index(&candidates[2], 2, &map), 1);
+    }
+
+    #[test]
+    fn assign_indices_single_candidate() {
+        let candidates = vec![candidate(500, None)];
+        let map = assign_effective_partition_indices(&candidates);
+        assert_eq!(effective_partition_index(&candidates[0], 0, &map), 0);
+    }
+
+    #[test]
+    fn assign_indices_empty() {
+        let candidates: Vec<ImageFilesystemCandidate> = vec![];
+        let map = assign_effective_partition_indices(&candidates);
+        assert!(map.is_empty());
     }
 }

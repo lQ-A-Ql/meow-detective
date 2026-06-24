@@ -1,6 +1,9 @@
 use tauri::State;
 use transport::{
-    dto::{GraphProvenanceEntryDto, GraphQueryDto, GraphQueryResultDto, GraphSnapshotDto},
+    dto::{
+        GetNodeNeighborhoodRequest, GetProvenanceChainRequest, GraphProvenanceEntryDto,
+        GraphQueryDto, GraphQueryResultDto, GraphSnapshotDto,
+    },
     CommandError,
 };
 
@@ -41,14 +44,13 @@ pub async fn query_graph(
 #[tauri::command]
 pub async fn get_node_neighborhood(
     state: State<'_, AppState>,
-    node_id: String,
-    depth: u32,
+    request: GetNodeNeighborhoodRequest,
 ) -> Result<GraphQueryResultDto, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
-        app_services::graph_service::get_node_neighborhood(&conn, &node_id, depth)
+        app_services::graph_service::get_node_neighborhood(&conn, &request.node_id, request.depth)
             .map_err(CommandError::from_service_error)
     })
     .await
@@ -58,13 +60,13 @@ pub async fn get_node_neighborhood(
 #[tauri::command]
 pub async fn get_provenance_chain(
     state: State<'_, AppState>,
-    edge_id: String,
+    request: GetProvenanceChainRequest,
 ) -> Result<Vec<GraphProvenanceEntryDto>, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
-        app_services::graph_service::get_provenance_chain(&conn, &edge_id)
+        app_services::graph_service::get_provenance_chain(&conn, &request.edge_id)
             .map_err(CommandError::from_service_error)
     })
     .await

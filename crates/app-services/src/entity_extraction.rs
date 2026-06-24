@@ -25,7 +25,14 @@ use regex::Regex;
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::sync::LazyLock;
 use thiserror::Error;
+
+static EMAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}").expect("valid email regex")
+});
+static SID_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"S-1-5-21-\d+-\d+-\d+-\d+").expect("valid SID regex"));
 use unicode_normalization::UnicodeNormalization;
 
 #[derive(Debug, Error)]
@@ -200,8 +207,8 @@ fn regex_scan_artifacts(
     conn: &Connection,
     case_id: &str,
 ) -> Result<HashMap<(String, String), Vec<String>>, EntityExtractionError> {
-    let email_re = Regex::new(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}").unwrap();
-    let sid_re = Regex::new(r"S-1-5-21-\d+-\d+-\d+-\d+").unwrap();
+    let email_re = &*EMAIL_RE;
+    let sid_re = &*SID_RE;
 
     let mut stmt =
         conn.prepare("SELECT id, title, summary, attrs FROM artifacts WHERE case_id = ?1")?;

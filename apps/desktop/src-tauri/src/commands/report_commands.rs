@@ -16,16 +16,20 @@ pub fn get_report_templates() -> Result<Vec<ReportTemplateDto>, CommandError> {
 
 /// Get report generation history from database.
 #[tauri::command]
-pub fn get_report_history(
+pub async fn get_report_history(
     state: State<'_, AppState>,
 ) -> Result<Vec<ReportHistoryItemDto>, CommandError> {
     let app_state = state.inner().clone();
-    let active = require_active_case(&app_state)?;
-    let conn = get_case_connection(&app_state)?;
-    Ok(app_services::report::get_report_history(
-        &conn,
-        &active.case_id,
-    ))
+    tauri::async_runtime::spawn_blocking(move || {
+        let active = require_active_case(&app_state)?;
+        let conn = get_case_connection(&app_state)?;
+        Ok(app_services::report::get_report_history(
+            &conn,
+            &active.case_id,
+        ))
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
 }
 
 /// Export HTML report for the current case.

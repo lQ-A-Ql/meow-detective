@@ -15,7 +15,7 @@ import { FileEntryRow } from '@/types/models';
 /**
  * 排序键类型
  */
-export type FileSortKey = 'name' | 'size' | 'modifiedAt' | 'ext' | 'entryType';
+export type FileSortKey = 'name' | 'size' | 'modifiedAt' | 'ext';
 
 /**
  * 排序方向
@@ -152,9 +152,6 @@ export function sortFileEntries(
       case 'ext':
         cmp = naturalCompare(ka.extLower, kb.extLower);
         break;
-      case 'entryType':
-        cmp = ka.typeRank - kb.typeRank;
-        break;
     }
 
     if (cmp !== 0) return cmp * dirMul;
@@ -188,7 +185,6 @@ export function getSortKeyLabel(key: FileSortKey): string {
     size: '大小',
     modifiedAt: '修改时间',
     ext: '扩展名',
-    entryType: '类型',
   };
   return labels[key];
 }

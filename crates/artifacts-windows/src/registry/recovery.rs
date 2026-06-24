@@ -5,8 +5,9 @@
 //! Scanning this unallocated space can recover partially-overwritten NK (key)
 //! and VK (value) records that were previously deleted.
 
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 
+use crate::registry::util::filetime_to_dt;
 use crate::registry::RegistryError;
 
 // ---------------------------------------------------------------------------
@@ -647,16 +648,6 @@ fn read_i32(bytes: &[u8], offset: usize) -> Result<i32, String> {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/// Convert a Windows FILETIME (100-ns intervals since 1601-01-01) to a UTC DateTime.
-fn filetime_to_dt(ft: u64) -> Option<DateTime<Utc>> {
-    if ft == 0 {
-        return None;
-    }
-    let secs = (ft / 10_000_000) as i64 - 11_644_473_600;
-    Utc.timestamp_opt(secs, ((ft % 10_000_000) * 100) as u32)
-        .single()
-}
 
 /// Decode UTF-16LE bytes to a String, replacing invalid sequences.
 fn decode_utf16le_lossy(bytes: &[u8]) -> String {

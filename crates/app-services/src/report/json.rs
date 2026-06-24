@@ -1,7 +1,7 @@
 use super::{
     current_analysis, current_correlation, current_governance, persist_report_record,
     prepare_report_output, write_report_atomically, RawExportBundle, ReportCorrelation,
-    ReportGovernance,
+    ReportError, ReportGovernance,
 };
 use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
 use reports::JsonExporter;
@@ -23,17 +23,13 @@ pub fn generate_json_export(
     case_id: &str,
     output_dir: &Path,
     scope: &ExportScopeDto,
-) -> Result<String, String> {
+) -> Result<String, ReportError> {
     let events = if scope.full_timeline {
-        TimelineRepo::new(conn)
-            .query(0, 500)
-            .map_err(|e| e.to_string())?
+        TimelineRepo::new(conn).query(0, 500)?
     } else {
         Vec::new()
     };
-    let artifacts = ArtifactRepo::new(conn)
-        .list_by_family(None)
-        .map_err(|e| e.to_string())?;
+    let artifacts = ArtifactRepo::new(conn).list_by_family(None)?;
     let analysis = current_analysis(conn)?;
     let governance = current_governance(conn, case_id)?;
     let correlation = current_correlation(conn)?;
@@ -111,8 +107,9 @@ pub fn generate_json_export(
                 "exportedCount": bundle.exported_count,
             });
         }
-        payload["warnings"] = serde_json::to_value(&warnings).map_err(|e| e.to_string())?;
-        JsonExporter::export(file, &payload).map_err(|e| e.to_string())
+        payload["warnings"] =
+            serde_json::to_value(&warnings).map_err(|e| ReportError::Other(e.to_string()))?;
+        JsonExporter::export(file, &payload).map_err(|e| ReportError::Other(e.to_string()))
     })?;
 
     persist_report_record(conn, case_id, "report-summary", &file_name, "completed")?;
@@ -199,14 +196,14 @@ fn export_raw_file_bundle(
     case_id: &str,
     report_file_name: &str,
     overwrite: bool,
-) -> Result<RawExportBundle, String> {
+) -> Result<RawExportBundle, ReportError> {
     let bundle_dir_name = bundle_dir_name_from_report(report_file_name);
     let bundle_dir = output_dir.join(&bundle_dir_name);
     prepare_bundle_directory(&bundle_dir, overwrite)?;
 
     let entries = collect_exportable_file_entries(conn)?;
     let export_root = bundle_dir.join("files");
-    fs::create_dir_all(&export_root).map_err(|e| e.to_string())?;
+    fs::create_dir_all(&export_root)?;
 
     let mut manifest_entries = Vec::new();
     let mut hash_lines = Vec::new();
@@ -222,31 +219,28 @@ fn export_raw_file_bundle(
             .join(format!("{}-{}", entry.id.0, safe_name));
         let export_path = export_root.join(&export_rel);
         if let Some(parent) = export_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            fs::create_dir_all(parent)?;
         }
 
         let mut output = OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(&export_path)
-            .map_err(|e| e.to_string())?;
+            .open(&export_path)?;
 
         let mut hasher = sha2::Sha256::new();
         let mut buffer = [0u8; 64 * 1024];
         let mut total_bytes = 0u64;
         loop {
-            let read = reader.read(&mut buffer).map_err(|e| e.to_string())?;
+            let read = reader.read(&mut buffer).map_err(ReportError::Io)?;
             if read == 0 {
                 break;
             }
-            output
-                .write_all(&buffer[..read])
-                .map_err(|e| e.to_string())?;
+            output.write_all(&buffer[..read])?;
             hasher.update(&buffer[..read]);
             total_bytes = total_bytes.saturating_add(read as u64);
         }
-        output.flush().map_err(|e| e.to_string())?;
-        output.sync_all().map_err(|e| e.to_string())?;
+        output.flush()?;
+        output.sync_all()?;
 
         let sha256 = format!("{:x}", hasher.finalize());
         hash_lines.push(format!(
@@ -279,11 +273,9 @@ fn export_raw_file_bundle(
     let hashes_file_name = "SHA256SUMS.txt".to_string();
     fs::write(
         bundle_dir.join(&manifest_file_name),
-        serde_json::to_vec_pretty(&manifest).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
-    fs::write(bundle_dir.join(&hashes_file_name), hash_lines.join("\n"))
-        .map_err(|e| e.to_string())?;
+        serde_json::to_vec_pretty(&manifest).map_err(|e| ReportError::Other(e.to_string()))?,
+    )?;
+    fs::write(bundle_dir.join(&hashes_file_name), hash_lines.join("\n"))?;
 
     Ok(RawExportBundle {
         bundle_dir_name,
@@ -293,46 +285,45 @@ fn export_raw_file_bundle(
     })
 }
 
-fn collect_exportable_file_entries(conn: &Connection) -> Result<Vec<domain::FileEntry>, String> {
+fn collect_exportable_file_entries(
+    conn: &Connection,
+) -> Result<Vec<domain::FileEntry>, ReportError> {
     let mut stmt = conn
         .prepare(
             "SELECT id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256
              FROM file_entries
              WHERE entry_type = 'file'
              ORDER BY data_source_id ASC, path ASC",
-        )
-        .map_err(|e| e.to_string())?;
-    let rows = stmt
-        .query_map([], |row| {
-            let entry_type: String = row.get(5)?;
-            Ok(domain::FileEntry {
-                id: domain::FileEntryId(row.get::<_, String>(0)?),
-                parent_id: row.get::<_, Option<String>>(1)?.map(domain::FileEntryId),
-                data_source_id: domain::DataSourceId(row.get::<_, String>(2)?),
-                path: row.get(3)?,
-                name: row.get(4)?,
-                entry_type: if entry_type.eq_ignore_ascii_case("directory") {
-                    domain::EntryType::Directory
-                } else {
-                    domain::EntryType::File
-                },
-                size: row.get(6)?,
-                ext: row.get(7)?,
-                deleted: row.get::<_, i32>(8)? != 0,
-                hidden: row.get::<_, i32>(9)? != 0,
-                system: row.get::<_, i32>(10)? != 0,
-                created_at: None,
-                modified_at: None,
-                accessed_at: None,
-                changed_at: None,
-                hash_sha256: row.get(15)?,
-            })
+        )?;
+    let rows = stmt.query_map([], |row| {
+        let entry_type: String = row.get(5)?;
+        Ok(domain::FileEntry {
+            id: domain::FileEntryId(row.get::<_, String>(0)?),
+            parent_id: row.get::<_, Option<String>>(1)?.map(domain::FileEntryId),
+            data_source_id: domain::DataSourceId(row.get::<_, String>(2)?),
+            path: row.get(3)?,
+            name: row.get(4)?,
+            entry_type: if entry_type.eq_ignore_ascii_case("directory") {
+                domain::EntryType::Directory
+            } else {
+                domain::EntryType::File
+            },
+            size: row.get(6)?,
+            ext: row.get(7)?,
+            deleted: row.get::<_, i32>(8)? != 0,
+            hidden: row.get::<_, i32>(9)? != 0,
+            system: row.get::<_, i32>(10)? != 0,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: row.get(15)?,
         })
-        .map_err(|e| e.to_string())?;
+    })?;
 
     let mut entries = Vec::new();
     for row in rows {
-        entries.push(row.map_err(|e| e.to_string())?);
+        entries.push(row?);
     }
     Ok(entries)
 }
@@ -345,20 +336,21 @@ fn bundle_dir_name_from_report(report_file_name: &str) -> String {
     format!("{stem}-bundle")
 }
 
-fn prepare_bundle_directory(bundle_dir: &Path, overwrite: bool) -> Result<(), String> {
+fn prepare_bundle_directory(bundle_dir: &Path, overwrite: bool) -> Result<(), ReportError> {
     if bundle_dir.exists() {
         if !overwrite {
-            return Err(format!(
+            return Err(ReportError::Other(format!(
                 "raw export bundle already exists: {} (set overwrite=true to replace it)",
                 bundle_dir
                     .file_name()
                     .and_then(|name| name.to_str())
                     .unwrap_or("bundle")
-            ));
+            )));
         }
-        fs::remove_dir_all(bundle_dir).map_err(|e| e.to_string())?;
+        fs::remove_dir_all(bundle_dir)?;
     }
-    fs::create_dir_all(bundle_dir).map_err(|e| e.to_string())
+    fs::create_dir_all(bundle_dir)?;
+    Ok(())
 }
 
 pub(crate) fn sanitize_bundle_component(value: &str) -> String {

@@ -1,0 +1,127 @@
+/**
+ * Single source of truth for Tauri command names used by the frontend API layer.
+ *
+ * Every command string passed to `apiClient.request(...)` must be imported from
+ * this file. Do not use bare string literals in API modules.
+ */
+export const COMMANDS = {
+  case: {
+    GET_CURRENT_CASE: 'get_current_case',
+    GET_CASE_METRICS: 'get_case_metrics',
+    GET_RECENT_OBJECTS: 'get_recent_objects',
+    GET_RECENT_CASES: 'get_recent_cases',
+    GET_DATA_SOURCES: 'get_data_sources',
+    CREATE_CASE: 'create_case',
+    CREATE_ANALYSIS_DEMO_CASE: 'create_analysis_demo_case',
+    OPEN_CASE: 'open_case',
+    CLOSE_CASE: 'close_case',
+    RENAME_DATA_SOURCE: 'rename_data_source',
+    DELETE_CASE: 'delete_case',
+    REMOVE_CASE_FROM_LIST: 'remove_case_from_list',
+    DELETE_DATA_SOURCE: 'delete_data_source',
+  },
+  files: {
+    GET_FILE_TREE_REQUEST: 'get_file_tree_request',
+    GET_FILE_ROWS_REQUEST: 'get_file_rows_request',
+    IMPORT_DATA_SOURCE: 'import_data_source',
+    GET_FILE_CHILDREN_REQUEST: 'get_file_children_request',
+    OPEN_FILE_HANDLE_REQUEST: 'open_file_handle_request',
+    READ_FILE_RANGE: 'read_file_range',
+    CANCEL_IMPORT: 'cancel_import',
+    GET_TEXT_PREVIEW: 'get_text_preview',
+    GET_IMAGE_PREVIEW: 'get_image_preview',
+    GET_MEDIA_URL: 'get_media_url',
+    READ_MEDIA_RANGE: 'read_media_range',
+    EXTRACT_FILE: 'extract_file',
+    GET_FILE_JUMP_CONTEXT: 'get_file_jump_context',
+  },
+  jobs: {
+    GET_JOBS_SNAPSHOT: 'get_jobs_snapshot',
+    GET_WARNINGS: 'get_warnings',
+    GET_TRACE_ITEMS: 'get_trace_items',
+  },
+  settings: {
+    GET_APP_SETTINGS: 'get_app_settings',
+    SAVE_APP_SETTINGS: 'save_app_settings',
+  },
+  timeline: {
+    GET_TIMELINE_EVENTS: 'get_timeline_events',
+    GET_TIMELINE_EVENT_BY_ID: 'get_timeline_event_by_id',
+  },
+  search: {
+    SEARCH_FILES_REQUEST: 'search_files_request',
+  },
+  artifacts: {
+    GET_ARTIFACT_FAMILIES: 'get_artifact_families',
+    GET_ARTIFACT_ROWS: 'get_artifact_rows',
+    GET_ARTIFACT_BY_ID: 'get_artifact_by_id',
+    GET_ARTIFACT_FAMILY_COUNTS: 'get_artifact_family_counts',
+  },
+  reports: {
+    GET_REPORT_TEMPLATES: 'get_report_templates',
+    GET_REPORT_HISTORY: 'get_report_history',
+    EXPORT_HTML_REPORT: 'export_html_report',
+    EXPORT_CSV_REPORT: 'export_csv_report',
+    EXPORT_JSON_REPORT: 'export_json_report',
+    EXPORT_CSV_CORRELATION_REPORT: 'export_csv_correlation_report',
+  },
+  graph: {
+    GET_GRAPH_SNAPSHOT: 'get_graph_snapshot',
+    QUERY_GRAPH: 'query_graph',
+    GET_NODE_NEIGHBORHOOD: 'get_node_neighborhood',
+    GET_PROVENANCE_CHAIN: 'get_provenance_chain',
+  },
+  analysis: {
+    GET_SYSTEM_INFO: 'get_system_info',
+    CLASSIFY_FILES: 'classify_files',
+    GET_EVIDENCE_CLASSIFICATION_SUMMARY: 'get_evidence_classification_summary',
+    RUN_EVIDENCE_CLASSIFICATION: 'run_evidence_classification',
+    RUN_ANALYSIS_EXTRACTION: 'run_analysis_extraction',
+    GET_REGISTRY_EXTRACTION_SUMMARY: 'get_registry_extraction_summary',
+    GET_REGISTRY_STRUCTURED_SUMMARY: 'get_registry_structured_summary',
+    GET_BROWSER_HISTORY_SUMMARY: 'get_browser_history_summary',
+    GET_EMAIL_EXTRACTION_SUMMARY: 'get_email_extraction_summary',
+    GET_V2_GOVERNANCE_SNAPSHOT: 'get_v2_governance_snapshot',
+    GET_V3_GOVERNANCE_SNAPSHOT: 'get_v3_governance_snapshot',
+    GET_CORRELATION_SNAPSHOT: 'get_correlation_snapshot',
+    GENERATE_ANALYSIS_SUMMARY: 'generate_analysis_summary',
+  },
+  rulePacks: {
+    LIST_LOADED_RULE_PACKS: 'list_loaded_rule_packs',
+    LOAD_RULE_PACK: 'load_rule_pack',
+    VALIDATE_RULE_PACK: 'validate_rule_pack',
+  },
+  mcp: {
+    GET_MCP_CONFIG: 'get_mcp_config',
+    SAVE_MCP_CONFIG: 'save_mcp_config',
+    ADD_MCP_SERVER: 'add_mcp_server',
+    REMOVE_MCP_SERVER: 'remove_mcp_server',
+    CONNECT_MCP_SERVER: 'connect_mcp_server',
+    DISCONNECT_MCP_SERVER: 'disconnect_mcp_server',
+    TEST_MCP_CONNECTION: 'test_mcp_connection',
+    LIST_MCP_RESOURCES: 'list_mcp_resources',
+    LIST_MCP_TOOLS: 'list_mcp_tools',
+    CALL_MCP_TOOL: 'call_mcp_tool',
+    LIST_MCP_PROMPTS: 'list_mcp_prompts',
+    GET_MCP_PROMPT: 'get_mcp_prompt',
+  },
+  batch: {
+    CREATE_BATCH_PLAN: 'create_batch_plan',
+    START_BATCH: 'start_batch',
+    PAUSE_BATCH: 'pause_batch',
+    RESUME_BATCH: 'resume_batch',
+    CANCEL_BATCH: 'cancel_batch',
+    GET_BATCH_JOB: 'get_batch_job',
+    LIST_BATCH_JOBS: 'list_batch_jobs',
+  },
+  notebook: {
+    LIST_NOTEBOOK_ENTRIES: 'list_notebook_entries',
+    GET_NOTEBOOK_THREAD: 'get_notebook_thread',
+    CREATE_NOTEBOOK_ENTRY: 'create_notebook_entry',
+    UPDATE_NOTEBOOK_ENTRY: 'update_notebook_entry',
+    ADD_EVIDENCE_CITATION: 'add_evidence_citation',
+    LIST_INVESTIGATION_STEPS: 'list_investigation_steps',
+  },
+} as const;
+
+export type CommandName = (typeof COMMANDS)[keyof typeof COMMANDS][keyof (typeof COMMANDS)[keyof typeof COMMANDS]];

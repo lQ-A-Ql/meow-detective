@@ -231,6 +231,7 @@ mod tests {
                 )
                 .unwrap();
         }
+        drop(staging_conn);
 
         let mut manifest = StagingManifest::create(ds_id, "/test.E01", "E01");
         manifest.partitions.push(PartitionEntry {
@@ -365,6 +366,8 @@ mod tests {
             )
             .unwrap();
         }
+        drop(s0);
+        drop(s1);
 
         let mut manifest = StagingManifest::create(ds_id, "/test.E01", "E01");
         for idx in 0..2 {
@@ -593,6 +596,7 @@ mod tests {
         let ds_id = "ds-empty";
         // Create staging DB but insert nothing
         let _s0 = open_partition_staging(tmp.path(), ds_id, 0).unwrap();
+        drop(_s0);
 
         let mut manifest = StagingManifest::create(ds_id, "/test.E01", "E01");
         manifest.partitions.push(PartitionEntry {
@@ -628,6 +632,7 @@ mod tests {
             [],
         )
         .unwrap();
+        drop(s0);
 
         let mut manifest = StagingManifest::create(ds_id, "/test.E01", "E01");
         manifest.partitions.push(PartitionEntry {
@@ -784,6 +789,7 @@ mod tests {
             )
             .unwrap();
         set_worker_meta(&worker, "merged", "true").unwrap();
+        drop(worker);
 
         let stats = merge_analysis_staging_to_main(
             &main_conn,

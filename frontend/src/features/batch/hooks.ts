@@ -8,22 +8,20 @@ import {
   getBatchJob,
   listBatchJobs,
 } from '@/lib/api/batch';
-import type { BatchJob, BatchPlan } from '@/types/models';
+import type { BatchJob, BatchPlanInput } from '@/types/models';
 
 const BATCH_POLL_INTERVAL_MS = 1500;
-
-const runningBatchIds = new Set<string>();
 
 function hasRunningBatch(jobs?: BatchJob[]) {
   return jobs?.some((job) => job.status === 'running') ?? false;
 }
 
 export function useListBatchJobs() {
-  const query = useQuery({
+  const query = useQuery<BatchJob[]>({
     queryKey: ['batch', 'list'],
     queryFn: listBatchJobs,
     refetchInterval: (activeQuery) => {
-      const data = activeQuery.state.data as BatchJob[] | undefined;
+      const data = activeQuery.state.data;
       return hasRunningBatch(data) ? BATCH_POLL_INTERVAL_MS : false;
     },
     refetchIntervalInBackground: true,
@@ -33,12 +31,12 @@ export function useListBatchJobs() {
 }
 
 export function useBatchJob(jobId: string | null) {
-  return useQuery({
+  return useQuery<BatchJob | null>({
     queryKey: ['batch', 'job', jobId],
     queryFn: () => getBatchJob(jobId!),
     enabled: jobId !== null,
     refetchInterval: (activeQuery) => {
-      const data = activeQuery.state.data as BatchJob | null | undefined;
+      const data = activeQuery.state.data;
       return data?.status === 'running' ? BATCH_POLL_INTERVAL_MS : false;
     },
     refetchIntervalInBackground: true,
@@ -49,7 +47,7 @@ export function useCreateBatchPlan() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (plan: BatchPlan) => createBatchPlan(plan),
+    mutationFn: (plan: BatchPlanInput) => createBatchPlan(plan),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['batch', 'list'] });
     },

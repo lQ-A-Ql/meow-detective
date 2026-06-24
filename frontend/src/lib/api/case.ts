@@ -5,56 +5,57 @@ import {
   RecentCase,
   RecentObject,
 } from '@/types/models';
+import { COMMANDS } from './commands';
 import { apiClient } from './client';
 
 export async function getCurrentCase(): Promise<CaseSummary | null> {
-  return apiClient.request('get_current_case');
+  return apiClient.request(COMMANDS.case.GET_CURRENT_CASE);
 }
 
 export async function getCaseMetrics(): Promise<CaseMetrics> {
-  return apiClient.request('get_case_metrics');
+  return apiClient.request(COMMANDS.case.GET_CASE_METRICS);
 }
 
 export async function getRecentObjects(): Promise<RecentObject[]> {
-  return apiClient.request('get_recent_objects');
+  return apiClient.request(COMMANDS.case.GET_RECENT_OBJECTS);
 }
 
 export async function getRecentCases(): Promise<RecentCase[]> {
-  return apiClient.request('get_recent_cases');
+  return apiClient.request(COMMANDS.case.GET_RECENT_CASES);
 }
 
 export async function getDataSources(): Promise<DataSourceSummary[]> {
-  return apiClient.request('get_data_sources');
+  return apiClient.request(COMMANDS.case.GET_DATA_SOURCES);
 }
 
 export async function createCase(caseRoot: string, name: string, examiner?: string): Promise<CaseSummary> {
-  return apiClient.request('create_case', { request: { caseRoot, name, examiner: examiner ?? null } });
+  return apiClient.request(COMMANDS.case.CREATE_CASE, { request: { caseRoot, name, examiner: examiner ?? null } });
 }
 
 export async function createAnalysisDemoCase(): Promise<CaseSummary> {
-  return apiClient.request('create_analysis_demo_case');
+  return apiClient.request(COMMANDS.case.CREATE_ANALYSIS_DEMO_CASE);
 }
 
 export async function openCase(caseRoot: string): Promise<CaseSummary> {
-  return apiClient.request('open_case', { request: { caseRoot } });
+  return apiClient.request(COMMANDS.case.OPEN_CASE, { request: { caseRoot } });
 }
 
 export async function closeCase(): Promise<void> {
-  return apiClient.request('close_case');
+  return apiClient.request(COMMANDS.case.CLOSE_CASE);
 }
 
 export async function renameDataSource(dataSourceId: string, name: string): Promise<DataSourceSummary> {
-  return apiClient.request('rename_data_source', { request: { dataSourceId, name } });
+  return apiClient.request(COMMANDS.case.RENAME_DATA_SOURCE, { request: { dataSourceId, name } });
 }
 
 export async function deleteCase(caseRoot: string): Promise<string> {
-  return apiClient.request('delete_case', { request: { caseRoot } });
+  return apiClient.request(COMMANDS.case.DELETE_CASE, { request: { caseRoot } });
 }
 
 export async function removeCaseFromList(caseRoot: string): Promise<string> {
-  return apiClient.request('remove_case_from_list', { request: { caseRoot } });
+  return apiClient.request(COMMANDS.case.REMOVE_CASE_FROM_LIST, { request: { caseRoot } });
 }
 
 export async function deleteDataSource(dataSourceId: string): Promise<string> {
-  return apiClient.request('delete_data_source', { request: { dataSourceId } });
+  return apiClient.request(COMMANDS.case.DELETE_DATA_SOURCE, { request: { dataSourceId } });
 }

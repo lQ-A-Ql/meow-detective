@@ -22,178 +22,196 @@ pub struct MftRecord {
 
 /// NTFS FILE record parser. Extracts metadata from raw MFT record bytes.
 pub struct MftRecordParser {
-    _record_size: u32,
     bytes_per_sector: u16,
+    /// Reusable buffer for fixup when record_size != 1024.
+    /// For the standard 1024-byte case, a stack array is used instead.
+    buf: Vec<u8>,
 }
 
 impl MftRecordParser {
     pub fn new(record_size: u32, bytes_per_sector: u16) -> Self {
         Self {
-            _record_size: record_size,
             bytes_per_sector,
+            buf: vec![0u8; record_size as usize],
         }
     }
 
     /// Parse a single MFT FILE record into an MftRecord.
     /// Returns None for invalid records. Inactive records with a valid
     /// $FILE_NAME attribute are retained and marked as deleted.
-    pub fn parse(&self, record: &[u8], record_number: u64) -> Option<MftRecord> {
+    pub fn parse(&mut self, record: &[u8], record_number: u64) -> Option<MftRecord> {
         if record.len() < 42 || &record[0..4] != b"FILE" {
             return None;
         }
 
-        let mut rec = record.to_vec();
-        if apply_record_fixup(&mut rec, self.bytes_per_sector as usize).is_err() {
-            return None;
+        // Stack-allocated buffer for the common 1024-byte record size,
+        // avoiding per-record heap allocation entirely.
+        if record.len() == 1024 {
+            let mut rec = [0u8; 1024];
+            rec.copy_from_slice(record);
+            if apply_record_fixup(&mut rec, self.bytes_per_sector as usize).is_err() {
+                return None;
+            }
+            return parse_mft_record(&rec, record_number);
         }
 
-        let attr_off = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
-        let flags = u16::from_le_bytes([rec[0x16], rec[0x17]]);
-        let in_use = flags & 0x01 != 0;
-        let deleted = !in_use;
-        let is_dir = flags & 0x02 != 0;
+        // Fallback: reuse the pre-allocated heap buffer for non-standard sizes.
+        self.buf.clear();
+        self.buf.extend_from_slice(record);
+        if apply_record_fixup(&mut self.buf, self.bytes_per_sector as usize).is_err() {
+            return None;
+        }
+        parse_mft_record(&self.buf, record_number)
+    }
+}
 
-        let mut name = String::new();
-        let mut parent_ref: u64 = 5;
-        let mut size: u64 = 0;
-        let mut created_at: Option<DateTime<Utc>> = None;
-        let mut modified_at: Option<DateTime<Utc>> = None;
-        let mut accessed_at: Option<DateTime<Utc>> = None;
-        let mut changed_at: Option<DateTime<Utc>> = None;
-        let mut fn_created: Option<DateTime<Utc>> = None;
-        let mut fn_modified: Option<DateTime<Utc>> = None;
-        let mut fn_accessed: Option<DateTime<Utc>> = None;
-        let mut fn_changed: Option<DateTime<Utc>> = None;
-        let mut fn_real_size: Option<u64> = None;
-        let mut fn_flags: Option<u32> = None;
-        let mut selected_name_rank: Option<u8> = None;
+/// Core MFT record parsing logic. Extracted from MftRecordParser to allow
+/// both stack-allocated (1024-byte fast path) and heap-allocated callers.
+fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
+    let attr_off = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
+    let flags = u16::from_le_bytes([rec[0x16], rec[0x17]]);
+    let in_use = flags & 0x01 != 0;
+    let deleted = !in_use;
+    let is_dir = flags & 0x02 != 0;
 
-        let mut pos = attr_off;
-        while pos + 8 < rec.len() {
-            let typ = u32::from_le_bytes(rec[pos..pos + 4].try_into().ok()?);
-            if typ == 0xFFFFFFFF {
-                break;
-            }
-            let len = u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().ok()?) as usize;
-            if len < 4 || pos + len > rec.len() {
-                break;
-            }
+    let mut name = String::new();
+    let mut parent_ref: u64 = 5;
+    let mut size: u64 = 0;
+    let mut created_at: Option<DateTime<Utc>> = None;
+    let mut modified_at: Option<DateTime<Utc>> = None;
+    let mut accessed_at: Option<DateTime<Utc>> = None;
+    let mut changed_at: Option<DateTime<Utc>> = None;
+    let mut fn_created: Option<DateTime<Utc>> = None;
+    let mut fn_modified: Option<DateTime<Utc>> = None;
+    let mut fn_accessed: Option<DateTime<Utc>> = None;
+    let mut fn_changed: Option<DateTime<Utc>> = None;
+    let mut fn_real_size: Option<u64> = None;
+    let mut fn_flags: Option<u32> = None;
+    let mut selected_name_rank: Option<u8> = None;
 
-            match typ {
-                0x10 => {
-                    if let Some(content) = resident_content(&rec, pos, len) {
-                        if content.len() >= 0x30 {
-                            created_at = ntfs_to_datetime(read_ntfs_time(content, 0x00));
-                            modified_at = ntfs_to_datetime(read_ntfs_time(content, 0x08));
-                            changed_at = ntfs_to_datetime(read_ntfs_time(content, 0x10));
-                            accessed_at = ntfs_to_datetime(read_ntfs_time(content, 0x18));
-                        }
+    let mut pos = attr_off;
+    while pos + 8 < rec.len() {
+        let typ = u32::from_le_bytes(rec[pos..pos + 4].try_into().ok()?);
+        if typ == 0xFFFFFFFF {
+            break;
+        }
+        let len = u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().ok()?) as usize;
+        if len < 4 || pos + len > rec.len() {
+            break;
+        }
+
+        match typ {
+            0x10 => {
+                if let Some(content) = resident_content(rec, pos, len) {
+                    if content.len() >= 0x30 {
+                        created_at = ntfs_to_datetime(read_ntfs_time(content, 0x00));
+                        modified_at = ntfs_to_datetime(read_ntfs_time(content, 0x08));
+                        changed_at = ntfs_to_datetime(read_ntfs_time(content, 0x10));
+                        accessed_at = ntfs_to_datetime(read_ntfs_time(content, 0x18));
                     }
                 }
-                0x30 => {
-                    if let Some(content) = resident_content(&rec, pos, len) {
-                        if content.len() >= 0x52 {
-                            let name_len = content[0x40] as usize;
-                            let name_ns = content[0x41]; // namespace: 0=POSIX, 1=Win32, 2=DOS, 3=Win32+DOS
-                            let name_start = 0x42;
-                            if name_len > 0 && name_start + name_len * 2 <= content.len() {
-                                let chars: Vec<u16> = content
-                                    [name_start..name_start + name_len * 2]
-                                    .chunks_exact(2)
-                                    .map(|c| u16::from_le_bytes([c[0], c[1]]))
-                                    .collect();
-                                let parsed_name = String::from_utf16_lossy(&chars);
+            }
+            0x30 => {
+                if let Some(content) = resident_content(rec, pos, len) {
+                    if content.len() >= 0x52 {
+                        let name_len = content[0x40] as usize;
+                        let name_ns = content[0x41]; // namespace: 0=POSIX, 1=Win32, 2=DOS, 3=Win32+DOS
+                        let name_start = 0x42;
+                        if name_len > 0 && name_start + name_len * 2 <= content.len() {
+                            let chars: Vec<u16> = content[name_start..name_start + name_len * 2]
+                                .chunks_exact(2)
+                                .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                                .collect();
+                            let parsed_name = String::from_utf16_lossy(&chars);
 
-                                // Keep name, parent ref, and timestamps from the same
-                                // $FILE_NAME attribute. Real NTFS records often contain
-                                // both DOS 8.3 and Win32 names; mixing name from one
-                                // attribute with parent_ref from another corrupts paths.
-                                let rank = file_name_namespace_rank(name_ns);
-                                if selected_name_rank.is_none_or(|current| rank > current) {
-                                    name = parsed_name;
-                                    parent_ref = u64::from_le_bytes(content[0..8].try_into().ok()?)
-                                        & 0x0000_FFFF_FFFF_FFFF;
-                                    fn_created = ntfs_to_datetime(read_ntfs_time(content, 0x08));
-                                    fn_modified = ntfs_to_datetime(read_ntfs_time(content, 0x10));
-                                    fn_changed = ntfs_to_datetime(read_ntfs_time(content, 0x18));
-                                    fn_accessed = ntfs_to_datetime(read_ntfs_time(content, 0x20));
-                                    if !is_dir && content.len() >= 0x38 {
-                                        fn_real_size = Some(u64::from_le_bytes(
-                                            content[0x30..0x38].try_into().ok()?,
-                                        ));
-                                    }
-                                    if content.len() >= 0x3C {
-                                        fn_flags = Some(u32::from_le_bytes(
-                                            content[0x38..0x3C].try_into().ok()?,
-                                        ));
-                                    }
-                                    selected_name_rank = Some(rank);
+                            // Keep name, parent ref, and timestamps from the same
+                            // $FILE_NAME attribute. Real NTFS records often contain
+                            // both DOS 8.3 and Win32 names; mixing name from one
+                            // attribute with parent_ref from another corrupts paths.
+                            let rank = file_name_namespace_rank(name_ns);
+                            if selected_name_rank.is_none_or(|current| rank > current) {
+                                name = parsed_name;
+                                parent_ref = u64::from_le_bytes(content[0..8].try_into().ok()?)
+                                    & 0x0000_FFFF_FFFF_FFFF;
+                                fn_created = ntfs_to_datetime(read_ntfs_time(content, 0x08));
+                                fn_modified = ntfs_to_datetime(read_ntfs_time(content, 0x10));
+                                fn_changed = ntfs_to_datetime(read_ntfs_time(content, 0x18));
+                                fn_accessed = ntfs_to_datetime(read_ntfs_time(content, 0x20));
+                                if !is_dir && content.len() >= 0x38 {
+                                    fn_real_size = Some(u64::from_le_bytes(
+                                        content[0x30..0x38].try_into().ok()?,
+                                    ));
                                 }
+                                if content.len() >= 0x3C {
+                                    fn_flags = Some(u32::from_le_bytes(
+                                        content[0x38..0x3C].try_into().ok()?,
+                                    ));
+                                }
+                                selected_name_rank = Some(rank);
                             }
                         }
                     }
                 }
-                0x80 => {
-                    // $DATA — file size
-                    if !is_unnamed_attribute(&rec, pos) {
-                        pos += len;
-                        continue;
-                    }
-                    let is_nonresident = pos + 9 <= rec.len() && (rec[pos + 8] & 1) != 0;
-                    if is_nonresident {
-                        if pos + 0x38 <= rec.len() {
-                            size = u64::from_le_bytes(rec[pos + 0x30..pos + 0x38].try_into().ok()?);
-                        }
-                    } else if pos + 0x14 <= rec.len() {
-                        size =
-                            u32::from_le_bytes(rec[pos + 0x10..pos + 0x14].try_into().ok()?) as u64;
-                    }
+            }
+            0x80 => {
+                // $DATA — file size
+                if !is_unnamed_attribute(rec, pos) {
+                    pos += len;
+                    continue;
                 }
-                _ => {}
+                let is_nonresident = pos + 9 <= rec.len() && (rec[pos + 8] & 1) != 0;
+                if is_nonresident {
+                    if pos + 0x38 <= rec.len() {
+                        size = u64::from_le_bytes(rec[pos + 0x30..pos + 0x38].try_into().ok()?);
+                    }
+                } else if pos + 0x14 <= rec.len() {
+                    size = u32::from_le_bytes(rec[pos + 0x10..pos + 0x14].try_into().ok()?) as u64;
+                }
             }
-
-            if len == 0 {
-                break;
-            }
-            pos += len;
+            _ => {}
         }
 
-        let final_created = created_at.or(fn_created);
-        let final_modified = modified_at.or(fn_modified);
-        let final_accessed = accessed_at.or(fn_accessed);
-        let final_changed = changed_at.or(fn_changed);
-
-        let is_valid = if deleted {
-            !name.is_empty()
-        } else {
-            !name.is_empty() || record_number < 24
-        };
-        if !is_valid {
-            return None;
+        if len == 0 {
+            break;
         }
-
-        let size = if !is_dir && size == 0 {
-            fn_real_size.unwrap_or(size)
-        } else {
-            size
-        };
-
-        Some(MftRecord {
-            record_number,
-            name,
-            parent_ref,
-            is_dir,
-            size,
-            created_at: final_created,
-            modified_at: final_modified,
-            accessed_at: final_accessed,
-            changed_at: final_changed,
-            hidden: fn_flags.is_some_and(|flags| flags & 0x02 != 0),
-            system: fn_flags.is_some_and(|flags| flags & 0x04 != 0),
-            deleted,
-            is_valid,
-        })
+        pos += len;
     }
+
+    let final_created = created_at.or(fn_created);
+    let final_modified = modified_at.or(fn_modified);
+    let final_accessed = accessed_at.or(fn_accessed);
+    let final_changed = changed_at.or(fn_changed);
+
+    let is_valid = if deleted {
+        !name.is_empty()
+    } else {
+        !name.is_empty() || record_number < 24
+    };
+    if !is_valid {
+        return None;
+    }
+
+    let size = if !is_dir && size == 0 {
+        fn_real_size.unwrap_or(size)
+    } else {
+        size
+    };
+
+    Some(MftRecord {
+        record_number,
+        name,
+        parent_ref,
+        is_dir,
+        size,
+        created_at: final_created,
+        modified_at: final_modified,
+        accessed_at: final_accessed,
+        changed_at: final_changed,
+        hidden: fn_flags.is_some_and(|flags| flags & 0x02 != 0),
+        system: fn_flags.is_some_and(|flags| flags & 0x04 != 0),
+        deleted,
+        is_valid,
+    })
 }
 
 fn file_name_namespace_rank(namespace: u8) -> u8 {
@@ -256,7 +274,7 @@ impl MftScanner {
     /// Parse a batch of MFT records from a pre-read buffer.
     /// The buffer must contain `count * record_size` bytes starting at `start_record`.
     pub fn parse_chunk(&self, buf: &[u8], start_record: u64, count: u64) -> Vec<MftRecord> {
-        let parser = MftRecordParser::new(self.record_size, self.bytes_per_sector);
+        let mut parser = MftRecordParser::new(self.record_size, self.bytes_per_sector);
         let mut records = Vec::with_capacity(count as usize);
         let rec_size = self.record_size as usize;
 
@@ -552,7 +570,7 @@ mod tests {
 
     #[test]
     fn parse_valid_file_record() {
-        let parser = MftRecordParser::new(1024, 512);
+        let mut parser = MftRecordParser::new(1024, 512);
         let rec = make_test_record(100, "test.txt", 5, false);
         let result = parser.parse(&rec, 100).unwrap();
         assert_eq!(result.name, "test.txt");
@@ -565,7 +583,7 @@ mod tests {
 
     #[test]
     fn parse_directory_record() {
-        let parser = MftRecordParser::new(1024, 512);
+        let mut parser = MftRecordParser::new(1024, 512);
         let rec = make_test_record(200, "Users", 5, true);
         let result = parser.parse(&rec, 200).unwrap();
         assert_eq!(result.name, "Users");
@@ -574,7 +592,7 @@ mod tests {
 
     #[test]
     fn parse_multiple_file_name_attrs_keeps_selected_parent_ref() {
-        let parser = MftRecordParser::new(1024, 512);
+        let mut parser = MftRecordParser::new(1024, 512);
         let mut rec = make_test_record(300, "WINDOW~1", 5, true);
         set_first_file_name_namespace(&mut rec, 2);
         append_file_name_attr(&mut rec, "Windows", 42, 1);
@@ -585,7 +603,7 @@ mod tests {
 
     #[test]
     fn named_data_stream_does_not_override_primary_file_size() {
-        let parser = MftRecordParser::new(1024, 512);
+        let mut parser = MftRecordParser::new(1024, 512);
         let mut rec = make_test_record(301, "System.evtx", 5, false);
         append_named_resident_data_attr(&mut rec, "Zone.Identifier", 0);
         let result = parser.parse(&rec, 301).unwrap();
@@ -594,7 +612,7 @@ mod tests {
 
     #[test]
     fn file_name_real_size_is_fallback_when_data_attr_unavailable() {
-        let parser = MftRecordParser::new(1024, 512);
+        let mut parser = MftRecordParser::new(1024, 512);
         let mut rec = make_test_record(302, "SOFTWARE", 5, false);
         remove_data_attrs(&mut rec);
         let result = parser.parse(&rec, 302).unwrap();
@@ -603,7 +621,7 @@ mod tests {
 
     #[test]
     fn parse_invalid_record() {
-        let parser = MftRecordParser::new(1024, 512);
+        let mut parser = MftRecordParser::new(1024, 512);
         let mut rec = vec![0u8; 1024];
         rec[0..4].copy_from_slice(b"BAAD");
         assert!(parser.parse(&rec, 0).is_none());
@@ -611,7 +629,7 @@ mod tests {
 
     #[test]
     fn parse_inactive_record() {
-        let parser = MftRecordParser::new(1024, 512);
+        let mut parser = MftRecordParser::new(1024, 512);
         let mut rec = make_test_record(500, "deleted.txt", 5, false);
         rec[0x16] = 0x00;
         let result = parser.parse(&rec, 500).unwrap();
@@ -622,7 +640,7 @@ mod tests {
 
     #[test]
     fn parse_inactive_hidden_system_record() {
-        let parser = MftRecordParser::new(1024, 512);
+        let mut parser = MftRecordParser::new(1024, 512);
         let mut rec = make_test_record(501, "hidden-deleted.txt", 5, false);
         rec[0x16] = 0x00;
         let mut pos = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;

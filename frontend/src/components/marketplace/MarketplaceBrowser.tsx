@@ -8,8 +8,9 @@ import {
   CheckCircle,
   XCircle,
   ExternalLink,
-  ChevronRight,
 } from 'lucide-react';
+import { listLoadedRulePacks, loadRulePack } from '@/lib/api/rule-packs';
+import { RulePackSummary, ApiErrorDto } from '@/types/models';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -57,8 +58,6 @@ export interface MarketplaceState {
   error: string | null;
   /** Currently downloading pack id (null if idle). */
   downloadingId: string | null;
-  /** Download progress (0-100). */
-  downloadProgress: number;
   /** Import result for the last operation. */
   importResult: ImportResult | null;
 }
@@ -68,19 +67,12 @@ export type ImportResult =
   | { status: 'error'; message: string };
 
 // ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/** Local directory path scanned for available rule packs. */
-const LOCAL_PACK_DIR = 'rulepacks';
-
-// ---------------------------------------------------------------------------
 // Hook: useMarketplace
 // ---------------------------------------------------------------------------
 
 /**
- * Hook that manages marketplace state: fetching the local pack directory,
- * downloading packs, and importing/installing them.
+ * Hook that manages marketplace state: fetching loaded rule packs from the
+ * backend, installing packs, and rating them.
  */
 export function useMarketplace() {
   const [state, setState] = useState<MarketplaceState>({
@@ -88,16 +80,15 @@ export function useMarketplace() {
     loading: true,
     error: null,
     downloadingId: null,
-    downloadProgress: 0,
     importResult: null,
   });
 
-  /** Fetch the list of available rule packs from the local directory. */
+  /** Fetch the list of available rule packs from the backend. */
   const fetchPacks = useCallback(async () => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
     try {
-      // In Tauri mode, invoke the Rust command; in mock mode, return fixtures.
-      const packs = await listAvailablePacks();
+      const summaries = await listLoadedRulePacks();
+      const packs = summaries.map(mapSummaryToMeta);
       setState((prev) => ({
         ...prev,
         packs,
@@ -107,12 +98,12 @@ export function useMarketplace() {
       setState((prev) => ({
         ...prev,
         loading: false,
-        error: err instanceof Error ? err.message : 'Failed to fetch packs',
+        error: formatApiError(err, 'Failed to fetch packs'),
       }));
     }
   }, []);
 
-  /** Download a rule pack by id. */
+  /** Download and install a rule pack by id. */
   const downloadPack = useCallback(async (packId: string) => {
     const pack = state.packs.find((p) => p.id === packId);
     if (!pack) return;
@@ -120,39 +111,31 @@ export function useMarketplace() {
     setState((prev) => ({
       ...prev,
       downloadingId: packId,
-      downloadProgress: 0,
       importResult: null,
     }));
 
     try {
-      // Simulated progress updates.
-      for (let i = 0; i <= 100; i += 10) {
-        await delay(200);
-        setState((prev) => ({ ...prev, downloadProgress: i }));
-      }
-
-      // In Tauri mode this would call the actual download command.
-      await downloadAndImportPack(pack);
+      await loadRulePack(pack.downloadUrl);
       setState((prev) => ({
         ...prev,
         downloadingId: null,
-        downloadProgress: 0,
         importResult: { status: 'ok', message: `Installed ${pack.name} v${pack.version}` },
       }));
+      // Refresh so installed status reflects the latest backend state.
+      fetchPacks();
     } catch (err) {
       setState((prev) => ({
         ...prev,
         downloadingId: null,
-        downloadProgress: 0,
         importResult: {
           status: 'error',
-          message: err instanceof Error ? err.message : 'Download failed',
+          message: formatApiError(err, 'Download failed'),
         },
       }));
     }
-  }, [state.packs]);
+  }, [state.packs, fetchPacks]);
 
-  /** Rate a rule pack. */
+  /** Rate a rule pack (local-only until a rating API exists). */
   const ratePack = useCallback(async (packId: string, rating: number) => {
     setState((prev) => ({
       ...prev,
@@ -166,7 +149,6 @@ export function useMarketplace() {
           : p,
       ),
     }));
-    // In Tauri mode: persist the rating via the backend.
   }, []);
 
   /** Refresh the pack list (e.g. after an install). */
@@ -235,9 +217,7 @@ export function MarketplaceBrowser() {
           <div className="flex flex-col items-center justify-center py-16 text-sm text-gray-400 gap-2">
             <Package className="w-10 h-10" />
             <span>No rule packs available</span>
-            <span className="text-xs">
-              Place rule packs in the <code className="bg-gray-100 px-1 rounded">{LOCAL_PACK_DIR}</code> directory
-            </span>
+            <span className="text-xs">Load rule packs from the case workspace to see them here</span>
           </div>
         ) : (
           <div className="space-y-3">
@@ -246,7 +226,6 @@ export function MarketplaceBrowser() {
                 key={pack.id}
                 pack={pack}
                 isDownloading={state.downloadingId === pack.id}
-                downloadProgress={state.downloadProgress}
                 onDownload={() => downloadPack(pack.id)}
                 onRate={(r) => ratePack(pack.id, r)}
               />
@@ -294,13 +273,11 @@ function ImportBanner({
 function RulePackCard({
   pack,
   isDownloading,
-  downloadProgress,
   onDownload,
   onRate,
 }: {
   pack: RulePackMeta;
   isDownloading: boolean;
-  downloadProgress: number;
   onDownload: () => void;
   onRate: (rating: number) => void;
 }) {
@@ -324,18 +301,11 @@ function RulePackCard({
               {pack.installedVersion ? `v${pack.installedVersion}` : 'Installed'}
             </span>
           ) : isDownloading ? (
-            <div className="w-24">
-              <div className="h-1.5 rounded-full bg-gray-200 overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-blue-500 transition-all duration-200"
-                  style={{ width: `${downloadProgress}%` }}
-                />
-              </div>
-              <span className="text-[10px] text-gray-400 mt-0.5 block text-right">
-                {downloadProgress}%
-              </span>
-            </div>
-          ) : (
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              Installing...
+            </span>
+          ) : pack.downloadUrl ? (
             <button
               onClick={onDownload}
               className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors"
@@ -343,6 +313,8 @@ function RulePackCard({
               <Download className="w-3.5 h-3.5" />
               Install
             </button>
+          ) : (
+            <span className="text-[11px] text-gray-400">No source</span>
           )}
         </div>
       </div>
@@ -373,15 +345,17 @@ function RulePackCard({
         <span className="text-[10px] text-gray-400">
           ({pack.ratingCount} ratings)
         </span>
-        <a
-          href={pack.downloadUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-0.5 text-[10px] text-gray-400 hover:text-blue-500 ml-auto"
-        >
-          <ExternalLink className="w-3 h-3" />
-          Source
-        </a>
+        {pack.downloadUrl && (
+          <a
+            href={pack.downloadUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-0.5 text-[10px] text-gray-400 hover:text-blue-500 ml-auto"
+          >
+            <ExternalLink className="w-3 h-3" />
+            Source
+          </a>
+        )}
       </div>
     </div>
   );
@@ -419,84 +393,36 @@ function StarRating({
 }
 
 // ---------------------------------------------------------------------------
-// API helpers (mocked by default; real in Tauri mode)
+// API mapping helpers
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const isTauri = (): boolean => !!(window as any).__TAURI_INTERNALS__;
-
-async function listAvailablePacks(): Promise<RulePackMeta[]> {
-  if (isTauri()) {
-    // TODO: Invoke 'list_marketplace_rule_packs' Tauri command.
-    return [];
-  }
-
-  // Mock data for development.
-  await delay(400);
-  return [
-    {
-      id: 'community-sigma-v2',
-      name: 'Community Sigma Rules',
-      author: 'sigma-project',
-      description:
-        'Curated collection of Sigma detection rules covering Windows, Linux, and macOS artifacts for threat hunting.',
-      version: '2.5.1',
-      publishedAt: '2026-05-20',
-      downloadUrl: 'https://github.com/SigmaHQ/sigma/releases/download/v2.5.1/sigma-rules.zip',
-      sha256: 'a1b2c3d4e5f6...',
-      ruleCount: 1247,
-      families: ['Windows', 'Linux', 'macOS'],
-      license: 'MIT',
-      rating: 4.7,
-      ratingCount: 183,
-      installed: false,
-    },
-    {
-      id: 'forensics-workbench-builtin',
-      name: 'Forensics Workbench Built-in',
-      author: 'lQ-A-Ql',
-      description:
-        'Default rule pack shipped with Forensics Workbench. Covers evidence ingest validation, file-system integrity, and artifact extraction rules.',
-      version: '1.0.0',
-      publishedAt: '2026-06-15',
-      downloadUrl: '',
-      sha256: '',
-      ruleCount: 42,
-      families: ['Windows', 'Linux', 'macOS', 'iOS', 'Android'],
-      license: 'MIT',
-      rating: 4.9,
-      ratingCount: 21,
-      installed: true,
-      installedVersion: '1.0.0',
-    },
-    {
-      id: 'forensic-artifact-kit',
-      name: 'Forensic Artifact Kit',
-      author: 'forensic-artifacts',
-      description:
-        'Community-maintained artifact definitions for forensic extraction tools. Includes browser, email, and file-system artifact specs.',
-      version: '3.2.0',
-      publishedAt: '2026-04-12',
-      downloadUrl: 'https://github.com/ForensicArtifacts/artifacts/releases/download/v3.2.0/fak.zip',
-      sha256: 'f6e5d4c3b2a1...',
-      ruleCount: 891,
-      families: ['Windows', 'Linux', 'macOS'],
-      license: 'Apache-2.0',
-      rating: 4.5,
-      ratingCount: 67,
-      installed: false,
-    },
-  ] as RulePackMeta[];
+function mapSummaryToMeta(summary: RulePackSummary): RulePackMeta {
+  return {
+    id: summary.id,
+    name: summary.name,
+    author: summary.author ?? '',
+    description: summary.description ?? '',
+    version: summary.version,
+    publishedAt: summary.loadedAt,
+    downloadUrl: '',
+    sha256: '',
+    ruleCount: summary.ruleCount,
+    families: summary.coveredFamilies,
+    license: '',
+    rating: 0,
+    ratingCount: 0,
+    installed: summary.status === 'loaded',
+    installedVersion: summary.status === 'loaded' ? summary.version : undefined,
+  };
 }
 
-async function downloadAndImportPack(_pack: RulePackMeta): Promise<void> {
-  if (isTauri()) {
-    // TODO: Invoke 'download_marketplace_rule_pack' and 'import_rule_pack' Tauri commands.
-    return;
+function formatApiError(err: unknown, fallback: string): string {
+  const candidate = err as Partial<ApiErrorDto>;
+  if (candidate && typeof candidate.message === 'string' && candidate.message.length > 0) {
+    return candidate.message;
   }
-  await delay(500);
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  if (err instanceof Error) {
+    return err.message;
+  }
+  return fallback;
 }

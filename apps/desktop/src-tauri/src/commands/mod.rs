@@ -1,5 +1,6 @@
 pub mod analysis_commands;
 pub mod artifact_commands;
+pub mod batch_commands;
 #[cfg(test)]
 mod benchmarks;
 pub mod case_commands;
@@ -11,6 +12,7 @@ pub mod job_commands;
 pub mod mcp_commands;
 pub mod notebook_commands;
 pub mod report_commands;
+pub mod rule_pack_commands;
 pub mod search_commands;
 pub mod settings_commands;
 pub mod timeline_commands;

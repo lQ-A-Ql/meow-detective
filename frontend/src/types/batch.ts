@@ -4,55 +4,44 @@ export type BatchPhaseState = 'pending' | 'running' | 'completed' | 'failed' | '
 
 export type BatchJobStatus = 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
 
-export interface ResourceLimits {
-  memoryMb: number;
-  threadCount: number;
+export interface BatchResourceLimits {
+  maxMemoryMb?: number;
+  maxThreads?: number;
 }
 
 export interface BatchPlan {
-  name: string;
-  dataSourceIds: string[];
+  dataSourceRefs: string[];
   phases: BatchPhaseName[];
-  resourceLimits: ResourceLimits;
+  resourceLimits: BatchResourceLimits;
 }
 
-export interface BatchPlanSummary {
+export interface BatchPlanInput {
   name: string;
   dataSourceIds: string[];
-  dataSourceCount: number;
   phases: BatchPhaseName[];
-  phaseCount: number;
-  resourceLimits: ResourceLimits;
+  resourceLimits: BatchResourceLimits;
 }
 
 export interface BatchPhaseProgress {
-  phase: BatchPhaseName;
+  kind: BatchPhaseName;
   state: BatchPhaseState;
   progress: number;
-  detail: string;
-}
-
-export interface BatchJobLogLine {
-  ts: string;
-  level: 'info' | 'warn' | 'error';
-  message: string;
+  startedAt?: string;
+  completedAt?: string;
+  errorCount: number;
+  warnings: string[];
 }
 
 export interface BatchJob {
   id: string;
-  name: string;
+  caseId: string;
+  label: string;
   status: BatchJobStatus;
-  progress: number;
   phases: BatchPhaseProgress[];
-  plan: BatchPlanSummary;
+  plan: BatchPlan;
   createdAt: string;
   startedAt?: string;
   completedAt?: string;
-  elapsedMs?: number;
-  etaMs?: number;
-  fileCount: number;
-  artifactCount: number;
-  logTail: BatchJobLogLine[];
 }
 
 export interface BatchStatus {

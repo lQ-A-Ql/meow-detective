@@ -11,8 +11,8 @@ chrono.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 domain.workspace = true
-rusqlite = { version = "0.31", features = ["bundled", "chrono"] }
-uuid = { version = "1", features = ["v4"] }
+rusqlite = { workspace = true, features = ["chrono"] }
+uuid.workspace = true
 
 [dev-dependencies]
-tempfile = "3"
+tempfile.workspace = true

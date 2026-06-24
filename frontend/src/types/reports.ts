@@ -18,6 +18,7 @@ export interface ExportScope {
   registry: boolean;
   fullTimeline: boolean;
   rawFileExtraction: boolean;
+  overwrite?: boolean;
 }
 
 export interface ExportOptions {

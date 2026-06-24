@@ -81,6 +81,7 @@ pub fn record_step(
         error_code,
         Some(&case_state_hash),
     )
+    .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

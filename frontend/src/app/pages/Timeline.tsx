@@ -10,9 +10,9 @@ import {
 } from '@/components/layout/InspectorPane';
 import { useTimelineEventById, useTimelineEvents } from '@/features/timeline/hooks';
 import { useSelectionStore } from '@/stores/selection-store';
-import { TimelineEventDto } from '@/types/models';
+import { TimelineEvent } from '@/types/models';
 
-function buildTimelineBars(events: TimelineEventDto[], bucketCount: number): number[] {
+function buildTimelineBars(events: TimelineEvent[], bucketCount: number): number[] {
   if (!events || events.length === 0) return Array(bucketCount).fill(0);
   const timestamps = events.map((e) => Date.parse(e.ts)).filter((t) => !isNaN(t));
   if (timestamps.length === 0) return Array(bucketCount).fill(0);
@@ -216,7 +216,7 @@ export function Timeline() {
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="min-w-0 flex-1 border-r border-[#e0e0e0]">
-          <DenseDataTable<TimelineEventDto>
+          <DenseDataTable<TimelineEvent>
             rows={tableEvents}
             getRowKey={(row) => row.id}
             selectedRowKey={selectedEvent?.id}
