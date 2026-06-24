@@ -18,6 +18,8 @@ use uuid::Uuid;
 
 use crate::{events::event_bridge, state::AppState};
 
+use super::settings_commands::load_app_settings;
+
 fn activate_case_pool(state: &AppState, db_path: &std::path::Path) -> Result<(), CommandError> {
     state
         .clear_db_pool()
@@ -374,6 +376,10 @@ pub async fn delete_case(
     request.validate().map_err(CommandError::invalid_input)?;
     let root = PathBuf::from(&request.case_root);
 
+    // Use user-configured cases directory for validation instead of hardcoded default
+    let settings = load_app_settings(&state.app_settings_path)?;
+    let allowed_root = PathBuf::from(&settings.case_root);
+
     let mut cleared_active_case = false;
     let mut cleared_case_id: Option<String> = None;
     {
@@ -399,8 +405,10 @@ pub async fn delete_case(
     }
 
     let root_clone = root.clone();
+    let allowed_root_clone = allowed_root.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        case_service::delete_case(&root_clone).map_err(CommandError::from_service_error)
+        case_service::delete_case_in(&root_clone, &allowed_root_clone)
+            .map_err(CommandError::from_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)??;

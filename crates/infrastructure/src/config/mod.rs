@@ -34,30 +34,46 @@ pub fn safe_cases_root() -> PathBuf {
 ///
 /// # Errors
 /// Returns an error message if the path is outside the safe root or cannot be resolved.
-pub fn validate_case_root_is_safe(case_root: &std::path::Path) -> Result<(), String> {
-    let safe_root = safe_cases_root();
-
-    // Ensure the safe root exists (create if needed)
-    if !safe_root.exists() {
-        std::fs::create_dir_all(&safe_root)
+/// Validate that a case root path is within a specific allowed root directory.
+///
+/// Performs `canonicalize()` on both paths to resolve symlinks and `..` components,
+/// then checks that `case_root` starts with `allowed_root`.
+///
+/// # Errors
+/// Returns an error message if the path is outside the allowed root or cannot be resolved.
+pub fn validate_case_root_is_within(
+    case_root: &std::path::Path,
+    allowed_root: &std::path::Path,
+) -> Result<(), String> {
+    // Ensure the allowed root exists (create if needed)
+    if !allowed_root.exists() {
+        std::fs::create_dir_all(allowed_root)
             .map_err(|e| format!("Failed to create cases root: {}", e))?;
     }
 
-    let safe_canonical = safe_root
+    let allowed_canonical = allowed_root
         .canonicalize()
-        .map_err(|e| format!("Failed to resolve safe root: {}", e))?;
+        .map_err(|e| format!("Failed to resolve allowed root: {}", e))?;
 
     let case_canonical = case_root
         .canonicalize()
         .map_err(|_| "Case path does not exist or cannot be resolved".to_string())?;
 
-    if !case_canonical.starts_with(&safe_canonical) {
+    if !case_canonical.starts_with(&allowed_canonical) {
         return Err(format!(
             "Case path is outside the allowed cases directory ({}). \
              For security, cases can only be managed within this directory.",
-            safe_canonical.display()
+            allowed_canonical.display()
         ));
     }
 
     Ok(())
+}
+
+/// Validate that a case root path is within the default safe cases root directory.
+///
+/// Uses `safe_cases_root()` as the allowed root. See `validate_case_root_is_within`
+/// for the parameterized version.
+pub fn validate_case_root_is_safe(case_root: &std::path::Path) -> Result<(), String> {
+    validate_case_root_is_within(case_root, &safe_cases_root())
 }

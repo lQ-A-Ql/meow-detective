@@ -186,11 +186,20 @@ pub fn open_case(root: &Path) -> Result<ActiveCase> {
 /// Returns `NotFound` if the directory doesn't exist, or `InvalidCaseDir`
 /// if `case.json` is missing.
 pub fn delete_case(root: &Path) -> Result<()> {
+    delete_case_in(root, &infrastructure::config::safe_cases_root())
+}
+
+/// Delete a case directory, validating it is within the specified allowed root.
+///
+/// Use this variant when the user has configured a custom cases directory.
+pub fn delete_case_in(root: &Path, allowed_root: &Path) -> Result<()> {
     if !root.exists() {
         return Err(CaseServiceError::NotFound(root.to_path_buf()));
     }
 
-    validate_case_root_is_safe(root).map_err(CaseServiceError::InvalidCaseDir)?;
+    infrastructure::config::validate_case_root_is_within(root, allowed_root)
+        .map_err(CaseServiceError::InvalidCaseDir)?;
+
 
     let case_json_path = root.join("case.json");
     if !case_json_path.exists() {

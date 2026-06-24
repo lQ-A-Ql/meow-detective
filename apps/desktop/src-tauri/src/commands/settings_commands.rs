@@ -37,7 +37,7 @@ pub async fn save_app_settings(
     .map_err(CommandError::from_join_error)?
 }
 
-fn load_app_settings(path: &PathBuf) -> Result<AppSettingsDto, CommandError> {
+pub(crate) fn load_app_settings(path: &PathBuf) -> Result<AppSettingsDto, CommandError> {
     if !path.exists() {
         return Ok(AppSettingsDto::default());
     }
