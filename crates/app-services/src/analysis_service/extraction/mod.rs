@@ -213,7 +213,7 @@ pub fn get_registry_extraction_summary(
     offset: u64,
     limit: u32,
 ) -> Result<RegistryExtractionSummaryDto, AnalysisServiceError> {
-    let total = count_artifacts_by_type(conn, "RegistryValue")?;
+    let total = count_artifacts_by_family_prefix(conn, "Registry")?;
     let rows = query_artifact_rows(conn, &["RegistryValue"], offset, limit)?;
     let values = rows
         .into_iter()
@@ -281,6 +281,18 @@ pub fn get_registry_structured_summary(
         .collect::<Vec<_>>();
 
     let hive_rows = query_artifact_rows(conn, &["RegistryHive", "RegistryValue"], 0, 10_000)?;
+    // First pass: count artifacts per hive
+    let mut hive_artifact_counts: HashMap<String, u64> = HashMap::new();
+    for row in &hive_rows {
+        let hive_name = string_attr(&row.attrs, "hivePath")
+            .rsplit('/')
+            .next()
+            .unwrap_or("")
+            .to_string();
+        if !hive_name.is_empty() {
+            *hive_artifact_counts.entry(hive_name).or_insert(0) += 1;
+        }
+    }
     let mut hive_overviews: Vec<RegistryHiveOverviewDto> = Vec::new();
     let mut seen_hives = std::collections::HashSet::new();
     for row in hive_rows {
@@ -297,10 +309,11 @@ pub fn get_registry_structured_summary(
         } else {
             AnalysisParseStatusDto::Partial
         };
+        let key_value_count = hive_artifact_counts.get(&hive_name).copied().unwrap_or(0);
         hive_overviews.push(RegistryHiveOverviewDto {
             hive_name,
             status,
-            key_value_count: 0,
+            key_value_count,
             extracted_at: row.created_at.clone(),
             data_source_id: string_attr(&row.attrs, "dataSourceId"),
             source_path: string_attr(&row.attrs, "sourcePath"),
@@ -837,6 +850,19 @@ fn count_artifacts_by_type(
     let count: i64 = conn.query_row(
         "SELECT COUNT(*) FROM artifacts WHERE artifact_type = ?1",
         [artifact_type],
+        |row| row.get(0),
+    )?;
+    Ok(count as u64)
+}
+
+fn count_artifacts_by_family_prefix(
+    conn: &Connection,
+    prefix: &str,
+) -> Result<u64, AnalysisServiceError> {
+    let pattern = format!("{}%", prefix);
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM artifacts WHERE artifact_type LIKE ?1",
+        [pattern],
         |row| row.get(0),
     )?;
     Ok(count as u64)

@@ -608,7 +608,7 @@ fn run_analysis_extraction_extracts_registry_browser_email_and_persists() {
     assert_eq!(timeline_case_count, 6);
 
     let registry = get_registry_extraction_summary(&conn, 0, 20).unwrap();
-    assert_eq!(registry.total, 8);
+    assert_eq!(registry.total, 10);
     assert!(registry.values.iter().any(|value| {
         value.source_path == "Windows/System32/config/SYSTEM"
             && value.key_path == "ControlSet001\\Control\\ComputerName\\ComputerName"
