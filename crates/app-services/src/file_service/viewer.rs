@@ -339,11 +339,6 @@ fn open_e01_file(
         candidates_to_try
     };
 
-    // Each partition needs its own E01Reader because NtfsReader/FatReader::open
-    // takes ownership of the Box<dyn EvidenceReader>. This means one E01 open per
-    // candidate per file access. In normal operation the loop exits on the first
-    // candidate — the cost of extra opens only materializes on edge cases where
-    // the expected partition fails to open the file and the fallback kicks in.
     for target in &candidates_to_try {
         if target.status == "EncryptedBitLocker" {
             continue;
@@ -354,25 +349,48 @@ fn open_e01_file(
         let boxed_reader: Box<dyn evidence_core::EvidenceReader> = Box::new(reader);
 
         let result = match fs_kind {
-            "NTFS" => {
-                if let Ok(fs) = fs_ntfs::NtfsReader::open(boxed_reader, target.offset) {
-                    fs.open_file(&entry.path)
-                } else {
+            "NTFS" => match fs_ntfs::NtfsReader::open(boxed_reader, target.offset) {
+                Ok(fs) => fs.open_file(&entry.path),
+                Err(e) => {
+                    tracing::warn!(
+                        path = %entry.path,
+                        partition = %target.name,
+                        offset = %target.offset,
+                        error = %e,
+                        "E01 NTFS open failed"
+                    );
                     continue;
                 }
-            }
+            },
             "FAT" | "FAT32" | "FAT16" | "FAT12" => {
-                if let Ok(fs) = fs_fat::FatReader::open(boxed_reader, target.offset) {
-                    fs.open_file(&entry.path)
-                } else {
-                    continue;
+                match fs_fat::FatReader::open(boxed_reader, target.offset) {
+                    Ok(fs) => fs.open_file(&entry.path),
+                    Err(e) => {
+                        tracing::warn!(
+                            path = %entry.path,
+                            partition = %target.name,
+                            offset = %target.offset,
+                            error = %e,
+                            "E01 FAT open failed"
+                        );
+                        continue;
+                    }
                 }
             }
             _ => continue,
         };
 
-        if let Ok(content) = result {
-            return Ok(content);
+        match &result {
+            Ok(_) => return result.map_err(|e| FileServiceError::other(format!("{e}"))),
+            Err(e) => {
+                tracing::warn!(
+                    path = %entry.path,
+                    partition = %target.name,
+                    kind = %fs_kind,
+                    error = %e,
+                    "E01 file not found on partition"
+                );
+            }
         }
     }
 
