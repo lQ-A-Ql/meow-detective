@@ -93,7 +93,7 @@ mod tests {
         assert_eq!(json, "\"job-progress\"");
 
         let search = serde_json::to_string(&EventTopic::SearchIndexProgress).unwrap();
-        assert_eq!(search, "\"search-index_progress\"");
+        assert_eq!(search, "\"search-index-progress\"");
 
         let imported = serde_json::to_string(&EventTopic::DataSourceImported).unwrap();
         assert_eq!(imported, "\"data-source-imported\"");
