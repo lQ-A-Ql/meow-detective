@@ -154,8 +154,12 @@ fn assert_file_magic(
 
             let file = all
                 .iter()
-                .filter(|f| f.path.contains(path_pattern) && f.size.unwrap_or(0) > 0)
-                .find(|f| f.entry_type == domain::EntryType::File)
+                .find(|f| {
+                    f.path.to_lowercase().ends_with(&path_pattern.to_lowercase())
+                        && !f.path.contains("$Recycle")
+                        && f.size.unwrap_or(0) > 0
+                        && f.entry_type == domain::EntryType::File
+                })
                 .unwrap_or_else(|| {
                     panic!("{label}: no file matching '{}' ({} total entries)", path_pattern, all.len())
                 });
@@ -307,7 +311,7 @@ fn liuyang_direct_ntfs_read_screenshots_png() {
     ).unwrap();
 
     // Walk: Users → 刘洋 → Pictures → Screenshots
-    let components = ["Users", "刘洋", "Pictures", "Screenshots"];
+    let _components = ["Users", "刘洋", "Pictures", "Screenshots"];
     let root = fs.list_root_children().unwrap();
     eprintln!("Root children ({}):", root.len());
     for e in &root[..root.len().min(20)] {
