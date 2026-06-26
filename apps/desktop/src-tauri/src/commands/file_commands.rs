@@ -219,6 +219,30 @@ pub async fn read_file_range(
     .map_err(CommandError::from_join_error)?
 }
 
+/// Format raw bytes as a hex dump string (offset + hex bytes + ASCII).
+fn format_hex_dump(bytes: &[u8]) -> String {
+    let max_display = 16384usize.min(bytes.len());
+    let mut out = String::with_capacity(max_display * 5);
+    for (line_idx, chunk) in bytes[..max_display].chunks(16).enumerate() {
+        let offset = line_idx * 16;
+        use std::fmt::Write;
+        let _ = write!(out, "{offset:08X}  ");
+        for (i, b) in chunk.iter().enumerate() {
+            if i == 8 { out.push(' '); }
+            let _ = write!(out, "{b:02X} ");
+        }
+        out.push_str(" |");
+        for b in chunk {
+            out.push(if b.is_ascii_graphic() || *b == b' ' { *b as char } else { '.' });
+        }
+        out.push_str("|\n");
+    }
+    if bytes.len() > max_display {
+        out.push_str("... (truncated)\n");
+    }
+    out
+}
+
 /// Get text preview for a file.
 ///
 /// Returns text content with encoding detection.
@@ -771,30 +795,6 @@ mod tests {
             Ok(())
         });
     }
-
-/// Format raw bytes as a hex dump string (offset + hex bytes + ASCII).
-fn format_hex_dump(bytes: &[u8]) -> String {
-    let max_display = 16384usize.min(bytes.len());
-    let mut out = String::with_capacity(max_display * 5);
-    for (line_idx, chunk) in bytes[..max_display].chunks(16).enumerate() {
-        let offset = line_idx * 16;
-        use std::fmt::Write;
-        let _ = write!(out, "{offset:08X}  ");
-        for (i, b) in chunk.iter().enumerate() {
-            if i == 8 { out.push(' '); }
-            let _ = write!(out, "{b:02X} ");
-        }
-        out.push_str(" |");
-        for b in chunk {
-            out.push(if b.is_ascii_graphic() || *b == b' ' { *b as char } else { '.' });
-        }
-        out.push_str("|\n");
-    }
-    if bytes.len() > max_display {
-        out.push_str("... (truncated)\n");
-    }
-    out
-}
 
 #[test]
 fn media_range_response_does_not_leak_host_path() {
