@@ -121,8 +121,9 @@ pub fn read_file_range_for_case(
     let read = file.read(&mut bytes)?;
     bytes.truncate(read);
 
+    let raw_bytes = bytes.clone();
     Ok(ViewerRangeResponseDto {
-        raw_bytes: None,
+        raw_bytes: Some(raw_bytes),
         kind: "hex".into(),
         lines: format_hex_lines(request.offset, &bytes),
         encoding: None,

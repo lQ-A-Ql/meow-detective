@@ -10,8 +10,10 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 
 interface HexViewerProps {
-  /** Hex 行数据 */
+  /** Hex 行数据 (format: "00000000  AA BB CC DD ...") */
   lines: string[];
+  /** 原始字节数组（用于备用渲染） */
+  rawBytes?: number[];
   /** 初始偏移量 */
   offset?: number;
   /** 行高 (px) */

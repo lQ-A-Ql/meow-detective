@@ -252,12 +252,13 @@ pub async fn get_text_preview(
 
         let is_binary = preview.is_binary;
         let content = preview.content;
+        let hex_dump = if is_binary {
+            Some(format_hex_dump(&content_bytes))
+        } else {
+            None
+        };
         Ok(TextPreviewDto {
-            hex_dump: if is_binary {
-                Some(content.clone())
-            } else {
-                None
-            },
+            hex_dump,
             content,
             encoding: preview.encoding,
             is_truncated: preview.is_truncated,
@@ -802,4 +803,40 @@ mod tests {
             },
         );
     }
+}
+
+/// Format raw bytes as a hex dump string (offset + hex bytes + ASCII).
+/// Used for displaying binary file content as hex in the text preview.
+fn format_hex_dump(bytes: &[u8]) -> String {
+    let max_display = 16384usize.min(bytes.len()); // Cap at 16KB for preview
+    let mut out = String::with_capacity(max_display * 5);
+    for (line_idx, chunk) in bytes[..max_display].chunks(16).enumerate() {
+        let offset = line_idx * 16;
+        use std::fmt::Write;
+        let _ = write!(out, "{offset:08X}  ");
+        for (i, b) in chunk.iter().enumerate() {
+            if i == 8 {
+                out.push(' ');
+            }
+            let _ = write!(out, "{b:02X} ");
+        }
+        // Pad short lines
+        if chunk.len() < 16 {
+            for i in chunk.len()..16 {
+                if i == 8 {
+                    out.push(' ');
+                }
+                out.push_str("   ");
+            }
+        }
+        out.push_str(" |");
+        for b in chunk {
+            out.push(if b.is_ascii_graphic() || *b == b' ' { *b as char } else { '.' });
+        }
+        out.push_str("|\n");
+    }
+    if bytes.len() > max_display {
+        out.push_str("... (truncated)\n");
+    }
+    out
 }
