@@ -2,8 +2,6 @@ use app_services::active_case::ActiveCase;
 use mcp_client::{
     validate_mcp_config, validate_mcp_server_config, McpClient, McpConfig, McpServerConfig,
 };
-use r2d2::Pool;
-use r2d2_sqlite::SqliteConnectionManager;
 use runtime_cache::RuntimeCache;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -13,8 +11,6 @@ use tracing::info;
 
 use super::task_manager::TaskManager;
 
-/// Type alias for the SQLite connection pool.
-pub type DbPool = Pool<SqliteConnectionManager>;
 pub type SharedMcpClient = Arc<AsyncMutex<McpClient>>;
 
 /// Application state shared across Tauri commands.
@@ -24,8 +20,6 @@ pub struct AppState {
     pub active_case: Arc<Mutex<Option<ActiveCase>>>,
     /// Manager for background tasks.
     pub task_manager: Arc<TaskManager>,
-    /// Database connection pool (initialized when a case is opened).
-    pub db_pool: Arc<Mutex<Option<DbPool>>>,
     /// MCP clients (server_id -> client)
     pub mcp_clients: Arc<RwLock<HashMap<String, SharedMcpClient>>>,
     /// MCP configuration
@@ -50,7 +44,6 @@ impl Default for AppState {
         Self {
             active_case: Arc::new(Mutex::new(None)),
             task_manager: Arc::new(TaskManager::new()),
-            db_pool: Arc::new(Mutex::new(None)),
             mcp_clients: Arc::new(RwLock::new(HashMap::new())),
             mcp_config: Arc::new(Mutex::new(McpConfig::default())),
             mcp_config_path,
@@ -119,64 +112,39 @@ impl AppState {
         Ok(())
     }
 
-    /// Initialize the database connection pool for the given database path.
-    pub fn init_db_pool(&self, db_path: &Path) -> Result<(), String> {
-        let manager = SqliteConnectionManager::file(db_path);
-        let pool = Pool::builder()
-            .max_size(10)
-            .min_idle(Some(2))
-            .build(manager)
-            .map_err(|e| format!("Failed to create connection pool: {}", e))?;
-
-        {
-            let conn = pool
-                .get()
-                .map_err(|e| format!("Failed to get connection: {}", e))?;
-            conn.execute_batch(
-                "PRAGMA journal_mode=WAL;
-                 PRAGMA foreign_keys=ON;
-                 PRAGMA busy_timeout=5000;
-                 PRAGMA synchronous=NORMAL;",
-            )
-            .map_err(|e| format!("Failed to set pragmas: {}", e))?;
-        }
-
-        let mut guard = self
-            .db_pool
-            .lock()
-            .map_err(|e| format!("Lock poisoned: {}", e))?;
-        *guard = Some(pool);
+    /// Initialize database pragmas on the active case connection.
+    pub fn init_db_pragmas(&self) -> Result<(), String> {
+        let conn = self.get_connection()?;
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL;
+             PRAGMA foreign_keys=ON;
+             PRAGMA busy_timeout=5000;
+             PRAGMA synchronous=NORMAL;",
+        )
+        .map_err(|e| format!("Failed to set pragmas: {}", e))?;
         Ok(())
     }
 
-    /// Get a connection from the pool.
-    pub fn get_connection(
-        &self,
-    ) -> Result<r2d2::PooledConnection<SqliteConnectionManager>, String> {
-        let active_guard = self
+    /// Get a fresh connection to the active case's database.
+    /// Opens a new connection each time — cheap in WAL mode, eliminates all
+    /// shared-state and lock-contention issues from the old r2d2 pool.
+    pub fn get_connection(&self) -> Result<rusqlite::Connection, String> {
+        let guard = self
             .active_case
             .lock()
             .map_err(|e| format!("Lock poisoned: {}", e))?;
-        if active_guard.is_none() {
-            return Err("No active case — open or create a case first".to_string());
-        }
-        drop(active_guard);
-
-        let guard = self
-            .db_pool
-            .lock()
-            .map_err(|e| format!("Lock poisoned: {}", e))?;
-        let pool = guard
+        let active = guard
             .as_ref()
-            .ok_or("No database pool initialized — is a case open?")?;
-        pool.get()
-            .map_err(|e| format!("Failed to get connection from pool: {}", e))
+            .ok_or("No active case — open or create a case first")?;
+        let db_path = active.db_path();
+        drop(guard);
+        rusqlite::Connection::open(&db_path).map_err(|e| format!("Failed to open database: {}", e))
     }
 
-    /// Clear the connection pool.
-    pub fn clear_db_pool(&self) -> Result<(), String> {
+    /// Clear the database state on case close.
+    pub fn clear_db_state(&self) -> Result<(), String> {
         let mut guard = self
-            .db_pool
+            .active_case
             .lock()
             .map_err(|e| format!("Lock poisoned: {}", e))?;
         *guard = None;

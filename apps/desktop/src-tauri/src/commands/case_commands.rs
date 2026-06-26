@@ -14,12 +14,9 @@ use crate::{events::event_bridge, state::AppState};
 
 use super::settings_commands::load_app_settings;
 
-fn activate_case_pool(state: &AppState, db_path: &std::path::Path) -> Result<(), CommandError> {
+fn init_case_db(state: &AppState) -> Result<(), CommandError> {
     state
-        .clear_db_pool()
-        .map_err(CommandError::from_service_error)?;
-    state
-        .init_db_pool(db_path)
+        .init_db_pragmas()
         .map_err(CommandError::from_service_error)
 }
 
@@ -53,7 +50,7 @@ pub fn create_case(
         .map_err(CommandError::from_service_error)?;
     let db_path = active.db_path();
     let active_case_root = active.case_root.clone();
-    activate_case_pool(&state, &db_path)?;
+    init_case_db(&state)?;
 
     let dto = meta_to_dto(&active.meta);
     let mut guard = state
@@ -76,7 +73,7 @@ pub fn open_case(
     let root = PathBuf::from(&request.case_root);
     let active = case_service::open_case(&root).map_err(CommandError::from_service_error)?;
     let db_path = active.db_path();
-    activate_case_pool(&state, &db_path)?;
+    init_case_db(&state)?;
 
     // Recover any jobs that were left in a running/cancelling state from a
     // previous app crash or unexpected shutdown.  This is best-effort;
@@ -131,7 +128,7 @@ pub fn create_analysis_demo_case(
     app_services::analysis_service::seed_analysis_demo_data(&active)
         .map_err(CommandError::from_service_error)?;
     let db_path = active.db_path();
-    activate_case_pool(&state, &db_path)?;
+    init_case_db(&state)?;
 
     let dto = meta_to_dto(&active.meta);
     let mut guard = state
@@ -204,7 +201,7 @@ pub fn close_case(state: State<AppState>, app: AppHandle) -> Result<(), CommandE
 
     // 4. Clear pooled database handles before clearing the active case.
     state
-        .clear_db_pool()
+        .clear_db_state()
         .map_err(CommandError::from_service_error)?;
 
     // 5. Clear active case
@@ -392,7 +389,7 @@ pub async fn delete_case(
     }
     if cleared_active_case {
         state
-            .clear_db_pool()
+            .clear_db_state()
             .map_err(CommandError::from_service_error)?;
         if let Some(case_id) = cleared_case_id.as_deref() {
             let _ = state.clear_runtime_cache_for_case(case_id);
@@ -556,7 +553,7 @@ mod tests {
         let db_path = active.db_path();
         let state = AppState::default();
 
-        activate_case_pool(&state, &db_path).expect("initialize pool");
+        init_case_db(&state).expect("initialize pool");
         let no_active_case = state
             .get_connection()
             .expect_err("pool access must require active case");
@@ -567,7 +564,7 @@ mod tests {
             .get_connection()
             .expect("pool available when active case is set");
 
-        state.clear_db_pool().expect("clear pool");
+        state.clear_db_state().expect("clear pool");
         *state.active_case.lock().expect("active case lock") = None;
         let cleared = state
             .get_connection()
@@ -588,7 +585,7 @@ mod tests {
         let db_path = active.db_path();
         let state = AppState::default();
 
-        activate_case_pool(&state, &db_path).expect("initialize pool");
+        init_case_db(&state).expect("initialize pool");
         let no_case = require_active_case(&state).expect_err("active case required");
         assert_eq!(no_case.code, "NO_ACTIVE_CASE");
 
@@ -601,7 +598,7 @@ mod tests {
         let no_case_again = get_case_connection(&state).expect_err("connection requires case");
         assert_eq!(no_case_again.code, "NO_ACTIVE_CASE");
 
-        state.clear_db_pool().expect("clear pool");
+        state.clear_db_state().expect("clear pool");
         std::fs::remove_dir_all(root).ok();
     }
 

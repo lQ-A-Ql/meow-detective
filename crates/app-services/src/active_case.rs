@@ -33,6 +33,14 @@ impl ActiveCase {
         f(&conn)
     }
 
+    /// Get a guard to the underlying connection. Holds the lock until dropped.
+    /// The returned MutexGuard implements Deref<Target=Connection>.
+    pub fn connection(&self) -> Result<std::sync::MutexGuard<'_, Connection>, String> {
+        self.conn
+            .lock()
+            .map_err(|e| format!("Lock poisoned: {}", e))
+    }
+
     pub fn db_path(&self) -> PathBuf {
         self.case_root.join("app.db")
     }

@@ -1,8 +1,6 @@
 use std::path::PathBuf;
 
 use persistence_sqlite::repositories::audit_repo::{AuditAction, AuditRepo};
-use r2d2::PooledConnection;
-use r2d2_sqlite::SqliteConnectionManager;
 use transport::CommandError;
 
 use crate::state::AppState;
@@ -37,11 +35,10 @@ pub(crate) fn require_active_case(state: &AppState) -> Result<ActiveCaseSnapshot
     snapshot_active_case(state)?.ok_or_else(CommandError::no_active_case)
 }
 
-pub(crate) fn get_case_connection(
-    state: &AppState,
-) -> Result<PooledConnection<SqliteConnectionManager>, CommandError> {
+/// Get a fresh connection to the active case's database.
+pub(crate) fn get_case_connection(state: &AppState) -> Result<rusqlite::Connection, CommandError> {
     state.get_connection().map_err(|error| {
-        if error.contains("No active case") || error.contains("No database pool initialized") {
+        if error.contains("No active case") {
             CommandError::no_active_case()
         } else {
             CommandError::from_service_error(error)
@@ -49,6 +46,7 @@ pub(crate) fn get_case_connection(
     })
 }
 
+/// Get the case ID from the active case (if any).
 /// Get the case ID from the active case (if any).
 pub fn current_case_id(state: &AppState) -> Option<String> {
     state
@@ -58,6 +56,11 @@ pub fn current_case_id(state: &AppState) -> Option<String> {
         .and_then(|guard| guard.as_ref().map(|active| active.meta.id.0.clone()))
 }
 
+/// Get the case ID or return a CommandError.
+pub fn get_case_id(state: &AppState) -> Result<String, CommandError> {
+    current_case_id(state).ok_or_else(CommandError::no_active_case)
+}
+
 /// Write an audit log entry for the active case.
 pub fn write_audit_log(
     state: &AppState,
@@ -65,18 +68,17 @@ pub fn write_audit_log(
     resource_id: Option<&str>,
     details: serde_json::Value,
 ) {
-    let Ok(conn) = state.get_connection() else {
-        return;
-    };
     let case_id = current_case_id(state);
     let details_str = serde_json::to_string(&details).unwrap_or_else(|_| "{}".to_string());
-    let _ = AuditRepo::new(&conn).log(
-        case_id.as_deref(),
-        "system",
-        &action,
-        resource_id,
-        &details_str,
-    );
+    if let Ok(conn) = state.get_connection() {
+        let _ = AuditRepo::new(&conn).log(
+            case_id.as_deref(),
+            "system",
+            &action,
+            resource_id,
+            &details_str,
+        );
+    }
 }
 
 #[cfg(test)]
@@ -98,19 +100,19 @@ mod tests {
 
         assert!(snapshot_active_case(&state).unwrap().is_none());
 
-        state.init_db_pool(&db_path).unwrap();
         *state.active_case.lock().unwrap() = Some(active);
+        state.init_db_pragmas().unwrap();
 
         let snapshot = require_active_case(&state).unwrap();
         assert_eq!(snapshot.db_path, db_path);
         assert_eq!(snapshot.case_root.parent(), Some(root.as_path()));
-        get_case_connection(&state).unwrap();
+        with_case_connection(&state, |_conn| Ok(())).unwrap();
 
         *state.active_case.lock().unwrap() = None;
         let err = require_active_case(&state).unwrap_err();
         assert_eq!(err.code, "NO_ACTIVE_CASE");
 
-        state.clear_db_pool().unwrap();
+        state.clear_db_state().unwrap();
         std::fs::remove_dir_all(root).ok();
     }
 }

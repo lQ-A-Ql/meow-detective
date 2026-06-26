@@ -179,8 +179,8 @@ mod tests {
         let case_id = active.meta.id.0.clone();
         let db_path = active.db_path();
         let state = AppState::default();
-        state.init_db_pool(&db_path).unwrap();
         *state.active_case.lock().unwrap() = Some(active);
+        state.init_db_pragmas().unwrap();
 
         let conn = state.get_connection().unwrap();
         let job = app_services::batch_service::create_and_persist_batch(
@@ -204,7 +204,7 @@ mod tests {
         let listed = app_services::batch_service::list_batch_jobs(&conn, &case_id).unwrap();
         assert_eq!(listed.len(), 1);
 
-        state.clear_db_pool().unwrap();
+        state.clear_db_state().unwrap();
         std::fs::remove_dir_all(root).ok();
     }
 }

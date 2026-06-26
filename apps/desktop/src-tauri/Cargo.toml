@@ -29,8 +29,6 @@ image-e01 = { path = "../../../crates/image-e01" }
 fs-ntfs = { path = "../../../crates/fs-ntfs" }
 fs-fat = { path = "../../../crates/fs-fat" }
 rusqlite.workspace = true
-r2d2.workspace = true
-r2d2_sqlite.workspace = true
 uuid.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
