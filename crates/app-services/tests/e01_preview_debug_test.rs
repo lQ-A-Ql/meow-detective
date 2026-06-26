@@ -294,6 +294,54 @@ fn jc2_list_root_and_read_any_text_file() {
     }
 }
 
+#[test]
+#[ignore = "requires FORENSICS_LIUYANG_E01"]
+fn liuyang_full_scan_read_first_8_bytes() {
+    let (_tmp, active, ds_id) = setup(&liuyang_path());
+    let mut total = 0u64;
+    let mut ok = 0u64;
+    let mut err = 0u64;
+
+    active
+        .with_conn(|conn| {
+            let all = FileRepo::new(conn)
+                .find_by_data_source(&domain::DataSourceId(ds_id.clone()))
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+
+            for f in all.iter().filter(|f| f.entry_type == domain::EntryType::File && f.size.unwrap_or(0) > 0) {
+                total += 1;
+                match file_service::open_file_content_by_id(conn, &f.id) {
+                    Ok(mut reader) => {
+                        let mut buf = [0u8; 8];
+                        match reader.read(&mut buf) {
+                            Ok(n) if n > 0 => {
+                                ok += 1;
+                                if total <= 10 || total % 1000 == 0 {
+                                    eprintln!("[{total}] ✅ {n}B {:02X?} — {}", &buf[..n], f.path);
+                                }
+                            }
+                            _ => {
+                                err += 1;
+                                eprintln!("[{total}] ❌ READ FAIL: {}", f.path);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        err += 1;
+                        eprintln!("[{total}] ❌ OPEN FAIL: {} — {e}", f.path);
+                    }
+                }
+            }
+            eprintln!(
+                "SCAN COMPLETE: total={}, ok={}, err={} ({:.1}% success)",
+                total, ok, err,
+                if total > 0 { ok as f64 / total as f64 * 100.0 } else { 0.0 }
+            );
+            Ok(())
+        })
+        .unwrap();
+}
+
 // ─── Liuyang 测试 ───
 
 #[test]
