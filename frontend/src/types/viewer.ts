@@ -14,6 +14,7 @@ export interface ViewerRangeResponse {
   kind: 'hex' | 'text';
   lines: string[];
   encoding?: string;
+  rawBytes?: number[];
 }
 
 export interface MediaUrl {
@@ -47,6 +48,7 @@ export interface TextPreviewResponse {
   isBinary: boolean;
   lineCount: number;
   language: string | null;
+  hexDump?: string;
 }
 
 export interface ImagePreviewResponse {

@@ -3,7 +3,8 @@ export interface ApiErrorDto {
   message: string;
   category?: ErrorCategory;
   details?: unknown;
-  recoverable: boolean;
+  recoverable?: boolean;
+  suggestion?: string;
 }
 
 export type ErrorCategory =
