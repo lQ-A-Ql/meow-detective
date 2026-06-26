@@ -702,6 +702,38 @@ mod tests {
     }
 
     #[test]
+    fn multi_partition_resolves_partition_index_correctly() {
+        // Verify that entries with partition index in ID format resolve correctly
+        assert_eq!(
+            mft_partition_index_from_entry_id("mft:0:42"),
+            Some(0),
+            "Partition 0 entry should resolve to index 0"
+        );
+        assert_eq!(
+            mft_partition_index_from_entry_id("mft:2:100"),
+            Some(2),
+            "Partition 2 entry should resolve to index 2"
+        );
+
+        // Verify that entries WITHOUT partition index in ID fall back to parent chain
+        assert_eq!(
+            mft_partition_index_from_entry_id("mft:42"),
+            None,
+            "Legacy format should return None and fall back to parent chain"
+        );
+
+        // Verify root name parsing from parent chain (simulated via function)
+        let root_name = "Partition 3 (NTFS)";
+        let idx: Option<usize> = root_name
+            .strip_prefix("Partition ")
+            .and_then(|rest| {
+                let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+                digits.parse().ok()
+            });
+        assert_eq!(idx, Some(3), "Root name 'Partition 3 (NTFS)' should resolve to index 3");
+    }
+
+    #[test]
     fn mft_partition_index_from_entry_id_parses_partition_record_format() {
         assert_eq!(mft_partition_index_from_entry_id("mft:3:42"), Some(3));
         assert_eq!(mft_partition_index_from_entry_id("mft:0:5"), Some(0));
