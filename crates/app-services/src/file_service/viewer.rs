@@ -74,10 +74,14 @@ pub fn clear_e01_reader_cache() {
 }
 
 fn open_e01_reader_cached(source_path: &Path) -> std::io::Result<E01Reader> {
-    E01_READER_CACHE
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .get_or_open(source_path)
+    let mut cache = E01_READER_CACHE.lock().unwrap_or_else(|poisoned| {
+        // Clear the cache on poison to avoid using potentially corrupted state
+        let mut cache = poisoned.into_inner();
+        cache.paths.clear();
+        cache.readers.clear();
+        cache
+    });
+    cache.get_or_open(source_path)
 }
 
 pub fn open_file_handle_real(
