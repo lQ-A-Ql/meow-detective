@@ -692,7 +692,7 @@ pub fn update_entry_paths(
         };
 
         let path = match parent {
-            Some(p) if p != "5" && path_map.contains_key(p) => {
+            Some(p) if path_map.contains_key(p) => {
                 let parent_path = resolve_path(p, path_map, deleted_records, resolved, visiting);
                 if parent_path.is_empty() {
                     name.clone()
