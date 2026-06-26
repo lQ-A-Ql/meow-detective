@@ -308,7 +308,10 @@ fn liuyang_full_scan_read_first_8_bytes() {
                 .find_by_data_source(&domain::DataSourceId(ds_id.clone()))
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
-            for f in all.iter().filter(|f| f.entry_type == domain::EntryType::File && f.size.unwrap_or(0) > 0) {
+            for f in all
+                .iter()
+                .filter(|f| f.entry_type == domain::EntryType::File && f.size.unwrap_or(0) > 0)
+            {
                 total += 1;
                 match file_service::open_file_content_by_id(conn, &f.id) {
                     Ok(mut reader) => {
@@ -334,8 +337,14 @@ fn liuyang_full_scan_read_first_8_bytes() {
             }
             eprintln!(
                 "SCAN COMPLETE: total={}, ok={}, err={} ({:.1}% success)",
-                total, ok, err,
-                if total > 0 { ok as f64 / total as f64 * 100.0 } else { 0.0 }
+                total,
+                ok,
+                err,
+                if total > 0 {
+                    ok as f64 / total as f64 * 100.0
+                } else {
+                    0.0
+                }
             );
             Ok(())
         })

@@ -56,6 +56,36 @@ pub fn enumerate_filesystem_mft(
     progress_fn: Option<&dyn Fn(u32, &str)>,
     cancel: Option<Arc<AtomicBool>>,
 ) -> DbResult<EnumerationStats> {
+    enumerate_filesystem_mft_with_partition(
+        conn,
+        data_source_id,
+        e01_path,
+        volume_offset,
+        mft_cluster,
+        cluster_size,
+        record_size,
+        bytes_per_sector,
+        mft_data_size,
+        progress_fn,
+        cancel,
+        0,
+    )
+}
+
+pub fn enumerate_filesystem_mft_with_partition(
+    conn: &Connection,
+    data_source_id: &DataSourceId,
+    e01_path: &Path,
+    volume_offset: u64,
+    mft_cluster: u64,
+    cluster_size: u64,
+    record_size: u32,
+    bytes_per_sector: u16,
+    mft_data_size: u64,
+    progress_fn: Option<&dyn Fn(u32, &str)>,
+    cancel: Option<Arc<AtomicBool>>,
+    partition_index: usize,
+) -> DbResult<EnumerationStats> {
     let scanner = MftScanner::new(
         volume_offset,
         mft_cluster,
@@ -281,7 +311,13 @@ pub fn enumerate_filesystem_mft(
         pf(95, "Reconstructing paths...");
     }
 
-    update_entry_paths(conn, data_source_id, &path_map, &deleted_records)?;
+    update_entry_paths(
+        conn,
+        data_source_id,
+        &path_map,
+        &deleted_records,
+        partition_index,
+    )?;
     update_entry_parent_ids(conn, data_source_id, &path_map)?;
 
     if let Some(pf) = progress_fn {
@@ -660,7 +696,9 @@ pub fn update_entry_paths(
     data_source_id: &DataSourceId,
     path_map: &HashMap<String, (Option<String>, String, bool)>,
     deleted_records: &HashSet<String>,
+    partition_index: usize,
 ) -> DbResult<()> {
+    let prefix = format!("[P{partition_index}]");
     let mut resolved: HashMap<String, String> = HashMap::with_capacity(path_map.len());
     let mut visiting: HashSet<String> = HashSet::new(); // Cycle detection
 
@@ -731,7 +769,17 @@ pub fn update_entry_paths(
             tx.prepare("UPDATE file_entries SET path = ?1 WHERE id = ?2 AND data_source_id = ?3")?;
         for (record_num, path) in &resolved {
             let entry_id = format!("mft:{}", record_num);
-            stmt.execute(rusqlite::params![path, entry_id, data_source_id.0])?;
+            let prefixed = if path.is_empty() {
+                prefix.clone()
+            } else {
+                let trimmed = path.trim_start_matches('/');
+                if trimmed.is_empty() {
+                    prefix.clone()
+                } else {
+                    format!("{prefix}/{trimmed}")
+                }
+            };
+            stmt.execute(rusqlite::params![prefixed, entry_id, data_source_id.0])?;
         }
     }
     tx.commit()?;

@@ -399,7 +399,7 @@ mod tests {
             add_entry_to_path_map(&mut path_map, &mut deleted_records, entry);
         }
 
-        update_entry_paths(&conn, &ds_id, &path_map, &deleted_records).unwrap();
+        update_entry_paths(&conn, &ds_id, &path_map, &deleted_records, 0).unwrap();
         update_entry_parent_ids(&conn, &ds_id, &path_map).unwrap();
 
         let (path, parent_id, deleted): (String, Option<String>, i32) = conn
@@ -409,7 +409,7 @@ mod tests {
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )
             .unwrap();
-        assert_eq!(path, "/$DeletedOrphans/77-old.txt");
+        assert_eq!(path, "[P0]/$DeletedOrphans/77-old.txt");
         assert_eq!(parent_id.as_deref(), Some("mft:5"));
         assert_eq!(deleted, 1);
     }

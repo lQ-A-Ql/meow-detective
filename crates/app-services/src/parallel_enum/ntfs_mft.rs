@@ -926,6 +926,7 @@ pub(super) fn update_mft_staging_paths(
             deleted_records,
             &mut resolved,
             &mut visiting,
+            partition_index,
         );
     }
 
@@ -958,6 +959,7 @@ pub(super) fn update_mft_staging_paths_and_parent_ids(
             deleted_records,
             &mut resolved,
             &mut visiting,
+            partition_index,
         );
     }
 
@@ -989,7 +991,9 @@ fn resolve_mft_path(
     deleted_records: &HashSet<String>,
     resolved: &mut HashMap<String, String>,
     _visiting: &mut HashSet<String>,
+    partition_index: usize,
 ) -> String {
+    let prefix = format!("[P{partition_index}]");
     if let Some(path) = resolved.get(record) {
         return path.clone();
     }
@@ -1058,7 +1062,16 @@ fn resolve_mft_path(
             }
         }
     };
-    final_path
+    if final_path.is_empty() {
+        prefix
+    } else {
+        let trimmed = final_path.trim_start_matches('/');
+        if trimmed.is_empty() {
+            prefix
+        } else {
+            format!("{prefix}/{trimmed}")
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1131,6 +1144,7 @@ pub(super) fn update_mft_staging_paths_via_sqlite(
             deleted_records,
             &mut resolved,
             &mut visiting,
+            partition_index,
         );
     }
     // All paths resolved — records list no longer needed
