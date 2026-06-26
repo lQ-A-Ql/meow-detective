@@ -929,12 +929,10 @@ impl FileSystemReader for NtfsReader {
         // ("mft:NNN" or "mft:PARTITION:NNN"), read directly.
         // This skips INDX name lookups which fail when directories
         // store 8.3 short names instead of long names.
-        let mft_inode = path
-            .strip_prefix("mft:")
-            .and_then(|s| {
-                // Handle both formats: "mft:5" and "mft:3:5"
-                s.rsplit(':').next()?.parse::<u64>().ok()
-            });
+        let mft_inode = path.strip_prefix("mft:").and_then(|s| {
+            // Handle both formats: "mft:5" and "mft:3:5"
+            s.rsplit(':').next()?.parse::<u64>().ok()
+        });
         if let Some(mft_inode) = mft_inode {
             let data = self.read_file_data(mft_inode)?;
             if data.len() > 128 * 1024 * 1024 {
@@ -1011,6 +1009,26 @@ fn parse_indx_entries(data: &[u8]) -> Vec<DirEntry> {
         off += entry_size;
     }
     entries
+}
+
+#[test]
+fn mft_inode_fast_path_handles_partition_record_format() {
+    // "mft:3:42" format from parallel MFT enumeration
+    let path = "mft:3:42";
+    let inode = path
+        .strip_prefix("mft:")
+        .and_then(|s| s.rsplit(':').next()?.parse::<u64>().ok());
+    assert_eq!(inode, Some(42));
+}
+
+#[test]
+fn mft_inode_fast_path_handles_legacy_format() {
+    // "mft:5" format from legacy MFT enumeration
+    let path = "mft:5";
+    let inode = path
+        .strip_prefix("mft:")
+        .and_then(|s| s.rsplit(':').next()?.parse::<u64>().ok());
+    assert_eq!(inode, Some(5));
 }
 
 // --- Boot sector parsing helpers ---

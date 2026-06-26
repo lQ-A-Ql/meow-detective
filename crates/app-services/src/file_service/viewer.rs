@@ -330,31 +330,29 @@ fn open_e01_file(
         )));
     }
 
-    // 收集候选分区：优先匹配 expected_partition_index，否则尝试所有
+    // 收集候选分区：必须匹配 expected_partition_index
     let candidates_to_try: Vec<
         &persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord,
-    > = if let Some(expected) = expected_partition_index {
-        partitions
+    > = match expected_partition_index {
+        Some(expected) => partitions
             .iter()
-            .filter(|p| p.partition_index as usize == expected)
-            .collect()
-    } else {
-        Vec::new()
+            .filter(|p| p.partition_index as usize == expected && p.status != "EncryptedBitLocker")
+            .collect(),
+        None => {
+            return Err(FileServiceError::other(
+                "Cannot determine which partition this file belongs to. Re-import the E01 image.",
+            ))
+        }
     };
 
-    let candidates_to_try = if candidates_to_try.is_empty() {
-        partitions
-            .iter()
-            .filter(|p| p.status != "EncryptedBitLocker")
-            .collect()
-    } else {
-        candidates_to_try
-    };
+    if candidates_to_try.is_empty() {
+        return Err(FileServiceError::other(format!(
+            "Partition index {} not found or is encrypted. Re-import.",
+            expected_partition_index.unwrap_or(0)
+        )));
+    }
 
     for target in &candidates_to_try {
-        if target.status == "EncryptedBitLocker" {
-            continue;
-        }
         let fs_kind = target.filesystem.as_deref().unwrap_or(&target.kind_label);
 
         let reader = open_e01_reader_cached(Path::new(source_path))?;
@@ -650,6 +648,18 @@ mod tests {
     }
 
     #[test]
+    fn mft_partition_index_from_entry_id_parses_partition_record_format() {
+        assert_eq!(mft_partition_index_from_entry_id("mft:3:42"), Some(3));
+        assert_eq!(mft_partition_index_from_entry_id("mft:0:5"), Some(0));
+    }
+
+    #[test]
+    fn mft_partition_index_from_entry_id_returns_none_for_legacy_format() {
+        assert_eq!(mft_partition_index_from_entry_id("mft:42"), None);
+        assert_eq!(mft_partition_index_from_entry_id("not-mft:1:2"), None);
+    }
+
+    #[test]
     fn fresh_e01_reader_opens_successfully() {
         let (_dir, path) = make_temp_e01();
         let mut reader = E01Reader::open(&path).unwrap();
@@ -672,5 +682,58 @@ mod tests {
         reader2.read_exact(&mut b2).unwrap();
         assert_eq!(&b1, b"E01-");
         assert_eq!(&b2, b"CACH");
+    }
+
+    #[test]
+    fn lru_evicts_oldest_when_full() {
+        clear_e01_reader_cache();
+        let dir = tempfile::TempDir::new().unwrap();
+        let mut paths = Vec::new();
+        // Open 5 E01 files (cache max = 4)
+        for i in 0..5 {
+            let path = dir.path().join(format!("cache-test-{i}.E01"));
+            write_tiny_e01(&path).unwrap();
+            paths.push(path);
+        }
+        // First 4 go into cache
+        for path in &paths[..4] {
+            let _r = open_e01_reader_cached(path).unwrap();
+        }
+        // 5th evicts the first (paths[0])
+        let _r = open_e01_reader_cached(&paths[4]).unwrap();
+
+        // Verify paths[0] was evicted by trying to open it fresh — should still work
+        let mut r = open_e01_reader_cached(&paths[0]).unwrap();
+        let mut buf = [0u8; 14];
+        r.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf, b"E01-CACHE-TEST");
+
+        clear_e01_reader_cache();
+    }
+
+    #[test]
+    fn cache_clear_on_poison() {
+        clear_e01_reader_cache();
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("poison-test.E01");
+        write_tiny_e01(&path).unwrap();
+
+        // Populate the cache
+        let _r = open_e01_reader_cached(&path).unwrap();
+
+        // Poison the mutex by panicking while holding the lock
+        let result = std::panic::catch_unwind(|| {
+            let _lock = E01_READER_CACHE.lock().unwrap();
+            panic!("simulated cache panic");
+        });
+        assert!(result.is_err());
+
+        // After poison, the cache should be cleared and a new open should work
+        let mut r = open_e01_reader_cached(&path).unwrap();
+        let mut buf = [0u8; 14];
+        r.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf, b"E01-CACHE-TEST");
+
+        clear_e01_reader_cache();
     }
 }

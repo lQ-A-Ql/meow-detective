@@ -29,15 +29,18 @@ fn liuyang_path() -> PathBuf {
 /// Full setup: attach → probe → store partitions → MFT enumerate → merge
 fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::ActiveCase, String) {
     let tmp = TempDir::new().unwrap();
-    let active =
-        case_service::create_case(&tmp.path().join("cases"), "debug-test", Some("tester"))
-            .expect("create_case failed");
+    let active = case_service::create_case(&tmp.path().join("cases"), "debug-test", Some("tester"))
+        .expect("create_case failed");
     let case_id = active.meta.id.clone();
 
     let ds_id_result = active
         .with_conn(|conn| {
             let ds = datasource_service::attach_data_source(
-                conn, &case_id, "test-e01", e01_path, DataSourceKind::E01,
+                conn,
+                &case_id,
+                "test-e01",
+                e01_path,
+                DataSourceKind::E01,
             )
             .map_err(|e| persistence_sqlite::DbError::System(format!("attach: {e}")))?;
 
@@ -64,11 +67,14 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                         type_guid: None,
                         offset: c.offset,
                         length: 0,
-                        filesystem: Some(match c.kind {
-                            datasource_service::ImageFilesystemKind::Ntfs => "NTFS",
-                            datasource_service::ImageFilesystemKind::Fat => "FAT",
-                            datasource_service::ImageFilesystemKind::BitLocker => "BitLocker",
-                        }.to_string()),
+                        filesystem: Some(
+                            match c.kind {
+                                datasource_service::ImageFilesystemKind::Ntfs => "NTFS",
+                                datasource_service::ImageFilesystemKind::Fat => "FAT",
+                                datasource_service::ImageFilesystemKind::BitLocker => "BitLocker",
+                            }
+                            .to_string(),
+                        ),
                         unlock_hint: None,
                     }
                 })
@@ -81,7 +87,9 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                     .candidates
                     .iter()
                     .enumerate()
-                    .filter(|(_, c)| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
+                    .filter(|(_, c)| {
+                        matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs)
+                    })
                     .collect();
             let (actual_ntfs_idx, ntfs) = ntfs_candidates.first().expect("no NTFS partition");
             eprintln!(
@@ -92,10 +100,12 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
             // MFT enumerate
             let mut reader = E01Reader::open(e01_path)
                 .map_err(|e| persistence_sqlite::DbError::System(format!("E01: {e}")))?;
-            reader.seek(SeekFrom::Start(ntfs.offset))
+            reader
+                .seek(SeekFrom::Start(ntfs.offset))
                 .map_err(|e| persistence_sqlite::DbError::System(format!("seek: {e}")))?;
             let mut boot = [0u8; 512];
-            reader.read_exact(&mut boot)
+            reader
+                .read_exact(&mut boot)
                 .map_err(|e| persistence_sqlite::DbError::System(format!("boot: {e}")))?;
 
             let bytes_per_sector = u16::from_le_bytes([boot[11], boot[12]]);
@@ -103,15 +113,19 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
             let cluster_size = bytes_per_sector as u64 * sectors_per_cluster as u64;
             let mft_cluster = u64::from_le_bytes(boot[0x30..0x38].try_into().unwrap_or([0; 8]));
             let mft_abs_offset = ntfs.offset + mft_cluster * cluster_size;
-            reader.seek(SeekFrom::Start(mft_abs_offset))
+            reader
+                .seek(SeekFrom::Start(mft_abs_offset))
                 .map_err(|e| persistence_sqlite::DbError::System(format!("seek MFT: {e}")))?;
             let mut mft_rec = vec![0u8; 1024];
-            reader.read_exact(&mut mft_rec)
+            reader
+                .read_exact(&mut mft_rec)
                 .map_err(|e| persistence_sqlite::DbError::System(format!("read MFT: {e}")))?;
-            let mft_data_size = fs_ntfs::parse_mft_data_real_size(&mft_rec).unwrap_or(1024 * 1024 * 100);
+            let mft_data_size =
+                fs_ntfs::parse_mft_data_real_size(&mft_rec).unwrap_or(1024 * 1024 * 100);
 
             // Fetch UUID-based data source ID
-            let ds_repo = persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn);
+            let ds_repo =
+                persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn);
             let stored_ds = ds_repo
                 .find_by_case(&case_id)
                 .map_err(|e| persistence_sqlite::DbError::System(format!("find ds: {e}")))?
@@ -120,8 +134,15 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                 .ok_or_else(|| persistence_sqlite::DbError::System("ds not found".to_string()))?;
 
             let stats = file_service::enumerate_filesystem_mft(
-                conn, &stored_ds.id, e01_path, ntfs.offset, mft_cluster,
-                cluster_size, 1024, bytes_per_sector, mft_data_size,
+                conn,
+                &stored_ds.id,
+                e01_path,
+                ntfs.offset,
+                mft_cluster,
+                cluster_size,
+                1024,
+                bytes_per_sector,
+                mft_data_size,
                 Some(&|pct, msg| eprintln!("[{pct}%] {msg}")),
                 None,
             )
@@ -155,16 +176,26 @@ fn assert_file_magic(
             let file = all
                 .iter()
                 .find(|f| {
-                    f.path.to_lowercase().ends_with(&path_pattern.to_lowercase())
+                    f.path
+                        .to_lowercase()
+                        .ends_with(&path_pattern.to_lowercase())
                         && !f.path.contains("$Recycle")
                         && f.size.unwrap_or(0) > 0
                         && f.entry_type == domain::EntryType::File
                 })
                 .unwrap_or_else(|| {
-                    panic!("{label}: no file matching '{}' ({} total entries)", path_pattern, all.len())
+                    panic!(
+                        "{label}: no file matching '{}' ({} total entries)",
+                        path_pattern,
+                        all.len()
+                    )
                 });
 
-            eprintln!("{label}: found '{}' ({} bytes)", file.path, file.size.unwrap_or(0));
+            eprintln!(
+                "{label}: found '{}' ({} bytes)",
+                file.path,
+                file.size.unwrap_or(0)
+            );
 
             let mut reader = file_service::open_file_content_by_id(conn, &file.id)
                 .unwrap_or_else(|e| panic!("{label}: preview failed for '{}': {e:?}", file.path));
@@ -192,7 +223,13 @@ fn jc2_preview_png_magic() {
     let (_tmp, active, ds_id) = setup(&jc2_path());
     // PNG magic: 89 50 4E 47 0D 0A 1A 0A
     // Try to find any PNG file via hex magic probe
-    assert_file_magic(&active, &ds_id, ".png", &[0x89, 0x50, 0x4E, 0x47], "JC2 PNG");
+    assert_file_magic(
+        &active,
+        &ds_id,
+        ".png",
+        &[0x89, 0x50, 0x4E, 0x47],
+        "JC2 PNG",
+    );
 }
 
 #[test]
@@ -202,7 +239,9 @@ fn jc2_preview_boot_sector() {
     let e01 = jc2_path();
     let mut reader = E01Reader::open(&e01).unwrap();
     let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
-    let ntfs = probe.candidates.iter()
+    let ntfs = probe
+        .candidates
+        .iter()
         .find(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
         .expect("no NTFS");
 
@@ -222,14 +261,14 @@ fn jc2_list_root_and_read_any_text_file() {
     let e01 = jc2_path();
     let mut reader = E01Reader::open(&e01).unwrap();
     let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
-    let ntfs = probe.candidates.iter()
+    let ntfs = probe
+        .candidates
+        .iter()
         .find(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
         .expect("no NTFS");
 
-    let fs = fs_ntfs::NtfsReader::open(
-        Box::new(E01Reader::open(&e01).unwrap()),
-        ntfs.offset,
-    ).unwrap();
+    let fs =
+        fs_ntfs::NtfsReader::open(Box::new(E01Reader::open(&e01).unwrap()), ntfs.offset).unwrap();
 
     let root = fs.list_root_children().unwrap();
     eprintln!("Root has {} entries:", root.len());
@@ -238,14 +277,19 @@ fn jc2_list_root_and_read_any_text_file() {
     }
 
     // Try to read a .txt or .log file
-    let text_file = root.iter()
+    let text_file = root
+        .iter()
         .find(|e| !e.is_dir && (e.name.contains(".txt") || e.name.contains(".log")));
     if let Some(tf) = text_file {
         let mut data = fs.open_file(&tf.path).unwrap();
         let mut buf = [0u8; 64];
         let n = data.read(&mut buf).unwrap();
         eprintln!("{}: {:02X?}", tf.name, &buf[..n.min(32)]);
-        eprintln!("{}: {:?}", tf.name, String::from_utf8_lossy(&buf[..n.min(64)]));
+        eprintln!(
+            "{}: {:?}",
+            tf.name,
+            String::from_utf8_lossy(&buf[..n.min(64)])
+        );
         eprintln!("✅ JC2 text file read OK");
     }
 }
@@ -256,7 +300,13 @@ fn jc2_list_root_and_read_any_text_file() {
 #[ignore = "requires FORENSICS_LIUYANG_E01"]
 fn liuyang_preview_png_magic() {
     let (_tmp, active, ds_id) = setup(&liuyang_path());
-    assert_file_magic(&active, &ds_id, ".png", &[0x89, 0x50, 0x4E, 0x47], "Liuyang PNG");
+    assert_file_magic(
+        &active,
+        &ds_id,
+        ".png",
+        &[0x89, 0x50, 0x4E, 0x47],
+        "Liuyang PNG",
+    );
 }
 
 #[test]
@@ -291,7 +341,13 @@ fn liuyang_preview_jpg_magic() {
 #[ignore = "requires FORENSICS_LIUYANG_E01"]
 fn liuyang_preview_jpeg_magic() {
     let (_tmp, active, ds_id) = setup(&liuyang_path());
-    assert_file_magic(&active, &ds_id, ".jpeg", &[0xFF, 0xD8, 0xFF], "Liuyang JPEG");
+    assert_file_magic(
+        &active,
+        &ds_id,
+        ".jpeg",
+        &[0xFF, 0xD8, 0xFF],
+        "Liuyang JPEG",
+    );
 }
 
 #[test]
@@ -301,14 +357,14 @@ fn liuyang_direct_ntfs_read_screenshots_png() {
     let e01 = liuyang_path();
     let mut reader = E01Reader::open(&e01).unwrap();
     let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
-    let ntfs = probe.candidates.iter()
+    let ntfs = probe
+        .candidates
+        .iter()
         .find(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
         .expect("no NTFS");
 
-    let fs = fs_ntfs::NtfsReader::open(
-        Box::new(E01Reader::open(&e01).unwrap()),
-        ntfs.offset,
-    ).unwrap();
+    let fs =
+        fs_ntfs::NtfsReader::open(Box::new(E01Reader::open(&e01).unwrap()), ntfs.offset).unwrap();
 
     // Walk: Users → 刘洋 → Pictures → Screenshots
     let _components = ["Users", "刘洋", "Pictures", "Screenshots"];
@@ -319,7 +375,9 @@ fn liuyang_direct_ntfs_read_screenshots_png() {
     }
 
     // Find Users
-    let users = root.iter().find(|e| e.name.eq_ignore_ascii_case("Users") && e.is_dir);
+    let users = root
+        .iter()
+        .find(|e| e.name.eq_ignore_ascii_case("Users") && e.is_dir);
     assert!(users.is_some(), "Users dir not found in root");
     let users_children = fs.list_children("Users").unwrap();
     eprintln!("Users children ({}):", users_children.len());
@@ -340,7 +398,9 @@ fn liuyang_direct_ntfs_read_screenshots_png() {
     }
 
     // Find Pictures
-    let pictures = ly_children.iter().find(|e| e.name == "Pictures" && e.is_dir);
+    let pictures = ly_children
+        .iter()
+        .find(|e| e.name == "Pictures" && e.is_dir);
     if pictures.is_none() {
         eprintln!("⚠ Pictures not found");
         return;
@@ -352,7 +412,9 @@ fn liuyang_direct_ntfs_read_screenshots_png() {
     }
 
     // Find Screenshots
-    let screenshots = pic_children.iter().find(|e| e.name == "Screenshots" && e.is_dir);
+    let screenshots = pic_children
+        .iter()
+        .find(|e| e.name == "Screenshots" && e.is_dir);
     if screenshots.is_none() {
         eprintln!("⚠ Screenshots not found in Pictures — INDX_ALLOC issue confirmed");
         return;
@@ -364,7 +426,8 @@ fn liuyang_direct_ntfs_read_screenshots_png() {
     }
 
     // Read first PNG found
-    let png = ss_children.iter()
+    let png = ss_children
+        .iter()
         .find(|e| e.name.to_lowercase().ends_with(".png") && !e.is_dir);
     if let Some(p) = png {
         let path = format!("Users/刘洋/Pictures/Screenshots/{}", p.name);
@@ -376,7 +439,10 @@ fn liuyang_direct_ntfs_read_screenshots_png() {
         assert_eq!(&buf[0..4], &[0x89, 0x50, 0x4E, 0x47], "PNG magic incorrect");
         eprintln!("✅ Liuyang Screenshots PNG read OK via direct NTFS");
     } else {
-        eprintln!("⚠ No PNG found in Screenshots (INDX_ALLOC issue — only {} entries visible)", ss_children.len());
+        eprintln!(
+            "⚠ No PNG found in Screenshots (INDX_ALLOC issue — only {} entries visible)",
+            ss_children.len()
+        );
     }
 }
 
@@ -387,14 +453,14 @@ fn liuyang_walk_to_screenshots_via_resolve_path() {
     let e01 = liuyang_path();
     let mut reader = E01Reader::open(&e01).unwrap();
     let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
-    let ntfs = probe.candidates.iter()
+    let ntfs = probe
+        .candidates
+        .iter()
         .find(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
         .expect("no NTFS");
 
-    let fs = fs_ntfs::NtfsReader::open(
-        Box::new(E01Reader::open(&e01).unwrap()),
-        ntfs.offset,
-    ).unwrap();
+    let fs =
+        fs_ntfs::NtfsReader::open(Box::new(E01Reader::open(&e01).unwrap()), ntfs.offset).unwrap();
 
     // Test paths with and without leading slash
     let paths = [
