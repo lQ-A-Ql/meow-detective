@@ -792,7 +792,7 @@ pub(super) fn records_to_partition_file_entries(
         .map(|record| {
             let name =
                 if record.record_number == 5 && (record.name.is_empty() || record.name == ".") {
-                    "\\".to_string()
+                    "/".to_string()
                 } else {
                     record.name.clone()
                 };
@@ -1016,8 +1016,7 @@ fn resolve_mft_path(
         }
         match path_map.get(&current) {
             Some((Some(parent), name, _))
-                if parent != "5"
-                    && parent != &current
+                if parent != &current
                     && path_map.contains_key(parent)
                     && seen.insert(parent.clone()) =>
             {
@@ -1028,25 +1027,34 @@ fn resolve_mft_path(
                 // Reached root, dangling parent, or cycle.
                 let base = if current != "5" && deleted_records.contains(&current) {
                     format!("/$DeletedOrphans/{current}-{name}")
+                } else if current == "5" {
+                    String::new() // Root — children build path from empty base
                 } else {
-                    name.clone()
+                    format!("/Unresolved/{name}") // Parent not in path_map
                 };
                 // Walk the chain in reverse to build full paths and cache them.
                 let mut path = base;
                 resolved.insert(current.clone(), path.clone());
                 for (id, _parent, name) in chain.iter().rev() {
-                    path = format!("{path}/{name}");
+                    if path.is_empty() {
+                        path = name.clone();
+                    } else {
+                        path = format!("{path}/{name}");
+                    }
                     resolved.insert(id.clone(), path.clone());
                 }
                 break resolved.get(record).cloned().unwrap_or_default();
             }
             None => {
-                // Record not in path_map — propagate empty for everything in chain.
-                for (id, _, _) in &chain {
-                    resolved.insert(id.clone(), String::new());
+                // Record not in path_map — use /Unresolved sentinel
+                let base = format!("/Unresolved/{}", current);
+                resolved.insert(current.clone(), base.clone());
+                let mut path = base;
+                for (id, _parent, name) in chain.iter().rev() {
+                    path = format!("{path}/{name}");
+                    resolved.insert(id.clone(), path.clone());
                 }
-                resolved.insert(record.to_string(), String::new());
-                break String::new();
+                break resolved.get(record).cloned().unwrap_or_default();
             }
         }
     };

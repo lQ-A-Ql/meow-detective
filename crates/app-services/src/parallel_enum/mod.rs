@@ -358,7 +358,7 @@ mod tests {
     #[test]
     fn ntfs_directory_index_backfill_traverses_newly_discovered_directories() {
         let mut path_map = HashMap::new();
-        path_map.insert("5".to_string(), (None, "\\".to_string(), true));
+        path_map.insert("5".to_string(), (None, "/".to_string(), true));
         let mut indexes = HashMap::new();
         indexes.insert(5, vec![fake_ntfs_index_entry(42, "Users", true)]);
         indexes.insert(42, vec![fake_ntfs_index_entry(43, "Liu Yang", true)]);
@@ -401,7 +401,7 @@ mod tests {
         insert_staging_entry(&conn, "mft:4:42", ds_id);
         insert_staging_entry(&conn, "mft:4:43", ds_id);
         let mut path_map = HashMap::new();
-        path_map.insert("5".to_string(), (None, "\\".to_string(), true));
+        path_map.insert("5".to_string(), (None, "/".to_string(), true));
         path_map.insert(
             "42".to_string(),
             (Some("5".to_string()), "Users".to_string(), true),
@@ -450,7 +450,7 @@ mod tests {
         insert_staging_entry(&conn, "mft:9:42", ds_id);
         insert_staging_entry(&conn, "mft:9:43", ds_id);
         let mut path_map = HashMap::new();
-        path_map.insert("5".to_string(), (None, "\\".to_string(), true));
+        path_map.insert("5".to_string(), (None, "/".to_string(), true));
         path_map.insert(
             "42".to_string(),
             (Some("5".to_string()), "Windows".to_string(), true),
@@ -485,7 +485,7 @@ mod tests {
         insert_staging_entry(&conn, "mft:8:bad-key", "ds-mft");
 
         let mut path_map = HashMap::new();
-        path_map.insert("5".to_string(), (None, "\\".to_string(), true));
+        path_map.insert("5".to_string(), (None, "/".to_string(), true));
         path_map.insert(
             "bad-key".to_string(),
             (Some("5".to_string()), "orphan.bin".to_string(), false),
