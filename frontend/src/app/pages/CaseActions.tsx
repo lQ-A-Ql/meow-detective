@@ -40,7 +40,7 @@ export function CaseWelcomeForms({
   return (
     <div className="flex-1 flex flex-col w-full h-full bg-white overflow-auto">
       <div className="border-b border-[#e0e0e0] bg-[#fafafa] p-8">
-        <div className="font-serif text-3xl text-[#111] tracking-tight mb-3">Forensics Workbench</div>
+        <div className="font-display text-3xl text-[#111] tracking-tight mb-3">Forensics Workbench</div>
         <div className="max-w-3xl text-[14px] text-[#666] leading-7">
           当前没有活动案件。先创建或打开案件目录，接着导入逻辑目录、RAW/DD/IMG 或 E01 镜像，即可进入可运行 demo 的真实文件浏览链路。
         </div>
