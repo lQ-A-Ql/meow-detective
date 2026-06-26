@@ -1146,10 +1146,10 @@ struct ReadFileRangeRequest {
 
 ## 8.1 前端目录建议
 ```text
-apps/desktop/src/
+frontend/src/
   app/
     App.tsx
-    router.tsx
+    routes.tsx
     providers.tsx
   pages/
     case-home/
@@ -1398,12 +1398,7 @@ UI 点击运行工件模块
 - `0001_cases.sql`
 - `0002_data_sources.sql`
 - `0003_file_entries.sql`
-- `0004_file_hashes.sql`
-- `0005_artifacts.sql`
-- `0006_timeline_events.sql`
-- `0007_tags_notes.sql`
-- `0008_jobs.sql`
-- `0009_reports.sql`
+- ... (实际已扩展至 31 个迁移脚本：0001–0030 + staging_001.sql)
 
 ### 11.2 临时运行时数据库 migration 建议
 - `1001_cache_entries.sql`

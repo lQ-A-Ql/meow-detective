@@ -80,7 +80,7 @@ pnpm --dir frontend build
 git diff --check
 cargo deny check advisories bans licenses sources
 
-# Repository guard scripts (PowerShell)
+# Repository guard scripts (PowerShell) — 12 check-* scripts total
 powershell -ExecutionPolicy Bypass -File scripts/check-doc-drift.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-command-sql-boundary.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-media-protocol-guard.ps1
@@ -88,6 +88,11 @@ powershell -ExecutionPolicy Bypass -File scripts/check-release-guard.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-stage5-regression-guard.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-frontend-lockfile-policy.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-deny-exceptions.ps1
+powershell -ExecutionPolicy Bypass -File scripts/check-evtx-dependency-decision.ps1
+powershell -ExecutionPolicy Bypass -File scripts/check-benchmark-regression.ps1
+powershell -ExecutionPolicy Bypass -File scripts/check-dependency-security.ps1
+powershell -ExecutionPolicy Bypass -File scripts/check-e01-import-performance.ps1
+powershell -ExecutionPolicy Bypass -File scripts/check-import-optimization-guard.ps1
 ```
 
 ## Code Style Guidelines
