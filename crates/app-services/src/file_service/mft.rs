@@ -72,6 +72,7 @@ pub fn enumerate_filesystem_mft(
     )
 }
 
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub fn enumerate_filesystem_mft_with_partition(
     conn: &Connection,
     data_source_id: &DataSourceId,
