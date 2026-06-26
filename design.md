@@ -254,12 +254,11 @@ forensics/
     ingest/
       src/
         lib.rs
-        job_manager.rs
-        scheduler.rs
-        worker_pool.rs
-        progress.rs
-        event_bus.rs
-        task_types.rs
+        config.rs
+        graph_writer.rs
+        pipeline.rs
+        sink.rs
+        stats.rs
     search/
       src/
         lib.rs
@@ -369,9 +368,9 @@ transport -> domain(只允许共享少量 ID/枚举) 或独立 DTO
 - `React` 直接依赖数据库结构
 
 ### 4.3 新增基础设施 crate 建议
-为满足可追溯开发报告与临时缓存数据库需求，建议在第一批或第二批补充：
-- `traceability/`
-  - 负责开发报告记录、事件日志追加、agent 署名规范、会话摘要输出
+为满足可追溯开发报告与临时缓存数据库需求，已实现：
+- `runtime-cache/`
+  - 负责临时缓存数据库（TTL-based，case-aware），替代原设计的 `traceability` crate
 - `runtime-cache/`
   - 负责临时 SQLite 数据库、缓存表、TTL/清理策略、临时句柄与预览缓存管理
 
@@ -379,7 +378,7 @@ transport -> domain(只允许共享少量 ID/枚举) 或独立 DTO
 
 ```text
 crates/
-  traceability/
+  runtime-cache/
     src/
       lib.rs
       reporter.rs
@@ -1456,7 +1455,7 @@ development-reports/
 - sqlite repository 测试
 - ingest 调度测试
 - runtime-cache TTL/清理测试
-- traceability writer 测试
+- runtime-cache handle TTL expiration 测试
 
 ## 12.3 前端
 - feature hook 单元测试
@@ -1491,7 +1490,7 @@ forensics/
         ttl_cleanup.rs
         file_handles.rs
         preview_chunks.rs
-    traceability/
+    runtime-cache/
       tests/
         event_log_append.rs
         session_report_render.rs
@@ -1536,7 +1535,7 @@ forensics/
         registry/
     reports/
     runtime-cache/
-    traceability/
+    runtime-cache/
 ```
 
 ### 12.6 命名规范
@@ -1562,7 +1561,7 @@ forensics/
 ## 13.1 CI 目标
 - 阻止格式、类型、测试回归进入主分支
 - 同时校验 Rust 后端、React 前端、Tauri 壳层与文档/契约
-- 在关键模块变更时校验 traceability 与 runtime-cache 相关测试
+- 在关键模块变更时校验 runtime-cache 相关测试
 
 ## 13.2 CI 分层
 ### Backend CI

@@ -2,16 +2,17 @@
 
 ## Project Overview
 
-**Forensics Workbench** is a Windows-first, single-user desktop digital-forensics application built with **Tauri 2**. It is backend-led: a Rust workspace of 38 crates performs evidence processing (disk images, volume detection, file systems, Windows/Linux/macOS artifacts, search indexing, timeline generation, entity resolution, STIX 2.1 exchange), while a **React 18 + TypeScript + Vite + Tailwind 4** frontend provides the investigator UI.
+**Forensics Workbench** is a Windows-first, single-user desktop digital-forensics application built with **Tauri 2**. It is backend-led: a Rust workspace of 37 crates performs evidence processing (disk images, volume detection, file systems, Windows/Linux/macOS artifacts, search indexing, timeline generation, entity resolution, STIX 2.1 exchange), while a **React 18 + TypeScript + Vite + Tailwind 4** frontend provides the investigator UI.
 
 - **Runtime**: Tauri 2 desktop shell. No HTTP server. All frontend↔backend communication goes through Tauri commands and events.
 - **Primary platform**: `x86_64-pc-windows-msvc` (Windows-primary, desktop-first, single-user).
-- **Storage**: SQLite case databases with WAL, migrations, and repository layer (12 repos, 31 migration scripts).
+- **Storage**: SQLite case databases with WAL, migrations, and repository layer (15 repos, 31 migration scripts).
 - **Evidence access**: Read-only. Original evidence sources are never modified.
 - **Current status**:
   - V2: ~90% complete, Grade B (81/100), all 7 real E01 regression tests passing.
   - V3: ~89% complete, 22/22 phases implemented, with new crates for PST/OST/mbox (`containers-pst`), Linux artifacts (`artifacts-linux`), and macOS artifacts (`artifacts-macos`).
   - V4: Core delivered — 5 new filesystem crates (`fs-ext4`, `fs-xfs`, `fs-btrfs`, `fs-apfs`, `fs-hfsplus`) and the `exchange` crate (entity resolution, STIX 2.1, Ed25519 signing, chain-of-custody).
+  - V5: Quality audit complete — architecture compliance 97%, runtime safety 96%, forensic completeness 96%. E01 preview pipeline hardened with partition path prefix, inode-based file resolution, and per-partition chunk-table caching.
 
 ## Build and Test Commands
 
@@ -267,15 +268,29 @@ Backend → Frontend via Tauri `emit`. Topics are string constants in `crates/tr
 
 | Count | Location | Notes |
 |-------|----------|-------|
-| 38 crates | `Cargo.toml` workspace members + `apps/desktop/src-tauri` | Includes 37 library crates and the Tauri shell |
-| 93 Tauri commands | `apps/desktop/src-tauri/src/commands/**/*.rs` | Registered in `src/lib.rs` |
-| 12 SQLite repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` | |
+| 37 crates | `Cargo.toml` workspace members + `apps/desktop/src-tauri` | Includes 36 library crates and the Tauri shell |
+| 95 Tauri commands | `apps/desktop/src-tauri/src/commands/**/*.rs` | Registered in `src/lib.rs` |
+| 15 SQLite repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` | Includes staging_repo, correlation_repo, entity_repo added in 2026-06 |
 | 31 migration scripts | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | `0001`–`0030` plus `staging_001.sql` |
-| 10 frontend pages | `frontend/src/app/pages/*.tsx` (excluding `*.test.tsx`) | Includes V2 Workbench and V3 Dashboard |
-| 36 frontend test files | `frontend/src/**/*.test.{ts,tsx}` | |
-| ~1,876 Rust tests | `cargo test --workspace` (calibrated 2026-06) | |
-| 18 event topics | `crates/transport/src/events/mod.rs` | |
-| 32 DTO domain files | `crates/transport/src/dto/*.rs` | |
+| 16 frontend pages | `frontend/src/app/pages/*.tsx` (excluding `*.test.tsx`) | Includes V2 Workbench, V3 Dashboard, CaseHome, FileBrowser, etc. |
+| 71 frontend test files | `frontend/src/**/*.test.{ts,tsx}` | |
+| ~2,061 Rust tests | `cargo test --workspace` (calibrated 2026-06) | |
+| 19 event topics | `crates/transport/src/events/mod.rs` | File extract progress added in 2026-06 |
+| 33 DTO domain files | `crates/transport/src/dto/*.rs` | Includes analysis_browser.rs added in 2026-06 |
+
+## V5 Quality Audit (2026-06)
+
+The project underwent a comprehensive quality audit across 5 stages:
+- **Stage 1 (Critical)**: MFT code deduplication, `unimplemented!()` elimination, TOCTOU race condition fix
+- **Stage 2 (Architecture)**: gql/ingest trait decoupling, ~83 raw SQL statements migrated to repository layer, timestamp deduplication
+- **Stage 3 (Runtime)**: Typed error migration (209→11 `Result<String>`), god function decomposition (418→86 lines), unwrap elimination in FS parsers
+- **Stage 4 (Quality)**: Tauri command business logic extraction, documentation sync, React.memo on 9 components
+- **Stage 5 (Forensics)**: EVTX expanded to 7 channels, NTFS EFS detection, browser profile auto-detection, RecycleBin v1 support
+
+Key architectural improvements:
+- **E01 preview pipeline**: Uses stored partition metadata instead of re-probing, MFT inode-based file resolution bypasses 8.3 short-name INDX issues
+- **Path reconstruction**: File paths now include partition index prefix `[P{n}]` for unambiguous multi-partition resolution
+- **Chunk-table caching**: `E01Reader::re_open()` shares `Arc<chunk_table>` across previews with independent file handles
 
 ### Crate roles
 
