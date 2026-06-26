@@ -679,15 +679,33 @@ impl NtfsReader {
                 .find(|e| e.node.name.eq_ignore_ascii_case(dir) && e.node.is_dir);
             match found {
                 Some(entry) => current_inode = entry.mft_ref,
-                None => return Ok(None),
+                None => {
+                    tracing::warn!(
+                        path = %path,
+                        missing_component = %dir,
+                        parent_inode = %current_inode,
+                        "NTFS path resolution: directory not found in parent INDX"
+                    );
+                    return Ok(None);
+                }
             }
         }
 
         let children = self.list_dir_by_inode(current_inode)?;
-        Ok(children
+        let result = children
             .iter()
             .find(|e| e.node.name.eq_ignore_ascii_case(file_name) && !e.node.is_dir)
-            .map(|e| e.mft_ref))
+            .map(|e| e.mft_ref);
+        if result.is_none() {
+            tracing::warn!(
+                path = %path,
+                missing_file = %file_name,
+                parent_inode = %current_inode,
+                children_count = %children.len(),
+                "NTFS path resolution: file not found in parent INDX"
+            );
+        }
+        Ok(result)
     }
 
     /// Resolve a path from root, walking top-down through directory INDX entries.

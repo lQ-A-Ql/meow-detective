@@ -703,7 +703,8 @@ pub fn update_entry_paths(
             _ if record != "5" && deleted_records.contains(record) => {
                 format!("/$DeletedOrphans/{}-{}", record, name)
             }
-            _ => name.clone(), // Root entry
+            _ if record == "5" || parent.is_none() => name.clone(), // Root entry
+            _ => format!("/Unresolved/{}", name),                   // Parent not in path_map
         };
 
         resolved.insert(record.to_string(), path.clone());

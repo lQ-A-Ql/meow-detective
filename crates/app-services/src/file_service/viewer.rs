@@ -318,6 +318,14 @@ fn open_e01_file(
         ));
     }
 
+    // 如果路径只是裸文件名，说明 import 时父链重构失败
+    if !entry.path.contains('/') && !entry.path.contains('\\') {
+        return Err(FileServiceError::other(format!(
+            "Cannot preview '{}': path reconstruction did not resolve the parent directory. Re-import.",
+            entry.path
+        )));
+    }
+
     // 收集候选分区：优先匹配 expected_partition_index，否则尝试所有
     let candidates_to_try: Vec<
         &persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord,
