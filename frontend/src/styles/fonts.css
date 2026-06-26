@@ -3,7 +3,7 @@
 /* 正文字体：毛笔楷行远 */
 @font-face {
   font-family: 'MaoKenWangXingYuan';
-  src: url('../ttf/MaoKenWangXingYuan(正文字体)/MaoKenWangXingYuan-2.ttf') format('truetype');
+  src: url('../ttf/MaoKenWangXingYuan/MaoKenWangXingYuan-2.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -12,7 +12,7 @@
 /* 文件预览区等宽字体：JetBrains Mono */
 @font-face {
   font-family: 'JetBrains Mono';
-  src: url('../ttf/JetBrains-Mono(文件预览区字体)/JetBrainsMono-Regular-2.ttf') format('truetype');
+  src: url('../ttf/JetBrains-Mono/JetBrainsMono-Regular-2.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -20,7 +20,7 @@
 
 @font-face {
   font-family: 'JetBrains Mono';
-  src: url('../ttf/JetBrains-Mono(文件预览区字体)/JetBrainsMono-Medium-3.ttf') format('truetype');
+  src: url('../ttf/JetBrains-Mono/JetBrainsMono-Medium-3.ttf') format('truetype');
   font-weight: 500;
   font-style: normal;
   font-display: swap;
@@ -28,7 +28,7 @@
 
 @font-face {
   font-family: 'JetBrains Mono';
-  src: url('../ttf/JetBrains-Mono(文件预览区字体)/JetBrainsMono-Bold-7.ttf') format('truetype');
+  src: url('../ttf/JetBrains-Mono/JetBrainsMono-Bold-7.ttf') format('truetype');
   font-weight: 700;
   font-style: normal;
   font-display: swap;
@@ -36,7 +36,7 @@
 
 @font-face {
   font-family: 'JetBrains Mono';
-  src: url('../ttf/JetBrains-Mono(文件预览区字体)/JetBrainsMono-ExtraBold-6.ttf') format('truetype');
+  src: url('../ttf/JetBrains-Mono/JetBrainsMono-ExtraBold-6.ttf') format('truetype');
   font-weight: 800;
   font-style: normal;
   font-display: swap;
@@ -44,7 +44,7 @@
 
 @font-face {
   font-family: 'JetBrains Mono';
-  src: url('../ttf/JetBrains-Mono(文件预览区字体)/JetBrainsMono-Italic-5.ttf') format('truetype');
+  src: url('../ttf/JetBrains-Mono/JetBrainsMono-Italic-5.ttf') format('truetype');
   font-weight: 400;
   font-style: italic;
   font-display: swap;
@@ -52,7 +52,7 @@
 
 @font-face {
   font-family: 'JetBrains Mono';
-  src: url('../ttf/JetBrains-Mono(文件预览区字体)/JetBrainsMono-Medium-Italic-4.ttf') format('truetype');
+  src: url('../ttf/JetBrains-Mono/JetBrainsMono-Medium-Italic-4.ttf') format('truetype');
   font-weight: 500;
   font-style: italic;
   font-display: swap;
@@ -60,7 +60,7 @@
 
 @font-face {
   font-family: 'JetBrains Mono';
-  src: url('../ttf/JetBrains-Mono(文件预览区字体)/JetBrainsMono-Bold-Italic-8.ttf') format('truetype');
+  src: url('../ttf/JetBrains-Mono/JetBrainsMono-Bold-Italic-8.ttf') format('truetype');
   font-weight: 700;
   font-style: italic;
   font-display: swap;
@@ -69,7 +69,7 @@
 /* 英文主标题字体：Playlist Script */
 @font-face {
   font-family: 'Playlist Script';
-  src: url('../ttf/Playlist-Script(英文主标题字体)/Playlist-Script-2.otf') format('opentype');
+  src: url('../ttf/Playlist-Script/Playlist-Script-2.otf') format('opentype');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
