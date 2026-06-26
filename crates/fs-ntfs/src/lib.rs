@@ -224,7 +224,12 @@ impl NtfsReader {
                 // $INDEX_ALLOCATION — non-resident B-Tree INDX records
                 match self.read_attr_nonresident(pos, &rec) {
                     Ok(data) => {
-                        if !data.is_empty() {
+                        if data.is_empty() {
+                            tracing::warn!(
+                                inode = %inode,
+                                "NTFS $INDEX_ALLOCATION returned empty data — large directory entries may be missing"
+                            );
+                        } else {
                             index_alloc_entries = Some(self.parse_indx_buffer(&data));
                         }
                     }
