@@ -191,6 +191,7 @@ impl NtfsReader {
         let mut pos = attr_off;
         let mut index_root_entries: Option<Vec<DirEntry>> = None;
         let mut index_alloc_entries: Option<Vec<DirEntry>> = None;
+        let mut saw_a0 = false;
 
         while pos + 8 < rec.len() {
             let typ = u32::from_le_bytes(rec[pos..pos + 4].try_into().unwrap_or([0; 4]));
@@ -201,6 +202,9 @@ impl NtfsReader {
                 u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
             if len == 0 || pos + len > rec.len() {
                 break;
+            }
+            if typ == 0xA0 {
+                saw_a0 = true;
             }
 
             if typ == 0x90 && pos + 0x18 <= rec.len() {
@@ -244,6 +248,18 @@ impl NtfsReader {
             }
 
             pos += len;
+        }
+
+        // If this is a directory with only $INDEX_ROOT and no $INDEX_ALLOCATION,
+        // the directory listing may be incomplete (large dirs store entries in
+        // the allocation tree, not the root entry).
+        if !saw_a0 && index_root_entries.is_some() {
+            let root_count = index_root_entries.as_ref().map(|v| v.len()).unwrap_or(0);
+            tracing::warn!(
+                inode = %inode,
+                root_entries = %root_count,
+                "NTFS directory has $INDEX_ROOT but no $INDEX_ALLOCATION — large directory listing may be incomplete"
+            );
         }
 
         // Merge: $INDEX_ALLOCATION entries first (more complete), then
