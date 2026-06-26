@@ -343,8 +343,10 @@ fn open_e01_file(
             // whose parent chain could not be resolved (e.g., /Unresolved/ entries)
             let ntfs: Vec<_> = partitions
                 .iter()
-                .filter(|p| p.status != "EncryptedBitLocker"
-                    && p.filesystem.as_deref().unwrap_or(&p.kind_label) == "NTFS")
+                .filter(|p| {
+                    p.status != "EncryptedBitLocker"
+                        && p.filesystem.as_deref().unwrap_or(&p.kind_label) == "NTFS"
+                })
                 .collect();
             if ntfs.is_empty() {
                 return Err(FileServiceError::other(
@@ -663,7 +665,8 @@ mod tests {
         let path = dir.path().join("truncated.E01");
         // Write a valid E01 header but truncate before the chunk data
         let mut f = std::fs::File::create(&path).unwrap();
-        f.write_all(b"EVF\t\r\n\x01\x00\x00\x01\x00\x01\x00").unwrap();
+        f.write_all(b"EVF\t\r\n\x01\x00\x00\x01\x00\x01\x00")
+            .unwrap();
         // Write volume section descriptor but no actual chunk table or data
         let desc = section_desc("volume", 0, 76 + 36);
         f.write_all(&desc).unwrap();
@@ -674,7 +677,10 @@ mod tests {
 
         // Opening should fail gracefully with an error, not panic
         let result = E01Reader::open(&path);
-        assert!(result.is_err(), "Truncated E01 should return error, not panic");
+        assert!(
+            result.is_err(),
+            "Truncated E01 should return error, not panic"
+        );
     }
 
     #[test]
@@ -698,7 +704,10 @@ mod tests {
         let result = reader.read(&mut big_buf);
         // read() may return partial data without error. Just verify no panic.
         let _ = result;
-        eprintln!("Short read returned {} bytes (expected for tiny E01)", big_buf.len());
+        eprintln!(
+            "Short read returned {} bytes (expected for tiny E01)",
+            big_buf.len()
+        );
     }
 
     #[test]
@@ -724,13 +733,15 @@ mod tests {
 
         // Verify root name parsing from parent chain (simulated via function)
         let root_name = "Partition 3 (NTFS)";
-        let idx: Option<usize> = root_name
-            .strip_prefix("Partition ")
-            .and_then(|rest| {
-                let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
-                digits.parse().ok()
-            });
-        assert_eq!(idx, Some(3), "Root name 'Partition 3 (NTFS)' should resolve to index 3");
+        let idx: Option<usize> = root_name.strip_prefix("Partition ").and_then(|rest| {
+            let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+            digits.parse().ok()
+        });
+        assert_eq!(
+            idx,
+            Some(3),
+            "Root name 'Partition 3 (NTFS)' should resolve to index 3"
+        );
     }
 
     #[test]
