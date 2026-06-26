@@ -270,6 +270,11 @@ fn open_e01_file(
         candidates_to_try
     };
 
+    // Each partition needs its own E01Reader because NtfsReader/FatReader::open
+    // takes ownership of the Box<dyn EvidenceReader>. This means one E01 open per
+    // candidate per file access. In normal operation the loop exits on the first
+    // candidate — the cost of extra opens only materializes on edge cases where
+    // the expected partition fails to open the file and the fallback kicks in.
     for target in &candidates_to_try {
         if target.status == "EncryptedBitLocker" {
             continue;
