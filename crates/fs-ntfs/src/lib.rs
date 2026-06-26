@@ -925,6 +925,20 @@ impl FileSystemReader for NtfsReader {
     }
 
     fn open_file(&self, path: &str) -> io::Result<Box<dyn Read>> {
+        // Fast path: if the path is an MFT inode reference ("mft:NNN"),
+        // read directly. This skips INDX name lookups which fail when
+        // directories store 8.3 short names instead of long names.
+        if let Some(mft_inode) = path.strip_prefix("mft:").and_then(|s| s.parse::<u64>().ok()) {
+            let data = self.read_file_data(mft_inode)?;
+            if data.len() > 128 * 1024 * 1024 {
+                return Err(fs_out_of_memory(format!(
+                    "file too large to buffer: {} bytes",
+                    data.len()
+                )));
+            }
+            return Ok(Box::new(io::Cursor::new(data)));
+        }
+
         let inode = self
             .resolve_file_path(path)?
             .ok_or_else(|| file_not_found(path))?;

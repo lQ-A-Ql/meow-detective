@@ -358,7 +358,9 @@ fn open_e01_file(
 
         let result = match fs_kind {
             "NTFS" => match fs_ntfs::NtfsReader::open(boxed_reader, target.offset) {
-                Ok(fs) => fs.open_file(&entry.path),
+                Ok(fs) => fs
+                    .open_file(&entry.path)
+                    .or_else(|_| fs.open_file(&entry.id.0)),
                 Err(e) => {
                     tracing::warn!(
                         path = %entry.path,
