@@ -206,6 +206,12 @@ impl NtfsReader {
             if typ == 0xA0 {
                 saw_a0 = true;
             }
+            if typ == 0x20 && !saw_a0 {
+                tracing::info!(
+                    inode = %inode,
+                    "NTFS directory has $ATTRIBUTE_LIST — $INDEX_ALLOCATION may be in external MFT record"
+                );
+            }
 
             if typ == 0x90 && pos + 0x18 <= rec.len() {
                 // $INDEX_ROOT is a resident attribute. On real disks, the index
