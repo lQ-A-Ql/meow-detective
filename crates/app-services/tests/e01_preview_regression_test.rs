@@ -10,9 +10,7 @@
 use app_services::{case_service, datasource_service, file_service};
 use evidence_core::{EvidenceReader, FileSystemReader};
 use image_e01::E01Reader;
-use persistence_sqlite::repositories::{
-    file_repo::FileRepo, partition_repo::PartitionRepo,
-};
+use persistence_sqlite::repositories::{file_repo::FileRepo, partition_repo::PartitionRepo};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -105,11 +103,14 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                         type_guid: None,
                         offset: c.offset,
                         length: 0,
-                        filesystem: Some(match c.kind {
-                            datasource_service::ImageFilesystemKind::Ntfs => "NTFS",
-                            datasource_service::ImageFilesystemKind::Fat => "FAT",
-                            datasource_service::ImageFilesystemKind::BitLocker => "BitLocker",
-                        }.to_string()),
+                        filesystem: Some(
+                            match c.kind {
+                                datasource_service::ImageFilesystemKind::Ntfs => "NTFS",
+                                datasource_service::ImageFilesystemKind::Fat => "FAT",
+                                datasource_service::ImageFilesystemKind::BitLocker => "BitLocker",
+                            }
+                            .to_string(),
+                        ),
                         unlock_hint: None,
                     }
                 })
@@ -124,19 +125,22 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                 .filter(|(_, c)| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
                 .collect();
             // Try NTFS candidates at the lowest offsets (usually the main volume)
-            let ntfs_candidates: Vec<(usize, &datasource_service::ImageFilesystemCandidate)> = probe
-                .candidates
-                .iter()
-                .enumerate()
-                .filter(|(_, c)| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
-                .collect();
-            let (actual_ntfs_idx, ntfs) = ntfs_candidates
-                .first()
-                .expect("no NTFS partition");
+            let ntfs_candidates: Vec<(usize, &datasource_service::ImageFilesystemCandidate)> =
+                probe
+                    .candidates
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, c)| {
+                        matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs)
+                    })
+                    .collect();
+            let (actual_ntfs_idx, ntfs) = ntfs_candidates.first().expect("no NTFS partition");
             let ntfs_partition_index = *actual_ntfs_idx;
             eprintln!(
                 "Using NTFS partition {} (candidate index {}) at offset {}",
-                ntfs.partition_name.as_deref().unwrap_or("?"), ntfs_partition_index, ntfs.offset
+                ntfs.partition_name.as_deref().unwrap_or("?"),
+                ntfs_partition_index,
+                ntfs.offset
             );
 
             let mut reader = E01Reader::open(e01_path)
@@ -163,8 +167,7 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
             reader
                 .read_exact(&mut mft_rec)
                 .map_err(|e| persistence_sqlite::DbError::System(format!("read MFT: {e}")))?;
-            let mft_data_size =
-                parse_mft_data_size(&mft_rec).unwrap_or(1024 * 1024 * 100);
+            let mft_data_size = parse_mft_data_size(&mft_rec).unwrap_or(1024 * 1024 * 100);
 
             eprintln!(
                 "NTFS at offset {}: cluster_size={}, mft_cluster={}, mft_data_size={} bytes",
@@ -173,13 +176,16 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
 
             // 5. MFT enumerate (public API from file_service)
             // Need to re-fetch the data source to get the UUID-based ID
-            let ds_repo = persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn);
+            let ds_repo =
+                persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn);
             let stored_ds = ds_repo
                 .find_by_case(&case_id)
                 .map_err(|e| persistence_sqlite::DbError::System(format!("find ds: {e}")))?
                 .into_iter()
                 .find(|d| d.name == "test-e01")
-                .ok_or_else(|| persistence_sqlite::DbError::System("data source not found".to_string()))?;
+                .ok_or_else(|| {
+                    persistence_sqlite::DbError::System("data source not found".to_string())
+                })?;
 
             let stats = file_service::enumerate_filesystem_mft(
                 conn,
@@ -219,7 +225,11 @@ fn preview_and_assert(active: &app_services::active_case::ActiveCase, ds_id: &st
 
             let file = all
                 .iter()
-                .find(|f| f.entry_type == domain::EntryType::File && f.size.unwrap_or(0) > 0 && f.path.starts_with('\\'))
+                .find(|f| {
+                    f.entry_type == domain::EntryType::File
+                        && f.size.unwrap_or(0) > 0
+                        && f.path.starts_with('\\')
+                })
                 .unwrap_or_else(|| {
                     panic!("{label}: no previewable NTFS file in {} entries", all.len())
                 });
@@ -228,7 +238,11 @@ fn preview_and_assert(active: &app_services::active_case::ActiveCase, ds_id: &st
                 .unwrap_or_else(|e| panic!("{label}: preview failed for '{}': {e:?}", file.path));
             let mut buf = Vec::new();
             reader.read_to_end(&mut buf).unwrap();
-            assert!(!buf.is_empty(), "{label}: empty content for '{}'", file.path);
+            assert!(
+                !buf.is_empty(),
+                "{label}: empty content for '{}'",
+                file.path
+            );
             eprintln!("✅ {label}: {} ({} bytes)", file.path, buf.len());
             Ok(())
         })
@@ -254,13 +268,20 @@ fn preview_chinese_path(active: &app_services::active_case::ActiveCase, ds_id: &
                 return Ok(());
             };
 
-            let mut reader = file_service::open_file_content_by_id(conn, &file.id)
-                .unwrap_or_else(|e| {
-                    panic!("{label}: Chinese path preview failed for '{}': {e:?}", file.path)
+            let mut reader =
+                file_service::open_file_content_by_id(conn, &file.id).unwrap_or_else(|e| {
+                    panic!(
+                        "{label}: Chinese path preview failed for '{}': {e:?}",
+                        file.path
+                    )
                 });
             let mut buf = Vec::new();
             reader.read_to_end(&mut buf).unwrap();
-            assert!(!buf.is_empty(), "{label}: empty content for '{}'", file.path);
+            assert!(
+                !buf.is_empty(),
+                "{label}: empty content for '{}'",
+                file.path
+            );
             eprintln!("✅ {label} Chinese: {} ({} bytes)", file.path, buf.len());
             Ok(())
         })
