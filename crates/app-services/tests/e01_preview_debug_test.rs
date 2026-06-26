@@ -319,7 +319,7 @@ fn liuyang_full_scan_read_first_8_bytes() {
                         match reader.read(&mut buf) {
                             Ok(n) if n > 0 => {
                                 ok += 1;
-                                if total <= 10 || total % 1000 == 0 {
+                                if total <= 10 || total.is_multiple_of(1000) {
                                     eprintln!("[{total}] ✅ {n}B {:02X?} — {}", &buf[..n], f.path);
                                 }
                             }
