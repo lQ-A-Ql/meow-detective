@@ -49,6 +49,38 @@ impl E01Reader {
             last_chunk_read: None,
         })
     }
+
+    /// Re-open with fresh file handles, reusing the cached chunk table.
+    /// Opens independent segment file descriptors (no shared file position)
+    /// while sharing the parsed `Arc<chunk_table>` to avoid re-parsing headers.
+    pub fn re_open(&self, source_path: &Path) -> io::Result<Self> {
+        let mut segment_files: Vec<std::fs::File> = Vec::new();
+        for seg_num in 1u32.. {
+            let seg_path = build_segment_path(source_path, seg_num);
+            match std::fs::File::open(&seg_path) {
+                Ok(f) => segment_files.push(f),
+                Err(e) if e.kind() == io::ErrorKind::NotFound => break,
+                Err(e) => return Err(e),
+            }
+        }
+        if segment_files.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "no E01 segments found",
+            ));
+        }
+        Ok(Self {
+            info: self.info.clone(),
+            total_bytes: self.total_bytes,
+            chunk_size_sectors: self.chunk_size_sectors,
+            chunk_table: Arc::clone(&self.chunk_table),
+            segment_files,
+            cursor: 0,
+            chunk_cache: VecDeque::new(),
+            chunk_cache_bytes: 0,
+            last_chunk_read: None,
+        })
+    }
 }
 
 impl E01Reader {

@@ -5,11 +5,80 @@ use image_e01::E01Reader;
 use persistence_sqlite::repositories::file_repo::FileRepo;
 use persistence_sqlite::repositories::partition_repo::PartitionRepo;
 use rusqlite::Connection;
+use std::collections::{HashMap, VecDeque};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use transport::dto::{ViewerHandleDto, ViewerRangeRequestDto, ViewerRangeResponseDto};
 
 const FILE_HANDLE_PREFIX: &str = "file:";
+
+/// Maximum number of concurrently cached parsed E01 readers.
+/// Cache hits reuse the `Arc<chunk_table>` via `E01Reader::re_open`,
+/// opening fresh segment file handles without re-parsing headers.
+const E01_READER_CACHE_MAX_SIZE: usize = 4;
+
+struct E01ReaderCache {
+    max_size: usize,
+    paths: VecDeque<PathBuf>,
+    readers: HashMap<PathBuf, E01Reader>,
+}
+
+impl E01ReaderCache {
+    fn new(max_size: usize) -> Self {
+        Self {
+            max_size,
+            paths: VecDeque::with_capacity(max_size),
+            readers: HashMap::with_capacity(max_size),
+        }
+    }
+
+    fn get_or_open(&mut self, source_path: &Path) -> std::io::Result<E01Reader> {
+        // Cache hit: re-open fresh file handles, share Arc<chunk_table>
+        if let Some(cached) = self.readers.get(source_path) {
+            // Update LRU: move to most-recently-used end
+            if let Some(pos) = self.paths.iter().position(|p| p == source_path) {
+                self.paths.remove(pos);
+            }
+            self.paths.push_back(source_path.to_path_buf());
+            return cached.re_open(source_path);
+        }
+
+        // Cache miss: fully parse from disk
+        let reader = E01Reader::open(source_path)?;
+
+        // Evict oldest if full
+        while self.paths.len() >= self.max_size {
+            if let Some(evict_path) = self.paths.pop_front() {
+                self.readers.remove(&evict_path);
+            }
+        }
+
+        self.paths.push_back(source_path.to_path_buf());
+        self.readers.insert(source_path.to_path_buf(), reader);
+
+        // Re-open for the caller with fresh handles
+        self.readers.get(source_path).unwrap().re_open(source_path)
+    }
+}
+
+static E01_READER_CACHE: std::sync::LazyLock<std::sync::Mutex<E01ReaderCache>> =
+    std::sync::LazyLock::new(|| {
+        std::sync::Mutex::new(E01ReaderCache::new(E01_READER_CACHE_MAX_SIZE))
+    });
+
+pub fn clear_e01_reader_cache() {
+    if let Ok(mut cache) = E01_READER_CACHE.lock() {
+        cache.paths.clear();
+        cache.readers.clear();
+    }
+}
+
+fn open_e01_reader_cached(source_path: &Path) -> std::io::Result<E01Reader> {
+    E01_READER_CACHE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .get_or_open(source_path)
+}
 
 pub fn open_file_handle_real(
     conn: &Connection,
@@ -281,7 +350,7 @@ fn open_e01_file(
         }
         let fs_kind = target.filesystem.as_deref().unwrap_or(&target.kind_label);
 
-        let reader = E01Reader::open(Path::new(source_path))?;
+        let reader = open_e01_reader_cached(Path::new(source_path))?;
         let boxed_reader: Box<dyn evidence_core::EvidenceReader> = Box::new(reader);
 
         let result = match fs_kind {

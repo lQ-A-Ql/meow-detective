@@ -8,7 +8,6 @@
 //!   cargo test -p app-services --test e01_preview_regression_test -- --ignored --nocapture
 
 use app_services::{case_service, datasource_service, file_service};
-use evidence_core::{EvidenceReader, FileSystemReader};
 use image_e01::E01Reader;
 use persistence_sqlite::repositories::{file_repo::FileRepo, partition_repo::PartitionRepo};
 use std::io::{Read, Seek, SeekFrom};
@@ -25,38 +24,6 @@ fn liuyang_path() -> PathBuf {
     std::env::var("FORENSICS_LIUYANG_E01")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("E:\\pangushi\\刘洋\\liuyang_pc.E01"))
-}
-
-/// Parse $MFT data size from MFT record 0.
-fn parse_mft_data_size(record: &[u8]) -> Option<u64> {
-    if &record[0..4] != b"FILE" {
-        return None;
-    }
-    let attr_off = u16::from_le_bytes([record[0x14], record[0x15]]) as usize;
-    let mut pos = attr_off;
-    while pos + 8 < record.len() {
-        let typ = u32::from_le_bytes(record[pos..pos + 4].try_into().ok()?);
-        if typ == 0xFFFFFFFF {
-            break;
-        }
-        let len = u32::from_le_bytes(record[pos + 4..pos + 8].try_into().ok()?) as usize;
-        if len < 4 || pos + len > record.len() {
-            break;
-        }
-        // $DATA non-resident (0x80) with non-resident flag set
-        if typ == 0x80 && record[pos + 8] != 0 {
-            let real_size_off = 0x30; // offset of real_size within non-resident header
-            if pos + real_size_off + 8 <= pos + len {
-                return Some(u64::from_le_bytes(
-                    record[pos + real_size_off..pos + real_size_off + 8]
-                        .try_into()
-                        .ok()?,
-                ));
-            }
-        }
-        pos += len;
-    }
-    None
 }
 
 /// Full setup: probe E01 → store partitions → MFT enumerate → preview.
@@ -117,14 +84,7 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                 .collect();
             part_repo.replace_for_data_source(&ds.id.0, &records)?;
 
-            // 4. Find the NTFS candidate with the most files (skip small/system partitions)
-            let ntfs_candidates: Vec<_> = probe
-                .candidates
-                .iter()
-                .enumerate()
-                .filter(|(_, c)| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
-                .collect();
-            // Try NTFS candidates at the lowest offsets (usually the main volume)
+            // 4. Find the first NTFS candidate (lowest offset — usually the main volume)
             let ntfs_candidates: Vec<(usize, &datasource_service::ImageFilesystemCandidate)> =
                 probe
                     .candidates
@@ -167,7 +127,8 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
             reader
                 .read_exact(&mut mft_rec)
                 .map_err(|e| persistence_sqlite::DbError::System(format!("read MFT: {e}")))?;
-            let mft_data_size = parse_mft_data_size(&mft_rec).unwrap_or(1024 * 1024 * 100);
+            let mft_data_size =
+                fs_ntfs::parse_mft_data_real_size(&mft_rec).unwrap_or(1024 * 1024 * 100);
 
             eprintln!(
                 "NTFS at offset {}: cluster_size={}, mft_cluster={}, mft_data_size={} bytes",
@@ -228,7 +189,7 @@ fn preview_and_assert(active: &app_services::active_case::ActiveCase, ds_id: &st
                 .find(|f| {
                     f.entry_type == domain::EntryType::File
                         && f.size.unwrap_or(0) > 0
-                        && f.path.starts_with('\\')
+                        && f.path.starts_with('/')
                 })
                 .unwrap_or_else(|| {
                     panic!("{label}: no previewable NTFS file in {} entries", all.len())
@@ -259,7 +220,7 @@ fn preview_chinese_path(active: &app_services::active_case::ActiveCase, ds_id: &
             let chinese = all.iter().find(|f| {
                 f.entry_type == domain::EntryType::File
                     && f.size.unwrap_or(0) > 0
-                    && f.path.starts_with('\\')
+                    && f.path.starts_with('/')
                     && f.path.chars().any(|c| c as u32 > 0x7F)
             });
 

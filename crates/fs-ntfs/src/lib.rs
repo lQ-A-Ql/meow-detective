@@ -1232,3 +1232,34 @@ fn read_sized_le_signed(bytes: &[u8]) -> i64 {
     }
     val as i64
 }
+
+/// Parse the $DATA non-resident real_size from MFT record 0.
+/// Used by E01 import/enumeration code to determine $MFT data size.
+pub fn parse_mft_data_real_size(record: &[u8]) -> Option<u64> {
+    if &record[0..4] != b"FILE" {
+        return None;
+    }
+    let attr_off = u16::from_le_bytes([record[0x14], record[0x15]]) as usize;
+    let mut pos = attr_off;
+    while pos + 8 < record.len() {
+        let typ = u32::from_le_bytes(record[pos..pos + 4].try_into().ok()?);
+        if typ == 0xFFFFFFFF {
+            break;
+        }
+        let len = u32::from_le_bytes(record[pos + 4..pos + 8].try_into().ok()?) as usize;
+        if len < 4 || pos + len > record.len() {
+            break;
+        }
+        // $DATA non-resident (0x80) with non-resident flag bit 0 set
+        if typ == 0x80 && pos + 0x38 <= record.len() && (record[pos + 8] & 1) != 0 {
+            return Some(u64::from_le_bytes(
+                record[pos + 0x30..pos + 0x38].try_into().ok()?,
+            ));
+        }
+        if len == 0 {
+            break;
+        }
+        pos += len;
+    }
+    None
+}

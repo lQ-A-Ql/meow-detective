@@ -582,7 +582,7 @@ pub fn records_to_file_entries(
         .filter(|r| r.is_valid && (!r.name.is_empty() || r.record_number == 5))
         .map(|r| {
             let name = if r.record_number == 5 && (r.name.is_empty() || r.name == ".") {
-                "\\".to_string()
+                "/".to_string()
             } else {
                 r.name.clone()
             };
