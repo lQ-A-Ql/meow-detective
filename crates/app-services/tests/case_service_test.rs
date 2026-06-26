@@ -204,6 +204,7 @@ fn delete_data_source_cascades_rows_and_writes_audit_log() {
                 deleted: false,
                 hidden: false,
                 system: false,
+                encrypted: false,
                 created_at: None,
                 modified_at: Some(chrono::Utc::now()),
                 accessed_at: None,

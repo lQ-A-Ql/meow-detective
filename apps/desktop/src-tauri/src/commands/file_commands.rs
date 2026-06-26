@@ -10,7 +10,6 @@ use app_services::{file_service, text_service::TextService};
 use base64::Engine;
 use persistence_sqlite::repositories::audit_repo::AuditAction;
 use std::io::Read;
-use std::io::Write;
 use tauri::State;
 use transport::{
     commands::{
@@ -360,111 +359,41 @@ pub async fn extract_file(
 ) -> Result<String, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
-    let audit_file_id = request.file_id.clone();
-    let audit_destination = request.destination_path.clone();
-    let overwrite = request.overwrite;
+    let (audit_file_id, audit_dest, overwrite, file_id, dest) = (
+        request.file_id.clone(),
+        request.destination_path.clone(),
+        request.overwrite,
+        request.file_id.clone(),
+        std::path::PathBuf::from(&request.destination_path),
+    );
     tauri::async_runtime::spawn_blocking(move || {
         let conn = crate::commands::command_support::get_case_connection(&app_state)?;
-        let result = extract_file_for_case(&conn, &request);
-        match &result {
-            Ok(message) => write_audit_log(
+        let outcome: Result<String, CommandError> =
+            file_service::extract_file_to_destination(&conn, &file_id, &dest, overwrite)
+                .map(|w| format!("Extracted {} bytes", w))
+                .map_err(CommandError::from_service_error);
+        let dest_file_name = std::path::Path::new(&audit_dest)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown");
+        match &outcome {
+            Ok(msg) => write_audit_log(
                 &app_state,
                 AuditAction::FileExtract,
                 Some(&audit_file_id),
-                serde_json::json!({
-                    "status": "ok",
-                    "overwrite": overwrite,
-                    "destinationFileName": std::path::Path::new(&audit_destination)
-                        .file_name()
-                        .and_then(|name| name.to_str())
-                        .unwrap_or("unknown"),
-                    "message": message,
-                }),
+                serde_json::json!({ "status":"ok","overwrite":overwrite,"destinationFileName":dest_file_name,"message":msg }),
             ),
             Err(err) => write_audit_log(
                 &app_state,
                 AuditAction::FileExtract,
                 Some(&audit_file_id),
-                serde_json::json!({
-                    "status": "failed",
-                    "overwrite": overwrite,
-                    "destinationFileName": std::path::Path::new(&audit_destination)
-                        .file_name()
-                        .and_then(|name| name.to_str())
-                        .unwrap_or("unknown"),
-                    "errorCode": err.code,
-                    "errorCategory": err.category,
-                }),
+                serde_json::json!({ "status":"failed","overwrite":overwrite,"destinationFileName":dest_file_name,"errorCode":err.code,"errorCategory":err.category }),
             ),
         }
-        result
+        outcome
     })
     .await
     .map_err(CommandError::from_join_error)?
-}
-
-fn extract_file_for_case(
-    conn: &rusqlite::Connection,
-    request: &ExtractFileRequest,
-) -> Result<String, CommandError> {
-    let mut reader =
-        file_service::open_file_content_by_id(conn, &domain::FileEntryId(request.file_id.clone()))
-            .map_err(CommandError::from_service_error)?;
-    let destination = std::path::PathBuf::from(&request.destination_path);
-    if destination.exists() && destination.is_dir() {
-        return Err(CommandError::invalid_input(
-            "destinationPath must point to a file, not a directory",
-        ));
-    }
-    if destination.exists() && !request.overwrite {
-        return Err(CommandError::conflict(
-            "destinationPath already exists; set overwrite=true to replace it",
-        ));
-    }
-    if let Some(parent) = destination.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent).map_err(CommandError::from_service_error)?;
-        }
-    }
-    let temp_path = destination.with_extension(format!(
-        "{}{}.tmp",
-        destination
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .map(|ext| format!("{ext}."))
-            .unwrap_or_default(),
-        uuid::Uuid::new_v4()
-    ));
-    let mut output = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temp_path)
-        .map_err(CommandError::from_service_error)?;
-    let bytes = std::io::copy(&mut reader, &mut output).map_err(|err| {
-        let _ = std::fs::remove_file(&temp_path);
-        CommandError::from_service_error(err)
-    })?;
-    output.flush().map_err(|err| {
-        let _ = std::fs::remove_file(&temp_path);
-        CommandError::from_service_error(err)
-    })?;
-    output.sync_all().map_err(|err| {
-        let _ = std::fs::remove_file(&temp_path);
-        CommandError::from_service_error(err)
-    })?;
-    drop(output);
-
-    if request.overwrite && destination.exists() {
-        std::fs::remove_file(&destination).map_err(|err| {
-            let _ = std::fs::remove_file(&temp_path);
-            CommandError::from_service_error(err)
-        })?;
-    }
-    std::fs::rename(&temp_path, &destination).map_err(|err| {
-        let _ = std::fs::remove_file(&temp_path);
-        CommandError::from_service_error(err)
-    })?;
-    Ok(format!("Extracted {} bytes", bytes))
 }
 
 fn media_data_url_for_file(
@@ -691,17 +620,11 @@ mod tests {
                     .expect("note.txt should be enumerated");
                 let destination = tmp.path().join("exports").join("note-copy.txt");
 
-                let result = extract_file_for_case(
-                    conn,
-                    &transport::commands::ExtractFileRequest {
-                        file_id,
-                        destination_path: destination.display().to_string(),
-                        overwrite: false,
-                    },
-                )
-                .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
+                let written =
+                    file_service::extract_file_to_destination(conn, &file_id, &destination, false)
+                        .map_err(|err| persistence_sqlite::DbError::System(err.to_string()))?;
 
-                assert!(result.contains("10 bytes"));
+                assert_eq!(written, 10);
                 assert_eq!(std::fs::read(&destination).unwrap(), b"extract me");
 
                 Ok(())

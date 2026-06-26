@@ -8,6 +8,7 @@ export interface FileTreeNode {
   deleted: boolean;
   hidden: boolean;
   system: boolean;
+  encrypted?: boolean;
   nodeType?: string;
   status?: string;
   expanded?: boolean;
@@ -33,6 +34,7 @@ export interface FileEntryRow {
   deleted: boolean;
   hidden: boolean;
   system: boolean;
+  encrypted?: boolean;
   createdAt?: string;
   modifiedAt?: string;
   accessedAt?: string;

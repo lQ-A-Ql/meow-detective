@@ -2,6 +2,7 @@
 //! and graph-level deduplication of extracted entity nodes.
 
 use super::EntityResolutionError;
+use persistence_sqlite::repositories::entity_repo;
 use rusqlite::Connection;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
@@ -76,20 +77,8 @@ impl EntityMergeEngine {
         case_id: &str,
     ) -> Result<Vec<ResolvedEntity>, EntityResolutionError> {
         // ── Query all entity nodes for this case ──
-        let mut stmt = conn.prepare(
-            "SELECT id, label, tags FROM graph_nodes
-                 WHERE case_id = ?1 AND node_type = 'entity'",
-        )?;
-
-        let rows: Vec<(String, String, String)> = stmt
-            .query_map(rusqlite::params![case_id], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                ))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
+        let rows =
+            entity_repo::query_entity_nodes(conn, case_id).map_err(EntityResolutionError::Db)?;
 
         if rows.is_empty() {
             return Ok(Vec::new());
@@ -176,43 +165,31 @@ impl EntityMergeEngine {
 
             for merged_id in entity.source_entities.iter().skip(1) {
                 // Re-point outgoing edges (source) from merged → kept
-                conn.execute(
-                    "UPDATE graph_edges SET source_id = ?1
-                     WHERE source_id = ?2 AND case_id = ?3",
-                    rusqlite::params![kept_id, merged_id, case_id],
-                )?;
+                entity_repo::repoint_outgoing_edges(conn, kept_id, merged_id, case_id)
+                    .map_err(EntityResolutionError::Db)?;
 
                 // Re-point incoming edges (target) from merged → kept
-                conn.execute(
-                    "UPDATE graph_edges SET target_id = ?1
-                     WHERE target_id = ?2 AND case_id = ?3",
-                    rusqlite::params![kept_id, merged_id, case_id],
-                )?;
+                entity_repo::repoint_incoming_edges(conn, kept_id, merged_id, case_id)
+                    .map_err(EntityResolutionError::Db)?;
 
                 // Log the merge for auditability (must happen before
                 // deletion so the merged entity ID is still valid).
                 let merge_id = format!("merge:{}:{}", case_id, uuid::Uuid::new_v4().as_simple());
-                conn.execute(
-                    "INSERT INTO entity_merge_log
-                     (merge_id, case_id, kept_entity_id, merged_entity_id,
-                      confidence, merged_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                    rusqlite::params![
-                        merge_id,
-                        case_id,
-                        kept_id,
-                        merged_id,
-                        entity.confidence,
-                        now,
-                    ],
-                )?;
+                entity_repo::insert_merge_log(
+                    conn,
+                    &merge_id,
+                    case_id,
+                    kept_id,
+                    merged_id,
+                    entity.confidence,
+                    &now,
+                )
+                .map_err(EntityResolutionError::Db)?;
 
                 // Delete the merged node (CASCADE cleans up any edges
                 // that still reference it)
-                conn.execute(
-                    "DELETE FROM graph_nodes WHERE id = ?1 AND case_id = ?2",
-                    rusqlite::params![merged_id, case_id],
-                )?;
+                entity_repo::delete_graph_node(conn, merged_id, case_id)
+                    .map_err(EntityResolutionError::Db)?;
 
                 merged_count += 1;
             }
@@ -221,21 +198,17 @@ impl EntityMergeEngine {
         // Upsert resolved entities into the denormalized lookup table
         for entity in &resolved {
             let attrs_json = serde_json::to_string(&entity.attributes).unwrap_or_default();
-            conn.execute(
-                "INSERT OR REPLACE INTO resolved_entities
-                 (id, case_id, entity_type, canonical_value, source_count,
-                  confidence, attributes_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                rusqlite::params![
-                    entity.id,
-                    case_id,
-                    entity.entity_type,
-                    entity.canonical_value,
-                    entity.source_entities.len() as i64,
-                    entity.confidence,
-                    attrs_json,
-                ],
-            )?;
+            entity_repo::upsert_resolved_entity(
+                conn,
+                &entity.id,
+                case_id,
+                &entity.entity_type,
+                &entity.canonical_value,
+                entity.source_entities.len() as u64,
+                entity.confidence,
+                &attrs_json,
+            )
+            .map_err(EntityResolutionError::Db)?;
         }
 
         Ok(merged_count)

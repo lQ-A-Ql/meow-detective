@@ -20,7 +20,7 @@
 
 use chrono::Utc;
 use domain::{EdgeType, GraphEdge, GraphNode, NodeType};
-use persistence_sqlite::repositories::graph_repo::GraphRepo;
+use persistence_sqlite::repositories::{entity_repo, graph_repo::GraphRepo};
 use regex::Regex;
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
@@ -97,14 +97,8 @@ pub fn index_entities(conn: &Connection, case_id: &str) -> Result<u64, EntityExt
         let new_ids_json = serde_json::to_string(artifact_ids).unwrap_or_default();
 
         // Check whether a row already exists for this (hash, entity_type).
-        let existing_json: Option<String> = conn
-            .query_row(
-                "SELECT source_artifact_ids FROM entity_index
-                 WHERE value_hash = ?1 AND entity_type = ?2",
-                rusqlite::params![hash, entity_type],
-                |row| row.get(0),
-            )
-            .ok();
+        let existing_json = entity_repo::find_entity_index_row(conn, &hash, entity_type)
+            .map_err(EntityExtractionError::Db)?;
 
         if let Some(existing_json) = existing_json {
             // Merge artifact IDs — preserve existing, add only new ones.
@@ -119,22 +113,27 @@ pub fn index_entities(conn: &Connection, case_id: &str) -> Result<u64, EntityExt
             }
             if changed {
                 let merged = serde_json::to_string(&existing_ids).unwrap_or_default();
-                conn.execute(
-                    "UPDATE entity_index
-                     SET source_artifact_ids = ?1, updated_at = ?2
-                     WHERE value_hash = ?3 AND entity_type = ?4",
-                    rusqlite::params![merged, now, hash, entity_type],
-                )?;
+                entity_repo::update_entity_index_source_ids(
+                    conn,
+                    &hash,
+                    entity_type,
+                    &merged,
+                    &now,
+                )
+                .map_err(EntityExtractionError::Db)?;
                 count += 1;
             }
         } else {
-            conn.execute(
-                "INSERT INTO entity_index
-                 (value_hash, entity_type, value_normalized, source_artifact_ids, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
-                rusqlite::params![hash, entity_type, normalized, new_ids_json, now],
+            entity_repo::upsert_entity_index(
+                conn,
+                &hash,
+                entity_type,
+                &normalized,
+                &new_ids_json,
+                &now,
+                &now,
             )
-            ?;
+            .map_err(EntityExtractionError::Db)?;
             count += 1;
         }
     }
@@ -151,15 +150,7 @@ pub fn lookup_entity(conn: &Connection, value: &str, entity_type: &str) -> Optio
     let normalized = normalize_entity_value(value);
     let hash = hash_entity_value(&normalized);
 
-    let ids_json: String = conn
-        .query_row(
-            "SELECT source_artifact_ids FROM entity_index
-             WHERE value_hash = ?1 AND entity_type = ?2",
-            rusqlite::params![hash, entity_type],
-            |row| row.get(0),
-        )
-        .ok()?;
-
+    let ids_json = entity_repo::find_entity_index_row(conn, &hash, entity_type).ok()??;
     serde_json::from_str(&ids_json).ok()
 }
 
@@ -210,19 +201,8 @@ fn regex_scan_artifacts(
     let email_re = &*EMAIL_RE;
     let sid_re = &*SID_RE;
 
-    let mut stmt =
-        conn.prepare("SELECT id, title, summary, attrs FROM artifacts WHERE case_id = ?1")?;
-
-    let rows: Vec<(String, String, String, String)> = stmt
-        .query_map(rusqlite::params![case_id], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-            ))
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
+    let rows = entity_repo::get_artifact_rows_for_case(conn, case_id)
+        .map_err(EntityExtractionError::Db)?;
 
     let mut entity_map: HashMap<(String, String), Vec<String>> = HashMap::new();
 
@@ -277,11 +257,7 @@ fn get_artifact_ids_for_case(
     conn: &Connection,
     case_id: &str,
 ) -> Result<Vec<String>, EntityExtractionError> {
-    let mut stmt = conn.prepare("SELECT id FROM artifacts WHERE case_id = ?1")?;
-    let ids: Vec<String> = stmt
-        .query_map(rusqlite::params![case_id], |row| row.get::<_, String>(0))?
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(ids)
+    entity_repo::get_artifact_ids_for_case(conn, case_id).map_err(EntityExtractionError::Db)
 }
 
 /// Build an entity_map from the persistent index, filtering to only
@@ -294,12 +270,12 @@ fn build_entity_map_from_index(
     let artifact_set: std::collections::HashSet<&str> =
         artifact_ids.iter().map(|s| s.as_str()).collect();
 
-    let mut stmt = conn
-        .prepare("SELECT value_normalized, entity_type, source_artifact_ids FROM entity_index")?;
-
-    let rows: Vec<(String, String, String)> = stmt
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
-        .collect::<Result<Vec<_>, _>>()?;
+    let entries =
+        entity_repo::list_all_entity_index_rows(conn).map_err(EntityExtractionError::Db)?;
+    let rows: Vec<(String, String, String)> = entries
+        .into_iter()
+        .map(|e| (e.value_normalized, e.entity_type, e.source_artifact_ids))
+        .collect();
 
     let mut entity_map: HashMap<(String, String), Vec<String>> = HashMap::new();
 
@@ -331,31 +307,23 @@ fn persist_entity_graph(
     let now = Utc::now().to_rfc3339();
 
     // ── Remove previous extraction artefacts for this case ──
-    conn.execute(
-        "DELETE FROM graph_nodes WHERE case_id = ?1 AND node_type = 'entity'",
-        rusqlite::params![case_id],
-    )?;
+    entity_repo::delete_entity_nodes(conn, case_id).map_err(EntityExtractionError::Db)?;
 
     // ── Ensure artifact graph nodes exist ──
     {
-        let existing: std::collections::HashSet<String> = {
-            let mut stmt = conn.prepare(
-                "SELECT id FROM graph_nodes WHERE case_id = ?1 AND node_type = 'artifact'",
-            )?;
-            let ids: Vec<String> = stmt
-                .query_map(rusqlite::params![case_id], |row| row.get::<_, String>(0))?
-                .collect::<Result<Vec<_>, _>>()?;
-            ids.into_iter().collect()
-        };
+        let existing: std::collections::HashSet<String> =
+            entity_repo::get_existing_artifact_node_ids(conn, case_id)
+                .map_err(EntityExtractionError::Db)?
+                .into_iter()
+                .collect();
 
         // Fetch title + summary for missing artifact nodes.
-        let mut stmt =
-            conn.prepare("SELECT id, title, summary FROM artifacts WHERE case_id = ?1")?;
-        let rows: Vec<(String, String, String)> = stmt
-            .query_map(rusqlite::params![case_id], |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
+        let artifact_rows = entity_repo::get_artifact_rows_for_case(conn, case_id)
+            .map_err(EntityExtractionError::Db)?;
+        let rows: Vec<(String, String, String)> = artifact_rows
+            .into_iter()
+            .map(|(id, title, summary, _attrs)| (id, title, summary))
+            .collect();
 
         let missing: Vec<GraphNode> = rows
             .iter()

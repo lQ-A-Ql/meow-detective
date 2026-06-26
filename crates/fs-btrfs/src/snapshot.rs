@@ -10,7 +10,7 @@
 //! - Computing a file-level diff between two snapshots
 
 use crate::{BtrfsReader, BtrfsSubvol, FS_TREE_OBJECTID, FT_DIR, ROOT_BACKREF_KEY, ROOT_ITEM_KEY};
-use evidence_core::filesystem::{fs_node, FsNode};
+use evidence_core::filesystem::{fs_node, invalid_fs_data, FsNode};
 use std::collections::HashMap;
 use std::io;
 
@@ -52,16 +52,16 @@ impl BtrfsReader {
         let mut root_names: HashMap<u64, String> = HashMap::new();
 
         if header.level == 0 {
-            Self::scan_snapshot_leaf(&root_data, header.nritems, &mut root_items, &mut root_names);
+            Self::scan_snapshot_leaf(&root_data, header.nritems, &mut root_items, &mut root_names)?;
         } else {
-            let internal = Self::parse_internal_items(&root_data, header.nritems);
+            let internal = Self::parse_internal_items(&root_data, header.nritems)?;
             for ii in &internal {
                 let child = self.read_logical_block(ii.blockptr)?;
                 let ch = Self::parse_header(&child)?;
                 if ch.level == 0 {
-                    Self::scan_snapshot_leaf(&child, ch.nritems, &mut root_items, &mut root_names);
+                    Self::scan_snapshot_leaf(&child, ch.nritems, &mut root_items, &mut root_names)?;
                 } else {
-                    let si = Self::parse_internal_items(&child, ch.nritems);
+                    let si = Self::parse_internal_items(&child, ch.nritems)?;
                     for s in &si {
                         let leaf = self.read_logical_block(s.blockptr)?;
                         let lh = Self::parse_header(&leaf)?;
@@ -71,7 +71,7 @@ impl BtrfsReader {
                                 lh.nritems,
                                 &mut root_items,
                                 &mut root_names,
-                            );
+                            )?;
                         }
                     }
                 }
@@ -129,20 +129,32 @@ impl BtrfsReader {
         nritems: u32,
         root_items: &mut HashMap<u64, (u64, u64)>,
         root_names: &mut HashMap<u64, String>,
-    ) {
-        let items = Self::parse_leaf_items(data, nritems);
+    ) -> io::Result<()> {
+        let items = Self::parse_leaf_items(data, nritems)?;
         for item in &items {
             if item.key.ty == ROOT_ITEM_KEY {
                 let rd = Self::get_item_data(data, item);
                 if rd.len() >= 184 {
-                    let bytenr = u64::from_le_bytes(rd[176..184].try_into().unwrap());
-                    let root_dirid = u64::from_le_bytes(rd[168..176].try_into().unwrap());
+                    let bytenr = u64::from_le_bytes(
+                        rd[176..184]
+                            .try_into()
+                            .map_err(|_| invalid_fs_data("disk parse error"))?,
+                    );
+                    let root_dirid = u64::from_le_bytes(
+                        rd[168..176]
+                            .try_into()
+                            .map_err(|_| invalid_fs_data("disk parse error"))?,
+                    );
                     root_items.insert(item.key.objectid, (bytenr, root_dirid));
                 }
             } else if item.key.ty == ROOT_BACKREF_KEY {
                 let rb = Self::get_item_data(data, item);
                 if rb.len() >= 18 {
-                    let name_len = u16::from_le_bytes(rb[16..18].try_into().unwrap()) as usize;
+                    let name_len = u16::from_le_bytes(
+                        rb[16..18]
+                            .try_into()
+                            .map_err(|_| invalid_fs_data("disk parse error"))?,
+                    ) as usize;
                     if rb.len() >= 18 + name_len {
                         let name = String::from_utf8_lossy(&rb[18..18 + name_len]).to_string();
                         root_names.insert(item.key.objectid, name);
@@ -150,6 +162,7 @@ impl BtrfsReader {
                 }
             }
         }
+        Ok(())
     }
 
     /// Walk the root tree to find the ROOT_ITEM for a specific root id.
@@ -162,7 +175,7 @@ impl BtrfsReader {
         if header.level == 0 {
             return Self::find_in_leaf(root_data, header.nritems, root_id);
         }
-        let internal = Self::parse_internal_items(root_data, header.nritems);
+        let internal = Self::parse_internal_items(root_data, header.nritems)?;
         for ii in &internal {
             let child = self.read_logical_block(ii.blockptr)?;
             let ch = Self::parse_header(&child)?;
@@ -171,7 +184,7 @@ impl BtrfsReader {
                     return Ok(result);
                 }
             } else {
-                let si = Self::parse_internal_items(&child, ch.nritems);
+                let si = Self::parse_internal_items(&child, ch.nritems)?;
                 for s in &si {
                     let leaf = self.read_logical_block(s.blockptr)?;
                     let lh = Self::parse_header(&leaf)?;
@@ -190,13 +203,21 @@ impl BtrfsReader {
     }
 
     fn find_in_leaf(data: &[u8], nritems: u32, root_id: u64) -> io::Result<(u64, u64)> {
-        let items = Self::parse_leaf_items(data, nritems);
+        let items = Self::parse_leaf_items(data, nritems)?;
         for item in &items {
             if item.key.objectid == root_id && item.key.ty == ROOT_ITEM_KEY {
                 let rd = Self::get_item_data(data, item);
                 if rd.len() >= 184 {
-                    let bytenr = u64::from_le_bytes(rd[176..184].try_into().unwrap());
-                    let root_dirid = u64::from_le_bytes(rd[168..176].try_into().unwrap());
+                    let bytenr = u64::from_le_bytes(
+                        rd[176..184]
+                            .try_into()
+                            .map_err(|_| invalid_fs_data("disk parse error"))?,
+                    );
+                    let root_dirid = u64::from_le_bytes(
+                        rd[168..176]
+                            .try_into()
+                            .map_err(|_| invalid_fs_data("disk parse error"))?,
+                    );
                     return Ok((bytenr, root_dirid));
                 }
             }

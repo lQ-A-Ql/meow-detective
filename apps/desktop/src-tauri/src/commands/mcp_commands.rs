@@ -181,22 +181,24 @@ fn summarize_transport(config: &McpServerConfig) -> serde_json::Value {
     }
 }
 
-fn summarize_test_transport(config: &McpServerConfig) -> serde_json::Value {
-    match &config.transport {
-        McpTransport::Sse { url } => {
-            let parsed = reqwest::Url::parse(url).ok();
+fn test_transport_summary_from_request(request: &McpTestConnectionRequestDto) -> serde_json::Value {
+    match request.transport_type.as_str() {
+        "sse" => {
+            let url_str = request.url.as_deref().unwrap_or("");
+            let parsed = reqwest::Url::parse(url_str).ok();
             serde_json::json!({
                 "transport": "sse",
-                "scheme": parsed.as_ref().map(|value| value.scheme()).unwrap_or("unknown"),
-                "host": parsed.as_ref().and_then(|value| value.host_str()).unwrap_or("unknown"),
-                "networkPolicy": network_policy_to_dto(&config.permissions.network_policy),
+                "scheme": parsed.as_ref().map(|v| v.scheme()).unwrap_or("unknown"),
+                "host": parsed.as_ref().and_then(|v| v.host_str()).unwrap_or("unknown"),
+                "networkPolicy": &request.permissions.network_policy,
             })
         }
-        McpTransport::Stdio { command, .. } => serde_json::json!({
+        "stdio" => serde_json::json!({
             "transport": "stdio",
-            "command": command,
-            "allowedCommands": config.permissions.allowed_commands,
+            "command": request.command.as_deref().unwrap_or(""),
+            "allowedCommands": request.permissions.allowed_commands,
         }),
+        _ => serde_json::json!({ "transport": "invalid" }),
     }
 }
 
@@ -399,111 +401,48 @@ pub async fn test_mcp_connection(
     state: State<'_, AppState>,
     request: McpTestConnectionRequestDto,
 ) -> Result<McpTestConnectionResultDto, CommandError> {
-    let transport = match request.transport_type.as_str() {
-        "sse" => McpTransport::Sse {
-            url: request.url.unwrap_or_default(),
-        },
-        "stdio" => McpTransport::Stdio {
-            command: request.command.unwrap_or_default(),
-            args: request.args.unwrap_or_default(),
-        },
-        _ => {
-            let result = McpTestConnectionResultDto {
-                success: false,
-                error: Some("Invalid transport type".to_string()),
-                capabilities: None,
-            };
-            write_audit_log(
-                state.inner(),
-                AuditAction::McpTest,
-                Some("test"),
-                serde_json::json!({
-                    "success": false,
-                    "error": result.error,
-                    "summary": {
-                        "transport": "invalid",
-                    }
-                }),
-            );
-            return Ok(result);
-        }
-    };
-
-    let mut config = McpServerConfig {
-        id: "test".to_string(),
-        name: "Test".to_string(),
-        transport,
-        enabled: true,
-        auto_connect: false,
-        permissions: permissions_from_dto(&request.permissions),
-    };
-    if let Err(err) = validate_mcp_server_config(&mut config) {
-        let result = McpTestConnectionResultDto {
-            success: false,
-            error: Some(err.to_string()),
-            capabilities: None,
-        };
-        write_audit_log(
-            state.inner(),
-            AuditAction::McpTest,
-            Some("test"),
-            serde_json::json!({
-                "success": false,
-                "error": result.error,
-                "summary": summarize_test_transport(&config),
+    let permissions = permissions_from_dto(&request.permissions);
+    let summary = test_transport_summary_from_request(&request);
+    let caps = mcp_client::probe::probe_mcp_connection(
+        &request.transport_type,
+        request.url.clone(),
+        request.command.clone(),
+        request.args.clone(),
+        permissions,
+    )
+    .await;
+    let (success, error, capabilities) = match &caps {
+        Ok(c) => (
+            true,
+            None,
+            Some(McpCapabilitiesDto {
+                resources: c.resources,
+                tools: c.tools,
+                prompts: c.prompts,
             }),
-        );
-        return Ok(result);
-    }
-
-    let mut client = mcp_client::McpClient::new(config);
-    match client.connect().await {
-        Ok(capabilities) => {
-            let _ = client.disconnect().await;
-            let result = McpTestConnectionResultDto {
-                success: true,
-                error: None,
-                capabilities: Some(McpCapabilitiesDto {
-                    resources: capabilities.resources,
-                    tools: capabilities.tools,
-                    prompts: capabilities.prompts,
-                }),
-            };
-            write_audit_log(
-                state.inner(),
-                AuditAction::McpTest,
-                Some("test"),
-                serde_json::json!({
-                    "success": true,
-                    "summary": summarize_test_transport(client.config()),
-                    "capabilities": {
-                        "resources": capabilities.resources,
-                        "tools": capabilities.tools,
-                        "prompts": capabilities.prompts,
-                    }
-                }),
-            );
-            Ok(result)
-        }
-        Err(err) => {
-            let result = McpTestConnectionResultDto {
-                success: false,
-                error: Some(err.to_string()),
-                capabilities: None,
-            };
-            write_audit_log(
-                state.inner(),
-                AuditAction::McpTest,
-                Some("test"),
-                serde_json::json!({
-                    "success": false,
-                    "error": result.error,
-                    "summary": summarize_test_transport(client.config()),
-                }),
-            );
-            Ok(result)
-        }
-    }
+        ),
+        Err(e) => (false, Some(e.to_string()), None),
+    };
+    write_audit_log(
+        state.inner(),
+        AuditAction::McpTest,
+        Some("test"),
+        serde_json::json!({
+            "success": success,
+            "error": error,
+            "summary": summary,
+            "capabilities": capabilities.as_ref().map(|c| serde_json::json!({
+                "resources": c.resources,
+                "tools": c.tools,
+                "prompts": c.prompts,
+            })),
+        }),
+    );
+    Ok(McpTestConnectionResultDto {
+        success,
+        error,
+        capabilities,
+    })
 }
 
 #[tauri::command]

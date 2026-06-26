@@ -6,6 +6,7 @@
 //! to one another (CommunicatesWith, Owns, LoggedInto, Executed, etc.).
 
 use super::EntityResolutionError;
+use persistence_sqlite::repositories::entity_repo;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -100,38 +101,27 @@ impl EntityRelationshipEngine {
         })?;
 
         let mut count = 0u64;
-        {
-            let mut stmt = tx.prepare(
-                "INSERT OR REPLACE INTO entity_relationships
-                 (id, case_id, source_entity_id, target_entity_id,
-                  relationship_type, confidence, evidence_edge_ids, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            )?;
-
-            for r in relationships {
-                if r.case_id != case_id {
-                    continue;
-                }
-                let edge_json = serde_json::to_string(&r.evidence_edge_ids).unwrap_or_default();
-                stmt.execute(rusqlite::params![
-                    r.id,
-                    r.case_id,
-                    r.source_entity_id,
-                    r.target_entity_id,
-                    r.relationship_type.as_db_str(),
-                    r.confidence,
-                    edge_json,
-                    r.created_at,
-                ])
-                .map_err(|e| {
-                    EntityResolutionError::Other(format!(
-                        "failed to insert relationship {}: {e}",
-                        r.id
-                    ))
-                })?;
-                count += 1;
+        for r in relationships {
+            if r.case_id != case_id {
+                continue;
             }
-        } // stmt goes out of scope here
+            let edge_json = serde_json::to_string(&r.evidence_edge_ids).unwrap_or_default();
+            entity_repo::upsert_entity_relationship(
+                &tx,
+                &r.id,
+                &r.case_id,
+                &r.source_entity_id,
+                &r.target_entity_id,
+                r.relationship_type.as_db_str(),
+                r.confidence,
+                &edge_json,
+                &r.created_at,
+            )
+            .map_err(|e| {
+                EntityResolutionError::Other(format!("failed to insert relationship {}: {e}", r.id))
+            })?;
+            count += 1;
+        }
 
         tx.commit().map_err(|e| {
             EntityResolutionError::Other(format!("failed to commit relationships: {e}"))

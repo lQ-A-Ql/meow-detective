@@ -18,7 +18,6 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::active_case::ActiveCase;
-use infrastructure::config::validate_case_root_is_safe;
 
 #[derive(Debug, Error)]
 pub enum CaseServiceError {
@@ -199,7 +198,6 @@ pub fn delete_case_in(root: &Path, allowed_root: &Path) -> Result<()> {
 
     infrastructure::config::validate_case_root_is_within(root, allowed_root)
         .map_err(CaseServiceError::InvalidCaseDir)?;
-
 
     let case_json_path = root.join("case.json");
     if !case_json_path.exists() {

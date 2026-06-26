@@ -1,13 +1,14 @@
 use super::db_paths::analysis_staging_db_path;
+use super::error::StagingError;
 use super::rows_per_sec;
 use super::schema_bootstrap::{get_worker_meta, open_analysis_staging, set_worker_meta};
-use rusqlite::{params, Connection};
+use persistence_sqlite::repositories::staging_repo::StagingRepo;
+use rusqlite::Connection;
 use std::path::Path;
 use std::time::Instant;
 
 pub(super) const INDEX_DOC_MERGE_PAGE_SIZE: i64 = 50;
 
-/// Merge analysis worker staging DBs into the main DB and search index.
 pub fn merge_analysis_staging_to_main(
     main_conn: &Connection,
     case_root: &Path,
@@ -16,7 +17,7 @@ pub fn merge_analysis_staging_to_main(
     case_id: &str,
     index_dir: &Path,
     progress_cb: Option<&dyn Fn(usize, usize)>,
-) -> Result<AnalysisMergeStats, String> {
+) -> Result<AnalysisMergeStats, StagingError> {
     let mut stats = AnalysisMergeStats::default();
     let total = worker_ids.len().max(1);
 
@@ -29,10 +30,14 @@ pub fn merge_analysis_staging_to_main(
             continue;
         }
 
-        let worker_conn = open_analysis_staging(case_root, data_source_id, *worker_id)
-            .map_err(|e| format!("Open analysis staging DB {}: {}", worker_id, e))?;
+        let worker_conn =
+            open_analysis_staging(case_root, data_source_id, *worker_id).map_err(|e| {
+                StagingError::Other(format!("Open analysis staging DB {}: {}", worker_id, e))
+            })?;
         if get_worker_meta(&worker_conn, "merged")
-            .map_err(|e| format!("Read analysis merge state {}: {}", worker_id, e))?
+            .map_err(|e| {
+                StagingError::Other(format!("Read analysis merge state {}: {}", worker_id, e))
+            })?
             .as_deref()
             == Some("true")
         {
@@ -44,8 +49,12 @@ pub fn merge_analysis_staging_to_main(
         drop(worker_conn);
 
         let worker_merge_started = Instant::now();
+        let worker_conn =
+            open_analysis_staging(case_root, data_source_id, *worker_id).map_err(|e| {
+                StagingError::Other(format!("Open analysis staging DB {}: {}", worker_id, e))
+            })?;
         let worker_stats =
-            merge_one_analysis_worker(main_conn, &db_path, *worker_id, case_id, data_source_id)?;
+            merge_one_analysis_worker(main_conn, &worker_conn, case_id, data_source_id)?;
         tracing::info!(
             "Analysis DB merge profile: worker={} artifacts={} timeline={} elapsedMs={} rowsPerSec={}",
             worker_id,
@@ -61,7 +70,7 @@ pub fn merge_analysis_staging_to_main(
         stats.timeline_count += worker_stats.timeline_count;
 
         let index_merge_started = Instant::now();
-        let indexed = merge_one_analysis_index_docs(&db_path, index_dir, *worker_id)?;
+        let indexed = merge_one_analysis_index_docs(&worker_conn, index_dir)?;
         tracing::info!(
             "Analysis index merge profile: worker={} indexed={} elapsedMs={} rowsPerSec={}",
             worker_id,
@@ -71,10 +80,12 @@ pub fn merge_analysis_staging_to_main(
         );
         stats.indexed_count += indexed;
 
-        let worker_conn = open_analysis_staging(case_root, data_source_id, *worker_id)
-            .map_err(|e| format!("Reopen analysis staging DB {}: {}", worker_id, e))?;
-        set_worker_meta(&worker_conn, "merged", "true")
-            .map_err(|e| format!("Mark analysis staging DB {} merged: {}", worker_id, e))?;
+        set_worker_meta(&worker_conn, "merged", "true").map_err(|e| {
+            StagingError::Other(format!(
+                "Mark analysis staging DB {} merged: {}",
+                worker_id, e
+            ))
+        })?;
 
         if let Some(cb) = progress_cb {
             cb(position + 1, total);
@@ -93,118 +104,66 @@ pub struct AnalysisMergeStats {
 
 fn merge_one_analysis_worker(
     main_conn: &Connection,
-    db_path: &Path,
-    worker_id: usize,
+    staging_conn: &Connection,
     case_id: &str,
     data_source_id: &str,
-) -> Result<AnalysisMergeStats, String> {
-    let db_path_str = db_path.to_string_lossy().replace('\'', "''");
-    let attach_sql = format!("ATTACH DATABASE '{}' AS analysis_stage", db_path_str);
-    let result = (|| {
-        main_conn
-            .execute_batch(&attach_sql)
-            .map_err(|e| format!("Attach analysis DB {}: {}", worker_id, e))?;
-        main_conn
-            .execute_batch("BEGIN IMMEDIATE")
-            .map_err(|e| format!("Begin analysis merge transaction {}: {}", worker_id, e))?;
+) -> Result<AnalysisMergeStats, StagingError> {
+    let (artifact_count, timeline_count) = StagingRepo::merge_analysis_staging_to_main(
+        main_conn,
+        staging_conn,
+        case_id,
+        data_source_id,
+    )
+    .map_err(|e| StagingError::Other(format!("Merge analysis staging: {}", e)))?;
 
-        let artifact_count = main_conn
-            .execute(
-                "INSERT INTO main.artifacts
-                 (id, case_id, data_source_id, artifact_type, source_object_id, extractor_id, extractor_version, confidence, source_attribution, title, summary, attrs, created_at)
-                  SELECT id, ?1, ?2, artifact_type, file_id, extractor_id, extractor_version, confidence, source_attribution, display_name, summary, data_json, created_at
-                  FROM analysis_stage.artifact_rows",
-                params![case_id, data_source_id],
-            )
-            .map_err(|e| format!("Merge analysis artifacts {}: {}", worker_id, e))?;
-
-        let timeline_count = main_conn
-            .execute(
-                "INSERT INTO main.timeline_events
-                 (id, case_id, source_object_id, event_type, ts, title, description, parser_id, parser_version, confidence, source_attribution, attrs)
-                  SELECT id, ?1, file_id, event_type, timestamp, title, description, parser_id, parser_version, confidence, source_attribution, data_json
-                  FROM analysis_stage.timeline_rows",
-                params![case_id],
-            )
-            .map_err(|e| format!("Merge analysis timeline {}: {}", worker_id, e))?;
-
-        main_conn
-            .execute_batch("COMMIT")
-            .map_err(|e| format!("Commit analysis merge transaction {}: {}", worker_id, e))?;
-        main_conn
-            .execute_batch("DETACH DATABASE analysis_stage")
-            .map_err(|e| format!("Detach analysis DB {}: {}", worker_id, e))?;
-
-        Ok(AnalysisMergeStats {
-            artifact_count: artifact_count as u64,
-            timeline_count: timeline_count as u64,
-            indexed_count: 0,
-        })
-    })();
-
-    if result.is_err() {
-        let _ = main_conn.execute_batch("ROLLBACK");
-        let _ = main_conn.execute_batch("DETACH DATABASE analysis_stage");
-    }
-
-    result
+    Ok(AnalysisMergeStats {
+        artifact_count,
+        timeline_count,
+        indexed_count: 0,
+    })
 }
 
 pub(super) fn merge_one_analysis_index_docs(
-    db_path: &Path,
+    staging_conn: &Connection,
     index_dir: &Path,
-    worker_id: usize,
-) -> Result<u64, String> {
-    let conn = Connection::open(db_path)
-        .map_err(|e| format!("Open analysis index docs {}: {}", worker_id, e))?;
+) -> Result<u64, StagingError> {
     let index = match search::SearchIndex::open(index_dir) {
         Ok(index) => index,
-        Err(_) => search::SearchIndex::create(index_dir).map_err(|e| e.to_string())?,
+        Err(_) => search::SearchIndex::create(index_dir)
+            .map_err(|e| StagingError::Other(e.to_string()))?,
     };
     let mut indexed_total = 0u64;
     let mut offset = 0i64;
     loop {
-        let mut stmt = conn
-            .prepare(
-                "SELECT file_id, path, text, language
-                 FROM index_docs
-                 WHERE text <> ''
-                 ORDER BY file_id
-                 LIMIT ?1 OFFSET ?2",
-            )
-            .map_err(|e| format!("Prepare index docs {}: {}", worker_id, e))?;
-        let rows = stmt
-            .query_map(params![INDEX_DOC_MERGE_PAGE_SIZE, offset], |row| {
-                let file_id: String = row.get(0)?;
-                let path: String = row.get(1)?;
-                let text: String = row.get(2)?;
-                let language: String = row.get(3)?;
-                Ok((file_id, path, text, language))
-            })
-            .map_err(|e| format!("Read index docs {}: {}", worker_id, e))?;
+        let rows = StagingRepo::read_analysis_index_docs_page(
+            staging_conn,
+            INDEX_DOC_MERGE_PAGE_SIZE,
+            offset,
+        )
+        .map_err(|e| StagingError::Other(e.to_string()))?;
 
-        let mut texts = Vec::new();
-        let mut paths = Vec::new();
-        for row in rows {
-            let (file_id, path, text, language) =
-                row.map_err(|e| format!("Map index docs {}: {}", worker_id, e))?;
+        if rows.is_empty() {
+            break;
+        }
+
+        let mut texts = Vec::with_capacity(rows.len());
+        let mut paths = Vec::with_capacity(rows.len());
+        for (file_id, path, text, language) in &rows {
             texts.push(search::ExtractedText {
                 file_id: file_id.clone(),
-                content: text,
-                encoding: language,
+                content: text.clone(),
+                encoding: language.clone(),
                 extractable: true,
                 byte_count: 0,
             });
-            paths.push((file_id, path));
-        }
-        if texts.is_empty() {
-            break;
+            paths.push((file_id.clone(), path.clone()));
         }
 
         indexed_total += index
             .index_documents(&texts, &paths)
-            .map_err(|e| e.to_string())?;
-        if texts.len() < INDEX_DOC_MERGE_PAGE_SIZE as usize {
+            .map_err(|e| StagingError::Other(e.to_string()))?;
+
+        if rows.len() < INDEX_DOC_MERGE_PAGE_SIZE as usize {
             break;
         }
         offset += INDEX_DOC_MERGE_PAGE_SIZE;

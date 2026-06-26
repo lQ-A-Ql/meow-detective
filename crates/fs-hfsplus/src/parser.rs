@@ -146,10 +146,10 @@ pub(crate) struct CatalogRecord {
     pub(crate) create_date: u32,
     pub(crate) content_mod_date: u32,
     pub(crate) access_date: u32,
-    /// BSD file mode (parsed but not yet used for symlink/hard-link detection).
+    // Parsed for format completeness; available for future use.
     #[allow(dead_code)]
     pub(crate) file_mode: u16,
-    /// BSD `special` field (inode number for hard links; parsed for completeness).
+    // Parsed for format completeness; available for future use.
     #[allow(dead_code)]
     pub(crate) special: u32,
 }
@@ -243,14 +243,14 @@ pub(crate) fn parse_catalog_record(
 /// Minimal B-tree node descriptor.
 #[derive(Debug)]
 pub(crate) struct BtNodeDesc {
-    /// Forward link (parsed for format completeness).
+    // Parsed for format completeness; available for future use.
     #[allow(dead_code)]
     pub(crate) f_link: u32,
-    /// Backward link (parsed for format completeness).
+    // Parsed for format completeness; available for future use.
     #[allow(dead_code)]
     pub(crate) b_link: u32,
     pub(crate) kind: u8,
-    /// Node height (parsed for format completeness).
+    // Parsed for format completeness; available for future use.
     #[allow(dead_code)]
     pub(crate) height: u8,
     pub(crate) num_records: u16,

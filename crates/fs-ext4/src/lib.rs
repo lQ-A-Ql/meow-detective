@@ -55,13 +55,33 @@ impl Ext4Reader {
             )));
         }
 
-        let s_log_block_size = u32::from_le_bytes(sb[0x18..0x1C].try_into().unwrap());
+        let s_log_block_size = u32::from_le_bytes(
+            sb[0x18..0x1C]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        );
         let block_size = 1u64 << (10 + s_log_block_size);
 
-        let s_blocks_count_lo = u32::from_le_bytes(sb[0x04..0x08].try_into().unwrap());
-        let s_blocks_per_group = u32::from_le_bytes(sb[0x20..0x24].try_into().unwrap());
-        let s_inodes_per_group = u32::from_le_bytes(sb[0x28..0x2C].try_into().unwrap());
-        let s_first_data_block = u32::from_le_bytes(sb[0x14..0x18].try_into().unwrap());
+        let s_blocks_count_lo = u32::from_le_bytes(
+            sb[0x04..0x08]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        );
+        let s_blocks_per_group = u32::from_le_bytes(
+            sb[0x20..0x24]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        );
+        let s_inodes_per_group = u32::from_le_bytes(
+            sb[0x28..0x2C]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        );
+        let s_first_data_block = u32::from_le_bytes(
+            sb[0x14..0x18]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        );
         let s_inode_size = u16::from_le_bytes([sb[0x58], sb[0x59]]);
 
         if s_blocks_per_group == 0 || s_inodes_per_group == 0 {
@@ -122,7 +142,11 @@ impl Ext4Reader {
             )));
         }
         let desc = self.read_bg_descriptor(bg)?;
-        let inode_table_block = u32::from_le_bytes(desc[0x08..0x0C].try_into().unwrap()) as u64;
+        let inode_table_block = u32::from_le_bytes(
+            desc[0x08..0x0C]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        ) as u64;
         let inode_byte_offset = local_index as u64 * self.inode_size as u64;
         let block_abs_offset = self.block_to_offset(inode_table_block) + inode_byte_offset;
         let mut inode = vec![0u8; self.inode_size as usize];
@@ -136,13 +160,21 @@ impl Ext4Reader {
         u16::from_le_bytes([inode[0], inode[1]])
     }
 
-    pub fn inode_size(inode: &[u8]) -> u64 {
-        let lo = u32::from_le_bytes(inode[0x04..0x08].try_into().unwrap()) as u64;
+    pub fn inode_size(inode: &[u8]) -> io::Result<u64> {
+        let lo = u32::from_le_bytes(
+            inode[0x04..0x08]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        ) as u64;
         if inode.len() > 0x6C + 4 {
-            let hi = u32::from_le_bytes(inode[0x6C..0x70].try_into().unwrap()) as u64;
-            lo | (hi << 32)
+            let hi = u32::from_le_bytes(
+                inode[0x6C..0x70]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("disk parse error"))?,
+            ) as u64;
+            Ok(lo | (hi << 32))
         } else {
-            lo
+            Ok(lo)
         }
     }
 
@@ -172,7 +204,7 @@ impl Ext4Reader {
             if off + 12 > node_data.len() {
                 break;
             }
-            let extent = Ext4Extent::parse(&node_data[off..off + 12]);
+            let extent = Ext4Extent::parse(&node_data[off..off + 12])?;
             let start_block = ((extent.ee_start_hi as u64) << 32) | (extent.ee_start_lo as u64);
             for blk in 0..extent.ee_len as u64 {
                 let block_data = self.read_block(start_block + blk)?;
@@ -195,8 +227,11 @@ impl Ext4Reader {
             if off + 12 > node_data.len() {
                 break;
             }
-            let leaf_lo =
-                u32::from_le_bytes(node_data[off + 4..off + 8].try_into().unwrap()) as u64;
+            let leaf_lo = u32::from_le_bytes(
+                node_data[off + 4..off + 8]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("disk parse error"))?,
+            ) as u64;
             let leaf_hi = u16::from_le_bytes([node_data[off + 8], node_data[off + 9]]) as u64;
             let child_block = leaf_lo | (leaf_hi << 32);
             let child_data = self.read_block(child_block)?;
@@ -211,11 +246,15 @@ impl Ext4Reader {
         Ok(truncate_data_to_declared_size(data, file_size))
     }
 
-    fn parse_directory_entries(&self, data: &[u8]) -> Vec<(String, u32, u8)> {
+    fn parse_directory_entries(&self, data: &[u8]) -> io::Result<Vec<(String, u32, u8)>> {
         let mut entries = Vec::new();
         let mut off = 0usize;
         while off + 8 <= data.len() {
-            let inode = u32::from_le_bytes(data[off..off + 4].try_into().unwrap());
+            let inode = u32::from_le_bytes(
+                data[off..off + 4]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("disk parse error"))?,
+            );
             let rec_len = u16::from_le_bytes([data[off + 4], data[off + 5]]) as usize;
             let name_len = data[off + 6] as usize;
             let file_type = data[off + 7];
@@ -234,7 +273,7 @@ impl Ext4Reader {
             }
             off += rec_len;
         }
-        entries
+        Ok(entries)
     }
 
     fn read_directory_entries(&self, inode_num: u32) -> io::Result<Vec<(String, u32, u8)>> {
@@ -247,9 +286,9 @@ impl Ext4Reader {
             )));
         }
         let i_block = Self::inode_i_block(&inode);
-        let size = Self::inode_size(&inode);
+        let size = Self::inode_size(&inode)?;
         let data = self.read_extent_data(i_block, size)?;
-        Ok(self.parse_directory_entries(&data))
+        self.parse_directory_entries(&data)
     }
 
     fn resolve_path(&self, path: &str) -> io::Result<Option<(u32, bool)>> {
@@ -280,7 +319,7 @@ impl Ext4Reader {
     }
 
     fn read_symlink_target(&self, inode: &[u8]) -> io::Result<String> {
-        let size = Self::inode_size(inode) as usize;
+        let size = Self::inode_size(inode)? as usize;
         if size < I_BLOCK_SIZE {
             let i_block = Self::inode_i_block(inode);
             let bytes = &i_block[..size.min(i_block.len())];
@@ -339,7 +378,7 @@ impl FileSystemReader for Ext4Reader {
             return Ok(Box::new(io::Cursor::new(target.into_bytes())));
         }
         let i_block = Self::inode_i_block(&inode);
-        let size = Self::inode_size(&inode);
+        let size = Self::inode_size(&inode)?;
         let data = self.read_extent_data(i_block, size)?;
         Ok(Box::new(io::Cursor::new(data)))
     }
@@ -384,13 +423,21 @@ struct Ext4Extent {
 }
 
 impl Ext4Extent {
-    fn parse(data: &[u8]) -> Self {
-        Self {
-            ee_block: u32::from_le_bytes(data[0..4].try_into().unwrap()),
+    fn parse(data: &[u8]) -> io::Result<Self> {
+        Ok(Self {
+            ee_block: u32::from_le_bytes(
+                data[0..4]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("disk parse error"))?,
+            ),
             ee_len: u16::from_le_bytes([data[4], data[5]]),
             ee_start_hi: u16::from_le_bytes([data[6], data[7]]),
-            ee_start_lo: u32::from_le_bytes(data[8..12].try_into().unwrap()),
-        }
+            ee_start_lo: u32::from_le_bytes(
+                data[8..12]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("disk parse error"))?,
+            ),
+        })
     }
 }
 
@@ -411,11 +458,20 @@ mod tests {
     struct FakeReader {
         data: Vec<u8>,
         pos: u64,
+        info: ReaderInfo,
     }
 
     impl FakeReader {
         fn new(data: Vec<u8>) -> Self {
-            Self { data, pos: 0 }
+            Self {
+                data,
+                pos: 0,
+                info: ReaderInfo {
+                    path: std::path::PathBuf::from("fake-ext4"),
+                    size: 0,
+                    kind: "fake-ext4".to_string(),
+                },
+            }
         }
     }
 
@@ -443,7 +499,7 @@ mod tests {
 
     impl EvidenceReader for FakeReader {
         fn info(&self) -> &ReaderInfo {
-            unimplemented!()
+            &self.info
         }
     }
 
@@ -648,11 +704,11 @@ mod tests {
 
         let root_inode = ext4.read_inode(2).unwrap();
         assert_eq!(Ext4Reader::inode_mode(&root_inode) & 0x4000, 0x4000);
-        assert_eq!(Ext4Reader::inode_size(&root_inode), 4096);
+        assert_eq!(Ext4Reader::inode_size(&root_inode).unwrap(), 4096);
 
         let file_inode = ext4.read_inode(3).unwrap();
         assert_eq!(Ext4Reader::inode_mode(&file_inode) & 0x8000, 0x8000);
-        assert_eq!(Ext4Reader::inode_size(&file_inode), 11);
+        assert_eq!(Ext4Reader::inode_size(&file_inode).unwrap(), 11);
     }
 
     // -----------------------------------------------------------------------
@@ -869,7 +925,7 @@ mod tests {
             0xAB, 0xCD, // ee_start_hi = 0xCDAB
             0x78, 0x56, 0x34, 0x12, // ee_start_lo = 0x12345678
         ];
-        let extent = Ext4Extent::parse(&extent_bytes);
+        let extent = Ext4Extent::parse(&extent_bytes).unwrap();
         assert_eq!(extent.ee_len, 1);
         assert_eq!(extent.ee_start_hi, 0xCDAB);
         assert_eq!(extent.ee_start_lo, 0x12345678);

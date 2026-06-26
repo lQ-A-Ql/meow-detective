@@ -521,6 +521,7 @@ mod tests {
             deleted: false,
             hidden: false,
             system: false,
+            encrypted: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,

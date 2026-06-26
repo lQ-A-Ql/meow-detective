@@ -200,6 +200,20 @@ mod tests {
     struct FakeReader {
         data: Vec<u8>,
         pos: u64,
+        info: evidence_core::ReaderInfo,
+    }
+    impl FakeReader {
+        fn new(data: Vec<u8>) -> Self {
+            Self {
+                data,
+                pos: 0,
+                info: evidence_core::ReaderInfo {
+                    path: std::path::PathBuf::from("fake-ntfs-ads"),
+                    size: 0,
+                    kind: "fake-ntfs-ads".to_string(),
+                },
+            }
+        }
     }
     impl Read for FakeReader {
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
@@ -223,7 +237,7 @@ mod tests {
     }
     impl EvidenceReader for FakeReader {
         fn info(&self) -> &evidence_core::ReaderInfo {
-            unimplemented!()
+            &self.info
         }
     }
 
@@ -347,7 +361,7 @@ mod tests {
     #[test]
     fn list_ads_returns_named_stream() {
         let img = build_ads_fixture();
-        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
         let ntfs = NtfsReader::open(reader, 0).expect("open NTFS");
 
         let streams = list_alternate_streams(&ntfs, "test.txt").expect("list_ads");
@@ -359,7 +373,7 @@ mod tests {
     #[test]
     fn read_ads_returns_stream_content() {
         let img = build_ads_fixture();
-        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
         let ntfs = NtfsReader::open(reader, 0).expect("open NTFS");
 
         let content =
@@ -372,7 +386,7 @@ mod tests {
     #[test]
     fn read_ads_nonexistent_returns_empty() {
         let img = build_ads_fixture();
-        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
         let ntfs = NtfsReader::open(reader, 0).expect("open NTFS");
 
         let content = read_alternate_stream(&ntfs, "test.txt", "NoSuchStream").expect("read_ads");
@@ -430,7 +444,7 @@ mod tests {
             rec6[0x80 + i] = b;
         });
 
-        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data, pos: 0 });
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(data));
         let ntfs = NtfsReader::open(reader, 0).expect("open NTFS");
 
         let streams = list_alternate_streams(&ntfs, "plain.txt").expect("list_ads");
@@ -496,7 +510,7 @@ mod tests {
 
         write_named_data_attr(rec6, next, "stream-two", b"BBBB");
 
-        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data, pos: 0 });
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(data));
         let ntfs = NtfsReader::open(reader, 0).expect("open NTFS");
 
         let streams = list_alternate_streams(&ntfs, "multi.txt").expect("list_ads");
@@ -509,7 +523,7 @@ mod tests {
     #[test]
     fn read_ads_case_insensitive_name() {
         let img = build_ads_fixture();
-        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
         let ntfs = NtfsReader::open(reader, 0).expect("open NTFS");
 
         // NTFS stream names are case-insensitive
@@ -521,7 +535,7 @@ mod tests {
     #[test]
     fn list_ads_nonexistent_path_returns_empty() {
         let img = build_ads_fixture();
-        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
         let ntfs = NtfsReader::open(reader, 0).expect("open NTFS");
 
         let streams = list_alternate_streams(&ntfs, "nonexistent.txt").expect("list_ads");

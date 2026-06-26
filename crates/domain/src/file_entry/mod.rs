@@ -24,6 +24,10 @@ pub struct FileEntry {
     pub deleted: bool,
     pub hidden: bool,
     pub system: bool,
+    /// True when the file is encrypted via NTFS Encrypting File System (EFS).
+    /// Encrypted files cannot be read without the decryption key.
+    #[serde(default)]
+    pub encrypted: bool,
     pub created_at: Option<DateTime<Utc>>,
     pub modified_at: Option<DateTime<Utc>>,
     pub accessed_at: Option<DateTime<Utc>>,
@@ -111,6 +115,7 @@ mod tests {
             deleted: false,
             hidden: false,
             system: false,
+            encrypted: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,

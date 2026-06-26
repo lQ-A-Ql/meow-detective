@@ -8,6 +8,7 @@ mod analysis_merge;
 mod cleanup;
 mod db_paths;
 mod enum_merge;
+mod error;
 mod manifest;
 mod schema_bootstrap;
 
@@ -17,6 +18,7 @@ pub use db_paths::{analysis_staging_db_path, enum_staging_db_path, staging_db_pa
 pub use enum_merge::{
     merge_all_staging_to_main, merge_all_staging_to_main_with_stats, StagingMergeStats,
 };
+pub use error::StagingError;
 pub use manifest::{ImportPhase, PartitionEntry, PartitionStatus, StagingManifest};
 pub use schema_bootstrap::{
     analysis_staging_counts, get_staging_meta, get_worker_meta, open_analysis_staging,
@@ -29,9 +31,11 @@ use analysis_merge::{merge_one_analysis_index_docs, INDEX_DOC_MERGE_PAGE_SIZE};
 #[cfg(test)]
 use enum_merge::find_partition_placeholder_root_id_by_index;
 #[cfg(test)]
+use persistence_sqlite::repositories::staging_repo::table_has_column;
+#[cfg(test)]
 use rusqlite::{params, Connection};
 #[cfg(test)]
-use schema_bootstrap::{table_has_column, STAGING_CACHE_SIZE_KIB};
+use schema_bootstrap::STAGING_CACHE_SIZE_KIB;
 
 fn rows_per_sec(rows: u64, duration: std::time::Duration) -> u64 {
     let secs = duration.as_secs_f64();
@@ -489,7 +493,7 @@ mod tests {
         let err =
             merge_all_staging_to_main_with_stats(&main_conn, tmp.path(), ds_id, &manifest, None)
                 .unwrap_err();
-        assert!(err.contains("Merge partition 0"));
+        assert!(err.to_string().contains("Merge partition 0"));
 
         let count: i64 = main_conn
             .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
@@ -826,14 +830,7 @@ mod tests {
                 )
                 .unwrap();
         }
-        drop(worker);
-
-        let indexed = merge_one_analysis_index_docs(
-            &analysis_staging_db_path(tmp.path(), "ds-analysis", 0),
-            &tmp.path().join("idx"),
-            0,
-        )
-        .unwrap();
+        let indexed = merge_one_analysis_index_docs(&worker, &tmp.path().join("idx")).unwrap();
 
         assert_eq!(indexed, (INDEX_DOC_MERGE_PAGE_SIZE + 5) as u64);
     }

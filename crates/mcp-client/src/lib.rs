@@ -5,6 +5,7 @@
 
 pub mod client;
 pub mod error;
+pub mod probe;
 pub mod transport;
 pub mod types;
 

@@ -1,8 +1,16 @@
-//! Bounded EVTX boot/shutdown candidate extraction.
+//! Bounded EVTX candidate extraction.
 //!
-//! This is intentionally not a general event log platform. It extracts a small
-//! set of System.evtx EventLog/User32 records that can be shown as candidates
-//! with provenance.
+//! This is intentionally not a general event log platform. It extracts a
+//! targeted set of events from supported EVTX channels that can be shown as
+//! candidates with provenance.
+//!
+//! Supported channels and event IDs:
+//! - System.evtx: 6005, 6006, 6008, 1074 (boot/shutdown)
+//! - Security.evtx, Application.evtx: channel-aware extraction
+//! - PowerShell/Operational: 4104 (script block logging)
+//! - Sysmon/Operational: 1 (process creation)
+//! - TerminalServices-LocalSessionManager/Operational: 21 (RDP session)
+//! - Windows Defender/Operational: 1116 (threat detection)
 
 use super::capability::supports_evtx_boot_shutdown_path;
 use super::error::EvtxBootError;
@@ -24,6 +32,10 @@ pub enum EvtxBootEventKind {
     EventLogStopped,
     UnexpectedShutdown,
     PlannedShutdown,
+    PowerShellScriptBlock,
+    SysmonProcessCreate,
+    RdpSessionConnect,
+    DefenderThreatDetected,
 }
 
 impl EvtxBootEventKind {
@@ -33,6 +45,10 @@ impl EvtxBootEventKind {
             Self::EventLogStopped => "eventLogStopped",
             Self::UnexpectedShutdown => "unexpectedShutdown",
             Self::PlannedShutdown => "plannedShutdown",
+            Self::PowerShellScriptBlock => "powershellScriptBlock",
+            Self::SysmonProcessCreate => "sysmonProcessCreate",
+            Self::RdpSessionConnect => "rdpSessionConnect",
+            Self::DefenderThreatDetected => "defenderThreatDetected",
         }
     }
 
@@ -50,6 +66,18 @@ impl EvtxBootEventKind {
             Self::PlannedShutdown => {
                 "User32 1074 candidate; indicates a planned shutdown or restart event."
             }
+            Self::PowerShellScriptBlock => {
+                "PowerShell 4104 candidate; script block logging content."
+            }
+            Self::SysmonProcessCreate => {
+                "Sysmon 1 candidate; process creation event."
+            }
+            Self::RdpSessionConnect => {
+                "TerminalServices 21 candidate; remote desktop session logon."
+            }
+            Self::DefenderThreatDetected => {
+                "Defender 1116 candidate; malware or threat detected."
+            }
         }
     }
 }
@@ -64,6 +92,9 @@ pub struct EvtxBootEvent {
     pub kind: EvtxBootEventKind,
     pub source_path: String,
     pub note: String,
+    /// Extracted event data fields specific to this event kind (key: value pairs).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -260,24 +291,17 @@ fn boot_event_from_json(
     fallback_timestamp: Option<String>,
     source_path: &str,
 ) -> Option<EvtxBootEvent> {
-    let system = record
-        .get("Event")?
-        .get("System")
-        .or_else(|| record.get("System"))?;
+    let wrapper = record.get("Event").unwrap_or(record);
+    let system = wrapper.get("System")?;
     let event_id = event_id(system.get("EventID")?)?;
-    let kind = match event_id {
-        6005 => EvtxBootEventKind::EventLogStarted,
-        6006 => EvtxBootEventKind::EventLogStopped,
-        6008 => EvtxBootEventKind::UnexpectedShutdown,
-        1074 => EvtxBootEventKind::PlannedShutdown,
-        _ => return None,
-    };
+    let provider = provider_name(system);
+    let kind = classify_event(event_id, provider.as_deref())?;
     let timestamp = event_timestamp(system)
         .or(fallback_timestamp)
         .unwrap_or_else(|| "unknown".to_string());
     let record_id = event_record_id(system).or(fallback_record_id);
-    let provider = provider_name(system);
     let note = kind.note().to_string();
+    let details = extract_event_details(wrapper, &kind);
 
     Some(EvtxBootEvent {
         timestamp,
@@ -287,6 +311,110 @@ fn boot_event_from_json(
         kind,
         source_path: source_path.to_string(),
         note,
+        details,
+    })
+}
+
+/// Classify an event by ID with optional provider filtering for ambiguous IDs.
+fn classify_event(event_id: u32, provider: Option<&str>) -> Option<EvtxBootEventKind> {
+    match event_id {
+        6005 => Some(EvtxBootEventKind::EventLogStarted),
+        6006 => Some(EvtxBootEventKind::EventLogStopped),
+        6008 => Some(EvtxBootEventKind::UnexpectedShutdown),
+        1074 => Some(EvtxBootEventKind::PlannedShutdown),
+        4104 if provider_matches(provider, "microsoft-windows-powershell") => {
+            Some(EvtxBootEventKind::PowerShellScriptBlock)
+        }
+        1 if provider_matches(provider, "microsoft-windows-sysmon") => {
+            Some(EvtxBootEventKind::SysmonProcessCreate)
+        }
+        21 if provider_matches(
+            provider,
+            "microsoft-windows-terminalservices-localsessionmanager",
+        ) =>
+        {
+            Some(EvtxBootEventKind::RdpSessionConnect)
+        }
+        1116 if provider_matches(provider, "microsoft-windows-windows defender")
+            || provider_matches(provider, "Microsoft-Windows-Windows Defender") =>
+        {
+            Some(EvtxBootEventKind::DefenderThreatDetected)
+        }
+        _ => None,
+    }
+}
+
+fn provider_matches(provider: Option<&str>, target: &str) -> bool {
+    match provider {
+        Some(p) => p.eq_ignore_ascii_case(target),
+        None => false,
+    }
+}
+
+/// Extract named Data elements from `<EventData>` for specific event kinds.
+///
+/// The evtx library serializes `<EventData><Data Name="X">value</Data></EventData>`
+/// into JSON as an object keyed by `@Name` and `#text`.
+fn extract_event_details(wrapper: &Value, kind: &EvtxBootEventKind) -> Option<String> {
+    let event_data = wrapper.get("EventData")?;
+    let data_items = match event_data.get("Data") {
+        Some(Value::Array(items)) => items,
+        Some(single) => std::slice::from_ref(single),
+        None => return None,
+    };
+
+    let fields: &[&str] = match kind {
+        EvtxBootEventKind::PowerShellScriptBlock => &["ScriptBlockText"],
+        EvtxBootEventKind::SysmonProcessCreate => &["Image", "CommandLine"],
+        EvtxBootEventKind::RdpSessionConnect => &["User", "Address"],
+        EvtxBootEventKind::DefenderThreatDetected => &["Threat", "Severity", "Category"],
+        _ => return None,
+    };
+
+    let parts: Vec<String> = fields
+        .iter()
+        .filter_map(|field_name| {
+            let value = find_data_value(data_items, field_name)?;
+            Some(format!("{field_name}: {value}"))
+        })
+        .collect();
+
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("; "))
+    }
+}
+
+/// Look up a named Data element value from the event data array.
+///
+/// Handles multiple JSON shapes the evtx library may produce:
+/// - `{"@Name": "…", "#text": "value"}`
+/// - `{"Name": "…", "#text": "value"}`
+/// - Just a string value (rare)
+fn find_data_value(data_items: &[Value], name: &str) -> Option<String> {
+    data_items.iter().find_map(|item| {
+        let obj = item.as_object()?;
+        let matches_name = obj
+            .get("@Name")
+            .or_else(|| obj.get("Name"))
+            .and_then(Value::as_str)
+            .is_some_and(|n| n.eq_ignore_ascii_case(name));
+        if !matches_name {
+            return None;
+        }
+        obj.get("#text")
+            .or_else(|| obj.get("Text"))
+            .or_else(|| obj.get("Value"))
+            .and_then(|v| {
+                if v.is_string() {
+                    v.as_str().map(str::to_string)
+                } else if v.is_number() {
+                    Some(v.to_string())
+                } else {
+                    None
+                }
+            })
     })
 }
 
@@ -515,7 +643,7 @@ mod tests {
     fn unsupported_path_returns_error() {
         let result = extract_boot_shutdown_events(
             b"ElfFile\0",
-            "Windows/System32/winevt/Logs/Security.evtx",
+            "Windows/System32/winevt/Logs/UnknownChannel.evtx",
         );
         assert!(matches!(result, Err(EvtxBootError::UnsupportedPath { .. })));
     }
@@ -536,5 +664,192 @@ mod tests {
         std::fs::write(&out, serde_json::to_string_pretty(&extraction).unwrap())
             .expect("write expected.json");
         println!("written expected.json to {}", out.display());
+    }
+
+    #[test]
+    fn extract_powershell_4104_script_block_from_json() {
+        let extraction = extract_boot_shutdown_events_from_json_records(
+            &[json!({
+                "Event": {
+                    "System": {
+                        "Provider": { "@Name": "Microsoft-Windows-PowerShell" },
+                        "EventID": 4104,
+                        "EventRecordID": 100,
+                        "TimeCreated": { "@SystemTime": "2026-03-15T10:30:00Z" }
+                    },
+                    "EventData": {
+                        "Data": [
+                            { "@Name": "ScriptBlockText", "#text": "Get-Process | Where-Object {$_.CPU -gt 10}" },
+                            { "@Name": "Path", "#text": "C:\\Scripts\\audit.ps1" }
+                        ]
+                    }
+                }
+            })],
+            "Microsoft-Windows-PowerShell%4Operational.evtx",
+        )
+        .expect("json extraction should succeed");
+
+        assert!(extraction.warnings.is_empty());
+        assert_eq!(extraction.events.len(), 1);
+        let event = &extraction.events[0];
+        assert_eq!(event.event_id, 4104);
+        assert_eq!(event.kind, EvtxBootEventKind::PowerShellScriptBlock);
+        assert!(event
+            .details
+            .as_ref()
+            .is_some_and(|d| d.contains("ScriptBlockText")));
+        assert!(event
+            .details
+            .as_ref()
+            .is_some_and(|d| d.contains("Get-Process")));
+    }
+
+    #[test]
+    fn extract_sysmon_1_process_create_from_json() {
+        let extraction = extract_boot_shutdown_events_from_json_records(
+            &[json!({
+                "Event": {
+                    "System": {
+                        "Provider": { "@Name": "Microsoft-Windows-Sysmon" },
+                        "EventID": 1,
+                        "EventRecordID": 200,
+                        "TimeCreated": { "@SystemTime": "2026-03-15T11:00:00Z" }
+                    },
+                    "EventData": {
+                        "Data": [
+                            { "@Name": "Image", "#text": "C:\\Windows\\System32\\cmd.exe" },
+                            { "@Name": "CommandLine", "#text": "cmd.exe /c whoami" },
+                            { "@Name": "User", "#text": "DOMAIN\\User" }
+                        ]
+                    }
+                }
+            })],
+            "Microsoft-Windows-Sysmon%4Operational.evtx",
+        )
+        .expect("json extraction should succeed");
+
+        assert!(extraction.warnings.is_empty());
+        assert_eq!(extraction.events.len(), 1);
+        let event = &extraction.events[0];
+        assert_eq!(event.event_id, 1);
+        assert_eq!(event.kind, EvtxBootEventKind::SysmonProcessCreate);
+        let details = event.details.as_ref().expect("should have details");
+        assert!(details.contains("Image: C:\\Windows\\System32\\cmd.exe"));
+        assert!(details.contains("CommandLine: cmd.exe /c whoami"));
+    }
+
+    #[test]
+    fn extract_rdp_21_session_connect_from_json() {
+        let extraction = extract_boot_shutdown_events_from_json_records(
+            &[json!({
+                "Event": {
+                    "System": {
+                        "Provider": { "@Name": "Microsoft-Windows-TerminalServices-LocalSessionManager" },
+                        "EventID": 21,
+                        "EventRecordID": 300,
+                        "TimeCreated": { "@SystemTime": "2026-03-15T12:00:00Z" }
+                    },
+                    "EventData": {
+                        "Data": [
+                            { "@Name": "User", "#text": "DOMAIN\\jsmith" },
+                            { "@Name": "Address", "#text": "192.168.1.100" }
+                        ]
+                    }
+                }
+            })],
+            "Microsoft-Windows-TerminalServices-LocalSessionManager%4Operational.evtx",
+        )
+        .expect("json extraction should succeed");
+
+        assert!(extraction.warnings.is_empty());
+        assert_eq!(extraction.events.len(), 1);
+        let event = &extraction.events[0];
+        assert_eq!(event.event_id, 21);
+        assert_eq!(event.kind, EvtxBootEventKind::RdpSessionConnect);
+        let details = event.details.as_ref().expect("should have details");
+        assert!(details.contains("User: DOMAIN\\jsmith"));
+        assert!(details.contains("Address: 192.168.1.100"));
+    }
+
+    #[test]
+    fn extract_defender_1116_threat_from_json() {
+        let extraction = extract_boot_shutdown_events_from_json_records(
+            &[json!({
+                "Event": {
+                    "System": {
+                        "Provider": { "@Name": "Microsoft-Windows-Windows Defender" },
+                        "EventID": 1116,
+                        "EventRecordID": 400,
+                        "TimeCreated": { "@SystemTime": "2026-03-15T13:00:00Z" }
+                    },
+                    "EventData": {
+                        "Data": [
+                            { "@Name": "Threat", "#text": "Trojan:Win32/Malware" },
+                            { "@Name": "Severity", "#text": "Severe" },
+                            { "@Name": "Category", "#text": "Trojan" }
+                        ]
+                    }
+                }
+            })],
+            "Microsoft-Windows-Windows Defender%4Operational.evtx",
+        )
+        .expect("json extraction should succeed");
+
+        assert!(extraction.warnings.is_empty());
+        assert_eq!(extraction.events.len(), 1);
+        let event = &extraction.events[0];
+        assert_eq!(event.event_id, 1116);
+        assert_eq!(event.kind, EvtxBootEventKind::DefenderThreatDetected);
+        let details = event.details.as_ref().expect("should have details");
+        assert!(details.contains("Threat: Trojan:Win32/Malware"));
+        assert!(details.contains("Severity: Severe"));
+    }
+
+    #[test]
+    fn find_data_value_handles_various_json_shapes() {
+        // Object with @Name and #text
+        let items = vec![json!({"@Name": "Image", "#text": "cmd.exe"})];
+        assert_eq!(
+            find_data_value(&items, "Image"),
+            Some("cmd.exe".to_string())
+        );
+
+        // Object with Name (no @ prefix)
+        let items = vec![json!({"Name": "CommandLine", "#text": "/c dir"})];
+        assert_eq!(
+            find_data_value(&items, "CommandLine"),
+            Some("/c dir".to_string())
+        );
+
+        // Case-insensitive name match
+        let items = vec![json!({"@Name": "ThReAt", "#text": "malware"})];
+        assert_eq!(
+            find_data_value(&items, "Threat"),
+            Some("malware".to_string())
+        );
+
+        // Missing field returns None
+        let items = vec![json!({"@Name": "Other", "#text": "val"})];
+        assert_eq!(find_data_value(&items, "Image"), None);
+    }
+
+    #[test]
+    fn boot_events_dont_have_details() {
+        let extraction = extract_boot_shutdown_events_from_json_records(
+            &[json!({
+                "Event": {
+                    "System": {
+                        "Provider": { "@Name": "EventLog" },
+                        "EventID": 6005,
+                        "TimeCreated": { "@SystemTime": "2026-01-01T00:00:00Z" }
+                    }
+                }
+            })],
+            "Windows/System32/winevt/Logs/System.evtx",
+        )
+        .expect("json extraction should succeed");
+
+        assert_eq!(extraction.events.len(), 1);
+        assert_eq!(extraction.events[0].details, None);
     }
 }

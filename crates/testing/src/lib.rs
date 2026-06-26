@@ -5,3 +5,4 @@
 
 pub mod builders;
 pub mod fixtures;
+pub mod real_image_tests;

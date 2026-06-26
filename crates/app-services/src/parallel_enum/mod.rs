@@ -4,12 +4,14 @@
 //! staging DB. After all partitions complete, the caller merges staging
 //! DBs into the main case.db.
 
+pub mod error;
 mod ntfs_mft;
 mod partition_worker;
 mod progress;
 mod scheduler;
 mod staging_meta;
 
+pub use error::ParallelEnumError;
 pub use partition_worker::{PartitionResult, PartitionWork};
 pub use scheduler::enumerate_partitions_parallel;
 pub use staging_meta::{default_worker_count, resolve_worker_count};
@@ -86,6 +88,7 @@ mod tests {
                     size: 1,
                     hidden: false,
                     system: false,
+                    encrypted: false,
                     created_at: None,
                     modified_at: None,
                     accessed_at: None,
@@ -128,12 +131,18 @@ mod tests {
 
     struct FakeEvidenceReader {
         cursor: Cursor<Vec<u8>>,
+        info: evidence_core::ReaderInfo,
     }
 
     impl FakeEvidenceReader {
         fn new(data: Vec<u8>) -> Self {
             Self {
                 cursor: Cursor::new(data),
+                info: evidence_core::ReaderInfo {
+                    path: std::path::PathBuf::from("fake-parallel-enum"),
+                    size: 0,
+                    kind: "fake-parallel-enum".to_string(),
+                },
             }
         }
     }
@@ -152,7 +161,7 @@ mod tests {
 
     impl EvidenceReader for FakeEvidenceReader {
         fn info(&self) -> &evidence_core::ReaderInfo {
-            unimplemented!()
+            &self.info
         }
     }
 
@@ -574,7 +583,7 @@ mod tests {
         .unwrap();
 
         let err = validate_mft_staging_shape(&conn, ds_id, 3).unwrap_err();
-        assert!(err.contains("suspicious flat NTFS tree"));
+        assert!(err.to_string().contains("suspicious flat NTFS tree"));
     }
 
     #[test]

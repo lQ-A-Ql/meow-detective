@@ -80,6 +80,20 @@ fn build_fixture() -> Vec<u8> {
 struct FakeReader {
     data: Vec<u8>,
     pos: u64,
+    info: evidence_core::ReaderInfo,
+}
+impl FakeReader {
+    fn new(data: Vec<u8>) -> Self {
+        Self {
+            data,
+            pos: 0,
+            info: evidence_core::ReaderInfo {
+                path: std::path::PathBuf::from("fake-ntfs"),
+                size: 0,
+                kind: "fake-ntfs".to_string(),
+            },
+        }
+    }
 }
 impl io::Read for FakeReader {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
@@ -103,14 +117,14 @@ impl io::Seek for FakeReader {
 }
 impl EvidenceReader for FakeReader {
     fn info(&self) -> &evidence_core::ReaderInfo {
-        unimplemented!()
+        &self.info
     }
 }
 
 #[test]
 fn list_root_children_returns_3_nodes() {
     let img = build_fixture();
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
     let ntfs = NtfsReader::open(reader, 0).expect("open NTFS");
     let nodes = ntfs.list_root_children().expect("list_root_children");
     assert_eq!(
@@ -137,7 +151,7 @@ fn list_root_children_returns_3_nodes() {
 #[test]
 fn list_children_subdir_returns_empty() {
     let img = build_fixture();
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
     let ntfs = NtfsReader::open(reader, 0).unwrap();
     let result = ntfs.list_subdir_children("subdir").unwrap();
     assert!(result.is_empty());
@@ -222,7 +236,7 @@ fn build_nested_fixture() -> Vec<u8> {
 #[test]
 fn resolve_nested_path_lists_children() {
     let img = build_nested_fixture();
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
     let ntfs = NtfsReader::open(reader, 0).unwrap();
 
     let nodes = ntfs.list_subdir_children("\\Windows\\System32").unwrap();
@@ -233,7 +247,7 @@ fn resolve_nested_path_lists_children() {
 #[test]
 fn wrong_path_returns_empty() {
     let img = build_nested_fixture();
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
     let ntfs = NtfsReader::open(reader, 0).unwrap();
 
     // "System32" exists but only under "Windows" — bare name should fail
@@ -285,7 +299,7 @@ fn later_file_name_parent_match_resolves_directory() {
     off += 4;
     rec6[attr_off + 4..attr_off + 8].copy_from_slice(&((off - attr_off) as u32).to_le_bytes());
 
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(data));
     let ntfs = NtfsReader::open(reader, 0).unwrap();
     let nodes = ntfs
         .list_subdir_children("System Volume Information")
@@ -467,7 +481,7 @@ fn build_index_alloc_fixture() -> Vec<u8> {
 #[test]
 fn list_root_with_index_alloc_returns_all_entries() {
     let img = build_index_alloc_fixture();
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
     let ntfs = NtfsReader::open(reader, 0).unwrap();
     let nodes = ntfs.list_root_children().unwrap();
 
@@ -484,7 +498,7 @@ fn list_root_with_index_alloc_returns_all_entries() {
 #[test]
 fn index_alloc_entries_are_directories() {
     let img = build_index_alloc_fixture();
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
     let ntfs = NtfsReader::open(reader, 0).unwrap();
     let nodes = ntfs.list_root_children().unwrap();
 
@@ -560,7 +574,7 @@ fn data_run_parse_zero_length_runs_skipped() {
 
     data[indx_offset..indx_offset + indx_rec.len()].copy_from_slice(&indx_rec);
 
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(data));
     let ntfs = NtfsReader::open(reader, 0).unwrap();
     let nodes = ntfs.list_root_children().unwrap();
     assert_eq!(nodes.len(), 1);
@@ -729,7 +743,7 @@ fn make_boot(boot: &mut [u8]) {
 #[test]
 fn read_resident_file_data() {
     let img = build_resident_data_fixture();
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
     let ntfs = NtfsReader::open(reader, 0).unwrap();
     let mut file = ntfs.open_file("README.TXT").unwrap();
     let mut buf = String::new();
@@ -740,7 +754,7 @@ fn read_resident_file_data() {
 #[test]
 fn read_nonresident_file_data() {
     let img = build_nonresident_data_fixture();
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
     let ntfs = NtfsReader::open(reader, 0).unwrap();
     let mut file = ntfs.open_file("large.bin").unwrap();
     let mut buf = Vec::new();
@@ -829,7 +843,7 @@ fn open_file_nested_path() {
     rec8[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
     write_resident_data(rec8, 0x68, b"MZ\x90\x00");
 
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(data));
     let ntfs = NtfsReader::open(reader, 0).unwrap();
     let mut file = ntfs.open_file("\\Windows\\System32\\ntdll.dll").unwrap();
     let mut buf = Vec::new();
@@ -840,7 +854,7 @@ fn open_file_nested_path() {
 #[test]
 fn open_nonexistent_file_errors() {
     let img = build_resident_data_fixture();
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
     let ntfs = NtfsReader::open(reader, 0).unwrap();
     let result = ntfs.open_file("NONEXIST.TXT");
     assert!(result.is_err());
@@ -919,7 +933,7 @@ fn list_children_returns_files_and_dirs() {
     rec7[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
     write_resident_data(rec7, 0x68, b"file content here");
 
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(data));
     let ntfs = NtfsReader::open(reader, 0).unwrap();
 
     // List root: should have 2 children (SubDir + notes.txt)
@@ -952,10 +966,7 @@ fn list_children_returns_files_and_dirs() {
 fn malformed_record_no_panic() {
     // Feed random/garbage bytes to list_root_children — must not panic
     let garbage = vec![0xFFu8; 4096];
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader {
-        data: garbage,
-        pos: 0,
-    });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(garbage));
     // open may fail (no valid boot sector), which is OK
     if let Ok(ntfs) = NtfsReader::open(reader, 0) {
         let _ = ntfs.list_root_children();
@@ -1016,7 +1027,7 @@ fn par_ref_mismatch_returns_none() {
                           // par_ref at attribute start: parent=99
     rec6[fn_off..fn_off + 8].copy_from_slice(&99u64.to_le_bytes());
 
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(data));
     let ntfs = NtfsReader::open(reader, 0).unwrap();
     // resolve_path should detect the par_ref mismatch and return None
     let result = ntfs.list_subdir_children("DirA").unwrap();
@@ -1033,12 +1044,96 @@ fn open_file_truncated_record_no_panic() {
     let img = build_resident_data_fixture();
     // Corrupt: shorten the file to truncate the README.TXT record
     let corrupted: Vec<u8> = img[..img.len() - 900].to_vec();
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader {
-        data: corrupted,
-        pos: 0,
-    });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(corrupted));
     if let Ok(ntfs) = NtfsReader::open(reader, 0) {
         let _ = ntfs.open_file("README.TXT");
         let _ = ntfs.list_root_children();
     }
+}
+
+/// Build a minimal NTFS fixture with an EFS-encrypted file.
+/// Sets FILE_ATTRIBUTE_ENCRYPTED (0x4000) on the INDX entry flags.
+fn build_efs_fixture() -> Vec<u8> {
+    let bps = 512u16;
+    let spc = 1u8;
+    let mft_cluster = 2u64;
+
+    let rec5_offset = mft_cluster as usize * 512 + 5 * 1024;
+    let mut data = vec![0u8; rec5_offset + 2048];
+
+    // Boot sector
+    let boot = &mut data[0..512];
+    boot[0] = 0xEB;
+    boot[1] = 0x52;
+    boot[2] = 0x90;
+    boot[3..11].copy_from_slice(b"NTFS    ");
+    boot[11..13].copy_from_slice(&bps.to_le_bytes());
+    boot[13] = spc;
+    boot[0x30..0x38].copy_from_slice(&mft_cluster.to_le_bytes());
+    boot[0x40..0x44].copy_from_slice(&(-10i32).to_le_bytes());
+
+    // MFT record 5 — root directory
+    let rec5 = &mut data[rec5_offset..];
+    rec5[0..4].copy_from_slice(b"FILE");
+    rec5[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+
+    // $STANDARD_INFORMATION (0x10) — minimal
+    rec5[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+    rec5[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+    rec5[0x68..0x6C].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+
+    // $INDEX_ROOT (0x90)
+    let iro = 0x68usize;
+    rec5[iro..iro + 4].copy_from_slice(&0x90u32.to_le_bytes());
+    rec5[iro + 4..iro + 8].copy_from_slice(&0u32.to_le_bytes());
+    rec5[iro + 0x10..iro + 0x14].copy_from_slice(&0x10u32.to_le_bytes());
+
+    // INDX entries: one plain text file + one EFS-encrypted file
+    let entries: &[(&str, u32)] = &[("plain.txt", 0), ("secret.docx", 0x4000)];
+    let mut off = iro + 0x20;
+    for (i, &(name, extra_flags)) in entries.iter().enumerate() {
+        let utf16: Vec<u16> = name.encode_utf16().collect();
+        let name_bytes = utf16.len() * 2;
+        let entry_size = 0x52 + name_bytes;
+        let mft_ref = 100u64 + i as u64;
+
+        rec5[off..off + 8].copy_from_slice(&mft_ref.to_le_bytes());
+        rec5[off + 8..off + 10].copy_from_slice(&(entry_size as u16).to_le_bytes());
+        rec5[off + 0x50] = utf16.len() as u8;
+        // Set flags: not a directory, but with extra_flags (e.g. 0x4000 for EFS)
+        rec5[off + 0x48..off + 0x4C].copy_from_slice(&extra_flags.to_le_bytes());
+        for (j, c) in utf16.iter().enumerate() {
+            rec5[off + 0x52 + j * 2..off + 0x52 + j * 2 + 2].copy_from_slice(&c.to_le_bytes());
+        }
+        off += entry_size;
+    }
+    rec5[off..off + 4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+    rec5[iro + 4..iro + 8].copy_from_slice(&((off - iro) as u32).to_le_bytes());
+
+    data
+}
+
+#[test]
+fn efs_encrypted_file_detected() {
+    let img = build_efs_fixture();
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let ntfs = NtfsReader::open(reader, 0).expect("open NTFS");
+    let nodes = ntfs.list_root_children().expect("list_root_children");
+
+    assert_eq!(nodes.len(), 2, "expected 2 nodes");
+
+    let plain = nodes
+        .iter()
+        .find(|n| n.name == "plain.txt")
+        .expect("plain.txt missing");
+    assert!(!plain.encrypted, "plain.txt should not be encrypted");
+
+    let secret = nodes
+        .iter()
+        .find(|n| n.name == "secret.docx")
+        .expect("secret.docx missing");
+    assert!(
+        secret.encrypted,
+        "secret.docx should be flagged as encrypted"
+    );
 }

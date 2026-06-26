@@ -12,6 +12,9 @@ pub struct FsNode {
     pub size: u64,
     pub hidden: bool,
     pub system: bool,
+    /// True when the file is encrypted via NTFS Encrypting File System (EFS).
+    /// Encrypted files cannot be read without the decryption key.
+    pub encrypted: bool,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
     pub modified_at: Option<chrono::DateTime<chrono::Utc>>,
     pub accessed_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -44,13 +47,14 @@ pub fn fs_node(
         size,
         false,
         false,
+        false,
         created_at,
         modified_at,
         accessed_at,
     )
 }
 
-/// Build a filesystem node with explicit DOS/Windows-style hidden/system flags.
+/// Build a filesystem node with explicit DOS/Windows-style hidden/system/encrypted flags.
 #[allow(clippy::too_many_arguments)]
 pub fn fs_node_with_attributes(
     name: impl Into<String>,
@@ -58,6 +62,7 @@ pub fn fs_node_with_attributes(
     size: u64,
     hidden: bool,
     system: bool,
+    encrypted: bool,
     created_at: Option<chrono::DateTime<chrono::Utc>>,
     modified_at: Option<chrono::DateTime<chrono::Utc>>,
     accessed_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -69,6 +74,7 @@ pub fn fs_node_with_attributes(
         size,
         hidden,
         system,
+        encrypted,
         created_at,
         modified_at,
         accessed_at,
@@ -262,6 +268,7 @@ mod tests {
             size: 42,
             hidden: false,
             system: false,
+            encrypted: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,
@@ -286,6 +293,7 @@ mod tests {
                 size: 1,
                 hidden: false,
                 system: false,
+                encrypted: false,
                 created_at: None,
                 modified_at: None,
                 accessed_at: None,
@@ -297,6 +305,7 @@ mod tests {
                 size: 0,
                 hidden: false,
                 system: false,
+                encrypted: false,
                 created_at: None,
                 modified_at: None,
                 accessed_at: None,

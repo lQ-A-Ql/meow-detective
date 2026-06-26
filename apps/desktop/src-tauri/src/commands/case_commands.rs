@@ -1,9 +1,4 @@
 use app_services::{case_service, job_service};
-use domain::{
-    DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType, FileEntry,
-    FileEntryId,
-};
-use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
 use std::path::PathBuf;
 use tauri::{AppHandle, State};
 use transport::{
@@ -14,7 +9,6 @@ use transport::{
     dto::{CaseMetricsDto, CaseSummaryDto, DataSourceSummaryDto, RecentCaseDto, RecentObjectDto},
     CommandError,
 };
-use uuid::Uuid;
 
 use crate::{events::event_bridge, state::AppState};
 
@@ -134,7 +128,8 @@ pub fn create_analysis_demo_case(
 
     let active = case_service::create_case(&case_root, "Analysis Demo", Some("Codex Demo"))
         .map_err(CommandError::from_service_error)?;
-    seed_analysis_demo(&active)?;
+    app_services::analysis_service::seed_analysis_demo_data(&active)
+        .map_err(CommandError::from_service_error)?;
     let db_path = active.db_path();
     activate_case_pool(&state, &db_path)?;
 
@@ -170,7 +165,7 @@ pub fn close_case(state: State<AppState>, app: AppHandle) -> Result<(), CommandE
     let timeout = std::time::Duration::from_secs(5);
     let _ = state.task_manager.wait_all(timeout);
 
-    // 3. Drain database jobs — mark any that are still running as interrupted
+    // 3. Drain database jobs �?mark any that are still running as interrupted
     match state.get_connection() {
         Ok(conn) => {
             let case_id = {
@@ -187,7 +182,7 @@ pub fn close_case(state: State<AppState>, app: AppHandle) -> Result<(), CommandE
                 Ok(drain) => {
                     if !drain.fully_drained {
                         tracing::warn!(
-                            "Degraded case close — {} job(s) did not drain within {}ms: {:?}",
+                            "Degraded case close �?{} job(s) did not drain within {}ms: {:?}",
                             drain.pending_jobs.len(),
                             timeout.as_millis(),
                             drain.pending_jobs,
@@ -252,7 +247,7 @@ pub async fn get_case_metrics(state: State<'_, AppState>) -> Result<CaseMetricsD
                 }
             }
         };
-        // Guard is now dropped — query with a fresh connection
+        // Guard is now dropped �?query with a fresh connection
         let conn = app_services::connection::open_case_db(&db_path)
             .map_err(CommandError::from_service_error)?;
         let repo = persistence_sqlite::repositories::case_repo::CaseRepo::new(&conn);
@@ -337,7 +332,7 @@ pub async fn rename_data_source(
             let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
             active.db_path()
         };
-        // Guard is now dropped — query with released lock
+        // Guard is now dropped �?query with released lock
         let conn = app_services::connection::open_case_db(&db_path)
             .map_err(CommandError::from_service_error)?;
         app_services::file_service::rename_data_source_real(
@@ -444,7 +439,7 @@ pub async fn delete_data_source(
             let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
             active.db_path()
         };
-        // Guard is now dropped — query with released lock
+        // Guard is now dropped �?query with released lock
         let conn = app_services::connection::open_case_db(&db_path)
             .map_err(CommandError::from_service_error)?;
         case_service::delete_data_source(&conn, &ds_id)
@@ -535,172 +530,6 @@ fn read_recent_cases() -> Result<Vec<RecentCaseDto>, CommandError> {
         .collect())
 }
 
-fn seed_analysis_demo(active: &app_services::active_case::ActiveCase) -> Result<(), CommandError> {
-    let evidence_root = active.case_root.join("evidence").join("analysis-demo");
-    if evidence_root.exists() {
-        std::fs::remove_dir_all(&evidence_root)?;
-    }
-    std::fs::create_dir_all(&evidence_root)?;
-
-    let fixture_root = repo_root()
-        .join("testdata")
-        .join("fixtures")
-        .join("public-small");
-    copy_dir_all(&fixture_root.join("logical"), &evidence_root)?;
-    let evtx_src = fixture_root.join("evtx").join("system.evtx");
-    let evtx_dest = evidence_root
-        .join("Windows")
-        .join("System32")
-        .join("winevt")
-        .join("Logs")
-        .join("System.evtx");
-    if let Some(parent) = evtx_dest.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::copy(&evtx_src, &evtx_dest).map_err(|e| {
-        tracing::error!("Failed to copy public-small System.evtx fixture: {}", e);
-        CommandError::io("Failed to copy demo fixture")
-    })?;
-
-    write_demo_file(
-        &evidence_root.join("Users").join("alice").join("report.pdf"),
-        b"%PDF-1.7\n% demo forensic report\n",
-    )?;
-    write_demo_file(
-        &evidence_root
-            .join("Users")
-            .join("alice")
-            .join("Downloads")
-            .join("tool.exe"),
-        b"MZdemo executable header",
-    )?;
-    write_demo_file(
-        &evidence_root
-            .join("Users")
-            .join("alice")
-            .join("Archive")
-            .join("case-notes.zip"),
-        b"PK\x03\x04demo zip payload",
-    )?;
-
-    let ds_id = DataSourceId(format!("demo-ds-{}", Uuid::new_v4()));
-    let data_source = DataSource {
-        id: ds_id.clone(),
-        name: "Analysis Demo Logical Evidence".to_string(),
-        kind: DataSourceKind::LogicalDirectory,
-        source_path: evidence_root.clone(),
-        imported_at: chrono::Utc::now(),
-        provenance: DataSourceProvenance::unknown(),
-    };
-    let mut entries = Vec::new();
-    collect_demo_entries(&evidence_root, &evidence_root, &ds_id, None, &mut entries)?;
-    active
-        .with_conn(|conn| {
-            DataSourceRepo::new(conn).insert(&active.meta.id, &data_source)?;
-            FileRepo::new(conn).insert_batch(&entries)?;
-            Ok(())
-        })
-        .map_err(CommandError::from_service_error)?;
-    Ok(())
-}
-
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../..")
-        .canonicalize()
-        .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.."))
-}
-
-fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> Result<(), CommandError> {
-    if !src.is_dir() {
-        return Err(CommandError::invalid_input("analysis demo fixture missing"));
-    }
-    std::fs::create_dir_all(dst)?;
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let file_type = entry.file_type()?;
-        let target = dst.join(entry.file_name());
-        if file_type.is_dir() {
-            copy_dir_all(&entry.path(), &target)?;
-        } else if file_type.is_file() {
-            std::fs::copy(entry.path(), target)?;
-        }
-    }
-    Ok(())
-}
-
-fn write_demo_file(path: &std::path::Path, bytes: &[u8]) -> Result<(), CommandError> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(path, bytes)?;
-    Ok(())
-}
-
-fn collect_demo_entries(
-    root: &std::path::Path,
-    path: &std::path::Path,
-    data_source_id: &DataSourceId,
-    parent_id: Option<FileEntryId>,
-    entries: &mut Vec<FileEntry>,
-) -> Result<(), CommandError> {
-    let mut children = std::fs::read_dir(path)?.collect::<Result<Vec<_>, _>>()?;
-    children.sort_by_key(|entry| entry.path());
-
-    for child in children {
-        let child_path = child.path();
-        let metadata = child.metadata()?;
-        let relative = child_path
-            .strip_prefix(root)
-            .map_err(|_| CommandError::invalid_input("demo entry path is outside evidence root"))?
-            .to_string_lossy()
-            .replace('\\', "/");
-        let id = FileEntryId(format!("demo-file-{}", Uuid::new_v4()));
-        let entry_type = if metadata.is_dir() {
-            EntryType::Directory
-        } else {
-            EntryType::File
-        };
-        let name = child.file_name().to_string_lossy().to_string();
-        let system = matches!(
-            name.to_ascii_lowercase().as_str(),
-            "$recycle.bin"
-                | "system volume information"
-                | "pagefile.sys"
-                | "hiberfil.sys"
-                | "swapfile.sys"
-        );
-        entries.push(FileEntry {
-            id: id.clone(),
-            parent_id: parent_id.clone(),
-            data_source_id: data_source_id.clone(),
-            path: relative,
-            name: name.clone(),
-            entry_type: entry_type.clone(),
-            size: if metadata.is_file() {
-                Some(metadata.len())
-            } else {
-                None
-            },
-            ext: child_path
-                .extension()
-                .map(|ext| ext.to_string_lossy().to_string()),
-            deleted: false,
-            hidden: name.starts_with('.') || system,
-            system,
-            created_at: None,
-            modified_at: None,
-            accessed_at: None,
-            changed_at: None,
-            hash_sha256: None,
-        });
-        if entry_type == EntryType::Directory {
-            collect_demo_entries(root, &child_path, data_source_id, Some(id), entries)?;
-        }
-    }
-    Ok(())
-}
-
 fn valid_recent_case_root(case_root: &str) -> bool {
     if case_root.trim().is_empty() || case_root.contains('\0') {
         return false;
@@ -714,6 +543,7 @@ mod tests {
     use super::*;
     use crate::commands::command_support::{get_case_connection, require_active_case};
     use app_services::{analysis_service, file_service};
+    use uuid::Uuid;
 
     #[test]
     fn active_case_pool_is_guarded_by_active_case_lifecycle() {
@@ -783,7 +613,7 @@ mod tests {
         ));
         let active = case_service::create_case(&root, "Analysis Demo", Some("Codex Demo"))
             .expect("create demo case");
-        seed_analysis_demo(&active).expect("seed demo case");
+        app_services::analysis_service::seed_analysis_demo_data(&active).expect("seed demo case");
 
         active
             .with_conn(|conn| {
@@ -897,22 +727,5 @@ mod tests {
             None => std::env::remove_var("FORENSICS_RECENT_CASES_DIR"),
         }
         std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn demo_helpers_return_sanitized_command_errors() {
-        use std::path::Path;
-
-        let missing = Path::new("/definitely/missing/demo-fixture");
-        let dst =
-            std::env::temp_dir().join(format!("forensics-demo-helper-test-{}", Uuid::new_v4()));
-        let err = copy_dir_all(missing, &dst).expect_err("should fail for missing source");
-        assert_eq!(err.code, "INVALID_INPUT");
-        assert!(
-            !err.message.contains("/definitely/missing"),
-            "error message should not leak internal path: {}",
-            err.message
-        );
-        std::fs::remove_dir_all(&dst).ok();
     }
 }

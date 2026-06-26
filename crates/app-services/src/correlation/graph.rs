@@ -14,9 +14,10 @@ use super::{
 };
 use chrono::Utc;
 use domain::{EdgeType, FileEntry, FileEntryId, GraphEdge};
-use persistence_sqlite::repositories::{file_repo::FileRepo, graph_repo::GraphRepo};
-use rusqlite::{params, Connection, OptionalExtension};
-use sha2::{Digest, Sha256};
+use persistence_sqlite::repositories::{
+    correlation_repo, file_repo::FileRepo, graph_repo::GraphRepo,
+};
+use rusqlite::Connection;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 use transport::dto::{
@@ -248,20 +249,13 @@ fn get_cached_snapshot(
     conn: &Connection,
     case_id: &str,
 ) -> Result<Option<CachedSnapshot>, CorrelationError> {
-    conn.query_row(
-        "SELECT snapshot_json, artifact_hash, artifact_ids_json
-         FROM correlation_snapshots WHERE case_id = ?1",
-        params![case_id],
-        |row| {
-            Ok(CachedSnapshot {
-                snapshot_json: row.get(0)?,
-                artifact_hash: row.get(1)?,
-                artifact_ids_json: row.get(2)?,
-            })
-        },
-    )
-    .optional()
-    .map_err(|e| CorrelationError::Other(e.to_string()))
+    let cached = correlation_repo::get_correlation_snapshot_cache(conn, case_id)
+        .map_err(|e| CorrelationError::Other(e.to_string()))?;
+    Ok(cached.map(|c| CachedSnapshot {
+        snapshot_json: c.snapshot_json,
+        artifact_hash: c.artifact_hash,
+        artifact_ids_json: c.artifact_ids_json,
+    }))
 }
 
 fn store_cached_snapshot(
@@ -273,17 +267,13 @@ fn store_cached_snapshot(
 ) -> Result<(), CorrelationError> {
     let json = serde_json::to_string(snapshot)
         .map_err(|e| CorrelationError::Other(format!("serialize snapshot for cache: {e}")))?;
-    conn.execute(
-        "INSERT OR REPLACE INTO correlation_snapshots
-         (case_id, snapshot_json, generated_at, artifact_hash, artifact_ids_json)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![
-            case_id,
-            json,
-            snapshot.generated_at,
-            artifact_hash,
-            artifact_ids_json,
-        ],
+    correlation_repo::store_correlation_snapshot_cache(
+        conn,
+        case_id,
+        &json,
+        &snapshot.generated_at,
+        artifact_hash,
+        artifact_ids_json,
     )
     .map_err(|e| CorrelationError::Other(format!("store cached snapshot: {e}")))?;
     Ok(())
@@ -294,70 +284,29 @@ pub fn invalidate_correlation_cache(
     conn: &Connection,
     case_id: &str,
 ) -> Result<(), CorrelationError> {
-    conn.execute(
-        "DELETE FROM correlation_snapshots WHERE case_id = ?1",
-        params![case_id],
-    )
-    .map_err(|e| CorrelationError::Other(format!("invalidate correlation snapshots cache: {e}")))?;
-    conn.execute(
-        "DELETE FROM correlation_edges_cache WHERE case_id = ?1",
-        params![case_id],
-    )
-    .map_err(|e| CorrelationError::Other(format!("invalidate correlation edges cache: {e}")))?;
+    correlation_repo::clear_correlation_cache(conn, case_id)
+        .map_err(|e| CorrelationError::Other(format!("invalidate correlation cache: {e}")))?;
     Ok(())
 }
 
 /// Compute a SHA-256 artifact hash over (sorted artifact id, created_at) pairs.
 fn compute_artifact_hash(conn: &Connection) -> Result<String, CorrelationError> {
-    let mut stmt = conn
-        .prepare("SELECT id, created_at FROM artifacts ORDER BY id")
-        .map_err(|e| CorrelationError::Other(format!("compute artifact hash: {e}")))?;
-    let mut hasher = Sha256::new();
-    let rows = stmt
-        .query_map([], |row| {
-            let id: String = row.get(0)?;
-            let created_at: String = row.get(1)?;
-            Ok((id, created_at))
-        })
-        .map_err(|e| CorrelationError::Other(format!("compute artifact hash query: {e}")))?;
-    for row in rows {
-        let (id, created_at) =
-            row.map_err(|e| CorrelationError::Other(format!("compute artifact hash row: {e}")))?;
-        hasher.update(id.as_bytes());
-        hasher.update(b"|");
-        hasher.update(created_at.as_bytes());
-        hasher.update(b"\n");
-    }
-    Ok(hex::encode(hasher.finalize()))
+    correlation_repo::compute_artifact_hash_hex(conn)
+        .map_err(|e| CorrelationError::Other(format!("compute artifact hash: {e}")))
 }
 
 /// Collect all artifact IDs for cache tracking.
 fn collect_artifact_ids(conn: &Connection) -> Result<BTreeSet<String>, CorrelationError> {
-    let mut stmt = conn
-        .prepare("SELECT id FROM artifacts ORDER BY id")
+    let ids = correlation_repo::collect_artifact_ids(conn)
         .map_err(|e| CorrelationError::Other(format!("collect artifact ids: {e}")))?;
-    let rows = stmt
-        .query_map([], |row| row.get::<_, String>(0))
-        .map_err(|e| CorrelationError::Other(format!("collect artifact ids query: {e}")))?;
-    let mut ids = BTreeSet::new();
-    for row in rows {
-        ids.insert(
-            row.map_err(|e| CorrelationError::Other(format!("collect artifact ids row: {e}")))?,
-        );
-    }
-    Ok(ids)
+    Ok(ids.into_iter().collect())
 }
 
 /// Resolve the case_id from the database (needed for cache key).
 /// Returns `None` when the artifacts table is empty (nothing to correlate).
 fn resolve_case_id(conn: &Connection) -> Result<Option<String>, CorrelationError> {
-    conn.query_row(
-        "SELECT DISTINCT case_id FROM artifacts LIMIT 1",
-        [],
-        |row| row.get::<_, String>(0),
-    )
-    .optional()
-    .map_err(|e| CorrelationError::Other(format!("resolve case_id: {e}")))
+    correlation_repo::resolve_case_id(conn)
+        .map_err(|e| CorrelationError::Other(format!("resolve case_id: {e}")))
 }
 
 /// Build a CorrelationSnapshotDto from pre-fetched artifacts and timelines.
@@ -1402,13 +1351,9 @@ fn persist_correlation_edges(
     }
 
     // Resolve case_id from the artifacts table
-    let case_id: String = match conn.query_row(
-        "SELECT DISTINCT case_id FROM artifacts LIMIT 1",
-        [],
-        |row| row.get::<_, String>(0),
-    ) {
-        Ok(id) => id,
-        Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(()),
+    let case_id: String = match correlation_repo::resolve_case_id(conn) {
+        Ok(Some(id)) => id,
+        Ok(None) => return Ok(()),
         Err(e) => {
             return Err(CorrelationError::Other(format!(
                 "resolve case_id for correlation edges: {e}"

@@ -58,5 +58,7 @@ pub struct AnalysisBootRecordDto {
     pub record_id: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<String>,
     pub provenance: AnalysisProvenanceDto,
 }

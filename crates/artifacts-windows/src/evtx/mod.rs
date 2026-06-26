@@ -6,7 +6,7 @@ pub mod parser;
 
 pub use capability::{
     evtx_capability, supports_evtx_boot_shutdown_path, EvtxCapability, EVTX_PARSER_ID,
-    SUPPORTED_EVENT_IDS, SUPPORTED_SOURCE_PATH_SUFFIX,
+    SUPPORTED_EVENT_IDS, SUPPORTED_SOURCE_PATH_SUFFIX, SUPPORTED_SOURCE_PATH_SUFFIXES,
 };
 pub use error::EvtxBootError;
 pub use parser::{

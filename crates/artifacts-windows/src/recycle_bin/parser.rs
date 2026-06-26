@@ -1,11 +1,12 @@
 //! Windows Recycle Bin ($I file) parser.
-//! Parses v2 format: header_size, file_size, deletion FILETIME, original path (UTF-16LE).
+//!
+//! Supports both v1 (Windows Vista/7: 4-byte header) and v2
+//! (Windows 8+: 8-byte header) formats with automatic detection.
 
 use artifacts_core::{
     new_artifact, new_timeline_event, ArtifactContext, ArtifactExtractor, ArtifactSink,
     ExtractorReport,
 };
-use byteorder::{LittleEndian, ReadBytesExt};
 use chrono::{DateTime, Datelike, TimeZone, Utc};
 use domain::ArtifactFamily;
 use std::collections::BTreeMap;
@@ -30,28 +31,64 @@ impl RecycleBinExtractor {
     }
 
     fn parse_i_file<R: Read>(reader: &mut R) -> Result<ParsedRecycleInfo, String> {
-        let header_size = reader
-            .read_u64::<LittleEndian>()
-            .map_err(|e| e.to_string())?;
-        let file_size = reader
-            .read_u64::<LittleEndian>()
-            .map_err(|e| e.to_string())?;
-        let deletion_ft = reader
-            .read_u64::<LittleEndian>()
-            .map_err(|e| e.to_string())?;
+        // Read enough bytes to detect v1 vs v2 format
+        let mut header = vec![0u8; 24];
+        let n = reader.read(&mut header).map_err(|e| e.to_string())?;
+        if n < 16 {
+            return Err("$I file too short".to_string());
+        }
+
+        // Try v2 first (Windows 8+): 8-byte header_size, 8-byte file_size, 8-byte FILETIME
+        let v2_header_size = u64::from_le_bytes(header[0..8].try_into().unwrap());
+        // v1 format (Vista/7): 4-byte header_size, 4-byte file_size, 8-byte FILETIME
+        let v1_header_size = u32::from_le_bytes(header[0..4].try_into().unwrap()) as u64;
+
+        // Detect format: v2 headers are typically 0x18 (24) or larger; v1 headers are ≤ 512
+        let (header_size, file_size, deletion_ft) = if (24..=1024).contains(&v2_header_size) {
+            let fs = u64::from_le_bytes(header[8..16].try_into().unwrap());
+            let ft = u64::from_le_bytes(header[16..24].try_into().unwrap());
+            (v2_header_size, fs, ft)
+        } else {
+            // v1: header is [4B header_size][4B file_size][8B FILETIME]
+            let fs = u32::from_le_bytes(header[4..8].try_into().unwrap());
+            let _ft_start = if n >= 16 {
+                8
+            } else {
+                return Err("$I file truncated".to_string());
+            };
+            let mut ft_bytes = [0u8; 8];
+            if n >= 16 {
+                ft_bytes.copy_from_slice(&header[8..16]);
+            } else {
+                return Err("$I file too short for FILETIME".to_string());
+            }
+            let ft = u64::from_le_bytes(ft_bytes);
+            (v1_header_size, fs as u64, ft)
+        };
         let deletion_time = Self::filetime_to_dt(deletion_ft);
 
-        let path = if header_size > 24 {
-            // Skip padding bytes between field data and the path
-            let padding = (header_size - 24) as usize;
-            if padding > 0 {
-                let mut _skip = vec![0u8; padding.min(256)];
-                reader.read_exact(&mut _skip).map_err(|e| e.to_string())?;
+        let path = if header_size > 0 && header_size <= 2048 {
+            let header_bytes = if (24..=1024).contains(&v2_header_size) {
+                24
+            } else {
+                16
+            };
+            let padding = header_size.saturating_sub(header_bytes) as usize;
+            // Seek past any remaining padding
+            if padding > 0 && n < header_size as usize {
+                let mut skip = vec![0u8; padding.min(1024)];
+                reader
+                    .read_exact(&mut skip)
+                    .map_err(|e| format!("skip padding: {e}"))?;
+            } else if n > header_size as usize {
+                // We already read past the header into path data; use remaining bytes
             }
-            // Now read path (up to 520 bytes, UTF-16LE null-terminated)
+            // Read path (up to 520 bytes, UTF-16LE null-terminated)
             let mut raw = vec![0u8; 520];
-            let n = reader.read(&mut raw).map_err(|e| e.to_string())?;
-            raw.truncate(n);
+            let path_n = reader
+                .read(&mut raw)
+                .map_err(|e| format!("read path: {e}"))?;
+            raw.truncate(path_n);
             let chars: Vec<u16> = raw
                 .chunks_exact(2)
                 .map(|c| u16::from_le_bytes([c[0], c[1]]))

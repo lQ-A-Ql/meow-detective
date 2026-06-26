@@ -522,6 +522,7 @@ fn row_to_file_entry(row: &rusqlite::Row) -> rusqlite::Result<FileEntry> {
         deleted: row.get::<_, i32>(8)? != 0,
         hidden: row.get::<_, i32>(9)? != 0,
         system: row.get::<_, i32>(10)? != 0,
+        encrypted: false,
         created_at: row
             .get::<_, Option<String>>(11)?
             .and_then(|s| parse_opt_datetime(&s)),
@@ -546,6 +547,90 @@ fn collect_entries(
         entries.push(row?);
     }
     Ok(entries)
+}
+
+impl FileRepo<'_> {
+    /// Insert a single file entry row with explicit column values. Uses
+    /// `INSERT OR IGNORE` so overlapping ids are silently skipped.
+    ///
+    /// Returns `true` when a row was actually inserted.
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_file_entry_row(
+        conn: &Connection,
+        id: &str,
+        parent_id: Option<&str>,
+        data_source_id: &str,
+        name: &str,
+        entry_type: &str,
+        size: Option<i64>,
+        ext: Option<&str>,
+        deleted: bool,
+        hidden: bool,
+        system: bool,
+        created_at: Option<&str>,
+        modified_at: Option<&str>,
+        accessed_at: Option<&str>,
+        changed_at: Option<&str>,
+        hash_sha256: Option<&str>,
+        partition_index: Option<i64>,
+    ) -> DbResult<bool> {
+        let changed = conn.execute(
+            "INSERT OR IGNORE INTO file_entries
+             (id, parent_id, data_source_id, path, name, entry_type,
+              size, ext, deleted, hidden, system, created_at, modified_at,
+              accessed_at, changed_at, hash_sha256, partition_index)
+             VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            params![
+                id,
+                parent_id,
+                data_source_id,
+                name,
+                entry_type,
+                size,
+                ext,
+                deleted as i32,
+                hidden as i32,
+                system as i32,
+                created_at,
+                modified_at,
+                accessed_at,
+                changed_at,
+                hash_sha256,
+                partition_index,
+            ],
+        )?;
+        Ok(changed > 0)
+    }
+
+    /// Update the path of a single `file_entries` row.
+    pub fn update_file_entry_path(
+        conn: &Connection,
+        entry_id: &str,
+        data_source_id: &str,
+        path: &str,
+    ) -> DbResult<()> {
+        conn.execute(
+            "UPDATE file_entries SET path = ?1 WHERE id = ?2 AND data_source_id = ?3",
+            params![path, entry_id, data_source_id],
+        )?;
+        Ok(())
+    }
+
+    /// Update the path and parent_id of a single `file_entries` row.
+    pub fn update_file_entry_parent_path(
+        conn: &Connection,
+        entry_id: &str,
+        data_source_id: &str,
+        parent_id: Option<&str>,
+        path: &str,
+    ) -> DbResult<()> {
+        conn.execute(
+            "UPDATE file_entries SET path = ?1, parent_id = ?2
+             WHERE id = ?3 AND data_source_id = ?4",
+            params![path, parent_id, entry_id, data_source_id],
+        )?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -581,6 +666,7 @@ mod tests {
             deleted: false,
             hidden: false,
             system: false,
+            encrypted: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,

@@ -88,14 +88,24 @@ pub(crate) struct BtrfsKey {
 }
 
 impl BtrfsKey {
-    pub(crate) fn parse(data: &[u8]) -> Self {
-        Self {
-            objectid: u64::from_le_bytes(data[0..8].try_into().unwrap()),
+    pub(crate) fn parse(data: &[u8]) -> io::Result<Self> {
+        Ok(Self {
+            objectid: u64::from_le_bytes(
+                data[0..8]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("disk parse error"))?,
+            ),
             ty: data[8],
-            offset: u64::from_le_bytes(data[9..17].try_into().unwrap()),
-        }
+            offset: u64::from_le_bytes(
+                data[9..17]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("disk parse error"))?,
+            ),
+        })
     }
 
+    /// Serialize this key back to its on-disk representation
+    /// (kept for format symmetry; useful for debugging and testing).
     #[allow(dead_code)]
     fn to_bytes(&self) -> [u8; KEY_SIZE] {
         let mut buf = [0u8; KEY_SIZE];
@@ -131,6 +141,8 @@ impl Eq for BtrfsKey {}
 
 #[derive(Debug)]
 pub(crate) struct BtrfsHeader {
+    /// Logical block address of this node (parsed for format completeness;
+    /// currently unused during B-tree traversal).
     #[allow(dead_code)]
     pub(crate) bytenr: u64,
     pub(crate) nritems: u32,
@@ -171,6 +183,7 @@ pub struct BtrfsSubvol {
 
 pub struct BtrfsReader {
     reader: RefCell<Box<dyn EvidenceReader>>,
+    /// Sector size from the superblock (used in test assertions for validation).
     #[allow(dead_code)]
     sectorsize: u32,
     nodesize: u32,
@@ -201,17 +214,37 @@ impl BtrfsReader {
             )));
         }
 
-        let sectorsize = u32::from_le_bytes(sb[0xB8..0xBC].try_into().unwrap());
-        let nodesize = u32::from_le_bytes(sb[0xBC..0xC0].try_into().unwrap());
-        let root_tree_logical = u64::from_le_bytes(sb[0x78..0x80].try_into().unwrap());
-        let chunk_tree_logical = u64::from_le_bytes(sb[0x80..0x88].try_into().unwrap());
+        let sectorsize = u32::from_le_bytes(
+            sb[0xB8..0xBC]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        );
+        let nodesize = u32::from_le_bytes(
+            sb[0xBC..0xC0]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        );
+        let root_tree_logical = u64::from_le_bytes(
+            sb[0x78..0x80]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        );
+        let chunk_tree_logical = u64::from_le_bytes(
+            sb[0x80..0x88]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        );
 
         if sectorsize == 0 || nodesize == 0 {
             return Err(invalid_fs_data("invalid btrfs geometry"));
         }
 
         // Parse sys_chunk_array for initial chunk mappings.
-        let sys_chunk_array_size = u32::from_le_bytes(sb[0xC8..0xCC].try_into().unwrap()) as usize;
+        let sys_chunk_array_size = u32::from_le_bytes(
+            sb[0xC8..0xCC]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        ) as usize;
         let sys_chunk_start = 0x32B;
         let sys_chunk_end = (sys_chunk_start + sys_chunk_array_size).min(sb.len());
         let chunk_data = &sb[sys_chunk_start..sys_chunk_end];
@@ -276,7 +309,7 @@ impl BtrfsReader {
     fn parse_chunks(&mut self, data: &[u8]) -> io::Result<()> {
         let mut pos = 0usize;
         while pos + KEY_SIZE + 8 <= data.len() {
-            let key = BtrfsKey::parse(&data[pos..pos + KEY_SIZE]);
+            let key = BtrfsKey::parse(&data[pos..pos + KEY_SIZE])?;
             pos += KEY_SIZE;
             if key.ty != CHUNK_ITEM_KEY {
                 break;
@@ -284,14 +317,22 @@ impl BtrfsReader {
             if pos + 0x30 > data.len() {
                 break;
             }
-            let length = u64::from_le_bytes(data[pos..pos + 8].try_into().unwrap());
-            let num_stripes = u16::from_le_bytes(data[pos + 0x2C..pos + 0x2E].try_into().unwrap());
+            let length = u64::from_le_bytes(
+                data[pos..pos + 8]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("disk parse error"))?,
+            );
+            let num_stripes = u16::from_le_bytes(
+                data[pos + 0x2C..pos + 0x2E]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("disk parse error"))?,
+            );
             let stripe_offset = pos + 0x30;
             if num_stripes > 0 {
                 let phys = u64::from_le_bytes(
                     data[stripe_offset + 8..stripe_offset + 16]
                         .try_into()
-                        .unwrap(),
+                        .map_err(|_| invalid_fs_data("btrfs chunk stripe physical too short"))?,
                 );
                 self.chunk_map.push(BtrfsChunk {
                     logical: key.offset,
@@ -309,7 +350,7 @@ impl BtrfsReader {
         let node_data = self.read_logical_block(self.chunk_tree_logical)?;
         let header = Self::parse_header(&node_data)?;
         if header.level == 0 {
-            let items = Self::parse_leaf_items(&node_data, header.nritems);
+            let items = Self::parse_leaf_items(&node_data, header.nritems)?;
             for item in &items {
                 if item.key.ty == CHUNK_ITEM_KEY {
                     let chunk_data = Self::get_item_data(&node_data, item);
@@ -317,12 +358,12 @@ impl BtrfsReader {
                 }
             }
         } else {
-            let internal = Self::parse_internal_items(&node_data, header.nritems);
+            let internal = Self::parse_internal_items(&node_data, header.nritems)?;
             for ii in &internal {
                 let child = self.read_logical_block(ii.blockptr)?;
                 let ch = Self::parse_header(&child)?;
                 if ch.level == 0 {
-                    let items = Self::parse_leaf_items(&child, ch.nritems);
+                    let items = Self::parse_leaf_items(&child, ch.nritems)?;
                     for item in &items {
                         if item.key.ty == CHUNK_ITEM_KEY {
                             let chunk_data = Self::get_item_data(&child, item);
@@ -347,16 +388,16 @@ impl BtrfsReader {
         let mut root_names: HashMap<u64, String> = HashMap::new();
 
         if header.level == 0 {
-            Self::scan_root_leaf(&root_data, header.nritems, &mut root_items, &mut root_names);
+            Self::scan_root_leaf(&root_data, header.nritems, &mut root_items, &mut root_names)?;
         } else {
-            let internal = Self::parse_internal_items(&root_data, header.nritems);
+            let internal = Self::parse_internal_items(&root_data, header.nritems)?;
             for ii in &internal {
                 let child = self.read_logical_block(ii.blockptr)?;
                 let ch = Self::parse_header(&child)?;
                 if ch.level == 0 {
-                    Self::scan_root_leaf(&child, ch.nritems, &mut root_items, &mut root_names);
+                    Self::scan_root_leaf(&child, ch.nritems, &mut root_items, &mut root_names)?;
                 } else {
-                    let si = Self::parse_internal_items(&child, ch.nritems);
+                    let si = Self::parse_internal_items(&child, ch.nritems)?;
                     for s in &si {
                         let leaf = self.read_logical_block(s.blockptr)?;
                         let lh = Self::parse_header(&leaf)?;
@@ -366,7 +407,7 @@ impl BtrfsReader {
                                 lh.nritems,
                                 &mut root_items,
                                 &mut root_names,
-                            );
+                            )?;
                         }
                     }
                 }
@@ -393,20 +434,32 @@ impl BtrfsReader {
         nritems: u32,
         root_items: &mut HashMap<u64, (u64, u64)>,
         root_names: &mut HashMap<u64, String>,
-    ) {
-        let items = Self::parse_leaf_items(data, nritems);
+    ) -> io::Result<()> {
+        let items = Self::parse_leaf_items(data, nritems)?;
         for item in &items {
             if item.key.ty == ROOT_ITEM_KEY {
                 let rd = Self::get_item_data(data, item);
                 if rd.len() >= 184 {
-                    let bytenr = u64::from_le_bytes(rd[176..184].try_into().unwrap());
-                    let root_dirid = u64::from_le_bytes(rd[168..176].try_into().unwrap());
+                    let bytenr = u64::from_le_bytes(
+                        rd[176..184]
+                            .try_into()
+                            .map_err(|_| invalid_fs_data("disk parse error"))?,
+                    );
+                    let root_dirid = u64::from_le_bytes(
+                        rd[168..176]
+                            .try_into()
+                            .map_err(|_| invalid_fs_data("disk parse error"))?,
+                    );
                     root_items.insert(item.key.objectid, (bytenr, root_dirid));
                 }
             } else if item.key.ty == ROOT_BACKREF_KEY {
                 let rb = Self::get_item_data(data, item);
                 if rb.len() >= 18 {
-                    let name_len = u16::from_le_bytes(rb[16..18].try_into().unwrap()) as usize;
+                    let name_len = u16::from_le_bytes(
+                        rb[16..18]
+                            .try_into()
+                            .map_err(|_| invalid_fs_data("disk parse error"))?,
+                    ) as usize;
                     if rb.len() >= 18 + name_len {
                         let name = String::from_utf8_lossy(&rb[18..18 + name_len]).to_string();
                         root_names.insert(item.key.objectid, name);
@@ -414,6 +467,7 @@ impl BtrfsReader {
                 }
             }
         }
+        Ok(())
     }
 
     // -------------------------------------------------------------------
@@ -425,13 +479,21 @@ impl BtrfsReader {
             return Err(invalid_fs_data("btrfs node too short for header"));
         }
         Ok(BtrfsHeader {
-            bytenr: u64::from_le_bytes(data[0x30..0x38].try_into().unwrap()),
-            nritems: u32::from_le_bytes(data[0x5D..0x61].try_into().unwrap()),
+            bytenr: u64::from_le_bytes(
+                data[0x30..0x38]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("disk parse error"))?,
+            ),
+            nritems: u32::from_le_bytes(
+                data[0x5D..0x61]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("disk parse error"))?,
+            ),
             level: data[0x61],
         })
     }
 
-    fn parse_leaf_items(data: &[u8], nritems: u32) -> Vec<LeafItem> {
+    fn parse_leaf_items(data: &[u8], nritems: u32) -> io::Result<Vec<LeafItem>> {
         let mut items = Vec::new();
         let base = BTRFS_HEADER_SIZE;
         for i in 0..nritems {
@@ -439,19 +501,27 @@ impl BtrfsReader {
             if off + LEAF_ITEM_SIZE > data.len() {
                 break;
             }
-            let key = BtrfsKey::parse(&data[off..off + KEY_SIZE]);
-            let data_offset = u32::from_le_bytes(data[off + 17..off + 21].try_into().unwrap());
-            let data_size = u32::from_le_bytes(data[off + 21..off + 25].try_into().unwrap());
+            let key = BtrfsKey::parse(&data[off..off + KEY_SIZE])?;
+            let data_offset = u32::from_le_bytes(
+                data[off + 17..off + 21]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("disk parse error"))?,
+            );
+            let data_size = u32::from_le_bytes(
+                data[off + 21..off + 25]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("disk parse error"))?,
+            );
             items.push(LeafItem {
                 key,
                 data_offset,
                 data_size,
             });
         }
-        items
+        Ok(items)
     }
 
-    fn parse_internal_items(data: &[u8], nritems: u32) -> Vec<InternalItem> {
+    fn parse_internal_items(data: &[u8], nritems: u32) -> io::Result<Vec<InternalItem>> {
         let mut items = Vec::new();
         let base = BTRFS_HEADER_SIZE;
         for i in 0..nritems {
@@ -459,11 +529,15 @@ impl BtrfsReader {
             if off + INTERNAL_ITEM_SIZE > data.len() {
                 break;
             }
-            let key = BtrfsKey::parse(&data[off..off + KEY_SIZE]);
-            let blockptr = u64::from_le_bytes(data[off + 17..off + 25].try_into().unwrap());
+            let key = BtrfsKey::parse(&data[off..off + KEY_SIZE])?;
+            let blockptr = u64::from_le_bytes(
+                data[off + 17..off + 25]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("disk parse error"))?,
+            );
             items.push(InternalItem { key, blockptr });
         }
-        items
+        Ok(items)
     }
 
     fn get_item_data<'a>(node_data: &'a [u8], item: &LeafItem) -> &'a [u8] {
@@ -494,10 +568,10 @@ impl BtrfsReader {
         let node_data = self.read_logical_block(root_bytenr)?;
         let header = Self::parse_header(&node_data)?;
         if header.level == 0 {
-            let items = Self::parse_leaf_items(&node_data, header.nritems);
+            let items = Self::parse_leaf_items(&node_data, header.nritems)?;
             return Ok((node_data, items));
         }
-        let internal = Self::parse_internal_items(&node_data, header.nritems);
+        let internal = Self::parse_internal_items(&node_data, header.nritems)?;
         let idx = internal
             .binary_search_by(|ii| ii.key.cmp(search_key))
             .unwrap_or_else(|i| i.saturating_sub(1));
@@ -523,21 +597,29 @@ impl BtrfsReader {
     // Directory & file operations
     // -------------------------------------------------------------------
 
-    fn parse_dir_entry(data: &[u8]) -> Option<(String, u64, u8)> {
+    fn parse_dir_entry(data: &[u8]) -> io::Result<Option<(String, u64, u8)>> {
         if data.len() < 30 {
-            return None;
+            return Ok(None);
         }
-        let child_obj = u64::from_le_bytes(data[0..8].try_into().unwrap());
-        let name_len = u16::from_le_bytes(data[27..29].try_into().unwrap()) as usize;
+        let child_obj = u64::from_le_bytes(
+            data[0..8]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        );
+        let name_len = u16::from_le_bytes(
+            data[27..29]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        ) as usize;
         let file_type = data[29];
         if data.len() < 30 + name_len {
-            return None;
+            return Ok(None);
         }
         let name = String::from_utf8_lossy(&data[30..30 + name_len]).to_string();
         if name.is_empty() {
-            return None;
+            return Ok(None);
         }
-        Some((name, child_obj, file_type))
+        Ok(Some((name, child_obj, file_type)))
     }
 
     fn list_dir_entries(
@@ -556,7 +638,7 @@ impl BtrfsReader {
         let mut entries = Vec::new();
         for &idx in &indices {
             let item_data = Self::get_item_data(&leaf_data, &items[idx]);
-            if let Some(entry) = Self::parse_dir_entry(item_data) {
+            if let Some(entry) = Self::parse_dir_entry(item_data)? {
                 entries.push(entry);
             }
         }
@@ -566,7 +648,7 @@ impl BtrfsReader {
             let ditem = Self::find_items_by_object_and_type(&items, dir_objectid, DIR_ITEM_KEY);
             for &idx in &ditem {
                 let item_data = Self::get_item_data(&leaf_data, &items[idx]);
-                if let Some(entry) = Self::parse_dir_entry(item_data) {
+                if let Some(entry) = Self::parse_dir_entry(item_data)? {
                     entries.push(entry);
                 }
             }
@@ -604,8 +686,16 @@ impl BtrfsReader {
                     if item_data.len() < 53 {
                         continue;
                     }
-                    let disk_bytenr = u64::from_le_bytes(item_data[21..29].try_into().unwrap());
-                    let num_bytes = u64::from_le_bytes(item_data[45..53].try_into().unwrap());
+                    let disk_bytenr = u64::from_le_bytes(
+                        item_data[21..29]
+                            .try_into()
+                            .map_err(|_| invalid_fs_data("disk parse error"))?,
+                    );
+                    let num_bytes = u64::from_le_bytes(
+                        item_data[45..53]
+                            .try_into()
+                            .map_err(|_| invalid_fs_data("disk parse error"))?,
+                    );
                     let absolute = self.volume_offset + disk_bytenr;
                     let mut buf = vec![0u8; num_bytes as usize];
                     let mut reader = self.reader.borrow_mut();
@@ -628,7 +718,11 @@ impl BtrfsReader {
         if let Ok(i) = items.binary_search_by(|item| item.key.cmp(&key)) {
             let idata = Self::get_item_data(&leaf_data, &items[i]);
             if idata.len() >= 24 {
-                return Ok(u64::from_le_bytes(idata[16..24].try_into().unwrap()));
+                return Ok(u64::from_le_bytes(
+                    idata[16..24]
+                        .try_into()
+                        .map_err(|_| invalid_fs_data("disk parse error"))?,
+                ));
             }
         }
         Ok(0)
@@ -774,12 +868,21 @@ impl FileSystemReader for BtrfsReader {
 pub(crate) struct FakeReader {
     pub(crate) data: Vec<u8>,
     pos: u64,
+    info: evidence_core::ReaderInfo,
 }
 
 #[cfg(test)]
 impl FakeReader {
     pub(crate) fn new(data: Vec<u8>) -> Self {
-        Self { data, pos: 0 }
+        Self {
+            data,
+            pos: 0,
+            info: evidence_core::ReaderInfo {
+                path: std::path::PathBuf::from("fake-btrfs"),
+                size: 0,
+                kind: "fake-btrfs".to_string(),
+            },
+        }
     }
 }
 
@@ -810,7 +913,7 @@ impl std::io::Seek for FakeReader {
 #[cfg(test)]
 impl EvidenceReader for FakeReader {
     fn info(&self) -> &evidence_core::ReaderInfo {
-        unimplemented!()
+        &self.info
     }
 }
 

@@ -56,6 +56,7 @@ fn insert_file(conn: &Connection, id: &str, path: &str, deleted: bool) {
             deleted,
             hidden: false,
             system: false,
+            encrypted: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,

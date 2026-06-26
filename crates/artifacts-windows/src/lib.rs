@@ -15,9 +15,10 @@ pub use browser::chromium::{
 pub use browser::firefox::{
     parse_firefox_cookies, parse_firefox_downloads, parse_firefox_history, parse_firefox_session,
 };
+pub use browser::profile_detect::{detect_browser_profiles, BrowserProfile};
 pub use evtx::capability::{
     evtx_capability, supports_evtx_boot_shutdown_path, EvtxCapability, EVTX_PARSER_ID,
-    SUPPORTED_EVENT_IDS, SUPPORTED_SOURCE_PATH_SUFFIX,
+    SUPPORTED_EVENT_IDS, SUPPORTED_SOURCE_PATH_SUFFIX, SUPPORTED_SOURCE_PATH_SUFFIXES,
 };
 pub use evtx::parser::{
     extract_boot_shutdown_events, extract_boot_shutdown_events_from_json_records, EvtxBootEvent,

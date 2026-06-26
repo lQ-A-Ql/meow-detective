@@ -918,13 +918,16 @@ fn parse_indx_entries(data: &[u8]) -> Vec<DirEntry> {
             let is_dir = flags & 0x10000000 != 0;
             let hidden = flags & 0x02 != 0;
             let system = flags & 0x04 != 0;
+            let encrypted = flags & 0x4000 != 0;
             let size = if is_dir || off + 0x48 > data.len() {
                 0
             } else {
                 u64::from_le_bytes(data[off + 0x40..off + 0x48].try_into().unwrap_or([0; 8]))
             };
             entries.push(DirEntry {
-                node: fs_node_with_attributes(name, is_dir, size, hidden, system, None, None, None),
+                node: fs_node_with_attributes(
+                    name, is_dir, size, hidden, system, encrypted, None, None, None,
+                ),
                 mft_ref,
             });
         }

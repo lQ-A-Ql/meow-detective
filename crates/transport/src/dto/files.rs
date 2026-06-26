@@ -14,6 +14,8 @@ pub struct FileTreeNodeDto {
     pub deleted: bool,
     pub hidden: bool,
     pub system: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub encrypted: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub node_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -73,6 +75,8 @@ pub struct FileEntryRowDto {
     pub deleted: bool,
     pub hidden: bool,
     pub system: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub encrypted: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -102,6 +106,7 @@ mod tests {
             deleted: true,
             hidden: true,
             system: false,
+            encrypted: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,
@@ -131,6 +136,7 @@ mod tests {
             deleted: false,
             hidden: true,
             system: true,
+            encrypted: false,
             node_type: None,
             status: None,
             expanded: None,
@@ -161,6 +167,7 @@ mod tests {
                 deleted: false,
                 hidden: false,
                 system: false,
+                encrypted: false,
                 created_at: None,
                 modified_at: None,
                 accessed_at: None,
@@ -178,6 +185,7 @@ mod tests {
                 deleted: false,
                 hidden: false,
                 system: false,
+                encrypted: false,
                 created_at: None,
                 modified_at: None,
                 accessed_at: None,

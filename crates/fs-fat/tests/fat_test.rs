@@ -8,6 +8,20 @@ use std::io::{self, Read, Seek, SeekFrom};
 struct FakeReader {
     data: Vec<u8>,
     pos: u64,
+    info: evidence_core::ReaderInfo,
+}
+impl FakeReader {
+    fn new(data: Vec<u8>) -> Self {
+        Self {
+            data,
+            pos: 0,
+            info: evidence_core::ReaderInfo {
+                path: std::path::PathBuf::from("fake-fat"),
+                size: 0,
+                kind: "fake-fat".to_string(),
+            },
+        }
+    }
 }
 impl Read for FakeReader {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
@@ -31,7 +45,7 @@ impl Seek for FakeReader {
 }
 impl EvidenceReader for FakeReader {
     fn info(&self) -> &evidence_core::ReaderInfo {
-        unimplemented!()
+        &self.info
     }
 }
 
@@ -47,7 +61,7 @@ fn fat32_open_file_errors_on_cycle() {
     let mut img = build_fat32_fixture();
     write_fat32_entry(&mut img, 4, 5);
     write_fat32_entry(&mut img, 5, 4);
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
     let fat = FatReader::open(reader, 0).unwrap();
 
     let Err(err) = fat.open_file("README.TXT") else {
@@ -60,7 +74,7 @@ fn fat32_open_file_errors_on_cycle() {
 fn fat32_open_file_errors_on_unexpected_free_cluster() {
     let mut img = build_fat32_fixture();
     write_fat32_entry(&mut img, 4, 0);
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
     let fat = FatReader::open(reader, 0).unwrap();
 
     let Err(err) = fat.open_file("README.TXT") else {
@@ -73,7 +87,7 @@ fn fat32_open_file_errors_on_unexpected_free_cluster() {
 fn fat32_open_file_errors_on_bad_cluster_marker() {
     let mut img = build_fat32_fixture();
     write_fat32_entry(&mut img, 4, 0x0FFF_FFF7);
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
     let fat = FatReader::open(reader, 0).unwrap();
 
     let Err(err) = fat.open_file("README.TXT") else {
@@ -86,7 +100,7 @@ fn fat32_open_file_errors_on_bad_cluster_marker() {
 fn fat32_list_subdir_errors_on_directory_chain_cycle() {
     let mut img = build_fat32_fixture();
     write_fat32_entry(&mut img, 3, 3);
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
     let fat = FatReader::open(reader, 0).unwrap();
 
     let Err(err) = fat.list_children("SUBDIR") else {
@@ -178,7 +192,7 @@ fn build_fat32_fixture() -> Vec<u8> {
 #[test]
 fn fat32_list_root() {
     let img = build_fat32_fixture();
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
     let fat = FatReader::open(reader, 0).unwrap();
 
     let nodes = fat.list_children("").unwrap();
@@ -191,7 +205,7 @@ fn fat32_list_root() {
 #[test]
 fn fat32_open_file_reads_content() {
     let img = build_fat32_fixture();
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
     let fat = FatReader::open(reader, 0).unwrap();
 
     let mut file = fat.open_file("README.TXT").unwrap();
@@ -203,7 +217,7 @@ fn fat32_open_file_reads_content() {
 #[test]
 fn fat32_list_subdir() {
     let img = build_fat32_fixture();
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
     let fat = FatReader::open(reader, 0).unwrap();
 
     let nodes = fat.list_children("SUBDIR").unwrap();
@@ -214,7 +228,7 @@ fn fat32_list_subdir() {
 #[test]
 fn fat32_open_nested_file() {
     let img = build_fat32_fixture();
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
     let fat = FatReader::open(reader, 0).unwrap();
 
     let mut file = fat.open_file("\\SUBDIR\\DEEP.TXT").unwrap();
@@ -226,7 +240,7 @@ fn fat32_open_nested_file() {
 #[test]
 fn fat32_open_nonexistent_errors() {
     let img = build_fat32_fixture();
-    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader { data: img, pos: 0 });
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
     let fat = FatReader::open(reader, 0).unwrap();
     assert!(fat.open_file("NOFILE.TXT").is_err());
 }

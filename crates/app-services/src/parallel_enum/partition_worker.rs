@@ -83,8 +83,9 @@ pub(super) fn enumerate_single_partition(
                     error
                 );
                 let _ = clear_staging_file_entries(&conn);
-                let _ = staging::set_staging_meta(&conn, "mft_fallback_warning", &error);
-                warnings.push(format!("MFT fast path fallback: {error}"));
+                let error_str = error.to_string();
+                let _ = staging::set_staging_meta(&conn, "mft_fallback_warning", &error_str);
+                warnings.push(format!("MFT fast path fallback: {error_str}"));
                 enumerate_fs_to_staging(&conn, &*partition.fs, ds_id, cancel_token, progress_cb)
             }
         }

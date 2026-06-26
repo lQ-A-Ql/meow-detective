@@ -133,6 +133,7 @@ fn row_to_file_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<FileTask> {
         deleted: row.get::<_, i32>(8)? != 0,
         hidden: row.get::<_, i32>(9)? != 0,
         system: row.get::<_, i32>(10)? != 0,
+        encrypted: false,
         created_at: row
             .get::<_, Option<String>>(11)?
             .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())

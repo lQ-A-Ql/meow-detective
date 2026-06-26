@@ -618,6 +618,7 @@ pub fn records_to_file_entries(
                     || visibility::inferred_hidden_name(&r.name)
                     || visibility::inferred_system_name(&r.name),
                 system: r.system || visibility::inferred_system_name(&r.name),
+                encrypted: false,
                 created_at: r.created_at,
                 modified_at: r.modified_at,
                 accessed_at: r.accessed_at,

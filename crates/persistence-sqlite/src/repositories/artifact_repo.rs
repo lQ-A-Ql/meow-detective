@@ -112,6 +112,40 @@ impl<'a> ArtifactRepo<'a> {
             Err(error) => Err(error.into()),
         }
     }
+
+    /// Load artifacts by family type, returning (id, attrs) pairs.
+    /// Used by rule pack engine to find source artifacts for matching.
+    pub fn find_by_family_raw(&self, family: &str) -> DbResult<Vec<(String, String)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, attrs FROM artifacts WHERE artifact_type = ?1")?;
+        let rows = stmt.query_map(params![family], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
+    /// Find distinct extractor version info for families matching a given parser name.
+    /// Returns (extractor_id, extractor_version) pairs.
+    pub fn find_extractor_versions(&self, parser: &str) -> DbResult<Vec<(String, Option<String>)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT extractor_id, extractor_version FROM artifacts
+             WHERE LOWER(extractor_id) = LOWER(?1) AND extractor_version IS NOT NULL
+             LIMIT 1",
+        )?;
+        let rows = stmt.query_map(params![parser], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
 }
 
 fn row_to_artifact(row: &rusqlite::Row) -> rusqlite::Result<Artifact> {

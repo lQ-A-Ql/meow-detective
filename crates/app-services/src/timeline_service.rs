@@ -655,6 +655,7 @@ mod tests {
             deleted: false,
             hidden: false,
             system: false,
+            encrypted: false,
             created_at: if created {
                 Some(Utc.with_ymd_and_hms(2024, 6, 15, 10, 0, 0).unwrap())
             } else {

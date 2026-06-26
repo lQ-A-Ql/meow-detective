@@ -87,6 +87,7 @@ fn insert_file_with_hash(
             deleted: false,
             hidden: false,
             system: false,
+            encrypted: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,
@@ -697,6 +698,7 @@ fn analysis_rows_include_field_and_boot_provenance() {
             event_id: Some(6005),
             record_id: Some(42),
             note: Some("EventLog 6005 candidate".to_string()),
+            details: None,
             provenance: AnalysisProvenanceDto {
                 data_source_id: "ds-report".to_string(),
                 artifact_path: "Windows/System32/winevt/Logs/System.evtx".to_string(),

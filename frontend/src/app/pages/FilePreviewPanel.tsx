@@ -86,6 +86,14 @@ export function FilePreviewPanel({
 }: FilePreviewPanelProps) {
   return (
     <div className="h-72 bg-[#fcfcfc] shrink-0 min-h-0">
+      {selectedFile?.encrypted && (
+        <div className="flex items-center gap-2 bg-amber-50 border-b border-amber-200 px-3 py-1.5 text-[11px] text-amber-800">
+          <span className="font-semibold">EFS Encrypted</span>
+          <span className="text-amber-600">
+            This file is encrypted with NTFS Encrypting File System. Content cannot be decrypted without the private key.
+          </span>
+        </div>
+      )}
       <ViewerTabs
         value={viewerTab}
         onValueChange={(value) =>

@@ -339,6 +339,60 @@ impl<'a> GraphRepo<'a> {
         Ok(())
     }
 
+    /// Find a graph edge by its id.
+    pub fn find_edge_by_id(&self, edge_id: &str) -> DbResult<Option<GraphEdge>> {
+        let sql = format!("SELECT {EDGE_COLUMNS} FROM graph_edges WHERE id = ?1");
+        let mut stmt = self.conn.prepare(&sql)?;
+        let result = stmt.query_row(params![edge_id], row_to_edge);
+        match result {
+            Ok(edge) => Ok(Some(edge)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Find edges with provenance metadata for a case (used for incremental rule pack execution).
+    pub fn find_edges_with_provenance_by_case(
+        &self,
+        case_id: &str,
+        edge_type: &str,
+    ) -> DbResult<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT provenance FROM graph_edges
+             WHERE case_id = ?1 AND edge_type = ?2
+             AND provenance IS NOT NULL",
+        )?;
+        let rows = stmt.query_map(params![case_id, edge_type], |row| row.get::<_, String>(0))?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
+    /// Find graph nodes by type for a case.
+    pub fn find_nodes_by_type_for_case(
+        &self,
+        case_id: &str,
+        node_type: &str,
+    ) -> DbResult<Vec<(String, String, String)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, label, summary FROM graph_nodes WHERE case_id = ?1 AND node_type = ?2",
+        )?;
+        let rows = stmt.query_map(params![case_id, node_type], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?;
+        let mut nodes = Vec::new();
+        for row in rows {
+            nodes.push(row?);
+        }
+        Ok(nodes)
+    }
+
     /// Helper: count rows grouped by a column with a filter.
     fn count_by_column(
         &self,

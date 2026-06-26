@@ -298,7 +298,7 @@ fn evtx_json_records_extract_boot_shutdown_candidates() {
 }
 
 #[test]
-fn evtx_json_records_fail_closed_for_non_system_log_path() {
+fn evtx_json_records_fail_closed_for_unsupported_log_path() {
     let result = extract_boot_shutdown_events_from_json_records(
         &[json!({
             "Event": {
@@ -309,28 +309,28 @@ fn evtx_json_records_fail_closed_for_non_system_log_path() {
                 }
             }
         })],
-        "Windows/System32/winevt/Logs/Security.evtx",
+        "Windows/System32/winevt/Logs/UnknownChannel.evtx",
     );
 
     assert!(result.is_err());
     assert!(result
         .unwrap_err()
         .to_string()
-        .contains("outside bounded System.evtx"));
+        .contains("outside bounded EVTX parser scope"));
 }
 
 #[test]
-fn evtx_binary_parser_fail_closed_for_non_system_log_path() {
+fn evtx_binary_parser_fail_closed_for_unsupported_log_path() {
     let result = extract_boot_shutdown_events(
         b"ElfFile\0",
-        "Windows/System32/winevt/Logs/Application.evtx",
+        "Windows/System32/winevt/Logs/UnknownChannel.evtx",
     );
 
     assert!(result.is_err());
     assert!(result
         .unwrap_err()
         .to_string()
-        .contains("outside bounded System.evtx"));
+        .contains("outside bounded EVTX parser scope"));
 }
 
 #[test]

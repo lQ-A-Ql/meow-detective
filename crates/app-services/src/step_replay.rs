@@ -7,9 +7,22 @@
 use persistence_sqlite::repositories::notebook_repo::{NotebookRepo, StepFilters};
 use rusqlite::Connection;
 use std::time::Instant;
+use thiserror::Error;
 use transport::dto::{
     StepReplayDifferDto, StepReplayFailDto, StepReplayMatchDto, StepReplayResultDto,
 };
+
+#[derive(Debug, Error)]
+pub enum StepReplayError {
+    #[error("Database error: {0}")]
+    Db(#[from] persistence_sqlite::DbError),
+    #[error("Search error: {0}")]
+    Search(#[from] crate::search_service::SearchError),
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error("{0}")]
+    Other(String),
+}
 
 /// Replay recorded investigation steps between `from_step_id` and `to_step_id`
 /// (inclusive). For each step, the function parses `params_json`, calls the
@@ -30,11 +43,11 @@ pub fn replay_steps(
     case_id: &str,
     from_step_id: &str,
     to_step_id: &str,
-) -> Result<StepReplayResultDto, String> {
+) -> Result<StepReplayResultDto, StepReplayError> {
     let repo = NotebookRepo::new(conn);
     let all_steps = repo
         .list_steps(case_id, &StepFilters::default())
-        .map_err(|e| format!("list steps for replay: {e}"))?;
+        .map_err(|e| StepReplayError::Other(format!("list steps for replay: {e}")))?;
 
     // Find the range in the full list (most-recent-first, will reverse below)
     let from_idx = all_steps.iter().position(|s| s.id == from_step_id);

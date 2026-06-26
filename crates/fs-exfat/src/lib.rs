@@ -250,6 +250,7 @@ impl FileSystemReader for ExfatReader {
                 entry.valid_data_length,
                 entry.attributes & ATTR_HIDDEN != 0,
                 entry.attributes & ATTR_SYSTEM != 0,
+                false,
                 entry.created_at,
                 entry.modified_at,
                 entry.accessed_at,
@@ -293,11 +294,20 @@ mod tests {
     struct FakeReader {
         data: Vec<u8>,
         pos: u64,
+        info: evidence_core::ReaderInfo,
     }
 
     impl FakeReader {
         fn new(data: Vec<u8>) -> Self {
-            Self { data, pos: 0 }
+            Self {
+                data,
+                pos: 0,
+                info: evidence_core::ReaderInfo {
+                    path: std::path::PathBuf::from("fake-exfat"),
+                    size: 0,
+                    kind: "fake-exfat".to_string(),
+                },
+            }
         }
     }
 
@@ -325,7 +335,7 @@ mod tests {
 
     impl EvidenceReader for FakeReader {
         fn info(&self) -> &evidence_core::ReaderInfo {
-            unimplemented!()
+            &self.info
         }
     }
 

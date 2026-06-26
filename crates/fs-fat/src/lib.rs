@@ -443,6 +443,7 @@ impl FatReader {
                 size,
                 attr & 0x02 != 0,
                 attr & 0x04 != 0,
+                false,
                 None,
                 None,
                 None,

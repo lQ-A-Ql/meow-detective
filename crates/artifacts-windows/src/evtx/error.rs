@@ -1,13 +1,12 @@
-//! Typed errors for the bounded EVTX boot/shutdown parser.
+//! Typed errors for the bounded EVTX parser.
 
 use thiserror::Error;
 
-/// Errors that can occur while extracting boot/shutdown candidates from a
-/// System.evtx file.
+/// Errors that can occur while extracting candidates from EVTX files.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum EvtxBootError {
-    /// The source path is not the bounded System.evtx surface this parser supports.
-    #[error("{path} is outside bounded System.evtx boot/shutdown parser scope")]
+    /// The source path is not within the bounded EVTX surface this parser supports.
+    #[error("{path} is outside bounded EVTX parser scope")]
     UnsupportedPath { path: String },
 
     /// The input exceeds the bounded parser size limit.
@@ -41,7 +40,7 @@ pub enum EvtxBootError {
         detail: String,
     },
 
-    /// No supported boot/shutdown candidate events were found.
-    #[error("{path} contains no supported boot/shutdown candidate events")]
+    /// No supported candidate events were found.
+    #[error("{path} contains no supported EVTX candidate events")]
     NoSupportedEvents { path: String },
 }

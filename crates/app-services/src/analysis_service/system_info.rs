@@ -349,6 +349,7 @@ fn inspect_evtx_boot_source<E: std::fmt::Display>(
                                     event_id: Some(event.event_id),
                                     record_id: event.record_id,
                                     note: Some(event.note),
+                                    details: event.details,
                                     provenance: event_provenance.clone(),
                                 }
                             }));

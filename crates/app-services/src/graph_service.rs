@@ -1,5 +1,5 @@
 use domain::{EdgeType, GraphEdge, GraphNode, NodeType};
-use persistence_sqlite::repositories::graph_repo::GraphRepo;
+use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, graph_repo::GraphRepo};
 use rusqlite::Connection;
 use thiserror::Error;
 use transport::dto::{
@@ -192,28 +192,12 @@ pub fn get_provenance_chain(
     conn: &Connection,
     edge_id: &str,
 ) -> Result<Vec<GraphProvenanceEntryDto>, GraphServiceError> {
-    // Fetch the edge. Use a direct query since GraphRepo doesn't expose get_edge_by_id.
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, case_id, source_id, target_id, edge_type, confidence, provenance, created_at
-             FROM graph_edges WHERE id = ?1",
-        )
-        .map_err(|e| GraphServiceError::Other(format!("prepare edge query: {e}")))?;
-
-    let edge: GraphEdge = stmt
-        .query_row(rusqlite::params![edge_id], |row| {
-            Ok(GraphEdge {
-                id: row.get(0)?,
-                case_id: row.get(1)?,
-                source_id: row.get(2)?,
-                target_id: row.get(3)?,
-                edge_type: parse_edge_type(&row.get::<_, String>(4)?),
-                confidence: row.get(5)?,
-                provenance: row.get(6)?,
-                created_at: row.get(7)?,
-            })
-        })
-        .map_err(|e| GraphServiceError::Other(format!("edge not found: {e}")))?;
+    // Fetch the edge using GraphRepo.
+    let repo = GraphRepo::new(conn);
+    let edge: GraphEdge = repo
+        .find_edge_by_id(edge_id)
+        .map_err(|e| GraphServiceError::Other(format!("edge query: {e}")))?
+        .ok_or_else(|| GraphServiceError::NotFound(format!("edge not found: {edge_id}")))?;
 
     // Parse provenance JSON to extract rule metadata
     let provenance_json: Option<serde_json::Value> = edge
@@ -401,20 +385,14 @@ fn enrich_parser_versions(
     }
 
     // Query artifacts table for extractor versions matching these families
-    let mut stmt = conn
-        .prepare(
-            "SELECT DISTINCT extractor_id, extractor_version FROM artifacts
-             WHERE LOWER(extractor_id) = LOWER(?1) AND extractor_version IS NOT NULL
-             LIMIT 1",
-        )
-        .map_err(|e| GraphServiceError::Other(format!("prepare artifact version query: {e}")))?;
+    let artifact_repo = ArtifactRepo::new(conn);
 
     for entry in entries.iter_mut() {
         if let Some(ref parser) = entry.source_parser {
-            if let Ok(Some(version)) = stmt.query_row(rusqlite::params![parser], |row| {
-                row.get::<_, Option<String>>(1)
-            }) {
-                entry.parser_version = Some(version);
+            if let Ok(versions) = artifact_repo.find_extractor_versions(parser) {
+                if let Some((_, Some(version))) = versions.first() {
+                    entry.parser_version = Some(version.clone());
+                }
             }
         }
     }

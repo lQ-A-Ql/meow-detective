@@ -20,7 +20,8 @@ pub struct HfsPlusReader {
     free_blocks: u32,
     /// The catalog file fork data.
     catalog_fork: HfsForkData,
-    /// Catalog B-tree header node data (kept for completeness; currently unused).
+    /// Catalog B-tree header node data.
+    // Parsed for format completeness; available for future use.
     #[allow(dead_code)]
     catalog_header_node: Vec<u8>,
     /// Root node number for the catalog B-tree.

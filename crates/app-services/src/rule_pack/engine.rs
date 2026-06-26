@@ -1,6 +1,6 @@
 use chrono::Utc;
 use domain::{GraphEdge, NodeType};
-use persistence_sqlite::repositories::graph_repo::GraphRepo;
+use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, graph_repo::GraphRepo};
 use rusqlite::Connection;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -223,20 +223,14 @@ fn load_artifacts_by_family(
     conn: &Connection,
     family: &str,
 ) -> Result<Vec<ArtifactRow>, RulePackError> {
-    let mut stmt = conn.prepare("SELECT id, attrs FROM artifacts WHERE artifact_type = ?1")?;
-
-    let rows = stmt.query_map(rusqlite::params![family], |row| {
-        Ok(ArtifactRow {
-            id: row.get(0)?,
-            attrs: row.get::<_, String>(1)?,
-        })
-    })?;
-
-    let mut artifacts = Vec::new();
-    for row in rows {
-        artifacts.push(row?);
-    }
-
+    let repo = ArtifactRepo::new(conn);
+    let rows = repo
+        .find_by_family_raw(family)
+        .map_err(|e| RulePackError::Other(format!("load artifacts by family '{family}': {e}")))?;
+    let artifacts = rows
+        .into_iter()
+        .map(|(id, attrs)| ArtifactRow { id, attrs })
+        .collect();
     Ok(artifacts)
 }
 
@@ -252,23 +246,14 @@ fn load_nodes_by_type(
     node_type: &NodeType,
 ) -> Result<Vec<NodeRow>, RulePackError> {
     let type_str = node_type_str(node_type);
-    let mut stmt = conn.prepare(
-        "SELECT id, label, summary FROM graph_nodes WHERE case_id = ?1 AND node_type = ?2",
-    )?;
-
-    let rows = stmt.query_map(rusqlite::params![case_id, type_str], |row| {
-        Ok(NodeRow {
-            id: row.get(0)?,
-            label: row.get(1)?,
-            summary: row.get(2)?,
-        })
-    })?;
-
-    let mut nodes = Vec::new();
-    for row in rows {
-        nodes.push(row?);
-    }
-
+    let repo = GraphRepo::new(conn);
+    let rows = repo
+        .find_nodes_by_type_for_case(case_id, type_str)
+        .map_err(|e| RulePackError::Other(format!("load nodes by type '{type_str}': {e}")))?;
+    let nodes = rows
+        .into_iter()
+        .map(|(id, label, summary)| NodeRow { id, label, summary })
+        .collect();
     Ok(nodes)
 }
 
@@ -501,17 +486,13 @@ fn get_executed_rule_ids(
     case_id: &str,
     pack_id: &str,
 ) -> Result<std::collections::HashSet<String>, RulePackError> {
-    let mut stmt = conn.prepare(
-        "SELECT DISTINCT provenance FROM graph_edges
-             WHERE case_id = ?1 AND edge_type = 'correlates_with'
-             AND provenance IS NOT NULL",
-    )?;
-
-    let rows = stmt.query_map(rusqlite::params![case_id], |row| row.get::<_, String>(0))?;
+    let repo = GraphRepo::new(conn);
+    let provenance_rows = repo
+        .find_edges_with_provenance_by_case(case_id, "correlates_with")
+        .map_err(|e| RulePackError::Other(format!("query executed rule ids: {e}")))?;
 
     let mut rule_ids = std::collections::HashSet::new();
-    for row in rows {
-        let provenance = row?;
+    for provenance in provenance_rows {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&provenance) {
             if json.get("pack_id").and_then(|v| v.as_str()) == Some(pack_id) {
                 if let Some(rule_id) = json.get("rule_id").and_then(|v| v.as_str()) {
@@ -633,6 +614,7 @@ mod tests {
                     deleted: false,
                     hidden: false,
                     system: false,
+                    encrypted: false,
                     created_at: None,
                     modified_at: None,
                     accessed_at: None,
@@ -651,6 +633,7 @@ mod tests {
                     deleted: false,
                     hidden: false,
                     system: false,
+                    encrypted: false,
                     created_at: None,
                     modified_at: None,
                     accessed_at: None,
@@ -669,6 +652,7 @@ mod tests {
                     deleted: true,
                     hidden: false,
                     system: false,
+                    encrypted: false,
                     created_at: None,
                     modified_at: None,
                     accessed_at: None,

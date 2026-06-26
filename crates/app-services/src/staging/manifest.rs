@@ -1,4 +1,5 @@
 use super::db_paths::manifest_path;
+use super::error::StagingError;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -75,15 +76,15 @@ impl StagingManifest {
     }
 
     /// Save manifest to disk atomically (write .tmp then rename).
-    pub fn save(&self, case_root: &Path) -> Result<(), String> {
+    pub fn save(&self, case_root: &Path) -> Result<(), StagingError> {
         let path = manifest_path(case_root, &self.data_source_id);
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            std::fs::create_dir_all(parent).map_err(StagingError::Io)?;
         }
-        let json = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
+        let json = serde_json::to_string_pretty(self).map_err(StagingError::Json)?;
         let tmp_path = path.with_extension("json.tmp");
-        std::fs::write(&tmp_path, &json).map_err(|e| e.to_string())?;
-        std::fs::rename(&tmp_path, &path).map_err(|e| e.to_string())?;
+        std::fs::write(&tmp_path, &json).map_err(StagingError::Io)?;
+        std::fs::rename(&tmp_path, &path).map_err(StagingError::Io)?;
         Ok(())
     }
 

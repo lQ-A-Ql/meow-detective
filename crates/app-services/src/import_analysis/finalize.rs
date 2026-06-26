@@ -58,7 +58,7 @@ pub(super) fn merge_finished_analysis_staging(
             }
         }),
     )
-    .map_err(ImportAnalysisError::Staging)?;
+    .map_err(|e| ImportAnalysisError::Staging(e.to_string()))?;
     stats.artifact_count = merge_stats.artifact_count;
     stats.timeline_count = merge_stats.timeline_count;
     stats.indexed_count = merge_stats.indexed_count;

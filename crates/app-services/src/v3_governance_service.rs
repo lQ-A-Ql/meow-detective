@@ -12,11 +12,20 @@
 //! - All queries are read-only and operate against the active case database.
 
 use rusqlite::Connection;
+use thiserror::Error;
 
 use transport::dto::{
     BatchStatusDto, GraphStatsDto, NotebookStatsDto, PlatformCoverageDto, RulePackInfoDto,
     RulePackStatusDto, V3GovernanceSnapshotDto,
 };
+
+#[derive(Debug, Error)]
+pub enum V3GovernanceError {
+    #[error("database error: {0}")]
+    Db(#[from] rusqlite::Error),
+    #[error("{0}")]
+    Other(String),
+}
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
@@ -28,9 +37,9 @@ use transport::dto::{
 pub fn get_v3_governance_snapshot(
     conn: &Connection,
     case_id: &str,
-) -> Result<V3GovernanceSnapshotDto, String> {
+) -> Result<V3GovernanceSnapshotDto, V3GovernanceError> {
     let v2 = crate::v2_governance_service::get_v2_governance_snapshot(conn, case_id)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| V3GovernanceError::Other(e.to_string()))?;
 
     let graph_statistics = build_graph_stats(conn, case_id)?;
     let platform_coverage = build_platform_coverage(conn)?;
@@ -50,9 +59,9 @@ pub fn get_v3_governance_snapshot(
 
 // ── Graph Statistics ───────────────────────────────────────────────────────
 
-fn build_graph_stats(conn: &Connection, case_id: &str) -> Result<GraphStatsDto, String> {
-    let graph_snapshot =
-        crate::graph_service::get_graph_snapshot(conn, case_id).map_err(|e| e.to_string())?;
+fn build_graph_stats(conn: &Connection, case_id: &str) -> Result<GraphStatsDto, V3GovernanceError> {
+    let graph_snapshot = crate::graph_service::get_graph_snapshot(conn, case_id)
+        .map_err(|e| V3GovernanceError::Other(e.to_string()))?;
     Ok(GraphStatsDto {
         node_count_by_type: graph_snapshot.node_count_by_type,
         edge_count_by_type: graph_snapshot.edge_count_by_type,
@@ -164,12 +173,12 @@ fn get_platform(family: &str) -> &'static str {
     }
 }
 
-fn build_platform_coverage(conn: &Connection) -> Result<PlatformCoverageDto, String> {
+fn build_platform_coverage(conn: &Connection) -> Result<PlatformCoverageDto, V3GovernanceError> {
     use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
 
     let family_counts = ArtifactRepo::new(conn)
         .count_by_family()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| V3GovernanceError::Other(e.to_string()))?;
 
     let mut windows_families: Vec<String> = Vec::new();
     let mut linux_families: Vec<String> = Vec::new();
@@ -254,7 +263,10 @@ fn build_rule_pack_status() -> RulePackStatusDto {
 
 // ── Batch Status ───────────────────────────────────────────────────────────
 
-fn build_batch_status(conn: &Connection, case_id: &str) -> Result<BatchStatusDto, String> {
+fn build_batch_status(
+    conn: &Connection,
+    case_id: &str,
+) -> Result<BatchStatusDto, V3GovernanceError> {
     use crate::batch_service;
 
     let jobs = batch_service::list_batch_jobs(conn, case_id).unwrap_or_default();
@@ -279,7 +291,10 @@ fn build_batch_status(conn: &Connection, case_id: &str) -> Result<BatchStatusDto
 
 // ── Notebook Stats ─────────────────────────────────────────────────────────
 
-fn build_notebook_stats(conn: &Connection, case_id: &str) -> Result<NotebookStatsDto, String> {
+fn build_notebook_stats(
+    conn: &Connection,
+    case_id: &str,
+) -> Result<NotebookStatsDto, V3GovernanceError> {
     let entry_count: u32 = conn
         .query_row(
             "SELECT COUNT(*) FROM notebook_entries WHERE case_id = ?1 AND status != 'deleted'",

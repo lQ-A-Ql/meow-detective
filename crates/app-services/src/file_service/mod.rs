@@ -6,6 +6,7 @@ use transport::{commands::GetFileJumpContextRequest, dto::FileJumpContextDto};
 mod data_sources;
 mod enumeration;
 mod error;
+mod export;
 mod file_rows;
 mod mapping;
 mod mft;
@@ -22,6 +23,7 @@ pub use enumeration::{
     enumerate_filesystem, enumerate_filesystem_with_root_name,
     enumerate_filesystem_with_root_name_and_cancel, EnumerationStats,
 };
+pub use export::extract_file_to_destination;
 pub use file_rows::get_file_rows_for_request;
 pub use partition_roots::{
     insert_partition_placeholder_root, replace_placeholder_root_with_real,
@@ -162,6 +164,7 @@ mod tests {
                         size: 1,
                         hidden: false,
                         system: false,
+                        encrypted: false,
                         created_at: None,
                         modified_at: None,
                         accessed_at: None,
@@ -173,6 +176,7 @@ mod tests {
                         size: 1,
                         hidden: false,
                         system: false,
+                        encrypted: false,
                         created_at: None,
                         modified_at: None,
                         accessed_at: None,
@@ -564,6 +568,7 @@ mod tests {
             deleted,
             hidden,
             system,
+            encrypted: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,

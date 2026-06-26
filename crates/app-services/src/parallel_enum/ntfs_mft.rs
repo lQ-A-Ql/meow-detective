@@ -1,3 +1,4 @@
+use super::error::ParallelEnumError;
 use super::partition_worker::PartitionWork;
 use crate::staging;
 #[cfg(test)]
@@ -6,6 +7,8 @@ use evidence_core::{EvidenceReader, RawImageReader};
 use fs_ntfs::mft_scanner::{MftRecord, MftScanner};
 use fs_ntfs::{NtfsDirectoryEntry, NtfsReader};
 use image_e01::E01Reader;
+#[cfg(test)]
+use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::params;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{Read, Seek, SeekFrom};
@@ -20,15 +23,17 @@ pub(super) fn enumerate_ntfs_mft_to_staging(
     ds_id: &str,
     cancel_token: &AtomicBool,
     progress_cb: Option<&dyn Fn(u64, u64)>,
-) -> Result<(u64, u64, u64), String> {
+) -> Result<(u64, u64, u64), ParallelEnumError> {
     if cancel_token.load(Ordering::Relaxed) {
-        return Err("Cancelled".to_string());
+        return Err(ParallelEnumError::Cancelled);
     }
 
     let mut reader = open_partition_evidence_reader(partition)?;
     let params = read_ntfs_mft_parameters(partition, &mut *reader)?;
     if params.mft_data_size == 0 {
-        return Err("MFT data size is zero".to_string());
+        return Err(ParallelEnumError::MftParams(
+            "MFT data size is zero".to_string(),
+        ));
     }
     let scanner = MftScanner::new(
         params.volume_offset,
@@ -40,11 +45,13 @@ pub(super) fn enumerate_ntfs_mft_to_staging(
     );
     let total_records = scanner.total_records();
     if total_records == 0 {
-        return Err("MFT total record count is zero".to_string());
+        return Err(ParallelEnumError::MftParams(
+            "MFT total record count is zero".to_string(),
+        ));
     }
 
     conn.execute_batch("BEGIN TRANSACTION")
-        .map_err(|e| format!("Begin MFT staging transaction: {e}"))?;
+        .map_err(ParallelEnumError::Db)?;
     let transaction_result = (|| {
         let mut stmt = conn
             .prepare_cached(
@@ -53,7 +60,7 @@ pub(super) fn enumerate_ntfs_mft_to_staging(
                   size, ext, deleted, hidden, system, created_at, modified_at, accessed_at, changed_at, hash_sha256)
                  VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, NULL)",
             )
-            .map_err(|e| format!("Prepare MFT staging insert: {e}"))?;
+            .map_err(ParallelEnumError::Db)?;
         let mut start_record = 0u64;
         let mut file_count = 0u64;
         let mut dir_count = 0u64;
@@ -64,7 +71,7 @@ pub(super) fn enumerate_ntfs_mft_to_staging(
 
         while start_record < total_records {
             if cancel_token.load(Ordering::Relaxed) {
-                return Err("Cancelled".to_string());
+                return Err(ParallelEnumError::Cancelled);
             }
 
             let chunk_count = MFT_CHUNK_RECORDS.min(total_records - start_record);
@@ -75,10 +82,10 @@ pub(super) fn enumerate_ntfs_mft_to_staging(
                 let byte_offset = scanner.mft_abs_offset() + mft_stream_offset;
                 reader
                     .seek(SeekFrom::Start(byte_offset))
-                    .map_err(|e| format!("Seek MFT chunk {start_record}: {e}"))?;
+                    .map_err(ParallelEnumError::Io)?;
                 reader
                     .read_exact(&mut buf[..byte_count as usize])
-                    .map_err(|e| format!("Read MFT chunk {start_record}: {e}"))?;
+                    .map_err(ParallelEnumError::Io)?;
             } else {
                 read_ntfs_mft_stream(
                     &mut *reader,
@@ -88,7 +95,7 @@ pub(super) fn enumerate_ntfs_mft_to_staging(
                     mft_stream_offset,
                     &mut buf[..byte_count as usize],
                 )
-                .map_err(|e| format!("Read MFT runlist chunk {start_record}: {e}"))?;
+                .map_err(ParallelEnumError::Io)?;
             }
 
             let records =
@@ -124,7 +131,9 @@ pub(super) fn enumerate_ntfs_mft_to_staging(
             &mut file_count,
             &mut dir_count,
         )
-        .map_err(|e| format!("Backfill NTFS directory index entries: {e}"))?;
+        .map_err(|e| {
+            ParallelEnumError::MftParams(format!("Backfill NTFS directory index entries: {e}"))
+        })?;
         // Capture result before dropping large structures
         let staging_result = update_mft_staging_paths_via_sqlite(
             conn,
@@ -136,7 +145,8 @@ pub(super) fn enumerate_ntfs_mft_to_staging(
         // Free large in-memory structures after path resolution is complete
         drop(path_map); // ~20MB per worker
         drop(deleted_records); // ~3MB per worker
-        staging_result.map_err(|e| format!("Update MFT staging paths: {e}"))?;
+        staging_result
+            .map_err(|e| ParallelEnumError::MftParams(format!("Update MFT staging paths: {e}")))?;
         validate_mft_staging_shape(conn, ds_id, partition.index)?;
         Ok((file_count, dir_count, total_size))
     })();
@@ -144,7 +154,7 @@ pub(super) fn enumerate_ntfs_mft_to_staging(
     let stats = match transaction_result {
         Ok(stats) => {
             conn.execute_batch("COMMIT")
-                .map_err(|e| format!("Commit MFT staging transaction: {e}"))?;
+                .map_err(ParallelEnumError::Db)?;
             stats
         }
         Err(error) => {
@@ -154,9 +164,9 @@ pub(super) fn enumerate_ntfs_mft_to_staging(
     };
 
     staging::set_staging_meta(conn, "enum_strategy", "mft")
-        .map_err(|e| format!("Mark MFT strategy: {e}"))?;
+        .map_err(|e| ParallelEnumError::MftParams(format!("Mark MFT strategy: {e}")))?;
     staging::set_staging_meta(conn, "mft_records", &total_records.to_string())
-        .map_err(|e| format!("Mark MFT record count: {e}"))?;
+        .map_err(|e| ParallelEnumError::MftParams(format!("Mark MFT record count: {e}")))?;
     Ok(stats)
 }
 
@@ -164,7 +174,7 @@ pub(super) fn validate_mft_staging_shape(
     conn: &rusqlite::Connection,
     ds_id: &str,
     partition_index: usize,
-) -> Result<(), String> {
+) -> Result<(), ParallelEnumError> {
     let root_id = mft_entry_id(partition_index, 5);
     let suspicious_root_system32 = mft_root_child_count(conn, ds_id, &root_id, "System32")?;
     let suspicious_root_hives = mft_root_child_count(conn, ds_id, &root_id, "SOFTWARE")?
@@ -176,9 +186,9 @@ pub(super) fn validate_mft_staging_shape(
         && users_dirs == 0
         && (suspicious_root_system32 > 0 || suspicious_root_hives > 0)
     {
-        return Err(format!(
+        return Err(ParallelEnumError::MftParams(format!(
             "MFT fast path produced suspicious flat NTFS tree: root System32={suspicious_root_system32}, root hive/log candidates={suspicious_root_hives}, Windows dirs={windows_dirs}, Users dirs={users_dirs}. Falling back to recursive NTFS reader."
-        ));
+        )));
     }
     Ok(())
 }
@@ -230,7 +240,7 @@ pub(super) struct NtfsMftParams {
 pub(super) fn read_ntfs_mft_parameters(
     partition: &PartitionWork,
     reader: &mut dyn EvidenceReader,
-) -> Result<NtfsMftParams, String> {
+) -> Result<NtfsMftParams, ParallelEnumError> {
     reader
         .seek(SeekFrom::Start(partition_offset(partition)))
         .map_err(|e| format!("Seek NTFS boot sector: {e}"))?;
@@ -239,13 +249,17 @@ pub(super) fn read_ntfs_mft_parameters(
         .read_exact(&mut boot)
         .map_err(|e| format!("Read NTFS boot sector: {e}"))?;
     if &boot[3..11] != b"NTFS    " {
-        return Err("not an NTFS boot sector".to_string());
+        return Err(ParallelEnumError::MftParams(
+            "not an NTFS boot sector".to_string(),
+        ));
     }
 
     let bytes_per_sector = u16::from_le_bytes([boot[11], boot[12]]);
     let sectors_per_cluster = boot[13];
     if bytes_per_sector == 0 || sectors_per_cluster == 0 {
-        return Err("invalid NTFS geometry".to_string());
+        return Err(ParallelEnumError::MftParams(
+            "invalid NTFS geometry".to_string(),
+        ));
     }
     let cluster_size = bytes_per_sector as u64 * sectors_per_cluster as u64;
     let mft_cluster = u64::from_le_bytes(boot[0x30..0x38].try_into().unwrap_or([0; 8]));
@@ -277,7 +291,7 @@ pub(super) fn read_ntfs_mft_parameters(
 
 pub(super) fn open_partition_evidence_reader(
     partition: &PartitionWork,
-) -> Result<Box<dyn EvidenceReader>, String> {
+) -> Result<Box<dyn EvidenceReader>, ParallelEnumError> {
     if partition.source_kind.eq_ignore_ascii_case("e01") {
         Ok(Box::new(
             E01Reader::open(&partition.source_path).map_err(|e| e.to_string())?,
@@ -822,6 +836,7 @@ pub(super) fn records_to_partition_file_entries(
                     || inferred_hidden_name(&record.name)
                     || inferred_system_name(&record.name),
                 system: record.system || inferred_system_name(&record.name),
+                encrypted: false,
                 created_at: record.created_at,
                 modified_at: record.modified_at,
                 accessed_at: record.accessed_at,
@@ -914,14 +929,14 @@ pub(super) fn update_mft_staging_paths(
         );
     }
 
-    let mut stmt =
-        conn.prepare("UPDATE file_entries SET path = ?1 WHERE id = ?2 AND data_source_id = ?3")?;
     for (record_num, path) in &resolved {
-        stmt.execute(params![
+        FileRepo::update_file_entry_path(
+            conn,
+            &mft_entry_id_from_key(partition_index, record_num),
+            ds_id,
             path,
-            mft_entry_id_from_key(partition_index, record_num),
-            ds_id
-        ])?;
+        )
+        .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
     }
     Ok(())
 }
@@ -947,11 +962,6 @@ pub(super) fn update_mft_staging_paths_and_parent_ids(
     }
 
     let root_id = mft_entry_id_from_key(partition_index, "5");
-    let mut stmt = conn.prepare_cached(
-        "UPDATE file_entries
-         SET path = ?1, parent_id = ?2
-         WHERE id = ?3 AND data_source_id = ?4",
-    )?;
 
     for (record_num, (parent, _, _)) in path_map {
         let path = resolved.get(record_num).map(String::as_str).unwrap_or("");
@@ -967,7 +977,8 @@ pub(super) fn update_mft_staging_paths_and_parent_ids(
                 _ => None,
             }
         };
-        stmt.execute(params![path, parent_id, entry_id, ds_id])?;
+        FileRepo::update_file_entry_parent_path(conn, &entry_id, ds_id, parent_id.as_deref(), path)
+            .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
     }
     Ok(())
 }

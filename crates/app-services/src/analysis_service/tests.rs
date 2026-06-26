@@ -31,6 +31,7 @@ fn file(id: &str, path: &str, size: u64) -> FileEntry {
         deleted: false,
         hidden: false,
         system: false,
+        encrypted: false,
         created_at: None,
         modified_at: None,
         accessed_at: None,
@@ -633,7 +634,7 @@ fn run_analysis_extraction_extracts_registry_browser_email_and_persists() {
     assert_eq!(browser.download_total, 2);
     assert!(browser.visits.iter().any(|visit| {
         visit.browser == "Chrome"
-            && visit.profile == "default"
+            && visit.profile == "Default"
             && visit.url == "https://chrome.example/"
             && visit.visit_count == 3
             && visit.visit_time.as_deref() == Some("2024-01-02T03:04:05+00:00")
@@ -645,7 +646,7 @@ fn run_analysis_extraction_extracts_registry_browser_email_and_persists() {
     }));
     assert!(browser.downloads.iter().any(|download| {
         download.browser == "Edge"
-            && download.profile == "profile 1"
+            && download.profile == "Profile 1"
             && download.target_path == "C:/Temp/edge.bin"
             && download.total_bytes == 4096
     }));

@@ -313,6 +313,7 @@ fn collect_exportable_file_entries(
             deleted: row.get::<_, i32>(8)? != 0,
             hidden: row.get::<_, i32>(9)? != 0,
             system: row.get::<_, i32>(10)? != 0,
+            encrypted: false,
             created_at: None,
             modified_at: None,
             accessed_at: None,

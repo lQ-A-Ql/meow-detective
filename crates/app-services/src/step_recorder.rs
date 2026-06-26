@@ -4,6 +4,7 @@
 //! key counts (files, artifacts, timeline events, graph nodes/edges) so that
 //! replays can detect state drift.
 
+use crate::notebook_service::NotebookError;
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 use transport::dto::InvestigationStepDto;
@@ -66,11 +67,11 @@ pub fn record_step(
     duration_ms: u32,
     success: bool,
     error_code: Option<&str>,
-) -> Result<InvestigationStepDto, String> {
+) -> Result<InvestigationStepDto, NotebookError> {
     let timestamp = chrono::Utc::now().to_rfc3339();
     let case_state_hash = compute_case_state_hash(conn, case_id);
 
-    super::notebook_service::record_step(
+    crate::notebook_service::record_step(
         conn,
         case_id,
         step_kind,
@@ -81,7 +82,6 @@ pub fn record_step(
         error_code,
         Some(&case_state_hash),
     )
-    .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

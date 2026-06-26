@@ -137,10 +137,14 @@ pub(crate) struct OidMap {
 }
 
 impl OidMap {
-    pub(crate) fn from_checkpoint_node(node_data: &[u8], flags: u16, nkeys: u32) -> Self {
+    pub(crate) fn from_checkpoint_node(
+        node_data: &[u8],
+        flags: u16,
+        nkeys: u32,
+    ) -> io::Result<Self> {
         let mut mappings = HashMap::new();
         if flags & BT_FIXED_KV == 0 {
-            return Self { mappings };
+            return Ok(Self { mappings });
         }
         let toc = parse_toc(node_data, nkeys);
         for entry in &toc {
@@ -153,14 +157,20 @@ impl OidMap {
                 && entry.key_len >= 8
                 && entry.val_len >= 8
             {
-                let oid =
-                    u64::from_le_bytes(node_data[key_start..key_start + 8].try_into().unwrap());
-                let block =
-                    u64::from_le_bytes(node_data[val_start..val_start + 8].try_into().unwrap());
+                let oid = u64::from_le_bytes(
+                    node_data[key_start..key_start + 8]
+                        .try_into()
+                        .map_err(|_| invalid_fs_data("checkpoint OID key too short"))?,
+                );
+                let block = u64::from_le_bytes(
+                    node_data[val_start..val_start + 8]
+                        .try_into()
+                        .map_err(|_| invalid_fs_data("checkpoint block value too short"))?,
+                );
                 mappings.insert(oid, block);
             }
         }
-        Self { mappings }
+        Ok(Self { mappings })
     }
 
     pub(crate) fn resolve(&self, oid: u64) -> io::Result<u64> {
@@ -220,59 +230,103 @@ pub(crate) struct ApfsInode {
 ///
 /// The children_oid / extents follow in the j_inode_val or are stored separately
 /// in the xfield area. For simplicity we scan the raw value for known OID patterns.
-pub(crate) fn parse_inode_val(data: &[u8], oid: u64) -> ApfsInode {
+pub(crate) fn parse_inode_val(data: &[u8], oid: u64) -> io::Result<ApfsInode> {
     let parent_id = if data.len() >= 8 {
-        u64::from_le_bytes(data[0..8].try_into().unwrap())
+        u64::from_le_bytes(
+            data[0..8]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        )
     } else {
         0
     };
     let private_id = if data.len() >= 16 {
-        u64::from_le_bytes(data[8..16].try_into().unwrap())
+        u64::from_le_bytes(
+            data[8..16]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        )
     } else {
         0
     };
     let create_time = if data.len() >= 24 {
-        u64::from_le_bytes(data[0x10..0x18].try_into().unwrap())
+        u64::from_le_bytes(
+            data[0x10..0x18]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        )
     } else {
         0
     };
     let mod_time = if data.len() >= 32 {
-        u64::from_le_bytes(data[0x18..0x20].try_into().unwrap())
+        u64::from_le_bytes(
+            data[0x18..0x20]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        )
     } else {
         0
     };
     let change_time = if data.len() >= 40 {
-        u64::from_le_bytes(data[0x20..0x28].try_into().unwrap())
+        u64::from_le_bytes(
+            data[0x20..0x28]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        )
     } else {
         0
     };
     let access_time = if data.len() >= 48 {
-        u64::from_le_bytes(data[0x28..0x30].try_into().unwrap())
+        u64::from_le_bytes(
+            data[0x28..0x30]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        )
     } else {
         0
     };
     let flags = if data.len() >= 56 {
-        u64::from_le_bytes(data[0x30..0x38].try_into().unwrap())
+        u64::from_le_bytes(
+            data[0x30..0x38]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        )
     } else {
         0
     };
     let nchildren_or_nlink = if data.len() >= 60 {
-        u32::from_le_bytes(data[0x38..0x3C].try_into().unwrap())
+        u32::from_le_bytes(
+            data[0x38..0x3C]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        )
     } else {
         0
     };
     let uid = if data.len() >= 72 {
-        u32::from_le_bytes(data[0x44..0x48].try_into().unwrap())
+        u32::from_le_bytes(
+            data[0x44..0x48]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        )
     } else {
         0
     };
     let gid = if data.len() >= 76 {
-        u32::from_le_bytes(data[0x48..0x4C].try_into().unwrap())
+        u32::from_le_bytes(
+            data[0x48..0x4C]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        )
     } else {
         0
     };
     let mode = if data.len() >= 78 {
-        u16::from_le_bytes(data[0x4C..0x4E].try_into().unwrap())
+        u16::from_le_bytes(
+            data[0x4C..0x4E]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        )
     } else {
         0
     };
@@ -280,12 +334,20 @@ pub(crate) fn parse_inode_val(data: &[u8], oid: u64) -> ApfsInode {
     // Scan for children_oid and extent OIDs.
     // j_children_oid is typically at offset 0x80 in j_inode_val.
     let children_oid = if data.len() >= 0x88 {
-        u64::from_le_bytes(data[0x80..0x88].try_into().unwrap())
+        u64::from_le_bytes(
+            data[0x80..0x88]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        )
     } else {
         0
     };
     let logical_size = if data.len() >= 0x60 {
-        u64::from_le_bytes(data[0x58..0x60].try_into().unwrap())
+        u64::from_le_bytes(
+            data[0x58..0x60]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        )
     } else {
         0
     };
@@ -294,14 +356,18 @@ pub(crate) fn parse_inode_val(data: &[u8], oid: u64) -> ApfsInode {
     let mut extents = Vec::new();
     if data.len() >= 0x98 {
         for off in (0x88..data.len() - 7).step_by(8) {
-            let val = u64::from_le_bytes(data[off..off + 8].try_into().unwrap());
+            let val = u64::from_le_bytes(
+                data[off..off + 8]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("disk parse error"))?,
+            );
             if val != 0 && val != children_oid && val != parent_id && val != private_id {
                 extents.push(val);
             }
         }
     }
 
-    ApfsInode {
+    Ok(ApfsInode {
         oid,
         parent_id,
         private_id,
@@ -317,7 +383,7 @@ pub(crate) fn parse_inode_val(data: &[u8], oid: u64) -> ApfsInode {
         children_oid,
         extents,
         logical_size,
-    }
+    })
 }
 
 pub(crate) fn ns_to_option_dt(ns: u64) -> Option<chrono::DateTime<chrono::Utc>> {
@@ -345,10 +411,14 @@ pub(crate) struct DirEntry {
 /// Parse a directory B-tree leaf node (variable-size KV).
 /// Key: `j_drec_hashed_key_t` (name_hash: u64, name_len: u16, name: [u8]).
 /// Value: `j_drec_val_t` (file_id: u64, date_added: u64, flags: u64).
-pub(crate) fn parse_dir_b_tree(node_data: &[u8], flags: u16, nkeys: u32) -> Vec<DirEntry> {
+pub(crate) fn parse_dir_b_tree(
+    node_data: &[u8],
+    flags: u16,
+    nkeys: u32,
+) -> io::Result<Vec<DirEntry>> {
     // Variable-size KV directory nodes.
     if flags & BT_FIXED_KV != 0 {
-        return Vec::new();
+        return Ok(Vec::new());
     }
     let toc = parse_toc(node_data, nkeys);
     let mut entries = Vec::new();
@@ -379,12 +449,20 @@ pub(crate) fn parse_dir_b_tree(node_data: &[u8], flags: u16, nkeys: u32) -> Vec<
         // Parse j_drec_val: file_id(8) + date_added(8) + flags(4?) or type?
         // Simplified: file_id at offset 0, type/flags at offset 24.
         let file_id = if val_data.len() >= 8 {
-            u64::from_le_bytes(val_data[0..8].try_into().unwrap())
+            u64::from_le_bytes(
+                val_data[0..8]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("disk parse error"))?,
+            )
         } else {
             0
         };
         let date_added = if val_data.len() >= 16 {
-            u64::from_le_bytes(val_data[8..16].try_into().unwrap())
+            u64::from_le_bytes(
+                val_data[8..16]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("disk parse error"))?,
+            )
         } else {
             0
         };
@@ -403,7 +481,7 @@ pub(crate) fn parse_dir_b_tree(node_data: &[u8], flags: u16, nkeys: u32) -> Vec<
             date_added,
         });
     }
-    entries
+    Ok(entries)
 }
 
 // ---------------------------------------------------------------------------
@@ -437,7 +515,11 @@ impl ApfsReader {
         let mut block0 = [0u8; 4096];
         reader.read_exact(&mut block0)?;
 
-        let magic = u32::from_le_bytes(block0[NX_MAGIC_OFF..NX_MAGIC_OFF + 4].try_into().unwrap());
+        let magic = u32::from_le_bytes(
+            block0[NX_MAGIC_OFF..NX_MAGIC_OFF + 4]
+                .try_into()
+                .map_err(|_| invalid_fs_data("APFS container superblock header too short"))?,
+        );
         if magic != NXSB_MAGIC {
             return Err(invalid_fs_data(format!(
                 "not a valid APFS container (magic 0x{:08X})",
@@ -448,7 +530,7 @@ impl ApfsReader {
         let block_size = u32::from_le_bytes(
             block0[NX_BLOCK_SIZE_OFF..NX_BLOCK_SIZE_OFF + 4]
                 .try_into()
-                .unwrap(),
+                .map_err(|_| invalid_fs_data("APFS block_size field too short"))?,
         );
         if block_size == 0 || block_size < 512 {
             return Err(invalid_fs_data("invalid APFS block size"));
@@ -457,22 +539,22 @@ impl ApfsReader {
         let _xp_desc_blocks = u32::from_le_bytes(
             block0[NX_XP_DESC_BLOCKS_OFF..NX_XP_DESC_BLOCKS_OFF + 4]
                 .try_into()
-                .unwrap(),
+                .map_err(|_| invalid_fs_data("APFS xp_desc_blocks field too short"))?,
         );
         let xp_desc_base = u64::from_le_bytes(
             block0[NX_XP_DESC_BASE_OFF..NX_XP_DESC_BASE_OFF + 8]
                 .try_into()
-                .unwrap(),
+                .map_err(|_| invalid_fs_data("APFS xp_desc_base field too short"))?,
         );
         let xp_desc_index = u32::from_le_bytes(
             block0[NX_XP_DESC_INDEX_OFF..NX_XP_DESC_INDEX_OFF + 4]
                 .try_into()
-                .unwrap(),
+                .map_err(|_| invalid_fs_data("APFS xp_desc_index field too short"))?,
         );
         let max_file_systems = u32::from_le_bytes(
             block0[NX_MAX_FILE_SYSTEMS_OFF..NX_MAX_FILE_SYSTEMS_OFF + 4]
                 .try_into()
-                .unwrap(),
+                .map_err(|_| invalid_fs_data("APFS max_file_systems field too short"))?,
         );
 
         // Read the checkpoint descriptor node.
@@ -480,11 +562,17 @@ impl ApfsReader {
         let cp_data = Self::read_block_at(&mut reader, offset, cp_block, block_size)?;
 
         // Parse the checkpoint: it's a btree_node with OID→block mappings.
-        let cp_flags =
-            u16::from_le_bytes(cp_data[BT_FLAGS_OFF..BT_FLAGS_OFF + 2].try_into().unwrap());
-        let cp_nkeys =
-            u32::from_le_bytes(cp_data[BT_NKEYS_OFF..BT_NKEYS_OFF + 4].try_into().unwrap());
-        let oid_map = OidMap::from_checkpoint_node(&cp_data, cp_flags, cp_nkeys);
+        let cp_flags = u16::from_le_bytes(
+            cp_data[BT_FLAGS_OFF..BT_FLAGS_OFF + 2]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        );
+        let cp_nkeys = u32::from_le_bytes(
+            cp_data[BT_NKEYS_OFF..BT_NKEYS_OFF + 4]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        );
+        let oid_map = OidMap::from_checkpoint_node(&cp_data, cp_flags, cp_nkeys)?;
 
         // Discover volumes.
         let mut volumes = Vec::new();
@@ -493,7 +581,11 @@ impl ApfsReader {
             if fs_oid_off + 8 > block0.len() {
                 break;
             }
-            let fs_oid = u64::from_le_bytes(block0[fs_oid_off..fs_oid_off + 8].try_into().unwrap());
+            let fs_oid = u64::from_le_bytes(
+                block0[fs_oid_off..fs_oid_off + 8]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("disk parse error"))?,
+            );
             if fs_oid == 0 {
                 continue;
             }
@@ -508,8 +600,11 @@ impl ApfsReader {
             };
             let vsb_data = Self::read_block_at(&mut reader, offset, vsb_block, block_size)?;
 
-            let vsb_magic =
-                u32::from_le_bytes(vsb_data[AP_MAGIC_OFF..AP_MAGIC_OFF + 4].try_into().unwrap());
+            let vsb_magic = u32::from_le_bytes(
+                vsb_data[AP_MAGIC_OFF..AP_MAGIC_OFF + 4]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("disk parse error"))?,
+            );
             if vsb_magic != APSB_MAGIC {
                 continue;
             }
@@ -517,7 +612,7 @@ impl ApfsReader {
             let root_tree_oid = u64::from_le_bytes(
                 vsb_data[AP_ROOT_TREE_OID_OFF..AP_ROOT_TREE_OID_OFF + 8]
                     .try_into()
-                    .unwrap(),
+                    .map_err(|_| invalid_fs_data("APFS root_tree_oid field too short"))?,
             );
 
             let vol_name = if i == 0 {
@@ -576,8 +671,16 @@ impl ApfsReader {
 
     fn read_btree_node(&self, oid: u64) -> io::Result<(Vec<u8>, u16, u32)> {
         let data = self.resolve_oid_block(oid)?;
-        let flags = u16::from_le_bytes(data[BT_FLAGS_OFF..BT_FLAGS_OFF + 2].try_into().unwrap());
-        let nkeys = u32::from_le_bytes(data[BT_NKEYS_OFF..BT_NKEYS_OFF + 4].try_into().unwrap());
+        let flags = u16::from_le_bytes(
+            data[BT_FLAGS_OFF..BT_FLAGS_OFF + 2]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        );
+        let nkeys = u32::from_le_bytes(
+            data[BT_NKEYS_OFF..BT_NKEYS_OFF + 4]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        );
         // Recursively follow non-leaf nodes down to the first leaf.
         if flags & BT_LEAF == 0 {
             // Internal node: follow the TOC to child node OIDs.
@@ -585,20 +688,27 @@ impl ApfsReader {
             for entry in &toc {
                 let val_start = entry.val_off as usize;
                 if val_start + 8 <= data.len() {
-                    let child_oid =
-                        u64::from_le_bytes(data[val_start..val_start + 8].try_into().unwrap());
+                    let child_oid = u64::from_le_bytes(
+                        data[val_start..val_start + 8]
+                            .try_into()
+                            .map_err(|_| invalid_fs_data("disk parse error"))?,
+                    );
                     if child_oid != 0 {
                         let child_data = self.resolve_oid_block(child_oid)?;
                         let cf = u16::from_le_bytes(
                             child_data[BT_FLAGS_OFF..BT_FLAGS_OFF + 2]
                                 .try_into()
-                                .unwrap(),
+                                .map_err(|_| {
+                                    invalid_fs_data("B-tree child node flags too short")
+                                })?,
                         );
                         if cf & BT_LEAF != 0 {
                             let cn = u32::from_le_bytes(
                                 child_data[BT_NKEYS_OFF..BT_NKEYS_OFF + 4]
                                     .try_into()
-                                    .unwrap(),
+                                    .map_err(|_| {
+                                        invalid_fs_data("B-tree child node nkeys too short")
+                                    })?,
                             );
                             return Ok((child_data, cf, cn));
                         }
@@ -615,7 +725,7 @@ impl ApfsReader {
         // Actually, for simplicity, we resolve the OID directly to its block
         // and parse the raw data as the inode value.
         let data = self.resolve_oid_block(oid)?;
-        Ok(parse_inode_val(&data, oid))
+        parse_inode_val(&data, oid)
     }
 
     fn list_directory(&self, dir_inode: &ApfsInode) -> io::Result<Vec<DirEntry>> {
@@ -623,7 +733,7 @@ impl ApfsReader {
             return Ok(Vec::new());
         }
         let (node_data, flags, nkeys) = self.read_btree_node(dir_inode.children_oid)?;
-        Ok(parse_dir_b_tree(&node_data, flags, nkeys))
+        parse_dir_b_tree(&node_data, flags, nkeys)
     }
 
     fn resolve_path_in_volume(
@@ -791,12 +901,21 @@ impl FileSystemReader for ApfsReader {
 pub(crate) struct FakeReader {
     pub(crate) data: Vec<u8>,
     pos: u64,
+    info: evidence_core::ReaderInfo,
 }
 
 #[cfg(test)]
 impl FakeReader {
     pub(crate) fn new(data: Vec<u8>) -> Self {
-        Self { data, pos: 0 }
+        Self {
+            data,
+            pos: 0,
+            info: evidence_core::ReaderInfo {
+                path: std::path::PathBuf::from("fake-apfs"),
+                size: 0,
+                kind: "fake-apfs".to_string(),
+            },
+        }
     }
 }
 
@@ -827,7 +946,7 @@ impl std::io::Seek for FakeReader {
 #[cfg(test)]
 impl EvidenceReader for FakeReader {
     fn info(&self) -> &evidence_core::ReaderInfo {
-        unimplemented!()
+        &self.info
     }
 }
 
@@ -1369,7 +1488,7 @@ mod tests {
         }
 
         let flags = BT_ROOT | BT_LEAF | BT_FIXED_KV;
-        let omap = OidMap::from_checkpoint_node(&cp, flags, nkeys);
+        let omap = OidMap::from_checkpoint_node(&cp, flags, nkeys).unwrap();
 
         assert_eq!(omap.resolve(200).unwrap(), 4);
         assert_eq!(omap.resolve(300).unwrap(), 5);

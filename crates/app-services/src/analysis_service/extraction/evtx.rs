@@ -39,6 +39,9 @@ pub fn extract_evtx_candidate(candidate: &EvidenceCandidate, bytes: &[u8]) -> Ex
                     attrs.insert("provider".to_string(), Value::String(provider.clone()));
                 }
                 attrs.insert("note".to_string(), Value::String(event.note.clone()));
+                if let Some(ref details) = event.details {
+                    attrs.insert("details".to_string(), Value::String(details.clone()));
+                }
 
                 let title = format!("EVTX {} event {}", event.kind.as_str(), event.event_id);
                 let artifact = make_artifact(

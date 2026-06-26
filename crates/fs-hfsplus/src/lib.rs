@@ -38,11 +38,20 @@ mod tests {
     struct FakeReader {
         data: Vec<u8>,
         pos: u64,
+        info: ReaderInfo,
     }
 
     impl FakeReader {
         fn new(data: Vec<u8>) -> Self {
-            Self { data, pos: 0 }
+            Self {
+                data,
+                pos: 0,
+                info: ReaderInfo {
+                    path: std::path::PathBuf::from("fake-hfsplus"),
+                    size: 0,
+                    kind: "fake-hfsplus".to_string(),
+                },
+            }
         }
     }
 
@@ -70,7 +79,7 @@ mod tests {
 
     impl EvidenceReader for FakeReader {
         fn info(&self) -> &ReaderInfo {
-            unimplemented!()
+            &self.info
         }
     }
 

@@ -6,6 +6,7 @@ use crate::analysis_service::candidates::{
     is_browser_history_path, normalize_evidence_path, EvidenceCandidate,
 };
 use crate::analysis_service::error::AnalysisServiceError;
+use artifacts_windows::BrowserProfile;
 use chrono::{DateTime, TimeZone, Utc};
 use domain::{Artifact, TimelineEvent};
 use rusqlite::{Connection, OpenFlags};
@@ -67,12 +68,49 @@ fn browser_profile_from_path(normalized: &str) -> (String, String) {
     } else {
         "/google/chrome/user data/"
     };
-    let profile = normalized
+    let raw_profile = normalized
         .split_once(marker)
         .map(|(_, rest)| rest.split('/').next().unwrap_or("default"))
         .filter(|value| !value.is_empty())
         .unwrap_or("default");
-    (browser.to_string(), profile.to_string())
+
+    // Produce a human-readable profile name.
+    let profile = if browser == "Firefox" {
+        // Firefox dir: keep full directory name ("abc123.default-release")
+        raw_profile.to_string()
+    } else {
+        // Chromium-like: "default" → "Default", "profile 1" → "Profile 1"
+        capitalise_words(raw_profile)
+    };
+    (browser.to_string(), profile)
+}
+
+/// Capitalise the first letter of each word separated by space, dash, or underscore.
+fn capitalise_words(input: &str) -> String {
+    let mut result = String::with_capacity(input.len());
+    let mut capitalise = true;
+    for ch in input.chars() {
+        if ch == ' ' || ch == '-' || ch == '_' {
+            result.push(ch);
+            capitalise = true;
+        } else if capitalise {
+            result.extend(ch.to_uppercase());
+            capitalise = false;
+        } else {
+            result.push(ch);
+        }
+    }
+    result
+}
+
+/// Auto-detect browser profiles from a set of evidence candidate paths.
+///
+/// This calls into the `artifacts-windows` profile detection logic and
+/// returns a list of discovered `BrowserProfile` values.  Callers can
+/// use this to pre-populate profile maps before per-file extraction.
+#[allow(dead_code)]
+pub fn detect_profiles_from_candidates(candidate_paths: &[String]) -> Vec<BrowserProfile> {
+    artifacts_windows::detect_browser_profiles(candidate_paths)
 }
 
 fn chromium_time_to_dt(value: i64) -> Option<DateTime<Utc>> {

@@ -130,6 +130,7 @@ mod tests {
             deleted,
             hidden: false,
             system: false,
+            encrypted: false,
             created_at,
             modified_at,
             accessed_at,

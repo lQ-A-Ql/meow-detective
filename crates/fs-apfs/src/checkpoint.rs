@@ -10,7 +10,7 @@ use crate::{
     DirEntry, OidMap, BT_FLAGS_OFF, BT_LEAF, BT_NKEYS_OFF, NX_XP_DESC_BASE_OFF,
     NX_XP_DESC_BLOCKS_OFF, NX_XP_DESC_INDEX_OFF, NX_XP_DESC_LEN_OFF,
 };
-use evidence_core::filesystem::{fs_node, FsNode};
+use evidence_core::filesystem::{fs_node, invalid_fs_data, FsNode};
 use std::collections::HashMap;
 use std::io;
 
@@ -221,10 +221,18 @@ impl ApfsReader {
         reader.seek(std::io::SeekFrom::Start(offset))?;
         reader.read_exact(&mut buf)?;
 
-        let flags = u16::from_le_bytes(buf[BT_FLAGS_OFF..BT_FLAGS_OFF + 2].try_into().unwrap());
-        let nkeys = u32::from_le_bytes(buf[BT_NKEYS_OFF..BT_NKEYS_OFF + 4].try_into().unwrap());
+        let flags = u16::from_le_bytes(
+            buf[BT_FLAGS_OFF..BT_FLAGS_OFF + 2]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        );
+        let nkeys = u32::from_le_bytes(
+            buf[BT_NKEYS_OFF..BT_NKEYS_OFF + 4]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        );
 
-        Ok(OidMap::from_checkpoint_node(&buf, flags, nkeys))
+        OidMap::from_checkpoint_node(&buf, flags, nkeys)
     }
 
     /// Recursively list all files and directories under a volume root using
@@ -297,16 +305,27 @@ impl ApfsReader {
         oid: u64,
     ) -> io::Result<(Vec<u8>, u16, u32)> {
         let data = self.resolve_oid_block_with_map(oid_map, oid)?;
-        let flags = u16::from_le_bytes(data[BT_FLAGS_OFF..BT_FLAGS_OFF + 2].try_into().unwrap());
-        let nkeys = u32::from_le_bytes(data[BT_NKEYS_OFF..BT_NKEYS_OFF + 4].try_into().unwrap());
+        let flags = u16::from_le_bytes(
+            data[BT_FLAGS_OFF..BT_FLAGS_OFF + 2]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        );
+        let nkeys = u32::from_le_bytes(
+            data[BT_NKEYS_OFF..BT_NKEYS_OFF + 4]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        );
 
         if flags & BT_LEAF == 0 {
             let toc = crate::parse_toc(&data, nkeys);
             for entry in &toc {
                 let val_start = entry.val_off as usize;
                 if val_start + 8 <= data.len() {
-                    let child_oid =
-                        u64::from_le_bytes(data[val_start..val_start + 8].try_into().unwrap());
+                    let child_oid = u64::from_le_bytes(
+                        data[val_start..val_start + 8]
+                            .try_into()
+                            .map_err(|_| invalid_fs_data("disk parse error"))?,
+                    );
                     if child_oid != 0 {
                         let child_data = self.resolve_oid_block_with_map(oid_map, child_oid)?;
                         let cf = u16::from_le_bytes(
@@ -332,7 +351,7 @@ impl ApfsReader {
 
     fn read_inode_with_map(&self, oid_map: &OidMap, oid: u64) -> io::Result<ApfsInode> {
         let data = self.resolve_oid_block_with_map(oid_map, oid)?;
-        Ok(parse_inode_val(&data, oid))
+        parse_inode_val(&data, oid)
     }
 
     fn list_directory_with_map(
@@ -345,7 +364,7 @@ impl ApfsReader {
         }
         let (node_data, flags, nkeys) =
             self.read_btree_node_with_map(oid_map, dir_inode.children_oid)?;
-        Ok(parse_dir_b_tree(&node_data, flags, nkeys))
+        parse_dir_b_tree(&node_data, flags, nkeys)
     }
 }
 
