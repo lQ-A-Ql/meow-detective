@@ -658,6 +658,50 @@ mod tests {
     }
 
     #[test]
+    fn truncated_e01_segment_no_panic() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("truncated.E01");
+        // Write a valid E01 header but truncate before the chunk data
+        let mut f = std::fs::File::create(&path).unwrap();
+        f.write_all(b"EVF\t\r\n\x01\x00\x00\x01\x00\x01\x00").unwrap();
+        // Write volume section descriptor but no actual chunk table or data
+        let desc = section_desc("volume", 0, 76 + 36);
+        f.write_all(&desc).unwrap();
+        f.write_all(&[0u8; 36]).unwrap();
+        // Missing: table section, done section, chunk data
+        f.flush().unwrap();
+        drop(f);
+
+        // Opening should fail gracefully with an error, not panic
+        let result = E01Reader::open(&path);
+        assert!(result.is_err(), "Truncated E01 should return error, not panic");
+    }
+
+    #[test]
+    fn truncated_e01_chunk_read_no_panic() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("short_chunk.E01");
+        write_tiny_e01(&path).unwrap();
+
+        // Open works (complete structure)
+        let mut reader = E01Reader::open(&path).unwrap();
+
+        // Read available chunk data
+        let mut buf = vec![0u8; 14]; // "E01-CACHE-TEST" marker
+        reader.seek(SeekFrom::Start(0)).unwrap();
+        reader.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf, b"E01-CACHE-TEST");
+
+        // Read past the available chunk — E01 reader should handle short reads gracefully
+        let mut big_buf = vec![0u8; 8192];
+        reader.seek(SeekFrom::Start(0)).unwrap();
+        let result = reader.read(&mut big_buf);
+        // read() may return partial data without error. Just verify no panic.
+        let _ = result;
+        eprintln!("Short read returned {} bytes (expected for tiny E01)", big_buf.len());
+    }
+
+    #[test]
     fn mft_partition_index_from_entry_id_parses_partition_record_format() {
         assert_eq!(mft_partition_index_from_entry_id("mft:3:42"), Some(3));
         assert_eq!(mft_partition_index_from_entry_id("mft:0:5"), Some(0));
