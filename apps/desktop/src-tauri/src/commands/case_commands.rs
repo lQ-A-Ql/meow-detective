@@ -218,7 +218,7 @@ pub fn close_case(state: State<AppState>, app: AppHandle) -> Result<(), CommandE
     if let Some(case_id) = &closed_case_id {
         let _ = state.clear_runtime_cache_for_case(case_id);
     }
-    app_services::file_service::clear_e01_reader_cache();
+    // E01 readers are no longer cached — each open gets independent file handles
     if let Some(case_id) = closed_case_id {
         event_bridge::emit_case_closed(&app, &case_id);
     }

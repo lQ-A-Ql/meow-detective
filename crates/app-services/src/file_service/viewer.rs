@@ -1,83 +1,19 @@
-use crate::{
-    datasource_service::{self, ImageFilesystemKind},
-    file_service::{mapping::mime_for_entry, FileServiceError},
-};
+use crate::file_service::{mapping::mime_for_entry, FileServiceError};
 use domain::{EntryType, FileEntry, FileEntryId};
-use evidence_core::{EvidenceReader, FileSystemReader, RawImageReader};
+use evidence_core::FileSystemReader;
 use image_e01::E01Reader;
 use persistence_sqlite::repositories::file_repo::FileRepo;
+use persistence_sqlite::repositories::partition_repo::PartitionRepo;
 use rusqlite::Connection;
-use std::{
-    collections::{HashMap, VecDeque},
-    io::Read,
-    path::{Path, PathBuf},
-    sync::Mutex,
-};
+use std::io::Read;
+use std::path::{Path, PathBuf};
 use transport::dto::{ViewerHandleDto, ViewerRangeRequestDto, ViewerRangeResponseDto};
 
 const FILE_HANDLE_PREFIX: &str = "file:";
 
-/// Maximum number of concurrently cached E01 readers (one per data source).
-const E01_READER_CACHE_MAX_SIZE: usize = 4;
-
-struct E01ReaderCache {
-    max_size: usize,
-    paths: VecDeque<PathBuf>, // front = least recently used
-    readers: HashMap<PathBuf, E01Reader>,
-}
-
-impl E01ReaderCache {
-    fn new(max_size: usize) -> Self {
-        Self {
-            max_size,
-            paths: VecDeque::with_capacity(max_size),
-            readers: HashMap::with_capacity(max_size),
-        }
-    }
-
-    /// Return a cloned reader from the cache, inserting a freshly opened one on miss.
-    fn get_or_open(&mut self, source_path: &Path) -> std::io::Result<E01Reader> {
-        if let Some(pos) = self.paths.iter().position(|p| p == source_path) {
-            // Cache hit: move to most-recently-used end and return a clone.
-            self.paths.remove(pos);
-            self.paths.push_back(source_path.to_path_buf());
-            let reader = self.readers.get(source_path).expect("cache invariant");
-            return reader.try_clone();
-        }
-
-        // Cache miss: open, evict if full, cache, clone.
-        let reader = E01Reader::open(source_path)?;
-        let clone = reader.try_clone()?;
-
-        while self.paths.len() >= self.max_size {
-            if let Some(evict_path) = self.paths.pop_front() {
-                self.readers.remove(&evict_path);
-            }
-        }
-
-        self.paths.push_back(source_path.to_path_buf());
-        self.readers.insert(source_path.to_path_buf(), reader);
-        Ok(clone)
-    }
-}
-
-/// Global E01 reader cache for connection reuse across sequential file opens.
-static E01_READER_CACHE: std::sync::LazyLock<Mutex<E01ReaderCache>> =
-    std::sync::LazyLock::new(|| Mutex::new(E01ReaderCache::new(E01_READER_CACHE_MAX_SIZE)));
-
-/// Clear all cached E01 readers (called on case close).
-pub fn clear_e01_reader_cache() {
-    if let Ok(mut cache) = E01_READER_CACHE.lock() {
-        cache.paths.clear();
-        cache.readers.clear();
-    }
-}
-
-fn open_e01_reader_cached(source_path: &Path) -> std::io::Result<E01Reader> {
-    E01_READER_CACHE
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .get_or_open(source_path)
+/// Open an E01 reader directly (no shared cache — each open gets independent file handles).
+fn open_e01_reader_fresh(source_path: &Path) -> std::io::Result<E01Reader> {
+    E01Reader::open(source_path)
 }
 
 pub fn open_file_handle_real(
@@ -137,7 +73,7 @@ pub fn open_file_content_by_id(
         .find_by_id(file_id)?
         .ok_or_else(|| FileServiceError::not_found("File not found"))?;
 
-    open_file_content_for_entry(&repo, &entry)
+    open_file_content_for_entry(conn, &repo, &entry)
 }
 
 pub fn read_file_header_by_id(
@@ -177,6 +113,7 @@ pub fn get_file_path_for_entry(
 }
 
 fn open_file_content_for_entry(
+    conn: &Connection,
     repo: &FileRepo<'_>,
     entry: &FileEntry,
 ) -> Result<Box<dyn Read>, FileServiceError> {
@@ -193,7 +130,7 @@ fn open_file_content_for_entry(
 
     match kind.as_str() {
         "logical_directory" => open_logical_file(&source_path, entry),
-        "e01" => open_e01_file(&source_path, entry, expected_partition_index),
+        "e01" => open_e01_file(conn, &source_path, entry, expected_partition_index),
         "raw" => open_raw_file(&source_path, entry, expected_partition_index),
         other => Err(FileServiceError::other(format!(
             "Range reading is not yet wired for data source kind '{}'",
@@ -243,98 +180,138 @@ fn open_raw_file(
     entry: &FileEntry,
     expected_partition_index: Option<usize>,
 ) -> Result<Box<dyn Read>, FileServiceError> {
-    let reader = RawImageReader::open(Path::new(source_path))?;
-    open_image_file(entry, reader, expected_partition_index)
+    let reader = evidence_core::RawImageReader::open(Path::new(source_path))?;
+    // RAW 镜像：使用简单的 MBR/GPT 探测（不需要缓存的分区表）
+    open_raw_image_file(entry, reader, expected_partition_index)
 }
 
-fn open_e01_file(
-    source_path: &str,
-    entry: &FileEntry,
-    expected_partition_index: Option<usize>,
-) -> Result<Box<dyn Read>, FileServiceError> {
-    let reader = open_e01_reader_cached(Path::new(source_path))?;
-    open_image_file(entry, reader, expected_partition_index)
-}
-
-fn open_image_file<R>(
+fn open_raw_image_file<R>(
     entry: &FileEntry,
     mut reader: R,
     expected_partition_index: Option<usize>,
 ) -> Result<Box<dyn Read>, FileServiceError>
 where
-    R: EvidenceReader + Read + std::io::Seek + 'static,
+    R: evidence_core::EvidenceReader + Read + std::io::Seek + 'static,
 {
-    let probe = datasource_service::detect_image_filesystem(&mut reader).map_err(|e| {
-        FileServiceError::other(format!("Failed to detect image filesystem: {}", e))
-    })?;
+    let probe = crate::datasource_service::detect_image_filesystem(&mut reader)
+        .map_err(|e| FileServiceError::other(format!("Failed to detect RAW filesystem: {e}")))?;
     if probe.candidates.is_empty() {
-        let detail = if probe.warnings.is_empty() {
-            "No supported NTFS/FAT filesystem detected".to_string()
-        } else {
-            probe.warnings.join("; ")
-        };
-        return Err(FileServiceError::other(detail));
+        return Err(FileServiceError::other(
+            "No supported filesystem detected in RAW image",
+        ));
     }
-
     let source_path = reader.info().path.clone();
-    let source_kind = reader.info().kind.clone();
-    let candidate_effective_indices =
-        datasource_service::assign_effective_partition_indices(&probe.candidates);
-
+    let candidates =
+        crate::datasource_service::assign_effective_partition_indices(&probe.candidates);
     for (ci, candidate) in probe.candidates.iter().enumerate() {
-        let effective_index = datasource_service::effective_partition_index(
-            candidate,
-            ci,
-            &candidate_effective_indices,
-        );
-
-        if let Some(expected_partition) = expected_partition_index {
-            if effective_index != expected_partition {
+        let eff = crate::datasource_service::effective_partition_index(candidate, ci, &candidates);
+        if let Some(expected) = expected_partition_index {
+            if eff != expected {
                 continue;
             }
         }
-
-        let boxed_reader: Box<dyn EvidenceReader> = match source_kind.as_str() {
-            "e01" => Box::new(open_e01_reader_cached(&source_path)?),
-            _ => Box::new(RawImageReader::open(&source_path)?),
-        };
-
-        let result = match candidate.kind {
-            ImageFilesystemKind::Ntfs => {
-                let fs =
-                    fs_ntfs::NtfsReader::open(boxed_reader, candidate.offset).map_err(|e| {
-                        FileServiceError::other(format!("Cannot open NTFS filesystem: {}", e))
-                    })?;
-                fs.open_file(&entry.path).map_err(|e| {
-                    FileServiceError::other(format!(
-                        "Cannot open NTFS file '{}': {}",
-                        entry.path, e
-                    ))
-                })
+        let boxed: Box<dyn evidence_core::EvidenceReader> =
+            Box::new(evidence_core::RawImageReader::open(&source_path)?);
+        match candidate.kind {
+            crate::datasource_service::ImageFilesystemKind::Ntfs => {
+                if let Ok(fs) = fs_ntfs::NtfsReader::open(boxed, candidate.offset) {
+                    if let Ok(r) = fs.open_file(&entry.path) {
+                        return Ok(r);
+                    }
+                }
             }
-            ImageFilesystemKind::Fat => {
-                let fs = fs_fat::FatReader::open(boxed_reader, candidate.offset).map_err(|e| {
-                    FileServiceError::other(format!("Cannot open FAT filesystem: {}", e))
-                })?;
-                fs.open_file(&entry.path).map_err(|e| {
-                    FileServiceError::other(format!("Cannot open FAT file '{}': {}", entry.path, e))
-                })
+            crate::datasource_service::ImageFilesystemKind::Fat => {
+                if let Ok(fs) = fs_fat::FatReader::open(boxed, candidate.offset) {
+                    if let Ok(r) = fs.open_file(&entry.path) {
+                        return Ok(r);
+                    }
+                }
             }
-            ImageFilesystemKind::BitLocker => Err(FileServiceError::other(format!(
-                "Cannot open '{}' from locked BitLocker partition",
-                entry.path
-            ))),
-        };
-
-        if result.is_ok() {
-            return result;
+            _ => {}
         }
     }
-
     Err(FileServiceError::other(format!(
-        "Cannot open image-backed file '{}' from any detected partition",
+        "Cannot open RAW image file '{}' from any partition",
         entry.path
     )))
+}
+
+fn open_e01_file(
+    conn: &Connection,
+    source_path: &str,
+    entry: &FileEntry,
+    expected_partition_index: Option<usize>,
+) -> Result<Box<dyn Read>, FileServiceError> {
+    // 查询导入时已存储的分区元数据
+    let part_repo = PartitionRepo::new(conn);
+    let partitions = part_repo
+        .find_by_data_source(&entry.data_source_id.0)
+        .map_err(|e| FileServiceError::other(format!("Failed to query partitions: {e}")))?;
+
+    if partitions.is_empty() {
+        return Err(FileServiceError::other(
+            "No partition metadata found for this data source. Re-import the E01 image.",
+        ));
+    }
+
+    // 确定目标分区
+    let target = if let Some(expected) = expected_partition_index {
+        partitions
+            .iter()
+            .find(|p| p.partition_index as usize == expected)
+            .ok_or_else(|| {
+                FileServiceError::other(format!(
+                    "Partition index {expected} not found in stored metadata"
+                ))
+            })?
+    } else if partitions.len() == 1 {
+        &partitions[0]
+    } else {
+        // 多分区且未指定：尝试第一个可访问的
+        partitions
+            .iter()
+            .find(|p| p.status != "EncryptedBitLocker")
+            .ok_or_else(|| FileServiceError::other("All partitions are encrypted"))?
+    };
+
+    // 检查分区状态
+    if target.status == "EncryptedBitLocker" {
+        return Err(FileServiceError::other(format!(
+            "Cannot open '{}' from locked BitLocker partition '{}'",
+            entry.path, target.name
+        )));
+    }
+
+    let fs_kind = target.filesystem.as_deref().unwrap_or(&target.kind_label);
+
+    let reader = open_e01_reader_fresh(Path::new(source_path))?;
+    let boxed_reader: Box<dyn evidence_core::EvidenceReader> = Box::new(reader);
+
+    match fs_kind {
+        "NTFS" => {
+            let fs = fs_ntfs::NtfsReader::open(boxed_reader, target.offset).map_err(|e| {
+                FileServiceError::other(format!(
+                    "Cannot open NTFS at offset {}: {e}",
+                    target.offset
+                ))
+            })?;
+            fs.open_file(&entry.path).map_err(|e| {
+                FileServiceError::other(format!("Cannot open NTFS file '{}': {e}", entry.path))
+            })
+        }
+        "FAT" | "FAT32" | "FAT16" | "FAT12" => {
+            let fs = fs_fat::FatReader::open(boxed_reader, target.offset).map_err(|e| {
+                FileServiceError::other(format!("Cannot open FAT at offset {}: {e}", target.offset))
+            })?;
+            fs.open_file(&entry.path).map_err(|e| {
+                FileServiceError::other(format!("Cannot open FAT file '{}': {e}", entry.path))
+            })
+        }
+        other => Err(FileServiceError::other(format!(
+            "Unsupported filesystem '{other}' for partition '{}'",
+            target.name
+        ))),
+    }
 }
 
 fn root_partition_index_for_entry(repo: &FileRepo<'_>, entry: &FileEntry) -> Option<usize> {
@@ -573,45 +550,20 @@ mod tests {
     }
 
     #[test]
-    fn cache_miss_opens_new_reader() {
-        clear_e01_reader_cache();
+    fn fresh_e01_reader_opens_successfully() {
         let (_dir, path) = make_temp_e01();
-
-        // First open: cache miss (should parse header from disk).
-        let mut reader = open_e01_reader_cached(&path).unwrap();
+        let mut reader = open_e01_reader_fresh(&path).unwrap();
         let mut buf = [0u8; 14];
         reader.read_exact(&mut buf).unwrap();
         assert_eq!(&buf, b"E01-CACHE-TEST");
-
-        // Clear cache and open again: another cache miss.
-        clear_e01_reader_cache();
-        let mut reader2 = open_e01_reader_cached(&path).unwrap();
-        let mut buf2 = [0u8; 14];
-        reader2.read_exact(&mut buf2).unwrap();
-        assert_eq!(&buf2, b"E01-CACHE-TEST");
-
-        clear_e01_reader_cache();
     }
 
     #[test]
-    fn cache_hit_avoids_second_open() {
-        clear_e01_reader_cache();
+    fn fresh_e01_readers_have_independent_positions() {
         let (_dir, path) = make_temp_e01();
+        let mut reader1 = open_e01_reader_fresh(&path).unwrap();
+        let mut reader2 = open_e01_reader_fresh(&path).unwrap();
 
-        // First open populates the cache.
-        let mut reader1 = open_e01_reader_cached(&path).unwrap();
-        let mut buf1 = [0u8; 14];
-        reader1.read_exact(&mut buf1).unwrap();
-        assert_eq!(&buf1, b"E01-CACHE-TEST");
-
-        // Second open with the same path hits the cache (clone of the cached
-        // reader, not a fresh disk parse).
-        let mut reader2 = open_e01_reader_cached(&path).unwrap();
-        let mut buf2 = [0u8; 14];
-        reader2.read_exact(&mut buf2).unwrap();
-        assert_eq!(&buf2, b"E01-CACHE-TEST");
-
-        // The two clones must have independent seek positions.
         reader1.seek(SeekFrom::Start(0)).unwrap();
         reader2.seek(SeekFrom::Start(4)).unwrap();
         let mut b1 = [0u8; 4];
@@ -620,7 +572,5 @@ mod tests {
         reader2.read_exact(&mut b2).unwrap();
         assert_eq!(&b1, b"E01-");
         assert_eq!(&b2, b"CACH");
-
-        clear_e01_reader_cache();
     }
 }
