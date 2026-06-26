@@ -126,7 +126,7 @@ export function SyntaxHighlighter({
       {lines.map((lineHtml, index) => (
         <div key={index} className="flex hover:bg-[#f8f8f8]">
           {/* 行号 */}
-          <div className="w-12 shrink-0 text-right text-[#999] select-none border-r border-[#eee] bg-[#fafafa] px-2">
+          <div className="w-16 shrink-0 text-right text-[#999] select-none border-r border-[#eee] bg-[#fafafa] px-2">
             {index + 1}
           </div>
           {/* 代码 */}

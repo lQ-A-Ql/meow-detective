@@ -102,11 +102,10 @@ export function TreeContextMenu({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  // 边界检测
+  // 边界检测 — 使用 ref 测量实际高度
   const menuWidth = 200;
-  const menuHeight = 280;
   const adjustedX = Math.min(x, window.innerWidth - menuWidth - 10);
-  const adjustedY = Math.min(y, window.innerHeight - menuHeight - 10);
+  const adjustedY = Math.min(y, window.innerHeight - (menuRef.current?.offsetHeight ?? 300) - 10);
 
   // 复制到剪贴板
   const copyToClipboard = async (text: string) => {
