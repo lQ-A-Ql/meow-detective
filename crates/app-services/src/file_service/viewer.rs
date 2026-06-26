@@ -122,6 +122,7 @@ pub fn read_file_range_for_case(
     bytes.truncate(read);
 
     Ok(ViewerRangeResponseDto {
+        raw_bytes: None,
         kind: "hex".into(),
         lines: format_hex_lines(request.offset, &bytes),
         encoding: None,
@@ -581,6 +582,7 @@ fn format_hex_lines(base_offset: u64, bytes: &[u8]) -> Vec<String> {
 
 fn empty_hex_response() -> ViewerRangeResponseDto {
     ViewerRangeResponseDto {
+        raw_bytes: None,
         kind: "hex".into(),
         lines: Vec::new(),
         encoding: None,

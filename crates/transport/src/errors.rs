@@ -61,6 +61,8 @@ pub struct CommandError {
     pub category: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recoverable: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggestion: Option<String>,
 }
 
 impl std::fmt::Display for CommandError {
@@ -81,7 +83,20 @@ impl CommandError {
             message: message.into(),
             category: category.as_str().to_string(),
             recoverable: Some(recoverable),
+            suggestion: None,
         }
+    }
+
+    fn with_suggestion(
+        code: impl Into<String>,
+        message: impl Into<String>,
+        category: ErrorCategory,
+        recoverable: bool,
+        suggestion: impl Into<String>,
+    ) -> Self {
+        let mut s = Self::new(code, message, category, recoverable);
+        s.suggestion = Some(suggestion.into());
+        s
     }
 
     pub fn not_found(entity: &str) -> Self {
@@ -177,6 +192,35 @@ impl CommandError {
             || normalized.contains("path")
         {
             return Self::io("A file system operation failed");
+        }
+
+        // Attach actionable suggestions for forensics-specific errors
+        if normalized.contains("re-import") || normalized.contains("path reconstruction") {
+            return Self::with_suggestion(
+                "IMPORT_NEEDED",
+                msg,
+                ErrorCategory::Internal,
+                true,
+                "建议重新导入 E01 镜像以重建完整的文件路径和分区元数据",
+            );
+        }
+        if normalized.contains("from any partition") {
+            return Self::with_suggestion(
+                "PARTITION_NOT_FOUND",
+                msg,
+                ErrorCategory::Internal,
+                true,
+                "文件在已存储的所有分区中均未找到。可能原因：路径格式不匹配，或分区元数据缺失。建议重新导入 E01 镜像。",
+            );
+        }
+        if normalized.contains("no partition metadata") {
+            return Self::with_suggestion(
+                "NO_METADATA",
+                msg,
+                ErrorCategory::Internal,
+                true,
+                "该数据源缺少分区元数据。建议重新导入 E01 镜像以生成分区信息。",
+            );
         }
 
         Self::internal("An operation failed. Check logs for details.")

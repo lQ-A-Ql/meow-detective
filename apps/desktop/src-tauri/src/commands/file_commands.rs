@@ -250,12 +250,19 @@ pub async fn get_text_preview(
         )
         .map_err(|e| CommandError::from_service_error(e.to_string()))?;
 
+        let is_binary = preview.is_binary;
+        let content = preview.content;
         Ok(TextPreviewDto {
-            content: preview.content,
+            hex_dump: if is_binary {
+                Some(content.clone())
+            } else {
+                None
+            },
+            content,
             encoding: preview.encoding,
             is_truncated: preview.is_truncated,
             line_count: preview.line_count,
-            is_binary: preview.is_binary,
+            is_binary,
             language: preview.language,
         })
     })

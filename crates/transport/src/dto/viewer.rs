@@ -40,6 +40,9 @@ pub struct ViewerRangeResponseDto {
     pub lines: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub encoding: Option<String>,
+    /// Raw bytes for hex preview (up to 64KB)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_bytes: Option<Vec<u8>>,
 }
 
 /// Text preview DTO
@@ -59,6 +62,9 @@ pub struct TextPreviewDto {
     /// Programming language (for syntax highlighting)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
+    /// Hex dump of first 64KB for binary files
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hex_dump: Option<String>,
 }
 
 /// Image preview DTO
@@ -175,6 +181,7 @@ mod tests {
             line_count: 1,
             is_binary: false,
             language: Some("plaintext".to_string()),
+            hex_dump: None,
         };
         let json = serde_json::to_string(&dto).unwrap();
         assert!(json.contains("Hello World"));
