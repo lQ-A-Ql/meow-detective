@@ -133,13 +133,13 @@ impl<'a> CaseRepo<'a> {
             ) OR case_id = ?1",
             params![id.0],
         )?;
-        // Delete timeline events for this case's files
+        // Delete timeline events for this case's files (including direct case_id match)
         tx.execute(
             "DELETE FROM timeline_events WHERE source_object_id IN (
                 SELECT fe.id FROM file_entries fe
                 JOIN data_sources ds ON fe.data_source_id = ds.id
                 WHERE ds.case_id = ?1
-            )",
+            ) OR case_id = ?1",
             params![id.0],
         )?;
         // Delete file entries

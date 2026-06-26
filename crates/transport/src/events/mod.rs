@@ -12,7 +12,7 @@ pub const TOPIC_JOB_CANCELLED: &str = "job-cancelled";
 pub const TOPIC_DATA_SOURCE_IMPORTED: &str = "data-source-imported";
 pub const TOPIC_ARTIFACT_ADDED: &str = "artifact-added";
 pub const TOPIC_TIMELINE_UPDATED: &str = "timeline-updated";
-pub const TOPIC_SEARCH_INDEX_PROGRESS: &str = "search-index_progress";
+pub const TOPIC_SEARCH_INDEX_PROGRESS: &str = "search-index-progress";
 pub const TOPIC_PARTITION_PROGRESS: &str = "partition-progress";
 pub const TOPIC_IMPORT_PHASE_PROGRESS: &str = "import-phase-progress";
 pub const TOPIC_IMPORT_PARTIAL_RESULT: &str = "import-partial-result";
@@ -34,7 +34,7 @@ pub enum EventTopic {
     DataSourceImported,
     ArtifactAdded,
     TimelineUpdated,
-    #[serde(rename = "search-index_progress")]
+    #[serde(rename = "search-index-progress")]
     SearchIndexProgress,
     PartitionProgress,
     #[serde(rename = "import-phase-progress")]

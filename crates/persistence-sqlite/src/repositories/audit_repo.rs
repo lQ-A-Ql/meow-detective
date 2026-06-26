@@ -226,10 +226,14 @@ impl<'a> AuditRepo<'a> {
         Ok(count as u64)
     }
 
+    /// Delete audit log entries older than `days` days.
+    /// Enforces a minimum retention of 365 days for forensic compliance.
     pub fn cleanup_old(&self, days: u32) -> DbResult<usize> {
+        let effective_days = days.max(365);
+        tracing::info!(requested_days = days, effective_days, "audit_log cleanup_old");
         let count = self.conn.execute(
             "DELETE FROM audit_log WHERE created_at < datetime('now', ?1)",
-            params![format!("-{} days", days)],
+            params![format!("-{} days", effective_days)],
         )?;
         Ok(count)
     }

@@ -10,7 +10,7 @@ export type EventTopic =
   | 'data-source-imported'
   | 'artifact-added'
   | 'timeline-updated'
-  | 'search-index_progress'
+  | 'search-index-progress'
   | 'partition-progress'
   | 'import-phase-progress'
   | 'import-partial-result'

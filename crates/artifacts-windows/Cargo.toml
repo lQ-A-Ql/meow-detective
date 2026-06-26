@@ -21,10 +21,10 @@ tempfile.workspace = true
 lz4_flex = { workspace = true }
 binread = { workspace = true }
 hex.workspace = true
-md-5 = { workspace = true }
-des = { workspace = true }
-aes = { workspace = true }
-cipher = { workspace = true }
+md-5.workspace = true
+des.workspace = true
+aes.workspace = true
+cipher.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true
