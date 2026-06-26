@@ -222,8 +222,19 @@ impl NtfsReader {
 
             if typ == 0xA0 && pos + 0x40 <= rec.len() {
                 // $INDEX_ALLOCATION — non-resident B-Tree INDX records
-                if let Ok(data) = self.read_attr_nonresident(pos, &rec) {
-                    index_alloc_entries = Some(self.parse_indx_buffer(&data));
+                match self.read_attr_nonresident(pos, &rec) {
+                    Ok(data) => {
+                        if !data.is_empty() {
+                            index_alloc_entries = Some(self.parse_indx_buffer(&data));
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            inode = %inode,
+                            error = %e,
+                            "NTFS $INDEX_ALLOCATION read failed, falling back to $INDEX_ROOT only"
+                        );
+                    }
                 }
             }
 
