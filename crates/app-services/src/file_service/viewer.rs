@@ -330,7 +330,7 @@ fn open_e01_file(
         )));
     }
 
-    // 收集候选分区：必须匹配 expected_partition_index
+    // 收集候选分区：优先匹配 expected_partition_index，回退到第一个非加密 NTFS
     let candidates_to_try: Vec<
         &persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord,
     > = match expected_partition_index {
@@ -339,9 +339,19 @@ fn open_e01_file(
             .filter(|p| p.partition_index as usize == expected && p.status != "EncryptedBitLocker")
             .collect(),
         None => {
-            return Err(FileServiceError::other(
-                "Cannot determine which partition this file belongs to. Re-import the E01 image.",
-            ))
+            // Fallback: try the first non-encrypted NTFS partition for entries
+            // whose parent chain could not be resolved (e.g., /Unresolved/ entries)
+            let ntfs: Vec<_> = partitions
+                .iter()
+                .filter(|p| p.status != "EncryptedBitLocker"
+                    && p.filesystem.as_deref().unwrap_or(&p.kind_label) == "NTFS")
+                .collect();
+            if ntfs.is_empty() {
+                return Err(FileServiceError::other(
+                    "Cannot determine which partition this file belongs to. Re-import the E01 image.",
+                ));
+            }
+            ntfs
         }
     };
 
