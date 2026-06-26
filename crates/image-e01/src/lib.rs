@@ -49,6 +49,40 @@ impl E01Reader {
             last_chunk_read: None,
         })
     }
+
+    /// Clone with a fresh file handle — reuses the parsed chunk table but
+    /// opens independent file descriptors for each segment. This eliminates
+    /// the shared-file-position race condition that `File::try_clone()` causes
+    /// under concurrent access.
+    pub fn try_clone_independent_handle(&self, source_path: &Path) -> io::Result<Self> {
+        let base = source_path.with_extension("");
+        let mut segment_files: Vec<std::fs::File> = Vec::new();
+        for seg_num in 1u32.. {
+            let seg_path = build_segment_path(source_path, seg_num);
+            match std::fs::File::open(&seg_path) {
+                Ok(f) => segment_files.push(f),
+                Err(e) if e.kind() == io::ErrorKind::NotFound => break,
+                Err(e) => return Err(e),
+            }
+        }
+        if segment_files.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("no E01 segments found at {}", base.display()),
+            ));
+        }
+        Ok(Self {
+            info: self.info.clone(),
+            total_bytes: self.total_bytes,
+            chunk_size_sectors: self.chunk_size_sectors,
+            chunk_table: Arc::clone(&self.chunk_table),
+            segment_files,
+            cursor: 0,
+            chunk_cache: VecDeque::new(),
+            chunk_cache_bytes: 0,
+            last_chunk_read: None,
+        })
+    }
 }
 
 impl E01Reader {

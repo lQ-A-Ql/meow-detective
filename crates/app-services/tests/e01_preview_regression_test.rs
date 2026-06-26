@@ -1,0 +1,293 @@
+//! E01 file preview regression tests.
+//!
+//! Tests the full pipeline: probe → store partitions → MFT enumerate → preview files.
+//!
+//! Run:
+//!   $env:FORENSICS_JC2_E01='D:\獬豸杯\检材2.E01'
+//!   $env:FORENSICS_LIUYANG_E01='E:\pangushi\刘洋\liuyang_pc.E01'
+//!   cargo test -p app-services --test e01_preview_regression_test -- --ignored --nocapture
+
+use app_services::{case_service, datasource_service, file_service};
+use evidence_core::{EvidenceReader, FileSystemReader};
+use image_e01::E01Reader;
+use persistence_sqlite::repositories::{
+    file_repo::FileRepo, partition_repo::PartitionRepo,
+};
+use std::io::{Read, Seek, SeekFrom};
+use std::path::PathBuf;
+use tempfile::TempDir;
+
+fn jc2_path() -> PathBuf {
+    std::env::var("FORENSICS_JC2_E01")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("D:\\獬豸杯\\检材2.E01"))
+}
+
+fn liuyang_path() -> PathBuf {
+    std::env::var("FORENSICS_LIUYANG_E01")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("E:\\pangushi\\刘洋\\liuyang_pc.E01"))
+}
+
+/// Parse $MFT data size from MFT record 0.
+fn parse_mft_data_size(record: &[u8]) -> Option<u64> {
+    if &record[0..4] != b"FILE" {
+        return None;
+    }
+    let attr_off = u16::from_le_bytes([record[0x14], record[0x15]]) as usize;
+    let mut pos = attr_off;
+    while pos + 8 < record.len() {
+        let typ = u32::from_le_bytes(record[pos..pos + 4].try_into().ok()?);
+        if typ == 0xFFFFFFFF {
+            break;
+        }
+        let len = u32::from_le_bytes(record[pos + 4..pos + 8].try_into().ok()?) as usize;
+        if len < 4 || pos + len > record.len() {
+            break;
+        }
+        // $DATA non-resident (0x80) with non-resident flag set
+        if typ == 0x80 && record[pos + 8] != 0 {
+            let real_size_off = 0x30; // offset of real_size within non-resident header
+            if pos + real_size_off + 8 <= pos + len {
+                return Some(u64::from_le_bytes(
+                    record[pos + real_size_off..pos + real_size_off + 8]
+                        .try_into()
+                        .ok()?,
+                ));
+            }
+        }
+        pos += len;
+    }
+    None
+}
+
+/// Full setup: probe E01 → store partitions → MFT enumerate → preview.
+/// Returns (tmp_dir, active_case, actual_data_source_id)
+fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::ActiveCase, String) {
+    let tmp = TempDir::new().unwrap();
+    let active =
+        case_service::create_case(&tmp.path().join("cases"), "preview-test", Some("tester"))
+            .expect("create_case failed");
+    let case_id = active.meta.id.clone();
+
+    let ds_id_result = active
+        .with_conn(|conn| {
+            // 1. Attach data source
+            let ds = datasource_service::attach_data_source(
+                conn,
+                &case_id,
+                "test-e01",
+                e01_path,
+                domain::DataSourceKind::E01,
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(format!("attach: {e}")))?;
+
+            // 2. Probe partitions
+            let mut probe_reader = E01Reader::open(e01_path)
+                .map_err(|e| persistence_sqlite::DbError::System(format!("E01 open: {e}")))?;
+            let probe = datasource_service::detect_image_filesystem(&mut probe_reader)
+                .map_err(|e| persistence_sqlite::DbError::System(format!("probe: {e}")))?;
+
+            // 3. Store partition metadata
+            let part_repo = PartitionRepo::new(conn);
+            let records: Vec<_> = probe
+                .candidates
+                .iter()
+                .enumerate()
+                .map(|(i, c)| {
+                    persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord {
+                        id: format!("{}:{i}", ds.id.0),
+                        data_source_id: ds.id.0.clone(),
+                        partition_index: i as u32,
+                        name: format!("Partition {i}"),
+                        kind_label: format!("{:?}", c.kind),
+                        status: "Supported".to_string(),
+                        type_guid: None,
+                        offset: c.offset,
+                        length: 0,
+                        filesystem: Some(match c.kind {
+                            datasource_service::ImageFilesystemKind::Ntfs => "NTFS",
+                            datasource_service::ImageFilesystemKind::Fat => "FAT",
+                            datasource_service::ImageFilesystemKind::BitLocker => "BitLocker",
+                        }.to_string()),
+                        unlock_hint: None,
+                    }
+                })
+                .collect();
+            part_repo.replace_for_data_source(&ds.id.0, &records)?;
+
+            // 4. Find the NTFS candidate with the most files (skip small/system partitions)
+            let ntfs_candidates: Vec<_> = probe
+                .candidates
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
+                .collect();
+            // Try NTFS candidates at the lowest offsets (usually the main volume)
+            let ntfs_candidates: Vec<(usize, &datasource_service::ImageFilesystemCandidate)> = probe
+                .candidates
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
+                .collect();
+            let (actual_ntfs_idx, ntfs) = ntfs_candidates
+                .first()
+                .expect("no NTFS partition");
+            let ntfs_partition_index = *actual_ntfs_idx;
+            eprintln!(
+                "Using NTFS partition {} (candidate index {}) at offset {}",
+                ntfs.partition_name.as_deref().unwrap_or("?"), ntfs_partition_index, ntfs.offset
+            );
+
+            let mut reader = E01Reader::open(e01_path)
+                .map_err(|e| persistence_sqlite::DbError::System(format!("E01 reopen: {e}")))?;
+            reader
+                .seek(SeekFrom::Start(ntfs.offset))
+                .map_err(|e| persistence_sqlite::DbError::System(format!("seek: {e}")))?;
+            let mut boot = [0u8; 512];
+            reader
+                .read_exact(&mut boot)
+                .map_err(|e| persistence_sqlite::DbError::System(format!("read boot: {e}")))?;
+
+            let bytes_per_sector = u16::from_le_bytes([boot[11], boot[12]]);
+            let sectors_per_cluster = boot[13];
+            let cluster_size = bytes_per_sector as u64 * sectors_per_cluster as u64;
+            let mft_cluster = u64::from_le_bytes(boot[0x30..0x38].try_into().unwrap_or([0; 8]));
+
+            // Read MFT record 0 to get $DATA size
+            let mft_abs_offset = ntfs.offset + mft_cluster * cluster_size;
+            reader
+                .seek(SeekFrom::Start(mft_abs_offset))
+                .map_err(|e| persistence_sqlite::DbError::System(format!("seek MFT: {e}")))?;
+            let mut mft_rec = vec![0u8; 1024];
+            reader
+                .read_exact(&mut mft_rec)
+                .map_err(|e| persistence_sqlite::DbError::System(format!("read MFT: {e}")))?;
+            let mft_data_size =
+                parse_mft_data_size(&mft_rec).unwrap_or(1024 * 1024 * 100);
+
+            eprintln!(
+                "NTFS at offset {}: cluster_size={}, mft_cluster={}, mft_data_size={} bytes",
+                ntfs.offset, cluster_size, mft_cluster, mft_data_size
+            );
+
+            // 5. MFT enumerate (public API from file_service)
+            // Need to re-fetch the data source to get the UUID-based ID
+            let ds_repo = persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn);
+            let stored_ds = ds_repo
+                .find_by_case(&case_id)
+                .map_err(|e| persistence_sqlite::DbError::System(format!("find ds: {e}")))?
+                .into_iter()
+                .find(|d| d.name == "test-e01")
+                .ok_or_else(|| persistence_sqlite::DbError::System("data source not found".to_string()))?;
+
+            let stats = file_service::enumerate_filesystem_mft(
+                conn,
+                &stored_ds.id,
+                e01_path,
+                ntfs.offset,
+                mft_cluster,
+                cluster_size,
+                1024,
+                bytes_per_sector,
+                mft_data_size,
+                Some(&|pct, msg| {
+                    eprintln!("[{pct}%] {msg}");
+                }),
+                None,
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(format!("MFT enum: {e}")))?;
+
+            eprintln!(
+                "MFT: {} files, {} dirs, {} bytes",
+                stats.file_count, stats.dir_count, stats.total_size
+            );
+
+            Ok::<String, persistence_sqlite::DbError>(stored_ds.id.0.clone())
+        })
+        .expect("setup failed");
+
+    (tmp, active, ds_id_result)
+}
+
+fn preview_and_assert(active: &app_services::active_case::ActiveCase, ds_id: &str, label: &str) {
+    active
+        .with_conn(|conn| {
+            let all = FileRepo::new(conn)
+                .find_by_data_source(&domain::DataSourceId(ds_id.to_string()))
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+
+            let file = all
+                .iter()
+                .find(|f| f.entry_type == domain::EntryType::File && f.size.unwrap_or(0) > 0 && f.path.starts_with('\\'))
+                .unwrap_or_else(|| {
+                    panic!("{label}: no previewable NTFS file in {} entries", all.len())
+                });
+
+            let mut reader = file_service::open_file_content_by_id(conn, &file.id)
+                .unwrap_or_else(|e| panic!("{label}: preview failed for '{}': {e:?}", file.path));
+            let mut buf = Vec::new();
+            reader.read_to_end(&mut buf).unwrap();
+            assert!(!buf.is_empty(), "{label}: empty content for '{}'", file.path);
+            eprintln!("✅ {label}: {} ({} bytes)", file.path, buf.len());
+            Ok(())
+        })
+        .unwrap();
+}
+
+fn preview_chinese_path(active: &app_services::active_case::ActiveCase, ds_id: &str, label: &str) {
+    active
+        .with_conn(|conn| {
+            let all = FileRepo::new(conn)
+                .find_by_data_source(&domain::DataSourceId(ds_id.to_string()))
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+
+            let chinese = all.iter().find(|f| {
+                f.entry_type == domain::EntryType::File
+                    && f.size.unwrap_or(0) > 0
+                    && f.path.starts_with('\\')
+                    && f.path.chars().any(|c| c as u32 > 0x7F)
+            });
+
+            let Some(file) = chinese else {
+                eprintln!("⚠️  {label}: no Chinese-path file, skipping");
+                return Ok(());
+            };
+
+            let mut reader = file_service::open_file_content_by_id(conn, &file.id)
+                .unwrap_or_else(|e| {
+                    panic!("{label}: Chinese path preview failed for '{}': {e:?}", file.path)
+                });
+            let mut buf = Vec::new();
+            reader.read_to_end(&mut buf).unwrap();
+            assert!(!buf.is_empty(), "{label}: empty content for '{}'", file.path);
+            eprintln!("✅ {label} Chinese: {} ({} bytes)", file.path, buf.len());
+            Ok(())
+        })
+        .unwrap();
+}
+
+// ─── 检材2.E01 ───
+
+#[test]
+#[ignore = "requires FORENSICS_JC2_E01"]
+fn jc2_preview_returns_file_content() {
+    let (_tmp, active, ds_id) = setup(&jc2_path());
+    preview_and_assert(&active, &ds_id, "JC2");
+}
+
+// ─── liuyang_pc.E01 ───
+
+#[test]
+#[ignore = "requires FORENSICS_LIUYANG_E01"]
+fn liuyang_preview_returns_file_content() {
+    let (_tmp, active, ds_id) = setup(&liuyang_path());
+    preview_and_assert(&active, &ds_id, "Liuyang");
+}
+
+#[test]
+#[ignore = "requires FORENSICS_LIUYANG_E01"]
+fn liuyang_preview_chinese_path() {
+    let (_tmp, active, ds_id) = setup(&liuyang_path());
+    preview_chinese_path(&active, &ds_id, "Liuyang");
+}

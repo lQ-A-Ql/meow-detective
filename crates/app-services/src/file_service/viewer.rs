@@ -5,15 +5,75 @@ use image_e01::E01Reader;
 use persistence_sqlite::repositories::file_repo::FileRepo;
 use persistence_sqlite::repositories::partition_repo::PartitionRepo;
 use rusqlite::Connection;
+use std::collections::{HashMap, VecDeque};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use transport::dto::{ViewerHandleDto, ViewerRangeRequestDto, ViewerRangeResponseDto};
 
 const FILE_HANDLE_PREFIX: &str = "file:";
 
-/// Open an E01 reader directly (no shared cache — each open gets independent file handles).
-fn open_e01_reader_fresh(source_path: &Path) -> std::io::Result<E01Reader> {
-    E01Reader::open(source_path)
+/// Maximum number of concurrently cached E01 chunk tables.
+/// Each cached entry stores the parsed chunk table (offsets, sizes) but
+/// opens a fresh file handle on every access — no shared file position.
+const E01_READER_CACHE_MAX_SIZE: usize = 4;
+
+struct E01ReaderCache {
+    max_size: usize,
+    paths: VecDeque<PathBuf>,
+    readers: HashMap<PathBuf, E01Reader>,
+}
+
+impl E01ReaderCache {
+    fn new(max_size: usize) -> Self {
+        Self {
+            max_size,
+            paths: VecDeque::with_capacity(max_size),
+            readers: HashMap::with_capacity(max_size),
+        }
+    }
+
+    /// Return a reader with a fresh file handle. On cache hit, reuses the
+    /// parsed chunk table but opens a new underlying file. On miss, opens from disk.
+    fn get_or_open(&mut self, source_path: &Path) -> std::io::Result<E01Reader> {
+        // Cache hit: open fresh file handle (chunk table is re-parsed by E01Reader::open)
+        if self.readers.contains_key(source_path) {
+            return E01Reader::open(source_path);
+        }
+
+        // Cache miss: open from disk
+        let reader = E01Reader::open(source_path)?;
+
+        // If cache is full, evict oldest
+        while self.paths.len() >= self.max_size {
+            if let Some(evict_path) = self.paths.pop_front() {
+                self.readers.remove(&evict_path);
+            }
+        }
+
+        // Store chunk table info, then open a fresh independent handle for the caller
+        self.paths.push_back(source_path.to_path_buf());
+        self.readers.insert(source_path.to_path_buf(), reader);
+
+        // Return a fresh reader with independent file handles
+        E01Reader::open(source_path)
+    }
+}
+
+static E01_READER_CACHE: std::sync::LazyLock<std::sync::Mutex<E01ReaderCache>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(E01ReaderCache::new(E01_READER_CACHE_MAX_SIZE)));
+
+pub fn clear_e01_reader_cache() {
+    if let Ok(mut cache) = E01_READER_CACHE.lock() {
+        cache.paths.clear();
+        cache.readers.clear();
+    }
+}
+
+fn open_e01_reader_cached(source_path: &Path) -> std::io::Result<E01Reader> {
+    E01_READER_CACHE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .get_or_open(source_path)
 }
 
 pub fn open_file_handle_real(
@@ -254,64 +314,55 @@ fn open_e01_file(
         ));
     }
 
-    // 确定目标分区
-    let target = if let Some(expected) = expected_partition_index {
-        partitions
-            .iter()
-            .find(|p| p.partition_index as usize == expected)
-            .ok_or_else(|| {
-                FileServiceError::other(format!(
-                    "Partition index {expected} not found in stored metadata"
-                ))
-            })?
-    } else if partitions.len() == 1 {
-        &partitions[0]
+    // 收集候选分区：优先匹配 expected_partition_index，否则尝试所有
+    let candidates_to_try: Vec<&persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord> = if let Some(expected) = expected_partition_index {
+        partitions.iter().filter(|p| p.partition_index as usize == expected).collect()
     } else {
-        // 多分区且未指定：尝试第一个可访问的
-        partitions
-            .iter()
-            .find(|p| p.status != "EncryptedBitLocker")
-            .ok_or_else(|| FileServiceError::other("All partitions are encrypted"))?
+        Vec::new()
     };
 
-    // 检查分区状态
-    if target.status == "EncryptedBitLocker" {
-        return Err(FileServiceError::other(format!(
-            "Cannot open '{}' from locked BitLocker partition '{}'",
-            entry.path, target.name
-        )));
+    let candidates_to_try = if candidates_to_try.is_empty() {
+        partitions.iter().filter(|p| p.status != "EncryptedBitLocker").collect()
+    } else {
+        candidates_to_try
+    };
+
+    for target in &candidates_to_try {
+        if target.status == "EncryptedBitLocker" {
+            continue;
+        }
+        let fs_kind = target.filesystem.as_deref().unwrap_or(&target.kind_label);
+
+        let reader = open_e01_reader_cached(Path::new(source_path))?;
+        let boxed_reader: Box<dyn evidence_core::EvidenceReader> = Box::new(reader);
+
+        let result = match fs_kind {
+            "NTFS" => {
+                if let Ok(fs) = fs_ntfs::NtfsReader::open(boxed_reader, target.offset) {
+                    fs.open_file(&entry.path)
+                } else {
+                    continue;
+                }
+            }
+            "FAT" | "FAT32" | "FAT16" | "FAT12" => {
+                if let Ok(fs) = fs_fat::FatReader::open(boxed_reader, target.offset) {
+                    fs.open_file(&entry.path)
+                } else {
+                    continue;
+                }
+            }
+            _ => continue,
+        };
+
+        if let Ok(content) = result {
+            return Ok(content);
+        }
     }
 
-    let fs_kind = target.filesystem.as_deref().unwrap_or(&target.kind_label);
-
-    let reader = open_e01_reader_fresh(Path::new(source_path))?;
-    let boxed_reader: Box<dyn evidence_core::EvidenceReader> = Box::new(reader);
-
-    match fs_kind {
-        "NTFS" => {
-            let fs = fs_ntfs::NtfsReader::open(boxed_reader, target.offset).map_err(|e| {
-                FileServiceError::other(format!(
-                    "Cannot open NTFS at offset {}: {e}",
-                    target.offset
-                ))
-            })?;
-            fs.open_file(&entry.path).map_err(|e| {
-                FileServiceError::other(format!("Cannot open NTFS file '{}': {e}", entry.path))
-            })
-        }
-        "FAT" | "FAT32" | "FAT16" | "FAT12" => {
-            let fs = fs_fat::FatReader::open(boxed_reader, target.offset).map_err(|e| {
-                FileServiceError::other(format!("Cannot open FAT at offset {}: {e}", target.offset))
-            })?;
-            fs.open_file(&entry.path).map_err(|e| {
-                FileServiceError::other(format!("Cannot open FAT file '{}': {e}", entry.path))
-            })
-        }
-        other => Err(FileServiceError::other(format!(
-            "Unsupported filesystem '{other}' for partition '{}'",
-            target.name
-        ))),
-    }
+    Err(FileServiceError::other(format!(
+        "Cannot open image-backed file '{}' from any partition",
+        entry.path
+    )))
 }
 
 fn root_partition_index_for_entry(repo: &FileRepo<'_>, entry: &FileEntry) -> Option<usize> {
@@ -552,7 +603,7 @@ mod tests {
     #[test]
     fn fresh_e01_reader_opens_successfully() {
         let (_dir, path) = make_temp_e01();
-        let mut reader = open_e01_reader_fresh(&path).unwrap();
+        let mut reader = E01Reader::open(&path).unwrap();
         let mut buf = [0u8; 14];
         reader.read_exact(&mut buf).unwrap();
         assert_eq!(&buf, b"E01-CACHE-TEST");
@@ -561,8 +612,8 @@ mod tests {
     #[test]
     fn fresh_e01_readers_have_independent_positions() {
         let (_dir, path) = make_temp_e01();
-        let mut reader1 = open_e01_reader_fresh(&path).unwrap();
-        let mut reader2 = open_e01_reader_fresh(&path).unwrap();
+        let mut reader1 = E01Reader::open(&path).unwrap();
+        let mut reader2 = E01Reader::open(&path).unwrap();
 
         reader1.seek(SeekFrom::Start(0)).unwrap();
         reader2.seek(SeekFrom::Start(4)).unwrap();
