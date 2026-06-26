@@ -212,7 +212,7 @@ mod tests {
         // Second call should return cached
         let entry2 = repo
             .get_or_insert("key1", "ns", Duration::seconds(60), || {
-                panic!("Should not be called");
+                unreachable!("cache hit should not invoke factory")
             })
             .unwrap();
 

@@ -228,12 +228,18 @@ fn format_hex_dump(bytes: &[u8]) -> String {
         use std::fmt::Write;
         let _ = write!(out, "{offset:08X}  ");
         for (i, b) in chunk.iter().enumerate() {
-            if i == 8 { out.push(' '); }
+            if i == 8 {
+                out.push(' ');
+            }
             let _ = write!(out, "{b:02X} ");
         }
         out.push_str(" |");
         for b in chunk {
-            out.push(if b.is_ascii_graphic() || *b == b' ' { *b as char } else { '.' });
+            out.push(if b.is_ascii_graphic() || *b == b' ' {
+                *b as char
+            } else {
+                '.'
+            });
         }
         out.push_str("|\n");
     }
@@ -796,8 +802,8 @@ mod tests {
         });
     }
 
-#[test]
-fn media_range_response_does_not_leak_host_path() {
+    #[test]
+    fn media_range_response_does_not_leak_host_path() {
         with_logical_case_file(
             "media-no-leak",
             "clip.mp4",

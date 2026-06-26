@@ -95,6 +95,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         include_str!("scripts/0029_entity_relationships.sql"),
     ),
     ("0030_custody", include_str!("scripts/0030_custody.sql")),
+    (
+        "0031_cleanup_partition_triple_representation",
+        include_str!("scripts/0031_cleanup_partition_triple_representation.sql"),
+    ),
 ];
 
 pub fn latest_version() -> &'static str {

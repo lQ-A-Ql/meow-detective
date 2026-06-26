@@ -42,6 +42,9 @@ pub(crate) fn expand_array_substitutions_in_element<'a>(
 
     let mut out = Vec::with_capacity(expanded_once.len());
     for id in expanded_once {
+        if out.len() > 10_000 {
+            break;
+        }
         if let Some(expanded) = expand_array_substitutions_in_element(arena, bump, id)? {
             out.extend(expanded);
         } else {

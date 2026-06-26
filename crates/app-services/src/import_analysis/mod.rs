@@ -190,7 +190,10 @@ mod tests {
         };
         let events = std::sync::Mutex::new(Vec::new());
         let progress = |pct: u32, detail: &str| {
-            events.lock().unwrap().push((pct, detail.to_string()));
+            events
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push((pct, detail.to_string()));
         };
 
         let (message, counts) = run_post_import_pipeline_with_counts(options, Some(&progress))
@@ -201,7 +204,7 @@ mod tests {
             "Timeline: deferred until Timeline page. Artifacts: 0. Index: 0 indexed"
         );
         assert_eq!(counts, JobOutcomeCounts::default());
-        let events = events.lock().unwrap();
+        let events = events.lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].0, 84);
         assert!(events[0].1.contains("phase=post-import-skip"));
@@ -231,7 +234,10 @@ mod tests {
         );
         let events = std::sync::Mutex::new(Vec::new());
         let progress = |pct: u32, detail: &str| {
-            events.lock().unwrap().push((pct, detail.to_string()));
+            events
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push((pct, detail.to_string()));
         };
 
         let (message, counts) = run_post_import_pipeline_with_counts(options, Some(&progress))
@@ -240,7 +246,7 @@ mod tests {
         assert!(message.starts_with("Timeline: 2 events"));
         assert!(message.contains("Artifacts: 0. Index: 0 indexed"));
         assert_eq!(counts, JobOutcomeCounts::default());
-        let events = events.lock().unwrap();
+        let events = events.lock().unwrap_or_else(|e| e.into_inner());
         let scheduled = events
             .iter()
             .find(|(_, detail)| detail.contains("Post-import analysis scheduled"))

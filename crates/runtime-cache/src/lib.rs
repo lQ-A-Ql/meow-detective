@@ -239,7 +239,7 @@ mod tests {
             let handle = thread::spawn(move || {
                 let key = format!("concurrent-key-{}", thread_id);
                 {
-                    let cache = cache.lock().unwrap();
+                    let cache = cache.lock().unwrap_or_else(|e| e.into_inner());
                     cache
                         .cache()
                         .get_or_insert(&key, "concurrent-ns", Duration::minutes(5), || {
@@ -249,7 +249,7 @@ mod tests {
                 }
                 // Read it back
                 {
-                    let cache = cache.lock().unwrap();
+                    let cache = cache.lock().unwrap_or_else(|e| e.into_inner());
                     let entry = cache.cache().get(&key).unwrap();
                     assert!(
                         entry.is_some(),

@@ -958,7 +958,7 @@ mod tests {
 
         assert_eq!(results.len(), 1);
         assert!(results[0].error.is_none());
-        let progress = progress.lock().unwrap();
+        let progress = progress.lock().unwrap_or_else(|e| e.into_inner());
         assert!(progress.iter().any(|(pct, detail)| {
             *pct > 0
                 && *pct < 100

@@ -1,3 +1,13 @@
+//! # Ingest Pipeline (DEPRECATED)
+//!
+//! This crate defines the IngestPipeline trait and related types for evidence ingestion.
+//!
+//! **DEPRECATED**: The production ingestion path lives in
+//! pps/desktop/src-tauri/src/commands/import/pipeline.rs.
+//! This crate is retained for reference but is not used by any production code.
+//! Scheduled for removal in a future cleanup pass after confirming no external
+//! consumers depend on the trait shapes defined here.
+//!
 //! Ingestion pipeline orchestration.
 //!
 //! Defines the trait-based pipeline for importing data sources into a case:

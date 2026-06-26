@@ -395,7 +395,7 @@ pub(crate) fn build_source_groups(
         let Some(ref source_object_id) = artifact.source_object_id else {
             return;
         };
-        let mut groups = groups_map.lock().unwrap();
+        let mut groups = groups_map.lock().unwrap_or_else(|e| e.into_inner());
         let group =
             groups
                 .entry(source_object_id.clone())
@@ -407,7 +407,7 @@ pub(crate) fn build_source_groups(
     });
 
     timelines.par_iter().for_each(|timeline| {
-        let mut groups = groups_map.lock().unwrap();
+        let mut groups = groups_map.lock().unwrap_or_else(|e| e.into_inner());
         let group = groups
             .entry(timeline.source_object_id.clone())
             .or_insert_with(|| CorrelationSourceGroup {
@@ -459,7 +459,7 @@ pub(crate) fn build_rule_groups(
     artifacts.par_iter().for_each(|artifact| {
         for rule_match in build_artifact_rule_matches(&files, artifact) {
             let file_id = rule_match.file.id.0.clone();
-            let mut groups = groups_map.lock().unwrap();
+            let mut groups = groups_map.lock().unwrap_or_else(|e| e.into_inner());
             let group = groups
                 .entry(file_id.clone())
                 .or_insert_with(|| CorrelationRuleGroup {
