@@ -4,7 +4,9 @@ import { TextViewer } from '@/components/viewers/TextViewer';
 import { ImageViewer } from '@/components/viewers/ImageViewer';
 import { VideoViewer } from '@/components/viewers/VideoViewer';
 import { AudioViewer } from '@/components/viewers/AudioViewer';
+import { ViewerError } from '@/components/viewers/ViewerError';
 import type {
+  ApiErrorDto,
   FileEntryRow,
   ViewerHandle,
   ViewerRangeResponse,
@@ -73,6 +75,8 @@ export interface FilePreviewPanelProps {
   imagePreview: ImagePreviewResponse | null | undefined;
   mediaUrl: MediaUrl | null | undefined;
   selectedFile: FileEntryRow | undefined;
+  previewError?: ApiErrorDto | null;
+  onRetryPreview?: () => void;
 }
 
 export function FilePreviewPanel({
@@ -83,10 +87,15 @@ export function FilePreviewPanel({
   imagePreview,
   mediaUrl,
   selectedFile,
+  previewError,
+  onRetryPreview,
 }: FilePreviewPanelProps) {
   return (
     <div className="h-72 bg-[#fcfcfc] shrink-0 min-h-0">
-      {selectedFile?.encrypted && (
+      {previewError && (
+        <ViewerError error={previewError} onRetry={onRetryPreview} />
+      )}
+      {!previewError && selectedFile?.encrypted && (
         <div className="flex items-center gap-2 bg-amber-50 border-b border-amber-200 px-3 py-1.5 text-[11px] text-amber-800">
           <span className="font-semibold">EFS Encrypted</span>
           <span className="text-amber-600">
