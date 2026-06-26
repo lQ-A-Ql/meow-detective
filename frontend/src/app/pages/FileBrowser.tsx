@@ -459,14 +459,14 @@ export function FileBrowser() {
             <HardDrive size={12} />
             {treeNodes.length > 0 ? (
               <>
-                <span className="text-[#111] font-semibold">
+                <span className="text-[#111] font-semibold truncate max-w-[200px]">
                   {activeRootNode ? displayNodeName(activeRootNode.name, activeRootNode.depth) : '/'}
                 </span>
                 {currentDirectory &&
                 currentDirectory.id !== activeRootNode?.id ? (
                   <>
                     <ChevronRight size={12} className="text-[#aaa]" />
-                    <span className="text-[#111] font-semibold">
+                    <span className="text-[#111] font-semibold truncate max-w-[200px]">
                       {displayNodeName(currentDirectory.name, currentDirectory.depth)}
                     </span>
                   </>
@@ -474,7 +474,7 @@ export function FileBrowser() {
                 {selectedFile ? (
                   <>
                     <ChevronRight size={12} className="text-[#aaa]" />
-                    <span className="text-[#111] font-semibold">
+                    <span className="text-[#111] font-semibold truncate max-w-[200px]">
                       {selectedFile.name}
                     </span>
                   </>
@@ -554,6 +554,7 @@ export function FileBrowser() {
 
         {/* 第三列：对象检查器 */}
         <InspectorPane
+          className="hidden lg:flex"
           title="对象检查器"
           subtitle={
             selectedFile

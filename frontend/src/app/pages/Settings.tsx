@@ -141,7 +141,7 @@ export function Settings() {
             onChange={(event) =>
               setSettings((current) => ({ ...current, caseRoot: event.target.value }))
             }
-            className="w-full bg-[#f8f8f8] border border-[#e0e0e0] p-3 font-mono text-[12px] text-[#111]"
+            className="w-full max-w-3xl bg-[#f8f8f8] border border-[#e0e0e0] p-3 font-mono text-[12px] text-[#111]"
           />
           <div className="mt-1 text-[10px] text-[#999]">所有案件数据将存储在此目录下</div>
         </section>
@@ -160,7 +160,7 @@ export function Settings() {
             onChange={(event) =>
               setSettings((current) => ({ ...current, imageSearchPaths: event.target.value }))
             }
-            className="w-full bg-[#f8f8f8] border border-[#e0e0e0] p-3 font-mono text-[12px] text-[#111]"
+            className="w-full max-w-3xl bg-[#f8f8f8] border border-[#e0e0e0] p-3 font-mono text-[12px] text-[#111]"
           />
           <div className="mt-1 text-[10px] text-[#999]">导入数据源时自动搜索的镜像目录（分号分隔）</div>
         </section>

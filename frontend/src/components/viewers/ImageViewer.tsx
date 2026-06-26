@@ -103,13 +103,19 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
       if (isDragging) {
+        const containerWidth = containerRef.current?.clientWidth ?? 0;
+        const containerHeight = containerRef.current?.clientHeight ?? 0;
+        const imageWidth = imageSize.width * scale;
+        const imageHeight = imageSize.height * scale;
+        const newX = e.clientX - dragStart.x;
+        const newY = e.clientY - dragStart.y;
         setPosition({
-          x: e.clientX - dragStart.x,
-          y: e.clientY - dragStart.y,
+          x: Math.max(Math.min(newX, containerWidth - 100), -(imageWidth - 100)),
+          y: Math.max(Math.min(newY, containerHeight - 100), -(imageHeight - 100)),
         });
       }
     },
-    [isDragging, dragStart]
+    [isDragging, dragStart, imageSize, scale]
   );
 
   // 鼠标拖拽结束

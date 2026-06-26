@@ -28,7 +28,7 @@ export function StatCard({
         <div className="font-mono text-[11px] uppercase tracking-wider text-[#888]">{title}</div>
         {Icon ? <Icon size={16} className="text-[#aaa]" /> : null}
       </div>
-      <div className="mt-1 font-mono text-2xl font-semibold text-[#111]">{value}</div>
+      <div className="mt-1 font-mono text-2xl font-semibold text-[#111] truncate overflow-hidden">{value}</div>
       {subtitle ? <div className="mt-0.5 text-[11px] text-[#666]">{subtitle}</div> : null}
     </div>
   );
@@ -53,7 +53,7 @@ export function BreakdownList({
       <div className="space-y-1">
         {sorted.map(([key, count]) => (
           <div key={key} className="flex items-center justify-between text-xs">
-            <span className="font-mono text-[#111]">{key}</span>
+            <span className="font-mono text-[#111] truncate min-w-0 flex-1">{key}</span>
             <span className="font-mono text-[#666]">{formatValue(count)}</span>
           </div>
         ))}

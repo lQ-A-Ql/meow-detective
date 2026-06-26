@@ -182,7 +182,7 @@ export function Search() {
                   key: 'snippet',
                   title: '内容预览',
                   className: 'text-[#555]',
-                  render: (row) => row.snippets[0]?.text ?? '-',
+                  render: (row) => <span className="line-clamp-2 text-sm leading-tight">{row.snippets[0]?.text ?? '-'}</span>,
                 },
               ]}
             />

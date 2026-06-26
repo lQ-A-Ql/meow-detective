@@ -4,14 +4,15 @@ interface InspectorPaneProps extends PropsWithChildren {
   title: ReactNode;
   widthClassName?: string;
   subtitle?: ReactNode;
+  className?: string;
 }
 
-export function InspectorPane({ title, widthClassName = 'w-72', subtitle, children }: InspectorPaneProps) {
+export function InspectorPane({ title, widthClassName = 'w-72', subtitle, className, children }: InspectorPaneProps) {
   return (
-    <aside className={`${widthClassName} shrink-0 border-l border-[#e0e0e0] bg-[#fafafa] flex flex-col`}>
+    <aside className={`${widthClassName} shrink-0 border-l border-[#e0e0e0] bg-[#fafafa] flex flex-col ${className ?? ''}`}>
       <div className="shrink-0 border-b border-[#e0e0e0] bg-[#f5f5f5] px-4 py-2">
         <div className="text-[10px] font-semibold tracking-wider text-[#555] uppercase">{title}</div>
-        {subtitle ? <div className="mt-1 text-[10px] font-mono text-[#888]">{subtitle}</div> : null}
+        {subtitle ? <div className="mt-1 text-[10px] font-mono text-[#888] truncate">{subtitle}</div> : null}
       </div>
       <div className="flex-1 overflow-auto p-4">{children}</div>
     </aside>

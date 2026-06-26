@@ -126,7 +126,7 @@ export function V3Dashboard() {
                       key={ds.id}
                       className="flex items-center justify-between border-b border-[#f0f0f0] pb-2 text-xs last:border-none last:pb-0"
                     >
-                      <div>
+                      <div className="min-w-0 flex-1 truncate">
                         <span className="font-mono text-[#111]">{ds.name}</span>
                         <span className="ml-2 font-mono text-[#aaa]">{ds.kind}</span>
                       </div>

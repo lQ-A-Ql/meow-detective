@@ -58,7 +58,7 @@ export function Reports() {
                 </div>
               ) : null}
               <div className="text-[#111] text-[13px] font-medium mb-1">{template.name}</div>
-              <div className="text-[#666] text-[11px] leading-relaxed">{template.description}</div>
+              <div className="text-[#666] text-[11px] leading-relaxed line-clamp-3">{template.description}</div>
             </div>
           ))}
         </div>

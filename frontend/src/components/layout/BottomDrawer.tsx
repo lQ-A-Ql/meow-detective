@@ -173,9 +173,9 @@ export function BottomDrawer() {
                 <div key={job.id} className="border border-[#e0e0e0] bg-white p-3 text-[11px]">
                   <div className="flex items-center justify-between gap-3 text-[#111]">
                     <span className="font-medium">{job.name}</span>
-                    <span className="text-[#888]">{job.detail}</span>
+                    <span className="text-[#888] truncate">{job.detail}</span>
                   </div>
-                  <div className="mt-1 text-[#666]">{job.scope}</div>
+                  <div className="mt-1 text-[#666] truncate">{job.scope}</div>
                   <JobOutcomeBadges job={job} />
                   {job.currentPartition ? (
                     <div className="mt-2 border border-[#ececec] bg-[#fafafa] px-2 py-2">
@@ -223,9 +223,9 @@ export function BottomDrawer() {
                         </span>
                       ) : null}
                     </span>
-                    <span className="text-[#888]">{job.detail}</span>
+                    <span className="text-[#888] truncate">{job.detail}</span>
                   </div>
-                  <div className="mt-1 text-[#888]">{job.scope}</div>
+                  <div className="mt-1 text-[#888] truncate">{job.scope}</div>
                   <JobOutcomeBadges job={job} />
                 </div>
               ))}
@@ -233,9 +233,9 @@ export function BottomDrawer() {
                 <div key={job.id} className="border border-red-200 bg-red-50 p-3 text-[11px] text-red-700">
                   <div className="flex items-center justify-between gap-3">
                     <span className="font-medium">{job.name}</span>
-                    <span>{job.detail}</span>
+                    <span className="truncate">{job.detail}</span>
                   </div>
-                  <div className="mt-1 text-red-600/80">{job.scope || '任务执行失败'}</div>
+                  <div className="mt-1 text-red-600/80 truncate">{job.scope || '任务执行失败'}</div>
                   <JobOutcomeBadges job={job} />
                 </div>
               ))}
@@ -252,8 +252,8 @@ export function BottomDrawer() {
                   <div className="flex items-start gap-2 text-[#111]">
                     <AlertCircle size={12} className="mt-0.5 text-[#b7791f] shrink-0" />
                     <div>
-                      <div className="font-medium">{warning.title}</div>
-                      <div className="mt-1 text-[#666]">{warning.detail}</div>
+                      <div className="font-medium break-words">{warning.title}</div>
+                      <div className="mt-1 text-[#666] line-clamp-2">{warning.detail}</div>
                     </div>
                   </div>
                 </div>

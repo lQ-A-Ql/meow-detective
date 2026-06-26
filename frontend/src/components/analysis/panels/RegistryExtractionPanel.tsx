@@ -68,9 +68,9 @@ export function RegistryExtractionPanel({
     { key: 'lastLogin', title: '最后登录', className: 'w-[160px] font-mono text-[10px]', render: (row) => row.lastLogin ? row.lastLogin.replace('T', ' ').replace('Z', '') : '从未登录' },
     { key: 'profilePath', title: 'Profile 路径', className: 'min-w-[200px] font-mono text-[10px]', render: (row) => row.profilePath ?? '-' },
     {
-      key: 'passwordHash', title: '密码哈希 (LM:NT)', className: 'min-w-[340px] font-mono text-[10px]',
+      key: 'passwordHash', title: '密码哈希 (LM:NT)', className: 'min-w-[180px] font-mono text-[10px]',
       render: (row) => row.passwordHash
-        ? <span className="select-all text-[#b42318]">{row.passwordHash}</span>
+        ? <span className="select-all text-[#b42318] truncate block">{row.passwordHash}</span>
         : <span className="text-[#999]">—</span>,
     },
     { key: 'passwordHint', title: '密码提示', className: 'w-[120px]', render: (row) => row.passwordHint ?? '-' },

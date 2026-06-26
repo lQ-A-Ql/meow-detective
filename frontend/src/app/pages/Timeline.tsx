@@ -276,8 +276,8 @@ export function Timeline() {
 
             <InspectorSection title="时间上下文">
               <div className="space-y-1 font-mono text-[10px] text-[#666]">
-                <div>source: {String(selectedEvent?.attrs.source ?? '-')}</div>
-                <div>window: {selectedEvent?.ts ?? '-'} ± 10m</div>
+                <div className="truncate max-w-full">source: {String(selectedEvent?.attrs.source ?? '-')}</div>
+                <div className="truncate max-w-full">window: {selectedEvent?.ts ?? '-'} ± 10m</div>
               </div>
             </InspectorSection>
 
