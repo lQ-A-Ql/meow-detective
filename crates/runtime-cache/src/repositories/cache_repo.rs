@@ -133,7 +133,7 @@ impl<'a> CacheRepo<'a> {
         F: FnOnce() -> Result<serde_json::Value>,
     {
         if let Some(entry) = self.get(key)? {
-            if entry.case_id.as_deref() == Some(case_id) {
+            if entry.namespace == namespace && entry.case_id.as_deref() == Some(case_id) {
                 return Ok(entry);
             }
         }
@@ -328,6 +328,47 @@ mod tests {
             )
             .unwrap();
         assert_eq!(third.value_json, serde_json::json!({"generation": 2}));
+        assert_eq!(factory_calls.get(), 2);
+    }
+
+    #[test]
+    fn cache_get_or_insert_case_does_not_hit_different_namespace() {
+        let conn = crate::connection::open_in_memory().unwrap();
+        let repo = CacheRepo::new(&conn);
+        let factory_calls = Cell::new(0usize);
+
+        let first = repo
+            .get_or_insert_case(
+                "shared-key",
+                "search_results",
+                "case-1",
+                Duration::seconds(60),
+                || {
+                    factory_calls.set(factory_calls.get() + 1);
+                    Ok(serde_json::json!({"namespace": "search"}))
+                },
+            )
+            .unwrap();
+        assert_eq!(first.value_json, serde_json::json!({"namespace": "search"}));
+
+        let second = repo
+            .get_or_insert_case(
+                "shared-key",
+                crate::models::namespaces::PREVIEW_DESCRIPTORS,
+                "case-1",
+                Duration::seconds(60),
+                || {
+                    factory_calls.set(factory_calls.get() + 1);
+                    Ok(serde_json::json!({"namespace": "preview"}))
+                },
+            )
+            .unwrap();
+
+        assert_eq!(
+            second.value_json,
+            serde_json::json!({"namespace": "preview"})
+        );
+        assert_eq!(second.namespace, crate::models::namespaces::PREVIEW_DESCRIPTORS);
         assert_eq!(factory_calls.get(), 2);
     }
 

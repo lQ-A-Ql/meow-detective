@@ -539,13 +539,12 @@ where
     }
 
     let source_path = Path::new(&descriptor.source_path);
+    let path_candidates = descriptor_image_path_candidates(descriptor);
     for candidate in &descriptor.partition_candidates {
         let boxed_reader = open_reader(source_path)?;
         let result = match candidate.filesystem_kind.as_str() {
             "NTFS" => match fs_ntfs::NtfsReader::open(boxed_reader, candidate.offset) {
-                Ok(fs) => fs
-                    .open_file(&descriptor.path)
-                    .or_else(|_| fs.open_file(&descriptor.file_id)),
+                Ok(fs) => open_first_image_path(&fs, &path_candidates),
                 Err(e) => {
                     tracing::warn!(
                         path = %descriptor.path,
@@ -559,7 +558,7 @@ where
             },
             "FAT" | "FAT32" | "FAT16" | "FAT12" => {
                 match fs_fat::FatReader::open(boxed_reader, candidate.offset) {
-                    Ok(fs) => fs.open_file(&descriptor.path),
+                    Ok(fs) => open_first_image_path(&fs, &path_candidates),
                     Err(e) => {
                         tracing::warn!(
                             path = %descriptor.path,
@@ -593,6 +592,54 @@ where
         "Cannot open image-backed file '{}' from any partition",
         descriptor.path
     )))
+}
+
+fn open_first_image_path(
+    fs: &dyn FileSystemReader,
+    path_candidates: &[String],
+) -> std::io::Result<Box<dyn Read>> {
+    let mut last_error = None;
+    for path in path_candidates {
+        match fs.open_file(path) {
+            Ok(reader) => return Ok(reader),
+            Err(error) => last_error = Some(error),
+        }
+    }
+
+    Err(last_error.unwrap_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::NotFound, "No preview path candidates")
+    }))
+}
+
+fn descriptor_image_path_candidates(descriptor: &PreviewDescriptor) -> Vec<String> {
+    let mut candidates = Vec::new();
+    push_unique_path_candidate(&mut candidates, descriptor.path.trim());
+
+    if let Some(stripped) = strip_partition_path_prefix(&descriptor.path) {
+        push_unique_path_candidate(&mut candidates, stripped);
+    }
+
+    push_unique_path_candidate(&mut candidates, &descriptor.file_id);
+    candidates
+}
+
+fn push_unique_path_candidate(candidates: &mut Vec<String>, path: &str) {
+    let path = path.trim();
+    if !path.is_empty() && !candidates.iter().any(|candidate| candidate == path) {
+        candidates.push(path.to_string());
+    }
+}
+
+fn strip_partition_path_prefix(path: &str) -> Option<&str> {
+    let path = path.trim_start();
+    let rest = path.strip_prefix("[P")?;
+    let (partition, after_partition) = rest.split_once(']')?;
+    if partition.is_empty() || !partition.chars().all(|ch| ch.is_ascii_digit()) {
+        return None;
+    }
+
+    let stripped = after_partition.trim_start_matches(['/', '\\']);
+    (!stripped.is_empty()).then_some(stripped)
 }
 
 fn read_seekable_range(
