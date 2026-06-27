@@ -380,6 +380,9 @@ fn read_file_bytes_for_entry(
     if let Some(bytes) = try_read_ntfs_image_range_for_entry(conn, repo, entry, offset, length)? {
         return Ok(bytes);
     }
+    if let Some(bytes) = try_read_fat_image_range_for_entry(conn, repo, entry, offset, length)? {
+        return Ok(bytes);
+    }
 
     match open_range_content_for_entry(conn, repo, entry)? {
         RangeContentReader::Seekable(mut reader) => {
@@ -436,6 +439,9 @@ pub fn read_file_bytes_for_descriptor(
 ) -> Result<Vec<u8>, FileServiceError> {
     let length = (length as usize).min(infrastructure::constants::MAX_RANGE_LENGTH);
     if let Some(bytes) = try_read_ntfs_image_range_for_descriptor(descriptor, offset, length)? {
+        return Ok(bytes);
+    }
+    if let Some(bytes) = try_read_fat_image_range_for_descriptor(descriptor, offset, length)? {
         return Ok(bytes);
     }
 
@@ -620,6 +626,147 @@ fn try_read_ntfs_image_range_for_entry(
     }
 }
 
+fn try_read_fat_image_range_for_descriptor(
+    descriptor: &PreviewDescriptor,
+    offset: u64,
+    length: usize,
+) -> Result<Option<Vec<u8>>, FileServiceError> {
+    if !matches!(descriptor.source_kind.as_str(), "e01" | "raw") {
+        return Ok(None);
+    }
+    if descriptor.partition_candidates.is_empty() {
+        return Ok(None);
+    }
+
+    let source_path = Path::new(&descriptor.source_path);
+    let path_candidates = descriptor_image_path_candidates(descriptor);
+    match descriptor.source_kind.as_str() {
+        "e01" => try_read_fat_image_range_from_candidates(
+            source_path,
+            &descriptor.partition_candidates,
+            &path_candidates,
+            offset,
+            length,
+            |path| {
+                open_e01_reader_cached(path)
+                    .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+            },
+        ),
+        "raw" => try_read_fat_image_range_from_candidates(
+            source_path,
+            &descriptor.partition_candidates,
+            &path_candidates,
+            offset,
+            length,
+            |path| {
+                evidence_core::RawImageReader::open(path)
+                    .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+            },
+        ),
+        _ => Ok(None),
+    }
+}
+
+fn try_read_fat_image_range_for_entry(
+    conn: &Connection,
+    repo: &FileRepo<'_>,
+    entry: &FileEntry,
+    offset: u64,
+    length: usize,
+) -> Result<Option<Vec<u8>>, FileServiceError> {
+    let (source_kind, source_path) = repo
+        .find_data_source_location(&entry.data_source_id)?
+        .ok_or_else(|| FileServiceError::not_found("Data source not found"))?;
+    let expected_partition_index = root_partition_index_for_entry(repo, entry);
+
+    match source_kind.as_str() {
+        "e01" => {
+            let candidates = e01_partition_candidates(conn, entry, expected_partition_index)?;
+            let path_candidates = entry_image_path_candidates(entry);
+            try_read_fat_image_range_from_candidates(
+                Path::new(&source_path),
+                &candidates,
+                &path_candidates,
+                offset,
+                length,
+                |path| {
+                    open_e01_reader_cached(path)
+                        .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+                },
+            )
+        }
+        "raw" => {
+            let candidates = raw_partition_candidates(&source_path, expected_partition_index)?;
+            let path_candidates = entry_image_path_candidates(entry);
+            try_read_fat_image_range_from_candidates(
+                Path::new(&source_path),
+                &candidates,
+                &path_candidates,
+                offset,
+                length,
+                |path| {
+                    evidence_core::RawImageReader::open(path)
+                        .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+                },
+            )
+        }
+        _ => Ok(None),
+    }
+}
+
+fn try_read_fat_image_range_from_candidates<F>(
+    source_path: &Path,
+    partition_candidates: &[PreviewPartitionCandidate],
+    path_candidates: &[String],
+    offset: u64,
+    length: usize,
+    mut open_reader: F,
+) -> Result<Option<Vec<u8>>, FileServiceError>
+where
+    F: FnMut(&Path) -> std::io::Result<Box<dyn evidence_core::EvidenceReader>>,
+{
+    for candidate in partition_candidates {
+        if !is_fat_filesystem_kind(&candidate.filesystem_kind) {
+            continue;
+        }
+
+        let boxed_reader = open_reader(source_path)?;
+        let fs = match fs_fat::FatReader::open(boxed_reader, candidate.offset) {
+            Ok(fs) => fs,
+            Err(error) => {
+                tracing::warn!(
+                    partition_index = candidate.partition_index,
+                    offset = candidate.offset,
+                    error = %error,
+                    "Descriptor FAT range open failed"
+                );
+                continue;
+            }
+        };
+
+        for path in path_candidates {
+            match fs.read_file_range(path, offset, length) {
+                Ok(bytes) => return Ok(Some(bytes)),
+                Err(error) => {
+                    tracing::warn!(
+                        path = %path,
+                        partition_index = candidate.partition_index,
+                        offset = candidate.offset,
+                        error = %error,
+                        "Descriptor FAT range read failed for path candidate"
+                    );
+                }
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+fn is_fat_filesystem_kind(kind: &str) -> bool {
+    matches!(kind, "FAT" | "FAT32" | "FAT16" | "FAT12")
+}
+
 fn try_read_ntfs_image_range_from_candidates<F>(
     source_path: &Path,
     partition_candidates: &[PreviewPartitionCandidate],
@@ -701,7 +848,7 @@ where
                     continue;
                 }
             },
-            "FAT" | "FAT32" | "FAT16" | "FAT12" => {
+            kind if is_fat_filesystem_kind(kind) => {
                 match fs_fat::FatReader::open(boxed_reader, candidate.offset) {
                     Ok(fs) => open_first_image_path(&fs, &path_candidates),
                     Err(e) => {
@@ -1631,6 +1778,63 @@ mod tests {
         std::fs::write(path, data)
     }
 
+    fn write_fat32_raw_fixture(path: &std::path::Path) -> std::io::Result<()> {
+        const SECTOR_SIZE: usize = 512;
+        const RESERVED_SECTORS: usize = 1;
+        const FAT_SECTORS: usize = 1;
+        const FIRST_DATA_SECTOR: usize = RESERVED_SECTORS + FAT_SECTORS;
+        const CLUSTER_SIZE: usize = SECTOR_SIZE;
+
+        let total_sectors = 16usize;
+        let mut data = vec![0u8; total_sectors * SECTOR_SIZE];
+
+        let boot = &mut data[0..SECTOR_SIZE];
+        boot[0..3].copy_from_slice(&[0xEB, 0x58, 0x90]);
+        boot[3..11].copy_from_slice(b"MSDOS5.0");
+        boot[11..13].copy_from_slice(&(SECTOR_SIZE as u16).to_le_bytes());
+        boot[13] = 1;
+        boot[14..16].copy_from_slice(&(RESERVED_SECTORS as u16).to_le_bytes());
+        boot[16] = 1;
+        boot[17..19].copy_from_slice(&0u16.to_le_bytes());
+        boot[32..36].copy_from_slice(&(total_sectors as u32).to_le_bytes());
+        boot[36..40].copy_from_slice(&(FAT_SECTORS as u32).to_le_bytes());
+        boot[44..48].copy_from_slice(&2u32.to_le_bytes());
+        boot[0x42] = 0x29;
+        boot[82..90].copy_from_slice(b"FAT32   ");
+        boot[510] = 0x55;
+        boot[511] = 0xAA;
+
+        let fat_offset = RESERVED_SECTORS * SECTOR_SIZE;
+        let fat = &mut data[fat_offset..fat_offset + SECTOR_SIZE];
+        fat[0..4].copy_from_slice(&0x0FFF_FFF8u32.to_le_bytes());
+        fat[4..8].copy_from_slice(&0x0FFF_FFFFu32.to_le_bytes());
+        fat[8..12].copy_from_slice(&0x0FFF_FFFFu32.to_le_bytes());
+        fat[12..16].copy_from_slice(&4u32.to_le_bytes());
+        fat[16..20].copy_from_slice(&5u32.to_le_bytes());
+        fat[20..24].copy_from_slice(&0x0FFF_FFFFu32.to_le_bytes());
+
+        let root_offset = FIRST_DATA_SECTOR * SECTOR_SIZE;
+        let root = &mut data[root_offset..root_offset + CLUSTER_SIZE];
+        root[0..8].copy_from_slice(b"RANGE   ");
+        root[8..11].copy_from_slice(b"TXT");
+        root[11] = 0x20;
+        root[26..28].copy_from_slice(&3u16.to_le_bytes());
+        root[28..32].copy_from_slice(&(CLUSTER_SIZE as u32 * 3).to_le_bytes());
+
+        for cluster in 3..=5usize {
+            let value = match cluster {
+                3 => b'A',
+                4 => b'B',
+                5 => b'C',
+                _ => unreachable!(),
+            };
+            let offset = FIRST_DATA_SECTOR * SECTOR_SIZE + (cluster - 2) * CLUSTER_SIZE;
+            data[offset..offset + CLUSTER_SIZE].fill(value);
+        }
+
+        std::fs::write(path, data)
+    }
+
     #[test]
     fn logical_directory_mid_file_range_uses_seek_not_linear_skip() {
         let dir = tempfile::TempDir::new().unwrap();
@@ -1808,6 +2012,37 @@ mod tests {
                 .unwrap();
 
         assert_eq!(bytes, marker);
+        assert_eq!(skip_reader_bytes_call_count(), 0);
+    }
+
+    #[test]
+    fn raw_fat_mid_file_range_uses_fat_range_reader_without_materialize() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let raw_path = dir.path().join("fat32.raw");
+        write_fat32_raw_fixture(&raw_path).unwrap();
+
+        let descriptor = PreviewDescriptor {
+            case_id: "case-raw-fat-range".to_string(),
+            file_id: "fat-file-range".to_string(),
+            source_kind: "raw".to_string(),
+            source_path: raw_path.display().to_string(),
+            partition_index: Some(0),
+            filesystem_kind: Some("FAT".to_string()),
+            path: "[P0]/RANGE.TXT".to_string(),
+            mime: Some("text/plain".to_string()),
+            size: 1536,
+            data_source_id: "ds-raw-fat-range".to_string(),
+            partition_candidates: vec![PreviewPartitionCandidate {
+                partition_index: 0,
+                filesystem_kind: "FAT".to_string(),
+                offset: 0,
+            }],
+        };
+
+        reset_skip_reader_bytes_call_count();
+        let bytes = read_file_bytes_for_descriptor(&descriptor, 512 + 7, 9).unwrap();
+
+        assert_eq!(bytes, vec![b'B'; 9]);
         assert_eq!(skip_reader_bytes_call_count(), 0);
     }
 

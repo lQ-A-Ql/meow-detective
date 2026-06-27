@@ -12,9 +12,9 @@ use boot::ExfatBootSector;
 use dir::FileEntrySet;
 use evidence_core::filesystem::{
     child_nodes_with_parent_path_with_separator, file_not_found, fs_node_with_attributes,
-    is_special_directory_name, path_components, path_is_directory, path_is_not_directory,
-    path_not_found, root_node, truncate_data_to_declared_size, unsupported_fs, FileSystemReader,
-    FsNode,
+    fs_out_of_memory, is_special_directory_name, path_components, path_is_directory,
+    path_is_not_directory, path_not_found, root_node, truncate_data_to_declared_size,
+    unsupported_fs, FileSystemReader, FsNode,
 };
 use evidence_core::EvidenceReader;
 use fat::{FatEntry, FatReader};
@@ -172,6 +172,187 @@ impl ExfatReader {
         }
     }
 
+    fn bounded_range_len(data_length: u64, offset: u64, length: usize) -> io::Result<usize> {
+        if offset >= data_length || length == 0 {
+            return Ok(0);
+        }
+
+        let requested = u64::try_from(length)
+            .map_err(|_| fs_out_of_memory("requested range length is too large"))?;
+        let bounded = requested.min(data_length.saturating_sub(offset));
+        usize::try_from(bounded)
+            .map_err(|_| fs_out_of_memory("requested range length is too large"))
+    }
+
+    fn read_no_fat_chain_range(
+        &self,
+        start_cluster: u32,
+        data_length: u64,
+        offset: u64,
+        length: usize,
+    ) -> io::Result<Vec<u8>> {
+        let bounded_len = Self::bounded_range_len(data_length, offset, length)?;
+        if bounded_len == 0 {
+            return Ok(Vec::new());
+        }
+
+        self.validate_cluster(start_cluster)?;
+        let cluster_size = self.boot.cluster_size();
+        let clusters_to_read = data_length.div_ceil(cluster_size).max(1);
+        let max_cluster = self.boot.cluster_count.saturating_add(1) as u64;
+        let end_cluster = start_cluster as u64 + clusters_to_read - 1;
+        if end_cluster > max_cluster {
+            return Err(evidence_core::filesystem::invalid_fs_data(format!(
+                "NoFatChain run starting at cluster {} exceeds declared cluster count ({})",
+                start_cluster, self.boot.cluster_count
+            )));
+        }
+
+        let read_offset = self
+            .cluster_to_abs_offset(start_cluster)
+            .checked_add(offset)
+            .ok_or_else(|| evidence_core::filesystem::invalid_fs_data("range offset overflow"))?;
+        let mut data = vec![0u8; bounded_len];
+        let mut reader = self.reader.borrow_mut();
+        reader.seek(SeekFrom::Start(read_offset))?;
+        reader.read_exact(&mut data)?;
+        Ok(data)
+    }
+
+    fn next_cluster_in_chain(
+        &self,
+        current: u32,
+        start_cluster: u32,
+        visited: &std::collections::HashSet<u32>,
+    ) -> io::Result<Option<u32>> {
+        match self.read_fat_entry(current)? {
+            FatEntry::EndOfChain => Ok(None),
+            FatEntry::BadCluster => Err(evidence_core::filesystem::invalid_fs_data(format!(
+                "bad cluster marker in chain starting at {} after cluster {}",
+                start_cluster, current
+            ))),
+            FatEntry::Free => Err(evidence_core::filesystem::invalid_fs_data(format!(
+                "unexpected free cluster {} in chain starting at {}",
+                current, start_cluster
+            ))),
+            FatEntry::Cluster(next) => {
+                self.validate_cluster(next)?;
+                if visited.contains(&next) {
+                    return Err(evidence_core::filesystem::invalid_fs_data(format!(
+                        "cycle detected in cluster chain: cluster {} points to already-visited cluster {}",
+                        current, next
+                    )));
+                }
+                Ok(Some(next))
+            }
+        }
+    }
+
+    fn read_cluster_chain_range(
+        &self,
+        start_cluster: u32,
+        data_length: u64,
+        offset: u64,
+        length: usize,
+    ) -> io::Result<Vec<u8>> {
+        let bounded_len = Self::bounded_range_len(data_length, offset, length)?;
+        if bounded_len == 0 {
+            return Ok(Vec::new());
+        }
+
+        self.validate_cluster(start_cluster)?;
+        let cluster_size = self.boot.cluster_size();
+        let first_cluster_index = offset / cluster_size;
+        let mut cluster_offset = offset % cluster_size;
+        let mut cluster = start_cluster;
+        let mut visited = std::collections::HashSet::new();
+
+        for _ in 0..first_cluster_index {
+            self.validate_cluster(cluster)?;
+            if !visited.insert(cluster) {
+                return Err(evidence_core::filesystem::invalid_fs_data(format!(
+                    "cycle detected in cluster chain at cluster {}",
+                    cluster
+                )));
+            }
+            cluster = self
+                .next_cluster_in_chain(cluster, start_cluster, &visited)?
+                .ok_or_else(|| {
+                    evidence_core::filesystem::invalid_fs_data(format!(
+                        "cluster chain ended before range offset {} in file starting at {}",
+                        offset, start_cluster
+                    ))
+                })?;
+        }
+
+        let mut data = Vec::with_capacity(bounded_len);
+        let mut remaining = bounded_len;
+        while remaining > 0 {
+            self.validate_cluster(cluster)?;
+            if !visited.insert(cluster) {
+                return Err(evidence_core::filesystem::invalid_fs_data(format!(
+                    "cycle detected in cluster chain at cluster {}",
+                    cluster
+                )));
+            }
+
+            let available_in_cluster = cluster_size.saturating_sub(cluster_offset);
+            let to_read = (available_in_cluster as usize).min(remaining);
+            let read_offset = self
+                .cluster_to_abs_offset(cluster)
+                .checked_add(cluster_offset)
+                .ok_or_else(|| {
+                    evidence_core::filesystem::invalid_fs_data("range offset overflow")
+                })?;
+            let start = data.len();
+            data.resize(start + to_read, 0);
+            {
+                let mut reader = self.reader.borrow_mut();
+                reader.seek(SeekFrom::Start(read_offset))?;
+                reader.read_exact(&mut data[start..])?;
+            }
+
+            remaining -= to_read;
+            cluster_offset = 0;
+            if remaining == 0 {
+                break;
+            }
+
+            cluster = self
+                .next_cluster_in_chain(cluster, start_cluster, &visited)?
+                .ok_or_else(|| {
+                    evidence_core::filesystem::invalid_fs_data(format!(
+                        "cluster chain ended before reading requested range for file starting at {}",
+                        start_cluster
+                    ))
+                })?;
+
+            if visited.len() > self.boot.cluster_count as usize {
+                return Err(evidence_core::filesystem::invalid_fs_data(format!(
+                    "cluster chain exceeds declared cluster count ({})",
+                    self.boot.cluster_count
+                )));
+            }
+        }
+
+        Ok(data)
+    }
+
+    fn read_entry_range(
+        &self,
+        cluster: u32,
+        data_length: u64,
+        no_fat_chain: bool,
+        offset: u64,
+        length: usize,
+    ) -> io::Result<Vec<u8>> {
+        if no_fat_chain {
+            self.read_no_fat_chain_range(cluster, data_length, offset, length)
+        } else {
+            self.read_cluster_chain_range(cluster, data_length, offset, length)
+        }
+    }
+
     /// Resolve a path to a (cluster, is_dir, size, no_fat_chain) tuple.
     ///
     /// Returns None if the path doesn't exist.
@@ -216,6 +397,19 @@ impl ExfatReader {
         }
 
         Ok(Some((current_cluster, is_dir, 0, no_fat_chain)))
+    }
+
+    /// Read a file range by path without materializing the whole file.
+    pub fn read_file_range(&self, path: &str, offset: u64, length: usize) -> io::Result<Vec<u8>> {
+        let (cluster, is_dir, size, no_fat_chain) = self
+            .resolve_path(path)?
+            .ok_or_else(|| file_not_found(path))?;
+
+        if is_dir {
+            return Err(path_is_directory(path));
+        }
+
+        self.read_entry_range(cluster, size, no_fat_chain, offset, length)
     }
 }
 
@@ -289,12 +483,14 @@ mod tests {
     use super::*;
     use crate::types::*;
     use std::io::{Read, Seek};
+    use std::sync::{Arc, Mutex};
 
     /// A fake reader that wraps a byte vector for testing.
     struct FakeReader {
         data: Vec<u8>,
         pos: u64,
         info: evidence_core::ReaderInfo,
+        reads: Option<Arc<Mutex<Vec<(u64, usize)>>>>,
     }
 
     impl FakeReader {
@@ -307,6 +503,20 @@ mod tests {
                     size: 0,
                     kind: "fake-exfat".to_string(),
                 },
+                reads: None,
+            }
+        }
+
+        fn with_read_log(data: Vec<u8>, reads: Arc<Mutex<Vec<(u64, usize)>>>) -> Self {
+            Self {
+                data,
+                pos: 0,
+                info: evidence_core::ReaderInfo {
+                    path: std::path::PathBuf::from("fake-exfat"),
+                    size: 0,
+                    kind: "fake-exfat".to_string(),
+                },
+                reads: Some(reads),
             }
         }
     }
@@ -317,6 +527,9 @@ mod tests {
             let end = (start + buf.len()).min(self.data.len());
             let n = end - start;
             buf[..n].copy_from_slice(&self.data[start..end]);
+            if let Some(reads) = &self.reads {
+                reads.lock().unwrap().push((self.pos, buf.len()));
+            }
             self.pos += n as u64;
             Ok(n)
         }
@@ -476,6 +689,29 @@ mod tests {
         let mut content = String::new();
         file.read_to_string(&mut content).unwrap();
         assert_eq!(content, "Hello World");
+    }
+
+    #[test]
+    fn exfat_range_read_nonzero_offset_reads_only_requested_extent() {
+        let img = build_exfat_fixture();
+        let reads = Arc::new(Mutex::new(Vec::new()));
+        let reader: Box<dyn EvidenceReader> =
+            Box::new(FakeReader::with_read_log(img, reads.clone()));
+        let fat = ExfatReader::open(reader, 0).unwrap();
+
+        reads.lock().unwrap().clear();
+        let bytes = fat.read_file_range("TEST.TXT", 6, 5).unwrap();
+
+        assert_eq!(bytes, b"World");
+        let file_offset = 32 * 512 + 512;
+        let file_data_reads: Vec<_> = reads
+            .lock()
+            .unwrap()
+            .iter()
+            .copied()
+            .filter(|(offset, _)| *offset >= file_offset && *offset < file_offset + 512)
+            .collect();
+        assert_eq!(file_data_reads, vec![(file_offset + 6, 5)]);
     }
 
     #[test]
