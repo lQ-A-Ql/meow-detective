@@ -177,7 +177,6 @@ mod tests {
             std::env::temp_dir().join(format!("forensics-batch-command-test-{}", Uuid::new_v4()));
         let active = case_service::create_case(&root, "Batch Command", Some("Codex Test")).unwrap();
         let case_id = active.meta.id.0.clone();
-        let db_path = active.db_path();
         let state = AppState::default();
         *state.active_case.lock().unwrap() = Some(active);
         state.init_db_pragmas().unwrap();

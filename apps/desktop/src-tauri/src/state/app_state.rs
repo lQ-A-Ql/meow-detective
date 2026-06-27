@@ -4,7 +4,7 @@ use mcp_client::{
 };
 use runtime_cache::RuntimeCache;
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::sync::{Mutex as AsyncMutex, RwLock};
 use tracing::info;

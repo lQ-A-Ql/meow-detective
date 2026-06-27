@@ -56,11 +56,6 @@ pub fn current_case_id(state: &AppState) -> Option<String> {
         .and_then(|guard| guard.as_ref().map(|active| active.meta.id.0.clone()))
 }
 
-/// Get the case ID or return a CommandError.
-pub fn get_case_id(state: &AppState) -> Result<String, CommandError> {
-    current_case_id(state).ok_or_else(CommandError::no_active_case)
-}
-
 /// Write an audit log entry for the active case.
 pub fn write_audit_log(
     state: &AppState,

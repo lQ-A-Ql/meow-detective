@@ -547,7 +547,6 @@ mod tests {
         ));
         let active = case_service::create_case(&root, "Pool Lifecycle", Some("Codex Test"))
             .expect("create test case");
-        let db_path = active.db_path();
         let state = AppState::default();
 
         init_case_db(&state).expect("initialize pool");
