@@ -368,7 +368,10 @@ mod tests {
             second.value_json,
             serde_json::json!({"namespace": "preview"})
         );
-        assert_eq!(second.namespace, crate::models::namespaces::PREVIEW_DESCRIPTORS);
+        assert_eq!(
+            second.namespace,
+            crate::models::namespaces::PREVIEW_DESCRIPTORS
+        );
         assert_eq!(factory_calls.get(), 2);
     }
 

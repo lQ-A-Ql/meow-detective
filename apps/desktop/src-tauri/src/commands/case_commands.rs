@@ -37,11 +37,7 @@ fn same_path(left: &std::path::Path, right: &std::path::Path) -> bool {
 }
 
 /// Drain jobs and wait for background tasks when deleting the active case.
-fn drain_active_case_jobs(
-    state: &AppState,
-    case_id: &str,
-    timeout: std::time::Duration,
-) {
+fn drain_active_case_jobs(state: &AppState, case_id: &str, timeout: std::time::Duration) {
     state.task_manager.cancel_all();
     let _ = state.task_manager.wait_all(timeout);
 
