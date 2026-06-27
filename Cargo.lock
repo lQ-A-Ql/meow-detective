@@ -88,6 +88,7 @@ dependencies = [
  "domain",
  "encoding_rs",
  "evidence-core",
+ "fs-exfat",
  "fs-fat",
  "fs-ntfs",
  "hex",

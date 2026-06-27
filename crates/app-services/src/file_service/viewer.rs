@@ -383,6 +383,9 @@ fn read_file_bytes_for_entry(
     if let Some(bytes) = try_read_fat_image_range_for_entry(conn, repo, entry, offset, length)? {
         return Ok(bytes);
     }
+    if let Some(bytes) = try_read_exfat_image_range_for_entry(conn, repo, entry, offset, length)? {
+        return Ok(bytes);
+    }
 
     match open_range_content_for_entry(conn, repo, entry)? {
         RangeContentReader::Seekable(mut reader) => {
@@ -442,6 +445,9 @@ pub fn read_file_bytes_for_descriptor(
         return Ok(bytes);
     }
     if let Some(bytes) = try_read_fat_image_range_for_descriptor(descriptor, offset, length)? {
+        return Ok(bytes);
+    }
+    if let Some(bytes) = try_read_exfat_image_range_for_descriptor(descriptor, offset, length)? {
         return Ok(bytes);
     }
 
@@ -714,6 +720,94 @@ fn try_read_fat_image_range_for_entry(
     }
 }
 
+fn try_read_exfat_image_range_for_descriptor(
+    descriptor: &PreviewDescriptor,
+    offset: u64,
+    length: usize,
+) -> Result<Option<Vec<u8>>, FileServiceError> {
+    if !matches!(descriptor.source_kind.as_str(), "e01" | "raw") {
+        return Ok(None);
+    }
+    if descriptor.partition_candidates.is_empty() {
+        return Ok(None);
+    }
+
+    let source_path = Path::new(&descriptor.source_path);
+    let path_candidates = descriptor_image_path_candidates(descriptor);
+    match descriptor.source_kind.as_str() {
+        "e01" => try_read_exfat_image_range_from_candidates(
+            source_path,
+            &descriptor.partition_candidates,
+            &path_candidates,
+            offset,
+            length,
+            |path| {
+                open_e01_reader_cached(path)
+                    .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+            },
+        ),
+        "raw" => try_read_exfat_image_range_from_candidates(
+            source_path,
+            &descriptor.partition_candidates,
+            &path_candidates,
+            offset,
+            length,
+            |path| {
+                evidence_core::RawImageReader::open(path)
+                    .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+            },
+        ),
+        _ => Ok(None),
+    }
+}
+
+fn try_read_exfat_image_range_for_entry(
+    conn: &Connection,
+    repo: &FileRepo<'_>,
+    entry: &FileEntry,
+    offset: u64,
+    length: usize,
+) -> Result<Option<Vec<u8>>, FileServiceError> {
+    let (source_kind, source_path) = repo
+        .find_data_source_location(&entry.data_source_id)?
+        .ok_or_else(|| FileServiceError::not_found("Data source not found"))?;
+    let expected_partition_index = root_partition_index_for_entry(repo, entry);
+
+    match source_kind.as_str() {
+        "e01" => {
+            let candidates = e01_partition_candidates(conn, entry, expected_partition_index)?;
+            let path_candidates = entry_image_path_candidates(entry);
+            try_read_exfat_image_range_from_candidates(
+                Path::new(&source_path),
+                &candidates,
+                &path_candidates,
+                offset,
+                length,
+                |path| {
+                    open_e01_reader_cached(path)
+                        .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+                },
+            )
+        }
+        "raw" => {
+            let candidates = raw_partition_candidates(&source_path, expected_partition_index)?;
+            let path_candidates = entry_image_path_candidates(entry);
+            try_read_exfat_image_range_from_candidates(
+                Path::new(&source_path),
+                &candidates,
+                &path_candidates,
+                offset,
+                length,
+                |path| {
+                    evidence_core::RawImageReader::open(path)
+                        .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+                },
+            )
+        }
+        _ => Ok(None),
+    }
+}
+
 fn try_read_fat_image_range_from_candidates<F>(
     source_path: &Path,
     partition_candidates: &[PreviewPartitionCandidate],
@@ -763,8 +857,64 @@ where
     Ok(None)
 }
 
+fn try_read_exfat_image_range_from_candidates<F>(
+    source_path: &Path,
+    partition_candidates: &[PreviewPartitionCandidate],
+    path_candidates: &[String],
+    offset: u64,
+    length: usize,
+    mut open_reader: F,
+) -> Result<Option<Vec<u8>>, FileServiceError>
+where
+    F: FnMut(&Path) -> std::io::Result<Box<dyn evidence_core::EvidenceReader>>,
+{
+    for candidate in partition_candidates {
+        let mut boxed_reader = open_reader(source_path)?;
+        let looks_like_exfat = is_exfat_filesystem_kind(&candidate.filesystem_kind)
+            || looks_like_exfat_boot_sector(boxed_reader.as_mut(), candidate.offset)
+                .unwrap_or(false);
+        if !looks_like_exfat {
+            continue;
+        }
+
+        let fs = match fs_exfat::ExfatReader::open(boxed_reader, candidate.offset) {
+            Ok(fs) => fs,
+            Err(error) => {
+                tracing::warn!(
+                    partition_index = candidate.partition_index,
+                    offset = candidate.offset,
+                    error = %error,
+                    "Descriptor exFAT range open failed"
+                );
+                continue;
+            }
+        };
+
+        for path in path_candidates {
+            match fs.read_file_range(path, offset, length) {
+                Ok(bytes) => return Ok(Some(bytes)),
+                Err(error) => {
+                    tracing::warn!(
+                        path = %path,
+                        partition_index = candidate.partition_index,
+                        offset = candidate.offset,
+                        error = %error,
+                        "Descriptor exFAT range read failed for path candidate"
+                    );
+                }
+            }
+        }
+    }
+
+    Ok(None)
+}
+
 fn is_fat_filesystem_kind(kind: &str) -> bool {
     matches!(kind, "FAT" | "FAT32" | "FAT16" | "FAT12")
+}
+
+fn is_exfat_filesystem_kind(kind: &str) -> bool {
+    kind.eq_ignore_ascii_case("exfat") || kind.to_ascii_uppercase().contains("EXFAT")
 }
 
 fn try_read_ntfs_image_range_from_candidates<F>(
@@ -833,9 +983,9 @@ where
     let source_path = Path::new(&descriptor.source_path);
     let path_candidates = descriptor_image_path_candidates(descriptor);
     for candidate in &descriptor.partition_candidates {
-        let boxed_reader = open_reader(source_path)?;
-        let result = match candidate.filesystem_kind.as_str() {
-            "NTFS" => match fs_ntfs::NtfsReader::open(boxed_reader, candidate.offset) {
+        let result = if candidate.filesystem_kind == "NTFS" {
+            let boxed_reader = open_reader(source_path)?;
+            match fs_ntfs::NtfsReader::open(boxed_reader, candidate.offset) {
                 Ok(fs) => open_first_image_path(&fs, &path_candidates),
                 Err(e) => {
                     tracing::warn!(
@@ -847,23 +997,34 @@ where
                     );
                     continue;
                 }
-            },
-            kind if is_fat_filesystem_kind(kind) => {
-                match fs_fat::FatReader::open(boxed_reader, candidate.offset) {
-                    Ok(fs) => open_first_image_path(&fs, &path_candidates),
-                    Err(e) => {
-                        tracing::warn!(
-                            path = %descriptor.path,
-                            partition_index = candidate.partition_index,
-                            offset = candidate.offset,
-                            error = %e,
-                            "Descriptor FAT open failed"
-                        );
-                        continue;
-                    }
+            }
+        } else if is_fat_filesystem_kind(&candidate.filesystem_kind) {
+            open_fat_or_exfat_image_candidate(
+                source_path,
+                candidate,
+                &path_candidates,
+                &mut open_reader,
+            )
+        } else {
+            match try_open_exfat_image_candidate(
+                source_path,
+                candidate,
+                &path_candidates,
+                &mut open_reader,
+            ) {
+                Ok(Some(reader)) => Ok(reader),
+                Ok(None) => continue,
+                Err(e) => {
+                    tracing::warn!(
+                        path = %descriptor.path,
+                        partition_index = candidate.partition_index,
+                        offset = candidate.offset,
+                        error = %e,
+                        "Descriptor exFAT open failed"
+                    );
+                    continue;
                 }
             }
-            _ => continue,
         };
 
         match result {
@@ -884,6 +1045,67 @@ where
         "Cannot open image-backed file '{}' from any partition",
         descriptor.path
     )))
+}
+
+fn open_fat_or_exfat_image_candidate<F>(
+    source_path: &Path,
+    candidate: &PreviewPartitionCandidate,
+    path_candidates: &[String],
+    open_reader: &mut F,
+) -> std::io::Result<Box<dyn Read>>
+where
+    F: FnMut(&Path) -> std::io::Result<Box<dyn evidence_core::EvidenceReader>>,
+{
+    let fat_result = {
+        let boxed_reader = open_reader(source_path)?;
+        match fs_fat::FatReader::open(boxed_reader, candidate.offset) {
+            Ok(fs) => open_first_image_path(&fs, path_candidates),
+            Err(e) => Err(e),
+        }
+    };
+
+    match fat_result {
+        Ok(reader) => Ok(reader),
+        Err(fat_error) => {
+            tracing::warn!(
+                partition_index = candidate.partition_index,
+                offset = candidate.offset,
+                error = %fat_error,
+                "Descriptor FAT open failed; trying exFAT"
+            );
+
+            let boxed_reader = open_reader(source_path)?;
+            match fs_exfat::ExfatReader::open(boxed_reader, candidate.offset) {
+                Ok(fs) => open_first_image_path(&fs, path_candidates),
+                Err(exfat_error) => Err(std::io::Error::new(
+                    exfat_error.kind(),
+                    format!("FAT open failed: {fat_error}; exFAT open failed: {exfat_error}"),
+                )),
+            }
+        }
+    }
+}
+
+fn try_open_exfat_image_candidate<F>(
+    source_path: &Path,
+    candidate: &PreviewPartitionCandidate,
+    path_candidates: &[String],
+    open_reader: &mut F,
+) -> std::io::Result<Option<Box<dyn Read>>>
+where
+    F: FnMut(&Path) -> std::io::Result<Box<dyn evidence_core::EvidenceReader>>,
+{
+    let mut boxed_reader = open_reader(source_path)?;
+    let looks_like_exfat = is_exfat_filesystem_kind(&candidate.filesystem_kind)
+        || looks_like_exfat_boot_sector(boxed_reader.as_mut(), candidate.offset).unwrap_or(false);
+    if !looks_like_exfat {
+        return Ok(None);
+    }
+
+    match fs_exfat::ExfatReader::open(boxed_reader, candidate.offset) {
+        Ok(fs) => open_first_image_path(&fs, path_candidates).map(Some),
+        Err(error) => Err(error),
+    }
 }
 
 fn open_first_image_path(
@@ -1169,14 +1391,7 @@ fn e01_partition_candidates(
             .collect(),
         None => partitions
             .iter()
-            .filter(|partition| {
-                partition.status != "EncryptedBitLocker"
-                    && partition
-                        .filesystem
-                        .as_deref()
-                        .unwrap_or(&partition.kind_label)
-                        == "NTFS"
-            })
+            .filter(|partition| partition.status != "EncryptedBitLocker")
             .map(|partition| PreviewPartitionCandidate {
                 partition_index: partition.partition_index as usize,
                 filesystem_kind: partition
@@ -1212,6 +1427,14 @@ fn raw_partition_candidates(
     let probe = crate::datasource_service::detect_image_filesystem(&mut reader)
         .map_err(|e| FileServiceError::other(format!("Failed to detect RAW filesystem: {e}")))?;
     if probe.candidates.is_empty() {
+        if let Some(candidate) = direct_exfat_raw_partition_candidate(source_path)? {
+            if expected_partition_index
+                .map_or(true, |expected| expected == candidate.partition_index)
+            {
+                return Ok(vec![candidate]);
+            }
+        }
+
         return Err(FileServiceError::other(
             "No supported filesystem detected in RAW image",
         ));
@@ -1242,6 +1465,28 @@ fn raw_partition_candidates(
         });
     }
 
+    let mut exfat_reader = evidence_core::RawImageReader::open(Path::new(source_path))?;
+    for partition in &probe.partitions {
+        if expected_partition_index.is_some_and(|expected| partition.index != expected) {
+            continue;
+        }
+        if candidates
+            .iter()
+            .any(|candidate| candidate.partition_index == partition.index)
+        {
+            continue;
+        }
+        if !looks_like_exfat_boot_sector(&mut exfat_reader, partition.offset)? {
+            continue;
+        }
+
+        candidates.push(PreviewPartitionCandidate {
+            partition_index: partition.index,
+            filesystem_kind: "EXFAT".to_string(),
+            offset: partition.offset,
+        });
+    }
+
     if candidates.is_empty() {
         return Err(FileServiceError::other(match expected_partition_index {
             Some(expected) => {
@@ -1252,6 +1497,36 @@ fn raw_partition_candidates(
     }
 
     Ok(candidates)
+}
+
+fn direct_exfat_raw_partition_candidate(
+    source_path: &str,
+) -> Result<Option<PreviewPartitionCandidate>, FileServiceError> {
+    let mut reader = evidence_core::RawImageReader::open(Path::new(source_path))?;
+    if !looks_like_exfat_boot_sector(&mut reader, 0)? {
+        return Ok(None);
+    }
+
+    Ok(Some(PreviewPartitionCandidate {
+        partition_index: 0,
+        filesystem_kind: "EXFAT".to_string(),
+        offset: 0,
+    }))
+}
+
+fn looks_like_exfat_boot_sector<R>(reader: &mut R, offset: u64) -> std::io::Result<bool>
+where
+    R: Read + Seek + ?Sized,
+{
+    let mut sector = [0u8; 512];
+    reader.seek(SeekFrom::Start(offset))?;
+    reader.read_exact(&mut sector)?;
+
+    Ok(&sector[3..11] == b"EXFAT   " && sector[510] == 0x55 && sector[511] == 0xAA)
+}
+
+fn is_preview_image_filesystem_kind(kind: &str) -> bool {
+    kind == "NTFS" || is_fat_filesystem_kind(kind) || is_exfat_filesystem_kind(kind)
 }
 
 fn open_raw_file(
@@ -1274,12 +1549,38 @@ where
 {
     let probe = crate::datasource_service::detect_image_filesystem(&mut reader)
         .map_err(|e| FileServiceError::other(format!("Failed to detect RAW filesystem: {e}")))?;
+    let source_path = reader.info().path.clone();
+    let path_candidates = entry_image_path_candidates(entry);
     if probe.candidates.is_empty() {
+        if expected_partition_index.map_or(true, |expected| expected == 0)
+            && looks_like_exfat_boot_sector(&mut reader, 0)?
+        {
+            let boxed: Box<dyn evidence_core::EvidenceReader> =
+                Box::new(evidence_core::RawImageReader::open(&source_path)?);
+            let fs = fs_exfat::ExfatReader::open(boxed, 0)?;
+            return open_first_image_path(&fs, &path_candidates)
+                .map_err(|e| FileServiceError::other(format!("{e}")));
+        }
+
+        for partition in &probe.partitions {
+            if expected_partition_index.is_some_and(|expected| partition.index != expected) {
+                continue;
+            }
+            if !looks_like_exfat_boot_sector(&mut reader, partition.offset)? {
+                continue;
+            }
+
+            let boxed: Box<dyn evidence_core::EvidenceReader> =
+                Box::new(evidence_core::RawImageReader::open(&source_path)?);
+            let fs = fs_exfat::ExfatReader::open(boxed, partition.offset)?;
+            return open_first_image_path(&fs, &path_candidates)
+                .map_err(|e| FileServiceError::other(format!("{e}")));
+        }
+
         return Err(FileServiceError::other(
             "No supported filesystem detected in RAW image",
         ));
     }
-    let source_path = reader.info().path.clone();
     let candidates =
         crate::datasource_service::assign_effective_partition_indices(&probe.candidates);
     for (ci, candidate) in probe.candidates.iter().enumerate() {
@@ -1300,9 +1601,28 @@ where
                 }
             }
             crate::datasource_service::ImageFilesystemKind::Fat => {
-                if let Ok(fs) = fs_fat::FatReader::open(boxed, candidate.offset) {
-                    if let Ok(r) = fs.open_file(&entry.path) {
-                        return Ok(r);
+                match fs_fat::FatReader::open(boxed, candidate.offset) {
+                    Ok(fs) => {
+                        if let Ok(r) = open_first_image_path(&fs, &path_candidates) {
+                            return Ok(r);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            path = %entry.path,
+                            partition_index = eff,
+                            offset = candidate.offset,
+                            error = %e,
+                            "RAW FAT open failed; trying exFAT"
+                        );
+
+                        let exfat_boxed: Box<dyn evidence_core::EvidenceReader> =
+                            Box::new(evidence_core::RawImageReader::open(&source_path)?);
+                        if let Ok(fs) = fs_exfat::ExfatReader::open(exfat_boxed, candidate.offset) {
+                            if let Ok(r) = open_first_image_path(&fs, &path_candidates) {
+                                return Ok(r);
+                            }
+                        }
                     }
                 }
             }
@@ -1352,19 +1672,21 @@ fn open_e01_file(
         None => {
             // Fallback: try the first non-encrypted NTFS partition for entries
             // whose parent chain could not be resolved (e.g., /Unresolved/ entries)
-            let ntfs: Vec<_> = partitions
+            let previewable: Vec<_> = partitions
                 .iter()
                 .filter(|p| {
                     p.status != "EncryptedBitLocker"
-                        && p.filesystem.as_deref().unwrap_or(&p.kind_label) == "NTFS"
+                        && is_preview_image_filesystem_kind(
+                            p.filesystem.as_deref().unwrap_or(&p.kind_label),
+                        )
                 })
                 .collect();
-            if ntfs.is_empty() {
+            if previewable.is_empty() {
                 return Err(FileServiceError::other(
                     "Cannot determine which partition this file belongs to. Re-import the E01 image.",
                 ));
             }
-            ntfs
+            previewable
         }
     };
 
@@ -1375,8 +1697,15 @@ fn open_e01_file(
         )));
     }
 
+    let path_candidates = entry_image_path_candidates(entry);
     for target in &candidates_to_try {
         let fs_kind = target.filesystem.as_deref().unwrap_or(&target.kind_label);
+        let exfat_hint = if is_exfat_filesystem_kind(fs_kind) {
+            true
+        } else {
+            let mut probe_reader = open_e01_reader_cached(Path::new(source_path))?;
+            looks_like_exfat_boot_sector(&mut probe_reader, target.offset).unwrap_or(false)
+        };
 
         let reader = open_e01_reader_cached(Path::new(source_path))?;
         let boxed_reader: Box<dyn evidence_core::EvidenceReader> = Box::new(reader);
@@ -1399,14 +1728,39 @@ fn open_e01_file(
             },
             "FAT" | "FAT32" | "FAT16" | "FAT12" => {
                 match fs_fat::FatReader::open(boxed_reader, target.offset) {
-                    Ok(fs) => fs.open_file(&entry.path),
+                    Ok(fs) => open_first_image_path(&fs, &path_candidates),
                     Err(e) => {
                         tracing::warn!(
                             path = %entry.path,
                             partition = %target.name,
                             offset = %target.offset,
                             error = %e,
-                            "E01 FAT open failed"
+                            "E01 FAT open failed; trying exFAT"
+                        );
+
+                        let exfat_reader = open_e01_reader_cached(Path::new(source_path))?;
+                        let exfat_boxed: Box<dyn evidence_core::EvidenceReader> =
+                            Box::new(exfat_reader);
+                        match fs_exfat::ExfatReader::open(exfat_boxed, target.offset) {
+                            Ok(fs) => open_first_image_path(&fs, &path_candidates),
+                            Err(exfat_error) => Err(std::io::Error::new(
+                                exfat_error.kind(),
+                                format!("FAT open failed: {e}; exFAT open failed: {exfat_error}"),
+                            )),
+                        }
+                    }
+                }
+            }
+            _ if exfat_hint => {
+                match fs_exfat::ExfatReader::open(boxed_reader, target.offset) {
+                    Ok(fs) => open_first_image_path(&fs, &path_candidates),
+                    Err(e) => {
+                        tracing::warn!(
+                            path = %entry.path,
+                            partition = %target.name,
+                            offset = %target.offset,
+                            error = %e,
+                            "E01 exFAT open failed"
                         );
                         continue;
                     }
@@ -1835,6 +2189,78 @@ mod tests {
         std::fs::write(path, data)
     }
 
+    fn write_exfat_raw_fixture(path: &std::path::Path) -> std::io::Result<()> {
+        const SECTOR_SIZE: usize = 512;
+        const FAT_SECTOR: usize = 24;
+        const CLUSTER_HEAP_SECTOR: usize = 32;
+        const CLUSTER_SIZE: usize = SECTOR_SIZE;
+        const FILE_SIZE: usize = CLUSTER_SIZE * 3;
+        const TOTAL_SECTORS: usize = 1024;
+
+        let mut data = vec![0u8; TOTAL_SECTORS * SECTOR_SIZE];
+
+        let boot = &mut data[0..SECTOR_SIZE];
+        boot[0..3].copy_from_slice(&[0xEB, 0x76, 0x90]);
+        boot[3..11].copy_from_slice(b"EXFAT   ");
+        boot[72..80].copy_from_slice(&(TOTAL_SECTORS as u64).to_le_bytes());
+        boot[80..84].copy_from_slice(&(FAT_SECTOR as u32).to_le_bytes());
+        boot[84..88].copy_from_slice(&1u32.to_le_bytes());
+        boot[88..92].copy_from_slice(&(CLUSTER_HEAP_SECTOR as u32).to_le_bytes());
+        boot[92..96].copy_from_slice(&100u32.to_le_bytes());
+        boot[96..100].copy_from_slice(&2u32.to_le_bytes());
+        boot[100..104].copy_from_slice(&0x12345678u32.to_le_bytes());
+        boot[104..106].copy_from_slice(&0x0100u16.to_le_bytes());
+        boot[108] = 9;
+        boot[109] = 0;
+        boot[110] = 1;
+        boot[111] = 0x80;
+        boot[112] = 0xFF;
+        boot[510..512].copy_from_slice(&0xAA55u16.to_le_bytes());
+
+        let fat_offset = FAT_SECTOR * SECTOR_SIZE;
+        let fat = &mut data[fat_offset..fat_offset + SECTOR_SIZE];
+        fat[0..4].copy_from_slice(&[0xF8, 0xFF, 0xFF, 0xFF]);
+        fat[4..8].copy_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF]);
+        fat[8..12].copy_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF]);
+        fat[12..16].copy_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF]);
+
+        let root_offset = CLUSTER_HEAP_SECTOR * SECTOR_SIZE;
+        let root = &mut data[root_offset..root_offset + CLUSTER_SIZE];
+        let mut pos = 0usize;
+
+        root[pos] = 0x85;
+        root[pos + 1] = 0x02;
+        root[pos + 4..pos + 6].copy_from_slice(&0x20u16.to_le_bytes());
+        pos += 32;
+
+        root[pos] = 0xC0;
+        root[pos + 1] = 0x02;
+        root[pos + 3] = "LARGE.BIN".encode_utf16().count() as u8;
+        root[pos + 8..pos + 16].copy_from_slice(&(FILE_SIZE as u64).to_le_bytes());
+        root[pos + 20..pos + 24].copy_from_slice(&3u32.to_le_bytes());
+        root[pos + 24..pos + 32].copy_from_slice(&(FILE_SIZE as u64).to_le_bytes());
+        pos += 32;
+
+        root[pos] = 0xC1;
+        for (i, ch) in "LARGE.BIN".encode_utf16().enumerate() {
+            let offset = pos + 2 + i * 2;
+            root[offset..offset + 2].copy_from_slice(&ch.to_le_bytes());
+        }
+
+        for cluster in 3..=5usize {
+            let value = match cluster {
+                3 => b'A',
+                4 => b'B',
+                5 => b'C',
+                _ => unreachable!(),
+            };
+            let offset = CLUSTER_HEAP_SECTOR * SECTOR_SIZE + (cluster - 2) * CLUSTER_SIZE;
+            data[offset..offset + CLUSTER_SIZE].fill(value);
+        }
+
+        std::fs::write(path, data)
+    }
+
     #[test]
     fn logical_directory_mid_file_range_uses_seek_not_linear_skip() {
         let dir = tempfile::TempDir::new().unwrap();
@@ -2041,6 +2467,57 @@ mod tests {
 
         reset_skip_reader_bytes_call_count();
         let bytes = read_file_bytes_for_descriptor(&descriptor, 512 + 7, 9).unwrap();
+
+        assert_eq!(bytes, vec![b'B'; 9]);
+        assert_eq!(skip_reader_bytes_call_count(), 0);
+    }
+
+    #[test]
+    fn raw_exfat_mid_file_range_uses_exfat_range_reader_without_materialize() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let raw_path = dir.path().join("exfat.raw");
+        write_exfat_raw_fixture(&raw_path).unwrap();
+
+        let conn = persistence_sqlite::open_or_create(&dir.path().join("case.db")).unwrap();
+        runner::run_all(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO cases (id, name, created_at, updated_at)
+             VALUES ('case-raw-exfat-range', 'Raw exFAT Range Case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+
+        let ds_id = DataSourceId("ds-raw-exfat-range".to_string());
+        DataSourceRepo::new(&conn)
+            .insert(
+                &CaseId("case-raw-exfat-range".to_string()),
+                &DataSource {
+                    id: ds_id.clone(),
+                    name: "raw exfat evidence".to_string(),
+                    kind: DataSourceKind::Raw,
+                    source_path: raw_path,
+                    imported_at: chrono::Utc::now(),
+                    provenance: DataSourceProvenance::unknown(),
+                },
+            )
+            .unwrap();
+
+        conn.execute(
+            "INSERT INTO file_entries
+             (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
+             VALUES ('file-raw-exfat-large', NULL, ?1, 'LARGE.BIN', 'LARGE.BIN', 'file', ?2, 'bin', 0, 0, 0)",
+            params![ds_id.0, 1536i64],
+        )
+        .unwrap();
+
+        reset_skip_reader_bytes_call_count();
+        let bytes = read_file_bytes_for_case(
+            &conn,
+            &FileEntryId("file-raw-exfat-large".to_string()),
+            512 + 7,
+            9,
+        )
+        .unwrap();
 
         assert_eq!(bytes, vec![b'B'; 9]);
         assert_eq!(skip_reader_bytes_call_count(), 0);
