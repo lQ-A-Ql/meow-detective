@@ -41,12 +41,17 @@ mod tests {
             analysis_task_queue_bound, count_analysis_file_tasks, fetch_analysis_file_page,
         },
         worker_runtime::{
-            reserve_content_budget, should_extract_artifact, should_index_file, SharedAnalysisState,
+            reserve_content_budget, should_extract_artifact, should_index_file, test_hooks,
+            SharedAnalysisState,
         },
     };
     use crate::{artifact_service, staging};
     use chrono::{TimeZone, Utc};
-    use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
+    use domain::{
+        CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType,
+        FileEntry, FileEntryId,
+    };
+    use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
     use persistence_sqlite::runner;
     use rusqlite::{params, Connection};
     use std::path::PathBuf;
@@ -110,6 +115,73 @@ mod tests {
             params![file_id, format!("{file_id}.txt"), text],
         )
         .unwrap();
+    }
+
+    fn write_exfat_text_raw_fixture(path: &std::path::Path) -> std::io::Result<()> {
+        const SECTOR_SIZE: usize = 512;
+        const FAT_SECTOR: usize = 24;
+        const CLUSTER_HEAP_SECTOR: usize = 32;
+        const CLUSTER_SIZE: usize = SECTOR_SIZE;
+        const FILE_SIZE: usize = CLUSTER_SIZE * 3;
+        const TOTAL_SECTORS: usize = 1024;
+        const FILE_NAME: &str = "LARGE.TXT";
+
+        let mut data = vec![0u8; TOTAL_SECTORS * SECTOR_SIZE];
+
+        let boot = &mut data[0..SECTOR_SIZE];
+        boot[0..3].copy_from_slice(&[0xEB, 0x76, 0x90]);
+        boot[3..11].copy_from_slice(b"EXFAT   ");
+        boot[72..80].copy_from_slice(&(TOTAL_SECTORS as u64).to_le_bytes());
+        boot[80..84].copy_from_slice(&(FAT_SECTOR as u32).to_le_bytes());
+        boot[84..88].copy_from_slice(&1u32.to_le_bytes());
+        boot[88..92].copy_from_slice(&(CLUSTER_HEAP_SECTOR as u32).to_le_bytes());
+        boot[92..96].copy_from_slice(&100u32.to_le_bytes());
+        boot[96..100].copy_from_slice(&2u32.to_le_bytes());
+        boot[100..104].copy_from_slice(&0x12345678u32.to_le_bytes());
+        boot[104..106].copy_from_slice(&0x0100u16.to_le_bytes());
+        boot[108] = 9;
+        boot[109] = 0;
+        boot[110] = 1;
+        boot[111] = 0x80;
+        boot[112] = 0xFF;
+        boot[510..512].copy_from_slice(&0xAA55u16.to_le_bytes());
+
+        let fat_offset = FAT_SECTOR * SECTOR_SIZE;
+        let fat = &mut data[fat_offset..fat_offset + SECTOR_SIZE];
+        fat[0..4].copy_from_slice(&[0xF8, 0xFF, 0xFF, 0xFF]);
+        fat[4..8].copy_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF]);
+        fat[8..12].copy_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF]);
+        fat[12..16].copy_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF]);
+
+        let root_offset = CLUSTER_HEAP_SECTOR * SECTOR_SIZE;
+        let root = &mut data[root_offset..root_offset + CLUSTER_SIZE];
+        let mut pos = 0usize;
+
+        root[pos] = 0x85;
+        root[pos + 1] = 0x02;
+        root[pos + 4..pos + 6].copy_from_slice(&0x20u16.to_le_bytes());
+        pos += 32;
+
+        root[pos] = 0xC0;
+        root[pos + 1] = 0x02;
+        root[pos + 3] = FILE_NAME.encode_utf16().count() as u8;
+        root[pos + 8..pos + 16].copy_from_slice(&(FILE_SIZE as u64).to_le_bytes());
+        root[pos + 20..pos + 24].copy_from_slice(&3u32.to_le_bytes());
+        root[pos + 24..pos + 32].copy_from_slice(&(FILE_SIZE as u64).to_le_bytes());
+        pos += 32;
+
+        root[pos] = 0xC1;
+        for (i, ch) in FILE_NAME.encode_utf16().enumerate() {
+            let offset = pos + 2 + i * 2;
+            root[offset..offset + 2].copy_from_slice(&ch.to_le_bytes());
+        }
+
+        for cluster in 3..=5usize {
+            let offset = CLUSTER_HEAP_SECTOR * SECTOR_SIZE + (cluster - 2) * CLUSTER_SIZE;
+            data[offset..offset + CLUSTER_SIZE].fill(b'A' + (cluster - 3) as u8);
+        }
+
+        std::fs::write(path, data)
     }
 
     fn set_done_worker_meta(
@@ -563,6 +635,77 @@ mod tests {
         assert!(should_index_file(&small_text));
         assert!(!should_index_file(&large_text));
         assert!(!should_index_file(&unknown));
+    }
+
+    #[test]
+    fn analysis_text_indexing_raw_exfat_uses_bytes_only_reader() {
+        let tmp = TempDir::new().unwrap();
+        let raw_path = tmp.path().join("text-exfat.raw");
+        write_exfat_text_raw_fixture(&raw_path).unwrap();
+
+        let db_path = tmp.path().join("app.db");
+        let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
+        runner::run_all(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO cases (id, name, created_at, updated_at)
+             VALUES ('case-raw-exfat-index', 'Raw exFAT Index Case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+
+        let ds_id = DataSourceId("ds-raw-exfat-index".to_string());
+        DataSourceRepo::new(&conn)
+            .insert(
+                &CaseId("case-raw-exfat-index".to_string()),
+                &DataSource {
+                    id: ds_id.clone(),
+                    name: "raw exfat evidence".to_string(),
+                    kind: DataSourceKind::Raw,
+                    source_path: raw_path,
+                    imported_at: chrono::Utc::now(),
+                    provenance: DataSourceProvenance::unknown(),
+                },
+            )
+            .unwrap();
+        conn.execute(
+            "INSERT INTO file_entries
+             (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
+             VALUES ('file-raw-exfat-index', NULL, ?1, 'LARGE.TXT', 'LARGE.TXT', 'file', 1536, 'txt', 0, 0, 0)",
+            params![ds_id.0],
+        )
+        .unwrap();
+        drop(conn);
+
+        let mut options = analysis_options(
+            &tmp,
+            db_path,
+            ds_id.clone(),
+            ImportAnalysisMode::BudgetedContent,
+        );
+        options.enable_timeline_projection = false;
+        options.enable_content_extraction = false;
+        options.enable_text_indexing = true;
+
+        test_hooks::reset();
+        test_hooks::track_file_id("file-raw-exfat-index");
+        let stats = run_import_analysis_staging(options, None).unwrap();
+
+        assert_eq!(stats.processed_count, 1);
+        assert_eq!(stats.artifact_count, 0);
+        assert_eq!(stats.indexed_count, 1);
+        assert_eq!(stats.warning_count, 0);
+        assert_eq!(test_hooks::text_index_bytes_reads(), 1);
+
+        let worker_conn = staging::open_analysis_staging(tmp.path(), &ds_id.0, 0).unwrap();
+        let (text, truncated): (String, i32) = worker_conn
+            .query_row(
+                "SELECT text, truncated FROM index_docs WHERE file_id = 'file-raw-exfat-index'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert!(text.starts_with("AAAA"));
+        assert_eq!(truncated, 0);
     }
 
     #[test]

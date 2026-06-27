@@ -7,7 +7,7 @@ use crossbeam_channel::Receiver;
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
 use rusqlite::{params, Connection};
 use search::extract_text;
-use std::io::Read;
+use std::io::Cursor;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -180,15 +180,9 @@ pub(super) fn run_analysis_worker(
             && shared.indexed_total.load(Ordering::Relaxed)
                 < infrastructure::constants::IMPORT_TEXT_INDEX_LIMIT
         {
-            if let Ok(mut reader) = file_service::open_file_content_by_id(&main_conn, &file.id) {
+            if let Ok(bytes) = read_text_index_bytes(&main_conn, &file.id) {
                 let mime = mime_hint_for_entry(&file);
-                let text = extract_text(
-                    reader
-                        .by_ref()
-                        .take(infrastructure::constants::IMPORT_TEXT_INDEX_FILE_LIMIT_BYTES),
-                    &file.id.0,
-                    mime,
-                );
+                let text = extract_text(Cursor::new(bytes), &file.id.0, mime);
                 if text.extractable && !text.content.is_empty() {
                     let previous = shared.indexed_total.fetch_add(1, Ordering::Relaxed);
                     if previous < infrastructure::constants::IMPORT_TEXT_INDEX_LIMIT {
@@ -363,6 +357,33 @@ fn flush_worker_rows(
     Ok(())
 }
 
+fn read_text_index_bytes(
+    conn: &Connection,
+    file_id: &FileEntryId,
+) -> Result<Vec<u8>, file_service::FileServiceError> {
+    read_text_index_bytes_impl(conn, file_id)
+}
+
+#[cfg(not(test))]
+fn read_text_index_bytes_impl(
+    conn: &Connection,
+    file_id: &FileEntryId,
+) -> Result<Vec<u8>, file_service::FileServiceError> {
+    file_service::read_file_header_by_id(
+        conn,
+        file_id,
+        infrastructure::constants::IMPORT_TEXT_INDEX_FILE_LIMIT_BYTES as usize,
+    )
+}
+
+#[cfg(test)]
+fn read_text_index_bytes_impl(
+    conn: &Connection,
+    file_id: &FileEntryId,
+) -> Result<Vec<u8>, file_service::FileServiceError> {
+    test_hooks::read_text_index_bytes(conn, file_id)
+}
+
 #[derive(Debug)]
 struct IndexDocRow {
     file_id: String,
@@ -460,4 +481,46 @@ pub(super) fn reserve_content_budget(
         return false;
     }
     true
+}
+
+#[cfg(test)]
+pub(super) mod test_hooks {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
+
+    static TEXT_INDEX_BYTES_READS: AtomicUsize = AtomicUsize::new(0);
+    static TRACKED_FILE_ID: Mutex<Option<String>> = Mutex::new(None);
+
+    pub(in crate::import_analysis) fn read_text_index_bytes(
+        conn: &Connection,
+        file_id: &FileEntryId,
+    ) -> Result<Vec<u8>, file_service::FileServiceError> {
+        let should_count = TRACKED_FILE_ID
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map_or(true, |tracked| tracked == &file_id.0);
+        if should_count {
+            TEXT_INDEX_BYTES_READS.fetch_add(1, Ordering::Relaxed);
+        }
+        file_service::read_file_header_by_id(
+            conn,
+            file_id,
+            infrastructure::constants::IMPORT_TEXT_INDEX_FILE_LIMIT_BYTES as usize,
+        )
+    }
+
+    pub(in crate::import_analysis) fn reset() {
+        TEXT_INDEX_BYTES_READS.store(0, Ordering::Relaxed);
+        *TRACKED_FILE_ID.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+
+    pub(in crate::import_analysis) fn track_file_id(file_id: &str) {
+        *TRACKED_FILE_ID.lock().unwrap_or_else(|e| e.into_inner()) = Some(file_id.to_string());
+    }
+
+    pub(in crate::import_analysis) fn text_index_bytes_reads() -> usize {
+        TEXT_INDEX_BYTES_READS.load(Ordering::Relaxed)
+    }
 }
