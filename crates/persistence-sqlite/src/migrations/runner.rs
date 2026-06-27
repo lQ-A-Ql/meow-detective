@@ -99,6 +99,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0031_cleanup_partition_triple_representation",
         include_str!("scripts/0031_cleanup_partition_triple_representation.sql"),
     ),
+    (
+        "0032_file_entry_type_nocase_index",
+        include_str!("scripts/0032_file_entry_type_nocase_index.sql"),
+    ),
 ];
 
 pub fn latest_version() -> &'static str {

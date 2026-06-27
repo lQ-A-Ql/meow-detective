@@ -106,7 +106,7 @@ mod tests {
         let snapshot = require_active_case(&state).unwrap();
         assert_eq!(snapshot.db_path, db_path);
         assert_eq!(snapshot.case_root.parent(), Some(root.as_path()));
-        with_case_connection(&state, |_conn| Ok(())).unwrap();
+        get_case_connection(&state).unwrap();
 
         *state.active_case.lock().unwrap() = None;
         let err = require_active_case(&state).unwrap_err();

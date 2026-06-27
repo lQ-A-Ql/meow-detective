@@ -48,7 +48,6 @@ pub fn create_case(
     let root = PathBuf::from(&request.case_root);
     let active = case_service::create_case(&root, &request.name, request.examiner.as_deref())
         .map_err(CommandError::from_service_error)?;
-    let db_path = active.db_path();
     let active_case_root = active.case_root.clone();
     init_case_db(&state)?;
 
@@ -72,7 +71,6 @@ pub fn open_case(
     request.validate().map_err(CommandError::invalid_input)?;
     let root = PathBuf::from(&request.case_root);
     let active = case_service::open_case(&root).map_err(CommandError::from_service_error)?;
-    let db_path = active.db_path();
     init_case_db(&state)?;
 
     // Recover any jobs that were left in a running/cancelling state from a
@@ -127,7 +125,6 @@ pub fn create_analysis_demo_case(
         .map_err(CommandError::from_service_error)?;
     app_services::analysis_service::seed_analysis_demo_data(&active)
         .map_err(CommandError::from_service_error)?;
-    let db_path = active.db_path();
     init_case_db(&state)?;
 
     let dto = meta_to_dto(&active.meta);
