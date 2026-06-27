@@ -29,6 +29,7 @@ pub struct FileHandleCache {
 /// Cache namespaces for organizing different types of cached data.
 pub mod namespaces {
     pub const FILE_HANDLES: &str = "file_handles";
+    pub const PREVIEW_DESCRIPTORS: &str = "preview_descriptors";
     pub const SEARCH_RESULTS: &str = "search_results";
     pub const TIMELINE_BUCKETS: &str = "timeline_buckets";
     pub const PREVIEW_CHUNKS: &str = "preview_chunks";

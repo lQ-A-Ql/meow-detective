@@ -5,6 +5,7 @@ use image_e01::E01Reader;
 use persistence_sqlite::repositories::file_repo::FileRepo;
 use persistence_sqlite::repositories::partition_repo::PartitionRepo;
 use rusqlite::Connection;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -24,6 +25,77 @@ impl<T> ReadSeek for T where T: Read + Seek {}
 enum RangeContentReader {
     Seekable(Box<dyn ReadSeek>),
     Streaming(Box<dyn Read>),
+}
+
+/// Internal preview locator used by command/runtime-cache layers.
+///
+/// This intentionally contains only small metadata needed to re-open evidence
+/// content; it never stores preview bytes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewDescriptor {
+    pub case_id: String,
+    pub file_id: String,
+    pub source_kind: String,
+    pub source_path: String,
+    pub partition_index: Option<usize>,
+    pub filesystem_kind: Option<String>,
+    pub path: String,
+    pub mime: Option<String>,
+    pub size: u64,
+    pub data_source_id: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub partition_candidates: Vec<PreviewPartitionCandidate>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewPartitionCandidate {
+    pub partition_index: usize,
+    pub filesystem_kind: String,
+    pub offset: u64,
+}
+
+pub trait PreviewReadContext {
+    fn conn(&self) -> &Connection;
+
+    fn case_id(&self) -> &str {
+        ""
+    }
+
+    fn get_cached_preview_descriptor(&mut self, _key: &str) -> Option<serde_json::Value> {
+        None
+    }
+
+    fn set_cached_preview_descriptor(&mut self, _key: &str, _value: &serde_json::Value) {}
+}
+
+impl PreviewReadContext for &Connection {
+    fn conn(&self) -> &Connection {
+        self
+    }
+}
+
+impl<'a, G, S> PreviewReadContext for (&'a Connection, &'a str, G, S)
+where
+    G: FnMut(&str) -> Option<serde_json::Value>,
+    S: FnMut(&str, &serde_json::Value),
+{
+    fn conn(&self) -> &Connection {
+        self.0
+    }
+
+    fn case_id(&self) -> &str {
+        self.1
+    }
+
+    fn get_cached_preview_descriptor(&mut self, key: &str) -> Option<serde_json::Value> {
+        (self.2)(key)
+    }
+
+    fn set_cached_preview_descriptor(&mut self, key: &str, value: &serde_json::Value) {
+        (self.3)(key, value);
+    }
 }
 
 #[cfg(test)]
@@ -101,7 +173,28 @@ fn open_e01_reader_cached(source_path: &Path) -> std::io::Result<E01Reader> {
     cache.get_or_open(source_path)
 }
 
-pub fn open_file_handle_real(
+pub fn open_file_handle_real<C>(
+    mut context: C,
+    file_id: &str,
+) -> Result<ViewerHandleDto, FileServiceError>
+where
+    C: PreviewReadContext,
+{
+    if context.case_id().is_empty() {
+        return open_file_handle_uncached(context.conn(), file_id);
+    }
+
+    let descriptor =
+        descriptor_for_file_with_cache(&mut context, &FileEntryId(file_id.to_string()))?;
+
+    Ok(ViewerHandleDto {
+        handle_id: format!("{FILE_HANDLE_PREFIX}{}", descriptor.file_id),
+        size: descriptor.size,
+        mime: descriptor.mime,
+    })
+}
+
+fn open_file_handle_uncached(
     conn: &Connection,
     file_id: &str,
 ) -> Result<ViewerHandleDto, FileServiceError> {
@@ -123,15 +216,76 @@ pub fn open_file_handle_real(
     })
 }
 
-pub fn read_file_range_for_case(
+pub fn preview_descriptor_for_case(
     conn: &Connection,
+    case_id: &str,
+    file_id: &FileEntryId,
+) -> Result<PreviewDescriptor, FileServiceError> {
+    let repo = FileRepo::new(conn);
+    let entry = repo
+        .find_by_id(file_id)?
+        .ok_or_else(|| FileServiceError::not_found("File not found"))?;
+
+    preview_descriptor_for_entry(conn, &repo, case_id, &entry)
+}
+
+fn preview_descriptor_for_entry(
+    conn: &Connection,
+    repo: &FileRepo<'_>,
+    case_id: &str,
+    entry: &FileEntry,
+) -> Result<PreviewDescriptor, FileServiceError> {
+    if entry.entry_type != EntryType::File {
+        return Err(FileServiceError::invalid_input(
+            "Cannot read a directory as a file",
+        ));
+    }
+
+    let (source_kind, source_path) = repo
+        .find_data_source_location(&entry.data_source_id)?
+        .ok_or_else(|| FileServiceError::not_found("Data source not found"))?;
+    let expected_partition_index = root_partition_index_for_entry(repo, entry);
+
+    let partition_candidates = match source_kind.as_str() {
+        "logical_directory" => Vec::new(),
+        "e01" => e01_partition_candidates(conn, entry, expected_partition_index)?,
+        "raw" => raw_partition_candidates(&source_path, expected_partition_index)?,
+        other => {
+            return Err(FileServiceError::other(format!(
+                "Range reading is not yet wired for data source kind '{}'",
+                other
+            )))
+        }
+    };
+    let selected = partition_candidates.first();
+
+    Ok(PreviewDescriptor {
+        case_id: case_id.to_string(),
+        file_id: entry.id.0.clone(),
+        source_kind,
+        source_path,
+        partition_index: selected.map(|candidate| candidate.partition_index),
+        filesystem_kind: selected.map(|candidate| candidate.filesystem_kind.clone()),
+        path: entry.path.clone(),
+        mime: mime_for_entry(entry),
+        size: entry.size.unwrap_or(0),
+        data_source_id: entry.data_source_id.0.clone(),
+        partition_candidates,
+    })
+}
+
+pub fn read_file_range_for_case<C>(
+    context: C,
     request: &ViewerRangeRequestDto,
-) -> Result<ViewerRangeResponseDto, FileServiceError> {
+) -> Result<ViewerRangeResponseDto, FileServiceError>
+where
+    C: PreviewReadContext,
+{
     let mut request = request.clone();
     request.validate().map_err(FileServiceError::InvalidInput)?;
     let file_id = file_id_from_handle(&request.handle_id)?;
     let bytes = read_file_bytes_for_case(
-        conn,
+        context,
         &FileEntryId(file_id.to_string()),
         request.offset,
         request.length,
@@ -150,35 +304,69 @@ pub fn read_file_range_real(_request: &ViewerRangeRequestDto) -> ViewerRangeResp
     empty_hex_response()
 }
 
-pub fn open_file_content_by_id(
-    conn: &Connection,
+pub fn open_file_content_by_id<C>(
+    mut context: C,
     file_id: &FileEntryId,
-) -> Result<Box<dyn Read>, FileServiceError> {
-    let repo = FileRepo::new(conn);
-    let entry = repo
-        .find_by_id(file_id)?
-        .ok_or_else(|| FileServiceError::not_found("File not found"))?;
+) -> Result<Box<dyn Read>, FileServiceError>
+where
+    C: PreviewReadContext,
+{
+    if context.case_id().is_empty() {
+        let repo = FileRepo::new(context.conn());
+        let entry = repo
+            .find_by_id(file_id)?
+            .ok_or_else(|| FileServiceError::not_found("File not found"))?;
 
-    open_file_content_for_entry(conn, &repo, &entry)
+        return open_file_content_for_entry(context.conn(), &repo, &entry);
+    }
+
+    let descriptor = descriptor_for_file_with_cache(&mut context, file_id)?;
+    open_file_content_for_descriptor(&descriptor)
 }
 
-pub fn read_file_bytes_for_case(
-    conn: &Connection,
+fn open_file_content_for_descriptor(
+    descriptor: &PreviewDescriptor,
+) -> Result<Box<dyn Read>, FileServiceError> {
+    match descriptor.source_kind.as_str() {
+        "logical_directory" => open_logical_descriptor_file(descriptor),
+        "e01" => open_e01_descriptor_file(descriptor),
+        "raw" => open_raw_descriptor_file(descriptor),
+        other => Err(FileServiceError::other(format!(
+            "Range reading is not yet wired for data source kind '{}'",
+            other
+        ))),
+    }
+}
+
+pub fn read_file_bytes_for_case<C>(
+    mut context: C,
     file_id: &FileEntryId,
     offset: u64,
     length: u32,
-) -> Result<Vec<u8>, FileServiceError> {
-    let repo = FileRepo::new(conn);
-    let entry = repo
-        .find_by_id(file_id)?
-        .ok_or_else(|| FileServiceError::not_found("File not found"))?;
-    if let Some(size) = entry.size {
-        if offset > size {
-            return Err(FileServiceError::other("Read offset exceeds file size"));
+) -> Result<Vec<u8>, FileServiceError>
+where
+    C: PreviewReadContext,
+{
+    if context.case_id().is_empty() {
+        let repo = FileRepo::new(context.conn());
+        let entry = repo
+            .find_by_id(file_id)?
+            .ok_or_else(|| FileServiceError::not_found("File not found"))?;
+        if let Some(size) = entry.size {
+            if offset > size {
+                return Err(FileServiceError::other("Read offset exceeds file size"));
+            }
         }
+
+        return read_file_bytes_for_entry(context.conn(), &repo, &entry, offset, length);
     }
 
-    read_file_bytes_for_entry(conn, &repo, &entry, offset, length)
+    let descriptor = descriptor_for_file_with_cache(&mut context, file_id)?;
+    if offset > descriptor.size {
+        return Err(FileServiceError::other("Read offset exceeds file size"));
+    }
+
+    read_file_bytes_for_descriptor(&descriptor, offset, length)
 }
 
 fn read_file_bytes_for_entry(
@@ -201,6 +389,210 @@ fn read_file_bytes_for_entry(
             read_bounded(reader.as_mut(), length)
         }
     }
+}
+
+fn descriptor_cache_key(case_id: &str, file_id: &FileEntryId) -> String {
+    format!("preview-descriptor:{case_id}:{}", file_id.0)
+}
+
+fn descriptor_for_file_with_cache<C>(
+    context: &mut C,
+    file_id: &FileEntryId,
+) -> Result<PreviewDescriptor, FileServiceError>
+where
+    C: PreviewReadContext,
+{
+    let case_id = context.case_id().to_string();
+    let key = descriptor_cache_key(&case_id, file_id);
+    if let Some(value) = context.get_cached_preview_descriptor(&key) {
+        match serde_json::from_value::<PreviewDescriptor>(value) {
+            Ok(descriptor) if descriptor.case_id == case_id && descriptor.file_id == file_id.0 => {
+                return Ok(descriptor);
+            }
+            Ok(_) | Err(_) => {
+                tracing::warn!(
+                    cache_key = %key,
+                    "Ignoring stale or invalid preview descriptor cache entry"
+                );
+            }
+        }
+    }
+
+    let descriptor = preview_descriptor_for_case(context.conn(), &case_id, file_id)?;
+    if let Ok(value) = serde_json::to_value(&descriptor) {
+        context.set_cached_preview_descriptor(&key, &value);
+    }
+    Ok(descriptor)
+}
+
+pub fn read_file_bytes_for_descriptor(
+    descriptor: &PreviewDescriptor,
+    offset: u64,
+    length: u32,
+) -> Result<Vec<u8>, FileServiceError> {
+    let length = (length as usize).min(infrastructure::constants::MAX_RANGE_LENGTH);
+    match open_range_content_for_descriptor(descriptor)? {
+        RangeContentReader::Seekable(mut reader) => {
+            read_seekable_range(reader.as_mut(), offset, length)
+        }
+        RangeContentReader::Streaming(mut reader) => {
+            skip_reader_bytes(reader.as_mut(), offset)?;
+            read_bounded(reader.as_mut(), length)
+        }
+    }
+}
+
+fn descriptor_file_entry(descriptor: &PreviewDescriptor) -> FileEntry {
+    let name = Path::new(&descriptor.path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or(&descriptor.path)
+        .to_string();
+    let ext = Path::new(&name)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .filter(|ext| !ext.is_empty())
+        .map(str::to_string);
+
+    FileEntry {
+        id: FileEntryId(descriptor.file_id.clone()),
+        parent_id: None,
+        data_source_id: domain::DataSourceId(descriptor.data_source_id.clone()),
+        path: descriptor.path.clone(),
+        name,
+        entry_type: EntryType::File,
+        size: Some(descriptor.size),
+        ext,
+        deleted: false,
+        hidden: false,
+        system: false,
+        encrypted: false,
+        created_at: None,
+        modified_at: None,
+        accessed_at: None,
+        changed_at: None,
+        hash_sha256: None,
+    }
+}
+
+fn open_logical_descriptor_file(
+    descriptor: &PreviewDescriptor,
+) -> Result<Box<dyn Read>, FileServiceError> {
+    let entry = descriptor_file_entry(descriptor);
+    open_logical_file(&descriptor.source_path, &entry)
+}
+
+fn open_logical_descriptor_seekable(
+    descriptor: &PreviewDescriptor,
+) -> Result<Box<dyn ReadSeek>, FileServiceError> {
+    let entry = descriptor_file_entry(descriptor);
+    open_logical_file_seekable(&descriptor.source_path, &entry)
+}
+
+fn open_range_content_for_descriptor(
+    descriptor: &PreviewDescriptor,
+) -> Result<RangeContentReader, FileServiceError> {
+    match descriptor.source_kind.as_str() {
+        "logical_directory" => {
+            open_logical_descriptor_seekable(descriptor).map(RangeContentReader::Seekable)
+        }
+        "e01" => open_e01_descriptor_file(descriptor).map(RangeContentReader::Streaming),
+        "raw" => open_raw_descriptor_file(descriptor).map(RangeContentReader::Streaming),
+        other => Err(FileServiceError::other(format!(
+            "Range reading is not yet wired for data source kind '{}'",
+            other
+        ))),
+    }
+}
+
+fn open_e01_descriptor_file(
+    descriptor: &PreviewDescriptor,
+) -> Result<Box<dyn Read>, FileServiceError> {
+    open_descriptor_image_file(descriptor, |source_path| {
+        open_e01_reader_cached(source_path)
+            .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+    })
+}
+
+fn open_raw_descriptor_file(
+    descriptor: &PreviewDescriptor,
+) -> Result<Box<dyn Read>, FileServiceError> {
+    open_descriptor_image_file(descriptor, |source_path| {
+        evidence_core::RawImageReader::open(source_path)
+            .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+    })
+}
+
+fn open_descriptor_image_file<F>(
+    descriptor: &PreviewDescriptor,
+    mut open_reader: F,
+) -> Result<Box<dyn Read>, FileServiceError>
+where
+    F: FnMut(&Path) -> std::io::Result<Box<dyn evidence_core::EvidenceReader>>,
+{
+    if descriptor.partition_candidates.is_empty() {
+        return Err(FileServiceError::other(format!(
+            "Cannot open image-backed file '{}' without partition candidates",
+            descriptor.path
+        )));
+    }
+
+    let source_path = Path::new(&descriptor.source_path);
+    for candidate in &descriptor.partition_candidates {
+        let boxed_reader = open_reader(source_path)?;
+        let result = match candidate.filesystem_kind.as_str() {
+            "NTFS" => match fs_ntfs::NtfsReader::open(boxed_reader, candidate.offset) {
+                Ok(fs) => fs
+                    .open_file(&descriptor.path)
+                    .or_else(|_| fs.open_file(&descriptor.file_id)),
+                Err(e) => {
+                    tracing::warn!(
+                        path = %descriptor.path,
+                        partition_index = candidate.partition_index,
+                        offset = candidate.offset,
+                        error = %e,
+                        "Descriptor NTFS open failed"
+                    );
+                    continue;
+                }
+            },
+            "FAT" | "FAT32" | "FAT16" | "FAT12" => {
+                match fs_fat::FatReader::open(boxed_reader, candidate.offset) {
+                    Ok(fs) => fs.open_file(&descriptor.path),
+                    Err(e) => {
+                        tracing::warn!(
+                            path = %descriptor.path,
+                            partition_index = candidate.partition_index,
+                            offset = candidate.offset,
+                            error = %e,
+                            "Descriptor FAT open failed"
+                        );
+                        continue;
+                    }
+                }
+            }
+            _ => continue,
+        };
+
+        match result {
+            Ok(reader) => return Ok(reader),
+            Err(e) => {
+                tracing::warn!(
+                    path = %descriptor.path,
+                    partition_index = candidate.partition_index,
+                    kind = %candidate.filesystem_kind,
+                    error = %e,
+                    "Descriptor file not found on partition"
+                );
+            }
+        }
+    }
+
+    Err(FileServiceError::other(format!(
+        "Cannot open image-backed file '{}' from any partition",
+        descriptor.path
+    )))
 }
 
 fn read_seekable_range(
@@ -230,11 +622,27 @@ pub fn read_file_header_by_id(
     Ok(bytes)
 }
 
-pub fn get_file_path_for_entry(
-    conn: &Connection,
+pub fn get_file_path_for_entry<C>(
+    mut context: C,
     file_id: &str,
-) -> Result<PathBuf, FileServiceError> {
-    let repo = FileRepo::new(conn);
+) -> Result<PathBuf, FileServiceError>
+where
+    C: PreviewReadContext,
+{
+    if !context.case_id().is_empty() {
+        let descriptor =
+            descriptor_for_file_with_cache(&mut context, &FileEntryId(file_id.to_string()))?;
+        if descriptor.source_kind != "logical_directory" {
+            return Err(FileServiceError::other(
+                "File path only available for logical directories",
+            ));
+        }
+
+        let entry = descriptor_file_entry(&descriptor);
+        return resolve_logical_file_path(&descriptor.source_path, &entry);
+    }
+
+    let repo = FileRepo::new(context.conn());
     let entry = repo
         .find_by_id(&FileEntryId(file_id.to_string()))?
         .ok_or_else(|| FileServiceError::not_found("File not found"))?;
@@ -366,6 +774,133 @@ fn resolve_logical_file_path(
     }
 
     Ok(canonical)
+}
+
+fn e01_partition_candidates(
+    conn: &Connection,
+    entry: &FileEntry,
+    expected_partition_index: Option<usize>,
+) -> Result<Vec<PreviewPartitionCandidate>, FileServiceError> {
+    let part_repo = PartitionRepo::new(conn);
+    let partitions = part_repo
+        .find_by_data_source(&entry.data_source_id.0)
+        .map_err(|e| FileServiceError::other(format!("Failed to query partitions: {e}")))?;
+
+    if partitions.is_empty() {
+        return Err(FileServiceError::other(
+            "No partition metadata found for this data source. Re-import the E01 image.",
+        ));
+    }
+
+    if !entry.path.contains('/') && !entry.path.contains('\\') {
+        return Err(FileServiceError::other(format!(
+            "Cannot preview '{}': path reconstruction did not resolve the parent directory. Re-import.",
+            entry.path
+        )));
+    }
+
+    let candidates: Vec<PreviewPartitionCandidate> = match expected_partition_index {
+        Some(expected) => partitions
+            .iter()
+            .filter(|partition| {
+                partition.partition_index as usize == expected
+                    && partition.status != "EncryptedBitLocker"
+            })
+            .map(|partition| PreviewPartitionCandidate {
+                partition_index: partition.partition_index as usize,
+                filesystem_kind: partition
+                    .filesystem
+                    .as_deref()
+                    .unwrap_or(&partition.kind_label)
+                    .to_string(),
+                offset: partition.offset,
+            })
+            .collect(),
+        None => partitions
+            .iter()
+            .filter(|partition| {
+                partition.status != "EncryptedBitLocker"
+                    && partition
+                        .filesystem
+                        .as_deref()
+                        .unwrap_or(&partition.kind_label)
+                        == "NTFS"
+            })
+            .map(|partition| PreviewPartitionCandidate {
+                partition_index: partition.partition_index as usize,
+                filesystem_kind: partition
+                    .filesystem
+                    .as_deref()
+                    .unwrap_or(&partition.kind_label)
+                    .to_string(),
+                offset: partition.offset,
+            })
+            .collect(),
+    };
+
+    if candidates.is_empty() {
+        return Err(FileServiceError::other(match expected_partition_index {
+            Some(expected) => {
+                format!("Partition index {expected} not found or is encrypted. Re-import.")
+            }
+            None => {
+                "Cannot determine which partition this file belongs to. Re-import the E01 image."
+                    .to_string()
+            }
+        }));
+    }
+
+    Ok(candidates)
+}
+
+fn raw_partition_candidates(
+    source_path: &str,
+    expected_partition_index: Option<usize>,
+) -> Result<Vec<PreviewPartitionCandidate>, FileServiceError> {
+    let mut reader = evidence_core::RawImageReader::open(Path::new(source_path))?;
+    let probe = crate::datasource_service::detect_image_filesystem(&mut reader)
+        .map_err(|e| FileServiceError::other(format!("Failed to detect RAW filesystem: {e}")))?;
+    if probe.candidates.is_empty() {
+        return Err(FileServiceError::other(
+            "No supported filesystem detected in RAW image",
+        ));
+    }
+
+    let index_map =
+        crate::datasource_service::assign_effective_partition_indices(&probe.candidates);
+    let mut candidates = Vec::new();
+    for (candidate_pos, candidate) in probe.candidates.iter().enumerate() {
+        let partition_index = crate::datasource_service::effective_partition_index(
+            candidate,
+            candidate_pos,
+            &index_map,
+        );
+        if expected_partition_index.is_some_and(|expected| partition_index != expected) {
+            continue;
+        }
+
+        let filesystem_kind = match candidate.kind {
+            crate::datasource_service::ImageFilesystemKind::Ntfs => "NTFS",
+            crate::datasource_service::ImageFilesystemKind::Fat => "FAT",
+            crate::datasource_service::ImageFilesystemKind::BitLocker => continue,
+        };
+        candidates.push(PreviewPartitionCandidate {
+            partition_index,
+            filesystem_kind: filesystem_kind.to_string(),
+            offset: candidate.offset,
+        });
+    }
+
+    if candidates.is_empty() {
+        return Err(FileServiceError::other(match expected_partition_index {
+            Some(expected) => {
+                format!("Partition index {expected} not found or is unsupported.")
+            }
+            None => "No supported filesystem detected in RAW image".to_string(),
+        }));
+    }
+
+    Ok(candidates)
 }
 
 fn open_raw_file(
@@ -726,6 +1261,8 @@ mod tests {
     use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
     use persistence_sqlite::runner;
     use rusqlite::params;
+    use std::cell::Cell;
+    use std::collections::HashMap;
     use std::io::{Read, Seek, SeekFrom, Write};
 
     fn reset_skip_reader_bytes_call_count() {
@@ -873,6 +1410,87 @@ mod tests {
 
         assert_eq!(response.raw_bytes.unwrap(), bytes[17..29].to_vec());
         assert_eq!(format_hex_lines_call_count(), 1);
+    }
+
+    #[test]
+    fn logical_directory_repeated_range_uses_preview_descriptor_cache() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let evidence_dir = dir.path().join("evidence");
+        std::fs::create_dir_all(&evidence_dir).unwrap();
+        let bytes: Vec<u8> = (0u8..64).collect();
+        std::fs::write(evidence_dir.join("sample.bin"), &bytes).unwrap();
+
+        let conn = persistence_sqlite::open_or_create(&dir.path().join("case.db")).unwrap();
+        runner::run_all(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO cases (id, name, created_at, updated_at)
+             VALUES ('case-cache', 'Cache Case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+
+        let ds_id = DataSourceId("ds-logical-cache".to_string());
+        DataSourceRepo::new(&conn)
+            .insert(
+                &CaseId("case-cache".to_string()),
+                &DataSource {
+                    id: ds_id.clone(),
+                    name: "logical evidence".to_string(),
+                    kind: DataSourceKind::LogicalDirectory,
+                    source_path: evidence_dir,
+                    imported_at: chrono::Utc::now(),
+                    provenance: DataSourceProvenance::unknown(),
+                },
+            )
+            .unwrap();
+
+        conn.execute(
+            "INSERT INTO file_entries
+             (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
+             VALUES ('file-cache-sample', NULL, ?1, 'sample.bin', 'sample.bin', 'file', ?2, 'bin', 0, 0, 0)",
+            params![ds_id.0, bytes.len() as i64],
+        )
+        .unwrap();
+
+        let file_id = FileEntryId("file-cache-sample".to_string());
+        let cache = std::cell::RefCell::new(HashMap::<String, serde_json::Value>::new());
+        let cache_hits = Cell::new(0usize);
+        let set_calls = Cell::new(0usize);
+
+        let read_with_cache = |offset, length| {
+            let get_cache = |key: &str| {
+                let value = cache.borrow().get(key).cloned();
+                if value.is_some() {
+                    cache_hits.set(cache_hits.get() + 1);
+                }
+                value
+            };
+            let set_cache = |key: &str, value: &serde_json::Value| {
+                set_calls.set(set_calls.get() + 1);
+                cache.borrow_mut().insert(key.to_string(), value.clone());
+            };
+            read_file_bytes_for_case(
+                (&conn, "case-cache", get_cache, set_cache),
+                &file_id,
+                offset,
+                length,
+            )
+        };
+
+        let first = read_with_cache(0, 8).unwrap();
+        assert_eq!(first, bytes[0..8].to_vec());
+        assert_eq!(set_calls.get(), 1);
+        assert_eq!(cache_hits.get(), 0);
+
+        let second = read_with_cache(17, 12).unwrap();
+        assert_eq!(second, bytes[17..29].to_vec());
+        assert_eq!(set_calls.get(), 1);
+        assert_eq!(cache_hits.get(), 1);
+
+        cache.borrow_mut().clear();
+        let third = read_with_cache(29, 7).unwrap();
+        assert_eq!(third, bytes[29..36].to_vec());
+        assert_eq!(set_calls.get(), 2);
     }
 
     #[test]

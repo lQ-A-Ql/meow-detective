@@ -8,7 +8,9 @@
 
 use app_services::{file_service, text_service::TextService};
 use base64::Engine;
+use chrono::Duration;
 use persistence_sqlite::repositories::audit_repo::AuditAction;
+use runtime_cache::models::{namespaces, CacheEntry};
 use std::io::{Read, Seek, SeekFrom};
 use tauri::State;
 use transport::{
@@ -33,6 +35,54 @@ use crate::state::AppState;
 #[cfg(test)]
 static MEDIA_BYTES_HELPER_CALLS: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
+
+const PREVIEW_DESCRIPTOR_CACHE_TTL_MINUTES: i64 = 30;
+
+macro_rules! with_preview_cache_context {
+    ($state:expr, $conn:expr, $case_id:expr, |$context:ident| $body:expr) => {{
+        let mut get_cached_preview_descriptor = |key: &str| -> Option<serde_json::Value> {
+            let cache = $state.runtime_cache.lock().ok()?;
+            let entry = cache.cache().get(key).ok().flatten()?;
+            if entry.namespace != namespaces::PREVIEW_DESCRIPTORS
+                || entry.case_id.as_deref() != Some($case_id)
+            {
+                return None;
+            }
+            Some(entry.value_json)
+        };
+        let mut set_cached_preview_descriptor = |key: &str, value: &serde_json::Value| {
+            let Ok(cache) = $state.runtime_cache.lock() else {
+                return;
+            };
+            let now = chrono::Utc::now();
+            let entry = CacheEntry {
+                cache_key: key.to_string(),
+                namespace: namespaces::PREVIEW_DESCRIPTORS.to_string(),
+                case_id: Some($case_id.to_string()),
+                value_json: value.clone(),
+                created_at: now,
+                expires_at: Some(now + Duration::minutes(PREVIEW_DESCRIPTOR_CACHE_TTL_MINUTES)),
+                last_accessed_at: now,
+            };
+            if let Err(error) = cache.cache().set(&entry) {
+                tracing::warn!(cache_key = %key, error = %error, "Failed to cache preview descriptor");
+            }
+        };
+        let $context = (
+            $conn,
+            $case_id,
+            &mut get_cached_preview_descriptor,
+            &mut set_cached_preview_descriptor,
+        );
+        $body
+    }};
+}
+
+fn current_case_id_for_preview(state: &AppState) -> Result<String, CommandError> {
+    crate::commands::command_support::snapshot_active_case(state)?
+        .map(|active| active.case_id)
+        .ok_or_else(CommandError::no_active_case)
+}
 
 /// Get children of a file tree node (lazy loading).
 #[tauri::command]
@@ -178,9 +228,12 @@ pub async fn open_file_handle(
 ) -> Result<ViewerHandleDto, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        let case_id = current_case_id_for_preview(&app_state)?;
         let conn = crate::commands::command_support::get_case_connection(&app_state)?;
-        file_service::open_file_handle_real(&conn, &file_id)
-            .map_err(CommandError::from_service_error)
+        with_preview_cache_context!(&app_state, &conn, case_id.as_str(), |context| {
+            file_service::open_file_handle_real(context, &file_id)
+        })
+        .map_err(CommandError::from_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -195,9 +248,12 @@ pub async fn open_file_handle_request(
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        let case_id = current_case_id_for_preview(&app_state)?;
         let conn = crate::commands::command_support::get_case_connection(&app_state)?;
-        file_service::open_file_handle_real(&conn, &request.file_id)
-            .map_err(CommandError::from_service_error)
+        with_preview_cache_context!(&app_state, &conn, case_id.as_str(), |context| {
+            file_service::open_file_handle_real(context, &request.file_id)
+        })
+        .map_err(CommandError::from_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -215,9 +271,12 @@ pub async fn read_file_range(
         if crate::commands::command_support::snapshot_active_case(&app_state)?.is_none() {
             return Ok(file_service::read_file_range_real(&request));
         }
+        let case_id = current_case_id_for_preview(&app_state)?;
         let conn = crate::commands::command_support::get_case_connection(&app_state)?;
-        file_service::read_file_range_for_case(&conn, &request)
-            .map_err(CommandError::from_service_error)
+        with_preview_cache_context!(&app_state, &conn, case_id.as_str(), |context| {
+            file_service::read_file_range_for_case(context, &request)
+        })
+        .map_err(CommandError::from_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -318,8 +377,11 @@ pub async fn get_image_preview(
         let conn = crate::commands::command_support::get_case_connection(&app_state)?;
 
         // Get file handle
-        let handle = file_service::open_file_handle_real(&conn, &file_id)
-            .map_err(CommandError::from_service_error)?;
+        let case_id = current_case_id_for_preview(&app_state)?;
+        let handle = with_preview_cache_context!(&app_state, &conn, case_id.as_str(), |context| {
+            file_service::open_file_handle_real(context, &file_id)
+        })
+        .map_err(CommandError::from_service_error)?;
 
         // Check if it's an image
         let mime = handle.mime.as_deref().unwrap_or("");
@@ -336,8 +398,13 @@ pub async fn get_image_preview(
         }
 
         let mut reader =
-            file_service::open_file_content_by_id(&conn, &domain::FileEntryId(file_id.clone()))
-                .map_err(CommandError::from_service_error)?;
+            with_preview_cache_context!(&app_state, &conn, case_id.as_str(), |context| {
+                file_service::open_file_content_by_id(
+                    context,
+                    &domain::FileEntryId(file_id.clone()),
+                )
+            })
+            .map_err(CommandError::from_service_error)?;
         let mut content_bytes = Vec::with_capacity(handle.size as usize);
         reader
             .read_to_end(&mut content_bytes)
@@ -443,8 +510,11 @@ fn media_data_url_for_file(
     conn: &rusqlite::Connection,
     file_id: &str,
 ) -> Result<MediaUrlDto, CommandError> {
-    let handle = file_service::open_file_handle_real(conn, file_id)
-        .map_err(CommandError::from_service_error)?;
+    let case_id = current_case_id_for_preview(state)?;
+    let handle = with_preview_cache_context!(state, conn, case_id.as_str(), |context| {
+        file_service::open_file_handle_real(context, file_id)
+    })
+    .map_err(CommandError::from_service_error)?;
     let mime = handle
         .mime
         .clone()
@@ -462,9 +532,10 @@ fn media_data_url_for_file(
         });
     }
 
-    let mut reader =
-        file_service::open_file_content_by_id(conn, &domain::FileEntryId(file_id.to_string()))
-            .map_err(CommandError::from_service_error)?;
+    let mut reader = with_preview_cache_context!(state, conn, case_id.as_str(), |context| {
+        file_service::open_file_content_by_id(context, &domain::FileEntryId(file_id.to_string()))
+    })
+    .map_err(CommandError::from_service_error)?;
     let mut content_bytes = Vec::with_capacity(handle.size as usize);
     reader
         .read_to_end(&mut content_bytes)
@@ -488,8 +559,11 @@ fn media_range_for_file(
 ) -> Result<MediaRangeResponseDto, CommandError> {
     let file_id = crate::media_protocol::resolve_scoped_media_handle(state, &request.handle_id)
         .map_err(CommandError::security)?;
-    let handle = file_service::open_file_handle_real(conn, &file_id)
-        .map_err(CommandError::from_service_error)?;
+    let case_id = current_case_id_for_preview(state)?;
+    let handle = with_preview_cache_context!(state, conn, case_id.as_str(), |context| {
+        file_service::open_file_handle_real(context, &file_id)
+    })
+    .map_err(CommandError::from_service_error)?;
     if request.offset >= handle.size {
         return Ok(MediaRangeResponseDto {
             offset: request.offset,
@@ -501,7 +575,14 @@ fn media_range_for_file(
     let readable_len = request
         .length
         .min((handle.size - request.offset).min(u32::MAX as u64) as u32);
-    let bytes = read_media_bytes_for_file(conn, &file_id, request.offset, readable_len)?;
+    let bytes = read_media_bytes_for_file(
+        state,
+        conn,
+        &case_id,
+        &file_id,
+        request.offset,
+        readable_len,
+    )?;
     let bytes_read = bytes.len();
     let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
     let end_offset = request.offset.saturating_add(bytes_read as u64);
@@ -515,7 +596,9 @@ fn media_range_for_file(
 }
 
 fn read_media_bytes_for_file(
+    state: &AppState,
     conn: &rusqlite::Connection,
+    case_id: &str,
     file_id: &str,
     offset: u64,
     length: u32,
@@ -523,7 +606,9 @@ fn read_media_bytes_for_file(
     #[cfg(test)]
     MEDIA_BYTES_HELPER_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-    if let Ok(path) = file_service::get_file_path_for_entry(conn, file_id) {
+    if let Ok(path) = with_preview_cache_context!(state, conn, case_id, |context| {
+        file_service::get_file_path_for_entry(context, file_id)
+    }) {
         let mut file = std::fs::File::open(path).map_err(CommandError::from_service_error)?;
         file.seek(SeekFrom::Start(offset))
             .map_err(CommandError::from_service_error)?;
@@ -534,9 +619,10 @@ fn read_media_bytes_for_file(
         return Ok(bytes);
     }
 
-    let mut reader =
-        file_service::open_file_content_by_id(conn, &domain::FileEntryId(file_id.to_string()))
-            .map_err(CommandError::from_service_error)?;
+    let mut reader = with_preview_cache_context!(state, conn, case_id, |context| {
+        file_service::open_file_content_by_id(context, &domain::FileEntryId(file_id.to_string()))
+    })
+    .map_err(CommandError::from_service_error)?;
     // Image-backed filesystem readers still expose `Read` only; keep this
     // compatibility path until fs-* crates provide seekable per-file streams.
     file_service::skip_reader_bytes(reader.as_mut(), offset)

@@ -116,6 +116,43 @@ impl<'a> CacheRepo<'a> {
         Ok(entry)
     }
 
+    /// Get a cache entry scoped to a case or insert one using the factory.
+    ///
+    /// The cache key remains globally unique, while `case_id` allows
+    /// `RuntimeCache::clear_case` to invalidate the entry with the rest of the
+    /// case-scoped runtime state.
+    pub fn get_or_insert_case<F>(
+        &self,
+        key: &str,
+        namespace: &str,
+        case_id: &str,
+        ttl: Duration,
+        factory: F,
+    ) -> Result<CacheEntry>
+    where
+        F: FnOnce() -> Result<serde_json::Value>,
+    {
+        if let Some(entry) = self.get(key)? {
+            if entry.case_id.as_deref() == Some(case_id) {
+                return Ok(entry);
+            }
+        }
+
+        let now = Utc::now();
+        let value = factory()?;
+        let entry = CacheEntry {
+            cache_key: key.to_string(),
+            namespace: namespace.to_string(),
+            case_id: Some(case_id.to_string()),
+            value_json: value,
+            created_at: now,
+            expires_at: Some(now + ttl),
+            last_accessed_at: now,
+        };
+        self.set(&entry)?;
+        Ok(entry)
+    }
+
     /// Delete all expired entries.
     ///
     /// Returns the number of deleted entries.
@@ -170,6 +207,7 @@ fn parse_datetime(s: &str) -> DateTime<Utc> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
 
     #[test]
     fn cache_set_get_delete() {
@@ -217,6 +255,80 @@ mod tests {
             .unwrap();
 
         assert_eq!(entry2.value_json, serde_json::json!({"computed": 42}));
+    }
+
+    #[test]
+    fn cache_get_or_insert_case_sets_case_id_and_clear_case_removes_it() {
+        let conn = crate::connection::open_in_memory().unwrap();
+        let repo = CacheRepo::new(&conn);
+
+        let entry = repo
+            .get_or_insert_case(
+                "case-key",
+                crate::models::namespaces::PREVIEW_DESCRIPTORS,
+                "case-1",
+                Duration::seconds(60),
+                || Ok(serde_json::json!({"descriptor": true})),
+            )
+            .unwrap();
+
+        assert_eq!(entry.case_id.as_deref(), Some("case-1"));
+        assert_eq!(repo.clear_case("case-1").unwrap(), 1);
+        assert!(repo.get("case-key").unwrap().is_none());
+    }
+
+    #[test]
+    fn cache_get_or_insert_case_hits_until_clear_case_invalidates() {
+        let conn = crate::connection::open_in_memory().unwrap();
+        let repo = CacheRepo::new(&conn);
+        let factory_calls = Cell::new(0usize);
+
+        let first = repo
+            .get_or_insert_case(
+                "descriptor-key",
+                crate::models::namespaces::PREVIEW_DESCRIPTORS,
+                "case-1",
+                Duration::seconds(60),
+                || {
+                    factory_calls.set(factory_calls.get() + 1);
+                    Ok(serde_json::json!({"generation": factory_calls.get()}))
+                },
+            )
+            .unwrap();
+        assert_eq!(first.value_json, serde_json::json!({"generation": 1}));
+        assert_eq!(factory_calls.get(), 1);
+
+        let second = repo
+            .get_or_insert_case(
+                "descriptor-key",
+                crate::models::namespaces::PREVIEW_DESCRIPTORS,
+                "case-1",
+                Duration::seconds(60),
+                || {
+                    factory_calls.set(factory_calls.get() + 1);
+                    Ok(serde_json::json!({"generation": factory_calls.get()}))
+                },
+            )
+            .unwrap();
+        assert_eq!(second.value_json, serde_json::json!({"generation": 1}));
+        assert_eq!(factory_calls.get(), 1);
+
+        assert_eq!(repo.clear_case("case-1").unwrap(), 1);
+
+        let third = repo
+            .get_or_insert_case(
+                "descriptor-key",
+                crate::models::namespaces::PREVIEW_DESCRIPTORS,
+                "case-1",
+                Duration::seconds(60),
+                || {
+                    factory_calls.set(factory_calls.get() + 1);
+                    Ok(serde_json::json!({"generation": factory_calls.get()}))
+                },
+            )
+            .unwrap();
+        assert_eq!(third.value_json, serde_json::json!({"generation": 2}));
+        assert_eq!(factory_calls.get(), 2);
     }
 
     #[test]

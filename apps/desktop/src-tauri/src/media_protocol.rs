@@ -2,6 +2,7 @@ use crate::state::AppState;
 use app_services::file_service;
 use base64::Engine;
 use chrono::Duration;
+use runtime_cache::models::{namespaces, CacheEntry};
 use std::borrow::Cow;
 use std::io::{Read, Seek, SeekFrom};
 use tauri::http::{self, header, StatusCode};
@@ -10,6 +11,47 @@ use tauri::{AppHandle, Manager, Wry};
 pub const EVIDENCE_MEDIA_SCHEME: &str = "evidence-media";
 pub const MAX_MEDIA_PROTOCOL_READ_BYTES: u64 = transport::dto::MAX_VIEWER_RANGE_LENGTH as u64;
 const MEDIA_HANDLE_TTL_MINUTES: i64 = 30;
+const PREVIEW_DESCRIPTOR_CACHE_TTL_MINUTES: i64 = 30;
+
+macro_rules! with_preview_cache_context {
+    ($state:expr, $conn:expr, $case_id:expr, |$context:ident| $body:expr) => {{
+        let mut get_cached_preview_descriptor = |key: &str| -> Option<serde_json::Value> {
+            let cache = $state.runtime_cache.lock().ok()?;
+            let entry = cache.cache().get(key).ok().flatten()?;
+            if entry.namespace != namespaces::PREVIEW_DESCRIPTORS
+                || entry.case_id.as_deref() != Some($case_id)
+            {
+                return None;
+            }
+            Some(entry.value_json)
+        };
+        let mut set_cached_preview_descriptor = |key: &str, value: &serde_json::Value| {
+            let Ok(cache) = $state.runtime_cache.lock() else {
+                return;
+            };
+            let now = chrono::Utc::now();
+            let entry = CacheEntry {
+                cache_key: key.to_string(),
+                namespace: namespaces::PREVIEW_DESCRIPTORS.to_string(),
+                case_id: Some($case_id.to_string()),
+                value_json: value.clone(),
+                created_at: now,
+                expires_at: Some(now + Duration::minutes(PREVIEW_DESCRIPTOR_CACHE_TTL_MINUTES)),
+                last_accessed_at: now,
+            };
+            if let Err(error) = cache.cache().set(&entry) {
+                tracing::warn!(cache_key = %key, error = %error, "Failed to cache preview descriptor");
+            }
+        };
+        let $context = (
+            $conn,
+            $case_id,
+            &mut get_cached_preview_descriptor,
+            &mut set_cached_preview_descriptor,
+        );
+        $body
+    }};
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedRange {
@@ -216,7 +258,7 @@ fn handle_media_protocol_request_inner(
         .map(str::to_string);
 
     let app_state = app_state.inner().clone();
-    let db_path = {
+    let (case_id, db_path) = {
         let guard = app_state.active_case.lock().map_err(|_| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -229,7 +271,7 @@ fn handle_media_protocol_request_inner(
                 "media handle unavailable".to_string(),
             )
         })?;
-        active.db_path()
+        (active.meta.id.0.clone(), active.db_path())
     };
     let conn = persistence_sqlite::open_or_create(&db_path).map_err(|_| {
         (
@@ -238,8 +280,10 @@ fn handle_media_protocol_request_inner(
         )
     })?;
 
-    let handle = file_service::open_file_handle_real(&conn, &file_id)
-        .map_err(|_| (StatusCode::NOT_FOUND, "media file unavailable".to_string()))?;
+    let handle = with_preview_cache_context!(&app_state, &conn, case_id.as_str(), |context| {
+        file_service::open_file_handle_real(context, &file_id)
+    })
+    .map_err(|_| (StatusCode::NOT_FOUND, "media file unavailable".to_string()))?;
     let range = parse_media_range_header(
         range_header.as_deref(),
         handle.size,
@@ -248,7 +292,9 @@ fn handle_media_protocol_request_inner(
     .map_err(|err| (err.status(), "invalid media range".to_string()))?;
 
     let bytes = read_media_protocol_bytes(
+        &app_state,
         &conn,
+        &case_id,
         &file_id,
         range.start,
         range.length.min(u32::MAX as u64) as u32,
@@ -290,12 +336,16 @@ fn handle_media_protocol_request_inner(
 }
 
 fn read_media_protocol_bytes(
+    state: &AppState,
     conn: &rusqlite::Connection,
+    case_id: &str,
     file_id: &str,
     offset: u64,
     length: u32,
 ) -> Result<Vec<u8>, (StatusCode, String)> {
-    if let Ok(path) = file_service::get_file_path_for_entry(conn, file_id) {
+    if let Ok(path) = with_preview_cache_context!(state, conn, case_id, |context| {
+        file_service::get_file_path_for_entry(context, file_id)
+    }) {
         let mut file = std::fs::File::open(path).map_err(|_| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -320,14 +370,15 @@ fn read_media_protocol_bytes(
         return Ok(bytes);
     }
 
-    let mut reader =
-        file_service::open_file_content_by_id(conn, &domain::FileEntryId(file_id.to_string()))
-            .map_err(|_| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "media backend unavailable".to_string(),
-                )
-            })?;
+    let mut reader = with_preview_cache_context!(state, conn, case_id, |context| {
+        file_service::open_file_content_by_id(context, &domain::FileEntryId(file_id.to_string()))
+    })
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "media backend unavailable".to_string(),
+        )
+    })?;
     // Image-backed filesystem readers still expose `Read` only; keep this
     // compatibility path until fs-* crates provide seekable per-file streams.
     file_service::skip_reader_bytes(reader.as_mut(), offset).map_err(|_| {
