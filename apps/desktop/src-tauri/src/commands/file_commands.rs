@@ -33,8 +33,24 @@ use super::command_support::write_audit_log;
 use crate::state::AppState;
 
 #[cfg(test)]
-static MEDIA_BYTES_HELPER_CALLS: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
+type PreviewReadCounter =
+    std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<String, usize>>>;
+
+#[cfg(test)]
+static MEDIA_BYTES_HELPER_CALLS: PreviewReadCounter =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+
+#[cfg(test)]
+static FILE_BYTES_SERVICE_READ_CALLS: PreviewReadCounter =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+
+#[cfg(test)]
+fn increment_preview_read_counter(counter: &PreviewReadCounter, case_id: &str) {
+    let Ok(mut counts) = counter.lock() else {
+        return;
+    };
+    *counts.entry(case_id.to_string()).or_insert(0) += 1;
+}
 
 const PREVIEW_DESCRIPTOR_CACHE_TTL_MINUTES: i64 = 30;
 
@@ -324,41 +340,8 @@ pub async fn get_text_preview(
 ) -> Result<TextPreviewDto, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let max =
-            max_bytes.unwrap_or(infrastructure::constants::DEFAULT_TEXT_PREVIEW_MAX_BYTES) as u32;
-
         let conn = crate::commands::command_support::get_case_connection(&app_state)?;
-
-        let content_bytes = file_service::read_file_header_by_id(
-            &conn,
-            &domain::FileEntryId(file_id.clone()),
-            max as usize,
-        )
-        .map_err(CommandError::from_service_error)?;
-
-        // Detect encoding and extract text
-        let preview = TextService::extract_text_preview(
-            &mut std::io::Cursor::new(&content_bytes),
-            max as usize,
-        )
-        .map_err(|e| CommandError::from_service_error(e.to_string()))?;
-
-        let is_binary = preview.is_binary;
-        let content = preview.content;
-        let hex_dump = if is_binary {
-            Some(format_hex_dump(&content_bytes))
-        } else {
-            None
-        };
-        Ok(TextPreviewDto {
-            hex_dump,
-            content,
-            encoding: preview.encoding,
-            is_truncated: preview.is_truncated,
-            line_count: preview.line_count,
-            is_binary,
-            language: preview.language,
-        })
+        text_preview_for_file(&app_state, &conn, &file_id, max_bytes)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -595,6 +578,40 @@ fn media_range_for_file(
     })
 }
 
+fn text_preview_for_file(
+    state: &AppState,
+    conn: &rusqlite::Connection,
+    file_id: &str,
+    max_bytes: Option<usize>,
+) -> Result<TextPreviewDto, CommandError> {
+    let max = max_bytes
+        .unwrap_or(infrastructure::constants::DEFAULT_TEXT_PREVIEW_MAX_BYTES)
+        .min(transport::dto::MAX_VIEWER_RANGE_LENGTH as usize) as u32;
+    let case_id = current_case_id_for_preview(state)?;
+    let content_bytes = read_preview_bytes_for_file(state, conn, &case_id, file_id, 0, max)?;
+
+    let preview =
+        TextService::extract_text_preview(&mut std::io::Cursor::new(&content_bytes), max as usize)
+            .map_err(|e| CommandError::from_service_error(e.to_string()))?;
+
+    let is_binary = preview.is_binary;
+    let content = preview.content;
+    let hex_dump = if is_binary {
+        Some(format_hex_dump(&content_bytes))
+    } else {
+        None
+    };
+    Ok(TextPreviewDto {
+        hex_dump,
+        content,
+        encoding: preview.encoding,
+        is_truncated: preview.is_truncated,
+        line_count: preview.line_count,
+        is_binary,
+        language: preview.language,
+    })
+}
+
 fn read_media_bytes_for_file(
     state: &AppState,
     conn: &rusqlite::Connection,
@@ -604,8 +621,19 @@ fn read_media_bytes_for_file(
     length: u32,
 ) -> Result<Vec<u8>, CommandError> {
     #[cfg(test)]
-    MEDIA_BYTES_HELPER_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    increment_preview_read_counter(&MEDIA_BYTES_HELPER_CALLS, case_id);
 
+    read_preview_bytes_for_file(state, conn, case_id, file_id, offset, length)
+}
+
+fn read_preview_bytes_for_file(
+    state: &AppState,
+    conn: &rusqlite::Connection,
+    case_id: &str,
+    file_id: &str,
+    offset: u64,
+    length: u32,
+) -> Result<Vec<u8>, CommandError> {
     if let Ok(path) = with_preview_cache_context!(state, conn, case_id, |context| {
         file_service::get_file_path_for_entry(context, file_id)
     }) {
@@ -619,20 +647,18 @@ fn read_media_bytes_for_file(
         return Ok(bytes);
     }
 
-    let mut reader = with_preview_cache_context!(state, conn, case_id, |context| {
-        file_service::open_file_content_by_id(context, &domain::FileEntryId(file_id.to_string()))
+    #[cfg(test)]
+    increment_preview_read_counter(&FILE_BYTES_SERVICE_READ_CALLS, case_id);
+
+    with_preview_cache_context!(state, conn, case_id, |context| {
+        file_service::read_file_bytes_for_case(
+            context,
+            &domain::FileEntryId(file_id.to_string()),
+            offset,
+            length,
+        )
     })
-    .map_err(CommandError::from_service_error)?;
-    // Image-backed filesystem readers still expose `Read` only; keep this
-    // compatibility path until fs-* crates provide seekable per-file streams.
-    file_service::skip_reader_bytes(reader.as_mut(), offset)
-        .map_err(CommandError::from_service_error)?;
-    let mut bytes = Vec::with_capacity(length as usize);
-    reader
-        .take(length as u64)
-        .read_to_end(&mut bytes)
-        .map_err(CommandError::from_service_error)?;
-    Ok(bytes)
+    .map_err(CommandError::from_service_error)
 }
 
 #[cfg(test)]
@@ -640,15 +666,23 @@ mod tests {
     use super::*;
     use app_services::{case_service, file_service};
     use evidence_core::LogicalFsReader;
-    use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
+    use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
     use tempfile::TempDir;
 
-    fn reset_media_bytes_helper_call_count() {
-        MEDIA_BYTES_HELPER_CALLS.store(0, std::sync::atomic::Ordering::Relaxed);
+    fn preview_counter_value(counter: &PreviewReadCounter, case_id: &str) -> usize {
+        counter
+            .lock()
+            .ok()
+            .and_then(|counts| counts.get(case_id).copied())
+            .unwrap_or(0)
     }
 
-    fn media_bytes_helper_call_count() -> usize {
-        MEDIA_BYTES_HELPER_CALLS.load(std::sync::atomic::Ordering::Relaxed)
+    fn media_bytes_helper_call_count(case_id: &str) -> usize {
+        preview_counter_value(&MEDIA_BYTES_HELPER_CALLS, case_id)
+    }
+
+    fn file_bytes_service_read_call_count(case_id: &str) -> usize {
+        preview_counter_value(&FILE_BYTES_SERVICE_READ_CALLS, case_id)
     }
 
     fn test_state_with_case(case_id: &str) -> AppState {
@@ -721,6 +755,136 @@ mod tests {
                 Ok(())
             })
             .unwrap();
+    }
+
+    fn with_raw_exfat_case_file(
+        case_name: &str,
+        test: impl FnOnce(
+            &rusqlite::Connection,
+            String,
+            String,
+        ) -> Result<(), persistence_sqlite::DbError>,
+    ) {
+        let tmp = TempDir::new().unwrap();
+        let raw_path = tmp.path().join("exfat.raw");
+        write_exfat_raw_fixture(&raw_path).unwrap();
+
+        let active =
+            case_service::create_case(&tmp.path().join("cases"), case_name, Some("tester"))
+                .unwrap();
+        let case_id = active.meta.id.clone();
+
+        active
+            .with_conn(|conn| {
+                let ds_id = domain::DataSourceId("ds-raw-exfat-media".to_string());
+                DataSourceRepo::new(conn).insert(
+                    &case_id,
+                    &domain::DataSource {
+                        id: ds_id.clone(),
+                        name: "raw exfat evidence".to_string(),
+                        kind: domain::DataSourceKind::Raw,
+                        source_path: raw_path,
+                        imported_at: chrono::Utc::now(),
+                        provenance: domain::DataSourceProvenance::unknown(),
+                    },
+                )?;
+
+                let file_id = domain::FileEntryId("file-raw-exfat-large".to_string());
+                FileRepo::new(conn).insert_batch(&[domain::FileEntry {
+                    id: file_id.clone(),
+                    parent_id: None,
+                    data_source_id: ds_id,
+                    path: "LARGE.BIN".to_string(),
+                    name: "LARGE.BIN".to_string(),
+                    entry_type: domain::EntryType::File,
+                    size: Some(1536),
+                    ext: Some("bin".to_string()),
+                    deleted: false,
+                    hidden: false,
+                    system: false,
+                    encrypted: false,
+                    created_at: None,
+                    modified_at: None,
+                    accessed_at: None,
+                    changed_at: None,
+                    hash_sha256: None,
+                }])?;
+
+                test(conn, case_id.0.clone(), file_id.0)
+            })
+            .unwrap();
+    }
+
+    fn write_exfat_raw_fixture(path: &std::path::Path) -> std::io::Result<()> {
+        const SECTOR_SIZE: usize = 512;
+        const FAT_SECTOR: usize = 24;
+        const CLUSTER_HEAP_SECTOR: usize = 32;
+        const CLUSTER_SIZE: usize = SECTOR_SIZE;
+        const FILE_SIZE: usize = CLUSTER_SIZE * 3;
+        const TOTAL_SECTORS: usize = 1024;
+
+        let mut data = vec![0u8; TOTAL_SECTORS * SECTOR_SIZE];
+
+        let boot = &mut data[0..SECTOR_SIZE];
+        boot[0..3].copy_from_slice(&[0xEB, 0x76, 0x90]);
+        boot[3..11].copy_from_slice(b"EXFAT   ");
+        boot[72..80].copy_from_slice(&(TOTAL_SECTORS as u64).to_le_bytes());
+        boot[80..84].copy_from_slice(&(FAT_SECTOR as u32).to_le_bytes());
+        boot[84..88].copy_from_slice(&1u32.to_le_bytes());
+        boot[88..92].copy_from_slice(&(CLUSTER_HEAP_SECTOR as u32).to_le_bytes());
+        boot[92..96].copy_from_slice(&100u32.to_le_bytes());
+        boot[96..100].copy_from_slice(&2u32.to_le_bytes());
+        boot[100..104].copy_from_slice(&0x12345678u32.to_le_bytes());
+        boot[104..106].copy_from_slice(&0x0100u16.to_le_bytes());
+        boot[108] = 9;
+        boot[109] = 0;
+        boot[110] = 1;
+        boot[111] = 0x80;
+        boot[112] = 0xFF;
+        boot[510..512].copy_from_slice(&0xAA55u16.to_le_bytes());
+
+        let fat_offset = FAT_SECTOR * SECTOR_SIZE;
+        let fat = &mut data[fat_offset..fat_offset + SECTOR_SIZE];
+        fat[0..4].copy_from_slice(&[0xF8, 0xFF, 0xFF, 0xFF]);
+        fat[4..8].copy_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF]);
+        fat[8..12].copy_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF]);
+        fat[12..16].copy_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF]);
+
+        let root_offset = CLUSTER_HEAP_SECTOR * SECTOR_SIZE;
+        let root = &mut data[root_offset..root_offset + CLUSTER_SIZE];
+        let mut pos = 0usize;
+
+        root[pos] = 0x85;
+        root[pos + 1] = 0x02;
+        root[pos + 4..pos + 6].copy_from_slice(&0x20u16.to_le_bytes());
+        pos += 32;
+
+        root[pos] = 0xC0;
+        root[pos + 1] = 0x02;
+        root[pos + 3] = "LARGE.BIN".encode_utf16().count() as u8;
+        root[pos + 8..pos + 16].copy_from_slice(&(FILE_SIZE as u64).to_le_bytes());
+        root[pos + 20..pos + 24].copy_from_slice(&3u32.to_le_bytes());
+        root[pos + 24..pos + 32].copy_from_slice(&(FILE_SIZE as u64).to_le_bytes());
+        pos += 32;
+
+        root[pos] = 0xC1;
+        for (i, ch) in "LARGE.BIN".encode_utf16().enumerate() {
+            let offset = pos + 2 + i * 2;
+            root[offset..offset + 2].copy_from_slice(&ch.to_le_bytes());
+        }
+
+        for cluster in 3..=5usize {
+            let value = match cluster {
+                3 => b'A',
+                4 => b'B',
+                5 => b'C',
+                _ => unreachable!(),
+            };
+            let offset = CLUSTER_HEAP_SECTOR * SECTOR_SIZE + (cluster - 2) * CLUSTER_SIZE;
+            data[offset..offset + CLUSTER_SIZE].fill(value);
+        }
+
+        std::fs::write(path, data)
     }
 
     #[test]
@@ -883,10 +1047,12 @@ mod tests {
             "clip.mp4",
             &content,
             |conn, file_id, _| {
-                let state = test_state_with_case("case-media-mid-range");
+                let case_id = "case-media-mid-range";
+                let state = test_state_with_case(case_id);
                 let handle_id = crate::media_protocol::create_scoped_media_handle(&state, &file_id)
                     .map_err(persistence_sqlite::DbError::System)?;
-                reset_media_bytes_helper_call_count();
+                let media_helper_before = media_bytes_helper_call_count(case_id);
+                let service_before = file_bytes_service_read_call_count(case_id);
                 let range = media_range_for_file(
                     &state,
                     conn,
@@ -900,7 +1066,14 @@ mod tests {
 
                 assert_eq!(range.offset, 17);
                 assert_eq!(range.bytes_read, 12);
-                assert_eq!(media_bytes_helper_call_count(), 1);
+                assert_eq!(
+                    media_bytes_helper_call_count(case_id) - media_helper_before,
+                    1
+                );
+                assert_eq!(
+                    file_bytes_service_read_call_count(case_id) - service_before,
+                    0
+                );
                 assert_eq!(
                     base64::engine::general_purpose::STANDARD
                         .decode(range.bytes_base64.as_bytes())
@@ -912,6 +1085,70 @@ mod tests {
                 Ok(())
             },
         );
+    }
+
+    #[test]
+    fn media_range_mid_raw_image_reads_via_bytes_only_service_path() {
+        with_raw_exfat_case_file("media-raw-range", |conn, case_id, file_id| {
+            let state = test_state_with_case(&case_id);
+            let handle_id = crate::media_protocol::create_scoped_media_handle(&state, &file_id)
+                .map_err(persistence_sqlite::DbError::System)?;
+
+            let media_helper_before = media_bytes_helper_call_count(&case_id);
+            let service_before = file_bytes_service_read_call_count(&case_id);
+            let range = media_range_for_file(
+                &state,
+                conn,
+                &MediaRangeRequestDto {
+                    handle_id,
+                    offset: 512 + 7,
+                    length: 9,
+                },
+            )
+            .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
+
+            assert_eq!(range.offset, 512 + 7);
+            assert_eq!(range.bytes_read, 9);
+            assert_eq!(
+                media_bytes_helper_call_count(&case_id) - media_helper_before,
+                1
+            );
+            assert_eq!(
+                file_bytes_service_read_call_count(&case_id) - service_before,
+                1
+            );
+            assert_eq!(
+                base64::engine::general_purpose::STANDARD
+                    .decode(range.bytes_base64.as_bytes())
+                    .unwrap(),
+                vec![b'B'; 9]
+            );
+            assert!(!range.eof);
+
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn text_preview_raw_image_header_reads_via_bytes_only_service_path() {
+        with_raw_exfat_case_file("text-raw-header", |conn, case_id, file_id| {
+            let state = test_state_with_case(&case_id);
+
+            let service_before = file_bytes_service_read_call_count(&case_id);
+            let preview = text_preview_for_file(&state, conn, &file_id, Some(16))
+                .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
+
+            assert_eq!(
+                file_bytes_service_read_call_count(&case_id) - service_before,
+                1
+            );
+            assert_eq!(preview.content, "AAAAAAAAAAAAAAAA");
+            assert_eq!(preview.encoding, "UTF-8");
+            assert!(!preview.is_binary);
+            assert!(preview.is_truncated);
+
+            Ok(())
+        });
     }
 
     #[test]
