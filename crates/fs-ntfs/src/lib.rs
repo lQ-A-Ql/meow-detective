@@ -52,6 +52,22 @@ pub struct NtfsReader {
     volume_offset: u64,
 }
 
+/// Minimal NTFS preview abstraction for bounded range reads.
+pub struct NtfsPreviewFile<'a> {
+    reader: &'a NtfsReader,
+    inode: u64,
+}
+
+impl NtfsPreviewFile<'_> {
+    pub fn inode(&self) -> u64 {
+        self.inode
+    }
+
+    pub fn read_range(&self, offset: u64, length: usize) -> io::Result<Vec<u8>> {
+        self.reader.read_file_data_range(self.inode, offset, length)
+    }
+}
+
 impl NtfsReader {
     pub fn open(mut reader: Box<dyn EvidenceReader>, offset: u64) -> io::Result<Self> {
         reader.seek(SeekFrom::Start(offset))?;
@@ -433,6 +449,70 @@ impl NtfsReader {
         Ok(buf)
     }
 
+    fn read_data_runs_range(
+        &self,
+        runs: &[DataRun],
+        offset: u64,
+        length: usize,
+    ) -> io::Result<Vec<u8>> {
+        let mut out = vec![0u8; length];
+        if length == 0 {
+            return Ok(out);
+        }
+
+        let request_end = offset
+            .checked_add(length as u64)
+            .ok_or_else(|| invalid_fs_data("requested range offset overflow"))?;
+        let mut logical_start = 0u64;
+        let mut reader = self.reader.borrow_mut();
+
+        for run in runs {
+            let run_bytes = run
+                .cluster_count
+                .checked_mul(self.cluster_size)
+                .ok_or_else(|| {
+                    invalid_fs_data(format!(
+                        "data run overflow: {} clusters 脳 {} bytes/cluster",
+                        run.cluster_count, self.cluster_size
+                    ))
+                })?;
+            let run_end = logical_start
+                .checked_add(run_bytes)
+                .ok_or_else(|| invalid_fs_data("data run logical offset overflow"))?;
+
+            if run_end <= offset {
+                logical_start = run_end;
+                continue;
+            }
+            if logical_start >= request_end {
+                break;
+            }
+
+            let overlap_start = offset.max(logical_start);
+            let overlap_end = request_end.min(run_end);
+            if overlap_start < overlap_end {
+                let out_start = usize::try_from(overlap_start - offset)
+                    .map_err(|_| invalid_fs_data("range output offset overflow"))?;
+                let out_len = usize::try_from(overlap_end - overlap_start)
+                    .map_err(|_| invalid_fs_data("range output length overflow"))?;
+
+                if let Some(lcn) = run.lcn {
+                    let run_relative = overlap_start - logical_start;
+                    let disk_offset = self
+                        .cluster_to_offset(lcn)?
+                        .checked_add(run_relative)
+                        .ok_or_else(|| invalid_fs_data("data run disk offset overflow"))?;
+                    reader.seek(SeekFrom::Start(disk_offset))?;
+                    reader.read_exact(&mut out[out_start..out_start + out_len])?;
+                }
+            }
+
+            logical_start = run_end;
+        }
+
+        Ok(out)
+    }
+
     fn read_compressed_data_runs_to_vec(
         &self,
         runs: &[DataRun],
@@ -644,6 +724,47 @@ impl NtfsReader {
             .collect())
     }
 
+    /// Create a lightweight preview handle for a file path.
+    ///
+    /// Unlike [`FileSystemReader::open_file`], the handle reads requested ranges
+    /// directly from resident data or NTFS data runs and does not materialize the
+    /// whole file for non-resident files.
+    pub fn preview_file(&self, path: &str) -> io::Result<NtfsPreviewFile<'_>> {
+        let inode = match mft_inode_from_path(path) {
+            Some(inode) => inode,
+            None => self
+                .resolve_file_path(path)?
+                .ok_or_else(|| file_not_found(path))?,
+        };
+        Ok(NtfsPreviewFile {
+            reader: self,
+            inode,
+        })
+    }
+
+    /// Create a lightweight preview handle from an MFT inode.
+    pub fn preview_file_by_inode(&self, inode: u64) -> NtfsPreviewFile<'_> {
+        NtfsPreviewFile {
+            reader: self,
+            inode,
+        }
+    }
+
+    /// Read a file range by path without materializing the full file.
+    pub fn read_file_range(&self, path: &str, offset: u64, length: usize) -> io::Result<Vec<u8>> {
+        self.preview_file(path)?.read_range(offset, length)
+    }
+
+    /// Read a file range by MFT inode without materializing the full file.
+    pub fn read_file_range_by_inode(
+        &self,
+        inode: u64,
+        offset: u64,
+        length: usize,
+    ) -> io::Result<Vec<u8>> {
+        self.preview_file_by_inode(inode).read_range(offset, length)
+    }
+
     /// Read the $DATA attribute of a file by MFT inode.
     /// Handles both resident (inline) and non-resident (data run chain) $DATA.
     fn read_file_data(&self, inode: u64) -> io::Result<Vec<u8>> {
@@ -698,6 +819,121 @@ impl NtfsReader {
             pos += len;
         }
         Ok(Vec::new())
+    }
+
+    fn read_file_data_range(&self, inode: u64, offset: u64, length: usize) -> io::Result<Vec<u8>> {
+        if length == 0 {
+            return Ok(Vec::new());
+        }
+
+        let rec = self.read_mft_record(inode)?;
+        if rec.len() < 0x18 || &rec[0..4] != b"FILE" {
+            return Err(invalid_fs_data(format!(
+                "inode {} is not a valid FILE record",
+                inode
+            )));
+        }
+
+        let attr_off = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
+        let mut pos = attr_off;
+        while pos + 8 < rec.len() {
+            let typ = u32::from_le_bytes(rec[pos..pos + 4].try_into().unwrap_or([0; 4]));
+            if typ == 0xFFFFFFFF {
+                break;
+            }
+            let len =
+                u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
+            if len == 0 || pos + len > rec.len() {
+                break;
+            }
+            if typ == 0x80 {
+                if !is_unnamed_attribute(&rec, pos) {
+                    pos += len;
+                    continue;
+                }
+                let is_nonresident = pos + 9 <= rec.len() && (rec[pos + 8] & 1) != 0;
+                if is_nonresident {
+                    return self.read_attr_nonresident_range(pos, len, &rec, offset, length);
+                }
+
+                if pos + 0x16 > rec.len() {
+                    return Ok(Vec::new());
+                }
+                let content_size =
+                    u32::from_le_bytes(rec[pos + 0x10..pos + 0x14].try_into().unwrap_or([0; 4]))
+                        as usize;
+                let content_off = pos
+                    + u16::from_le_bytes(rec[pos + 0x14..pos + 0x16].try_into().unwrap_or([0; 2]))
+                        as usize;
+                let end = content_off.saturating_add(content_size).min(rec.len());
+                if content_off >= end {
+                    return Ok(Vec::new());
+                }
+                let content = &rec[content_off..end];
+                let Ok(start) = usize::try_from(offset) else {
+                    return Ok(Vec::new());
+                };
+                if start >= content.len() {
+                    return Ok(Vec::new());
+                }
+                let end = start.saturating_add(length).min(content.len());
+                return Ok(content[start..end].to_vec());
+            }
+            pos += len;
+        }
+        Ok(Vec::new())
+    }
+
+    fn read_attr_nonresident_range(
+        &self,
+        attr_pos: usize,
+        attr_len: usize,
+        record: &[u8],
+        offset: u64,
+        length: usize,
+    ) -> io::Result<Vec<u8>> {
+        if attr_pos + 0x38 > record.len() || (record[attr_pos + 8] & 1) == 0 {
+            return Ok(Vec::new());
+        }
+
+        let run_off =
+            u16::from_le_bytes([record[attr_pos + 0x20], record[attr_pos + 0x21]]) as usize;
+        let attr_end = attr_pos
+            .checked_add(attr_len)
+            .ok_or_else(|| invalid_fs_data("attribute length overflow"))?
+            .min(record.len());
+        if run_off == 0 || attr_pos + run_off >= attr_end {
+            return Ok(Vec::new());
+        }
+
+        let attr_flags = u16::from_le_bytes(
+            record[attr_pos + 0x0c..attr_pos + 0x0e]
+                .try_into()
+                .unwrap_or([0; 2]),
+        );
+        let real_size = u64::from_le_bytes(
+            record[attr_pos + 0x30..attr_pos + 0x38]
+                .try_into()
+                .unwrap_or([0; 8]),
+        );
+        if offset >= real_size {
+            return Ok(Vec::new());
+        }
+
+        let length_u64 = u64::try_from(length)
+            .map_err(|_| fs_out_of_memory("requested range length is too large"))?;
+        let bounded_len = length_u64.min(real_size.saturating_sub(offset));
+        let bounded_len = usize::try_from(bounded_len)
+            .map_err(|_| fs_out_of_memory("requested range length is too large"))?;
+
+        if attr_flags & 0x0001 != 0 {
+            return Err(invalid_fs_data(
+                "range reads for compressed NTFS data are not supported",
+            ));
+        }
+
+        let runs = parse_data_runs_ext(&record[attr_pos + run_off..attr_end])?;
+        self.read_data_runs_range(&runs, offset, bounded_len)
     }
 
     /// Resolve a file path: walk parent directories, then find the file
@@ -868,6 +1104,11 @@ fn is_unnamed_attribute(record: &[u8], attr_pos: usize) -> bool {
     attr_pos + 0x0a <= record.len() && record[attr_pos + 0x09] == 0
 }
 
+fn mft_inode_from_path(path: &str) -> Option<u64> {
+    path.strip_prefix("mft:")
+        .and_then(|s| s.rsplit(':').next()?.parse::<u64>().ok())
+}
+
 fn apply_record_fixup(record: &mut [u8], sector_size: usize) -> io::Result<()> {
     if record.len() < 8 || sector_size < 2 {
         return Ok(());
@@ -929,11 +1170,7 @@ impl FileSystemReader for NtfsReader {
         // ("mft:NNN" or "mft:PARTITION:NNN"), read directly.
         // This skips INDX name lookups which fail when directories
         // store 8.3 short names instead of long names.
-        let mft_inode = path.strip_prefix("mft:").and_then(|s| {
-            // Handle both formats: "mft:5" and "mft:3:5"
-            s.rsplit(':').next()?.parse::<u64>().ok()
-        });
-        if let Some(mft_inode) = mft_inode {
+        if let Some(mft_inode) = mft_inode_from_path(path) {
             let data = self.read_file_data(mft_inode)?;
             if data.len() > 128 * 1024 * 1024 {
                 return Err(fs_out_of_memory(format!(

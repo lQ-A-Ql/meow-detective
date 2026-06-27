@@ -377,6 +377,10 @@ fn read_file_bytes_for_entry(
     length: u32,
 ) -> Result<Vec<u8>, FileServiceError> {
     let length = (length as usize).min(infrastructure::constants::MAX_RANGE_LENGTH);
+    if let Some(bytes) = try_read_ntfs_image_range_for_entry(conn, repo, entry, offset, length)? {
+        return Ok(bytes);
+    }
+
     match open_range_content_for_entry(conn, repo, entry)? {
         RangeContentReader::Seekable(mut reader) => {
             read_seekable_range(reader.as_mut(), offset, length)
@@ -431,6 +435,10 @@ pub fn read_file_bytes_for_descriptor(
     length: u32,
 ) -> Result<Vec<u8>, FileServiceError> {
     let length = (length as usize).min(infrastructure::constants::MAX_RANGE_LENGTH);
+    if let Some(bytes) = try_read_ntfs_image_range_for_descriptor(descriptor, offset, length)? {
+        return Ok(bytes);
+    }
+
     match open_range_content_for_descriptor(descriptor)? {
         RangeContentReader::Seekable(mut reader) => {
             read_seekable_range(reader.as_mut(), offset, length)
@@ -522,6 +530,143 @@ fn open_raw_descriptor_file(
         evidence_core::RawImageReader::open(source_path)
             .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
     })
+}
+
+fn try_read_ntfs_image_range_for_descriptor(
+    descriptor: &PreviewDescriptor,
+    offset: u64,
+    length: usize,
+) -> Result<Option<Vec<u8>>, FileServiceError> {
+    if !matches!(descriptor.source_kind.as_str(), "e01" | "raw") {
+        return Ok(None);
+    }
+    if descriptor.partition_candidates.is_empty() {
+        return Ok(None);
+    }
+
+    let source_path = Path::new(&descriptor.source_path);
+    let path_candidates = descriptor_image_path_candidates(descriptor);
+    match descriptor.source_kind.as_str() {
+        "e01" => try_read_ntfs_image_range_from_candidates(
+            source_path,
+            &descriptor.partition_candidates,
+            &path_candidates,
+            offset,
+            length,
+            |path| {
+                open_e01_reader_cached(path)
+                    .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+            },
+        ),
+        "raw" => try_read_ntfs_image_range_from_candidates(
+            source_path,
+            &descriptor.partition_candidates,
+            &path_candidates,
+            offset,
+            length,
+            |path| {
+                evidence_core::RawImageReader::open(path)
+                    .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+            },
+        ),
+        _ => Ok(None),
+    }
+}
+
+fn try_read_ntfs_image_range_for_entry(
+    conn: &Connection,
+    repo: &FileRepo<'_>,
+    entry: &FileEntry,
+    offset: u64,
+    length: usize,
+) -> Result<Option<Vec<u8>>, FileServiceError> {
+    let (source_kind, source_path) = repo
+        .find_data_source_location(&entry.data_source_id)?
+        .ok_or_else(|| FileServiceError::not_found("Data source not found"))?;
+    let expected_partition_index = root_partition_index_for_entry(repo, entry);
+
+    match source_kind.as_str() {
+        "e01" => {
+            let candidates = e01_partition_candidates(conn, entry, expected_partition_index)?;
+            let path_candidates = entry_image_path_candidates(entry);
+            try_read_ntfs_image_range_from_candidates(
+                Path::new(&source_path),
+                &candidates,
+                &path_candidates,
+                offset,
+                length,
+                |path| {
+                    open_e01_reader_cached(path)
+                        .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+                },
+            )
+        }
+        "raw" => {
+            let candidates = raw_partition_candidates(&source_path, expected_partition_index)?;
+            let path_candidates = entry_image_path_candidates(entry);
+            try_read_ntfs_image_range_from_candidates(
+                Path::new(&source_path),
+                &candidates,
+                &path_candidates,
+                offset,
+                length,
+                |path| {
+                    evidence_core::RawImageReader::open(path)
+                        .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+                },
+            )
+        }
+        _ => Ok(None),
+    }
+}
+
+fn try_read_ntfs_image_range_from_candidates<F>(
+    source_path: &Path,
+    partition_candidates: &[PreviewPartitionCandidate],
+    path_candidates: &[String],
+    offset: u64,
+    length: usize,
+    mut open_reader: F,
+) -> Result<Option<Vec<u8>>, FileServiceError>
+where
+    F: FnMut(&Path) -> std::io::Result<Box<dyn evidence_core::EvidenceReader>>,
+{
+    for candidate in partition_candidates {
+        if candidate.filesystem_kind != "NTFS" {
+            continue;
+        }
+
+        let boxed_reader = open_reader(source_path)?;
+        let fs = match fs_ntfs::NtfsReader::open(boxed_reader, candidate.offset) {
+            Ok(fs) => fs,
+            Err(error) => {
+                tracing::warn!(
+                    partition_index = candidate.partition_index,
+                    offset = candidate.offset,
+                    error = %error,
+                    "Descriptor NTFS range open failed"
+                );
+                continue;
+            }
+        };
+
+        for path in path_candidates {
+            match fs.read_file_range(path, offset, length) {
+                Ok(bytes) => return Ok(Some(bytes)),
+                Err(error) => {
+                    tracing::warn!(
+                        path = %path,
+                        partition_index = candidate.partition_index,
+                        offset = candidate.offset,
+                        error = %error,
+                        "Descriptor NTFS range read failed for path candidate"
+                    );
+                }
+            }
+        }
+    }
+
+    Ok(None)
 }
 
 fn open_descriptor_image_file<F>(
@@ -620,6 +765,18 @@ fn descriptor_image_path_candidates(descriptor: &PreviewDescriptor) -> Vec<Strin
     }
 
     push_unique_path_candidate(&mut candidates, &descriptor.file_id);
+    candidates
+}
+
+fn entry_image_path_candidates(entry: &FileEntry) -> Vec<String> {
+    let mut candidates = Vec::new();
+    push_unique_path_candidate(&mut candidates, entry.path.trim());
+
+    if let Some(stripped) = strip_partition_path_prefix(&entry.path) {
+        push_unique_path_candidate(&mut candidates, stripped);
+    }
+
+    push_unique_path_candidate(&mut candidates, &entry.id.0);
     candidates
 }
 
@@ -1395,6 +1552,85 @@ mod tests {
         desc
     }
 
+    fn write_large_ntfs_raw_fixture(path: &std::path::Path, marker: &[u8]) -> std::io::Result<()> {
+        const CLUSTER_SIZE: usize = 512;
+        const MFT_RECORD_SIZE: usize = 1024;
+        const MFT_CLUSTER: usize = 2;
+        const FILE_RECORD: u64 = 6;
+        const DATA_CLUSTER: usize = 32;
+        const SPARSE_PREFIX_CLUSTERS: u64 = (128 * 1024 * 1024) / CLUSTER_SIZE as u64;
+
+        let rec5_off = MFT_CLUSTER * CLUSTER_SIZE + 5 * MFT_RECORD_SIZE;
+        let rec6_off = MFT_CLUSTER * CLUSTER_SIZE + FILE_RECORD as usize * MFT_RECORD_SIZE;
+        let data_off = DATA_CLUSTER * CLUSTER_SIZE;
+        let total = data_off + CLUSTER_SIZE;
+        let mut data = vec![0u8; total];
+
+        let boot = &mut data[0..512];
+        boot[0] = 0xEB;
+        boot[1] = 0x52;
+        boot[2] = 0x90;
+        boot[3..11].copy_from_slice(b"NTFS    ");
+        boot[11..13].copy_from_slice(&512u16.to_le_bytes());
+        boot[13] = 1;
+        boot[0x30..0x38].copy_from_slice(&(MFT_CLUSTER as u64).to_le_bytes());
+        boot[0x40..0x44].copy_from_slice(&(-10i32).to_le_bytes());
+        boot[510] = 0x55;
+        boot[511] = 0xAA;
+
+        let rec5 = &mut data[rec5_off..rec5_off + MFT_RECORD_SIZE];
+        rec5[0..4].copy_from_slice(b"FILE");
+        rec5[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+        rec5[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+        rec5[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+        let iro = 0x68usize;
+        rec5[iro..iro + 4].copy_from_slice(&0x90u32.to_le_bytes());
+        rec5[iro + 0x10..iro + 0x14].copy_from_slice(&0x10u32.to_le_bytes());
+        let mut entry = vec![0u8; 0x52 + "large.bin".encode_utf16().count() * 2];
+        let entry_len = entry.len();
+        entry[0..8].copy_from_slice(&FILE_RECORD.to_le_bytes());
+        entry[8..10].copy_from_slice(&(entry_len as u16).to_le_bytes());
+        entry[0x40..0x48]
+            .copy_from_slice(&((128u64 * 1024 * 1024) + marker.len() as u64).to_le_bytes());
+        entry[0x50] = "large.bin".encode_utf16().count() as u8;
+        for (i, ch) in "large.bin".encode_utf16().enumerate() {
+            entry[0x52 + i * 2..0x54 + i * 2].copy_from_slice(&ch.to_le_bytes());
+        }
+        let mut off = iro + 0x20;
+        rec5[off..off + entry.len()].copy_from_slice(&entry);
+        off += entry.len();
+        rec5[off..off + 4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+        off += 4;
+        rec5[iro + 4..iro + 8].copy_from_slice(&((off - iro) as u32).to_le_bytes());
+
+        let rec6 = &mut data[rec6_off..rec6_off + MFT_RECORD_SIZE];
+        rec6[0..4].copy_from_slice(b"FILE");
+        rec6[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+        rec6[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+        rec6[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+        let data_attr = 0x68usize;
+        let logical_size = (128u64 * 1024 * 1024) + marker.len() as u64;
+        rec6[data_attr..data_attr + 4].copy_from_slice(&0x80u32.to_le_bytes());
+        rec6[data_attr + 8] = 1;
+        rec6[data_attr + 0x20..data_attr + 0x22].copy_from_slice(&0x40u16.to_le_bytes());
+        rec6[data_attr + 0x28..data_attr + 0x30]
+            .copy_from_slice(&((SPARSE_PREFIX_CLUSTERS + 1) * CLUSTER_SIZE as u64).to_le_bytes());
+        rec6[data_attr + 0x30..data_attr + 0x38].copy_from_slice(&logical_size.to_le_bytes());
+
+        let run = data_attr + 0x40;
+        rec6[run] = 0x03;
+        rec6[run + 1..run + 4].copy_from_slice(&SPARSE_PREFIX_CLUSTERS.to_le_bytes()[..3]);
+        rec6[run + 4] = 0x11;
+        rec6[run + 5] = 1;
+        rec6[run + 6] = DATA_CLUSTER as u8;
+        rec6[run + 7] = 0;
+        let attr_len = (run + 8 - data_attr) as u32;
+        rec6[data_attr + 4..data_attr + 8].copy_from_slice(&attr_len.to_le_bytes());
+
+        data[data_off..data_off + marker.len()].copy_from_slice(marker);
+        std::fs::write(path, data)
+    }
+
     #[test]
     fn logical_directory_mid_file_range_uses_seek_not_linear_skip() {
         let dir = tempfile::TempDir::new().unwrap();
@@ -1538,6 +1774,41 @@ mod tests {
         let third = read_with_cache(29, 7).unwrap();
         assert_eq!(third, bytes[29..36].to_vec());
         assert_eq!(set_calls.get(), 2);
+    }
+
+    #[test]
+    fn raw_ntfs_mid_file_range_uses_ntfs_range_reader_without_materialize() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let raw_path = dir.path().join("large_ntfs.raw");
+        let marker = b"RANGE-ONLY";
+        write_large_ntfs_raw_fixture(&raw_path, marker).unwrap();
+
+        let huge_size = (128u64 * 1024 * 1024) + marker.len() as u64;
+        let descriptor = PreviewDescriptor {
+            case_id: "case-raw-ntfs-range".to_string(),
+            file_id: "mft:1:6".to_string(),
+            source_kind: "raw".to_string(),
+            source_path: raw_path.display().to_string(),
+            partition_index: Some(1),
+            filesystem_kind: Some("NTFS".to_string()),
+            path: "[P1]/large.bin".to_string(),
+            mime: Some("application/octet-stream".to_string()),
+            size: huge_size,
+            data_source_id: "ds-raw-ntfs-range".to_string(),
+            partition_candidates: vec![PreviewPartitionCandidate {
+                partition_index: 1,
+                filesystem_kind: "NTFS".to_string(),
+                offset: 0,
+            }],
+        };
+
+        reset_skip_reader_bytes_call_count();
+        let bytes =
+            read_file_bytes_for_descriptor(&descriptor, 128u64 * 1024 * 1024, marker.len() as u32)
+                .unwrap();
+
+        assert_eq!(bytes, marker);
+        assert_eq!(skip_reader_bytes_call_count(), 0);
     }
 
     #[test]
