@@ -549,13 +549,15 @@ mod tests {
             .expect("create test case");
         let state = AppState::default();
 
-        init_case_db(&state).expect("initialize pool");
+        // No active case — get_connection must fail
         let no_active_case = state
             .get_connection()
             .expect_err("pool access must require active case");
         assert!(no_active_case.contains("No active case"));
 
+        // Set active case and initialize pragmas
         *state.active_case.lock().expect("active case lock") = Some(active);
+        state.init_db_pragmas().expect("initialize pragmas");
         state
             .get_connection()
             .expect("pool available when active case is set");
@@ -581,14 +583,14 @@ mod tests {
         let db_path = active.db_path();
         let state = AppState::default();
 
-        init_case_db(&state).expect("initialize pool");
         let no_case = require_active_case(&state).expect_err("active case required");
         assert_eq!(no_case.code, "NO_ACTIVE_CASE");
 
         *state.active_case.lock().expect("active case lock") = Some(active);
+        state.init_db_pragmas().expect("initialize pragmas");
         let snapshot = require_active_case(&state).expect("snapshot available");
         assert_eq!(snapshot.db_path, db_path);
-        get_case_connection(&state).expect("pooled connection available");
+        get_case_connection(&state).expect("connection available");
 
         *state.active_case.lock().expect("active case lock") = None;
         let no_case_again = get_case_connection(&state).expect_err("connection requires case");
