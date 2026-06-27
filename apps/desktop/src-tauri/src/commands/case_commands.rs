@@ -20,6 +20,32 @@ fn init_case_db(state: &AppState) -> Result<(), CommandError> {
         .map_err(CommandError::from_service_error)
 }
 
+/// Validate that a case path is under the configured `caseRoot` from settings.
+/// This prevents cases from being created/opened outside the managed directory.
+fn validate_case_path_under_settings_root(
+    state: &AppState,
+    case_root: &std::path::Path,
+) -> Result<(), CommandError> {
+    let settings = load_app_settings(&state.app_settings_path)
+        .map_err(CommandError::from_service_error)?;
+    let allowed = std::path::PathBuf::from(&settings.case_root);
+    let canon_allowed = allowed
+        .canonicalize()
+        .unwrap_or(allowed.clone());
+    let canon_case = case_root
+        .canonicalize()
+        .unwrap_or(case_root.to_path_buf());
+
+    if !canon_case.starts_with(&canon_allowed) {
+        return Err(CommandError::invalid_input(format!(
+            "案件路径 '{}' 不在配置的案件目录 '{}' 下。请在设置中更改案件目录，或将案件创建在该目录内。",
+            case_root.display(),
+            allowed.display()
+        )));
+    }
+    Ok(())
+}
+
 fn meta_to_dto(meta: &domain::CaseMeta) -> CaseSummaryDto {
     CaseSummaryDto {
         id: meta.id.0.clone(),
@@ -46,6 +72,7 @@ pub fn create_case(
 ) -> Result<CaseSummaryDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let root = PathBuf::from(&request.case_root);
+    validate_case_path_under_settings_root(&state, &root)?;
     let active = case_service::create_case(&root, &request.name, request.examiner.as_deref())
         .map_err(CommandError::from_service_error)?;
     let active_case_root = active.case_root.clone();
@@ -70,6 +97,7 @@ pub fn open_case(
 ) -> Result<CaseSummaryDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let root = PathBuf::from(&request.case_root);
+    validate_case_path_under_settings_root(&state, &root)?;
     let active = case_service::open_case(&root).map_err(CommandError::from_service_error)?;
     init_case_db(&state)?;
 
