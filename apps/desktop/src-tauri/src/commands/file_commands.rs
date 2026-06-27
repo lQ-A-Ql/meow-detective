@@ -358,51 +358,7 @@ pub async fn get_image_preview(
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let conn = crate::commands::command_support::get_case_connection(&app_state)?;
-
-        // Get file handle
-        let case_id = current_case_id_for_preview(&app_state)?;
-        let handle = with_preview_cache_context!(&app_state, &conn, case_id.as_str(), |context| {
-            file_service::open_file_handle_real(context, &file_id)
-        })
-        .map_err(CommandError::from_service_error)?;
-
-        // Check if it's an image
-        let mime = handle.mime.as_deref().unwrap_or("");
-        if !mime.starts_with("image/") {
-            return Err(CommandError::from_service_error("Not an image file"));
-        }
-
-        if handle.size > infrastructure::constants::MAX_INLINE_IMAGE_PREVIEW_BYTES {
-            return Err(CommandError::invalid_input(format!(
-                "Image preview is limited to {} MB",
-                infrastructure::constants::MAX_INLINE_IMAGE_PREVIEW_BYTES
-                    / infrastructure::constants::BYTES_PER_MB
-            )));
-        }
-
-        let mut reader =
-            with_preview_cache_context!(&app_state, &conn, case_id.as_str(), |context| {
-                file_service::open_file_content_by_id(
-                    context,
-                    &domain::FileEntryId(file_id.clone()),
-                )
-            })
-            .map_err(CommandError::from_service_error)?;
-        let mut content_bytes = Vec::with_capacity(handle.size as usize);
-        reader
-            .read_to_end(&mut content_bytes)
-            .map_err(CommandError::from_service_error)?;
-
-        // Base64 encode
-        let base64 = base64::engine::general_purpose::STANDARD.encode(&content_bytes);
-
-        Ok(ImagePreviewDto {
-            data_url: format!("data:{};base64,{}", mime, base64),
-            mime_type: mime.to_string(),
-            width: 0,  // Frontend will detect
-            height: 0, // Frontend will detect
-            size: handle.size,
-        })
+        image_preview_for_file(&app_state, &conn, &file_id)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -486,6 +442,43 @@ pub async fn extract_file(
     })
     .await
     .map_err(CommandError::from_join_error)?
+}
+
+fn image_preview_for_file(
+    state: &AppState,
+    conn: &rusqlite::Connection,
+    file_id: &str,
+) -> Result<ImagePreviewDto, CommandError> {
+    let case_id = current_case_id_for_preview(state)?;
+    let handle = with_preview_cache_context!(state, conn, case_id.as_str(), |context| {
+        file_service::open_file_handle_real(context, file_id)
+    })
+    .map_err(CommandError::from_service_error)?;
+
+    let mime = handle.mime.as_deref().unwrap_or("");
+    if !mime.starts_with("image/") {
+        return Err(CommandError::from_service_error("Not an image file"));
+    }
+
+    if handle.size > infrastructure::constants::MAX_INLINE_IMAGE_PREVIEW_BYTES {
+        return Err(CommandError::invalid_input(format!(
+            "Image preview is limited to {} MB",
+            infrastructure::constants::MAX_INLINE_IMAGE_PREVIEW_BYTES
+                / infrastructure::constants::BYTES_PER_MB
+        )));
+    }
+
+    let content_bytes =
+        read_inline_preview_bytes_for_file(state, conn, &case_id, file_id, handle.size)?;
+    let base64 = base64::engine::general_purpose::STANDARD.encode(&content_bytes);
+
+    Ok(ImagePreviewDto {
+        data_url: format!("data:{};base64,{}", mime, base64),
+        mime_type: mime.to_string(),
+        width: 0,  // Frontend will detect
+        height: 0, // Frontend will detect
+        size: handle.size,
+    })
 }
 
 fn media_data_url_for_file(
@@ -626,6 +619,39 @@ fn read_media_bytes_for_file(
     read_preview_bytes_for_file(state, conn, case_id, file_id, offset, length)
 }
 
+fn read_inline_preview_bytes_for_file(
+    state: &AppState,
+    conn: &rusqlite::Connection,
+    case_id: &str,
+    file_id: &str,
+    size: u64,
+) -> Result<Vec<u8>, CommandError> {
+    let mut bytes = Vec::with_capacity(size as usize);
+    let mut offset = 0u64;
+
+    while offset < size {
+        let length = (size - offset).min(transport::dto::MAX_VIEWER_RANGE_LENGTH as u64) as u32;
+        if length == 0 {
+            break;
+        }
+
+        let chunk = read_preview_bytes_for_file(state, conn, case_id, file_id, offset, length)?;
+        if chunk.is_empty() {
+            break;
+        }
+
+        let is_short_read = chunk.len() < length as usize;
+        offset = offset.saturating_add(chunk.len() as u64);
+        bytes.extend_from_slice(&chunk);
+
+        if is_short_read {
+            break;
+        }
+    }
+
+    Ok(bytes)
+}
+
 fn read_preview_bytes_for_file(
     state: &AppState,
     conn: &rusqlite::Connection,
@@ -759,6 +785,7 @@ mod tests {
 
     fn with_raw_exfat_case_file(
         case_name: &str,
+        ext: &str,
         test: impl FnOnce(
             &rusqlite::Connection,
             String,
@@ -798,7 +825,7 @@ mod tests {
                     name: "LARGE.BIN".to_string(),
                     entry_type: domain::EntryType::File,
                     size: Some(1536),
-                    ext: Some("bin".to_string()),
+                    ext: Some(ext.to_string()),
                     deleted: false,
                     hidden: false,
                     system: false,
@@ -903,6 +930,37 @@ mod tests {
                 assert!(!url.starts_with("asset://"));
                 assert!(!url.contains(&evidence_dir.to_string_lossy().to_string()));
                 assert!(media.can_read_ranges);
+
+                Ok(())
+            },
+        );
+    }
+
+    #[test]
+    fn image_preview_logical_directory_reads_direct_without_service_fallback() {
+        with_logical_case_file(
+            "image-inline-logical",
+            "tiny.png",
+            b"tiny image bytes",
+            |conn, file_id, _| {
+                let case_id = "case-image-inline-logical";
+                let state = test_state_with_case(case_id);
+                let service_before = file_bytes_service_read_call_count(case_id);
+                let image = image_preview_for_file(&state, conn, &file_id)
+                    .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
+
+                assert_eq!(image.mime_type, "image/png");
+                assert_eq!(
+                    file_bytes_service_read_call_count(case_id) - service_before,
+                    0
+                );
+                let (_, encoded) = image.data_url.split_once(',').expect("data URL payload");
+                assert_eq!(
+                    base64::engine::general_purpose::STANDARD
+                        .decode(encoded.as_bytes())
+                        .unwrap(),
+                    b"tiny image bytes"
+                );
 
                 Ok(())
             },
@@ -1089,7 +1147,7 @@ mod tests {
 
     #[test]
     fn media_range_mid_raw_image_reads_via_bytes_only_service_path() {
-        with_raw_exfat_case_file("media-raw-range", |conn, case_id, file_id| {
+        with_raw_exfat_case_file("media-raw-range", "bin", |conn, case_id, file_id| {
             let state = test_state_with_case(&case_id);
             let handle_id = crate::media_protocol::create_scoped_media_handle(&state, &file_id)
                 .map_err(persistence_sqlite::DbError::System)?;
@@ -1130,8 +1188,35 @@ mod tests {
     }
 
     #[test]
+    fn image_preview_raw_image_reads_via_bytes_only_service_path() {
+        with_raw_exfat_case_file("image-raw-inline", "png", |conn, case_id, file_id| {
+            let state = test_state_with_case(&case_id);
+
+            let service_before = file_bytes_service_read_call_count(&case_id);
+            let image = image_preview_for_file(&state, conn, &file_id)
+                .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
+
+            assert_eq!(image.mime_type, "image/png");
+            assert_eq!(
+                file_bytes_service_read_call_count(&case_id) - service_before,
+                1
+            );
+            let (_, encoded) = image.data_url.split_once(',').expect("data URL payload");
+            let decoded = base64::engine::general_purpose::STANDARD
+                .decode(encoded.as_bytes())
+                .unwrap();
+            assert_eq!(decoded.len(), 1536);
+            assert_eq!(&decoded[0..512], vec![b'A'; 512].as_slice());
+            assert_eq!(&decoded[512..1024], vec![b'B'; 512].as_slice());
+            assert_eq!(&decoded[1024..1536], vec![b'C'; 512].as_slice());
+
+            Ok(())
+        });
+    }
+
+    #[test]
     fn text_preview_raw_image_header_reads_via_bytes_only_service_path() {
-        with_raw_exfat_case_file("text-raw-header", |conn, case_id, file_id| {
+        with_raw_exfat_case_file("text-raw-header", "bin", |conn, case_id, file_id| {
             let state = test_state_with_case(&case_id);
 
             let service_before = file_bytes_service_read_call_count(&case_id);

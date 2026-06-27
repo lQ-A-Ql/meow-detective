@@ -106,6 +106,12 @@ static SKIP_READER_BYTES_CALLS: std::sync::atomic::AtomicUsize =
 static FORMAT_HEX_LINES_CALLS: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
+#[cfg(test)]
+thread_local! {
+    static OPEN_FILE_CONTENT_BY_ID_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static READ_FILE_BYTES_FOR_CASE_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 struct E01ReaderCache {
     max_size: usize,
     paths: VecDeque<PathBuf>,
@@ -311,6 +317,9 @@ pub fn open_file_content_by_id<C>(
 where
     C: PreviewReadContext,
 {
+    #[cfg(test)]
+    OPEN_FILE_CONTENT_BY_ID_CALLS.with(|calls| calls.set(calls.get() + 1));
+
     if context.case_id().is_empty() {
         let repo = FileRepo::new(context.conn());
         let entry = repo
@@ -347,6 +356,9 @@ pub fn read_file_bytes_for_case<C>(
 where
     C: PreviewReadContext,
 {
+    #[cfg(test)]
+    READ_FILE_BYTES_FOR_CASE_CALLS.with(|calls| calls.set(calls.get() + 1));
+
     if context.case_id().is_empty() {
         let repo = FileRepo::new(context.conn());
         let entry = repo
@@ -1188,10 +1200,33 @@ pub fn read_file_header_by_id(
     file_id: &FileEntryId,
     max_bytes: usize,
 ) -> Result<Vec<u8>, FileServiceError> {
-    let mut reader = open_file_content_by_id(conn, file_id)?;
-    let mut limited = reader.by_ref().take(max_bytes as u64);
-    let mut bytes = Vec::new();
-    limited.read_to_end(&mut bytes)?;
+    let mut bytes = Vec::with_capacity(max_bytes.min(infrastructure::constants::MAX_RANGE_LENGTH));
+    let mut offset = 0u64;
+    let mut remaining = max_bytes;
+
+    while remaining > 0 {
+        let chunk_len = remaining
+            .min(infrastructure::constants::MAX_RANGE_LENGTH)
+            .min(u32::MAX as usize) as u32;
+        if chunk_len == 0 {
+            break;
+        }
+
+        let chunk = read_file_bytes_for_case(conn, file_id, offset, chunk_len)?;
+        if chunk.is_empty() {
+            break;
+        }
+
+        let is_short_read = chunk.len() < chunk_len as usize;
+        offset = offset.saturating_add(chunk.len() as u64);
+        remaining = remaining.saturating_sub(chunk.len());
+        bytes.extend_from_slice(&chunk);
+
+        if is_short_read {
+            break;
+        }
+    }
+
     Ok(bytes)
 }
 
@@ -1751,21 +1786,19 @@ fn open_e01_file(
                     }
                 }
             }
-            _ if exfat_hint => {
-                match fs_exfat::ExfatReader::open(boxed_reader, target.offset) {
-                    Ok(fs) => open_first_image_path(&fs, &path_candidates),
-                    Err(e) => {
-                        tracing::warn!(
-                            path = %entry.path,
-                            partition = %target.name,
-                            offset = %target.offset,
-                            error = %e,
-                            "E01 exFAT open failed"
-                        );
-                        continue;
-                    }
+            _ if exfat_hint => match fs_exfat::ExfatReader::open(boxed_reader, target.offset) {
+                Ok(fs) => open_first_image_path(&fs, &path_candidates),
+                Err(e) => {
+                    tracing::warn!(
+                        path = %entry.path,
+                        partition = %target.name,
+                        offset = %target.offset,
+                        error = %e,
+                        "E01 exFAT open failed"
+                    );
+                    continue;
                 }
-            }
+            },
             _ => continue,
         };
 
@@ -1984,6 +2017,22 @@ mod tests {
 
     fn format_hex_lines_call_count() -> usize {
         FORMAT_HEX_LINES_CALLS.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    fn reset_open_file_content_by_id_call_count() {
+        OPEN_FILE_CONTENT_BY_ID_CALLS.with(|calls| calls.set(0));
+    }
+
+    fn open_file_content_by_id_call_count() -> usize {
+        OPEN_FILE_CONTENT_BY_ID_CALLS.with(std::cell::Cell::get)
+    }
+
+    fn reset_read_file_bytes_for_case_call_count() {
+        READ_FILE_BYTES_FOR_CASE_CALLS.with(|calls| calls.set(0));
+    }
+
+    fn read_file_bytes_for_case_call_count() -> usize {
+        READ_FILE_BYTES_FOR_CASE_CALLS.with(std::cell::Cell::get)
     }
 
     fn make_temp_e01() -> (tempfile::TempDir, PathBuf) {
@@ -2520,6 +2569,58 @@ mod tests {
         .unwrap();
 
         assert_eq!(bytes, vec![b'B'; 9]);
+        assert_eq!(skip_reader_bytes_call_count(), 0);
+    }
+
+    #[test]
+    fn raw_exfat_text_header_reads_via_bytes_only_fast_path() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let raw_path = dir.path().join("exfat.raw");
+        write_exfat_raw_fixture(&raw_path).unwrap();
+
+        let conn = persistence_sqlite::open_or_create(&dir.path().join("case.db")).unwrap();
+        runner::run_all(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO cases (id, name, created_at, updated_at)
+             VALUES ('case-raw-exfat-header', 'Raw exFAT Header Case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+
+        let ds_id = DataSourceId("ds-raw-exfat-header".to_string());
+        DataSourceRepo::new(&conn)
+            .insert(
+                &CaseId("case-raw-exfat-header".to_string()),
+                &DataSource {
+                    id: ds_id.clone(),
+                    name: "raw exfat evidence".to_string(),
+                    kind: DataSourceKind::Raw,
+                    source_path: raw_path,
+                    imported_at: chrono::Utc::now(),
+                    provenance: DataSourceProvenance::unknown(),
+                },
+            )
+            .unwrap();
+
+        conn.execute(
+            "INSERT INTO file_entries
+             (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
+             VALUES ('file-raw-exfat-header', NULL, ?1, 'LARGE.BIN', 'LARGE.BIN', 'file', ?2, 'bin', 0, 0, 0)",
+            params![ds_id.0, 1536i64],
+        )
+        .unwrap();
+
+        reset_open_file_content_by_id_call_count();
+        reset_read_file_bytes_for_case_call_count();
+        reset_skip_reader_bytes_call_count();
+
+        let bytes =
+            read_file_header_by_id(&conn, &FileEntryId("file-raw-exfat-header".to_string()), 16)
+                .unwrap();
+
+        assert_eq!(bytes, vec![b'A'; 16]);
+        assert_eq!(read_file_bytes_for_case_call_count(), 1);
+        assert_eq!(open_file_content_by_id_call_count(), 0);
         assert_eq!(skip_reader_bytes_call_count(), 0);
     }
 
