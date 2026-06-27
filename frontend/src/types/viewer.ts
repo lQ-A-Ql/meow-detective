@@ -17,6 +17,29 @@ export interface ViewerRangeResponse {
   rawBytes?: number[];
 }
 
+export type HexViewerMode = 'full' | 'chunked';
+
+export interface HexLoadedRange {
+  start: number;
+  end: number;
+}
+
+export interface FileHexViewerState {
+  handle: ViewerHandle;
+  mode: HexViewerMode;
+  chunkSize: number;
+  fileSize: number;
+  lines: string[];
+  loadedRanges: HexLoadedRange[];
+  activeOffset: number;
+  jumpOffsetInput: string;
+  isFullyLoaded: boolean;
+  isLoadingMore: boolean;
+  hasMoreBefore: boolean;
+  hasMoreAfter: boolean;
+  error?: string;
+}
+
 export interface MediaUrl {
   url?: string;
   handleId?: string;

@@ -235,10 +235,26 @@ describe('FileBrowser media preview', () => {
     );
     mocks.fileJumpContext.mockReturnValue(queryState(null));
     mocks.fileViewer.mockReturnValue(
-      queryState({
-        handle: { handleId: 'file:video-1', size: videoFile.size, mime: 'video/mp4' },
-        range: { kind: 'hex', lines: [] },
-      }),
+      {
+        ...queryState({
+          handle: { handleId: 'file:video-1', size: videoFile.size, mime: 'video/mp4' },
+          mode: 'chunked',
+          chunkSize: 1024 * 1024,
+          fileSize: videoFile.size,
+          lines: [],
+          loadedRanges: [],
+          activeOffset: 0,
+          jumpOffsetInput: '0x0',
+          isFullyLoaded: false,
+          isLoadingMore: false,
+          hasMoreBefore: false,
+          hasMoreAfter: true,
+        }),
+        setJumpOffsetInput: vi.fn(),
+        jumpToOffset: vi.fn(),
+        loadNextRange: vi.fn(),
+        loadPreviousRange: vi.fn(),
+      },
     );
     mocks.textPreview.mockReturnValue(queryState(null));
     mocks.imagePreview.mockReturnValue(queryState(null));
@@ -319,6 +335,43 @@ describe('FileBrowser media preview', () => {
     );
     expect(screen.getByTestId('video-viewer').textContent).not.toContain('C:\\');
     expect(screen.getByTestId('video-viewer').textContent).not.toContain('D:\\');
+  });
+
+  it('does not render paging controls in hex preview mode', () => {
+    Object.assign(mocks.uiState, {
+      viewerTab: 'hex',
+    });
+    mocks.fileViewer.mockReturnValue({
+      ...queryState({
+        handle: { handleId: 'file:hex-1', size: 2048, mime: 'image/png' },
+        mode: 'full',
+        chunkSize: 1024 * 1024,
+        fileSize: 2048,
+        lines: [
+          '00000000  89 50 4E 47 0D 0A 1A 0A  00 00 00 0D 49 48 44 52',
+          '00000010  00 00 07 80 00 04 38 08  06 00 00 00 E8 D3 C1',
+        ],
+        loadedRanges: [{ start: 0, end: 2048 }],
+        activeOffset: 0,
+        jumpOffsetInput: '0x0',
+        isFullyLoaded: true,
+        isLoadingMore: false,
+        hasMoreBefore: false,
+        hasMoreAfter: false,
+      }),
+      setJumpOffsetInput: vi.fn(),
+      jumpToOffset: vi.fn(),
+      loadNextRange: vi.fn(),
+      loadPreviousRange: vi.fn(),
+    });
+
+    renderPage();
+
+    expect(screen.queryByText('上一页')).toBeNull();
+    expect(screen.queryByText('下一页')).toBeNull();
+    expect(screen.queryByText(/显示第/)).toBeNull();
+    expect(screen.getByText('完整 Hex 预览')).toBeDefined();
+    expect(screen.queryByRole('button', { name: '跳转' })).toBeNull();
   });
 
   it('hides hidden and system files by default and reloads rows when enabled', async () => {
@@ -578,4 +631,3 @@ describe('FileBrowser media preview', () => {
     expect(screen.getAllByText('secret.dat').length).toBeGreaterThan(0);
   });
 });
-

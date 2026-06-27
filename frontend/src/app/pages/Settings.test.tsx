@@ -92,10 +92,10 @@ describe('Settings page', () => {
     vi.stubGlobal('localStorage', storage);
     render(<Settings />);
 
-    const caseRoot = await screen.findByLabelText('案件目录');
+    const caseRoot = await screen.findByLabelText('案件默认存储路径');
     const themeSelect = screen.getByLabelText('主题') as HTMLSelectElement;
     await waitFor(() => expect(themeSelect.value).toBe('dark'));
-    fireEvent.change(caseRoot, { target: { value: 'C:\\Cases' } });
+    fireEvent.change(caseRoot, { target: { value: 'C:\\ForensicsWorkbench\\cases' } });
     fireEvent.change(screen.getByLabelText('镜像搜索路径'), {
       target: { value: 'D:\\Images; F:\\MoreImages' },
     });
@@ -105,7 +105,7 @@ describe('Settings page', () => {
 
     await waitFor(() => {
       expect(mocks.saveAppSettings).toHaveBeenCalledWith({
-        caseRoot: 'C:\\Cases',
+        caseRoot: 'C:\\ForensicsWorkbench\\cases',
         imageSearchPaths: ['D:\\Images', 'F:\\MoreImages'],
         theme: 'light',
         devEventTrace: false,
@@ -117,7 +117,7 @@ describe('Settings page', () => {
     expect(await screen.findByText('设置已保存。')).toBeTruthy();
     expect(storage.setItem).toHaveBeenCalledWith(
       'forensics.localSettings',
-      expect.stringContaining('"caseRoot":"C:\\\\Cases"'),
+      expect.stringContaining('"caseRoot":"C:\\\\ForensicsWorkbench\\\\cases"'),
     );
     expect(document.documentElement.dataset.theme).toBe('light');
   });
@@ -127,7 +127,7 @@ describe('Settings page', () => {
 
     render(<Settings />);
 
-    expect(await screen.findByDisplayValue('C:\\Cases')).toBeTruthy();
+    expect(await screen.findByDisplayValue('C:\\ForensicsWorkbench\\cases')).toBeTruthy();
     expect((screen.getByLabelText('镜像搜索路径') as HTMLInputElement).value).toBe(
       'E:\\cases\\; D:\\images\\',
     );

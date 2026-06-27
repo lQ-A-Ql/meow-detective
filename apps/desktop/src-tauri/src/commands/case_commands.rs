@@ -12,38 +12,10 @@ use transport::{
 
 use crate::{events::event_bridge, state::AppState};
 
-use super::settings_commands::load_app_settings;
-
 fn init_case_db(state: &AppState) -> Result<(), CommandError> {
     state
         .init_db_pragmas()
         .map_err(CommandError::from_service_error)
-}
-
-/// Validate that a case path is under the configured `caseRoot` from settings.
-/// This prevents cases from being created/opened outside the managed directory.
-fn validate_case_path_under_settings_root(
-    state: &AppState,
-    case_root: &std::path::Path,
-) -> Result<(), CommandError> {
-    let settings = load_app_settings(&state.app_settings_path)
-        .map_err(CommandError::from_service_error)?;
-    let allowed = std::path::PathBuf::from(&settings.case_root);
-    let canon_allowed = allowed
-        .canonicalize()
-        .unwrap_or(allowed.clone());
-    let canon_case = case_root
-        .canonicalize()
-        .unwrap_or(case_root.to_path_buf());
-
-    if !canon_case.starts_with(&canon_allowed) {
-        return Err(CommandError::invalid_input(format!(
-            "案件路径 '{}' 不在配置的案件目录 '{}' 下。请在设置中更改案件目录，或将案件创建在该目录内。",
-            case_root.display(),
-            allowed.display()
-        )));
-    }
-    Ok(())
 }
 
 fn meta_to_dto(meta: &domain::CaseMeta) -> CaseSummaryDto {
@@ -64,6 +36,29 @@ fn same_path(left: &std::path::Path, right: &std::path::Path) -> bool {
     }
 }
 
+/// Drain jobs and wait for background tasks when deleting the active case.
+fn drain_active_case_jobs(
+    state: &AppState,
+    case_id: &str,
+    timeout: std::time::Duration,
+) {
+    state.task_manager.cancel_all();
+    let _ = state.task_manager.wait_all(timeout);
+
+    match state.get_connection() {
+        Ok(conn) => {
+            if let Err(error) =
+                case_service::close_case_drain(&conn, case_id, timeout.as_millis() as u64)
+            {
+                tracing::warn!("Failed to drain jobs during case delete: {}", error);
+            }
+        }
+        Err(error) => {
+            tracing::warn!("Failed to get connection for case delete drain: {}", error);
+        }
+    }
+}
+
 #[tauri::command]
 pub fn create_case(
     state: State<AppState>,
@@ -72,19 +67,38 @@ pub fn create_case(
 ) -> Result<CaseSummaryDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let root = PathBuf::from(&request.case_root);
-    validate_case_path_under_settings_root(&state, &root)?;
     let active = case_service::create_case(&root, &request.name, request.examiner.as_deref())
         .map_err(CommandError::from_service_error)?;
     let active_case_root = active.case_root.clone();
-    init_case_db(&state)?;
-
     let dto = meta_to_dto(&active.meta);
-    let mut guard = state
-        .active_case
-        .lock()
-        .map_err(|e| CommandError::from_lock_error("Case", e))?;
-    *guard = Some(active);
-    remember_recent_case(&active_case_root, &dto)?;
+    {
+        let mut guard = state
+            .active_case
+            .lock()
+            .map_err(|e| CommandError::from_lock_error("Case", e))?;
+        *guard = Some(active);
+    }
+    if let Err(error) =
+        init_case_db(&state).and_then(|_| remember_recent_case(&active_case_root, &dto))
+    {
+        {
+            let mut guard = state
+                .active_case
+                .lock()
+                .map_err(|e| CommandError::from_lock_error("Case", e))?;
+            *guard = None;
+        }
+        let _ = state.clear_db_state();
+        app_services::file_service::clear_e01_reader_cache();
+        if let Err(cleanup_error) = case_service::delete_case(&active_case_root) {
+            tracing::error!(
+                "Failed to roll back case creation at {}: {}",
+                active_case_root.display(),
+                cleanup_error
+            );
+        }
+        return Err(error);
+    }
     event_bridge::emit_case_opened(&app, &dto.id, &dto.name);
     Ok(dto)
 }
@@ -97,8 +111,15 @@ pub fn open_case(
 ) -> Result<CaseSummaryDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let root = PathBuf::from(&request.case_root);
-    validate_case_path_under_settings_root(&state, &root)?;
     let active = case_service::open_case(&root).map_err(CommandError::from_service_error)?;
+    let dto = meta_to_dto(&active.meta);
+    {
+        let mut guard = state
+            .active_case
+            .lock()
+            .map_err(|e| CommandError::from_lock_error("Case", e))?;
+        *guard = Some(active);
+    }
     init_case_db(&state)?;
 
     // Recover any jobs that were left in a running/cancelling state from a
@@ -124,12 +145,6 @@ pub fn open_case(
         }
     }
 
-    let dto = meta_to_dto(&active.meta);
-    let mut guard = state
-        .active_case
-        .lock()
-        .map_err(|e| CommandError::from_lock_error("Case", e))?;
-    *guard = Some(active);
     remember_recent_case(&root, &dto)?;
     event_bridge::emit_case_opened(&app, &dto.id, &dto.name);
     Ok(dto)
@@ -153,14 +168,15 @@ pub fn create_analysis_demo_case(
         .map_err(CommandError::from_service_error)?;
     app_services::analysis_service::seed_analysis_demo_data(&active)
         .map_err(CommandError::from_service_error)?;
-    init_case_db(&state)?;
-
     let dto = meta_to_dto(&active.meta);
-    let mut guard = state
-        .active_case
-        .lock()
-        .map_err(|e| CommandError::from_lock_error("Case", e))?;
-    *guard = Some(active);
+    {
+        let mut guard = state
+            .active_case
+            .lock()
+            .map_err(|e| CommandError::from_lock_error("Case", e))?;
+        *guard = Some(active);
+    }
+    init_case_db(&state)?;
     remember_recent_case(&case_root.join("Analysis Demo"), &dto)?;
     event_bridge::emit_case_opened(&app, &dto.id, &dto.name);
     Ok(dto)
@@ -187,7 +203,7 @@ pub fn close_case(state: State<AppState>, app: AppHandle) -> Result<(), CommandE
     let timeout = std::time::Duration::from_secs(5);
     let _ = state.task_manager.wait_all(timeout);
 
-    // 3. Drain database jobs �?mark any that are still running as interrupted
+    // 3. Drain database jobs - mark any that are still running as interrupted.
     match state.get_connection() {
         Ok(conn) => {
             let case_id = {
@@ -204,7 +220,7 @@ pub fn close_case(state: State<AppState>, app: AppHandle) -> Result<(), CommandE
                 Ok(drain) => {
                     if !drain.fully_drained {
                         tracing::warn!(
-                            "Degraded case close �?{} job(s) did not drain within {}ms: {:?}",
+                            "Degraded case close - {} job(s) did not drain within {}ms: {:?}",
                             drain.pending_jobs.len(),
                             timeout.as_millis(),
                             drain.pending_jobs,
@@ -224,19 +240,18 @@ pub fn close_case(state: State<AppState>, app: AppHandle) -> Result<(), CommandE
         }
     }
 
-    // 4. Clear pooled database handles before clearing the active case.
+    let closed_case_id = state
+        .active_case
+        .lock()
+        .map_err(|e| CommandError::from_lock_error("Case", e))?
+        .as_ref()
+        .map(|active| active.meta.id.0.clone());
+
+    // 4. Clear active case state after all drain logic finishes.
     state
         .clear_db_state()
         .map_err(CommandError::from_service_error)?;
 
-    // 5. Clear active case
-    let mut guard = state
-        .active_case
-        .lock()
-        .map_err(|e| CommandError::from_lock_error("Case", e))?;
-    let closed_case_id = guard.as_ref().map(|active| active.meta.id.0.clone());
-    *guard = None;
-    drop(guard);
     if let Some(case_id) = &closed_case_id {
         let _ = state.clear_runtime_cache_for_case(case_id);
     }
@@ -269,7 +284,7 @@ pub async fn get_case_metrics(state: State<'_, AppState>) -> Result<CaseMetricsD
                 }
             }
         };
-        // Guard is now dropped �?query with a fresh connection
+        // Guard is now dropped; query with a fresh connection.
         let conn = app_services::connection::open_case_db(&db_path)
             .map_err(CommandError::from_service_error)?;
         let repo = persistence_sqlite::repositories::case_repo::CaseRepo::new(&conn);
@@ -354,7 +369,7 @@ pub async fn rename_data_source(
             let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
             active.db_path()
         };
-        // Guard is now dropped �?query with released lock
+        // Guard is now dropped; query with released lock.
         let conn = app_services::connection::open_case_db(&db_path)
             .map_err(CommandError::from_service_error)?;
         app_services::file_service::rename_data_source_real(
@@ -388,47 +403,58 @@ pub fn remove_case_from_list(request: DeleteCaseRequest) -> Result<String, Comma
 #[tauri::command]
 pub async fn delete_case(
     state: State<'_, AppState>,
+    app: AppHandle,
     request: DeleteCaseRequest,
 ) -> Result<String, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let root = PathBuf::from(&request.case_root);
-
-    // Use user-configured cases directory for validation instead of hardcoded default
-    let settings = load_app_settings(&state.app_settings_path)?;
-    let allowed_root = PathBuf::from(&settings.case_root);
-
-    let mut cleared_active_case = false;
-    let mut cleared_case_id: Option<String> = None;
-    {
-        let mut guard = state
+    let active_snapshot = {
+        let guard = state
             .active_case
             .lock()
             .map_err(|e| CommandError::from_lock_error("Case", e))?;
-        if let Some(ref active) = *guard {
-            if same_path(&active.case_root, &root) {
-                cleared_case_id = Some(active.meta.id.0.clone());
-                *guard = None;
-                cleared_active_case = true;
-            }
-        }
-    }
-    if cleared_active_case {
-        state
-            .clear_db_state()
-            .map_err(CommandError::from_service_error)?;
-        if let Some(case_id) = cleared_case_id.as_deref() {
-            let _ = state.clear_runtime_cache_for_case(case_id);
-        }
+        guard
+            .as_ref()
+            .map(|active| (active.case_root.clone(), active.meta.id.0.clone()))
+    };
+    let deleting_active_case = active_snapshot
+        .as_ref()
+        .map(|(active_root, _)| same_path(active_root, &root))
+        .unwrap_or(false);
+
+    if deleting_active_case {
+        let timeout = std::time::Duration::from_secs(5);
+        let case_id = active_snapshot
+            .as_ref()
+            .map(|(_, case_id)| case_id.as_str())
+            .unwrap_or("");
+        drain_active_case_jobs(&state, case_id, timeout);
     }
 
     let root_clone = root.clone();
-    let allowed_root_clone = allowed_root.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        case_service::delete_case_in(&root_clone, &allowed_root_clone)
-            .map_err(CommandError::from_service_error)
+        case_service::delete_case_in(&root_clone).map_err(CommandError::from_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)??;
+
+    if deleting_active_case {
+        if let Some((_, case_id)) = active_snapshot.as_ref() {
+            let _ = state.clear_runtime_cache_for_case(case_id);
+            app_services::file_service::clear_e01_reader_cache();
+            {
+                let mut guard = state
+                    .active_case
+                    .lock()
+                    .map_err(|e| CommandError::from_lock_error("Case", e))?;
+                *guard = None;
+            }
+            event_bridge::emit_case_closed(&app, case_id);
+        }
+        state
+            .clear_db_state()
+            .map_err(CommandError::from_service_error)?;
+    }
 
     let mut recent = read_recent_cases().unwrap_or_else(|e| {
         tracing::warn!("Failed to read recent cases, starting fresh: {}", e);
@@ -461,7 +487,7 @@ pub async fn delete_data_source(
             let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
             active.db_path()
         };
-        // Guard is now dropped �?query with released lock
+        // Guard is now dropped; query with released lock.
         let conn = app_services::connection::open_case_db(&db_path)
             .map_err(CommandError::from_service_error)?;
         case_service::delete_data_source(&conn, &ds_id)

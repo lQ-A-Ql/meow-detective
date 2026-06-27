@@ -14,7 +14,7 @@ export interface LocalSettings {
 const STORAGE_KEY = 'forensics.localSettings';
 
 export const defaultSettings: LocalSettings = {
-  caseRoot: 'C:\\Cases',
+  caseRoot: 'C:\\ForensicsWorkbench\\cases',
   imageSearchPaths: 'E:\\cases\\; D:\\images\\',
   theme: 'light',
   devEventTrace: false,

@@ -1,30 +1,16 @@
-/**
- * HexViewer - 高性能十六进制查看器
- *
- * 优化点：
- * 1. 使用虚拟滚动只渲染可见行
- * 2. 使用 useMemo 缓存格式化结果
- * 3. 使用 useCallback 减少重渲染
- */
-
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
+import type { HexLoadedRange } from '@/types/models';
 
 interface HexViewerProps {
-  /** Hex 行数据 (format: "00000000  AA BB CC DD ...") */
   lines: string[];
-  /** 原始字节数组（用于备用渲染） */
-  rawBytes?: number[];
-  /** 初始偏移量 */
-  offset?: number;
-  /** 行高 (px) */
   lineHeight?: number;
+  activeOffset?: number;
+  loadedRanges?: HexLoadedRange[];
+  onNeedMoreRange?: (direction: 'previous' | 'next') => void;
 }
 
 const DEFAULT_CONTAINER_HEIGHT = 600;
 const OVERSCAN_ROWS = 5;
-const LARGE_HEX_ROW_THRESHOLD = 1000;
-
-/** 解析 hex 行为结构化数据 */
 interface ParsedLine {
   offset: string;
   hex: string;
@@ -49,12 +35,17 @@ function parseHexLine(line: string): ParsedLine {
   return { offset: '', hex: line, ascii: '' };
 }
 
-export function HexViewer({ lines, lineHeight = 20 }: HexViewerProps) {
+export function HexViewer({
+  lines,
+  lineHeight = 20,
+  activeOffset,
+  loadedRanges,
+  onNeedMoreRange,
+}: HexViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(DEFAULT_CONTAINER_HEIGHT);
 
-  // 监听容器大小变化
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -80,7 +71,6 @@ export function HexViewer({ lines, lineHeight = 20 }: HexViewerProps) {
     return () => observer.disconnect();
   }, []);
 
-  // 计算可见范围
   const visibleRange = useMemo(() => {
     const startIndex = Math.max(0, Math.floor(scrollTop / lineHeight) - OVERSCAN_ROWS);
     const endIndex = Math.min(
@@ -90,7 +80,6 @@ export function HexViewer({ lines, lineHeight = 20 }: HexViewerProps) {
     return { startIndex, endIndex };
   }, [scrollTop, containerHeight, lineHeight, lines.length]);
 
-  // 可见行
   const visibleLines = useMemo(() => {
     return lines
       .slice(visibleRange.startIndex, visibleRange.endIndex)
@@ -100,40 +89,46 @@ export function HexViewer({ lines, lineHeight = 20 }: HexViewerProps) {
       }));
   }, [lines, visibleRange.endIndex, visibleRange.startIndex]);
 
-  // 滚动处理
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    setScrollTop(e.currentTarget.scrollTop);
-  }, []);
+    const nextScrollTop = e.currentTarget.scrollTop;
+    setScrollTop(nextScrollTop);
 
-  // 计算偏移量列宽
+    if (!onNeedMoreRange) {
+      return;
+    }
+
+    const maxScrollTop = Math.max(0, e.currentTarget.scrollHeight - e.currentTarget.clientHeight);
+    if (nextScrollTop <= lineHeight * OVERSCAN_ROWS) {
+      onNeedMoreRange('previous');
+    } else if (maxScrollTop - nextScrollTop <= lineHeight * (OVERSCAN_ROWS + 2)) {
+      onNeedMoreRange('next');
+    }
+  }, [lineHeight, onNeedMoreRange]);
+
+  useEffect(() => {
+    if (activeOffset === undefined || !containerRef.current) {
+      return;
+    }
+    const firstVisibleOffset = parseHexLine(lines[0] ?? '').offset;
+    const baseOffset = Number.parseInt(firstVisibleOffset || '0', 16) || 0;
+    const lineIndex = Math.max(0, Math.floor((activeOffset - baseOffset) / 16));
+    containerRef.current.scrollTop = lineIndex * lineHeight;
+  }, [activeOffset, lineHeight, lines]);
+
   const offsetWidth = useMemo(() => {
     if (lines.length === 0) return 80;
     const lastOffset = parseHexLine(lines[lines.length - 1] ?? '').offset || '00000000';
     return Math.max(80, lastOffset.length * 10 + 16);
   }, [lines]);
 
-  const isLargeContent = lines.length >= LARGE_HEX_ROW_THRESHOLD;
-  const visibleRowCount = visibleRange.endIndex - visibleRange.startIndex;
-
   return (
     <div className="flex h-full min-h-0 flex-col bg-white font-mono text-[11px]">
-      {isLargeContent && (
-        <div
-          className="shrink-0 border-b border-[#e0e0e0] bg-[#fafafa] px-3 py-1 text-[10px] text-[#666]"
-          role="status"
-        >
-          大内容模式: 共 {lines.length.toLocaleString()} 行，仅在 DOM 中渲染可见附近的 {visibleRowCount.toLocaleString()} 行。
-        </div>
-      )}
-
       <div
         ref={containerRef}
         className="min-h-0 flex-1 overflow-auto"
         onScroll={handleScroll}
       >
-        {/* 总高度占位 */}
         <div style={{ height: lines.length * lineHeight, position: 'relative' }}>
-          {/* 可见行 */}
           <div
             data-testid="hex-visible-window"
             style={{
@@ -150,7 +145,6 @@ export function HexViewer({ lines, lineHeight = 20 }: HexViewerProps) {
                   className="flex hover:bg-[#f5f5f5]"
                   style={{ height: lineHeight }}
                 >
-                  {/* 偏移量 */}
                   <div
                     className="shrink-0 text-[#999] text-right pr-2 select-none border-r border-[#eee] bg-[#fafafa]"
                     style={{ width: offsetWidth }}
@@ -158,7 +152,6 @@ export function HexViewer({ lines, lineHeight = 20 }: HexViewerProps) {
                     {line.offset}
                   </div>
 
-                  {/* Hex 字节 */}
                   <div className="flex-1 px-3 tracking-wider">
                     {line.hex.split(' ').map((byte, i) => (
                       <span key={i} className="inline-block w-[26px] text-center">
@@ -173,7 +166,6 @@ export function HexViewer({ lines, lineHeight = 20 }: HexViewerProps) {
                     ))}
                   </div>
 
-                  {/* ASCII 预览 */}
                   <div className="shrink-0 w-[128px] pl-2 border-l border-[#eee] text-[#666]">
                     {line.ascii.split('').map((char, i) => (
                       <span
@@ -196,13 +188,18 @@ export function HexViewer({ lines, lineHeight = 20 }: HexViewerProps) {
           </div>
         </div>
 
-        {/* 空状态 */}
         {lines.length === 0 && (
           <div className="flex h-full items-center justify-center text-[#999]">
             选择文件后显示十六进制预览
           </div>
         )}
       </div>
+
+      {loadedRanges?.length ? (
+        <div className="shrink-0 border-t border-[#e0e0e0] bg-[#fafafa] px-3 py-1 text-[10px] text-[#777]">
+          已加载区间: {loadedRanges.map((range) => `0x${range.start.toString(16).toUpperCase()}-0x${Math.max(range.start, range.end - 1).toString(16).toUpperCase()}`).join(', ')}
+        </div>
+      ) : null}
     </div>
   );
 }

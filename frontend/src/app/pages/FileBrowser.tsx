@@ -254,7 +254,13 @@ export function FileBrowser() {
   ]);
 
   const selectedFile = rows?.find((row) => row.id === selectedFileId);
-  const { data: viewer } = useFileViewer(selectedFile?.id);
+  const {
+    data: viewer,
+    setJumpOffsetInput,
+    jumpToOffset,
+    loadNextRange,
+    loadPreviousRange,
+  } = useFileViewer(selectedFile?.id);
   const { data: textPreview } = useTextPreview(selectedFile?.id);
   const { data: imagePreview } = useImagePreview(selectedFile?.id);
   const { data: mediaUrl } = useMediaUrl(selectedFile?.id);
@@ -528,6 +534,7 @@ export function FileBrowser() {
           <FileListPanel
             sortedRows={sortedRows}
             selectedFileId={selectedFileId}
+            viewerTab={viewerTab}
             fileSortKey={fileSortKey}
             fileSortDirection={fileSortDirection}
             handleSort={handleSort}
@@ -545,6 +552,10 @@ export function FileBrowser() {
             viewerTab={viewerTab}
             setViewerTab={setViewerTab}
             viewer={viewer}
+            onHexJumpInputChange={setJumpOffsetInput}
+            onHexJump={jumpToOffset}
+            onLoadNextHexRange={loadNextRange}
+            onLoadPreviousHexRange={loadPreviousRange}
             textPreview={textPreview}
             imagePreview={imagePreview}
             mediaUrl={mediaUrl}

@@ -1,6 +1,5 @@
 use app_services::case_service;
 use domain::{Artifact, ArtifactId, DataSource, DataSourceId, EntryType, FileEntry, FileEntryId};
-use infrastructure::config::safe_cases_root;
 use persistence_sqlite::repositories::{
     artifact_repo::ArtifactRepo, audit_repo::AuditRepo, datasource_repo::DataSourceRepo,
     file_repo::FileRepo, job_repo::JobRepo, timeline_repo::TimelineRepo,
@@ -116,13 +115,18 @@ fn reopen_case_shares_no_state() {
 }
 
 #[test]
-fn delete_case_removes_safe_case_directory() {
+fn delete_case_removes_valid_case_directory_outside_default_root() {
     let _guard = lock_case_env();
     let tmp = TempDir::new().unwrap();
-    std::env::set_var("APPDATA", tmp.path());
-    let parent = safe_cases_root();
+    let parent = tmp.path().join("outside-cases");
     let active = case_service::create_case(&parent, "delete-me", Some("tester")).unwrap();
     let case_root = active.case_root.clone();
+    let db_path = active.db_path();
+
+    let delete_audit_count = active
+        .with_conn(|conn| AuditRepo::new(conn).count_by_action("case.delete"))
+        .unwrap();
+    assert_eq!(delete_audit_count, 0);
     drop(active);
 
     assert!(case_root.join("case.json").is_file());
@@ -132,25 +136,11 @@ fn delete_case_removes_safe_case_directory() {
 
     assert!(!case_root.exists());
     assert!(parent.exists());
-}
 
-#[test]
-fn delete_case_rejects_case_outside_safe_root() {
-    let _guard = lock_case_env();
-    let tmp = TempDir::new().unwrap();
-    std::env::set_var("APPDATA", tmp.path().join("appdata"));
-    let outside_parent = tmp.path().join("outside-cases");
-    let active =
-        case_service::create_case(&outside_parent, "outside-delete", Some("tester")).unwrap();
-    let case_root = active.case_root.clone();
-    drop(active);
-
-    let result = case_service::delete_case(&case_root);
-
-    assert!(result.is_err());
-    let error = result.unwrap_err().to_string();
-    assert!(error.contains("outside the allowed cases directory"));
-    assert!(case_root.exists());
+    let reopened = case_service::open_case(&case_root);
+    assert!(reopened.is_err());
+    let delete_db = persistence_sqlite::open_existing(&db_path);
+    assert!(delete_db.is_err());
 }
 
 #[test]

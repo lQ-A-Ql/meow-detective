@@ -75,7 +75,7 @@ export function Settings() {
 
   async function saveSettings() {
     if (!settings.caseRoot.trim()) {
-      setSettingsMessage('案件目录不能为空。');
+      setSettingsMessage('案件默认存储路径不能为空。');
       return;
     }
     if (!validatePathList(settings.imageSearchPaths)) {
@@ -127,12 +127,12 @@ export function Settings() {
       </div>
 
       <div className="p-6 space-y-8">
-        {/* 案件目录 */}
+        {/* 案件默认存储路径 */}
         <section>
           <div className="flex items-center gap-2 mb-3">
             <FolderOpen size={14} className="text-[#888]" />
             <label htmlFor="settings-case-root" className="text-[13px] font-semibold text-[#333]">
-              案件目录
+              案件默认存储路径
             </label>
           </div>
           <input
@@ -143,7 +143,9 @@ export function Settings() {
             }
             className="w-full max-w-3xl bg-[#f8f8f8] border border-[#e0e0e0] p-3 font-mono text-[12px] text-[#111]"
           />
-          <div className="mt-1 text-[10px] text-[#999]">所有案件数据将存储在此目录下</div>
+          <div className="mt-1 text-[10px] text-[#999]">
+            仅用于预填首页新建案件的父目录，实际存储位置以首页填写路径为准。
+          </div>
         </section>
 
         {/* 镜像搜索路径 */}

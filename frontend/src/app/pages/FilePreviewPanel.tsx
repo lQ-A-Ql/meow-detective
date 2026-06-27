@@ -5,11 +5,12 @@ import { ImageViewer } from '@/components/viewers/ImageViewer';
 import { VideoViewer } from '@/components/viewers/VideoViewer';
 import { AudioViewer } from '@/components/viewers/AudioViewer';
 import { ViewerError } from '@/components/viewers/ViewerError';
+import { ChevronDown, ChevronUp } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import type {
   ApiErrorDto,
+  FileHexViewerState,
   FileEntryRow,
-  ViewerHandle,
-  ViewerRangeResponse,
   TextPreviewResponse,
   ImagePreviewResponse,
   MediaUrl,
@@ -61,16 +62,14 @@ function LargeMediaFallback({
   );
 }
 
-// Viewer data types
-interface ViewerData {
-  handle: ViewerHandle;
-  range: ViewerRangeResponse;
-}
-
 export interface FilePreviewPanelProps {
   viewerTab: 'metadata' | 'text' | 'hex' | 'preview';
   setViewerTab: (tab: 'metadata' | 'text' | 'hex' | 'preview') => void;
-  viewer: ViewerData | undefined;
+  viewer: FileHexViewerState | undefined;
+  onHexJumpInputChange: (value: string) => void;
+  onHexJump: (input?: string) => Promise<boolean>;
+  onLoadNextHexRange: () => Promise<void> | void;
+  onLoadPreviousHexRange: () => Promise<void> | void;
   textPreview: TextPreviewResponse | null | undefined;
   imagePreview: ImagePreviewResponse | null | undefined;
   mediaUrl: MediaUrl | null | undefined;
@@ -83,6 +82,10 @@ export function FilePreviewPanel({
   viewerTab,
   setViewerTab,
   viewer,
+  onHexJumpInputChange,
+  onHexJump,
+  onLoadNextHexRange,
+  onLoadPreviousHexRange,
   textPreview,
   imagePreview,
   mediaUrl,
@@ -90,6 +93,14 @@ export function FilePreviewPanel({
   previewError,
   onRetryPreview,
 }: FilePreviewPanelProps) {
+  const [hexInspectorExpanded, setHexInspectorExpanded] = useState(false);
+
+  useEffect(() => {
+    if (viewerTab !== 'hex') {
+      setHexInspectorExpanded(false);
+    }
+  }, [viewerTab, selectedFile?.id]);
+
   return (
     <div className="h-72 bg-[#fcfcfc] shrink-0 min-h-0">
       {previewError && (
@@ -114,8 +125,68 @@ export function FilePreviewPanel({
           {
             value: 'hex',
             label: '十六进制',
-            content: viewer?.range.lines?.length ? (
-              <HexViewer lines={viewer.range.lines} />
+            content: viewer?.lines?.length ? (
+              <div className="flex h-full min-h-0 flex-col">
+                <div className="min-h-0 flex-1">
+                  <HexViewer
+                    lines={viewer.lines}
+                    activeOffset={viewer.activeOffset}
+                    loadedRanges={viewer.loadedRanges}
+                    onNeedMoreRange={(direction) => {
+                      if (direction === 'next') {
+                        void onLoadNextHexRange();
+                      } else {
+                        void onLoadPreviousHexRange();
+                      }
+                    }}
+                  />
+                </div>
+                {viewer.error ? (
+                  <div className="mt-2 shrink-0 text-[10px] text-red-600">{viewer.error}</div>
+                ) : null}
+                <div className="mt-2 shrink-0 border border-[#e0e0e0] bg-[#fafafa]">
+                  <button
+                    type="button"
+                    onClick={() => setHexInspectorExpanded((value) => !value)}
+                    className="flex w-full items-center justify-between px-3 py-2 text-left text-[10px] text-[#666] hover:bg-[#f0f0f0]"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="font-semibold text-[#222]">
+                        {viewer.mode === 'full' ? '完整 Hex 预览' : '分段只读浏览'}
+                      </span>
+                      <span>
+                        已加载 {formatBytes(viewer.loadedRanges.reduce((total, range) => total + (range.end - range.start), 0))} / {formatBytes(viewer.fileSize)}
+                      </span>
+                      <span>offset={viewer.activeOffset.toString(16).toUpperCase().padStart(8, '0')}</span>
+                    </div>
+                    {hexInspectorExpanded ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+                  </button>
+                  {hexInspectorExpanded ? (
+                    <div className="border-t border-[#e0e0e0] px-3 py-2 text-[10px] text-[#666]">
+                      <div className="flex items-center gap-2">
+                        <input
+                          value={viewer.jumpOffsetInput}
+                          onChange={(event) => onHexJumpInputChange(event.target.value)}
+                          className="w-32 border border-[#ccc] bg-white px-2 py-1 font-mono text-[10px] text-[#111]"
+                          placeholder="0x0"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => { void onHexJump(); }}
+                          className="border border-[#111] bg-white px-2 py-1 text-[10px] text-[#111] hover:bg-[#111] hover:text-white"
+                        >
+                          跳转
+                        </button>
+                      </div>
+                      <div className="mt-2">
+                        {viewer.mode === 'chunked'
+                          ? '分段只读浏览，支持纵向滚动与 offset 跳转，不会一次性加载整个文件。'
+                          : '完整 Hex 预览，可直接纵向滚动浏览全部内容。'}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
             ) : (
               <div className="text-[#666]">
                 选择文件后显示十六进制预览。

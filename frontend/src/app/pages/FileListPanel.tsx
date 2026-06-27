@@ -6,6 +6,7 @@ import type { FileEntryRow } from '@/types/models';
 export interface FileListPanelProps {
   sortedRows: FileEntryRow[];
   selectedFileId: string | undefined;
+  viewerTab?: 'metadata' | 'text' | 'hex' | 'preview';
   fileSortKey: string;
   fileSortDirection: 'asc' | 'desc';
   handleSort: (key: string) => void;
@@ -22,6 +23,7 @@ export interface FileListPanelProps {
 export function FileListPanel({
   sortedRows,
   selectedFileId,
+  viewerTab,
   fileSortKey,
   fileSortDirection,
   handleSort,
@@ -119,7 +121,7 @@ export function FileListPanel({
           },
         ]}
       />
-      {rowsPage ? (
+      {rowsPage && viewerTab !== 'hex' ? (
         <div className="flex items-center justify-between border-t border-[#e0e0e0] bg-[#fafafa] px-3 py-2 text-[11px] text-[#666]">
           <span>
             显示第 {rowsPage.totalCount === 0 ? 0 : rowsPage.offset + 1} - {Math.min(rowsPage.offset + rowsPage.rows.length, rowsPage.totalCount)} 项，共 {rowsPage.totalCount} 项

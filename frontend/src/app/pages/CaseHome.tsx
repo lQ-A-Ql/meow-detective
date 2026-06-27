@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Upload } from 'lucide-react';
 import {
   useCreateCase,
@@ -19,6 +19,8 @@ import { useJobsSnapshot, useWarnings } from '@/features/jobs/hooks';
 import type { JobSnapshot } from '@/types/models';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { getAppSettings } from '@/lib/api/settings';
+import { readLocalSettings } from '@/lib/settings';
 import { CaseMetricsStrip, RecentTasksPanel, DataSourcesPanel, RecentObjectsPanel } from './CaseOverview';
 import { CaseWelcomeForms, ImportSection } from './CaseActions';
 
@@ -56,11 +58,12 @@ export function CaseHome() {
 
   const [importPath, setImportPath] = useState('');
   const [showImport, setShowImport] = useState(false);
-  const [caseRoot, setCaseRoot] = useState('C:\\Cases');
+  const [caseRoot, setCaseRoot] = useState(() => readLocalSettings().caseRoot);
   const [caseName, setCaseName] = useState('');
   const [openCasePath, setOpenCasePath] = useState('C:\\Cases\\case-001');
   const [editingDataSourceId, setEditingDataSourceId] = useState<string | undefined>();
   const [editingDataSourceName, setEditingDataSourceName] = useState('');
+  const hasEditedCaseRoot = useRef(false);
 
   const runningJobs = jobs?.filter((job) => job.status === 'running') ?? [];
   const runningJob = runningJobs[0];
@@ -70,11 +73,30 @@ export function CaseHome() {
   const failedImportJob = jobs?.find((job) => job.status === 'failed' && isImportRelatedJob(job));
   const sortedRecentCases = useMemo(() => recentCases ?? [], [recentCases]);
 
+  useEffect(() => {
+    let cancelled = false;
+    getAppSettings()
+      .then((settings) => {
+        if (!cancelled && !hasEditedCaseRoot.current) {
+          setCaseRoot(settings.caseRoot);
+        }
+      })
+      .catch(() => {
+        // Keep local fallback if persisted settings are temporarily unavailable.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   if (!currentCase) {
     return (
       <CaseWelcomeForms
         caseRoot={caseRoot}
-        setCaseRoot={setCaseRoot}
+        setCaseRoot={(value) => {
+          hasEditedCaseRoot.current = true;
+          setCaseRoot(value);
+        }}
         caseName={caseName}
         setCaseName={setCaseName}
         onCreateCase={() => createCaseMutation.mutate({ caseRoot, name: caseName })}

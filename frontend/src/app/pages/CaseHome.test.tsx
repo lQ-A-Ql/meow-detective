@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   renameDataSource: vi.fn(),
   removeCaseFromList: vi.fn(),
   importDataSource: vi.fn(),
+  getAppSettings: vi.fn(),
 }));
 
 vi.mock('@/features/case/hooks', () => ({
@@ -50,6 +51,22 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({
 
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
+}));
+
+vi.mock('@/lib/api/settings', () => ({
+  getAppSettings: mocks.getAppSettings,
+}));
+
+vi.mock('@/lib/settings', () => ({
+  readLocalSettings: vi.fn(() => ({
+    caseRoot: 'C:\\ForensicsWorkbench\\cases',
+    imageSearchPaths: 'E:\\cases\\; D:\\images\\',
+    theme: 'light',
+    devEventTrace: false,
+    maxImportWorkers: '',
+    maxAnalysisWorkers: '',
+    importAnalysisMode: 'metadataOnly',
+  })),
 }));
 
 function mockQueryState(overrides: Record<string, unknown> = {}) {
@@ -111,6 +128,15 @@ describe('CaseHome page', () => {
     mocks.renameDataSource.mockReturnValue(mockMutationState());
     mocks.removeCaseFromList.mockReturnValue(mockMutationState());
     mocks.importDataSource.mockReturnValue(mockMutationState());
+    mocks.getAppSettings.mockResolvedValue({
+      caseRoot: 'D:\\ForensicsCases',
+      imageSearchPaths: [],
+      theme: 'light',
+      devEventTrace: false,
+      maxImportWorkers: undefined,
+      maxAnalysisWorkers: undefined,
+      importAnalysisMode: 'metadataOnly',
+    });
   });
 
   it('renders welcome screen when no case is open', () => {
@@ -124,7 +150,7 @@ describe('CaseHome page', () => {
     renderPage();
 
     expect(screen.getByText('新建案件')).toBeDefined();
-    expect(screen.getByPlaceholderText('案件根目录')).toBeDefined();
+    expect(screen.getByPlaceholderText('案件父目录')).toBeDefined();
     expect(screen.getByPlaceholderText('案件名称')).toBeDefined();
     expect(screen.getByText('创建案件')).toBeDefined();
   });

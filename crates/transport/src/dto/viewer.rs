@@ -40,7 +40,7 @@ pub struct ViewerRangeResponseDto {
     pub lines: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub encoding: Option<String>,
-    /// Raw bytes for hex preview (up to 64KB)
+    /// Raw bytes for hex preview (single-response payload, currently up to 1MB)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_bytes: Option<Vec<u8>>,
 }

@@ -52,8 +52,6 @@ describe('HexViewer', () => {
 
     const { container } = render(<HexViewer lines={lines} lineHeight={20} />);
 
-    expect(screen.getByRole('status').textContent).toContain('大内容模式');
-
     const scrollContainer = container.querySelector('.overflow-auto') as HTMLDivElement;
     const visibleWindow = screen.getByTestId('hex-visible-window');
 
@@ -68,5 +66,28 @@ describe('HexViewer', () => {
     expect(visibleWindow.textContent).toContain('000003B6');
     expect(visibleWindow.textContent).not.toContain('00000000');
     expect(visibleWindow.firstElementChild?.getAttribute('data-row-index')).toBe('945');
+  });
+
+  it('requests more data when scrolling near the bottom edge', () => {
+    const lines = Array.from({ length: 1000 }, (_, index) => {
+      const offset = (index * 16).toString(16).padStart(8, '0').toUpperCase();
+      return `${offset}  41 42 43 44 45 46 47 48  49 4A 4B 4C 4D 4E 4F 50`;
+    });
+    const onNeedMoreRange = vi.fn();
+
+    const { container } = render(
+      <HexViewer
+        lines={lines}
+        lineHeight={20}
+        onNeedMoreRange={onNeedMoreRange}
+      />,
+    );
+
+    const scrollContainer = container.querySelector('.overflow-auto') as HTMLDivElement;
+    fireEvent.scroll(scrollContainer, {
+      target: { scrollTop: 19_500 },
+    });
+
+    expect(onNeedMoreRange).toHaveBeenCalledWith('next');
   });
 });

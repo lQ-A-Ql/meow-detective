@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   getFileTree: vi.fn(),
   getMediaUrl: vi.fn(),
   readMediaRange: vi.fn(),
+  openFileHandle: vi.fn(),
+  readFileRange: vi.fn(),
 }));
 
 vi.mock('@/lib/api/files', () => ({
@@ -19,8 +21,8 @@ vi.mock('@/lib/api/files', () => ({
   getFileChildren: vi.fn(),
   getFileChildrenPage: vi.fn(),
   importDataSource: vi.fn(),
-  openFileHandle: vi.fn(),
-  readFileRange: vi.fn(),
+  openFileHandle: mocks.openFileHandle,
+  readFileRange: mocks.readFileRange,
   extractFile: vi.fn(),
   getTextPreview: vi.fn(),
   getImagePreview: vi.fn(),
@@ -34,7 +36,7 @@ vi.mock('@/features/cache-invalidation', () => ({
   invalidateImportProjectionQueries: vi.fn(),
 }));
 
-import { useFileTree, useMediaUrl } from './hooks';
+import { useFileTree, useFileViewer, useMediaUrl } from './hooks';
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -180,6 +182,75 @@ describe('files hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data?.previewMode).toBe('rangeFallback');
       expect(result.current.data?.previewBytes).toBe(0);
+    });
+  });
+
+  describe('useFileViewer', () => {
+    it('loads small files completely instead of fixed 96 bytes', async () => {
+      mocks.openFileHandle.mockResolvedValue({
+        handleId: 'file:small',
+        size: 4096,
+        mime: 'application/octet-stream',
+      });
+      mocks.readFileRange.mockResolvedValue({
+        kind: 'hex',
+        lines: ['00000000  41 42 43 44'],
+      });
+
+      const { result } = renderHook(() => useFileViewer('file-small'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mocks.readFileRange).toHaveBeenCalledWith({
+        handleId: 'file:small',
+        offset: 0,
+        length: 4096,
+      });
+      expect(result.current.data?.mode).toBe('full');
+      expect(result.current.data?.isFullyLoaded).toBe(true);
+    });
+
+    it('loads large files in 1MB chunks and can jump to a later chunk', async () => {
+      mocks.openFileHandle.mockResolvedValue({
+        handleId: 'file:large',
+        size: 3 * 1024 * 1024,
+        mime: 'application/octet-stream',
+      });
+      mocks.readFileRange
+        .mockResolvedValueOnce({
+          kind: 'hex',
+          lines: ['00000000  41 42 43 44'],
+        })
+        .mockResolvedValueOnce({
+          kind: 'hex',
+          lines: ['00100000  45 46 47 48'],
+        });
+
+      const { result } = renderHook(() => useFileViewer('file-large'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mocks.readFileRange).toHaveBeenNthCalledWith(1, {
+        handleId: 'file:large',
+        offset: 0,
+        length: 1024 * 1024,
+      });
+      expect(result.current.data?.mode).toBe('chunked');
+
+      await result.current.jumpToOffset('0x100000');
+
+      await waitFor(() => {
+        expect(mocks.readFileRange).toHaveBeenNthCalledWith(2, {
+          handleId: 'file:large',
+          offset: 1024 * 1024,
+          length: 1024 * 1024,
+        });
+      });
+      await waitFor(() => {
+        expect(result.current.data?.activeOffset).toBe(1024 * 1024);
+      });
     });
   });
 });

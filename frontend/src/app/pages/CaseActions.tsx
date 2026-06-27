@@ -54,7 +54,7 @@ export function CaseWelcomeForms({
               type="text"
               value={caseRoot}
               onChange={(e) => setCaseRoot(e.target.value)}
-              placeholder="案件根目录"
+              placeholder="案件父目录"
               className="w-full border border-[#ccc] px-2 py-1 text-[12px] font-mono"
             />
             <input

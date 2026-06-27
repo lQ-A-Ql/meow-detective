@@ -72,6 +72,7 @@ fn validate_case_name(name: &str) -> Result<()> {
     }
     // Check for Windows reserved names
     let upper = name.to_uppercase();
+    // split() always returns at least one element, so unwrap_or("") is safe but kept for clarity
     let name_part = upper.split(' ').next().unwrap_or("");
     if RESERVED_NAMES.contains(&name_part) {
         return Err(CaseServiceError::InvalidCaseDir(format!(
@@ -185,19 +186,14 @@ pub fn open_case(root: &Path) -> Result<ActiveCase> {
 /// Returns `NotFound` if the directory doesn't exist, or `InvalidCaseDir`
 /// if `case.json` is missing.
 pub fn delete_case(root: &Path) -> Result<()> {
-    delete_case_in(root, &infrastructure::config::safe_cases_root())
+    delete_case_in(root)
 }
 
-/// Delete a case directory, validating it is within the specified allowed root.
-///
-/// Use this variant when the user has configured a custom cases directory.
-pub fn delete_case_in(root: &Path, allowed_root: &Path) -> Result<()> {
+/// Delete a case directory after validating it is a real case workspace.
+pub fn delete_case_in(root: &Path) -> Result<()> {
     if !root.exists() {
         return Err(CaseServiceError::NotFound(root.to_path_buf()));
     }
-
-    infrastructure::config::validate_case_root_is_within(root, allowed_root)
-        .map_err(CaseServiceError::InvalidCaseDir)?;
 
     let case_json_path = root.join("case.json");
     if !case_json_path.exists() {
@@ -207,6 +203,20 @@ pub fn delete_case_in(root: &Path, allowed_root: &Path) -> Result<()> {
     }
 
     let active = open_case(root)?;
+    let delete_details = serde_json::json!({
+        "case_id": active.meta.id.0,
+        "case_root": root.display().to_string(),
+    })
+    .to_string();
+    let _ = active.with_conn(|conn| {
+        AuditRepo::new(conn).log(
+            Some(&active.meta.id.0),
+            "system",
+            &AuditAction::CaseDelete,
+            Some(&active.meta.id.0),
+            &delete_details,
+        )
+    });
     drop(active);
 
     // Retry removal on Windows where SQLite WAL/SHM files may still be held
@@ -224,9 +234,10 @@ pub fn delete_case_in(root: &Path, allowed_root: &Path) -> Result<()> {
             }
         }
     }
-    Err(CaseServiceError::Io(last_err.unwrap_or_else(|| {
-        std::io::Error::other("Failed to delete case after retries")
-    })))
+    // After 5 attempts, last_err is guaranteed to be Some
+    Err(CaseServiceError::Io(
+        last_err.expect("last_err must be Some after retry loop"),
+    ))
 }
 
 pub fn delete_data_source(conn: &Connection, data_source_id: &str) -> Result<()> {
