@@ -508,14 +508,8 @@ fn media_data_url_for_file(
         });
     }
 
-    let mut reader = with_preview_cache_context!(state, conn, case_id.as_str(), |context| {
-        file_service::open_file_content_by_id(context, &domain::FileEntryId(file_id.to_string()))
-    })
-    .map_err(CommandError::from_service_error)?;
-    let mut content_bytes = Vec::with_capacity(handle.size as usize);
-    reader
-        .read_to_end(&mut content_bytes)
-        .map_err(CommandError::from_service_error)?;
+    let content_bytes =
+        read_inline_preview_bytes_for_file(state, conn, &case_id, file_id, handle.size)?;
     let base64 = base64::engine::general_purpose::STANDARD.encode(&content_bytes);
 
     Ok(MediaUrlDto {
@@ -934,6 +928,73 @@ mod tests {
                 Ok(())
             },
         );
+    }
+
+    #[test]
+    fn media_preview_logical_directory_reads_direct_without_service_fallback() {
+        with_logical_case_file(
+            "media-inline-logical",
+            "clip.mp4",
+            b"tiny media bytes",
+            |conn, file_id, _| {
+                let case_id = "case-media-inline-logical";
+                let state = test_state_with_case(case_id);
+                let service_before = file_bytes_service_read_call_count(case_id);
+                let media = media_data_url_for_file(&state, conn, &file_id)
+                    .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
+
+                assert_eq!(media.mode, MediaPreviewModeDto::Inline);
+                assert_eq!(
+                    file_bytes_service_read_call_count(case_id) - service_before,
+                    0
+                );
+                let (_, encoded) = media
+                    .url
+                    .as_deref()
+                    .expect("small media should return inline URL")
+                    .split_once(',')
+                    .expect("data URL payload");
+                assert_eq!(
+                    base64::engine::general_purpose::STANDARD
+                        .decode(encoded.as_bytes())
+                        .unwrap(),
+                    b"tiny media bytes"
+                );
+
+                Ok(())
+            },
+        );
+    }
+
+    #[test]
+    fn media_preview_raw_image_reads_via_bytes_only_service_path() {
+        with_raw_exfat_case_file("media-raw-inline", "mp4", |conn, case_id, file_id| {
+            let state = test_state_with_case(&case_id);
+            let service_before = file_bytes_service_read_call_count(&case_id);
+            let media = media_data_url_for_file(&state, conn, &file_id)
+                .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
+
+            assert_eq!(media.mode, MediaPreviewModeDto::Inline);
+            assert_eq!(
+                file_bytes_service_read_call_count(&case_id) - service_before,
+                1
+            );
+            let (_, encoded) = media
+                .url
+                .as_deref()
+                .expect("small media should return inline URL")
+                .split_once(',')
+                .expect("data URL payload");
+            let decoded = base64::engine::general_purpose::STANDARD
+                .decode(encoded.as_bytes())
+                .unwrap();
+            assert_eq!(decoded.len(), 1536);
+            assert_eq!(&decoded[0..512], vec![b'A'; 512].as_slice());
+            assert_eq!(&decoded[512..1024], vec![b'B'; 512].as_slice());
+            assert_eq!(&decoded[1024..1536], vec![b'C'; 512].as_slice());
+
+            Ok(())
+        });
     }
 
     #[test]
