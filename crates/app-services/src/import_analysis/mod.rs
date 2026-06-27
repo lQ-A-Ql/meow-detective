@@ -59,6 +59,8 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use tempfile::TempDir;
 
+    static TEST_HOOK_LOCK: Mutex<()> = Mutex::new(());
+
     fn setup_case_db(tmp: &TempDir) -> (PathBuf, DataSourceId) {
         let db_path = tmp.path().join("app.db");
         let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
@@ -118,15 +120,23 @@ mod tests {
     }
 
     fn write_exfat_text_raw_fixture(path: &std::path::Path) -> std::io::Result<()> {
+        write_exfat_single_file_raw_fixture(path, "LARGE.TXT", &[b'A'; 1536])
+    }
+
+    fn write_exfat_single_file_raw_fixture(
+        path: &std::path::Path,
+        file_name: &str,
+        content: &[u8],
+    ) -> std::io::Result<()> {
         const SECTOR_SIZE: usize = 512;
         const FAT_SECTOR: usize = 24;
         const CLUSTER_HEAP_SECTOR: usize = 32;
         const CLUSTER_SIZE: usize = SECTOR_SIZE;
-        const FILE_SIZE: usize = CLUSTER_SIZE * 3;
         const TOTAL_SECTORS: usize = 1024;
-        const FILE_NAME: &str = "LARGE.TXT";
 
         let mut data = vec![0u8; TOTAL_SECTORS * SECTOR_SIZE];
+        let file_size = content.len();
+        let file_clusters = file_size.div_ceil(CLUSTER_SIZE).max(1);
 
         let boot = &mut data[0..SECTOR_SIZE];
         boot[0..3].copy_from_slice(&[0xEB, 0x76, 0x90]);
@@ -151,7 +161,10 @@ mod tests {
         fat[0..4].copy_from_slice(&[0xF8, 0xFF, 0xFF, 0xFF]);
         fat[4..8].copy_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF]);
         fat[8..12].copy_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF]);
-        fat[12..16].copy_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF]);
+        for cluster in 3..3 + file_clusters {
+            let offset = cluster * 4;
+            fat[offset..offset + 4].copy_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF]);
+        }
 
         let root_offset = CLUSTER_HEAP_SECTOR * SECTOR_SIZE;
         let root = &mut data[root_offset..root_offset + CLUSTER_SIZE];
@@ -164,24 +177,34 @@ mod tests {
 
         root[pos] = 0xC0;
         root[pos + 1] = 0x02;
-        root[pos + 3] = FILE_NAME.encode_utf16().count() as u8;
-        root[pos + 8..pos + 16].copy_from_slice(&(FILE_SIZE as u64).to_le_bytes());
+        root[pos + 3] = file_name.encode_utf16().count() as u8;
+        root[pos + 8..pos + 16].copy_from_slice(&(file_size as u64).to_le_bytes());
         root[pos + 20..pos + 24].copy_from_slice(&3u32.to_le_bytes());
-        root[pos + 24..pos + 32].copy_from_slice(&(FILE_SIZE as u64).to_le_bytes());
+        root[pos + 24..pos + 32].copy_from_slice(&(file_size as u64).to_le_bytes());
         pos += 32;
 
         root[pos] = 0xC1;
-        for (i, ch) in FILE_NAME.encode_utf16().enumerate() {
+        for (i, ch) in file_name.encode_utf16().enumerate() {
             let offset = pos + 2 + i * 2;
             root[offset..offset + 2].copy_from_slice(&ch.to_le_bytes());
         }
 
-        for cluster in 3..=5usize {
-            let offset = CLUSTER_HEAP_SECTOR * SECTOR_SIZE + (cluster - 2) * CLUSTER_SIZE;
-            data[offset..offset + CLUSTER_SIZE].fill(b'A' + (cluster - 3) as u8);
-        }
+        let file_offset = CLUSTER_HEAP_SECTOR * SECTOR_SIZE + CLUSTER_SIZE;
+        data[file_offset..file_offset + content.len()].copy_from_slice(content);
 
         std::fs::write(path, data)
+    }
+
+    fn recycle_bin_i_file_bytes(original_path: &str) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&24u64.to_le_bytes());
+        bytes.extend_from_slice(&4096u64.to_le_bytes());
+        bytes.extend_from_slice(&0u64.to_le_bytes());
+        for ch in original_path.encode_utf16() {
+            bytes.extend_from_slice(&ch.to_le_bytes());
+        }
+        bytes.extend_from_slice(&0u16.to_le_bytes());
+        bytes
     }
 
     fn set_done_worker_meta(
@@ -639,6 +662,7 @@ mod tests {
 
     #[test]
     fn analysis_text_indexing_raw_exfat_uses_bytes_only_reader() {
+        let _hook_guard = TEST_HOOK_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let tmp = TempDir::new().unwrap();
         let raw_path = tmp.path().join("text-exfat.raw");
         write_exfat_text_raw_fixture(&raw_path).unwrap();
@@ -709,6 +733,92 @@ mod tests {
     }
 
     #[test]
+    fn analysis_artifact_extraction_raw_exfat_uses_bytes_only_reader() {
+        let _hook_guard = TEST_HOOK_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let tmp = TempDir::new().unwrap();
+        let raw_path = tmp.path().join("artifact-exfat.raw");
+        let image_file_name = "$IABCDEF";
+        write_exfat_single_file_raw_fixture(
+            &raw_path,
+            image_file_name,
+            &recycle_bin_i_file_bytes("C:\\Users\\alice\\Desktop\\deleted.txt"),
+        )
+        .unwrap();
+
+        let db_path = tmp.path().join("app.db");
+        let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
+        runner::run_all(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO cases (id, name, created_at, updated_at)
+             VALUES ('case-raw-exfat-artifact', 'Raw exFAT Artifact Case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+
+        let ds_id = DataSourceId("ds-raw-exfat-artifact".to_string());
+        DataSourceRepo::new(&conn)
+            .insert(
+                &CaseId("case-raw-exfat-artifact".to_string()),
+                &DataSource {
+                    id: ds_id.clone(),
+                    name: "raw exfat evidence".to_string(),
+                    kind: DataSourceKind::Raw,
+                    source_path: raw_path,
+                    imported_at: chrono::Utc::now(),
+                    provenance: DataSourceProvenance::unknown(),
+                },
+            )
+            .unwrap();
+        conn.execute(
+            "INSERT INTO file_entries
+             (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
+             VALUES (?1, NULL, ?2, '$Recycle.Bin/$IABCDEF', '$IABCDEF', 'file', ?3, NULL, 0, 0, 0)",
+            params![
+                image_file_name,
+                ds_id.0,
+                (infrastructure::constants::IMPORT_TEXT_INDEX_FILE_LIMIT_BYTES + 4096) as i64
+            ],
+        )
+        .unwrap();
+        drop(conn);
+
+        let mut options = analysis_options(
+            &tmp,
+            db_path,
+            ds_id.clone(),
+            ImportAnalysisMode::FullContent,
+        );
+        options.enable_timeline_projection = false;
+        options.enable_content_extraction = true;
+        options.enable_text_indexing = false;
+
+        test_hooks::reset();
+        test_hooks::track_file_id(image_file_name);
+        let stats = run_import_analysis_staging(options, None).unwrap();
+
+        assert_eq!(stats.processed_count, 1);
+        assert_eq!(stats.artifact_count, 1);
+        assert_eq!(stats.indexed_count, 0);
+        assert_eq!(stats.warning_count, 0);
+        assert_eq!(test_hooks::artifact_bytes_reads(), 1);
+        assert_eq!(test_hooks::text_index_bytes_reads(), 0);
+
+        let main_conn = persistence_sqlite::open_or_create(&tmp.path().join("app.db")).unwrap();
+        let (artifact_type, source_object_id, summary): (String, String, String) = main_conn
+            .query_row(
+                "SELECT artifact_type, source_object_id, summary
+                 FROM artifacts
+                 WHERE source_object_id = '$IABCDEF'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(artifact_type, "RecycleBin");
+        assert_eq!(source_object_id, image_file_name);
+        assert!(summary.contains("deleted.txt"));
+    }
+
+    #[test]
     fn analysis_artifact_extraction_skips_large_candidates() {
         let registry = artifact_service::create_registry();
         let small_prefetch = FileEntry {
@@ -731,7 +841,7 @@ mod tests {
             hash_sha256: None,
         };
         let large_prefetch = FileEntry {
-            size: Some(infrastructure::constants::IMPORT_TEXT_INDEX_FILE_LIMIT_BYTES + 1),
+            size: Some(infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES + 1),
             ..small_prefetch.clone()
         };
         let non_candidate = FileEntry {

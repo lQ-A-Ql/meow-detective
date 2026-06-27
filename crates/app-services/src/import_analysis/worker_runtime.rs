@@ -129,11 +129,15 @@ pub(super) fn run_analysis_worker(
             && should_extract_artifact(&registry, &file)
             && reserve_content_budget(&options.content_budget, &file, &shared)
         {
-            match file_service::open_file_content_by_id(&main_conn, &file.id) {
-                Ok(reader) => {
+            match read_artifact_bytes(&main_conn, &file.id) {
+                Ok(bytes) => {
                     let mut sink = VecSink::new();
                     match artifact_service::run_extractors_on_file(
-                        &registry, &file.id, &file.path, reader, &mut sink,
+                        &registry,
+                        &file.id,
+                        &file.path,
+                        Box::new(Cursor::new(bytes)),
+                        &mut sink,
                     ) {
                         Ok(extract_stats) => {
                             stats.warning_count = stats
@@ -364,6 +368,33 @@ fn read_text_index_bytes(
     read_text_index_bytes_impl(conn, file_id)
 }
 
+fn read_artifact_bytes(
+    conn: &Connection,
+    file_id: &FileEntryId,
+) -> Result<Vec<u8>, file_service::FileServiceError> {
+    read_artifact_bytes_impl(conn, file_id)
+}
+
+#[cfg(not(test))]
+fn read_artifact_bytes_impl(
+    conn: &Connection,
+    file_id: &FileEntryId,
+) -> Result<Vec<u8>, file_service::FileServiceError> {
+    file_service::read_file_header_by_id(
+        conn,
+        file_id,
+        infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES as usize,
+    )
+}
+
+#[cfg(test)]
+fn read_artifact_bytes_impl(
+    conn: &Connection,
+    file_id: &FileEntryId,
+) -> Result<Vec<u8>, file_service::FileServiceError> {
+    test_hooks::read_artifact_bytes(conn, file_id)
+}
+
 #[cfg(not(test))]
 fn read_text_index_bytes_impl(
     conn: &Connection,
@@ -442,7 +473,7 @@ pub(crate) fn should_extract_artifact(
         return false;
     }
     file.size
-        .is_some_and(|size| size <= infrastructure::constants::IMPORT_TEXT_INDEX_FILE_LIMIT_BYTES)
+        .is_some_and(|size| size <= infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES)
 }
 
 pub(super) fn reserve_content_budget(
@@ -489,19 +520,29 @@ pub(super) mod test_hooks {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
 
+    static ARTIFACT_BYTES_READS: AtomicUsize = AtomicUsize::new(0);
     static TEXT_INDEX_BYTES_READS: AtomicUsize = AtomicUsize::new(0);
     static TRACKED_FILE_ID: Mutex<Option<String>> = Mutex::new(None);
+
+    pub(in crate::import_analysis) fn read_artifact_bytes(
+        conn: &Connection,
+        file_id: &FileEntryId,
+    ) -> Result<Vec<u8>, file_service::FileServiceError> {
+        if should_count_file_id(file_id) {
+            ARTIFACT_BYTES_READS.fetch_add(1, Ordering::Relaxed);
+        }
+        file_service::read_file_header_by_id(
+            conn,
+            file_id,
+            infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES as usize,
+        )
+    }
 
     pub(in crate::import_analysis) fn read_text_index_bytes(
         conn: &Connection,
         file_id: &FileEntryId,
     ) -> Result<Vec<u8>, file_service::FileServiceError> {
-        let should_count = TRACKED_FILE_ID
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .as_ref()
-            .map_or(true, |tracked| tracked == &file_id.0);
-        if should_count {
+        if should_count_file_id(file_id) {
             TEXT_INDEX_BYTES_READS.fetch_add(1, Ordering::Relaxed);
         }
         file_service::read_file_header_by_id(
@@ -511,7 +552,16 @@ pub(super) mod test_hooks {
         )
     }
 
+    fn should_count_file_id(file_id: &FileEntryId) -> bool {
+        TRACKED_FILE_ID
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map_or(true, |tracked| tracked == &file_id.0)
+    }
+
     pub(in crate::import_analysis) fn reset() {
+        ARTIFACT_BYTES_READS.store(0, Ordering::Relaxed);
         TEXT_INDEX_BYTES_READS.store(0, Ordering::Relaxed);
         *TRACKED_FILE_ID.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
@@ -522,5 +572,9 @@ pub(super) mod test_hooks {
 
     pub(in crate::import_analysis) fn text_index_bytes_reads() -> usize {
         TEXT_INDEX_BYTES_READS.load(Ordering::Relaxed)
+    }
+
+    pub(in crate::import_analysis) fn artifact_bytes_reads() -> usize {
+        ARTIFACT_BYTES_READS.load(Ordering::Relaxed)
     }
 }
