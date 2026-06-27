@@ -1463,8 +1463,7 @@ fn raw_partition_candidates(
         .map_err(|e| FileServiceError::other(format!("Failed to detect RAW filesystem: {e}")))?;
     if probe.candidates.is_empty() {
         if let Some(candidate) = direct_exfat_raw_partition_candidate(source_path)? {
-            if expected_partition_index
-                .map_or(true, |expected| expected == candidate.partition_index)
+            if expected_partition_index.is_none_or(|expected| expected == candidate.partition_index)
             {
                 return Ok(vec![candidate]);
             }
@@ -1587,7 +1586,7 @@ where
     let source_path = reader.info().path.clone();
     let path_candidates = entry_image_path_candidates(entry);
     if probe.candidates.is_empty() {
-        if expected_partition_index.map_or(true, |expected| expected == 0)
+        if expected_partition_index.is_none_or(|expected| expected == 0)
             && looks_like_exfat_boot_sector(&mut reader, 0)?
         {
             let boxed: Box<dyn evidence_core::EvidenceReader> =
