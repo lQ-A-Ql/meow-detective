@@ -1,6 +1,8 @@
 //! Data source analysis commands.
 
 use app_services::{analysis_service, file_service};
+use domain::FileEntryId;
+use std::io::{Cursor, Read};
 use tauri::State;
 use transport::{
     commands::{
@@ -30,6 +32,25 @@ fn resolve_sample_size(request: &ClassifyFilesRequest) -> Result<u32, CommandErr
         )));
     }
     Ok(sample_size)
+}
+
+fn limited_header_cursor<E>(
+    file_id: &FileEntryId,
+    max_bytes: usize,
+    read_header: impl FnOnce(&FileEntryId, usize) -> Result<Vec<u8>, E>,
+) -> Result<Box<dyn Read>, E> {
+    let bytes = read_header(file_id, max_bytes)?;
+    Ok(Box::new(Cursor::new(bytes)))
+}
+
+fn read_file_header_cursor_by_id(
+    conn: &rusqlite::Connection,
+    file_id: &FileEntryId,
+    max_bytes: usize,
+) -> Result<Box<dyn Read>, app_services::file_service::FileServiceError> {
+    limited_header_cursor(file_id, max_bytes, |file_id, max_bytes| {
+        file_service::read_file_header_by_id(conn, file_id, max_bytes)
+    })
 }
 
 /// Get system information from the current case.
@@ -108,8 +129,12 @@ pub async fn run_evidence_classification(
             &active.case_id,
             &categories,
             |file_id| {
-                file_service::open_file_content_by_id(&conn, file_id)
-                    .map_err(app_services::artifact_service::ArtifactServiceError::from)
+                read_file_header_cursor_by_id(
+                    &conn,
+                    file_id,
+                    infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES as usize,
+                )
+                .map_err(app_services::artifact_service::ArtifactServiceError::from)
             },
         )
         .map_err(CommandError::from_service_error)?;
@@ -137,7 +162,11 @@ pub async fn run_analysis_extraction(
             .map(String::as_str)
             .collect::<Vec<_>>();
         analysis_service::run_analysis_extraction(&conn, &active.case_id, &categories, |file_id| {
-            file_service::open_file_content_by_id(&conn, file_id)
+            read_file_header_cursor_by_id(
+                &conn,
+                file_id,
+                analysis_service::MAX_ANALYSIS_SOURCE_BYTES,
+            )
         })
         .map_err(CommandError::from_service_error)
     })
@@ -304,6 +333,7 @@ pub async fn generate_analysis_summary(state: State<'_, AppState>) -> Result<Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::RefCell;
 
     #[test]
     fn sample_size_defaults_and_validates_bounds() {
@@ -326,5 +356,23 @@ mod tests {
             sample_size: Some(analysis_service::MAX_SAMPLE_SIZE + 1)
         })
         .is_err());
+    }
+
+    #[test]
+    fn limited_header_cursor_passes_limit_and_returns_bytes_reader() {
+        let file_id = FileEntryId("file-1".to_string());
+        let calls = RefCell::new(Vec::new());
+
+        let mut reader = limited_header_cursor(&file_id, 7, |id, max_bytes| {
+            calls.borrow_mut().push((id.clone(), max_bytes));
+            Ok::<_, String>(b"bounded".to_vec())
+        })
+        .unwrap();
+
+        let mut bytes = Vec::new();
+        reader.read_to_end(&mut bytes).unwrap();
+
+        assert_eq!(calls.into_inner(), vec![(file_id, 7)]);
+        assert_eq!(bytes, b"bounded");
     }
 }

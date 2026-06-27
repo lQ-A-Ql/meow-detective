@@ -8,7 +8,7 @@ use persistence_sqlite::repositories::{
 };
 use persistence_sqlite::{open_in_memory, runner};
 use rusqlite::{params, Connection};
-use std::{collections::HashMap, io::Read, path::Path};
+use std::{cell::Cell, collections::HashMap, io::Read, path::Path, rc::Rc};
 use tempfile::TempDir;
 use testing::{builders::registry, fixtures};
 use transport::dto::AnalysisParseStatusDto;
@@ -178,6 +178,41 @@ fn firefox_places_bytes() -> Vec<u8> {
 
 fn sample_email_bytes() -> Vec<u8> {
     b"Date: Tue, 02 Jan 2024 03:04:05 +0000\r\nFrom: alice@example.com\r\nTo: bob@example.com, carol@example.com\r\nSubject: Quarterly evidence note\r\nMessage-ID: <msg-1@example.com>\r\nContent-Disposition: attachment; filename=\"evidence.txt\"\r\n\r\nThis is the first line of the message body.\r\nThis is the second line.\r\n".to_vec()
+}
+
+#[derive(Clone)]
+struct BoundedBytesProbe {
+    bytes: Vec<u8>,
+    requested_limits: Rc<std::cell::RefCell<Vec<usize>>>,
+    full_reader_calls: Rc<Cell<usize>>,
+}
+
+impl BoundedBytesProbe {
+    fn new(bytes: Vec<u8>) -> Self {
+        Self {
+            bytes,
+            requested_limits: Rc::new(std::cell::RefCell::new(Vec::new())),
+            full_reader_calls: Rc::new(Cell::new(0)),
+        }
+    }
+
+    fn read_header(&self, max_bytes: usize) -> Vec<u8> {
+        self.requested_limits.borrow_mut().push(max_bytes);
+        self.bytes[..self.bytes.len().min(max_bytes)].to_vec()
+    }
+
+    fn open_full_reader(&self) -> Box<dyn Read> {
+        self.full_reader_calls.set(self.full_reader_calls.get() + 1);
+        panic!("test path must use bounded header bytes, not full reader");
+    }
+
+    fn requested_limits(&self) -> Vec<usize> {
+        self.requested_limits.borrow().clone()
+    }
+
+    fn full_reader_calls(&self) -> usize {
+        self.full_reader_calls.get()
+    }
 }
 
 #[test]
@@ -497,6 +532,79 @@ fn evidence_discovery_maps_registry_evtx_prefetch_lnk_paths_to_categories() {
     assert_eq!(candidates.get("EventLogs").map(Vec::len), Some(1));
     assert_eq!(candidates.get("ProgramExecution").map(Vec::len), Some(1));
     assert_eq!(candidates.get("UserActivity").map(Vec::len), Some(1));
+}
+
+#[test]
+fn targeted_evidence_scan_can_use_bounded_bytes_reader_without_full_open() {
+    let (conn, _tmp, ds_id) = setup_case_db();
+    FileRepo::new(&conn)
+        .insert_batch(&[file_with_ds(
+            "lnk",
+            &ds_id,
+            "Users/alice/AppData/Roaming/Microsoft/Windows/Recent/app.lnk",
+            64,
+        )])
+        .unwrap();
+
+    let probe = BoundedBytesProbe::new(vec![0u8; 64]);
+    let full_reader_probe = probe.clone();
+    let _full_reader_path = move || full_reader_probe.open_full_reader();
+    let reader_probe = probe.clone();
+
+    let stats = crate::artifact_service::run_targeted_evidence_scan(
+        &conn,
+        "case-analysis",
+        &["UserActivity"],
+        |file_id| {
+            assert_eq!(file_id.0, "lnk");
+            let bytes = reader_probe
+                .read_header(infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES as usize);
+            Ok::<Box<dyn Read>, crate::artifact_service::ArtifactServiceError>(Box::new(
+                std::io::Cursor::new(bytes),
+            ))
+        },
+    )
+    .unwrap();
+
+    assert_eq!(stats.candidate_count, 1);
+    assert_eq!(stats.scanned_count, 1);
+    assert_eq!(
+        probe.requested_limits(),
+        vec![infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES as usize]
+    );
+    assert_eq!(probe.full_reader_calls(), 0);
+}
+
+#[test]
+fn run_analysis_extraction_can_use_bounded_bytes_reader_without_full_open() {
+    let (conn, _tmp, ds_id) = setup_case_db();
+    let email = sample_email_bytes();
+    FileRepo::new(&conn)
+        .insert_batch(&[file_with_ds(
+            "email",
+            &ds_id,
+            "Users/alice/Mail/message.eml",
+            email.len() as u64,
+        )])
+        .unwrap();
+
+    let probe = BoundedBytesProbe::new(email);
+    let full_reader_probe = probe.clone();
+    let _full_reader_path = move || full_reader_probe.open_full_reader();
+    let reader_probe = probe.clone();
+
+    let run = run_analysis_extraction(&conn, "case-analysis", &["Email"], |file_id| {
+        assert_eq!(file_id.0, "email");
+        let bytes = reader_probe.read_header(MAX_ANALYSIS_SOURCE_BYTES);
+        Ok::<Box<dyn Read>, String>(Box::new(std::io::Cursor::new(bytes)))
+    })
+    .unwrap();
+
+    assert_eq!(run.status, AnalysisParseStatusDto::Parsed);
+    assert_eq!(run.scanned_count, 1);
+    assert_eq!(run.artifact_count, 1);
+    assert_eq!(probe.requested_limits(), vec![MAX_ANALYSIS_SOURCE_BYTES]);
+    assert_eq!(probe.full_reader_calls(), 0);
 }
 
 #[test]
