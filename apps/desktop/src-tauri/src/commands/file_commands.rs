@@ -9,7 +9,7 @@
 use app_services::{file_service, text_service::TextService};
 use base64::Engine;
 use persistence_sqlite::repositories::audit_repo::AuditAction;
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 use tauri::State;
 use transport::{
     commands::{
@@ -29,6 +29,10 @@ use transport::dto::MAX_VIEWER_RANGE_LENGTH;
 
 use super::command_support::write_audit_log;
 use crate::state::AppState;
+
+#[cfg(test)]
+static MEDIA_BYTES_HELPER_CALLS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
 
 /// Get children of a file tree node (lazy loading).
 #[tauri::command]
@@ -494,18 +498,11 @@ fn media_range_for_file(
             eof: true,
         });
     }
-    let mut reader =
-        file_service::open_file_content_by_id(conn, &domain::FileEntryId(file_id.clone()))
-            .map_err(CommandError::from_service_error)?;
-
-    file_service::skip_reader_bytes(reader.as_mut(), request.offset)
-        .map_err(CommandError::from_service_error)?;
-    let readable_len = request.length.min((handle.size - request.offset) as u32);
-    let mut bytes = vec![0u8; readable_len as usize];
-    let bytes_read = reader
-        .read(&mut bytes)
-        .map_err(CommandError::from_service_error)?;
-    bytes.truncate(bytes_read);
+    let readable_len = request
+        .length
+        .min((handle.size - request.offset).min(u32::MAX as u64) as u32);
+    let bytes = read_media_bytes_for_file(conn, &file_id, request.offset, readable_len)?;
+    let bytes_read = bytes.len();
     let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
     let end_offset = request.offset.saturating_add(bytes_read as u64);
 
@@ -517,6 +514,41 @@ fn media_range_for_file(
     })
 }
 
+fn read_media_bytes_for_file(
+    conn: &rusqlite::Connection,
+    file_id: &str,
+    offset: u64,
+    length: u32,
+) -> Result<Vec<u8>, CommandError> {
+    #[cfg(test)]
+    MEDIA_BYTES_HELPER_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+    if let Ok(path) = file_service::get_file_path_for_entry(conn, file_id) {
+        let mut file = std::fs::File::open(path).map_err(CommandError::from_service_error)?;
+        file.seek(SeekFrom::Start(offset))
+            .map_err(CommandError::from_service_error)?;
+        let mut bytes = Vec::with_capacity(length as usize);
+        file.take(length as u64)
+            .read_to_end(&mut bytes)
+            .map_err(CommandError::from_service_error)?;
+        return Ok(bytes);
+    }
+
+    let mut reader =
+        file_service::open_file_content_by_id(conn, &domain::FileEntryId(file_id.to_string()))
+            .map_err(CommandError::from_service_error)?;
+    // Image-backed filesystem readers still expose `Read` only; keep this
+    // compatibility path until fs-* crates provide seekable per-file streams.
+    file_service::skip_reader_bytes(reader.as_mut(), offset)
+        .map_err(CommandError::from_service_error)?;
+    let mut bytes = Vec::with_capacity(length as usize);
+    reader
+        .take(length as u64)
+        .read_to_end(&mut bytes)
+        .map_err(CommandError::from_service_error)?;
+    Ok(bytes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -524,6 +556,14 @@ mod tests {
     use evidence_core::LogicalFsReader;
     use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
     use tempfile::TempDir;
+
+    fn reset_media_bytes_helper_call_count() {
+        MEDIA_BYTES_HELPER_CALLS.store(0, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn media_bytes_helper_call_count() -> usize {
+        MEDIA_BYTES_HELPER_CALLS.load(std::sync::atomic::Ordering::Relaxed)
+    }
 
     fn test_state_with_case(case_id: &str) -> AppState {
         let state = AppState::default();
@@ -743,6 +783,45 @@ mod tests {
                 assert_eq!(range.bytes_base64, "");
                 assert_eq!(range.bytes_read, 0);
                 assert!(range.eof);
+
+                Ok(())
+            },
+        );
+    }
+
+    #[test]
+    fn media_range_mid_file_reads_raw_bytes_without_hex_viewer_path() {
+        let content: Vec<u8> = (0u8..64).collect();
+        with_logical_case_file(
+            "media-mid-range",
+            "clip.mp4",
+            &content,
+            |conn, file_id, _| {
+                let state = test_state_with_case("case-media-mid-range");
+                let handle_id = crate::media_protocol::create_scoped_media_handle(&state, &file_id)
+                    .map_err(persistence_sqlite::DbError::System)?;
+                reset_media_bytes_helper_call_count();
+                let range = media_range_for_file(
+                    &state,
+                    conn,
+                    &MediaRangeRequestDto {
+                        handle_id,
+                        offset: 17,
+                        length: 12,
+                    },
+                )
+                .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
+
+                assert_eq!(range.offset, 17);
+                assert_eq!(range.bytes_read, 12);
+                assert_eq!(media_bytes_helper_call_count(), 1);
+                assert_eq!(
+                    base64::engine::general_purpose::STANDARD
+                        .decode(range.bytes_base64.as_bytes())
+                        .unwrap(),
+                    content[17..29].to_vec()
+                );
+                assert!(!range.eof);
 
                 Ok(())
             },

@@ -3,7 +3,7 @@ use app_services::file_service;
 use base64::Engine;
 use chrono::Duration;
 use std::borrow::Cow;
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 use tauri::http::{self, header, StatusCode};
 use tauri::{AppHandle, Manager, Wry};
 
@@ -247,28 +247,13 @@ fn handle_media_protocol_request_inner(
     )
     .map_err(|err| (err.status(), "invalid media range".to_string()))?;
 
-    let mut reader = file_service::open_file_content_by_id(&conn, &domain::FileEntryId(file_id))
-        .map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "media backend unavailable".to_string(),
-            )
-        })?;
-    file_service::skip_reader_bytes(reader.as_mut(), range.start).map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "media backend unavailable".to_string(),
-        )
-    })?;
-
-    let mut bytes = vec![0u8; range.length as usize];
-    let bytes_read = reader.read(&mut bytes).map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "media backend unavailable".to_string(),
-        )
-    })?;
-    bytes.truncate(bytes_read);
+    let bytes = read_media_protocol_bytes(
+        &conn,
+        &file_id,
+        range.start,
+        range.length.min(u32::MAX as u64) as u32,
+    )?;
+    let bytes_read = bytes.len();
 
     let content_end = range
         .start
@@ -302,6 +287,66 @@ fn handle_media_protocol_request_inner(
         )
         .body(Cow::Owned(bytes))
         .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
+}
+
+fn read_media_protocol_bytes(
+    conn: &rusqlite::Connection,
+    file_id: &str,
+    offset: u64,
+    length: u32,
+) -> Result<Vec<u8>, (StatusCode, String)> {
+    if let Ok(path) = file_service::get_file_path_for_entry(conn, file_id) {
+        let mut file = std::fs::File::open(path).map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "media backend unavailable".to_string(),
+            )
+        })?;
+        file.seek(SeekFrom::Start(offset)).map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "media backend unavailable".to_string(),
+            )
+        })?;
+        let mut bytes = Vec::with_capacity(length as usize);
+        file.take(length as u64)
+            .read_to_end(&mut bytes)
+            .map_err(|_| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "media backend unavailable".to_string(),
+                )
+            })?;
+        return Ok(bytes);
+    }
+
+    let mut reader =
+        file_service::open_file_content_by_id(conn, &domain::FileEntryId(file_id.to_string()))
+            .map_err(|_| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "media backend unavailable".to_string(),
+                )
+            })?;
+    // Image-backed filesystem readers still expose `Read` only; keep this
+    // compatibility path until fs-* crates provide seekable per-file streams.
+    file_service::skip_reader_bytes(reader.as_mut(), offset).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "media backend unavailable".to_string(),
+        )
+    })?;
+    let mut bytes = Vec::with_capacity(length as usize);
+    reader
+        .take(length as u64)
+        .read_to_end(&mut bytes)
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "media backend unavailable".to_string(),
+            )
+        })?;
+    Ok(bytes)
 }
 
 fn text_response(status: StatusCode, message: &str) -> http::Response<Cow<'static, [u8]>> {

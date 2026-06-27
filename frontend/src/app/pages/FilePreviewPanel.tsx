@@ -14,6 +14,7 @@ import type {
   TextPreviewResponse,
   ImagePreviewResponse,
   MediaUrl,
+  ViewerHandle,
 } from '@/types/models';
 
 function formatBytes(bytes?: number) {
@@ -62,10 +63,14 @@ function LargeMediaFallback({
   );
 }
 
+export type FilePreviewKind = 'image' | 'video' | 'audio';
+
 export interface FilePreviewPanelProps {
   viewerTab: 'metadata' | 'text' | 'hex' | 'preview';
   setViewerTab: (tab: 'metadata' | 'text' | 'hex' | 'preview') => void;
   viewer: FileHexViewerState | undefined;
+  fileHandle?: ViewerHandle;
+  previewKind?: FilePreviewKind;
   onHexJumpInputChange: (value: string) => void;
   onHexJump: (input?: string) => Promise<boolean>;
   onLoadNextHexRange: () => Promise<void> | void;
@@ -82,6 +87,8 @@ export function FilePreviewPanel({
   viewerTab,
   setViewerTab,
   viewer,
+  fileHandle,
+  previewKind,
   onHexJumpInputChange,
   onHexJump,
   onLoadNextHexRange,
@@ -213,14 +220,9 @@ export function FilePreviewPanel({
             value: 'preview',
             label: '预览',
             content: (() => {
-              const mime = viewer?.handle.mime?.toLowerCase() ?? '';
-              const ext = (selectedFile?.ext ?? selectedFile?.name.split('.').pop() ?? '').toLowerCase().replace(/^\./, '');
-              const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
-              const videoExts = ['mp4', 'webm', 'avi', 'mkv'];
-              const audioExts = ['mp3', 'wav', 'flac', 'aac', 'ogg'];
               
               // 图片预览
-              if (mime.startsWith('image/') || imageExts.includes(ext)) {
+              if (previewKind === 'image') {
                 if (imagePreview?.dataUrl) {
                   return (
                     <ImageViewer
@@ -234,7 +236,7 @@ export function FilePreviewPanel({
               }
               
               // 视频预览
-              if (mime.startsWith('video/') || videoExts.includes(ext)) {
+              if (previewKind === 'video') {
                 if (mediaUrl?.url) {
                   return mediaUrl.previewMode === 'rangeFallback' || mediaUrl.previewMode === 'range' ? (
                     <div className="h-full flex flex-col">
@@ -284,7 +286,7 @@ export function FilePreviewPanel({
               }
               
               // 音频预览
-              if (mime.startsWith('audio/') || audioExts.includes(ext)) {
+              if (previewKind === 'audio') {
                 if (mediaUrl?.url) {
                   return mediaUrl.previewMode === 'rangeFallback' || mediaUrl.previewMode === 'range' ? (
                     <div className="h-full flex flex-col">
@@ -347,10 +349,10 @@ export function FilePreviewPanel({
             content: (
               <div className="space-y-2 font-mono text-[11px] text-[#444]">
                 <div>
-                  handle_id: {viewer?.handle.handleId ?? '-'}
+                  handle_id: {fileHandle?.handleId ?? viewer?.handle.handleId ?? '-'}
                 </div>
-                <div>size: {viewer?.handle.size ?? '-'}</div>
-                <div>mime: {viewer?.handle.mime ?? '-'}</div>
+                <div>size: {fileHandle?.size ?? viewer?.handle.size ?? selectedFile?.size ?? '-'}</div>
+                <div>mime: {fileHandle?.mime ?? viewer?.handle.mime ?? '-'}</div>
                 <div>path: {selectedFile?.path ?? '-'}</div>
               </div>
             ),

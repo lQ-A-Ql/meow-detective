@@ -116,7 +116,16 @@ export function useImportDataSource() {
   });
 }
 
-export function useFileViewer(fileId?: string) {
+export function useFileHandle(fileId?: string, enabled = true) {
+  return useQuery({
+    queryKey: ['files', 'handle', fileId ?? null],
+    enabled: Boolean(fileId) && enabled,
+    retry: false,
+    queryFn: () => openFileHandle(fileId!),
+  });
+}
+
+export function useFileViewer(fileId?: string, enabled = true) {
   const [loadedRanges, setLoadedRanges] = useState<HexLoadedRange[]>([]);
   const [loadedChunks, setLoadedChunks] = useState<Record<number, ViewerRangeResponse>>({});
   const [activeOffset, setActiveOffset] = useState(0);
@@ -134,7 +143,8 @@ export function useFileViewer(fileId?: string) {
   }, [fileId]);
 
   const baseQuery = useQuery({
-    enabled: Boolean(fileId),
+    queryKey: ['files', 'viewer', fileId ?? null],
+    enabled: Boolean(fileId) && enabled,
     retry: false,
     queryFn: async () => {
       const handle = await openFileHandle(fileId!);
@@ -265,10 +275,10 @@ export function useFileViewer(fileId?: string) {
  * Hook to get text preview for a file.
  * Returns text content with encoding detection.
  */
-export function useTextPreview(fileId?: string) {
+export function useTextPreview(fileId?: string, enabled = true) {
   return useQuery({
     queryKey: ['files', 'text', fileId],
-    enabled: Boolean(fileId),
+    enabled: Boolean(fileId) && enabled,
     retry: false,
     queryFn: async () => {
       if (!fileId) return null;
@@ -281,10 +291,10 @@ export function useTextPreview(fileId?: string) {
  * Hook to get image preview for a file.
  * Returns an inline data URL for bounded image previews.
  */
-export function useImagePreview(fileId?: string) {
+export function useImagePreview(fileId?: string, enabled = true) {
   return useQuery({
     queryKey: ['files', 'image', fileId],
-    enabled: Boolean(fileId),
+    enabled: Boolean(fileId) && enabled,
     retry: false,
     queryFn: async () => {
       if (!fileId) return null;
@@ -297,10 +307,10 @@ export function useImagePreview(fileId?: string) {
  * Hook to get media URL for video/audio playback.
  * Returns an inline data URL for bounded media previews.
  */
-export function useMediaUrl(fileId?: string) {
+export function useMediaUrl(fileId?: string, enabled = true) {
   const query = useQuery({
     queryKey: ['files', 'media', fileId],
-    enabled: Boolean(fileId),
+    enabled: Boolean(fileId) && enabled,
     retry: false,
     queryFn: async () => {
       if (!fileId) return null;

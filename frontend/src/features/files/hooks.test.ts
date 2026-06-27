@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   readMediaRange: vi.fn(),
   openFileHandle: vi.fn(),
   readFileRange: vi.fn(),
+  getTextPreview: vi.fn(),
+  getImagePreview: vi.fn(),
 }));
 
 vi.mock('@/lib/api/files', () => ({
@@ -24,8 +26,8 @@ vi.mock('@/lib/api/files', () => ({
   openFileHandle: mocks.openFileHandle,
   readFileRange: mocks.readFileRange,
   extractFile: vi.fn(),
-  getTextPreview: vi.fn(),
-  getImagePreview: vi.fn(),
+  getTextPreview: mocks.getTextPreview,
+  getImagePreview: mocks.getImagePreview,
 }));
 
 vi.mock('@/features/jobs/hooks', () => ({
@@ -36,7 +38,14 @@ vi.mock('@/features/cache-invalidation', () => ({
   invalidateImportProjectionQueries: vi.fn(),
 }));
 
-import { useFileTree, useFileViewer, useMediaUrl } from './hooks';
+import {
+  useFileHandle,
+  useFileTree,
+  useFileViewer,
+  useImagePreview,
+  useMediaUrl,
+  useTextPreview,
+} from './hooks';
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -182,6 +191,47 @@ describe('files hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data?.previewMode).toBe('rangeFallback');
       expect(result.current.data?.previewBytes).toBe(0);
+    });
+  });
+
+  describe('preview hook gating', () => {
+    it('keeps handle and hex range calls idle when disabled', () => {
+      const { result: handleResult } = renderHook(
+        () => useFileHandle('file-disabled', false),
+        { wrapper: createWrapper() },
+      );
+      const { result: viewerResult } = renderHook(
+        () => useFileViewer('file-disabled', false),
+        { wrapper: createWrapper() },
+      );
+
+      expect(handleResult.current.fetchStatus).toBe('idle');
+      expect(viewerResult.current.fetchStatus).toBe('idle');
+      expect(mocks.openFileHandle).not.toHaveBeenCalled();
+      expect(mocks.readFileRange).not.toHaveBeenCalled();
+    });
+
+    it('keeps text, image, and media preview calls idle when disabled', () => {
+      const { result: textResult } = renderHook(
+        () => useTextPreview('file-disabled', false),
+        { wrapper: createWrapper() },
+      );
+      const { result: imageResult } = renderHook(
+        () => useImagePreview('file-disabled', false),
+        { wrapper: createWrapper() },
+      );
+      const { result: mediaResult } = renderHook(
+        () => useMediaUrl('file-disabled', false),
+        { wrapper: createWrapper() },
+      );
+
+      expect(textResult.current.fetchStatus).toBe('idle');
+      expect(imageResult.current.fetchStatus).toBe('idle');
+      expect(mediaResult.current.fetchStatus).toBe('idle');
+      expect(mocks.getTextPreview).not.toHaveBeenCalled();
+      expect(mocks.getImagePreview).not.toHaveBeenCalled();
+      expect(mocks.getMediaUrl).not.toHaveBeenCalled();
+      expect(mocks.readMediaRange).not.toHaveBeenCalled();
     });
   });
 

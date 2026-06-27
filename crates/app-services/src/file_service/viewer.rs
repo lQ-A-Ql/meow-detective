@@ -6,7 +6,7 @@ use persistence_sqlite::repositories::file_repo::FileRepo;
 use persistence_sqlite::repositories::partition_repo::PartitionRepo;
 use rusqlite::Connection;
 use std::collections::{HashMap, VecDeque};
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use transport::dto::{ViewerHandleDto, ViewerRangeRequestDto, ViewerRangeResponseDto};
 
@@ -16,6 +16,23 @@ const FILE_HANDLE_PREFIX: &str = "file:";
 /// Cache hits reuse the `Arc<chunk_table>` via `E01Reader::re_open`,
 /// opening fresh segment file handles without re-parsing headers.
 const E01_READER_CACHE_MAX_SIZE: usize = 4;
+
+trait ReadSeek: Read + Seek {}
+
+impl<T> ReadSeek for T where T: Read + Seek {}
+
+enum RangeContentReader {
+    Seekable(Box<dyn ReadSeek>),
+    Streaming(Box<dyn Read>),
+}
+
+#[cfg(test)]
+static SKIP_READER_BYTES_CALLS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(test)]
+static FORMAT_HEX_LINES_CALLS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
 
 struct E01ReaderCache {
     max_size: usize,
@@ -113,13 +130,12 @@ pub fn read_file_range_for_case(
     let mut request = request.clone();
     request.validate().map_err(FileServiceError::InvalidInput)?;
     let file_id = file_id_from_handle(&request.handle_id)?;
-    let mut file = open_file_content_by_id(conn, &FileEntryId(file_id.to_string()))?;
-
-    skip_reader_bytes(file.as_mut(), request.offset)?;
-    let length = (request.length as usize).min(infrastructure::constants::MAX_RANGE_LENGTH);
-    let mut bytes = vec![0u8; length];
-    let read = file.read(&mut bytes)?;
-    bytes.truncate(read);
+    let bytes = read_file_bytes_for_case(
+        conn,
+        &FileEntryId(file_id.to_string()),
+        request.offset,
+        request.length,
+    )?;
 
     let raw_bytes = bytes.clone();
     Ok(ViewerRangeResponseDto {
@@ -144,6 +160,62 @@ pub fn open_file_content_by_id(
         .ok_or_else(|| FileServiceError::not_found("File not found"))?;
 
     open_file_content_for_entry(conn, &repo, &entry)
+}
+
+pub fn read_file_bytes_for_case(
+    conn: &Connection,
+    file_id: &FileEntryId,
+    offset: u64,
+    length: u32,
+) -> Result<Vec<u8>, FileServiceError> {
+    let repo = FileRepo::new(conn);
+    let entry = repo
+        .find_by_id(file_id)?
+        .ok_or_else(|| FileServiceError::not_found("File not found"))?;
+    if let Some(size) = entry.size {
+        if offset > size {
+            return Err(FileServiceError::other("Read offset exceeds file size"));
+        }
+    }
+
+    read_file_bytes_for_entry(conn, &repo, &entry, offset, length)
+}
+
+fn read_file_bytes_for_entry(
+    conn: &Connection,
+    repo: &FileRepo<'_>,
+    entry: &FileEntry,
+    offset: u64,
+    length: u32,
+) -> Result<Vec<u8>, FileServiceError> {
+    let length = (length as usize).min(infrastructure::constants::MAX_RANGE_LENGTH);
+    match open_range_content_for_entry(conn, repo, entry)? {
+        RangeContentReader::Seekable(mut reader) => {
+            read_seekable_range(reader.as_mut(), offset, length)
+        }
+        RangeContentReader::Streaming(mut reader) => {
+            // Image-backed filesystem readers still expose `Read` only and may
+            // materialize file data internally. Keep this compatibility path
+            // until fs-* crates expose seekable per-file streams.
+            skip_reader_bytes(reader.as_mut(), offset)?;
+            read_bounded(reader.as_mut(), length)
+        }
+    }
+}
+
+fn read_seekable_range(
+    reader: &mut dyn ReadSeek,
+    offset: u64,
+    length: usize,
+) -> Result<Vec<u8>, FileServiceError> {
+    reader.seek(SeekFrom::Start(offset))?;
+    read_bounded(reader, length)
+}
+
+fn read_bounded(reader: &mut dyn Read, length: usize) -> Result<Vec<u8>, FileServiceError> {
+    let mut bytes = Vec::with_capacity(length);
+    reader.take(length as u64).read_to_end(&mut bytes)?;
+    Ok(bytes)
 }
 
 pub fn read_file_header_by_id(
@@ -209,10 +281,61 @@ fn open_file_content_for_entry(
     }
 }
 
+fn open_range_content_for_entry(
+    conn: &Connection,
+    repo: &FileRepo<'_>,
+    entry: &FileEntry,
+) -> Result<RangeContentReader, FileServiceError> {
+    if entry.entry_type != EntryType::File {
+        return Err(FileServiceError::invalid_input(
+            "Cannot read a directory as a file",
+        ));
+    }
+
+    let (kind, source_path) = repo
+        .find_data_source_location(&entry.data_source_id)?
+        .ok_or_else(|| FileServiceError::not_found("Data source not found"))?;
+    let expected_partition_index = root_partition_index_for_entry(repo, entry);
+
+    match kind.as_str() {
+        "logical_directory" => {
+            open_logical_file_seekable(&source_path, entry).map(RangeContentReader::Seekable)
+        }
+        "e01" => open_e01_file(conn, &source_path, entry, expected_partition_index)
+            .map(RangeContentReader::Streaming),
+        "raw" => open_raw_file(&source_path, entry, expected_partition_index)
+            .map(RangeContentReader::Streaming),
+        other => Err(FileServiceError::other(format!(
+            "Range reading is not yet wired for data source kind '{}'",
+            other
+        ))),
+    }
+}
+
 fn open_logical_file(
     source_path: &str,
     entry: &FileEntry,
 ) -> Result<Box<dyn Read>, FileServiceError> {
+    Ok(Box::new(std::fs::File::open(resolve_logical_file_path(
+        source_path,
+        entry,
+    )?)?) as Box<dyn Read>)
+}
+
+fn open_logical_file_seekable(
+    source_path: &str,
+    entry: &FileEntry,
+) -> Result<Box<dyn ReadSeek>, FileServiceError> {
+    Ok(Box::new(std::fs::File::open(resolve_logical_file_path(
+        source_path,
+        entry,
+    )?)?) as Box<dyn ReadSeek>)
+}
+
+fn resolve_logical_file_path(
+    source_path: &str,
+    entry: &FileEntry,
+) -> Result<PathBuf, FileServiceError> {
     let root = PathBuf::from(source_path).canonicalize()?;
     let relative_path = safe_relative_path(&entry.path)?;
     let full_path = root.join(relative_path);
@@ -242,7 +365,7 @@ fn open_logical_file(
         ));
     }
 
-    Ok(Box::new(std::fs::File::open(canonical)?) as Box<dyn Read>)
+    Ok(canonical)
 }
 
 fn open_raw_file(
@@ -545,6 +668,9 @@ pub fn skip_reader_bytes(
     reader: &mut dyn Read,
     mut remaining: u64,
 ) -> Result<(), FileServiceError> {
+    #[cfg(test)]
+    SKIP_READER_BYTES_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
     let mut buffer = vec![0u8; 65536];
     while remaining > 0 {
         let chunk_len = remaining.min(buffer.len() as u64) as usize;
@@ -558,6 +684,9 @@ pub fn skip_reader_bytes(
 }
 
 fn format_hex_lines(base_offset: u64, bytes: &[u8]) -> Vec<String> {
+    #[cfg(test)]
+    FORMAT_HEX_LINES_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
     let line_count = bytes.len().div_ceil(16);
     let mut result = Vec::with_capacity(line_count);
 
@@ -593,7 +722,27 @@ fn empty_hex_response() -> ViewerRangeResponseDto {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use domain::{CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
+    use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
+    use persistence_sqlite::runner;
+    use rusqlite::params;
     use std::io::{Read, Seek, SeekFrom, Write};
+
+    fn reset_skip_reader_bytes_call_count() {
+        SKIP_READER_BYTES_CALLS.store(0, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn skip_reader_bytes_call_count() -> usize {
+        SKIP_READER_BYTES_CALLS.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    fn reset_format_hex_lines_call_count() {
+        FORMAT_HEX_LINES_CALLS.store(0, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn format_hex_lines_call_count() -> usize {
+        FORMAT_HEX_LINES_CALLS.load(std::sync::atomic::Ordering::Relaxed)
+    }
 
     fn make_temp_e01() -> (tempfile::TempDir, PathBuf) {
         let dir = tempfile::TempDir::new().unwrap();
@@ -660,6 +809,70 @@ mod tests {
         desc[16..24].copy_from_slice(&next.to_le_bytes());
         desc[24..32].copy_from_slice(&size.to_le_bytes());
         desc
+    }
+
+    #[test]
+    fn logical_directory_mid_file_range_uses_seek_not_linear_skip() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let evidence_dir = dir.path().join("evidence");
+        std::fs::create_dir_all(&evidence_dir).unwrap();
+        let bytes: Vec<u8> = (0u8..64).collect();
+        std::fs::write(evidence_dir.join("sample.bin"), &bytes).unwrap();
+
+        let conn = persistence_sqlite::open_or_create(&dir.path().join("case.db")).unwrap();
+        runner::run_all(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO cases (id, name, created_at, updated_at)
+             VALUES ('case-range', 'Range Case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+
+        let ds_id = DataSourceId("ds-logical-range".to_string());
+        DataSourceRepo::new(&conn)
+            .insert(
+                &CaseId("case-range".to_string()),
+                &DataSource {
+                    id: ds_id.clone(),
+                    name: "logical evidence".to_string(),
+                    kind: DataSourceKind::LogicalDirectory,
+                    source_path: evidence_dir,
+                    imported_at: chrono::Utc::now(),
+                    provenance: DataSourceProvenance::unknown(),
+                },
+            )
+            .unwrap();
+
+        conn.execute(
+            "INSERT INTO file_entries
+             (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
+             VALUES ('file-sample', NULL, ?1, 'sample.bin', 'sample.bin', 'file', ?2, 'bin', 0, 0, 0)",
+            params![ds_id.0, bytes.len() as i64],
+        )
+        .unwrap();
+
+        reset_skip_reader_bytes_call_count();
+        reset_format_hex_lines_call_count();
+        let range_bytes =
+            read_file_bytes_for_case(&conn, &FileEntryId("file-sample".to_string()), 17, 12)
+                .unwrap();
+
+        assert_eq!(range_bytes, bytes[17..29].to_vec());
+        assert_eq!(skip_reader_bytes_call_count(), 0);
+        assert_eq!(format_hex_lines_call_count(), 0);
+
+        let response = read_file_range_for_case(
+            &conn,
+            &ViewerRangeRequestDto {
+                handle_id: "file:file-sample".to_string(),
+                offset: 17,
+                length: 12,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(response.raw_bytes.unwrap(), bytes[17..29].to_vec());
+        assert_eq!(format_hex_lines_call_count(), 1);
     }
 
     #[test]

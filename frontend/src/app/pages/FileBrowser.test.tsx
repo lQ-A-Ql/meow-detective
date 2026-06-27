@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   fileRows: vi.fn(),
   fileChildren: vi.fn(),
   fileJumpContext: vi.fn(),
+  fileHandle: vi.fn(),
   fileViewer: vi.fn(),
   textPreview: vi.fn(),
   imagePreview: vi.fn(),
@@ -67,6 +68,7 @@ vi.mock('@/features/files/hooks', () => ({
   useFileJumpContext: mocks.fileJumpContext,
   useFileRowsPage: mocks.fileRows,
   useFileTree: mocks.fileTree,
+  useFileHandle: mocks.fileHandle,
   useFileViewer: mocks.fileViewer,
   useTextPreview: mocks.textPreview,
   useImagePreview: mocks.imagePreview,
@@ -234,6 +236,13 @@ describe('FileBrowser media preview', () => {
       }),
     );
     mocks.fileJumpContext.mockReturnValue(queryState(null));
+    mocks.fileHandle.mockReturnValue(
+      queryState({
+        handleId: 'file:video-1',
+        size: videoFile.size,
+        mime: 'video/mp4',
+      }),
+    );
     mocks.fileViewer.mockReturnValue(
       {
         ...queryState({
@@ -259,6 +268,44 @@ describe('FileBrowser media preview', () => {
     mocks.textPreview.mockReturnValue(queryState(null));
     mocks.imagePreview.mockReturnValue(queryState(null));
     mocks.mediaUrl.mockReturnValue(queryState(null));
+  });
+
+  it('enables only the hex preview chain on the hex tab', () => {
+    Object.assign(mocks.uiState, {
+      viewerTab: 'hex',
+    });
+
+    renderPage();
+
+    expect(mocks.fileViewer).toHaveBeenCalledWith('video-1', true);
+    expect(mocks.textPreview).toHaveBeenCalledWith('video-1', false);
+    expect(mocks.imagePreview).toHaveBeenCalledWith('video-1', false);
+    expect(mocks.mediaUrl).toHaveBeenCalledWith('video-1', false);
+    expect(mocks.fileHandle).toHaveBeenCalledWith('video-1', false);
+  });
+
+  it('enables only the text preview chain on the text tab', () => {
+    Object.assign(mocks.uiState, {
+      viewerTab: 'text',
+    });
+
+    renderPage();
+
+    expect(mocks.fileViewer).toHaveBeenCalledWith('video-1', false);
+    expect(mocks.textPreview).toHaveBeenCalledWith('video-1', true);
+    expect(mocks.imagePreview).toHaveBeenCalledWith('video-1', false);
+    expect(mocks.mediaUrl).toHaveBeenCalledWith('video-1', false);
+    expect(mocks.fileHandle).toHaveBeenCalledWith('video-1', false);
+  });
+
+  it('enables only the matching media preview chain on the preview tab', () => {
+    renderPage();
+
+    expect(mocks.fileViewer).toHaveBeenCalledWith('video-1', false);
+    expect(mocks.textPreview).toHaveBeenCalledWith('video-1', false);
+    expect(mocks.imagePreview).toHaveBeenCalledWith('video-1', false);
+    expect(mocks.mediaUrl).toHaveBeenCalledWith('video-1', true);
+    expect(mocks.fileHandle).toHaveBeenCalledWith('video-1', false);
   });
 
   it('shows large media controlled chunk fallback text and keeps extract available', () => {
