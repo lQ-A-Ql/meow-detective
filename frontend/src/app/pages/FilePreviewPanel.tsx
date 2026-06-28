@@ -132,11 +132,14 @@ export function FilePreviewPanel({
           {
             value: 'hex',
             label: '十六进制',
-            content: viewer?.lines?.length ? (
+            content: viewer && (viewer.rawBytes.length > 0 || viewer.lines.length > 0) ? (
               <div className="flex h-full min-h-0 flex-col">
                 <div className="min-h-0 flex-1">
                   <HexViewer
                     lines={viewer.lines}
+                    rawBytes={viewer.rawBytes}
+                    baseOffset={viewer.baseOffset}
+                    fileSize={viewer.fileSize}
                     activeOffset={viewer.activeOffset}
                     loadedRanges={viewer.loadedRanges}
                     onNeedMoreRange={(direction) => {
