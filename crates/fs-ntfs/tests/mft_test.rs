@@ -728,6 +728,94 @@ fn build_nonresident_data_fixture() -> Vec<u8> {
     data
 }
 
+/// Build a fixture where the base record has only $ATTRIBUTE_LIST and the
+/// unnamed $DATA stream lives in an extension MFT record.
+fn build_attribute_list_external_data_fixture() -> Vec<u8> {
+    let cluster_size = 512usize;
+    let mft_cluster = 2u64;
+    let mft_record_size = 1024usize;
+    let rec5_off = mft_cluster as usize * 512 + 5 * mft_record_size;
+    let rec6_off = mft_cluster as usize * 512 + 6 * mft_record_size;
+    let rec7_off = mft_cluster as usize * 512 + 7 * mft_record_size;
+
+    let data_cluster = 40u64;
+    let data_offset = data_cluster as usize * cluster_size;
+    let file_content = b"external-attribute-list-data-across-extension-record";
+    let total = (data_offset + cluster_size).max(rec7_off + mft_record_size + 512);
+    let mut data = vec![0u8; total];
+
+    make_boot(&mut data[0..512]);
+
+    // Root -> listed.bin (inode 6)
+    let rec5 = &mut data[rec5_off..rec5_off + mft_record_size];
+    rec5[0..4].copy_from_slice(b"FILE");
+    rec5[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+    rec5[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+    rec5[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+    let iro = 0x68usize;
+    rec5[iro..iro + 4].copy_from_slice(&0x90u32.to_le_bytes());
+    rec5[iro + 0x10..iro + 0x14].copy_from_slice(&0x10u32.to_le_bytes());
+    let (ent, _) = build_indx_entries(&["listed.bin"], 6, false);
+    let mut off = iro + 0x20;
+    rec5[off..off + ent.len()].copy_from_slice(&ent);
+    off += ent.len();
+    rec5[off..off + 4].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+    off += 4;
+    rec5[iro + 4..iro + 8].copy_from_slice(&((off - iro) as u32).to_le_bytes());
+
+    // Base file record (inode 6) with resident $ATTRIBUTE_LIST only.
+    let rec6 = &mut data[rec6_off..rec6_off + mft_record_size];
+    rec6[0..4].copy_from_slice(b"FILE");
+    rec6[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+    rec6[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+    rec6[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+
+    let attr_list = 0x68usize;
+    let content_off = 0x18u16;
+    let entry_len = 0x20u16;
+    let attr_len = content_off as usize + entry_len as usize;
+    rec6[attr_list..attr_list + 4].copy_from_slice(&0x20u32.to_le_bytes());
+    rec6[attr_list + 4..attr_list + 8].copy_from_slice(&(attr_len as u32).to_le_bytes());
+    rec6[attr_list + 8] = 0;
+    rec6[attr_list + 0x10..attr_list + 0x14].copy_from_slice(&(entry_len as u32).to_le_bytes());
+    rec6[attr_list + 0x14..attr_list + 0x16].copy_from_slice(&content_off.to_le_bytes());
+    let list_entry = attr_list + content_off as usize;
+    rec6[list_entry..list_entry + 4].copy_from_slice(&0x80u32.to_le_bytes());
+    rec6[list_entry + 4..list_entry + 6].copy_from_slice(&entry_len.to_le_bytes());
+    rec6[list_entry + 0x10..list_entry + 0x18].copy_from_slice(&7u64.to_le_bytes());
+    rec6[list_entry + 0x18..list_entry + 0x1a].copy_from_slice(&1u16.to_le_bytes());
+    rec6[attr_list + attr_len..attr_list + attr_len + 4]
+        .copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+
+    // Extension record (inode 7) points back to base inode 6 and owns $DATA.
+    let rec7 = &mut data[rec7_off..rec7_off + mft_record_size];
+    rec7[0..4].copy_from_slice(b"FILE");
+    rec7[0x14..0x16].copy_from_slice(&0x38u16.to_le_bytes());
+    rec7[0x20..0x28].copy_from_slice(&6u64.to_le_bytes());
+    rec7[0x38..0x3C].copy_from_slice(&0x10u32.to_le_bytes());
+    rec7[0x3C..0x40].copy_from_slice(&48u32.to_le_bytes());
+
+    let data_attr = 0x68usize;
+    rec7[data_attr..data_attr + 4].copy_from_slice(&0x80u32.to_le_bytes());
+    rec7[data_attr + 8] = 1;
+    rec7[data_attr + 0x20..data_attr + 0x22].copy_from_slice(&0x40u16.to_le_bytes());
+    rec7[data_attr + 0x28..data_attr + 0x30].copy_from_slice(&(cluster_size as u64).to_le_bytes());
+    rec7[data_attr + 0x30..data_attr + 0x38]
+        .copy_from_slice(&(file_content.len() as u64).to_le_bytes());
+    let run = data_attr + 0x40;
+    rec7[run] = 0x31;
+    rec7[run + 1] = 1;
+    rec7[run + 2..run + 5].copy_from_slice(&data_cluster.to_le_bytes()[..3]);
+    rec7[run + 5] = 0;
+    rec7[data_attr + 4..data_attr + 8]
+        .copy_from_slice(&((run + 6 - data_attr) as u32).to_le_bytes());
+    rec7[run + 6..run + 10].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes());
+
+    data[data_offset..data_offset + file_content.len()].copy_from_slice(file_content);
+
+    data
+}
+
 /// Boot sector helper for Phase 17 fixtures.
 fn make_boot(boot: &mut [u8]) {
     boot[0] = 0xEB;
@@ -760,6 +848,25 @@ fn read_nonresident_file_data() {
     let mut buf = Vec::new();
     file.read_to_end(&mut buf).unwrap();
     assert_eq!(buf, b"This is non-resident data spanning one cluster.");
+}
+
+#[test]
+fn read_external_attribute_list_data_by_inode_and_range() {
+    let img = build_attribute_list_external_data_fixture();
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let ntfs = NtfsReader::open(reader, 0).unwrap();
+    let expected = b"external-attribute-list-data-across-extension-record";
+
+    let mut file = ntfs.open_file("mft:6").unwrap();
+    let mut buf = Vec::new();
+    file.read_to_end(&mut buf).unwrap();
+    assert_eq!(buf, expected);
+
+    let first = ntfs.read_file_range_by_inode(6, 0, 8).unwrap();
+    assert_eq!(first, b"external");
+
+    let middle = ntfs.read_file_range_by_inode(6, 19, 9).unwrap();
+    assert_eq!(middle, b"list-data");
 }
 
 #[test]

@@ -29,6 +29,35 @@ struct DataRun {
 }
 
 #[derive(Debug, Clone)]
+enum DataAttributeExtent {
+    Resident {
+        data: Vec<u8>,
+    },
+    NonResident {
+        lowest_vcn: u64,
+        allocated_size: u64,
+        real_size: u64,
+        attr_flags: u16,
+        compression_unit_exp: u16,
+        runs: Vec<DataRun>,
+    },
+}
+
+#[derive(Debug)]
+struct AttributeListEntry {
+    attr_type: u32,
+    name_len: u8,
+    record_number: u64,
+}
+
+const ATTR_TYPE_ATTRIBUTE_LIST: u32 = 0x20;
+const ATTR_TYPE_DATA: u32 = 0x80;
+const ATTR_TYPE_END: u32 = 0xFFFF_FFFF;
+const MAX_EXTERNAL_ATTRIBUTE_RECORDS: usize = 256;
+const MAX_ATTRIBUTE_LIST_ENTRIES: usize = 4096;
+const MAX_BUFFERED_FILE_BYTES: usize = 256 * 1024 * 1024;
+
+#[derive(Debug, Clone)]
 pub struct NtfsDirectoryEntry {
     pub name: String,
     pub is_dir: bool,
@@ -351,7 +380,7 @@ impl NtfsReader {
         }
 
         // Upper bound to avoid OOM on corrupt data
-        if alloc_size > 128 * 1024 * 1024 {
+        if alloc_size > MAX_BUFFERED_FILE_BYTES as u64 {
             return Err(invalid_fs_data(format!(
                 "attribute allocation too large: {} bytes",
                 alloc_size
@@ -371,15 +400,7 @@ impl NtfsReader {
         let runs = parse_data_runs_ext(&record[attr_pos + run_off..])?;
 
         if attr_flags & 0x0001 != 0 {
-            let compression_unit_exp = if attr_pos + 0x24 <= record.len() {
-                u16::from_le_bytes(
-                    record[attr_pos + 0x22..attr_pos + 0x24]
-                        .try_into()
-                        .unwrap_or([0; 2]),
-                )
-            } else {
-                4
-            };
+            let compression_unit_exp = nonresident_compression_unit(record, attr_pos);
             let decoded =
                 self.read_compressed_data_runs_to_vec(&runs, compression_unit_exp, real_size)?;
             return Ok(truncate_data_to_declared_size(decoded, real_size));
@@ -395,7 +416,6 @@ impl NtfsReader {
         include_sparse: bool,
         max_bytes: u64,
     ) -> io::Result<Vec<u8>> {
-        const MAX_FILE_BUFFER: usize = 128 * 1024 * 1024;
         let mut buf = Vec::new();
         let mut reader = self.reader.borrow_mut();
 
@@ -424,10 +444,10 @@ impl NtfsReader {
                 .len()
                 .checked_add(to_append)
                 .ok_or_else(|| invalid_fs_data("data run buffer size overflow"))?;
-            if new_size > MAX_FILE_BUFFER {
+            if new_size > MAX_BUFFERED_FILE_BYTES {
                 return Err(invalid_fs_data(format!(
-                    "data run buffer exceeds 128 MB limit (would be {} bytes)",
-                    new_size
+                    "data run buffer exceeds {} byte limit (would be {} bytes)",
+                    MAX_BUFFERED_FILE_BYTES, new_size
                 )));
             }
 
@@ -519,7 +539,6 @@ impl NtfsReader {
         compression_unit_exp: u16,
         real_size: u64,
     ) -> io::Result<Vec<u8>> {
-        const MAX_FILE_BUFFER: usize = 128 * 1024 * 1024;
         let unit_clusters = 1u64
             .checked_shl(compression_unit_exp.min(20) as u32)
             .filter(|value| *value > 0)
@@ -545,7 +564,12 @@ impl NtfsReader {
                     let physical_lcn = lcn
                         .checked_add(consumed as i64)
                         .ok_or_else(|| invalid_fs_data("compressed data run LCN overflow"))?;
-                    self.read_clusters_into(physical_lcn, take, &mut unit, MAX_FILE_BUFFER)?;
+                    self.read_clusters_into(
+                        physical_lcn,
+                        take,
+                        &mut unit,
+                        MAX_BUFFERED_FILE_BYTES,
+                    )?;
                 } else {
                     unit_has_sparse = true;
                 }
@@ -558,7 +582,7 @@ impl NtfsReader {
                         &unit,
                         unit_has_sparse,
                         unit_bytes,
-                        MAX_FILE_BUFFER,
+                        MAX_BUFFERED_FILE_BYTES,
                     )?;
                     unit.clear();
                     unit_logical_clusters = 0;
@@ -576,7 +600,7 @@ impl NtfsReader {
                 &unit,
                 unit_has_sparse,
                 logical_bytes,
-                MAX_FILE_BUFFER,
+                MAX_BUFFERED_FILE_BYTES,
             )?;
         }
 
@@ -604,8 +628,8 @@ impl NtfsReader {
             .ok_or_else(|| invalid_fs_data("data run buffer size overflow"))?;
         if new_size > max_bytes {
             return Err(invalid_fs_data(format!(
-                "data run buffer exceeds 128 MB limit (would be {} bytes)",
-                new_size
+                "data run buffer exceeds {} byte limit (would be {} bytes)",
+                max_bytes, new_size
             )));
         }
 
@@ -768,57 +792,12 @@ impl NtfsReader {
     /// Read the $DATA attribute of a file by MFT inode.
     /// Handles both resident (inline) and non-resident (data run chain) $DATA.
     fn read_file_data(&self, inode: u64) -> io::Result<Vec<u8>> {
-        let rec = self.read_mft_record(inode)?;
-        if rec.len() < 0x18 || &rec[0..4] != b"FILE" {
-            return Err(invalid_fs_data(format!(
-                "inode {} is not a valid FILE record",
-                inode
-            )));
+        let extents = self.collect_unnamed_data_extents(inode)?;
+        if extents.is_empty() {
+            return Ok(Vec::new());
         }
-        let attr_off = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
-        let mut pos = attr_off;
-        while pos + 8 < rec.len() {
-            let typ = u32::from_le_bytes(rec[pos..pos + 4].try_into().unwrap_or([0; 4]));
-            if typ == 0xFFFFFFFF {
-                break;
-            }
-            let len =
-                u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
-            if len == 0 || pos + len > rec.len() {
-                break;
-            }
-            if typ == 0x80 {
-                if !is_unnamed_attribute(&rec, pos) {
-                    pos += len;
-                    continue;
-                }
-                let is_nonresident = pos + 9 <= rec.len() && (rec[pos + 8] & 1) != 0;
-                if is_nonresident {
-                    if pos + 0x40 > rec.len() {
-                        return Ok(Vec::new());
-                    }
-                    return self.read_attr_nonresident(pos, &rec);
-                } else {
-                    if pos + 0x16 > rec.len() {
-                        return Ok(Vec::new());
-                    }
-                    let content_size = u32::from_le_bytes(
-                        rec[pos + 0x10..pos + 0x14].try_into().unwrap_or([0; 4]),
-                    ) as usize;
-                    let content_off = pos
-                        + u16::from_le_bytes(
-                            rec[pos + 0x14..pos + 0x16].try_into().unwrap_or([0; 2]),
-                        ) as usize;
-                    let end = content_off.saturating_add(content_size).min(rec.len());
-                    if content_off < end {
-                        return Ok(rec[content_off..end].to_vec());
-                    }
-                    return Ok(Vec::new());
-                }
-            }
-            pos += len;
-        }
-        Ok(Vec::new())
+
+        self.read_data_extents_to_vec(&extents)
     }
 
     fn read_file_data_range(&self, inode: u64, offset: u64, length: usize) -> io::Result<Vec<u8>> {
@@ -827,113 +806,318 @@ impl NtfsReader {
         }
 
         let rec = self.read_mft_record(inode)?;
-        if rec.len() < 0x18 || &rec[0..4] != b"FILE" {
-            return Err(invalid_fs_data(format!(
-                "inode {} is not a valid FILE record",
-                inode
-            )));
+        validate_file_record(&rec, inode)?;
+
+        let extents = self.collect_unnamed_data_extents_from_base(inode, rec)?;
+        if extents.is_empty() {
+            return Ok(Vec::new());
         }
 
-        let attr_off = u16::from_le_bytes([rec[0x14], rec[0x15]]) as usize;
+        self.read_data_extents_range(&extents, offset, length)
+    }
+
+    fn collect_unnamed_data_extents(&self, inode: u64) -> io::Result<Vec<DataAttributeExtent>> {
+        let rec = self.read_mft_record(inode)?;
+        self.collect_unnamed_data_extents_from_base(inode, rec)
+    }
+
+    fn collect_unnamed_data_extents_from_base(
+        &self,
+        inode: u64,
+        rec: Vec<u8>,
+    ) -> io::Result<Vec<DataAttributeExtent>> {
+        validate_file_record(&rec, inode)?;
+
+        let mut extents = Vec::new();
+        self.collect_data_extents_from_record(&rec, &mut extents)?;
+
+        let external_records = self.external_attribute_records_for_unnamed_data(inode, &rec)?;
+        for external_record_number in external_records {
+            if external_record_number == inode {
+                continue;
+            }
+
+            let external = self.read_mft_record(external_record_number)?;
+            if !is_extension_record_for(&external, inode) {
+                tracing::warn!(
+                    inode,
+                    external_record_number,
+                    "Skipping NTFS external attribute record that does not reference the base file"
+                );
+                continue;
+            }
+            self.collect_data_extents_from_record(&external, &mut extents)?;
+        }
+
+        sort_data_extents(&mut extents);
+        Ok(extents)
+    }
+
+    fn collect_data_extents_from_record(
+        &self,
+        record: &[u8],
+        extents: &mut Vec<DataAttributeExtent>,
+    ) -> io::Result<()> {
+        let attr_off = u16::from_le_bytes([record[0x14], record[0x15]]) as usize;
         let mut pos = attr_off;
-        while pos + 8 < rec.len() {
-            let typ = u32::from_le_bytes(rec[pos..pos + 4].try_into().unwrap_or([0; 4]));
-            if typ == 0xFFFFFFFF {
+        while pos + 8 < record.len() {
+            let typ = u32::from_le_bytes(record[pos..pos + 4].try_into().unwrap_or([0; 4]));
+            if typ == ATTR_TYPE_END {
                 break;
             }
             let len =
-                u32::from_le_bytes(rec[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
-            if len == 0 || pos + len > rec.len() {
+                u32::from_le_bytes(record[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
+            if len == 0 || pos + len > record.len() {
                 break;
             }
-            if typ == 0x80 {
-                if !is_unnamed_attribute(&rec, pos) {
-                    pos += len;
-                    continue;
-                }
-                let is_nonresident = pos + 9 <= rec.len() && (rec[pos + 8] & 1) != 0;
-                if is_nonresident {
-                    return self.read_attr_nonresident_range(pos, len, &rec, offset, length);
-                }
 
-                if pos + 0x16 > rec.len() {
-                    return Ok(Vec::new());
+            if typ == ATTR_TYPE_DATA && is_unnamed_attribute(record, pos) {
+                if let Some(extent) = parse_data_attribute_extent(record, pos, len)? {
+                    extents.push(extent);
                 }
-                let content_size =
-                    u32::from_le_bytes(rec[pos + 0x10..pos + 0x14].try_into().unwrap_or([0; 4]))
-                        as usize;
-                let content_off = pos
-                    + u16::from_le_bytes(rec[pos + 0x14..pos + 0x16].try_into().unwrap_or([0; 2]))
-                        as usize;
-                let end = content_off.saturating_add(content_size).min(rec.len());
-                if content_off >= end {
-                    return Ok(Vec::new());
-                }
-                let content = &rec[content_off..end];
-                let Ok(start) = usize::try_from(offset) else {
-                    return Ok(Vec::new());
-                };
-                if start >= content.len() {
-                    return Ok(Vec::new());
-                }
-                let end = start.saturating_add(length).min(content.len());
-                return Ok(content[start..end].to_vec());
             }
+
             pos += len;
         }
-        Ok(Vec::new())
+
+        Ok(())
     }
 
-    fn read_attr_nonresident_range(
+    fn external_attribute_records_for_unnamed_data(
         &self,
+        inode: u64,
+        record: &[u8],
+    ) -> io::Result<Vec<u64>> {
+        let mut records = Vec::new();
+        let mut seen = HashSet::new();
+
+        for entry in self.attribute_list_entries(record)? {
+            if entry.attr_type != ATTR_TYPE_DATA || entry.name_len != 0 {
+                continue;
+            }
+            if entry.record_number == inode {
+                continue;
+            }
+            if seen.insert(entry.record_number) {
+                records.push(entry.record_number);
+                if records.len() >= MAX_EXTERNAL_ATTRIBUTE_RECORDS {
+                    tracing::warn!(
+                        inode,
+                        limit = MAX_EXTERNAL_ATTRIBUTE_RECORDS,
+                        "Stopping NTFS external $DATA expansion at safety limit"
+                    );
+                    break;
+                }
+            }
+        }
+
+        Ok(records)
+    }
+
+    fn attribute_list_entries(&self, record: &[u8]) -> io::Result<Vec<AttributeListEntry>> {
+        let mut entries = Vec::new();
+        let attr_off = u16::from_le_bytes([record[0x14], record[0x15]]) as usize;
+        let mut pos = attr_off;
+
+        while pos + 8 < record.len() {
+            let typ = u32::from_le_bytes(record[pos..pos + 4].try_into().unwrap_or([0; 4]));
+            if typ == ATTR_TYPE_END {
+                break;
+            }
+            let len =
+                u32::from_le_bytes(record[pos + 4..pos + 8].try_into().unwrap_or([0; 4])) as usize;
+            if len == 0 || pos + len > record.len() {
+                break;
+            }
+
+            if typ == ATTR_TYPE_ATTRIBUTE_LIST {
+                let attr_entries = self.read_attribute_list_content(record, pos, len)?;
+                for entry in attr_entries {
+                    if entries.len() >= MAX_ATTRIBUTE_LIST_ENTRIES {
+                        tracing::warn!(
+                            limit = MAX_ATTRIBUTE_LIST_ENTRIES,
+                            "Stopping NTFS $ATTRIBUTE_LIST parsing at safety limit"
+                        );
+                        return Ok(entries);
+                    }
+                    entries.push(entry);
+                }
+            }
+
+            pos += len;
+        }
+
+        Ok(entries)
+    }
+
+    fn read_attribute_list_content(
+        &self,
+        record: &[u8],
         attr_pos: usize,
         attr_len: usize,
-        record: &[u8],
+    ) -> io::Result<Vec<AttributeListEntry>> {
+        let is_nonresident = pos_is_nonresident(record, attr_pos);
+        if is_nonresident {
+            if attr_pos + 0x40 > record.len() {
+                return Ok(Vec::new());
+            }
+            let content = self.read_attr_nonresident(attr_pos, record)?;
+            return Ok(parse_attribute_list_entries(&content));
+        }
+
+        let Some(content) = resident_attr_content(record, attr_pos, attr_len) else {
+            return Ok(Vec::new());
+        };
+        Ok(parse_attribute_list_entries(content))
+    }
+
+    fn read_data_extents_to_vec(&self, extents: &[DataAttributeExtent]) -> io::Result<Vec<u8>> {
+        let data_len = data_extents_logical_size(extents, self.cluster_size)?;
+        if data_len as usize > MAX_BUFFERED_FILE_BYTES {
+            return Err(invalid_fs_data(format!(
+                "data run buffer exceeds {} byte limit (would be {} bytes)",
+                MAX_BUFFERED_FILE_BYTES, data_len
+            )));
+        }
+
+        let mut out = vec![0u8; data_len as usize];
+        for extent in extents {
+            let extent_start = data_extent_logical_start(extent, self.cluster_size)?;
+            let extent_bytes = self.read_data_extent_to_vec(extent)?;
+            let start = usize::try_from(extent_start)
+                .map_err(|_| invalid_fs_data("data extent offset too large"))?;
+            if start >= out.len() {
+                continue;
+            }
+            let end = start.saturating_add(extent_bytes.len()).min(out.len());
+            out[start..end].copy_from_slice(&extent_bytes[..end - start]);
+        }
+
+        Ok(truncate_data_to_declared_size(
+            out,
+            data_extents_declared_size(extents, self.cluster_size)?,
+        ))
+    }
+
+    fn read_data_extent_to_vec(&self, extent: &DataAttributeExtent) -> io::Result<Vec<u8>> {
+        match extent {
+            DataAttributeExtent::Resident { data } => Ok(data.clone()),
+            DataAttributeExtent::NonResident {
+                allocated_size,
+                real_size,
+                attr_flags,
+                compression_unit_exp,
+                runs,
+                ..
+            } => {
+                if *attr_flags & 0x0001 != 0 {
+                    let decoded = self.read_compressed_data_runs_to_vec(
+                        runs,
+                        *compression_unit_exp,
+                        *real_size,
+                    )?;
+                    return Ok(truncate_data_to_declared_size(decoded, *real_size));
+                }
+
+                let allocated = data_runs_logical_size(runs, self.cluster_size)?;
+                let allocated = if *allocated_size > 0 {
+                    (*allocated_size).min(allocated)
+                } else {
+                    allocated
+                };
+                let buf = self.read_data_runs_to_vec(runs, true, allocated)?;
+                Ok(buf)
+            }
+        }
+    }
+
+    fn read_data_extents_range(
+        &self,
+        extents: &[DataAttributeExtent],
         offset: u64,
         length: usize,
     ) -> io::Result<Vec<u8>> {
-        if attr_pos + 0x38 > record.len() || (record[attr_pos + 8] & 1) == 0 {
-            return Ok(Vec::new());
-        }
-
-        let run_off =
-            u16::from_le_bytes([record[attr_pos + 0x20], record[attr_pos + 0x21]]) as usize;
-        let attr_end = attr_pos
-            .checked_add(attr_len)
-            .ok_or_else(|| invalid_fs_data("attribute length overflow"))?
-            .min(record.len());
-        if run_off == 0 || attr_pos + run_off >= attr_end {
-            return Ok(Vec::new());
-        }
-
-        let attr_flags = u16::from_le_bytes(
-            record[attr_pos + 0x0c..attr_pos + 0x0e]
-                .try_into()
-                .unwrap_or([0; 2]),
-        );
-        let real_size = u64::from_le_bytes(
-            record[attr_pos + 0x30..attr_pos + 0x38]
-                .try_into()
-                .unwrap_or([0; 8]),
-        );
-        if offset >= real_size {
+        let logical_size = data_extents_declared_size(extents, self.cluster_size)?;
+        if offset >= logical_size {
             return Ok(Vec::new());
         }
 
         let length_u64 = u64::try_from(length)
             .map_err(|_| fs_out_of_memory("requested range length is too large"))?;
-        let bounded_len = length_u64.min(real_size.saturating_sub(offset));
+        let bounded_len = length_u64.min(logical_size.saturating_sub(offset));
         let bounded_len = usize::try_from(bounded_len)
             .map_err(|_| fs_out_of_memory("requested range length is too large"))?;
+        let mut out = vec![0u8; bounded_len];
+        let request_end = offset
+            .checked_add(bounded_len as u64)
+            .ok_or_else(|| invalid_fs_data("requested range offset overflow"))?;
 
-        if attr_flags & 0x0001 != 0 {
-            return Err(invalid_fs_data(
-                "range reads for compressed NTFS data are not supported",
-            ));
+        for extent in extents {
+            let extent_start = data_extent_logical_start(extent, self.cluster_size)?;
+            let extent_len = data_extent_logical_len(extent, self.cluster_size)?;
+            let extent_end = extent_start
+                .checked_add(extent_len)
+                .ok_or_else(|| invalid_fs_data("data extent logical offset overflow"))?;
+            if extent_end <= offset || extent_start >= request_end {
+                continue;
+            }
+
+            let overlap_start = offset.max(extent_start);
+            let overlap_end = request_end.min(extent_end);
+            let out_start = usize::try_from(overlap_start - offset)
+                .map_err(|_| invalid_fs_data("range output offset overflow"))?;
+            let out_len = usize::try_from(overlap_end - overlap_start)
+                .map_err(|_| invalid_fs_data("range output length overflow"))?;
+
+            let bytes = self.read_data_extent_range(
+                extent,
+                overlap_start.saturating_sub(extent_start),
+                out_len,
+            )?;
+            let copy_len = bytes.len().min(out_len);
+            out[out_start..out_start + copy_len].copy_from_slice(&bytes[..copy_len]);
         }
 
-        let runs = parse_data_runs_ext(&record[attr_pos + run_off..attr_end])?;
-        self.read_data_runs_range(&runs, offset, bounded_len)
+        Ok(out)
+    }
+
+    fn read_data_extent_range(
+        &self,
+        extent: &DataAttributeExtent,
+        offset: u64,
+        length: usize,
+    ) -> io::Result<Vec<u8>> {
+        match extent {
+            DataAttributeExtent::Resident { data } => {
+                let Ok(start) = usize::try_from(offset) else {
+                    return Ok(Vec::new());
+                };
+                if start >= data.len() {
+                    return Ok(Vec::new());
+                }
+                let end = start.saturating_add(length).min(data.len());
+                Ok(data[start..end].to_vec())
+            }
+            DataAttributeExtent::NonResident {
+                attr_flags, runs, ..
+            } => {
+                let extent_len = data_extent_logical_len(extent, self.cluster_size)?;
+                if offset >= extent_len {
+                    return Ok(Vec::new());
+                }
+                let length_u64 = u64::try_from(length)
+                    .map_err(|_| fs_out_of_memory("requested range length is too large"))?;
+                let bounded_len = length_u64.min(extent_len.saturating_sub(offset));
+                let bounded_len = usize::try_from(bounded_len)
+                    .map_err(|_| fs_out_of_memory("requested range length is too large"))?;
+                if *attr_flags & 0x0001 != 0 {
+                    return Err(invalid_fs_data(
+                        "range reads for compressed NTFS data are not supported",
+                    ));
+                }
+                self.read_data_runs_range(runs, offset, bounded_len)
+            }
+        }
     }
 
     /// Resolve a file path: walk parent directories, then find the file
@@ -1100,6 +1284,239 @@ fn resident_attr_content(record: &[u8], attr_pos: usize, attr_len: usize) -> Opt
     record.get(content_start..content_end)
 }
 
+fn validate_file_record(record: &[u8], inode: u64) -> io::Result<()> {
+    if record.len() < 0x18 || &record[0..4] != b"FILE" {
+        return Err(invalid_fs_data(format!(
+            "inode {} is not a valid FILE record",
+            inode
+        )));
+    }
+    Ok(())
+}
+
+fn pos_is_nonresident(record: &[u8], attr_pos: usize) -> bool {
+    attr_pos + 9 <= record.len() && (record[attr_pos + 8] & 1) != 0
+}
+
+fn nonresident_compression_unit(record: &[u8], attr_pos: usize) -> u16 {
+    if attr_pos + 0x24 <= record.len() {
+        u16::from_le_bytes(
+            record[attr_pos + 0x22..attr_pos + 0x24]
+                .try_into()
+                .unwrap_or([0; 2]),
+        )
+    } else {
+        4
+    }
+}
+
+fn base_record_reference(record: &[u8]) -> u64 {
+    if record.len() < 0x28 {
+        return 0;
+    }
+    u64::from_le_bytes(record[0x20..0x28].try_into().unwrap_or([0; 8])) & 0x0000_FFFF_FFFF_FFFF
+}
+
+fn is_extension_record_for(record: &[u8], base_inode: u64) -> bool {
+    record.len() >= 0x28 && &record[0..4] == b"FILE" && base_record_reference(record) == base_inode
+}
+
+fn parse_data_attribute_extent(
+    record: &[u8],
+    attr_pos: usize,
+    attr_len: usize,
+) -> io::Result<Option<DataAttributeExtent>> {
+    if pos_is_nonresident(record, attr_pos) {
+        if attr_pos + 0x40 > record.len() {
+            return Ok(None);
+        }
+        let run_off =
+            u16::from_le_bytes([record[attr_pos + 0x20], record[attr_pos + 0x21]]) as usize;
+        let attr_end = attr_pos
+            .checked_add(attr_len)
+            .ok_or_else(|| invalid_fs_data("attribute length overflow"))?
+            .min(record.len());
+        if run_off == 0 || attr_pos + run_off >= attr_end {
+            return Ok(None);
+        }
+
+        let lowest_vcn = u64::from_le_bytes(
+            record[attr_pos + 0x10..attr_pos + 0x18]
+                .try_into()
+                .unwrap_or([0; 8]),
+        );
+        let allocated_size = u64::from_le_bytes(
+            record[attr_pos + 0x28..attr_pos + 0x30]
+                .try_into()
+                .unwrap_or([0; 8]),
+        );
+        let real_size = u64::from_le_bytes(
+            record[attr_pos + 0x30..attr_pos + 0x38]
+                .try_into()
+                .unwrap_or([0; 8]),
+        );
+        let attr_flags = u16::from_le_bytes(
+            record[attr_pos + 0x0c..attr_pos + 0x0e]
+                .try_into()
+                .unwrap_or([0; 2]),
+        );
+        let compression_unit_exp = nonresident_compression_unit(record, attr_pos);
+        let runs = parse_data_runs_ext(&record[attr_pos + run_off..attr_end])?;
+        return Ok(Some(DataAttributeExtent::NonResident {
+            lowest_vcn,
+            allocated_size,
+            real_size,
+            attr_flags,
+            compression_unit_exp,
+            runs,
+        }));
+    }
+
+    let Some(content) = resident_attr_content(record, attr_pos, attr_len) else {
+        return Ok(None);
+    };
+    Ok(Some(DataAttributeExtent::Resident {
+        data: content.to_vec(),
+    }))
+}
+
+fn parse_attribute_list_entries(mut data: &[u8]) -> Vec<AttributeListEntry> {
+    let mut entries = Vec::new();
+    while data.len() >= 0x1a && entries.len() < MAX_ATTRIBUTE_LIST_ENTRIES {
+        let attr_type = u32::from_le_bytes(data[0..4].try_into().unwrap_or([0; 4]));
+        if attr_type == ATTR_TYPE_END {
+            break;
+        }
+
+        let entry_len = u16::from_le_bytes(data[4..6].try_into().unwrap_or([0; 2])) as usize;
+        if entry_len < 0x1a || entry_len > data.len() {
+            break;
+        }
+
+        let name_len = data[6];
+        let name_off = data[7] as usize;
+        if name_len > 0 && name_off.saturating_add(name_len as usize * 2) > entry_len {
+            break;
+        }
+
+        let record_number = u64::from_le_bytes(data[0x10..0x18].try_into().unwrap_or([0; 8]))
+            & 0x0000_FFFF_FFFF_FFFF;
+        entries.push(AttributeListEntry {
+            attr_type,
+            name_len,
+            record_number,
+        });
+        data = &data[entry_len..];
+    }
+
+    entries
+}
+
+fn sort_data_extents(extents: &mut [DataAttributeExtent]) {
+    extents.sort_by_key(|extent| match extent {
+        DataAttributeExtent::Resident { .. } => 0,
+        DataAttributeExtent::NonResident { lowest_vcn, .. } => *lowest_vcn,
+    });
+}
+
+fn data_extents_logical_size(
+    extents: &[DataAttributeExtent],
+    cluster_size: u64,
+) -> io::Result<u64> {
+    let mut size = 0u64;
+    for extent in extents {
+        let start = data_extent_logical_start(extent, cluster_size)?;
+        let len = data_extent_logical_len(extent, cluster_size)?;
+        let end = start
+            .checked_add(len)
+            .ok_or_else(|| invalid_fs_data("data extent logical size overflow"))?;
+        size = size.max(end);
+    }
+    Ok(size)
+}
+
+fn data_extents_declared_size(
+    extents: &[DataAttributeExtent],
+    cluster_size: u64,
+) -> io::Result<u64> {
+    let mut declared = 0u64;
+    for extent in extents {
+        match extent {
+            DataAttributeExtent::Resident { data } => {
+                declared = declared.max(
+                    u64::try_from(data.len())
+                        .map_err(|_| invalid_fs_data("resident data length overflow"))?,
+                );
+            }
+            DataAttributeExtent::NonResident {
+                lowest_vcn,
+                real_size,
+                ..
+            } => {
+                if *lowest_vcn == 0 {
+                    declared = declared.max(*real_size);
+                }
+            }
+        }
+    }
+
+    if declared == 0 {
+        data_extents_logical_size(extents, cluster_size)
+    } else {
+        Ok(declared)
+    }
+}
+
+fn data_extent_logical_start(extent: &DataAttributeExtent, cluster_size: u64) -> io::Result<u64> {
+    match extent {
+        DataAttributeExtent::Resident { .. } => Ok(0),
+        DataAttributeExtent::NonResident { lowest_vcn, .. } => lowest_vcn
+            .checked_mul(cluster_size)
+            .ok_or_else(|| invalid_fs_data("data extent logical offset overflow")),
+    }
+}
+
+fn data_extent_logical_len(extent: &DataAttributeExtent, cluster_size: u64) -> io::Result<u64> {
+    match extent {
+        DataAttributeExtent::Resident { data } => {
+            u64::try_from(data.len()).map_err(|_| invalid_fs_data("resident data length overflow"))
+        }
+        DataAttributeExtent::NonResident {
+            allocated_size,
+            real_size,
+            lowest_vcn,
+            runs,
+            ..
+        } => {
+            let allocated = data_runs_logical_size(runs, cluster_size)?;
+            let allocated = if *allocated_size > 0 {
+                (*allocated_size).min(allocated)
+            } else {
+                allocated
+            };
+            if *lowest_vcn == 0 {
+                Ok((*real_size).min(allocated))
+            } else {
+                Ok(allocated)
+            }
+        }
+    }
+}
+
+fn data_runs_logical_size(runs: &[DataRun], cluster_size: u64) -> io::Result<u64> {
+    let mut size = 0u64;
+    for run in runs {
+        let run_bytes = run
+            .cluster_count
+            .checked_mul(cluster_size)
+            .ok_or_else(|| invalid_fs_data("data run logical size overflow"))?;
+        size = size
+            .checked_add(run_bytes)
+            .ok_or_else(|| invalid_fs_data("data run logical size overflow"))?;
+    }
+    Ok(size)
+}
+
 fn is_unnamed_attribute(record: &[u8], attr_pos: usize) -> bool {
     attr_pos + 0x0a <= record.len() && record[attr_pos + 0x09] == 0
 }
@@ -1172,7 +1589,7 @@ impl FileSystemReader for NtfsReader {
         // store 8.3 short names instead of long names.
         if let Some(mft_inode) = mft_inode_from_path(path) {
             let data = self.read_file_data(mft_inode)?;
-            if data.len() > 128 * 1024 * 1024 {
+            if data.len() > MAX_BUFFERED_FILE_BYTES {
                 return Err(fs_out_of_memory(format!(
                     "file too large to buffer: {} bytes",
                     data.len()
@@ -1185,7 +1602,7 @@ impl FileSystemReader for NtfsReader {
             .resolve_file_path(path)?
             .ok_or_else(|| file_not_found(path))?;
         let data = self.read_file_data(inode)?;
-        if data.len() > 128 * 1024 * 1024 {
+        if data.len() > MAX_BUFFERED_FILE_BYTES {
             return Err(fs_out_of_memory(format!(
                 "file too large to buffer: {} bytes",
                 data.len()
@@ -1466,8 +1883,8 @@ fn append_compressed_unit(
         .ok_or_else(|| invalid_fs_data("compressed output size overflow"))?;
     if new_size > max_bytes {
         return Err(invalid_fs_data(format!(
-            "compressed output exceeds 128 MB limit (would be {} bytes)",
-            new_size
+            "compressed output exceeds {} byte limit (would be {} bytes)",
+            max_bytes, new_size
         )));
     }
     out.extend_from_slice(&decoded[..append_len]);
@@ -1478,8 +1895,8 @@ fn append_compressed_unit(
             .ok_or_else(|| invalid_fs_data("compressed sparse padding size overflow"))?;
         if final_size > max_bytes {
             return Err(invalid_fs_data(format!(
-                "compressed output exceeds 128 MB limit (would be {} bytes)",
-                final_size
+                "compressed output exceeds {} byte limit (would be {} bytes)",
+                max_bytes, final_size
             )));
         }
         out.resize(final_size, 0);

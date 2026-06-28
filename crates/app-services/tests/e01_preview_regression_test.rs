@@ -8,8 +8,13 @@
 //!   cargo test -p app-services --test e01_preview_regression_test -- --ignored --nocapture
 
 use app_services::{case_service, datasource_service, file_service};
+use evidence_core::filesystem::FileSystemReader;
 use image_e01::E01Reader;
-use persistence_sqlite::repositories::{file_repo::FileRepo, partition_repo::PartitionRepo};
+use persistence_sqlite::repositories::{
+    datasource_repo::DataSourceRepo,
+    file_repo::FileRepo,
+    partition_repo::{DataSourcePartitionRecord, PartitionRepo},
+};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::time::Instant;
@@ -265,15 +270,16 @@ fn preview_large_7z_head_range(
             let file = all
                 .iter()
                 .filter(|f| {
-                    f.entry_type == domain::EntryType::File
-                        && f.size.unwrap_or(0) > 100 * 1024 * 1024
-                        && f.path.contains("Users/刘洋/Downloads")
-                        && f.name.to_ascii_lowercase().ends_with(".7z")
+                    is_liuyang_attribute_list_7z_target(f)
+                        || (f.entry_type == domain::EntryType::File
+                            && f.size.unwrap_or(0) > 100 * 1024 * 1024
+                            && f.path.contains("Users/刘洋/Downloads")
+                            && f.name.to_ascii_lowercase().ends_with(".7z"))
                 })
                 .max_by_key(|f| f.size.unwrap_or(0))
                 .unwrap_or_else(|| {
                     panic!(
-                        "{label}: no large 7z under Users/刘洋/Downloads ({} total entries)",
+                        "{label}: no Liuyang large 7z target found ({} total entries)",
                         all.len()
                     )
                 });
@@ -309,10 +315,22 @@ fn preview_large_7z_head_range(
             let first_bytes = first.raw_bytes.unwrap_or_default();
             let second_bytes = second.raw_bytes.unwrap_or_default();
 
-            assert!(!first_bytes.is_empty(), "{label}: first 64KB preview is empty");
-            assert!(!second_bytes.is_empty(), "{label}: middle 64KB preview is empty");
-            assert!(first.lines.is_empty(), "{label}: first preview lines should be empty");
-            assert!(second.lines.is_empty(), "{label}: middle preview lines should be empty");
+            assert!(
+                !first_bytes.is_empty(),
+                "{label}: first 64KB preview is empty"
+            );
+            assert!(
+                !second_bytes.is_empty(),
+                "{label}: middle 64KB preview is empty"
+            );
+            assert!(
+                first.lines.is_empty(),
+                "{label}: first preview lines should be empty"
+            );
+            assert!(
+                second.lines.is_empty(),
+                "{label}: middle preview lines should be empty"
+            );
 
             eprintln!(
                 "✅ {label}: {} size={} first64KB={}ms mid64KB={}ms",
@@ -320,6 +338,76 @@ fn preview_large_7z_head_range(
                 file.size.unwrap_or(0),
                 first_elapsed.as_millis(),
                 second_elapsed.as_millis()
+            );
+            Ok(())
+        })
+        .unwrap();
+}
+
+fn is_liuyang_attribute_list_7z_target(file: &domain::FileEntry) -> bool {
+    file.id.0 == "mft:128026"
+        || file.id.0.ends_with(":128026")
+        || (file.entry_type == domain::EntryType::File
+            && file.path.contains("[P0]/Unresolved/Downloads")
+            && file.name.contains("7.36.0.3-Modified.7z"))
+}
+
+fn preview_liuyang_attribute_list_7z(active: &app_services::active_case::ActiveCase, ds_id: &str) {
+    active
+        .with_conn(|conn| {
+            let all = FileRepo::new(conn)
+                .find_by_data_source(&domain::DataSourceId(ds_id.to_string()))
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+
+            let file = all
+                .iter()
+                .find(|f| is_liuyang_attribute_list_7z_target(f))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Liuyang attribute-list 7z target not found ({} total entries)",
+                        all.len()
+                    )
+                });
+
+            let handle = file_service::open_file_handle_real(conn, &file.id.0)
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let first = file_service::read_file_range_for_case(
+                conn,
+                &ViewerRangeRequestDto {
+                    handle_id: handle.handle_id.clone(),
+                    offset: 0,
+                    length: 64 * 1024,
+                },
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let middle = file_service::read_file_range_for_case(
+                conn,
+                &ViewerRangeRequestDto {
+                    handle_id: handle.handle_id,
+                    offset: 64 * 1024 * 1024,
+                    length: 64 * 1024,
+                },
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+
+            let first_bytes = first.raw_bytes.unwrap_or_default();
+            let middle_bytes = middle.raw_bytes.unwrap_or_default();
+            assert!(
+                !first_bytes.is_empty(),
+                "Liuyang attribute-list first range is empty"
+            );
+            assert!(
+                !middle_bytes.is_empty(),
+                "Liuyang attribute-list middle range is empty"
+            );
+
+            eprintln!(
+                "OK Liuyang attribute-list 7z: id={} path={} size={} first={} middle={}",
+                file.id.0,
+                file.path,
+                file.size.unwrap_or(0),
+                first_bytes.len(),
+                middle_bytes.len()
             );
             Ok(())
         })
@@ -356,4 +444,182 @@ fn liuyang_preview_chinese_path() {
 fn liuyang_large_7z_hex_head_range_is_bounded_and_bytes_only() {
     let (_tmp, active, ds_id) = setup(&liuyang_path());
     preview_large_7z_head_range(&active, &ds_id, "Liuyang 7z");
+}
+
+#[test]
+#[ignore = "requires FORENSICS_LIUYANG_E01"]
+fn liuyang_attribute_list_7z_inode_128026_reads_head_and_middle() {
+    let (_tmp, active, ds_id) = setup(&liuyang_path());
+    preview_liuyang_attribute_list_7z(&active, &ds_id);
+}
+
+#[test]
+#[ignore = "requires FORENSICS_LIUYANG_E01"]
+fn liuyang_direct_ntfs_inode_128026_reads_head_and_middle() {
+    let path = liuyang_path();
+    let mut probe_reader = E01Reader::open(&path).expect("open Liuyang E01 for probe");
+    let probe =
+        datasource_service::detect_image_filesystem(&mut probe_reader).expect("probe Liuyang E01");
+    let ntfs = probe
+        .candidates
+        .iter()
+        .find(|candidate| {
+            matches!(
+                candidate.kind,
+                datasource_service::ImageFilesystemKind::Ntfs
+            )
+        })
+        .expect("no NTFS partition in Liuyang E01");
+
+    let reader: Box<dyn evidence_core::EvidenceReader> =
+        Box::new(E01Reader::open(&path).expect("reopen Liuyang E01"));
+    let fs = fs_ntfs::NtfsReader::open(reader, ntfs.offset).expect("open Liuyang NTFS");
+    let mut open_file = fs.open_file("mft:128026").expect("open inode 128026");
+    let mut open_head = vec![0u8; 4096];
+    let open_read = open_file
+        .read(&mut open_head)
+        .expect("read inode 128026 open_file head");
+    let first = fs
+        .read_file_range_by_inode(128026, 0, 64 * 1024)
+        .expect("read inode 128026 first range");
+    let middle = fs
+        .read_file_range_by_inode(128026, 64 * 1024 * 1024, 64 * 1024)
+        .expect("read inode 128026 middle range");
+
+    assert!(open_read > 0, "inode 128026 open_file head is empty");
+    assert!(!first.is_empty(), "inode 128026 first range is empty");
+    assert!(!middle.is_empty(), "inode 128026 middle range is empty");
+    eprintln!(
+        "OK Liuyang direct inode 128026: open={} first={} middle={}",
+        open_read,
+        first.len(),
+        middle.len()
+    );
+}
+
+#[test]
+#[ignore = "requires FORENSICS_LIUYANG_E01"]
+fn liuyang_seeded_app_services_inode_128026_reads_open_and_ranges() {
+    let path = liuyang_path();
+    let mut probe_reader = E01Reader::open(&path).expect("open Liuyang E01 for probe");
+    let probe =
+        datasource_service::detect_image_filesystem(&mut probe_reader).expect("probe Liuyang E01");
+    let (partition_index, ntfs) = probe
+        .candidates
+        .iter()
+        .enumerate()
+        .find(|(_, candidate)| {
+            matches!(
+                candidate.kind,
+                datasource_service::ImageFilesystemKind::Ntfs
+            )
+        })
+        .expect("no NTFS partition in Liuyang E01");
+
+    let tmp = TempDir::new().unwrap();
+    let active = case_service::create_case(
+        &tmp.path().join("cases"),
+        "liuyang-seeded-preview",
+        Some("tester"),
+    )
+    .expect("create seeded preview case");
+    let case_id = active.meta.id.clone();
+    let data_source_id = domain::DataSourceId("seeded-liuyang-e01".to_string());
+    let file_id = domain::FileEntryId(format!("mft:{partition_index}:128026"));
+
+    active
+        .with_conn(|conn| {
+            DataSourceRepo::new(conn)
+                .insert(
+                    &case_id,
+                    &domain::DataSource {
+                        id: data_source_id.clone(),
+                        name: "seeded-liuyang-e01".to_string(),
+                        kind: domain::DataSourceKind::E01,
+                        source_path: path.clone(),
+                        imported_at: chrono::Utc::now(),
+                        provenance: domain::DataSourceProvenance::unknown(),
+                    },
+                )
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            PartitionRepo::new(conn)
+                .replace_for_data_source(
+                    &data_source_id.0,
+                    &[DataSourcePartitionRecord {
+                        id: format!("{}:{partition_index}", data_source_id.0),
+                        data_source_id: data_source_id.0.clone(),
+                        partition_index: partition_index as u32,
+                        name: format!("Partition {partition_index}"),
+                        kind_label: "Ntfs".to_string(),
+                        status: "Supported".to_string(),
+                        type_guid: None,
+                        offset: ntfs.offset,
+                        length: 0,
+                        filesystem: Some("NTFS".to_string()),
+                        unlock_hint: None,
+                    }],
+                )
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            FileRepo::new(conn)
+                .insert_batch(&[domain::FileEntry {
+                    id: file_id.clone(),
+                    parent_id: None,
+                    data_source_id: data_source_id.clone(),
+                    path: "[P0]/Unresolved/Downloads/百度网盘客户端-7.36.0.3-Modified.7z"
+                        .to_string(),
+                    name: "百度网盘客户端-7.36.0.3-Modified.7z".to_string(),
+                    entry_type: domain::EntryType::File,
+                    size: Some(158_093_957),
+                    ext: Some("7z".to_string()),
+                    deleted: false,
+                    hidden: false,
+                    system: false,
+                    encrypted: false,
+                    created_at: None,
+                    modified_at: None,
+                    accessed_at: None,
+                    changed_at: None,
+                    hash_sha256: None,
+                }])
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+
+            let mut reader = file_service::open_file_content_by_id(conn, &file_id)
+                .unwrap_or_else(|e| panic!("seeded open_file_content_by_id failed: {e:?}"));
+            let mut open_head = vec![0u8; 4096];
+            let open_read = reader.read(&mut open_head).unwrap_or(0);
+            assert!(open_read > 0, "seeded open_file_content_by_id is empty");
+
+            let handle = file_service::open_file_handle_real(conn, &file_id.0)
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let first = file_service::read_file_range_for_case(
+                conn,
+                &ViewerRangeRequestDto {
+                    handle_id: handle.handle_id.clone(),
+                    offset: 0,
+                    length: 64 * 1024,
+                },
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let middle = file_service::read_file_range_for_case(
+                conn,
+                &ViewerRangeRequestDto {
+                    handle_id: handle.handle_id,
+                    offset: 64 * 1024 * 1024,
+                    length: 64 * 1024,
+                },
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let first_bytes = first.raw_bytes.unwrap_or_default();
+            let middle_bytes = middle.raw_bytes.unwrap_or_default();
+            assert!(!first_bytes.is_empty(), "seeded first range is empty");
+            assert!(!middle_bytes.is_empty(), "seeded middle range is empty");
+            eprintln!(
+                "OK Liuyang seeded app-services inode 128026: open={} first={} middle={}",
+                open_read,
+                first_bytes.len(),
+                middle_bytes.len()
+            );
+            Ok(())
+        })
+        .unwrap();
 }
