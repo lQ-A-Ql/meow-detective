@@ -386,7 +386,8 @@ fn deterministic_handle_reads_real_logical_file_bytes_as_hex() {
             .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             assert_eq!(range.kind, "hex");
-            assert_eq!(range.lines, vec!["00000001  31 32 33 34 35"]);
+            assert!(range.lines.is_empty());
+            assert_eq!(range.raw_bytes.unwrap(), b"12345");
 
             Ok(())
         })

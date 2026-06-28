@@ -16,7 +16,13 @@ import {
   openFileHandle,
   readFileRange,
 } from '@/lib/api/files';
-import { FileEntryRow, FileHexViewerState, HexLoadedRange, ViewerRangeResponse } from '@/types/models';
+import {
+  FileEntryRow,
+  FileHexViewerState,
+  HexByteWindowLines,
+  HexLoadedRange,
+  ViewerRangeResponse,
+} from '@/types/models';
 import type { FileSortKey, FileSortDirection } from '@/lib/file-sort';
 import { expectJobsSnapshotActivity } from '@/features/jobs/hooks';
 import { invalidateImportProjectionQueries } from '@/features/cache-invalidation';
@@ -24,7 +30,30 @@ import { parseOffsetInput } from '@/lib/hex-offset-parser';
 import { mergeLoadedRanges } from '@/lib/hex-range-merger';
 
 const MEDIA_CHUNK_PREVIEW_BYTES = 1024 * 1024;
-const HEX_CHUNK_BYTES = 1024 * 1024;
+const HEX_FULL_FILE_THRESHOLD_BYTES = 1024 * 1024;
+const HEX_CHUNK_BYTES = 64 * 1024;
+
+function getHexWindowSize(fileSize: number) {
+  return fileSize <= HEX_FULL_FILE_THRESHOLD_BYTES ? fileSize : HEX_CHUNK_BYTES;
+}
+
+function getRawBytes(range?: ViewerRangeResponse): number[] {
+  return range?.rawBytes ?? [];
+}
+
+function createHexByteWindowLines(
+  lines: string[],
+  rawBytes: number[],
+  baseOffset: number,
+  fileSize: number,
+): HexByteWindowLines {
+  const displayGateLines = lines.length > 0 || rawBytes.length === 0 ? lines : [''];
+  const byteWindow = [...displayGateLines] as HexByteWindowLines;
+  byteWindow.rawBytes = rawBytes;
+  byteWindow.baseOffset = baseOffset;
+  byteWindow.fileSize = fileSize;
+  return byteWindow;
+}
 
 function invalidateImportQueries(qc: ReturnType<typeof useQueryClient>) {
   invalidateImportProjectionQueries(qc);
@@ -148,7 +177,7 @@ export function useFileViewer(fileId?: string, enabled = true) {
     retry: false,
     queryFn: async () => {
       const handle = await openFileHandle(fileId!);
-      const initialLength = Math.min(handle.size, HEX_CHUNK_BYTES);
+      const initialLength = getHexWindowSize(handle.size);
       const range = await readFileRange({
         handleId: handle.handleId,
         offset: 0,
@@ -163,7 +192,7 @@ export function useFileViewer(fileId?: string, enabled = true) {
       return;
     }
     const { handle, range } = baseQuery.data;
-    const initialLength = Math.min(handle.size, HEX_CHUNK_BYTES);
+    const initialLength = getHexWindowSize(handle.size);
     setLoadedRanges([{ start: 0, end: initialLength }]);
     setLoadedChunks({ 0: range });
     setViewerError(undefined);
@@ -180,16 +209,19 @@ export function useFileViewer(fileId?: string, enabled = true) {
       return;
     }
 
-    const alignedOffset = Math.max(0, Math.floor(offset / HEX_CHUNK_BYTES) * HEX_CHUNK_BYTES);
+    const clampedOffset = Math.min(Math.max(0, offset), Math.max(0, handle.size - 1));
+    const mode = handle.size <= HEX_FULL_FILE_THRESHOLD_BYTES ? 'full' : 'chunked';
+    const alignedOffset =
+      mode === 'full' ? 0 : Math.max(0, Math.floor(clampedOffset / HEX_CHUNK_BYTES) * HEX_CHUNK_BYTES);
     if (loadedChunks[alignedOffset]) {
-      setActiveOffset(alignedOffset);
+      setActiveOffset(clampedOffset);
       return;
     }
 
     setIsLoadingMore(true);
     setViewerError(undefined);
     try {
-      const length = Math.min(HEX_CHUNK_BYTES, Math.max(1, handle.size - alignedOffset));
+      const length = Math.min(getHexWindowSize(handle.size), Math.max(1, handle.size - alignedOffset));
       const range = await readFileRange({
         handleId: handle.handleId,
         offset: alignedOffset,
@@ -199,7 +231,7 @@ export function useFileViewer(fileId?: string, enabled = true) {
       setLoadedRanges((current) =>
         mergeLoadedRanges(current, { start: alignedOffset, end: alignedOffset + length }),
       );
-      setActiveOffset(alignedOffset);
+      setActiveOffset(clampedOffset);
     } catch (error) {
       setViewerError(error instanceof Error ? error.message : 'Hex range load failed');
     } finally {
@@ -213,10 +245,12 @@ export function useFileViewer(fileId?: string, enabled = true) {
     }
 
     const { handle } = baseQuery.data;
-    const activeChunkOffset = Math.max(0, Math.floor(activeOffset / HEX_CHUNK_BYTES) * HEX_CHUNK_BYTES);
-    const activeChunk = loadedChunks[activeChunkOffset] ?? baseQuery.data.range;
-    const lines = activeChunk?.lines ?? [];
-    const mode = handle.size <= HEX_CHUNK_BYTES ? 'full' : 'chunked';
+    const mode = handle.size <= HEX_FULL_FILE_THRESHOLD_BYTES ? 'full' : 'chunked';
+    const baseOffset =
+      mode === 'full' ? 0 : Math.max(0, Math.floor(activeOffset / HEX_CHUNK_BYTES) * HEX_CHUNK_BYTES);
+    const activeChunk = loadedChunks[baseOffset] ?? baseQuery.data.range;
+    const rawBytes = getRawBytes(activeChunk);
+    const lines = createHexByteWindowLines(activeChunk?.lines ?? [], rawBytes, baseOffset, handle.size);
     const isFullyLoaded =
       mode === 'full' || loadedRanges.some((range) => range.start === 0 && range.end >= handle.size);
     const firstRange = loadedRanges[0];
@@ -228,8 +262,10 @@ export function useFileViewer(fileId?: string, enabled = true) {
       chunkSize: HEX_CHUNK_BYTES,
       fileSize: handle.size,
       lines,
+      rawBytes,
+      baseOffset,
       loadedRanges,
-      activeOffset: activeChunkOffset,
+      activeOffset,
       jumpOffsetInput,
       isFullyLoaded,
       isLoadingMore,

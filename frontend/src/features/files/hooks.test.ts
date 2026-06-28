@@ -1,7 +1,8 @@
 import { createElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
+import { render, renderHook, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { HexViewer } from '@/components/viewers/HexViewer';
 
 const mocks = vi.hoisted(() => ({
   getFileTree: vi.fn(),
@@ -261,7 +262,7 @@ describe('files hooks', () => {
       expect(result.current.data?.isFullyLoaded).toBe(true);
     });
 
-    it('loads large files in 1MB chunks and can jump to a later chunk', async () => {
+    it('loads large files in 64KB chunks and can jump to a later chunk', async () => {
       mocks.openFileHandle.mockResolvedValue({
         handleId: 'file:large',
         size: 3 * 1024 * 1024,
@@ -271,10 +272,12 @@ describe('files hooks', () => {
         .mockResolvedValueOnce({
           kind: 'hex',
           lines: ['00000000  41 42 43 44'],
+          rawBytes: [0x41, 0x42, 0x43, 0x44],
         })
         .mockResolvedValueOnce({
           kind: 'hex',
-          lines: ['00100000  45 46 47 48'],
+          lines: ['00010000  45 46 47 48'],
+          rawBytes: [0x45, 0x46, 0x47, 0x48],
         });
 
       const { result } = renderHook(() => useFileViewer('file-large'), {
@@ -285,22 +288,61 @@ describe('files hooks', () => {
       expect(mocks.readFileRange).toHaveBeenNthCalledWith(1, {
         handleId: 'file:large',
         offset: 0,
-        length: 1024 * 1024,
+        length: 64 * 1024,
       });
       expect(result.current.data?.mode).toBe('chunked');
+      expect(result.current.data?.chunkSize).toBe(64 * 1024);
+      expect(result.current.data?.rawBytes).toEqual([0x41, 0x42, 0x43, 0x44]);
+      expect(result.current.data?.baseOffset).toBe(0);
 
-      await result.current.jumpToOffset('0x100000');
+      await result.current.jumpToOffset('0x10000');
 
       await waitFor(() => {
         expect(mocks.readFileRange).toHaveBeenNthCalledWith(2, {
           handleId: 'file:large',
-          offset: 1024 * 1024,
-          length: 1024 * 1024,
+          offset: 64 * 1024,
+          length: 64 * 1024,
         });
       });
       await waitFor(() => {
-        expect(result.current.data?.activeOffset).toBe(1024 * 1024);
+        expect(result.current.data?.activeOffset).toBe(64 * 1024);
+        expect(result.current.data?.baseOffset).toBe(64 * 1024);
+        expect(result.current.data?.rawBytes).toEqual([0x45, 0x46, 0x47, 0x48]);
       });
+    });
+
+    it('renders hex from raw bytes without depending on backend lines', async () => {
+      mocks.openFileHandle.mockResolvedValue({
+        handleId: 'file:raw-only',
+        size: 2 * 1024 * 1024,
+        mime: 'application/octet-stream',
+      });
+      mocks.readFileRange.mockResolvedValue({
+        kind: 'hex',
+        lines: [],
+        rawBytes: [0x4d, 0x5a, 0x00, 0xff],
+      });
+
+      const { result } = renderHook(() => useFileViewer('file-raw-only'), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data?.lines.length).toBeGreaterThan(0);
+      expect(result.current.data?.lines.rawBytes).toEqual([0x4d, 0x5a, 0x00, 0xff]);
+
+      render(
+        createElement(HexViewer, {
+          lines: result.current.data!.lines,
+          activeOffset: result.current.data!.activeOffset,
+        }),
+      );
+
+      expect(screen.getByText('00000000')).toBeDefined();
+      expect(screen.getByText('4D')).toBeDefined();
+      expect(screen.getByText('5A')).toBeDefined();
+      expect(screen.getByText('00')).toBeDefined();
+      expect(screen.getByText('FF')).toBeDefined();
     });
   });
 });

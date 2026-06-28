@@ -12,7 +12,9 @@ use image_e01::E01Reader;
 use persistence_sqlite::repositories::{file_repo::FileRepo, partition_repo::PartitionRepo};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
+use std::time::Instant;
 use tempfile::TempDir;
+use transport::dto::ViewerRangeRequestDto;
 
 fn jc2_path() -> PathBuf {
     std::env::var("FORENSICS_JC2_E01")
@@ -249,6 +251,81 @@ fn preview_chinese_path(active: &app_services::active_case::ActiveCase, ds_id: &
         .unwrap();
 }
 
+fn preview_large_7z_head_range(
+    active: &app_services::active_case::ActiveCase,
+    ds_id: &str,
+    label: &str,
+) {
+    active
+        .with_conn(|conn| {
+            let all = FileRepo::new(conn)
+                .find_by_data_source(&domain::DataSourceId(ds_id.to_string()))
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+
+            let file = all
+                .iter()
+                .filter(|f| {
+                    f.entry_type == domain::EntryType::File
+                        && f.size.unwrap_or(0) > 100 * 1024 * 1024
+                        && f.path.contains("Users/刘洋/Downloads")
+                        && f.name.to_ascii_lowercase().ends_with(".7z")
+                })
+                .max_by_key(|f| f.size.unwrap_or(0))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "{label}: no large 7z under Users/刘洋/Downloads ({} total entries)",
+                        all.len()
+                    )
+                });
+
+            let handle = file_service::open_file_handle_real(conn, &file.id.0)
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+
+            let first_start = Instant::now();
+            let first = file_service::read_file_range_for_case(
+                conn,
+                &ViewerRangeRequestDto {
+                    handle_id: handle.handle_id.clone(),
+                    offset: 0,
+                    length: 64 * 1024,
+                },
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let first_elapsed = first_start.elapsed();
+
+            let mid_offset = 64 * 1024 * 1024;
+            let second_start = Instant::now();
+            let second = file_service::read_file_range_for_case(
+                conn,
+                &ViewerRangeRequestDto {
+                    handle_id: handle.handle_id,
+                    offset: mid_offset,
+                    length: 64 * 1024,
+                },
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let second_elapsed = second_start.elapsed();
+
+            let first_bytes = first.raw_bytes.unwrap_or_default();
+            let second_bytes = second.raw_bytes.unwrap_or_default();
+
+            assert!(!first_bytes.is_empty(), "{label}: first 64KB preview is empty");
+            assert!(!second_bytes.is_empty(), "{label}: middle 64KB preview is empty");
+            assert!(first.lines.is_empty(), "{label}: first preview lines should be empty");
+            assert!(second.lines.is_empty(), "{label}: middle preview lines should be empty");
+
+            eprintln!(
+                "✅ {label}: {} size={} first64KB={}ms mid64KB={}ms",
+                file.path,
+                file.size.unwrap_or(0),
+                first_elapsed.as_millis(),
+                second_elapsed.as_millis()
+            );
+            Ok(())
+        })
+        .unwrap();
+}
+
 // ─── 检材2.E01 ───
 
 #[test]
@@ -272,4 +349,11 @@ fn liuyang_preview_returns_file_content() {
 fn liuyang_preview_chinese_path() {
     let (_tmp, active, ds_id) = setup(&liuyang_path());
     preview_chinese_path(&active, &ds_id, "Liuyang");
+}
+
+#[test]
+#[ignore = "requires FORENSICS_LIUYANG_E01"]
+fn liuyang_large_7z_hex_head_range_is_bounded_and_bytes_only() {
+    let (_tmp, active, ds_id) = setup(&liuyang_path());
+    preview_large_7z_head_range(&active, &ds_id, "Liuyang 7z");
 }

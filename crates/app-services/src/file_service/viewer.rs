@@ -103,10 +103,6 @@ static SKIP_READER_BYTES_CALLS: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
 #[cfg(test)]
-static FORMAT_HEX_LINES_CALLS: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
-
-#[cfg(test)]
 thread_local! {
     static OPEN_FILE_CONTENT_BY_ID_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static READ_FILE_BYTES_FOR_CASE_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
@@ -297,11 +293,10 @@ where
         request.length,
     )?;
 
-    let raw_bytes = bytes.clone();
     Ok(ViewerRangeResponseDto {
-        raw_bytes: Some(raw_bytes),
+        raw_bytes: Some(bytes),
         kind: "hex".into(),
-        lines: format_hex_lines(request.offset, &bytes),
+        lines: Vec::new(),
         encoding: None,
     })
 }
@@ -1955,33 +1950,6 @@ pub fn skip_reader_bytes(
     Ok(())
 }
 
-fn format_hex_lines(base_offset: u64, bytes: &[u8]) -> Vec<String> {
-    #[cfg(test)]
-    FORMAT_HEX_LINES_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-    let line_count = bytes.len().div_ceil(16);
-    let mut result = Vec::with_capacity(line_count);
-
-    for (line_idx, chunk) in bytes.chunks(16).enumerate() {
-        let offset = base_offset + (line_idx * 16) as u64;
-        let mut line = String::with_capacity(8 + 2 + chunk.len() * 4);
-
-        use std::fmt::Write;
-        let _ = write!(line, "{offset:08X}");
-        line.push_str("  ");
-
-        for (i, byte) in chunk.iter().enumerate() {
-            if i > 0 {
-                line.push(' ');
-            }
-            let _ = write!(line, "{byte:02X}");
-        }
-
-        result.push(line);
-    }
-    result
-}
-
 fn empty_hex_response() -> ViewerRangeResponseDto {
     ViewerRangeResponseDto {
         raw_bytes: None,
@@ -2008,14 +1976,6 @@ mod tests {
 
     fn skip_reader_bytes_call_count() -> usize {
         SKIP_READER_BYTES_CALLS.load(std::sync::atomic::Ordering::Relaxed)
-    }
-
-    fn reset_format_hex_lines_call_count() {
-        FORMAT_HEX_LINES_CALLS.store(0, std::sync::atomic::Ordering::Relaxed);
-    }
-
-    fn format_hex_lines_call_count() -> usize {
-        FORMAT_HEX_LINES_CALLS.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     fn reset_open_file_content_by_id_call_count() {
@@ -2350,15 +2310,14 @@ mod tests {
         .unwrap();
 
         reset_skip_reader_bytes_call_count();
-        reset_format_hex_lines_call_count();
         let range_bytes =
             read_file_bytes_for_case(&conn, &FileEntryId("file-sample".to_string()), 17, 12)
                 .unwrap();
 
         assert_eq!(range_bytes, bytes[17..29].to_vec());
         assert_eq!(skip_reader_bytes_call_count(), 0);
-        assert_eq!(format_hex_lines_call_count(), 0);
 
+        reset_skip_reader_bytes_call_count();
         let response = read_file_range_for_case(
             &conn,
             &ViewerRangeRequestDto {
@@ -2370,7 +2329,8 @@ mod tests {
         .unwrap();
 
         assert_eq!(response.raw_bytes.unwrap(), bytes[17..29].to_vec());
-        assert_eq!(format_hex_lines_call_count(), 1);
+        assert!(response.lines.is_empty());
+        assert_eq!(skip_reader_bytes_call_count(), 0);
     }
 
     #[test]
@@ -2568,6 +2528,21 @@ mod tests {
         .unwrap();
 
         assert_eq!(bytes, vec![b'B'; 9]);
+        assert_eq!(skip_reader_bytes_call_count(), 0);
+
+        reset_skip_reader_bytes_call_count();
+        let response = read_file_range_for_case(
+            &conn,
+            &ViewerRangeRequestDto {
+                handle_id: "file:file-raw-exfat-large".to_string(),
+                offset: 512 + 7,
+                length: 9,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(response.raw_bytes.unwrap(), vec![b'B'; 9]);
+        assert!(response.lines.is_empty());
         assert_eq!(skip_reader_bytes_call_count(), 0);
     }
 

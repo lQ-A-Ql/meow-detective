@@ -1,8 +1,11 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
-import type { HexLoadedRange } from '@/types/models';
+import type { HexByteWindowLines, HexLoadedRange } from '@/types/models';
 
 interface HexViewerProps {
-  lines: string[];
+  lines: string[] | HexByteWindowLines;
+  rawBytes?: number[];
+  baseOffset?: number;
+  fileSize?: number;
   lineHeight?: number;
   activeOffset?: number;
   loadedRanges?: HexLoadedRange[];
@@ -11,10 +14,37 @@ interface HexViewerProps {
 
 const DEFAULT_CONTAINER_HEIGHT = 600;
 const OVERSCAN_ROWS = 5;
+const BYTES_PER_ROW = 16;
+
 interface ParsedLine {
   offset: string;
   hex: string;
+  bytes?: string[];
   ascii: string;
+}
+
+function formatOffset(offset: number) {
+  return offset.toString(16).toUpperCase().padStart(8, '0');
+}
+
+function formatByte(byte: number) {
+  return byte.toString(16).toUpperCase().padStart(2, '0');
+}
+
+function formatAsciiByte(byte: number) {
+  return byte >= 32 && byte <= 126 ? String.fromCharCode(byte) : '.';
+}
+
+function formatByteWindowLine(rawBytes: number[], rowIndex: number, baseOffset: number): ParsedLine {
+  const rowStart = rowIndex * BYTES_PER_ROW;
+  const rowBytes = rawBytes.slice(rowStart, rowStart + BYTES_PER_ROW);
+  const bytes = rowBytes.map(formatByte);
+  return {
+    offset: formatOffset(baseOffset + rowStart),
+    hex: bytes.join(' '),
+    bytes,
+    ascii: rowBytes.map(formatAsciiByte).join(''),
+  };
 }
 
 function parseHexLine(line: string): ParsedLine {
@@ -37,6 +67,9 @@ function parseHexLine(line: string): ParsedLine {
 
 export function HexViewer({
   lines,
+  rawBytes,
+  baseOffset,
+  fileSize,
   lineHeight = 20,
   activeOffset,
   loadedRanges,
@@ -45,6 +78,20 @@ export function HexViewer({
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(DEFAULT_CONTAINER_HEIGHT);
+
+  const byteWindow = useMemo(() => {
+    const metadata = lines as HexByteWindowLines;
+    const bytes = rawBytes ?? metadata.rawBytes;
+    return {
+      rawBytes: bytes && bytes.length > 0 ? bytes : undefined,
+      baseOffset: baseOffset ?? metadata.baseOffset ?? 0,
+      fileSize: fileSize ?? metadata.fileSize,
+    };
+  }, [baseOffset, fileSize, lines, rawBytes]);
+
+  const rowCount = byteWindow.rawBytes
+    ? Math.ceil(byteWindow.rawBytes.length / BYTES_PER_ROW)
+    : lines.length;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -74,20 +121,33 @@ export function HexViewer({
   const visibleRange = useMemo(() => {
     const startIndex = Math.max(0, Math.floor(scrollTop / lineHeight) - OVERSCAN_ROWS);
     const endIndex = Math.min(
-      lines.length,
+      rowCount,
       Math.ceil((scrollTop + containerHeight) / lineHeight) + OVERSCAN_ROWS
     );
     return { startIndex, endIndex };
-  }, [scrollTop, containerHeight, lineHeight, lines.length]);
+  }, [scrollTop, containerHeight, lineHeight, rowCount]);
 
   const visibleLines = useMemo(() => {
+    if (byteWindow.rawBytes) {
+      return Array.from(
+        { length: visibleRange.endIndex - visibleRange.startIndex },
+        (_, index) => {
+          const lineIndex = visibleRange.startIndex + index;
+          return {
+            parsed: formatByteWindowLine(byteWindow.rawBytes!, lineIndex, byteWindow.baseOffset),
+            lineIndex,
+          };
+        },
+      );
+    }
+
     return lines
       .slice(visibleRange.startIndex, visibleRange.endIndex)
       .map((line, idx) => ({
         parsed: parseHexLine(line),
         lineIndex: visibleRange.startIndex + idx,
       }));
-  }, [lines, visibleRange.endIndex, visibleRange.startIndex]);
+  }, [byteWindow, lines, visibleRange.endIndex, visibleRange.startIndex]);
 
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const nextScrollTop = e.currentTarget.scrollTop;
@@ -109,17 +169,30 @@ export function HexViewer({
     if (activeOffset === undefined || !containerRef.current) {
       return;
     }
-    const firstVisibleOffset = parseHexLine(lines[0] ?? '').offset;
-    const baseOffset = Number.parseInt(firstVisibleOffset || '0', 16) || 0;
-    const lineIndex = Math.max(0, Math.floor((activeOffset - baseOffset) / 16));
-    containerRef.current.scrollTop = lineIndex * lineHeight;
-  }, [activeOffset, lineHeight, lines]);
+    const firstVisibleOffset = byteWindow.rawBytes
+      ? byteWindow.baseOffset
+      : Number.parseInt(parseHexLine(lines[0] ?? '').offset || '0', 16) || 0;
+    const lineIndex = Math.min(
+      Math.max(0, rowCount - 1),
+      Math.max(0, Math.floor((activeOffset - firstVisibleOffset) / BYTES_PER_ROW)),
+    );
+    const nextScrollTop = lineIndex * lineHeight;
+    containerRef.current.scrollTop = nextScrollTop;
+    setScrollTop(nextScrollTop);
+  }, [activeOffset, byteWindow, lineHeight, lines, rowCount]);
 
   const offsetWidth = useMemo(() => {
-    if (lines.length === 0) return 80;
-    const lastOffset = parseHexLine(lines[lines.length - 1] ?? '').offset || '00000000';
+    if (rowCount === 0) return 80;
+    const lastOffset = byteWindow.rawBytes
+      ? formatOffset(
+        Math.max(
+          byteWindow.baseOffset + Math.max(0, byteWindow.rawBytes.length - 1),
+          byteWindow.fileSize ? byteWindow.fileSize - 1 : 0,
+        ),
+      )
+      : parseHexLine(lines[lines.length - 1] ?? '').offset || '00000000';
     return Math.max(80, lastOffset.length * 10 + 16);
-  }, [lines]);
+  }, [byteWindow, lines, rowCount]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white font-mono text-[11px]">
@@ -128,7 +201,7 @@ export function HexViewer({
         className="min-h-0 flex-1 overflow-auto"
         onScroll={handleScroll}
       >
-        <div style={{ height: lines.length * lineHeight, position: 'relative' }}>
+        <div style={{ height: rowCount * lineHeight, position: 'relative' }}>
           <div
             data-testid="hex-visible-window"
             style={{
@@ -153,7 +226,7 @@ export function HexViewer({
                   </div>
 
                   <div className="flex-1 px-3 tracking-wider">
-                    {line.hex.split(' ').map((byte, i) => (
+                    {(line.bytes ?? line.hex.split(' ')).map((byte, i) => (
                       <span key={i} className="inline-block w-[26px] text-center">
                         {byte === '00' ? (
                           <span className="text-[#ccc]">{byte}</span>
@@ -188,7 +261,7 @@ export function HexViewer({
           </div>
         </div>
 
-        {lines.length === 0 && (
+        {rowCount === 0 && (
           <div className="flex h-full items-center justify-center text-[#999]">
             选择文件后显示十六进制预览
           </div>

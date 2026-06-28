@@ -24,12 +24,20 @@ export interface HexLoadedRange {
   end: number;
 }
 
+export interface HexByteWindowLines extends Array<string> {
+  rawBytes?: number[];
+  baseOffset?: number;
+  fileSize?: number;
+}
+
 export interface FileHexViewerState {
   handle: ViewerHandle;
   mode: HexViewerMode;
   chunkSize: number;
   fileSize: number;
-  lines: string[];
+  lines: HexByteWindowLines;
+  rawBytes: number[];
+  baseOffset: number;
   loadedRanges: HexLoadedRange[];
   activeOffset: number;
   jumpOffsetInput: string;

@@ -37,10 +37,11 @@ impl ViewerRangeRequestDto {
 #[serde(rename_all = "camelCase")]
 pub struct ViewerRangeResponseDto {
     pub kind: String,
+    /// Compatibility field for older hex viewers. Bytes-only responses leave this empty.
     pub lines: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub encoding: Option<String>,
-    /// Raw bytes for hex preview (single-response payload, currently up to 1MB)
+    /// Raw bytes for hex preview (single-response payload, currently up to 1MB).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_bytes: Option<Vec<u8>>,
 }
