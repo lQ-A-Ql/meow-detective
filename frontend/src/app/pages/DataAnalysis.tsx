@@ -285,7 +285,7 @@ export function DataAnalysis() {
               <AnalysisLoadingPanel text="正在加载案件..." />
             ) : (
               <>
-                <TabsContent value="system" forceMount className="m-0 data-[state=inactive]:hidden">
+                <TabsContent value="system" className="m-0 data-[state=inactive]:hidden">
                   {systemInfo.isLoading ? (
                     <AnalysisLoadingPanel text="正在解析 Registry/EVTX 系统信息..." />
                   ) : (
@@ -293,7 +293,7 @@ export function DataAnalysis() {
                   )}
                 </TabsContent>
 
-                <TabsContent value="evidence" forceMount className="m-0 data-[state=inactive]:hidden">
+                <TabsContent value="evidence" className="m-0 data-[state=inactive]:hidden">
                   {evidenceSummary.isLoading ? (
                     <AnalysisLoadingPanel text="正在发现证据语义类别..." />
                   ) : (
@@ -305,7 +305,7 @@ export function DataAnalysis() {
                   )}
                 </TabsContent>
 
-                <TabsContent value="registry" forceMount className="m-0 data-[state=inactive]:hidden">
+                <TabsContent value="registry" className="m-0 data-[state=inactive]:hidden">
                   {registrySummary.isLoading ? (
                     <AnalysisLoadingPanel text="正在读取注册表提取结果..." />
                   ) : (
@@ -317,7 +317,7 @@ export function DataAnalysis() {
                   )}
                 </TabsContent>
 
-                <TabsContent value="browser" forceMount className="m-0 data-[state=inactive]:hidden">
+                <TabsContent value="browser" className="m-0 data-[state=inactive]:hidden">
                   {browserSummary.isLoading ? (
                     <AnalysisLoadingPanel text="正在读取浏览器记录..." />
                   ) : (
@@ -328,7 +328,7 @@ export function DataAnalysis() {
                   )}
                 </TabsContent>
 
-                <TabsContent value="email" forceMount className="m-0 data-[state=inactive]:hidden">
+                <TabsContent value="email" className="m-0 data-[state=inactive]:hidden">
                   {emailSummary.isLoading ? (
                     <AnalysisLoadingPanel text="正在读取邮件信息..." />
                   ) : (
@@ -339,7 +339,7 @@ export function DataAnalysis() {
                   )}
                 </TabsContent>
 
-                <TabsContent value="eventlogs" forceMount className="m-0 data-[state=inactive]:hidden">
+                <TabsContent value="eventlogs" className="m-0 data-[state=inactive]:hidden">
                   {eventLogSummary.isLoading ? (
                     <AnalysisLoadingPanel text="正在读取事件日志..." />
                   ) : (
@@ -350,7 +350,7 @@ export function DataAnalysis() {
                   )}
                 </TabsContent>
 
-                <TabsContent value="files" forceMount className="m-0 data-[state=inactive]:hidden">
+                <TabsContent value="files" className="m-0 data-[state=inactive]:hidden">
                   {classifications.isLoading ? (
                     <AnalysisLoadingPanel text="正在按元数据分类文件..." />
                   ) : (
@@ -358,7 +358,7 @@ export function DataAnalysis() {
                   )}
                 </TabsContent>
 
-                <TabsContent value="report" forceMount className="m-0 data-[state=inactive]:hidden">
+                <TabsContent value="report" className="m-0 data-[state=inactive]:hidden">
                   <AnalysisReportPanel
                     pending={summaryMutation.isPending}
                     onDownload={downloadSummary}

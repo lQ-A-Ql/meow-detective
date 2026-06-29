@@ -447,6 +447,21 @@ describe('DataAnalysis page', () => {
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
   });
 
+  it('only mounts the active tab content on initial render', () => {
+    renderPage();
+
+    expect(screen.getByRole('tab', { name: /系统信息/ })).toBeDefined();
+
+    const panels = screen.queryAllByRole('tabpanel', { hidden: true });
+    const activePanels = panels.filter((panel) => panel.getAttribute('data-state') === 'active');
+    const inactivePanels = panels.filter((panel) => panel.getAttribute('data-state') === 'inactive');
+
+    expect(activePanels).toHaveLength(1);
+    expect(activePanels[0].textContent).toContain('BETA-LAB');
+    expect(inactivePanels.length).toBeGreaterThan(0);
+    expect(inactivePanels.every((panel) => panel.textContent === '')).toBe(true);
+  });
+
   it('renders accessible tabs and parsed registry facts with provenance', () => {
     renderPage();
 
@@ -484,9 +499,9 @@ describe('DataAnalysis page', () => {
     });
 
     renderPage();
-    fireEvent.click(screen.getByRole('tab', { name: /证据分类/ }));
+    fireEvent.mouseDown(screen.getByRole('tab', { name: /证据分类/ }));
 
-    expect(screen.getByText('证据语义分类')).toBeDefined();
+    await waitFor(() => expect(screen.getByText('证据语义分类')).toBeDefined());
     expect(screen.getAllByText('系统信息').length).toBeGreaterThan(0);
     expect(screen.getAllByText('事件日志').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Windows/System32/winevt/Logs/System.evtx').length).toBeGreaterThan(0);
@@ -554,24 +569,24 @@ describe('DataAnalysis page', () => {
     expect(within(overview).getAllByText('timeline=3').length).toBe(4);
   });
 
-  it('renders registry, browser and email extraction tabs', () => {
+  it('renders registry, browser and email extraction tabs', async () => {
     renderPage();
 
-    fireEvent.click(screen.getByRole('tab', { name: /注册表/ }));
-    expect(screen.getAllByText('注册表提取').length).toBeGreaterThan(0);
+    fireEvent.mouseDown(screen.getByRole('tab', { name: /注册表/ }));
+    await waitFor(() => expect(screen.getAllByText('注册表提取').length).toBeGreaterThan(0));
     // registry panel renders sub-tabs for structured views
     expect(screen.getByText('用户账户')).toBeDefined();
     expect(screen.getByText('原始键值')).toBeDefined();
 
-    fireEvent.click(screen.getByRole('tab', { name: /浏览器记录/ }));
-    expect(screen.getAllByText('浏览器记录').length).toBeGreaterThan(0);
+    fireEvent.mouseDown(screen.getByRole('tab', { name: /浏览器记录/ }));
+    await waitFor(() => expect(screen.getAllByText('浏览器记录').length).toBeGreaterThan(0));
     expect(screen.getByText('Incident Response Playbook')).toBeDefined();
     expect(screen.getByText('Edge')).toBeDefined();
     expect(screen.getByText('Firefox')).toBeDefined();
     expect(screen.getByText('C:/Users/Admin/Downloads/triage.zip')).toBeDefined();
 
-    fireEvent.click(screen.getByRole('tab', { name: /邮件信息/ }));
-    expect(screen.getAllByText('邮件信息').length).toBeGreaterThan(0);
+    fireEvent.mouseDown(screen.getByRole('tab', { name: /邮件信息/ }));
+    await waitFor(() => expect(screen.getAllByText('邮件信息').length).toBeGreaterThan(0));
     expect(screen.getByText('Initial triage notes')).toBeDefined();
     expect(screen.getByText('alice@example.com')).toBeDefined();
     expect(screen.getByText('triage.csv')).toBeDefined();
@@ -607,11 +622,11 @@ describe('DataAnalysis page', () => {
     expect(screen.queryByText('Windows 10')).toBeNull();
   });
 
-  it('renders file classifications from hook data', () => {
+  it('renders file classifications from hook data', async () => {
     renderPage();
-    fireEvent.click(screen.getByRole('tab', { name: /文件分类/ }));
+    fireEvent.mouseDown(screen.getByRole('tab', { name: /文件分类/ }));
 
-    expect(screen.getByText('Documents')).toBeDefined();
+    await waitFor(() => expect(screen.getByText('Documents')).toBeDefined());
     expect(screen.getAllByText('doc.pdf').length).toBeGreaterThan(0);
     expect(screen.getByText('PDF Document')).toBeDefined();
     expect(screen.getAllByText(/metadata\.extension_path/).length).toBeGreaterThan(0);
@@ -635,7 +650,8 @@ describe('DataAnalysis page', () => {
     });
 
     renderPage();
-    fireEvent.click(screen.getByRole('tab', { name: /报告/ }));
+    fireEvent.mouseDown(screen.getByRole('tab', { name: /报告/ }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /下载 Markdown 报告/ })).toBeDefined());
     fireEvent.click(screen.getByRole('button', { name: /下载 Markdown 报告/ }));
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));

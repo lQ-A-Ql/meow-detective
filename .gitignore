@@ -36,3 +36,7 @@ Thumbs.db
 
 # Private regression fixtures (real disk images, not for CI)
 /testdata/fixtures/private-real-regression/
+/artifacts/
+/development-reports/
+AGENTS.md
+*.bat
