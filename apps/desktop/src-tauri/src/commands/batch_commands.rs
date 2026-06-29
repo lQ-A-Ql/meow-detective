@@ -206,4 +206,82 @@ mod tests {
         state.clear_db_state().unwrap();
         std::fs::remove_dir_all(root).ok();
     }
+
+    fn state_as_managed(state: &AppState) -> tauri::State<'_, AppState> {
+        // `State<'_, T>` is a newtype around `&T`; this transmute is sound
+        // because the test keeps `state` alive for the duration of the call.
+        unsafe { std::mem::transmute(state) }
+    }
+
+    fn setup_active_case_with_batch_job() -> (std::path::PathBuf, AppState, String) {
+        let root =
+            std::env::temp_dir().join(format!("forensics-batch-stub-test-{}", Uuid::new_v4()));
+        let active = case_service::create_case(&root, "Batch Stub", Some("Codex Test")).unwrap();
+        let case_id = active.meta.id.0.clone();
+        let state = AppState::default();
+        *state.active_case.lock().unwrap() = Some(active);
+        state.init_db_pragmas().unwrap();
+
+        let conn = state.get_connection().unwrap();
+        let job = app_services::batch_service::create_and_persist_batch(
+            &conn,
+            &case_id,
+            "stub-plan",
+            BatchPlanDto {
+                data_source_refs: vec!["ds-1".to_string()],
+                phases: vec!["Mount".to_string()],
+                resource_limits: BatchResourceLimitsDto {
+                    max_memory_mb: None,
+                    max_threads: None,
+                },
+            },
+        )
+        .unwrap();
+
+        (root, state, job.id)
+    }
+
+    #[test]
+    fn start_batch_returns_unsupported_stub() {
+        let (root, state, batch_id) = setup_active_case_with_batch_job();
+        let err = tauri::async_runtime::block_on(start_batch(state_as_managed(&state), batch_id))
+            .unwrap_err();
+        assert_eq!(err.code, "UNSUPPORTED");
+        assert!(err.message.to_ascii_lowercase().contains("not supported"));
+        state.clear_db_state().unwrap();
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn pause_batch_returns_unsupported_stub() {
+        let (root, state, batch_id) = setup_active_case_with_batch_job();
+        let err = tauri::async_runtime::block_on(pause_batch(state_as_managed(&state), batch_id))
+            .unwrap_err();
+        assert_eq!(err.code, "UNSUPPORTED");
+        assert!(err.message.to_ascii_lowercase().contains("not supported"));
+        state.clear_db_state().unwrap();
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn resume_batch_returns_unsupported_stub() {
+        let (root, state, batch_id) = setup_active_case_with_batch_job();
+        let err = tauri::async_runtime::block_on(resume_batch(state_as_managed(&state), batch_id))
+            .unwrap_err();
+        assert_eq!(err.code, "UNSUPPORTED");
+        assert!(err.message.to_ascii_lowercase().contains("not supported"));
+        state.clear_db_state().unwrap();
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn cancel_batch_returns_unsupported_stub() {
+        let (root, state, batch_id) = setup_active_case_with_batch_job();
+        let err = tauri::async_runtime::block_on(cancel_batch(state_as_managed(&state), batch_id))
+            .unwrap_err();
+        assert_eq!(err.code, "UNSUPPORTED");
+        assert!(err.message.to_ascii_lowercase().contains("not supported"));
+        state.clear_db_state().unwrap();
+        std::fs::remove_dir_all(root).ok();
+    }
 }

@@ -44,7 +44,7 @@ export async function closeCase(): Promise<void> {
   return apiClient.request(COMMANDS.case.CLOSE_CASE);
 }
 
-export async function renameDataSource(dataSourceId: string, name: string): Promise<DataSourceSummary> {
+export async function renameDataSource(dataSourceId: string, name: string): Promise<void> {
   return apiClient.request(COMMANDS.case.RENAME_DATA_SOURCE, { request: { dataSourceId, name } });
 }
 

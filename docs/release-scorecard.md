@@ -4,7 +4,27 @@
 
 本评分卡用于把 V2 的可信验证、关联分析、性能稳定性和安全治理收敛到一个可执行的候选发布门禁中。
 
-## 2. 总分结构
+## 2. 当前评分口径（2026-06）
+
+> 权威总分：**81 / 100，等级 B**。该口径与 `README.md`、`AGENTS.md` 中的 V2 状态保持一致。
+>
+> 四个阶段按等权平均计算：`(95 + 85 + 70 + 75) / 4 = 81.25 ≈ 81`。
+
+| 阶段 | 维度 | 阶段完成度 | 说明 |
+|---|---|---:|---|
+| V2-1 | 可信验证体系 | 95% | 核心 fixture 与真实 E01 回归覆盖较完整 |
+| V2-2 | 多工件关联分析 | 85% | 关联规则与 lead 已落地，部分家族覆盖待补齐 |
+| V2-3 | 性能与稳定性 | 70% | benchmark 覆盖与长任务稳定性仍在推进 |
+| V2-4 | 安全治理与发布治理 | 75% | 发布门禁与治理快照已建立，部分 gate 仍为 warning |
+
+### 评分历史
+
+| 日期 | 总分 | 等级 | 说明 |
+|---|---:|---|---|
+| 2026-06-13 | 70 | C | 早期 V2-4 治理运行快照；当时 correlation-family-coverage 为 blocked |
+| 2026-06 | 81 | B | 修复文档漂移、MCP Stage 5 回归守卫、lockfile 配置后重新校准的口径 |
+
+## 3. 总分结构
 
 总分 100 分：
 
@@ -13,9 +33,9 @@
 - 性能与稳定性：20 分
 - 安全治理与发布治理：25 分
 
-## 3. 评分项
+## 4. 评分项
 
-### 3.1 可信验证体系（30）
+### 4.1 可信验证体系（30）
 
 | 子项 | 分值 | 通过标准 |
 |---|---:|---|
@@ -24,7 +44,7 @@
 | expected JSON 完整性 | 8 | 核心链路 expected JSON 与字段承诺齐全 |
 | 真实样本回归说明 | 8 | 核心链路具备真实样本回归摘要 |
 
-### 3.2 多工件关联分析（25）
+### 4.2 多工件关联分析（25）
 
 | 子项 | 分值 | 通过标准 |
 |---|---:|---|
@@ -33,7 +53,7 @@
 | UI 联动 | 5 | timeline / artifacts / files / reports 共用同一套结果 |
 | walkthrough | 6 | 至少 3 个真实案例 |
 
-### 3.3 性能与稳定性（20）
+### 4.3 性能与稳定性（20）
 
 | 子项 | 分值 | 通过标准 |
 |---|---:|---|
@@ -41,7 +61,7 @@
 | 性能阈值达标 | 8 | medium / large 关键指标达标 |
 | 长任务稳定性 | 6 | cancel / retry / repeat / partial recovery 可验证 |
 
-### 3.4 安全治理与发布治理（25）
+### 4.4 安全治理与发布治理（25）
 
 | 子项 | 分值 | 通过标准 |
 |---|---:|---|
@@ -50,7 +70,7 @@
 | 防漂移与依赖治理 | 5 | 文档门禁与 dependency gate 通过 |
 | 发布演练 | 5 | release candidate 完整演练一次 |
 
-## 4. 硬门禁
+## 5. 硬门禁
 
 以下任一失败则总评直接不合格：
 
@@ -60,14 +80,14 @@
 - 真实样本回归无法说明验证范围与未保证字段
 - 发布文档严重漂移且无豁免审批
 
-## 5. 等级解释
+## 6. 等级解释
 
 - A（90-100）：可进入 V2 发布收尾
 - B（80-89）：可进入候选发布，但需关闭全部 P1
 - C（70-79）：仅可继续内测，不可对外宣称能力稳定
 - D（<70）：继续开发，不进入候选发布
 
-## 6. 发布材料清单
+## 7. 发布材料清单
 
 每次候选发布至少附带：
 
@@ -78,7 +98,7 @@
 - 安全回归摘要
 - 风险登记与豁免说明
 
-## 7. 当前产品内落地（2026-06-13）
+## 8. 当前产品内落地（2026-06-13）
 
 `/v2` 治理工作台当前已经提供第一版可见发布治理链路：
 
@@ -195,9 +215,9 @@
 
 这意味着 V2 的发布门禁与评分口径不再只停留在 `/v2` 页面里，而是已经能跟随案件导出物一起被审阅和留档。
 
-## 8. V2-4 治理运行结果（2026-06-13）
+## 9. V2-4 治理运行结果（2026-06-13）
 
-### 8.1 安全守护脚本运行结果
+### 9.1 安全守护脚本运行结果
 
 | 脚本 | 结果 | 备注 |
 |---|---|---|
@@ -207,11 +227,11 @@
 | `check-stage5-regression-guard.ps1` | PASSED | MCP 传输验证 + 嵌套 DTO 合约 + staging 冲突可见性均已锁定。修复：staging.rs 重构为 staging/mod.rs 后更新了 guard 路径和文件读取逻辑；补充了 mcp.rs 中的 `tool_call_request_documents_camel_case_boundary_is_top_level_only` 合约标记 |
 | `check-doc-drift.ps1` | PASSED | 修复：v2-known-limitations.json 从 9 items 扩展至 18 items 对齐 known-unsupported-formats.md section 2；README / AGENTS 补齐了 v2-benchmark-baseline.json 引用 |
 
-### 8.2 依赖治理
+### 9.2 依赖治理
 
 `cargo-deny` 未安装。建议在 CI 和本地发布流程中引入 `cargo deny check` 自动扫描 advisory / license / source 三类问题。当前尚未发现已知 CVE 依赖，但无自动化扫描无法保证。
 
-### 8.3 当前评分
+### 9.3 当前评分
 
 基于 `v2-release-policy.json` scorePolicy 派生（`testdata/governance/v2-runtime-results.json` 驱动）：
 
@@ -223,7 +243,7 @@
 | 安全治理 | 25 | 22 | 待哈希证据源 -3 |
 | **总分** | **100** | **70** | **等级：C** |
 
-### 8.4 当前门禁状态
+### 9.4 当前门禁状态
 
 | Gate | 状态 | 说明 |
 |---|---|---|
@@ -235,12 +255,12 @@
 | runtime-failures | warning | partial job 存在 |
 | correlation-family-coverage | **blocked** | 关联快照无 lead，8 个家族均为 missing |
 
-### 8.5 阻断项（Blockers）
+### 9.5 阻断项（Blockers）
 
 1. **关联规则家族全覆盖缺失**：当前关联快照 lead_count=0，全部 8 个规则家族（LNK、Prefetch、Registry、RecycleBin、BrowserDownload、BrowserHistory、EmailMessage、JumpList）均为 missing 状态。候选发布前需至少为 LNK / Prefetch / Registry / RecycleBin 补充规则落地并生成关联快照。
 2. **cargo-deny 未入 CI**：缺少自动化 advisory/license/source 扫描，无法在每次构建中拦截已知漏洞依赖。
 
-### 8.6 残余风险（Residual Risks）
+### 9.6 残余风险（Residual Risks）
 
 - Browser 仍处于 Beta，版本边界需要持续回归。
 - Email 仍为 EML/EMLX-first，PST/OST/mbox 需留在已知限制。
@@ -251,7 +271,7 @@
 - FAT/exFAT、JumpList、SRU、Thumbcache 缺少 committed fixture 与 expected.json。
 - Browser / Email 模块在 artifacts-windows 中尚无任何实现代码。
 
-### 8.7 发布建议
+### 9.7 发布建议
 
 当前总分 70（等级 C），存在 1 个 blocked gate（correlation-family-coverage）和多个 warning gates。建议：
 

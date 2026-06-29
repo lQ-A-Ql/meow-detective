@@ -49,13 +49,16 @@ export interface FileHexViewerState {
 }
 
 export interface MediaUrl {
+  mode: 'inline' | 'protocol' | 'rangeFallback';
   url?: string;
   handleId?: string;
   mimeType: string;
   size: number;
   canReadRanges: boolean;
-  mode?: 'inline' | 'protocol' | 'rangeFallback';
-  previewMode?: 'inline' | 'protocol' | 'rangeFallback' | 'range';
+}
+
+export interface MediaPreview extends MediaUrl {
+  previewMode: 'inline' | 'protocol' | 'rangeFallback' | 'range';
   previewBytes?: number;
 }
 

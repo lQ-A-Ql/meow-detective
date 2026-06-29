@@ -52,7 +52,7 @@ Assert-NotMatches `
 
 Assert-Matches `
   -Content $mcpCommands `
-  -Pattern 'fn\s+transport_from_dto[\s\S]{0,800}_\s*=>\s*Err\([\s\S]{0,160}Invalid transport type' `
+  -Pattern 'fn\s+transport_from_dto[\s\S]{0,800}_\s*=>\s*(?:return\s*)?Err\([\s\S]{0,160}Invalid transport type' `
   -Message "transport_from_dto must reject invalid MCP transport types"
 
 Assert-Matches `
@@ -71,8 +71,8 @@ Assert-Matches `
   -Message "test_mcp_connection must validate and report invalid MCP transport types"
 
 foreach ($pattern in @(
-    '"sse"\s*=>\s*McpTransport::Sse',
-    '"stdio"\s*=>\s*McpTransport::Stdio'
+    '"sse"\s*=>\s*(?:Ok\()?McpTransport::Sse',
+    '"stdio"\s*=>\s*(?:Ok\()?McpTransport::Stdio'
   )) {
   Assert-Matches `
     -Content $mcpCommands `
@@ -99,13 +99,19 @@ foreach ($pattern in @(
 # Staging merges must not use INSERT OR IGNORE in the merge-to-main path. Silent
 # conflict suppression hides missing/duplicate rows and lets staging partitions be
 # marked merged even when rows were skipped.
+$stagingRepoPath = Join-Path $repoRoot 'crates/persistence-sqlite/src/repositories/staging_repo.rs'
+if (-not (Test-Path -LiteralPath $stagingRepoPath)) {
+  throw "Required staging repository is missing: $stagingRepoPath"
+}
+$stagingRepo = Get-Content -LiteralPath $stagingRepoPath -Raw -Encoding UTF8
+
 foreach ($pattern in @(
     'INSERT\s+OR\s+IGNORE\s+INTO\s+main\.file_entries',
     'INSERT\s+OR\s+IGNORE\s+INTO\s+main\.artifacts',
     'INSERT\s+OR\s+IGNORE\s+INTO\s+main\.timeline_events'
   )) {
   Assert-NotMatches `
-    -Content $staging `
+    -Content $stagingRepo `
     -Pattern $pattern `
     -Message "Staging merge-to-main must not silently suppress conflicts with: $pattern"
 }
@@ -116,7 +122,7 @@ foreach ($pattern in @(
     'INSERT\s+INTO\s+main\.timeline_events'
   )) {
   Assert-Matches `
-    -Content $staging `
+    -Content $stagingRepo `
     -Pattern $pattern `
     -Message "Staging merge-to-main is missing explicit insert path: $pattern"
 }

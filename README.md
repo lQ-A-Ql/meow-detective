@@ -1,6 +1,6 @@
 # Forensics Workbench
 
-A Tauri 2 desktop application for disk image forensic analysis on Windows. 37 Rust crates, 16 frontend pages, 95 Tauri commands, 2,061 Rust tests. MIT licensed.
+A Tauri 2 desktop application for disk image forensic analysis on Windows. 37 Rust crates, 16 frontend pages, 96 Tauri commands, 2,061 Rust tests. MIT licensed.
 
 **V5 Quality Audit (2026-06):** Architecture compliance 97%, runtime safety 96%, forensic completeness 96%. E01 preview pipeline hardened with partition-indexed path reconstruction, MFT inode-based file resolution, and per-partition chunk-table caching.
 
@@ -8,7 +8,7 @@ A Tauri 2 desktop application for disk image forensic analysis on Windows. 37 Ru
 
 ```text
 React UI (frontend/) -> Tauri commands / events
-Tauri Command Layer (apps/desktop/src-tauri/) -> 95 commands
+Tauri Command Layer (apps/desktop/src-tauri/) -> 96 commands
 Application Services (crates/app-services/) -> 24 source modules
 Core crates -> domain / evidence / persistence / search / timeline / artifacts / reports / MCP / graph
 ```
@@ -41,7 +41,7 @@ cd apps/desktop/src-tauri && cargo tauri build
 
 ```bash
 cargo test --workspace
-cd frontend && pnpm test            # Frontend (33 test files)
+cd frontend && pnpm test            # Frontend (73 test files)
 cd frontend && pnpm test:coverage
 ```
 
@@ -64,7 +64,7 @@ cd frontend && pnpm test
 | `apps/desktop/src-tauri/` | Tauri 2 shell (96 commands) |
 | `crates/app-services/` | Application orchestration (24 source modules) |
 | `crates/transport/` | Shared DTOs, commands, events, errors |
-| `crates/persistence-sqlite/` | SQLite repos (12) and migration scripts (31) |
+| `crates/persistence-sqlite/` | SQLite repos (15) and migration scripts (33) |
 | `crates/evidence-core/` | Disk image probing and volume detection |
 | `crates/fs-ntfs/`, `fs-fat/`, `fs-exfat/` | Filesystem parsers (NTFS/FAT/ExFAT/ext4/XFS/Btrfs/APFS/HFS+) |
 | `crates/image-e01/`, `image-raw/` | Image readers (E01/RAW) |

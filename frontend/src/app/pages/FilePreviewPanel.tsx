@@ -13,7 +13,7 @@ import type {
   FileEntryRow,
   TextPreviewResponse,
   ImagePreviewResponse,
-  MediaUrl,
+  MediaPreview,
   ViewerHandle,
 } from '@/types/models';
 
@@ -77,7 +77,7 @@ export interface FilePreviewPanelProps {
   onLoadPreviousHexRange: () => Promise<void> | void;
   textPreview: TextPreviewResponse | null | undefined;
   imagePreview: ImagePreviewResponse | null | undefined;
-  mediaUrl: MediaUrl | null | undefined;
+  mediaUrl: MediaPreview | null | undefined;
   selectedFile: FileEntryRow | undefined;
   previewError?: ApiErrorDto | null;
   onRetryPreview?: () => void;

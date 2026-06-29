@@ -6,7 +6,7 @@
 
 - **Runtime**: Tauri 2 desktop shell. No HTTP server. All frontend↔backend communication goes through Tauri commands and events.
 - **Primary platform**: `x86_64-pc-windows-msvc` (Windows-primary, desktop-first, single-user).
-- **Storage**: SQLite case databases with WAL, migrations, and repository layer (15 repos, 31 migration scripts).
+- **Storage**: SQLite case databases with WAL, migrations, and repository layer (15 repos, 33 migration scripts).
 - **Evidence access**: Read-only. Original evidence sources are never modified.
 - **Current status**:
   - V2: ~90% complete, Grade B (81/100), all 7 real E01 regression tests passing.
@@ -274,11 +274,11 @@ Backend → Frontend via Tauri `emit`. Topics are string constants in `crates/tr
 | Count | Location | Notes |
 |-------|----------|-------|
 | 37 crates | `Cargo.toml` workspace members + `apps/desktop/src-tauri` | Includes 36 library crates and the Tauri shell |
-| 95 Tauri commands | `apps/desktop/src-tauri/src/commands/**/*.rs` | Registered in `src/lib.rs` |
+| 96 Tauri commands | `apps/desktop/src-tauri/src/commands/**/*.rs` | Registered in `src/lib.rs` |
 | 15 SQLite repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` | Includes staging_repo, correlation_repo, entity_repo added in 2026-06 |
-| 31 migration scripts | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | `0001`–`0030` plus `staging_001.sql` |
+| 33 migration scripts | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | `0001`–`0031` plus `staging_001.sql` |
 | 16 frontend pages | `frontend/src/app/pages/*.tsx` (excluding `*.test.tsx`) | Includes V2 Workbench, V3 Dashboard, CaseHome, FileBrowser, etc. |
-| 71 frontend test files | `frontend/src/**/*.test.{ts,tsx}` | |
+| 73 frontend test files | `frontend/src/**/*.test.{ts,tsx}` | |
 | ~2,061 Rust tests | `cargo test --workspace` (calibrated 2026-06) | |
 | 19 event topics | `crates/transport/src/events/mod.rs` | File extract progress added in 2026-06 |
 | 33 DTO domain files | `crates/transport/src/dto/*.rs` | Includes analysis_browser.rs added in 2026-06 |
@@ -455,3 +455,5 @@ Governance fact sources (embedded at compile time, drive `/v2` governance snapsh
 20. **Chinese docs are authoritative for several topics**: `docs/development-engineering-guide.md`, `docs/design-constraints.md`, `docs/engineering-audit-plan.md`, and `docs/documentation-index.md` contain authoritative engineering constraints. If a Chinese doc conflicts with an older English doc, the Chinese engineering doc and `AGENTS.md` take precedence.
 
 21. **MCP DTOs use snake_case intentionally**: The 12 DTOs in `crates/transport/src/dto/mcp.rs` intentionally lack `#[serde(rename_all = "camelCase")]`. This is guarded by `check-stage5-regression-guard.ps1`. Frontend uses `*ProtocolDto` interfaces to adapt. Do NOT add camelCase to MCP DTOs without updating the regression guard and frontend normalizer.
+
+22. **Batch execution control is a V3 stub**: `create_batch_plan`, `get_batch_job`, and `list_batch_jobs` are implemented. `start_batch`, `pause_batch`, `resume_batch`, and `cancel_batch` return `BatchServiceError::Unsupported` until V3 scheduling lands.

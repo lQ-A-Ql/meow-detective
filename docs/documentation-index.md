@@ -58,27 +58,27 @@
 | 事实 | 当前值 | 事实源 |
 |---|---:|---|
 | Rust workspace crate | 37 | `crates/` (新增 V4: fs-ext4, fs-xfs, fs-btrfs, fs-apfs, fs-hfsplus, exchange) |
-| Tauri commands | 85 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
+| Tauri commands | 96 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
 | app-services source modules | 24 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
-| SQLite repositories | 12 | `crates/persistence-sqlite/src/repositories/*_repo.rs` (新增: graph_repo, notebook_repo, batch_repo) |
-| SQLite migration scripts | 31 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0030 + staging_001) |
-| frontend pages | 10 | `frontend/src/app/pages/*.tsx`，排除测试 (新增: V3Dashboard) |
-| frontend test files | 43 | `frontend/src/**/*.test.ts(x)` |
+| SQLite repositories | 15 | `crates/persistence-sqlite/src/repositories/*_repo.rs` (新增: graph_repo, notebook_repo, batch_repo) |
+| SQLite migration scripts | 33 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0031 + staging_001) |
+| frontend pages | 16 | `frontend/src/app/pages/*.tsx`，排除测试 (新增: V3Dashboard) |
+| frontend test files | 73 | `frontend/src/**/*.test.ts(x)` |
 | Mermaid 图块 | 15 | `docs/model-architecture-algorithm-diagrams.md` |
 | V3 参考文档 | 9 | `docs/v3-plan.md` 及 8 篇 V3 参考文档 (已实现) |
 | V3 新增 crate | 3 | `crates/containers-pst/`, `crates/artifacts-linux/`, `crates/artifacts-macos/` (已创建) |
 | V4 参考文档 | 1 | `docs/v4-plan.md`（V4 阶段边界、测试矩阵、验收标准、评分机制） |
 | V4 新增 crate | 6 | `crates/fs-ext4/`, `crates/fs-xfs/`, `crates/fs-btrfs/`, `crates/fs-apfs/`, `crates/fs-hfsplus/`, `crates/exchange/` (已创建) |
-| Rust tests | 1,757 | `cargo test --workspace` 汇总 (2026-06 校准) |
+| Rust tests | 1,928 | `cargo test --workspace` 汇总 (2026-06 校准) |
 
 ## 3. 路径级事实校准
 
 | 路径模式 | 数量 | 说明 |
 |---|---:|---|
-| `frontend/src/app/pages/*.tsx` | 10 | 页面入口文件，不含 `*.test.tsx` |
-| `frontend/src/**/*.test.ts(x)` | 43 | Vitest 测试文件总数 |
-| `apps/desktop/src-tauri/src/commands/**/*.rs` | 84 | Tauri command 定义数 |
-| `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 31 | SQLite migration 脚本 (0001-0030 + staging_001) |
+| `frontend/src/app/pages/*.tsx` | 16 | 页面入口文件，不含 `*.test.tsx` |
+| `frontend/src/**/*.test.ts(x)` | 73 | Vitest 测试文件总数 |
+| `apps/desktop/src-tauri/src/commands/**/*.rs` | 96 | Tauri command 定义数 |
+| `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 33 | SQLite migration 脚本 (0001-0031 + staging_001) |
 | `docs/model-architecture-algorithm-diagrams.md` 中 Mermaid | 15 | Mermaid 图块总数 |
 | `docs/v3-*.md` | 1 | V3 阶段文档入口（主计划） |
 | `docs/` 中 V3 参考文档 | 9 | 证据图、笔记本、规则包、PST决策、批处理、Linux/macOS覆盖、PST支持、演练 |

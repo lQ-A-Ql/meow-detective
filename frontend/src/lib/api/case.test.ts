@@ -99,7 +99,7 @@ describe('case API', () => {
   });
 
   it('renameDataSource sends dataSourceId and name in request', async () => {
-    requestMock.mockResolvedValueOnce({ id: 'ds-1', name: 'Renamed' } as never);
+    requestMock.mockResolvedValueOnce(undefined as never);
     await renameDataSource('ds-1', 'Renamed');
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.case.RENAME_DATA_SOURCE, {
       request: { dataSourceId: 'ds-1', name: 'Renamed' },

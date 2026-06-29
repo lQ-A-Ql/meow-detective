@@ -1,3 +1,10 @@
+//! Batch orchestration service.
+//!
+//! MVP scope: `create_batch_plan`, `get_batch_status`, and `list_batch_jobs` are
+//! fully implemented. Execution control commands (`start_batch`, `pause_batch`,
+//! `resume_batch`, `cancel_batch`) are stubs and return
+//! `BatchServiceError::Unsupported` until V3 scheduling lands.
+
 use domain::batch::{BatchPlan, BatchResourceLimits, PhaseKind};
 use persistence_sqlite::repositories::batch_repo::BatchRepo;
 use rusqlite::Connection;

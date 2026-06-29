@@ -181,24 +181,26 @@ fn summarize_transport(config: &McpServerConfig) -> serde_json::Value {
     }
 }
 
-fn test_transport_summary_from_request(request: &McpTestConnectionRequestDto) -> serde_json::Value {
+fn test_transport_summary_from_request(
+    request: &McpTestConnectionRequestDto,
+) -> Result<serde_json::Value, CommandError> {
     match request.transport_type.as_str() {
         "sse" => {
             let url_str = request.url.as_deref().unwrap_or("");
             let parsed = reqwest::Url::parse(url_str).ok();
-            serde_json::json!({
+            Ok(serde_json::json!({
                 "transport": "sse",
                 "scheme": parsed.as_ref().map(|v| v.scheme()).unwrap_or("unknown"),
                 "host": parsed.as_ref().and_then(|v| v.host_str()).unwrap_or("unknown"),
                 "networkPolicy": &request.permissions.network_policy,
-            })
+            }))
         }
-        "stdio" => serde_json::json!({
+        "stdio" => Ok(serde_json::json!({
             "transport": "stdio",
             "command": request.command.as_deref().unwrap_or(""),
             "allowedCommands": request.permissions.allowed_commands,
-        }),
-        _ => serde_json::json!({ "transport": "invalid" }),
+        })),
+        _ => Err(CommandError::invalid_input("Invalid transport type")),
     }
 }
 
@@ -401,8 +403,11 @@ pub async fn test_mcp_connection(
     state: State<'_, AppState>,
     request: McpTestConnectionRequestDto,
 ) -> Result<McpTestConnectionResultDto, CommandError> {
+    if !matches!(request.transport_type.as_str(), "sse" | "stdio") {
+        return Err(CommandError::invalid_input("Invalid transport type"));
+    }
     let permissions = permissions_from_dto(&request.permissions);
-    let summary = test_transport_summary_from_request(&request);
+    let summary = test_transport_summary_from_request(&request)?;
     let caps = mcp_client::probe::probe_mcp_connection(
         &request.transport_type,
         request.url.clone(),
@@ -632,4 +637,50 @@ pub async fn get_mcp_prompt(
     );
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dummy_permissions() -> McpPermissionProfileDto {
+        McpPermissionProfileDto {
+            resource_access: "readOnly".to_string(),
+            tool_access: "disabled".to_string(),
+            prompt_access: "readOnly".to_string(),
+            network_policy: "localhostOnly".to_string(),
+            allowed_tools: vec![],
+            allowed_commands: vec![],
+        }
+    }
+
+    #[test]
+    fn transport_from_dto_rejects_invalid_transport() {
+        let server = McpServerConfigDto {
+            id: "s1".to_string(),
+            name: "Server".to_string(),
+            transport_type: "invalid".to_string(),
+            url: None,
+            command: None,
+            args: None,
+            enabled: false,
+            auto_connect: false,
+            permissions: dummy_permissions(),
+        };
+        let err = transport_from_dto(&server).unwrap_err();
+        assert!(err.to_string().contains("Invalid transport type"));
+    }
+
+    #[test]
+    fn test_transport_summary_rejects_invalid_transport() {
+        let request = McpTestConnectionRequestDto {
+            transport_type: "invalid".to_string(),
+            url: None,
+            command: None,
+            args: None,
+            permissions: dummy_permissions(),
+        };
+        let err = test_transport_summary_from_request(&request).unwrap_err();
+        assert!(err.to_string().contains("Invalid transport type"));
+    }
 }

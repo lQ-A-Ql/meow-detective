@@ -21,6 +21,7 @@ import {
   FileHexViewerState,
   HexByteWindowLines,
   HexLoadedRange,
+  MediaPreview,
   ViewerRangeResponse,
 } from '@/types/models';
 import type { FileSortKey, FileSortDirection } from '@/lib/file-sort';
@@ -361,11 +362,11 @@ export function useImagePreview(fileId?: string, enabled = true) {
  */
 export function useMediaUrl(fileId?: string, enabled = true) {
   const preview = useMemo(() => getPreviewSettings(), []);
-  const query = useQuery({
+  const query = useQuery<MediaPreview | null, Error>({
     queryKey: ['files', 'media', fileId],
     enabled: Boolean(fileId) && enabled,
     retry: false,
-    queryFn: async () => {
+    queryFn: async (): Promise<MediaPreview | null> => {
       if (!fileId) return null;
       const media = await getMediaUrl(fileId);
       if (media.url && media.mode === 'protocol') {
@@ -377,7 +378,7 @@ export function useMediaUrl(fileId?: string, enabled = true) {
       if (media.url || !media.handleId || !media.canReadRanges) {
         return {
           ...media,
-          previewMode: media.mode ?? media.previewMode ?? 'inline',
+          previewMode: media.mode,
         };
       }
 
