@@ -1,0 +1,216 @@
+{
+  "fileBrowser": {
+    "title": "File Browser Controls",
+    "empty": {
+      "title": "File browser inactive",
+      "description": "Create or open a case on the case overview page, then import an image or logical directory to browse the directory tree and file contents here."
+    },
+    "subbar": {
+      "title": "File Browser Controls",
+      "meta": "Current directory {{directoryCount}} items / executable objects {{executableCount}} items"
+    },
+    "breadcrumb": {
+      "noData": "No data source"
+    },
+    "filter": {
+      "label": "Filter:",
+      "placeholder": "*"
+    },
+    "viewer": {
+      "status": "viewer: metadata / hex enabled"
+    },
+    "itemCount": "Showing {{visibleCount}} items",
+    "itemCountWithTotal": "Showing {{visibleCount}} / {{total}} items",
+    "inspector": {
+      "title": "Object Inspector",
+      "selected": "Selected object {{name}}",
+      "noSelection": "No file object selected",
+      "sections": {
+        "identity": "Object Identity",
+        "path": "Source Path",
+        "timestamps": "Timestamps (MACB)",
+        "summary": "Summary",
+        "status": "Object Status",
+        "actions": "Actions"
+      },
+      "timestamp": {
+        "modified": "M",
+        "accessed": "A",
+        "changed": "C",
+        "created": "B"
+      },
+      "status": {
+        "deleted": "deleted",
+        "hidden": "hidden",
+        "system": "system"
+      },
+      "extract": {
+        "pending": "Extracting...",
+        "button": "Extract File"
+      },
+      "viewTimeline": "View in Timeline"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Application configuration and data directories",
+    "save": "Save Settings",
+    "saving": "Saving...",
+    "saved": "Settings saved.",
+    "saveFailed": "Failed to save settings.",
+    "validation": {
+      "caseRootEmpty": "Case default storage path cannot be empty.",
+      "imageSearchPathsInvalid": "Image search paths contain invalid characters.",
+      "workersPositive": "Worker count must be empty or greater than 0.",
+      "previewPositive": "Preview size / chunk size must be a positive integer."
+    },
+    "sections": {
+      "storagePaths": {
+        "caseRoot": "Default Case Storage Path",
+        "caseRootHint": "Only used to pre-fill the parent directory for new cases on the home page; the actual storage location depends on the path entered there.",
+        "imageSearchPaths": "Image Search Paths",
+        "imageSearchPathsHint": "Image directories automatically searched when importing data sources (semicolon-separated)."
+      },
+      "importPerformance": {
+        "title": "Import Performance",
+        "maxImportWorkers": "Enumeration Worker Limit",
+        "maxImportWorkersHint": "E01/RAW partition enumeration; empty means automatic.",
+        "maxAnalysisWorkers": "Analysis Worker Limit",
+        "maxAnalysisWorkersHint": "Artifact / timeline / text analysis pool; empty means logical cores.",
+        "importAnalysisMode": "Import Analysis Mode",
+        "metadataOnly": "Metadata only (recommended for E01/RAW)",
+        "budgetedContent": "Budgeted content (recommended for directory import)",
+        "fullContent": "Full content (high memory risk)",
+        "importAnalysisModeHint": "E01/RAW defaults to metadata and timeline only; content reading and full-text indexing require explicit budget mode."
+      },
+      "preview": {
+        "title": "Preview",
+        "hexChunkBytes": "Hex Chunk Size (bytes)",
+        "hexChunkBytesHint": "Number of bytes read per hex viewer request.",
+        "maxViewerRangeLength": "Max Range per Request (bytes)",
+        "maxViewerRangeLengthHint": "Maximum bytes returned in a single file preview request.",
+        "maxInlineImagePreviewBytes": "Inline Image Preview Limit (bytes)",
+        "maxInlineImagePreviewBytesHint": "Images larger than this will not be inlined directly.",
+        "maxInlineMediaPreviewBytes": "Inline Media Preview Limit (bytes)",
+        "maxInlineMediaPreviewBytesHint": "Media larger than this will not be inlined directly."
+      },
+      "uiDebug": {
+        "title": "UI & Debug",
+        "theme": "Theme",
+        "themeLight": "Light",
+        "themeDark": "Dark",
+        "devEventTrace": "Event Debug Log"
+      },
+      "mcp": {
+        "title": "AI Assistant (MCP)",
+        "loading": "Loading...",
+        "connectionTitle": "MCP Server Connections",
+        "noServers": "No servers",
+        "addServer": "Add Server",
+        "connectionStatus": "Connection status: {{count}} server(s) connected",
+        "connectionStatus_zero": "Connection status: {{count}} servers connected"
+      },
+      "systemInfo": {
+        "title": "System Information",
+        "version": "Version",
+        "platform": "Platform",
+        "database": "Database",
+        "perCase": "per case",
+        "searchEngine": "Search Engine",
+        "fullTextIndex": "full-text index",
+        "mcpProtocol": "MCP Protocol"
+      }
+    }
+  },
+  "sidebar": {
+    "toggleSidebar": "Toggle sidebar"
+  },
+  "topBar": {
+    "links": {
+      "home": { "label": "Case Overview", "context": "Case status, metrics and recent objects" },
+      "files": { "label": "File Browser", "context": "Directory tree, file table and forensics viewer" },
+      "analysis": { "label": "Data Source Analysis", "context": "System info, file classification and analysis reports" },
+      "v2": { "label": "V2 Governance", "context": "Trusted verification, benchmark, security governance and release scorecard" },
+      "v3": { "label": "V3", "context": "Graph stats, platform coverage, rule pack status and batch status" },
+      "search": { "label": "Global Search", "context": "Keywords, structured queries and hit details" },
+      "timeline": { "label": "Timeline", "context": "Event aggregation, filtering and chronological review" },
+      "artifacts": { "label": "Artifact Analysis", "context": "Windows artifact families and parsed fields" },
+      "reports": { "label": "Reports", "context": "Templates, export jobs and report artifacts" }
+    },
+    "currentPage": "Current Page",
+    "case": {
+      "number": "Case #{{number}}",
+      "noCase": "No case selected",
+      "examiner": "Examiner {{examiner}}",
+      "updatedAt": "Updated at {{updatedAt}}"
+    },
+    "search": {
+      "placeholder": "Enter global search query or IOC"
+    },
+    "jobs": {
+      "running": "{{count}} running",
+      "warnings": "{{count}}"
+    }
+  },
+  "bottomDrawer": {
+    "headline": {
+      "waiting": "Waiting for tasks"
+    },
+    "jobs": {
+      "running": "Running",
+      "warnings": "Warnings",
+      "skipped": "Skipped",
+      "trace": "Trace",
+      "stats": "{{running}} running / {{completed}} completed / {{partial}} partial / {{failed}} failed",
+      "failedFallback": "Task execution failed"
+    },
+    "importSignals": {
+      "title": "Import Signals",
+      "waiting": "Waiting for typed progress",
+      "noStatus": "No import status events received yet",
+      "percent": "%",
+      "processed": "{{processed}}",
+      "processedWithTotal": "{{processed}}/{{total}}"
+    },
+    "partitionProgress": {
+      "title": "Partition Progress",
+      "completed": "{{completed}}/{{total}} completed"
+    },
+    "performance": {
+      "title": "Performance"
+    },
+    "trace": {
+      "recentStream": "Recent event stream"
+    },
+    "status": {
+      "recent": "Recent status:",
+      "idle": "Idle"
+    },
+    "toggle": {
+      "collapse": "Collapse task drawer",
+      "expand": "Expand task drawer"
+    }
+  },
+  "gql": {
+    "placeholder": "MATCH (n:File)-[e:References]->(m:Artifact)\nWHERE e.confidence > 0.7\nRETURN n, e, m\nLIMIT 50",
+    "header": {
+      "title": "GQL Query",
+      "running": "Running...",
+      "run": "Run"
+    },
+    "autocomplete": {
+      "kind": {
+        "keyword": "keyword",
+        "type": "type",
+        "property": "property",
+        "predicate": "predicate"
+      }
+    }
+  },
+  "errorBoundary": {
+    "title": "Application Error",
+    "unknownError": "Unknown error",
+    "reload": "Reload",
+    "recover": "Try to recover"
+  }
+}

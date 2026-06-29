@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { LocalSettings } from '@/lib/settings';
 
 interface UiDebugSectionProps {
@@ -17,17 +18,19 @@ export function UiDebugSection({
   setSettings,
   onSave,
 }: UiDebugSectionProps) {
+  const { t } = useTranslation();
+
   return (
     <section>
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-[13px] font-semibold text-[#333]">界面与调试</span>
+        <span className="text-[13px] font-semibold text-forensics-text-secondary">{t('settings.sections.uiDebug.title')}</span>
       </div>
       <div className="flex flex-wrap items-center gap-3 text-[12px]">
         <label
           htmlFor="settings-theme"
-          className="flex items-center gap-2 border border-[#e0e0e0] bg-[#f8f8f8] px-3 py-2"
+          className="flex items-center gap-2 border border-forensics-border bg-forensics-input-bg px-3 py-2"
         >
-          主题
+          {t('settings.sections.uiDebug.theme')}
           <select
             id="settings-theme"
             value={theme}
@@ -37,13 +40,13 @@ export function UiDebugSection({
                 theme: event.target.value === 'dark' ? 'dark' : 'light',
               }))
             }
-            className="border border-[#ccc] bg-white px-2 py-1"
+            className="border border-forensics-border-strong bg-forensics-surface px-2 py-1"
           >
-            <option value="light">浅色</option>
-            <option value="dark">深色</option>
+            <option value="light">{t('settings.sections.uiDebug.themeLight')}</option>
+            <option value="dark">{t('settings.sections.uiDebug.themeDark')}</option>
           </select>
         </label>
-        <label className="flex items-center gap-2 border border-[#e0e0e0] bg-[#f8f8f8] px-3 py-2">
+        <label className="flex items-center gap-2 border border-forensics-border bg-forensics-input-bg px-3 py-2">
           <input
             type="checkbox"
             checked={devEventTrace}
@@ -54,18 +57,18 @@ export function UiDebugSection({
               }))
             }
           />
-          事件调试日志
+          {t('settings.sections.uiDebug.devEventTrace')}
         </label>
         <button
           type="button"
           onClick={onSave}
           disabled={savingSettings}
-          className="border border-[#111] bg-[#111] px-4 py-2 text-[12px] text-white hover:bg-[#333]"
+          className="border border-forensics-text bg-forensics-text px-4 py-2 text-[12px] text-forensics-surface hover:bg-forensics-text-secondary"
         >
-          {savingSettings ? '保存中...' : '保存设置'}
+          {savingSettings ? t('settings.saving') : t('settings.save')}
         </button>
         {settingsMessage ? (
-          <span className="text-[11px] text-[#666]">{settingsMessage}</span>
+          <span className="text-[11px] text-forensics-muted">{settingsMessage}</span>
         ) : null}
       </div>
     </section>

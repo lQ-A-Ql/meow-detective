@@ -1,4 +1,5 @@
 import { ChevronRight, HardDrive } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { PageSubbar } from '@/components/layout/PageSubbar';
 import { FileVisibilityToggle } from '@/components/files/FileVisibilityToggle';
 import { FileTreePanel } from './FileTreePanel';
@@ -8,17 +9,18 @@ import { FileBrowserInspector } from './FileBrowserInspector';
 import { useFileBrowser } from './use-file-browser';
 
 export function FileBrowser() {
+  const { t } = useTranslation();
   const fb = useFileBrowser();
 
   if (!fb.currentCase) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-white">
-        <div className="w-full max-w-xl border border-[#e0e0e0] bg-[#fafafa] p-8 text-center">
-          <div className="font-serif text-2xl text-[#111] mb-3">
-            文件浏览待激活
+      <div className="flex-1 flex items-center justify-center bg-forensics-surface">
+        <div className="w-full max-w-xl border border-forensics-border bg-forensics-panel p-8 text-center">
+          <div className="font-serif text-2xl text-forensics-text mb-3">
+            {t('fileBrowser.empty.title')}
           </div>
-          <div className="text-[13px] text-[#666] leading-6">
-            先在案件概览页创建或打开案件，再导入镜像或逻辑目录，即可在这里浏览目录树和文件内容。
+          <div className="text-[13px] text-forensics-muted leading-6">
+            {t('fileBrowser.empty.description')}
           </div>
         </div>
       </div>
@@ -26,17 +28,20 @@ export function FileBrowser() {
   }
 
   return (
-    <div className="flex-1 flex flex-col w-full h-full bg-white min-w-0">
+    <div className="flex-1 flex flex-col w-full h-full bg-forensics-surface min-w-0">
       <PageSubbar
-        title="文件浏览控制"
-        meta={`当前目录 ${fb.sortedRows.length} 项 / 可执行对象 ${fb.executableCount} 项`}
+        title={t('fileBrowser.subbar.title')}
+        meta={t('fileBrowser.subbar.meta', {
+          directoryCount: fb.sortedRows.length,
+          executableCount: fb.executableCount,
+        })}
       >
         <div className="h-10 flex items-center px-4 gap-4 text-xs shrink-0">
-          <div className="flex items-center gap-1.5 text-[#666] font-mono text-[11px] min-w-0">
+          <div className="flex items-center gap-1.5 text-forensics-muted font-mono text-[11px] min-w-0">
             <HardDrive size={12} />
             {fb.treeNodes.length > 0 ? (
               <>
-                <span className="text-[#111] font-semibold truncate max-w-[200px]">
+                <span className="text-forensics-text font-semibold truncate max-w-[200px]">
                   {fb.activeRootNode
                     ? fb.displayNodeName(fb.activeRootNode.name, fb.activeRootNode.depth)
                     : '/'}
@@ -44,41 +49,45 @@ export function FileBrowser() {
                 {fb.currentDirectory &&
                 fb.currentDirectory.id !== fb.activeRootNode?.id ? (
                   <>
-                    <ChevronRight size={12} className="text-[#aaa]" />
-                    <span className="text-[#111] font-semibold truncate max-w-[200px]">
+                    <ChevronRight size={12} className="text-forensics-500" />
+                    <span className="text-forensics-text font-semibold truncate max-w-[200px]">
                       {fb.displayNodeName(fb.currentDirectory.name, fb.currentDirectory.depth)}
                     </span>
                   </>
                 ) : null}
                 {fb.selectedFile ? (
                   <>
-                    <ChevronRight size={12} className="text-[#aaa]" />
-                    <span className="text-[#111] font-semibold truncate max-w-[200px]">
+                    <ChevronRight size={12} className="text-forensics-500" />
+                    <span className="text-forensics-text font-semibold truncate max-w-[200px]">
                       {fb.selectedFile.name}
                     </span>
                   </>
                 ) : null}
               </>
             ) : (
-              <span className="text-[#aaa]">无数据源</span>
+              <span className="text-forensics-500">{t('fileBrowser.breadcrumb.noData')}</span>
             )}
           </div>
-          <div className="h-4 border-l border-[#e0e0e0]" />
-          <div className="text-[#666] flex items-center gap-2">
-            过滤:
+          <div className="h-4 border-l border-forensics-border" />
+          <div className="text-forensics-muted flex items-center gap-2">
+            {t('fileBrowser.filter.label')}
             <input
               type="text"
-              className="bg-white border border-[#ccc] px-2 py-0.5 text-[#111] font-mono text-[11px] rounded-[2px] outline-none w-40 focus:border-[#666]"
-              defaultValue="*"
+              className="bg-forensics-surface border border-forensics-border-strong px-2 py-0.5 text-forensics-text font-mono text-[11px] rounded-[2px] outline-none w-40 focus:border-forensics-muted"
+              defaultValue={t('fileBrowser.filter.placeholder')}
             />
           </div>
-          <div className="text-[11px] text-[#888] font-mono">
-            viewer: metadata / hex 已启用
+          <div className="text-[11px] text-forensics-muted-light font-mono">
+            {t('fileBrowser.viewer.status')}
           </div>
           <FileVisibilityToggle checked={fb.showHidden} onCheckedChange={fb.setShowHidden} />
-          <div className="ml-auto text-[#888] text-[11px]">
-            显示 {fb.sortedRows.length}
-            {fb.rowsPage?.truncated ? ` / ${fb.rowsPage.totalCount}` : ''} 个项目
+          <div className="ml-auto text-forensics-muted-light text-[11px]">
+            {fb.rowsPage?.truncated
+              ? t('fileBrowser.itemCountWithTotal', {
+                  visibleCount: fb.sortedRows.length,
+                  total: fb.rowsPage.totalCount,
+                })
+              : t('fileBrowser.itemCount', { visibleCount: fb.sortedRows.length })}
           </div>
         </div>
       </PageSubbar>

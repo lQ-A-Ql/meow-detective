@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   applyTheme,
   defaultSettings,
@@ -18,6 +19,7 @@ import { McpSection } from './settings/McpSection';
 import { SystemInfoSection } from './settings/SystemInfoSection';
 
 export function Settings() {
+  const { t } = useTranslation();
   const [settings, setSettings] = useState(() => readLocalSettings());
   const [settingsMessage, setSettingsMessage] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
@@ -65,17 +67,17 @@ export function Settings() {
 
   async function saveSettings() {
     if (!settings.caseRoot.trim()) {
-      setSettingsMessage('案件默认存储路径不能为空。');
+      setSettingsMessage(t('settings.validation.caseRootEmpty'));
       return;
     }
     if (!validatePathList(settings.imageSearchPaths)) {
-      setSettingsMessage('镜像搜索路径包含非法字符。');
+      setSettingsMessage(t('settings.validation.imageSearchPathsInvalid'));
       return;
     }
     const maxImportWorkers = parseOptionalPositiveInt(settings.maxImportWorkers);
     const maxAnalysisWorkers = parseOptionalPositiveInt(settings.maxAnalysisWorkers);
     if (maxImportWorkers === 0 || maxAnalysisWorkers === 0) {
-      setSettingsMessage('Worker 数必须为空或大于 0。');
+      setSettingsMessage(t('settings.validation.workersPositive'));
       return;
     }
     const hexChunkBytes = parseRequiredPositiveInt(settings.hexChunkBytes);
@@ -88,7 +90,7 @@ export function Settings() {
       maxInlineImagePreviewBytes === 0 ||
       maxInlineMediaPreviewBytes === 0
     ) {
-      setSettingsMessage('预览大小/块大小必须为正整数。');
+      setSettingsMessage(t('settings.validation.previewPositive'));
       return;
     }
     setSavingSettings(true);
@@ -123,9 +125,9 @@ export function Settings() {
           saved.maxInlineMediaPreviewBytes?.toString() ?? defaultSettings.maxInlineMediaPreviewBytes,
       });
       setSettings(normalized);
-      setSettingsMessage('设置已保存。');
+      setSettingsMessage(t('settings.saved'));
     } catch (error) {
-      const message = error instanceof Error ? error.message : '设置保存失败。';
+      const message = error instanceof Error ? error.message : t('settings.saveFailed');
       setSettingsMessage(message);
     } finally {
       setSavingSettings(false);
@@ -133,10 +135,10 @@ export function Settings() {
   }
 
   return (
-    <div className="flex-1 flex flex-col w-full h-full bg-white overflow-auto">
-      <div className="border-b border-[#e0e0e0] bg-[#fafafa] p-6 shrink-0">
-        <div className="font-serif text-xl text-[#111] tracking-tight">设置</div>
-        <div className="text-[#666] text-[11px] font-mono mt-1">应用配置与数据目录</div>
+    <div className="flex-1 flex flex-col w-full h-full bg-forensics-surface overflow-auto">
+      <div className="border-b border-forensics-border bg-forensics-panel p-6 shrink-0">
+        <div className="font-serif text-xl text-forensics-text tracking-tight">{t('settings.title')}</div>
+        <div className="text-forensics-muted text-[11px] font-mono mt-1">{t('settings.subtitle')}</div>
       </div>
 
       <div className="p-6 space-y-8">

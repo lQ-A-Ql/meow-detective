@@ -39,6 +39,51 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /* Forensics grayscale palette */
+  --forensics-50: #f8f8f8;
+  --forensics-100: #f6f8fa;
+  --forensics-150: #f5f5f5;
+  --forensics-200: #f0f0f0;
+  --forensics-250: #ececec;
+  --forensics-300: #e0e0e0;
+  --forensics-350: #d9d9d9;
+  --forensics-400: #cccccc;
+  --forensics-500: #aaaaaa;
+  --forensics-550: #999999;
+  --forensics-600: #888888;
+  --forensics-700: #666666;
+  --forensics-750: #555555;
+  --forensics-800: #333333;
+  --forensics-850: #24292e;
+  --forensics-900: #111111;
+
+  /* Forensics semantic surface / text tokens */
+  --forensics-panel: #fafafa;
+  --forensics-panel-strong: #f5f5f5;
+  --forensics-surface: #ffffff;
+  --forensics-input-bg: #f8f8f8;
+  --forensics-highlight: #f6f8fa;
+  --forensics-hover: #f0f0f0;
+  --forensics-border: #e0e0e0;
+  --forensics-border-light: #ececec;
+  --forensics-border-strong: #cccccc;
+  --forensics-text: #111111;
+  --forensics-text-secondary: #333333;
+  --forensics-text-tertiary: #555555;
+  --forensics-muted: #666666;
+  --forensics-muted-light: #888888;
+  --forensics-muted-lighter: #999999;
+
+  /* Forensics GQL syntax tokens */
+  --forensics-gql-keyword: #d73a49;
+  --forensics-gql-type: #6f42c1;
+  --forensics-gql-variable: #005cc5;
+  --forensics-gql-string: #032f62;
+  --forensics-gql-base: #24292e;
+  --forensics-gql-muted: #586069;
+  --forensics-gql-bg-error: #fff0f0;
+  --forensics-gql-border-error: #ffcccc;
 }
 
 .dark {
@@ -76,6 +121,51 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(0.269 0 0);
   --sidebar-ring: oklch(0.439 0 0);
+
+  /* Forensics grayscale palette (dark mode inverses) */
+  --forensics-50: oklch(0.205 0 0);
+  --forensics-100: oklch(0.22 0 0);
+  --forensics-150: oklch(0.23 0 0);
+  --forensics-200: oklch(0.25 0 0);
+  --forensics-250: oklch(0.269 0 0);
+  --forensics-300: oklch(0.3 0 0);
+  --forensics-350: oklch(0.32 0 0);
+  --forensics-400: oklch(0.35 0 0);
+  --forensics-500: oklch(0.45 0 0);
+  --forensics-550: oklch(0.5 0 0);
+  --forensics-600: oklch(0.55 0 0);
+  --forensics-700: oklch(0.65 0 0);
+  --forensics-750: oklch(0.7 0 0);
+  --forensics-800: oklch(0.8 0 0);
+  --forensics-850: oklch(0.85 0 0);
+  --forensics-900: oklch(0.95 0 0);
+
+  /* Forensics semantic surface / text tokens (dark mode) */
+  --forensics-panel: oklch(0.18 0 0);
+  --forensics-panel-strong: oklch(0.22 0 0);
+  --forensics-surface: oklch(0.145 0 0);
+  --forensics-input-bg: oklch(0.2 0 0);
+  --forensics-highlight: oklch(0.22 0 0);
+  --forensics-hover: oklch(0.25 0 0);
+  --forensics-border: oklch(0.3 0 0);
+  --forensics-border-light: oklch(0.269 0 0);
+  --forensics-border-strong: oklch(0.35 0 0);
+  --forensics-text: oklch(0.95 0 0);
+  --forensics-text-secondary: oklch(0.85 0 0);
+  --forensics-text-tertiary: oklch(0.75 0 0);
+  --forensics-muted: oklch(0.65 0 0);
+  --forensics-muted-light: oklch(0.55 0 0);
+  --forensics-muted-lighter: oklch(0.5 0 0);
+
+  /* Forensics GQL syntax tokens (dark mode) */
+  --forensics-gql-keyword: #ff7b72;
+  --forensics-gql-type: #d2a8ff;
+  --forensics-gql-variable: #79c0ff;
+  --forensics-gql-string: #a5d6ff;
+  --forensics-gql-base: #c9d1d9;
+  --forensics-gql-muted: #8b949e;
+  --forensics-gql-bg-error: oklch(0.22 0.08 25);
+  --forensics-gql-border-error: oklch(0.3 0.1 25);
 }
 
 @theme inline {
@@ -117,6 +207,51 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Forensics grayscale utilities */
+  --color-forensics-50: var(--forensics-50);
+  --color-forensics-100: var(--forensics-100);
+  --color-forensics-150: var(--forensics-150);
+  --color-forensics-200: var(--forensics-200);
+  --color-forensics-250: var(--forensics-250);
+  --color-forensics-300: var(--forensics-300);
+  --color-forensics-350: var(--forensics-350);
+  --color-forensics-400: var(--forensics-400);
+  --color-forensics-500: var(--forensics-500);
+  --color-forensics-550: var(--forensics-550);
+  --color-forensics-600: var(--forensics-600);
+  --color-forensics-700: var(--forensics-700);
+  --color-forensics-750: var(--forensics-750);
+  --color-forensics-800: var(--forensics-800);
+  --color-forensics-850: var(--forensics-850);
+  --color-forensics-900: var(--forensics-900);
+
+  /* Forensics semantic utilities */
+  --color-forensics-panel: var(--forensics-panel);
+  --color-forensics-panel-strong: var(--forensics-panel-strong);
+  --color-forensics-surface: var(--forensics-surface);
+  --color-forensics-input-bg: var(--forensics-input-bg);
+  --color-forensics-highlight: var(--forensics-highlight);
+  --color-forensics-hover: var(--forensics-hover);
+  --color-forensics-border: var(--forensics-border);
+  --color-forensics-border-light: var(--forensics-border-light);
+  --color-forensics-border-strong: var(--forensics-border-strong);
+  --color-forensics-text: var(--forensics-text);
+  --color-forensics-text-secondary: var(--forensics-text-secondary);
+  --color-forensics-text-tertiary: var(--forensics-text-tertiary);
+  --color-forensics-muted: var(--forensics-muted);
+  --color-forensics-muted-light: var(--forensics-muted-light);
+  --color-forensics-muted-lighter: var(--forensics-muted-lighter);
+
+  /* Forensics GQL syntax utilities */
+  --color-forensics-gql-keyword: var(--forensics-gql-keyword);
+  --color-forensics-gql-type: var(--forensics-gql-type);
+  --color-forensics-gql-variable: var(--forensics-gql-variable);
+  --color-forensics-gql-string: var(--forensics-gql-string);
+  --color-forensics-gql-base: var(--forensics-gql-base);
+  --color-forensics-gql-muted: var(--forensics-gql-muted);
+  --color-forensics-gql-bg-error: var(--forensics-gql-bg-error);
+  --color-forensics-gql-border-error: var(--forensics-gql-border-error);
 }
 
 @layer base {

@@ -1,28 +1,32 @@
+import { useTranslation } from 'react-i18next';
+
 export function SystemInfoSection() {
+  const { t } = useTranslation();
+
   return (
     <section>
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-[13px] font-semibold text-[#333]">系统信息</span>
+        <span className="text-[13px] font-semibold text-forensics-text-secondary">{t('settings.sections.systemInfo.title')}</span>
       </div>
-      <div className="space-y-2 text-[12px] font-mono text-[#666]">
-        <div className="flex justify-between border-b border-[#eee] pb-1">
-          <span>版本</span>
+      <div className="space-y-2 text-[12px] font-mono text-forensics-muted">
+        <div className="flex justify-between border-b border-forensics-border-light pb-1">
+          <span>{t('settings.sections.systemInfo.version')}</span>
           <span>Forensics Workbench 0.1.0</span>
         </div>
-        <div className="flex justify-between border-b border-[#eee] pb-1">
-          <span>平台</span>
+        <div className="flex justify-between border-b border-forensics-border-light pb-1">
+          <span>{t('settings.sections.systemInfo.platform')}</span>
           <span>{navigator.platform || 'Windows'}</span>
         </div>
-        <div className="flex justify-between border-b border-[#eee] pb-1">
-          <span>数据库</span>
-          <span>SQLite (每个案件独立)</span>
+        <div className="flex justify-between border-b border-forensics-border-light pb-1">
+          <span>{t('settings.sections.systemInfo.database')}</span>
+          <span>SQLite ({t('settings.sections.systemInfo.perCase')})</span>
         </div>
-        <div className="flex justify-between border-b border-[#eee] pb-1">
-          <span>搜索引擎</span>
-          <span>Tantivy (全文索引)</span>
+        <div className="flex justify-between border-b border-forensics-border-light pb-1">
+          <span>{t('settings.sections.systemInfo.searchEngine')}</span>
+          <span>Tantivy ({t('settings.sections.systemInfo.fullTextIndex')})</span>
         </div>
-        <div className="flex justify-between border-b border-[#eee] pb-1">
-          <span>MCP 协议</span>
+        <div className="flex justify-between border-b border-forensics-border-light pb-1">
+          <span>{t('settings.sections.systemInfo.mcpProtocol')}</span>
           <span>v1.0 (Resources/Tools/Prompts)</span>
         </div>
       </div>

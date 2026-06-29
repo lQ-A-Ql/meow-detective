@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Terminal, AlertCircle, ChevronUp, ChevronDown, Clock3 } from 'lucide-react';
 import {
   deriveEvidenceHashStatus,
@@ -16,6 +17,7 @@ import { useUiStore } from '@/stores/ui-store';
 import type { JobSnapshot } from '@/types/models';
 
 export function BottomDrawer() {
+  const { t } = useTranslation();
   const { data: jobs } = useJobsSnapshot();
   const { data: warnings } = useWarnings();
   const { data: dataSources } = useDataSources();
@@ -42,82 +44,87 @@ export function BottomDrawer() {
     runningJobs[0]?.detail ||
     failedJobs[0]?.detail ||
     completedJobs[0]?.detail ||
-    '等待任务执行';
+    t('bottomDrawer.headline.waiting');
 
   return (
     <div
-      className={`shrink-0 border-t border-[#e0e0e0] bg-[#fafafa] z-10 transition-[height] duration-150 ${drawerOpen ? 'h-56' : 'h-8'}`}
+      className={`shrink-0 border-t border-forensics-border bg-forensics-panel z-10 transition-[height] duration-150 ${drawerOpen ? 'h-56' : 'h-8'}`}
     >
-      <div className="h-8 flex items-center px-4 text-[#666] text-[11px] font-mono justify-between">
+      <div className="h-8 flex items-center px-4 text-forensics-muted text-[11px] font-mono justify-between">
         <div className="flex items-center gap-4 min-w-0">
           <div className="flex items-center gap-2 min-w-0">
-            <Terminal size={12} className="text-[#888]" />
+            <Terminal size={12} className="text-forensics-muted-light" />
             <span className="truncate">[JOBS] {headline}</span>
           </div>
-          <div className="px-3 border-l border-[#e0e0e0] flex items-center gap-3 text-[#555]">
+          <div className="px-3 border-l border-forensics-border flex items-center gap-3 text-forensics-text-tertiary">
             <span>
-              <span className="text-[#111]">{runningCount}</span> 运行中
+              <span className="text-forensics-text">{runningCount}</span> {t('bottomDrawer.jobs.running')}
             </span>
             <span>
-              <span className="text-[#111]">{(warnings?.length ?? 0) + jobWarningCount}</span> 警告
+              <span className="text-forensics-text">{(warnings?.length ?? 0) + jobWarningCount}</span> {t('bottomDrawer.jobs.warnings')}
             </span>
             <span>
-              <span className="text-[#111]">{jobSkippedCount}</span> 跳过
+              <span className="text-forensics-text">{jobSkippedCount}</span> {t('bottomDrawer.jobs.skipped')}
             </span>
             <span>
-              <span className="text-[#111]">{trace?.length ?? 0}</span> Trace
+              <span className="text-forensics-text">{trace?.length ?? 0}</span> {t('bottomDrawer.jobs.trace')}
             </span>
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <button onClick={toggleDrawer} className="flex items-center gap-1.5 text-[#555] hover:text-[#111]">
-            <span>{drawerOpen ? '收起任务抽屉' : '展开任务抽屉'}</span>
+          <button onClick={toggleDrawer} className="flex items-center gap-1.5 text-forensics-text-tertiary hover:text-forensics-text">
+            <span>{drawerOpen ? t('bottomDrawer.toggle.collapse') : t('bottomDrawer.toggle.expand')}</span>
             {drawerOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
           </button>
-          <div className="border-l border-[#e0e0e0] pl-4">
-            最近状态: <span className="text-[#111]">{runningJobs[0]?.scope || failedJobs[0]?.scope || completedJobs[0]?.scope || '空闲'}</span>
+          <div className="border-l border-forensics-border pl-4">
+            {t('bottomDrawer.status.recent')} <span className="text-forensics-text">{runningJobs[0]?.scope || failedJobs[0]?.scope || completedJobs[0]?.scope || t('bottomDrawer.status.idle')}</span>
           </div>
         </div>
       </div>
       {drawerOpen ? (
-        <div className="grid h-[calc(100%-2rem)] grid-cols-3 border-t border-[#e0e0e0]">
-          <div className="overflow-auto border-r border-[#e0e0e0] p-3">
-            <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-[#555]">
+        <div className="grid h-[calc(100%-2rem)] grid-cols-3 border-t border-forensics-border">
+          <div className="overflow-auto border-r border-forensics-border p-3">
+            <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-forensics-text-tertiary">
               <span>JOBS</span>
-              <span className="font-mono text-[#888]">
-                {runningCount} 运行 / {completedJobs.length} 完成 / {partialJobs.length} 部分 / {failedJobs.length} 失败
+              <span className="font-mono text-forensics-muted-light">
+                {t('bottomDrawer.jobs.stats', {
+                  running: runningCount,
+                  completed: completedJobs.length,
+                  partial: partialJobs.length,
+                  failed: failedJobs.length,
+                })}
               </span>
             </div>
             <div className="space-y-3">
               {importSignals.latestPhase || importSignals.latestCancellation || importSignals.partialResults.length || importSignals.cacheStatuses.length || importSignals.latestReport ? (
-                <div className="border border-[#d9d9d9] bg-[#fcfcfc] p-3 text-[11px]">
+                <div className="border border-forensics-350 bg-forensics-surface p-3 text-[11px]">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-[#666]">Import Signals</div>
-                      <div className="mt-1 text-[#111] font-medium">
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-forensics-muted">{t('bottomDrawer.importSignals.title')}</div>
+                      <div className="mt-1 text-forensics-text font-medium">
                         {importSignals.latestPhase
                           ? `${getImportPhaseLabel(importSignals.latestPhase.phase)} · ${getImportPhaseStateLabel(importSignals.latestPhase.state)}`
                           : importSignals.latestCancellation
                             ? `Cancellation · ${getCacheStateLabel(importSignals.latestCancellation.state)}`
-                            : 'Waiting for typed progress'}
+                            : t('bottomDrawer.importSignals.waiting')}
                       </div>
-                      <div className="mt-1 text-[#666]">
-                        {importSignals.latestCancellation?.detail || importSignals.latestPhase?.detail || '尚未收到导入状态事件'}
+                      <div className="mt-1 text-forensics-muted">
+                        {importSignals.latestCancellation?.detail || importSignals.latestPhase?.detail || t('bottomDrawer.importSignals.noStatus')}
                       </div>
                     </div>
                     {importSignals.latestPhase ? (
                       <div className="text-right">
-                        <div className="font-mono text-[#111]">{importSignals.latestPhase.percent}%</div>
-                        <div className="text-[10px] text-[#888]">{importSignals.lastUpdatedAt ?? '-'}</div>
+                        <div className="font-mono text-forensics-text">{importSignals.latestPhase.percent}{t('bottomDrawer.importSignals.percent')}</div>
+                        <div className="text-[10px] text-forensics-muted-light">{importSignals.lastUpdatedAt ?? '-'}</div>
                       </div>
                     ) : null}
                   </div>
                   {importSignals.latestPhase ? (
                     <div className="mt-2 flex items-center gap-2">
-                      <div className="flex-1 h-1 overflow-hidden border border-[#e0e0e0] bg-[#eee]">
-                        <div className="h-full bg-[#111]" style={{ width: `${importSignals.latestPhase.percent}%` }} />
+                      <div className="flex-1 h-1 overflow-hidden border border-forensics-border bg-forensics-200">
+                        <div className="h-full bg-forensics-text" style={{ width: `${importSignals.latestPhase.percent}%` }} />
                       </div>
-                      <span className="text-[10px] font-mono text-[#555]">
+                      <span className="text-[10px] font-mono text-forensics-text-tertiary">
                         {importSignals.latestPhase.metrics.rowsProcessed}
                         {importSignals.latestPhase.metrics.rowsTotal ? `/${importSignals.latestPhase.metrics.rowsTotal}` : ''}
                       </span>
@@ -159,61 +166,67 @@ export function BottomDrawer() {
                     </div>
                   ) : null}
                   {importSignals.latestReport ? (
-                    <div className="mt-3 border-t border-[#ececec] pt-2 text-[#555]">
+                    <div className="mt-3 border-t border-forensics-border-light pt-2 text-forensics-text-tertiary">
                       <div className="flex items-center justify-between gap-3">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#666]">Performance</span>
-                        <span className="font-mono text-[#111]">{importSignals.latestReport.summary.elapsedMs}ms</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-forensics-muted">{t('bottomDrawer.performance.title')}</span>
+                        <span className="font-mono text-forensics-text">{importSignals.latestReport.summary.elapsedMs}ms</span>
                       </div>
-                      <div className="mt-1 text-[#666]">{importSignals.latestReport.summary.summary}</div>
+                      <div className="mt-1 text-forensics-muted">{importSignals.latestReport.summary.summary}</div>
                     </div>
                   ) : null}
                 </div>
               ) : null}
               {runningJobs.map((job) => (
-                <div key={job.id} className="border border-[#e0e0e0] bg-white p-3 text-[11px]">
-                  <div className="flex items-center justify-between gap-3 text-[#111]">
+                <div key={job.id} className="border border-forensics-border bg-forensics-surface p-3 text-[11px]">
+                  <div className="flex items-center justify-between gap-3 text-forensics-text">
                     <span className="font-medium">{job.name}</span>
-                    <span className="text-[#888] truncate">{job.detail}</span>
+                    <span className="text-forensics-muted-light truncate">{job.detail}</span>
                   </div>
-                  <div className="mt-1 text-[#666] truncate">{job.scope}</div>
+                  <div className="mt-1 text-forensics-muted truncate">{job.scope}</div>
                   <JobOutcomeBadges job={job} />
                   {job.currentPartition ? (
-                    <div className="mt-2 border border-[#ececec] bg-[#fafafa] px-2 py-2">
-                      <div className="flex items-center justify-between gap-3 text-[10px] uppercase tracking-wider text-[#666]">
-                        <span>分区进度</span>
-                        <span className="font-mono text-[#111]">
-                          {(job.completedPartitions ?? 0)}/{job.totalPartitions ?? '?'} 完成
+                    <div className="mt-2 border border-forensics-border-light bg-forensics-panel px-2 py-2">
+                      <div className="flex items-center justify-between gap-3 text-[10px] uppercase tracking-wider text-forensics-muted">
+                        <span>{t('bottomDrawer.partitionProgress.title')}</span>
+                        <span className="font-mono text-forensics-text">
+                          {t('bottomDrawer.partitionProgress.completed', {
+                            completed: job.completedPartitions ?? 0,
+                            total: job.totalPartitions ?? '?',
+                          })}
                         </span>
                       </div>
                       <div className="mt-1.5 flex items-center gap-2">
-                        <div className="flex-1 h-1.5 overflow-hidden border border-[#e0e0e0] bg-white">
+                        <div className="flex-1 h-1.5 overflow-hidden border border-forensics-border bg-forensics-surface">
                           <div
                             className="h-full transition-all duration-300"
                             style={{
                               width: `${job.partitionProgress ?? 0}%`,
-                              backgroundColor: (job.partitionProgress ?? 0) >= 100 ? '#22c55e' : '#666',
+                              backgroundColor:
+                                (job.partitionProgress ?? 0) >= 100
+                                  ? '#22c55e'
+                                  : 'var(--forensics-700)',
                             }}
                           />
                         </div>
-                        <span className="text-[10px] font-mono text-[#555] w-8 text-right">
+                        <span className="text-[10px] font-mono text-forensics-text-tertiary w-8 text-right">
                           {job.partitionProgress ?? 0}%
                         </span>
                       </div>
-                      <div className="mt-1 text-[11px] text-[#333] font-medium">
+                      <div className="mt-1 text-[11px] text-forensics-text-secondary font-medium">
                         {job.currentPartition}
                       </div>
                     </div>
                   ) : null}
                   <div className="mt-2 flex items-center gap-2">
-                    <div className="flex-1 h-1 overflow-hidden border border-[#e0e0e0] bg-[#eee]">
-                      <div className="h-full bg-[#111]" style={{ width: `${job.progress}%` }} />
+                    <div className="flex-1 h-1 overflow-hidden border border-forensics-border bg-forensics-200">
+                      <div className="h-full bg-forensics-text" style={{ width: `${job.progress}%` }} />
                     </div>
-                    <span className="text-[10px] font-mono text-[#888]">{job.progress}%</span>
+                    <span className="text-[10px] font-mono text-forensics-muted-light">{job.progress}%</span>
                   </div>
                 </div>
               ))}
               {completedJobs.map((job) => (
-                <div key={job.id} className="border-b border-[#ececec] pb-2 text-[11px] text-[#555]">
+                <div key={job.id} className="border-b border-forensics-border-light pb-2 text-[11px] text-forensics-text-tertiary">
                   <div className="flex items-center justify-between gap-3">
                     <span className="flex items-center gap-2">
                       {job.name}
@@ -223,9 +236,9 @@ export function BottomDrawer() {
                         </span>
                       ) : null}
                     </span>
-                    <span className="text-[#888] truncate">{job.detail}</span>
+                    <span className="text-forensics-muted-light truncate">{job.detail}</span>
                   </div>
-                  <div className="mt-1 text-[#888] truncate">{job.scope}</div>
+                  <div className="mt-1 text-forensics-muted-light truncate">{job.scope}</div>
                   <JobOutcomeBadges job={job} />
                 </div>
               ))}
@@ -235,25 +248,25 @@ export function BottomDrawer() {
                     <span className="font-medium">{job.name}</span>
                     <span className="truncate">{job.detail}</span>
                   </div>
-                  <div className="mt-1 text-red-600/80 truncate">{job.scope || '任务执行失败'}</div>
+                  <div className="mt-1 text-red-600/80 truncate">{job.scope || t('bottomDrawer.jobs.failedFallback')}</div>
                   <JobOutcomeBadges job={job} />
                 </div>
               ))}
             </div>
           </div>
-          <div className="overflow-auto border-r border-[#e0e0e0] p-3">
-            <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-[#555]">
+          <div className="overflow-auto border-r border-forensics-border p-3">
+            <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-forensics-text-tertiary">
               <span>WARNINGS</span>
-              <span className="font-mono text-[#888]">{warnings?.length ?? 0} 条</span>
+              <span className="font-mono text-forensics-muted-light">{warnings?.length ?? 0} {t('bottomDrawer.jobs.warnings')}</span>
             </div>
             <div className="space-y-2">
               {warnings?.map((warning) => (
-                <div key={warning.id} className="border border-[#e7d9b4] bg-white p-3 text-[11px]">
-                  <div className="flex items-start gap-2 text-[#111]">
+                <div key={warning.id} className="border border-[#e7d9b4] bg-forensics-surface p-3 text-[11px]">
+                  <div className="flex items-start gap-2 text-forensics-text">
                     <AlertCircle size={12} className="mt-0.5 text-[#b7791f] shrink-0" />
                     <div>
                       <div className="font-medium break-words">{warning.title}</div>
-                      <div className="mt-1 text-[#666] line-clamp-2">{warning.detail}</div>
+                      <div className="mt-1 text-forensics-muted line-clamp-2">{warning.detail}</div>
                     </div>
                   </div>
                 </div>
@@ -261,16 +274,16 @@ export function BottomDrawer() {
             </div>
           </div>
           <div className="overflow-auto p-3">
-            <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-[#555]">
+            <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-forensics-text-tertiary">
               <span>TRACE</span>
-              <span className="font-mono text-[#888]">最近事件流</span>
+              <span className="font-mono text-forensics-muted-light">{t('bottomDrawer.trace.recentStream')}</span>
             </div>
             <div className="space-y-2 text-[11px]">
               {trace?.map((item) => (
-                <div key={item.id} className="border-b border-[#ececec] pb-2 text-[#555] flex gap-2">
-                  <Clock3 size={11} className="mt-0.5 shrink-0 text-[#999]" />
+                <div key={item.id} className="border-b border-forensics-border-light pb-2 text-forensics-text-tertiary flex gap-2">
+                  <Clock3 size={11} className="mt-0.5 shrink-0 text-forensics-muted-lighter" />
                   <div>
-                    <div className="text-[#888] font-mono">{item.ts}</div>
+                    <div className="text-forensics-muted-light font-mono">{item.ts}</div>
                     <div>{item.message}</div>
                   </div>
                 </div>
@@ -322,7 +335,7 @@ function getToneClass(tone: string) {
     case 'unavailable':
     case 'deferred':
     case 'draining':
-      return 'border-[#d9d9d9] bg-white text-[#555]';
+      return 'border-forensics-350 bg-forensics-surface text-forensics-text-tertiary';
     case 'failed':
     case 'stale':
     case 'invalidated':
@@ -331,7 +344,7 @@ function getToneClass(tone: string) {
     case 'warning':
       return 'border-[#dcd4b0] bg-[#fff9ec] text-[#7f5b00]';
     default:
-      return 'border-[#d9d9d9] bg-white text-[#555]';
+      return 'border-forensics-350 bg-forensics-surface text-forensics-text-tertiary';
   }
 }
 
@@ -347,13 +360,13 @@ function JobOutcomeBadges({ job }: { job: JobSnapshot }) {
           PARTIAL
         </span>
       ) : null}
-      <span className="border border-[#e7d9b4] bg-white px-1.5 py-0.5 text-[#6f4d00]">
+      <span className="border border-[#e7d9b4] bg-forensics-surface px-1.5 py-0.5 text-[#6f4d00]">
         warnings {job.warningCount}
       </span>
-      <span className="border border-[#d9d9d9] bg-white px-1.5 py-0.5 text-[#555]">
+      <span className="border border-forensics-350 bg-forensics-surface px-1.5 py-0.5 text-forensics-text-tertiary">
         skipped {job.skippedCount}
       </span>
-      <span className="border border-red-200 bg-white px-1.5 py-0.5 text-red-700">
+      <span className="border border-red-200 bg-forensics-surface px-1.5 py-0.5 text-red-700">
         failed {job.failedCount}
       </span>
     </div>

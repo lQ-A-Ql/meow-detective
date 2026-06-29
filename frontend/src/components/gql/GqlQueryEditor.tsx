@@ -65,7 +65,7 @@ export const GqlQueryEditor = forwardRef<HTMLTextAreaElement, GqlQueryEditorProp
           onClick={onClick}
           placeholder={placeholder}
           className="absolute inset-0 w-full h-full resize-none px-3 py-2 font-mono text-[13px]
-                     leading-relaxed bg-transparent text-transparent caret-[#24292e]
+                     leading-relaxed bg-transparent text-transparent caret-forensics-gql-base
                      outline-none border-none"
           style={{ WebkitTextFillColor: 'transparent' }}
           spellCheck={false}

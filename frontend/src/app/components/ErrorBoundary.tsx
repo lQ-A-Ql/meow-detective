@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { withTranslation, type WithTranslation } from 'react-i18next';
 
-interface Props {
+interface Props extends WithTranslation {
   children: ReactNode;
   fallback?: ReactNode;
 }
@@ -10,7 +11,7 @@ interface State {
   error: Error | null;
 }
 
-export class ErrorBoundary extends Component<Props, State> {
+class ErrorBoundaryBase extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
     this.state = { hasError: false, error: null };
@@ -33,32 +34,34 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   render(): ReactNode {
+    const { t, children, fallback } = this.props;
+
     if (this.state.hasError) {
-      if (this.props.fallback) {
-        return this.props.fallback;
+      if (fallback) {
+        return fallback;
       }
 
       return (
-        <div className="min-h-screen flex items-center justify-center bg-white">
-          <div className="w-full max-w-lg border border-[#e0e0e0] bg-[#fafafa] p-8 text-center">
-            <div className="font-serif text-2xl text-[#111] mb-3">应用发生错误</div>
-            <div className="text-[13px] text-[#666] leading-6 mb-4 font-mono break-all">
-              {this.state.error?.message ?? '未知错误'}
+        <div className="min-h-screen flex items-center justify-center bg-forensics-surface">
+          <div className="w-full max-w-lg border border-forensics-border bg-forensics-panel p-8 text-center">
+            <div className="font-serif text-2xl text-forensics-text mb-3">{t('errorBoundary.title')}</div>
+            <div className="text-[13px] text-forensics-muted leading-6 mb-4 font-mono break-all">
+              {this.state.error?.message ?? t('errorBoundary.unknownError')}
             </div>
             <div className="flex gap-3 justify-center">
               <button
                 type="button"
                 onClick={this.handleReload}
-                className="border border-[#ccc] bg-white text-[#111] hover:bg-[#f0f0f0] px-4 py-2 text-[12px] rounded-[2px] cursor-pointer font-medium"
+                className="border border-forensics-border-strong bg-forensics-surface text-forensics-text hover:bg-forensics-hover px-4 py-2 text-[12px] rounded-[2px] cursor-pointer font-medium"
               >
-                重新加载
+                {t('errorBoundary.reload')}
               </button>
               <button
                 type="button"
                 onClick={this.handleReset}
-                className="border border-transparent text-[#666] hover:text-[#111] px-4 py-2 text-[12px] cursor-pointer underline hover:no-underline"
+                className="border border-transparent text-forensics-muted hover:text-forensics-text px-4 py-2 text-[12px] cursor-pointer underline hover:no-underline"
               >
-                尝试恢复
+                {t('errorBoundary.recover')}
               </button>
             </div>
           </div>
@@ -66,6 +69,8 @@ export class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    return this.props.children;
+    return children;
   }
 }
+
+export const ErrorBoundary = withTranslation()(ErrorBoundaryBase);

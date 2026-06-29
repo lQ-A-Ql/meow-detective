@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getAutocompleteSuggestions, tokenize, type AutocompleteSuggestion } from './gql-language';
 import { GqlQueryHeader } from './GqlQueryHeader';
 import { GqlQueryEditor } from './GqlQueryEditor';
@@ -25,9 +26,16 @@ export function GqlQueryInput({
   loading = false,
   error,
   initialQuery = '',
-  placeholder = 'MATCH (n:File)-[e:References]->(m:Artifact)\nWHERE e.confidence > 0.7\nRETURN n, e, m\nLIMIT 50',
+  placeholder,
   onQueryChange,
 }: GqlQueryInputProps) {
+  const { t } = useTranslation();
+  const resolvedPlaceholder =
+    placeholder ??
+    t('gql.placeholder', {
+      defaultValue:
+        'MATCH (n:File)-[e:References]->(m:Artifact)\nWHERE e.confidence > 0.7\nRETURN n, e, m\nLIMIT 50',
+    });
   const [code, setCode] = useState(initialQuery);
   const [cursorPos, setCursorPos] = useState(0);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
@@ -134,7 +142,7 @@ export function GqlQueryInput({
       <GqlQueryEditor
         ref={textareaRef}
         value={code}
-        placeholder={placeholder}
+        placeholder={resolvedPlaceholder}
         tokens={tokens}
         suggestions={suggestions}
         showAutocomplete={showAutocomplete}

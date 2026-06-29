@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { AutocompleteSuggestion } from './gql-language';
 
 interface GqlAutocompleteProps {
@@ -13,9 +14,11 @@ export function GqlAutocomplete({
   applySuggestion,
   setSelectedSuggestion,
 }: GqlAutocompleteProps) {
+  const { t } = useTranslation();
+
   return (
     <div
-      className="absolute z-50 bg-white border border-[#e0e0e0] rounded-md shadow-lg
+      className="absolute z-50 bg-forensics-surface border border-forensics-border rounded-md shadow-lg
                  max-h-[200px] overflow-y-auto"
       style={{
         left: '16px',
@@ -29,20 +32,20 @@ export function GqlAutocomplete({
           onClick={() => applySuggestion(s)}
           onMouseEnter={() => setSelectedSuggestion(i)}
           className={`w-full text-left px-3 py-1.5 text-[12px] font-mono flex items-center gap-2
-            ${i === selectedSuggestion ? 'bg-[#0366d6] text-white' : 'hover:bg-[#f6f8fa]'}`}
+            ${i === selectedSuggestion ? 'bg-[#0366d6] text-white' : 'hover:bg-forensics-highlight'}`}
         >
           <span
             className={`text-[10px] px-1 py-0.5 rounded ${
               i === selectedSuggestion
                 ? 'bg-white/20'
                 : s.kind === 'keyword'
-                  ? 'bg-[#d73a49]/10 text-[#d73a49]'
+                  ? 'bg-forensics-gql-keyword/10 text-forensics-gql-keyword'
                   : s.kind === 'type'
-                    ? 'bg-[#6f42c1]/10 text-[#6f42c1]'
-                    : 'bg-[#005cc5]/10 text-[#005cc5]'
+                    ? 'bg-forensics-gql-type/10 text-forensics-gql-type'
+                    : 'bg-forensics-gql-variable/10 text-forensics-gql-variable'
             }`}
           >
-            {s.kind}
+            {t(`gql.autocomplete.kind.${s.kind}`)}
           </span>
           <span className="flex-1 truncate">{s.label}</span>
           <span className="text-[10px] opacity-60 truncate max-w-[120px]">

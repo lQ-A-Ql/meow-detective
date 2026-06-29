@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import {
   InspectorPane,
   InspectorSection,
@@ -23,19 +24,21 @@ export function FileBrowserInspector({
   extractFile,
   onViewTimeline,
 }: FileBrowserInspectorProps) {
+  const { t } = useTranslation();
+
   return (
     <InspectorPane
       className="hidden lg:flex"
-      title="对象检查器"
+      title={t('fileBrowser.inspector.title')}
       subtitle={
         selectedFile
-          ? `已选对象 ${selectedFile.name}`
-          : '未选中文件对象'
+          ? t('fileBrowser.inspector.selected', { name: selectedFile.name })
+          : t('fileBrowser.inspector.noSelection')
       }
       widthClassName="w-80"
     >
       <div className="space-y-5">
-        <InspectorSection title="对象标识">
+        <InspectorSection title={t('fileBrowser.inspector.sections.identity')}>
           <InspectorValue
             value={selectedFile?.name ?? '-'}
             mono
@@ -43,7 +46,7 @@ export function FileBrowserInspector({
           />
         </InspectorSection>
 
-        <InspectorSection title="来源路径">
+        <InspectorSection title={t('fileBrowser.inspector.sections.path')}>
           <InspectorValue
             value={
               selectedFile?.path ??
@@ -55,46 +58,46 @@ export function FileBrowserInspector({
           />
         </InspectorSection>
 
-        <InspectorSection title="时间戳 (MACB)">
+        <InspectorSection title={t('fileBrowser.inspector.sections.timestamps')}>
           <div className="font-mono text-[11px] grid grid-cols-[30px_1fr] gap-1">
-            <div className="text-[#888]">M</div>
-            <div className="text-[#333]">
+            <div className="text-forensics-muted-light">{t('fileBrowser.inspector.timestamp.modified')}</div>
+            <div className="text-forensics-text-secondary">
               {selectedFile?.modifiedAt ?? '-'}
             </div>
-            <div className="text-[#888]">A</div>
-            <div className="text-[#333]">
+            <div className="text-forensics-muted-light">{t('fileBrowser.inspector.timestamp.accessed')}</div>
+            <div className="text-forensics-text-secondary">
               {selectedFile?.accessedAt ?? '-'}
             </div>
-            <div className="text-[#888]">C</div>
-            <div className="text-[#333]">
+            <div className="text-forensics-muted-light">{t('fileBrowser.inspector.timestamp.changed')}</div>
+            <div className="text-forensics-text-secondary">
               {selectedFile?.changedAt ?? '-'}
             </div>
-            <div className="text-[#888]">B</div>
-            <div className="text-[#333]">
+            <div className="text-forensics-muted-light">{t('fileBrowser.inspector.timestamp.created')}</div>
+            <div className="text-forensics-text-secondary">
               {selectedFile?.createdAt ?? '-'}
             </div>
           </div>
         </InspectorSection>
 
-        <InspectorSection title="摘要字段">
+        <InspectorSection title={t('fileBrowser.inspector.sections.summary')}>
           <InspectorValue
             value={selectedFile?.hashSha256 ?? '-'}
             mono
           />
         </InspectorSection>
 
-        <InspectorSection title="对象状态">
+        <InspectorSection title={t('fileBrowser.inspector.sections.status')}>
           <div className="font-mono text-[11px] grid grid-cols-[60px_1fr] gap-1">
-            <div className="text-[#888]">deleted</div>
-            <div className="text-[#333]">{selectedFile?.deleted ? 'true' : 'false'}</div>
-            <div className="text-[#888]">hidden</div>
-            <div className="text-[#333]">{selectedFile?.hidden ? 'true' : 'false'}</div>
-            <div className="text-[#888]">system</div>
-            <div className="text-[#333]">{selectedFile?.system ? 'true' : 'false'}</div>
+            <div className="text-forensics-muted-light">{t('fileBrowser.inspector.status.deleted')}</div>
+            <div className="text-forensics-text-secondary">{selectedFile?.deleted ? 'true' : 'false'}</div>
+            <div className="text-forensics-muted-light">{t('fileBrowser.inspector.status.hidden')}</div>
+            <div className="text-forensics-text-secondary">{selectedFile?.hidden ? 'true' : 'false'}</div>
+            <div className="text-forensics-muted-light">{t('fileBrowser.inspector.status.system')}</div>
+            <div className="text-forensics-text-secondary">{selectedFile?.system ? 'true' : 'false'}</div>
           </div>
         </InspectorSection>
 
-        <InspectorSection title="操作">
+        <InspectorSection title={t('fileBrowser.inspector.sections.actions')}>
           <div className="flex flex-col gap-2">
             <button
               type="button"
@@ -104,15 +107,17 @@ export function FileBrowserInspector({
                 }
               }}
               disabled={!selectedFile || extractFile.isPending}
-              className="w-full border border-[#ccc] bg-white text-[#111] hover:bg-[#f0f0f0] py-1.5 text-center text-[11px] rounded-[2px] cursor-pointer font-medium disabled:opacity-50"
+              className="w-full border border-forensics-border-strong bg-forensics-surface text-forensics-text hover:bg-forensics-hover py-1.5 text-center text-[11px] rounded-[2px] cursor-pointer font-medium disabled:opacity-50"
             >
-              {extractFile.isPending ? '提取中...' : '提取文件'}
+              {extractFile.isPending
+                ? t('fileBrowser.inspector.extract.pending')
+                : t('fileBrowser.inspector.extract.button')}
             </button>
             <button
               onClick={onViewTimeline}
-              className="w-full border border-transparent text-[#666] hover:text-[#111] py-1.5 text-center text-[11px] cursor-pointer underline hover:no-underline"
+              className="w-full border border-transparent text-forensics-muted hover:text-forensics-text py-1.5 text-center text-[11px] cursor-pointer underline hover:no-underline"
             >
-              在时间线中查看
+              {t('fileBrowser.inspector.viewTimeline')}
             </button>
           </div>
         </InspectorSection>

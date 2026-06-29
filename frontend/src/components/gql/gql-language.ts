@@ -255,15 +255,15 @@ export function getAutocompleteSuggestions(
 // ── Highlight colors ──
 
 export const HIGHLIGHT_COLORS: Record<HighlightToken['type'], string> = {
-  keyword: 'text-[#d73a49]',
-  type: 'text-[#6f42c1]',
-  variable: 'text-[#005cc5]',
-  operator: 'text-[#d73a49]',
-  string: 'text-[#032f62]',
-  number: 'text-[#005cc5]',
-  comment: 'text-[#6a737d]',
-  punctuation: 'text-[#24292e]',
-  plain: 'text-[#24292e]',
+  keyword: 'text-forensics-gql-keyword',
+  type: 'text-forensics-gql-type',
+  variable: 'text-forensics-gql-variable',
+  operator: 'text-forensics-gql-keyword',
+  string: 'text-forensics-gql-string',
+  number: 'text-forensics-gql-variable',
+  comment: 'text-forensics-gql-muted',
+  punctuation: 'text-forensics-gql-base',
+  plain: 'text-forensics-gql-base',
 };
 
 // Re-export KeyboardEvent type for subcomponents that reference native events.

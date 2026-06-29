@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTranslation } from 'react-i18next';
 import { PanelLeftIcon } from "lucide-react";
 
 import { cn } from "../utils";
@@ -12,6 +13,7 @@ function SidebarTrigger({
   onClick,
   ...props
 }: React.ComponentProps<typeof Button>) {
+  const { t } = useTranslation();
   const { toggleSidebar } = useSidebar();
 
   return (
@@ -28,7 +30,7 @@ function SidebarTrigger({
       {...props}
     >
       <PanelLeftIcon />
-      <span className="sr-only">Toggle Sidebar</span>
+      <span className="sr-only">{t('sidebar.toggleSidebar')}</span>
     </Button>
   );
 }

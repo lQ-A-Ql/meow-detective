@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Play, RefreshCw } from 'lucide-react';
 
 interface GqlQueryHeaderProps {
@@ -7,16 +8,18 @@ interface GqlQueryHeaderProps {
 }
 
 export function GqlQueryHeader({ loading, executeQuery, code }: GqlQueryHeaderProps) {
+  const { t } = useTranslation();
+
   return (
-    <div className="flex items-center justify-between px-3 py-2 border-b border-[#e0e0e0] bg-[#f6f8fa]">
-      <span className="text-[11px] font-semibold text-[#586069] uppercase tracking-wider">
-        GQL Query
+    <div className="flex items-center justify-between px-3 py-2 border-b border-forensics-border bg-forensics-highlight">
+      <span className="text-[11px] font-semibold text-forensics-gql-muted uppercase tracking-wider">
+        {t('gql.header.title')}
       </span>
       <div className="flex items-center gap-2">
         {loading && (
-          <span className="text-[11px] text-[#586069] flex items-center gap-1">
+          <span className="text-[11px] text-forensics-gql-muted flex items-center gap-1">
             <RefreshCw size={12} className="animate-spin" />
-            Running...
+            {t('gql.header.running')}
           </span>
         )}
         <button
@@ -27,7 +30,7 @@ export function GqlQueryHeader({ loading, executeQuery, code }: GqlQueryHeaderPr
                      disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Play size={12} />
-          Run
+          {t('gql.header.run')}
         </button>
       </div>
     </div>

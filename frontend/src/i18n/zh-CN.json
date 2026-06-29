@@ -1,0 +1,216 @@
+{
+  "fileBrowser": {
+    "title": "文件浏览控制",
+    "empty": {
+      "title": "文件浏览待激活",
+      "description": "先在案件概览页创建或打开案件，再导入镜像或逻辑目录，即可在这里浏览目录树和文件内容。"
+    },
+    "subbar": {
+      "title": "文件浏览控制",
+      "meta": "当前目录 {{directoryCount}} 项 / 可执行对象 {{executableCount}} 项"
+    },
+    "breadcrumb": {
+      "noData": "无数据源"
+    },
+    "filter": {
+      "label": "过滤:",
+      "placeholder": "*"
+    },
+    "viewer": {
+      "status": "viewer: metadata / hex 已启用"
+    },
+    "itemCount": "显示 {{visibleCount}} 个项目",
+    "itemCountWithTotal": "显示 {{visibleCount}} / {{total}} 个项目",
+    "inspector": {
+      "title": "对象检查器",
+      "selected": "已选对象 {{name}}",
+      "noSelection": "未选中文件对象",
+      "sections": {
+        "identity": "对象标识",
+        "path": "来源路径",
+        "timestamps": "时间戳 (MACB)",
+        "summary": "摘要字段",
+        "status": "对象状态",
+        "actions": "操作"
+      },
+      "timestamp": {
+        "modified": "M",
+        "accessed": "A",
+        "changed": "C",
+        "created": "B"
+      },
+      "status": {
+        "deleted": "deleted",
+        "hidden": "hidden",
+        "system": "system"
+      },
+      "extract": {
+        "pending": "提取中...",
+        "button": "提取文件"
+      },
+      "viewTimeline": "在时间线中查看"
+    }
+  },
+  "settings": {
+    "title": "设置",
+    "subtitle": "应用配置与数据目录",
+    "save": "保存设置",
+    "saving": "保存中...",
+    "saved": "设置已保存。",
+    "saveFailed": "设置保存失败。",
+    "validation": {
+      "caseRootEmpty": "案件默认存储路径不能为空。",
+      "imageSearchPathsInvalid": "镜像搜索路径包含非法字符。",
+      "workersPositive": "Worker 数必须为空或大于 0。",
+      "previewPositive": "预览大小/块大小必须为正整数。"
+    },
+    "sections": {
+      "storagePaths": {
+        "caseRoot": "案件默认存储路径",
+        "caseRootHint": "仅用于预填首页新建案件的父目录，实际存储位置以首页填写路径为准。",
+        "imageSearchPaths": "镜像搜索路径",
+        "imageSearchPathsHint": "导入数据源时自动搜索的镜像目录（分号分隔）"
+      },
+      "importPerformance": {
+        "title": "导入性能",
+        "maxImportWorkers": "枚举 Worker 上限",
+        "maxImportWorkersHint": "E01/RAW 分区枚举，空值使用自动。",
+        "maxAnalysisWorkers": "分析 Worker 上限",
+        "maxAnalysisWorkersHint": "artifact/timeline/text 分析池，空值使用逻辑核心。",
+        "importAnalysisMode": "导入分析模式",
+        "metadataOnly": "Metadata only (E01/RAW 推荐)",
+        "budgetedContent": "Budgeted content (目录导入推荐)",
+        "fullContent": "Full content (高内存风险)",
+        "importAnalysisModeHint": "E01/RAW 默认只做元数据与时间线；内容读取和全文索引需显式开启预算模式。"
+      },
+      "preview": {
+        "title": "预览",
+        "hexChunkBytes": "Hex 分块大小（字节）",
+        "hexChunkBytesHint": "十六进制查看器每次读取字节数。",
+        "maxViewerRangeLength": "单请求最大范围（字节）",
+        "maxViewerRangeLengthHint": "文件预览单次请求返回上限。",
+        "maxInlineImagePreviewBytes": "内联图片预览上限（字节）",
+        "maxInlineImagePreviewBytesHint": "超过此大小的图片将不直接内联显示。",
+        "maxInlineMediaPreviewBytes": "内联媒体预览上限（字节）",
+        "maxInlineMediaPreviewBytesHint": "超过此大小的媒体将不直接内联显示。"
+      },
+      "uiDebug": {
+        "title": "界面与调试",
+        "theme": "主题",
+        "themeLight": "浅色",
+        "themeDark": "深色",
+        "devEventTrace": "事件调试日志"
+      },
+      "mcp": {
+        "title": "AI 助手 (MCP)",
+        "loading": "加载中...",
+        "connectionTitle": "MCP 服务器连接",
+        "noServers": "暂无服务器",
+        "addServer": "添加服务器",
+        "connectionStatus": "连接状态: {{count}} 个服务器已连接",
+        "connectionStatus_zero": "连接状态: {{count}} 个服务器已连接"
+      },
+      "systemInfo": {
+        "title": "系统信息",
+        "version": "版本",
+        "platform": "平台",
+        "database": "数据库",
+        "perCase": "每个案件独立",
+        "searchEngine": "搜索引擎",
+        "fullTextIndex": "全文索引",
+        "mcpProtocol": "MCP 协议"
+      }
+    }
+  },
+  "sidebar": {
+    "toggleSidebar": "切换侧边栏"
+  },
+  "topBar": {
+    "links": {
+      "home": { "label": "案件概览", "context": "案件状态、指标与近期对象" },
+      "files": { "label": "文件浏览", "context": "目录树、文件表与取证查看器" },
+      "analysis": { "label": "数据源分析", "context": "系统信息、文件分类与分析报告" },
+      "v2": { "label": "V2 治理", "context": "可信验证、Benchmark、安全治理与发布评分" },
+      "v3": { "label": "V3", "context": "图统计、平台覆盖、规则包状态与批处理状态" },
+      "search": { "label": "全局搜索", "context": "关键字、结构化查询与命中详情" },
+      "timeline": { "label": "时间线", "context": "事件聚合、筛选与时序检视" },
+      "artifacts": { "label": "痕迹分析", "context": "Windows 痕迹家族与解析字段" },
+      "reports": { "label": "报告导出", "context": "模板、导出任务与报告产物" }
+    },
+    "currentPage": "当前页",
+    "case": {
+      "number": "案件 #{{number}}",
+      "noCase": "未选择案件",
+      "examiner": "检验人 {{examiner}}",
+      "updatedAt": "更新于 {{updatedAt}}"
+    },
+    "search": {
+      "placeholder": "输入全局检索语句或 IOC"
+    },
+    "jobs": {
+      "running": "{{count}} 运行中",
+      "warnings": "{{count}}"
+    }
+  },
+  "bottomDrawer": {
+    "headline": {
+      "waiting": "等待任务执行"
+    },
+    "jobs": {
+      "running": "运行中",
+      "warnings": "警告",
+      "skipped": "跳过",
+      "trace": "Trace",
+      "stats": "{{running}} 运行 / {{completed}} 完成 / {{partial}} 部分 / {{failed}} 失败",
+      "failedFallback": "任务执行失败"
+    },
+    "importSignals": {
+      "title": "Import Signals",
+      "waiting": "Waiting for typed progress",
+      "noStatus": "尚未收到导入状态事件",
+      "percent": "%",
+      "processed": "{{processed}}",
+      "processedWithTotal": "{{processed}}/{{total}}"
+    },
+    "partitionProgress": {
+      "title": "分区进度",
+      "completed": "{{completed}}/{{total}} 完成"
+    },
+    "performance": {
+      "title": "Performance"
+    },
+    "trace": {
+      "recentStream": "最近事件流"
+    },
+    "status": {
+      "recent": "最近状态:",
+      "idle": "空闲"
+    },
+    "toggle": {
+      "collapse": "收起任务抽屉",
+      "expand": "展开任务抽屉"
+    }
+  },
+  "gql": {
+    "placeholder": "MATCH (n:File)-[e:References]->(m:Artifact)\nWHERE e.confidence > 0.7\nRETURN n, e, m\nLIMIT 50",
+    "header": {
+      "title": "GQL Query",
+      "running": "Running...",
+      "run": "Run"
+    },
+    "autocomplete": {
+      "kind": {
+        "keyword": "keyword",
+        "type": "type",
+        "property": "property",
+        "predicate": "predicate"
+      }
+    }
+  },
+  "errorBoundary": {
+    "title": "应用发生错误",
+    "unknownError": "未知错误",
+    "reload": "重新加载",
+    "recover": "尝试恢复"
+  }
+}

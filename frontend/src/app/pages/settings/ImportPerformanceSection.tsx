@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { LocalSettings } from '@/lib/settings';
 
 interface ImportPerformanceSectionProps {
@@ -13,14 +14,16 @@ export function ImportPerformanceSection({
   importAnalysisMode,
   setSettings,
 }: ImportPerformanceSectionProps) {
+  const { t } = useTranslation();
+
   return (
     <section>
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-[13px] font-semibold text-[#333]">导入性能</span>
+        <span className="text-[13px] font-semibold text-forensics-text-secondary">{t('settings.sections.importPerformance.title')}</span>
       </div>
       <div className="grid gap-3 md:grid-cols-2">
-        <label className="block border border-[#e0e0e0] bg-[#f8f8f8] p-3">
-          <span className="block text-[11px] font-semibold text-[#555]">枚举 Worker 上限</span>
+        <label className="block border border-forensics-border bg-forensics-input-bg p-3">
+          <span className="block text-[11px] font-semibold text-forensics-text-tertiary">{t('settings.sections.importPerformance.maxImportWorkers')}</span>
           <input
             value={maxImportWorkers}
             onChange={(event) =>
@@ -30,13 +33,13 @@ export function ImportPerformanceSection({
               }))
             }
             inputMode="numeric"
-            placeholder="自动"
-            className="mt-2 w-full border border-[#ccc] bg-white px-2 py-1 font-mono text-[12px]"
+            placeholder={t('settings.sections.importPerformance.maxImportWorkers')}
+            className="mt-2 w-full border border-forensics-border-strong bg-forensics-surface px-2 py-1 font-mono text-[12px]"
           />
-          <span className="mt-1 block text-[10px] text-[#999]">E01/RAW 分区枚举，空值使用自动。</span>
+          <span className="mt-1 block text-[10px] text-forensics-muted-lighter">{t('settings.sections.importPerformance.maxImportWorkersHint')}</span>
         </label>
-        <label className="block border border-[#e0e0e0] bg-[#f8f8f8] p-3">
-          <span className="block text-[11px] font-semibold text-[#555]">分析 Worker 上限</span>
+        <label className="block border border-forensics-border bg-forensics-input-bg p-3">
+          <span className="block text-[11px] font-semibold text-forensics-text-tertiary">{t('settings.sections.importPerformance.maxAnalysisWorkers')}</span>
           <input
             value={maxAnalysisWorkers}
             onChange={(event) =>
@@ -46,14 +49,14 @@ export function ImportPerformanceSection({
               }))
             }
             inputMode="numeric"
-            placeholder="自动"
-            className="mt-2 w-full border border-[#ccc] bg-white px-2 py-1 font-mono text-[12px]"
+            placeholder={t('settings.sections.importPerformance.maxAnalysisWorkers')}
+            className="mt-2 w-full border border-forensics-border-strong bg-forensics-surface px-2 py-1 font-mono text-[12px]"
           />
-          <span className="mt-1 block text-[10px] text-[#999]">artifact/timeline/text 分析池，空值使用逻辑核心。</span>
+          <span className="mt-1 block text-[10px] text-forensics-muted-lighter">{t('settings.sections.importPerformance.maxAnalysisWorkersHint')}</span>
         </label>
       </div>
-      <label className="mt-3 block border border-[#e0e0e0] bg-[#f8f8f8] p-3">
-        <span className="block text-[11px] font-semibold text-[#555]">导入分析模式</span>
+      <label className="mt-3 block border border-forensics-border bg-forensics-input-bg p-3">
+        <span className="block text-[11px] font-semibold text-forensics-text-tertiary">{t('settings.sections.importPerformance.importAnalysisMode')}</span>
         <select
           value={importAnalysisMode}
           onChange={(event) =>
@@ -67,14 +70,14 @@ export function ImportPerformanceSection({
                     : 'metadataOnly',
             }))
           }
-          className="mt-2 w-full border border-[#ccc] bg-white px-2 py-1 text-[12px]"
+          className="mt-2 w-full border border-forensics-border-strong bg-forensics-surface px-2 py-1 text-[12px]"
         >
-          <option value="metadataOnly">Metadata only (E01/RAW 推荐)</option>
-          <option value="budgetedContent">Budgeted content (目录导入推荐)</option>
-          <option value="fullContent">Full content (高内存风险)</option>
+          <option value="metadataOnly">{t('settings.sections.importPerformance.metadataOnly')}</option>
+          <option value="budgetedContent">{t('settings.sections.importPerformance.budgetedContent')}</option>
+          <option value="fullContent">{t('settings.sections.importPerformance.fullContent')}</option>
         </select>
-        <span className="mt-1 block text-[10px] text-[#999]">
-          E01/RAW 默认只做元数据与时间线；内容读取和全文索引需显式开启预算模式。
+        <span className="mt-1 block text-[10px] text-forensics-muted-lighter">
+          {t('settings.sections.importPerformance.importAnalysisModeHint')}
         </span>
       </label>
     </section>

@@ -1,3 +1,6 @@
+// Initialize i18n for tests so components using react-i18next render without extra wrappers.
+import '@/i18n';
+
 if (!Element.prototype.hasPointerCapture) {
   Element.prototype.hasPointerCapture = () => false;
 }
