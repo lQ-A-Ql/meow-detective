@@ -62,8 +62,8 @@
 | app-services source modules | 24 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
 | SQLite repositories | 15 | `crates/persistence-sqlite/src/repositories/*_repo.rs` (新增: graph_repo, notebook_repo, batch_repo) |
 | SQLite migration scripts | 33 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0031 + staging_001) |
-| frontend pages | 16 | `frontend/src/app/pages/*.tsx`，排除测试 (新增: V3Dashboard) |
-| frontend test files | 73 | `frontend/src/**/*.test.ts(x)` |
+| frontend pages | 17 | `frontend/src/app/pages/*.tsx`，排除测试 (新增: V3Dashboard, V3ScoreCards) |
+| frontend test files | 75 | `frontend/src/**/*.test.ts(x)` |
 | Mermaid 图块 | 15 | `docs/model-architecture-algorithm-diagrams.md` |
 | V3 参考文档 | 9 | `docs/v3-plan.md` 及 8 篇 V3 参考文档 (已实现) |
 | V3 新增 crate | 3 | `crates/containers-pst/`, `crates/artifacts-linux/`, `crates/artifacts-macos/` (已创建) |
@@ -75,8 +75,8 @@
 
 | 路径模式 | 数量 | 说明 |
 |---|---:|---|
-| `frontend/src/app/pages/*.tsx` | 16 | 页面入口文件，不含 `*.test.tsx` |
-| `frontend/src/**/*.test.ts(x)` | 73 | Vitest 测试文件总数 |
+| `frontend/src/app/pages/*.tsx` | 17 | 页面入口文件，不含 `*.test.tsx` |
+| `frontend/src/**/*.test.ts(x)` | 75 | Vitest 测试文件总数 |
 | `apps/desktop/src-tauri/src/commands/**/*.rs` | 96 | Tauri command 定义数 |
 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 33 | SQLite migration 脚本 (0001-0031 + staging_001) |
 | `docs/model-architecture-algorithm-diagrams.md` 中 Mermaid | 15 | Mermaid 图块总数 |

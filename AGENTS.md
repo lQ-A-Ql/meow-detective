@@ -277,8 +277,8 @@ Backend → Frontend via Tauri `emit`. Topics are string constants in `crates/tr
 | 96 Tauri commands | `apps/desktop/src-tauri/src/commands/**/*.rs` | Registered in `src/lib.rs` |
 | 15 SQLite repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` | Includes staging_repo, correlation_repo, entity_repo added in 2026-06 |
 | 33 migration scripts | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | `0001`–`0031` plus `staging_001.sql` |
-| 16 frontend pages | `frontend/src/app/pages/*.tsx` (excluding `*.test.tsx`) | Includes V2 Workbench, V3 Dashboard, CaseHome, FileBrowser, etc. |
-| 73 frontend test files | `frontend/src/**/*.test.{ts,tsx}` | |
+| 17 frontend pages | `frontend/src/app/pages/*.tsx` (excluding `*.test.tsx`) | Includes V2 Workbench, V3 Dashboard, V3ScoreCards, CaseHome, FileBrowser, etc. |
+| 75 frontend test files | `frontend/src/**/*.test.{ts,tsx}` | |
 | ~2,061 Rust tests | `cargo test --workspace` (calibrated 2026-06) | |
 | 19 event topics | `crates/transport/src/events/mod.rs` | File extract progress added in 2026-06 |
 | 33 DTO domain files | `crates/transport/src/dto/*.rs` | Includes analysis_browser.rs added in 2026-06 |

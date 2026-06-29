@@ -1,6 +1,6 @@
 # Forensics Workbench
 
-A Tauri 2 desktop application for disk image forensic analysis on Windows. 37 Rust crates, 16 frontend pages, 96 Tauri commands, 2,061 Rust tests. MIT licensed.
+A Tauri 2 desktop application for disk image forensic analysis on Windows. 37 Rust crates, 17 frontend pages, 96 Tauri commands, 2,061 Rust tests. MIT licensed.
 
 **V5 Quality Audit (2026-06):** Architecture compliance 97%, runtime safety 96%, forensic completeness 96%. E01 preview pipeline hardened with partition-indexed path reconstruction, MFT inode-based file resolution, and per-partition chunk-table caching.
 
@@ -41,7 +41,7 @@ cd apps/desktop/src-tauri && cargo tauri build
 
 ```bash
 cargo test --workspace
-cd frontend && pnpm test            # Frontend (73 test files)
+cd frontend && pnpm test            # Frontend (75 test files)
 cd frontend && pnpm test:coverage
 ```
 
