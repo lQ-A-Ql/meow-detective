@@ -10,6 +10,7 @@
  */
 
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, FileText, Search } from 'lucide-react';
 
 interface TextViewerProps {
@@ -37,6 +38,7 @@ export function TextViewer({
   searchQuery,
   isTruncated,
 }: TextViewerProps) {
+  const { t } = useTranslation();
   const [currentPage, setCurrentPage] = useState(0);
   const [localSearch, setLocalSearch] = useState(searchQuery || '');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -144,38 +146,42 @@ export function TextViewer({
   return (
     <div className="flex flex-col h-full">
       {/* 工具栏 */}
-      <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-[#fafafa] text-[11px] shrink-0">
-        <FileText size={12} className="text-[#666]" />
-        <span className="text-[#666] font-medium">{encoding}</span>
-        <span className="text-[#ddd]">|</span>
-        <span className="text-[#666]">{lines.length.toLocaleString()} 行</span>
+      <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-forensics-panel text-[11px] shrink-0">
+        <FileText size={12} className="text-forensics-muted" />
+        <span className="text-forensics-muted font-medium">{encoding}</span>
+        <span className="text-forensics-border-strong">|</span>
+        <span className="text-forensics-muted">{t('textViewer.lineCount', { count: lines.length })}</span>
 
         {isTruncated && (
           <>
-            <span className="text-[#ddd]">|</span>
-            <span className="text-amber-600">已截断</span>
+            <span className="text-forensics-border-strong">|</span>
+            <span className="text-amber-600">{t('textViewer.truncated')}</span>
           </>
         )}
 
         {isLargeContent && (
           <>
-            <span className="text-[#ddd]">|</span>
-            <span className="text-[#666]" role="status">
-              大内容模式: 当前页 {pageStartLine.toLocaleString()}-{pageEndLine.toLocaleString()} 行，仅渲染可见附近的 {visibleLineCount.toLocaleString()} 行
+            <span className="text-forensics-border-strong">|</span>
+            <span className="text-forensics-muted" role="status">
+              {t('textViewer.largeContentMode', {
+                start: pageStartLine.toLocaleString(),
+                end: pageEndLine.toLocaleString(),
+                rendered: visibleLineCount.toLocaleString(),
+              })}
             </span>
           </>
         )}
 
         {/* 内联搜索 */}
         <div className="ml-auto flex items-center gap-1">
-          <Search size={11} className="text-[#999]" />
+          <Search size={11} className="text-forensics-muted-light" />
           <input
             type="text"
             value={localSearch}
             onChange={(e) => setLocalSearch(e.target.value)}
-            placeholder="搜索..."
-            className="w-32 px-1.5 py-0.5 text-[11px] border border-[#ddd] rounded bg-white 
-                       focus:outline-none focus:border-[#999] placeholder:text-[#ccc]"
+            placeholder={t('textViewer.searchPlaceholder')}
+            className="w-32 px-1.5 py-0.5 text-[11px] border border-forensics-border-strong rounded bg-forensics-surface
+                       focus:outline-none focus:border-forensics-muted placeholder:text-forensics-400"
           />
         </div>
 
@@ -185,11 +191,11 @@ export function TextViewer({
             <button
               onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
               disabled={currentPage === 0}
-              className="p-0.5 hover:bg-[#e0e0e0] rounded disabled:opacity-30"
+              className="p-0.5 hover:bg-forensics-hover rounded disabled:opacity-30"
             >
               <ChevronLeft size={12} />
             </button>
-            <span className="text-[#666] w-16 text-center">
+            <span className="text-forensics-muted w-16 text-center">
               {currentPage + 1}/{totalPages}
             </span>
             <button
@@ -197,7 +203,7 @@ export function TextViewer({
                 setCurrentPage((p) => Math.min(totalPages - 1, p + 1))
               }
               disabled={currentPage === totalPages - 1}
-              className="p-0.5 hover:bg-[#e0e0e0] rounded disabled:opacity-30"
+              className="p-0.5 hover:bg-forensics-hover rounded disabled:opacity-30"
             >
               <ChevronRight size={12} />
             </button>
@@ -238,7 +244,7 @@ export function TextViewer({
                 <div
                   key={lineNum}
                   data-line-number={lineNum}
-                  className={`flex hover:bg-[#f8f8f8] ${
+                  className={`flex hover:bg-forensics-highlight ${
                     hasMatch ? 'bg-yellow-50' : ''
                   }`}
                   style={{ height: ROW_HEIGHT }}
@@ -246,7 +252,7 @@ export function TextViewer({
                   {/* 行号 */}
                   <div
                     data-testid="text-line-number"
-                    className="shrink-0 text-right text-[#999] select-none border-r border-[#eee] bg-[#fafafa] px-2"
+                    className="shrink-0 text-right text-forensics-muted-light select-none border-r border-forensics-border-light bg-forensics-panel px-2"
                     style={{ width: `${lineNumberWidth}px` }}
                   >
                     {lineNum}
@@ -263,11 +269,11 @@ export function TextViewer({
       </div>
 
       {/* 状态栏 */}
-      <div className="flex items-center gap-3 px-3 py-1 border-t bg-[#fafafa] text-[10px] text-[#999] shrink-0">
+      <div className="flex items-center gap-3 px-3 py-1 border-t bg-forensics-panel text-[10px] text-forensics-muted-light shrink-0">
         <span>
           {localSearch
-            ? `搜索: "${localSearch}"`
-            : '就绪'}
+            ? t('textViewer.status.search', { query: localSearch })
+            : t('textViewer.status.ready')}
         </span>
       </div>
     </div>

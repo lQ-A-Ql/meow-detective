@@ -157,12 +157,20 @@
       "waiting": "等待任务执行"
     },
     "jobs": {
+      "title": "JOBS",
       "running": "运行中",
       "warnings": "警告",
       "skipped": "跳过",
       "trace": "Trace",
       "stats": "{{running}} 运行 / {{completed}} 完成 / {{partial}} 部分 / {{failed}} 失败",
       "failedFallback": "任务执行失败"
+    },
+    "warnings": {
+      "title": "WARNINGS"
+    },
+    "trace": {
+      "title": "TRACE",
+      "recentStream": "最近事件流"
     },
     "importSignals": {
       "title": "Import Signals",
@@ -179,9 +187,6 @@
     "performance": {
       "title": "Performance"
     },
-    "trace": {
-      "recentStream": "最近事件流"
-    },
     "status": {
       "recent": "最近状态:",
       "idle": "空闲"
@@ -189,6 +194,20 @@
     "toggle": {
       "collapse": "收起任务抽屉",
       "expand": "展开任务抽屉"
+    },
+    "labels": {
+      "partial": "部分完成",
+      "warnings": "警告",
+      "skipped": "跳过",
+      "failed": "失败",
+      "safeToClose": "可安全关闭",
+      "cancellation": "取消",
+      "evidenceHash": "Evidence Hash",
+      "cache": {
+        "timeline": "Timeline Cache",
+        "artifacts": "Artifact Cache",
+        "search": "Search Cache"
+      }
     }
   },
   "gql": {
@@ -204,6 +223,130 @@
         "type": "type",
         "property": "property",
         "predicate": "predicate"
+      }
+    },
+    "result": {
+      "nodes": "nodes",
+      "edges": "edges",
+      "totalMatched": "total matched",
+      "nodeList": "Nodes",
+      "edgeList": "Edges",
+      "empty": "Query returned no results.",
+      "copyTitle": "Copy ID",
+      "fields": {
+        "id": "id",
+        "type": "type",
+        "label": "label",
+        "summary": "summary",
+        "tags": "tags",
+        "source": "source",
+        "target": "target",
+        "confidence": "confidence",
+        "provenance": "provenance"
+      }
+    }
+  },
+  "analysis": {
+    "tabs": {
+      "system": "系统信息",
+      "evidence": "证据分类",
+      "registry": "注册表",
+      "browser": "浏览器记录",
+      "email": "邮件信息",
+      "eventlogs": "事件日志",
+      "files": "文件分类",
+      "report": "报告"
+    },
+    "extraction": {
+      "Registry": "注册表提取",
+      "BrowserHistory": "浏览器记录提取",
+      "Email": "邮件信息提取",
+      "EventLogs": "事件日志提取"
+    },
+    "loading": {
+      "case": "正在加载案件...",
+      "systemInfo": "正在解析 Registry/EVTX 系统信息...",
+      "evidence": "正在发现证据语义类别...",
+      "registry": "正在读取注册表提取结果...",
+      "browser": "正在读取浏览器记录...",
+      "email": "正在读取邮件信息...",
+      "eventLogs": "正在读取事件日志...",
+      "files": "正在按元数据分类文件..."
+    }
+  },
+  "textViewer": {
+    "lineCount": "{{count}} 行",
+    "truncated": "已截断",
+    "largeContentMode": "大内容模式: 当前页 {{start}}-{{end}} 行，仅渲染可见附近的 {{rendered}} 行",
+    "searchPlaceholder": "搜索...",
+    "status": {
+      "search": "搜索: \"{{query}}\"",
+      "ready": "就绪"
+    }
+  },
+  "eventLog": {
+    "title": "事件日志分析",
+    "status": {
+      "parsed": "parsed",
+      "notFound": "notFound"
+    },
+    "stats": {
+      "total": "事件总数",
+      "boot": "开关机",
+      "logon": "登录",
+      "process": "进程",
+      "application": "应用程序"
+    },
+    "tabs": {
+      "boot": "开关机",
+      "logon": "登录事件",
+      "process": "进程创建",
+      "account": "账户管理",
+      "application": "应用程序事件"
+    },
+    "columns": {
+      "timestamp": "时间",
+      "eventId": "事件 ID",
+      "kind": "类型",
+      "provider": "提供程序",
+      "recordId": "记录 ID",
+      "sourcePath": "来源日志",
+      "targetUser": "用户",
+      "logonType": "登录类型",
+      "ipAddress": "IP 地址",
+      "workstation": "工作站",
+      "failureReason": "失败原因",
+      "processName": "进程",
+      "parentProcessName": "父进程",
+      "subjectUser": "用户",
+      "subjectUserTarget": "主体用户",
+      "taskName": "任务名",
+      "memberName": "成员名",
+      "application": "应用程序",
+      "faultModule": "故障模块",
+      "productName": "产品",
+      "manufacturer": "制造商"
+    },
+    "empty": {
+      "boot": {
+        "title": "暂无开关机事件",
+        "description": "System.evtx 开关机候选事件（6005、6006、6008、1074）。"
+      },
+      "logon": {
+        "title": "暂无登录事件",
+        "description": "Security.evtx 登录事件（4624、4625、4648）。"
+      },
+      "process": {
+        "title": "暂无进程创建事件",
+        "description": "Security.evtx 进程创建事件（4688）。"
+      },
+      "account": {
+        "title": "暂无账户管理事件",
+        "description": "Security.evtx 账户/任务事件（4698、4702、4720、4732）。"
+      },
+      "application": {
+        "title": "暂无应用程序事件",
+        "description": "Application.evtx 崩溃/安装事件（1000、1001、1002、1033、11707、11708）。"
       }
     }
   },

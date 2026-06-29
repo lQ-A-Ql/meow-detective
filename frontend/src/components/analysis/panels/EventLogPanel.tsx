@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type {
   EvtxApplicationEvent,
   EvtxBootEvent,
@@ -17,14 +18,6 @@ type EventLogTabKey = 'boot' | 'logon' | 'process' | 'account' | 'application';
 
 const TABS: EventLogTabKey[] = ['boot', 'logon', 'process', 'account', 'application'];
 
-const TAB_LABELS: Record<EventLogTabKey, string> = {
-  boot: '开关机',
-  logon: '登录事件',
-  process: '进程创建',
-  account: '账户管理',
-  application: '应用程序事件',
-};
-
 export function EventLogPanel({
   summary,
   progress,
@@ -32,6 +25,7 @@ export function EventLogPanel({
   summary?: EvtxEventSummary;
   progress?: AnalysisExtractionProgressInfo;
 }) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<EventLogTabKey>('boot');
 
   const info = summary ?? {
@@ -61,51 +55,51 @@ export function EventLogPanel({
   );
 
   const bootColumns: DenseColumn<EvtxBootEvent>[] = [
-    { key: 'timestamp', title: '时间', className: 'w-[180px]', render: (row) => row.timestamp },
-    { key: 'eventId', title: '事件 ID', className: 'w-[70px]', render: (row) => row.eventId },
-    { key: 'kind', title: '类型', className: 'w-[140px]', render: (row) => row.kind },
-    { key: 'provider', title: '提供程序', className: 'w-[120px]', render: (row) => row.provider ?? '-' },
-    { key: 'recordId', title: '记录 ID', className: 'w-[70px]', render: (row) => row.recordId?.toString() ?? '-' },
-    { key: 'sourcePath', title: '来源日志', className: 'min-w-[200px]', render: (row) => row.sourcePath },
+    { key: 'timestamp', title: t('eventLog.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp },
+    { key: 'eventId', title: t('eventLog.columns.eventId'), className: 'w-[70px]', render: (row) => row.eventId },
+    { key: 'kind', title: t('eventLog.columns.kind'), className: 'w-[140px]', render: (row) => row.kind },
+    { key: 'provider', title: t('eventLog.columns.provider'), className: 'w-[120px]', render: (row) => row.provider ?? '-' },
+    { key: 'recordId', title: t('eventLog.columns.recordId'), className: 'w-[70px]', render: (row) => row.recordId?.toString() ?? '-' },
+    { key: 'sourcePath', title: t('eventLog.columns.sourcePath'), className: 'min-w-[200px]', render: (row) => row.sourcePath },
   ];
 
   const logonColumns: DenseColumn<EvtxSecurityEvent>[] = [
-    { key: 'timestamp', title: '时间', className: 'w-[180px]', render: (row) => row.timestamp },
-    { key: 'eventId', title: '事件 ID', className: 'w-[70px]', render: (row) => row.eventId },
-    { key: 'kind', title: '类型', className: 'w-[130px]', render: (row) => row.kind },
-    { key: 'targetUser', title: '用户', className: 'w-[120px]', render: (row) => row.targetUser ?? '-' },
-    { key: 'logonType', title: '登录类型', className: 'w-[90px]', render: (row) => row.logonType ?? '-' },
-    { key: 'ipAddress', title: 'IP 地址', className: 'w-[130px]', render: (row) => row.ipAddress ?? '-' },
-    { key: 'workstation', title: '工作站', className: 'w-[120px]', render: (row) => row.workstation ?? '-' },
-    { key: 'failureReason', title: '失败原因', className: 'min-w-[140px]', render: (row) => row.failureReason ?? '-' },
+    { key: 'timestamp', title: t('eventLog.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp },
+    { key: 'eventId', title: t('eventLog.columns.eventId'), className: 'w-[70px]', render: (row) => row.eventId },
+    { key: 'kind', title: t('eventLog.columns.kind'), className: 'w-[130px]', render: (row) => row.kind },
+    { key: 'targetUser', title: t('eventLog.columns.targetUser'), className: 'w-[120px]', render: (row) => row.targetUser ?? '-' },
+    { key: 'logonType', title: t('eventLog.columns.logonType'), className: 'w-[90px]', render: (row) => row.logonType ?? '-' },
+    { key: 'ipAddress', title: t('eventLog.columns.ipAddress'), className: 'w-[130px]', render: (row) => row.ipAddress ?? '-' },
+    { key: 'workstation', title: t('eventLog.columns.workstation'), className: 'w-[120px]', render: (row) => row.workstation ?? '-' },
+    { key: 'failureReason', title: t('eventLog.columns.failureReason'), className: 'min-w-[140px]', render: (row) => row.failureReason ?? '-' },
   ];
 
   const processColumns: DenseColumn<EvtxSecurityEvent>[] = [
-    { key: 'timestamp', title: '时间', className: 'w-[180px]', render: (row) => row.timestamp },
-    { key: 'processName', title: '进程', className: 'min-w-[200px]', render: (row) => row.processName ?? '-' },
-    { key: 'parentProcessName', title: '父进程', className: 'w-[180px]', render: (row) => row.parentProcessName ?? '-' },
-    { key: 'subjectUser', title: '用户', className: 'w-[120px]', render: (row) => row.subjectUser ?? '-' },
-    { key: 'recordId', title: '记录 ID', className: 'w-[70px]', render: (row) => row.recordId?.toString() ?? '-' },
+    { key: 'timestamp', title: t('eventLog.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp },
+    { key: 'processName', title: t('eventLog.columns.processName'), className: 'min-w-[200px]', render: (row) => row.processName ?? '-' },
+    { key: 'parentProcessName', title: t('eventLog.columns.parentProcessName'), className: 'w-[180px]', render: (row) => row.parentProcessName ?? '-' },
+    { key: 'subjectUser', title: t('eventLog.columns.subjectUser'), className: 'w-[120px]', render: (row) => row.subjectUser ?? '-' },
+    { key: 'recordId', title: t('eventLog.columns.recordId'), className: 'w-[70px]', render: (row) => row.recordId?.toString() ?? '-' },
   ];
 
   const accountColumns: DenseColumn<EvtxSecurityEvent>[] = [
-    { key: 'timestamp', title: '时间', className: 'w-[180px]', render: (row) => row.timestamp },
-    { key: 'eventId', title: '事件 ID', className: 'w-[70px]', render: (row) => row.eventId },
-    { key: 'kind', title: '类型', className: 'w-[150px]', render: (row) => row.kind },
-    { key: 'targetUser', title: '目标用户', className: 'w-[120px]', render: (row) => row.targetUser ?? '-' },
-    { key: 'subjectUser', title: '主体用户', className: 'w-[120px]', render: (row) => row.subjectUser ?? '-' },
-    { key: 'taskName', title: '任务名', className: 'min-w-[180px]', render: (row) => row.taskName ?? '-' },
-    { key: 'memberName', title: '成员名', className: 'w-[150px]', render: (row) => row.memberName ?? '-' },
+    { key: 'timestamp', title: t('eventLog.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp },
+    { key: 'eventId', title: t('eventLog.columns.eventId'), className: 'w-[70px]', render: (row) => row.eventId },
+    { key: 'kind', title: t('eventLog.columns.kind'), className: 'w-[150px]', render: (row) => row.kind },
+    { key: 'targetUser', title: t('eventLog.columns.subjectUserTarget'), className: 'w-[120px]', render: (row) => row.targetUser ?? '-' },
+    { key: 'subjectUser', title: t('eventLog.columns.subjectUser'), className: 'w-[120px]', render: (row) => row.subjectUser ?? '-' },
+    { key: 'taskName', title: t('eventLog.columns.taskName'), className: 'min-w-[180px]', render: (row) => row.taskName ?? '-' },
+    { key: 'memberName', title: t('eventLog.columns.memberName'), className: 'w-[150px]', render: (row) => row.memberName ?? '-' },
   ];
 
   const appColumns: DenseColumn<EvtxApplicationEvent>[] = [
-    { key: 'timestamp', title: '时间', className: 'w-[180px]', render: (row) => row.timestamp },
-    { key: 'eventId', title: '事件 ID', className: 'w-[70px]', render: (row) => row.eventId },
-    { key: 'kind', title: '类型', className: 'w-[130px]', render: (row) => row.kind },
-    { key: 'application', title: '应用程序', className: 'min-w-[200px]', render: (row) => row.application ?? '-' },
-    { key: 'faultModule', title: '故障模块', className: 'w-[150px]', render: (row) => row.faultModule ?? '-' },
-    { key: 'productName', title: '产品', className: 'w-[160px]', render: (row) => row.productName ?? '-' },
-    { key: 'manufacturer', title: '制造商', className: 'w-[140px]', render: (row) => row.manufacturer ?? '-' },
+    { key: 'timestamp', title: t('eventLog.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp },
+    { key: 'eventId', title: t('eventLog.columns.eventId'), className: 'w-[70px]', render: (row) => row.eventId },
+    { key: 'kind', title: t('eventLog.columns.kind'), className: 'w-[130px]', render: (row) => row.kind },
+    { key: 'application', title: t('eventLog.columns.application'), className: 'min-w-[200px]', render: (row) => row.application ?? '-' },
+    { key: 'faultModule', title: t('eventLog.columns.faultModule'), className: 'w-[150px]', render: (row) => row.faultModule ?? '-' },
+    { key: 'productName', title: t('eventLog.columns.productName'), className: 'w-[160px]', render: (row) => row.productName ?? '-' },
+    { key: 'manufacturer', title: t('eventLog.columns.manufacturer'), className: 'w-[140px]', render: (row) => row.manufacturer ?? '-' },
   ];
 
   const tabContent: Record<EventLogTabKey, React.ReactNode> = {
@@ -115,8 +109,8 @@ export function EventLogPanel({
           rows={info.bootEvents}
           columns={bootColumns}
           getRowKey={(row) => `${row.eventId}-${row.recordId ?? row.timestamp}`}
-          emptyTitle="暂无开关机事件"
-          emptyDescription="System.evtx 开关机候选事件（6005、6006、6008、1074）。"
+          emptyTitle={t('eventLog.empty.boot.title')}
+          emptyDescription={t('eventLog.empty.boot.description')}
         />
       </DenseTableFrame>
     ),
@@ -126,8 +120,8 @@ export function EventLogPanel({
           rows={logonEvents}
           columns={logonColumns}
           getRowKey={(row) => `${row.eventId}-${row.recordId ?? row.timestamp}`}
-          emptyTitle="暂无登录事件"
-          emptyDescription="Security.evtx 登录事件（4624、4625、4648）。"
+          emptyTitle={t('eventLog.empty.logon.title')}
+          emptyDescription={t('eventLog.empty.logon.description')}
         />
       </DenseTableFrame>
     ),
@@ -137,8 +131,8 @@ export function EventLogPanel({
           rows={processEvents}
           columns={processColumns}
           getRowKey={(row) => `${row.eventId}-${row.recordId ?? row.timestamp}`}
-          emptyTitle="暂无进程创建事件"
-          emptyDescription="Security.evtx 进程创建事件（4688）。"
+          emptyTitle={t('eventLog.empty.process.title')}
+          emptyDescription={t('eventLog.empty.process.description')}
         />
       </DenseTableFrame>
     ),
@@ -148,8 +142,8 @@ export function EventLogPanel({
           rows={accountEvents}
           columns={accountColumns}
           getRowKey={(row) => `${row.eventId}-${row.recordId ?? row.timestamp}`}
-          emptyTitle="暂无账户管理事件"
-          emptyDescription="Security.evtx 账户/任务事件（4698、4702、4720、4732）。"
+          emptyTitle={t('eventLog.empty.account.title')}
+          emptyDescription={t('eventLog.empty.account.description')}
         />
       </DenseTableFrame>
     ),
@@ -159,8 +153,8 @@ export function EventLogPanel({
           rows={info.applicationEvents}
           columns={appColumns}
           getRowKey={(row) => `${row.eventId}-${row.recordId ?? row.timestamp}`}
-          emptyTitle="暂无应用程序事件"
-          emptyDescription="Application.evtx 崩溃/安装事件（1000、1001、1002、1033、11707、11708）。"
+          emptyTitle={t('eventLog.empty.application.title')}
+          emptyDescription={t('eventLog.empty.application.description')}
         />
       </DenseTableFrame>
     ),
@@ -168,16 +162,16 @@ export function EventLogPanel({
 
   return (
     <ExtractionTableSection
-      title="事件日志分析"
+      title={t('eventLog.title')}
       status={info.totalCount > 0 ? 'parsed' : 'notFound'}
       generatedAt={info.generatedAt}
       warnings={info.warnings}
       stats={[
-        ['事件总数', info.totalCount.toString()],
-        ['开关机', info.bootShutdownCount.toString()],
-        ['登录', info.logonLogoffCount.toString()],
-        ['进程', info.processExecutionCount.toString()],
-        ['应用程序', info.applicationCrashCount.toString()],
+        [t('eventLog.stats.total'), info.totalCount.toString()],
+        [t('eventLog.stats.boot'), info.bootShutdownCount.toString()],
+        [t('eventLog.stats.logon'), info.logonLogoffCount.toString()],
+        [t('eventLog.stats.process'), info.processExecutionCount.toString()],
+        [t('eventLog.stats.application'), info.applicationCrashCount.toString()],
       ]}
     >
       <AnalysisExtractionProgress progress={progress} />
@@ -190,11 +184,11 @@ export function EventLogPanel({
             onClick={() => setActiveTab(tab)}
             className={`rounded px-2 py-1 text-[11px] font-medium transition-colors ${
               activeTab === tab
-                ? 'bg-[#175cd3] text-white'
-                : 'bg-[#f2f4f7] text-[#475467] hover:bg-[#e4e7ec]'
+                ? 'bg-forensics-primary-blue text-white'
+                : 'bg-forensics-surface-muted text-forensics-text-soft hover:bg-forensics-hover-muted'
             }`}
           >
-            {TAB_LABELS[tab]}
+            {t(`eventLog.tabs.${tab}`)}
           </button>
         ))}
       </div>

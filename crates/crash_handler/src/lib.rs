@@ -357,6 +357,7 @@ mod tests {
     /// the location file path is run through `sanitize_path`.
     #[test]
     fn test_crash_report_excludes_case_data() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let saved = std::env::var("USERPROFILE").ok();
         std::env::set_var("USERPROFILE", "C:\\Users\\QAQ");
 

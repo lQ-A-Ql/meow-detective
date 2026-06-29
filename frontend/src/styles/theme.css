@@ -84,6 +84,26 @@
   --forensics-gql-muted: #586069;
   --forensics-gql-bg-error: #fff0f0;
   --forensics-gql-border-error: #ffcccc;
+
+  /* Forensics status / action tokens */
+  --forensics-primary-blue: #175cd3;
+  --forensics-success: #22c55e;
+  --forensics-surface-muted: #f2f4f7;
+  --forensics-text-soft: #475467;
+  --forensics-hover-muted: #e4e7ec;
+
+  /* Forensics warning tokens */
+  --forensics-warning: #b7791f;
+  --forensics-warning-bg: #fff9ec;
+  --forensics-warning-border: #e7d9b4;
+  --forensics-warning-text: #6f4d00;
+  --forensics-warning-text-strong: #8a5a00;
+
+  /* Forensics success tokens */
+  --forensics-success: #22c55e;
+  --forensics-success-bg: #f4fbf5;
+  --forensics-success-border: #cfe3d3;
+  --forensics-success-text: #245c2f;
 }
 
 .dark {
@@ -166,6 +186,26 @@
   --forensics-gql-muted: #8b949e;
   --forensics-gql-bg-error: oklch(0.22 0.08 25);
   --forensics-gql-border-error: oklch(0.3 0.1 25);
+
+  /* Forensics status / action tokens (dark mode) */
+  --forensics-primary-blue: #4c9aff;
+  --forensics-success: #4ade80;
+  --forensics-surface-muted: oklch(0.22 0 0);
+  --forensics-text-soft: oklch(0.65 0 0);
+  --forensics-hover-muted: oklch(0.269 0 0);
+
+  /* Forensics warning tokens (dark mode) */
+  --forensics-warning: #f6ad55;
+  --forensics-warning-bg: oklch(0.22 0.05 80);
+  --forensics-warning-border: oklch(0.35 0.08 80);
+  --forensics-warning-text: #fbd38d;
+  --forensics-warning-text-strong: #fbd38d;
+
+  /* Forensics success tokens (dark mode) */
+  --forensics-success: #4ade80;
+  --forensics-success-bg: oklch(0.22 0.08 145);
+  --forensics-success-border: oklch(0.35 0.1 145);
+  --forensics-success-text: #86efac;
 }
 
 @theme inline {
@@ -252,6 +292,26 @@
   --color-forensics-gql-muted: var(--forensics-gql-muted);
   --color-forensics-gql-bg-error: var(--forensics-gql-bg-error);
   --color-forensics-gql-border-error: var(--forensics-gql-border-error);
+
+  /* Forensics status / action utilities */
+  --color-forensics-primary-blue: var(--forensics-primary-blue);
+  --color-forensics-success: var(--forensics-success);
+  --color-forensics-surface-muted: var(--forensics-surface-muted);
+  --color-forensics-text-soft: var(--forensics-text-soft);
+  --color-forensics-hover-muted: var(--forensics-hover-muted);
+
+  /* Forensics warning utilities */
+  --color-forensics-warning: var(--forensics-warning);
+  --color-forensics-warning-bg: var(--forensics-warning-bg);
+  --color-forensics-warning-border: var(--forensics-warning-border);
+  --color-forensics-warning-text: var(--forensics-warning-text);
+  --color-forensics-warning-text-strong: var(--forensics-warning-text-strong);
+
+  /* Forensics success utilities */
+  --color-forensics-success: var(--forensics-success);
+  --color-forensics-success-bg: var(--forensics-success-bg);
+  --color-forensics-success-border: var(--forensics-success-border);
+  --color-forensics-success-text: var(--forensics-success-text);
 }
 
 @layer base {

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Database, Download, FileClock, FileText, Globe, Mail, Monitor, Shield } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useCreateAnalysisDemoCase, useCurrentCase } from '@/features/case/hooks';
 import {
   useAnalysisClassifications,
@@ -39,24 +40,37 @@ import {
 } from '@/app/components/ui/tabs';
 import { isApiErrorDto } from '@/lib/api/client';
 
-const analysisTabs = [
-  { value: 'system', label: '系统信息', icon: Monitor },
-  { value: 'evidence', label: '证据分类', icon: Shield },
-  { value: 'registry', label: '注册表', icon: Database },
-  { value: 'browser', label: '浏览器记录', icon: Globe },
-  { value: 'email', label: '邮件信息', icon: Mail },
-  { value: 'eventlogs', label: '事件日志', icon: FileClock },
-  { value: 'files', label: '文件分类', icon: FileText },
-  { value: 'report', label: '报告', icon: Download },
-] as const;
+type AnalysisTabKey = 'system' | 'evidence' | 'registry' | 'browser' | 'email' | 'eventlogs' | 'files' | 'report';
+
+const ANALYSIS_TAB_KEYS: AnalysisTabKey[] = [
+  'system',
+  'evidence',
+  'registry',
+  'browser',
+  'email',
+  'eventlogs',
+  'files',
+  'report',
+];
+
+const TAB_ICONS: Record<AnalysisTabKey, React.ComponentType<{ size?: number | string }>> = {
+  system: Monitor,
+  evidence: Shield,
+  registry: Database,
+  browser: Globe,
+  email: Mail,
+  eventlogs: FileClock,
+  files: FileText,
+  report: Download,
+};
 
 type ExtractionCategory = 'Registry' | 'BrowserHistory' | 'Email' | 'EventLogs';
 
-const extractionCategories: Array<{ key: ExtractionCategory; label: string }> = [
-  { key: 'Registry', label: '注册表提取' },
-  { key: 'BrowserHistory', label: '浏览器记录提取' },
-  { key: 'Email', label: '邮件信息提取' },
-  { key: 'EventLogs', label: '事件日志提取' },
+const EXTRACTION_CATEGORIES: ExtractionCategory[] = [
+  'Registry',
+  'BrowserHistory',
+  'Email',
+  'EventLogs',
 ];
 
 function emptyProgress(label: string): AnalysisExtractionProgressInfo {
@@ -80,12 +94,12 @@ function statusFromRun(status: string): AnalysisExtractionProgressState {
   return 'success';
 }
 
-function defaultProgressMap(): Record<ExtractionCategory, AnalysisExtractionProgressInfo> {
+function defaultProgressMap(t: (key: string) => string): Record<ExtractionCategory, AnalysisExtractionProgressInfo> {
   return {
-    Registry: emptyProgress('注册表提取'),
-    BrowserHistory: emptyProgress('浏览器记录提取'),
-    Email: emptyProgress('邮件信息提取'),
-    EventLogs: emptyProgress('事件日志提取'),
+    Registry: emptyProgress(t('analysis.extraction.Registry')),
+    BrowserHistory: emptyProgress(t('analysis.extraction.BrowserHistory')),
+    Email: emptyProgress(t('analysis.extraction.Email')),
+    EventLogs: emptyProgress(t('analysis.extraction.EventLogs')),
   };
 }
 
@@ -100,6 +114,7 @@ function errorMessage(error: unknown) {
 }
 
 export function DataAnalysis() {
+  const { t } = useTranslation();
   const currentCase = useCurrentCase();
   const demoCase = useCreateAnalysisDemoCase();
   const systemInfo = useAnalysisSystemInfo();
@@ -113,7 +128,7 @@ export function DataAnalysis() {
   const eventLogSummary = useEvtxEventSummary({ limit: 200 });
   const classifications = useAnalysisClassifications(1000);
   const summaryMutation = useGenerateAnalysisSummary();
-  const [extractionProgress, setExtractionProgress] = useState(defaultProgressMap);
+  const [extractionProgress, setExtractionProgress] = useState(() => defaultProgressMap(t));
   const [extractionRunning, setExtractionRunning] = useState(false);
 
   const hasCase = Boolean(currentCase.data);
@@ -151,7 +166,7 @@ export function DataAnalysis() {
 
   async function runExtraction() {
     setExtractionRunning(true);
-    setExtractionProgress(defaultProgressMap());
+    setExtractionProgress(defaultProgressMap(t));
     const refetchByCategory: Record<ExtractionCategory, () => Promise<unknown>> = {
       Registry: registrySummary.refetch,
       BrowserHistory: browserSummary.refetch,
@@ -164,11 +179,11 @@ export function DataAnalysis() {
     };
 
     try {
-      for (const category of extractionCategories) {
+      for (const category of EXTRACTION_CATEGORIES) {
         setExtractionProgress((current) => ({
           ...current,
-          [category.key]: {
-            ...current[category.key],
+          [category]: {
+            ...current[category],
             status: 'running',
             warnings: [],
             error: undefined,
@@ -176,11 +191,11 @@ export function DataAnalysis() {
         }));
 
         try {
-          const run = await extractionRun.mutateAsync({ categories: [category.key] });
+          const run = await extractionRun.mutateAsync({ categories: [category] });
           setExtractionProgress((current) => ({
             ...current,
-            [category.key]: {
-              label: category.label,
+            [category]: {
+              label: t(`analysis.extraction.${category}`),
               status: statusFromRun(run.status),
               scannedCount: run.scannedCount,
               artifactCount: run.artifactCount,
@@ -188,15 +203,15 @@ export function DataAnalysis() {
               warnings: run.warnings,
             },
           }));
-          await refetchByCategory[category.key]();
-          if (category.key === 'Registry') {
+          await refetchByCategory[category]();
+          if (category === 'Registry') {
             await refetchRegistryStructured();
           }
         } catch (err) {
           setExtractionProgress((current) => ({
             ...current,
-            [category.key]: {
-              ...current[category.key],
+            [category]: {
+              ...current[category],
               status: 'failed',
               error: errorMessage(err),
             },
@@ -225,10 +240,10 @@ export function DataAnalysis() {
     await demoCase.mutateAsync();
   }
 
-  const extractionProgressCards = extractionCategories.map((category) => (
+  const extractionProgressCards = EXTRACTION_CATEGORIES.map((category) => (
     <AnalysisExtractionProgress
-      key={category.key}
-      progress={extractionProgress[category.key]}
+      key={category}
+      progress={extractionProgress[category]}
     />
   ));
 
@@ -248,7 +263,7 @@ export function DataAnalysis() {
       {hasCase ? (
         <div
           data-testid="analysis-progress-overview"
-          className="shrink-0 border-b border-[#e8e8e8] bg-[#fcfcfc] px-6 py-4"
+          className="shrink-0 border-b border-forensics-border bg-forensics-panel px-6 py-4"
         >
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             {extractionProgressCards}
@@ -263,17 +278,20 @@ export function DataAnalysis() {
         />
       ) : (
         <Tabs defaultValue="system" className="min-h-0 flex-1 gap-0">
-          <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-none border-b border-[#e0e0e0] bg-[#fafafa] p-0">
-            {analysisTabs.map(({ value, label, icon: Icon }) => (
-              <TabsTrigger
-                key={value}
-                value={value}
-                className="h-auto flex-none rounded-none border-x-0 border-t-0 border-b-2 border-transparent bg-transparent px-5 py-3 text-[12px] data-[state=active]:border-[#111] data-[state=active]:bg-transparent"
-              >
-                <Icon size={14} />
-                {label}
-              </TabsTrigger>
-            ))}
+          <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-none border-b border-forensics-border bg-forensics-panel p-0">
+            {ANALYSIS_TAB_KEYS.map((value) => {
+              const Icon = TAB_ICONS[value];
+              return (
+                <TabsTrigger
+                  key={value}
+                  value={value}
+                  className="h-auto flex-none rounded-none border-x-0 border-t-0 border-b-2 border-transparent bg-transparent px-5 py-3 text-[12px] data-[state=active]:border-forensics-text data-[state=active]:bg-transparent"
+                >
+                  <Icon size={14} />
+                  {t(`analysis.tabs.${value}`)}
+                </TabsTrigger>
+              );
+            })}
           </TabsList>
 
           <div className="min-h-0 flex-1 overflow-auto p-6">
@@ -282,12 +300,12 @@ export function DataAnalysis() {
             ) : null}
 
             {loading ? (
-              <AnalysisLoadingPanel text="正在加载案件..." />
+              <AnalysisLoadingPanel text={t('analysis.loading.case')} />
             ) : (
               <>
                 <TabsContent value="system" className="m-0 data-[state=inactive]:hidden">
                   {systemInfo.isLoading ? (
-                    <AnalysisLoadingPanel text="正在解析 Registry/EVTX 系统信息..." />
+                    <AnalysisLoadingPanel text={t('analysis.loading.systemInfo')} />
                   ) : (
                     <SystemInfoPanel systemInfo={systemInfo.data} />
                   )}
@@ -295,7 +313,7 @@ export function DataAnalysis() {
 
                 <TabsContent value="evidence" className="m-0 data-[state=inactive]:hidden">
                   {evidenceSummary.isLoading ? (
-                    <AnalysisLoadingPanel text="正在发现证据语义类别..." />
+                    <AnalysisLoadingPanel text={t('analysis.loading.evidence')} />
                   ) : (
                     <EvidenceClassificationPanel
                       summary={evidenceSummary.data}
@@ -307,7 +325,7 @@ export function DataAnalysis() {
 
                 <TabsContent value="registry" className="m-0 data-[state=inactive]:hidden">
                   {registrySummary.isLoading ? (
-                    <AnalysisLoadingPanel text="正在读取注册表提取结果..." />
+                    <AnalysisLoadingPanel text={t('analysis.loading.registry')} />
                   ) : (
                     <RegistryExtractionPanel
                       summary={registrySummary.data}
@@ -319,7 +337,7 @@ export function DataAnalysis() {
 
                 <TabsContent value="browser" className="m-0 data-[state=inactive]:hidden">
                   {browserSummary.isLoading ? (
-                    <AnalysisLoadingPanel text="正在读取浏览器记录..." />
+                    <AnalysisLoadingPanel text={t('analysis.loading.browser')} />
                   ) : (
                     <BrowserHistoryPanel
                       summary={browserSummary.data}
@@ -330,7 +348,7 @@ export function DataAnalysis() {
 
                 <TabsContent value="email" className="m-0 data-[state=inactive]:hidden">
                   {emailSummary.isLoading ? (
-                    <AnalysisLoadingPanel text="正在读取邮件信息..." />
+                    <AnalysisLoadingPanel text={t('analysis.loading.email')} />
                   ) : (
                     <EmailExtractionPanel
                       summary={emailSummary.data}
@@ -341,7 +359,7 @@ export function DataAnalysis() {
 
                 <TabsContent value="eventlogs" className="m-0 data-[state=inactive]:hidden">
                   {eventLogSummary.isLoading ? (
-                    <AnalysisLoadingPanel text="正在读取事件日志..." />
+                    <AnalysisLoadingPanel text={t('analysis.loading.eventLogs')} />
                   ) : (
                     <EventLogPanel
                       summary={eventLogSummary.data}
@@ -352,7 +370,7 @@ export function DataAnalysis() {
 
                 <TabsContent value="files" className="m-0 data-[state=inactive]:hidden">
                   {classifications.isLoading ? (
-                    <AnalysisLoadingPanel text="正在按元数据分类文件..." />
+                    <AnalysisLoadingPanel text={t('analysis.loading.files')} />
                   ) : (
                     <FileClassificationPanel classifications={classifications.data ?? []} />
                   )}

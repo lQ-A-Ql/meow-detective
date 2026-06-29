@@ -298,11 +298,15 @@ function normalizeResource(value: McpResourceProtocolDto): McpResource {
   };
 }
 
+function isJsonSchema(value: unknown): value is JsonSchema {
+  return isRecord(value) && typeof value.type === 'string';
+}
+
 function normalizeTool(value: McpToolProtocolDto): McpTool {
   return {
     name: optionalString(value.name) ?? '',
     description: optionalString(value.description) ?? '',
-    inputSchema: isRecord(value.input_schema) ? (value.input_schema as unknown as JsonSchema) : { type: 'object' },
+    inputSchema: isJsonSchema(value.input_schema) ? value.input_schema : { type: 'object' },
   };
 }
 

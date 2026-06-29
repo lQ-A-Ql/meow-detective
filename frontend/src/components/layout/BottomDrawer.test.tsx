@@ -91,10 +91,10 @@ describe('BottomDrawer jobs panel', () => {
   it('renders partial badge and outcome counts', () => {
     render(<BottomDrawer />);
 
-    expect(screen.getAllByText('PARTIAL').length).toBeGreaterThan(0);
-    expect(screen.getByText('warnings 2')).toBeDefined();
-    expect(screen.getByText('skipped 3')).toBeDefined();
-    expect(screen.getByText('failed 0')).toBeDefined();
+    expect(screen.getAllByText('部分完成').length).toBeGreaterThan(0);
+    expect(screen.getByText('警告 2')).toBeDefined();
+    expect(screen.getByText('跳过 3')).toBeDefined();
+    expect(screen.getByText('失败 0')).toBeDefined();
     expect(screen.getByText(/1 运行 \/ 1 完成 \/ 1 部分 \/ 0 失败/)).toBeDefined();
   });
 

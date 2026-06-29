@@ -157,12 +157,20 @@
       "waiting": "Waiting for tasks"
     },
     "jobs": {
+      "title": "JOBS",
       "running": "Running",
       "warnings": "Warnings",
       "skipped": "Skipped",
       "trace": "Trace",
       "stats": "{{running}} running / {{completed}} completed / {{partial}} partial / {{failed}} failed",
       "failedFallback": "Task execution failed"
+    },
+    "warnings": {
+      "title": "WARNINGS"
+    },
+    "trace": {
+      "title": "TRACE",
+      "recentStream": "Recent event stream"
     },
     "importSignals": {
       "title": "Import Signals",
@@ -179,9 +187,6 @@
     "performance": {
       "title": "Performance"
     },
-    "trace": {
-      "recentStream": "Recent event stream"
-    },
     "status": {
       "recent": "Recent status:",
       "idle": "Idle"
@@ -189,6 +194,20 @@
     "toggle": {
       "collapse": "Collapse task drawer",
       "expand": "Expand task drawer"
+    },
+    "labels": {
+      "partial": "PARTIAL",
+      "warnings": "warnings",
+      "skipped": "skipped",
+      "failed": "failed",
+      "safeToClose": "Safe To Close",
+      "cancellation": "Cancellation",
+      "evidenceHash": "Evidence Hash",
+      "cache": {
+        "timeline": "Timeline Cache",
+        "artifacts": "Artifact Cache",
+        "search": "Search Cache"
+      }
     }
   },
   "gql": {
@@ -204,6 +223,130 @@
         "type": "type",
         "property": "property",
         "predicate": "predicate"
+      }
+    },
+    "result": {
+      "nodes": "nodes",
+      "edges": "edges",
+      "totalMatched": "total matched",
+      "nodeList": "Nodes",
+      "edgeList": "Edges",
+      "empty": "Query returned no results.",
+      "copyTitle": "Copy ID",
+      "fields": {
+        "id": "id",
+        "type": "type",
+        "label": "label",
+        "summary": "summary",
+        "tags": "tags",
+        "source": "source",
+        "target": "target",
+        "confidence": "confidence",
+        "provenance": "provenance"
+      }
+    }
+  },
+  "analysis": {
+    "tabs": {
+      "system": "System Info",
+      "evidence": "Evidence",
+      "registry": "Registry",
+      "browser": "Browser",
+      "email": "Email",
+      "eventlogs": "Event Logs",
+      "files": "Files",
+      "report": "Report"
+    },
+    "extraction": {
+      "Registry": "Registry Extraction",
+      "BrowserHistory": "Browser History Extraction",
+      "Email": "Email Extraction",
+      "EventLogs": "Event Log Extraction"
+    },
+    "loading": {
+      "case": "Loading case...",
+      "systemInfo": "Parsing Registry/EVTX system info...",
+      "evidence": "Discovering evidence categories...",
+      "registry": "Reading registry extraction results...",
+      "browser": "Reading browser history...",
+      "email": "Reading email messages...",
+      "eventLogs": "Reading event logs...",
+      "files": "Classifying files by metadata..."
+    }
+  },
+  "textViewer": {
+    "lineCount": "{{count}} lines",
+    "truncated": "Truncated",
+    "largeContentMode": "Large content: rows {{start}}-{{end}}, rendering {{rendered}} visible rows",
+    "searchPlaceholder": "Search...",
+    "status": {
+      "search": "Search: \"{{query}}\"",
+      "ready": "Ready"
+    }
+  },
+  "eventLog": {
+    "title": "Event Log Analysis",
+    "status": {
+      "parsed": "parsed",
+      "notFound": "notFound"
+    },
+    "stats": {
+      "total": "Total Events",
+      "boot": "Boot/Shutdown",
+      "logon": "Logon",
+      "process": "Process",
+      "application": "Application"
+    },
+    "tabs": {
+      "boot": "Boot/Shutdown",
+      "logon": "Logon Events",
+      "process": "Process Creation",
+      "account": "Account Management",
+      "application": "Application Events"
+    },
+    "columns": {
+      "timestamp": "Timestamp",
+      "eventId": "Event ID",
+      "kind": "Kind",
+      "provider": "Provider",
+      "recordId": "Record ID",
+      "sourcePath": "Source Log",
+      "targetUser": "User",
+      "logonType": "Logon Type",
+      "ipAddress": "IP Address",
+      "workstation": "Workstation",
+      "failureReason": "Failure Reason",
+      "processName": "Process",
+      "parentProcessName": "Parent Process",
+      "subjectUser": "User",
+      "subjectUserTarget": "Subject User",
+      "taskName": "Task Name",
+      "memberName": "Member Name",
+      "application": "Application",
+      "faultModule": "Fault Module",
+      "productName": "Product",
+      "manufacturer": "Manufacturer"
+    },
+    "empty": {
+      "boot": {
+        "title": "No boot/shutdown events",
+        "description": "System.evtx boot/shutdown candidates (6005, 6006, 6008, 1074)."
+      },
+      "logon": {
+        "title": "No logon events",
+        "description": "Security.evtx logon events (4624, 4625, 4648)."
+      },
+      "process": {
+        "title": "No process creation events",
+        "description": "Security.evtx process creation events (4688)."
+      },
+      "account": {
+        "title": "No account management events",
+        "description": "Security.evtx account/task events (4698, 4702, 4720, 4732)."
+      },
+      "application": {
+        "title": "No application events",
+        "description": "Application.evtx crash/install events (1000, 1001, 1002, 1033, 11707, 11708)."
       }
     }
   },

@@ -35,7 +35,7 @@ export function BottomDrawer() {
   const runningCount = runningJobs.length;
   const evidenceHashStatus = deriveEvidenceHashStatus(importSignals.partialResults, dataSources ?? []);
   const typedHeadline = importSignals.latestCancellation
-    ? `${importSignals.latestCancellation.safeToClose ? 'Safe To Close' : getCacheStateLabel(importSignals.latestCancellation.state)} · ${importSignals.latestCancellation.detail}`
+    ? `${importSignals.latestCancellation.safeToClose ? t('bottomDrawer.labels.safeToClose') : getCacheStateLabel(importSignals.latestCancellation.state)} · ${importSignals.latestCancellation.detail}`
     : importSignals.latestPhase
       ? `${getImportPhaseLabel(importSignals.latestPhase.phase)} ${importSignals.latestPhase.percent}% · ${importSignals.latestPhase.detail}`
       : undefined;
@@ -54,7 +54,7 @@ export function BottomDrawer() {
         <div className="flex items-center gap-4 min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             <Terminal size={12} className="text-forensics-muted-light" />
-            <span className="truncate">[JOBS] {headline}</span>
+            <span className="truncate">[{t('bottomDrawer.jobs.title')}] {headline}</span>
           </div>
           <div className="px-3 border-l border-forensics-border flex items-center gap-3 text-forensics-text-tertiary">
             <span>
@@ -85,7 +85,7 @@ export function BottomDrawer() {
         <div className="grid h-[calc(100%-2rem)] grid-cols-3 border-t border-forensics-border">
           <div className="overflow-auto border-r border-forensics-border p-3">
             <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-forensics-text-tertiary">
-              <span>JOBS</span>
+              <span>{t('bottomDrawer.jobs.title')}</span>
               <span className="font-mono text-forensics-muted-light">
                 {t('bottomDrawer.jobs.stats', {
                   running: runningCount,
@@ -105,7 +105,7 @@ export function BottomDrawer() {
                         {importSignals.latestPhase
                           ? `${getImportPhaseLabel(importSignals.latestPhase.phase)} · ${getImportPhaseStateLabel(importSignals.latestPhase.state)}`
                           : importSignals.latestCancellation
-                            ? `Cancellation · ${getCacheStateLabel(importSignals.latestCancellation.state)}`
+                            ? `${t('bottomDrawer.labels.cancellation')} · ${getCacheStateLabel(importSignals.latestCancellation.state)}`
                             : t('bottomDrawer.importSignals.waiting')}
                       </div>
                       <div className="mt-1 text-forensics-muted">
@@ -134,7 +134,7 @@ export function BottomDrawer() {
                     {importSignals.latestCancellation ? (
                       <DrawerChip
                         tone={importSignals.latestCancellation.safeToClose ? 'ready' : 'warning'}
-                        label={importSignals.latestCancellation.safeToClose ? 'Safe To Close' : getCacheStateLabel(importSignals.latestCancellation.state)}
+                        label={importSignals.latestCancellation.safeToClose ? t('bottomDrawer.labels.safeToClose') : getCacheStateLabel(importSignals.latestCancellation.state)}
                       />
                     ) : null}
                     {importSignals.partialResults.slice(0, 4).map((result) => (
@@ -149,19 +149,19 @@ export function BottomDrawer() {
                       <DrawerChip
                         key={status.cacheKey}
                         tone={status.state}
-                        label={cacheKeyLabel(status.cacheKey)}
+                        label={cacheKeyLabel(status.cacheKey, t)}
                         detail={getCacheStateLabel(status.state)}
                       />
                     ))}
                     {evidenceHashStatus ? (
                       <DrawerChip
                         tone={evidenceHashStatus}
-                        label={`Evidence Hash ${getEvidenceHashStatusLabel(evidenceHashStatus)}`}
+                        label={`${t('bottomDrawer.labels.evidenceHash')} ${getEvidenceHashStatusLabel(evidenceHashStatus)}`}
                       />
                     ) : null}
                   </div>
                   {evidenceHashStatus && evidenceHashStatus !== 'ready' ? (
-                    <div className="mt-2 border border-[#e7d9b4] bg-[#fff9ec] px-2 py-1.5 text-[#6f4d00]">
+                    <div className="mt-2 border border-forensics-warning-border bg-forensics-warning-bg px-2 py-1.5 text-forensics-warning-text">
                       {getEvidenceHashCaveatText(evidenceHashStatus)}
                     </div>
                   ) : null}
@@ -203,7 +203,7 @@ export function BottomDrawer() {
                               width: `${job.partitionProgress ?? 0}%`,
                               backgroundColor:
                                 (job.partitionProgress ?? 0) >= 100
-                                  ? '#22c55e'
+                                  ? 'var(--forensics-success)'
                                   : 'var(--forensics-700)',
                             }}
                           />
@@ -231,8 +231,8 @@ export function BottomDrawer() {
                     <span className="flex items-center gap-2">
                       {job.name}
                       {job.partial ? (
-                        <span className="border border-[#e7d9b4] bg-[#fff9ec] px-1.5 py-0.5 text-[9px] font-semibold text-[#8a5a00]">
-                          PARTIAL
+                        <span className="border border-forensics-warning-border bg-forensics-warning-bg px-1.5 py-0.5 text-[9px] font-semibold text-forensics-warning-text-strong">
+                          {t('bottomDrawer.labels.partial')}
                         </span>
                       ) : null}
                     </span>
@@ -256,14 +256,14 @@ export function BottomDrawer() {
           </div>
           <div className="overflow-auto border-r border-forensics-border p-3">
             <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-forensics-text-tertiary">
-              <span>WARNINGS</span>
+              <span>{t('bottomDrawer.warnings.title')}</span>
               <span className="font-mono text-forensics-muted-light">{warnings?.length ?? 0} {t('bottomDrawer.jobs.warnings')}</span>
             </div>
             <div className="space-y-2">
               {warnings?.map((warning) => (
-                <div key={warning.id} className="border border-[#e7d9b4] bg-forensics-surface p-3 text-[11px]">
+                <div key={warning.id} className="border border-forensics-warning-border bg-forensics-surface p-3 text-[11px]">
                   <div className="flex items-start gap-2 text-forensics-text">
-                    <AlertCircle size={12} className="mt-0.5 text-[#b7791f] shrink-0" />
+                    <AlertCircle size={12} className="mt-0.5 text-forensics-warning shrink-0" />
                     <div>
                       <div className="font-medium break-words">{warning.title}</div>
                       <div className="mt-1 text-forensics-muted line-clamp-2">{warning.detail}</div>
@@ -275,7 +275,7 @@ export function BottomDrawer() {
           </div>
           <div className="overflow-auto p-3">
             <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-forensics-text-tertiary">
-              <span>TRACE</span>
+              <span>{t('bottomDrawer.trace.title')}</span>
               <span className="font-mono text-forensics-muted-light">{t('bottomDrawer.trace.recentStream')}</span>
             </div>
             <div className="space-y-2 text-[11px]">
@@ -296,17 +296,17 @@ export function BottomDrawer() {
   );
 }
 
-function cacheKeyLabel(cacheKey: string) {
+function cacheKeyLabel(cacheKey: string, t: (key: string) => string) {
   if (cacheKey.startsWith('timeline:')) {
-    return 'Timeline Cache';
+    return t('bottomDrawer.labels.cache.timeline');
   }
 
   if (cacheKey.startsWith('artifacts:')) {
-    return 'Artifact Cache';
+    return t('bottomDrawer.labels.cache.artifacts');
   }
 
   if (cacheKey.startsWith('search:')) {
-    return 'Search Cache';
+    return t('bottomDrawer.labels.cache.search');
   }
 
   return cacheKey;
@@ -327,11 +327,11 @@ function getToneClass(tone: string) {
   switch (tone) {
     case 'ready':
     case 'reused':
-      return 'border-[#cfe3d3] bg-[#f4fbf5] text-[#245c2f]';
+      return 'border-forensics-success-border bg-forensics-success-bg text-forensics-success-text';
     case 'pending':
     case 'partial':
     case 'warming':
-      return 'border-[#dcd4b0] bg-[#fff9ec] text-[#7f5b00]';
+      return 'border-forensics-warning-border bg-forensics-warning-bg text-forensics-warning-text';
     case 'unavailable':
     case 'deferred':
     case 'draining':
@@ -342,13 +342,15 @@ function getToneClass(tone: string) {
     case 'cancelled':
       return 'border-red-200 bg-red-50 text-red-700';
     case 'warning':
-      return 'border-[#dcd4b0] bg-[#fff9ec] text-[#7f5b00]';
+      return 'border-forensics-warning-border bg-forensics-warning-bg text-forensics-warning-text';
     default:
       return 'border-forensics-350 bg-forensics-surface text-forensics-text-tertiary';
   }
 }
 
 function JobOutcomeBadges({ job }: { job: JobSnapshot }) {
+  const { t } = useTranslation();
+
   if (!job.partial && job.warningCount === 0 && job.skippedCount === 0 && job.failedCount === 0) {
     return null;
   }
@@ -356,18 +358,18 @@ function JobOutcomeBadges({ job }: { job: JobSnapshot }) {
   return (
     <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
       {job.partial ? (
-        <span className="border border-[#e7d9b4] bg-[#fff9ec] px-1.5 py-0.5 font-semibold text-[#8a5a00]">
-          PARTIAL
+        <span className="border border-forensics-warning-border bg-forensics-warning-bg px-1.5 py-0.5 font-semibold text-forensics-warning-text-strong">
+          {t('bottomDrawer.labels.partial')}
         </span>
       ) : null}
-      <span className="border border-[#e7d9b4] bg-forensics-surface px-1.5 py-0.5 text-[#6f4d00]">
-        warnings {job.warningCount}
+      <span className="border border-forensics-warning-border bg-forensics-surface px-1.5 py-0.5 text-forensics-warning-text">
+        {t('bottomDrawer.labels.warnings')} {job.warningCount}
       </span>
       <span className="border border-forensics-350 bg-forensics-surface px-1.5 py-0.5 text-forensics-text-tertiary">
-        skipped {job.skippedCount}
+        {t('bottomDrawer.labels.skipped')} {job.skippedCount}
       </span>
       <span className="border border-red-200 bg-forensics-surface px-1.5 py-0.5 text-red-700">
-        failed {job.failedCount}
+        {t('bottomDrawer.labels.failed')} {job.failedCount}
       </span>
     </div>
   );
