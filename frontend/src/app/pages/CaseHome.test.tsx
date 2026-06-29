@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { createElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CaseHome } from './CaseHome';
@@ -108,6 +108,12 @@ function renderPage() {
   );
 }
 
+async function renderPageAsync() {
+  const result = renderPage();
+  await act(async () => { await Promise.resolve(); });
+  return result;
+}
+
 describe('CaseHome page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -139,15 +145,15 @@ describe('CaseHome page', () => {
     });
   });
 
-  it('renders welcome screen when no case is open', () => {
-    renderPage();
+  it('renders welcome screen when no case is open', async () => {
+    await renderPageAsync();
 
     expect(screen.getByText('Forensics Workbench')).toBeDefined();
     expect(screen.getByText(/当前没有活动案件/)).toBeDefined();
   });
 
-  it('shows create case form', () => {
-    renderPage();
+  it('shows create case form', async () => {
+    await renderPageAsync();
 
     expect(screen.getByText('新建案件')).toBeDefined();
     expect(screen.getByPlaceholderText('案件父目录')).toBeDefined();
@@ -155,21 +161,21 @@ describe('CaseHome page', () => {
     expect(screen.getByText('创建案件')).toBeDefined();
   });
 
-  it('shows open case form', () => {
-    renderPage();
+  it('shows open case form', async () => {
+    await renderPageAsync();
 
     expect(screen.getByText('打开已有案件')).toBeDefined();
     expect(screen.getByPlaceholderText('案件路径')).toBeDefined();
     expect(screen.getByText('打开案件')).toBeDefined();
   });
 
-  it('shows recent cases section', () => {
-    renderPage();
+  it('shows recent cases section', async () => {
+    await renderPageAsync();
 
     expect(screen.getByText('最近打开案件')).toBeDefined();
   });
 
-  it('renders case dashboard when case is open', () => {
+  it('renders case dashboard when case is open', async () => {
     mocks.currentCase.mockReturnValue(mockQueryState({
       data: {
         id: 'case-001',
@@ -194,13 +200,13 @@ describe('CaseHome page', () => {
     mocks.jobsSnapshot.mockReturnValue(mockQueryState({ data: [] }));
     mocks.warnings.mockReturnValue(mockQueryState({ data: [] }));
 
-    renderPage();
+    await renderPageAsync();
 
     expect(screen.getByText('Test Case')).toBeDefined();
     expect(screen.getByText(/2026-001/)).toBeDefined();
   });
 
-  it('shows metric blocks when case is open', () => {
+  it('shows metric blocks when case is open', async () => {
     mocks.currentCase.mockReturnValue(mockQueryState({
       data: {
         id: 'case-001',
@@ -225,7 +231,7 @@ describe('CaseHome page', () => {
     mocks.jobsSnapshot.mockReturnValue(mockQueryState({ data: [] }));
     mocks.warnings.mockReturnValue(mockQueryState({ data: [] }));
 
-    renderPage();
+    await renderPageAsync();
 
     expect(screen.getAllByText('数据源').length).toBeGreaterThan(0);
     expect(screen.getAllByText('已索引文件').length).toBeGreaterThan(0);
@@ -233,7 +239,7 @@ describe('CaseHome page', () => {
     expect(screen.getAllByText('提取痕迹').length).toBeGreaterThan(0);
   });
 
-  it('shows data sources panel when case is open', () => {
+  it('shows data sources panel when case is open', async () => {
     mocks.currentCase.mockReturnValue(mockQueryState({
       data: {
         id: 'case-001',
@@ -253,12 +259,12 @@ describe('CaseHome page', () => {
     mocks.jobsSnapshot.mockReturnValue(mockQueryState({ data: [] }));
     mocks.warnings.mockReturnValue(mockQueryState({ data: [] }));
 
-    renderPage();
+    await renderPageAsync();
 
     expect(screen.getByText('已有数据源')).toBeDefined();
   });
 
-  it('formats partition names with the shared partition display formatter', () => {
+  it('formats partition names with the shared partition display formatter', async () => {
     mocks.currentCase.mockReturnValue(mockQueryState({
       data: {
         id: 'case-001',
@@ -318,14 +324,14 @@ describe('CaseHome page', () => {
     mocks.jobsSnapshot.mockReturnValue(mockQueryState({ data: [] }));
     mocks.warnings.mockReturnValue(mockQueryState({ data: [] }));
 
-    renderPage();
+    await renderPageAsync();
 
     expect(screen.getByText('分区1（FAT）')).toBeDefined();
     expect(screen.getByText('分区2（NTFS）')).toBeDefined();
     expect(screen.getByText('分区3（RECOVERY）')).toBeDefined();
   });
 
-  it('shows high value objects panel when case is open', () => {
+  it('shows high value objects panel when case is open', async () => {
     mocks.currentCase.mockReturnValue(mockQueryState({
       data: {
         id: 'case-001',
@@ -345,12 +351,12 @@ describe('CaseHome page', () => {
     mocks.jobsSnapshot.mockReturnValue(mockQueryState({ data: [] }));
     mocks.warnings.mockReturnValue(mockQueryState({ data: [] }));
 
-    renderPage();
+    await renderPageAsync();
 
     expect(screen.getByText('高价值对象')).toBeDefined();
   });
 
-  it('shows running job progress when jobs are running', () => {
+  it('shows running job progress when jobs are running', async () => {
     mocks.currentCase.mockReturnValue(mockQueryState({
       data: {
         id: 'case-001',
@@ -385,7 +391,7 @@ describe('CaseHome page', () => {
     }));
     mocks.warnings.mockReturnValue(mockQueryState({ data: [] }));
 
-    renderPage();
+    await renderPageAsync();
 
     // "导入数据源" may appear in both sidebar nav and job list — use getAllByText
     const matches = screen.getAllByText('导入数据源');

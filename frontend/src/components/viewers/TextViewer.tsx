@@ -208,6 +208,7 @@ export function TextViewer({
       {/* 文本内容 */}
       <div
         ref={containerRef}
+        data-testid="text-scroll-container"
         className="flex-1 overflow-auto bg-white"
         onScroll={handleScroll}
       >
@@ -244,6 +245,7 @@ export function TextViewer({
                 >
                   {/* 行号 */}
                   <div
+                    data-testid="text-line-number"
                     className="shrink-0 text-right text-[#999] select-none border-r border-[#eee] bg-[#fafafa] px-2"
                     style={{ width: `${lineNumberWidth}px` }}
                   >

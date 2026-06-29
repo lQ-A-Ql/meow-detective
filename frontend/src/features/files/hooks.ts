@@ -46,7 +46,7 @@ function createHexByteWindowLines(
   fileSize: number,
 ): HexByteWindowLines {
   const displayGateLines = lines.length > 0 || rawBytes.length === 0 ? lines : [''];
-  const byteWindow = [...displayGateLines] as HexByteWindowLines;
+  const byteWindow: HexByteWindowLines = Object.assign([], displayGateLines);
   byteWindow.rawBytes = rawBytes;
   byteWindow.baseOffset = baseOffset;
   byteWindow.fileSize = fileSize;

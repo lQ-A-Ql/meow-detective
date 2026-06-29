@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, renderHook, screen, waitFor } from '@testing-library/react';
+import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HexViewer } from '@/components/viewers/HexViewer';
 
@@ -295,7 +295,9 @@ describe('files hooks', () => {
       expect(result.current.data?.rawBytes).toEqual([0x41, 0x42, 0x43, 0x44]);
       expect(result.current.data?.baseOffset).toBe(0);
 
-      await result.current.jumpToOffset('0x10000');
+      await act(async () => {
+        result.current.jumpToOffset('0x10000');
+      });
 
       await waitFor(() => {
         expect(mocks.readFileRange).toHaveBeenNthCalledWith(2, {

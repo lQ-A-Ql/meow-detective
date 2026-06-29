@@ -95,11 +95,15 @@ function defaultPermissions(): McpPermissionProfile {
   };
 }
 
+function hasMessage(err: unknown): err is { message: unknown } {
+  return typeof err === 'object' && err !== null && 'message' in err;
+}
+
 function formatError(err: unknown): string {
   if (typeof err === 'string') return err;
   if (err instanceof Error) return err.message;
-  if (typeof err === 'object' && err !== null && 'message' in err) {
-    return String((err as { message: unknown }).message);
+  if (hasMessage(err)) {
+    return String(err.message);
   }
   return '未知错误';
 }

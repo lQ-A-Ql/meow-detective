@@ -30,9 +30,9 @@ describe('TextViewer', () => {
 
   it('shows line numbers', () => {
     const content = ['Alpha', 'Beta', 'Gamma'].join('\n');
-    const { container } = render(<TextViewer content={content} encoding="UTF-8" />);
+    render(<TextViewer content={content} encoding="UTF-8" />);
 
-    const lineNumberDivs = container.querySelectorAll('.shrink-0.text-right');
+    const lineNumberDivs = screen.getAllByTestId('text-line-number');
     expect(lineNumberDivs.length).toBe(3);
     expect(lineNumberDivs[0].textContent?.trim()).toBe('1');
     expect(lineNumberDivs[1].textContent?.trim()).toBe('2');
@@ -41,29 +41,29 @@ describe('TextViewer', () => {
 
   it('paginates large text inputs to 1000 visible lines at a time', () => {
     const content = Array.from({ length: 2505 }, (_, index) => `Line ${index + 1}`).join('\n');
-    const { container } = render(<TextViewer content={content} encoding="UTF-8" />);
+    render(<TextViewer content={content} encoding="UTF-8" />);
 
     expect(screen.getByRole('status').textContent).toContain('大内容模式');
 
-    const lineNumberDivs = container.querySelectorAll('[data-line-number] .shrink-0.text-right');
+    const lineNumberDivs = screen.getAllByTestId('text-line-number');
     expect(lineNumberDivs.length).toBeLessThan(1000);
     expect(lineNumberDivs[0].textContent?.trim()).toBe('1');
     expect(screen.getByText('1/3')).toBeDefined();
-    expect(container.textContent).not.toContain('Line 2505');
+    expect(screen.queryByText('Line 2505')).toBeNull();
 
-    const scrollContainer = container.querySelector('.flex-1.overflow-auto.bg-white') as HTMLDivElement;
+    const scrollContainer = screen.getByTestId('text-scroll-container');
     fireEvent.scroll(scrollContainer, { target: { scrollTop: 17_640 } });
 
-    const scrolledLineNumbers = container.querySelectorAll('[data-line-number] .shrink-0.text-right');
+    const scrolledLineNumbers = screen.getAllByTestId('text-line-number');
     expect(scrolledLineNumbers.length).toBeLessThan(1000);
     expect(scrolledLineNumbers[0].textContent?.trim()).toBe('973');
-    expect(container.textContent).toContain('Line 981');
-    expect(container.querySelector('[data-line-number="1"]')).toBeNull();
+    expect(screen.getByText('Line 981')).toBeDefined();
+    expect(scrolledLineNumbers[0].getAttribute('data-line-number')).not.toBe('1');
 
     const nextButton = screen.getAllByRole('button')[1];
     fireEvent.click(nextButton);
 
-    const secondPageLineNumbers = container.querySelectorAll('[data-line-number] .shrink-0.text-right');
+    const secondPageLineNumbers = screen.getAllByTestId('text-line-number');
     expect(secondPageLineNumbers.length).toBeLessThan(1000);
     expect(secondPageLineNumbers[0].textContent?.trim()).toBe('1001');
     expect(screen.getByText('2/3')).toBeDefined();

@@ -15,6 +15,8 @@ import {
 
 type EventLogTabKey = 'boot' | 'logon' | 'process' | 'account' | 'application';
 
+const TABS: EventLogTabKey[] = ['boot', 'logon', 'process', 'account', 'application'];
+
 const TAB_LABELS: Record<EventLogTabKey, string> = {
   boot: '开关机',
   logon: '登录事件',
@@ -181,7 +183,7 @@ export function EventLogPanel({
       <AnalysisExtractionProgress progress={progress} />
 
       <div className="mb-3 flex flex-wrap gap-1">
-        {(Object.keys(TAB_LABELS) as EventLogTabKey[]).map((tab) => (
+        {TABS.map((tab) => (
           <button
             key={tab}
             type="button"
