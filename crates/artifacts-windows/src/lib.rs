@@ -21,8 +21,11 @@ pub use evtx::capability::{
     SUPPORTED_EVENT_IDS, SUPPORTED_SOURCE_PATH_SUFFIX, SUPPORTED_SOURCE_PATH_SUFFIXES,
 };
 pub use evtx::parser::{
-    extract_boot_shutdown_events, extract_boot_shutdown_events_from_json_records, EvtxBootEvent,
-    EvtxBootEventKind, EvtxBootExtraction, MAX_EVTX_ANALYSIS_BYTES,
+    extract_boot_shutdown_events, extract_boot_shutdown_events_from_json_records,
+    extract_structured_events, extract_structured_events_from_json_records, EvtxApplicationEvent,
+    EvtxApplicationEventKind, EvtxBootEvent, EvtxBootEventKind, EvtxBootExtraction,
+    EvtxEventCategory, EvtxSecurityEvent, EvtxSecurityEventKind, EvtxStructuredExtraction,
+    MAX_EVTX_ANALYSIS_BYTES,
 };
 pub use jumplist::JumpListExtractor;
 pub use lnk::parser::LnkExtractor;

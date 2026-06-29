@@ -3,6 +3,7 @@ import { HardDrive, FolderOpen, Bot, ChevronDown, ChevronRight, Plus } from 'luc
 import { useMcpStore } from '@/stores/mcp-store';
 import {
   applyTheme,
+  defaultSettings,
   formatPathList,
   parsePathList,
   readLocalSettings,
@@ -57,6 +58,12 @@ export function Settings() {
           maxImportWorkers: remote.maxImportWorkers?.toString() ?? '',
           maxAnalysisWorkers: remote.maxAnalysisWorkers?.toString() ?? '',
           importAnalysisMode: remote.importAnalysisMode ?? 'metadataOnly',
+          hexChunkBytes: remote.hexChunkBytes?.toString() ?? defaultSettings.hexChunkBytes,
+          maxViewerRangeLength: remote.maxViewerRangeLength?.toString() ?? defaultSettings.maxViewerRangeLength,
+          maxInlineImagePreviewBytes:
+            remote.maxInlineImagePreviewBytes?.toString() ?? defaultSettings.maxInlineImagePreviewBytes,
+          maxInlineMediaPreviewBytes:
+            remote.maxInlineMediaPreviewBytes?.toString() ?? defaultSettings.maxInlineMediaPreviewBytes,
         }));
       })
       .catch(() => {
@@ -88,6 +95,19 @@ export function Settings() {
       setSettingsMessage('Worker 数必须为空或大于 0。');
       return;
     }
+    const hexChunkBytes = parseRequiredPositiveInt(settings.hexChunkBytes);
+    const maxViewerRangeLength = parseRequiredPositiveInt(settings.maxViewerRangeLength);
+    const maxInlineImagePreviewBytes = parseRequiredPositiveInt(settings.maxInlineImagePreviewBytes);
+    const maxInlineMediaPreviewBytes = parseRequiredPositiveInt(settings.maxInlineMediaPreviewBytes);
+    if (
+      hexChunkBytes === 0 ||
+      maxViewerRangeLength === 0 ||
+      maxInlineImagePreviewBytes === 0 ||
+      maxInlineMediaPreviewBytes === 0
+    ) {
+      setSettingsMessage('预览大小/块大小必须为正整数。');
+      return;
+    }
     setSavingSettings(true);
     setSettingsMessage('');
     try {
@@ -99,6 +119,10 @@ export function Settings() {
         maxImportWorkers,
         maxAnalysisWorkers,
         importAnalysisMode: settings.importAnalysisMode,
+        hexChunkBytes,
+        maxViewerRangeLength,
+        maxInlineImagePreviewBytes,
+        maxInlineMediaPreviewBytes,
       });
       const normalized = writeLocalSettings({
         caseRoot: saved.caseRoot,
@@ -108,6 +132,12 @@ export function Settings() {
         maxImportWorkers: saved.maxImportWorkers?.toString() ?? '',
         maxAnalysisWorkers: saved.maxAnalysisWorkers?.toString() ?? '',
         importAnalysisMode: saved.importAnalysisMode ?? 'metadataOnly',
+        hexChunkBytes: saved.hexChunkBytes?.toString() ?? defaultSettings.hexChunkBytes,
+        maxViewerRangeLength: saved.maxViewerRangeLength?.toString() ?? defaultSettings.maxViewerRangeLength,
+        maxInlineImagePreviewBytes:
+          saved.maxInlineImagePreviewBytes?.toString() ?? defaultSettings.maxInlineImagePreviewBytes,
+        maxInlineMediaPreviewBytes:
+          saved.maxInlineMediaPreviewBytes?.toString() ?? defaultSettings.maxInlineMediaPreviewBytes,
       });
       setSettings(normalized);
       setSettingsMessage('设置已保存。');
@@ -230,6 +260,74 @@ export function Settings() {
               E01/RAW 默认只做元数据与时间线；内容读取和全文索引需显式开启预算模式。
             </span>
           </label>
+        </section>
+
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-[13px] font-semibold text-[#333]">预览</span>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="block border border-[#e0e0e0] bg-[#f8f8f8] p-3">
+              <span className="block text-[11px] font-semibold text-[#555]">Hex 分块大小（字节）</span>
+              <input
+                value={settings.hexChunkBytes}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    hexChunkBytes: event.target.value,
+                  }))
+                }
+                inputMode="numeric"
+                className="mt-2 w-full border border-[#ccc] bg-white px-2 py-1 font-mono text-[12px]"
+              />
+              <span className="mt-1 block text-[10px] text-[#999]">十六进制查看器每次读取字节数。</span>
+            </label>
+            <label className="block border border-[#e0e0e0] bg-[#f8f8f8] p-3">
+              <span className="block text-[11px] font-semibold text-[#555]">单请求最大范围（字节）</span>
+              <input
+                value={settings.maxViewerRangeLength}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    maxViewerRangeLength: event.target.value,
+                  }))
+                }
+                inputMode="numeric"
+                className="mt-2 w-full border border-[#ccc] bg-white px-2 py-1 font-mono text-[12px]"
+              />
+              <span className="mt-1 block text-[10px] text-[#999]">文件预览单次请求返回上限。</span>
+            </label>
+            <label className="block border border-[#e0e0e0] bg-[#f8f8f8] p-3">
+              <span className="block text-[11px] font-semibold text-[#555]">内联图片预览上限（字节）</span>
+              <input
+                value={settings.maxInlineImagePreviewBytes}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    maxInlineImagePreviewBytes: event.target.value,
+                  }))
+                }
+                inputMode="numeric"
+                className="mt-2 w-full border border-[#ccc] bg-white px-2 py-1 font-mono text-[12px]"
+              />
+              <span className="mt-1 block text-[10px] text-[#999]">超过此大小的图片将不直接内联显示。</span>
+            </label>
+            <label className="block border border-[#e0e0e0] bg-[#f8f8f8] p-3">
+              <span className="block text-[11px] font-semibold text-[#555]">内联媒体预览上限（字节）</span>
+              <input
+                value={settings.maxInlineMediaPreviewBytes}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    maxInlineMediaPreviewBytes: event.target.value,
+                  }))
+                }
+                inputMode="numeric"
+                className="mt-2 w-full border border-[#ccc] bg-white px-2 py-1 font-mono text-[12px]"
+              />
+              <span className="mt-1 block text-[10px] text-[#999]">超过此大小的媒体将不直接内联显示。</span>
+            </label>
+          </div>
         </section>
 
         <section>
@@ -408,6 +506,18 @@ function parseOptionalPositiveInt(value: string): number | undefined {
   const trimmed = value.trim();
   if (!trimmed) {
     return undefined;
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return 0;
+  }
+  return parsed;
+}
+
+function parseRequiredPositiveInt(value: string): number {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return 0;
   }
   const parsed = Number(trimmed);
   if (!Number.isInteger(parsed) || parsed <= 0) {

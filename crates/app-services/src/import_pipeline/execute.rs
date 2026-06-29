@@ -800,7 +800,7 @@ pub fn execute_import_job_with_counts(
             .into_iter()
             .find(|source| source.id == ds.id.0)
         {
-            Some(summary) => emit::emit_data_source_imported(app, &summary, &job_id.0),
+            Some(summary) => emit::emit_data_source_imported(app, &case_id.0, &summary, &job_id.0),
             None => tracing::warn!(
                 "Imported data source {} was not found in summary list for event emission",
                 ds.id.0

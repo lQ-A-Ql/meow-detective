@@ -3,7 +3,8 @@ use persistence_sqlite::DbResult;
 use rusqlite::Connection;
 use std::path::Path;
 
-#[allow(dead_code)]
+/// Staging SQLite cache size in KiB (used by staging tests).
+#[cfg(test)]
 pub(super) const STAGING_CACHE_SIZE_KIB: i64 = 16 * 1024;
 
 pub fn open_partition_staging(

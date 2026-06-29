@@ -15,7 +15,9 @@ use rusqlite::{params, Connection};
 use serde_json::Value;
 use std::io::Write;
 
-use super::chromium::{BrowserCookie, BrowserDownload, BrowserSessionTab, BrowserVisit};
+use super::chromium::{
+    BrowserCookie, BrowserDownload, BrowserPassword, BrowserSessionTab, BrowserVisit,
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -485,6 +487,74 @@ pub fn parse_firefox_cookies(data: &[u8]) -> Result<Vec<BrowserCookie>, String> 
                 tracing::warn!("skipping firefox cookie row: {}", e);
             }
         }
+    }
+
+    Ok(results)
+}
+
+// ---------------------------------------------------------------------------
+// 5.  Passwords parser (logins.json)
+// ---------------------------------------------------------------------------
+
+/// Parse Firefox saved passwords from `logins.json`.
+///
+/// The `encryptedUsername`/`encryptedPassword` fields are encrypted by Firefox's
+/// internal key store; this parser extracts only metadata and never decrypts.
+pub fn parse_firefox_passwords(data: &[u8]) -> Result<Vec<BrowserPassword>, String> {
+    let text =
+        std::str::from_utf8(data).map_err(|e| format!("logins.json is not valid UTF-8: {}", e))?;
+
+    let root: Value =
+        serde_json::from_str(text).map_err(|e| format!("logins.json parse error: {}", e))?;
+
+    let logins = match root.get("logins") {
+        Some(Value::Array(arr)) => arr,
+        _ => return Ok(Vec::new()),
+    };
+
+    let mut results = Vec::new();
+    for entry in logins {
+        let hostname = entry
+            .get("hostname")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let username = entry
+            .get("encryptedUsername")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let password = entry
+            .get("encryptedPassword")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let created_at = entry
+            .get("timeCreated")
+            .and_then(|v| v.as_i64())
+            .and_then(unix_millis_to_dt);
+        let times_used = entry
+            .get("timesUsed")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0)
+            .max(0);
+
+        let password_preview = if password.is_empty() {
+            None
+        } else {
+            Some(format!("[encrypted {} bytes]", password.len()))
+        };
+
+        results.push(BrowserPassword {
+            url: hostname,
+            username,
+            password_preview,
+            created_at,
+            times_used,
+            browser: "Firefox".to_string(),
+            profile: None,
+        });
     }
 
     Ok(results)

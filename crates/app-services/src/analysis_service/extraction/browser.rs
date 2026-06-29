@@ -6,7 +6,11 @@ use crate::analysis_service::candidates::{
     is_browser_history_path, normalize_evidence_path, EvidenceCandidate,
 };
 use crate::analysis_service::error::AnalysisServiceError;
-use artifacts_windows::BrowserProfile;
+use artifacts_windows::browser::{
+    parse_chrome_cookies, parse_chrome_passwords, parse_chrome_session, parse_firefox_cookies,
+    parse_firefox_passwords, parse_firefox_session, BrowserCookie, BrowserPassword,
+    BrowserSessionTab,
+};
 use chrono::{DateTime, TimeZone, Utc};
 use domain::{Artifact, TimelineEvent};
 use rusqlite::{Connection, OpenFlags};
@@ -103,16 +107,6 @@ fn capitalise_words(input: &str) -> String {
     result
 }
 
-/// Auto-detect browser profiles from a set of evidence candidate paths.
-///
-/// This calls into the `artifacts-windows` profile detection logic and
-/// returns a list of discovered `BrowserProfile` values.  Callers can
-/// use this to pre-populate profile maps before per-file extraction.
-#[allow(dead_code)]
-pub fn detect_profiles_from_candidates(candidate_paths: &[String]) -> Vec<BrowserProfile> {
-    artifacts_windows::detect_browser_profiles(candidate_paths)
-}
-
 fn chromium_time_to_dt(value: i64) -> Option<DateTime<Utc>> {
     if value <= 0 {
         return None;
@@ -138,20 +132,28 @@ pub(super) fn extract_browser_candidate(
     if !is_browser_history_path(&normalized) {
         return ExtractionOutcome {
             warnings: vec![format!(
-                "{} is not a browser history database",
+                "{} is not a recognized browser artifact",
                 candidate.path
             )],
             ..ExtractionOutcome::default()
         };
     }
     let (browser, profile) = browser_profile_from_path(&normalized);
-    let parse_result = with_temp_sqlite(bytes, "browser-history", |db| {
-        if normalized.ends_with("/places.sqlite") {
+    let parse_result = if normalized.ends_with("/places.sqlite") {
+        with_temp_sqlite(bytes, "browser-history", |db| {
             extract_firefox_history(db, candidate, &browser, &profile)
-        } else {
+        })
+    } else if normalized.ends_with("/history") || normalized.ends_with("/archived history") {
+        with_temp_sqlite(bytes, "browser-history", |db| {
             extract_chromium_history(db, candidate, &browser, &profile)
-        }
-    });
+        })
+    } else if normalized.ends_with("/cookies") || normalized.ends_with("/cookies.sqlite") {
+        extract_browser_cookies(candidate, bytes, &browser, &profile)
+    } else if normalized.ends_with("/login data") || normalized.ends_with("/logins.json") {
+        extract_browser_passwords(candidate, bytes, &browser, &profile)
+    } else {
+        extract_browser_sessions(candidate, bytes, &browser, &profile)
+    };
     match parse_result {
         Ok(outcome) => outcome,
         Err(err) => ExtractionOutcome {
@@ -377,6 +379,140 @@ fn extract_firefox_history(
             "BrowserHistory",
             format!("{} visit: {}", browser, title_or_url(&title, &url)),
             url,
+            candidate,
+            "browser.history",
+            attrs,
+        ));
+    }
+    Ok(outcome)
+}
+
+fn extract_browser_cookies(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    browser: &str,
+    profile: &str,
+) -> Result<ExtractionOutcome, AnalysisServiceError> {
+    let mut outcome = ExtractionOutcome::default();
+    let cookies: Vec<BrowserCookie> = if browser == "Firefox" {
+        parse_firefox_cookies(bytes).unwrap_or_default()
+    } else {
+        parse_chrome_cookies(bytes, browser, Some(profile)).unwrap_or_default()
+    };
+    for cookie in cookies {
+        let mut attrs = browser_attrs(candidate, browser, profile);
+        attrs.insert("domain".to_string(), Value::String(cookie.domain.clone()));
+        attrs.insert("name".to_string(), Value::String(cookie.name.clone()));
+        if let Some(preview) = &cookie.value_preview {
+            attrs.insert("valuePreview".to_string(), Value::String(preview.clone()));
+        }
+        if let Some(expiry) = cookie.expiry {
+            attrs.insert("expiry".to_string(), Value::String(expiry.to_rfc3339()));
+        }
+        attrs.insert("secure".to_string(), Value::Bool(cookie.secure));
+        attrs.insert("httpOnly".to_string(), Value::Bool(cookie.http_only));
+        if let Some(same_site) = cookie.same_site {
+            attrs.insert("sameSite".to_string(), Value::Number(same_site.into()));
+        }
+        outcome.artifacts.push(make_artifact(
+            "BrowserCookie",
+            format!("{} cookie: {}@{}", browser, cookie.name, cookie.domain),
+            cookie.domain.clone(),
+            candidate,
+            "browser.history",
+            attrs,
+        ));
+    }
+    Ok(outcome)
+}
+
+fn extract_browser_passwords(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    browser: &str,
+    profile: &str,
+) -> Result<ExtractionOutcome, AnalysisServiceError> {
+    let mut outcome = ExtractionOutcome::default();
+    let passwords: Vec<BrowserPassword> = if browser == "Firefox" {
+        parse_firefox_passwords(bytes).unwrap_or_default()
+    } else {
+        parse_chrome_passwords(bytes, browser, Some(profile)).unwrap_or_default()
+    };
+    for password in passwords {
+        let mut attrs = browser_attrs(candidate, browser, profile);
+        attrs.insert("url".to_string(), Value::String(password.url.clone()));
+        attrs.insert(
+            "username".to_string(),
+            Value::String(password.username.clone()),
+        );
+        if let Some(preview) = &password.password_preview {
+            attrs.insert(
+                "passwordPreview".to_string(),
+                Value::String(preview.clone()),
+            );
+        }
+        if let Some(created_at) = password.created_at {
+            attrs.insert(
+                "createdAt".to_string(),
+                Value::String(created_at.to_rfc3339()),
+            );
+        }
+        attrs.insert(
+            "timesUsed".to_string(),
+            Value::Number(serde_json::Number::from(password.times_used)),
+        );
+        outcome.artifacts.push(make_artifact(
+            "BrowserPassword",
+            format!("{} password: {}", browser, password.url),
+            password.url.clone(),
+            candidate,
+            "browser.history",
+            attrs,
+        ));
+    }
+    Ok(outcome)
+}
+
+fn extract_browser_sessions(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    browser: &str,
+    profile: &str,
+) -> Result<ExtractionOutcome, AnalysisServiceError> {
+    let mut outcome = ExtractionOutcome::default();
+    let sessions: Vec<BrowserSessionTab> = if browser == "Firefox" {
+        parse_firefox_session(bytes).unwrap_or_default()
+    } else {
+        parse_chrome_session(bytes).unwrap_or_default()
+    };
+    for session in sessions {
+        let mut attrs = browser_attrs(candidate, browser, profile);
+        attrs.insert("url".to_string(), Value::String(session.url.clone()));
+        if let Some(title) = &session.title {
+            attrs.insert("title".to_string(), Value::String(title.clone()));
+        }
+        attrs.insert(
+            "windowIndex".to_string(),
+            Value::Number(session.window_index.into()),
+        );
+        attrs.insert(
+            "tabIndex".to_string(),
+            Value::Number(session.tab_index.into()),
+        );
+        if let Some(last_active) = session.last_active {
+            attrs.insert(
+                "lastActive".to_string(),
+                Value::String(last_active.to_rfc3339()),
+            );
+        }
+        outcome.artifacts.push(make_artifact(
+            "BrowserSessionTab",
+            format!(
+                "{} session: {}",
+                browser,
+                session.title.as_deref().unwrap_or(&session.url)
+            ),
+            session.url.clone(),
             candidate,
             "browser.history",
             attrs,

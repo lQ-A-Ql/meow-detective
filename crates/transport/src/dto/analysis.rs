@@ -3,14 +3,17 @@ pub use crate::dto::analysis_base::{
     AnalysisProvenanceDto,
 };
 pub use crate::dto::analysis_browser::{
-    BrowserCookieDto, BrowserDownloadDto, BrowserHistorySummaryDto, BrowserSessionTabDto,
-    BrowserVisitDto,
+    BrowserCookieDto, BrowserDownloadDto, BrowserHistorySummaryDto, BrowserPasswordDto,
+    BrowserSessionTabDto, BrowserVisitDto,
 };
 pub use crate::dto::analysis_classification::{
     AnalysisClassifiedFileDto, AnalysisFileClassificationDto, EvidenceCategoryDto,
     EvidenceClassificationSummaryDto, EvidenceClassificationTotalsDto, EvidenceSourceDto,
 };
 pub use crate::dto::analysis_email::{EmailExtractionSummaryDto, EmailMessageDto};
+pub use crate::dto::analysis_evtx::{
+    EvtxApplicationEventDto, EvtxBootEventDto, EvtxEventSummaryDto, EvtxSecurityEventDto,
+};
 pub use crate::dto::analysis_registry::{
     AmcacheApplicationDto, AmcacheApplicationFileDto, AppCompatLayerDto, CachedCredentialDto,
     InstalledSoftwareDto, LastVisitedMruEntryDto, LsaPackageDto, LsaSecretDto, MountedDeviceDto,

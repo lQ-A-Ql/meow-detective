@@ -411,6 +411,23 @@ impl ExfatReader {
 
         self.read_entry_range(cluster, size, no_fat_chain, offset, length)
     }
+
+    /// Open a file and return a seekable in-memory cursor.
+    fn open_file_cursor(&self, path: &str) -> io::Result<io::Cursor<Vec<u8>>> {
+        let (cluster, is_dir, size, no_fat_chain) = self
+            .resolve_path(path)?
+            .ok_or_else(|| file_not_found(path))?;
+
+        if is_dir {
+            return Err(path_is_directory(path));
+        }
+
+        let data = truncate_data_to_declared_size(
+            self.read_entry_data(cluster, size, no_fat_chain)?,
+            size,
+        );
+        Ok(io::Cursor::new(data))
+    }
 }
 
 impl FileSystemReader for ExfatReader {
@@ -457,20 +474,11 @@ impl FileSystemReader for ExfatReader {
     }
 
     fn open_file(&self, path: &str) -> io::Result<Box<dyn Read>> {
-        let (cluster, is_dir, size, no_fat_chain) = self
-            .resolve_path(path)?
-            .ok_or_else(|| file_not_found(path))?;
+        Ok(Box::new(self.open_file_cursor(path)?))
+    }
 
-        if is_dir {
-            return Err(path_is_directory(path));
-        }
-
-        let data = truncate_data_to_declared_size(
-            self.read_entry_data(cluster, size, no_fat_chain)?,
-            size,
-        );
-
-        Ok(Box::new(io::Cursor::new(data)))
+    fn open_file_seekable(&self, path: &str) -> io::Result<Box<dyn evidence_core::ReadSeek>> {
+        Ok(Box::new(self.open_file_cursor(path)?))
     }
 
     fn data_source_name(&self) -> &str {
@@ -485,12 +493,14 @@ mod tests {
     use std::io::{Read, Seek};
     use std::sync::{Arc, Mutex};
 
+    type ReadLog = Arc<Mutex<Vec<(u64, usize)>>>;
+
     /// A fake reader that wraps a byte vector for testing.
     struct FakeReader {
         data: Vec<u8>,
         pos: u64,
         info: evidence_core::ReaderInfo,
-        reads: Option<Arc<Mutex<Vec<(u64, usize)>>>>,
+        reads: Option<ReadLog>,
     }
 
     impl FakeReader {
@@ -507,7 +517,7 @@ mod tests {
             }
         }
 
-        fn with_read_log(data: Vec<u8>, reads: Arc<Mutex<Vec<(u64, usize)>>>) -> Self {
+        fn with_read_log(data: Vec<u8>, reads: ReadLog) -> Self {
             Self {
                 data,
                 pos: 0,

@@ -16,12 +16,9 @@ const RUN_LVL: i32 = 1;
 const BOOT_TIME: i32 = 2;
 const _NEW_TIME: i32 = 3;
 const _OLD_TIME: i32 = 4;
-// Format constant — documents on-disk binary layout
-#[allow(dead_code)]
-const INIT_PROCESS: i32 = 5;
-// Format constant — documents on-disk binary layout
-#[allow(dead_code)]
-const LOGIN_PROCESS: i32 = 6;
+// Format constants — documents on-disk utmp record types.
+const _INIT_PROCESS: i32 = 5;
+const _LOGIN_PROCESS: i32 = 6;
 const USER_PROCESS: i32 = 7;
 const DEAD_PROCESS: i32 = 8;
 const _ACCOUNTING: i32 = 9;

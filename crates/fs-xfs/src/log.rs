@@ -52,17 +52,16 @@ pub const XLOG_ITEM_QUOTAOFF: u16 = 0x1238;
 pub const XLOG_ITEM_BUF_CANCEL: u16 = 0x1239;
 
 /// Log record header offsets.
-#[allow(dead_code)]
 mod lh_off {
     pub const MAGIC: usize = 0; // u16
     pub const CYCLE: usize = 2; // u16
     pub const VERSION: usize = 4; // u16
     pub const LEN: usize = 6; // u16
-    pub const TAIL_LSN_CYCLE: usize = 8; // u16
-    pub const TAIL_LSN_BLOCK: usize = 10; // u16
-    pub const CRC: usize = 12; // u32
-    pub const PREV_CYCLE: usize = 16; // u16
-    pub const PREV_BLOCK: usize = 18; // u16
+    pub const _TAIL_LSN_CYCLE: usize = 8; // u16
+    pub const _TAIL_LSN_BLOCK: usize = 10; // u16
+    pub const _CRC: usize = 12; // u32
+    pub const _PREV_CYCLE: usize = 16; // u16
+    pub const _PREV_BLOCK: usize = 18; // u16
 }
 
 // ---------------------------------------------------------------------------
@@ -120,8 +119,8 @@ pub struct XfsLogEntry {
 #[derive(Debug, Clone)]
 struct LoggedInodeCore {
     ino: u64,
-    #[allow(dead_code)]
-    mode: u16,
+    /// Inode mode (parsed for format completeness).
+    _mode: u16,
     size: u64,
     /// Number of extents declared when the log entry was written.
     nextents: u32,
@@ -479,7 +478,7 @@ fn parse_inode_fields(data: &[u8], base: usize) -> LoggedInodeCore {
 
     LoggedInodeCore {
         ino,
-        mode,
+        _mode: mode,
         size,
         nextents,
         format,
@@ -596,16 +595,6 @@ mod tests {
             data[c + 0x10..c + 0x12].copy_from_slice(&(nlink as u16).to_be_bytes());
         }
 
-        data
-    }
-
-    /// Build a BUF_ITEM payload with recognizable content.
-    #[allow(dead_code)]
-    fn build_buf_item_payload(content: &[u8]) -> Vec<u8> {
-        let mut data = vec![0u8; 4 + 512];
-        data[0..2].copy_from_slice(&XLOG_ITEM_BUF.to_be_bytes());
-        data[2..4].copy_from_slice(&((content.len() as u16) + 4u16).to_be_bytes());
-        data[4..4 + content.len()].copy_from_slice(content);
         data
     }
 

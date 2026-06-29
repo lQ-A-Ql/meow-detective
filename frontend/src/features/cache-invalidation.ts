@@ -95,7 +95,7 @@ export function invalidateEventProjectionQueries(queryClient: QueryInvalidator, 
     case 'artifact-added':
       invalidateProjectionKeys(queryClient, ['artifacts', 'timeline']);
       return;
-    case 'search-index_progress':
+    case 'search-index-progress':
       invalidateProjectionKeys(queryClient, ['search']);
       return;
     case 'case-opened':

@@ -309,7 +309,7 @@ fn evtx_json_records_fail_closed_for_unsupported_log_path() {
                 }
             }
         })],
-        "Windows/System32/winevt/Logs/UnknownChannel.evtx",
+        "Windows/Temp/UnknownChannel.evtx",
     );
 
     assert!(result.is_err());
@@ -321,10 +321,7 @@ fn evtx_json_records_fail_closed_for_unsupported_log_path() {
 
 #[test]
 fn evtx_binary_parser_fail_closed_for_unsupported_log_path() {
-    let result = extract_boot_shutdown_events(
-        b"ElfFile\0",
-        "Windows/System32/winevt/Logs/UnknownChannel.evtx",
-    );
+    let result = extract_boot_shutdown_events(b"ElfFile\0", "Windows/Temp/UnknownChannel.evtx");
 
     assert!(result.is_err());
     assert!(result

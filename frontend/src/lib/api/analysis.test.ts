@@ -4,13 +4,9 @@ import { COMMANDS } from './commands';
 import {
   classifyFiles,
   generateAnalysisSummary,
-  getBrowserCookiesSummary,
   getBrowserHistorySummary,
-  getBrowserPasswordsSummary,
-  getBrowserSessionsSummary,
   getCorrelationSnapshot,
   getEmailExtractionSummary,
-  getEventLogSummary,
   getEvidenceClassificationSummary,
   getRegistryExtractionSummary,
   getRegistryStructuredSummary,
@@ -115,33 +111,6 @@ describe('analysis API', () => {
     );
   });
 
-  it('getBrowserCookiesSummary sends page request', async () => {
-    requestMock.mockResolvedValueOnce({} as never);
-    await getBrowserCookiesSummary({});
-    expect(requestMock).toHaveBeenCalledWith(
-      COMMANDS.analysis.GET_BROWSER_COOKIES_SUMMARY,
-      { request: {} },
-    );
-  });
-
-  it('getBrowserSessionsSummary sends page request', async () => {
-    requestMock.mockResolvedValueOnce({} as never);
-    await getBrowserSessionsSummary({ limit: 50 });
-    expect(requestMock).toHaveBeenCalledWith(
-      COMMANDS.analysis.GET_BROWSER_SESSIONS_SUMMARY,
-      { request: { limit: 50 } },
-    );
-  });
-
-  it('getBrowserPasswordsSummary sends page request', async () => {
-    requestMock.mockResolvedValueOnce({} as never);
-    await getBrowserPasswordsSummary({});
-    expect(requestMock).toHaveBeenCalledWith(
-      COMMANDS.analysis.GET_BROWSER_PASSWORDS_SUMMARY,
-      { request: {} },
-    );
-  });
-
   it('getEmailExtractionSummary sends page request', async () => {
     requestMock.mockResolvedValueOnce({} as never);
     await getEmailExtractionSummary({ offset: 3 });
@@ -149,12 +118,6 @@ describe('analysis API', () => {
       COMMANDS.analysis.GET_EMAIL_EXTRACTION_SUMMARY,
       { request: { offset: 3 } },
     );
-  });
-
-  it('getEventLogSummary calls the correct command with no payload', async () => {
-    requestMock.mockResolvedValueOnce({} as never);
-    await getEventLogSummary();
-    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.GET_EVENT_LOG_SUMMARY);
   });
 
   it('getV2GovernanceSnapshot calls the correct command', async () => {

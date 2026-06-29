@@ -33,8 +33,6 @@ pub struct Ext4Reader {
     reader: RefCell<Box<dyn EvidenceReader>>,
     block_size: u64,
     inode_size: u16,
-    #[allow(dead_code)]
-    blocks_per_group: u32,
     inodes_per_group: u32,
     bg_desc_table_block: u64,
     num_block_groups: u32,
@@ -95,7 +93,6 @@ impl Ext4Reader {
             reader: RefCell::new(reader),
             block_size,
             inode_size: if s_inode_size == 0 { 128 } else { s_inode_size },
-            blocks_per_group: s_blocks_per_group,
             inodes_per_group: s_inodes_per_group,
             bg_desc_table_block,
             num_block_groups,
@@ -415,8 +412,8 @@ impl Ext4ExtentHeader {
 
 #[derive(Debug)]
 struct Ext4Extent {
-    #[allow(dead_code)]
-    ee_block: u32,
+    /// Logical block offset of this extent (parsed for format completeness).
+    _ee_block: u32,
     ee_len: u16,
     ee_start_hi: u16,
     ee_start_lo: u32,
@@ -425,7 +422,7 @@ struct Ext4Extent {
 impl Ext4Extent {
     fn parse(data: &[u8]) -> io::Result<Self> {
         Ok(Self {
-            ee_block: u32::from_le_bytes(
+            _ee_block: u32::from_le_bytes(
                 data[0..4]
                     .try_into()
                     .map_err(|_| invalid_fs_data("disk parse error"))?,

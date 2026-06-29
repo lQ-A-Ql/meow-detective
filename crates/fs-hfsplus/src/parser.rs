@@ -146,12 +146,10 @@ pub(crate) struct CatalogRecord {
     pub(crate) create_date: u32,
     pub(crate) content_mod_date: u32,
     pub(crate) access_date: u32,
-    // Parsed for format completeness; available for future use.
-    #[allow(dead_code)]
-    pub(crate) file_mode: u16,
-    // Parsed for format completeness; available for future use.
-    #[allow(dead_code)]
-    pub(crate) special: u32,
+    /// BSD file mode (parsed for format completeness).
+    pub(crate) _file_mode: u16,
+    /// BSD special device ID (parsed for format completeness).
+    pub(crate) _special: u32,
 }
 
 /// Parse a single B-tree record (key + data) into a CatalogRecord.
@@ -188,8 +186,8 @@ pub(crate) fn parse_catalog_record(
             let create_date = read_u32_be(data, FOLDER_CREATE_DATE);
             let content_mod_date = read_u32_be(data, FOLDER_CONTENT_MOD_DATE);
             let access_date = read_u32_be(data, FOLDER_ACCESS_DATE);
-            let file_mode = read_u16_be(data, FOLDER_PERMISSIONS + BSDINFO_FILE_MODE);
-            let special = read_u32_be(data, FOLDER_PERMISSIONS + BSDINFO_SPECIAL);
+            let _file_mode = read_u16_be(data, FOLDER_PERMISSIONS + BSDINFO_FILE_MODE);
+            let _special = read_u32_be(data, FOLDER_PERMISSIONS + BSDINFO_SPECIAL);
             Ok(Some(CatalogRecord {
                 name,
                 cnid,
@@ -199,8 +197,8 @@ pub(crate) fn parse_catalog_record(
                 create_date,
                 content_mod_date,
                 access_date,
-                file_mode,
-                special,
+                _file_mode,
+                _special,
             }))
         }
         RECORD_TYPE_FILE => {
@@ -212,8 +210,8 @@ pub(crate) fn parse_catalog_record(
             let create_date = read_u32_be(data, FILE_CREATE_DATE);
             let content_mod_date = read_u32_be(data, FILE_CONTENT_MOD_DATE);
             let access_date = read_u32_be(data, FILE_ACCESS_DATE);
-            let file_mode = read_u16_be(data, FILE_PERMISSIONS + BSDINFO_FILE_MODE);
-            let special = read_u32_be(data, FILE_PERMISSIONS + BSDINFO_SPECIAL);
+            let _file_mode = read_u16_be(data, FILE_PERMISSIONS + BSDINFO_FILE_MODE);
+            let _special = read_u32_be(data, FILE_PERMISSIONS + BSDINFO_SPECIAL);
             let data_fork = HfsForkData::from_bytes(data, FILE_DATA_FORK);
             let logical_size = data_fork.logical_size;
             Ok(Some(CatalogRecord {
@@ -225,8 +223,8 @@ pub(crate) fn parse_catalog_record(
                 create_date,
                 content_mod_date,
                 access_date,
-                file_mode,
-                special,
+                _file_mode,
+                _special,
             }))
         }
         _ => {
@@ -243,16 +241,13 @@ pub(crate) fn parse_catalog_record(
 /// Minimal B-tree node descriptor.
 #[derive(Debug)]
 pub(crate) struct BtNodeDesc {
-    // Parsed for format completeness; available for future use.
-    #[allow(dead_code)]
-    pub(crate) f_link: u32,
-    // Parsed for format completeness; available for future use.
-    #[allow(dead_code)]
-    pub(crate) b_link: u32,
+    /// Forward link to next B-tree node (parsed for format completeness).
+    pub(crate) _f_link: u32,
+    /// Backward link to previous B-tree node (parsed for format completeness).
+    pub(crate) _b_link: u32,
     pub(crate) kind: u8,
-    // Parsed for format completeness; available for future use.
-    #[allow(dead_code)]
-    pub(crate) height: u8,
+    /// Height of this node in the B-tree (parsed for format completeness).
+    pub(crate) _height: u8,
     pub(crate) num_records: u16,
     /// Offset from start of node data to the first record offset slot.
     pub(crate) record_offsets_start: usize,
@@ -264,10 +259,10 @@ impl BtNodeDesc {
             return Err(unexpected_fs_eof("BT node descriptor too short"));
         }
         Ok(Self {
-            f_link: read_u32_be(node_data, BT_F_LINK),
-            b_link: read_u32_be(node_data, BT_B_LINK),
+            _f_link: read_u32_be(node_data, BT_F_LINK),
+            _b_link: read_u32_be(node_data, BT_B_LINK),
             kind: node_data[BT_KIND],
-            height: node_data[BT_HEIGHT],
+            _height: node_data[BT_HEIGHT],
             num_records: read_u16_be(node_data, BT_NUM_RECORDS),
             // reserved field at BT_RESERVED is ignored.
             record_offsets_start: BT_NODE_DESC_SIZE,

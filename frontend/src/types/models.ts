@@ -9,6 +9,7 @@ export * from './analysis';
 export * from './analysisRegistry';
 export * from './analysisBrowser';
 export * from './analysisEmail';
+export * from './eventLog';
 export * from './governance';
 export * from './files';
 export * from './viewer';

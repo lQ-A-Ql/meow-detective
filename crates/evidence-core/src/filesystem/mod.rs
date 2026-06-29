@@ -1,6 +1,6 @@
 pub mod logical_fs;
 
-use std::io::{self, Read};
+use std::io::{self, Read, Seek};
 
 const ROOT_NAME: &str = "\\";
 
@@ -20,10 +20,26 @@ pub struct FsNode {
     pub accessed_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+/// Combined read + seek trait used by callers that need O(1) offset jumps.
+pub trait ReadSeek: Read + Seek {}
+impl<T> ReadSeek for T where T: Read + Seek {}
+
 pub trait FileSystemReader {
     fn root(&self) -> io::Result<FsNode>;
     fn list_children(&self, path: &str) -> io::Result<Vec<FsNode>>;
     fn open_file(&self, path: &str) -> io::Result<Box<dyn Read>>;
+
+    /// Open a file with guaranteed seek support. Readers whose underlying
+    /// implementation is not seekable (for example streaming decompressors)
+    /// should leave the default implementation, which returns
+    /// `Unsupported` so callers can fall back to sequential reads.
+    fn open_file_seekable(&self, _path: &str) -> io::Result<Box<dyn ReadSeek>> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "seekable file access is not implemented for this filesystem",
+        ))
+    }
+
     fn data_source_name(&self) -> &str;
 }
 

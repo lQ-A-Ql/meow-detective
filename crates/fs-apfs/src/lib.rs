@@ -40,7 +40,6 @@ pub(crate) const NX_BLOCK_SIZE_OFF: usize = 0x24;
 pub(crate) const NX_XP_DESC_BLOCKS_OFF: usize = 0x38;
 pub(crate) const NX_XP_DESC_BASE_OFF: usize = 0x40;
 pub(crate) const NX_XP_DESC_INDEX_OFF: usize = 0x58;
-#[allow(dead_code)]
 pub(crate) const NX_XP_DESC_LEN_OFF: usize = 0x5C;
 pub(crate) const NX_MAX_FILE_SYSTEMS_OFF: usize = 0x84;
 pub(crate) const NX_FS_OID_OFF: usize = 0x88;
@@ -50,37 +49,34 @@ pub(crate) const AP_MAGIC_OFF: usize = 0x20;
 pub(crate) const AP_ROOT_TREE_OID_OFF: usize = 0xB0;
 
 // B-tree node field offsets.
-#[allow(dead_code)]
 pub(crate) const BT_FLAGS_OFF: usize = 0x00;
-#[allow(dead_code)]
+// Used by apfs tests; format constant.
+#[cfg(test)]
 pub(crate) const BT_LEVEL_OFF: usize = 0x02;
-#[allow(dead_code)]
 pub(crate) const BT_NKEYS_OFF: usize = 0x04;
-#[allow(dead_code)]
 pub(crate) const BT_TABLE_SPACE_OFF: usize = 0x08;
-#[allow(dead_code)]
+// Used by apfs tests; format constant.
+#[cfg(test)]
 pub(crate) const BT_TOC_BASE: usize = 0x14;
 
 // B-tree flags.
-#[allow(dead_code)]
+// Used by apfs tests; format constant.
+#[cfg(test)]
 pub(crate) const BT_ROOT: u16 = 0x0002;
-#[allow(dead_code)]
 pub(crate) const BT_LEAF: u16 = 0x0004;
-#[allow(dead_code)]
 pub(crate) const BT_FIXED_KV: u16 = 0x0008;
 
 // Inode types.
-#[allow(dead_code)]
+// Used by apfs tests; format constant.
+#[cfg(test)]
 pub(crate) const S_IFDIR: u16 = 4;
-#[allow(dead_code)]
+// Used by apfs tests; format constant.
+#[cfg(test)]
 pub(crate) const S_IFREG: u16 = 8;
-#[allow(dead_code)]
-pub(crate) const S_IFLNK: u16 = 10;
-
 // j_drec_val type.
-#[allow(dead_code)]
 pub(crate) const DREC_TYPE_DIR: u16 = 2;
-#[allow(dead_code)]
+// Used by apfs tests; format constant.
+#[cfg(test)]
 pub(crate) const DREC_TYPE_FILE: u16 = 1;
 
 // TOC entry size.
@@ -186,20 +182,20 @@ impl OidMap {
 // ---------------------------------------------------------------------------
 
 #[derive(Debug)]
-#[allow(dead_code)]
+// Parsed for format completeness; individual fields are used by tests and checkpoint module.
 pub(crate) struct ApfsInode {
     pub(crate) oid: u64,
-    pub(crate) parent_id: u64,
-    pub(crate) private_id: u64,
-    pub(crate) mode: u16,
-    pub(crate) uid: u32,
-    pub(crate) gid: u32,
-    pub(crate) flags: u64,
+    pub(crate) _parent_id: u64,
+    pub(crate) _private_id: u64,
+    pub(crate) _mode: u16,
+    pub(crate) _uid: u32,
+    pub(crate) _gid: u32,
+    pub(crate) _flags: u64,
     pub(crate) access_time: u64,
-    pub(crate) change_time: u64,
+    pub(crate) _change_time: u64,
     pub(crate) mod_time: u64,
     pub(crate) create_time: u64,
-    pub(crate) nchildren_or_nlink: u32,
+    pub(crate) _nchildren_or_nlink: u32,
     /// OID of the child B-tree root (for directories).
     pub(crate) children_oid: u64,
     /// Extent references (OIDs pointing to data blocks).
@@ -369,17 +365,17 @@ pub(crate) fn parse_inode_val(data: &[u8], oid: u64) -> io::Result<ApfsInode> {
 
     Ok(ApfsInode {
         oid,
-        parent_id,
-        private_id,
-        mode,
-        uid,
-        gid,
-        flags,
+        _parent_id: parent_id,
+        _private_id: private_id,
+        _mode: mode,
+        _uid: uid,
+        _gid: gid,
+        _flags: flags,
         access_time,
-        change_time,
+        _change_time: change_time,
         mod_time,
         create_time,
-        nchildren_or_nlink,
+        _nchildren_or_nlink: nchildren_or_nlink,
         children_oid,
         extents,
         logical_size,
@@ -496,16 +492,13 @@ pub struct ApfsReader {
     oid_map: OidMap,
     /// Volumes in this container: name → (fs_oid, root_tree_oid).
     volumes: Vec<ApfsVolume>,
-    /// Default volume is the first one.
-    #[allow(dead_code)]
-    default_volume_idx: usize,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct ApfsVolume {
     pub(crate) name: String,
-    #[allow(dead_code)]
-    pub(crate) fs_oid: u64,
+    /// Volume filesystem OID (used by apfs tests).
+    pub(crate) _fs_oid: u64,
     pub(crate) root_tree_oid: u64,
 }
 
@@ -623,7 +616,7 @@ impl ApfsReader {
 
             volumes.push(ApfsVolume {
                 name: vol_name,
-                fs_oid,
+                _fs_oid: fs_oid,
                 root_tree_oid,
             });
         }
@@ -638,7 +631,6 @@ impl ApfsReader {
             volume_offset: offset,
             oid_map,
             volumes,
-            default_volume_idx: 0,
         })
     }
 
@@ -1346,7 +1338,7 @@ mod tests {
         assert!(!apfs.volumes.is_empty());
         let vol = &apfs.volumes[0];
         assert_eq!(vol.name, "Macintosh HD");
-        assert_eq!(vol.fs_oid, 100);
+        assert_eq!(vol._fs_oid, 100);
 
         // Top-level listing shows volumes.
         let children = apfs.list_children("").unwrap();
@@ -1411,7 +1403,7 @@ mod tests {
 
         // Read the file inode (OID 400).
         let inode = apfs.read_inode(400).unwrap();
-        assert_eq!(inode.mode, S_IFREG);
+        assert_eq!(inode._mode, S_IFREG);
         assert_eq!(inode.logical_size, 16); // "Hello from APFS!" = 16 bytes
         assert!(inode.access_time > 0, "access_time should be set");
         assert!(inode.mod_time > 0, "mod_time should be set");

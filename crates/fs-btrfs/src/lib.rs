@@ -53,27 +53,32 @@ pub(crate) const ROOT_BACKREF_KEY: u8 = 144;
 pub(crate) const CHUNK_ITEM_KEY: u8 = 228;
 
 // Well-known object ids.
-#[allow(dead_code)]
+// Used by btrfs tests and snapshot module; format constant.
+#[cfg(test)]
 pub(crate) const CHUNK_TREE_OBJECTID: u64 = 3;
 pub(crate) const FS_TREE_OBJECTID: u64 = 5;
 pub(crate) const FIRST_FREE_OBJECTID: u64 = 256;
 
 // Directory entry file types.
-#[allow(dead_code)]
+// Used by btrfs tests; format constant.
+#[cfg(test)]
 pub(crate) const FT_REG_FILE: u8 = 1;
 pub(crate) const FT_DIR: u8 = 2;
-#[allow(dead_code)]
-pub(crate) const FT_SYMLINK: u8 = 7;
+// Format constant — documents on-disk directory entry type.
+pub(crate) const _FT_SYMLINK: u8 = 7;
 
 // Extent types.
 pub(crate) const EXTENT_INLINE: u8 = 0;
-#[allow(dead_code)]
+// Used by btrfs tests; format constant.
+#[cfg(test)]
 pub(crate) const EXTENT_REGULAR: u8 = 1;
 
 // Inode mode bits.
-#[allow(dead_code)]
+// Used by btrfs tests; format constant.
+#[cfg(test)]
 pub(crate) const S_IFDIR: u32 = 0o040000;
-#[allow(dead_code)]
+// Used by btrfs tests; format constant.
+#[cfg(test)]
 pub(crate) const S_IFREG: u32 = 0o100000;
 
 // ---------------------------------------------------------------------------
@@ -102,17 +107,6 @@ impl BtrfsKey {
                     .map_err(|_| invalid_fs_data("disk parse error"))?,
             ),
         })
-    }
-
-    /// Serialize this key back to its on-disk representation
-    /// (kept for format symmetry; useful for debugging and testing).
-    #[allow(dead_code)]
-    fn to_bytes(&self) -> [u8; KEY_SIZE] {
-        let mut buf = [0u8; KEY_SIZE];
-        buf[0..8].copy_from_slice(&self.objectid.to_le_bytes());
-        buf[8] = self.ty;
-        buf[9..17].copy_from_slice(&self.offset.to_le_bytes());
-        buf
     }
 }
 
@@ -143,8 +137,7 @@ impl Eq for BtrfsKey {}
 pub(crate) struct BtrfsHeader {
     /// Logical block address of this node (parsed for format completeness;
     /// currently unused during B-tree traversal).
-    #[allow(dead_code)]
-    pub(crate) bytenr: u64,
+    pub(crate) _bytenr: u64,
     pub(crate) nritems: u32,
     pub(crate) level: u8,
 }
@@ -184,8 +177,7 @@ pub struct BtrfsSubvol {
 pub struct BtrfsReader {
     reader: RefCell<Box<dyn EvidenceReader>>,
     /// Sector size from the superblock (used in test assertions for validation).
-    #[allow(dead_code)]
-    sectorsize: u32,
+    _sectorsize: u32,
     nodesize: u32,
     root_tree_logical: u64,
     chunk_tree_logical: u64,
@@ -251,7 +243,7 @@ impl BtrfsReader {
 
         let mut reader_obj = Self {
             reader: RefCell::new(reader),
-            sectorsize,
+            _sectorsize: sectorsize,
             nodesize,
             root_tree_logical,
             chunk_tree_logical,
@@ -479,7 +471,7 @@ impl BtrfsReader {
             return Err(invalid_fs_data("btrfs node too short for header"));
         }
         Ok(BtrfsHeader {
-            bytenr: u64::from_le_bytes(
+            _bytenr: u64::from_le_bytes(
                 data[0x30..0x38]
                     .try_into()
                     .map_err(|_| invalid_fs_data("disk parse error"))?,
@@ -1213,7 +1205,7 @@ mod tests {
         let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
         let btrfs = BtrfsReader::open(reader, 0).unwrap();
         assert_eq!(btrfs.data_source_name(), "btrfs");
-        assert_eq!(btrfs.sectorsize, 4096);
+        assert_eq!(btrfs._sectorsize, 4096);
         assert_eq!(btrfs.nodesize, 4096);
     }
 
@@ -1416,7 +1408,7 @@ mod tests {
         let img = build_btrfs_fixture();
         let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
         let btrfs = BtrfsReader::open(reader, 0).unwrap();
-        assert!(btrfs.sectorsize > 0, "sectorsize must be > 0");
+        assert!(btrfs._sectorsize > 0, "sectorsize must be > 0");
         assert!(btrfs.nodesize > 0, "nodesize must be > 0");
     }
 }

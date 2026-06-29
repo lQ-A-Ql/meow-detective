@@ -9,6 +9,10 @@ export interface LocalSettings {
   maxImportWorkers: string;
   maxAnalysisWorkers: string;
   importAnalysisMode: ImportAnalysisMode;
+  hexChunkBytes: string;
+  maxViewerRangeLength: string;
+  maxInlineImagePreviewBytes: string;
+  maxInlineMediaPreviewBytes: string;
 }
 
 const STORAGE_KEY = 'forensics.localSettings';
@@ -21,6 +25,10 @@ export const defaultSettings: LocalSettings = {
   maxImportWorkers: '',
   maxAnalysisWorkers: '',
   importAnalysisMode: 'metadataOnly',
+  hexChunkBytes: '65536',
+  maxViewerRangeLength: '1048576',
+  maxInlineImagePreviewBytes: '5242880',
+  maxInlineMediaPreviewBytes: '20971520',
 };
 
 export function readLocalSettings(): LocalSettings {
@@ -88,9 +96,48 @@ function normalizeSettings(value: unknown): LocalSettings {
     importAnalysisMode: isImportAnalysisMode(candidate.importAnalysisMode)
       ? candidate.importAnalysisMode
       : defaultSettings.importAnalysisMode,
+    hexChunkBytes:
+      typeof candidate.hexChunkBytes === 'string'
+        ? candidate.hexChunkBytes
+        : defaultSettings.hexChunkBytes,
+    maxViewerRangeLength:
+      typeof candidate.maxViewerRangeLength === 'string'
+        ? candidate.maxViewerRangeLength
+        : defaultSettings.maxViewerRangeLength,
+    maxInlineImagePreviewBytes:
+      typeof candidate.maxInlineImagePreviewBytes === 'string'
+        ? candidate.maxInlineImagePreviewBytes
+        : defaultSettings.maxInlineImagePreviewBytes,
+    maxInlineMediaPreviewBytes:
+      typeof candidate.maxInlineMediaPreviewBytes === 'string'
+        ? candidate.maxInlineMediaPreviewBytes
+        : defaultSettings.maxInlineMediaPreviewBytes,
   };
 }
 
 function isImportAnalysisMode(value: unknown): value is ImportAnalysisMode {
   return value === 'metadataOnly' || value === 'budgetedContent' || value === 'fullContent';
+}
+
+export interface PreviewSettings {
+  hexChunkBytes: number;
+  maxViewerRangeLength: number;
+  maxInlineImagePreviewBytes: number;
+  maxInlineMediaPreviewBytes: number;
+}
+
+export function getPreviewSettings(): PreviewSettings {
+  const local = readLocalSettings();
+  const parse = (value: string, fallback: number) => {
+    const trimmed = value.trim();
+    if (!trimmed) return fallback;
+    const parsed = Number(trimmed);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+  };
+  return {
+    hexChunkBytes: parse(local.hexChunkBytes, 64 * 1024),
+    maxViewerRangeLength: parse(local.maxViewerRangeLength, 1024 * 1024),
+    maxInlineImagePreviewBytes: parse(local.maxInlineImagePreviewBytes, 5 * 1024 * 1024),
+    maxInlineMediaPreviewBytes: parse(local.maxInlineMediaPreviewBytes, 20 * 1024 * 1024),
+  };
 }

@@ -133,11 +133,17 @@ const EVIDENCE_CATEGORY_DEFS: &[EvidenceCategoryDef] = &[
         )],
     },
     EvidenceCategoryDef {
-        category: "BrowserData",
-        display_name: "Browser data",
-        evidence_kind: "browser_sqlite",
-        parser: "browser.sqlite",
-        artifact_families: &[],
+        category: "BrowserHistory",
+        display_name: "浏览器历史",
+        evidence_kind: "browser_history",
+        parser: "browser.history",
+        artifact_families: &[
+            "BrowserHistory",
+            "BrowserDownload",
+            "BrowserCookie",
+            "BrowserSessionTab",
+            "BrowserPassword",
+        ],
         patterns: &[
             EvidencePathPattern::Contains("/google/chrome/user data/"),
             EvidencePathPattern::Contains("/microsoft/edge/user data/"),
@@ -145,22 +151,16 @@ const EVIDENCE_CATEGORY_DEFS: &[EvidenceCategoryDef] = &[
             EvidencePathPattern::Suffix("/history"),
             EvidencePathPattern::Suffix("/archived history"),
             EvidencePathPattern::Suffix("/cookies"),
-            EvidencePathPattern::Suffix("/places.sqlite"),
-        ],
-    },
-    EvidenceCategoryDef {
-        category: "BrowserHistory",
-        display_name: "浏览器历史",
-        evidence_kind: "browser_history",
-        parser: "browser.history",
-        artifact_families: &["BrowserHistory", "BrowserDownload"],
-        patterns: &[
-            EvidencePathPattern::Contains("/google/chrome/user data/default/history"),
-            EvidencePathPattern::Contains("/google/chrome/user data/profile"),
-            EvidencePathPattern::Contains("/microsoft/edge/user data/default/history"),
-            EvidencePathPattern::Contains("/microsoft/edge/user data/profile"),
-            EvidencePathPattern::Contains("/mozilla/firefox/profiles/"),
-            EvidencePathPattern::Suffix("/history"),
+            EvidencePathPattern::Suffix("/cookies.sqlite"),
+            EvidencePathPattern::Suffix("/login data"),
+            EvidencePathPattern::Suffix("/logins.json"),
+            EvidencePathPattern::Suffix("/last session"),
+            EvidencePathPattern::Suffix("/last tabs"),
+            EvidencePathPattern::Suffix("/current session"),
+            EvidencePathPattern::Suffix("/current tabs"),
+            EvidencePathPattern::Suffix("/recovery.jsonlz4"),
+            EvidencePathPattern::Suffix("/previous.jsonlz4"),
+            EvidencePathPattern::Suffix("/sessionstore.jsonlz4"),
             EvidencePathPattern::Suffix("/places.sqlite"),
         ],
     },
@@ -511,11 +511,27 @@ pub fn get_evidence_classification_summary(
 }
 
 pub(crate) fn is_browser_history_path(normalized: &str) -> bool {
-    (normalized.ends_with("/history") || normalized.ends_with("/archived history"))
-        && (normalized.contains("/google/chrome/user data/")
-            || normalized.contains("/microsoft/edge/user data/"))
-        || (normalized.ends_with("/places.sqlite")
-            && normalized.contains("/mozilla/firefox/profiles/"))
+    if normalized.contains("/google/chrome/user data/")
+        || normalized.contains("/microsoft/edge/user data/")
+    {
+        return normalized.ends_with("/history")
+            || normalized.ends_with("/archived history")
+            || normalized.ends_with("/cookies")
+            || normalized.ends_with("/login data")
+            || normalized.ends_with("/last session")
+            || normalized.ends_with("/last tabs")
+            || normalized.ends_with("/current session")
+            || normalized.ends_with("/current tabs");
+    }
+    if normalized.contains("/mozilla/firefox/profiles/") {
+        return normalized.ends_with("/places.sqlite")
+            || normalized.ends_with("/cookies.sqlite")
+            || normalized.ends_with("/logins.json")
+            || normalized.ends_with("/recovery.jsonlz4")
+            || normalized.ends_with("/previous.jsonlz4")
+            || normalized.ends_with("/sessionstore.jsonlz4");
+    }
+    false
 }
 
 fn artifact_counts_by_family(

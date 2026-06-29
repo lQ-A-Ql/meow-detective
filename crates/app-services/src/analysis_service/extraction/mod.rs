@@ -5,7 +5,7 @@ pub(crate) mod registry;
 
 use self::browser::extract_browser_candidate;
 use self::email::extract_email_candidate;
-use self::evtx::extract_evtx_candidate;
+pub use self::evtx::extract_evtx_candidate;
 pub use self::registry::extract_registry_candidate;
 use crate::analysis_service::candidates::{
     evidence_candidates_for_categories, normalize_evidence_path, EvidenceCandidate,
@@ -21,13 +21,15 @@ use std::collections::{BTreeMap, HashMap};
 use std::io::Read;
 use transport::dto::{
     AmcacheApplicationDto, AmcacheApplicationFileDto, AnalysisExtractionRunDto,
-    AnalysisParseStatusDto, AppCompatLayerDto, BrowserDownloadDto, BrowserHistorySummaryDto,
-    BrowserVisitDto, CachedCredentialDto, EmailExtractionSummaryDto, EmailMessageDto,
-    InstalledSoftwareDto, LastVisitedMruEntryDto, LsaPackageDto, LsaSecretDto, MountedDeviceDto,
-    MuiCacheEntryDto, NetworkProfileDto, OpenSaveMruEntryDto, RegistryExtractionSummaryDto,
-    RegistryHiveOverviewDto, RegistryRunKeyDto, RegistryStructuredSummaryDto, RegistryValueDto,
-    RunMruEntryDto, SamUserAccountDto, SecurityPolicyDto, ShellbagEntryDto, ShimCacheEntryDto,
-    ShutdownTimeDto, SystemServiceDto, UsbDeviceHistoryDto, UserAssistEntryDto, WinlogonConfigDto,
+    AnalysisParseStatusDto, AppCompatLayerDto, BrowserCookieDto, BrowserDownloadDto,
+    BrowserHistorySummaryDto, BrowserPasswordDto, BrowserSessionTabDto, BrowserVisitDto,
+    CachedCredentialDto, EmailExtractionSummaryDto, EmailMessageDto, EvtxApplicationEventDto,
+    EvtxBootEventDto, EvtxEventSummaryDto, EvtxSecurityEventDto, InstalledSoftwareDto,
+    LastVisitedMruEntryDto, LsaPackageDto, LsaSecretDto, MountedDeviceDto, MuiCacheEntryDto,
+    NetworkProfileDto, OpenSaveMruEntryDto, RegistryExtractionSummaryDto, RegistryHiveOverviewDto,
+    RegistryRunKeyDto, RegistryStructuredSummaryDto, RegistryValueDto, RunMruEntryDto,
+    SamUserAccountDto, SecurityPolicyDto, ShellbagEntryDto, ShimCacheEntryDto, ShutdownTimeDto,
+    SystemServiceDto, UsbDeviceHistoryDto, UserAssistEntryDto, WinlogonConfigDto,
 };
 
 type TxlogBytes = (Option<Vec<u8>>, Option<Vec<u8>>);
@@ -40,7 +42,7 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
 ) -> Result<AnalysisExtractionRunDto, AnalysisServiceError> {
     let generated_at = Utc::now().to_rfc3339();
     let selected = if categories.is_empty() {
-        vec!["Registry", "BrowserHistory", "Email"]
+        vec!["Registry", "BrowserHistory", "Email", "EventLogs"]
     } else {
         categories.to_vec()
     };
@@ -668,8 +670,14 @@ pub fn get_browser_history_summary(
 ) -> Result<BrowserHistorySummaryDto, AnalysisServiceError> {
     let visit_total = count_artifacts_by_type(conn, "BrowserHistory")?;
     let download_total = count_artifacts_by_type(conn, "BrowserDownload")?;
+    let cookie_total = count_artifacts_by_type(conn, "BrowserCookie")?;
+    let session_total = count_artifacts_by_type(conn, "BrowserSessionTab")?;
+    let password_total = count_artifacts_by_type(conn, "BrowserPassword")?;
     let visit_rows = query_artifact_rows(conn, &["BrowserHistory"], offset, limit)?;
     let download_rows = query_artifact_rows(conn, &["BrowserDownload"], offset, limit)?;
+    let cookie_rows = query_artifact_rows(conn, &["BrowserCookie"], offset, limit)?;
+    let session_rows = query_artifact_rows(conn, &["BrowserSessionTab"], offset, limit)?;
+    let password_rows = query_artifact_rows(conn, &["BrowserPassword"], offset, limit)?;
     let visits = visit_rows
         .into_iter()
         .map(|row| BrowserVisitDto {
@@ -698,12 +706,200 @@ pub fn get_browser_history_summary(
             total_bytes: u64_attr(&row.attrs, "totalBytes"),
         })
         .collect::<Vec<_>>();
+    let cookies = cookie_rows
+        .into_iter()
+        .map(|row| BrowserCookieDto {
+            artifact_id: row.id,
+            file_id: row.source_object_id.unwrap_or_default(),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            browser: string_attr(&row.attrs, "browser"),
+            profile: optional_string_attr(&row.attrs, "profile"),
+            domain: string_attr(&row.attrs, "domain"),
+            name: string_attr(&row.attrs, "name"),
+            value_preview: optional_string_attr(&row.attrs, "valuePreview"),
+            expiry: optional_string_attr(&row.attrs, "expiry"),
+            secure: bool_attr(&row.attrs, "secure"),
+            http_only: bool_attr(&row.attrs, "httpOnly"),
+            same_site: optional_i64_attr(&row.attrs, "sameSite"),
+        })
+        .collect::<Vec<_>>();
+    let sessions = session_rows
+        .into_iter()
+        .map(|row| BrowserSessionTabDto {
+            artifact_id: row.id,
+            file_id: row.source_object_id.unwrap_or_default(),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            browser: string_attr(&row.attrs, "browser"),
+            profile: optional_string_attr(&row.attrs, "profile"),
+            url: string_attr(&row.attrs, "url"),
+            title: optional_string_attr(&row.attrs, "title"),
+            window_index: i32_attr(&row.attrs, "windowIndex"),
+            tab_index: i32_attr(&row.attrs, "tabIndex"),
+            last_active: optional_string_attr(&row.attrs, "lastActive"),
+        })
+        .collect::<Vec<_>>();
+    let passwords = password_rows
+        .into_iter()
+        .map(|row| BrowserPasswordDto {
+            artifact_id: row.id,
+            file_id: row.source_object_id.unwrap_or_default(),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            browser: string_attr(&row.attrs, "browser"),
+            profile: optional_string_attr(&row.attrs, "profile"),
+            url: string_attr(&row.attrs, "url"),
+            username: string_attr(&row.attrs, "username"),
+            password_preview: optional_string_attr(&row.attrs, "passwordPreview"),
+            created_at: optional_string_attr(&row.attrs, "createdAt"),
+            times_used: u64_attr(&row.attrs, "timesUsed"),
+        })
+        .collect::<Vec<_>>();
     Ok(BrowserHistorySummaryDto {
-        status: status_from_total(visit_total + download_total),
+        status: status_from_total(
+            visit_total + download_total + cookie_total + session_total + password_total,
+        ),
         visit_total,
         download_total,
+        cookie_total,
+        session_total,
+        password_total,
         visits,
         downloads,
+        cookies,
+        sessions,
+        passwords,
+        generated_at: Utc::now().to_rfc3339(),
+        warnings: Vec::new(),
+    })
+}
+
+pub fn get_evtx_event_summary(
+    conn: &Connection,
+    offset: u64,
+    limit: u32,
+) -> Result<EvtxEventSummaryDto, AnalysisServiceError> {
+    let boot_shutdown_count = count_artifacts_by_type(conn, "EvtxBootShutdown")?;
+    let security_count = count_artifacts_by_type(conn, "EvtxSecurityEvent")?;
+    let application_count = count_artifacts_by_type(conn, "EvtxApplicationEvent")?;
+    let boot_rows = query_artifact_rows(conn, &["EvtxBootShutdown"], offset, limit)?;
+    let security_rows = query_artifact_rows(conn, &["EvtxSecurityEvent"], offset, limit)?;
+    let application_rows = query_artifact_rows(conn, &["EvtxApplicationEvent"], offset, limit)?;
+
+    let boot_events = boot_rows
+        .into_iter()
+        .map(|row| EvtxBootEventDto {
+            timestamp: string_attr(&row.attrs, "timestamp"),
+            event_id: u32_attr(&row.attrs, "eventId"),
+            record_id: optional_u64_attr(&row.attrs, "recordId"),
+            provider: optional_string_attr(&row.attrs, "provider"),
+            kind: string_attr(&row.attrs, "eventKind"),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            note: string_attr(&row.attrs, "note"),
+        })
+        .collect::<Vec<_>>();
+
+    let security_events = security_rows
+        .into_iter()
+        .map(|row| EvtxSecurityEventDto {
+            timestamp: string_attr(&row.attrs, "timestamp"),
+            event_id: u32_attr(&row.attrs, "eventId"),
+            record_id: optional_u64_attr(&row.attrs, "recordId"),
+            provider: optional_string_attr(&row.attrs, "provider"),
+            kind: string_attr(&row.attrs, "kind"),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            target_user: optional_string_attr(&row.attrs, "targetUser"),
+            subject_user: optional_string_attr(&row.attrs, "subjectUser"),
+            logon_type: optional_string_attr(&row.attrs, "logonType"),
+            ip_address: optional_string_attr(&row.attrs, "ipAddress"),
+            workstation: optional_string_attr(&row.attrs, "workstation"),
+            failure_reason: optional_string_attr(&row.attrs, "failureReason"),
+            process_name: optional_string_attr(&row.attrs, "processName"),
+            parent_process_name: optional_string_attr(&row.attrs, "parentProcessName"),
+            task_name: optional_string_attr(&row.attrs, "taskName"),
+            privilege_list: optional_string_attr(&row.attrs, "privilegeList"),
+            member_name: optional_string_attr(&row.attrs, "memberName"),
+        })
+        .collect::<Vec<_>>();
+
+    let application_events = application_rows
+        .into_iter()
+        .map(|row| EvtxApplicationEventDto {
+            timestamp: string_attr(&row.attrs, "timestamp"),
+            event_id: u32_attr(&row.attrs, "eventId"),
+            record_id: optional_u64_attr(&row.attrs, "recordId"),
+            provider: optional_string_attr(&row.attrs, "provider"),
+            kind: string_attr(&row.attrs, "kind"),
+            source_path: string_attr(&row.attrs, "sourcePath"),
+            application: optional_string_attr(&row.attrs, "application"),
+            fault_module: optional_string_attr(&row.attrs, "faultModule"),
+            product_name: optional_string_attr(&row.attrs, "productName"),
+            manufacturer: optional_string_attr(&row.attrs, "manufacturer"),
+        })
+        .collect::<Vec<_>>();
+
+    let total_count = boot_shutdown_count + security_count + application_count;
+    let logon_logoff_count = security_events
+        .iter()
+        .filter(|event| matches!(event.kind.as_str(), "logonSuccess" | "logonFailure"))
+        .count() as u64;
+    let privilege_escalation_count = security_events
+        .iter()
+        .filter(|event| event.kind == "explicitCredentials")
+        .count() as u64;
+    let process_execution_count = security_events
+        .iter()
+        .filter(|event| event.kind == "processCreated")
+        .count() as u64;
+    let account_management_count = security_events
+        .iter()
+        .filter(|event| matches!(event.kind.as_str(), "accountCreated" | "groupMemberAdded"))
+        .count() as u64;
+    let scheduled_task_count = security_events
+        .iter()
+        .filter(|event| {
+            matches!(
+                event.kind.as_str(),
+                "scheduledTaskCreated" | "scheduledTaskModified"
+            )
+        })
+        .count() as u64;
+    let application_crash_count = application_events
+        .iter()
+        .filter(|event| {
+            matches!(
+                event.kind.as_str(),
+                "applicationCrash" | "applicationHang" | "windowsErrorReporting"
+            )
+        })
+        .count() as u64;
+    let software_installation_count = application_events
+        .iter()
+        .filter(|event| event.kind == "softwareInstallation")
+        .count() as u64;
+    let other_count = security_count
+        .saturating_sub(logon_logoff_count)
+        .saturating_sub(privilege_escalation_count)
+        .saturating_sub(process_execution_count)
+        .saturating_sub(account_management_count)
+        .saturating_sub(scheduled_task_count)
+        + application_count
+            .saturating_sub(application_crash_count)
+            .saturating_sub(software_installation_count);
+
+    Ok(EvtxEventSummaryDto {
+        status: status_from_total(total_count),
+        boot_shutdown_count,
+        logon_logoff_count,
+        privilege_escalation_count,
+        process_execution_count,
+        account_management_count,
+        scheduled_task_count,
+        application_crash_count,
+        software_installation_count,
+        other_count,
+        total_count,
+        boot_events,
+        security_events,
+        application_events,
         generated_at: Utc::now().to_rfc3339(),
         warnings: Vec::new(),
     })
@@ -790,8 +986,19 @@ fn already_has_v1_artifacts(
             "RegistryLsaSecret",
             "RegistryCachedCredential",
         ][..],
-        "BrowserHistory" => &["BrowserHistory", "BrowserDownload"][..],
+        "BrowserHistory" => &[
+            "BrowserHistory",
+            "BrowserDownload",
+            "BrowserCookie",
+            "BrowserSessionTab",
+            "BrowserPassword",
+        ][..],
         "Email" => &["EmailMessage"][..],
+        "EventLogs" => &[
+            "EvtxBootShutdown",
+            "EvtxSecurityEvent",
+            "EvtxApplicationEvent",
+        ][..],
         _ => &[][..],
     };
     if families.is_empty() {
@@ -835,7 +1042,7 @@ fn artifacts_by_data_source(artifacts: Vec<Artifact>) -> HashMap<String, Vec<Art
 fn count_analysis_artifacts(conn: &Connection) -> Result<u64, AnalysisServiceError> {
     let count: i64 = conn
         .query_row(
-            "SELECT COUNT(*) FROM artifacts WHERE artifact_type IN ('RegistryValue', 'RegistrySamUser', 'RegistryUserAssist', 'RegistryHive', 'RegistryNetworkAdapter', 'RegistryNetworkProfile', 'RegistryInstalledSoftware', 'RegistrySystemService', 'RegistryUsbDevice', 'RegistryMountedDevice', 'RegistryShutdownTime', 'RegistryShimCache', 'RegistryMachineRunKey', 'RegistryWinlogonConfig', 'RegistryLsaPackage', 'RegistryOpenSaveMru', 'RegistryLastVisitedMru', 'RegistryRunMru', 'RegistryShellbag', 'RegistryMuiCache', 'RegistryAmcacheApplication', 'RegistryAmcacheApplicationFile', 'RegistryAppCompatLayer', 'RegistrySecurityPolicy', 'RegistryLsaSecret', 'RegistryCachedCredential', 'BrowserHistory', 'BrowserDownload', 'EmailMessage')",
+            "SELECT COUNT(*) FROM artifacts WHERE artifact_type IN ('RegistryValue', 'RegistrySamUser', 'RegistryUserAssist', 'RegistryHive', 'RegistryNetworkAdapter', 'RegistryNetworkProfile', 'RegistryInstalledSoftware', 'RegistrySystemService', 'RegistryUsbDevice', 'RegistryMountedDevice', 'RegistryShutdownTime', 'RegistryShimCache', 'RegistryMachineRunKey', 'RegistryWinlogonConfig', 'RegistryLsaPackage', 'RegistryOpenSaveMru', 'RegistryLastVisitedMru', 'RegistryRunMru', 'RegistryShellbag', 'RegistryMuiCache', 'RegistryAmcacheApplication', 'RegistryAmcacheApplicationFile', 'RegistryAppCompatLayer', 'RegistrySecurityPolicy', 'RegistryLsaSecret', 'RegistryCachedCredential', 'BrowserHistory', 'BrowserDownload', 'BrowserCookie', 'BrowserSessionTab', 'BrowserPassword', 'EmailMessage', 'EvtxBootShutdown', 'EvtxSecurityEvent', 'EvtxApplicationEvent')",
             [],
             |row| row.get(0),
         )
@@ -1003,6 +1210,18 @@ fn optional_u32_attr(attrs: &BTreeMap<String, Value>, key: &str) -> Option<u32> 
 
 fn optional_u64_attr(attrs: &BTreeMap<String, Value>, key: &str) -> Option<u64> {
     attrs.get(key).and_then(Value::as_u64)
+}
+
+fn optional_i64_attr(attrs: &BTreeMap<String, Value>, key: &str) -> Option<i64> {
+    attrs.get(key).and_then(Value::as_i64)
+}
+
+fn i32_attr(attrs: &BTreeMap<String, Value>, key: &str) -> i32 {
+    attrs.get(key).and_then(Value::as_i64).unwrap_or(0) as i32
+}
+
+fn u32_attr(attrs: &BTreeMap<String, Value>, key: &str) -> u32 {
+    attrs.get(key).and_then(Value::as_u64).unwrap_or(0) as u32
 }
 
 fn optional_bool_attr(attrs: &BTreeMap<String, Value>, key: &str) -> Option<bool> {

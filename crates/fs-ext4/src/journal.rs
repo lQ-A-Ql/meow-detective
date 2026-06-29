@@ -66,12 +66,9 @@ pub const JOURNAL_SB_OFFSET: u64 = 4096;
 pub const JBD2_TAG_SIZE_V2: usize = 16;
 
 /// Tag flag: this block is being deleted (escaped).
-#[allow(dead_code)]
+// Used by journal tests; format constant.
+#[cfg(test)]
 const TAG_FLAG_ESCAPE: u32 = 1;
-
-/// Tag flag: same UUID as previous.
-#[allow(dead_code)]
-const TAG_FLAG_SAME_UUID: u32 = 2;
 
 /// Tag flag: deleted inode content.
 const TAG_FLAG_DELETED: u32 = 4;

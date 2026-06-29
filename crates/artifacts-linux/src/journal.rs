@@ -19,28 +19,20 @@ const JOURNAL_HEADER_SIGNATURE: &[u8; 8] = b"LPKSHHRH";
 const HEADER_INCOMPATIBLE_COMPRESSED: u32 = 0x04;
 
 /// Object type constants
-// Format constant — documents on-disk binary layout
-#[allow(dead_code)]
-const OBJECT_UNUSED: u8 = 0;
+// Format constants — documents on-disk binary layout
+const _OBJECT_UNUSED: u8 = 0;
 const OBJECT_DATA: u8 = 1;
 const OBJECT_FIELD: u8 = 2;
 const OBJECT_ENTRY: u8 = 3;
-// Format constant — documents on-disk binary layout
-#[allow(dead_code)]
-const OBJECT_DATA_HASH_TABLE: u8 = 4;
-// Format constant — documents on-disk binary layout
-#[allow(dead_code)]
-const OBJECT_FIELD_HASH_TABLE: u8 = 5;
+const _OBJECT_DATA_HASH_TABLE: u8 = 4;
+const _OBJECT_FIELD_HASH_TABLE: u8 = 5;
 const OBJECT_ENTRY_ARRAY: u8 = 6;
-// Format constant — documents on-disk binary layout
-#[allow(dead_code)]
-const OBJECT_TAG: u8 = 7;
+const _OBJECT_TAG: u8 = 7;
 
 /// Core journal field IDs stored as array offsets in entry objects
 const FIELD__REALTIME_TIMESTAMP: u64 = 0;
 // Format constant — documents on-disk binary layout
-#[allow(dead_code)]
-const FIELD__MONOTONIC_TIMESTAMP: u64 = 1;
+const _FIELD__MONOTONIC_TIMESTAMP: u64 = 1;
 const FIELD__BOOT_ID: u64 = 2;
 const FIELD_PRIORITY: u64 = 3;
 const FIELD__PID: u64 = 4;

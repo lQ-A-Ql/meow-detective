@@ -6,6 +6,7 @@ export {
   AnalysisLoadingPanel,
   BrowserHistoryPanel,
   EmailExtractionPanel,
+  EventLogPanel,
   RegistryExtractionPanel,
   EvidenceClassificationPanel,
   FileClassificationPanel,

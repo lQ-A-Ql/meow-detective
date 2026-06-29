@@ -12,7 +12,7 @@ use transport::{
     dto::{
         AnalysisExtractionRunDto, AnalysisFileClassificationDto, AnalysisSystemInfoDto,
         BrowserHistorySummaryDto, CorrelationSnapshotDto, EmailExtractionSummaryDto,
-        EvidenceClassificationSummaryDto, RegistryExtractionSummaryDto,
+        EvidenceClassificationSummaryDto, EvtxEventSummaryDto, RegistryExtractionSummaryDto,
         RegistryStructuredSummaryDto, V2GovernanceSnapshotDto, V3GovernanceSnapshotDto,
     },
     CommandError,
@@ -245,6 +245,26 @@ pub async fn get_email_extraction_summary(
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         analysis_service::get_email_extraction_summary(&conn, req.offset, req.limit)
+            .map_err(CommandError::from_service_error)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+/// Get structured EVTX event summary for boot/shutdown, Security, and Application logs.
+#[tauri::command]
+pub async fn get_evtx_event_summary(
+    state: State<'_, AppState>,
+    request: Option<GetAnalysisExtractionRequest>,
+) -> Result<EvtxEventSummaryDto, CommandError> {
+    let app_state = state.inner().clone();
+    let mut req = request.unwrap_or_default();
+    req.validate().map_err(CommandError::invalid_input)?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        require_active_case(&app_state)?;
+        let conn = get_case_connection(&app_state)?;
+        analysis_service::get_evtx_event_summary(&conn, req.offset, req.limit)
             .map_err(CommandError::from_service_error)
     })
     .await

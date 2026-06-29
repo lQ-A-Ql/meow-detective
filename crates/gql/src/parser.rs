@@ -265,10 +265,6 @@ enum Token {
     Star,
     StringLiteral(String),
     NumberLiteral(String),
-    #[allow(dead_code)]
-    BoolLiteral(bool),
-    #[allow(dead_code)]
-    NullLiteral,
     Eof,
 }
 
@@ -829,15 +825,6 @@ impl Parser {
                 })?;
                 self.advance()?;
                 Ok(Value::Number(n))
-            }
-            Token::BoolLiteral(b) => {
-                let val = Value::Bool(*b);
-                self.advance()?;
-                Ok(val)
-            }
-            Token::NullLiteral => {
-                self.advance()?;
-                Ok(Value::Null)
             }
             Token::Keyword(ref k) => {
                 let upper = k.to_uppercase();

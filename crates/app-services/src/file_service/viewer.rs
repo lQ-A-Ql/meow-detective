@@ -13,17 +13,15 @@ use transport::dto::{ViewerHandleDto, ViewerRangeRequestDto, ViewerRangeResponse
 
 const FILE_HANDLE_PREFIX: &str = "file:";
 
-/// Maximum number of concurrently cached parsed E01 readers.
+/// Maximum number of concurrently cached parsed E01 readers per case.
 /// Cache hits reuse the `Arc<chunk_table>` via `E01Reader::re_open`,
 /// opening fresh segment file handles without re-parsing headers.
-const E01_READER_CACHE_MAX_SIZE: usize = 4;
-
-trait ReadSeek: Read + Seek {}
-
-impl<T> ReadSeek for T where T: Read + Seek {}
+/// Bucketing by case prevents one case's preview activity from evicting
+/// another case's readers.
+const E01_READER_CACHE_PER_CASE_MAX_SIZE: usize = 16;
 
 enum RangeContentReader {
-    Seekable(Box<dyn ReadSeek>),
+    Seekable(Box<dyn evidence_core::ReadSeek>),
     Streaming(Box<dyn Read>),
 }
 
@@ -46,6 +44,13 @@ pub struct PreviewDescriptor {
     pub data_source_id: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub partition_candidates: Vec<PreviewPartitionCandidate>,
+    /// File entry size at the time the descriptor was built. Used to detect
+    /// stale cache entries when the underlying entry is updated in place.
+    #[serde(default)]
+    pub entry_size: u64,
+    /// File entry modified timestamp at the time the descriptor was built.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry_modified_at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -148,31 +153,83 @@ impl E01ReaderCache {
         self.readers.insert(source_path.to_path_buf(), reader);
 
         // Re-open for the caller with fresh handles
-        self.readers.get(source_path).unwrap().re_open(source_path)
+        self.readers
+            .get(source_path)
+            .expect("reader was just inserted")
+            .re_open(source_path)
     }
 }
 
-static E01_READER_CACHE: std::sync::LazyLock<std::sync::Mutex<E01ReaderCache>> =
+/// Per-case E01 reader cache. Callers that do not have a case context (for
+/// example low-level filesystem probes) use the empty-string default bucket.
+struct E01ReaderCacheRegistry {
+    default_bucket: E01ReaderCache,
+    buckets: HashMap<String, E01ReaderCache>,
+}
+
+impl E01ReaderCacheRegistry {
+    fn new(max_size: usize) -> Self {
+        Self {
+            default_bucket: E01ReaderCache::new(max_size),
+            buckets: HashMap::new(),
+        }
+    }
+
+    fn bucket(&mut self, case_id: &str) -> &mut E01ReaderCache {
+        if case_id.is_empty() {
+            return &mut self.default_bucket;
+        }
+        self.buckets
+            .entry(case_id.to_string())
+            .or_insert_with(|| E01ReaderCache::new(E01_READER_CACHE_PER_CASE_MAX_SIZE))
+    }
+
+    fn clear(&mut self) {
+        self.default_bucket.paths.clear();
+        self.default_bucket.readers.clear();
+        self.buckets.clear();
+    }
+
+    fn clear_case(&mut self, case_id: &str) {
+        if case_id.is_empty() {
+            self.default_bucket.paths.clear();
+            self.default_bucket.readers.clear();
+            return;
+        }
+        if let Some(bucket) = self.buckets.remove(case_id) {
+            drop(bucket);
+        }
+    }
+}
+
+static E01_READER_CACHE: std::sync::LazyLock<std::sync::Mutex<E01ReaderCacheRegistry>> =
     std::sync::LazyLock::new(|| {
-        std::sync::Mutex::new(E01ReaderCache::new(E01_READER_CACHE_MAX_SIZE))
+        std::sync::Mutex::new(E01ReaderCacheRegistry::new(
+            E01_READER_CACHE_PER_CASE_MAX_SIZE,
+        ))
     });
 
 pub fn clear_e01_reader_cache() {
     if let Ok(mut cache) = E01_READER_CACHE.lock() {
-        cache.paths.clear();
-        cache.readers.clear();
+        cache.clear();
     }
 }
 
-fn open_e01_reader_cached(source_path: &Path) -> std::io::Result<E01Reader> {
-    let mut cache = E01_READER_CACHE.lock().unwrap_or_else(|poisoned| {
+/// Clear cached E01 readers for a single case.
+pub fn clear_e01_reader_cache_for_case(case_id: &str) {
+    if let Ok(mut cache) = E01_READER_CACHE.lock() {
+        cache.clear_case(case_id);
+    }
+}
+
+fn open_e01_reader_cached(source_path: &Path, case_id: &str) -> std::io::Result<E01Reader> {
+    let mut registry = E01_READER_CACHE.lock().unwrap_or_else(|poisoned| {
         // Clear the cache on poison to avoid using potentially corrupted state
-        let mut cache = poisoned.into_inner();
-        cache.paths.clear();
-        cache.readers.clear();
-        cache
+        let mut registry = poisoned.into_inner();
+        registry.clear();
+        registry
     });
-    cache.get_or_open(source_path)
+    registry.bucket(case_id).get_or_open(source_path)
 }
 
 pub fn open_file_handle_real<C>(
@@ -273,6 +330,8 @@ fn preview_descriptor_for_entry(
         size: entry.size.unwrap_or(0),
         data_source_id: entry.data_source_id.0.clone(),
         partition_candidates,
+        entry_size: entry.size.unwrap_or(0),
+        entry_modified_at: entry.modified_at.as_ref().map(|dt| dt.to_rfc3339()),
     })
 }
 
@@ -331,7 +390,7 @@ where
 fn open_file_content_for_descriptor(
     descriptor: &PreviewDescriptor,
 ) -> Result<Box<dyn Read>, FileServiceError> {
-    match descriptor.source_kind.as_str() {
+    let range_reader = match descriptor.source_kind.as_str() {
         "logical_directory" => open_logical_descriptor_file(descriptor),
         "e01" => open_e01_descriptor_file(descriptor),
         "raw" => open_raw_descriptor_file(descriptor),
@@ -339,7 +398,11 @@ fn open_file_content_for_descriptor(
             "Range reading is not yet wired for data source kind '{}'",
             other
         ))),
-    }
+    }?;
+    Ok(match range_reader {
+        RangeContentReader::Seekable(reader) => reader as Box<dyn Read>,
+        RangeContentReader::Streaming(reader) => reader,
+    })
 }
 
 pub fn read_file_bytes_for_case<C>(
@@ -423,7 +486,11 @@ where
     let key = descriptor_cache_key(&case_id, file_id);
     if let Some(value) = context.get_cached_preview_descriptor(&key) {
         match serde_json::from_value::<PreviewDescriptor>(value) {
-            Ok(descriptor) if descriptor.case_id == case_id && descriptor.file_id == file_id.0 => {
+            Ok(descriptor)
+                if descriptor.case_id == case_id
+                    && descriptor.file_id == file_id.0
+                    && descriptor_is_fresh(context.conn(), file_id, &descriptor) =>
+            {
                 return Ok(descriptor);
             }
             Ok(_) | Err(_) => {
@@ -442,29 +509,84 @@ where
     Ok(descriptor)
 }
 
+/// Check whether a cached preview descriptor still matches the current file
+/// entry metadata. A mismatch indicates the entry was updated in place (for
+/// example by a re-import or staging merge) and the descriptor must be rebuilt.
+fn descriptor_is_fresh(
+    conn: &Connection,
+    file_id: &FileEntryId,
+    descriptor: &PreviewDescriptor,
+) -> bool {
+    let repo = match FileRepo::new(conn).find_by_id(file_id) {
+        Ok(Some(entry)) => entry,
+        Ok(None) => {
+            tracing::debug!(file_id = %file_id.0, "File entry not found; treating descriptor as stale");
+            return false;
+        }
+        Err(error) => {
+            tracing::warn!(%error, file_id = %file_id.0, "Failed to validate descriptor freshness");
+            return false;
+        }
+    };
+
+    let current_size = repo.size.unwrap_or(0);
+    let current_modified = repo.modified_at.as_ref().map(|dt| dt.to_rfc3339());
+
+    if descriptor.entry_size != current_size || descriptor.entry_modified_at != current_modified {
+        tracing::debug!(
+            file_id = %file_id.0,
+            cached_size = descriptor.entry_size,
+            current_size = current_size,
+            cached_modified = ?descriptor.entry_modified_at,
+            current_modified = ?current_modified,
+            "Preview descriptor metadata changed; rebuilding"
+        );
+        return false;
+    }
+
+    true
+}
+
 pub fn read_file_bytes_for_descriptor(
     descriptor: &PreviewDescriptor,
     offset: u64,
     length: u32,
 ) -> Result<Vec<u8>, FileServiceError> {
     let length = (length as usize).min(infrastructure::constants::MAX_RANGE_LENGTH);
-    if let Some(bytes) = try_read_ntfs_image_range_for_descriptor(descriptor, offset, length)? {
+    let mut reasons = Vec::new();
+    if let Some(bytes) =
+        try_read_ntfs_image_range_for_descriptor(descriptor, offset, length, &mut reasons)?
+    {
         return Ok(bytes);
     }
-    if let Some(bytes) = try_read_fat_image_range_for_descriptor(descriptor, offset, length)? {
+    if let Some(bytes) =
+        try_read_fat_image_range_for_descriptor(descriptor, offset, length, &mut reasons)?
+    {
         return Ok(bytes);
     }
-    if let Some(bytes) = try_read_exfat_image_range_for_descriptor(descriptor, offset, length)? {
+    if let Some(bytes) =
+        try_read_exfat_image_range_for_descriptor(descriptor, offset, length, &mut reasons)?
+    {
         return Ok(bytes);
     }
 
-    match open_range_content_for_descriptor(descriptor)? {
-        RangeContentReader::Seekable(mut reader) => {
+    match open_range_content_for_descriptor(descriptor) {
+        Ok(RangeContentReader::Seekable(mut reader)) => {
             read_seekable_range(reader.as_mut(), offset, length)
         }
-        RangeContentReader::Streaming(mut reader) => {
+        Ok(RangeContentReader::Streaming(mut reader)) => {
             skip_reader_bytes(reader.as_mut(), offset)?;
             read_bounded(reader.as_mut(), length)
+        }
+        Err(error) => {
+            if reasons.is_empty() {
+                return Err(error);
+            }
+            Err(FileServiceError::other(format_image_range_error(
+                &descriptor.path,
+                &reasons,
+                Some(&error.to_string()),
+            )))
         }
     }
 }
@@ -505,14 +627,14 @@ fn descriptor_file_entry(descriptor: &PreviewDescriptor) -> FileEntry {
 
 fn open_logical_descriptor_file(
     descriptor: &PreviewDescriptor,
-) -> Result<Box<dyn Read>, FileServiceError> {
+) -> Result<RangeContentReader, FileServiceError> {
     let entry = descriptor_file_entry(descriptor);
-    open_logical_file(&descriptor.source_path, &entry)
+    open_logical_file_seekable(&descriptor.source_path, &entry).map(RangeContentReader::Seekable)
 }
 
 fn open_logical_descriptor_seekable(
     descriptor: &PreviewDescriptor,
-) -> Result<Box<dyn ReadSeek>, FileServiceError> {
+) -> Result<Box<dyn evidence_core::ReadSeek>, FileServiceError> {
     let entry = descriptor_file_entry(descriptor);
     open_logical_file_seekable(&descriptor.source_path, &entry)
 }
@@ -524,8 +646,8 @@ fn open_range_content_for_descriptor(
         "logical_directory" => {
             open_logical_descriptor_seekable(descriptor).map(RangeContentReader::Seekable)
         }
-        "e01" => open_e01_descriptor_file(descriptor).map(RangeContentReader::Streaming),
-        "raw" => open_raw_descriptor_file(descriptor).map(RangeContentReader::Streaming),
+        "e01" => open_e01_descriptor_file(descriptor),
+        "raw" => open_raw_descriptor_file(descriptor),
         other => Err(FileServiceError::other(format!(
             "Range reading is not yet wired for data source kind '{}'",
             other
@@ -535,16 +657,17 @@ fn open_range_content_for_descriptor(
 
 fn open_e01_descriptor_file(
     descriptor: &PreviewDescriptor,
-) -> Result<Box<dyn Read>, FileServiceError> {
-    open_descriptor_image_file(descriptor, |source_path| {
-        open_e01_reader_cached(source_path)
+) -> Result<RangeContentReader, FileServiceError> {
+    let case_id = descriptor.case_id.clone();
+    open_descriptor_image_file(descriptor, move |source_path| {
+        open_e01_reader_cached(source_path, &case_id)
             .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
     })
 }
 
 fn open_raw_descriptor_file(
     descriptor: &PreviewDescriptor,
-) -> Result<Box<dyn Read>, FileServiceError> {
+) -> Result<RangeContentReader, FileServiceError> {
     open_descriptor_image_file(descriptor, |source_path| {
         evidence_core::RawImageReader::open(source_path)
             .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
@@ -555,6 +678,7 @@ fn try_read_ntfs_image_range_for_descriptor(
     descriptor: &PreviewDescriptor,
     offset: u64,
     length: usize,
+    reasons: &mut Vec<String>,
 ) -> Result<Option<Vec<u8>>, FileServiceError> {
     if !matches!(descriptor.source_kind.as_str(), "e01" | "raw") {
         return Ok(None);
@@ -566,17 +690,21 @@ fn try_read_ntfs_image_range_for_descriptor(
     let source_path = Path::new(&descriptor.source_path);
     let path_candidates = descriptor_image_path_candidates(descriptor);
     match descriptor.source_kind.as_str() {
-        "e01" => try_read_ntfs_image_range_from_candidates(
-            source_path,
-            &descriptor.partition_candidates,
-            &path_candidates,
-            offset,
-            length,
-            |path| {
-                open_e01_reader_cached(path)
-                    .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
-            },
-        ),
+        "e01" => {
+            let case_id = descriptor.case_id.clone();
+            try_read_ntfs_image_range_from_candidates(
+                source_path,
+                &descriptor.partition_candidates,
+                &path_candidates,
+                offset,
+                length,
+                move |path| {
+                    open_e01_reader_cached(path, &case_id)
+                        .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+                },
+                reasons,
+            )
+        }
         "raw" => try_read_ntfs_image_range_from_candidates(
             source_path,
             &descriptor.partition_candidates,
@@ -587,6 +715,7 @@ fn try_read_ntfs_image_range_for_descriptor(
                 evidence_core::RawImageReader::open(path)
                     .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
             },
+            reasons,
         ),
         _ => Ok(None),
     }
@@ -615,9 +744,10 @@ fn try_read_ntfs_image_range_for_entry(
                 offset,
                 length,
                 |path| {
-                    open_e01_reader_cached(path)
+                    open_e01_reader_cached(path, "")
                         .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
                 },
+                &mut Vec::new(),
             )
         }
         "raw" => {
@@ -633,6 +763,7 @@ fn try_read_ntfs_image_range_for_entry(
                     evidence_core::RawImageReader::open(path)
                         .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
                 },
+                &mut Vec::new(),
             )
         }
         _ => Ok(None),
@@ -643,6 +774,7 @@ fn try_read_fat_image_range_for_descriptor(
     descriptor: &PreviewDescriptor,
     offset: u64,
     length: usize,
+    reasons: &mut Vec<String>,
 ) -> Result<Option<Vec<u8>>, FileServiceError> {
     if !matches!(descriptor.source_kind.as_str(), "e01" | "raw") {
         return Ok(None);
@@ -654,17 +786,21 @@ fn try_read_fat_image_range_for_descriptor(
     let source_path = Path::new(&descriptor.source_path);
     let path_candidates = descriptor_image_path_candidates(descriptor);
     match descriptor.source_kind.as_str() {
-        "e01" => try_read_fat_image_range_from_candidates(
-            source_path,
-            &descriptor.partition_candidates,
-            &path_candidates,
-            offset,
-            length,
-            |path| {
-                open_e01_reader_cached(path)
-                    .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
-            },
-        ),
+        "e01" => {
+            let case_id = descriptor.case_id.clone();
+            try_read_fat_image_range_from_candidates(
+                source_path,
+                &descriptor.partition_candidates,
+                &path_candidates,
+                offset,
+                length,
+                move |path| {
+                    open_e01_reader_cached(path, &case_id)
+                        .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+                },
+                reasons,
+            )
+        }
         "raw" => try_read_fat_image_range_from_candidates(
             source_path,
             &descriptor.partition_candidates,
@@ -675,6 +811,7 @@ fn try_read_fat_image_range_for_descriptor(
                 evidence_core::RawImageReader::open(path)
                     .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
             },
+            reasons,
         ),
         _ => Ok(None),
     }
@@ -703,9 +840,10 @@ fn try_read_fat_image_range_for_entry(
                 offset,
                 length,
                 |path| {
-                    open_e01_reader_cached(path)
+                    open_e01_reader_cached(path, "")
                         .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
                 },
+                &mut Vec::new(),
             )
         }
         "raw" => {
@@ -721,6 +859,7 @@ fn try_read_fat_image_range_for_entry(
                     evidence_core::RawImageReader::open(path)
                         .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
                 },
+                &mut Vec::new(),
             )
         }
         _ => Ok(None),
@@ -731,6 +870,7 @@ fn try_read_exfat_image_range_for_descriptor(
     descriptor: &PreviewDescriptor,
     offset: u64,
     length: usize,
+    reasons: &mut Vec<String>,
 ) -> Result<Option<Vec<u8>>, FileServiceError> {
     if !matches!(descriptor.source_kind.as_str(), "e01" | "raw") {
         return Ok(None);
@@ -742,17 +882,21 @@ fn try_read_exfat_image_range_for_descriptor(
     let source_path = Path::new(&descriptor.source_path);
     let path_candidates = descriptor_image_path_candidates(descriptor);
     match descriptor.source_kind.as_str() {
-        "e01" => try_read_exfat_image_range_from_candidates(
-            source_path,
-            &descriptor.partition_candidates,
-            &path_candidates,
-            offset,
-            length,
-            |path| {
-                open_e01_reader_cached(path)
-                    .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
-            },
-        ),
+        "e01" => {
+            let case_id = descriptor.case_id.clone();
+            try_read_exfat_image_range_from_candidates(
+                source_path,
+                &descriptor.partition_candidates,
+                &path_candidates,
+                offset,
+                length,
+                move |path| {
+                    open_e01_reader_cached(path, &case_id)
+                        .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
+                },
+                reasons,
+            )
+        }
         "raw" => try_read_exfat_image_range_from_candidates(
             source_path,
             &descriptor.partition_candidates,
@@ -763,6 +907,7 @@ fn try_read_exfat_image_range_for_descriptor(
                 evidence_core::RawImageReader::open(path)
                     .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
             },
+            reasons,
         ),
         _ => Ok(None),
     }
@@ -791,9 +936,10 @@ fn try_read_exfat_image_range_for_entry(
                 offset,
                 length,
                 |path| {
-                    open_e01_reader_cached(path)
+                    open_e01_reader_cached(path, "")
                         .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
                 },
+                &mut Vec::new(),
             )
         }
         "raw" => {
@@ -809,6 +955,7 @@ fn try_read_exfat_image_range_for_entry(
                     evidence_core::RawImageReader::open(path)
                         .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
                 },
+                &mut Vec::new(),
             )
         }
         _ => Ok(None),
@@ -822,6 +969,7 @@ fn try_read_fat_image_range_from_candidates<F>(
     offset: u64,
     length: usize,
     mut open_reader: F,
+    reasons: &mut Vec<String>,
 ) -> Result<Option<Vec<u8>>, FileServiceError>
 where
     F: FnMut(&Path) -> std::io::Result<Box<dyn evidence_core::EvidenceReader>>,
@@ -835,12 +983,12 @@ where
         let fs = match fs_fat::FatReader::open(boxed_reader, candidate.offset) {
             Ok(fs) => fs,
             Err(error) => {
-                tracing::warn!(
-                    partition_index = candidate.partition_index,
-                    offset = candidate.offset,
-                    error = %error,
-                    "Descriptor FAT range open failed"
+                let reason = format!(
+                    "FAT partition {} @{} open failed: {}",
+                    candidate.partition_index, candidate.offset, error
                 );
+                tracing::warn!(%reason, "Descriptor FAT range open failed");
+                reasons.push(reason);
                 continue;
             }
         };
@@ -849,13 +997,12 @@ where
             match fs.read_file_range(path, offset, length) {
                 Ok(bytes) => return Ok(Some(bytes)),
                 Err(error) => {
-                    tracing::warn!(
-                        path = %path,
-                        partition_index = candidate.partition_index,
-                        offset = candidate.offset,
-                        error = %error,
-                        "Descriptor FAT range read failed for path candidate"
+                    let reason = format!(
+                        "FAT partition {} @{} path '{}' range read failed: {}",
+                        candidate.partition_index, candidate.offset, path, error
                     );
+                    tracing::warn!(%reason, "Descriptor FAT range read failed for path candidate");
+                    reasons.push(reason);
                 }
             }
         }
@@ -871,6 +1018,7 @@ fn try_read_exfat_image_range_from_candidates<F>(
     offset: u64,
     length: usize,
     mut open_reader: F,
+    reasons: &mut Vec<String>,
 ) -> Result<Option<Vec<u8>>, FileServiceError>
 where
     F: FnMut(&Path) -> std::io::Result<Box<dyn evidence_core::EvidenceReader>>,
@@ -887,12 +1035,12 @@ where
         let fs = match fs_exfat::ExfatReader::open(boxed_reader, candidate.offset) {
             Ok(fs) => fs,
             Err(error) => {
-                tracing::warn!(
-                    partition_index = candidate.partition_index,
-                    offset = candidate.offset,
-                    error = %error,
-                    "Descriptor exFAT range open failed"
+                let reason = format!(
+                    "exFAT partition {} @{} open failed: {}",
+                    candidate.partition_index, candidate.offset, error
                 );
+                tracing::warn!(%reason, "Descriptor exFAT range open failed");
+                reasons.push(reason);
                 continue;
             }
         };
@@ -901,13 +1049,12 @@ where
             match fs.read_file_range(path, offset, length) {
                 Ok(bytes) => return Ok(Some(bytes)),
                 Err(error) => {
-                    tracing::warn!(
-                        path = %path,
-                        partition_index = candidate.partition_index,
-                        offset = candidate.offset,
-                        error = %error,
-                        "Descriptor exFAT range read failed for path candidate"
+                    let reason = format!(
+                        "exFAT partition {} @{} path '{}' range read failed: {}",
+                        candidate.partition_index, candidate.offset, path, error
                     );
+                    tracing::warn!(%reason, "Descriptor exFAT range read failed for path candidate");
+                    reasons.push(reason);
                 }
             }
         }
@@ -924,6 +1071,53 @@ fn is_exfat_filesystem_kind(kind: &str) -> bool {
     kind.eq_ignore_ascii_case("exfat") || kind.to_ascii_uppercase().contains("EXFAT")
 }
 
+/// Build a user-facing error message when all filesystem-specific range fast
+/// paths fail and the generic open path also fails. Limits total length and
+/// avoids leaking overly long path strings to the UI.
+fn format_image_range_error(
+    path: &str,
+    reasons: &[String],
+    fallback_error: Option<&str>,
+) -> String {
+    const MAX_REASONS: usize = 8;
+    const MAX_REASON_LEN: usize = 120;
+    const MAX_PATH_LEN: usize = 80;
+
+    let display_path = if path.len() > MAX_PATH_LEN {
+        format!("{}...", &path[..MAX_PATH_LEN])
+    } else {
+        path.to_string()
+    };
+
+    let mut summary = reasons
+        .iter()
+        .take(MAX_REASONS)
+        .map(|reason| {
+            if reason.len() > MAX_REASON_LEN {
+                format!("{}...", &reason[..MAX_REASON_LEN])
+            } else {
+                reason.clone()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("; ");
+
+    if reasons.len() > MAX_REASONS {
+        summary.push_str(&format!("; and {} more", reasons.len() - MAX_REASONS));
+    }
+
+    match fallback_error {
+        Some(fallback) => format!(
+            "Cannot open image-backed file '{}' from any partition. Attempts: {}. Fallback error: {}",
+            display_path, summary, fallback
+        ),
+        None => format!(
+            "Cannot open image-backed file '{}' from any partition. Attempts: {}",
+            display_path, summary
+        ),
+    }
+}
+
 fn try_read_ntfs_image_range_from_candidates<F>(
     source_path: &Path,
     partition_candidates: &[PreviewPartitionCandidate],
@@ -931,6 +1125,7 @@ fn try_read_ntfs_image_range_from_candidates<F>(
     offset: u64,
     length: usize,
     mut open_reader: F,
+    reasons: &mut Vec<String>,
 ) -> Result<Option<Vec<u8>>, FileServiceError>
 where
     F: FnMut(&Path) -> std::io::Result<Box<dyn evidence_core::EvidenceReader>>,
@@ -944,12 +1139,12 @@ where
         let fs = match fs_ntfs::NtfsReader::open(boxed_reader, candidate.offset) {
             Ok(fs) => fs,
             Err(error) => {
-                tracing::warn!(
-                    partition_index = candidate.partition_index,
-                    offset = candidate.offset,
-                    error = %error,
-                    "Descriptor NTFS range open failed"
+                let reason = format!(
+                    "NTFS partition {} @{} open failed: {}",
+                    candidate.partition_index, candidate.offset, error
                 );
+                tracing::warn!(%reason, "Descriptor NTFS range open failed");
+                reasons.push(reason);
                 continue;
             }
         };
@@ -958,13 +1153,12 @@ where
             match fs.read_file_range(path, offset, length) {
                 Ok(bytes) => return Ok(Some(bytes)),
                 Err(error) => {
-                    tracing::warn!(
-                        path = %path,
-                        partition_index = candidate.partition_index,
-                        offset = candidate.offset,
-                        error = %error,
-                        "Descriptor NTFS range read failed for path candidate"
+                    let reason = format!(
+                        "NTFS partition {} @{} path '{}' range read failed: {}",
+                        candidate.partition_index, candidate.offset, path, error
                     );
+                    tracing::warn!(%reason, "Descriptor NTFS range read failed for path candidate");
+                    reasons.push(reason);
                 }
             }
         }
@@ -976,7 +1170,7 @@ where
 fn open_descriptor_image_file<F>(
     descriptor: &PreviewDescriptor,
     mut open_reader: F,
-) -> Result<Box<dyn Read>, FileServiceError>
+) -> Result<RangeContentReader, FileServiceError>
 where
     F: FnMut(&Path) -> std::io::Result<Box<dyn evidence_core::EvidenceReader>>,
 {
@@ -993,7 +1187,7 @@ where
         let result = if candidate.filesystem_kind == "NTFS" {
             let boxed_reader = open_reader(source_path)?;
             match fs_ntfs::NtfsReader::open(boxed_reader, candidate.offset) {
-                Ok(fs) => open_first_image_path(&fs, &path_candidates),
+                Ok(fs) => open_first_image_path_seekable(&fs, &path_candidates),
                 Err(e) => {
                     tracing::warn!(
                         path = %descriptor.path,
@@ -1059,14 +1253,14 @@ fn open_fat_or_exfat_image_candidate<F>(
     candidate: &PreviewPartitionCandidate,
     path_candidates: &[String],
     open_reader: &mut F,
-) -> std::io::Result<Box<dyn Read>>
+) -> std::io::Result<RangeContentReader>
 where
     F: FnMut(&Path) -> std::io::Result<Box<dyn evidence_core::EvidenceReader>>,
 {
     let fat_result = {
         let boxed_reader = open_reader(source_path)?;
         match fs_fat::FatReader::open(boxed_reader, candidate.offset) {
-            Ok(fs) => open_first_image_path(&fs, path_candidates),
+            Ok(fs) => open_first_image_path_seekable(&fs, path_candidates),
             Err(e) => Err(e),
         }
     };
@@ -1083,7 +1277,7 @@ where
 
             let boxed_reader = open_reader(source_path)?;
             match fs_exfat::ExfatReader::open(boxed_reader, candidate.offset) {
-                Ok(fs) => open_first_image_path(&fs, path_candidates),
+                Ok(fs) => open_first_image_path_seekable(&fs, path_candidates),
                 Err(exfat_error) => Err(std::io::Error::new(
                     exfat_error.kind(),
                     format!("FAT open failed: {fat_error}; exFAT open failed: {exfat_error}"),
@@ -1098,7 +1292,7 @@ fn try_open_exfat_image_candidate<F>(
     candidate: &PreviewPartitionCandidate,
     path_candidates: &[String],
     open_reader: &mut F,
-) -> std::io::Result<Option<Box<dyn Read>>>
+) -> std::io::Result<Option<RangeContentReader>>
 where
     F: FnMut(&Path) -> std::io::Result<Box<dyn evidence_core::EvidenceReader>>,
 {
@@ -1110,7 +1304,7 @@ where
     }
 
     match fs_exfat::ExfatReader::open(boxed_reader, candidate.offset) {
-        Ok(fs) => open_first_image_path(&fs, path_candidates).map(Some),
+        Ok(fs) => open_first_image_path_seekable(&fs, path_candidates).map(Some),
         Err(error) => Err(error),
     }
 }
@@ -1123,6 +1317,37 @@ fn open_first_image_path(
     for path in path_candidates {
         match fs.open_file(path) {
             Ok(reader) => return Ok(reader),
+            Err(error) => last_error = Some(error),
+        }
+    }
+
+    Err(last_error.unwrap_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::NotFound, "No preview path candidates")
+    }))
+}
+
+/// Try to open the first available path candidate as a seekable reader.
+/// Falls back to a non-seekable streaming reader if the filesystem does not
+/// support seekable file access.
+fn open_first_image_path_seekable(
+    fs: &dyn FileSystemReader,
+    path_candidates: &[String],
+) -> std::io::Result<RangeContentReader> {
+    let mut last_error = None;
+
+    for path in path_candidates {
+        match fs.open_file_seekable(path) {
+            Ok(reader) => return Ok(RangeContentReader::Seekable(reader)),
+            Err(error) if error.kind() == std::io::ErrorKind::Unsupported => {
+                // Filesystem does not provide seekable files; try non-seekable below.
+            }
+            Err(error) => last_error = Some(error),
+        }
+    }
+
+    for path in path_candidates {
+        match fs.open_file(path) {
+            Ok(reader) => return Ok(RangeContentReader::Streaming(reader)),
             Err(error) => last_error = Some(error),
         }
     }
@@ -1176,7 +1401,7 @@ fn strip_partition_path_prefix(path: &str) -> Option<&str> {
 }
 
 fn read_seekable_range(
-    reader: &mut dyn ReadSeek,
+    reader: &mut dyn evidence_core::ReadSeek,
     offset: u64,
     length: usize,
 ) -> Result<Vec<u8>, FileServiceError> {
@@ -1207,7 +1432,11 @@ pub fn read_file_header_by_id(
             break;
         }
 
-        let chunk = read_file_bytes_for_case(conn, file_id, offset, chunk_len)?;
+        let chunk = match read_file_bytes_for_case(conn, file_id, offset, chunk_len) {
+            Ok(chunk) => chunk,
+            Err(error) if error.is_read_offset_beyond_size() => break,
+            Err(error) => return Err(error),
+        };
         if chunk.is_empty() {
             break;
         }
@@ -1336,11 +1565,11 @@ fn open_logical_file(
 fn open_logical_file_seekable(
     source_path: &str,
     entry: &FileEntry,
-) -> Result<Box<dyn ReadSeek>, FileServiceError> {
+) -> Result<Box<dyn evidence_core::ReadSeek>, FileServiceError> {
     Ok(Box::new(std::fs::File::open(resolve_logical_file_path(
         source_path,
         entry,
-    )?)?) as Box<dyn ReadSeek>)
+    )?)?) as Box<dyn evidence_core::ReadSeek>)
 }
 
 fn resolve_logical_file_path(
@@ -1732,11 +1961,11 @@ fn open_e01_file(
         let exfat_hint = if is_exfat_filesystem_kind(fs_kind) {
             true
         } else {
-            let mut probe_reader = open_e01_reader_cached(Path::new(source_path))?;
+            let mut probe_reader = open_e01_reader_cached(Path::new(source_path), "")?;
             looks_like_exfat_boot_sector(&mut probe_reader, target.offset).unwrap_or(false)
         };
 
-        let reader = open_e01_reader_cached(Path::new(source_path))?;
+        let reader = open_e01_reader_cached(Path::new(source_path), "")?;
         let boxed_reader: Box<dyn evidence_core::EvidenceReader> = Box::new(reader);
 
         let result = match fs_kind {
@@ -1767,7 +1996,7 @@ fn open_e01_file(
                             "E01 FAT open failed; trying exFAT"
                         );
 
-                        let exfat_reader = open_e01_reader_cached(Path::new(source_path))?;
+                        let exfat_reader = open_e01_reader_cached(Path::new(source_path), "")?;
                         let exfat_boxed: Box<dyn evidence_core::EvidenceReader> =
                             Box::new(exfat_reader);
                         match fs_exfat::ExfatReader::open(exfat_boxed, target.offset) {
@@ -1938,7 +2167,23 @@ pub fn skip_reader_bytes(
     #[cfg(test)]
     SKIP_READER_BYTES_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-    let mut buffer = vec![0u8; 65536];
+    if remaining == 0 {
+        return Ok(());
+    }
+
+    // Sequential skipping is expensive for deep offsets. Large offsets indicate
+    // a filesystem reader that should have been opened via the seekable path;
+    // log it so regressions can be detected.
+    if remaining > 1024 * 1024 {
+        tracing::warn!(
+            bytes_to_skip = remaining,
+            "Sequential byte skip for large offset; consider using a seekable reader"
+        );
+    }
+
+    // Use a 1 MiB buffer to amortize syscall overhead for the unavoidable
+    // sequential-skip path.
+    let mut buffer = vec![0u8; 1024 * 1024];
     while remaining > 0 {
         let chunk_len = remaining.min(buffer.len() as u64) as usize;
         let read = reader.read(&mut buffer[..chunk_len])?;
@@ -2438,6 +2683,8 @@ mod tests {
                 filesystem_kind: "NTFS".to_string(),
                 offset: 0,
             }],
+            entry_size: huge_size,
+            entry_modified_at: None,
         };
 
         reset_skip_reader_bytes_call_count();
@@ -2471,6 +2718,8 @@ mod tests {
                 filesystem_kind: "FAT".to_string(),
                 offset: 0,
             }],
+            entry_size: 1536,
+            entry_modified_at: None,
         };
 
         reset_skip_reader_bytes_call_count();
@@ -2725,21 +2974,42 @@ mod tests {
         clear_e01_reader_cache();
         let dir = tempfile::TempDir::new().unwrap();
         let mut paths = Vec::new();
-        // Open 5 E01 files (cache max = 4)
-        for i in 0..5 {
+        // Open one more than the per-case limit to force eviction.
+        let limit = E01_READER_CACHE_PER_CASE_MAX_SIZE;
+        for i in 0..=limit {
             let path = dir.path().join(format!("cache-test-{i}.E01"));
             write_tiny_e01(&path).unwrap();
             paths.push(path);
         }
-        // First 4 go into cache
-        for path in &paths[..4] {
-            let _r = open_e01_reader_cached(path).unwrap();
+        for path in &paths[..limit] {
+            let _r = open_e01_reader_cached(path, "").unwrap();
         }
-        // 5th evicts the first (paths[0])
-        let _r = open_e01_reader_cached(&paths[4]).unwrap();
+        // The next open evicts the least-recently-used reader (paths[0]).
+        let _r = open_e01_reader_cached(&paths[limit], "").unwrap();
 
-        // Verify paths[0] was evicted by trying to open it fresh — should still work
-        let mut r = open_e01_reader_cached(&paths[0]).unwrap();
+        // Verify paths[0] was evicted by trying to open it fresh — should still work.
+        let mut r = open_e01_reader_cached(&paths[0], "").unwrap();
+        let mut buf = [0u8; 14];
+        r.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf, b"E01-CACHE-TEST");
+
+        clear_e01_reader_cache();
+    }
+
+    #[test]
+    fn e01_reader_cache_is_bucketed_by_case() {
+        clear_e01_reader_cache();
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("shared.E01");
+        write_tiny_e01(&path).unwrap();
+
+        // Warm the cache for case A and case B.
+        let _ = open_e01_reader_cached(&path, "case-a").unwrap();
+        let _ = open_e01_reader_cached(&path, "case-b").unwrap();
+
+        // Clearing case A must not evict case B's reader.
+        clear_e01_reader_cache_for_case("case-a");
+        let mut r = open_e01_reader_cached(&path, "case-b").unwrap();
         let mut buf = [0u8; 14];
         r.read_exact(&mut buf).unwrap();
         assert_eq!(&buf, b"E01-CACHE-TEST");
@@ -2755,7 +3025,7 @@ mod tests {
         write_tiny_e01(&path).unwrap();
 
         // Populate the cache
-        let _r = open_e01_reader_cached(&path).unwrap();
+        let _r = open_e01_reader_cached(&path, "").unwrap();
 
         // Poison the mutex by panicking while holding the lock
         let result = std::panic::catch_unwind(|| {
@@ -2765,7 +3035,7 @@ mod tests {
         assert!(result.is_err());
 
         // After poison, the cache should be cleared and a new open should work
-        let mut r = open_e01_reader_cached(&path).unwrap();
+        let mut r = open_e01_reader_cached(&path, "").unwrap();
         let mut buf = [0u8; 14];
         r.read_exact(&mut buf).unwrap();
         assert_eq!(&buf, b"E01-CACHE-TEST");

@@ -557,7 +557,7 @@ pub(super) mod test_hooks {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .as_ref()
-            .map_or(true, |tracked| tracked == &file_id.0)
+            .is_none_or(|tracked| tracked == &file_id.0)
     }
 
     pub(in crate::import_analysis) fn reset() {

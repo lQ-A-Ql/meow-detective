@@ -600,6 +600,21 @@ impl FatReader {
             None => Err(file_not_found(path)),
         }
     }
+
+    /// Open a file and return a seekable in-memory cursor.
+    fn open_file_cursor(&self, path: &str) -> io::Result<io::Cursor<Vec<u8>>> {
+        match self.resolve_path_cluster(path)? {
+            Some((cluster, false, size)) => {
+                if size == 0 {
+                    return Ok(io::Cursor::new(Vec::new()));
+                }
+                let data = truncate_data_to_declared_size(self.walk_cluster_chain(cluster)?, size);
+                Ok(io::Cursor::new(data))
+            }
+            Some((_, true, _)) => Err(path_is_directory(path)),
+            None => Err(file_not_found(path)),
+        }
+    }
 }
 
 impl FileSystemReader for FatReader {
@@ -622,17 +637,11 @@ impl FileSystemReader for FatReader {
     }
 
     fn open_file(&self, path: &str) -> io::Result<Box<dyn Read>> {
-        match self.resolve_path_cluster(path)? {
-            Some((cluster, false, size)) => {
-                if size == 0 {
-                    return Ok(Box::new(io::Cursor::new(Vec::new())));
-                }
-                let data = truncate_data_to_declared_size(self.walk_cluster_chain(cluster)?, size);
-                Ok(Box::new(io::Cursor::new(data)))
-            }
-            Some((_, true, _)) => Err(path_is_directory(path)),
-            None => Err(file_not_found(path)),
-        }
+        Ok(Box::new(self.open_file_cursor(path)?))
+    }
+
+    fn open_file_seekable(&self, path: &str) -> io::Result<Box<dyn evidence_core::ReadSeek>> {
+        Ok(Box::new(self.open_file_cursor(path)?))
     }
 
     fn data_source_name(&self) -> &str {
@@ -662,11 +671,13 @@ mod tests {
     use evidence_core::filesystem::join_child_path;
     use std::sync::{Arc, Mutex};
 
+    type ReadLog = Arc<Mutex<Vec<(u64, usize)>>>;
+
     struct FakeReader {
         data: Vec<u8>,
         pos: u64,
         info: evidence_core::ReaderInfo,
-        reads: Option<Arc<Mutex<Vec<(u64, usize)>>>>,
+        reads: Option<ReadLog>,
     }
 
     impl FakeReader {
@@ -683,7 +694,7 @@ mod tests {
             }
         }
 
-        fn with_read_log(data: Vec<u8>, reads: Arc<Mutex<Vec<(u64, usize)>>>) -> Self {
+        fn with_read_log(data: Vec<u8>, reads: ReadLog) -> Self {
             Self {
                 data,
                 pos: 0,

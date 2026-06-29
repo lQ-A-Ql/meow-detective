@@ -14,7 +14,7 @@ const projectionEventTopics: EventTopic[] = [
   'data-source-imported',
   'artifact-added',
   'timeline-updated',
-  'search-index_progress',
+  'search-index-progress',
 ];
 
 function subscribeToProjectionInvalidations(queryClient: QueryClient) {

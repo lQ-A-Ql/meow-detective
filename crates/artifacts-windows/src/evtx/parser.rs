@@ -104,10 +104,140 @@ pub struct EvtxBootExtraction {
     pub warnings: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EvtxEventCategory {
+    BootShutdown,
+    LogonLogoff,
+    PrivilegeEscalation,
+    ProcessExecution,
+    AccountManagement,
+    ScheduledTask,
+    ApplicationCrash,
+    SoftwareInstallation,
+    Other,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EvtxSecurityEventKind {
+    LogonSuccess,
+    LogonFailure,
+    ExplicitCredentials,
+    ProcessCreated,
+    ScheduledTaskCreated,
+    ScheduledTaskModified,
+    AccountCreated,
+    GroupMemberAdded,
+}
+
+impl EvtxSecurityEventKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::LogonSuccess => "logonSuccess",
+            Self::LogonFailure => "logonFailure",
+            Self::ExplicitCredentials => "explicitCredentials",
+            Self::ProcessCreated => "processCreated",
+            Self::ScheduledTaskCreated => "scheduledTaskCreated",
+            Self::ScheduledTaskModified => "scheduledTaskModified",
+            Self::AccountCreated => "accountCreated",
+            Self::GroupMemberAdded => "groupMemberAdded",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EvtxApplicationEventKind {
+    ApplicationCrash,
+    ApplicationHang,
+    WindowsErrorReporting,
+    SoftwareInstallation,
+}
+
+impl EvtxApplicationEventKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::ApplicationCrash => "applicationCrash",
+            Self::ApplicationHang => "applicationHang",
+            Self::WindowsErrorReporting => "windowsErrorReporting",
+            Self::SoftwareInstallation => "softwareInstallation",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvtxSecurityEvent {
+    pub timestamp: String,
+    pub event_id: u32,
+    pub record_id: Option<u64>,
+    pub provider: Option<String>,
+    pub kind: EvtxSecurityEventKind,
+    pub source_path: String,
+    pub target_user: Option<String>,
+    pub subject_user: Option<String>,
+    pub logon_type: Option<String>,
+    pub ip_address: Option<String>,
+    pub workstation: Option<String>,
+    pub failure_reason: Option<String>,
+    pub process_name: Option<String>,
+    pub parent_process_name: Option<String>,
+    pub task_name: Option<String>,
+    pub privilege_list: Option<String>,
+    pub member_name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvtxApplicationEvent {
+    pub timestamp: String,
+    pub event_id: u32,
+    pub record_id: Option<u64>,
+    pub provider: Option<String>,
+    pub kind: EvtxApplicationEventKind,
+    pub source_path: String,
+    pub application: Option<String>,
+    pub fault_module: Option<String>,
+    pub product_name: Option<String>,
+    pub manufacturer: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvtxStructuredExtraction {
+    pub boot_events: Vec<EvtxBootEvent>,
+    pub security_events: Vec<EvtxSecurityEvent>,
+    pub application_events: Vec<EvtxApplicationEvent>,
+    pub warnings: Vec<String>,
+}
+
 pub fn extract_boot_shutdown_events(
     bytes: &[u8],
     source_path: &str,
 ) -> Result<EvtxBootExtraction, EvtxBootError> {
+    let structured = extract_structured_events(bytes, source_path)?;
+    Ok(EvtxBootExtraction {
+        events: structured.boot_events,
+        warnings: structured.warnings,
+    })
+}
+
+pub fn extract_boot_shutdown_events_from_json_records(
+    records: &[Value],
+    source_path: &str,
+) -> Result<EvtxBootExtraction, EvtxBootError> {
+    let structured = extract_structured_events_from_json_records(records, source_path)?;
+    Ok(EvtxBootExtraction {
+        events: structured.boot_events,
+        warnings: structured.warnings,
+    })
+}
+
+pub fn extract_structured_events(
+    bytes: &[u8],
+    source_path: &str,
+) -> Result<EvtxStructuredExtraction, EvtxBootError> {
     if !supports_evtx_boot_shutdown_path(source_path) {
         return Err(EvtxBootError::UnsupportedPath {
             path: source_path.to_string(),
@@ -131,62 +261,42 @@ pub fn extract_boot_shutdown_events(
     })?;
 
     let mut raw_warnings = Vec::new();
-    let mut events = Vec::new();
+    let mut extraction = EvtxStructuredExtraction::default();
     for record in parser.records_json_value() {
         match record {
             Ok(record) => {
-                if let Some(event) = boot_event_from_json(
+                structured_event_from_json(
                     &record.data,
                     Some(record.event_record_id),
                     Some(record.timestamp.to_string()),
                     source_path,
-                ) {
-                    events.push(event);
-                }
+                    &mut extraction,
+                );
             }
             Err(err) => raw_warnings.push(format_evtx_warning(source_path, &err)),
         }
     }
 
-    if events.is_empty() && raw_warnings.is_empty() {
-        raw_warnings.push(format!(
-            "{source_path} contains no supported boot/shutdown candidate events"
-        ));
-    }
-
-    Ok(EvtxBootExtraction {
-        events,
-        warnings: govern_evtx_warnings(source_path, raw_warnings),
-    })
+    extraction.warnings = govern_evtx_warnings(source_path, raw_warnings);
+    Ok(extraction)
 }
 
-pub fn extract_boot_shutdown_events_from_json_records(
+pub fn extract_structured_events_from_json_records(
     records: &[Value],
     source_path: &str,
-) -> Result<EvtxBootExtraction, EvtxBootError> {
+) -> Result<EvtxStructuredExtraction, EvtxBootError> {
     if !supports_evtx_boot_shutdown_path(source_path) {
         return Err(EvtxBootError::UnsupportedPath {
             path: source_path.to_string(),
         });
     }
 
-    let mut raw_warnings = Vec::new();
-    let mut events = Vec::new();
+    let mut extraction = EvtxStructuredExtraction::default();
     for record in records {
-        if let Some(event) = boot_event_from_json(record, None, None, source_path) {
-            events.push(event);
-        }
+        structured_event_from_json(record, None, None, source_path, &mut extraction);
     }
-    if events.is_empty() {
-        raw_warnings.push(format!(
-            "{source_path} contains no supported boot/shutdown candidate events"
-        ));
-    }
-
-    Ok(EvtxBootExtraction {
-        events,
-        warnings: govern_evtx_warnings(source_path, raw_warnings),
-    })
+    extraction.warnings = govern_evtx_warnings(source_path, Vec::new());
+    Ok(extraction)
 }
 
 fn bounded_clean_evtx_bytes(bytes: &[u8]) -> &[u8] {
@@ -285,62 +395,209 @@ fn sanitize_evtx_path(path: &str) -> String {
         .to_string()
 }
 
-fn boot_event_from_json(
+fn structured_event_from_json(
     record: &Value,
     fallback_record_id: Option<u64>,
     fallback_timestamp: Option<String>,
     source_path: &str,
-) -> Option<EvtxBootEvent> {
+    extraction: &mut EvtxStructuredExtraction,
+) {
     let wrapper = record.get("Event").unwrap_or(record);
-    let system = wrapper.get("System")?;
-    let event_id = event_id(system.get("EventID")?)?;
+    let Some(system) = wrapper.get("System") else {
+        return;
+    };
+    let Some(event_id_value) = system.get("EventID") else {
+        return;
+    };
+    let Some(event_id) = event_id(event_id_value) else {
+        return;
+    };
     let provider = provider_name(system);
-    let kind = classify_event(event_id, provider.as_deref())?;
+    let channel = event_channel(system);
     let timestamp = event_timestamp(system)
         .or(fallback_timestamp)
         .unwrap_or_else(|| "unknown".to_string());
     let record_id = event_record_id(system).or(fallback_record_id);
-    let note = kind.note().to_string();
-    let details = extract_event_details(wrapper, &kind);
 
-    Some(EvtxBootEvent {
-        timestamp,
-        event_id,
-        record_id,
-        provider,
-        kind,
-        source_path: source_path.to_string(),
-        note,
-        details,
-    })
+    match classify_event(event_id, provider.as_deref(), channel.as_deref()) {
+        EventClass::Boot(kind) => {
+            let note = kind.note().to_string();
+            let details = extract_event_details(wrapper, &kind);
+            extraction.boot_events.push(EvtxBootEvent {
+                timestamp,
+                event_id,
+                record_id,
+                provider,
+                kind,
+                source_path: source_path.to_string(),
+                note,
+                details,
+            });
+        }
+        EventClass::Security(kind) => {
+            if let Some(event) = security_event_from_json(
+                wrapper,
+                kind,
+                timestamp,
+                event_id,
+                record_id,
+                provider,
+                source_path,
+            ) {
+                extraction.security_events.push(event);
+            }
+        }
+        EventClass::Application(kind) => {
+            if let Some(event) = application_event_from_json(
+                wrapper,
+                kind,
+                timestamp,
+                event_id,
+                record_id,
+                provider,
+                source_path,
+            ) {
+                extraction.application_events.push(event);
+            }
+        }
+        EventClass::Ignore => {}
+    }
 }
 
-/// Classify an event by ID with optional provider filtering for ambiguous IDs.
-fn classify_event(event_id: u32, provider: Option<&str>) -> Option<EvtxBootEventKind> {
+enum EventClass {
+    Boot(EvtxBootEventKind),
+    Security(EvtxSecurityEventKind),
+    Application(EvtxApplicationEventKind),
+    Ignore,
+}
+
+/// Classify an event by ID with optional provider/channel filtering for ambiguous IDs.
+fn classify_event(event_id: u32, provider: Option<&str>, channel: Option<&str>) -> EventClass {
+    let channel = channel.unwrap_or("");
     match event_id {
-        6005 => Some(EvtxBootEventKind::EventLogStarted),
-        6006 => Some(EvtxBootEventKind::EventLogStopped),
-        6008 => Some(EvtxBootEventKind::UnexpectedShutdown),
-        1074 => Some(EvtxBootEventKind::PlannedShutdown),
+        6005 => EventClass::Boot(EvtxBootEventKind::EventLogStarted),
+        6006 => EventClass::Boot(EvtxBootEventKind::EventLogStopped),
+        6008 => EventClass::Boot(EvtxBootEventKind::UnexpectedShutdown),
+        1074 => EventClass::Boot(EvtxBootEventKind::PlannedShutdown),
         4104 if provider_matches(provider, "microsoft-windows-powershell") => {
-            Some(EvtxBootEventKind::PowerShellScriptBlock)
+            EventClass::Boot(EvtxBootEventKind::PowerShellScriptBlock)
         }
         1 if provider_matches(provider, "microsoft-windows-sysmon") => {
-            Some(EvtxBootEventKind::SysmonProcessCreate)
+            EventClass::Boot(EvtxBootEventKind::SysmonProcessCreate)
         }
         21 if provider_matches(
             provider,
             "microsoft-windows-terminalservices-localsessionmanager",
         ) =>
         {
-            Some(EvtxBootEventKind::RdpSessionConnect)
+            EventClass::Boot(EvtxBootEventKind::RdpSessionConnect)
         }
         1116 if provider_matches(provider, "microsoft-windows-windows defender")
             || provider_matches(provider, "Microsoft-Windows-Windows Defender") =>
         {
-            Some(EvtxBootEventKind::DefenderThreatDetected)
+            EventClass::Boot(EvtxBootEventKind::DefenderThreatDetected)
         }
-        _ => None,
+        4624 if channel.eq_ignore_ascii_case("security") => {
+            EventClass::Security(EvtxSecurityEventKind::LogonSuccess)
+        }
+        4625 if channel.eq_ignore_ascii_case("security") => {
+            EventClass::Security(EvtxSecurityEventKind::LogonFailure)
+        }
+        4648 if channel.eq_ignore_ascii_case("security") => {
+            EventClass::Security(EvtxSecurityEventKind::ExplicitCredentials)
+        }
+        4688 if channel.eq_ignore_ascii_case("security") => {
+            EventClass::Security(EvtxSecurityEventKind::ProcessCreated)
+        }
+        4698 if channel.eq_ignore_ascii_case("security") => {
+            EventClass::Security(EvtxSecurityEventKind::ScheduledTaskCreated)
+        }
+        4702 if channel.eq_ignore_ascii_case("security") => {
+            EventClass::Security(EvtxSecurityEventKind::ScheduledTaskModified)
+        }
+        4720 if channel.eq_ignore_ascii_case("security") => {
+            EventClass::Security(EvtxSecurityEventKind::AccountCreated)
+        }
+        4732 if channel.eq_ignore_ascii_case("security") => {
+            EventClass::Security(EvtxSecurityEventKind::GroupMemberAdded)
+        }
+        1000..=1002 if channel.eq_ignore_ascii_case("application") => {
+            EventClass::Application(match event_id {
+                1000 => EvtxApplicationEventKind::ApplicationCrash,
+                1001 => EvtxApplicationEventKind::WindowsErrorReporting,
+                _ => EvtxApplicationEventKind::ApplicationHang,
+            })
+        }
+        1033 | 11707 | 11708 if channel.eq_ignore_ascii_case("application") => {
+            EventClass::Application(EvtxApplicationEventKind::SoftwareInstallation)
+        }
+        _ => EventClass::Ignore,
+    }
+}
+
+fn security_event_from_json(
+    wrapper: &Value,
+    kind: EvtxSecurityEventKind,
+    timestamp: String,
+    event_id: u32,
+    record_id: Option<u64>,
+    provider: Option<String>,
+    source_path: &str,
+) -> Option<EvtxSecurityEvent> {
+    let data_items = event_data_items(wrapper);
+    Some(EvtxSecurityEvent {
+        timestamp,
+        event_id,
+        record_id,
+        provider,
+        kind,
+        source_path: source_path.to_string(),
+        target_user: find_data_value(&data_items, "TargetUserName"),
+        subject_user: find_data_value(&data_items, "SubjectUserName"),
+        logon_type: find_data_value(&data_items, "LogonType"),
+        ip_address: find_data_value(&data_items, "IpAddress"),
+        workstation: find_data_value(&data_items, "WorkstationName"),
+        failure_reason: find_data_value(&data_items, "Status"),
+        process_name: find_data_value(&data_items, "NewProcessName"),
+        parent_process_name: find_data_value(&data_items, "CreatorProcessName"),
+        task_name: find_data_value(&data_items, "TaskName"),
+        privilege_list: find_data_value(&data_items, "PrivilegeList"),
+        member_name: find_data_value(&data_items, "MemberName"),
+    })
+}
+
+fn application_event_from_json(
+    wrapper: &Value,
+    kind: EvtxApplicationEventKind,
+    timestamp: String,
+    event_id: u32,
+    record_id: Option<u64>,
+    provider: Option<String>,
+    source_path: &str,
+) -> Option<EvtxApplicationEvent> {
+    let data_items = event_data_items(wrapper);
+    Some(EvtxApplicationEvent {
+        timestamp,
+        event_id,
+        record_id,
+        provider,
+        kind,
+        source_path: source_path.to_string(),
+        application: find_data_value(&data_items, "AppName"),
+        fault_module: find_data_value(&data_items, "ModuleName"),
+        product_name: find_data_value(&data_items, "ProductName"),
+        manufacturer: find_data_value(&data_items, "Manufacturer"),
+    })
+}
+
+fn event_data_items(wrapper: &Value) -> Vec<Value> {
+    let Some(event_data) = wrapper.get("EventData") else {
+        return Vec::new();
+    };
+    match event_data.get("Data") {
+        Some(Value::Array(items)) => items.clone(),
+        Some(single) => vec![single.clone()],
+        None => Vec::new(),
     }
 }
 
@@ -477,6 +734,20 @@ fn provider_name(system: &Value) -> Option<String> {
     }
 }
 
+fn event_channel(system: &Value) -> Option<String> {
+    let channel = system.get("Channel")?;
+    match channel {
+        Value::String(text) => Some(text.clone()),
+        Value::Object(map) => map
+            .get("#text")
+            .or_else(|| map.get("Text"))
+            .or_else(|| map.get("Value"))
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -542,7 +813,7 @@ mod tests {
         .expect("json extraction should succeed");
 
         assert!(extraction.events.is_empty());
-        assert!(extraction.warnings[0].contains("no supported"));
+        assert!(extraction.warnings.is_empty());
     }
 
     #[test]
@@ -641,10 +912,7 @@ mod tests {
 
     #[test]
     fn unsupported_path_returns_error() {
-        let result = extract_boot_shutdown_events(
-            b"ElfFile\0",
-            "Windows/System32/winevt/Logs/UnknownChannel.evtx",
-        );
+        let result = extract_boot_shutdown_events(b"ElfFile\0", "Windows/Temp/UnknownChannel.evtx");
         assert!(matches!(result, Err(EvtxBootError::UnsupportedPath { .. })));
     }
 

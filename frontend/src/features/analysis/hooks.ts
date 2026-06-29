@@ -5,6 +5,7 @@ import {
   getBrowserHistorySummary,
   getCorrelationSnapshot,
   getEmailExtractionSummary,
+  getEvtxEventSummary,
   getEvidenceClassificationSummary,
   getRegistryExtractionSummary,
   getRegistryStructuredSummary,
@@ -94,6 +95,18 @@ export function useEmailExtractionSummary(request: AnalysisExtractionPageRequest
   });
 }
 
+export function useEvtxEventSummary(request: AnalysisExtractionPageRequest = {}) {
+  const currentCase = useCurrentCase();
+  const offset = request.offset ?? 0;
+  const limit = request.limit ?? 200;
+  return useQuery({
+    queryKey: ['analysis', 'evtx-events', currentCase.data?.id ?? null, offset, limit],
+    queryFn: () => getEvtxEventSummary({ offset, limit }),
+    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+    retry: false,
+  });
+}
+
 export function useV2GovernanceSnapshot() {
   const currentCase = useCurrentCase();
   return useQuery({
@@ -149,6 +162,7 @@ export function useRunAnalysisExtraction() {
       qc.invalidateQueries({ queryKey: ['analysis', 'registry-structured', currentCase.data?.id ?? null] });
       qc.invalidateQueries({ queryKey: ['analysis', 'browser-history', currentCase.data?.id ?? null] });
       qc.invalidateQueries({ queryKey: ['analysis', 'email-extraction', currentCase.data?.id ?? null] });
+      qc.invalidateQueries({ queryKey: ['analysis', 'evtx-events', currentCase.data?.id ?? null] });
       qc.invalidateQueries({ queryKey: ['artifacts'] });
       qc.invalidateQueries({ queryKey: ['timeline'] });
     },

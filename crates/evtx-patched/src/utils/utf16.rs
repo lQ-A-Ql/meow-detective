@@ -79,7 +79,6 @@ pub(crate) fn decode_utf16le_bytes(bytes: &[u8]) -> Result<String, Utf16LeDecode
 }
 
 /// Decode UTF-16LE bytes into a bump-allocated UTF-8 string slice.
-#[allow(dead_code)]
 pub(crate) fn decode_utf16le_bytes_to_bump_str<'a>(
     bytes: &[u8],
     num_chars: usize,

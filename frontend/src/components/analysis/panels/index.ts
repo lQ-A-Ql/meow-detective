@@ -1,6 +1,7 @@
 export { BrowserHistoryPanel } from './BrowserHistoryPanel';
-export { EvidenceClassificationPanel, FileClassificationPanel, AnalysisReportPanel } from './ClassificationPanel';
 export { EmailExtractionPanel } from './EmailExtractionPanel';
+export { EventLogPanel } from './EventLogPanel';
+export { EvidenceClassificationPanel, FileClassificationPanel, AnalysisReportPanel } from './ClassificationPanel';
 export { RegistryExtractionPanel } from './RegistryExtractionPanel';
 export { SystemInfoPanel, AnalysisHeader, AnalysisEmptyState, AnalysisErrorBanner, AnalysisLoadingPanel } from './SystemInfoPanel';
 export {

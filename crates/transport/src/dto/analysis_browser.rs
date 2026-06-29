@@ -8,8 +8,14 @@ pub struct BrowserHistorySummaryDto {
     pub status: AnalysisParseStatusDto,
     pub visit_total: u64,
     pub download_total: u64,
+    pub cookie_total: u64,
+    pub session_total: u64,
+    pub password_total: u64,
     pub visits: Vec<BrowserVisitDto>,
     pub downloads: Vec<BrowserDownloadDto>,
+    pub cookies: Vec<BrowserCookieDto>,
+    pub sessions: Vec<BrowserSessionTabDto>,
+    pub passwords: Vec<BrowserPasswordDto>,
     pub generated_at: String,
     pub warnings: Vec<String>,
 }
@@ -81,4 +87,22 @@ pub struct BrowserSessionTabDto {
     pub tab_index: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_active: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserPasswordDto {
+    pub artifact_id: String,
+    pub file_id: String,
+    pub source_path: String,
+    pub browser: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    pub url: String,
+    pub username: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password_preview: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+    pub times_used: u64,
 }

@@ -58,10 +58,16 @@ describe('AnalysisPanels sub-components', () => {
         status: 'parsed' as const,
         visitTotal: 1,
         downloadTotal: 0,
+        cookieTotal: 0,
+        sessionTotal: 0,
+        passwordTotal: 0,
         generatedAt: '2026-06-01T10:00:00Z',
         warnings: [],
         visits: [{ artifactId: 'v1', fileId: 'f1', sourcePath: '/path', browser: 'Chrome', profile: 'Default', url: 'https://example.com', title: 'Example', visitTime: '2026-06-01T10:00:00Z', visitCount: 1 }],
         downloads: [],
+        cookies: [],
+        sessions: [],
+        passwords: [],
       };
       render(createElement(BrowserHistoryPanel, { summary }));
       expect(screen.getByText('Example')).toBeDefined();

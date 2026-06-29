@@ -81,7 +81,7 @@ describe('projection cache invalidation', () => {
 
     invalidateEventProjectionQueries(queryClient, 'artifact-added');
     invalidateEventProjectionQueries(queryClient, 'timeline-updated');
-    invalidateEventProjectionQueries(queryClient, 'search-index_progress');
+    invalidateEventProjectionQueries(queryClient, 'search-index-progress');
 
     expect(invalidatedKeys(invalidateSpy)).toEqual([['artifacts'], ['timeline'], ['timeline'], ['search']]);
   });

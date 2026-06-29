@@ -10,6 +10,9 @@ pub use capability::{
 };
 pub use error::EvtxBootError;
 pub use parser::{
-    extract_boot_shutdown_events, extract_boot_shutdown_events_from_json_records, EvtxBootEvent,
-    EvtxBootEventKind, EvtxBootExtraction, MAX_EVTX_ANALYSIS_BYTES,
+    extract_boot_shutdown_events, extract_boot_shutdown_events_from_json_records,
+    extract_structured_events, extract_structured_events_from_json_records, EvtxApplicationEvent,
+    EvtxApplicationEventKind, EvtxBootEvent, EvtxBootEventKind, EvtxBootExtraction,
+    EvtxEventCategory, EvtxSecurityEvent, EvtxSecurityEventKind, EvtxStructuredExtraction,
+    MAX_EVTX_ANALYSIS_BYTES,
 };

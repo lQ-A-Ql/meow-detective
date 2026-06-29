@@ -34,6 +34,13 @@ impl FileServiceError {
     pub fn other(message: impl Into<String>) -> Self {
         Self::Other(message.into())
     }
+
+    /// Returns true when the error indicates a read started past the recorded
+    /// end-of-file.  Callers that are only interested in a bounded prefix (such
+    /// as header extraction) can treat this as EOF rather than a fatal error.
+    pub fn is_read_offset_beyond_size(&self) -> bool {
+        matches!(self, Self::Other(message) if message == "Read offset exceeds file size")
+    }
 }
 
 impl From<String> for FileServiceError {

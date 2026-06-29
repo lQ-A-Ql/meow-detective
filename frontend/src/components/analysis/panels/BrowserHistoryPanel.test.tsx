@@ -1,8 +1,24 @@
 import { createElement } from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { BrowserHistoryPanel } from './BrowserHistoryPanel';
 import type { BrowserHistorySummary } from '@/types/models';
+
+const emptySummary: BrowserHistorySummary = {
+  status: 'parsed',
+  visitTotal: 0,
+  downloadTotal: 0,
+  cookieTotal: 0,
+  sessionTotal: 0,
+  passwordTotal: 0,
+  visits: [],
+  downloads: [],
+  cookies: [],
+  sessions: [],
+  passwords: [],
+  generatedAt: '2026-06-01T10:00:00Z',
+  warnings: [],
+};
 
 describe('BrowserHistoryPanel', () => {
   it('renders header with section title and status', () => {
@@ -12,31 +28,18 @@ describe('BrowserHistoryPanel', () => {
     expect(screen.getByText('浏览器记录暂不可用。')).toBeDefined();
   });
 
-  it('renders tab buttons for all browser data categories', () => {
+  it('renders visit and download sections', () => {
     render(createElement(BrowserHistoryPanel, {}));
-    // Tab labels appear in both the tab bar and the TableBlock title area;
-    // use getAllByText to disambiguate
     expect(screen.getAllByText('访问历史').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('下载记录').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('Cookies').length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('switches to downloads tab when clicked', () => {
-    render(createElement(BrowserHistoryPanel, {}));
-    // "下载记录" appears in both summary stats and tab buttons;
-    // find the actual button element among the matches
-    const allMatches = screen.getAllByText('下载记录');
-    const tabBtn = allMatches.find((el) => el.tagName === 'BUTTON');
-    expect(tabBtn).toBeDefined();
-    fireEvent.click(tabBtn!);
+    expect(screen.getByText('暂无浏览历史')).toBeDefined();
     expect(screen.getByText('暂无下载记录')).toBeDefined();
   });
 
   it('renders visit data when summary is provided', () => {
     const summary: BrowserHistorySummary = {
-      status: 'parsed',
+      ...emptySummary,
       visitTotal: 1,
-      downloadTotal: 0,
       visits: [
         {
           artifactId: 'v1',
@@ -50,12 +53,19 @@ describe('BrowserHistoryPanel', () => {
           visitCount: 3,
         },
       ],
-      downloads: [],
-      generatedAt: '2026-06-01T10:00:00Z',
-      warnings: [],
     };
     render(createElement(BrowserHistoryPanel, { summary }));
     expect(screen.getByText('Example Site')).toBeDefined();
     expect(screen.getByText('https://example.com')).toBeDefined();
+  });
+
+  it('renders cookie, session and password sections', () => {
+    render(createElement(BrowserHistoryPanel, {}));
+    expect(screen.getAllByText('Cookies').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('会话 / 标签页').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('保存的密码').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('暂无 Cookie 记录')).toBeDefined();
+    expect(screen.getByText('暂无会话记录')).toBeDefined();
+    expect(screen.getByText('暂无密码记录')).toBeDefined();
   });
 });

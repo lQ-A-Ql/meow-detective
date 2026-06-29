@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   registrySummary: vi.fn(),
   browserSummary: vi.fn(),
   emailSummary: vi.fn(),
+  eventLogSummary: vi.fn(),
   classifications: vi.fn(),
   summaryMutation: vi.fn(),
 }));
@@ -32,6 +33,7 @@ vi.mock('@/features/analysis/hooks', () => ({
   useRegistryStructuredSummary: () => ({ data: undefined, error: null, isLoading: false, refetch: vi.fn() }),
   useBrowserHistorySummary: mocks.browserSummary,
   useEmailExtractionSummary: mocks.emailSummary,
+  useEvtxEventSummary: mocks.eventLogSummary,
   useAnalysisClassifications: mocks.classifications,
   useGenerateAnalysisSummary: mocks.summaryMutation,
 }));
@@ -251,6 +253,9 @@ describe('DataAnalysis page', () => {
         status: 'parsed',
         visitTotal: 3,
         downloadTotal: 1,
+        cookieTotal: 0,
+        sessionTotal: 0,
+        passwordTotal: 0,
         generatedAt: '2026-06-01T10:12:00Z',
         warnings: [],
         visits: [
@@ -301,6 +306,9 @@ describe('DataAnalysis page', () => {
             totalBytes: 7340032,
           },
         ],
+        cookies: [],
+        sessions: [],
+        passwords: [],
       },
     }));
     mocks.emailSummary.mockReturnValue(queryState({
@@ -339,6 +347,28 @@ describe('DataAnalysis page', () => {
             bodyPreview: 'Endpoint alert was forwarded from the SOC queue.',
           },
         ],
+      },
+    }));
+    mocks.eventLogSummary.mockReturnValue(queryState({
+      data: {
+        status: 'parsed',
+        bootShutdownCount: 1,
+        logonLogoffCount: 0,
+        privilegeEscalationCount: 0,
+        processExecutionCount: 0,
+        accountManagementCount: 0,
+        scheduledTaskCount: 0,
+        applicationCrashCount: 0,
+        softwareInstallationCount: 0,
+        otherCount: 0,
+        totalCount: 1,
+        bootEvents: [
+          { eventId: 6005, kind: 'boot', timestamp: '2026-06-01T08:00:00Z', provider: 'EventLog', recordId: 1, sourcePath: 'System.evtx', note: 'System started' },
+        ],
+        securityEvents: [],
+        applicationEvents: [],
+        warnings: [],
+        generatedAt: '2026-06-01T10:14:00Z',
       },
     }));
     mocks.classifications.mockReturnValue(queryState({
@@ -425,6 +455,7 @@ describe('DataAnalysis page', () => {
     expect(screen.getByRole('tab', { name: /注册表/ })).toBeDefined();
     expect(screen.getByRole('tab', { name: /浏览器记录/ })).toBeDefined();
     expect(screen.getByRole('tab', { name: /邮件信息/ })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /事件日志/ })).toBeDefined();
     expect(screen.getByRole('tab', { name: /文件分类/ })).toBeDefined();
     expect(screen.getByRole('tab', { name: /报告/ })).toBeDefined();
     expect(screen.getAllByText('已解析').length).toBeGreaterThan(0);
@@ -457,7 +488,7 @@ describe('DataAnalysis page', () => {
 
     expect(screen.getByText('证据语义分类')).toBeDefined();
     expect(screen.getAllByText('系统信息').length).toBeGreaterThan(0);
-    expect(screen.getByText('事件日志')).toBeDefined();
+    expect(screen.getAllByText('事件日志').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Windows/System32/winevt/Logs/System.evtx').length).toBeGreaterThan(0);
     expect(screen.getAllByText('已发现候选').length).toBeGreaterThan(0);
 
@@ -465,7 +496,7 @@ describe('DataAnalysis page', () => {
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith([]));
   });
 
-  it('runs Registry, BrowserHistory and Email extraction sequentially from the header toolbar', async () => {
+  it('runs Registry, BrowserHistory, Email and EventLogs extraction sequentially from the header toolbar', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({
       status: 'parsed',
       scannedCount: 8,
@@ -483,10 +514,11 @@ describe('DataAnalysis page', () => {
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: /运行提取/ }));
 
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(4));
     expect(mutateAsync).toHaveBeenNthCalledWith(1, { categories: ['Registry'] });
     expect(mutateAsync).toHaveBeenNthCalledWith(2, { categories: ['BrowserHistory'] });
     expect(mutateAsync).toHaveBeenNthCalledWith(3, { categories: ['Email'] });
+    expect(mutateAsync).toHaveBeenNthCalledWith(4, { categories: ['EventLogs'] });
   });
 
   it('shows extraction progress overview on the first screen and updates it after running extraction', async () => {
@@ -510,15 +542,16 @@ describe('DataAnalysis page', () => {
     expect(within(overview).getByText('注册表提取')).toBeDefined();
     expect(within(overview).getByText('浏览器记录提取')).toBeDefined();
     expect(within(overview).getByText('邮件信息提取')).toBeDefined();
-    expect(within(overview).getAllByText('等待').length).toBe(3);
+    expect(within(overview).getByText('事件日志提取')).toBeDefined();
+    expect(within(overview).getAllByText('等待').length).toBe(4);
 
     fireEvent.click(screen.getByRole('button', { name: /运行提取/ }));
 
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(3));
-    await waitFor(() => expect(within(overview).getAllByText('已完成').length).toBe(3));
-    expect(within(overview).getAllByText('scanned=8').length).toBe(3);
-    expect(within(overview).getAllByText('artifacts=7').length).toBe(3);
-    expect(within(overview).getAllByText('timeline=3').length).toBe(3);
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(within(overview).getAllByText('已完成').length).toBe(4));
+    expect(within(overview).getAllByText('scanned=8').length).toBe(4);
+    expect(within(overview).getAllByText('artifacts=7').length).toBe(4);
+    expect(within(overview).getAllByText('timeline=3').length).toBe(4);
   });
 
   it('renders registry, browser and email extraction tabs', () => {

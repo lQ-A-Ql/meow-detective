@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Database, Download, FileText, Globe, Mail, Monitor, Shield } from 'lucide-react';
+import { Database, Download, FileClock, FileText, Globe, Mail, Monitor, Shield } from 'lucide-react';
 import { useCreateAnalysisDemoCase, useCurrentCase } from '@/features/case/hooks';
 import {
   useAnalysisClassifications,
   useAnalysisSystemInfo,
   useBrowserHistorySummary,
   useEmailExtractionSummary,
+  useEvtxEventSummary,
   useEvidenceClassificationSummary,
   useGenerateAnalysisSummary,
   useRegistryExtractionSummary,
@@ -24,6 +25,7 @@ import {
   AnalysisReportPanel,
   BrowserHistoryPanel,
   EmailExtractionPanel,
+  EventLogPanel,
   EvidenceClassificationPanel,
   FileClassificationPanel,
   RegistryExtractionPanel,
@@ -43,16 +45,18 @@ const analysisTabs = [
   { value: 'registry', label: '注册表', icon: Database },
   { value: 'browser', label: '浏览器记录', icon: Globe },
   { value: 'email', label: '邮件信息', icon: Mail },
+  { value: 'eventlogs', label: '事件日志', icon: FileClock },
   { value: 'files', label: '文件分类', icon: FileText },
   { value: 'report', label: '报告', icon: Download },
 ] as const;
 
-type ExtractionCategory = 'Registry' | 'BrowserHistory' | 'Email';
+type ExtractionCategory = 'Registry' | 'BrowserHistory' | 'Email' | 'EventLogs';
 
 const extractionCategories: Array<{ key: ExtractionCategory; label: string }> = [
   { key: 'Registry', label: '注册表提取' },
   { key: 'BrowserHistory', label: '浏览器记录提取' },
   { key: 'Email', label: '邮件信息提取' },
+  { key: 'EventLogs', label: '事件日志提取' },
 ];
 
 function emptyProgress(label: string): AnalysisExtractionProgressInfo {
@@ -81,6 +85,7 @@ function defaultProgressMap(): Record<ExtractionCategory, AnalysisExtractionProg
     Registry: emptyProgress('注册表提取'),
     BrowserHistory: emptyProgress('浏览器记录提取'),
     Email: emptyProgress('邮件信息提取'),
+    EventLogs: emptyProgress('事件日志提取'),
   };
 }
 
@@ -105,6 +110,7 @@ export function DataAnalysis() {
   const registryStructured = useRegistryStructuredSummary();
   const browserSummary = useBrowserHistorySummary({ limit: 200 });
   const emailSummary = useEmailExtractionSummary({ limit: 200 });
+  const eventLogSummary = useEvtxEventSummary({ limit: 200 });
   const classifications = useAnalysisClassifications(1000);
   const summaryMutation = useGenerateAnalysisSummary();
   const [extractionProgress, setExtractionProgress] = useState(defaultProgressMap);
@@ -118,6 +124,7 @@ export function DataAnalysis() {
     ?? registrySummary.error
     ?? browserSummary.error
     ?? emailSummary.error
+    ?? eventLogSummary.error
     ?? classifications.error
     ?? summaryMutation.error
     ?? evidenceScan.error
@@ -132,6 +139,7 @@ export function DataAnalysis() {
       registryStructured.refetch(),
       browserSummary.refetch(),
       emailSummary.refetch(),
+      eventLogSummary.refetch(),
       classifications.refetch(),
     ]);
   }
@@ -148,6 +156,7 @@ export function DataAnalysis() {
       Registry: registrySummary.refetch,
       BrowserHistory: browserSummary.refetch,
       Email: emailSummary.refetch,
+      EventLogs: eventLogSummary.refetch,
     };
 
     const refetchRegistryStructured = async () => {
@@ -326,6 +335,17 @@ export function DataAnalysis() {
                     <EmailExtractionPanel
                       summary={emailSummary.data}
                       progress={extractionProgress.Email}
+                    />
+                  )}
+                </TabsContent>
+
+                <TabsContent value="eventlogs" forceMount className="m-0 data-[state=inactive]:hidden">
+                  {eventLogSummary.isLoading ? (
+                    <AnalysisLoadingPanel text="正在读取事件日志..." />
+                  ) : (
+                    <EventLogPanel
+                      summary={eventLogSummary.data}
+                      progress={extractionProgress.EventLogs}
                     />
                   )}
                 </TabsContent>

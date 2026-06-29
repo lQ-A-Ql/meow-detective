@@ -25,4 +25,8 @@ export interface AppSettings {
   maxImportWorkers?: number;
   maxAnalysisWorkers?: number;
   importAnalysisMode?: 'metadataOnly' | 'budgetedContent' | 'fullContent';
+  hexChunkBytes?: number;
+  maxViewerRangeLength?: number;
+  maxInlineImagePreviewBytes?: number;
+  maxInlineMediaPreviewBytes?: number;
 }

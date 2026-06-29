@@ -42,7 +42,8 @@ const BMAP_MAGIC: u32 = 0x424D_4150;
 
 /// Standard Unix inode type masks.
 const S_IFDIR: u16 = 0x4000;
-#[allow(dead_code)]
+// Used by xfs tests; format constant.
+#[cfg(test)]
 const S_IFREG: u16 = 0x8000;
 
 /// di_format values (inode data-fork layout).
@@ -63,7 +64,6 @@ const BMBT_REC_SIZE: usize = 16;
 const DIR2_SF_HDR_SIZE: usize = 10;
 
 /// Key field offsets within the XFS superblock (big-endian).
-#[allow(dead_code)]
 mod sb_off {
     pub const MAGIC: usize = 0x00; // u32
     pub const BLOCKSIZE: usize = 0x04; // u32
@@ -71,13 +71,12 @@ mod sb_off {
     pub const ROOTINO: usize = 0x38; // u64
     pub const AGBLOCKS: usize = 0x54; // u32
     pub const AGCOUNT: usize = 0x58; // u32
-    pub const SECTSIZE: usize = 0x66; // u16
+    pub const _SECTSIZE: usize = 0x66; // u16
     pub const INODESIZE: usize = 0x68; // u16
     pub const INOPBLOCK: usize = 0x6A; // u16
 }
 
 /// Key field offsets within the v2 inode core (big-endian).
-#[allow(dead_code)]
 mod di_off {
     pub const MAGIC: usize = 0x00; // u16
     pub const MODE: usize = 0x02; // u16
@@ -85,7 +84,7 @@ mod di_off {
     pub const SIZE: usize = 0x38; // u64
     pub const NEXTENTS: usize = 0x4C; // u32
     pub const FORKOFF: usize = 0x52; // u8
-    pub const AFORMAT: usize = 0x53; // u8
+    pub const _AFORMAT: usize = 0x53; // u8
 }
 
 // ---------------------------------------------------------------------------
@@ -120,13 +119,13 @@ fn be_u64(buf: &[u8], off: usize) -> u64 {
 pub struct XfsReader {
     reader: RefCell<Box<dyn EvidenceReader>>,
     block_size: u64,
-    #[allow(dead_code)]
-    ag_blocks: u64,
-    #[allow(dead_code)]
-    ag_count: u32,
+    /// Allocation-group block count (used by xfs tests).
+    _ag_blocks: u64,
+    /// Allocation-group count (used by xfs tests).
+    _ag_count: u32,
     inode_size: u16,
-    #[allow(dead_code)]
-    inopblock: u16,
+    /// Inodes per filesystem block (used by xfs tests).
+    _inopblock: u16,
     root_ino: u64,
     volume_offset: u64,
     inode_base_block: u64,
@@ -187,10 +186,10 @@ impl XfsReader {
         Ok(Self {
             reader: RefCell::new(reader),
             block_size,
-            ag_blocks,
-            ag_count,
+            _ag_blocks: ag_blocks,
+            _ag_count: ag_count,
             inode_size,
-            inopblock,
+            _inopblock: inopblock,
             root_ino,
             volume_offset: offset,
             inode_base_block,
@@ -781,8 +780,8 @@ mod tests {
         let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
         let xfs = XfsReader::open(reader, 0).unwrap();
         // Fixture declares agcount = 1, agblocks = 10 (== dblocks).
-        assert_eq!(xfs.ag_count, 1);
-        assert_eq!(xfs.ag_blocks, 10);
+        assert_eq!(xfs._ag_count, 1);
+        assert_eq!(xfs._ag_blocks, 10);
     }
 
     // -----------------------------------------------------------------------
@@ -892,7 +891,7 @@ mod tests {
         let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
         let xfs = XfsReader::open(reader, 0).unwrap();
         assert_eq!(xfs.inode_size, 256);
-        assert_eq!(xfs.inopblock, 16);
+        assert_eq!(xfs._inopblock, 16);
     }
 
     // -----------------------------------------------------------------------
@@ -979,9 +978,9 @@ mod tests {
 
         let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
         let xfs = XfsReader::open(reader, 0).unwrap();
-        assert_eq!(xfs.ag_count, 4);
+        assert_eq!(xfs._ag_count, 4);
         // dblocks(20) / agcount(4) = 5
-        assert_eq!(xfs.ag_blocks, 5);
+        assert_eq!(xfs._ag_blocks, 5);
     }
 
     // -----------------------------------------------------------------------

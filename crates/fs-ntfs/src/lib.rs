@@ -67,11 +67,11 @@ pub struct NtfsDirectoryEntry {
     pub system: bool,
 }
 
-#[allow(dead_code)]
 pub struct NtfsReader {
     reader: RefCell<Box<dyn EvidenceReader>>,
     bytes_per_sector: u16,
-    sectors_per_cluster: u8,
+    /// Sectors per cluster (parsed for format completeness).
+    _sectors_per_cluster: u8,
     mft_cluster: u64,
     mft_record_size: u32,
     index_record_size: u32,
@@ -132,7 +132,7 @@ impl NtfsReader {
         Ok(Self {
             reader: RefCell::new(reader),
             bytes_per_sector,
-            sectors_per_cluster,
+            _sectors_per_cluster: sectors_per_cluster,
             mft_cluster,
             mft_record_size,
             index_record_size,
@@ -1583,6 +1583,22 @@ impl FileSystemReader for NtfsReader {
     }
 
     fn open_file(&self, path: &str) -> io::Result<Box<dyn Read>> {
+        Ok(Box::new(self.open_file_cursor(path)?))
+    }
+
+    fn open_file_seekable(&self, path: &str) -> io::Result<Box<dyn evidence_core::ReadSeek>> {
+        Ok(Box::new(self.open_file_cursor(path)?))
+    }
+
+    fn data_source_name(&self) -> &str {
+        "NTFS"
+    }
+}
+
+impl NtfsReader {
+    /// Open a file and return a seekable in-memory cursor. Both `open_file`
+    /// and `open_file_seekable` are backed by this helper.
+    fn open_file_cursor(&self, path: &str) -> io::Result<io::Cursor<Vec<u8>>> {
         // Fast path: if the path is an MFT inode reference
         // ("mft:NNN" or "mft:PARTITION:NNN"), read directly.
         // This skips INDX name lookups which fail when directories
@@ -1595,7 +1611,7 @@ impl FileSystemReader for NtfsReader {
                     data.len()
                 )));
             }
-            return Ok(Box::new(io::Cursor::new(data)));
+            return Ok(io::Cursor::new(data));
         }
 
         let inode = self
@@ -1608,11 +1624,7 @@ impl FileSystemReader for NtfsReader {
                 data.len()
             )));
         }
-        Ok(Box::new(io::Cursor::new(data)))
-    }
-
-    fn data_source_name(&self) -> &str {
-        "NTFS"
+        Ok(io::Cursor::new(data))
     }
 }
 

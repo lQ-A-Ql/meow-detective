@@ -69,6 +69,10 @@ describe('Settings page', () => {
       maxImportWorkers: 1,
       maxAnalysisWorkers: 4,
       importAnalysisMode: 'budgetedContent',
+      hexChunkBytes: 32768,
+      maxViewerRangeLength: 1048576,
+      maxInlineImagePreviewBytes: 5242880,
+      maxInlineMediaPreviewBytes: 20971520,
     });
     mocks.saveAppSettings.mockImplementation(async (settings) => settings);
   });
@@ -112,6 +116,10 @@ describe('Settings page', () => {
         maxImportWorkers: 1,
         maxAnalysisWorkers: 4,
         importAnalysisMode: 'budgetedContent',
+        hexChunkBytes: 32768,
+        maxViewerRangeLength: 1048576,
+        maxInlineImagePreviewBytes: 5242880,
+        maxInlineMediaPreviewBytes: 20971520,
       });
     });
     expect(await screen.findByText('设置已保存。')).toBeTruthy();

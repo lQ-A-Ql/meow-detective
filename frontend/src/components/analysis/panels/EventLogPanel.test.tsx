@@ -7,20 +7,20 @@ import type { EvtxEventSummary } from '@/types/models';
 describe('EventLogPanel', () => {
   it('renders header with section title', () => {
     render(createElement(EventLogPanel, {}));
-    expect(screen.getByText('Event Log Analysis')).toBeDefined();
-    // "Boot/Shutdown" appears in both the tab button and summary stats
-    expect(screen.getAllByText('Boot/Shutdown').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('事件日志分析')).toBeDefined();
+    // "开关机" appears in both the tab button and summary stats
+    expect(screen.getAllByText('开关机').length).toBeGreaterThanOrEqual(1);
   });
 
   it('renders empty state for boot tab when no data', () => {
     render(createElement(EventLogPanel, {}));
-    expect(screen.getByText('No boot/shutdown events')).toBeDefined();
+    expect(screen.getByText('暂无开关机事件')).toBeDefined();
   });
 
   it('switches to application tab when clicked', () => {
     render(createElement(EventLogPanel, {}));
-    fireEvent.click(screen.getByText('Application Events'));
-    expect(screen.getByText('No application events')).toBeDefined();
+    fireEvent.click(screen.getByText('应用程序事件'));
+    expect(screen.getByText('暂无应用程序事件')).toBeDefined();
   });
 
   it('renders boot events when summary is provided', () => {
@@ -36,7 +36,7 @@ describe('EventLogPanel', () => {
       otherCount: 0,
       totalCount: 1,
       bootEvents: [
-        { eventId: 6005, kind: 'boot', timestamp: '2026-06-01T08:00:00Z', provider: 'EventLog', recordId: 1, sourcePath: 'System.evtx', note: 'System started' },
+        { eventId: 6005, kind: 'eventLogStarted', timestamp: '2026-06-01T08:00:00Z', provider: 'EventLog', recordId: 1, sourcePath: 'System.evtx', note: 'System started' },
       ],
       securityEvents: [],
       applicationEvents: [],

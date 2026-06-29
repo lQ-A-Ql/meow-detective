@@ -108,6 +108,18 @@ pub struct AppSettingsDto {
     /// Default analysis depth for import-time post processing.
     #[serde(default = "default_import_analysis_mode")]
     pub import_analysis_mode: String,
+    /// Number of bytes requested in one hex viewer chunk.
+    #[serde(default = "default_hex_chunk_bytes")]
+    pub hex_chunk_bytes: u32,
+    /// Maximum number of bytes returned by a single viewer range request.
+    #[serde(default = "default_max_viewer_range_length")]
+    pub max_viewer_range_length: u32,
+    /// Maximum file size for inline image previews.
+    #[serde(default = "default_max_inline_image_preview_bytes")]
+    pub max_inline_image_preview_bytes: u64,
+    /// Maximum file size for inline media previews.
+    #[serde(default = "default_max_inline_media_preview_bytes")]
+    pub max_inline_media_preview_bytes: u64,
 }
 
 impl Default for AppSettingsDto {
@@ -120,6 +132,10 @@ impl Default for AppSettingsDto {
             max_import_workers: None,
             max_analysis_workers: None,
             import_analysis_mode: default_import_analysis_mode(),
+            hex_chunk_bytes: default_hex_chunk_bytes(),
+            max_viewer_range_length: default_max_viewer_range_length(),
+            max_inline_image_preview_bytes: default_max_inline_image_preview_bytes(),
+            max_inline_media_preview_bytes: default_max_inline_media_preview_bytes(),
         }
     }
 }
@@ -148,12 +164,46 @@ impl AppSettingsDto {
                     .to_string(),
             );
         }
+        if self.hex_chunk_bytes == 0 {
+            return Err("hexChunkBytes must be greater than zero".to_string());
+        }
+        if self.hex_chunk_bytes < 1024 {
+            return Err("hexChunkBytes must be at least 1024".to_string());
+        }
+        if self.max_viewer_range_length == 0 {
+            return Err("maxViewerRangeLength must be greater than zero".to_string());
+        }
+        if self.max_viewer_range_length < 4096 {
+            return Err("maxViewerRangeLength must be at least 4096".to_string());
+        }
+        if self.max_inline_image_preview_bytes == 0 {
+            return Err("maxInlineImagePreviewBytes must be greater than zero".to_string());
+        }
+        if self.max_inline_media_preview_bytes == 0 {
+            return Err("maxInlineMediaPreviewBytes must be greater than zero".to_string());
+        }
         Ok(())
     }
 }
 
 fn default_import_analysis_mode() -> String {
     "metadataOnly".to_string()
+}
+
+fn default_hex_chunk_bytes() -> u32 {
+    64 * 1024
+}
+
+fn default_max_viewer_range_length() -> u32 {
+    1024 * 1024
+}
+
+fn default_max_inline_image_preview_bytes() -> u64 {
+    5 * 1024 * 1024
+}
+
+fn default_max_inline_media_preview_bytes() -> u64 {
+    20 * 1024 * 1024
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

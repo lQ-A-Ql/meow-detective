@@ -7,6 +7,7 @@ import {
   BrowserHistorySummary,
   CorrelationSnapshot,
   EmailExtractionSummary,
+  EvtxEventSummary,
   EvidenceClassificationSummary,
   RegistryExtractionSummary,
   RegistryStructuredSummary,
@@ -58,6 +59,12 @@ export async function getEmailExtractionSummary(
   request: AnalysisExtractionPageRequest = {},
 ): Promise<EmailExtractionSummary> {
   return apiClient.request(COMMANDS.analysis.GET_EMAIL_EXTRACTION_SUMMARY, { request });
+}
+
+export async function getEvtxEventSummary(
+  request: AnalysisExtractionPageRequest = {},
+): Promise<EvtxEventSummary> {
+  return apiClient.request(COMMANDS.analysis.GET_EVTX_EVENT_SUMMARY, { request });
 }
 
 export async function getV2GovernanceSnapshot(): Promise<V2GovernanceSnapshot> {

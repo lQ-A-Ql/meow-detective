@@ -77,6 +77,10 @@ mod tests {
             max_import_workers: Some(4),
             max_analysis_workers: Some(2),
             import_analysis_mode: "budgetedContent".to_string(),
+            hex_chunk_bytes: 32 * 1024,
+            max_viewer_range_length: 2 * 1024 * 1024,
+            max_inline_image_preview_bytes: 1024 * 1024,
+            max_inline_media_preview_bytes: 10 * 1024 * 1024,
         };
 
         std::fs::write(&path, serde_json::to_string(&settings).unwrap()).unwrap();

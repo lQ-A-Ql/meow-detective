@@ -35,33 +35,26 @@ pub(crate) const PROP_TAG_ATTACH_SIZE: u16 = 0x0E20;
 #[allow(non_upper_case_globals)]
 pub(crate) mod prop_type {
     /// MAPI 16-bit integer property type (format documentation).
-    #[allow(dead_code)]
-    pub const PtypInteger16: u16 = 0x0002;
+    pub const _PtypInteger16: u16 = 0x0002;
     /// MAPI 32-bit integer property type (format documentation).
-    #[allow(dead_code)]
-    pub const PtypInteger32: u16 = 0x0003;
+    pub const _PtypInteger32: u16 = 0x0003;
     /// MAPI 32-bit floating-point property type (format documentation).
-    #[allow(dead_code)]
-    pub const PtypFloating32: u16 = 0x0004;
+    pub const _PtypFloating32: u16 = 0x0004;
     pub const PtypFloating64: u16 = 0x0005;
     /// MAPI boolean property type (format documentation).
-    #[allow(dead_code)]
-    pub const PtypBoolean: u16 = 0x000B;
+    pub const _PtypBoolean: u16 = 0x000B;
     pub const PtypInteger64: u16 = 0x0014;
     pub const PtypString: u16 = 0x001F;
     pub const PtypString8: u16 = 0x001E;
     pub const PtypTime: u16 = 0x0040;
     pub const PtypBinary: u16 = 0x0102;
     /// MAPI multi-valued 16-bit integer type code (format documentation).
-    #[allow(dead_code)]
-    pub const PtypMultipleInteger16: u16 = 0x1002;
+    pub const _PtypMultipleInteger16: u16 = 0x1002;
     /// MAPI multi-valued 32-bit integer type code (format documentation).
-    #[allow(dead_code)]
-    pub const PtypMultipleInteger32: u16 = 0x1003;
+    pub const _PtypMultipleInteger32: u16 = 0x1003;
     pub const PtypMultipleString: u16 = 0x101F;
     /// MAPI multi-valued binary type code (format documentation).
-    #[allow(dead_code)]
-    pub const PtypMultipleBinary: u16 = 0x1102;
+    pub const _PtypMultipleBinary: u16 = 0x1102;
 }
 
 /// Represents a parsed property value.

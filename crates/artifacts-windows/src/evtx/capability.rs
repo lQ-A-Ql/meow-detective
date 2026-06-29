@@ -12,11 +12,19 @@ pub const SUPPORTED_EVENT_IDS: &[u32] = &[
     1,    // Sysmon process creation
     21,   // RDP session connect
     1116, // Windows Defender malware detection
+    // Security audit events
+    4624, 4625, 4648, 4688, 4698, 4702, 4720, 4732, // Application events
+    1000, 1001, 1002, 1033, 11707, 11708,
 ];
 pub const SUPPORTED_SOURCE_PATH_SUFFIX: &str = "windows/system32/winevt/logs/system.evtx";
 
 /// Extended set of EVTX log paths supported by the parser.
-/// Includes the original System.evtx plus forensically-critical channels.
+/// Includes the original System.evtx, Security.evtx, Application.evtx plus
+/// forensically-critical operational channels.  In addition, any `.evtx`
+/// file located under `Windows/System32/winevt/Logs` is accepted so that
+/// adjacent channels (Biometrics, Winlogon, etc.) do not generate noisy
+/// "outside bounded parser scope" warnings; events from those channels are
+/// simply ignored unless they match a supported ID/channel rule.
 pub const SUPPORTED_SOURCE_PATH_SUFFIXES: &[&str] = &[
     "windows/system32/winevt/logs/system.evtx",
     "windows/system32/winevt/logs/security.evtx",
@@ -48,10 +56,25 @@ pub fn evtx_capability() -> EvtxCapability {
 
 pub fn supports_evtx_boot_shutdown_path(path: &str) -> bool {
     let normalized = path.replace('\\', "/").to_ascii_lowercase();
-    SUPPORTED_SOURCE_PATH_SUFFIXES.iter().any(|suffix| {
+    if !normalized.ends_with(".evtx") {
+        return false;
+    }
+    // Accept bare filenames used by enumerated operational channels.
+    let bare_filename_match = SUPPORTED_SOURCE_PATH_SUFFIXES.iter().any(|suffix| {
         let sfx = suffix.replace('\\', "/");
-        normalized == sfx || normalized.ends_with(&format!("/{sfx}"))
-    })
+        normalized == sfx
+    });
+    if bare_filename_match {
+        return true;
+    }
+    // Only accept files that live in the standard Windows event-log directory.
+    // The directory check includes a leading slash so arbitrary parent prefixes
+    // such as `c:/notwindows/system32/winevt/logs` are not accepted.
+    if let Some((dir, _file)) = normalized.rsplit_once('/') {
+        return dir == "windows/system32/winevt/logs"
+            || dir.ends_with("/windows/system32/winevt/logs");
+    }
+    false
 }
 
 #[cfg(test)]
@@ -64,7 +87,10 @@ mod tests {
         assert_eq!(capability.parser_id, "evtx.boot_shutdown");
         assert_eq!(
             capability.supported_event_ids,
-            &[6005, 6006, 6008, 1074, 4104, 1, 21, 1116]
+            &[
+                6005, 6006, 6008, 1074, 4104, 1, 21, 1116, 4624, 4625, 4648, 4688, 4698, 4702,
+                4720, 4732, 1000, 1001, 1002, 1033, 11707, 11708
+            ]
         );
         assert_eq!(
             capability.source_path_suffix,
@@ -123,12 +149,28 @@ mod tests {
     }
 
     #[test]
-    fn path_guard_rejects_unsupported_evtx() {
+    fn path_guard_accepts_any_evtx_under_winevt_logs() {
+        assert!(supports_evtx_boot_shutdown_path(
+            "C:/Windows/System32/winevt/Logs/Microsoft-Windows-Biometrics%4Operational.evtx"
+        ));
+        assert!(supports_evtx_boot_shutdown_path(
+            "C:/Windows/System32/winevt/Logs/Microsoft-Windows-Winlogon%4Operational.evtx"
+        ));
+        assert!(supports_evtx_boot_shutdown_path(
+            "C:/Windows/System32/winevt/Logs/UnknownChannel.evtx"
+        ));
+    }
+
+    #[test]
+    fn path_guard_rejects_evtx_outside_winevt_logs() {
         assert!(!supports_evtx_boot_shutdown_path(
             "C:/notWindows/System32/winevt/Logs/System.evtx"
         ));
         assert!(!supports_evtx_boot_shutdown_path(
-            "C:/Windows/System32/winevt/Logs/UnknownChannel.evtx"
+            "C:/Windows/System32/config/SYSTEM"
+        ));
+        assert!(!supports_evtx_boot_shutdown_path(
+            "C:/Windows/System32/winevt/Logs/Setup.etl"
         ));
     }
 }

@@ -236,38 +236,6 @@ impl<'a> ByteCursor<'a> {
         ))
     }
 
-    /// Read `char_count` UTF-16 code units (little-endian), decode (stop at NUL if present),
-    /// and trim trailing whitespace.
-    pub(crate) fn utf16_by_char_count_trimmed(
-        &mut self,
-        char_count: usize,
-        what: &'static str,
-    ) -> DeserializationResult<Option<Utf16LeSlice<'a>>> {
-        if char_count == 0 {
-            return Ok(None);
-        }
-
-        let byte_len =
-            char_count
-                .checked_mul(2)
-                .ok_or_else(|| DeserializationError::Truncated {
-                    what,
-                    offset: self.pos as u64,
-                    need: usize::MAX,
-                    have: self.buf.len().saturating_sub(self.pos),
-                })?;
-
-        let bytes = self.take_bytes(byte_len, what)?;
-        if !bytes.len().is_multiple_of(2) {
-            return Err(Self::invalid_data(what, self.pos as u64));
-        }
-
-        let trimmed_chars = trim_utf16le_whitespace(bytes, char_count)
-            .map_err(|_| Self::invalid_data(what, (self.pos - byte_len) as u64))?;
-
-        Ok(Some(Utf16LeSlice::new(bytes, trimmed_chars)))
-    }
-
     /// Read `char_count` UTF-16 code units (little-endian), stopping at NUL if present,
     /// without trimming whitespace.
     pub(crate) fn utf16_by_char_count(
@@ -303,46 +271,6 @@ impl<'a> ByteCursor<'a> {
         }
 
         Ok(Some(Utf16LeSlice::new(bytes, actual_chars)))
-    }
-
-    /// Read `char_count` UTF-16 code units, trim trailing whitespace, and decode to UTF-8.
-    #[allow(dead_code)]
-    pub(crate) fn utf16_by_char_count_trimmed_utf8(
-        &mut self,
-        char_count: usize,
-        what: &'static str,
-    ) -> DeserializationResult<Option<String>> {
-        let start = self.pos;
-        let slice = self.utf16_by_char_count_trimmed(char_count, what)?;
-        match slice {
-            Some(value) => value
-                .to_string()
-                .map(Some)
-                .map_err(|_| Self::invalid_data(what, start as u64)),
-            None => Ok(None),
-        }
-    }
-
-    /// Read `char_count` UTF-16 code units, trim trailing whitespace, and decode into a bump string.
-    #[allow(dead_code)]
-    pub(crate) fn utf16_by_char_count_trimmed_bump(
-        &mut self,
-        char_count: usize,
-        what: &'static str,
-        arena: &'a Bump,
-    ) -> DeserializationResult<Option<&'a str>> {
-        let start = self.pos;
-        let slice = self.utf16_by_char_count_trimmed(char_count, what)?;
-        match slice {
-            Some(value) => decode_utf16le_bytes_to_bump_str(
-                value.as_bytes(),
-                value.as_bytes().len() / 2,
-                arena,
-            )
-            .map(Some)
-            .map_err(|_| Self::invalid_data(what, start as u64)),
-            None => Ok(None),
-        }
     }
 
     /// Read a `u16` length prefix (number of UTF-16 code units), then that many code units,
@@ -408,32 +336,6 @@ impl<'a> ByteCursor<'a> {
         trim_utf16le_whitespace(bytes, num_chars)
             .map_err(|_| Self::invalid_data(what, start as u64))?;
         Ok(Utf16LeSlice::new(bytes, num_chars))
-    }
-
-    /// Read UTF-16 code units until NUL and decode into UTF-8.
-    #[allow(dead_code)]
-    pub(crate) fn null_terminated_utf16_string_utf8(
-        &mut self,
-        what: &'static str,
-    ) -> DeserializationResult<String> {
-        let start = self.pos;
-        let slice = self.null_terminated_utf16_string(what)?;
-        slice
-            .to_string()
-            .map_err(|_| Self::invalid_data(what, start as u64))
-    }
-
-    /// Read UTF-16 code units until NUL and decode into a bump string.
-    #[allow(dead_code)]
-    pub(crate) fn null_terminated_utf16_string_bump(
-        &mut self,
-        what: &'static str,
-        arena: &'a Bump,
-    ) -> DeserializationResult<&'a str> {
-        let start = self.pos;
-        let slice = self.null_terminated_utf16_string(what)?;
-        decode_utf16le_bytes_to_bump_str(slice.as_bytes(), slice.as_bytes().len() / 2, arena)
-            .map_err(|_| Self::invalid_data(what, start as u64))
     }
 
     /// Read a length-prefixed UTF-16LE string and decode into a bump string.
