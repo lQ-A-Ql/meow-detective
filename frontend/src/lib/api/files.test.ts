@@ -3,8 +3,6 @@ import { apiClient } from './client';
 import { COMMANDS } from './commands';
 import {
   cancelImport,
-  extractFile,
-  getFileChildren,
   getFileChildrenPage,
   getFileJumpContext,
   getFileRowsPage,

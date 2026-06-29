@@ -10,7 +10,6 @@ import type {
   PartialResult,
   PartialResultKind,
   PerformanceReport,
-  PerformanceReportSummary,
   ResultFreshness,
 } from '@/types/models';
 

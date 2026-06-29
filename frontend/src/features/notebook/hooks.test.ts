@@ -25,7 +25,6 @@ vi.mock('@/lib/api/notebook', () => ({
 }));
 
 import {
-  useAddEvidenceCitation,
   useCreateNotebookEntry,
   useNotebookEntries,
   useNotebookEntry,

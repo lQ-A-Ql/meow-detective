@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { LeadDetailPanel } from './LeadDetail';
 import type { CorrelationCluster, CorrelationLead, CorrelationSnapshot } from '@/types/models';

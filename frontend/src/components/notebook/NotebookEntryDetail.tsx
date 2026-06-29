@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
-import { ScrollArea } from '@/app/components/ui/scroll-area';
 import {
   useNotebookEntry,
   useUpdateNotebookEntry,

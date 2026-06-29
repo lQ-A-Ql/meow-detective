@@ -92,12 +92,6 @@ interface McpPromptArgumentProtocolDto {
   required?: unknown;
 }
 
-interface McpCapabilitiesProtocolDto {
-  resources?: unknown;
-  tools?: unknown;
-  prompts?: unknown;
-}
-
 interface McpTestConnectionProtocolDto {
   success?: unknown;
   error?: unknown;

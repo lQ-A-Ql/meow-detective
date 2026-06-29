@@ -682,3 +682,10 @@ describe('FileBrowser media preview', () => {
     expect(screen.getAllByText('secret.dat').length).toBeGreaterThan(0);
   });
 });
+
+describe('FileBrowser render', () => {
+  it('renders without crashing when a case is active', () => {
+    const { container } = renderPage();
+    expect(container).toBeTruthy();
+  });
+});

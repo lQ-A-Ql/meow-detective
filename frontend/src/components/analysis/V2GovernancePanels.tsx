@@ -1,4 +1,4 @@
-import { AlertTriangle, BarChart3, CheckCircle2, Database, Shield } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Database, Shield } from 'lucide-react';
 import type {
   ErrorTaxonomyEntry,
   ReleaseGateEntry,

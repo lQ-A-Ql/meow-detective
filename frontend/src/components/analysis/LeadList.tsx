@@ -1,5 +1,4 @@
 import type {
-  CorrelationCluster,
   CorrelationFamilyCoverage,
   CorrelationLead,
 } from '@/types/models';

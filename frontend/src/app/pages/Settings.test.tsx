@@ -77,6 +77,12 @@ describe('Settings page', () => {
     mocks.saveAppSettings.mockImplementation(async (settings) => settings);
   });
 
+  it('renders without crashing', async () => {
+    render(<Settings />);
+    expect(await screen.findByText('设置')).toBeTruthy();
+    expect(screen.getByText('应用配置与数据目录')).toBeTruthy();
+  });
+
   it('loads persisted backend settings and applies theme state', async () => {
     render(<Settings />);
 

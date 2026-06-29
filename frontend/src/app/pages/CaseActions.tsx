@@ -1,4 +1,4 @@
-import { FolderOpen, Trash2, Upload } from 'lucide-react';
+import { FolderOpen, Trash2 } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
 import type { JobSnapshot, RecentCase } from '@/types/models';
 

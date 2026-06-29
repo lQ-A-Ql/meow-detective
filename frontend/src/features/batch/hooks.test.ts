@@ -25,11 +25,8 @@ vi.mock('@/lib/api/batch', () => ({
 
 import {
   useBatchJob,
-  useCancelBatch,
   useCreateBatchPlan,
   useListBatchJobs,
-  usePauseBatch,
-  useResumeBatch,
   useStartBatch,
 } from './hooks';
 

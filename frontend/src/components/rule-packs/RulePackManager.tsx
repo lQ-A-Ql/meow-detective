@@ -56,8 +56,6 @@ export function RulePackManager() {
   const [selectedPackId, setSelectedPackId] = useState<string | null>(null);
   const [loadPath, setLoadPath] = useState('');
 
-  const selectedPack = packs.find((p) => p.id === selectedPackId) ?? null;
-
   const totalRules = packs.reduce((sum, p) => sum + p.ruleCount, 0);
   const totalCovered = new Set<string>();
   packs.forEach((p) => p.coveredFamilies.forEach((f) => totalCovered.add(f)));
