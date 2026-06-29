@@ -50,7 +50,7 @@ pub(crate) fn run_attach_phase(
 
     ctx.report_job_progress(10, &format!("Attaching data source {source_name}"))?;
 
-    let telemetry = PhaseTelemetry::start("attach");
+    let telemetry = PhaseTelemetry::new();
     let ds = datasource_service::attach_data_source(
         ctx.conn,
         ctx.case_id,
@@ -89,7 +89,7 @@ pub(crate) fn run_enumeration_phase(
             enumerate_logical_directory(ctx, ds).map_err(CommandError::from_service_error)?
         }
         domain::DataSourceKind::E01 | domain::DataSourceKind::Raw => {
-            enumerate_image_data_source(ctx, ds)?
+            enumerate_image_data_source_with_staging(ctx, ds)?
         }
     };
 
@@ -155,7 +155,7 @@ fn enumerate_logical_directory(
     )
 }
 
-fn enumerate_image_data_source(
+fn enumerate_image_data_source_with_staging(
     ctx: &mut ImportJobContext<'_>,
     ds: &domain::DataSource,
 ) -> Result<file_service::EnumerationStats, CommandError> {

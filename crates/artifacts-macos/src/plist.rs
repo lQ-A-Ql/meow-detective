@@ -192,7 +192,7 @@ pub fn parse_xml_plist(data: &[u8], source_file: &str) -> Result<Vec<MacPlistEnt
         }
 
         // Extract <key>value</key>
-        if let Some(key) = extract_xml_content(trimmed, "key") {
+        if let Some(key) = crate::xml::extract_xml_tag_content(trimmed, "key") {
             current_key = Some(key);
             continue;
         }
@@ -200,7 +200,7 @@ pub fn parse_xml_plist(data: &[u8], source_file: &str) -> Result<Vec<MacPlistEnt
         // Extract value tags
         if let Some(ref key) = current_key {
             for tag in &["string", "integer", "real", "true", "false", "date", "data"] {
-                if let Some(value) = extract_xml_content(trimmed, tag) {
+                if let Some(value) = crate::xml::extract_xml_tag_content(trimmed, tag) {
                     let value_type = if *tag == "true" || *tag == "false" {
                         "boolean"
                     } else {
@@ -227,29 +227,6 @@ pub fn parse_xml_plist(data: &[u8], source_file: &str) -> Result<Vec<MacPlistEnt
     }
 
     Ok(entries)
-}
-
-/// Extract the text content between XML tags like `<tag>content</tag>`.
-fn extract_xml_content(line: &str, tag: &str) -> Option<String> {
-    let open = format!("<{}>", tag);
-    let close = format!("</{}>", tag);
-    let self_close = format!("<{}/>", tag);
-
-    // Self-closing tag
-    if line.contains(&self_close) {
-        return Some(String::new());
-    }
-
-    if let (Some(start), Some(end)) = (line.find(&open), line.find(&close)) {
-        let content_start = start + open.len();
-        if content_start < end {
-            return Some(line[content_start..end].to_string());
-        }
-        // Empty tag: <string></string>
-        return Some(String::new());
-    }
-
-    None
 }
 
 /// Read a big-endian integer from a byte slice of variable length.

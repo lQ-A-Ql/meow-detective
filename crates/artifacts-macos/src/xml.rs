@@ -9,6 +9,13 @@
 pub(crate) fn extract_xml_tag_content(line: &str, tag: &str) -> Option<String> {
     let open = format!("<{tag}>");
     let close = format!("</{tag}>");
+    let self_close = format!("<{tag}/>");
+
+    // Self-closing tag: <tag/>
+    if line.contains(&self_close) {
+        return Some(String::new());
+    }
+
     if let (Some(start), Some(end)) = (line.find(&open), line.find(&close)) {
         let content_start = start + open.len();
         if content_start < end {

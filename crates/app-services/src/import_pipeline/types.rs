@@ -67,15 +67,12 @@ impl<'a> ImportJobContext<'a> {
 /// elapsed time when building profile detail strings.
 #[derive(Debug)]
 pub(crate) struct PhaseTelemetry {
-    #[allow(dead_code)]
-    label: &'static str,
     started: Instant,
 }
 
 impl PhaseTelemetry {
-    pub fn start(label: &'static str) -> Self {
+    pub fn new() -> Self {
         Self {
-            label,
             started: Instant::now(),
         }
     }
@@ -86,5 +83,11 @@ impl PhaseTelemetry {
 
     pub fn elapsed_ms(&self) -> u128 {
         self.elapsed().as_millis()
+    }
+}
+
+impl Default for PhaseTelemetry {
+    fn default() -> Self {
+        Self::new()
     }
 }
