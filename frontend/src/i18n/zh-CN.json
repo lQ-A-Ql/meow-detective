@@ -96,9 +96,6 @@
       },
       "uiDebug": {
         "title": "界面与调试",
-        "theme": "主题",
-        "themeLight": "浅色",
-        "themeDark": "深色",
         "devEventTrace": "事件调试日志"
       },
       "mcp": {

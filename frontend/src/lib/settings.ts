@@ -1,10 +1,8 @@
-export type ThemeMode = 'light' | 'dark';
 export type ImportAnalysisMode = 'metadataOnly' | 'budgetedContent' | 'fullContent';
 
 export interface LocalSettings {
   caseRoot: string;
   imageSearchPaths: string;
-  theme: ThemeMode;
   devEventTrace: boolean;
   maxImportWorkers: string;
   maxAnalysisWorkers: string;
@@ -20,7 +18,6 @@ const STORAGE_KEY = 'forensics.localSettings';
 export const defaultSettings: LocalSettings = {
   caseRoot: 'C:\\ForensicsWorkbench\\cases',
   imageSearchPaths: 'E:\\cases\\; D:\\images\\',
-  theme: 'light',
   devEventTrace: false,
   maxImportWorkers: '',
   maxAnalysisWorkers: '',
@@ -44,13 +41,7 @@ export function readLocalSettings(): LocalSettings {
 export function writeLocalSettings(settings: LocalSettings) {
   const normalized = normalizeSettings(settings);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
-  applyTheme(normalized.theme);
   return normalized;
-}
-
-export function applyTheme(theme: ThemeMode) {
-  document.documentElement.dataset.theme = theme;
-  document.documentElement.classList.toggle('dark', theme === 'dark');
 }
 
 export function validatePathList(value: string) {
@@ -83,7 +74,6 @@ function normalizeSettings(value: unknown): LocalSettings {
       typeof candidate.imageSearchPaths === 'string'
         ? candidate.imageSearchPaths
         : defaultSettings.imageSearchPaths,
-    theme: candidate.theme === 'dark' ? 'dark' : 'light',
     devEventTrace: candidate.devEventTrace === true,
     maxImportWorkers:
       typeof candidate.maxImportWorkers === 'string'

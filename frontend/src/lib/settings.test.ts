@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  applyTheme,
   defaultSettings,
   formatPathList,
   parsePathList,
@@ -18,24 +17,19 @@ describe('local settings', () => {
       removeItem: (key: string) => store.delete(key),
       clear: () => store.clear(),
     });
-    document.documentElement.removeAttribute('data-theme');
-    document.documentElement.classList.remove('dark');
   });
 
   it('returns defaults when no local settings exist', () => {
     expect(readLocalSettings()).toEqual(defaultSettings);
   });
 
-  it('persists settings and applies theme', () => {
+  it('persists settings', () => {
     const saved = writeLocalSettings({
       ...defaultSettings,
-      theme: 'dark',
       devEventTrace: true,
     });
 
     expect(readLocalSettings()).toEqual(saved);
-    expect(document.documentElement.dataset.theme).toBe('dark');
-    expect(document.documentElement.classList.contains('dark')).toBe(true);
   });
 
   it('validates semicolon separated path lists', () => {
@@ -46,13 +40,5 @@ describe('local settings', () => {
   it('parses and formats semicolon separated path lists', () => {
     expect(parsePathList('C:\\cases; D:\\images; ')).toEqual(['C:\\cases', 'D:\\images']);
     expect(formatPathList(['C:\\cases', 'D:\\images'])).toBe('C:\\cases; D:\\images');
-  });
-
-  it('can switch back to light theme', () => {
-    applyTheme('dark');
-    applyTheme('light');
-
-    expect(document.documentElement.dataset.theme).toBe('light');
-    expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 });

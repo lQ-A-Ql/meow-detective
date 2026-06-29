@@ -57,7 +57,6 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let settings = load_app_settings(&temp.path().join("missing.json")).unwrap();
 
-        assert_eq!(settings.theme, "light");
         assert!(!settings.case_root.trim().is_empty());
     }
 
@@ -72,7 +71,6 @@ mod tests {
         let settings = AppSettingsDto {
             case_root: case_root.display().to_string(),
             image_search_paths: vec![search_root.display().to_string()],
-            theme: "dark".to_string(),
             dev_event_trace: true,
             max_import_workers: Some(4),
             max_analysis_workers: Some(2),
@@ -88,7 +86,6 @@ mod tests {
 
         assert_eq!(loaded.case_root, settings.case_root);
         assert_eq!(loaded.image_search_paths, settings.image_search_paths);
-        assert_eq!(loaded.theme, "dark");
         assert!(loaded.dev_event_trace);
         assert_eq!(loaded.max_import_workers, Some(4));
         assert_eq!(loaded.max_analysis_workers, Some(2));

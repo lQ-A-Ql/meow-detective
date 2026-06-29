@@ -97,7 +97,6 @@ impl ExtractFileRequest {
 pub struct AppSettingsDto {
     pub case_root: String,
     pub image_search_paths: Vec<String>,
-    pub theme: String,
     pub dev_event_trace: bool,
     /// Maximum parallel workers for import. None = use all available cores.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -127,7 +126,6 @@ impl Default for AppSettingsDto {
         Self {
             case_root: default_case_root(),
             image_search_paths: Vec::new(),
-            theme: "light".to_string(),
             dev_event_trace: false,
             max_import_workers: None,
             max_analysis_workers: None,
@@ -145,9 +143,6 @@ impl AppSettingsDto {
         validate_config_directory_path("caseRoot", &self.case_root, true)?;
         for path in &self.image_search_paths {
             validate_config_directory_path("imageSearchPaths", path, false)?;
-        }
-        if self.theme != "light" && self.theme != "dark" {
-            return Err("theme must be light or dark".to_string());
         }
         if self.max_import_workers == Some(0) {
             return Err("maxImportWorkers must be greater than zero".to_string());
@@ -718,17 +713,6 @@ mod tests {
     }
 
     #[test]
-    fn app_settings_rejects_invalid_theme() {
-        let settings = AppSettingsDto {
-            case_root: std::env::temp_dir().display().to_string(),
-            theme: "sepia".to_string(),
-            ..Default::default()
-        };
-
-        assert!(settings.validate().is_err());
-    }
-
-    #[test]
     fn app_settings_rejects_missing_case_root() {
         let settings = AppSettingsDto {
             case_root: "Z:/definitely/missing/forensics/path".to_string(),
@@ -763,7 +747,7 @@ mod tests {
     #[test]
     fn app_settings_defaults_to_metadata_only_import_analysis() {
         let settings: AppSettingsDto = serde_json::from_str(&format!(
-            r#"{{"caseRoot":"{}","imageSearchPaths":[],"theme":"light","devEventTrace":false}}"#,
+            r#"{{"caseRoot":"{}","imageSearchPaths":[],"devEventTrace":false}}"#,
             std::env::temp_dir()
                 .display()
                 .to_string()

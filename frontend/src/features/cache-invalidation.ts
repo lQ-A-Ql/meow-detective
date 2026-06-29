@@ -23,6 +23,11 @@ export const timelineQueryKeys = {
 
 export const projectionQueryKeys = {
   case: ['case'] as const,
+  caseCurrent: ['case', 'current'] as const,
+  caseMetrics: ['case', 'metrics'] as const,
+  caseDataSources: ['case', 'data-sources'] as const,
+  caseRecentObjects: ['case', 'recent-objects'] as const,
+  caseRecentCases: ['case', 'recent-cases'] as const,
   files: ['files'] as const,
   timeline: timelineQueryKeys.root,
   artifacts: ['artifacts'] as const,
@@ -35,18 +40,31 @@ export const projectionQueryKeys = {
 type ProjectionKey = keyof typeof projectionQueryKeys;
 type QueryInvalidator = Pick<QueryClient, 'invalidateQueries'>;
 
-const importProjectionKeys: ProjectionKey[] = ['case', 'files', 'timeline', 'artifacts', 'search'];
-const postJobProjectionKeys: ProjectionKey[] = [...importProjectionKeys, 'jobWarnings', 'jobTrace'];
+const importProjectionKeys: ProjectionKey[] = [
+  'caseDataSources',
+  'caseMetrics',
+  'caseRecentObjects',
+  'files',
+  'timeline',
+  'artifacts',
+  'search',
+];
+
+const postJobProjectionKeys: ProjectionKey[] = [
+  ...importProjectionKeys,
+  'jobWarnings',
+  'jobTrace',
+];
 
 const partialResultProjectionKeys: Record<PartialResultKind, ProjectionKey[]> = {
-  fileTree: ['files', 'case'],
-  fileRows: ['files', 'case'],
-  partition: ['files', 'case'],
+  fileTree: ['files', 'caseDataSources'],
+  fileRows: ['files', 'caseDataSources'],
+  partition: ['files', 'caseDataSources'],
   timelineEvents: ['timeline'],
   timelineBuckets: ['timeline'],
   artifactFamily: ['artifacts', 'timeline'],
   searchIndex: ['search'],
-  evidenceHash: ['case', 'reports'],
+  evidenceHash: ['caseMetrics', 'reports'],
 };
 
 function invalidateProjectionKeys(queryClient: QueryInvalidator, keys: ProjectionKey[]) {

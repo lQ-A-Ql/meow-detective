@@ -59,12 +59,9 @@ describe('Settings page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('localStorage', createLocalStorageMock());
-    document.documentElement.removeAttribute('data-theme');
-    document.documentElement.classList.remove('dark');
     mocks.getAppSettings.mockResolvedValue({
       caseRoot: 'D:\\Cases',
       imageSearchPaths: ['D:\\Images', 'E:\\Evidence'],
-      theme: 'dark',
       devEventTrace: true,
       maxImportWorkers: 1,
       maxAnalysisWorkers: 4,
@@ -83,17 +80,14 @@ describe('Settings page', () => {
     expect(screen.getByText('应用配置与数据目录')).toBeTruthy();
   });
 
-  it('loads persisted backend settings and applies theme state', async () => {
+  it('loads persisted backend settings', async () => {
     render(<Settings />);
 
     expect(await screen.findByDisplayValue('D:\\Cases')).toBeTruthy();
     expect((screen.getByLabelText('镜像搜索路径') as HTMLInputElement).value).toBe(
       'D:\\Images; E:\\Evidence',
     );
-    const themeSelect = screen.getByLabelText('主题') as HTMLSelectElement;
-    expect(themeSelect.value).toBe('dark');
     expect((screen.getByLabelText('事件调试日志') as HTMLInputElement).checked).toBe(true);
-    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('dark'));
     expect(mocks.mcpState.loadConfig).toHaveBeenCalledTimes(1);
   });
 
@@ -103,13 +97,10 @@ describe('Settings page', () => {
     render(<Settings />);
 
     const caseRoot = await screen.findByLabelText('案件默认存储路径');
-    const themeSelect = screen.getByLabelText('主题') as HTMLSelectElement;
-    await waitFor(() => expect(themeSelect.value).toBe('dark'));
     fireEvent.change(caseRoot, { target: { value: 'C:\\ForensicsWorkbench\\cases' } });
     fireEvent.change(screen.getByLabelText('镜像搜索路径'), {
       target: { value: 'D:\\Images; F:\\MoreImages' },
     });
-    fireEvent.change(themeSelect, { target: { value: 'light' } });
     fireEvent.click(screen.getByLabelText('事件调试日志'));
     fireEvent.click(screen.getByRole('button', { name: '保存设置' }));
 
@@ -117,7 +108,6 @@ describe('Settings page', () => {
       expect(mocks.saveAppSettings).toHaveBeenCalledWith({
         caseRoot: 'C:\\ForensicsWorkbench\\cases',
         imageSearchPaths: ['D:\\Images', 'F:\\MoreImages'],
-        theme: 'light',
         devEventTrace: false,
         maxImportWorkers: 1,
         maxAnalysisWorkers: 4,
@@ -133,7 +123,6 @@ describe('Settings page', () => {
       'forensics.localSettings',
       expect.stringContaining('"caseRoot":"C:\\\\ForensicsWorkbench\\\\cases"'),
     );
-    expect(document.documentElement.dataset.theme).toBe('light');
   });
 
   it('keeps local fallback when backend settings cannot be loaded', async () => {

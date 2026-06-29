@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  applyTheme,
   defaultSettings,
   formatPathList,
   parsePathList,
@@ -40,7 +39,6 @@ export function Settings() {
           ...current,
           caseRoot: remote.caseRoot,
           imageSearchPaths: formatPathList(remote.imageSearchPaths),
-          theme: remote.theme,
           devEventTrace: remote.devEventTrace,
           maxImportWorkers: remote.maxImportWorkers?.toString() ?? '',
           maxAnalysisWorkers: remote.maxAnalysisWorkers?.toString() ?? '',
@@ -60,10 +58,6 @@ export function Settings() {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    applyTheme(settings.theme);
-  }, [settings.theme]);
 
   async function saveSettings() {
     if (!settings.caseRoot.trim()) {
@@ -99,7 +93,6 @@ export function Settings() {
       const saved = await saveAppSettings({
         caseRoot: settings.caseRoot,
         imageSearchPaths: parsePathList(settings.imageSearchPaths),
-        theme: settings.theme,
         devEventTrace: settings.devEventTrace,
         maxImportWorkers,
         maxAnalysisWorkers,
@@ -112,7 +105,6 @@ export function Settings() {
       const normalized = writeLocalSettings({
         caseRoot: saved.caseRoot,
         imageSearchPaths: formatPathList(saved.imageSearchPaths),
-        theme: saved.theme,
         devEventTrace: saved.devEventTrace,
         maxImportWorkers: saved.maxImportWorkers?.toString() ?? '',
         maxAnalysisWorkers: saved.maxAnalysisWorkers?.toString() ?? '',
@@ -161,7 +153,6 @@ export function Settings() {
           setSettings={setSettings}
         />
         <UiDebugSection
-          theme={settings.theme}
           devEventTrace={settings.devEventTrace}
           savingSettings={savingSettings}
           settingsMessage={settingsMessage}

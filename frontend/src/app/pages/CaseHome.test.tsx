@@ -61,7 +61,6 @@ vi.mock('@/lib/settings', () => ({
   readLocalSettings: vi.fn(() => ({
     caseRoot: 'C:\\ForensicsWorkbench\\cases',
     imageSearchPaths: 'E:\\cases\\; D:\\images\\',
-    theme: 'light',
     devEventTrace: false,
     maxImportWorkers: '',
     maxAnalysisWorkers: '',
@@ -137,7 +136,6 @@ describe('CaseHome page', () => {
     mocks.getAppSettings.mockResolvedValue({
       caseRoot: 'D:\\ForensicsCases',
       imageSearchPaths: [],
-      theme: 'light',
       devEventTrace: false,
       maxImportWorkers: undefined,
       maxAnalysisWorkers: undefined,

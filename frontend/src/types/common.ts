@@ -20,7 +20,6 @@ export type ErrorCategory =
 export interface AppSettings {
   caseRoot: string;
   imageSearchPaths: string[];
-  theme: 'light' | 'dark';
   devEventTrace: boolean;
   maxImportWorkers?: number;
   maxAnalysisWorkers?: number;

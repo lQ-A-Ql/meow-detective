@@ -2,7 +2,6 @@ import { useTranslation } from 'react-i18next';
 import type { LocalSettings } from '@/lib/settings';
 
 interface UiDebugSectionProps {
-  theme: LocalSettings['theme'];
   devEventTrace: boolean;
   savingSettings: boolean;
   settingsMessage: string;
@@ -11,7 +10,6 @@ interface UiDebugSectionProps {
 }
 
 export function UiDebugSection({
-  theme,
   devEventTrace,
   savingSettings,
   settingsMessage,
@@ -26,26 +24,6 @@ export function UiDebugSection({
         <span className="text-[13px] font-semibold text-forensics-text-secondary">{t('settings.sections.uiDebug.title')}</span>
       </div>
       <div className="flex flex-wrap items-center gap-3 text-[12px]">
-        <label
-          htmlFor="settings-theme"
-          className="flex items-center gap-2 border border-forensics-border bg-forensics-input-bg px-3 py-2"
-        >
-          {t('settings.sections.uiDebug.theme')}
-          <select
-            id="settings-theme"
-            value={theme}
-            onChange={(event) =>
-              setSettings((current) => ({
-                ...current,
-                theme: event.target.value === 'dark' ? 'dark' : 'light',
-              }))
-            }
-            className="border border-forensics-border-strong bg-forensics-surface px-2 py-1"
-          >
-            <option value="light">{t('settings.sections.uiDebug.themeLight')}</option>
-            <option value="dark">{t('settings.sections.uiDebug.themeDark')}</option>
-          </select>
-        </label>
         <label className="flex items-center gap-2 border border-forensics-border bg-forensics-input-bg px-3 py-2">
           <input
             type="checkbox"

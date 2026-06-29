@@ -96,9 +96,6 @@
       },
       "uiDebug": {
         "title": "UI & Debug",
-        "theme": "Theme",
-        "themeLight": "Light",
-        "themeDark": "Dark",
         "devEventTrace": "Event Debug Log"
       },
       "mcp": {

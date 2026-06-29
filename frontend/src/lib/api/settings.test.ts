@@ -18,14 +18,12 @@ describe('settings API', () => {
 
   it('getAppSettings calls the correct command with no payload', async () => {
     requestMock.mockResolvedValueOnce({
-      theme: 'dark',
       language: 'en',
       recentCases: [],
     } as never);
     const result = await getAppSettings();
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.settings.GET_APP_SETTINGS);
     expect(result).toEqual({
-      theme: 'dark',
       language: 'en',
       recentCases: [],
     });
@@ -33,7 +31,6 @@ describe('settings API', () => {
 
   it('saveAppSettings sends settings in payload', async () => {
     const settings = {
-      theme: 'light' as const,
       language: 'zh' as const,
       recentCases: ['/cases/test'],
     };

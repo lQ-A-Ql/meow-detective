@@ -39,7 +39,15 @@ describe('projection cache invalidation', () => {
 
     invalidateImportProjectionQueries(queryClient);
 
-    expect(invalidatedKeys(invalidateSpy)).toEqual([['case'], ['files'], ['timeline'], ['artifacts'], ['search']]);
+    expect(invalidatedKeys(invalidateSpy)).toEqual([
+      ['case', 'data-sources'],
+      ['case', 'metrics'],
+      ['case', 'recent-objects'],
+      ['files'],
+      ['timeline'],
+      ['artifacts'],
+      ['search'],
+    ]);
   });
 
   it('invalidates post-job projections and job diagnostic queries', () => {
@@ -48,7 +56,9 @@ describe('projection cache invalidation', () => {
     invalidatePostJobProjectionQueries(queryClient);
 
     expect(invalidatedKeys(invalidateSpy)).toEqual([
-      ['case'],
+      ['case', 'data-sources'],
+      ['case', 'metrics'],
+      ['case', 'recent-objects'],
       ['files'],
       ['timeline'],
       ['artifacts'],
