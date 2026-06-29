@@ -26,6 +26,9 @@ export function BottomDrawer() {
   const toggleDrawer = useUiStore((state) => state.toggleDrawer);
   const importSignals = useImportEventState();
 
+  // Drawer open/close is now fully manual via the toggle button; previous
+  // auto-collapse on import completion was removed because jobs/events timing
+  // was too unreliable to avoid premature or missed collapses.
   const runningJobs = jobs?.filter((job) => job.status === 'running') ?? [];
   const completedJobs = jobs?.filter((job) => job.status === 'completed') ?? [];
   const failedJobs = jobs?.filter((job) => job.status === 'failed') ?? [];
@@ -50,13 +53,13 @@ export function BottomDrawer() {
     <div
       className={`shrink-0 border-t border-forensics-border bg-forensics-panel z-10 transition-[height] duration-150 ${drawerOpen ? 'h-56' : 'h-8'}`}
     >
-      <div className="h-8 flex items-center px-4 text-forensics-muted text-[11px] font-mono justify-between">
+      <div className="h-8 flex items-center px-4 text-forensics-muted text-[11px] font-mono justify-between gap-4">
         <div className="flex items-center gap-4 min-w-0">
           <div className="flex items-center gap-2 min-w-0">
-            <Terminal size={12} className="text-forensics-muted-light" />
+            <Terminal size={12} className="text-forensics-muted-light shrink-0" />
             <span className="truncate">[{t('bottomDrawer.jobs.title')}] {headline}</span>
           </div>
-          <div className="px-3 border-l border-forensics-border flex items-center gap-3 text-forensics-text-tertiary">
+          <div className="hidden lg:flex px-3 border-l border-forensics-border items-center gap-3 text-forensics-text-tertiary">
             <span>
               <span className="text-forensics-text">{runningCount}</span> {t('bottomDrawer.jobs.running')}
             </span>
@@ -71,12 +74,16 @@ export function BottomDrawer() {
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          <button onClick={toggleDrawer} className="flex items-center gap-1.5 text-forensics-text-tertiary hover:text-forensics-text">
+        <div className="flex shrink-0 items-center gap-4">
+          <button
+            type="button"
+            onClick={toggleDrawer}
+            className="flex items-center gap-1 rounded border border-forensics-border bg-forensics-surface px-2 py-0.5 text-[11px] text-forensics-text hover:bg-forensics-hover"
+          >
             <span>{drawerOpen ? t('bottomDrawer.toggle.collapse') : t('bottomDrawer.toggle.expand')}</span>
             {drawerOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
           </button>
-          <div className="border-l border-forensics-border pl-4">
+          <div className="hidden xl:flex border-l border-forensics-border pl-4">
             {t('bottomDrawer.status.recent')} <span className="text-forensics-text">{runningJobs[0]?.scope || failedJobs[0]?.scope || completedJobs[0]?.scope || t('bottomDrawer.status.idle')}</span>
           </div>
         </div>

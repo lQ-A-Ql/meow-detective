@@ -22,8 +22,13 @@ vi.mock('@/features/case/hooks', () => ({
 }));
 
 vi.mock('@/stores/ui-store', () => ({
-  useUiStore: (selector: (state: { drawerOpen: boolean; toggleDrawer: () => void }) => unknown) =>
-    selector(mocks.uiStore()),
+  useUiStore: (
+    selector: (state: {
+      drawerOpen: boolean;
+      setDrawerOpen: (open: boolean) => void;
+      toggleDrawer: () => void;
+    }) => unknown,
+  ) => selector(mocks.uiStore()),
 }));
 
 vi.mock('@/features/jobs/import-event-state', () => ({
@@ -77,7 +82,11 @@ describe('BottomDrawer jobs panel', () => {
     mocks.warnings.mockReturnValue({ data: [] });
     mocks.dataSources.mockReturnValue({ data: [] });
     mocks.trace.mockReturnValue({ data: [] });
-    mocks.uiStore.mockReturnValue({ drawerOpen: true, toggleDrawer: vi.fn() });
+    mocks.uiStore.mockReturnValue({
+      drawerOpen: true,
+      setDrawerOpen: vi.fn(),
+      toggleDrawer: vi.fn(),
+    });
     mocks.importSignals.mockReturnValue({
       latestPhase: undefined,
       latestCancellation: undefined,
@@ -187,5 +196,83 @@ describe('BottomDrawer jobs panel', () => {
     expect(screen.getByText('evidenceHash partial')).toBeDefined();
     expect(screen.getByText('Evidence Hash pending')).toBeDefined();
     expect(screen.getByText('hash caveat pending')).toBeDefined();
+  });
+});
+
+describe('BottomDrawer manual toggle', () => {
+  beforeEach(() => {
+    mocks.warnings.mockReturnValue({ data: [] });
+    mocks.dataSources.mockReturnValue({ data: [] });
+    mocks.trace.mockReturnValue({ data: [] });
+    mocks.importSignals.mockReturnValue({
+      latestPhase: undefined,
+      latestCancellation: undefined,
+      partialResults: [],
+      cacheStatuses: [],
+      latestReport: undefined,
+      lastUpdatedAt: undefined,
+    });
+  });
+
+  it('does not auto-close when a running job completes', () => {
+    const setDrawerOpen = vi.fn();
+    const toggleDrawer = vi.fn();
+    mocks.uiStore.mockReturnValue({
+      drawerOpen: true,
+      setDrawerOpen,
+      toggleDrawer,
+    });
+    mocks.jobs.mockReturnValue({
+      data: [
+        {
+          id: 'job-running',
+          name: 'Import',
+          scope: 'Test',
+          progress: 50,
+          status: 'running',
+          detail: 'running',
+          warningCount: 0,
+          skippedCount: 0,
+          failedCount: 0,
+          partial: false,
+        },
+      ],
+    });
+
+    const { rerender } = render(<BottomDrawer />);
+    mocks.jobs.mockReturnValue({
+      data: [
+        {
+          id: 'job-running',
+          name: 'Import',
+          scope: 'Test',
+          progress: 100,
+          status: 'completed',
+          detail: 'done',
+          warningCount: 0,
+          skippedCount: 0,
+          failedCount: 0,
+          partial: false,
+        },
+      ],
+    });
+    rerender(<BottomDrawer />);
+    expect(setDrawerOpen).not.toHaveBeenCalled();
+    expect(toggleDrawer).not.toHaveBeenCalled();
+  });
+
+  it('calls toggleDrawer when the collapse/expand button is clicked', () => {
+    const toggleDrawer = vi.fn();
+    mocks.uiStore.mockReturnValue({
+      drawerOpen: true,
+      setDrawerOpen: vi.fn(),
+      toggleDrawer,
+    });
+    mocks.jobs.mockReturnValue({ data: [] });
+
+    render(<BottomDrawer />);
+    const button = screen.getByRole('button', { name: /collapse|展开|收起/i });
+    button.click();
+    expect(toggleDrawer).toHaveBeenCalled();
   });
 });

@@ -553,7 +553,6 @@ fn security_event_from_json(
     provider: Option<String>,
     source_path: &str,
 ) -> Option<EvtxSecurityEvent> {
-    let data_items = event_data_items(wrapper);
     let details = event_data_map(wrapper);
     Some(EvtxSecurityEvent {
         timestamp,
@@ -562,17 +561,20 @@ fn security_event_from_json(
         provider,
         kind,
         source_path: source_path.to_string(),
-        target_user: find_data_value(&data_items, "TargetUserName"),
-        subject_user: find_data_value(&data_items, "SubjectUserName"),
-        logon_type: find_data_value(&data_items, "LogonType"),
-        ip_address: find_data_value(&data_items, "IpAddress"),
-        workstation: find_data_value(&data_items, "WorkstationName"),
-        failure_reason: find_data_value(&data_items, "Status"),
-        process_name: find_data_value(&data_items, "NewProcessName"),
-        parent_process_name: find_data_value(&data_items, "CreatorProcessName"),
-        task_name: find_data_value(&data_items, "TaskName"),
-        privilege_list: find_data_value(&data_items, "PrivilegeList"),
-        member_name: find_data_value(&data_items, "MemberName"),
+        target_user: details.get("TargetUserName").cloned(),
+        subject_user: details.get("SubjectUserName").cloned(),
+        logon_type: details.get("LogonType").cloned(),
+        ip_address: details.get("IpAddress").cloned(),
+        workstation: details.get("WorkstationName").cloned(),
+        failure_reason: details.get("Status").cloned(),
+        process_name: details.get("NewProcessName").cloned(),
+        parent_process_name: details
+            .get("ParentProcessName")
+            .or_else(|| details.get("CreatorProcessName"))
+            .cloned(),
+        task_name: details.get("TaskName").cloned(),
+        privilege_list: details.get("PrivilegeList").cloned(),
+        member_name: details.get("MemberName").cloned(),
         details,
     })
 }
@@ -586,8 +588,47 @@ fn application_event_from_json(
     provider: Option<String>,
     source_path: &str,
 ) -> Option<EvtxApplicationEvent> {
-    let data_items = event_data_items(wrapper);
     let details = event_data_map(wrapper);
+    let mut application = details
+        .get("AppName")
+        .or_else(|| details.get("P1"))
+        .cloned();
+    let mut fault_module = details
+        .get("ModuleName")
+        .or_else(|| details.get("P4"))
+        .cloned();
+    let mut product_name = details.get("ProductName").cloned();
+    let mut manufacturer = details.get("Manufacturer").cloned();
+
+    // Older Application channel events (and some WER records) use unnamed
+    // `<Data>` elements. Fall back to well-known positional indices when the
+    // named keys above are absent.
+    if application.is_none()
+        || fault_module.is_none()
+        || product_name.is_none()
+        || manufacturer.is_none()
+    {
+        let values = event_data_values(wrapper);
+        match event_id {
+            1000 => {
+                application = application.or_else(|| values.first().cloned());
+                fault_module = fault_module.or_else(|| values.get(3).cloned());
+            }
+            1001 => {
+                application = application.or_else(|| values.get(5).cloned());
+                fault_module = fault_module.or_else(|| values.get(8).cloned());
+            }
+            1002 => {
+                application = application.or_else(|| values.first().cloned());
+            }
+            1033 | 11707 | 11708 => {
+                product_name = product_name.or_else(|| values.first().cloned());
+                manufacturer = manufacturer.or_else(|| values.get(4).cloned());
+            }
+            _ => {}
+        }
+    }
+
     Some(EvtxApplicationEvent {
         timestamp,
         event_id,
@@ -595,10 +636,10 @@ fn application_event_from_json(
         provider,
         kind,
         source_path: source_path.to_string(),
-        application: find_data_value(&data_items, "AppName"),
-        fault_module: find_data_value(&data_items, "ModuleName"),
-        product_name: find_data_value(&data_items, "ProductName"),
-        manufacturer: find_data_value(&data_items, "Manufacturer"),
+        application,
+        fault_module,
+        product_name,
+        manufacturer,
         details,
     })
 }
@@ -614,37 +655,92 @@ fn event_data_items(wrapper: &Value) -> Vec<Value> {
     }
 }
 
+/// Extract the raw text values of `<EventData><Data>...</Data></EventData>`
+/// elements in document order. This is used as a positional fallback for
+/// events whose `<Data>` elements do not carry a `Name` attribute (e.g. older
+/// Application Error / MsiInstaller records).
+fn event_data_values(wrapper: &Value) -> Vec<String> {
+    event_data_items(wrapper)
+        .into_iter()
+        .filter_map(|item| {
+            if let Some(text) = item.as_str() {
+                return Some(text.to_string());
+            }
+            if let Some(obj) = item.as_object() {
+                if obj.contains_key("@Name") || obj.contains_key("Name") {
+                    // Named items are handled by event_data_map; including them
+                    // here would shift positional indices for mixed schemas.
+                    return None;
+                }
+                return obj
+                    .get("#text")
+                    .or_else(|| obj.get("Text"))
+                    .and_then(value_as_string);
+            }
+            None
+        })
+        .collect()
+}
+
 /// Extract all named `<EventData>` values into a generic key/value map.
+///
+/// Handles both JSON shapes the evtx library may produce:
+/// - Modern flattened named data:
+///   `{"EventData": {"TargetUserName": "…", "LogonType": 3}}`
+/// - Legacy array form:
+///   `{"EventData": {"Data": [{"@Name": "…", "#text": "value"}, …]}}`
 fn event_data_map(wrapper: &Value) -> BTreeMap<String, String> {
     let mut map = BTreeMap::new();
-    for item in event_data_items(wrapper) {
-        let Some(obj) = item.as_object() else {
-            continue;
-        };
-        let Some(name) = obj
-            .get("@Name")
-            .or_else(|| obj.get("Name"))
-            .and_then(Value::as_str)
-        else {
-            continue;
-        };
-        let value = obj
-            .get("#text")
-            .or_else(|| obj.get("Text"))
-            .or_else(|| obj.get("Value"))
-            .and_then(|v| {
-                if v.is_string() {
-                    v.as_str().map(str::to_string)
-                } else if v.is_number() {
-                    Some(v.to_string())
-                } else {
-                    None
-                }
-            })
-            .unwrap_or_default();
-        map.insert(name.to_string(), value);
+    let Some(event_data) = wrapper.get("EventData") else {
+        return map;
+    };
+
+    // Modern flattened shape: EventData is an object whose keys are the Data names.
+    if let Some(obj) = event_data.as_object() {
+        for (key, value) in obj {
+            if key == "Data" || key.starts_with('#') || key.starts_with('@') {
+                continue;
+            }
+            if let Some(text) = value_as_string(value) {
+                map.insert(key.clone(), text);
+            }
+        }
     }
+
+    // Legacy array shape: EventData.Data is an array of {Name, #text} objects.
+    for item in event_data_items(wrapper) {
+        let Some((name, value)) = extract_named_data_item(&item) else {
+            continue;
+        };
+        map.insert(name, value);
+    }
+
     map
+}
+
+fn value_as_string(value: &Value) -> Option<String> {
+    if value.is_string() {
+        value.as_str().map(str::to_string)
+    } else if value.is_number() {
+        Some(value.to_string())
+    } else {
+        None
+    }
+}
+
+fn extract_named_data_item(item: &Value) -> Option<(String, String)> {
+    let obj = item.as_object()?;
+    let name = obj
+        .get("@Name")
+        .or_else(|| obj.get("Name"))
+        .and_then(Value::as_str)?;
+    let value = obj
+        .get("#text")
+        .or_else(|| obj.get("Text"))
+        .or_else(|| obj.get("Value"))
+        .and_then(value_as_string)
+        .unwrap_or_default();
+    Some((name.to_string(), value))
 }
 
 fn provider_matches(provider: Option<&str>, target: &str) -> bool {
@@ -652,38 +748,6 @@ fn provider_matches(provider: Option<&str>, target: &str) -> bool {
         Some(p) => p.eq_ignore_ascii_case(target),
         None => false,
     }
-}
-
-/// Look up a named Data element value from the event data array.
-///
-/// Handles multiple JSON shapes the evtx library may produce:
-/// - `{"@Name": "…", "#text": "value"}`
-/// - `{"Name": "…", "#text": "value"}`
-/// - Just a string value (rare)
-fn find_data_value(data_items: &[Value], name: &str) -> Option<String> {
-    data_items.iter().find_map(|item| {
-        let obj = item.as_object()?;
-        let matches_name = obj
-            .get("@Name")
-            .or_else(|| obj.get("Name"))
-            .and_then(Value::as_str)
-            .is_some_and(|n| n.eq_ignore_ascii_case(name));
-        if !matches_name {
-            return None;
-        }
-        obj.get("#text")
-            .or_else(|| obj.get("Text"))
-            .or_else(|| obj.get("Value"))
-            .and_then(|v| {
-                if v.is_string() {
-                    v.as_str().map(str::to_string)
-                } else if v.is_number() {
-                    Some(v.to_string())
-                } else {
-                    None
-                }
-            })
-    })
 }
 
 fn event_id(value: &Value) -> Option<u32> {
@@ -1101,31 +1165,322 @@ mod tests {
     }
 
     #[test]
-    fn find_data_value_handles_various_json_shapes() {
-        // Object with @Name and #text
-        let items = vec![json!({"@Name": "Image", "#text": "cmd.exe"})];
-        assert_eq!(
-            find_data_value(&items, "Image"),
-            Some("cmd.exe".to_string())
-        );
+    fn event_data_map_handles_various_json_shapes() {
+        // Legacy array shape with @Name and #text
+        let wrapper = json!({
+            "EventData": {
+                "Data": [
+                    { "@Name": "Image", "#text": "cmd.exe" },
+                    { "Name": "CommandLine", "#text": "/c dir" },
+                    { "@Name": "ThReAt", "#text": "malware" },
+                    { "@Name": "Other", "#text": "val" }
+                ]
+            }
+        });
+        let map = event_data_map(&wrapper);
+        assert_eq!(map.get("Image").map(String::as_str), Some("cmd.exe"));
+        assert_eq!(map.get("CommandLine").map(String::as_str), Some("/c dir"));
+        assert_eq!(map.get("ThReAt").map(String::as_str), Some("malware"));
+        assert_eq!(map.get("Image2").map(String::as_str), None);
 
-        // Object with Name (no @ prefix)
-        let items = vec![json!({"Name": "CommandLine", "#text": "/c dir"})];
-        assert_eq!(
-            find_data_value(&items, "CommandLine"),
-            Some("/c dir".to_string())
-        );
+        // Modern flattened shape
+        let wrapper = json!({
+            "EventData": {
+                "Image": "cmd.exe",
+                "CommandLine": "/c dir",
+                "LogonType": 3
+            }
+        });
+        let map = event_data_map(&wrapper);
+        assert_eq!(map.get("Image").map(String::as_str), Some("cmd.exe"));
+        assert_eq!(map.get("CommandLine").map(String::as_str), Some("/c dir"));
+        assert_eq!(map.get("LogonType").map(String::as_str), Some("3"));
+    }
 
-        // Case-insensitive name match
-        let items = vec![json!({"@Name": "ThReAt", "#text": "malware"})];
-        assert_eq!(
-            find_data_value(&items, "Threat"),
-            Some("malware".to_string())
-        );
+    #[test]
+    fn extract_security_4624_flattened_event_data() {
+        let extraction = extract_structured_events_from_json_records(
+            &[json!({
+                "Event": {
+                    "System": {
+                        "Provider": { "@Name": "Microsoft-Windows-Security-Auditing" },
+                        "EventID": 4624,
+                        "EventRecordID": 1,
+                        "Channel": "Security",
+                        "TimeCreated": { "@SystemTime": "2026-03-15T08:00:00Z" }
+                    },
+                    "EventData": {
+                        "TargetUserName": "jdoe",
+                        "LogonType": 3,
+                        "IpAddress": "192.168.1.10",
+                        "WorkstationName": "DESKTOP-ABC",
+                        "Status": "0x0"
+                    }
+                }
+            })],
+            "Windows/System32/winevt/Logs/Security.evtx",
+        )
+        .expect("json extraction should succeed");
 
-        // Missing field returns None
-        let items = vec![json!({"@Name": "Other", "#text": "val"})];
-        assert_eq!(find_data_value(&items, "Image"), None);
+        assert_eq!(extraction.security_events.len(), 1);
+        let event = &extraction.security_events[0];
+        assert_eq!(event.kind, EvtxSecurityEventKind::LogonSuccess);
+        assert_eq!(event.target_user.as_deref(), Some("jdoe"));
+        assert_eq!(event.logon_type.as_deref(), Some("3"));
+        assert_eq!(event.ip_address.as_deref(), Some("192.168.1.10"));
+        assert_eq!(event.workstation.as_deref(), Some("DESKTOP-ABC"));
+        assert_eq!(event.failure_reason.as_deref(), Some("0x0"));
+    }
+
+    #[test]
+    fn extract_security_4625_failure_from_flattened_event_data() {
+        let extraction = extract_structured_events_from_json_records(
+            &[json!({
+                "Event": {
+                    "System": {
+                        "Provider": { "@Name": "Microsoft-Windows-Security-Auditing" },
+                        "EventID": 4625,
+                        "EventRecordID": 2,
+                        "Channel": "Security",
+                        "TimeCreated": { "@SystemTime": "2026-03-15T08:01:00Z" }
+                    },
+                    "EventData": {
+                        "TargetUserName": "admin",
+                        "LogonType": 10,
+                        "IpAddress": "10.0.0.5",
+                        "Status": "0xC000006D",
+                        "SubStatus": "0xC000006A"
+                    }
+                }
+            })],
+            "Windows/System32/winevt/Logs/Security.evtx",
+        )
+        .expect("json extraction should succeed");
+
+        assert_eq!(extraction.security_events.len(), 1);
+        let event = &extraction.security_events[0];
+        assert_eq!(event.kind, EvtxSecurityEventKind::LogonFailure);
+        assert_eq!(event.target_user.as_deref(), Some("admin"));
+        assert_eq!(event.logon_type.as_deref(), Some("10"));
+        assert_eq!(event.ip_address.as_deref(), Some("10.0.0.5"));
+        assert_eq!(event.failure_reason.as_deref(), Some("0xC000006D"));
+    }
+
+    #[test]
+    fn extract_security_event_data_map_merges_legacy_and_flattened_shapes() {
+        let wrapper = json!({
+            "EventData": {
+                "TargetUserName": "flattened",
+                "Data": [
+                    { "@Name": "LogonType", "#text": "2" },
+                    { "@Name": "MissingFromFlat", "#text": "legacy" }
+                ]
+            }
+        });
+
+        let map = event_data_map(&wrapper);
+        assert_eq!(
+            map.get("TargetUserName").map(String::as_str),
+            Some("flattened")
+        );
+        assert_eq!(map.get("LogonType").map(String::as_str), Some("2"));
+        assert_eq!(
+            map.get("MissingFromFlat").map(String::as_str),
+            Some("legacy")
+        );
+    }
+
+    #[test]
+    fn extract_application_1000_flattened_event_data() {
+        let extraction = extract_structured_events_from_json_records(
+            &[json!({
+                "Event": {
+                    "System": {
+                        "Provider": { "@Name": "Application Error" },
+                        "EventID": 1000,
+                        "EventRecordID": 10,
+                        "Channel": "Application",
+                        "TimeCreated": { "@SystemTime": "2026-03-15T09:00:00Z" }
+                    },
+                    "EventData": {
+                        "AppName": "chrome.exe",
+                        "ModuleName": "ntdll.dll"
+                    }
+                }
+            })],
+            "Windows/System32/winevt/Logs/Application.evtx",
+        )
+        .expect("json extraction should succeed");
+
+        assert_eq!(extraction.application_events.len(), 1);
+        let event = &extraction.application_events[0];
+        assert_eq!(event.kind, EvtxApplicationEventKind::ApplicationCrash);
+        assert_eq!(event.application.as_deref(), Some("chrome.exe"));
+        assert_eq!(event.fault_module.as_deref(), Some("ntdll.dll"));
+    }
+
+    #[test]
+    fn extract_security_4688_prefers_parent_process_name() {
+        let extraction = extract_structured_events_from_json_records(
+            &[json!({
+                "Event": {
+                    "System": {
+                        "Provider": { "@Name": "Microsoft-Windows-Security-Auditing" },
+                        "EventID": 4688,
+                        "EventRecordID": 101,
+                        "Channel": "Security",
+                        "TimeCreated": { "@SystemTime": "2026-03-15T10:00:00Z" }
+                    },
+                    "EventData": {
+                        "NewProcessName": "C:\\Windows\\System32\\cmd.exe",
+                        "ParentProcessName": "C:\\Windows\\explorer.exe",
+                        "ProcessId": "0x1234"
+                    }
+                }
+            })],
+            "Windows/System32/winevt/Logs/Security.evtx",
+        )
+        .expect("json extraction should succeed");
+
+        assert_eq!(extraction.security_events.len(), 1);
+        let event = &extraction.security_events[0];
+        assert_eq!(event.kind, EvtxSecurityEventKind::ProcessCreated);
+        assert_eq!(
+            event.process_name.as_deref(),
+            Some("C:\\Windows\\System32\\cmd.exe")
+        );
+        assert_eq!(
+            event.parent_process_name.as_deref(),
+            Some("C:\\Windows\\explorer.exe")
+        );
+    }
+
+    #[test]
+    fn extract_security_4688_falls_back_to_creator_process_name() {
+        let extraction = extract_structured_events_from_json_records(
+            &[json!({
+                "Event": {
+                    "System": {
+                        "Provider": { "@Name": "Microsoft-Windows-Security-Auditing" },
+                        "EventID": 4688,
+                        "EventRecordID": 102,
+                        "Channel": "Security",
+                        "TimeCreated": { "@SystemTime": "2026-03-15T10:01:00Z" }
+                    },
+                    "EventData": {
+                        "NewProcessName": "C:\\Windows\\System32\\powershell.exe",
+                        "CreatorProcessName": "C:\\Windows\\System32\\cmd.exe"
+                    }
+                }
+            })],
+            "Windows/System32/winevt/Logs/Security.evtx",
+        )
+        .expect("json extraction should succeed");
+
+        assert_eq!(extraction.security_events.len(), 1);
+        let event = &extraction.security_events[0];
+        assert_eq!(
+            event.parent_process_name.as_deref(),
+            Some("C:\\Windows\\System32\\cmd.exe")
+        );
+    }
+
+    #[test]
+    fn extract_application_1000_unnamed_data_positions() {
+        let extraction = extract_structured_events_from_json_records(
+            &[json!({
+                "Event": {
+                    "System": {
+                        "Provider": { "@Name": "Application Error" },
+                        "EventID": 1000,
+                        "EventRecordID": 11,
+                        "Channel": "Application",
+                        "TimeCreated": { "@SystemTime": "2026-03-15T09:01:00Z" }
+                    },
+                    "EventData": {
+                        "Data": [
+                            "chrome.exe",
+                            "12.0.0.0",
+                            "63a1b2c3",
+                            "ntdll.dll",
+                            "10.0.19041.0"
+                        ]
+                    }
+                }
+            })],
+            "Windows/System32/winevt/Logs/Application.evtx",
+        )
+        .expect("json extraction should succeed");
+
+        assert_eq!(extraction.application_events.len(), 1);
+        let event = &extraction.application_events[0];
+        assert_eq!(event.kind, EvtxApplicationEventKind::ApplicationCrash);
+        assert_eq!(event.application.as_deref(), Some("chrome.exe"));
+        assert_eq!(event.fault_module.as_deref(), Some("ntdll.dll"));
+    }
+
+    #[test]
+    fn extract_application_1001_named_wer_p1_p4_fields() {
+        let extraction = extract_structured_events_from_json_records(
+            &[json!({
+                "Event": {
+                    "System": {
+                        "Provider": { "@Name": "Windows Error Reporting" },
+                        "EventID": 1001,
+                        "EventRecordID": 12,
+                        "Channel": "Application",
+                        "TimeCreated": { "@SystemTime": "2026-03-15T09:02:00Z" }
+                    },
+                    "EventData": {
+                        "P1": "notepad.exe",
+                        "P4": "kernelbase.dll"
+                    }
+                }
+            })],
+            "Windows/System32/winevt/Logs/Application.evtx",
+        )
+        .expect("json extraction should succeed");
+
+        assert_eq!(extraction.application_events.len(), 1);
+        let event = &extraction.application_events[0];
+        assert_eq!(event.kind, EvtxApplicationEventKind::WindowsErrorReporting);
+        assert_eq!(event.application.as_deref(), Some("notepad.exe"));
+        assert_eq!(event.fault_module.as_deref(), Some("kernelbase.dll"));
+    }
+
+    #[test]
+    fn extract_application_1033_unnamed_data_positions() {
+        let extraction = extract_structured_events_from_json_records(
+            &[json!({
+                "Event": {
+                    "System": {
+                        "Provider": { "@Name": "MsiInstaller" },
+                        "EventID": 1033,
+                        "EventRecordID": 13,
+                        "Channel": "Application",
+                        "TimeCreated": { "@SystemTime": "2026-03-15T09:03:00Z" }
+                    },
+                    "EventData": {
+                        "Data": [
+                            "ForensicsWorkbench",
+                            "1.0.0",
+                            "1033",
+                            "0",
+                            "Contoso Inc.",
+                            "(none)"
+                        ]
+                    }
+                }
+            })],
+            "Windows/System32/winevt/Logs/Application.evtx",
+        )
+        .expect("json extraction should succeed");
+
+        assert_eq!(extraction.application_events.len(), 1);
+        let event = &extraction.application_events[0];
+        assert_eq!(event.kind, EvtxApplicationEventKind::SoftwareInstallation);
+        assert_eq!(event.product_name.as_deref(), Some("ForensicsWorkbench"));
+        assert_eq!(event.manufacturer.as_deref(), Some("Contoso Inc."));
     }
 
     #[test]

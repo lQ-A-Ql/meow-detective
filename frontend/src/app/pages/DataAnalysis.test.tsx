@@ -569,6 +569,23 @@ describe('DataAnalysis page', () => {
     expect(within(overview).getAllByText('timeline=3').length).toBe(4);
   });
 
+  it('toggles the extraction progress drawer manually', () => {
+    renderPage();
+
+    const overview = screen.getByTestId('analysis-progress-overview');
+    expect(within(overview).getByText('注册表提取')).toBeDefined();
+
+    const toggle = screen.getByRole('button', { name: /收起进度/ });
+    fireEvent.click(toggle);
+
+    expect(screen.getByRole('button', { name: /展开进度/ })).toBeDefined();
+    expect(within(overview).queryByText('注册表提取')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /展开进度/ }));
+    expect(screen.getByRole('button', { name: /收起进度/ })).toBeDefined();
+    expect(within(overview).getByText('注册表提取')).toBeDefined();
+  });
+
   it('renders registry, browser and email extraction tabs', async () => {
     renderPage();
 

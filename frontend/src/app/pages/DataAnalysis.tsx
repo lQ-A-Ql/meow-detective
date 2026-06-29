@@ -130,6 +130,7 @@ export function DataAnalysis() {
   const summaryMutation = useGenerateAnalysisSummary();
   const [extractionProgress, setExtractionProgress] = useState(() => defaultProgressMap(t));
   const [extractionRunning, setExtractionRunning] = useState(false);
+  const [progressExpanded, setProgressExpanded] = useState(true);
 
   const hasCase = Boolean(currentCase.data);
   const loading = currentCase.isLoading || demoCase.isPending;
@@ -263,11 +264,27 @@ export function DataAnalysis() {
       {hasCase ? (
         <div
           data-testid="analysis-progress-overview"
-          className="shrink-0 border-b border-forensics-border bg-forensics-panel px-6 py-4"
+          className="shrink-0 border-b border-forensics-border bg-forensics-panel"
         >
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-            {extractionProgressCards}
+          <div className="flex items-center justify-between border-b border-forensics-border px-6 py-2">
+            <span className="text-xs font-medium text-forensics-text-secondary">
+              {t('analysis.progressDrawer.title')}
+            </span>
+            <button
+              type="button"
+              onClick={() => setProgressExpanded((v) => !v)}
+              className="flex items-center gap-1 rounded border border-forensics-border bg-forensics-surface px-2 py-0.5 text-[11px] text-forensics-text hover:bg-forensics-hover"
+            >
+              <span>{progressExpanded ? t('analysis.progressDrawer.collapse') : t('analysis.progressDrawer.expand')}</span>
+            </button>
           </div>
+          {progressExpanded ? (
+            <div className="px-6 py-4">
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                {extractionProgressCards}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

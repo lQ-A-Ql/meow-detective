@@ -260,6 +260,11 @@
       "Email": "Email Extraction",
       "EventLogs": "Event Log Extraction"
     },
+    "progressDrawer": {
+      "title": "Extraction Progress",
+      "collapse": "Collapse Progress",
+      "expand": "Expand Progress"
+    },
     "loading": {
       "case": "Loading case...",
       "systemInfo": "Parsing Registry/EVTX system info...",

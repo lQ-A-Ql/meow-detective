@@ -180,18 +180,13 @@ export function AnalysisHeader({
           </Button>
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto]">
-        <div className="rounded border border-[#e0e0e0] bg-white px-3 py-2 text-[11px] leading-5 text-[#666]">
-          数据源分析保持只读读取，结构化结果通过 Tauri commands 获取。
+      {extractionRun ? (
+        <div className="mt-4 grid min-w-[360px] grid-cols-3 rounded border border-[#e0e0e0] bg-white text-center">
+          <RunMetric label="扫描" value={extractionRun.scannedCount.toString()} />
+          <RunMetric label="Artifact" value={extractionRun.artifactCount.toString()} />
+          <RunMetric label="Timeline" value={extractionRun.timelineEventCount.toString()} />
         </div>
-        {extractionRun ? (
-          <div className="grid min-w-[360px] grid-cols-3 rounded border border-[#e0e0e0] bg-white text-center">
-            <RunMetric label="扫描" value={extractionRun.scannedCount.toString()} />
-            <RunMetric label="Artifact" value={extractionRun.artifactCount.toString()} />
-            <RunMetric label="Timeline" value={extractionRun.timelineEventCount.toString()} />
-          </div>
-        ) : null}
-      </div>
+      ) : null}
     </div>
   );
 }

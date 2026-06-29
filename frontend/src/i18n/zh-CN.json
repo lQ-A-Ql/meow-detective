@@ -189,8 +189,8 @@
       "idle": "空闲"
     },
     "toggle": {
-      "collapse": "收起任务抽屉",
-      "expand": "展开任务抽屉"
+      "collapse": "收起",
+      "expand": "展开"
     },
     "labels": {
       "partial": "部分完成",
@@ -259,6 +259,11 @@
       "BrowserHistory": "浏览器记录提取",
       "Email": "邮件信息提取",
       "EventLogs": "事件日志提取"
+    },
+    "progressDrawer": {
+      "title": "提取进度",
+      "collapse": "收起进度",
+      "expand": "展开进度"
     },
     "loading": {
       "case": "正在加载案件...",
