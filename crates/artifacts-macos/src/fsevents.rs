@@ -31,6 +31,7 @@
 //!
 //! Reference: Apple FSEvents API (FSEventStreamEventFlags)
 
+use crate::error::{MacArtifactError, Result};
 use chrono::{TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -72,12 +73,16 @@ pub fn is_fsevents(data: &[u8]) -> bool {
 /// - Magic: "1SLD" (4 bytes)
 /// - Header: includes timestamps, device info
 /// - Event records: variable-length entries with flags and paths
-pub fn parse_fsevents_log(data: &[u8]) -> Result<Vec<FSEvent>, String> {
+pub fn parse_fsevents_log(data: &[u8]) -> Result<Vec<FSEvent>> {
     if data.len() < 8 {
-        return Err("FSEvents log data too short".to_string());
+        return Err(MacArtifactError::InvalidInput(
+            "FSEvents log data too short".to_string(),
+        ));
     }
     if !is_fsevents(data) {
-        return Err("Not an FSEvents log file (missing 1SLD magic)".to_string());
+        return Err(MacArtifactError::InvalidInput(
+            "Not an FSEvents log file (missing 1SLD magic)".to_string(),
+        ));
     }
 
     let mut events: Vec<FSEvent> = Vec::new();

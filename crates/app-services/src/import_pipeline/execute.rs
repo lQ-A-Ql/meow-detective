@@ -1,9 +1,6 @@
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use evidence_core::{EvidenceReader, LogicalFsReader, RawImageReader};
-use image_e01::E01Reader;
 use persistence_sqlite::repositories::job_repo::JobRepo;
 use tauri::AppHandle;
 use transport::{
@@ -16,15 +13,12 @@ use transport::{
 };
 
 use crate::{
-    datasource_service, file_service, import_analysis,
     import_pipeline::{
-        emit,
         options::{ImportJobOptions, JobOutcomeCounts},
-        partition::{
-            build_partition_work, format_partition_record_root_name, format_partition_root_name,
-        },
+        phases,
+        types::ImportJobContext,
     },
-    import_precheck, staging, step_recorder,
+    import_precheck,
 };
 
 /// Convert a precheck config error into a command error.
@@ -63,41 +57,33 @@ pub fn execute_import_job_with_counts(
 ) -> Result<(String, JobOutcomeCounts), CommandError> {
     let import_config = import_precheck::prepare_import_source_config_from_path(source_path)
         .map_err(import_config_error_to_command_error)?;
-    let path = import_config.source_path.clone();
-    let kind = import_config.kind.clone();
-    let source_name = import_config.source_name.clone();
-    let index_dir = case_root.join("indexes").join("tantivy");
     let job_repo = JobRepo::new(conn);
     let mut counts = JobOutcomeCounts::default();
     let import_started = Instant::now();
 
-    job_repo
-        .update_progress(job_id, 10, &format!("Attaching data source {source_name}"))
-        .map_err(CommandError::from_service_error)?;
-    if let Some(app) = options.app {
-        emit::emit_job_progress(app, &job_id.0, 10, &format!("Attaching {source_name}"));
-    }
-    let attach_started = Instant::now();
-    let ds =
-        datasource_service::attach_data_source(conn, case_id, &source_name, &path, kind.clone())
-            .map_err(CommandError::from_service_error)?;
-    emit_phase_profile(
-        options.app,
-        job_id,
+    let mut ctx = ImportJobContext {
+        conn,
         case_id,
-        Some(&ds.id),
-        12,
-        format!(
-            "Attach complete: phase=attach elapsedMs={} rssMb={}",
-            elapsed_ms(attach_started.elapsed()),
-            import_analysis::current_rss_mb()
-        ),
-        options.cancel_token.load(Ordering::Relaxed),
-    );
+        case_root,
+        source_path,
+        job_id,
+        options,
+        import_config,
+        ds: None,
+        job_repo,
+        counts: &mut counts,
+    };
 
-    // Check for cancellation
+    let ds = phases::run_attach_phase(&mut ctx)?;
+    ctx.ds = Some(&ds);
+
+    // Preserve the original cancellation behaviour right after attach.
     if options.cancel_token.load(Ordering::Relaxed) {
-        mark_import_cancelling(&job_repo, job_id, "Cancellation acknowledged after attach");
+        mark_import_cancelling(
+            &ctx.job_repo,
+            job_id,
+            "Cancellation acknowledged after attach",
+        );
         emit_import_cancellation_state(
             options.app,
             job_id,
@@ -117,738 +103,9 @@ pub fn execute_import_job_with_counts(
         return Err(CommandError::internal("Import cancelled by user"));
     }
 
-    job_repo
-        .update_progress(job_id, 25, "Enumerating filesystem...")
-        .map_err(CommandError::from_service_error)?;
-    if let Some(app) = options.app {
-        emit::emit_job_progress(app, &job_id.0, 25, "Enumerating filesystem...");
-    }
-
-    let stats = match kind {
-        domain::DataSourceKind::LogicalDirectory => {
-            let fs =
-                LogicalFsReader::open(&path, &ds.name).map_err(CommandError::from_service_error)?;
-            file_service::enumerate_filesystem_with_root_name_and_cancel(
-                conn,
-                &ds.id,
-                &fs,
-                None,
-                None::<&dyn Fn(u32)>,
-                Some(options.cancel_token),
-            )
-            .map_err(CommandError::from_service_error)?
-        }
-        domain::DataSourceKind::E01 | domain::DataSourceKind::Raw => {
-            // Load or create manifest for staging-based import
-            let mut manifest =
-                staging::StagingManifest::load(case_root, &ds.id.0).unwrap_or_else(|| {
-                    staging::StagingManifest::create(
-                        &ds.id.0,
-                        source_path,
-                        import_config.staging_kind().unwrap_or("Raw"),
-                    )
-                });
-
-            // Probe once: detect partitions and filesystem candidates
-            let mut probe_candidates: Vec<datasource_service::ImageFilesystemCandidate> =
-                Vec::new();
-            if manifest.partitions.is_empty() {
-                let probe_started = Instant::now();
-                let mut probe_reader: Box<dyn EvidenceReader> = if kind
-                    == domain::DataSourceKind::E01
-                {
-                    Box::new(E01Reader::open(&path).map_err(CommandError::from_service_error)?)
-                } else {
-                    Box::new(RawImageReader::open(&path).map_err(CommandError::from_service_error)?)
-                };
-                let probe = datasource_service::detect_image_filesystem(&mut probe_reader)
-                    .map_err(CommandError::from_service_error)?;
-                emit_phase_profile(
-                    options.app,
-                    job_id,
-                    case_id,
-                    Some(&ds.id),
-                    28,
-                    format!(
-                        "Probe complete: phase=probe elapsedMs={} partitions={} candidates={} rssMb={}",
-                        elapsed_ms(probe_started.elapsed()),
-                        probe.partitions.len(),
-                        probe.candidates.len(),
-                        import_analysis::current_rss_mb()
-                    ),
-                    options.cancel_token.load(Ordering::Relaxed),
-                );
-
-                // Store partition records in main DB
-                file_service::store_data_source_partitions(conn, &ds.id, &probe.partitions)
-                    .map_err(CommandError::from_service_error)?;
-
-                let candidate_index_map =
-                    datasource_service::assign_effective_partition_indices(&probe.candidates);
-
-                let candidate_root_names = probe
-                    .candidates
-                    .iter()
-                    .enumerate()
-                    .map(|(i, candidate)| {
-                        let index = datasource_service::effective_partition_index(
-                            candidate,
-                            i,
-                            &candidate_index_map,
-                        );
-                        (index, format_partition_root_name(candidate))
-                    })
-                    .collect::<std::collections::HashMap<usize, String>>();
-
-                for partition in &probe.partitions {
-                    let status = match partition.status {
-                        datasource_service::PartitionStatus::Supported => "queued",
-                        datasource_service::PartitionStatus::EncryptedBitLocker => "locked",
-                        datasource_service::PartitionStatus::Unsupported => "unsupported",
-                    };
-                    let root_name = candidate_root_names
-                        .get(&partition.index)
-                        .cloned()
-                        .unwrap_or_else(|| format_partition_record_root_name(partition));
-                    file_service::insert_partition_placeholder_root(
-                        conn,
-                        &ds.id,
-                        partition.index,
-                        &root_name,
-                        status,
-                    )
-                    .map_err(CommandError::from_service_error)?;
-                }
-
-                // Build manifest entries for supported partitions
-                for (i, candidate) in probe.candidates.iter().enumerate() {
-                    let index = datasource_service::effective_partition_index(
-                        candidate,
-                        i,
-                        &candidate_index_map,
-                    );
-                    let name = format_partition_root_name(candidate);
-                    manifest.partitions.push(staging::PartitionEntry {
-                        index,
-                        name,
-                        fs_kind: format!("{:?}", candidate.kind),
-                        staging_db: format!("enum_partition_{index}.db"),
-                        status: staging::PartitionStatus::Pending,
-                        file_count: 0,
-                        dir_count: 0,
-                        total_size: 0,
-                        last_path: None,
-                        completed_at: None,
-                        error: None,
-                    });
-                }
-                probe_candidates = probe.candidates;
-                manifest
-                    .save(case_root)
-                    .map_err(CommandError::from_service_error)?;
-            }
-
-            if manifest.partitions.is_empty() {
-                file_service::EnumerationStats {
-                    file_count: 0,
-                    dir_count: 0,
-                    total_size: 0,
-                    warnings: vec![],
-                }
-            } else {
-                // Update partition statuses from staging DBs (for resume)
-                for partition in &mut manifest.partitions {
-                    let staging_db_path =
-                        staging::staging_db_path(case_root, &ds.id.0, partition.index);
-                    if staging_db_path.exists() {
-                        if let Ok(staging_conn) =
-                            staging::open_partition_staging(case_root, &ds.id.0, partition.index)
-                        {
-                            if let Ok(Some(status)) =
-                                staging::get_staging_meta(&staging_conn, "status")
-                            {
-                                match status.as_str() {
-                                    "done" => {
-                                        partition.status = staging::PartitionStatus::Done;
-                                        partition.file_count =
-                                            staging::staging_db_row_count(&staging_conn)
-                                                .unwrap_or(0);
-                                    }
-                                    "failed" => {
-                                        partition.status = staging::PartitionStatus::Failed;
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                    }
-                }
-                manifest
-                    .save(case_root)
-                    .map_err(CommandError::from_service_error)?;
-
-                if let Some(app) = options.app {
-                    emit::emit_job_progress(app, &job_id.0, 30, "Building filesystem readers...");
-                }
-
-                // For resume: probe once to get candidates if we don't have them
-                if probe_candidates.is_empty() {
-                    let probe_started = Instant::now();
-                    let mut probe_reader: Box<dyn EvidenceReader> = if kind
-                        == domain::DataSourceKind::E01
-                    {
-                        Box::new(E01Reader::open(&path).map_err(CommandError::from_service_error)?)
-                    } else {
-                        Box::new(
-                            RawImageReader::open(&path)
-                                .map_err(CommandError::from_service_error)?,
-                        )
-                    };
-                    let probe = datasource_service::detect_image_filesystem(&mut probe_reader)
-                        .map_err(CommandError::from_service_error)?;
-                    emit_phase_profile(
-                        options.app,
-                        job_id,
-                        case_id,
-                        Some(&ds.id),
-                        30,
-                        format!(
-                            "Probe complete: phase=probe-resume elapsedMs={} candidates={} rssMb={}",
-                            elapsed_ms(probe_started.elapsed()),
-                            probe.candidates.len(),
-                            import_analysis::current_rss_mb()
-                        ),
-                        options.cancel_token.load(Ordering::Relaxed),
-                    );
-                    probe_candidates = probe.candidates;
-                }
-
-                // Build work items for pending partitions — reuse probe results, no re-probe
-                let build_started = Instant::now();
-                let mut pending: Vec<crate::parallel_enum::PartitionWork> = Vec::new();
-                let mut build_failures = Vec::new();
-                for p in manifest.partitions.iter() {
-                    if p.status == staging::PartitionStatus::Done {
-                        continue;
-                    }
-                    let work = build_partition_work(
-                        &path,
-                        &kind,
-                        p.index,
-                        &p.name,
-                        &p.fs_kind,
-                        &probe_candidates,
-                    );
-                    match work {
-                        Some(w) => pending.push(w),
-                        None => {
-                            let error = format!(
-                                "Partition {} ({}): could not build filesystem reader",
-                                p.index, p.name
-                            );
-                            tracing::warn!("{}", error);
-                            build_failures.push((p.index, error));
-                        }
-                    }
-                }
-                emit_phase_profile(
-                    options.app,
-                    job_id,
-                    case_id,
-                    Some(&ds.id),
-                    31,
-                    format!(
-                        "Reader build complete: phase=reader-build elapsedMs={} pending={} failures={} rssMb={}",
-                        elapsed_ms(build_started.elapsed()),
-                        pending.len(),
-                        build_failures.len(),
-                        import_analysis::current_rss_mb()
-                    ),
-                    options.cancel_token.load(Ordering::Relaxed),
-                );
-                if !build_failures.is_empty() {
-                    counts.add_warnings(build_failures.len());
-                    counts.add_failed(build_failures.len() as u32);
-                    for (index, error) in &build_failures {
-                        if let Some(partition) =
-                            manifest.partitions.iter_mut().find(|p| p.index == *index)
-                        {
-                            partition.status = staging::PartitionStatus::Failed;
-                            partition.error = Some(error.clone());
-                        }
-                    }
-                    manifest
-                        .save(case_root)
-                        .map_err(CommandError::from_service_error)?;
-                }
-
-                if pending.is_empty() {
-                    let done_count = manifest
-                        .partitions
-                        .iter()
-                        .filter(|p| p.status == staging::PartitionStatus::Done)
-                        .count();
-                    if done_count == 0 && !build_failures.is_empty() {
-                        job_repo
-                            .update_outcome_counts(
-                                job_id,
-                                counts.warning_count,
-                                counts.skipped_count,
-                                counts.failed_count,
-                                counts.is_partial(),
-                            )
-                            .map_err(CommandError::from_service_error)?;
-                        return Err(CommandError::internal(
-                            "No supported partitions could be enumerated",
-                        ));
-                    }
-                    file_service::EnumerationStats {
-                        file_count: manifest.partitions.iter().map(|p| p.file_count).sum(),
-                        dir_count: manifest.partitions.iter().map(|p| p.dir_count).sum(),
-                        total_size: manifest.partitions.iter().map(|p| p.total_size).sum(),
-                        warnings: vec![],
-                    }
-                } else {
-                    let max_workers =
-                        crate::parallel_enum::resolve_worker_count(options.max_import_workers);
-                    let ds_id_clone = ds.id.clone();
-                    let app_ref = options.app;
-                    let job_ref = job_id;
-                    let case_root_clone = case_root.to_path_buf();
-                    let total_partitions = manifest.partitions.len() as u32;
-
-                    let enum_started = Instant::now();
-                    let results = crate::parallel_enum::enumerate_partitions_parallel(
-                        &case_root_clone,
-                        &ds_id_clone,
-                        pending,
-                        max_workers,
-                        Arc::clone(options.cancel_token),
-                        &|partition_idx, pct, detail| {
-                            if let Some(a) = app_ref {
-                                let overall = 25 + (pct * 35 / 100);
-                                emit::emit_job_progress(a, &job_ref.0, overall.min(60), detail);
-                                emit::emit_partition_progress(
-                                    a,
-                                    &job_ref.0,
-                                    &format!("Partition {}", partition_idx),
-                                    partition_idx as u32,
-                                    total_partitions,
-                                    pct,
-                                );
-                            }
-                        },
-                    )
-                    .map_err(CommandError::from_service_error)?;
-                    let enum_elapsed = enum_started.elapsed();
-                    let enum_files: u64 = results.iter().map(|result| result.file_count).sum();
-                    let enum_dirs: u64 = results.iter().map(|result| result.dir_count).sum();
-                    let enum_size: u64 = results.iter().map(|result| result.total_size).sum();
-                    if options.cancel_token.load(Ordering::Relaxed) {
-                        mark_import_cancelling(
-                            &job_repo,
-                            job_id,
-                            "Cancellation acknowledged; draining enumeration workers",
-                        );
-                        emit_import_cancellation_state(
-                            options.app,
-                            job_id,
-                            CancellationStateDto::Draining,
-                            false,
-                            "Cancellation acknowledged; draining enumeration workers",
-                        );
-                    }
-                    emit_phase_profile(
-                        options.app,
-                        job_id,
-                        case_id,
-                        Some(&ds.id),
-                        60,
-                        format!(
-                            "Enumeration complete: phase=enumeration elapsedMs={} rows={} rowsPerSec={} dataMb={} mbPerSec={} workers={} rssMb={}",
-                            elapsed_ms(enum_elapsed),
-                            enum_files + enum_dirs,
-                            rows_per_sec(enum_files + enum_dirs, enum_elapsed),
-                            bytes_to_mb(enum_size),
-                            mb_per_sec(enum_size, enum_elapsed),
-                            max_workers,
-                            import_analysis::current_rss_mb()
-                        ),
-                        options.cancel_token.load(Ordering::Relaxed),
-                    );
-
-                    // Update manifest with results
-                    for result in &results {
-                        if let Some(p) = manifest
-                            .partitions
-                            .iter_mut()
-                            .find(|p| p.index == result.index)
-                        {
-                            if result.error.is_some() {
-                                p.status = staging::PartitionStatus::Failed;
-                                p.error = result.error.clone();
-                            } else {
-                                p.status = staging::PartitionStatus::Done;
-                                p.file_count = result.file_count;
-                                p.dir_count = result.dir_count;
-                                p.total_size = result.total_size;
-                                p.completed_at = Some(chrono::Utc::now().to_rfc3339());
-                            }
-                        }
-                    }
-                    let failed_results = results
-                        .iter()
-                        .filter(|result| result.error.is_some())
-                        .count();
-                    if failed_results > 0 {
-                        counts.add_failed(failed_results as u32);
-                    }
-                    manifest.phase = staging::ImportPhase::Enumerating;
-                    manifest
-                        .save(case_root)
-                        .map_err(CommandError::from_service_error)?;
-
-                    if options.cancel_token.load(Ordering::Relaxed) {
-                        job_repo
-                            .update_outcome_counts(
-                                job_id,
-                                counts.warning_count,
-                                counts.skipped_count.saturating_add(1),
-                                counts.failed_count,
-                                true,
-                            )
-                            .map_err(CommandError::from_service_error)?;
-                        emit_import_cancellation_state(
-                            options.app,
-                            job_id,
-                            CancellationStateDto::Acknowledged,
-                            false,
-                            "Import cancellation acknowledged after enumeration",
-                        );
-                        return Err(CommandError::internal("Import cancelled by user"));
-                    }
-
-                    let success_results = results
-                        .iter()
-                        .filter(|result| result.error.is_none())
-                        .count();
-                    if success_results == 0 {
-                        counts.add_warnings(failed_results);
-                        job_repo
-                            .update_outcome_counts(
-                                job_id,
-                                counts.warning_count,
-                                counts.skipped_count,
-                                counts.failed_count,
-                                counts.is_partial(),
-                            )
-                            .map_err(CommandError::from_service_error)?;
-                        return Err(CommandError::internal(
-                            "No supported partitions could be enumerated",
-                        ));
-                    }
-
-                    // Merge staging → main DB
-                    if let Some(a) = options.app {
-                        emit::emit_job_progress(a, &job_id.0, 62, "Merging partitions...");
-                    }
-                    manifest.phase = staging::ImportPhase::Merging;
-                    manifest
-                        .save(case_root)
-                        .map_err(CommandError::from_service_error)?;
-
-                    let enum_merge_started = Instant::now();
-                    let merged = staging::merge_all_staging_to_main(
-                        conn,
-                        case_root,
-                        &ds.id.0,
-                        &manifest,
-                        Some(&|completed, total| {
-                            if let Some(a) = options.app {
-                                let pct = 62 + (completed as u32 * 8 / total as u32);
-                                emit::emit_job_progress(
-                                    a,
-                                    &job_id.0,
-                                    pct.min(70),
-                                    &format!("Merged {}/{} partitions", completed, total),
-                                );
-                            }
-                        }),
-                    )
-                    .map_err(CommandError::from_service_error)?;
-                    let enum_merge_elapsed = enum_merge_started.elapsed();
-                    emit_phase_profile(
-                        options.app,
-                        job_id,
-                        case_id,
-                        Some(&ds.id),
-                        70,
-                        format!(
-                            "Partition merge complete: phase=enum-merge elapsedMs={} rows={} rowsPerSec={} rssMb={}",
-                            elapsed_ms(enum_merge_elapsed),
-                            merged,
-                            rows_per_sec(merged, enum_merge_elapsed),
-                            import_analysis::current_rss_mb()
-                        ),
-                        options.cancel_token.load(Ordering::Relaxed),
-                    );
-
-                    let total_files: u64 = results.iter().map(|r| r.file_count).sum();
-                    let total_dirs: u64 = results.iter().map(|r| r.dir_count).sum();
-                    let total_size: u64 = results.iter().map(|r| r.total_size).sum();
-                    let warnings: Vec<String> = results
-                        .iter()
-                        .flat_map(|r| {
-                            let mut warnings = r
-                                .warnings
-                                .iter()
-                                .map(|warning| format!("Partition {}: {}", r.index, warning))
-                                .collect::<Vec<_>>();
-                            if let Some(error) = &r.error {
-                                warnings.push(format!("Partition {}: {}", r.index, error));
-                            }
-                            warnings
-                        })
-                        .collect();
-
-                    file_service::EnumerationStats {
-                        file_count: total_files,
-                        dir_count: total_dirs,
-                        total_size,
-                        warnings,
-                    }
-                }
-            }
-        }
-    };
-    counts.add_warnings(stats.warnings.len());
-    emit_phase_profile(
-        options.app,
-        job_id,
-        case_id,
-        Some(&ds.id),
-        70,
-        format!(
-            "File catalog ready: phase=enum-merge rows={} files={} dirs={} warnings={} rssMb={}",
-            stats.file_count + stats.dir_count,
-            stats.file_count,
-            stats.dir_count,
-            stats.warnings.len(),
-            import_analysis::current_rss_mb()
-        ),
-        options.cancel_token.load(Ordering::Relaxed),
-    );
-
-    // Check for cancellation
-    if options.cancel_token.load(Ordering::Relaxed) {
-        mark_import_cancelling(
-            &job_repo,
-            job_id,
-            "Cancellation acknowledged before post-import analysis",
-        );
-        emit_import_cancellation_state(
-            options.app,
-            job_id,
-            CancellationStateDto::Acknowledged,
-            false,
-            "Cancellation acknowledged before post-import analysis",
-        );
-        emit_import_profile_progress(
-            options.app,
-            job_id,
-            case_id,
-            Some(&ds.id),
-            70,
-            "Cancellation acknowledged: phase=enumeration",
-            true,
-        );
-        return Err(CommandError::internal("Import cancelled by user"));
-    }
-
-    job_repo
-        .update_progress(job_id, 70, "Running post-import pipeline...")
-        .map_err(CommandError::from_service_error)?;
-    if let Some(app) = options.app {
-        emit::emit_job_progress(app, &job_id.0, 70, "Running post-import pipeline...");
-    }
-
-    let post_import_db_path = case_root.join("app.db");
-    let image_backed_source = import_config.is_image_backed();
-    let analysis_mode = if image_backed_source {
-        options.analysis_mode
-    } else {
-        match options.analysis_mode {
-            import_analysis::ImportAnalysisMode::MetadataOnly => {
-                import_analysis::ImportAnalysisMode::BudgetedContent
-            }
-            mode => mode,
-        }
-    };
-    let post_import_started = Instant::now();
-    let progress_adapter = |pct: u32, detail: &str| {
-        emit_import_profile_progress(
-            options.app,
-            job_id,
-            case_id,
-            Some(&ds.id),
-            pct,
-            detail,
-            options.cancel_token.load(Ordering::Relaxed),
-        );
-    };
-    let (pipeline_msg, pipeline_counts) = import_analysis::run_post_import_pipeline_with_counts(
-        import_analysis::PostImportPipelineOptions {
-            case_root: case_root.to_path_buf(),
-            db_path: post_import_db_path,
-            case_id: case_id.0.clone(),
-            data_source_id: ds.id.clone(),
-            index_dir: index_dir.clone(),
-            max_analysis_workers: options.max_analysis_workers,
-            cancel_token: Arc::clone(options.cancel_token),
-            enable_timeline_projection: !image_backed_source,
-            enable_content_extraction: analysis_mode.allows_content(),
-            enable_text_indexing: analysis_mode.allows_content(),
-            analysis_mode,
-            tier_state: Arc::new(Mutex::new(import_analysis::tier::TierStateMachine::new())),
-        },
-        Some(&progress_adapter),
-    )
-    .map_err(|error| {
-        let service_counts = JobOutcomeCounts::from(error.counts);
-        counts.warning_count = counts
-            .warning_count
-            .saturating_add(service_counts.warning_count);
-        counts.skipped_count = counts
-            .skipped_count
-            .saturating_add(service_counts.skipped_count);
-        counts.failed_count = counts
-            .failed_count
-            .saturating_add(service_counts.failed_count);
-        let cancellation_error = options.cancel_token.load(Ordering::Relaxed)
-            || is_import_cancelled_message(&error.message);
-        if cancellation_error {
-            mark_import_cancelling(
-                &job_repo,
-                job_id,
-                "Cancellation acknowledged during post-import analysis drain",
-            );
-            emit_import_cancellation_state(
-                options.app,
-                job_id,
-                CancellationStateDto::Draining,
-                false,
-                "Cancellation acknowledged during post-import analysis drain",
-            );
-        }
-        if cancellation_error {
-            CommandError::internal("Import cancelled by user")
-        } else {
-            CommandError::from_service_error(error.message)
-        }
-    })?;
-    let pipeline_counts = JobOutcomeCounts::from(pipeline_counts);
-    let post_import_results = post_import_counts_from_message(&pipeline_msg);
-    emit_phase_profile(
-        options.app,
-        job_id,
-        case_id,
-        Some(&ds.id),
-        94,
-        format!(
-            "Post-import complete: phase=post-import elapsedMs={} timeline={} artifacts={} indexed={} rssMb={}",
-            elapsed_ms(post_import_started.elapsed()),
-            post_import_results.timeline_events,
-            post_import_results.artifact_count,
-            post_import_results.indexed_count,
-            import_analysis::current_rss_mb()
-        ),
-        options.cancel_token.load(Ordering::Relaxed),
-    );
-    counts.warning_count = counts
-        .warning_count
-        .saturating_add(pipeline_counts.warning_count);
-    counts.skipped_count = counts
-        .skipped_count
-        .saturating_add(pipeline_counts.skipped_count);
-    counts.failed_count = counts
-        .failed_count
-        .saturating_add(pipeline_counts.failed_count);
-    job_repo
-        .update_outcome_counts(
-            job_id,
-            counts.warning_count,
-            counts.skipped_count,
-            counts.failed_count,
-            counts.is_partial(),
-        )
-        .map_err(CommandError::from_service_error)?;
-    if let Some(app) = options.app {
-        emit::emit_timeline_updated(app, stats.file_count + stats.dir_count);
-        emit::emit_search_index_progress(app, 100, "Post-import indexing completed");
-    }
-
-    job_repo
-        .update_progress(job_id, 95, "Finalizing...")
-        .map_err(CommandError::from_service_error)?;
-    if let Some(app) = options.app {
-        emit::emit_job_progress(app, &job_id.0, 95, "Finalizing...");
-    }
-
-    if let Some(app) = options.app {
-        match file_service::get_data_sources_real(conn, case_id)
-            .map_err(CommandError::from_service_error)?
-            .into_iter()
-            .find(|source| source.id == ds.id.0)
-        {
-            Some(summary) => emit::emit_data_source_imported(app, &case_id.0, &summary, &job_id.0),
-            None => tracing::warn!(
-                "Imported data source {} was not found in summary list for event emission",
-                ds.id.0
-            ),
-        }
-    }
-    emit_phase_profile(
-        options.app,
-        job_id,
-        case_id,
-        Some(&ds.id),
-        99,
-        format!(
-            "Import profile complete: phase=total elapsedMs={} rssMb={}",
-            elapsed_ms(import_started.elapsed()),
-            import_analysis::current_rss_mb()
-        ),
-        options.cancel_token.load(Ordering::Relaxed),
-    );
-
-    let mut msg = format!(
-        "Imported {}: {} files, {} dirs",
-        source_name, stats.file_count, stats.dir_count
-    );
-    if !pipeline_msg.is_empty() {
-        msg.push_str(". ");
-        msg.push_str(&pipeline_msg);
-    }
-
-    // Record investigation step for provenance
-    let import_duration_ms = import_started.elapsed().as_millis() as u32;
-    let params_json = serde_json::json!({
-        "sourcePath": source_path,
-        "sourceName": source_name,
-        "kind": format!("{:?}", kind),
-        "filesEnumerated": stats.file_count,
-        "dirsEnumerated": stats.dir_count,
-    })
-    .to_string();
-    let _ = step_recorder::record_step(
-        conn,
-        &case_id.0,
-        "import",
-        &params_json,
-        import_duration_ms,
-        true,
-        None,
-    );
+    let stats = phases::run_enumeration_phase(&mut ctx, &ds)?;
+    let pipeline_msg = phases::run_post_import_phase(&mut ctx, &ds)?;
+    let msg = phases::run_finalize_phase(&mut ctx, &ds, &stats, &pipeline_msg, import_started)?;
 
     Ok((msg, counts))
 }
@@ -865,7 +122,7 @@ pub(crate) fn emit_import_cancellation_state(
     detail: &str,
 ) {
     if let Some(app) = app {
-        emit::emit_job_cancellation(
+        crate::import_pipeline::emit::emit_job_cancellation(
             app,
             &job_cancellation_dto(&job_id.0, state, safe_to_close, detail),
         );
@@ -951,14 +208,14 @@ pub(crate) fn emit_import_profile_progress(
             detail,
             cancel_requested,
         );
-        emit::emit_import_phase_progress(app, &phase_progress);
+        crate::import_pipeline::emit::emit_import_phase_progress(app, &phase_progress);
         for result in &phase_progress.partial_results {
-            emit::emit_import_partial_result(app, result);
+            crate::import_pipeline::emit::emit_import_partial_result(app, result);
         }
         for status in cache_statuses_from_profile(data_source_id, detail) {
-            emit::emit_cache_index_status(app, &status);
+            crate::import_pipeline::emit::emit_cache_index_status(app, &status);
         }
-        emit::emit_job_progress(app, &job_id.0, progress.min(99), detail);
+        crate::import_pipeline::emit::emit_job_progress(app, &job_id.0, progress.min(99), detail);
     }
 }
 

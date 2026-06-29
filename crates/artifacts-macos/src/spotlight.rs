@@ -11,6 +11,7 @@
 //! This parser opens the SQLite database and queries metadata columns to extract
 //! indexed file information.
 
+use crate::error::{MacArtifactError, Result};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
@@ -35,25 +36,21 @@ pub struct SpotlightEntry {
 ///
 /// Opens the SQLite database in memory and queries the metadata tables to extract
 /// file entries with their Spotlight attributes.
-pub fn parse_spotlight_store(data: &[u8]) -> Result<Vec<SpotlightEntry>, String> {
+pub fn parse_spotlight_store(data: &[u8]) -> Result<Vec<SpotlightEntry>> {
     if data.is_empty() {
-        return Err("Spotlight store data is empty".to_string());
+        return Err(MacArtifactError::InvalidInput(
+            "Spotlight store data is empty".to_string(),
+        ));
     }
 
     // Write the data to a temp file and open it as SQLite
     // This avoids the serde Deserialize trait conflict with Connection::deserialize
     use std::io::Write;
-    let mut tmp = tempfile::Builder::new()
-        .suffix(".store.db")
-        .tempfile()
-        .map_err(|e| format!("Failed to create temp file: {}", e))?;
-    tmp.write_all(data)
-        .map_err(|e| format!("Failed to write temp file: {}", e))?;
-    tmp.flush()
-        .map_err(|e| format!("Failed to flush temp file: {}", e))?;
+    let mut tmp = tempfile::Builder::new().suffix(".store.db").tempfile()?;
+    tmp.write_all(data)?;
+    tmp.flush()?;
 
-    let conn = Connection::open(tmp.path())
-        .map_err(|e| format!("Failed to open Spotlight store database: {}", e))?;
+    let conn = Connection::open(tmp.path()).map_err(MacArtifactError::Database)?;
 
     let mut entries: Vec<SpotlightEntry> = Vec::new();
 
@@ -89,14 +86,14 @@ pub fn parse_spotlight_store(data: &[u8]) -> Result<Vec<SpotlightEntry>, String>
 }
 
 /// Get all table names from the database.
-fn get_table_names(conn: &Connection) -> Result<Vec<String>, String> {
+fn get_table_names(conn: &Connection) -> Result<Vec<String>> {
     let mut stmt = conn
         .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-        .map_err(|e| format!("Failed to prepare table query: {}", e))?;
+        .map_err(MacArtifactError::Database)?;
 
     let names: Vec<String> = stmt
         .query_map([], |row| row.get(0))
-        .map_err(|e| format!("Failed to query tables: {}", e))?
+        .map_err(MacArtifactError::Database)?
         .filter_map(|r| r.ok())
         .collect();
 
@@ -104,15 +101,15 @@ fn get_table_names(conn: &Connection) -> Result<Vec<String>, String> {
 }
 
 /// Parse entries from a specific metadata table.
-fn parse_metadata_table(conn: &Connection, table: &str) -> Result<Vec<SpotlightEntry>, String> {
+fn parse_metadata_table(conn: &Connection, table: &str) -> Result<Vec<SpotlightEntry>> {
     // Get column info for this table
     let mut col_stmt = conn
         .prepare(&format!("PRAGMA table_info({})", table))
-        .map_err(|e| format!("Failed to get table info for {}: {}", table, e))?;
+        .map_err(MacArtifactError::Database)?;
 
     let columns: Vec<String> = col_stmt
         .query_map([], |row| row.get(1))
-        .map_err(|e| format!("Failed to read columns: {}", e))?
+        .map_err(MacArtifactError::Database)?
         .filter_map(|r| r.ok())
         .collect();
 
@@ -170,9 +167,7 @@ fn parse_metadata_table(conn: &Connection, table: &str) -> Result<Vec<SpotlightE
 
     let query = format!("SELECT {} FROM {} LIMIT 500", select_cols.join(", "), table);
 
-    let mut stmt = conn
-        .prepare(&query)
-        .map_err(|e| format!("Failed to prepare query for {}: {}", table, e))?;
+    let mut stmt = conn.prepare(&query).map_err(MacArtifactError::Database)?;
 
     let entries: Vec<SpotlightEntry> = stmt
         .query_map([], |row| {
@@ -202,7 +197,7 @@ fn parse_metadata_table(conn: &Connection, table: &str) -> Result<Vec<SpotlightE
                 authors: Vec::new(),
             })
         })
-        .map_err(|e| format!("Failed to query {}: {}", table, e))?
+        .map_err(MacArtifactError::Database)?
         .filter_map(|r| r.ok())
         .collect();
 
@@ -210,7 +205,7 @@ fn parse_metadata_table(conn: &Connection, table: &str) -> Result<Vec<SpotlightE
 }
 
 /// Fallback: try to extract metadata from any table with recognizable columns.
-fn parse_generic_metadata(conn: &Connection) -> Result<Vec<SpotlightEntry>, String> {
+fn parse_generic_metadata(conn: &Connection) -> Result<Vec<SpotlightEntry>> {
     let mut entries: Vec<SpotlightEntry> = Vec::new();
 
     // Known Spotlight metadata column names
@@ -297,7 +292,7 @@ fn parse_generic_metadata(conn: &Connection) -> Result<Vec<SpotlightEntry>, Stri
                     authors: Vec::new(),
                 })
             })
-            .map_err(|e| format!("Failed to query {}: {}", table, e))?
+            .map_err(MacArtifactError::Database)?
             .filter_map(|r| r.ok())
             .collect();
 
@@ -308,14 +303,14 @@ fn parse_generic_metadata(conn: &Connection) -> Result<Vec<SpotlightEntry>, Stri
 }
 
 /// Get column names for a table.
-fn get_column_names(conn: &Connection, table: &str) -> Result<Vec<String>, String> {
+fn get_column_names(conn: &Connection, table: &str) -> Result<Vec<String>> {
     let mut stmt = conn
         .prepare(&format!("PRAGMA table_info({})", table))
-        .map_err(|e| format!("Failed to get column info: {}", e))?;
+        .map_err(MacArtifactError::Database)?;
 
     let names: Vec<String> = stmt
         .query_map([], |row| row.get(1))
-        .map_err(|e| format!("Failed to read columns: {}", e))?
+        .map_err(MacArtifactError::Database)?
         .filter_map(|r| r.ok())
         .collect();
 

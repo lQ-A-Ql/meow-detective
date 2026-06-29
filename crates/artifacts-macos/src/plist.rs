@@ -30,6 +30,7 @@
 //! </plist>
 //! ```
 
+use crate::error::{MacArtifactError, Result};
 use chrono::{TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -71,19 +72,25 @@ pub fn is_xml_plist(data: &[u8]) -> bool {
 /// - Reads the 32-byte trailer at the end of the data
 /// - Parses the offset table to locate objects
 /// - Traverses top-level dict to extract string key → value pairs
-pub fn parse_binary_plist(data: &[u8], source_file: &str) -> Result<Vec<MacPlistEntry>, String> {
+pub fn parse_binary_plist(data: &[u8], source_file: &str) -> Result<Vec<MacPlistEntry>> {
     if data.len() < 40 {
-        return Err("Binary plist too short (minimum 40 bytes required)".to_string());
+        return Err(MacArtifactError::InvalidInput(
+            "Binary plist too short (minimum 40 bytes required)".to_string(),
+        ));
     }
     if !is_binary_plist(data) {
-        return Err("Not a binary plist (missing bplist00 magic)".to_string());
+        return Err(MacArtifactError::InvalidInput(
+            "Not a binary plist (missing bplist00 magic)".to_string(),
+        ));
     }
 
     // Trailer is the last 32 bytes (for files < 16 MB, offset size is 1)
     let trailer_start = data.len().saturating_sub(32);
     let trailer = &data[trailer_start..];
     if trailer.len() < 32 {
-        return Err("Binary plist trailer truncated".to_string());
+        return Err(MacArtifactError::InvalidInput(
+            "Binary plist trailer truncated".to_string(),
+        ));
     }
 
     // Trailer layout (last 32 bytes):
@@ -123,7 +130,9 @@ pub fn parse_binary_plist(data: &[u8], source_file: &str) -> Result<Vec<MacPlist
     ]) as usize;
 
     if offset_size == 0 || obj_ref_size == 0 || num_objects == 0 {
-        return Err("Invalid binary plist trailer values".to_string());
+        return Err(MacArtifactError::InvalidInput(
+            "Invalid binary plist trailer values".to_string(),
+        ));
     }
 
     // Read object offsets from the offset table
@@ -131,7 +140,10 @@ pub fn parse_binary_plist(data: &[u8], source_file: &str) -> Result<Vec<MacPlist
     for i in 0..num_objects {
         let pos = offset_table_start + i * offset_size;
         if pos + offset_size > data.len() {
-            return Err(format!("Offset table entry {} out of bounds", i));
+            return Err(MacArtifactError::InvalidInput(format!(
+                "Offset table entry {} out of bounds",
+                i
+            )));
         }
         let off = read_int_be(&data[pos..pos + offset_size]);
         offsets.push(off);
@@ -139,11 +151,15 @@ pub fn parse_binary_plist(data: &[u8], source_file: &str) -> Result<Vec<MacPlist
 
     // The top object is typically a dict (0xD?) — traverse it
     if top_object >= offsets.len() {
-        return Err("Top object index out of bounds".to_string());
+        return Err(MacArtifactError::InvalidInput(
+            "Top object index out of bounds".to_string(),
+        ));
     }
     let top_offset = offsets[top_object];
     if top_offset + 1 > data.len() {
-        return Err("Top object offset out of bounds".to_string());
+        return Err(MacArtifactError::InvalidInput(
+            "Top object offset out of bounds".to_string(),
+        ));
     }
 
     let entries = parse_dict(data, top_offset, &offsets, obj_ref_size, source_file)?;
@@ -151,8 +167,9 @@ pub fn parse_binary_plist(data: &[u8], source_file: &str) -> Result<Vec<MacPlist
 }
 
 /// Parse an XML plist and return key-value entries.
-pub fn parse_xml_plist(data: &[u8], source_file: &str) -> Result<Vec<MacPlistEntry>, String> {
-    let text = std::str::from_utf8(data).map_err(|_| "XML plist is not valid UTF-8".to_string())?;
+pub fn parse_xml_plist(data: &[u8], source_file: &str) -> Result<Vec<MacPlistEntry>> {
+    let text = std::str::from_utf8(data)
+        .map_err(|_| MacArtifactError::Decode("XML plist is not valid UTF-8".to_string()))?;
 
     let mut entries: Vec<MacPlistEntry> = Vec::new();
     let mut in_dict = false;
@@ -251,17 +268,19 @@ fn parse_dict(
     offsets: &[usize],
     obj_ref_size: usize,
     source_file: &str,
-) -> Result<Vec<MacPlistEntry>, String> {
+) -> Result<Vec<MacPlistEntry>> {
     if offset >= data.len() {
-        return Err("Dict offset out of bounds".to_string());
+        return Err(MacArtifactError::InvalidInput(
+            "Dict offset out of bounds".to_string(),
+        ));
     }
     let marker = data[offset];
     let marker_type = marker >> 4;
     if marker_type != 0xD {
-        return Err(format!(
+        return Err(MacArtifactError::InvalidInput(format!(
             "Expected dict marker (0xDx) at offset {}, got 0x{:02X}",
             offset, marker
-        ));
+        )));
     }
     let count = (marker & 0x0F) as usize;
 
@@ -290,7 +309,7 @@ fn parse_dict(
 }
 
 /// Read a binary plist string object (0x5x ASCII, 0x6x UTF-16).
-fn read_string_object(data: &[u8], ref_idx: usize, offsets: &[usize]) -> Result<String, String> {
+fn read_string_object(data: &[u8], ref_idx: usize, offsets: &[usize]) -> Result<String> {
     if ref_idx >= offsets.len() {
         return Ok("<invalid ref>".to_string());
     }
@@ -325,11 +344,7 @@ fn read_string_object(data: &[u8], ref_idx: usize, offsets: &[usize]) -> Result<
 }
 
 /// Read a binary plist value and return (string_value, type_name).
-fn read_value_string(
-    data: &[u8],
-    ref_idx: usize,
-    offsets: &[usize],
-) -> Result<(String, String), String> {
+fn read_value_string(data: &[u8], ref_idx: usize, offsets: &[usize]) -> Result<(String, String)> {
     if ref_idx >= offsets.len() {
         return Ok(("<invalid ref>".to_string(), "unknown".to_string()));
     }

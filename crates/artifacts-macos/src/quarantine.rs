@@ -18,6 +18,7 @@
 //! - `LSQuarantineOriginSenderName` (TEXT) — origin sender
 //! - `LSQuarantineTypeNumber` (INTEGER) — quarantine type
 
+use crate::error::{MacArtifactError, Result};
 use chrono::{TimeZone, Utc};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
@@ -42,24 +43,22 @@ const APPLE_EPOCH_OFFSET: f64 = 978_307_200.0;
 ///
 /// Opens the SQLite database in memory and queries the `LSQuarantineEvent` table
 /// to extract quarantine event records.
-pub fn parse_quarantine_events(data: &[u8]) -> Result<Vec<QuarantineEntry>, String> {
+pub fn parse_quarantine_events(data: &[u8]) -> Result<Vec<QuarantineEntry>> {
     if data.is_empty() {
-        return Err("QuarantineEvents database is empty".to_string());
+        return Err(MacArtifactError::InvalidInput(
+            "QuarantineEvents database is empty".to_string(),
+        ));
     }
 
     // Write the data to a temp file and open it as SQLite
     use std::io::Write;
     let mut tmp = tempfile::Builder::new()
         .suffix(".quarantine.db")
-        .tempfile()
-        .map_err(|e| format!("Failed to create temp file: {}", e))?;
-    tmp.write_all(data)
-        .map_err(|e| format!("Failed to write temp file: {}", e))?;
-    tmp.flush()
-        .map_err(|e| format!("Failed to flush temp file: {}", e))?;
+        .tempfile()?;
+    tmp.write_all(data)?;
+    tmp.flush()?;
 
-    let conn = Connection::open(tmp.path())
-        .map_err(|e| format!("Failed to open QuarantineEvents database: {}", e))?;
+    let conn = Connection::open(tmp.path()).map_err(MacArtifactError::Database)?;
 
     // Check if the expected table exists
     let tables = get_quarantine_tables(&conn)?;
@@ -67,7 +66,9 @@ pub fn parse_quarantine_events(data: &[u8]) -> Result<Vec<QuarantineEntry>, Stri
     let has_quarantine_table = tables.iter().any(|t| t.contains("Quarantine"));
 
     if !has_quarantine_table {
-        return Err("No LSQuarantineEvent table found in database".to_string());
+        return Err(MacArtifactError::InvalidInput(
+            "No LSQuarantineEvent table found in database".to_string(),
+        ));
     }
 
     let entries = query_quarantine_events(&conn)?;
@@ -75,14 +76,11 @@ pub fn parse_quarantine_events(data: &[u8]) -> Result<Vec<QuarantineEntry>, Stri
 }
 
 /// Get table names from the database.
-fn get_quarantine_tables(conn: &Connection) -> Result<Vec<String>, String> {
-    let mut stmt = conn
-        .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-        .map_err(|e| format!("Failed to query tables: {}", e))?;
+fn get_quarantine_tables(conn: &Connection) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table'")?;
 
     let names: Vec<String> = stmt
-        .query_map([], |row| row.get(0))
-        .map_err(|e| format!("Failed to read table names: {}", e))?
+        .query_map([], |row| row.get(0))?
         .filter_map(|r| r.ok())
         .collect();
 
@@ -90,7 +88,7 @@ fn get_quarantine_tables(conn: &Connection) -> Result<Vec<String>, String> {
 }
 
 /// Query the LSQuarantineEvent table for entries.
-fn query_quarantine_events(conn: &Connection) -> Result<Vec<QuarantineEntry>, String> {
+fn query_quarantine_events(conn: &Connection) -> Result<Vec<QuarantineEntry>> {
     // First try the standard schema
     let query = "SELECT LSQuarantineDataURLString, LSQuarantineAgentBundleIdentifier, LSQuarantineAgentName, LSQuarantineTimeStamp FROM LSQuarantineEvent LIMIT 1000";
 
@@ -100,7 +98,7 @@ fn query_quarantine_events(conn: &Connection) -> Result<Vec<QuarantineEntry>, St
             // Try alternative schema with different column names
             let alt_query = "SELECT LSQuarantineOriginURLString, LSQuarantineAgentBundleIdentifier, LSQuarantineAgentName, LSQuarantineTimeStamp FROM LSQuarantineEvent LIMIT 1000";
             conn.prepare(alt_query)
-                .map_err(|e| format!("Failed to prepare quarantine query: {}", e))?
+                .map_err(MacArtifactError::Database)?
         }
     };
 
@@ -122,7 +120,7 @@ fn query_quarantine_events(conn: &Connection) -> Result<Vec<QuarantineEntry>, St
                 timestamp,
             })
         })
-        .map_err(|e| format!("Failed to query quarantine events: {}", e))?
+        .map_err(MacArtifactError::Database)?
         .filter_map(|r| r.ok())
         .collect();
 

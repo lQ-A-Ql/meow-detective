@@ -14,6 +14,7 @@
 //!   - `LSHandlerContentType` — UTI content type
 //!   - `LSHandlerPreferredVersions` — preferred app versions
 
+use crate::error::{MacArtifactError, Result};
 use serde::{Deserialize, Serialize};
 
 /// A single Launch Services entry (registered application or handler).
@@ -39,9 +40,11 @@ pub struct LaunchService {
 /// - URL scheme handlers
 /// - Content type handlers
 /// - Protocol handlers
-pub fn parse_launch_services_plist(data: &[u8]) -> Result<Vec<LaunchService>, String> {
+pub fn parse_launch_services_plist(data: &[u8]) -> Result<Vec<LaunchService>> {
     if data.is_empty() {
-        return Err("Launch Services plist data is empty".to_string());
+        return Err(MacArtifactError::InvalidInput(
+            "Launch Services plist data is empty".to_string(),
+        ));
     }
 
     // Detect format and parse
@@ -52,7 +55,9 @@ pub fn parse_launch_services_plist(data: &[u8]) -> Result<Vec<LaunchService>, St
     } else {
         // Treat as XML
         std::str::from_utf8(data)
-            .map_err(|_| "Launch Services plist is not valid UTF-8".to_string())?
+            .map_err(|_| {
+                MacArtifactError::Decode("Launch Services plist is not valid UTF-8".to_string())
+            })?
             .to_string()
     };
 
@@ -60,9 +65,7 @@ pub fn parse_launch_services_plist(data: &[u8]) -> Result<Vec<LaunchService>, St
 }
 
 /// Convert plist entries to LaunchService structs.
-fn parse_from_plist_entries(
-    entries: &[crate::plist::MacPlistEntry],
-) -> Result<Vec<LaunchService>, String> {
+fn parse_from_plist_entries(entries: &[crate::plist::MacPlistEntry]) -> Result<Vec<LaunchService>> {
     let mut services: Vec<LaunchService> = Vec::new();
 
     for entry in entries {
@@ -109,7 +112,7 @@ fn parse_from_plist_entries(
 }
 
 /// Parse XML Launch Services plist.
-fn parse_xml_launch_services(xml: &str) -> Result<Vec<LaunchService>, String> {
+fn parse_xml_launch_services(xml: &str) -> Result<Vec<LaunchService>> {
     let mut services: Vec<LaunchService> = Vec::new();
 
     // State machine for parsing LSHandlers array
@@ -167,14 +170,14 @@ fn parse_xml_launch_services(xml: &str) -> Result<Vec<LaunchService>, String> {
         }
 
         // Extract <key>...</key>
-        if let Some(key) = extract_xml_tag_content(trimmed, "key") {
+        if let Some(key) = crate::xml::extract_xml_tag_content(trimmed, "key") {
             current_key = Some(key);
             continue;
         }
 
         // Extract value based on current key
         if let Some(ref key) = current_key {
-            if let Some(value) = extract_xml_tag_content(trimmed, "string") {
+            if let Some(value) = crate::xml::extract_xml_tag_content(trimmed, "string") {
                 match key.as_str() {
                     "LSHandlerRoleAll" | "LSHandlerRoleViewer" | "LSHandlerRoleEditor" => {
                         current_bundle_id = value;
@@ -206,20 +209,6 @@ fn parse_xml_launch_services(xml: &str) -> Result<Vec<LaunchService>, String> {
     }
 
     Ok(services)
-}
-
-/// Extract content from an XML tag like `<tag>content</tag>`.
-fn extract_xml_tag_content(line: &str, tag: &str) -> Option<String> {
-    let open = format!("<{}>", tag);
-    let close = format!("</{}>", tag);
-    if let (Some(start), Some(end)) = (line.find(&open), line.find(&close)) {
-        let content_start = start + open.len();
-        if content_start < end {
-            return Some(line[content_start..end].to_string());
-        }
-        return Some(String::new());
-    }
-    None
 }
 
 /// Convert a string to bytes (for fallback plist parsing).

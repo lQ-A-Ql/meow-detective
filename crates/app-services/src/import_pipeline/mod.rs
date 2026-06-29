@@ -8,6 +8,8 @@ mod emit;
 pub mod execute;
 pub mod options;
 pub mod partition;
+mod phases;
+mod types;
 
 pub use execute::{execute_import_job, execute_import_job_with_counts};
 pub use options::{ImportJobOptions, JobOutcomeCounts};

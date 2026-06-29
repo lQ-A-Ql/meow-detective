@@ -15,6 +15,7 @@
 //!
 //! Reference: macOS Unified Log format (reverse-engineered by community).
 
+use crate::error::{MacArtifactError, Result};
 use chrono::{TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -50,12 +51,16 @@ pub fn is_tracev3(data: &[u8]) -> bool {
 /// The tracev3 format uses the Mach absolute timebase, which on Apple Silicon
 /// uses a 24 MHz clock (41.667 ns per tick). We use a simplified approach
 /// that handles commonly observed patterns.
-pub fn parse_tracev3(data: &[u8]) -> Result<Vec<UnifiedLogEntry>, String> {
+pub fn parse_tracev3(data: &[u8]) -> Result<Vec<UnifiedLogEntry>> {
     if data.len() < 256 {
-        return Err("Unified Log data too short".to_string());
+        return Err(MacArtifactError::InvalidInput(
+            "Unified Log data too short".to_string(),
+        ));
     }
     if !is_tracev3(data) {
-        return Err("Not a tracev3 file (missing tracev3 magic)".to_string());
+        return Err(MacArtifactError::InvalidInput(
+            "Not a tracev3 file (missing tracev3 magic)".to_string(),
+        ));
     }
 
     let mut entries: Vec<UnifiedLogEntry> = Vec::new();

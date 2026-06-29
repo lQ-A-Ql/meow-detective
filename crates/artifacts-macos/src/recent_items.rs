@@ -22,6 +22,7 @@
 //! </dict>
 //! ```
 
+use crate::error::{MacArtifactError, Result};
 use serde::{Deserialize, Serialize};
 
 /// The kind of recent item.
@@ -57,9 +58,11 @@ pub struct RecentItem {
 ///
 /// Supports both XML and binary plist formats. Extracts files, servers,
 /// applications, and volumes from the recent items list.
-pub fn parse_recent_items_plist(data: &[u8]) -> Result<Vec<RecentItem>, String> {
+pub fn parse_recent_items_plist(data: &[u8]) -> Result<Vec<RecentItem>> {
     if data.is_empty() {
-        return Err("Recent items plist data is empty".to_string());
+        return Err(MacArtifactError::InvalidInput(
+            "Recent items plist data is empty".to_string(),
+        ));
     }
 
     let text = if crate::plist::is_binary_plist(data) {
@@ -68,7 +71,9 @@ pub fn parse_recent_items_plist(data: &[u8]) -> Result<Vec<RecentItem>, String> 
         return parse_from_bplist_entries(&entries);
     } else {
         std::str::from_utf8(data)
-            .map_err(|_| "Recent items plist is not valid UTF-8".to_string())?
+            .map_err(|_| {
+                MacArtifactError::Decode("Recent items plist is not valid UTF-8".to_string())
+            })?
             .to_string()
     };
 
@@ -76,9 +81,7 @@ pub fn parse_recent_items_plist(data: &[u8]) -> Result<Vec<RecentItem>, String> 
 }
 
 /// Convert binary plist entries to RecentItem structs.
-fn parse_from_bplist_entries(
-    entries: &[crate::plist::MacPlistEntry],
-) -> Result<Vec<RecentItem>, String> {
+fn parse_from_bplist_entries(entries: &[crate::plist::MacPlistEntry]) -> Result<Vec<RecentItem>> {
     let mut items: Vec<RecentItem> = Vec::new();
     let mut current_name = String::new();
     let mut current_path = String::new();
@@ -131,7 +134,7 @@ fn parse_from_bplist_entries(
 }
 
 /// Parse XML recent items plist.
-fn parse_xml_recent_items(xml: &str) -> Result<Vec<RecentItem>, String> {
+fn parse_xml_recent_items(xml: &str) -> Result<Vec<RecentItem>> {
     let mut items: Vec<RecentItem> = Vec::new();
 
     // State machine for parsing RecentItems/Files/Servers/Applications/Volumes entries
@@ -183,7 +186,7 @@ fn parse_xml_recent_items(xml: &str) -> Result<Vec<RecentItem>, String> {
         }
 
         // Extract <key>...</key>
-        if let Some(key) = extract_xml_content(trimmed, "key") {
+        if let Some(key) = crate::xml::extract_xml_tag_content(trimmed, "key") {
             current_key = Some(key);
             continue;
         }
@@ -195,7 +198,7 @@ fn parse_xml_recent_items(xml: &str) -> Result<Vec<RecentItem>, String> {
         };
 
         // Try string value
-        if let Some(value) = extract_xml_content(trimmed, "string") {
+        if let Some(value) = crate::xml::extract_xml_tag_content(trimmed, "string") {
             match key_str.as_str() {
                 "Name" => {
                     current_name = value;
@@ -239,7 +242,7 @@ fn parse_xml_recent_items(xml: &str) -> Result<Vec<RecentItem>, String> {
                 }
             }
             // key_str consumed or put back above; nothing to do here
-        } else if let Some(value) = extract_xml_content(trimmed, "date") {
+        } else if let Some(value) = crate::xml::extract_xml_tag_content(trimmed, "date") {
             if key_str.as_str() == "Date" || key_str.as_str() == "LastUsed" {
                 current_date = Some(value);
             }
@@ -260,7 +263,7 @@ fn parse_xml_recent_items(xml: &str) -> Result<Vec<RecentItem>, String> {
 
 /// Detect which recent items section we're in from a <key> tag.
 fn detect_section_start(line: &str) -> Option<String> {
-    if let Some(key) = extract_xml_content(line, "key") {
+    if let Some(key) = crate::xml::extract_xml_tag_content(line, "key") {
         match key.as_str() {
             "RecentFiles" | "Files" => return Some("Files".to_string()),
             "RecentServers" | "Servers" | "RecentNetworkServers" => {
@@ -272,21 +275,6 @@ fn detect_section_start(line: &str) -> Option<String> {
             "RecentVolumes" | "Volumes" => return Some("Volumes".to_string()),
             _ => {}
         }
-    }
-    None
-}
-
-/// Extract content from an XML tag like `<tag>content</tag>`.
-fn extract_xml_content(line: &str, tag: &str) -> Option<String> {
-    let open = format!("<{}>", tag);
-    let close = format!("</{}>", tag);
-
-    if let (Some(start), Some(end)) = (line.find(&open), line.find(&close)) {
-        let content_start = start + open.len();
-        if content_start < end {
-            return Some(line[content_start..end].to_string());
-        }
-        return Some(String::new());
     }
     None
 }

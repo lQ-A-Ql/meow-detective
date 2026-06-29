@@ -508,6 +508,15 @@ pub(crate) fn build_rule_groups(
 
 // ── Group appenders ──
 
+/// Result bundle produced when inserting rule-match artifact nodes and edges.
+type RuleMatchInsertionResult = (
+    Vec<String>,
+    Vec<String>,
+    Vec<String>,
+    Vec<CorrelationProvenanceDto>,
+    Vec<CorrelationJumpTargetDto>,
+);
+
 pub(crate) fn append_source_group(
     group: &CorrelationSourceGroup,
     node_map: &mut BTreeMap<String, CorrelationNodeDto>,
@@ -521,75 +530,35 @@ pub(crate) fn append_source_group(
     let related_count = artifact_count + timeline_count;
     let confidence = group_confidence(artifact_count, timeline_count);
     let file_node = build_file_node(&file_node_id, group, related_count);
-    let mut node_ids = vec![file_node.id.clone()];
-    let mut edge_ids = Vec::new();
-    let mut supporting_node_ids = Vec::new();
-    let mut provenance = Vec::new();
 
     insert_node(node_map, file_node);
 
-    for artifact in &group.artifacts {
-        let artifact_node = build_artifact_node(artifact, related_count);
-        let artifact_node_id = artifact_node.id.clone();
-        let edge_id = format!("edge:{}:{}", artifact.id, group.source_object_id);
+    let (mut node_ids, mut edge_ids, supporting_node_ids, provenance) =
+        insert_source_artifact_nodes_and_edges(
+            node_map,
+            edge_map,
+            group,
+            &file_node_id,
+            related_count,
+        );
+    let (timeline_node_ids, timeline_edge_ids, timeline_supporting, timeline_provenance) =
+        insert_source_timeline_nodes_and_edges(
+            node_map,
+            edge_map,
+            group,
+            &file_node_id,
+            related_count,
+            artifact_count,
+        );
+    node_ids.extend(timeline_node_ids);
+    edge_ids.extend(timeline_edge_ids);
 
-        insert_node(node_map, artifact_node);
-        edge_map
-            .entry(edge_id.clone())
-            .or_insert(CorrelationEdgeDto {
-                id: edge_id.clone(),
-                kind: CorrelationEdgeKindDto::SourceReference,
-                from_node_id: artifact_node_id.clone(),
-                to_node_id: file_node_id.clone(),
-                summary: format!("{} 引用同一 source object", artifact.artifact_type),
-                confidence: CorrelationConfidenceDto::Direct,
-            });
+    let mut provenance = provenance;
+    provenance.extend(timeline_provenance);
+    let mut supporting_node_ids = supporting_node_ids;
+    supporting_node_ids.extend(timeline_supporting);
 
-        node_ids.push(artifact_node_id.clone());
-        edge_ids.push(edge_id);
-        supporting_node_ids.push(artifact_node_id);
-        provenance.push(build_artifact_provenance(artifact));
-    }
-
-    for timeline in &group.timelines {
-        let timeline_node = build_timeline_node(timeline, related_count);
-        let timeline_node_id = timeline_node.id.clone();
-        let edge_id = format!("edge:{}:{}", timeline.id, group.source_object_id);
-
-        insert_node(node_map, timeline_node);
-        edge_map
-            .entry(edge_id.clone())
-            .or_insert(CorrelationEdgeDto {
-                id: edge_id.clone(),
-                kind: CorrelationEdgeKindDto::TemporalContext,
-                from_node_id: timeline_node_id.clone(),
-                to_node_id: file_node_id.clone(),
-                summary: format!("{} 时间线事件命中同一 source object", timeline.event_type),
-                confidence: if artifact_count > 0 {
-                    CorrelationConfidenceDto::Direct
-                } else {
-                    CorrelationConfidenceDto::Strong
-                },
-            });
-
-        node_ids.push(timeline_node_id.clone());
-        edge_ids.push(edge_id);
-        supporting_node_ids.push(timeline_node_id);
-        provenance.push(build_timeline_provenance(timeline));
-    }
-
-    if let (Some(artifact), Some(timeline)) = (group.artifacts.first(), group.timelines.first()) {
-        let edge_id = format!("edge:shared:{}:{}", artifact.id, timeline.id);
-        edge_map
-            .entry(edge_id.clone())
-            .or_insert(CorrelationEdgeDto {
-                id: edge_id.clone(),
-                kind: CorrelationEdgeKindDto::SharedSourceObject,
-                from_node_id: format!("artifact:{}", artifact.id),
-                to_node_id: format!("timeline:{}", timeline.id),
-                summary: "Artifact 与时间线共享同一 source object".to_string(),
-                confidence: CorrelationConfidenceDto::Direct,
-            });
+    if let Some(edge_id) = insert_source_shared_edge(edge_map, group) {
         edge_ids.push(edge_id);
     }
 
@@ -627,6 +596,119 @@ pub(crate) fn append_source_group(
     });
 }
 
+fn insert_source_artifact_nodes_and_edges(
+    node_map: &mut BTreeMap<String, CorrelationNodeDto>,
+    edge_map: &mut BTreeMap<String, CorrelationEdgeDto>,
+    group: &CorrelationSourceGroup,
+    file_node_id: &str,
+    related_count: u32,
+) -> (
+    Vec<String>,
+    Vec<String>,
+    Vec<String>,
+    Vec<CorrelationProvenanceDto>,
+) {
+    let mut node_ids = Vec::new();
+    let mut edge_ids = Vec::new();
+    let mut supporting_node_ids = Vec::new();
+    let mut provenance = Vec::new();
+
+    for artifact in &group.artifacts {
+        let artifact_node = build_artifact_node(artifact, related_count);
+        let artifact_node_id = artifact_node.id.clone();
+        let edge_id = format!("edge:{}:{}", artifact.id, group.source_object_id);
+
+        insert_node(node_map, artifact_node);
+        edge_map
+            .entry(edge_id.clone())
+            .or_insert(CorrelationEdgeDto {
+                id: edge_id.clone(),
+                kind: CorrelationEdgeKindDto::SourceReference,
+                from_node_id: artifact_node_id.clone(),
+                to_node_id: file_node_id.to_string(),
+                summary: format!("{} 引用同一 source object", artifact.artifact_type),
+                confidence: CorrelationConfidenceDto::Direct,
+            });
+
+        node_ids.push(artifact_node_id.clone());
+        edge_ids.push(edge_id);
+        supporting_node_ids.push(artifact_node_id);
+        provenance.push(build_artifact_provenance(artifact));
+    }
+
+    (node_ids, edge_ids, supporting_node_ids, provenance)
+}
+
+fn insert_source_timeline_nodes_and_edges(
+    node_map: &mut BTreeMap<String, CorrelationNodeDto>,
+    edge_map: &mut BTreeMap<String, CorrelationEdgeDto>,
+    group: &CorrelationSourceGroup,
+    file_node_id: &str,
+    related_count: u32,
+    artifact_count: u32,
+) -> (
+    Vec<String>,
+    Vec<String>,
+    Vec<String>,
+    Vec<CorrelationProvenanceDto>,
+) {
+    let mut node_ids = Vec::new();
+    let mut edge_ids = Vec::new();
+    let mut supporting_node_ids = Vec::new();
+    let mut provenance = Vec::new();
+
+    for timeline in &group.timelines {
+        let timeline_node = build_timeline_node(timeline, related_count);
+        let timeline_node_id = timeline_node.id.clone();
+        let edge_id = format!("edge:{}:{}", timeline.id, group.source_object_id);
+
+        insert_node(node_map, timeline_node);
+        edge_map
+            .entry(edge_id.clone())
+            .or_insert(CorrelationEdgeDto {
+                id: edge_id.clone(),
+                kind: CorrelationEdgeKindDto::TemporalContext,
+                from_node_id: timeline_node_id.clone(),
+                to_node_id: file_node_id.to_string(),
+                summary: format!("{} 时间线事件命中同一 source object", timeline.event_type),
+                confidence: if artifact_count > 0 {
+                    CorrelationConfidenceDto::Direct
+                } else {
+                    CorrelationConfidenceDto::Strong
+                },
+            });
+
+        node_ids.push(timeline_node_id.clone());
+        edge_ids.push(edge_id);
+        supporting_node_ids.push(timeline_node_id);
+        provenance.push(build_timeline_provenance(timeline));
+    }
+
+    (node_ids, edge_ids, supporting_node_ids, provenance)
+}
+
+fn insert_source_shared_edge(
+    edge_map: &mut BTreeMap<String, CorrelationEdgeDto>,
+    group: &CorrelationSourceGroup,
+) -> Option<String> {
+    let (Some(artifact), Some(timeline)) = (group.artifacts.first(), group.timelines.first())
+    else {
+        return None;
+    };
+    let edge_id = format!("edge:shared:{}:{}", artifact.id, timeline.id);
+    edge_map
+        .entry(edge_id.clone())
+        .or_insert(CorrelationEdgeDto {
+            id: edge_id.clone(),
+            kind: CorrelationEdgeKindDto::SharedSourceObject,
+            from_node_id: format!("artifact:{}", artifact.id),
+            to_node_id: format!("timeline:{}", timeline.id),
+            summary: "Artifact 与时间线共享同一 source object".to_string(),
+            confidence: CorrelationConfidenceDto::Direct,
+        });
+    Some(edge_id)
+}
+
 pub(crate) fn append_rule_group(
     group: &CorrelationRuleGroup,
     node_map: &mut BTreeMap<String, CorrelationNodeDto>,
@@ -641,79 +723,23 @@ pub(crate) fn append_rule_group(
         build_file_node_for_entry(&file_node_id, &group.file, related_count),
     );
 
-    let mut node_ids = vec![file_node_id.clone()];
-    let mut edge_ids = Vec::new();
-    let mut supporting_node_ids = Vec::new();
-    let mut provenance = Vec::new();
-    let mut jumps = vec![CorrelationJumpTargetDto {
-        route: "/files".to_string(),
-        target_id: group.file.id.0.clone(),
-        label: "查看文件".to_string(),
-    }];
-
-    for rule in &group.matches {
-        let artifact_node = build_artifact_node(&rule.artifact, related_count);
-        let artifact_node_id = artifact_node.id.clone();
-        let edge_id = format!(
-            "edge:rule:{}:{}:{}",
-            rule.artifact.id,
-            group.file.id.0,
-            edge_kind_token(&rule.kind)
+    let (match_node_ids, mut edge_ids, mut supporting_node_ids, mut provenance, mut jumps) =
+        insert_rule_match_nodes_and_edges(node_map, edge_map, group, &file_node_id, related_count);
+    let (timeline_node_ids, timeline_edge_ids, timeline_supporting, timeline_provenance) =
+        insert_rule_timeline_nodes_and_edges(
+            node_map,
+            edge_map,
+            group,
+            &file_node_id,
+            related_count,
         );
 
-        insert_node(node_map, artifact_node);
-        edge_map
-            .entry(edge_id.clone())
-            .or_insert(CorrelationEdgeDto {
-                id: edge_id.clone(),
-                kind: rule.kind.clone(),
-                from_node_id: artifact_node_id.clone(),
-                to_node_id: file_node_id.clone(),
-                summary: rule.summary.clone(),
-                confidence: rule.confidence.clone(),
-            });
-
-        node_ids.push(artifact_node_id.clone());
-        edge_ids.push(edge_id);
-        supporting_node_ids.push(artifact_node_id);
-        provenance.push(build_artifact_provenance(&rule.artifact));
-
-        if jumps.len() == 1 {
-            jumps.push(CorrelationJumpTargetDto {
-                route: "/artifacts".to_string(),
-                target_id: rule.artifact.id.clone(),
-                label: "查看痕迹".to_string(),
-            });
-        }
-    }
-
-    let rule_group_confidence = rule_group_confidence(
-        &group.matches,
-        group.timelines.len() as u32,
-        !group.timeline_signals.is_empty(),
-    );
-    for timeline in &group.timelines {
-        let timeline_node = build_timeline_node(timeline, related_count);
-        let timeline_node_id = timeline_node.id.clone();
-        let edge_id = format!("edge:rule-timeline:{}:{}", timeline.id, group.file.id.0);
-
-        insert_node(node_map, timeline_node);
-        edge_map
-            .entry(edge_id.clone())
-            .or_insert(CorrelationEdgeDto {
-                id: edge_id.clone(),
-                kind: CorrelationEdgeKindDto::TemporalContext,
-                from_node_id: timeline_node_id.clone(),
-                to_node_id: file_node_id.clone(),
-                summary: "关联文件时间线事件提供上下文".to_string(),
-                confidence: rule_group_confidence.clone(),
-            });
-
-        node_ids.push(timeline_node_id.clone());
-        edge_ids.push(edge_id);
-        supporting_node_ids.push(timeline_node_id);
-        provenance.push(build_timeline_provenance(timeline));
-    }
+    let mut node_ids = vec![file_node_id.clone()];
+    node_ids.extend(match_node_ids);
+    node_ids.extend(timeline_node_ids);
+    edge_ids.extend(timeline_edge_ids);
+    supporting_node_ids.extend(timeline_supporting);
+    provenance.extend(timeline_provenance);
 
     dedup_vec(&mut node_ids);
     dedup_vec(&mut edge_ids);
@@ -721,7 +747,11 @@ pub(crate) fn append_rule_group(
     dedup_vec(&mut jumps);
     dedup_vec(&mut provenance);
 
-    let confidence = rule_group_confidence;
+    let confidence = rule_group_confidence(
+        &group.matches,
+        group.timelines.len() as u32,
+        !group.timeline_signals.is_empty(),
+    );
     let title = group.file.name.clone();
     let summary = rule_group_summary(
         &group.matches,
@@ -766,6 +796,110 @@ pub(crate) fn append_rule_group(
         provenance,
         caveats,
     });
+}
+
+fn insert_rule_match_nodes_and_edges(
+    node_map: &mut BTreeMap<String, CorrelationNodeDto>,
+    edge_map: &mut BTreeMap<String, CorrelationEdgeDto>,
+    group: &CorrelationRuleGroup,
+    file_node_id: &str,
+    related_count: u32,
+) -> RuleMatchInsertionResult {
+    let mut node_ids = Vec::new();
+    let mut edge_ids = Vec::new();
+    let mut supporting_node_ids = Vec::new();
+    let mut provenance = Vec::new();
+    let mut jumps = vec![CorrelationJumpTargetDto {
+        route: "/files".to_string(),
+        target_id: group.file.id.0.clone(),
+        label: "查看文件".to_string(),
+    }];
+
+    for rule in &group.matches {
+        let artifact_node = build_artifact_node(&rule.artifact, related_count);
+        let artifact_node_id = artifact_node.id.clone();
+        let edge_id = format!(
+            "edge:rule:{}:{}:{}",
+            rule.artifact.id,
+            group.file.id.0,
+            edge_kind_token(&rule.kind)
+        );
+
+        insert_node(node_map, artifact_node);
+        edge_map
+            .entry(edge_id.clone())
+            .or_insert(CorrelationEdgeDto {
+                id: edge_id.clone(),
+                kind: rule.kind.clone(),
+                from_node_id: artifact_node_id.clone(),
+                to_node_id: file_node_id.to_string(),
+                summary: rule.summary.clone(),
+                confidence: rule.confidence.clone(),
+            });
+
+        node_ids.push(artifact_node_id.clone());
+        edge_ids.push(edge_id);
+        supporting_node_ids.push(artifact_node_id);
+        provenance.push(build_artifact_provenance(&rule.artifact));
+
+        if jumps.len() == 1 {
+            jumps.push(CorrelationJumpTargetDto {
+                route: "/artifacts".to_string(),
+                target_id: rule.artifact.id.clone(),
+                label: "查看痕迹".to_string(),
+            });
+        }
+    }
+
+    (node_ids, edge_ids, supporting_node_ids, provenance, jumps)
+}
+
+fn insert_rule_timeline_nodes_and_edges(
+    node_map: &mut BTreeMap<String, CorrelationNodeDto>,
+    edge_map: &mut BTreeMap<String, CorrelationEdgeDto>,
+    group: &CorrelationRuleGroup,
+    file_node_id: &str,
+    related_count: u32,
+) -> (
+    Vec<String>,
+    Vec<String>,
+    Vec<String>,
+    Vec<CorrelationProvenanceDto>,
+) {
+    let confidence = rule_group_confidence(
+        &group.matches,
+        group.timelines.len() as u32,
+        !group.timeline_signals.is_empty(),
+    );
+    let mut node_ids = Vec::new();
+    let mut edge_ids = Vec::new();
+    let mut supporting_node_ids = Vec::new();
+    let mut provenance = Vec::new();
+
+    for timeline in &group.timelines {
+        let timeline_node = build_timeline_node(timeline, related_count);
+        let timeline_node_id = timeline_node.id.clone();
+        let edge_id = format!("edge:rule-timeline:{}:{}", timeline.id, group.file.id.0);
+
+        insert_node(node_map, timeline_node);
+        edge_map
+            .entry(edge_id.clone())
+            .or_insert(CorrelationEdgeDto {
+                id: edge_id.clone(),
+                kind: CorrelationEdgeKindDto::TemporalContext,
+                from_node_id: timeline_node_id.clone(),
+                to_node_id: file_node_id.to_string(),
+                summary: "关联文件时间线事件提供上下文".to_string(),
+                confidence: confidence.clone(),
+            });
+
+        node_ids.push(timeline_node_id.clone());
+        edge_ids.push(edge_id);
+        supporting_node_ids.push(timeline_node_id);
+        provenance.push(build_timeline_provenance(timeline));
+    }
+
+    (node_ids, edge_ids, supporting_node_ids, provenance)
 }
 
 // ── Node builders ──
@@ -1146,28 +1280,55 @@ pub(crate) fn derive_rule_timeline_signals(
         return signals;
     }
 
-    let target_path_keys = group
-        .matches
+    let (target_path_keys, text_needles) = collect_rule_match_needles(&group.matches);
+    if target_path_keys.is_empty() && text_needles.is_empty() {
+        return signals;
+    }
+
+    let mut related = find_proximate_timelines(
+        all_timelines,
+        &group.file.id.0,
+        &artifact_times,
+        &target_path_keys,
+        &text_needles,
+    );
+    related.sort();
+    related.truncate(RULE_TIMELINE_CONTEXT_LIMIT);
+    for item in related {
+        signals.push(format!("邻近时间线命中 {item}"));
+    }
+
+    signals
+}
+
+fn collect_rule_match_needles(
+    matches: &[CorrelationRuleMatch],
+) -> (BTreeSet<String>, BTreeSet<String>) {
+    let target_path_keys = matches
         .iter()
         .flat_map(rule_match_paths)
         .map(|value| path_suffix_key(&value))
         .filter(|value| !value.is_empty())
         .collect::<BTreeSet<_>>();
-    let text_needles = group
-        .matches
+    let text_needles = matches
         .iter()
         .flat_map(rule_match_text_needles)
         .map(|value| value.to_ascii_lowercase())
         .filter(|value| !value.is_empty())
         .collect::<BTreeSet<_>>();
+    (target_path_keys, text_needles)
+}
 
-    if target_path_keys.is_empty() && text_needles.is_empty() {
-        return signals;
-    }
-
-    let mut related = all_timelines
+fn find_proximate_timelines(
+    all_timelines: &[TimelineEventDto],
+    exclude_source_object_id: &str,
+    artifact_times: &[chrono::DateTime<Utc>],
+    target_path_keys: &BTreeSet<String>,
+    text_needles: &BTreeSet<String>,
+) -> Vec<String> {
+    all_timelines
         .iter()
-        .filter(|timeline| timeline.source_object_id != group.file.id.0)
+        .filter(|timeline| timeline.source_object_id != exclude_source_object_id)
         .filter_map(|timeline| {
             let timeline_ts = parse_rfc3339_utc(&timeline.ts)?;
             let within_window = artifact_times.iter().any(|artifact_ts| {
@@ -1178,11 +1339,12 @@ pub(crate) fn derive_rule_timeline_signals(
                 return None;
             }
 
-            let timeline_paths = timeline_path_candidates(timeline);
-            let path_hit = timeline_paths.into_iter().any(|candidate| {
-                let suffix = path_suffix_key(&candidate);
-                !suffix.is_empty() && target_path_keys.contains(&suffix)
-            });
+            let path_hit = timeline_path_candidates(timeline)
+                .into_iter()
+                .any(|candidate| {
+                    let suffix = path_suffix_key(&candidate);
+                    !suffix.is_empty() && target_path_keys.contains(&suffix)
+                });
             let text_hit = timeline_text_candidates(timeline)
                 .into_iter()
                 .any(|candidate| {
@@ -1197,15 +1359,7 @@ pub(crate) fn derive_rule_timeline_signals(
 
             Some(format!("{} @ {}", timeline.event_type, timeline.ts))
         })
-        .collect::<Vec<_>>();
-
-    related.sort();
-    related.truncate(RULE_TIMELINE_CONTEXT_LIMIT);
-    for item in related {
-        signals.push(format!("邻近时间线命中 {item}"));
-    }
-
-    signals
+        .collect()
 }
 
 // ── Family coverage ──
@@ -1218,88 +1372,13 @@ pub(crate) fn build_family_coverage(
         .iter()
         .map(|(family, display_name)| {
             let family_token = family.to_ascii_lowercase();
-            let related_leads = leads
-                .iter()
-                .filter(|lead| {
-                    has_family(&lead.families, family)
-                        || lead.provenance.iter().any(|item| {
-                            item.source_label.eq_ignore_ascii_case(family)
-                                || item.source_kind.eq_ignore_ascii_case(family)
-                                || item
-                                    .producer
-                                    .as_deref()
-                                    .map(|producer| {
-                                        producer.to_ascii_lowercase().contains(&family_token)
-                                    })
-                                    .unwrap_or(false)
-                        })
-                        || lead
-                            .match_signals
-                            .iter()
-                            .any(|signal| signal.to_ascii_lowercase().contains(&family_token))
-                })
-                .collect::<Vec<_>>();
-
-            let cluster_count = clusters
-                .iter()
-                .filter(|cluster| {
-                    has_family(&cluster.families, family)
-                        || cluster.provenance.iter().any(|item| {
-                            item.source_label.eq_ignore_ascii_case(family)
-                                || item.source_kind.eq_ignore_ascii_case(family)
-                                || item
-                                    .producer
-                                    .as_deref()
-                                    .map(|producer| {
-                                        producer.to_ascii_lowercase().contains(&family_token)
-                                    })
-                                    .unwrap_or(false)
-                        })
-                        || cluster.summary.to_ascii_lowercase().contains(&family_token)
-                })
-                .count() as u32;
-
+            let related_leads = family_leads_for(leads, family, &family_token);
+            let cluster_count = family_clusters_for(clusters, family, &family_token);
             let lead_count = related_leads.len() as u32;
-            let high_confidence_lead_count = related_leads
-                .iter()
-                .filter(|lead| {
-                    matches!(
-                        lead.confidence,
-                        CorrelationConfidenceDto::Direct | CorrelationConfidenceDto::Strong
-                    )
-                })
-                .count() as u32;
-            let review_lead_count = related_leads
-                .iter()
-                .filter(|lead| {
-                    !lead.caveats.is_empty()
-                        || matches!(
-                            lead.confidence,
-                            CorrelationConfidenceDto::Weak | CorrelationConfidenceDto::Heuristic
-                        )
-                })
-                .count() as u32;
-            let mut sample_signals = related_leads
-                .iter()
-                .flat_map(|lead| lead.match_signals.iter().cloned())
-                .filter(|signal| signal.to_ascii_lowercase().contains(&family_token))
-                .take(3)
-                .collect::<Vec<_>>();
-            if sample_signals.is_empty() {
-                sample_signals = related_leads
-                    .iter()
-                    .flat_map(|lead| lead.match_signals.iter().cloned())
-                    .take(3)
-                    .collect::<Vec<_>>();
-            }
-
-            let status = if lead_count == 0 {
-                CorrelationCoverageStatusDto::Missing
-            } else if high_confidence_lead_count > 0 {
-                CorrelationCoverageStatusDto::Covered
-            } else {
-                CorrelationCoverageStatusDto::Review
-            };
+            let high_confidence_lead_count = family_high_confidence_lead_count(&related_leads);
+            let review_lead_count = family_review_lead_count(&related_leads);
+            let sample_signals = family_sample_signals(&related_leads, &family_token);
+            let status = family_coverage_status(lead_count, high_confidence_lead_count);
 
             CorrelationFamilyCoverageDto {
                 family: (*family).to_string(),
@@ -1313,6 +1392,110 @@ pub(crate) fn build_family_coverage(
             }
         })
         .collect()
+}
+
+fn family_leads_for<'a>(
+    leads: &'a [CorrelationLeadDto],
+    family: &str,
+    family_token: &str,
+) -> Vec<&'a CorrelationLeadDto> {
+    leads
+        .iter()
+        .filter(|lead| {
+            has_family(&lead.families, family)
+                || lead.provenance.iter().any(|item| {
+                    item.source_label.eq_ignore_ascii_case(family)
+                        || item.source_kind.eq_ignore_ascii_case(family)
+                        || item
+                            .producer
+                            .as_deref()
+                            .map(|producer| producer.to_ascii_lowercase().contains(family_token))
+                            .unwrap_or(false)
+                })
+                || lead
+                    .match_signals
+                    .iter()
+                    .any(|signal| signal.to_ascii_lowercase().contains(family_token))
+        })
+        .collect()
+}
+
+fn family_clusters_for(
+    clusters: &[CorrelationClusterDto],
+    family: &str,
+    family_token: &str,
+) -> u32 {
+    clusters
+        .iter()
+        .filter(|cluster| {
+            has_family(&cluster.families, family)
+                || cluster.provenance.iter().any(|item| {
+                    item.source_label.eq_ignore_ascii_case(family)
+                        || item.source_kind.eq_ignore_ascii_case(family)
+                        || item
+                            .producer
+                            .as_deref()
+                            .map(|producer| producer.to_ascii_lowercase().contains(family_token))
+                            .unwrap_or(false)
+                })
+                || cluster.summary.to_ascii_lowercase().contains(family_token)
+        })
+        .count() as u32
+}
+
+fn family_high_confidence_lead_count(related_leads: &[&CorrelationLeadDto]) -> u32 {
+    related_leads
+        .iter()
+        .filter(|lead| {
+            matches!(
+                lead.confidence,
+                CorrelationConfidenceDto::Direct | CorrelationConfidenceDto::Strong
+            )
+        })
+        .count() as u32
+}
+
+fn family_review_lead_count(related_leads: &[&CorrelationLeadDto]) -> u32 {
+    related_leads
+        .iter()
+        .filter(|lead| {
+            !lead.caveats.is_empty()
+                || matches!(
+                    lead.confidence,
+                    CorrelationConfidenceDto::Weak | CorrelationConfidenceDto::Heuristic
+                )
+        })
+        .count() as u32
+}
+
+fn family_sample_signals(related_leads: &[&CorrelationLeadDto], family_token: &str) -> Vec<String> {
+    let mut sample_signals = related_leads
+        .iter()
+        .flat_map(|lead| lead.match_signals.iter().cloned())
+        .filter(|signal| signal.to_ascii_lowercase().contains(family_token))
+        .take(3)
+        .collect::<Vec<_>>();
+    if sample_signals.is_empty() {
+        sample_signals = related_leads
+            .iter()
+            .flat_map(|lead| lead.match_signals.iter().cloned())
+            .take(3)
+            .collect::<Vec<_>>();
+    }
+    sample_signals
+}
+
+fn family_coverage_status(
+    lead_count: u32,
+    high_confidence_lead_count: u32,
+) -> CorrelationCoverageStatusDto {
+    if lead_count == 0 {
+        CorrelationCoverageStatusDto::Missing
+    } else if high_confidence_lead_count > 0 {
+        CorrelationCoverageStatusDto::Covered
+    } else {
+        CorrelationCoverageStatusDto::Review
+    }
 }
 
 pub(crate) fn derive_source_group_families(group: &CorrelationSourceGroup) -> Vec<String> {

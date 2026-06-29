@@ -1,3 +1,11 @@
+//! Application services layer for the Forensics Workbench.
+//!
+//! This crate orchestrates backend business logic: case management, evidence
+//! ingestion, filesystem enumeration, artifact/timeline/search analysis,
+//! correlation, reporting, and governance snapshots. It sits between the Tauri
+//! command layer and the domain/infrastructure crates, and owns the SQLite
+//! case database schema through `persistence-sqlite`.
+
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
