@@ -794,6 +794,7 @@ pub fn get_evtx_event_summary(
             kind: string_attr(&row.attrs, "eventKind"),
             source_path: string_attr(&row.attrs, "sourcePath"),
             note: string_attr(&row.attrs, "note"),
+            details: details_attr(&row.attrs, "details"),
         })
         .collect::<Vec<_>>();
 
@@ -817,6 +818,7 @@ pub fn get_evtx_event_summary(
             task_name: optional_string_attr(&row.attrs, "taskName"),
             privilege_list: optional_string_attr(&row.attrs, "privilegeList"),
             member_name: optional_string_attr(&row.attrs, "memberName"),
+            details: details_attr(&row.attrs, "details"),
         })
         .collect::<Vec<_>>();
 
@@ -833,6 +835,7 @@ pub fn get_evtx_event_summary(
             fault_module: optional_string_attr(&row.attrs, "faultModule"),
             product_name: optional_string_attr(&row.attrs, "productName"),
             manufacturer: optional_string_attr(&row.attrs, "manufacturer"),
+            details: details_attr(&row.attrs, "details"),
         })
         .collect::<Vec<_>>();
 
@@ -1210,6 +1213,23 @@ fn optional_u32_attr(attrs: &BTreeMap<String, Value>, key: &str) -> Option<u32> 
 
 fn optional_u64_attr(attrs: &BTreeMap<String, Value>, key: &str) -> Option<u64> {
     attrs.get(key).and_then(Value::as_u64)
+}
+
+fn details_attr(attrs: &BTreeMap<String, Value>, key: &str) -> BTreeMap<String, String> {
+    attrs
+        .get(key)
+        .and_then(|value| {
+            if let Some(obj) = value.as_object() {
+                Some(
+                    obj.iter()
+                        .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                        .collect(),
+                )
+            } else {
+                serde_json::from_value::<BTreeMap<String, String>>(value.clone()).ok()
+            }
+        })
+        .unwrap_or_default()
 }
 
 fn optional_i64_attr(attrs: &BTreeMap<String, Value>, key: &str) -> Option<i64> {

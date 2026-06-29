@@ -18,7 +18,7 @@ use chrono::{DateTime, Utc};
 use evtx::{err::EvtxError, EvtxParser};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub const MAX_EVTX_ANALYSIS_BYTES: usize = 16 * 1024 * 1024;
 const EVTX_FILE_HEADER_SIZE: u64 = 4096;
@@ -92,9 +92,10 @@ pub struct EvtxBootEvent {
     pub kind: EvtxBootEventKind,
     pub source_path: String,
     pub note: String,
-    /// Extracted event data fields specific to this event kind (key: value pairs).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<String>,
+    /// All `<EventData><Data Name="X">value</Data></EventData>` pairs extracted
+    /// from the event XML.  The map is empty for events without EventData.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    pub details: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -186,6 +187,10 @@ pub struct EvtxSecurityEvent {
     pub task_name: Option<String>,
     pub privilege_list: Option<String>,
     pub member_name: Option<String>,
+    /// All `<EventData><Data Name="X">value</Data></EventData>` pairs extracted
+    /// from the event XML.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    pub details: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -201,6 +206,10 @@ pub struct EvtxApplicationEvent {
     pub fault_module: Option<String>,
     pub product_name: Option<String>,
     pub manufacturer: Option<String>,
+    /// All `<EventData><Data Name="X">value</Data></EventData>` pairs extracted
+    /// from the event XML.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    pub details: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -422,7 +431,7 @@ fn structured_event_from_json(
     match classify_event(event_id, provider.as_deref(), channel.as_deref()) {
         EventClass::Boot(kind) => {
             let note = kind.note().to_string();
-            let details = extract_event_details(wrapper, &kind);
+            let details = event_data_map(wrapper);
             extraction.boot_events.push(EvtxBootEvent {
                 timestamp,
                 event_id,
@@ -545,6 +554,7 @@ fn security_event_from_json(
     source_path: &str,
 ) -> Option<EvtxSecurityEvent> {
     let data_items = event_data_items(wrapper);
+    let details = event_data_map(wrapper);
     Some(EvtxSecurityEvent {
         timestamp,
         event_id,
@@ -563,6 +573,7 @@ fn security_event_from_json(
         task_name: find_data_value(&data_items, "TaskName"),
         privilege_list: find_data_value(&data_items, "PrivilegeList"),
         member_name: find_data_value(&data_items, "MemberName"),
+        details,
     })
 }
 
@@ -576,6 +587,7 @@ fn application_event_from_json(
     source_path: &str,
 ) -> Option<EvtxApplicationEvent> {
     let data_items = event_data_items(wrapper);
+    let details = event_data_map(wrapper);
     Some(EvtxApplicationEvent {
         timestamp,
         event_id,
@@ -587,6 +599,7 @@ fn application_event_from_json(
         fault_module: find_data_value(&data_items, "ModuleName"),
         product_name: find_data_value(&data_items, "ProductName"),
         manufacturer: find_data_value(&data_items, "Manufacturer"),
+        details,
     })
 }
 
@@ -601,45 +614,43 @@ fn event_data_items(wrapper: &Value) -> Vec<Value> {
     }
 }
 
+/// Extract all named `<EventData>` values into a generic key/value map.
+fn event_data_map(wrapper: &Value) -> BTreeMap<String, String> {
+    let mut map = BTreeMap::new();
+    for item in event_data_items(wrapper) {
+        let Some(obj) = item.as_object() else {
+            continue;
+        };
+        let Some(name) = obj
+            .get("@Name")
+            .or_else(|| obj.get("Name"))
+            .and_then(Value::as_str)
+        else {
+            continue;
+        };
+        let value = obj
+            .get("#text")
+            .or_else(|| obj.get("Text"))
+            .or_else(|| obj.get("Value"))
+            .and_then(|v| {
+                if v.is_string() {
+                    v.as_str().map(str::to_string)
+                } else if v.is_number() {
+                    Some(v.to_string())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_default();
+        map.insert(name.to_string(), value);
+    }
+    map
+}
+
 fn provider_matches(provider: Option<&str>, target: &str) -> bool {
     match provider {
         Some(p) => p.eq_ignore_ascii_case(target),
         None => false,
-    }
-}
-
-/// Extract named Data elements from `<EventData>` for specific event kinds.
-///
-/// The evtx library serializes `<EventData><Data Name="X">value</Data></EventData>`
-/// into JSON as an object keyed by `@Name` and `#text`.
-fn extract_event_details(wrapper: &Value, kind: &EvtxBootEventKind) -> Option<String> {
-    let event_data = wrapper.get("EventData")?;
-    let data_items = match event_data.get("Data") {
-        Some(Value::Array(items)) => items,
-        Some(single) => std::slice::from_ref(single),
-        None => return None,
-    };
-
-    let fields: &[&str] = match kind {
-        EvtxBootEventKind::PowerShellScriptBlock => &["ScriptBlockText"],
-        EvtxBootEventKind::SysmonProcessCreate => &["Image", "CommandLine"],
-        EvtxBootEventKind::RdpSessionConnect => &["User", "Address"],
-        EvtxBootEventKind::DefenderThreatDetected => &["Threat", "Severity", "Category"],
-        _ => return None,
-    };
-
-    let parts: Vec<String> = fields
-        .iter()
-        .filter_map(|field_name| {
-            let value = find_data_value(data_items, field_name)?;
-            Some(format!("{field_name}: {value}"))
-        })
-        .collect();
-
-    if parts.is_empty() {
-        None
-    } else {
-        Some(parts.join("; "))
     }
 }
 
@@ -962,14 +973,15 @@ mod tests {
         let event = &extraction.events[0];
         assert_eq!(event.event_id, 4104);
         assert_eq!(event.kind, EvtxBootEventKind::PowerShellScriptBlock);
-        assert!(event
-            .details
-            .as_ref()
-            .is_some_and(|d| d.contains("ScriptBlockText")));
-        assert!(event
-            .details
-            .as_ref()
-            .is_some_and(|d| d.contains("Get-Process")));
+        assert!(event.details.contains_key("ScriptBlockText"));
+        assert_eq!(
+            event.details.get("ScriptBlockText").map(String::as_str),
+            Some("Get-Process | Where-Object {$_.CPU -gt 10}")
+        );
+        assert_eq!(
+            event.details.get("Path").map(String::as_str),
+            Some("C:\\Scripts\\audit.ps1")
+        );
     }
 
     #[test]
@@ -1001,9 +1013,14 @@ mod tests {
         let event = &extraction.events[0];
         assert_eq!(event.event_id, 1);
         assert_eq!(event.kind, EvtxBootEventKind::SysmonProcessCreate);
-        let details = event.details.as_ref().expect("should have details");
-        assert!(details.contains("Image: C:\\Windows\\System32\\cmd.exe"));
-        assert!(details.contains("CommandLine: cmd.exe /c whoami"));
+        assert_eq!(
+            event.details.get("Image").map(String::as_str),
+            Some("C:\\Windows\\System32\\cmd.exe")
+        );
+        assert_eq!(
+            event.details.get("CommandLine").map(String::as_str),
+            Some("cmd.exe /c whoami")
+        );
     }
 
     #[test]
@@ -1034,9 +1051,14 @@ mod tests {
         let event = &extraction.events[0];
         assert_eq!(event.event_id, 21);
         assert_eq!(event.kind, EvtxBootEventKind::RdpSessionConnect);
-        let details = event.details.as_ref().expect("should have details");
-        assert!(details.contains("User: DOMAIN\\jsmith"));
-        assert!(details.contains("Address: 192.168.1.100"));
+        assert_eq!(
+            event.details.get("User").map(String::as_str),
+            Some("DOMAIN\\jsmith")
+        );
+        assert_eq!(
+            event.details.get("Address").map(String::as_str),
+            Some("192.168.1.100")
+        );
     }
 
     #[test]
@@ -1068,9 +1090,14 @@ mod tests {
         let event = &extraction.events[0];
         assert_eq!(event.event_id, 1116);
         assert_eq!(event.kind, EvtxBootEventKind::DefenderThreatDetected);
-        let details = event.details.as_ref().expect("should have details");
-        assert!(details.contains("Threat: Trojan:Win32/Malware"));
-        assert!(details.contains("Severity: Severe"));
+        assert_eq!(
+            event.details.get("Threat").map(String::as_str),
+            Some("Trojan:Win32/Malware")
+        );
+        assert_eq!(
+            event.details.get("Severity").map(String::as_str),
+            Some("Severe")
+        );
     }
 
     #[test]
@@ -1118,6 +1145,6 @@ mod tests {
         .expect("json extraction should succeed");
 
         assert_eq!(extraction.events.len(), 1);
-        assert_eq!(extraction.events[0].details, None);
+        assert!(extraction.events[0].details.is_empty());
     }
 }

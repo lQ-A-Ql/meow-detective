@@ -181,9 +181,7 @@ fn boot_event_attrs(
         attrs.insert("provider".to_string(), Value::String(provider.clone()));
     }
     attrs.insert("note".to_string(), Value::String(event.note.clone()));
-    if let Some(details) = &event.details {
-        attrs.insert("details".to_string(), Value::String(details.clone()));
-    }
+    insert_details(&mut attrs, &event.details);
     attrs
 }
 
@@ -228,6 +226,7 @@ fn security_event_attrs(
     insert_optional(&mut attrs, "taskName", event.task_name.clone());
     insert_optional(&mut attrs, "privilegeList", event.privilege_list.clone());
     insert_optional(&mut attrs, "memberName", event.member_name.clone());
+    insert_details(&mut attrs, &event.details);
     attrs
 }
 
@@ -304,6 +303,7 @@ fn application_event_attrs(
     insert_optional(&mut attrs, "faultModule", event.fault_module.clone());
     insert_optional(&mut attrs, "productName", event.product_name.clone());
     insert_optional(&mut attrs, "manufacturer", event.manufacturer.clone());
+    insert_details(&mut attrs, &event.details);
     attrs
 }
 
@@ -332,6 +332,17 @@ fn application_event_note(event: &EvtxApplicationEvent) -> String {
 fn insert_optional(attrs: &mut BTreeMap<String, Value>, key: &str, value: Option<String>) {
     if let Some(value) = value {
         attrs.insert(key.to_string(), Value::String(value));
+    }
+}
+
+fn insert_details(
+    attrs: &mut BTreeMap<String, Value>,
+    details: &std::collections::BTreeMap<String, String>,
+) {
+    if !details.is_empty() {
+        if let Ok(value) = serde_json::to_value(details) {
+            attrs.insert("details".to_string(), value);
+        }
     }
 }
 

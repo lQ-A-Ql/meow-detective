@@ -65,7 +65,7 @@ mod tests {
                 event_id: Some(6005),
                 record_id: Some(42),
                 note: Some("EventLog 6005 candidate, not a direct boot assertion".to_string()),
-                details: None,
+                details: std::collections::BTreeMap::new(),
                 provenance: AnalysisProvenanceDto {
                     data_source_id: "ds-1".to_string(),
                     artifact_path: "Windows/System32/winevt/Logs/System.evtx".to_string(),

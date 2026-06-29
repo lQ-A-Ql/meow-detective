@@ -10,8 +10,10 @@ use persistence_sqlite::repositories::{
     datasource_repo::DataSourceRepo, file_repo::FileRepo, timeline_repo::TimelineRepo,
 };
 use persistence_sqlite::{open_in_memory, runner};
+use std::collections::BTreeMap;
 use tempfile::TempDir;
 use transport::commands::ExportScopeDto;
+
 use transport::dto::{
     AnalysisBootRecordDto, AnalysisFieldProvenanceDto, AnalysisParseStatusDto,
     AnalysisProvenanceDto,
@@ -698,7 +700,7 @@ fn analysis_rows_include_field_and_boot_provenance() {
             event_id: Some(6005),
             record_id: Some(42),
             note: Some("EventLog 6005 candidate".to_string()),
-            details: None,
+            details: BTreeMap::new(),
             provenance: AnalysisProvenanceDto {
                 data_source_id: "ds-report".to_string(),
                 artifact_path: "Windows/System32/winevt/Logs/System.evtx".to_string(),

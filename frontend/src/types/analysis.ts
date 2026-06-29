@@ -57,6 +57,7 @@ export interface AnalysisBootRecord {
   eventId?: number;
   recordId?: number;
   note?: string;
+  details?: Record<string, string>;
   provenance: AnalysisProvenance;
 }
 

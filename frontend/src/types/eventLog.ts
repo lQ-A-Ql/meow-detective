@@ -19,6 +19,7 @@ export interface EvtxBootEvent {
   kind: string;
   sourcePath: string;
   note: string;
+  details?: Record<string, string>;
 }
 
 /** Security audit event from Security.evtx. */
@@ -40,6 +41,7 @@ export interface EvtxSecurityEvent {
   taskName?: string;
   privilegeList?: string;
   memberName?: string;
+  details?: Record<string, string>;
 }
 
 /** Application event from Application.evtx. */
@@ -54,6 +56,7 @@ export interface EvtxApplicationEvent {
   faultModule?: string;
   productName?: string;
   manufacturer?: string;
+  details?: Record<string, string>;
 }
 
 /** Unified EVTX event log summary. */

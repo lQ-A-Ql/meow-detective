@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 use crate::dto::analysis_base::AnalysisParseStatusDto;
 
@@ -35,6 +36,8 @@ pub struct EvtxBootEventDto {
     pub kind: String,
     pub source_path: String,
     pub note: String,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    pub details: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,6 +73,8 @@ pub struct EvtxSecurityEventDto {
     pub privilege_list: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub member_name: Option<String>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    pub details: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,4 +96,6 @@ pub struct EvtxApplicationEventDto {
     pub product_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub manufacturer: Option<String>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    pub details: BTreeMap<String, String>,
 }

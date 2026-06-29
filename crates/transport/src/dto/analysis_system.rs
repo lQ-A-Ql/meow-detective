@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 use crate::dto::analysis_base::{
     AnalysisFieldProvenanceDto, AnalysisParseStatusDto, AnalysisProvenanceDto,
@@ -58,7 +59,7 @@ pub struct AnalysisBootRecordDto {
     pub record_id: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<String>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    pub details: BTreeMap<String, String>,
     pub provenance: AnalysisProvenanceDto,
 }
