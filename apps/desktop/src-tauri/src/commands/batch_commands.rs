@@ -13,6 +13,23 @@ pub async fn create_batch_plan(
     phases: Vec<String>,
     resource_limits: BatchResourceLimitsDto,
 ) -> Result<BatchJobDto, CommandError> {
+    create_batch_plan_impl(
+        state.inner(),
+        name,
+        data_source_ids,
+        phases,
+        resource_limits,
+    )
+    .await
+}
+
+async fn create_batch_plan_impl(
+    app_state: &AppState,
+    name: String,
+    data_source_ids: Vec<String>,
+    phases: Vec<String>,
+    resource_limits: BatchResourceLimitsDto,
+) -> Result<BatchJobDto, CommandError> {
     if name.trim().is_empty() || name.len() > 200 {
         return Err(CommandError::invalid_input(
             "Batch name must be 1-200 characters",
@@ -28,7 +45,7 @@ pub async fn create_batch_plan(
             "At least one phase is required",
         ));
     }
-    let app_state = state.inner().clone();
+    let app_state = app_state.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let active = require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
@@ -49,10 +66,17 @@ pub async fn start_batch(
     state: State<'_, AppState>,
     batch_id: String,
 ) -> Result<BatchJobDto, CommandError> {
+    start_batch_impl(state.inner(), batch_id).await
+}
+
+async fn start_batch_impl(
+    app_state: &AppState,
+    batch_id: String,
+) -> Result<BatchJobDto, CommandError> {
     if batch_id.trim().is_empty() {
         return Err(CommandError::invalid_input("batch_id is required"));
     }
-    let app_state = state.inner().clone();
+    let app_state = app_state.clone();
     tauri::async_runtime::spawn_blocking(move || {
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
@@ -68,10 +92,17 @@ pub async fn pause_batch(
     state: State<'_, AppState>,
     batch_id: String,
 ) -> Result<BatchJobDto, CommandError> {
+    pause_batch_impl(state.inner(), batch_id).await
+}
+
+async fn pause_batch_impl(
+    app_state: &AppState,
+    batch_id: String,
+) -> Result<BatchJobDto, CommandError> {
     if batch_id.trim().is_empty() {
         return Err(CommandError::invalid_input("batch_id is required"));
     }
-    let app_state = state.inner().clone();
+    let app_state = app_state.clone();
     tauri::async_runtime::spawn_blocking(move || {
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
@@ -87,10 +118,17 @@ pub async fn resume_batch(
     state: State<'_, AppState>,
     batch_id: String,
 ) -> Result<BatchJobDto, CommandError> {
+    resume_batch_impl(state.inner(), batch_id).await
+}
+
+async fn resume_batch_impl(
+    app_state: &AppState,
+    batch_id: String,
+) -> Result<BatchJobDto, CommandError> {
     if batch_id.trim().is_empty() {
         return Err(CommandError::invalid_input("batch_id is required"));
     }
-    let app_state = state.inner().clone();
+    let app_state = app_state.clone();
     tauri::async_runtime::spawn_blocking(move || {
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
@@ -110,10 +148,17 @@ pub async fn cancel_batch(
     state: State<'_, AppState>,
     batch_id: String,
 ) -> Result<BatchJobDto, CommandError> {
+    cancel_batch_impl(state.inner(), batch_id).await
+}
+
+async fn cancel_batch_impl(
+    app_state: &AppState,
+    batch_id: String,
+) -> Result<BatchJobDto, CommandError> {
     if batch_id.trim().is_empty() {
         return Err(CommandError::invalid_input("batch_id is required"));
     }
-    let app_state = state.inner().clone();
+    let app_state = app_state.clone();
     tauri::async_runtime::spawn_blocking(move || {
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
@@ -129,10 +174,17 @@ pub async fn get_batch_job(
     state: State<'_, AppState>,
     batch_id: String,
 ) -> Result<BatchJobDto, CommandError> {
+    get_batch_job_impl(state.inner(), batch_id).await
+}
+
+async fn get_batch_job_impl(
+    app_state: &AppState,
+    batch_id: String,
+) -> Result<BatchJobDto, CommandError> {
     if batch_id.trim().is_empty() {
         return Err(CommandError::invalid_input("batch_id is required"));
     }
-    let app_state = state.inner().clone();
+    let app_state = app_state.clone();
     tauri::async_runtime::spawn_blocking(move || {
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
@@ -145,7 +197,11 @@ pub async fn get_batch_job(
 
 #[tauri::command]
 pub async fn list_batch_jobs(state: State<'_, AppState>) -> Result<Vec<BatchJobDto>, CommandError> {
-    let app_state = state.inner().clone();
+    list_batch_jobs_impl(state.inner()).await
+}
+
+async fn list_batch_jobs_impl(app_state: &AppState) -> Result<Vec<BatchJobDto>, CommandError> {
+    let app_state = app_state.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let active = require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
@@ -207,12 +263,6 @@ mod tests {
         std::fs::remove_dir_all(root).ok();
     }
 
-    fn state_as_managed(state: &AppState) -> tauri::State<'_, AppState> {
-        // `State<'_, T>` is a newtype around `&T`; this transmute is sound
-        // because the test keeps `state` alive for the duration of the call.
-        unsafe { std::mem::transmute(state) }
-    }
-
     fn setup_active_case_with_batch_job() -> (std::path::PathBuf, AppState, String) {
         let root =
             std::env::temp_dir().join(format!("forensics-batch-stub-test-{}", Uuid::new_v4()));
@@ -244,8 +294,7 @@ mod tests {
     #[test]
     fn start_batch_returns_unsupported_stub() {
         let (root, state, batch_id) = setup_active_case_with_batch_job();
-        let err = tauri::async_runtime::block_on(start_batch(state_as_managed(&state), batch_id))
-            .unwrap_err();
+        let err = tauri::async_runtime::block_on(start_batch_impl(&state, batch_id)).unwrap_err();
         assert_eq!(err.code, "UNSUPPORTED");
         assert!(err.message.to_ascii_lowercase().contains("not supported"));
         state.clear_db_state().unwrap();
@@ -255,8 +304,7 @@ mod tests {
     #[test]
     fn pause_batch_returns_unsupported_stub() {
         let (root, state, batch_id) = setup_active_case_with_batch_job();
-        let err = tauri::async_runtime::block_on(pause_batch(state_as_managed(&state), batch_id))
-            .unwrap_err();
+        let err = tauri::async_runtime::block_on(pause_batch_impl(&state, batch_id)).unwrap_err();
         assert_eq!(err.code, "UNSUPPORTED");
         assert!(err.message.to_ascii_lowercase().contains("not supported"));
         state.clear_db_state().unwrap();
@@ -266,8 +314,7 @@ mod tests {
     #[test]
     fn resume_batch_returns_unsupported_stub() {
         let (root, state, batch_id) = setup_active_case_with_batch_job();
-        let err = tauri::async_runtime::block_on(resume_batch(state_as_managed(&state), batch_id))
-            .unwrap_err();
+        let err = tauri::async_runtime::block_on(resume_batch_impl(&state, batch_id)).unwrap_err();
         assert_eq!(err.code, "UNSUPPORTED");
         assert!(err.message.to_ascii_lowercase().contains("not supported"));
         state.clear_db_state().unwrap();
@@ -277,8 +324,7 @@ mod tests {
     #[test]
     fn cancel_batch_returns_unsupported_stub() {
         let (root, state, batch_id) = setup_active_case_with_batch_job();
-        let err = tauri::async_runtime::block_on(cancel_batch(state_as_managed(&state), batch_id))
-            .unwrap_err();
+        let err = tauri::async_runtime::block_on(cancel_batch_impl(&state, batch_id)).unwrap_err();
         assert_eq!(err.code, "UNSUPPORTED");
         assert!(err.message.to_ascii_lowercase().contains("not supported"));
         state.clear_db_state().unwrap();
