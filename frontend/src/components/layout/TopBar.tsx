@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { Search, Activity, Settings, AlertTriangle } from 'lucide-react';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
+import { isDevOrAuditMode } from '@/lib/env';
 import {
   deriveEvidenceHashStatus,
   getCacheStateLabel,
@@ -20,7 +21,7 @@ const pageKeys = [
   { to: '/', page: 'home' as const },
   { to: '/files', page: 'files' as const },
   { to: '/analysis', page: 'analysis' as const },
-  { to: '/v2', page: 'v2' as const },
+  ...(isDevOrAuditMode() ? [{ to: '/v2', page: 'v2' as const }] : []),
   { to: '/v3', page: 'v3' as const },
   { to: '/search', page: 'search' as const },
   { to: '/timeline', page: 'timeline' as const },

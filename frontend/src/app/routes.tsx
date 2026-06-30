@@ -1,5 +1,6 @@
 import { createBrowserRouter, type RouteObject } from 'react-router';
 import { Layout } from '@/components/layout/Layout';
+import { isDevOrAuditMode } from '@/lib/env';
 
 export const appRoutes: RouteObject[] = [
   {
@@ -18,12 +19,16 @@ export const appRoutes: RouteObject[] = [
           Component: (await import('./pages/DataAnalysis')).DataAnalysis,
         }),
       },
-      {
-        path: 'v2',
-        lazy: async () => ({
-          Component: (await import('./pages/V2Workbench')).V2Workbench,
-        }),
-      },
+      ...(isDevOrAuditMode()
+        ? [
+            {
+              path: 'v2',
+              lazy: async () => ({
+                Component: (await import('./pages/V2Workbench')).V2Workbench,
+              }),
+            },
+          ]
+        : []),
       {
         path: 'v3',
         lazy: async () => ({
