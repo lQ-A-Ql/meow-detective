@@ -12,6 +12,7 @@
     "breadcrumb": {
       "noData": "无数据源"
     },
+    "parentDirectory": "返回上级目录",
     "filter": {
       "label": "过滤:",
       "placeholder": "*"

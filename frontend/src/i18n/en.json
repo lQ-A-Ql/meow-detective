@@ -12,6 +12,7 @@
     "breadcrumb": {
       "noData": "No data source"
     },
+    "parentDirectory": "Parent directory",
     "filter": {
       "label": "Filter:",
       "placeholder": "*"

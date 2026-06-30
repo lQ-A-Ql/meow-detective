@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo } from 'react';
 import { Database, Download, FileClock, FileText, Globe, Mail, Monitor, Shield } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useCreateAnalysisDemoCase, useCurrentCase } from '@/features/case/hooks';
@@ -19,8 +19,6 @@ import {
   AnalysisEmptyState,
   AnalysisErrorBanner,
   AnalysisExtractionProgress,
-  type AnalysisExtractionProgressInfo,
-  type AnalysisExtractionProgressState,
   AnalysisHeader,
   AnalysisLoadingPanel,
   AnalysisReportPanel,
@@ -39,8 +37,13 @@ import {
   TabsTrigger,
 } from '@/app/components/ui/tabs';
 import { isApiErrorDto } from '@/lib/api/client';
-
-type AnalysisTabKey = 'system' | 'evidence' | 'registry' | 'browser' | 'email' | 'eventlogs' | 'files' | 'report';
+import {
+  type AnalysisTabKey,
+  type ExtractionCategory,
+  labeledProgress,
+  statusFromRun,
+  useAnalysisStore,
+} from '@/stores/analysis-store';
 
 const ANALYSIS_TAB_KEYS: AnalysisTabKey[] = [
   'system',
@@ -64,44 +67,12 @@ const TAB_ICONS: Record<AnalysisTabKey, React.ComponentType<{ size?: number | st
   report: Download,
 };
 
-type ExtractionCategory = 'Registry' | 'BrowserHistory' | 'Email' | 'EventLogs';
-
 const EXTRACTION_CATEGORIES: ExtractionCategory[] = [
   'Registry',
   'BrowserHistory',
   'Email',
   'EventLogs',
 ];
-
-function emptyProgress(label: string): AnalysisExtractionProgressInfo {
-  return {
-    label,
-    status: 'idle',
-    scannedCount: 0,
-    artifactCount: 0,
-    timelineEventCount: 0,
-    warnings: [],
-  };
-}
-
-function statusFromRun(status: string): AnalysisExtractionProgressState {
-  if (status === 'failed' || status === 'unavailable') {
-    return 'failed';
-  }
-  if (status === 'partial') {
-    return 'partial';
-  }
-  return 'success';
-}
-
-function defaultProgressMap(t: (key: string) => string): Record<ExtractionCategory, AnalysisExtractionProgressInfo> {
-  return {
-    Registry: emptyProgress(t('analysis.extraction.Registry')),
-    BrowserHistory: emptyProgress(t('analysis.extraction.BrowserHistory')),
-    Email: emptyProgress(t('analysis.extraction.Email')),
-    EventLogs: emptyProgress(t('analysis.extraction.EventLogs')),
-  };
-}
 
 function errorMessage(error: unknown) {
   if (isApiErrorDto(error)) {
@@ -128,9 +99,20 @@ export function DataAnalysis() {
   const eventLogSummary = useEvtxEventSummary({ limit: 200 });
   const classifications = useAnalysisClassifications(1000);
   const summaryMutation = useGenerateAnalysisSummary();
-  const [extractionProgress, setExtractionProgress] = useState(() => defaultProgressMap(t));
-  const [extractionRunning, setExtractionRunning] = useState(false);
-  const [progressExpanded, setProgressExpanded] = useState(true);
+
+  const extractionProgress = useAnalysisStore((s) => s.extractionProgress);
+  const extractionRunning = useAnalysisStore((s) => s.extractionRunning);
+  const progressExpanded = useAnalysisStore((s) => s.progressExpanded);
+  const activeTab = useAnalysisStore((s) => s.activeTab);
+  const updateExtractionProgress = useAnalysisStore((s) => s.updateExtractionProgress);
+  const setExtractionRunning = useAnalysisStore((s) => s.setExtractionRunning);
+  const setProgressExpanded = useAnalysisStore((s) => s.setProgressExpanded);
+  const setActiveTab = useAnalysisStore((s) => s.setActiveTab);
+
+  const labeledExtractionProgress = useMemo(
+    () => labeledProgress(extractionProgress, t),
+    [extractionProgress, t],
+  );
 
   const hasCase = Boolean(currentCase.data);
   const loading = currentCase.isLoading || demoCase.isPending;
@@ -167,7 +149,7 @@ export function DataAnalysis() {
 
   async function runExtraction() {
     setExtractionRunning(true);
-    setExtractionProgress(defaultProgressMap(t));
+    useAnalysisStore.getState().resetExtractionProgress();
     const refetchByCategory: Record<ExtractionCategory, () => Promise<unknown>> = {
       Registry: registrySummary.refetch,
       BrowserHistory: browserSummary.refetch,
@@ -181,42 +163,30 @@ export function DataAnalysis() {
 
     try {
       for (const category of EXTRACTION_CATEGORIES) {
-        setExtractionProgress((current) => ({
-          ...current,
-          [category]: {
-            ...current[category],
-            status: 'running',
-            warnings: [],
-            error: undefined,
-          },
-        }));
+        updateExtractionProgress(category, {
+          status: 'running',
+          warnings: [],
+          error: undefined,
+        });
 
         try {
           const run = await extractionRun.mutateAsync({ categories: [category] });
-          setExtractionProgress((current) => ({
-            ...current,
-            [category]: {
-              label: t(`analysis.extraction.${category}`),
-              status: statusFromRun(run.status),
-              scannedCount: run.scannedCount,
-              artifactCount: run.artifactCount,
-              timelineEventCount: run.timelineEventCount,
-              warnings: run.warnings,
-            },
-          }));
+          updateExtractionProgress(category, {
+            status: statusFromRun(run.status),
+            scannedCount: run.scannedCount,
+            artifactCount: run.artifactCount,
+            timelineEventCount: run.timelineEventCount,
+            warnings: run.warnings,
+          });
           await refetchByCategory[category]();
           if (category === 'Registry') {
             await refetchRegistryStructured();
           }
         } catch (err) {
-          setExtractionProgress((current) => ({
-            ...current,
-            [category]: {
-              ...current[category],
-              status: 'failed',
-              error: errorMessage(err),
-            },
-          }));
+          updateExtractionProgress(category, {
+            status: 'failed',
+            error: errorMessage(err),
+          });
         }
       }
 
@@ -244,7 +214,7 @@ export function DataAnalysis() {
   const extractionProgressCards = EXTRACTION_CATEGORIES.map((category) => (
     <AnalysisExtractionProgress
       key={category}
-      progress={extractionProgress[category]}
+      progress={labeledExtractionProgress[category]}
     />
   ));
 
@@ -272,7 +242,7 @@ export function DataAnalysis() {
             </span>
             <button
               type="button"
-              onClick={() => setProgressExpanded((v) => !v)}
+              onClick={() => setProgressExpanded(!progressExpanded)}
               className="flex items-center gap-1 rounded border border-forensics-border bg-forensics-surface px-2 py-0.5 text-[11px] text-forensics-text hover:bg-forensics-hover"
             >
               <span>{progressExpanded ? t('analysis.progressDrawer.collapse') : t('analysis.progressDrawer.expand')}</span>
@@ -294,7 +264,7 @@ export function DataAnalysis() {
           onLoadDemoCase={loadDemoCase}
         />
       ) : (
-        <Tabs defaultValue="system" className="min-h-0 flex-1 gap-0">
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AnalysisTabKey)} className="min-h-0 flex-1 gap-0">
           <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-none border-b border-forensics-border bg-forensics-panel p-0">
             {ANALYSIS_TAB_KEYS.map((value) => {
               const Icon = TAB_ICONS[value];
@@ -347,7 +317,7 @@ export function DataAnalysis() {
                     <RegistryExtractionPanel
                       summary={registrySummary.data}
                       structured={registryStructured.data}
-                      progress={extractionProgress.Registry}
+                      progress={labeledExtractionProgress.Registry}
                     />
                   )}
                 </TabsContent>
@@ -358,7 +328,7 @@ export function DataAnalysis() {
                   ) : (
                     <BrowserHistoryPanel
                       summary={browserSummary.data}
-                      progress={extractionProgress.BrowserHistory}
+                      progress={labeledExtractionProgress.BrowserHistory}
                     />
                   )}
                 </TabsContent>
@@ -369,7 +339,7 @@ export function DataAnalysis() {
                   ) : (
                     <EmailExtractionPanel
                       summary={emailSummary.data}
-                      progress={extractionProgress.Email}
+                      progress={labeledExtractionProgress.Email}
                     />
                   )}
                 </TabsContent>
@@ -380,7 +350,7 @@ export function DataAnalysis() {
                   ) : (
                     <EventLogPanel
                       summary={eventLogSummary.data}
-                      progress={extractionProgress.EventLogs}
+                      progress={labeledExtractionProgress.EventLogs}
                     />
                   )}
                 </TabsContent>

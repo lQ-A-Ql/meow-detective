@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DataAnalysis } from './DataAnalysis';
+import { useAnalysisStore } from '@/stores/analysis-store';
 
 const mocks = vi.hoisted(() => ({
   currentCase: vi.fn(),
@@ -65,6 +66,7 @@ function queryState(overrides: Record<string, unknown> = {}) {
 describe('DataAnalysis page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useAnalysisStore.getState().reset();
     mocks.currentCase.mockReturnValue(queryState({
       data: { id: 'case-1', name: 'Case 1' },
     }));

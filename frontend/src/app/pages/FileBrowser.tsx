@@ -1,4 +1,4 @@
-import { ChevronRight, HardDrive } from 'lucide-react';
+import { ArrowUp, ChevronRight, HardDrive } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { PageSubbar } from '@/components/layout/PageSubbar';
 import { FileVisibilityToggle } from '@/components/files/FileVisibilityToggle';
@@ -68,6 +68,15 @@ export function FileBrowser() {
               <span className="text-forensics-500">{t('fileBrowser.breadcrumb.noData')}</span>
             )}
           </div>
+          <button
+            type="button"
+            disabled={!fb.parentDirectory}
+            onClick={fb.goToParentDirectory}
+            className="flex items-center gap-1 rounded border border-forensics-border bg-forensics-surface px-2 py-1 text-[11px] text-forensics-text hover:bg-forensics-hover disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <ArrowUp size={12} />
+            {t('fileBrowser.parentDirectory')}
+          </button>
           <div className="h-4 border-l border-forensics-border" />
           <div className="text-forensics-muted flex items-center gap-2">
             {t('fileBrowser.filter.label')}

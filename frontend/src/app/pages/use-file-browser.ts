@@ -267,6 +267,20 @@ export function useFileBrowser() {
     return visible;
   }, [expandedDirectoryIds, rootTree, treeChildren]);
   const currentDirectory = flatTree.find((node) => node.id === activeDirectoryId);
+  const parentDirectory = useMemo(() => {
+    if (!currentDirectory) return undefined;
+    const idx = flatTree.findIndex((node) => node.id === currentDirectory.id);
+    if (idx <= 0) return undefined;
+    return flatTree
+      .slice(0, idx)
+      .reverse()
+      .find((node) => node.depth === currentDirectory.depth - 1);
+  }, [currentDirectory, flatTree]);
+  const goToParentDirectory = useCallback(() => {
+    if (!parentDirectory) return;
+    setSelectedDirectoryId(parentDirectory.id);
+    setSelectedFileId(undefined);
+  }, [parentDirectory, setSelectedDirectoryId, setSelectedFileId]);
   const activeRootNode = useMemo(() => {
     if (!activeDirectoryId || !rootTree?.length) return rootTree?.[0];
     for (const root of rootTree) {
@@ -445,6 +459,8 @@ export function useFileBrowser() {
     selectedFile,
     activeDirectoryPath,
     currentDirectory,
+    parentDirectory,
+    goToParentDirectory,
     activeRootNode,
     executableCount,
     extractFile,
