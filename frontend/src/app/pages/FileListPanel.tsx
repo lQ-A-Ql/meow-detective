@@ -1,3 +1,5 @@
+import { ArrowUp } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { DenseDataTable } from '@/components/tables/DenseDataTable';
 import { FileIconWithStatusOverlay } from '@/components/files/FileIconWithStatusOverlay';
@@ -13,6 +15,8 @@ export interface FileListPanelProps {
   setSelectedDirectoryId: (id: string) => void;
   setSelectedFileId: (id: string | undefined) => void;
   setExpandedDirectoryIds: (updater: (prev: string[]) => string[]) => void;
+  parentDirectory?: { id: string; name: string };
+  goToParentDirectory?: () => void;
   rowsPage: { offset: number; limit: number; totalCount: number; rows: FileEntryRow[]; truncated: boolean } | undefined;
   canGoToPreviousRows: boolean;
   canGoToNextRows: boolean;
@@ -30,16 +34,32 @@ export function FileListPanel({
   setSelectedDirectoryId,
   setSelectedFileId,
   setExpandedDirectoryIds,
+  parentDirectory,
+  goToParentDirectory,
   rowsPage,
   canGoToPreviousRows,
   canGoToNextRows,
   goToPreviousRows,
   goToNextRows,
 }: FileListPanelProps) {
+  const { t } = useTranslation();
   const selectedFile = sortedRows.find((row) => row.id === selectedFileId);
 
   return (
     <div className="flex-1 flex flex-col border-b border-[#e0e0e0] bg-white min-h-0">
+      <div className="shrink-0 flex items-center gap-2 border-b border-[#e0e0e0] bg-[#fafafa] px-3 py-1.5">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1 px-2 text-[11px]"
+          disabled={!parentDirectory}
+          onClick={goToParentDirectory}
+        >
+          <ArrowUp size={12} />
+          {t('fileBrowser.parentDirectory')}
+        </Button>
+      </div>
       <DenseDataTable<FileEntryRow>
         rows={sortedRows}
         getRowKey={(row) => row.id}
