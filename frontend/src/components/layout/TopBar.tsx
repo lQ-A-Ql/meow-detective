@@ -62,7 +62,7 @@ export function TopBar() {
     <div className="shrink-0 border-b border-forensics-border bg-forensics-panel px-4 py-2 text-xs">
       <div className="flex items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-6">
-          <div className="flex items-center gap-5 min-w-0 overflow-x-auto scrollbar-none">
+          <div className="flex items-center gap-5 min-w-0 overflow-x-auto">
             {pageKeys.map((link) => (
               <NavLink
                 key={link.to}

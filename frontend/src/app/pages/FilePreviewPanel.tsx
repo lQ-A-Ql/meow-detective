@@ -7,6 +7,7 @@ import { AudioViewer } from '@/components/viewers/AudioViewer';
 import { ViewerError } from '@/components/viewers/ViewerError';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useResizableHeight } from '@/hooks/use-resizable-height';
 import type {
   ApiErrorDto,
   FileHexViewerState,
@@ -101,6 +102,12 @@ export function FilePreviewPanel({
   onRetryPreview,
 }: FilePreviewPanelProps) {
   const [hexInspectorExpanded, setHexInspectorExpanded] = useState(false);
+  const { height: previewHeight, isResizing: isResizingPreview, onResizeStart: onPreviewResizeStart } = useResizableHeight({
+    defaultHeight: 288,
+    minHeight: 160,
+    maxHeight: 600,
+    storageKey: 'filePreviewHeight',
+  });
 
   useEffect(() => {
     if (viewerTab !== 'hex') {
@@ -109,7 +116,17 @@ export function FilePreviewPanel({
   }, [viewerTab, selectedFile?.id]);
 
   return (
-    <div className="h-72 bg-[#fcfcfc] shrink-0 min-h-0">
+    <div
+      className="bg-[#fcfcfc] shrink-0 min-h-0 flex flex-col"
+      style={{ height: `${previewHeight}px` }}
+    >
+      <div
+        className={`shrink-0 h-1 cursor-row-resize transition-colors ${
+          isResizingPreview ? 'bg-blue-400' : 'hover:bg-blue-200'
+        }`}
+        onMouseDown={onPreviewResizeStart}
+        title="拖拽调整预览区高度"
+      />
       {previewError && (
         <ViewerError error={previewError} onRetry={onRetryPreview} />
       )}
@@ -121,7 +138,8 @@ export function FilePreviewPanel({
           </span>
         </div>
       )}
-      <ViewerTabs
+      <div className="min-h-0 flex-1">
+        <ViewerTabs
         value={viewerTab}
         onValueChange={(value) =>
           setViewerTab(
@@ -362,6 +380,7 @@ export function FilePreviewPanel({
           },
         ]}
       />
+      </div>
     </div>
   );
 }

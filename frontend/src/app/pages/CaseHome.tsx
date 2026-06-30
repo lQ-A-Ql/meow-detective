@@ -118,7 +118,7 @@ export function CaseHome() {
   }
 
   return (
-    <div className="flex-1 flex flex-col w-full h-full bg-white overflow-auto">
+    <div className="flex-1 flex flex-col w-full h-full bg-white overflow-hidden">
       <div className="border-b border-[#e0e0e0] bg-[#fafafa] p-6 shrink-0">
         <div className="flex items-start justify-between gap-6">
           <div>

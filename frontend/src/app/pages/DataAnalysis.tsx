@@ -219,7 +219,7 @@ export function DataAnalysis() {
   ));
 
   return (
-    <div className="flex h-full w-full flex-1 flex-col overflow-auto bg-white">
+    <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-white">
       <AnalysisHeader
         loading={loading}
         hasCase={hasCase}

@@ -167,7 +167,7 @@ export function Search() {
             <span className="border border-[#d9d9d9] bg-white px-2 py-0.5">上下文已提取</span>
           </div>
 
-          <div className="flex-1 flex flex-col border-b border-[#e0e0e0] min-h-0">
+          <div className="flex-[2] flex flex-col border-b border-[#e0e0e0] min-h-0">
             <DenseDataTable<SearchHit>
               rows={data?.items ?? []}
               getRowKey={(row) => row.fileId}
@@ -188,7 +188,7 @@ export function Search() {
             />
           </div>
 
-          <div className="h-56 bg-[#fcfcfc] flex flex-col shrink-0 min-h-0">
+          <div className="flex-1 min-h-[8rem] bg-[#fcfcfc] flex flex-col shrink-0">
             <div className="h-7 border-b border-[#e0e0e0] flex items-center px-4 text-[10px] font-semibold uppercase text-[#555] tracking-wider shrink-0 bg-[#fafafa]">
               上下文预览
             </div>

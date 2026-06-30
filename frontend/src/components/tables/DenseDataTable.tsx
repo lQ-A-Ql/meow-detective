@@ -87,13 +87,13 @@ function TableRowMemoBase<T>({
       {columns.map((column, index) => (
         <TableCell
           key={column.key}
-          className={`h-[31px] whitespace-nowrap px-2 py-1.5 align-middle ${
+          className={`h-[31px] px-2 py-1.5 align-middle ${
             index < columns.length - 1
               ? 'border-r border-[#f0f0f0]'
               : ''
           } ${column.className ?? ''}`}
         >
-          <div className="max-w-full overflow-x-auto whitespace-nowrap">
+          <div className="truncate">
             {column.render(row)}
           </div>
         </TableCell>

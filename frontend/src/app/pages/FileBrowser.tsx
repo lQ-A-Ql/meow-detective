@@ -36,7 +36,7 @@ export function FileBrowser() {
           executableCount: fb.executableCount,
         })}
       >
-        <div className="h-10 flex items-center px-4 gap-4 text-xs shrink-0">
+        <div className="h-10 flex items-center px-4 gap-4 text-xs shrink-0 min-w-0 overflow-x-auto">
           <div className="flex items-center gap-1.5 text-forensics-muted font-mono text-[11px] min-w-0">
             <HardDrive size={12} />
             {fb.treeNodes.length > 0 ? (

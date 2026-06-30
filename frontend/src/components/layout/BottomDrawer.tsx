@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Terminal, AlertCircle, ChevronUp, ChevronDown, Clock3 } from 'lucide-react';
+import { useResizableHeight } from '@/hooks/use-resizable-height';
 import {
   deriveEvidenceHashStatus,
   getCacheStateLabel,
@@ -49,9 +50,17 @@ export function BottomDrawer() {
     completedJobs[0]?.detail ||
     t('bottomDrawer.headline.waiting');
 
+  const { height: drawerHeight, isResizing: isResizingDrawer, onResizeStart: onDrawerResizeStart } = useResizableHeight({
+    defaultHeight: 224,
+    minHeight: 128,
+    maxHeight: 600,
+    storageKey: 'bottomDrawerHeight',
+  });
+
   return (
     <div
-      className={`shrink-0 border-t border-forensics-border bg-forensics-panel z-10 transition-[height] duration-150 ${drawerOpen ? 'h-56' : 'h-8'}`}
+      className={`shrink-0 border-t border-forensics-border bg-forensics-panel z-10 transition-[height] duration-150 ${drawerOpen ? 'flex flex-col' : 'h-8 overflow-hidden'}`}
+      style={drawerOpen ? { height: `${drawerHeight}px` } : undefined}
     >
       <div className="h-8 flex items-center px-4 text-forensics-muted text-[11px] font-mono justify-between gap-4">
         <div className="flex items-center gap-4 min-w-0">
@@ -89,7 +98,15 @@ export function BottomDrawer() {
         </div>
       </div>
       {drawerOpen ? (
-        <div className="grid h-[calc(100%-2rem)] grid-cols-3 border-t border-forensics-border">
+        <>
+          <div
+            className={`shrink-0 h-1 cursor-row-resize transition-colors ${
+              isResizingDrawer ? 'bg-blue-400' : 'hover:bg-blue-200'
+            }`}
+            onMouseDown={onDrawerResizeStart}
+            title="拖拽调整抽屉高度"
+          />
+          <div className="grid flex-1 min-h-0 grid-cols-3 overflow-hidden border-t border-forensics-border">
           <div className="overflow-auto border-r border-forensics-border p-3">
             <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-forensics-text-tertiary">
               <span>{t('bottomDrawer.jobs.title')}</span>
@@ -298,6 +315,7 @@ export function BottomDrawer() {
             </div>
           </div>
         </div>
+        </>
       ) : null}
     </div>
   );

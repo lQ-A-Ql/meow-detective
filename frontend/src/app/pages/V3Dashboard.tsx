@@ -34,7 +34,7 @@ export function V3Dashboard() {
   }
 
   return (
-    <div className="flex h-full w-full flex-1 flex-col overflow-auto bg-white">
+    <div className="flex h-full w-full flex-1 flex-col overflow-hidden bg-white">
       <div className="shrink-0 border-b border-[#e0e0e0] bg-[#fafafa] p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>

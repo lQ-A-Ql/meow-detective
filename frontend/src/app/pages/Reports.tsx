@@ -65,7 +65,7 @@ export function Reports() {
       </div>
 
       <div className="flex-1 flex overflow-hidden min-h-0">
-        <div className="flex-1 border-r border-[#e0e0e0] p-6 bg-white flex flex-col gap-6 min-h-0">
+        <div className="flex-1 border-r border-[#e0e0e0] p-6 bg-white flex flex-col gap-6 min-h-0 min-w-0">
           <div>
             <div className="text-[#888] text-[10px] uppercase tracking-wider mb-3">导出范围</div>
             <div className="space-y-2 font-mono text-[11px] text-[#333]">
@@ -115,7 +115,7 @@ export function Reports() {
           </div>
         </div>
 
-        <div className="w-96 bg-[#fafafa] flex flex-col shrink-0 min-h-0">
+        <div className="w-96 max-w-[40%] bg-[#fafafa] flex flex-col shrink-0 min-h-0">
           <div className="h-7 border-b border-[#e0e0e0] flex items-center justify-between px-4 text-[10px] font-semibold uppercase text-[#555] tracking-wider shrink-0 bg-[#f5f5f5]">
             <span>最近导出</span>
             <span className="font-mono text-[#888]">{history?.length ?? 0} 条记录</span>

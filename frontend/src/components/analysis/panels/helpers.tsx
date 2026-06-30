@@ -218,7 +218,7 @@ export function TableBlock({ title, children }: { title: string; children: React
 
 export function DenseTableFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-[340px] min-h-0 overflow-hidden rounded border border-[#e0e0e0] bg-white">
+    <div className="flex flex-1 flex-col min-h-0 overflow-hidden rounded border border-[#e0e0e0] bg-white">
       {children}
     </div>
   );

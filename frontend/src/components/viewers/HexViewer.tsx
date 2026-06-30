@@ -52,10 +52,9 @@ function parseHexLine(line: string): ParsedLine {
   if (parts.length >= 2) {
     const offset = parts[0];
     const hex = parts[1];
-    // 生成 ASCII 预览
-    const bytes = hex.split(' ').filter(h => h.length === 2);
+    const bytes = hex.split(' ').filter((h) => h.length === 2);
     const ascii = bytes
-      .map(h => {
+      .map((h) => {
         const code = parseInt(h, 16);
         return code >= 32 && code <= 126 ? String.fromCharCode(code) : '.';
       })
@@ -219,15 +218,15 @@ export function HexViewer({
                   style={{ height: lineHeight }}
                 >
                   <div
-                    className="shrink-0 text-[#999] text-right pr-2 select-none border-r border-[#eee] bg-[#fafafa]"
+                    className="shrink-0 border-r border-[#eee] bg-[#fafafa] pr-2 text-right text-[#999] select-none"
                     style={{ width: offsetWidth }}
                   >
                     {line.offset}
                   </div>
 
-                  <div className="flex-1 px-3 tracking-wider">
+                  <div className="flex-1 min-w-0 grid grid-cols-[repeat(16,minmax(min-content,1fr))] gap-0 px-3 tracking-wider">
                     {(line.bytes ?? line.hex.split(' ')).map((byte, i) => (
-                      <span key={i} className="inline-block w-[26px] text-center">
+                      <span key={i} className="text-center">
                         {byte === '00' ? (
                           <span className="text-[#ccc]">{byte}</span>
                         ) : byte === 'FF' ? (
@@ -239,7 +238,7 @@ export function HexViewer({
                     ))}
                   </div>
 
-                  <div className="shrink-0 w-[128px] pl-2 border-l border-[#eee] text-[#666]">
+                  <div className="shrink-0 min-w-[6rem] w-[8rem] border-l border-[#eee] pl-2 text-[#666] grid grid-cols-[repeat(16,minmax(min-content,1fr))] gap-0">
                     {line.ascii.split('').map((char, i) => (
                       <span
                         key={i}
