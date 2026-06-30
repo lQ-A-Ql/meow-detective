@@ -922,14 +922,29 @@ pub fn get_email_extraction_summary(
             file_id: row.source_object_id.unwrap_or_default(),
             source_path: string_attr(&row.attrs, "sourcePath"),
             sent_at: optional_string_attr(&row.attrs, "sentAt"),
+            received_at: optional_string_attr(&row.attrs, "receivedAt"),
             from: string_attr(&row.attrs, "from"),
             to: string_vec_attr(&row.attrs, "to"),
             cc: string_vec_attr(&row.attrs, "cc"),
             bcc: string_vec_attr(&row.attrs, "bcc"),
+            reply_to: optional_string_attr(&row.attrs, "replyTo"),
+            return_path: optional_string_attr(&row.attrs, "returnPath"),
             subject: string_attr(&row.attrs, "subject"),
             message_id: string_attr(&row.attrs, "messageId"),
+            in_reply_to: optional_string_attr(&row.attrs, "inReplyTo"),
+            references: string_vec_attr(&row.attrs, "references"),
             attachments: string_vec_attr(&row.attrs, "attachments"),
+            attachment_details: attachment_details_attr(&row.attrs, "attachmentDetails"),
+            headers: header_attr(&row.attrs, "headers"),
             body_preview: string_attr(&row.attrs, "bodyPreview"),
+            body_plain: optional_string_attr(&row.attrs, "bodyPlain"),
+            body_html: optional_string_attr(&row.attrs, "bodyHtml"),
+            x_mailer: optional_string_attr(&row.attrs, "xMailer"),
+            x_originating_ip: optional_string_attr(&row.attrs, "xOriginatingIp"),
+            container_path: optional_string_attr(&row.attrs, "containerPath"),
+            message_class: optional_string_attr(&row.attrs, "messageClass"),
+            attachment_count: u64_attr(&row.attrs, "attachmentCount"),
+            is_deleted: optional_bool_attr(&row.attrs, "isDeleted"),
         })
         .collect::<Vec<_>>();
     Ok(EmailExtractionSummaryDto {
@@ -1257,6 +1272,47 @@ fn string_vec_attr(attrs: &BTreeMap<String, Value>, key: &str) -> Vec<String> {
                 .iter()
                 .filter_map(Value::as_str)
                 .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn attachment_details_attr(
+    attrs: &BTreeMap<String, Value>,
+    key: &str,
+) -> Vec<transport::dto::EmailAttachmentDto> {
+    attrs
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|v| {
+                    Some(transport::dto::EmailAttachmentDto {
+                        file_name: v.get("fileName")?.as_str()?.to_string(),
+                        size: v.get("size")?.as_u64(),
+                        mime_type: v.get("mimeType")?.as_str().map(str::to_string),
+                        content_id: v.get("contentId")?.as_str().map(str::to_string),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn header_attr(attrs: &BTreeMap<String, Value>, key: &str) -> Vec<transport::dto::EmailHeaderDto> {
+    attrs
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|v| {
+                    Some(transport::dto::EmailHeaderDto {
+                        name: v.get("name")?.as_str()?.to_string(),
+                        value: v.get("value")?.as_str()?.to_string(),
+                    })
+                })
                 .collect()
         })
         .unwrap_or_default()

@@ -1,0 +1,40 @@
+From: investigator@forensics.local
+To: analyst@forensics.local
+Cc: cc-recipient@forensics.local
+Bcc: bcc-recipient@forensics.local
+Reply-To: noreply@forensics.local
+Return-Path: <bounces@forensics.local>
+Subject: Multipart email with attachment
+Date: Tue, 16 Jan 2024 14:45:00 +0000
+Message-ID: <multipart-001@forensics.local>
+In-Reply-To: <thread-parent@forensics.local>
+References: <thread-parent@forensics.local> <thread-prev@forensics.local>
+X-Mailer: ForensicsWorkbench-Test/1.0
+X-Originating-IP: 203.0.113.42
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="boundary123"
+
+--boundary123
+Content-Type: multipart/alternative; boundary="altBoundary"
+
+--altBoundary
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+This is the plain text body of the multipart message.
+
+--altBoundary
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+<html><body><p>This is the <b>HTML</b> body.</p></body></html>
+
+--altBoundary--
+--boundary123
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="payload.bin"
+Content-Transfer-Encoding: base64
+
+SGVsbG8gZnJvbSBhdHRhY2htZW50
+
+--boundary123--

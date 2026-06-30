@@ -14,8 +14,10 @@ use crate::props::{
     find_prop_filetime, find_prop_string, find_prop_string_array, parse_property_context,
     prop_type, read_u32_le, read_u64_le, PropValue, PROP_TAG_ATTACH_DATA,
     PROP_TAG_ATTACH_LONG_FILENAME, PROP_TAG_ATTACH_MIME, PROP_TAG_ATTACH_SIZE, PROP_TAG_BODY,
-    PROP_TAG_DELIVERY_TIME, PROP_TAG_DISPLAY_CC, PROP_TAG_DISPLAY_TO, PROP_TAG_MESSAGE_CLASS,
-    PROP_TAG_SENDER_EMAIL, PROP_TAG_SENDER_NAME, PROP_TAG_SENT_TIME, PROP_TAG_SUBJECT,
+    PROP_TAG_DELIVERY_TIME, PROP_TAG_DISPLAY_BCC, PROP_TAG_DISPLAY_CC, PROP_TAG_DISPLAY_TO,
+    PROP_TAG_INTERNET_MESSAGE_ID, PROP_TAG_IN_REPLY_TO_ID, PROP_TAG_MESSAGE_CLASS,
+    PROP_TAG_REFERENCES, PROP_TAG_SENDER_EMAIL, PROP_TAG_SENDER_NAME, PROP_TAG_SENT_TIME,
+    PROP_TAG_SUBJECT,
 };
 use crate::{PstAttachment, PstCalendar, PstContact, PstError, PstFolder, PstMessage};
 
@@ -596,24 +598,65 @@ impl PstReader {
         let cc = self
             .get_property_string(nid, PROP_TAG_DISPLAY_CC)
             .unwrap_or_default();
+        let bcc = self
+            .get_property_string(nid, PROP_TAG_DISPLAY_BCC)
+            .unwrap_or_default();
 
+        let to_vec = split_display_addresses(&to);
+        let cc_vec = split_display_addresses(&cc);
+        let bcc_vec = split_display_addresses(&bcc);
+
+        // Keep `recipients` as a backward-compatible aggregate.
         let mut recipients: Vec<String> = Vec::new();
+        recipients.extend(to_vec.iter().cloned());
+        recipients.extend(cc_vec.iter().cloned());
+
+        let message_id = self
+            .get_property_string(nid, PROP_TAG_INTERNET_MESSAGE_ID)
+            .unwrap_or_default();
+        let in_reply_to = self
+            .get_property_string(nid, PROP_TAG_IN_REPLY_TO_ID)
+            .unwrap_or_default();
+        let references = self
+            .get_property_string(nid, PROP_TAG_REFERENCES)
+            .map(|raw| split_display_addresses(&raw))
+            .unwrap_or_default();
+        let message_class = self
+            .get_property_string(nid, PROP_TAG_MESSAGE_CLASS)
+            .unwrap_or_else(|| "IPM.Note".to_string());
+
+        // Build a best-effort header list from MAPI properties.
+        let mut headers: Vec<(String, String)> = Vec::new();
+        if !subject.is_empty() {
+            headers.push(("Subject".to_string(), subject.clone()));
+        }
+        if !sender_email.is_empty() {
+            let from = if sender_name.is_empty() {
+                sender_email.clone()
+            } else {
+                format!("{} <{}>", sender_name, sender_email)
+            };
+            headers.push(("From".to_string(), from));
+        }
         if !to.is_empty() {
-            for addr in to.split(';') {
-                let trimmed = addr.trim();
-                if !trimmed.is_empty() {
-                    recipients.push(trimmed.to_string());
-                }
-            }
+            headers.push(("To".to_string(), to.clone()));
         }
         if !cc.is_empty() {
-            for addr in cc.split(';') {
-                let trimmed = addr.trim();
-                if !trimmed.is_empty() {
-                    recipients.push(trimmed.to_string());
-                }
-            }
+            headers.push(("Cc".to_string(), cc.clone()));
         }
+        if !bcc.is_empty() {
+            headers.push(("Bcc".to_string(), bcc.clone()));
+        }
+        if !message_id.is_empty() {
+            headers.push(("Message-Id".to_string(), message_id.clone()));
+        }
+        if !in_reply_to.is_empty() {
+            headers.push(("In-Reply-To".to_string(), in_reply_to.clone()));
+        }
+        if !references.is_empty() {
+            headers.push(("References".to_string(), references.join(" ")));
+        }
+        headers.push(("Message-Class".to_string(), message_class.clone()));
 
         // Extract attachments from sub-node table.
         let attachments = self.read_attachments(nid);
@@ -625,10 +668,22 @@ impl PstReader {
             sender_name,
             sender_email,
             recipients,
+            to: to_vec,
+            cc: cc_vec,
+            bcc: bcc_vec,
+            reply_to: String::new(),
+            return_path: String::new(),
+            message_id,
+            in_reply_to,
+            references,
+            message_class,
+            x_mailer: String::new(),
+            x_originating_ip: String::new(),
             sent_time,
             received_time,
             attachments,
             folder_path: folder_path.to_string(),
+            headers,
         })
     }
 
@@ -696,4 +751,11 @@ impl PstReader {
         }
         None
     }
+}
+
+fn split_display_addresses(raw: &str) -> Vec<String> {
+    raw.split(';')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
 }

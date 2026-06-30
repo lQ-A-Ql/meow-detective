@@ -43,7 +43,7 @@ V2 长期执行与发布口径见：
 | Chrome History | 跨平台 | Supported | 无 | URL / 标题 / 访问时间 / 下载 | **planned** (2026-Q3) — controlled VM snapshot, 500+ history entries, 50+ downloads, 100+ cookies, 2 profiles | medium fixture 规划中 (Chrome SQLite) |
 | Edge History | 跨平台 | Supported | 无 | URL / 标题 / 访问时间 / 下载 | **planned** (2026-Q3) — controlled VM snapshot, 300+ history, 20+ downloads, 80+ cookies | medium fixture 规划中 (Edge Chromium SQLite) |
 | Firefox History | 跨平台 | Supported | 无 | URL / 标题 / 访问时间 / 下载 | **planned** (2026-Q3) — controlled VM snapshot, 300+ URLs in places.sqlite, 500+ visits, 30+ downloads.json, 80+ cookies | medium fixture 规划中 (Firefox SQLite) |
-| Email extraction | 跨平台 | Supported | 无 | 发件人 / 收件人 / 主题 / 正文 / 附件 | **planned** (2026-Q3) — `testdata/fixtures/public-medium/` EML/EMLX samples | medium fixture 规划中 (EML/EMLX)。PST/OST/mbox 延后至 V3 |
+| Email extraction | 跨平台 | Supported | `testdata/fixtures/public-small/email/` `testdata/fixtures/public-medium/email/` | 发件人 / 收件人 / Cc/Bcc / 主题 / 正文(plain/HTML) / 附件 / Message-ID / References / Received / Container path / Folder path / Message class | **completed** — `public-small` 覆盖 EML/EMLX/MBOX/PST/OST；`public-medium` 覆盖 13 EML、55-message mbox、10-message PST/OST | EML/EMLX/MBOX/PST/OST 已接入。加密 PST/OST 延后至 V4 |
 
 ## 4. Linux 制品解析器 (V3 计划) — Medium Fixtures: `testdata/fixtures/public-medium/linux/`
 
@@ -71,9 +71,9 @@ V2 长期执行与发布口径见：
 
 | 链路 | 平台 | 当前等级 | 已验证样本 | 对齐基准 | 字段承诺 | Medium Fixture | 备注 |
 |---|---|---|---|---|---|---|---|
-| PST (Unicode 32/64) | 跨平台 | Experimental | 规划中 | V3 新增，无现有测试 | 主题、正文、发件人、收件人、时间、附件、文件夹路径 | **planned** (2026-Q4) — `testdata/fixtures/public-medium/pst/` sanitized real-world PSTs | public-small + public-medium fixture 规划中。加密 PST 延后至 V4 |
-| OST | 跨平台 | Experimental | 规划中 | V3 新增，无现有测试 | 主题、正文、发件人、收件人、时间、附件、文件夹路径 | **planned** (2026-Q4) — `testdata/fixtures/public-medium/ost/` offline folder samples | public-small fixture 规划中。复用 PST 代码。离线文件夹表与同步元数据 |
-| mbox | 跨平台 | Experimental | 规划中 | V3 新增，无现有测试 | 主题、正文、发件人、收件人、时间、附件 | **planned** (2026-Q4) — `testdata/fixtures/public-medium/mbox/` RFC 4155 variant samples | public-small + public-medium fixture 规划中。RFC 4155 变体检测 (mboxrd/mboxo/mboxcl/mboxcl2) |
+| PST (Unicode 32/64) | 跨平台 | Supported | `testdata/fixtures/public-small/email/synthetic.pst` `testdata/fixtures/public-medium/email/medium-pst/medium.pst` | V3 接入；支持 NBT/BBT 遍历、MAPI 属性上下文、邮件/附件/文件夹路径 | 主题、正文、发件人、收件人、时间、附件、文件夹路径 | **completed** — `public-small` synthetic + `public-medium` 10-message synthetic；sanitized real-world PSTs 仍 planned (2026-Q4) | public-small synthetic fixture 已覆盖。加密 PST 延后至 V4 |
+| OST | 跨平台 | Supported | `testdata/fixtures/public-small/email/synthetic.ost` `testdata/fixtures/public-medium/email/medium-pst/medium.ost` | V3 接入；复用 PST 解析代码，按扩展名检测文件类型 | 主题、正文、发件人、收件人、时间、附件、文件夹路径 | **completed** — `public-small` synthetic + `public-medium` 10-message synthetic；offline folder samples 仍 planned (2026-Q4) | public-small synthetic fixture 已覆盖。复用 PST 代码。离线文件夹表与同步元数据 |
+| mbox | 跨平台 | Supported | `testdata/fixtures/public-small/email/` `testdata/fixtures/public-medium/email/medium-mbox/` | V3 提前接入；支持 RFC 4155 四种变体拆分、附件元数据、容器路径 | 主题、正文(plain/HTML)、发件人、收件人、时间、附件、容器路径 | **completed** — `public-small` 3 samples + `public-medium` 55-message Thunderbird-style mbox；real-world Takeout 样本仍 planned (2026-Q3) | public-small fixture 已覆盖 simple/multipart/mboxrd_escaped。RFC 4155 变体检测 (mboxrd/mboxo/mboxcl/mboxcl2) |
 
 ## 7. 字段承诺规则
 
@@ -100,7 +100,7 @@ V2 长期执行与发布口径见：
 | SRU | Windows | Experimental | Experimental / Beta | 需补 fixture、expected.json、自动化测试 |
 | Thumbcache | Windows | Experimental | Experimental / Beta | 需补 fixture、expected.json、自动化测试 |
 | Browser History | 跨平台 | Supported | Supported / GA | medium fixture 规划中 (Chrome/Edge/Firefox SQLite)。需新建 artifacts-windows 浏览器模块、fixture、expected.json |
-| Email extraction | 跨平台 | Supported | Supported / GA | medium fixture 规划中 (EML/EMLX)。需新建 artifacts-windows 邮件模块、fixture、expected.json。PST/OST/mbox 延后 |
+| Email extraction | 跨平台 | Supported | Supported / GA | public-small fixture 已覆盖 EML/EMLX/MBOX/PST/OST；medium fixture 规划中。加密 PST/OST 延后 |
 
 ## 9. V3 目标状态 (Linux / macOS / 容器邮件)
 
@@ -118,9 +118,9 @@ V2 长期执行与发布口径见：
 | Quarantine | macOS | Experimental | Supported | public-small + public-medium fixture。QuarantineEventsV2 SQLite 全字段 |
 | Launch Services | macOS | Experimental | Supported | public-small + public-medium fixture |
 | FSEvents | macOS | Experimental | Supported | public-small + public-medium fixture。.fseventsd/ 事件日志 |
-| PST | 跨平台 | Experimental | Supported / GA | public-small + public-medium + private-real fixture。Unicode 32/64-bit。消息 + 附件 + 文件夹 + 日历 + 联系人。加密 PST 延后至 V4 |
-| OST | 跨平台 | Experimental | Supported | public-small fixture。离线文件夹表与同步元数据 |
-| mbox | 跨平台 | Experimental | Supported / GA | public-small + public-medium fixture。RFC 4155 变体全覆盖 (mboxrd/mboxo/mboxcl/mboxcl2) |
+| PST | 跨平台 | Supported | Supported / GA | public-small + public-medium + private-real fixture。Unicode 32/64-bit。消息 + 附件 + 文件夹 + 日历 + 联系人。加密 PST 延后至 V4 |
+| OST | 跨平台 | Supported | Supported | public-small fixture 已覆盖。离线文件夹表与同步元数据 |
+| mbox | 跨平台 | Supported | Supported / GA | public-small fixture 已覆盖；public-medium 规划中。RFC 4155 变体全覆盖 (mboxrd/mboxo/mboxcl/mboxcl2) |
 
 ## 10. 与文档同步要求
 

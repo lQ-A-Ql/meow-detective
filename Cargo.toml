@@ -121,6 +121,7 @@ des = "~0.8"
 aes = "~0.8"
 cipher = "~0.4"
 rand = "~0.8"
+mailparse = "0.16"
 winres = "~0.1"
 binread = "~2.2"
 mimalloc = { version = "0.1", default-features = false }

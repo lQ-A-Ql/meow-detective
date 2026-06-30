@@ -4,7 +4,10 @@ use app_services::{
 };
 use evidence_core::{EvidenceReader, FileSystemReader};
 use image_e01::E01Reader;
-use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
+use persistence_sqlite::repositories::{
+    artifact_repo::ArtifactRepo, datasource_repo::DataSourceRepo, file_repo::FileRepo,
+};
+use serde_json::Value;
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -2285,6 +2288,179 @@ fn liuyang_e01_recycle_bin_extraction() {
 
             let total_elapsed = start.elapsed();
             eprintln!("=== Recycle Bin extraction + correlation test complete in {total_elapsed:?} ===");
+
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+#[ignore = "requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample"]
+fn liuyang_e01_email_extraction_regression() {
+    let fixture_path = sample_path();
+    let start = Instant::now();
+
+    let mut reader = E01Reader::open(&fixture_path).unwrap();
+    let probe = datasource_service::detect_image_filesystem(&mut reader).unwrap();
+    let ntfs = probe
+        .candidates
+        .iter()
+        .find(|c| matches!(c.kind, datasource_service::ImageFilesystemKind::Ntfs))
+        .expect("Liu Yang sample should include a readable NTFS candidate");
+
+    let (mft_cluster, cluster_size, record_size, bytes_per_sector, mft_data_size) =
+        read_mft_parameters(&fixture_path, ntfs.offset).unwrap();
+
+    let tmp = TempDir::new().unwrap();
+    let active = case_service::create_case(
+        &tmp.path().join("cases"),
+        "liuyang-email-extraction",
+        Some("tester"),
+    )
+    .unwrap();
+    let case_id = active.meta.id.clone();
+
+    active
+        .with_conn(|conn| {
+            let data_source_id = domain::DataSourceId(uuid::Uuid::new_v4().to_string());
+            DataSourceRepo::new(conn).insert(
+                &case_id,
+                &domain::DataSource {
+                    id: data_source_id.clone(),
+                    name: "liuyang-email-test".into(),
+                    kind: domain::DataSourceKind::E01,
+                    source_path: fixture_path.clone(),
+                    imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
+                },
+            )?;
+
+            let stats = file_service::enumerate_filesystem_mft(
+                conn,
+                &data_source_id,
+                &fixture_path,
+                ntfs.offset,
+                mft_cluster,
+                cluster_size,
+                record_size,
+                bytes_per_sector,
+                mft_data_size,
+                Some(&|pct, msg| eprintln!("[MFT {pct}%] {msg}")),
+                None,
+            )?;
+            eprintln!(
+                "[BENCH-OUTPUT] scenario=email_mft_import dataset_level=large p95_ms={} file_count={}",
+                start.elapsed().as_millis(),
+                stats.file_count
+            );
+            assert!(stats.file_count > 1000, "Should enumerate many Liu Yang files");
+
+            let candidates = analysis_service::evidence_candidates_for_categories(conn, &["Email"])
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            eprintln!("email candidates discovered: {}", candidates.len());
+            for candidate in candidates.iter().take(20) {
+                eprintln!(
+                    "  {} kind={} parser={} size={}",
+                    candidate.path, candidate.evidence_kind, candidate.parser, candidate.size
+                );
+            }
+
+            // Build a file-id -> path map so the reader closure does not need to
+            // borrow the connection while run_analysis_extraction is using it.
+            let entries = FileRepo::new(conn).find_by_data_source(&data_source_id)?;
+            let entry_map: std::collections::HashMap<String, String> = entries
+                .into_iter()
+                .map(|entry| (entry.id.0, entry.path))
+                .collect();
+            let entry_map = Arc::new(entry_map);
+
+            let fixture_for_reader = fixture_path.clone();
+            let offset = ntfs.offset;
+            let run = analysis_service::run_analysis_extraction(
+                conn,
+                &case_id.0,
+                &["Email"],
+                |file_id| {
+                    let path = entry_map
+                        .get(&file_id.0)
+                        .cloned()
+                        .ok_or_else(|| format!("missing file entry for {}", file_id.0))?;
+                    let boxed: Box<dyn EvidenceReader> =
+                        Box::new(E01Reader::open(&fixture_for_reader).map_err(|e| e.to_string())?);
+                    let fs = fs_ntfs::NtfsReader::open(boxed, offset).map_err(|e| e.to_string())?;
+                    let mut reader = fs.open_file(&path).map_err(|e| e.to_string())?;
+                    let mut bytes = Vec::new();
+                    reader.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+                    Ok::<Box<dyn Read>, String>(Box::new(std::io::Cursor::new(bytes)))
+                },
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+
+            eprintln!(
+                "email extraction: status={:?} scanned={} artifacts={} timeline_events={} warnings={}",
+                run.status,
+                run.scanned_count,
+                run.artifact_count,
+                run.timeline_event_count,
+                run.warnings.len()
+            );
+            for warning in run.warnings.iter().take(20) {
+                eprintln!("  warning: {warning}");
+            }
+
+            if run.artifact_count > 0 {
+                let repo = ArtifactRepo::new(conn);
+                let rows = repo.find_by_family_raw("EmailMessage")?;
+                let matching: Vec<_> = rows
+                    .into_iter()
+                    .filter_map(|(id, attrs_json)| {
+                        let attrs: Value = serde_json::from_str(&attrs_json).ok()?;
+                        if attrs
+                            .get("dataSourceId")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            != data_source_id.0
+                        {
+                            return None;
+                        }
+                        Some((id, attrs))
+                    })
+                    .collect();
+                assert!(
+                    !matching.is_empty(),
+                    "persisted EmailMessage artifacts should belong to the current data source"
+                );
+
+                let sample = &matching[0].1;
+                let from = sample.get("from").and_then(Value::as_str).unwrap_or("");
+                let subject = sample.get("subject").and_then(Value::as_str).unwrap_or("");
+                assert!(
+                    !from.is_empty() || !subject.is_empty(),
+                    "first extracted email should have a from or subject field"
+                );
+                assert!(
+                    sample.get("attachmentCount").and_then(Value::as_u64).is_some(),
+                    "attachmentCount must be populated on extracted emails"
+                );
+                assert!(
+                    sample.get("isDeleted").is_some(),
+                    "isDeleted must be present on extracted emails"
+                );
+
+                eprintln!(
+                    "email sample: id={} from={} subject={} attachmentCount={:?} isDeleted={:?}",
+                    matching[0].0,
+                    from,
+                    subject,
+                    sample.get("attachmentCount"),
+                    sample.get("isDeleted")
+                );
+            }
+
+            let total_elapsed = start.elapsed();
+            eprintln!(
+                "=== Email extraction regression test complete in {total_elapsed:?} ==="
+            );
 
             Ok(())
         })

@@ -1,0 +1,108 @@
+{
+  "samples": [
+    {
+      "file": "plain.eml",
+      "type": "eml",
+      "expected": {
+        "subjectContains": "Plain text message 0",
+        "fromContains": "alice@example.com"
+      }
+    },
+    {
+      "file": "html.eml",
+      "type": "eml",
+      "expected": {
+        "subjectContains": "HTML message 1",
+        "fromContains": "alice@example.com"
+      }
+    },
+    {
+      "file": "attachment.eml",
+      "type": "eml",
+      "expected": {
+        "subjectContains": "Document attached 2",
+        "fromContains": "sender@example.com"
+      }
+    },
+    {
+      "file": "multipart_related.eml",
+      "type": "eml",
+      "expected": {
+        "subjectContains": "Newsletter 3",
+        "fromContains": "newsletter@example.com"
+      }
+    },
+    {
+      "file": "encoded_headers.eml",
+      "type": "eml",
+      "expected": {
+        "subjectContains": "中文主题 4",
+        "fromContains": "lilei@example.com"
+      }
+    },
+    {
+      "file": "japanese.eml",
+      "type": "eml",
+      "expected": {
+        "subjectContains": "日本語の件名 5",
+        "fromContains": "yamada@example.jp"
+      }
+    },
+    {
+      "file": "thread_root.eml",
+      "type": "eml",
+      "expected": {
+        "subjectContains": "Re: project plan",
+        "fromContains": "user6@example.com"
+      }
+    },
+    {
+      "file": "thread_reply.eml",
+      "type": "eml",
+      "expected": {
+        "subjectContains": "Re: project plan",
+        "fromContains": "user7@example.com"
+      }
+    },
+    {
+      "file": "x_headers.eml",
+      "type": "eml",
+      "expected": {
+        "subjectContains": "X-Headers 8",
+        "fromContains": "remote@example.com"
+      }
+    },
+    {
+      "file": "quoted_printable.eml",
+      "type": "eml",
+      "expected": {
+        "subjectContains": "Quoted-printable 9",
+        "fromContains": "qp@example.com"
+      }
+    },
+    {
+      "file": "no_subject.eml",
+      "type": "eml",
+      "expected": {
+        "subjectContains": "",
+        "fromContains": "nosubject@example.com"
+      }
+    },
+    {
+      "file": "long_subject.eml",
+      "type": "eml",
+      "expected": {
+        "subjectContains": "Very long subject line repeated for mess",
+        "fromContains": "longsubject@example.com"
+      }
+    },
+    {
+      "file": "nested_rfc822.eml",
+      "type": "eml",
+      "expected": {
+        "subjectContains": "Forwarded message 12",
+        "fromContains": "forwarder@example.com"
+      }
+    }
+  ]
+}

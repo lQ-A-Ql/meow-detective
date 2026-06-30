@@ -1,0 +1,34 @@
+From investigator@forensics.local Tue Jan 16 14:45:00 2024
+From: investigator@forensics.local
+To: analyst@forensics.local
+Cc: cc-recipient@forensics.local
+Subject: Multipart mbox message with attachment
+Date: Tue, 16 Jan 2024 14:45:00 +0000
+Message-ID: <mbox-multipart-001@forensics.local>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="boundary-mbox"
+
+--boundary-mbox
+Content-Type: multipart/alternative; boundary="alt-mbox"
+
+--alt-mbox
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+This is the plain text part of the multipart mbox message.
+
+--alt-mbox
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+<html><body><p>This is the <b>HTML</b> part.</p></body></html>
+
+--alt-mbox--
+--boundary-mbox
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="mbox-payload.bin"
+Content-Transfer-Encoding: base64
+
+SGVsbG8gZnJvbSBtYm94IGF0dGFjaG1lbnQ=
+
+--boundary-mbox--

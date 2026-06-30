@@ -1,0 +1,31 @@
+Content-Type: multipart/mixed; boundary="===============2274737258927935517=="
+MIME-Version: 1.0
+From: forwarder@example.com
+To: archive@example.com
+Subject: Forwarded message 12
+Date: Fri, 01 Mar 2024 21:00:00 GMT
+Message-ID: <178275275863.28308.8464322714206859442@example.com>
+
+--===============2274737258927935517==
+Content-Type: text/plain; charset="utf-8"
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+
+U2VlIGF0dGFjaGVkIGZvcndhcmRlZCBtZXNzYWdlIDEyLgo=
+
+--===============2274737258927935517==
+Content-Type: message/rfc822
+MIME-Version: 1.0
+
+Content-Type: text/plain; charset="utf-8"
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+From: original@example.com
+To: final@example.com
+Subject: Original message 12
+Date: Fri, 01 Mar 2024 20:00:00 GMT
+Message-ID: <178275275863.28308.4886176751863151491@example.com>
+
+T3JpZ2luYWwgYm9keSAxMi4K
+
+--===============2274737258927935517==--

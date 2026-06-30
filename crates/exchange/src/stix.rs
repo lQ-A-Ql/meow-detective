@@ -172,11 +172,88 @@ pub fn observed_data_from_registry(reg: &RegistryValueDto) -> Value {
     })
 }
 
+/// Extract a bare SMTP address from a display-name address like
+/// `"Alice <alice@example.com>"` or return the trimmed input.
+fn extract_smtp_address(raw: &str) -> String {
+    let raw = raw.trim();
+    if let Some(start) = raw.find('<') {
+        if let Some(end) = raw.find('>') {
+            if end > start {
+                return raw[start + 1..end].trim().to_string();
+            }
+        }
+    }
+    raw.to_string()
+}
+
 /// Create a STIX 2.1 `observed-data` object from an email message record.
 pub fn observed_data_from_email(email: &EmailMessageDto) -> Value {
     let now = iso_now();
     let id = stix_id("observed-data");
     let msg_id = stix_id("email-message");
+
+    let mut addr_objects: HashMap<String, Value> = HashMap::new();
+    let mut addr_refs: HashMap<String, String> = HashMap::new();
+
+    let mut register_address = |raw: &str| {
+        let smtp = extract_smtp_address(raw);
+        if smtp.is_empty() {
+            return None;
+        }
+        let ref_id = addr_refs.get(&smtp).cloned().unwrap_or_else(|| {
+            let new_id = stix_id("email-addr");
+            addr_objects.insert(
+                new_id.clone(),
+                serde_json::json!({
+                    "type": "email-addr",
+                    "value": smtp,
+                }),
+            );
+            addr_refs.insert(smtp.clone(), new_id.clone());
+            new_id
+        });
+        Some(ref_id)
+    };
+
+    let from_ref = register_address(&email.from);
+    let to_refs: Vec<String> = email
+        .to
+        .iter()
+        .filter_map(|a| register_address(a))
+        .collect();
+    let cc_refs: Vec<String> = email
+        .cc
+        .iter()
+        .filter_map(|a| register_address(a))
+        .collect();
+    let bcc_refs: Vec<String> = email
+        .bcc
+        .iter()
+        .filter_map(|a| register_address(a))
+        .collect();
+
+    let mut object_refs = vec![msg_id.clone()];
+    object_refs.extend(addr_objects.keys().cloned());
+
+    let mut objects = serde_json::Map::new();
+    objects.insert(
+        msg_id.clone(),
+        serde_json::json!({
+            "type": "email-message",
+            "is_multipart": email.body_html.is_some() || !email.attachments.is_empty(),
+            "date": email.sent_at,
+            "from_ref": from_ref,
+            "to_refs": to_refs,
+            "cc_refs": cc_refs,
+            "bcc_refs": bcc_refs,
+            "subject": email.subject,
+            "x_message_id": email.message_id,
+            "x_artifact_id": email.artifact_id,
+        }),
+    );
+    for (ref_id, obj) in addr_objects {
+        objects.insert(ref_id, obj);
+    }
 
     serde_json::json!({
         "type": "observed-data",
@@ -187,21 +264,8 @@ pub fn observed_data_from_email(email: &EmailMessageDto) -> Value {
         "first_observed": now,
         "last_observed": now,
         "number_observed": 1,
-        "object_refs": [msg_id.clone()],
-        "objects": {
-            msg_id: {
-                "type": "email-message",
-                "is_multipart": false,
-                "date": email.sent_at,
-                "from_ref": email.from,
-                "to_refs": email.to,
-                "cc_refs": email.cc,
-                "bcc_refs": email.bcc,
-                "subject": email.subject,
-                "x_message_id": email.message_id,
-                "x_artifact_id": email.artifact_id,
-            }
-        }
+        "object_refs": object_refs,
+        "objects": objects,
     })
 }
 
@@ -406,14 +470,29 @@ mod tests {
             file_id: "file-1".to_string(),
             source_path: "mailbox.pst".to_string(),
             sent_at: Some("2026-06-17T00:00:00Z".to_string()),
+            received_at: None,
             from: "attacker@evil.com".to_string(),
             to: vec!["victim@corp.com".to_string()],
             cc: vec![],
             bcc: vec![],
+            reply_to: None,
+            return_path: None,
             subject: subject.to_string(),
             message_id: "<msg-1@evil.com>".to_string(),
+            in_reply_to: None,
+            references: vec![],
             attachments: vec!["payload.exe".to_string()],
+            attachment_details: vec![],
+            headers: vec![],
             body_preview: "Click the link...".to_string(),
+            body_plain: Some("Click the link...".to_string()),
+            body_html: None,
+            x_mailer: None,
+            x_originating_ip: None,
+            container_path: None,
+            message_class: None,
+            attachment_count: 1,
+            is_deleted: Some(false),
         }
     }
 
@@ -578,12 +657,20 @@ mod tests {
 
         assert_eq!(obs["type"], "observed-data");
         let refs = obs["object_refs"].as_array().unwrap();
+        assert_eq!(refs.len(), 3); // email-message + from + to
         let msg_id = refs[0].as_str().unwrap();
         let inner = &obs["objects"][msg_id];
         assert_eq!(inner["type"], "email-message");
         assert_eq!(inner["subject"], "Urgent: Password reset");
-        assert_eq!(inner["from_ref"], "attacker@evil.com");
-        assert_eq!(inner["to_refs"][0], "victim@corp.com");
+
+        let from_id = inner["from_ref"].as_str().unwrap();
+        assert_eq!(obs["objects"][from_id]["type"], "email-addr");
+        assert_eq!(obs["objects"][from_id]["value"], "attacker@evil.com");
+
+        let to_id = inner["to_refs"][0].as_str().unwrap();
+        assert_eq!(obs["objects"][to_id]["type"], "email-addr");
+        assert_eq!(obs["objects"][to_id]["value"], "victim@corp.com");
+
         assert_eq!(inner["x_message_id"], "<msg-1@evil.com>");
     }
 

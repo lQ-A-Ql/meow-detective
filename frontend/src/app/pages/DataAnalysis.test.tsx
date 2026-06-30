@@ -326,11 +326,33 @@ describe('DataAnalysis page', () => {
             from: 'alice@example.com',
             to: ['dfir@example.com'],
             cc: ['lead@example.com'],
-            bcc: [],
+            bcc: ['hidden@example.com'],
+            replyTo: 'reply@example.com',
+            returnPath: '<alice@example.com>',
             subject: 'Initial triage notes',
             messageId: '<mock-incident-1@example.com>',
+            inReplyTo: '<parent@example.com>',
+            references: ['<parent@example.com>'],
             attachments: ['triage.csv'],
+            attachmentDetails: [
+              {
+                fileName: 'triage.csv',
+                size: 1024,
+                mimeType: 'text/csv',
+                contentId: '<att-1>',
+              },
+            ],
+            headers: [
+              { name: 'From', value: 'alice@example.com' },
+              { name: 'Subject', value: 'Initial triage notes' },
+            ],
             bodyPreview: 'Please review the initial triage notes.',
+            bodyPlain: 'Please review the initial triage notes.',
+            bodyHtml: '<p>Please review the initial triage notes.</p>',
+            xMailer: 'TestMailer/1.0',
+            xOriginatingIp: '192.168.1.1',
+            attachmentCount: 1,
+            isDeleted: false,
           },
           {
             artifactId: 'mail-2',
@@ -343,8 +365,13 @@ describe('DataAnalysis page', () => {
             bcc: [],
             subject: 'Forwarded security alert',
             messageId: '<mock-alert-2@example.com>',
+            references: [],
             attachments: [],
+            attachmentDetails: [],
+            headers: [],
             bodyPreview: 'Endpoint alert was forwarded from the SOC queue.',
+            attachmentCount: 0,
+            isDeleted: false,
           },
         ],
       },
@@ -606,7 +633,24 @@ describe('DataAnalysis page', () => {
     await waitFor(() => expect(screen.getAllByText('邮件信息').length).toBeGreaterThan(0));
     expect(screen.getByText('Initial triage notes')).toBeDefined();
     expect(screen.getByText('alice@example.com')).toBeDefined();
-    expect(screen.getByText('triage.csv')).toBeDefined();
+
+    // Click the first email row to expand the detail card.
+    fireEvent.click(screen.getByText('Initial triage notes'));
+    await waitFor(() =>
+      expect(screen.getByText('Message-ID:')).toBeDefined(),
+    );
+    expect(screen.getByText('<mock-incident-1@example.com>')).toBeDefined();
+    expect(screen.getAllByText('lead@example.com').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('hidden@example.com').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('triage.csv').length).toBeGreaterThan(0);
+    expect(screen.getByText('Reply-To:')).toBeDefined();
+    expect(screen.getByText('reply@example.com')).toBeDefined();
+    expect(screen.getByText('Bcc:')).toBeDefined();
+    expect(screen.getByText('In-Reply-To:')).toBeDefined();
+    expect(screen.getByText('X-Mailer:')).toBeDefined();
+    expect(screen.getByText('192.168.1.1')).toBeDefined();
+    expect(screen.getByText('纯文本')).toBeDefined();
+    expect(screen.getByText('HTML')).toBeDefined();
   });
 
   it('renders notParsed system info without fake facts', () => {

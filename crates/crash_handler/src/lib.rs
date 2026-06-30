@@ -242,8 +242,18 @@ mod tests {
 
     #[test]
     fn test_sanitize_path() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let saved = std::env::var("USERPROFILE").ok();
+        std::env::set_var("USERPROFILE", "C:\\Users\\QAQ");
+
         let result = sanitize_path("C:\\Users\\QAQ\\Documents\\file.txt");
         assert!(!result.contains("QAQ") || result.contains("~"));
+
+        if let Some(v) = saved {
+            std::env::set_var("USERPROFILE", v);
+        } else {
+            std::env::remove_var("USERPROFILE");
+        }
     }
 
     #[test]

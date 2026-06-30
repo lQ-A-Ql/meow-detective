@@ -31,9 +31,6 @@ pub(crate) const BTREE_LEAF: u8 = 0x01;
 /// BTree page signature (wSig field) for block BTree pages.
 pub(crate) const BTREE_BB: u8 = 0x80;
 
-/// BTree page signature (wSig field) for node BTree pages.
-pub(crate) const BTREE_NB: u8 = 0x81;
-
 /// NID for the message store.
 pub(crate) const NID_MESSAGE_STORE: u32 = 0x21;
 

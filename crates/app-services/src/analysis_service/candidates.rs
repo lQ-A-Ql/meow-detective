@@ -167,12 +167,15 @@ const EVIDENCE_CATEGORY_DEFS: &[EvidenceCategoryDef] = &[
     EvidenceCategoryDef {
         category: "Email",
         display_name: "电子邮件",
-        evidence_kind: "email_eml_emlx",
-        parser: "email.eml_emlx",
+        evidence_kind: "email",
+        parser: "email",
         artifact_families: &["EmailMessage"],
         patterns: &[
             EvidencePathPattern::Suffix(".eml"),
             EvidencePathPattern::Suffix(".emlx"),
+            EvidencePathPattern::Suffix(".mbox"),
+            EvidencePathPattern::Suffix(".pst"),
+            EvidencePathPattern::Suffix(".ost"),
         ],
     },
     EvidenceCategoryDef {
@@ -305,6 +308,11 @@ pub fn discover_evidence_candidates(
             if def.category == "BrowserHistory" && !is_browser_history_path(&normalized) {
                 continue;
             }
+            let (evidence_kind, parser) = if def.category == "Email" {
+                email_kind_and_parser(&normalized)
+            } else {
+                (def.evidence_kind.to_string(), def.parser.to_string())
+            };
             map.entry(def.category.to_string())
                 .or_default()
                 .push(EvidenceCandidate {
@@ -312,14 +320,30 @@ pub fn discover_evidence_candidates(
                     data_source_id: data_source_id.clone(),
                     path: path.clone(),
                     size,
-                    evidence_kind: def.evidence_kind.to_string(),
-                    parser: def.parser.to_string(),
+                    evidence_kind,
+                    parser,
                     category: def.category.to_string(),
                 });
         }
     }
 
     Ok(map)
+}
+
+fn email_kind_and_parser(normalized: &str) -> (String, String) {
+    if normalized.ends_with(".eml") || normalized.ends_with(".emlx") {
+        return ("email_eml_emlx".to_string(), "email.eml_emlx".to_string());
+    }
+    if normalized.ends_with(".mbox") {
+        return ("email_mbox".to_string(), "email.mbox".to_string());
+    }
+    if normalized.ends_with(".pst") {
+        return ("email_pst".to_string(), "email.pst".to_string());
+    }
+    if normalized.ends_with(".ost") {
+        return ("email_ost".to_string(), "email.ost".to_string());
+    }
+    ("email".to_string(), "email".to_string())
 }
 
 pub fn evidence_candidates_for_categories(
@@ -609,5 +633,38 @@ fn evidence_confidence(file_count: u64, artifact_count: u64) -> f32 {
         0.65
     } else {
         0.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn email_kind_and_parser_splits_by_extension() {
+        assert_eq!(
+            email_kind_and_parser("mail.eml"),
+            ("email_eml_emlx".to_string(), "email.eml_emlx".to_string())
+        );
+        assert_eq!(
+            email_kind_and_parser("mail.emlx"),
+            ("email_eml_emlx".to_string(), "email.eml_emlx".to_string())
+        );
+        assert_eq!(
+            email_kind_and_parser("inbox.mbox"),
+            ("email_mbox".to_string(), "email.mbox".to_string())
+        );
+        assert_eq!(
+            email_kind_and_parser("archive.pst"),
+            ("email_pst".to_string(), "email.pst".to_string())
+        );
+        assert_eq!(
+            email_kind_and_parser("cache.ost"),
+            ("email_ost".to_string(), "email.ost".to_string())
+        );
+        assert_eq!(
+            email_kind_and_parser("unknown.bin"),
+            ("email".to_string(), "email".to_string())
+        );
     }
 }

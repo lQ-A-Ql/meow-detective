@@ -10,7 +10,9 @@ pub use crate::dto::analysis_classification::{
     AnalysisClassifiedFileDto, AnalysisFileClassificationDto, EvidenceCategoryDto,
     EvidenceClassificationSummaryDto, EvidenceClassificationTotalsDto, EvidenceSourceDto,
 };
-pub use crate::dto::analysis_email::{EmailExtractionSummaryDto, EmailMessageDto};
+pub use crate::dto::analysis_email::{
+    EmailAttachmentDto, EmailExtractionSummaryDto, EmailHeaderDto, EmailMessageDto,
+};
 pub use crate::dto::analysis_evtx::{
     EvtxApplicationEventDto, EvtxBootEventDto, EvtxEventSummaryDto, EvtxSecurityEventDto,
 };

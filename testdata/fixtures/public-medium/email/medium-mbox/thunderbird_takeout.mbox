@@ -1,0 +1,558 @@
+From alice@example.com Mon Apr 01 08:00:00 2024
+From: Alice <alice@example.com>
+To: team@example.com
+Subject: Project update #1
+Date: Mon, 01 Apr 2024 08:00:00 GMT
+Message-ID: <178275275864.28308.10355414347130837273@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 1 from Alice.
+>From escaped line should be unescaped.
+
+From bob@example.com Mon Apr 01 08:13:00 2024
+From: Bob <bob@example.com>
+To: team@example.com
+Subject: Lunch tomorrow? #2
+Date: Mon, 01 Apr 2024 08:13:00 GMT
+Message-ID: <178275275864.28308.4846727229842549352@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 2 from Bob.
+
+From carol@example.com Mon Apr 01 08:26:00 2024
+From: Carol <carol@example.com>
+To: team@example.com
+Subject: Invoice attached #3
+Date: Mon, 01 Apr 2024 08:26:00 GMT
+Message-ID: <178275275864.28308.10783708202428812294@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 3 from Carol.
+
+From dave@example.com Mon Apr 01 08:39:00 2024
+From: Dave <dave@example.com>
+To: team@example.com
+Subject: Meeting notes #4
+Date: Mon, 01 Apr 2024 08:39:00 GMT
+Message-ID: <178275275864.28308.16561908969169082055@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 4 from Dave.
+
+From newsletter@example.com Mon Apr 01 08:52:00 2024
+From: Newsletter <newsletter@example.com>
+To: team@example.com
+Subject: Re: proposal #5
+Date: Mon, 01 Apr 2024 08:52:00 GMT
+Message-ID: <178275275864.28308.7367638952773315056@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 5 from Newsletter.
+
+From alice@example.com Mon Apr 01 09:05:00 2024
+From: Alice <alice@example.com>
+To: team@example.com
+Subject: Weekly report #6
+Date: Mon, 01 Apr 2024 09:05:00 GMT
+Message-ID: <178275275864.28308.4045753881788664983@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 6 from Alice.
+
+From bob@example.com Mon Apr 01 09:18:00 2024
+From: Bob <bob@example.com>
+To: team@example.com
+Subject: FW: announcement #7
+Date: Mon, 01 Apr 2024 09:18:00 GMT
+Message-ID: <178275275864.28308.18401320984906874340@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 7 from Bob.
+
+From carol@example.com Mon Apr 01 09:31:00 2024
+From: Carol <carol@example.com>
+To: team@example.com
+Subject: Account alert #8
+Date: Mon, 01 Apr 2024 09:31:00 GMT
+Message-ID: <178275275864.28308.9399101105401083268@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 8 from Carol.
+>From escaped line should be unescaped.
+
+From dave@example.com Mon Apr 01 09:44:00 2024
+From: Dave <dave@example.com>
+To: team@example.com
+Subject: Holiday schedule #9
+Date: Mon, 01 Apr 2024 09:44:00 GMT
+Message-ID: <178275275864.28308.1676982661586292191@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 9 from Dave.
+
+From newsletter@example.com Mon Apr 01 09:57:00 2024
+From: Newsletter <newsletter@example.com>
+To: team@example.com
+Subject: System notification #10
+Date: Mon, 01 Apr 2024 09:57:00 GMT
+Message-ID: <178275275864.28308.869143694232187018@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 10 from Newsletter.
+
+From alice@example.com Mon Apr 01 10:10:00 2024
+From: Alice <alice@example.com>
+To: team@example.com
+Subject: Project update #11
+Date: Mon, 01 Apr 2024 10:10:00 GMT
+Message-ID: <178275275864.28308.2022669518369799574@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 11 from Alice.
+
+From bob@example.com Mon Apr 01 10:23:00 2024
+From: Bob <bob@example.com>
+To: team@example.com
+Subject: Lunch tomorrow? #12
+Date: Mon, 01 Apr 2024 10:23:00 GMT
+Message-ID: <178275275864.28308.11574336547207551967@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 12 from Bob.
+
+From carol@example.com Mon Apr 01 10:36:00 2024
+From: Carol <carol@example.com>
+To: team@example.com
+Subject: Invoice attached #13
+Date: Mon, 01 Apr 2024 10:36:00 GMT
+Message-ID: <178275275864.28308.14611285279172236417@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 13 from Carol.
+
+From dave@example.com Mon Apr 01 10:49:00 2024
+From: Dave <dave@example.com>
+To: team@example.com
+Subject: Meeting notes #14
+Date: Mon, 01 Apr 2024 10:49:00 GMT
+Message-ID: <178275275864.28308.7787476821032043604@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 14 from Dave.
+
+From newsletter@example.com Mon Apr 01 11:02:00 2024
+From: Newsletter <newsletter@example.com>
+To: team@example.com
+Subject: Re: proposal #15
+Date: Mon, 01 Apr 2024 11:02:00 GMT
+Message-ID: <178275275864.28308.1171879355373994804@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 15 from Newsletter.
+>From escaped line should be unescaped.
+
+From alice@example.com Mon Apr 01 11:15:00 2024
+From: Alice <alice@example.com>
+To: team@example.com
+Subject: Weekly report #16
+Date: Mon, 01 Apr 2024 11:15:00 GMT
+Message-ID: <178275275864.28308.7039633240121941061@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 16 from Alice.
+
+From bob@example.com Mon Apr 01 11:28:00 2024
+From: Bob <bob@example.com>
+To: team@example.com
+Subject: FW: announcement #17
+Date: Mon, 01 Apr 2024 11:28:00 GMT
+Message-ID: <178275275864.28308.18375196213244601545@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 17 from Bob.
+
+From carol@example.com Mon Apr 01 11:41:00 2024
+From: Carol <carol@example.com>
+To: team@example.com
+Subject: Account alert #18
+Date: Mon, 01 Apr 2024 11:41:00 GMT
+Message-ID: <178275275864.28308.9760436915883089410@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 18 from Carol.
+
+From dave@example.com Mon Apr 01 11:54:00 2024
+From: Dave <dave@example.com>
+To: team@example.com
+Subject: Holiday schedule #19
+Date: Mon, 01 Apr 2024 11:54:00 GMT
+Message-ID: <178275275864.28308.17913234339770707180@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 19 from Dave.
+
+From newsletter@example.com Mon Apr 01 12:07:00 2024
+From: Newsletter <newsletter@example.com>
+To: team@example.com
+Subject: System notification #20
+Date: Mon, 01 Apr 2024 12:07:00 GMT
+Message-ID: <178275275864.28308.15878582799647651419@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 20 from Newsletter.
+
+From alice@example.com Mon Apr 01 12:20:00 2024
+From: Alice <alice@example.com>
+To: team@example.com
+Subject: Project update #21
+Date: Mon, 01 Apr 2024 12:20:00 GMT
+Message-ID: <178275275864.28308.211787452753585711@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 21 from Alice.
+
+From bob@example.com Mon Apr 01 12:33:00 2024
+From: Bob <bob@example.com>
+To: team@example.com
+Subject: Lunch tomorrow? #22
+Date: Mon, 01 Apr 2024 12:33:00 GMT
+Message-ID: <178275275864.28308.13294971044627942823@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 22 from Bob.
+>From escaped line should be unescaped.
+
+From carol@example.com Mon Apr 01 12:46:00 2024
+From: Carol <carol@example.com>
+To: team@example.com
+Subject: Invoice attached #23
+Date: Mon, 01 Apr 2024 12:46:00 GMT
+Message-ID: <178275275864.28308.12575336687499166539@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 23 from Carol.
+
+From dave@example.com Mon Apr 01 12:59:00 2024
+From: Dave <dave@example.com>
+To: team@example.com
+Subject: Meeting notes #24
+Date: Mon, 01 Apr 2024 12:59:00 GMT
+Message-ID: <178275275864.28308.9905354246725926653@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 24 from Dave.
+
+From newsletter@example.com Mon Apr 01 13:12:00 2024
+From: Newsletter <newsletter@example.com>
+To: team@example.com
+Subject: Re: proposal #25
+Date: Mon, 01 Apr 2024 13:12:00 GMT
+Message-ID: <178275275864.28308.4922055923422824208@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 25 from Newsletter.
+
+From alice@example.com Mon Apr 01 13:25:00 2024
+From: Alice <alice@example.com>
+To: team@example.com
+Subject: Weekly report #26
+Date: Mon, 01 Apr 2024 13:25:00 GMT
+Message-ID: <178275275864.28308.11823658297578414819@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 26 from Alice.
+
+From bob@example.com Mon Apr 01 13:38:00 2024
+From: Bob <bob@example.com>
+To: team@example.com
+Subject: FW: announcement #27
+Date: Mon, 01 Apr 2024 13:38:00 GMT
+Message-ID: <178275275864.28308.2057774396966550895@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 27 from Bob.
+
+From carol@example.com Mon Apr 01 13:51:00 2024
+From: Carol <carol@example.com>
+To: team@example.com
+Subject: Account alert #28
+Date: Mon, 01 Apr 2024 13:51:00 GMT
+Message-ID: <178275275864.28308.8020003402427847432@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 28 from Carol.
+
+From dave@example.com Mon Apr 01 14:04:00 2024
+From: Dave <dave@example.com>
+To: team@example.com
+Subject: Holiday schedule #29
+Date: Mon, 01 Apr 2024 14:04:00 GMT
+Message-ID: <178275275864.28308.8369725103947974346@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 29 from Dave.
+>From escaped line should be unescaped.
+
+From newsletter@example.com Mon Apr 01 14:17:00 2024
+From: Newsletter <newsletter@example.com>
+To: team@example.com
+Subject: System notification #30
+Date: Mon, 01 Apr 2024 14:17:00 GMT
+Message-ID: <178275275864.28308.17594798260719234905@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 30 from Newsletter.
+
+From alice@example.com Mon Apr 01 14:30:00 2024
+From: Alice <alice@example.com>
+To: team@example.com
+Subject: Project update #31
+Date: Mon, 01 Apr 2024 14:30:00 GMT
+Message-ID: <178275275864.28308.16156634997386315378@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 31 from Alice.
+
+From bob@example.com Mon Apr 01 14:43:00 2024
+From: Bob <bob@example.com>
+To: team@example.com
+Subject: Lunch tomorrow? #32
+Date: Mon, 01 Apr 2024 14:43:00 GMT
+Message-ID: <178275275864.28308.4858670289128324619@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 32 from Bob.
+
+From carol@example.com Mon Apr 01 14:56:00 2024
+From: Carol <carol@example.com>
+To: team@example.com
+Subject: Invoice attached #33
+Date: Mon, 01 Apr 2024 14:56:00 GMT
+Message-ID: <178275275864.28308.9234183946886817931@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 33 from Carol.
+
+From dave@example.com Mon Apr 01 15:09:00 2024
+From: Dave <dave@example.com>
+To: team@example.com
+Subject: Meeting notes #34
+Date: Mon, 01 Apr 2024 15:09:00 GMT
+Message-ID: <178275275864.28308.3295545537822979182@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 34 from Dave.
+
+From newsletter@example.com Mon Apr 01 15:22:00 2024
+From: Newsletter <newsletter@example.com>
+To: team@example.com
+Subject: Re: proposal #35
+Date: Mon, 01 Apr 2024 15:22:00 GMT
+Message-ID: <178275275864.28308.16835012238916414748@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 35 from Newsletter.
+
+From alice@example.com Mon Apr 01 15:35:00 2024
+From: Alice <alice@example.com>
+To: team@example.com
+Subject: Weekly report #36
+Date: Mon, 01 Apr 2024 15:35:00 GMT
+Message-ID: <178275275864.28308.16058233278196202844@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 36 from Alice.
+>From escaped line should be unescaped.
+
+From bob@example.com Mon Apr 01 15:48:00 2024
+From: Bob <bob@example.com>
+To: team@example.com
+Subject: FW: announcement #37
+Date: Mon, 01 Apr 2024 15:48:00 GMT
+Message-ID: <178275275864.28308.5505334609351781486@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 37 from Bob.
+
+From carol@example.com Mon Apr 01 16:01:00 2024
+From: Carol <carol@example.com>
+To: team@example.com
+Subject: Account alert #38
+Date: Mon, 01 Apr 2024 16:01:00 GMT
+Message-ID: <178275275864.28308.11786537771726251127@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 38 from Carol.
+
+From dave@example.com Mon Apr 01 16:14:00 2024
+From: Dave <dave@example.com>
+To: team@example.com
+Subject: Holiday schedule #39
+Date: Mon, 01 Apr 2024 16:14:00 GMT
+Message-ID: <178275275864.28308.11233517643819790804@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 39 from Dave.
+
+From newsletter@example.com Mon Apr 01 16:27:00 2024
+From: Newsletter <newsletter@example.com>
+To: team@example.com
+Subject: System notification #40
+Date: Mon, 01 Apr 2024 16:27:00 GMT
+Message-ID: <178275275864.28308.2819386945366120073@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 40 from Newsletter.
+
+From alice@example.com Mon Apr 01 16:40:00 2024
+From: Alice <alice@example.com>
+To: team@example.com
+Subject: Project update #41
+Date: Mon, 01 Apr 2024 16:40:00 GMT
+Message-ID: <178275275864.28308.14065841566123610476@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 41 from Alice.
+
+From bob@example.com Mon Apr 01 16:53:00 2024
+From: Bob <bob@example.com>
+To: team@example.com
+Subject: Lunch tomorrow? #42
+Date: Mon, 01 Apr 2024 16:53:00 GMT
+Message-ID: <178275275864.28308.9949786805578188565@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 42 from Bob.
+
+From carol@example.com Mon Apr 01 17:06:00 2024
+From: Carol <carol@example.com>
+To: team@example.com
+Subject: Invoice attached #43
+Date: Mon, 01 Apr 2024 17:06:00 GMT
+Message-ID: <178275275864.28308.14363123322052972351@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 43 from Carol.
+>From escaped line should be unescaped.
+
+From dave@example.com Mon Apr 01 17:19:00 2024
+From: Dave <dave@example.com>
+To: team@example.com
+Subject: Meeting notes #44
+Date: Mon, 01 Apr 2024 17:19:00 GMT
+Message-ID: <178275275864.28308.9783298466110546885@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 44 from Dave.
+
+From newsletter@example.com Mon Apr 01 17:32:00 2024
+From: Newsletter <newsletter@example.com>
+To: team@example.com
+Subject: Re: proposal #45
+Date: Mon, 01 Apr 2024 17:32:00 GMT
+Message-ID: <178275275864.28308.10549616149947357@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 45 from Newsletter.
+
+From alice@example.com Mon Apr 01 17:45:00 2024
+From: Alice <alice@example.com>
+To: team@example.com
+Subject: Weekly report #46
+Date: Mon, 01 Apr 2024 17:45:00 GMT
+Message-ID: <178275275864.28308.5979623874891116212@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 46 from Alice.
+
+From bob@example.com Mon Apr 01 17:58:00 2024
+From: Bob <bob@example.com>
+To: team@example.com
+Subject: FW: announcement #47
+Date: Mon, 01 Apr 2024 17:58:00 GMT
+Message-ID: <178275275864.28308.359282477494518661@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 47 from Bob.
+
+From carol@example.com Mon Apr 01 18:11:00 2024
+From: Carol <carol@example.com>
+To: team@example.com
+Subject: Account alert #48
+Date: Mon, 01 Apr 2024 18:11:00 GMT
+Message-ID: <178275275864.28308.17138844417078287611@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 48 from Carol.
+
+From dave@example.com Mon Apr 01 18:24:00 2024
+From: Dave <dave@example.com>
+To: team@example.com
+Subject: Holiday schedule #49
+Date: Mon, 01 Apr 2024 18:24:00 GMT
+Message-ID: <178275275864.28308.16209557527030681269@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 49 from Dave.
+
+From newsletter@example.com Mon Apr 01 18:37:00 2024
+From: Newsletter <newsletter@example.com>
+To: team@example.com
+Subject: System notification #50
+Date: Mon, 01 Apr 2024 18:37:00 GMT
+Message-ID: <178275275864.28308.15341521175775675787@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 50 from Newsletter.
+>From escaped line should be unescaped.
+
+From alice@example.com Mon Apr 01 18:50:00 2024
+From: Alice <alice@example.com>
+To: team@example.com
+Subject: Project update #51
+Date: Mon, 01 Apr 2024 18:50:00 GMT
+Message-ID: <178275275864.28308.5672634474052504365@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 51 from Alice.
+
+From bob@example.com Mon Apr 01 19:03:00 2024
+From: Bob <bob@example.com>
+To: team@example.com
+Subject: Lunch tomorrow? #52
+Date: Mon, 01 Apr 2024 19:03:00 GMT
+Message-ID: <178275275864.28308.1068530801337745207@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 52 from Bob.
+
+From carol@example.com Mon Apr 01 19:16:00 2024
+From: Carol <carol@example.com>
+To: team@example.com
+Subject: Invoice attached #53
+Date: Mon, 01 Apr 2024 19:16:00 GMT
+Message-ID: <178275275864.28308.16196418396914041513@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 53 from Carol.
+
+From dave@example.com Mon Apr 01 19:29:00 2024
+From: Dave <dave@example.com>
+To: team@example.com
+Subject: Meeting notes #54
+Date: Mon, 01 Apr 2024 19:29:00 GMT
+Message-ID: <178275275864.28308.17468134154255093218@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 54 from Dave.
+
+From newsletter@example.com Mon Apr 01 19:42:00 2024
+From: Newsletter <newsletter@example.com>
+To: team@example.com
+Subject: Re: proposal #55
+Date: Mon, 01 Apr 2024 19:42:00 GMT
+Message-ID: <178275275864.28308.1580027247726259207@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Body of message 55 from Newsletter.
+

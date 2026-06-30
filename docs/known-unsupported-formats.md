@@ -36,7 +36,10 @@ V2 长期计划与能力评级请同时参考：
 | SRU | committed fixture | 缺失 | 有实现 (4 测试)，无 fixture，无 expected.json |
 | Thumbcache | committed fixture | 缺失 | 有实现 (3 测试)，无 fixture，无 expected.json |
 | Browser | 全部 | 未实现 | artifacts-windows 中无浏览器模块。Chrome/Edge/Firefox 均无代码、无 fixture、无 expected.json |
-| Email | 全部 | 未实现 | artifacts-windows 中无邮件模块。EML/EMLX/PST/OST/mbox 均无实现。PST/OST/mbox 规划于 V3-2 |
+| Email | EML/EMLX/MBOX/PST/OST | 已支持 | `app-services` 已接入 `containers-pst`；public-small + public-medium fixture 与 expected.json 已覆盖。详见 `docs/pst-ost-mbox-support.md` |
+| Email | MSG (Outlook .msg) | 不支持 | OLE2 复合文档，超出当前范围，规划于 V4 或后续评估 |
+| Email | TNEF / winmail.dat | 不支持 | MS-OXTNEF 格式，规划于 V4 或后续评估 |
+| Email | 加密或密码保护 PST/OST | 不支持 | 不尝试破解密码；检测并记录 warning |
 | Linux 文件系统 | ext4 raw disk | 不支持 | 当前仅支持从已挂载或导入的 Linux 文件树提取制品。ext4 原始磁盘镜像解析规划于 V4 |
 | Linux 文件系统 | XFS raw disk | 不支持 | XFS 原始磁盘镜像解析规划于 V4 |
 | Linux 文件系统 | Btrfs raw disk | 不支持 | Btrfs 原始磁盘镜像解析规划于 V4 |
@@ -66,7 +69,9 @@ V2 长期计划与能力评级请同时参考：
 - LNK 全量复杂 shell item
 - JumpList / SRU / Thumbcache 全格式覆盖（当前无 fixture，无 expected.json）
 - Browser 全浏览器全版本兼容（当前无任何实现代码）
-- Email 各类邮箱容器全覆盖（当前无任何实现代码）
+- Email MSG (Outlook .msg) / TNEF (winmail.dat) 格式
+- Email 加密或密码保护 PST/OST
+- Email 全 MAPI 属性级精度与超大 PST 流式解析
 
 ## 3a. V3 期间仍不得被市场化夸大的边界
 
@@ -82,6 +87,9 @@ V2 长期计划与能力评级请同时参考：
 - 网络数据包捕获 (PCAP) 摄入
 - 内存镜像采集与分析
 - 全浏览器全版本全平台兼容（V3 目标为 Chrome/Edge/Firefox 主流版本）
+- Email MSG (Outlook .msg) / TNEF (winmail.dat) 格式
+- Email 加密或密码保护 PST/OST
+- Email 超大 PST/OST 流式解析（当前为完整文件加载）
 - 规则包 DSL / 脚本逻辑（V3 规则条件为声明式字段断言）
 - 多用户协作笔记本（V3 为单用户）
 - 图形查询语言 DSL（V3 使用结构化 Rust API）

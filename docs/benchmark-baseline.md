@@ -103,6 +103,9 @@ V2 benchmark 至少覆盖：
 | large 文件树首展开 | p95 ≤ 2s |
 | 取消任务 UI 确认 | ≤ 500ms |
 | 后端协作停止 | ≤ 3s |
+| small 1 MiB mbox 解析 | ≤ 1.0s |
+| small 10-message 合成 PST 解析 | ≤ 100ms |
+| medium 10 MiB PST 解析 | ≤ 10s（待流式解析器完成后实测） |
 
 如有调整，必须同步更新 `docs/v2-longterm-plan.md` 与发布评分卡。
 

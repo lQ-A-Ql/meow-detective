@@ -1,0 +1,24 @@
+Content-Type: multipart/mixed; boundary="===============0945351111358374057=="
+MIME-Version: 1.0
+From: sender@example.com
+To: recipient@example.com
+Subject: Document attached 2
+Date: Fri, 01 Mar 2024 11:00:00 GMT
+Message-ID: <178275275862.28308.2574020394472462046@example.com>
+
+--===============0945351111358374057==
+Content-Type: text/plain; charset="utf-8"
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+
+UGxlYXNlIHNlZSB0aGUgYXR0YWNoZWQgZG9jdW1lbnQgZm9yIG1lc3NhZ2UgMi4=
+
+--===============0945351111358374057==
+Content-Type: application/octet-stream
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="data2.bin"
+
+QXR0YWNobWVudCBwYXlsb2FkIDI=
+
+--===============0945351111358374057==--

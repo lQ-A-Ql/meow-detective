@@ -1,0 +1,11 @@
+From: alice@example.com
+To: bob@example.com
+Subject: Hello from the lab
+Date: Mon, 15 Jan 2024 09:30:00 +0000
+Message-ID: <plain-001@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="us-ascii"
+Content-Transfer-Encoding: 7bit
+
+This is a plain-text test message used for the public-small email fixture.
+It contains no attachments and a single text/plain body.

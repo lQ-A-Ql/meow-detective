@@ -81,8 +81,9 @@ impl OstReader {
     /// Detects the file kind from the header and delegates parsing to
     /// the underlying PST reader.
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, PstError> {
-        let inner = PstReader::open(path)?;
-        let file_kind = detect_file_kind(&inner);
+        let path_ref = path.as_ref();
+        let inner = PstReader::open(path_ref)?;
+        let file_kind = detect_file_kind(path_ref, &inner);
 
         let encrypted = false; // MVP: encryption detection not yet implemented
 
@@ -145,13 +146,17 @@ impl OstReader {
 /// Currently this is a heuristic based on well-known patterns. A more precise
 /// detection would examine the `dwReserved` field in the header ROOT structure
 /// or look for Exchange-specific synchronization NIDs.
-fn detect_file_kind(_reader: &PstReader) -> OutlookFileKind {
-    // MVP heuristic: files with the ".ost" extension or those that contain
-    // Exchange synchronization properties are OST. For now, callers rely on
-    // the file extension or external knowledge; the reader defaults to PST.
-    //
-    // Future: examine `bClientSig` in header, `dwReserved` in ROOT, or
-    // presence of known Exchange NIDs (e.g., 0x35 for special folders).
+fn detect_file_kind(path: &Path, _reader: &PstReader) -> OutlookFileKind {
+    // Primary signal: file extension. OST and PST share the same NDB/LTP
+    // format, so the extension is the most reliable caller-provided hint.
+    if let Some(ext) = path.extension() {
+        if ext.eq_ignore_ascii_case("ost") {
+            return OutlookFileKind::Ost;
+        }
+    }
+
+    // Future: fall back to examining `bClientSig` in header, `dwReserved` in
+    // ROOT, or presence of known Exchange NIDs (e.g., 0x35 for special folders).
     OutlookFileKind::Pst
 }
 
@@ -189,15 +194,24 @@ mod tests {
     }
 
     #[test]
-    fn ost_file_kind_defaults_to_pst() {
+    fn ost_file_kind_detected_by_extension() {
         let data = build_synthetic_ost();
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("test.ost");
         std::fs::write(&path, &data).unwrap();
 
         let reader = OstReader::open(&path).unwrap();
-        // MVP: without OST-specific header flags, defaults to PST.
-        // This is expected — detection will improve in future iterations.
+        assert_eq!(reader.file_kind(), OutlookFileKind::Ost);
+    }
+
+    #[test]
+    fn ost_file_kind_defaults_to_pst_for_pst_extension() {
+        let data = build_synthetic_ost();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.pst");
+        std::fs::write(&path, &data).unwrap();
+
+        let reader = OstReader::open(&path).unwrap();
         assert_eq!(reader.file_kind(), OutlookFileKind::Pst);
     }
 

@@ -37,7 +37,7 @@
 //! | 0x3701 | PidTagAttachmentData     |
 
 pub use crate::reader::PstReader;
-pub use crate::synthetic::build_synthetic_pst;
+pub use crate::synthetic::{build_synthetic_pst, build_synthetic_pst_with_messages};
 
 #[cfg(test)]
 mod tests {
@@ -115,6 +115,30 @@ mod tests {
 
         let props = reader.parse_property_context(block.unwrap());
         assert!(!props.is_empty(), "Property context should have entries");
+    }
+
+    #[test]
+    fn synthetic_pst_read_messages() {
+        let pst = build_synthetic_unicode_pst();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.pst");
+        std::fs::write(&path, &pst).unwrap();
+
+        let reader = PstReader::open(&path).unwrap();
+        let messages = reader.read_messages().unwrap();
+        assert_eq!(
+            messages.len(),
+            1,
+            "expected one message, got {:?}",
+            messages
+        );
+        let msg = &messages[0];
+        assert_eq!(msg.subject, "Synthetic Subject 1");
+        assert_eq!(msg.sender_name, "Sender 1");
+        assert_eq!(msg.sender_email, "sender1@example.com");
+        assert!(msg
+            .body_plain
+            .contains("Body text for synthetic message number 1."));
     }
 
     #[test]

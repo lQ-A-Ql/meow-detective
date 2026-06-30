@@ -107,7 +107,8 @@
 - 公开验证体系以 `testdata/fixtures/public-small/` 为默认 small fixture 来源
 - `expected.json` 用于真实样本回归对齐
 - 当前重点链路包括 E01、NTFS、Prefetch、LNK、Registry、Recycle Bin
-- 浏览器记录与邮件提取已纳入验证框架，但仍属于低成熟度链路
+- 邮件提取（EML/EMLX/MBOX/PST/OST）已落地并接入验证框架，public-small + public-medium fixture 与 expected.json 已覆盖；MSG/TNEF 明确排除在 V2/V3 范围外
+- 浏览器记录仍处于未实现状态
 - V2 权威主计划位于 `docs/v2-longterm-plan.md`
 - V2 的 fixture、expected JSON、benchmark、关联分析、评分卡均已有独立专题文档
 - V2 治理工作台已经接入产品页 `/v2`
@@ -138,7 +139,8 @@
 - V3 阶段为 V3-1(证据图基础) → V3-2(容器与跨平台覆盖) → V3-3(可复现调查与规则包) → V3-4(离线批处理与发布)
 - V3 目前处于规划阶段，所有 V3 参考文档标记为“规划中”
 - V3 文档入口：`docs/v3-plan.md`（主计划）、`docs/v3-walkthrough.md`（调查工作流演练）
-- V3 参考文档（规划中）：`docs/evidence-graph-design.md`、`docs/case-notebook-design.md`、`docs/rule-pack-spec.md`、`docs/pst-dependency-decision.md`、`docs/batch-processing-design.md`、`docs/linux-artifact-coverage.md`、`docs/mac-artifact-coverage.md`、`docs/pst-ost-mbox-support.md`
+- V3 参考文档（规划中）：`docs/evidence-graph-design.md`、`docs/case-notebook-design.md`、`docs/rule-pack-spec.md`、`docs/pst-dependency-decision.md`、`docs/batch-processing-design.md`、`docs/linux-artifact-coverage.md`、`docs/mac-artifact-coverage.md`
+- V3 参考文档（已实现）：`docs/pst-ost-mbox-support.md` — PST/OST/mbox 容器邮件解析已落地，含 `public-small` 与 `public-medium` fixture
 - V3 将在 `docs/parser-support-matrix.md` 中新增 Linux/macOS 解析器条目，在 `docs/known-unsupported-formats.md` 中新增 Linux/macOS 文件系统与移动/云制品缺口
 - V3 治理工作台将替代 `/v2` 为 `/v3`，引入图统计、平台覆盖、规则包覆盖、批处理状态等信号
 

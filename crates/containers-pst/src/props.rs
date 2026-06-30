@@ -20,8 +20,16 @@ pub(crate) const PROP_TAG_DELIVERY_TIME: u16 = 0x0E06;
 pub(crate) const PROP_TAG_DISPLAY_TO: u16 = 0x0E04;
 /// Property tag: display cc.
 pub(crate) const PROP_TAG_DISPLAY_CC: u16 = 0x0E03;
+/// Property tag: display bcc.
+pub(crate) const PROP_TAG_DISPLAY_BCC: u16 = 0x0E02;
 /// Property tag: message class.
 pub(crate) const PROP_TAG_MESSAGE_CLASS: u16 = 0x001A;
+/// Property tag: internet message id.
+pub(crate) const PROP_TAG_INTERNET_MESSAGE_ID: u16 = 0x1035;
+/// Property tag: in-reply-to id.
+pub(crate) const PROP_TAG_IN_REPLY_TO_ID: u16 = 0x1042;
+/// Property tag: references.
+pub(crate) const PROP_TAG_REFERENCES: u16 = 0x1039;
 /// Property tag: attachment binary data.
 pub(crate) const PROP_TAG_ATTACH_DATA: u16 = 0x3701;
 /// Property tag: attachment long filename.

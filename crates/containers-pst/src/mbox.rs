@@ -12,6 +12,7 @@
 
 use crate::{MboxMessage, PstAttachment, PstError};
 use chrono::DateTime;
+use mailparse::{addrparse_header, msgidparse, parse_headers, MailAddr, MailHeader, MailHeaderMap};
 
 /// Recognized mbox sub-format variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -223,7 +224,7 @@ fn parse_single_message(raw: &str, variant: MboxVariant) -> Result<Option<MboxMe
     let from_addr = parse_from_line(from_line);
 
     let subject = find_header(header_str, "Subject").unwrap_or_default();
-    let to = find_header(header_str, "To").unwrap_or_default();
+    let to_raw = find_header(header_str, "To").unwrap_or_default();
     let date_str = find_header(header_str, "Date").unwrap_or_default();
     let content_type =
         find_header(header_str, "Content-Type").unwrap_or_else(|| "text/plain".to_string());
@@ -231,16 +232,42 @@ fn parse_single_message(raw: &str, variant: MboxVariant) -> Result<Option<MboxMe
     // Parse the "From" header into name + email.
     let (sender_name, sender_email) = parse_address(&from_addr);
 
-    // Parse recipients.
-    let recipients = parse_recipients(&to);
+    // Parse recipients from the To header for backward compatibility.
+    let recipients = parse_recipients(&to_raw);
 
     // Parse date.
     let sent_time = parse_email_date(&date_str);
-
     let received_time = None; // Mbox does not carry a separate received time header.
 
     // Handle body based on Content-Type.
     let (body_plain, body_html, attachments) = parse_body_parts(&body_str, &content_type);
+
+    // Use mailparse for complete RFC 5322/MIME header decoding.
+    let parsed_headers = parse_headers(header_str.as_bytes())
+        .map(|(h, _)| h)
+        .unwrap_or_default();
+    let header_map = ParsedHeaderMap(&parsed_headers);
+
+    let to = header_map.address_list("To");
+    let cc = header_map.address_list("Cc");
+    let bcc = header_map.address_list("Bcc");
+    let reply_to = header_map.first_value("Reply-To");
+    let return_path = header_map.first_value("Return-Path");
+    let message_id = header_map.first_value("Message-Id");
+    let in_reply_to = header_map.first_value("In-Reply-To");
+    let references_raw = header_map.first_value("References");
+    let references = if references_raw.is_empty() {
+        Vec::new()
+    } else {
+        parse_message_ids(&references_raw)
+    };
+    let message_class = header_map.first_value("X-Message-Class");
+    let x_mailer = header_map.first_value("X-Mailer");
+    let x_originating_ip = header_map.first_value("X-Originating-IP");
+    let headers = parsed_headers
+        .iter()
+        .map(|h| (h.get_key().to_string(), h.get_value().to_string()))
+        .collect();
 
     Ok(Some(MboxMessage {
         subject,
@@ -249,10 +276,22 @@ fn parse_single_message(raw: &str, variant: MboxVariant) -> Result<Option<MboxMe
         sender_name,
         sender_email,
         recipients,
+        to,
+        cc,
+        bcc,
+        reply_to,
+        return_path,
+        message_id,
+        in_reply_to,
+        references,
+        message_class,
+        x_mailer,
+        x_originating_ip,
         sent_time,
         received_time,
         attachments,
         folder_path: String::new(),
+        headers,
     }))
 }
 
@@ -353,6 +392,78 @@ fn parse_recipients(to_header: &str) -> Vec<String> {
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// mailparse-based header helpers
+// ---------------------------------------------------------------------------
+
+struct ParsedHeaderMap<'a>(&'a [MailHeader<'a>]);
+
+impl ParsedHeaderMap<'_> {
+    fn first_value(&self, name: &str) -> String {
+        self.0
+            .get_first_value(name)
+            .unwrap_or_default()
+            .trim()
+            .to_string()
+    }
+
+    fn address_list(&self, name: &str) -> Vec<String> {
+        let Some(header) = self.0.get_first_header(name) else {
+            return Vec::new();
+        };
+        match addrparse_header(header) {
+            Ok(list) => list.into_inner().into_iter().map(format_address).collect(),
+            Err(_) => Vec::new(),
+        }
+    }
+}
+
+fn format_address(addr: MailAddr) -> String {
+    match addr {
+        MailAddr::Single(s) => {
+            if let Some(name) = s.display_name {
+                if name.trim().is_empty() {
+                    s.addr
+                } else {
+                    format!("{} <{}>", name, s.addr)
+                }
+            } else {
+                s.addr
+            }
+        }
+        MailAddr::Group(g) => {
+            let members = g
+                .addrs
+                .into_iter()
+                .map(|s| {
+                    if let Some(name) = s.display_name {
+                        if name.trim().is_empty() {
+                            s.addr
+                        } else {
+                            format!("{} <{}>", name, s.addr)
+                        }
+                    } else {
+                        s.addr
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{}: {}", g.group_name, members)
+        }
+    }
+}
+
+fn parse_message_ids(raw: &str) -> Vec<String> {
+    match msgidparse(raw) {
+        Ok(list) => list
+            .iter()
+            .map(|id| id.trim().trim_matches(|c| c == '<' || c == '>').to_string())
+            .filter(|id| !id.is_empty())
+            .collect(),
+        Err(_) => Vec::new(),
+    }
 }
 
 // ---------------------------------------------------------------------------

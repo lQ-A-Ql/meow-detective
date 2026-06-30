@@ -499,8 +499,8 @@ fn ost_reader_properties_accessible() {
     let reader = OstReader::open(&path).expect("should open");
     let props = reader.ost_properties();
     assert!(!props.encrypted);
-    // OST detection defaults to PST for the MVP
-    assert_eq!(props.file_kind, containers_pst::ost::OutlookFileKind::Pst);
+    // OST detection is driven by the .ost extension.
+    assert_eq!(props.file_kind, containers_pst::ost::OutlookFileKind::Ost);
 }
 
 #[test]
