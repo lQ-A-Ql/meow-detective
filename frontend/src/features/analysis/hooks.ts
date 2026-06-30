@@ -19,6 +19,14 @@ import { useCurrentCase } from '@/features/case/hooks';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnalysisExtractionPageRequest, AnalysisExtractionRequest } from '@/types/models';
 
+const ANALYSIS_QUERY_OPTIONS = {
+  staleTime: Infinity,
+  gcTime: 30 * 60 * 1000,
+  refetchOnMount: false,
+  refetchOnWindowFocus: false,
+  refetchOnReconnect: false,
+} as const;
+
 export function useAnalysisSystemInfo() {
   const currentCase = useCurrentCase();
   return useQuery({
@@ -26,6 +34,7 @@ export function useAnalysisSystemInfo() {
     queryFn: getSystemInfo,
     enabled: currentCase.isSuccess && Boolean(currentCase.data),
     retry: false,
+    ...ANALYSIS_QUERY_OPTIONS,
   });
 }
 
@@ -36,6 +45,7 @@ export function useAnalysisClassifications(sampleSize = 1000) {
     queryFn: () => classifyFiles(sampleSize),
     enabled: currentCase.isSuccess && Boolean(currentCase.data),
     retry: false,
+    ...ANALYSIS_QUERY_OPTIONS,
   });
 }
 
@@ -46,6 +56,7 @@ export function useEvidenceClassificationSummary() {
     queryFn: getEvidenceClassificationSummary,
     enabled: currentCase.isSuccess && Boolean(currentCase.data),
     retry: false,
+    ...ANALYSIS_QUERY_OPTIONS,
   });
 }
 
@@ -58,6 +69,7 @@ export function useRegistryExtractionSummary(request: AnalysisExtractionPageRequ
     queryFn: () => getRegistryExtractionSummary({ offset, limit }),
     enabled: currentCase.isSuccess && Boolean(currentCase.data),
     retry: false,
+    ...ANALYSIS_QUERY_OPTIONS,
   });
 }
 
@@ -68,6 +80,7 @@ export function useRegistryStructuredSummary() {
     queryFn: getRegistryStructuredSummary,
     enabled: currentCase.isSuccess && Boolean(currentCase.data),
     retry: false,
+    ...ANALYSIS_QUERY_OPTIONS,
   });
 }
 
@@ -80,6 +93,7 @@ export function useBrowserHistorySummary(request: AnalysisExtractionPageRequest 
     queryFn: () => getBrowserHistorySummary({ offset, limit }),
     enabled: currentCase.isSuccess && Boolean(currentCase.data),
     retry: false,
+    ...ANALYSIS_QUERY_OPTIONS,
   });
 }
 
@@ -92,6 +106,7 @@ export function useEmailExtractionSummary(request: AnalysisExtractionPageRequest
     queryFn: () => getEmailExtractionSummary({ offset, limit }),
     enabled: currentCase.isSuccess && Boolean(currentCase.data),
     retry: false,
+    ...ANALYSIS_QUERY_OPTIONS,
   });
 }
 
@@ -104,6 +119,7 @@ export function useEvtxEventSummary(request: AnalysisExtractionPageRequest = {})
     queryFn: () => getEvtxEventSummary({ offset, limit }),
     enabled: currentCase.isSuccess && Boolean(currentCase.data),
     retry: false,
+    ...ANALYSIS_QUERY_OPTIONS,
   });
 }
 
@@ -114,6 +130,7 @@ export function useV2GovernanceSnapshot() {
     queryFn: getV2GovernanceSnapshot,
     enabled: currentCase.isSuccess && Boolean(currentCase.data),
     retry: false,
+    ...ANALYSIS_QUERY_OPTIONS,
   });
 }
 
@@ -124,6 +141,7 @@ export function useCorrelationSnapshot() {
     queryFn: getCorrelationSnapshot,
     enabled: currentCase.isSuccess && Boolean(currentCase.data),
     retry: false,
+    ...ANALYSIS_QUERY_OPTIONS,
   });
 }
 
@@ -134,6 +152,7 @@ export function useV3GovernanceSnapshot() {
     queryFn: getV3GovernanceSnapshot,
     enabled: currentCase.isSuccess && Boolean(currentCase.data),
     retry: false,
+    ...ANALYSIS_QUERY_OPTIONS,
   });
 }
 
