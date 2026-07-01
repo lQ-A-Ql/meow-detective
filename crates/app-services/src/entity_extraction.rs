@@ -53,6 +53,17 @@ impl From<rusqlite::Error> for EntityExtractionError {
     }
 }
 
+impl transport::ServiceErrorCategory for EntityExtractionError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Db(_) => transport::ErrorCategory::Io,
+            Self::Json(_) => transport::ErrorCategory::Parser,
+            Self::InvalidInput(_) => transport::ErrorCategory::Validation,
+            Self::Other(_) => transport::ErrorCategory::Internal,
+        }
+    }
+}
+
 // ── Public API: normalization & hashing ───────────────────────────
 
 /// Normalize an entity value for consistent deduplication.

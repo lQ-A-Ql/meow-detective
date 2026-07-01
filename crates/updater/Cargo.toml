@@ -15,7 +15,7 @@ reqwest = { workspace = true, features = ["json", "rustls-tls"] }
 tempfile.workspace = true
 sha2.workspace = true
 hex.workspace = true
-tauri-plugin-updater = "2"
+tauri-plugin-updater = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }

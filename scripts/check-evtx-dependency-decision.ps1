@@ -35,8 +35,17 @@ if ($deny -match 'RUSTSEC-2021-0153') {
 if ($cargo -notmatch 'evtx\s*=\s*\{\s*path\s*=\s*"crates/evtx-patched"') {
   throw "workspace evtx dependency must point at crates/evtx-patched"
 }
-if ($patchedManifest -notmatch 'encoding_rs\s*=\s*"0\.8"') {
+# encoding_rs may be pinned inline (legacy) or centralized via
+# `encoding_rs.workspace = true` per the workspace-dependency convention
+# (CLAUDE.md "Naming conventions"); accept either form, but require the
+# workspace root to pin a concrete 0.8.x version when centralized.
+$usesWorkspaceDep = $patchedManifest -match 'encoding_rs\.workspace\s*=\s*true'
+$usesInlineDep = $patchedManifest -match 'encoding_rs\s*=\s*"0\.8"'
+if (-not $usesWorkspaceDep -and -not $usesInlineDep) {
   throw "patched EVTX manifest must depend on encoding_rs"
+}
+if ($usesWorkspaceDep -and ($cargo -notmatch 'encoding_rs\s*=\s*"0\.8"')) {
+  throw "root Cargo.toml [workspace.dependencies] must pin encoding_rs to 0.8.x"
 }
 if ($patchedManifest -match '\[dependencies\.encoding\]' -or $patchedManifest -match 'encoding\s*=\s*"0\.2\.33"') {
   throw "patched EVTX manifest must not depend on encoding 0.2.33"

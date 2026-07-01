@@ -6,6 +6,10 @@ const mocks = vi.hoisted(() => ({
   useCurrentCase: vi.fn(),
   useDataSources: vi.fn(),
   useGraphSnapshot: vi.fn(),
+  useGraphQuery: vi.fn(),
+  useNodeNeighborhood: vi.fn(),
+  useProvenanceChain: vi.fn(),
+  useFileTree: vi.fn(),
   useTimelineEvents: vi.fn(),
   useArtifactFamilyCounts: vi.fn(),
   useCorrelationSnapshot: vi.fn(),
@@ -19,6 +23,13 @@ vi.mock('@/features/case/hooks', () => ({
 
 vi.mock('@/features/graph/hooks', () => ({
   useGraphSnapshot: mocks.useGraphSnapshot,
+  useGraphQuery: mocks.useGraphQuery,
+  useNodeNeighborhood: mocks.useNodeNeighborhood,
+  useProvenanceChain: mocks.useProvenanceChain,
+}));
+
+vi.mock('@/features/files/hooks', () => ({
+  useFileTree: mocks.useFileTree,
 }));
 
 vi.mock('@/features/timeline/hooks', () => ({
@@ -52,6 +63,21 @@ function queryState(data: unknown) {
 describe('V3Dashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+
+    class MockResizeObserver {
+      constructor(private cb: ResizeObserverCallback) {}
+      observe(_target: Element) {
+        this.cb(
+          [{ contentRect: { width: 640, height: 420 } } as unknown as ResizeObserverEntry],
+          this as unknown as ResizeObserver,
+        );
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+
+    global.requestAnimationFrame = vi.fn(() => 0);
     mocks.useCurrentCase.mockReturnValue(queryState({ id: 'case-1' }));
     mocks.useDataSources.mockReturnValue(queryState([
       {
@@ -88,6 +114,20 @@ describe('V3Dashboard', () => {
       density: 0.0026,
       largestComponentSize: 180,
     }));
+    mocks.useFileTree.mockReturnValue(queryState([
+      { id: 'file-1', name: 'root', path: '/', isDirectory: true, children: [] },
+    ]));
+    mocks.useGraphQuery.mockReturnValue(queryState({
+      nodes: [
+        { id: 'file-1', nodeType: 'file', label: 'root', summary: 'Root directory' },
+        { id: 'art-1', nodeType: 'artifact', label: 'LNK artifact', summary: '' },
+      ],
+      edges: [
+        { id: 'edge-1', edgeType: 'references', sourceId: 'art-1', targetId: 'file-1', confidence: 0.9, provenance: [] },
+      ],
+    }));
+    mocks.useNodeNeighborhood.mockReturnValue(queryState({ nodes: [], edges: [] }));
+    mocks.useProvenanceChain.mockReturnValue(queryState([]));
     mocks.useTimelineEvents.mockReturnValue(queryState({
       total: 3200,
       items: [],
@@ -147,17 +187,17 @@ describe('V3Dashboard', () => {
 
   it('renders without crashing', () => {
     render(<V3Dashboard />);
-    expect(screen.getByText('V3 治理台')).toBeDefined();
+    expect(screen.getByText('取证总览')).toBeDefined();
   });
 
   it('shows graph stats section', () => {
     render(<V3Dashboard />);
 
     expect(screen.getByText('图统计')).toBeDefined();
-    // Use unique values that do not collide with breakdown list entries
-    expect(screen.getByText('392')).toBeDefined();
-    expect(screen.getByText('0.0026')).toBeDefined();
-    expect(screen.getByText('180')).toBeDefined();
+    // Stat cards and the embedded graph mini panel share the same snapshot values
+    expect(screen.getAllByText('392').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('0.0026').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('180').length).toBeGreaterThanOrEqual(1);
 
     expect(screen.getByText('按节点类型')).toBeDefined();
     expect(screen.getByText('按边类型')).toBeDefined();

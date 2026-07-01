@@ -33,6 +33,9 @@ pub enum RegistryError {
     #[error("account F record missing or unreadable")]
     MissingAccountF,
 
+    #[error("io error: {0}")]
+    Io(String),
+
     #[error("{0}")]
     Other(String),
 }
@@ -46,6 +49,18 @@ impl From<String> for RegistryError {
 impl From<&str> for RegistryError {
     fn from(msg: &str) -> Self {
         Self::Other(msg.to_owned())
+    }
+}
+
+impl From<std::io::Error> for RegistryError {
+    fn from(err: std::io::Error) -> Self {
+        Self::Io(err.to_string())
+    }
+}
+
+impl From<RegistryError> for String {
+    fn from(err: RegistryError) -> Self {
+        err.to_string()
     }
 }
 

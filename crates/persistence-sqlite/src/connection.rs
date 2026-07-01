@@ -14,6 +14,15 @@ pub enum DbError {
     System(String),
 }
 
+impl transport::ServiceErrorCategory for DbError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Sqlite(_) | Self::Io(_) => transport::ErrorCategory::Io,
+            Self::Migration(_) | Self::System(_) => transport::ErrorCategory::Internal,
+        }
+    }
+}
+
 pub type DbResult<T> = Result<T, DbError>;
 
 pub fn open_or_create(path: &Path) -> DbResult<Connection> {

@@ -129,7 +129,7 @@
       "files": { "label": "文件浏览", "context": "目录树、文件表与取证查看器" },
       "analysis": { "label": "数据源分析", "context": "系统信息、文件分类与分析报告" },
       "v2": { "label": "V2 治理", "context": "可信验证、Benchmark、安全治理与发布评分" },
-      "v3": { "label": "V3", "context": "图统计、平台覆盖、规则包状态与批处理状态" },
+      "v3": { "label": "取证总览", "context": "图统计、数据源覆盖、痕迹关联与规则包状态" },
       "search": { "label": "全局搜索", "context": "关键字、结构化查询与命中详情" },
       "timeline": { "label": "时间线", "context": "事件聚合、筛选与时序检视" },
       "artifacts": { "label": "痕迹分析", "context": "Windows 痕迹家族与解析字段" },

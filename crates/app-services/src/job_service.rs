@@ -16,6 +16,16 @@ pub enum JobServiceError {
     Other(String),
 }
 
+impl transport::ServiceErrorCategory for JobServiceError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Db(_) => transport::ErrorCategory::Io,
+            Self::NotFound(_) | Self::InvalidState(_) => transport::ErrorCategory::Validation,
+            Self::Other(_) => transport::ErrorCategory::Internal,
+        }
+    }
+}
+
 pub fn get_jobs_from_db(conn: &Connection) -> Result<Vec<JobSnapshotDto>, JobServiceError> {
     let repo = JobRepo::new(conn);
     let jobs = repo.list_recent(infrastructure::constants::JOB_LIST_LIMIT)?;

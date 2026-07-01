@@ -4,6 +4,7 @@
 //! MCP 调用留痕、导出留痕与问题追溯。
 
 use crate::connection::DbResult;
+use crate::sql_builder::ClauseBuilder;
 use rusqlite::{params, Connection};
 use uuid::Uuid;
 
@@ -150,37 +151,25 @@ impl<'a> AuditRepo<'a> {
         limit: u32,
         offset: u64,
     ) -> DbResult<Vec<AuditLogEntry>> {
-        let mut sql = String::from(
-            "SELECT id, case_id, user_id, action, resource_type, resource_id, details, ip_address, created_at
-             FROM audit_log WHERE 1=1",
-        );
-        let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
-        let mut param_index = 1;
-
+        let mut builder = ClauseBuilder::new();
         if let Some(cid) = case_id {
-            sql.push_str(&format!(" AND case_id = ?{}", param_index));
-            param_values.push(Box::new(cid.to_string()));
-            param_index += 1;
+            builder.push_eq("case_id", cid.to_string());
         }
-
         if let Some(act) = action {
-            sql.push_str(&format!(" AND action = ?{}", param_index));
-            param_values.push(Box::new(act.to_string()));
-            param_index += 1;
+            builder.push_eq("action", act.to_string());
         }
+        let limit_param = builder.push_param(limit);
+        let offset_param = builder.push_param(offset);
 
-        sql.push_str(&format!(
-            " ORDER BY created_at DESC LIMIT ?{} OFFSET ?{}",
-            param_index,
-            param_index + 1
-        ));
-        param_values.push(Box::new(limit));
-        param_values.push(Box::new(offset));
+        let sql = format!(
+            "SELECT id, case_id, user_id, action, resource_type, resource_id, details, ip_address, created_at
+             FROM audit_log {}
+             ORDER BY created_at DESC LIMIT ?{limit_param} OFFSET ?{offset_param}",
+            builder.where_clause(),
+        );
 
         let mut stmt = self.conn.prepare(&sql)?;
-        let params_refs: Vec<&dyn rusqlite::types::ToSql> =
-            param_values.iter().map(|p| p.as_ref()).collect();
-        let rows = stmt.query_map(params_refs.as_slice(), |row| {
+        let rows = stmt.query_map(builder.param_refs().as_slice(), |row| {
             Ok(AuditLogEntry {
                 id: row.get(0)?,
                 case_id: row.get(1)?,

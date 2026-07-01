@@ -30,3 +30,13 @@ impl From<persistence_sqlite::DbError> for ParallelEnumError {
         Self::MftParams(e.to_string())
     }
 }
+
+impl transport::ServiceErrorCategory for ParallelEnumError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Cancelled => transport::ErrorCategory::Internal,
+            Self::Io(_) | Self::Db(_) => transport::ErrorCategory::Io,
+            Self::MftParams(_) => transport::ErrorCategory::Validation,
+        }
+    }
+}

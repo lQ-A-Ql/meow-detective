@@ -40,6 +40,17 @@ pub enum ImportSourceConfigError {
     Classification(#[from] DataSourceError),
 }
 
+impl transport::ServiceErrorCategory for ImportSourceConfigError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::InvalidRequest(_)
+            | Self::MissingOrInaccessibleSource
+            | Self::UnsupportedSourceType => transport::ErrorCategory::Validation,
+            Self::Classification(e) => e.category(),
+        }
+    }
+}
+
 impl ImportSourceConfig {
     pub fn is_image_backed(&self) -> bool {
         matches!(self.mode, ImportSourceMode::Image { .. })

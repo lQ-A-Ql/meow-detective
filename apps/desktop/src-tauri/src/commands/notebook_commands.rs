@@ -35,7 +35,7 @@ pub async fn create_notebook_entry(
             &request.status,
             request.parent_id.as_deref(),
         )
-        .map_err(CommandError::from_service_error)
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -58,7 +58,7 @@ pub async fn update_notebook_entry(
             request.tags.as_deref(),
             request.status.as_ref(),
         )
-        .map_err(CommandError::from_service_error)
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -95,7 +95,7 @@ pub async fn list_notebook_entries(
         };
 
         app_services::notebook_service::list_entries(&conn, &case_id, &filters)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -111,7 +111,7 @@ pub async fn get_notebook_thread(
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         app_services::notebook_service::get_thread(&conn, &request.entry_id)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -136,7 +136,7 @@ pub async fn add_evidence_citation(
             &request.display_label,
             request.snippet.as_deref(),
         )
-        .map_err(CommandError::from_service_error)
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -163,7 +163,7 @@ pub async fn list_investigation_steps(
         };
 
         app_services::notebook_service::list_steps(&conn, &case_id, &filters)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?

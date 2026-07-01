@@ -25,6 +25,7 @@ pub use enumeration::{
 };
 pub use export::extract_file_to_destination;
 pub use file_rows::get_file_rows_for_request;
+pub use mft::populate_file_graph_for_data_source;
 pub use partition_roots::{
     insert_partition_placeholder_root, replace_placeholder_root_with_real,
     store_data_source_partitions,

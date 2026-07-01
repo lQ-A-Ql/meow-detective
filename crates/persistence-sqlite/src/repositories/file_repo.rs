@@ -1,4 +1,5 @@
 use crate::connection::DbResult;
+use crate::sql_builder::placeholders;
 use crate::util::parse_opt_datetime;
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
 use rusqlite::{params, Connection};
@@ -384,12 +385,11 @@ impl<'a> FileRepo<'a> {
         if parent_ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let placeholders: Vec<String> = (1..=parent_ids.len()).map(|i| format!("?{i}")).collect();
         let sql = format!(
             "SELECT parent_id, COUNT(*) FROM file_entries
              WHERE parent_id IN ({}) AND entry_type = 'directory' COLLATE NOCASE
              GROUP BY parent_id",
-            placeholders.join(", ")
+            placeholders(1, parent_ids.len())
         );
         let mut stmt = self.conn.prepare(&sql)?;
         let params: Vec<&str> = parent_ids.iter().map(|id| id.0.as_str()).collect();
@@ -415,12 +415,11 @@ impl<'a> FileRepo<'a> {
         if parent_ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let placeholders: Vec<String> = (1..=parent_ids.len()).map(|i| format!("?{i}")).collect();
         let sql = format!(
             "SELECT parent_id, COUNT(*) FROM file_entries
              WHERE parent_id IN ({}) AND entry_type = 'directory' COLLATE NOCASE AND hidden = 0 AND system = 0
              GROUP BY parent_id",
-            placeholders.join(", ")
+            placeholders(1, parent_ids.len())
         );
         let mut stmt = self.conn.prepare(&sql)?;
         let params: Vec<&str> = parent_ids.iter().map(|id| id.0.as_str()).collect();

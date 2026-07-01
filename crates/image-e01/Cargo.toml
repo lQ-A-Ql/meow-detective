@@ -13,7 +13,7 @@ thiserror.workspace = true
 anyhow.workspace = true
 evidence-core.workspace = true
 tracing.workspace = true
-flate2 = "1"
+flate2 = { workspace = true }
 
 [dev-dependencies]
 testing.workspace = true

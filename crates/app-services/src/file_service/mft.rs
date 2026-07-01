@@ -832,6 +832,17 @@ fn errs_add(errors: &Arc<AtomicU64>) {
 /// Write File graph nodes and Contains edges for all file entries belonging to
 /// the given data source. Run after MFT enumeration completes so paths and
 /// parent links are already persisted.
+/// Populate investigative graph nodes/edges for all file entries of a data source.
+///
+/// Safe to call repeatedly: node and edge IDs are deterministic, so subsequent
+/// runs update existing rows in place.
+pub fn populate_file_graph_for_data_source(
+    conn: &Connection,
+    data_source_id: &DataSourceId,
+) -> DbResult<()> {
+    populate_mft_file_graph(conn, data_source_id)
+}
+
 fn populate_mft_file_graph(conn: &Connection, data_source_id: &DataSourceId) -> DbResult<()> {
     let case_id: String = conn.query_row(
         "SELECT case_id FROM data_sources WHERE id = ?1",
@@ -844,26 +855,22 @@ fn populate_mft_file_graph(conn: &Connection, data_source_id: &DataSourceId) -> 
 
     const GRAPH_QUERY_BATCH: u32 = 5000;
     const GRAPH_WRITE_CHUNK: usize = 2000;
-    let mut offset = 0u64;
 
+    // ── Pass 1: insert all file nodes first ──
+    // graph_edges has a foreign key on source_id/target_id, so every node must
+    // exist before any edge is written. A single batch may contain a child whose
+    // parent falls into a later batch, which would otherwise violate the FK.
+    let mut offset = 0u64;
     loop {
         let mut stmt = conn.prepare(
-            "SELECT id, parent_id, name, path, entry_type FROM file_entries
+            "SELECT id, parent_id, name, path FROM file_entries
              WHERE data_source_id = ?1
              LIMIT ?2 OFFSET ?3",
         )?;
-        let rows: Vec<(String, Option<String>, String, String, String)> = stmt
+        let rows: Vec<(String, Option<String>, String, String)> = stmt
             .query_map(
                 rusqlite::params![data_source_id.0, GRAPH_QUERY_BATCH, offset],
-                |row| {
-                    Ok((
-                        row.get(0)?,
-                        row.get(1)?,
-                        row.get(2)?,
-                        row.get(3)?,
-                        row.get(4)?,
-                    ))
-                },
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )?
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -872,17 +879,11 @@ fn populate_mft_file_graph(conn: &Connection, data_source_id: &DataSourceId) -> 
         }
 
         let row_count = rows.len() as u64;
-
-        // Build nodes and edges from the query result
         let mut nodes: Vec<GraphNode> = Vec::with_capacity(rows.len());
-        let mut edges: Vec<GraphEdge> = Vec::with_capacity(rows.len());
-
-        for (id, parent_id, name, path, _entry_type) in &rows {
-            // Only directories and files: skip root sentinels with empty names
+        for (id, parent_id, name, path) in &rows {
             if name.is_empty() && parent_id.is_none() {
                 continue;
             }
-
             nodes.push(GraphNode {
                 id: id.clone(),
                 case_id: case_id.clone(),
@@ -892,7 +893,35 @@ fn populate_mft_file_graph(conn: &Connection, data_source_id: &DataSourceId) -> 
                 tags: Vec::new(),
                 created_at: now.clone(),
             });
+        }
+        for node_chunk in nodes.chunks(GRAPH_WRITE_CHUNK) {
+            graph_repo.insert_nodes_batch(node_chunk)?;
+        }
+        offset += row_count;
+    }
 
+    // ── Pass 2: write contains edges now that all nodes exist ──
+    let mut offset = 0u64;
+    loop {
+        let mut stmt = conn.prepare(
+            "SELECT id, parent_id FROM file_entries
+             WHERE data_source_id = ?1
+             LIMIT ?2 OFFSET ?3",
+        )?;
+        let rows: Vec<(String, Option<String>)> = stmt
+            .query_map(
+                rusqlite::params![data_source_id.0, GRAPH_QUERY_BATCH, offset],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        if rows.is_empty() {
+            break;
+        }
+
+        let row_count = rows.len() as u64;
+        let mut edges: Vec<GraphEdge> = Vec::with_capacity(rows.len());
+        for (id, parent_id) in &rows {
             if let Some(pid) = parent_id {
                 edges.push(GraphEdge {
                     id: format!("contains:{pid}:{id}"),
@@ -906,15 +935,9 @@ fn populate_mft_file_graph(conn: &Connection, data_source_id: &DataSourceId) -> 
                 });
             }
         }
-
-        // Write in chunks so each GraphRepo transaction stays bounded
-        for node_chunk in nodes.chunks(GRAPH_WRITE_CHUNK) {
-            graph_repo.insert_nodes_batch(node_chunk)?;
-        }
         for edge_chunk in edges.chunks(GRAPH_WRITE_CHUNK) {
             graph_repo.insert_edges_batch(edge_chunk)?;
         }
-
         offset += row_count;
     }
 

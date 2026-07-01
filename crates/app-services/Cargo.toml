@@ -28,6 +28,8 @@ image-e01.workspace = true
 search.workspace = true
 artifacts-core.workspace = true
 artifacts-windows.workspace = true
+artifacts-linux.workspace = true
+artifacts-macos.workspace = true
 timeline.workspace = true
 reports.workspace = true
 rusqlite.workspace = true
@@ -37,7 +39,7 @@ sha2.workspace = true
 hex.workspace = true
 once_cell.workspace = true
 regex.workspace = true
-unicode-normalization = "0.1"
+unicode-normalization = { workspace = true }
 toml.workspace = true
 mimalloc.workspace = true
 mailparse.workspace = true

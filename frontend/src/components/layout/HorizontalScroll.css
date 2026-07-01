@@ -1,0 +1,67 @@
+:root {
+  --scrollbar-line: var(--forensics-300, #e0e0e0);
+  --scrollbar-glow-core: rgba(255, 255, 255, 0.95);
+  --scrollbar-glow-mid: rgba(240, 240, 240, 0.65);
+  --scrollbar-glow-outer: rgba(204, 204, 204, 0.35);
+}
+
+.scrollbar-thin-glow {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+
+.scrollbar-thin-glow-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* Push the native horizontal scrollbar 50px below the content,
+     then pull the container back up so only our 7px custom track
+     area remains visible and the native scrollbar is clipped. */
+  padding-bottom: 50px;
+  margin-bottom: -43px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-thin-glow-scroll::-webkit-scrollbar,
+.scrollbar-thin-glow-scroll::-webkit-scrollbar-track,
+.scrollbar-thin-glow-scroll::-webkit-scrollbar-thumb,
+.scrollbar-thin-glow-scroll::-webkit-scrollbar-button,
+.scrollbar-thin-glow-scroll::-webkit-scrollbar-track-piece,
+.scrollbar-thin-glow-scroll::-webkit-scrollbar-corner {
+  display: none;
+  width: 0;
+  height: 0;
+  background: transparent;
+  border: none;
+}
+
+/* Visible 1px line track with soft fading ends */
+.scrollbar-thin-glow-track-line {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    var(--scrollbar-line) 8%,
+    var(--scrollbar-line) 92%,
+    transparent 100%
+  );
+  opacity: 0.45;
+}
+
+/* Point-light glowing thumb: white core -> transparent */
+.scrollbar-thin-glow-thumb {
+  min-width: 40px;
+  background: radial-gradient(
+    ellipse 55% 75% at center,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(255, 255, 255, 0.5) 28%,
+    rgba(255, 255, 255, 0.15) 52%,
+    transparent 75%
+  );
+  box-shadow:
+    0 0 3px 1px rgba(255, 255, 255, 0.7),
+    0 0 8px 2px rgba(224, 224, 224, 0.55),
+    0 0 16px 4px rgba(204, 204, 204, 0.35),
+    0 0 28px 6px rgba(204, 204, 204, 0.15);
+}

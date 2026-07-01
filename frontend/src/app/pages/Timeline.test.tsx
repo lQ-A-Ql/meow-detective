@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { createElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Timeline } from './Timeline';
@@ -147,5 +147,49 @@ describe('Timeline page', () => {
 
     expect(screen.getAllByText('Downloaded payload.exe').length).toBeGreaterThan(0);
     expect(screen.getByText(/当前事件 evt-offpage/)).toBeDefined();
+  });
+
+  it('zoom buttons change the number of rendered timeline bars', () => {
+    mocks.timelineEvents.mockReturnValue(queryState({ data: populatedTimelineResult }));
+
+    renderPage();
+
+    const bars = () => screen.getAllByTitle(/条事件/);
+    const initialCount = bars().length;
+
+    fireEvent.click(screen.getByLabelText('放大'));
+    expect(bars().length).toBeGreaterThan(initialCount);
+
+    fireEvent.click(screen.getByLabelText('缩小'));
+    fireEvent.click(screen.getByLabelText('缩小'));
+    expect(bars().length).toBeLessThan(initialCount);
+  });
+
+  it('disables Apply and shows an error when the date input does not parse', () => {
+    mocks.timelineEvents.mockReturnValue(queryState({ data: populatedTimelineResult }));
+
+    renderPage();
+
+    const startInput = screen.getByLabelText('起始') as HTMLInputElement;
+    // jsdom sanitizes datetime-local values to the HTML5 format at the DOM level, so an
+    // out-of-range year is the way to get a value that is format-valid but Date.parse-invalid.
+    fireEvent.change(startInput, { target: { value: '275760-09-14T00:00' } });
+
+    expect(screen.getByText('日期无效')).toBeDefined();
+    expect((screen.getByRole('button', { name: '应用' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('applies a valid date range without throwing', () => {
+    mocks.timelineEvents.mockReturnValue(queryState({ data: populatedTimelineResult }));
+
+    renderPage();
+
+    const startInput = screen.getByLabelText('起始') as HTMLInputElement;
+    fireEvent.change(startInput, { target: { value: '2026-06-01T00:00' } });
+
+    expect(screen.queryByText('日期无效')).toBeNull();
+    const applyButton = screen.getByRole('button', { name: '应用' }) as HTMLButtonElement;
+    expect(applyButton.disabled).toBe(false);
+    fireEvent.click(applyButton);
   });
 });

@@ -4,4 +4,4 @@ pub mod errors;
 pub mod events;
 pub mod paging;
 
-pub use errors::{ApiErrorDto, CommandError};
+pub use errors::{ApiErrorDto, CommandError, ErrorCategory, ServiceErrorCategory};

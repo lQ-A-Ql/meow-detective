@@ -34,3 +34,14 @@ impl From<persistence_sqlite::DbError> for StagingError {
         Self::Other(e.to_string())
     }
 }
+
+impl transport::ServiceErrorCategory for StagingError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Db(_) | Self::Io(_) => transport::ErrorCategory::Io,
+            Self::Json(_) => transport::ErrorCategory::Parser,
+            Self::MergeConflict(_) | Self::InvalidState(_) => transport::ErrorCategory::Validation,
+            Self::Other(_) => transport::ErrorCategory::Internal,
+        }
+    }
+}

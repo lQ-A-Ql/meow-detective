@@ -1,4 +1,5 @@
 use crate::connection::DbResult;
+use crate::sql_builder::{placeholders, ClauseBuilder};
 use domain::{EntryStatus, EvidenceCitation, NodeType, NotebookEntry, NotebookEntryType};
 use rusqlite::{params, Connection};
 use std::collections::HashMap;
@@ -96,49 +97,28 @@ impl<'a> NotebookRepo<'a> {
         status: Option<&EntryStatus>,
         updated_at: &str,
     ) -> DbResult<()> {
-        // Build a dynamic UPDATE using coalesce-like approach with COALESCE(?x, original_column).
-        // Since we know which fields are provided, build the SET clause dynamically.
-        let mut set_clauses: Vec<String> = Vec::new();
-        let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
-
-        // title
+        // Build a dynamic UPDATE only touching fields that are provided.
+        let mut builder = ClauseBuilder::new();
         if let Some(t) = title {
-            set_clauses.push(format!("title = ?{}", set_clauses.len() + 1));
-            param_values.push(Box::new(t.to_string()));
+            builder.push_eq("title", t.to_string());
         }
-        // body_markdown
         if let Some(b) = body_markdown {
-            set_clauses.push(format!("body_markdown = ?{}", set_clauses.len() + 1));
-            param_values.push(Box::new(b.to_string()));
+            builder.push_eq("body_markdown", b.to_string());
         }
-        // tags
         if let Some(t) = tags {
-            let json = serde_json::to_string(t).unwrap_or_default();
-            set_clauses.push(format!("tags = ?{}", set_clauses.len() + 1));
-            param_values.push(Box::new(json));
+            builder.push_eq("tags", serde_json::to_string(t).unwrap_or_default());
         }
-        // status
         if let Some(s) = status {
-            set_clauses.push(format!("status = ?{}", set_clauses.len() + 1));
-            param_values.push(Box::new(entry_status_str(s).to_string()));
+            builder.push_eq("status", entry_status_str(s).to_string());
         }
-        // always update updated_at
-        set_clauses.push(format!("updated_at = ?{}", set_clauses.len() + 1));
-        param_values.push(Box::new(updated_at.to_string()));
+        builder.push_eq("updated_at", updated_at.to_string());
+        let id_param = builder.push_param(id.to_string());
 
-        let id_param_pos = set_clauses.len() + 1;
         let sql = format!(
-            "UPDATE notebook_entries SET {} WHERE id = ?{}",
-            set_clauses.join(", "),
-            id_param_pos,
+            "UPDATE notebook_entries SET {} WHERE id = ?{id_param}",
+            builder.set_clause(),
         );
-        param_values.push(Box::new(id.to_string()));
-
-        // Convert param_values to rusqlite params with dynamic dispatch
-        let params_refs: Vec<&dyn rusqlite::types::ToSql> =
-            param_values.iter().map(|v| v.as_ref()).collect();
-
-        self.conn.execute(&sql, params_refs.as_slice())?;
+        self.conn.execute(&sql, builder.param_refs().as_slice())?;
         Ok(())
     }
 
@@ -160,60 +140,48 @@ impl<'a> NotebookRepo<'a> {
         case_id: &str,
         filters: &NotebookEntryFilters,
     ) -> DbResult<Vec<NotebookEntry>> {
-        let mut where_clauses: Vec<String> = vec!["case_id = ?1".to_string()];
-        let mut params: Vec<String> = vec![case_id.to_string()];
-        let mut next_param = 2usize;
+        let mut builder = ClauseBuilder::new();
+        builder.push_eq("case_id", case_id.to_string());
 
         if let Some(ref et) = filters.entry_type {
-            where_clauses.push(format!("entry_type = ?{next_param}"));
-            params.push(entry_type_str(et).to_string());
-            next_param += 1;
+            builder.push_eq("entry_type", entry_type_str(et).to_string());
         }
         if let Some(ref s) = filters.status {
-            where_clauses.push(format!("status = ?{next_param}"));
-            params.push(entry_status_str(s).to_string());
-            next_param += 1;
+            builder.push_eq("status", entry_status_str(s).to_string());
         }
         if let Some(ref search) = filters.search {
-            where_clauses.push(format!(
-                "(title LIKE ?{next_param} OR body_markdown LIKE ?{p})",
-                next_param = next_param,
-                p = next_param + 1,
-            ));
+            let next_param = builder.next_param();
             let pattern = format!("%{search}%");
-            params.push(pattern.clone());
-            params.push(pattern);
-            next_param += 2;
+            builder.push_raw(
+                format!(
+                    "(title LIKE ?{next_param} OR body_markdown LIKE ?{})",
+                    next_param + 1
+                ),
+                vec![pattern.clone(), pattern],
+            );
         }
         // tag filter uses JSON array LIKE
         if let Some(ref tags) = filters.tags {
             for tag in tags {
-                where_clauses.push(format!("tags LIKE ?{next_param}"));
-                params.push(format!("%\"{tag}\"%"));
-                next_param += 1;
+                builder.push_cmp("tags", "LIKE", format!("%\"{tag}\"%"));
             }
         }
 
         let limit = filters.limit.unwrap_or(500);
         let offset = filters.offset.unwrap_or(0);
-        let limit_param = next_param;
-        let offset_param = next_param + 1;
+        let limit_param = builder.push_param(limit);
+        let offset_param = builder.push_param(offset);
 
         let sql = format!(
             "SELECT {NOTEBOOK_ENTRY_COLUMNS} FROM notebook_entries
-             WHERE {}
+             {}
              ORDER BY created_at DESC
              LIMIT ?{limit_param} OFFSET ?{offset_param}",
-            where_clauses.join(" AND "),
+            builder.where_clause(),
         );
-        params.push(limit.to_string());
-        params.push(offset.to_string());
 
         let mut stmt = self.conn.prepare(&sql)?;
-        let rows = stmt.query_map(
-            rusqlite::params_from_iter(params.iter()),
-            row_to_notebook_entry,
-        )?;
+        let rows = stmt.query_map(builder.param_refs().as_slice(), row_to_notebook_entry)?;
         let mut entries = Vec::new();
         for row in rows {
             entries.push(row?);
@@ -328,11 +296,10 @@ impl<'a> NotebookRepo<'a> {
         }
 
         // Dynamic IN clause
-        let placeholders: Vec<String> = (1..=entry_ids.len()).map(|i| format!("?{i}")).collect();
         let sql = format!(
             "SELECT {CITATION_COLUMNS} FROM evidence_citations
              WHERE entry_id IN ({}) ORDER BY cited_at ASC",
-            placeholders.join(", "),
+            placeholders(1, entry_ids.len()),
         );
 
         let mut stmt = self.conn.prepare(&sql)?;
@@ -384,38 +351,31 @@ impl<'a> NotebookRepo<'a> {
         case_id: &str,
         filters: &StepFilters,
     ) -> DbResult<Vec<InvestigationStep>> {
-        let mut where_clauses: Vec<String> = vec!["case_id = ?1".to_string()];
-        let mut params: Vec<String> = vec![case_id.to_string()];
-        let mut next_param = 2usize;
+        let mut builder = ClauseBuilder::new();
+        builder.push_eq("case_id", case_id.to_string());
 
         if let Some(ref kind) = filters.step_kind {
-            where_clauses.push(format!("step_kind = ?{next_param}"));
-            params.push(kind.to_string());
-            next_param += 1;
+            builder.push_eq("step_kind", kind.to_string());
         }
         if let Some(success_val) = filters.success {
-            where_clauses.push(format!("success = ?{next_param}"));
-            params.push((success_val as i32).to_string());
-            next_param += 1;
+            builder.push_eq("success", success_val as i32);
         }
 
         let limit = filters.limit.unwrap_or(500);
         let offset = filters.offset.unwrap_or(0);
-        let limit_param = next_param;
-        let offset_param = next_param + 1;
+        let limit_param = builder.push_param(limit);
+        let offset_param = builder.push_param(offset);
 
         let sql = format!(
             "SELECT {STEP_COLUMNS} FROM investigation_steps
-             WHERE {}
+             {}
              ORDER BY timestamp DESC
              LIMIT ?{limit_param} OFFSET ?{offset_param}",
-            where_clauses.join(" AND "),
+            builder.where_clause(),
         );
-        params.push(limit.to_string());
-        params.push(offset.to_string());
 
         let mut stmt = self.conn.prepare(&sql)?;
-        let rows = stmt.query_map(rusqlite::params_from_iter(params.iter()), row_to_step)?;
+        let rows = stmt.query_map(builder.param_refs().as_slice(), row_to_step)?;
         let mut steps = Vec::new();
         for row in rows {
             steps.push(row?);

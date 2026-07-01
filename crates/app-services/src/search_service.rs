@@ -20,6 +20,16 @@ pub enum SearchError {
     Other(String),
 }
 
+impl transport::ServiceErrorCategory for SearchError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Db(_) => transport::ErrorCategory::Io,
+            Self::Index(_) => transport::ErrorCategory::Parser,
+            Self::Other(_) => transport::ErrorCategory::Internal,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct IndexStats {
     pub indexed_count: u64,

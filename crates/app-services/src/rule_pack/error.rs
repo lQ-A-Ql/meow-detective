@@ -13,3 +13,12 @@ pub enum RulePackError {
     #[error("{0}")]
     Other(String),
 }
+
+impl transport::ServiceErrorCategory for RulePackError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Db(_) => transport::ErrorCategory::Io,
+            Self::Other(_) => transport::ErrorCategory::Internal,
+        }
+    }
+}

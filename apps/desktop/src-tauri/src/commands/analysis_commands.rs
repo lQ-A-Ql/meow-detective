@@ -85,7 +85,7 @@ pub async fn classify_files(
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         analysis_service::classify_files_by_metadata(&conn, sample_size)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -102,7 +102,7 @@ pub async fn get_evidence_classification_summary(
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         analysis_service::get_evidence_classification_summary(&conn)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -137,9 +137,9 @@ pub async fn run_evidence_classification(
                 .map_err(app_services::artifact_service::ArtifactServiceError::from)
             },
         )
-        .map_err(CommandError::from_service_error)?;
+        .map_err(CommandError::from_typed_service_error)?;
         analysis_service::get_evidence_classification_summary(&conn)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -168,7 +168,7 @@ pub async fn run_analysis_extraction(
                 analysis_service::MAX_ANALYSIS_SOURCE_BYTES,
             )
         })
-        .map_err(CommandError::from_service_error)
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -188,7 +188,7 @@ pub async fn get_registry_extraction_summary(
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         analysis_service::get_registry_extraction_summary(&conn, req.offset, req.limit)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -205,7 +205,7 @@ pub async fn get_registry_structured_summary(
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         analysis_service::get_registry_structured_summary(&conn)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -225,7 +225,7 @@ pub async fn get_browser_history_summary(
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         analysis_service::get_browser_history_summary(&conn, req.offset, req.limit)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -245,7 +245,7 @@ pub async fn get_email_extraction_summary(
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         analysis_service::get_email_extraction_summary(&conn, req.offset, req.limit)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -265,7 +265,7 @@ pub async fn get_evtx_event_summary(
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         analysis_service::get_evtx_event_summary(&conn, req.offset, req.limit)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -282,7 +282,7 @@ pub async fn get_v2_governance_snapshot(
         let active = require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         app_services::v2_governance_service::get_v2_governance_snapshot(&conn, &active.case_id)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -300,7 +300,7 @@ pub async fn get_v3_governance_snapshot(
         let active = require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         app_services::v3_governance_service::get_v3_governance_snapshot(&conn, &active.case_id)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -317,7 +317,7 @@ pub async fn get_correlation_snapshot(
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         app_services::correlation::get_correlation_snapshot(&conn)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -339,7 +339,7 @@ pub async fn generate_analysis_summary(state: State<'_, AppState>) -> Result<Str
             &conn,
             analysis_service::DEFAULT_SAMPLE_SIZE,
         )
-        .map_err(CommandError::from_service_error)?;
+        .map_err(CommandError::from_typed_service_error)?;
 
         Ok(analysis_service::generate_analysis_summary(
             &system_info,

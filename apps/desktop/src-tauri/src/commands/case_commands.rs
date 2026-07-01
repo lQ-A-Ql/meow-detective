@@ -13,6 +13,8 @@ use transport::{
 use crate::{events::event_bridge, state::AppState};
 
 fn init_case_db(state: &AppState) -> Result<(), CommandError> {
+    // AppState methods are typed `Result<_, String>` today, so this stays on the
+    // substring-matching fallback path.
     state
         .init_db_pragmas()
         .map_err(CommandError::from_service_error)
@@ -64,7 +66,7 @@ pub fn create_case(
     request.validate().map_err(CommandError::invalid_input)?;
     let root = PathBuf::from(&request.case_root);
     let active = case_service::create_case(&root, &request.name, request.examiner.as_deref())
-        .map_err(CommandError::from_service_error)?;
+        .map_err(CommandError::from_typed_service_error)?;
     let active_case_root = active.case_root.clone();
     let dto = meta_to_dto(&active.meta);
     {
@@ -107,7 +109,7 @@ pub fn open_case(
 ) -> Result<CaseSummaryDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let root = PathBuf::from(&request.case_root);
-    let active = case_service::open_case(&root).map_err(CommandError::from_service_error)?;
+    let active = case_service::open_case(&root).map_err(CommandError::from_typed_service_error)?;
     let dto = meta_to_dto(&active.meta);
     {
         let mut guard = state
@@ -161,9 +163,9 @@ pub fn create_analysis_demo_case(
         .map_err(|e| CommandError::internal(format!("Failed to create analysis demo root: {e}")))?;
 
     let active = case_service::create_case(&case_root, "Analysis Demo", Some("Codex Demo"))
-        .map_err(CommandError::from_service_error)?;
+        .map_err(CommandError::from_typed_service_error)?;
     app_services::analysis_service::seed_analysis_demo_data(&active)
-        .map_err(CommandError::from_service_error)?;
+        .map_err(CommandError::from_typed_service_error)?;
     let dto = meta_to_dto(&active.meta);
     {
         let mut guard = state
@@ -244,6 +246,8 @@ pub fn close_case(state: State<AppState>, app: AppHandle) -> Result<(), CommandE
         .map(|active| active.meta.id.0.clone());
 
     // 4. Clear active case state after all drain logic finishes.
+    // AppState::clear_db_state is typed `Result<_, String>`, so this stays on the
+    // substring-matching fallback path.
     state
         .clear_db_state()
         .map_err(CommandError::from_service_error)?;
@@ -282,11 +286,11 @@ pub async fn get_case_metrics(state: State<'_, AppState>) -> Result<CaseMetricsD
         };
         // Guard is now dropped; query with a fresh connection.
         let conn = app_services::connection::open_case_db(&db_path)
-            .map_err(CommandError::from_service_error)?;
+            .map_err(CommandError::from_typed_service_error)?;
         let repo = persistence_sqlite::repositories::case_repo::CaseRepo::new(&conn);
         let metrics = repo
             .get_metrics()
-            .map_err(CommandError::from_service_error)?;
+            .map_err(CommandError::from_typed_service_error)?;
         Ok(CaseMetricsDto {
             data_source_count: metrics.data_source_count,
             indexed_file_count: metrics.indexed_file_count,
@@ -315,9 +319,9 @@ pub async fn get_recent_objects(
             }
         };
         let conn = app_services::connection::open_case_db(&db_path)
-            .map_err(CommandError::from_service_error)?;
+            .map_err(CommandError::from_typed_service_error)?;
         app_services::file_service::get_recent_objects_real(&conn)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -340,9 +344,9 @@ pub async fn get_data_sources(
             }
         };
         let conn = app_services::connection::open_case_db(&db_path)
-            .map_err(CommandError::from_service_error)?;
+            .map_err(CommandError::from_typed_service_error)?;
         app_services::file_service::get_data_sources_real(&conn, &case_id)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -367,13 +371,13 @@ pub async fn rename_data_source(
         };
         // Guard is now dropped; query with released lock.
         let conn = app_services::connection::open_case_db(&db_path)
-            .map_err(CommandError::from_service_error)?;
+            .map_err(CommandError::from_typed_service_error)?;
         app_services::file_service::rename_data_source_real(
             &conn,
             &request.data_source_id,
             &request.name,
         )
-        .map_err(CommandError::from_service_error)
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -429,7 +433,7 @@ pub async fn delete_case(
 
     let root_clone = root.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        case_service::delete_case_in(&root_clone).map_err(CommandError::from_service_error)
+        case_service::delete_case_in(&root_clone).map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)??;
@@ -447,6 +451,8 @@ pub async fn delete_case(
             }
             event_bridge::emit_case_closed(&app, case_id);
         }
+        // AppState::clear_db_state is typed `Result<_, String>`, so this stays on
+        // the substring-matching fallback path.
         state
             .clear_db_state()
             .map_err(CommandError::from_service_error)?;
@@ -485,9 +491,9 @@ pub async fn delete_data_source(
         };
         // Guard is now dropped; query with released lock.
         let conn = app_services::connection::open_case_db(&db_path)
-            .map_err(CommandError::from_service_error)?;
+            .map_err(CommandError::from_typed_service_error)?;
         case_service::delete_data_source(&conn, &ds_id)
-            .map_err(CommandError::from_service_error)?;
+            .map_err(CommandError::from_typed_service_error)?;
         Ok("Data source deleted".to_string())
     })
     .await

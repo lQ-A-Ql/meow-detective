@@ -186,6 +186,59 @@ const EVIDENCE_CATEGORY_DEFS: &[EvidenceCategoryDef] = &[
         artifact_families: &[],
         patterns: &[],
     },
+    EvidenceCategoryDef {
+        category: "LinuxArtifacts",
+        display_name: "Linux 痕迹",
+        evidence_kind: "linux_artifact",
+        parser: "linux.artifacts",
+        artifact_families: &[
+            "LinuxJournal",
+            "LinuxWtmp",
+            "LinuxBashCommand",
+            "LinuxAptEvent",
+            "LinuxCronJob",
+            "LinuxSudoEvent",
+        ],
+        patterns: &[
+            EvidencePathPattern::Suffix(".journal"),
+            EvidencePathPattern::Contains("/var/log/journal/"),
+            EvidencePathPattern::Suffix("/var/log/wtmp"),
+            EvidencePathPattern::Suffix("/var/log/btmp"),
+            EvidencePathPattern::Suffix(".bash_history"),
+            EvidencePathPattern::Contains("/var/log/apt/history.log"),
+            EvidencePathPattern::Contains("/var/log/dpkg.log"),
+            EvidencePathPattern::Suffix("/etc/crontab"),
+            EvidencePathPattern::Contains("/etc/cron.d/"),
+            EvidencePathPattern::Contains("/var/spool/cron/crontabs/"),
+            EvidencePathPattern::Suffix("/var/log/auth.log"),
+            EvidencePathPattern::Suffix("/var/log/secure"),
+        ],
+    },
+    EvidenceCategoryDef {
+        category: "MacArtifacts",
+        display_name: "macOS 痕迹",
+        evidence_kind: "macos_artifact",
+        parser: "macos.artifacts",
+        artifact_families: &[
+            "MacFSEvent",
+            "MacLaunchService",
+            "MacQuarantineEvent",
+            "MacRecentItem",
+            "MacSpotlightEntry",
+            "MacUnifiedLogEntry",
+        ],
+        patterns: &[
+            EvidencePathPattern::Contains("/.fseventsd/"),
+            EvidencePathPattern::Contains("com.apple.launchservices"),
+            EvidencePathPattern::Contains("com.apple.recentitems"),
+            EvidencePathPattern::Suffix(".sfl2"),
+            EvidencePathPattern::Contains("/launchservices.quarantineevents"),
+            EvidencePathPattern::Contains("/.spotlight-v100/"),
+            EvidencePathPattern::Suffix(".store.db"),
+            EvidencePathPattern::Contains("/var/db/diagnostics/"),
+            EvidencePathPattern::Suffix(".tracev3"),
+        ],
+    },
 ];
 
 #[derive(Debug, Clone)]
@@ -521,8 +574,7 @@ pub fn get_evidence_classification_summary(
     };
 
     if totals.candidate_file_count == 0 {
-        warnings
-            .push("未发现 Windows 证据族候选文件；请确认数据源已导入且文件树可用。".to_string());
+        warnings.push("未发现证据族候选文件；请确认数据源已导入且文件树可用。".to_string());
     }
 
     Ok(EvidenceClassificationSummaryDto {

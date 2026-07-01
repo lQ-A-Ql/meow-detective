@@ -1,6 +1,7 @@
 pub mod connection;
 pub mod migrations;
 pub mod repositories;
+pub mod sql_builder;
 pub mod util;
 
 pub use connection::{open_existing, open_in_memory, open_or_create, DbError, DbResult};

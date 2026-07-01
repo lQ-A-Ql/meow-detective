@@ -39,36 +39,36 @@ export function CaseWelcomeForms({
 }: CaseWelcomeFormsProps) {
   return (
     <div className="flex-1 flex flex-col w-full h-full bg-white overflow-auto">
-      <div className="border-b border-[#e0e0e0] bg-[#fafafa] p-8">
-        <div className="font-display text-3xl text-[#111] tracking-tight mb-3">Forensics Workbench</div>
-        <div className="max-w-3xl text-[14px] text-[#666] leading-7">
+      <div className="border-b border-forensics-border bg-forensics-panel p-8">
+        <div className="font-display text-3xl text-forensics-text tracking-tight mb-3">Forensics Workbench</div>
+        <div className="max-w-3xl text-[14px] text-forensics-muted leading-7">
           当前没有活动案件。先创建或打开案件目录，接着导入逻辑目录、RAW/DD/IMG 或 E01 镜像，即可进入可运行 demo 的真实文件浏览链路。
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-6 p-8">
-        <div className="border border-[#e0e0e0] bg-white p-5">
-          <div className="text-[13px] font-semibold text-[#333] mb-3">新建案件</div>
+        <div className="border border-forensics-border bg-white p-5">
+          <div className="text-[13px] font-semibold text-forensics-text-secondary mb-3">新建案件</div>
           <div className="space-y-2 mb-3">
             <input
               type="text"
               value={caseRoot}
               onChange={(e) => setCaseRoot(e.target.value)}
               placeholder="案件父目录"
-              className="w-full border border-[#ccc] px-2 py-1 text-[12px] font-mono"
+              className="w-full border border-forensics-border-strong px-2 py-1 text-[12px] font-mono"
             />
             <input
               type="text"
               value={caseName}
               onChange={(e) => setCaseName(e.target.value)}
               placeholder="案件名称"
-              className="w-full border border-[#ccc] px-2 py-1 text-[12px]"
+              className="w-full border border-forensics-border-strong px-2 py-1 text-[12px]"
             />
           </div>
           <button
             onClick={onCreateCase}
             disabled={createPending || !caseRoot || !caseName}
-            className="bg-[#111] text-white px-4 py-1.5 text-[12px] hover:bg-[#333] disabled:opacity-50"
+            className="bg-forensics-text text-white px-4 py-1.5 text-[12px] hover:bg-forensics-text-secondary disabled:opacity-50"
           >
             {createPending ? '创建中...' : '创建案件'}
           </button>
@@ -77,21 +77,21 @@ export function CaseWelcomeForms({
           ) : null}
         </div>
 
-        <div className="border border-[#e0e0e0] bg-white p-5">
-          <div className="text-[13px] font-semibold text-[#333] mb-3">打开已有案件</div>
+        <div className="border border-forensics-border bg-white p-5">
+          <div className="text-[13px] font-semibold text-forensics-text-secondary mb-3">打开已有案件</div>
           <div className="space-y-2 mb-3">
             <input
               type="text"
               value={openCasePath}
               onChange={(e) => setOpenCasePath(e.target.value)}
               placeholder="案件路径"
-              className="w-full border border-[#ccc] px-2 py-1 text-[12px] font-mono"
+              className="w-full border border-forensics-border-strong px-2 py-1 text-[12px] font-mono"
             />
           </div>
           <button
             onClick={() => onOpenCase(openCasePath)}
             disabled={openPending || !openCasePath}
-            className="bg-[#111] text-white px-4 py-1.5 text-[12px] hover:bg-[#333] disabled:opacity-50"
+            className="bg-forensics-text text-white px-4 py-1.5 text-[12px] hover:bg-forensics-text-secondary disabled:opacity-50"
           >
             {openPending ? '打开中...' : '打开案件'}
           </button>
@@ -102,24 +102,24 @@ export function CaseWelcomeForms({
       </div>
 
       <div className="px-8 pb-8">
-        <div className="border border-[#e0e0e0] bg-white">
-          <div className="border-b border-[#e0e0e0] bg-[#fafafa] px-5 py-3 flex items-center justify-between">
-            <div className="text-[13px] font-semibold text-[#333]">最近打开案件</div>
-            <div className="text-[10px] font-mono text-[#888]">{recentCases.length} 项</div>
+        <div className="border border-forensics-border bg-white">
+          <div className="border-b border-forensics-border bg-forensics-panel px-5 py-3 flex items-center justify-between">
+            <div className="text-[13px] font-semibold text-forensics-text-secondary">最近打开案件</div>
+            <div className="text-[10px] font-mono text-forensics-muted-light">{recentCases.length} 项</div>
           </div>
           {recentCases.length ? (
-            <div className="divide-y divide-[#eee]">
+            <div className="divide-y divide-forensics-border-light">
               {recentCases.map((item) => (
                 <div
                   key={`${item.caseRoot}-${item.openedAt}`}
-                  className="flex items-center px-5 py-3 text-left hover:bg-[#f7f7f7] cursor-pointer"
+                  className="flex items-center px-5 py-3 text-left hover:bg-forensics-panel-strong cursor-pointer"
                   onClick={() => onOpenCase(item.caseRoot)}
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="text-[13px] text-[#111] font-medium truncate">{item.name}</div>
-                    <div className="text-[11px] text-[#666] font-mono truncate mt-1">{item.caseRoot}</div>
+                    <div className="text-[13px] text-forensics-text font-medium truncate">{item.name}</div>
+                    <div className="text-[11px] text-forensics-muted font-mono truncate mt-1">{item.caseRoot}</div>
                   </div>
-                  <div className="text-[10px] text-[#888] font-mono shrink-0 mr-3">{item.openedAt}</div>
+                  <div className="text-[10px] text-forensics-muted-light font-mono shrink-0 mr-3">{item.openedAt}</div>
                   <button
                     type="button"
                     onClick={(e) => {
@@ -128,7 +128,7 @@ export function CaseWelcomeForms({
                         onDeleteCase(item.caseRoot);
                       }
                     }}
-                    className="text-[#999] hover:text-red-600 shrink-0"
+                    className="text-forensics-muted-lighter hover:text-red-600 shrink-0"
                     title="删除案件"
                   >
                     <Trash2 size={12} />
@@ -137,7 +137,7 @@ export function CaseWelcomeForms({
               ))}
             </div>
           ) : (
-            <div className="px-5 py-6 text-[12px] text-[#777]">这里会保留最近打开过的案件，便于重新进入分析现场。</div>
+            <div className="px-5 py-6 text-[12px] text-forensics-muted">这里会保留最近打开过的案件，便于重新进入分析现场。</div>
           )}
         </div>
       </div>
@@ -175,14 +175,14 @@ export function ImportSection({
   onClose,
 }: ImportSectionProps) {
   return (
-    <div className="border-b border-[#e0e0e0] bg-[#fafafa] p-4 shrink-0">
+    <div className="border-b border-forensics-border bg-forensics-panel p-4 shrink-0">
       <div className="flex items-center gap-3">
         <input
           type="text"
           value={importPath}
           onChange={(e) => setImportPath(e.target.value)}
           placeholder="镜像路径或逻辑目录路径"
-          className="flex-1 border border-[#ccc] px-3 py-1.5 text-[12px] font-mono"
+          className="flex-1 border border-forensics-border-strong px-3 py-1.5 text-[12px] font-mono"
         />
         <button
           onClick={async () => {
@@ -199,7 +199,7 @@ export function ImportSection({
               // Tauri dialog may be unavailable in non-tauri mode.
             }
           }}
-          className="border border-[#ccc] px-3 py-1.5 text-[12px] hover:bg-[#eee] flex items-center gap-1"
+          className="border border-forensics-border-strong px-3 py-1.5 text-[12px] hover:bg-forensics-border-light flex items-center gap-1"
         >
           <FolderOpen size={12} /> 文件
         </button>
@@ -214,14 +214,14 @@ export function ImportSection({
               // Tauri dialog may be unavailable in non-tauri mode.
             }
           }}
-          className="border border-[#ccc] px-3 py-1.5 text-[12px] hover:bg-[#eee] flex items-center gap-1"
+          className="border border-forensics-border-strong px-3 py-1.5 text-[12px] hover:bg-forensics-border-light flex items-center gap-1"
         >
           <FolderOpen size={12} /> 目录
         </button>
         <button
           onClick={onImport}
           disabled={importPending || Boolean(importJob)}
-          className="bg-[#111] text-white px-4 py-1.5 text-[12px] hover:bg-[#333] disabled:opacity-50"
+          className="bg-forensics-text text-white px-4 py-1.5 text-[12px] hover:bg-forensics-text-secondary disabled:opacity-50"
         >
           {importPending ? '提交中...' : importJob ? '后台导入中...' : '导入'}
         </button>
@@ -229,19 +229,19 @@ export function ImportSection({
           onClick={() => {
             onClose();
           }}
-          className="text-[#888] text-[12px] hover:text-[#111]"
+          className="text-forensics-muted-light text-[12px] hover:text-forensics-text"
         >
           取消
         </button>
       </div>
       {importPending ? (
-        <div className="mt-2 flex items-center gap-2 text-[11px] text-[#666]">
-          <div className="w-3 h-3 border-2 border-[#666] border-t-transparent rounded-full animate-spin" />
+        <div className="mt-2 flex items-center gap-2 text-[11px] text-forensics-muted">
+          <div className="w-3 h-3 border-2 border-forensics-muted border-t-transparent rounded-full animate-spin" />
           正在提交导入任务，后台进度会在任务列表中持续更新。
         </div>
       ) : null}
       {importJob ? (
-        <div className="mt-2 text-[11px] text-[#555] font-mono bg-white border border-[#ddd] p-2">
+        <div className="mt-2 text-[11px] text-forensics-text-tertiary font-mono bg-white border border-forensics-350 p-2">
           <div>后台导入进行中: {importJob.name} · {importJob.progress}% · {importJob.detail}</div>
           <button
             onClick={onCancelImport}

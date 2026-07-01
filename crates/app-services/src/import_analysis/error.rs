@@ -24,3 +24,13 @@ pub enum ImportAnalysisError {
     #[error("{0}")]
     Other(String),
 }
+
+impl transport::ServiceErrorCategory for ImportAnalysisError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Db(_) | Self::Persistence(_) | Self::Io(_) => transport::ErrorCategory::Io,
+            Self::Staging(_) => transport::ErrorCategory::Validation,
+            Self::Other(_) => transport::ErrorCategory::Internal,
+        }
+    }
+}

@@ -1,4 +1,5 @@
 use crate::connection::DbResult;
+use crate::sql_builder::placeholders;
 use domain::{EdgeType, GraphEdge, GraphNode, NodeType};
 use rusqlite::{params, Connection};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -483,19 +484,12 @@ fn build_neighbor_query(
         return (base_sql.to_string(), params);
     }
 
-    let placeholders: Vec<String> = edge_types
-        .iter()
-        .enumerate()
-        .map(|(i, et)| {
-            params.push(edge_type_str(et).to_string());
-            format!("?{}", start_param + 1 + i)
-        })
-        .collect();
+    params.extend(edge_types.iter().map(|et| edge_type_str(et).to_string()));
 
     let sql = format!(
         "{} AND edge_type IN ({})",
         base_sql,
-        placeholders.join(", ")
+        placeholders(start_param + 1, edge_types.len())
     );
     (sql, params)
 }

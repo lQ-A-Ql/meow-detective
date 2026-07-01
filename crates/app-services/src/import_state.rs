@@ -13,6 +13,15 @@ pub enum ImportStateError {
     Serde(#[from] serde_json::Error),
 }
 
+impl transport::ServiceErrorCategory for ImportStateError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Io(_) => transport::ErrorCategory::Io,
+            Self::Serde(_) => transport::ErrorCategory::Parser,
+        }
+    }
+}
+
 /// Import phase
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ImportPhase {

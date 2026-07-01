@@ -177,6 +177,7 @@ export function useRunAnalysisExtraction() {
     mutationFn: (request?: AnalysisExtractionRequest) => runAnalysisExtraction(request ?? { categories: [] }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['analysis', 'evidence-classification', currentCase.data?.id ?? null] });
+      qc.invalidateQueries({ queryKey: ['analysis', 'system-info', currentCase.data?.id ?? null] });
       qc.invalidateQueries({ queryKey: ['analysis', 'registry-extraction', currentCase.data?.id ?? null] });
       qc.invalidateQueries({ queryKey: ['analysis', 'registry-structured', currentCase.data?.id ?? null] });
       qc.invalidateQueries({ queryKey: ['analysis', 'browser-history', currentCase.data?.id ?? null] });
@@ -184,6 +185,7 @@ export function useRunAnalysisExtraction() {
       qc.invalidateQueries({ queryKey: ['analysis', 'evtx-events', currentCase.data?.id ?? null] });
       qc.invalidateQueries({ queryKey: ['artifacts'] });
       qc.invalidateQueries({ queryKey: ['timeline'] });
+      qc.invalidateQueries({ queryKey: ['graph', 'snapshot', currentCase.data?.id ?? null] });
     },
   });
 }

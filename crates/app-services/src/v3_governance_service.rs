@@ -27,6 +27,15 @@ pub enum V3GovernanceError {
     Other(String),
 }
 
+impl transport::ServiceErrorCategory for V3GovernanceError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Db(_) => transport::ErrorCategory::Io,
+            Self::Other(_) => transport::ErrorCategory::Internal,
+        }
+    }
+}
+
 // ── Public API ─────────────────────────────────────────────────────────────
 
 /// Build a V3 governance snapshot for the given case.

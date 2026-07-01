@@ -14,7 +14,7 @@ import {
 import { useSelectionStore } from '@/stores/selection-store';
 import { SearchHit } from '@/types/models';
 
-const defaultQuery = "files WHERE extension IN ('.doc', '.xls') AND size > 10MB";
+const defaultQuery = 'content:password AND path:doc';
 
 export function Search() {
   const [searchParams] = useSearchParams();
@@ -62,18 +62,18 @@ export function Search() {
       <PageSubbar title="搜索控制台" meta={`共 ${data?.total ?? 0} 项命中 / 高置信 ${highScoreHits} 项`}>
         <div className="shrink-0 p-3 flex flex-col gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex items-center bg-white border border-[#ccc] px-3 py-1.5 flex-1 focus-within:border-[#111] transition-colors">
-              <span className="text-[#888] font-mono text-[11px] mr-2 shrink-0">SELECT * FROM</span>
+            <div className="flex items-center bg-white border border-forensics-border-strong px-3 py-1.5 flex-1 focus-within:border-forensics-text transition-colors">
+              <span className="text-forensics-muted-light font-mono text-[11px] mr-2 shrink-0">QUERY</span>
               <input
                 type="text"
-                className="bg-transparent border-none outline-none text-[#111] font-mono text-[13px] w-full placeholder-[#aaa]"
+                className="bg-transparent border-none outline-none text-forensics-text font-mono text-[13px] w-full placeholder-forensics-500"
                 value={queryInput}
                 onChange={(e) => setQueryInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') setActiveQuery(queryInput); }}
               />
               <button
                 onClick={() => setActiveQuery(queryInput)}
-                className="bg-[#111] text-white font-semibold text-[11px] px-3 py-0.5 ml-2 uppercase tracking-wider shrink-0 hover:bg-[#333]"
+                className="bg-forensics-text text-white font-semibold text-[11px] px-3 py-0.5 ml-2 uppercase tracking-wider shrink-0 hover:bg-forensics-text-secondary"
               >
                 执行
               </button>
@@ -82,24 +82,24 @@ export function Search() {
               <button
                 type="button"
                 onClick={() => setSavedOpen((open) => !open)}
-                className="flex items-center gap-2 border border-[#e0e0e0] bg-white px-3 py-1.5 text-[11px] text-[#666] cursor-pointer hover:text-[#111]"
+                className="flex items-center gap-2 border border-forensics-border bg-white px-3 py-1.5 text-[11px] text-forensics-muted cursor-pointer hover:text-forensics-text"
               >
                 <Filter size={12} />
                 <span>已保存查询</span>
               </button>
               {savedOpen ? (
-                <div className="absolute right-0 top-8 z-20 w-80 border border-[#ccc] bg-white shadow-lg">
-                  <div className="border-b border-[#e0e0e0] p-2">
+                <div className="absolute right-0 top-8 z-20 w-80 border border-forensics-border-strong bg-white shadow-lg">
+                  <div className="border-b border-forensics-border p-2">
                     <input
                       value={savedName}
                       onChange={(event) => setSavedName(event.target.value)}
                       placeholder="查询名称"
-                      className="mb-2 w-full border border-[#ccc] px-2 py-1 text-[11px] font-mono"
+                      className="mb-2 w-full border border-forensics-border-strong px-2 py-1 text-[11px] font-mono"
                     />
                     <button
                       type="button"
                       onClick={saveCurrentQuery}
-                      className="flex w-full items-center justify-center gap-1 border border-[#111] bg-[#111] px-2 py-1 text-[11px] text-white hover:bg-[#333]"
+                      className="flex w-full items-center justify-center gap-1 border border-forensics-text bg-forensics-text px-2 py-1 text-[11px] text-white hover:bg-forensics-text-secondary"
                     >
                       <Save size={12} />
                       保存当前查询
@@ -110,17 +110,17 @@ export function Search() {
                       savedQueries.map((item) => (
                         <div
                           key={item.id}
-                          className="flex items-start gap-2 border-b border-[#eee] p-2 last:border-b-0"
+                          className="flex items-start gap-2 border-b border-forensics-border-light p-2 last:border-b-0"
                         >
                           <button
                             type="button"
                             onClick={() => runSavedQuery(item.query)}
-                            className="min-w-0 flex-1 text-left hover:text-[#111]"
+                            className="min-w-0 flex-1 text-left hover:text-forensics-text"
                           >
-                            <div className="truncate text-[12px] font-medium text-[#222]">
+                            <div className="truncate text-[12px] font-medium text-forensics-text">
                               {item.name}
                             </div>
-                            <div className="mt-0.5 line-clamp-2 font-mono text-[10px] text-[#777]">
+                            <div className="mt-0.5 line-clamp-2 font-mono text-[10px] text-forensics-muted">
                               {item.query}
                             </div>
                           </button>
@@ -129,7 +129,7 @@ export function Search() {
                             onClick={() =>
                               persistSavedQueries(removeSavedSearchQuery(savedQueries, item.id))
                             }
-                            className="p-1 text-[#888] hover:text-red-600"
+                            className="p-1 text-forensics-muted-light hover:text-red-600"
                             title="删除保存的查询"
                           >
                             <Trash2 size={12} />
@@ -137,37 +137,37 @@ export function Search() {
                         </div>
                       ))
                     ) : (
-                      <div className="p-3 text-[11px] text-[#888]">暂无保存的查询。</div>
+                      <div className="p-3 text-[11px] text-forensics-muted-light">暂无保存的查询。</div>
                     )}
                   </div>
                 </div>
               ) : null}
             </div>
           </div>
-          <div className="flex items-center gap-4 text-[11px] text-[#888] font-mono flex-wrap">
-            <div className="flex items-center gap-1.5 cursor-pointer hover:text-[#111]">
-              <span className="text-[#111]">范围:</span> 全局
+          <div className="flex items-center gap-4 text-[11px] text-forensics-muted-light font-mono flex-wrap">
+            <div className="flex items-center gap-1.5 cursor-pointer hover:text-forensics-text">
+              <span className="text-forensics-text">范围:</span> 全局
             </div>
-            <div className="flex items-center gap-1.5 cursor-pointer hover:text-[#111]">
-              <span className="text-[#111]">模式:</span> SQL
+            <div className="flex items-center gap-1.5 cursor-pointer hover:text-forensics-text">
+              <span className="text-forensics-text">模式:</span> Tantivy
             </div>
-            <div className="flex items-center gap-1.5 cursor-pointer hover:text-[#111]">
-              <span className="text-[#111]">过滤:</span> 文档 / 表格 / 大文件
+            <div className="flex items-center gap-1.5 cursor-pointer hover:text-forensics-text">
+              <span className="text-forensics-text">过滤:</span> 文档 / 表格 / 大文件
             </div>
-            <div className="ml-auto text-[#666]">找到 {data?.total ?? 0} 个结果 ({data?.tookMs ?? 0}ms)</div>
+            <div className="ml-auto text-forensics-muted">找到 {data?.total ?? 0} 个结果 ({data?.tookMs ?? 0}ms)</div>
           </div>
         </div>
       </PageSubbar>
 
       <div className="flex-1 flex overflow-hidden min-h-0">
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
-          <div className="shrink-0 border-b border-[#e0e0e0] bg-[#fcfcfc] px-4 py-2 flex gap-2 text-[10px] uppercase tracking-wider text-[#666]">
-            <span className="border border-[#d9d9d9] bg-white px-2 py-0.5">高分命中 {highScoreHits}</span>
-            <span className="border border-[#d9d9d9] bg-white px-2 py-0.5">文档对象</span>
-            <span className="border border-[#d9d9d9] bg-white px-2 py-0.5">上下文已提取</span>
+          <div className="shrink-0 border-b border-forensics-border bg-forensics-panel px-4 py-2 flex gap-2 text-[10px] uppercase tracking-wider text-forensics-muted">
+            <span className="border border-forensics-350 bg-white px-2 py-0.5">高分命中 {highScoreHits}</span>
+            <span className="border border-forensics-350 bg-white px-2 py-0.5">文档对象</span>
+            <span className="border border-forensics-350 bg-white px-2 py-0.5">上下文已提取</span>
           </div>
 
-          <div className="flex-[2] flex flex-col border-b border-[#e0e0e0] min-h-0">
+          <div className="flex-[2] flex flex-col border-b border-forensics-border min-h-0">
             <DenseDataTable<SearchHit>
               rows={data?.items ?? []}
               getRowKey={(row) => row.fileId}
@@ -176,25 +176,25 @@ export function Search() {
               emptyTitle="无搜索命中"
               emptyDescription="请调整检索语句、范围或过滤条件。"
               columns={[
-                { key: 'path', title: '路径', className: 'w-[32%]', render: (row) => <span className="truncate block text-[#333]">{row.path}</span> },
-                { key: 'score', title: '评分', className: 'w-24 text-[#666]', render: (row) => row.score.toFixed(2) },
+                { key: 'path', title: '路径', className: 'w-[32%]', render: (row) => <span className="truncate block text-forensics-text-secondary">{row.path}</span> },
+                { key: 'score', title: '评分', className: 'w-24 text-forensics-muted', render: (row) => row.score.toFixed(2) },
                 {
                   key: 'snippet',
                   title: '内容预览',
-                  className: 'text-[#555]',
+                  className: 'text-forensics-text-tertiary',
                   render: (row) => <span className="line-clamp-2 text-sm leading-tight">{row.snippets[0]?.text ?? '-'}</span>,
                 },
               ]}
             />
           </div>
 
-          <div className="flex-1 min-h-[8rem] bg-[#fcfcfc] flex flex-col shrink-0">
-            <div className="h-7 border-b border-[#e0e0e0] flex items-center px-4 text-[10px] font-semibold uppercase text-[#555] tracking-wider shrink-0 bg-[#fafafa]">
+          <div className="flex-1 min-h-[8rem] bg-forensics-panel flex flex-col shrink-0">
+            <div className="h-7 border-b border-forensics-border flex items-center px-4 text-[10px] font-semibold uppercase text-forensics-text-tertiary tracking-wider shrink-0 bg-forensics-panel">
               上下文预览
             </div>
-            <div className="flex-1 overflow-auto p-4 font-mono text-[11px] text-[#444] leading-[1.6]">
-              <div className="text-[#888] mb-2">在偏移 0x00A145 处找到匹配项</div>
-              <div className="bg-white border border-[#e0e0e0] p-3 text-[#333] whitespace-pre-wrap">
+            <div className="flex-1 overflow-auto p-4 font-mono text-[11px] text-forensics-text-secondary leading-[1.6]">
+              <div className="text-forensics-muted-light mb-2">在偏移 0x00A145 处找到匹配项</div>
+              <div className="bg-white border border-forensics-border p-3 text-forensics-text-secondary whitespace-pre-wrap">
                 {selectedHit?.snippets[0]?.text ?? '无上下文预览'}
               </div>
             </div>
@@ -216,14 +216,14 @@ export function Search() {
             </InspectorSection>
 
             <InspectorSection title="命中字段">
-              <div className="space-y-2 text-[10px] font-mono text-[#666]">
-                <div className="flex items-center justify-between border border-[#e0e0e0] bg-white p-2">
+              <div className="space-y-2 text-[10px] font-mono text-forensics-muted">
+                <div className="flex items-center justify-between border border-forensics-border bg-white p-2">
                   <span>score</span>
-                  <span className="text-[#111]">{selectedHit?.score.toFixed(2) ?? '-'}</span>
+                  <span className="text-forensics-text">{selectedHit?.score.toFixed(2) ?? '-'}</span>
                 </div>
-                <div className="flex items-center justify-between border border-[#e0e0e0] bg-white p-2">
+                <div className="flex items-center justify-between border border-forensics-border bg-white p-2">
                   <span>snippet_count</span>
-                  <span className="text-[#111]">{selectedHit?.snippets.length ?? 0}</span>
+                  <span className="text-forensics-text">{selectedHit?.snippets.length ?? 0}</span>
                 </div>
               </div>
             </InspectorSection>
@@ -240,7 +240,7 @@ export function Search() {
                     navigate("/files");
                   }
                 }}
-                className="w-full border border-[#ccc] bg-white text-[#111] hover:bg-[#f0f0f0] py-1.5 text-center font-sans text-[11px] transition-colors rounded-[2px] cursor-pointer shadow-sm flex items-center justify-center gap-1.5"
+                className="w-full border border-forensics-border-strong bg-white text-forensics-text hover:bg-forensics-hover py-1.5 text-center font-sans text-[11px] transition-colors rounded-[2px] cursor-pointer shadow-sm flex items-center justify-center gap-1.5"
               >
                 在文件浏览中打开 <ChevronRight size={12} />
               </button>

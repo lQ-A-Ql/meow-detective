@@ -24,6 +24,17 @@ pub enum ArtifactServiceError {
     Other(String),
 }
 
+impl transport::ServiceErrorCategory for ArtifactServiceError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Db(_) | Self::Io(_) => transport::ErrorCategory::Io,
+            Self::Extractor(_) => transport::ErrorCategory::Parser,
+            Self::NotFound(_) => transport::ErrorCategory::Validation,
+            Self::Other(_) => transport::ErrorCategory::Internal,
+        }
+    }
+}
+
 impl ArtifactServiceError {
     pub fn extractor(message: impl Into<String>) -> Self {
         Self::Extractor(message.into())

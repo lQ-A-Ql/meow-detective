@@ -26,11 +26,11 @@ pub async fn save_app_settings(
     let path = state.inner().app_settings_path.clone();
     tauri::async_runtime::spawn_blocking(move || {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(CommandError::from_service_error)?;
+            std::fs::create_dir_all(parent).map_err(CommandError::from_typed_service_error)?;
         }
-        let content =
-            serde_json::to_string_pretty(&settings).map_err(CommandError::from_service_error)?;
-        std::fs::write(&path, content).map_err(CommandError::from_service_error)?;
+        let content = serde_json::to_string_pretty(&settings)
+            .map_err(CommandError::from_typed_service_error)?;
+        std::fs::write(&path, content).map_err(CommandError::from_typed_service_error)?;
         Ok(settings)
     })
     .await
@@ -41,9 +41,9 @@ pub(crate) fn load_app_settings(path: &PathBuf) -> Result<AppSettingsDto, Comman
     if !path.exists() {
         return Ok(AppSettingsDto::default());
     }
-    let content = std::fs::read_to_string(path).map_err(CommandError::from_service_error)?;
+    let content = std::fs::read_to_string(path).map_err(CommandError::from_typed_service_error)?;
     let settings: AppSettingsDto =
-        serde_json::from_str(&content).map_err(CommandError::from_service_error)?;
+        serde_json::from_str(&content).map_err(CommandError::from_typed_service_error)?;
     settings.validate().map_err(CommandError::invalid_input)?;
     Ok(settings)
 }

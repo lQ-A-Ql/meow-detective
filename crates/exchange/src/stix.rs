@@ -12,6 +12,16 @@ use transport::dto::artifacts::ArtifactRowDto;
 use transport::dto::correlation::{CorrelationConfidenceDto, CorrelationLeadDto};
 
 // ---------------------------------------------------------------------------
+// Error type
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, thiserror::Error)]
+pub enum StixError {
+    #[error("Failed to serialize STIX bundle: {0}")]
+    Serialize(#[from] serde_json::Error),
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -314,7 +324,7 @@ pub fn export_stix_bundle(
     artifacts: &[ArtifactRowDto],
     registry_values: &[RegistryValueDto],
     emails: &[EmailMessageDto],
-) -> Result<String, String> {
+) -> Result<String, StixError> {
     let mut objects: Vec<Value> = Vec::new();
     // Maps source object ids (lead/artifact/registry/email ids) to their
     // generated STIX identifiers so relationships can reference them.
@@ -386,8 +396,7 @@ pub fn export_stix_bundle(
         "spec_version": "2.1"
     });
 
-    serde_json::to_string_pretty(&bundle)
-        .map_err(|e| format!("Failed to serialize STIX bundle: {e}"))
+    Ok(serde_json::to_string_pretty(&bundle)?)
 }
 
 // ---------------------------------------------------------------------------

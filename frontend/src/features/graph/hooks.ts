@@ -1,5 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { getGraphSnapshot, getNodeNeighborhood, queryGraph } from '@/lib/api/graph';
+import {
+  getGraphSnapshot,
+  getNodeNeighborhood,
+  getProvenanceChain,
+  queryGraph,
+} from '@/lib/api/graph';
 import { GraphQuery } from '@/types/models';
 
 export function useGraphSnapshot(caseId: string) {
@@ -25,6 +30,15 @@ export function useNodeNeighborhood(nodeId: string, depth: number = 1) {
     queryKey: ['graph', 'neighborhood', nodeId, depth],
     queryFn: () => getNodeNeighborhood(nodeId, depth),
     enabled: Boolean(nodeId),
+    retry: false,
+  });
+}
+
+export function useProvenanceChain(edgeId?: string) {
+  return useQuery({
+    queryKey: ['graph', 'provenance', edgeId ?? ''],
+    queryFn: () => getProvenanceChain(edgeId!),
+    enabled: Boolean(edgeId),
     retry: false,
   });
 }

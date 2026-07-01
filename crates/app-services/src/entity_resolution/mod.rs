@@ -26,3 +26,14 @@ impl From<rusqlite::Error> for EntityResolutionError {
         Self::Db(persistence_sqlite::DbError::from(e))
     }
 }
+
+impl transport::ServiceErrorCategory for EntityResolutionError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Db(_) => transport::ErrorCategory::Io,
+            Self::Json(_) => transport::ErrorCategory::Parser,
+            Self::InvalidInput(_) => transport::ErrorCategory::Validation,
+            Self::Other(_) => transport::ErrorCategory::Internal,
+        }
+    }
+}

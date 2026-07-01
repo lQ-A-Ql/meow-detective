@@ -145,7 +145,7 @@ pub async fn get_file_children_request(
             request.limit,
             request.show_hidden,
         )
-        .map_err(CommandError::from_service_error)
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -173,7 +173,7 @@ pub async fn get_file_tree_request(
         }
         let conn = crate::commands::command_support::get_case_connection(&app_state)?;
         file_service::get_file_tree_real_with_visibility(&conn, request.show_hidden)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -208,7 +208,7 @@ pub async fn get_file_rows_request(
         }
         let conn = crate::commands::command_support::get_case_connection(&app_state)?;
         file_service::get_file_rows_for_request(&conn, &request)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -228,7 +228,7 @@ pub async fn get_file_jump_context(
             if err.to_string().contains("not found") {
                 CommandError::not_found("File")
             } else {
-                CommandError::from_service_error(err)
+                CommandError::from_typed_service_error(err)
             }
         })
     })
@@ -249,7 +249,7 @@ pub async fn open_file_handle(
         with_preview_cache_context!(&app_state, &conn, case_id.as_str(), |context| {
             file_service::open_file_handle_real(context, &file_id)
         })
-        .map_err(CommandError::from_service_error)
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -269,7 +269,7 @@ pub async fn open_file_handle_request(
         with_preview_cache_context!(&app_state, &conn, case_id.as_str(), |context| {
             file_service::open_file_handle_real(context, &request.file_id)
         })
-        .map_err(CommandError::from_service_error)
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -292,7 +292,7 @@ pub async fn read_file_range(
         with_preview_cache_context!(&app_state, &conn, case_id.as_str(), |context| {
             file_service::read_file_range_for_case(context, &request)
         })
-        .map_err(CommandError::from_service_error)
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -419,7 +419,7 @@ pub async fn extract_file(
         let outcome: Result<String, CommandError> =
             file_service::extract_file_to_destination(&conn, &file_id, &dest, overwrite)
                 .map(|w| format!("Extracted {} bytes", w))
-                .map_err(CommandError::from_service_error);
+                .map_err(CommandError::from_typed_service_error);
         let dest_file_name = std::path::Path::new(&audit_dest)
             .file_name()
             .and_then(|n| n.to_str())
@@ -453,11 +453,11 @@ fn image_preview_for_file(
     let handle = with_preview_cache_context!(state, conn, case_id.as_str(), |context| {
         file_service::open_file_handle_real(context, file_id)
     })
-    .map_err(CommandError::from_service_error)?;
+    .map_err(CommandError::from_typed_service_error)?;
 
     let mime = handle.mime.as_deref().unwrap_or("");
     if !mime.starts_with("image/") {
-        return Err(CommandError::from_service_error("Not an image file"));
+        return Err(CommandError::invalid_input("Not an image file"));
     }
 
     if handle.size > infrastructure::constants::MAX_INLINE_IMAGE_PREVIEW_BYTES {
@@ -490,7 +490,7 @@ fn media_data_url_for_file(
     let handle = with_preview_cache_context!(state, conn, case_id.as_str(), |context| {
         file_service::open_file_handle_real(context, file_id)
     })
-    .map_err(CommandError::from_service_error)?;
+    .map_err(CommandError::from_typed_service_error)?;
     let mime = handle
         .mime
         .clone()
@@ -533,7 +533,7 @@ fn media_range_for_file(
     let handle = with_preview_cache_context!(state, conn, case_id.as_str(), |context| {
         file_service::open_file_handle_real(context, &file_id)
     })
-    .map_err(CommandError::from_service_error)?;
+    .map_err(CommandError::from_typed_service_error)?;
     if request.offset >= handle.size {
         return Ok(MediaRangeResponseDto {
             offset: request.offset,
@@ -579,7 +579,7 @@ fn text_preview_for_file(
 
     let preview =
         TextService::extract_text_preview(&mut std::io::Cursor::new(&content_bytes), max as usize)
-            .map_err(|e| CommandError::from_service_error(e.to_string()))?;
+            .map_err(CommandError::from_typed_service_error)?;
 
     let is_binary = preview.is_binary;
     let content = preview.content;
@@ -657,13 +657,13 @@ fn read_preview_bytes_for_file(
     if let Ok(path) = with_preview_cache_context!(state, conn, case_id, |context| {
         file_service::get_file_path_for_entry(context, file_id)
     }) {
-        let mut file = std::fs::File::open(path).map_err(CommandError::from_service_error)?;
+        let mut file = std::fs::File::open(path).map_err(CommandError::from_typed_service_error)?;
         file.seek(SeekFrom::Start(offset))
-            .map_err(CommandError::from_service_error)?;
+            .map_err(CommandError::from_typed_service_error)?;
         let mut bytes = Vec::with_capacity(length as usize);
         file.take(length as u64)
             .read_to_end(&mut bytes)
-            .map_err(CommandError::from_service_error)?;
+            .map_err(CommandError::from_typed_service_error)?;
         return Ok(bytes);
     }
 
@@ -678,7 +678,7 @@ fn read_preview_bytes_for_file(
             length,
         )
     })
-    .map_err(CommandError::from_service_error)
+    .map_err(CommandError::from_typed_service_error)
 }
 
 #[cfg(test)]

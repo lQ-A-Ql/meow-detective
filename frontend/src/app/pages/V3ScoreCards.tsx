@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { isApiErrorDto } from '@/lib/api/client';
 
 export function errorMessage(error: unknown) {
@@ -34,30 +35,10 @@ export function StatCard({
   );
 }
 
-export function BreakdownList({
-  title,
-  entries,
-  formatValue = (v: number) => String(v),
-}: {
-  title: string;
-  entries: Record<string, number>;
-  formatValue?: (v: number) => string;
-}) {
-  const sorted = Object.entries(entries).sort(([, a], [, b]) => b - a);
-  if (sorted.length === 0) {
-    return null;
-  }
+export function EmptyPlaceholder({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded border border-[#e0e0e0] bg-white p-4">
-      <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-[#888]">{title}</div>
-      <div className="space-y-1">
-        {sorted.map(([key, count]) => (
-          <div key={key} className="flex items-center justify-between text-xs">
-            <span className="font-mono text-[#111] truncate min-w-0 flex-1">{key}</span>
-            <span className="font-mono text-[#666]">{formatValue(count)}</span>
-          </div>
-        ))}
-      </div>
+    <div className="mt-3 rounded border border-dashed border-[#ccc] bg-[#fafafa] p-6 text-center text-[12px] text-[#999]">
+      {children}
     </div>
   );
 }

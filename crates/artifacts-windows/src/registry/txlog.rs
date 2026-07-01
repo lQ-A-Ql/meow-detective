@@ -143,7 +143,7 @@ pub fn parse_transaction_log(data: &[u8]) -> Result<TxLogParseResult, RegistryEr
         let mut buf = [0u8; 4];
         cursor
             .read_exact(&mut buf)
-            .map_err(|e| format!("read magic: {e}"))?;
+            .map_err(|e| RegistryError::other(format!("read magic: {e}")))?;
         buf
     };
 
@@ -167,7 +167,7 @@ pub fn parse_transaction_log(data: &[u8]) -> Result<TxLogParseResult, RegistryEr
     // Seek past the rest of the header page to the start of the entry region.
     cursor
         .seek(SeekFrom::Start(HEADER_SIZE))
-        .map_err(|e| format!("seek to entry region: {e}"))?;
+        .map_err(|e| RegistryError::other(format!("seek to entry region: {e}")))?;
 
     // --- entries ----------------------------------------------------------
     let mut transactions: Vec<RegistryTransaction> = Vec::new();
@@ -179,7 +179,7 @@ pub fn parse_transaction_log(data: &[u8]) -> Result<TxLogParseResult, RegistryEr
     loop {
         let pos = cursor
             .stream_position()
-            .map_err(|e| format!("stream pos: {e}"))?;
+            .map_err(|e| RegistryError::other(format!("stream pos: {e}")))?;
         if pos + 4 > end {
             break; // not enough room for even a size field
         }
@@ -222,16 +222,17 @@ pub fn parse_transaction_log(data: &[u8]) -> Result<TxLogParseResult, RegistryEr
         // --- read fixed header inside the record --------------------------
         let seq_num = cursor
             .read_u32::<LittleEndian>()
-            .map_err(|e| format!("seq_num: {e}"))? as u64;
+            .map_err(|e| RegistryError::other(format!("seq_num: {e}")))?
+            as u64;
         let op_raw = cursor
             .read_u16::<LittleEndian>()
-            .map_err(|e| format!("op: {e}"))?;
+            .map_err(|e| RegistryError::other(format!("op: {e}")))?;
         let _entry_flags = cursor
             .read_u16::<LittleEndian>()
-            .map_err(|e| format!("flags: {e}"))?;
+            .map_err(|e| RegistryError::other(format!("flags: {e}")))?;
         let filetime = cursor
             .read_u64::<LittleEndian>()
-            .map_err(|e| format!("timestamp: {e}"))?;
+            .map_err(|e| RegistryError::other(format!("timestamp: {e}")))?;
 
         // Detect wraparound: sequence numbers should be monotonic; a drop
         // signals that the ring buffer wrapped.
@@ -257,7 +258,7 @@ pub fn parse_transaction_log(data: &[u8]) -> Result<TxLogParseResult, RegistryEr
                 ));
                 cursor
                     .seek(SeekFrom::Start(record_end))
-                    .map_err(|e| format!("skip seek: {e}"))?;
+                    .map_err(|e| RegistryError::other(format!("skip seek: {e}")))?;
                 continue;
             }
         };
@@ -271,7 +272,7 @@ pub fn parse_transaction_log(data: &[u8]) -> Result<TxLogParseResult, RegistryEr
         // --- key path (UTF-16LE) ------------------------------------------
         let key_path_len = cursor
             .read_u16::<LittleEndian>()
-            .map_err(|e| format!("key_path_len: {e}"))?;
+            .map_err(|e| RegistryError::other(format!("key_path_len: {e}")))?;
         let key_path = if key_path_len == 0 {
             String::new()
         } else {
@@ -281,18 +282,18 @@ pub fn parse_transaction_log(data: &[u8]) -> Result<TxLogParseResult, RegistryEr
                 ));
                 cursor
                     .seek(SeekFrom::Start(record_end))
-                    .map_err(|e| format!("skip seek: {e}"))?;
+                    .map_err(|e| RegistryError::other(format!("skip seek: {e}")))?;
                 continue;
             }
             read_utf16_string(&mut cursor, key_path_len as usize)
-                .map_err(|e| format!("key_path at offset {pos:#x}: {e}"))?
+                .map_err(|e| RegistryError::other(format!("key_path at offset {pos:#x}: {e}")))?
         };
 
         // --- value name (UTF-16LE) — always consumed from stream ----------
         let parsed_value_name = {
             let val_name_len = cursor
                 .read_u16::<LittleEndian>()
-                .map_err(|e| format!("value_name_len: {e}"))?;
+                .map_err(|e| RegistryError::other(format!("value_name_len: {e}")))?;
             if val_name_len == 0 {
                 None
             } else {
@@ -302,11 +303,12 @@ pub fn parse_transaction_log(data: &[u8]) -> Result<TxLogParseResult, RegistryEr
                     ));
                     cursor
                         .seek(SeekFrom::Start(record_end))
-                        .map_err(|e| format!("skip seek: {e}"))?;
+                        .map_err(|e| RegistryError::other(format!("skip seek: {e}")))?;
                     continue;
                 }
-                let name = read_utf16_string(&mut cursor, val_name_len as usize)
-                    .map_err(|e| format!("value_name at offset {pos:#x}: {e}"))?;
+                let name = read_utf16_string(&mut cursor, val_name_len as usize).map_err(|e| {
+                    RegistryError::other(format!("value_name at offset {pos:#x}: {e}"))
+                })?;
                 Some(name)
             }
         };
@@ -323,10 +325,10 @@ pub fn parse_transaction_log(data: &[u8]) -> Result<TxLogParseResult, RegistryEr
 
         // --- data-before / data-after (variable length blobs) -------------
         let data_before = read_data_blob(&mut cursor)
-            .map_err(|e| format!("data_before at offset {pos:#x}: {e}"))?;
+            .map_err(|e| RegistryError::other(format!("data_before at offset {pos:#x}: {e}")))?;
 
         let data_after = read_data_blob(&mut cursor)
-            .map_err(|e| format!("data_after at offset {pos:#x}: {e}"))?;
+            .map_err(|e| RegistryError::other(format!("data_after at offset {pos:#x}: {e}")))?;
 
         // Only keep data_before for operations that actually have "before" state.
         let data_before = match operation {
@@ -402,14 +404,17 @@ pub fn parse_and_merge_txlogs(
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn read_utf16_string(cursor: &mut Cursor<&[u8]>, code_units: usize) -> Result<String, String> {
+fn read_utf16_string(
+    cursor: &mut Cursor<&[u8]>,
+    code_units: usize,
+) -> Result<String, RegistryError> {
     let byte_len = code_units
         .checked_mul(2)
-        .ok_or_else(|| "UTF-16 byte length overflow".to_string())?;
+        .ok_or_else(|| RegistryError::utf16("UTF-16 byte length overflow"))?;
     let mut buf = vec![0u8; byte_len];
     cursor
         .read_exact(&mut buf)
-        .map_err(|e| format!("read UTF-16 string: {e}"))?;
+        .map_err(|e| RegistryError::utf16(format!("read UTF-16 string: {e}")))?;
     let units: Vec<u16> = buf
         .chunks_exact(2)
         .map(|c| u16::from_le_bytes([c[0], c[1]]))
@@ -417,20 +422,23 @@ fn read_utf16_string(cursor: &mut Cursor<&[u8]>, code_units: usize) -> Result<St
     Ok(String::from_utf16_lossy(&units))
 }
 
-fn read_data_blob(cursor: &mut Cursor<&[u8]>) -> Result<Option<Vec<u8>>, String> {
-    let len = cursor
-        .read_u32::<LittleEndian>()
-        .map_err(|e| format!("data blob len: {e}"))?;
+fn read_data_blob(cursor: &mut Cursor<&[u8]>) -> Result<Option<Vec<u8>>, RegistryError> {
+    let len = cursor.read_u32::<LittleEndian>().map_err(|e| {
+        RegistryError::truncated(cursor.position() as usize, format!("data blob len: {e}"))
+    })?;
     if len == 0 {
         return Ok(None);
     }
     if len > MAX_ENTRY_BYTES {
-        return Err(format!("data blob length {len} exceeds maximum"));
+        return Err(RegistryError::truncated(
+            cursor.position() as usize,
+            format!("data blob length {len} exceeds maximum"),
+        ));
     }
     let mut buf = vec![0u8; len as usize];
-    cursor
-        .read_exact(&mut buf)
-        .map_err(|e| format!("read data blob: {e}"))?;
+    cursor.read_exact(&mut buf).map_err(|e| {
+        RegistryError::truncated(cursor.position() as usize, format!("read data blob: {e}"))
+    })?;
     Ok(Some(buf))
 }
 

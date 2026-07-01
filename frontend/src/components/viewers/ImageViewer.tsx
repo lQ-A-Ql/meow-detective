@@ -152,7 +152,7 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
   return (
     <div className="flex flex-col h-full">
       {/* 工具栏 */}
-      <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-[#fafafa] text-[11px] shrink-0">
+      <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 border-b bg-[#fafafa] text-[11px] shrink-0">
         <Image size={12} className="text-[#666]" />
 
         {/* 缩放控制 */}
@@ -163,7 +163,7 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
         >
           <ZoomIn size={14} />
         </button>
-        <span className="text-[#666] w-14 text-center font-mono">
+        <span className="min-w-[3.5rem] text-center font-mono text-[#666]">
           {Math.round(scale * 100)}%
         </span>
         <button
@@ -278,7 +278,7 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
         {fileName && (
           <>
             <span className="text-[#ddd]">|</span>
-            <span className="truncate max-w-[200px]">{fileName}</span>
+            <span className="max-w-[50%] truncate">{fileName}</span>
           </>
         )}
       </div>

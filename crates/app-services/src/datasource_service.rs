@@ -19,6 +19,15 @@ pub enum DataSourceError {
     Evidence(String),
 }
 
+impl transport::ServiceErrorCategory for DataSourceError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Io(_) | Self::Db(_) => transport::ErrorCategory::Io,
+            Self::Evidence(_) => transport::ErrorCategory::Validation,
+        }
+    }
+}
+
 pub type Result<T> = std::result::Result<T, DataSourceError>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

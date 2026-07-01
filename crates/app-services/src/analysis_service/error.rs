@@ -23,3 +23,14 @@ impl From<rusqlite::Error> for AnalysisServiceError {
         Self::Db(persistence_sqlite::DbError::from(e))
     }
 }
+
+impl transport::ServiceErrorCategory for AnalysisServiceError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Db(_) | Self::Io(_) | Self::Read(_) => transport::ErrorCategory::Io,
+            Self::Extraction(_) => transport::ErrorCategory::Parser,
+            Self::NotFound(_, _) | Self::InvalidInput(_) => transport::ErrorCategory::Validation,
+            Self::Other(_) => transport::ErrorCategory::Internal,
+        }
+    }
+}

@@ -144,7 +144,7 @@ fn config_from_dto(config: McpConfigDto) -> Result<McpConfig, CommandError> {
         resources: config.resources,
         tools: config.tools,
     };
-    validate_mcp_config(&mut config).map_err(CommandError::from_service_error)?;
+    validate_mcp_config(&mut config).map_err(CommandError::from_typed_service_error)?;
     Ok(config)
 }
 
@@ -274,7 +274,7 @@ pub async fn add_mcp_server(
     server: McpServerConfigDto,
 ) -> Result<McpServerStatusDto, CommandError> {
     let mut config = server_config_from_dto(&server)?;
-    validate_mcp_server_config(&mut config).map_err(CommandError::from_service_error)?;
+    validate_mcp_server_config(&mut config).map_err(CommandError::from_typed_service_error)?;
 
     state
         .add_mcp_server(config.clone())
@@ -462,7 +462,7 @@ pub async fn list_mcp_resources(
         client
             .list_resources()
             .await
-            .map_err(CommandError::from_service_error)?
+            .map_err(CommandError::from_typed_service_error)?
     };
 
     write_audit_log(
@@ -498,7 +498,7 @@ pub async fn list_mcp_tools(
         client
             .list_tools()
             .await
-            .map_err(CommandError::from_service_error)?
+            .map_err(CommandError::from_typed_service_error)?
     };
 
     write_audit_log(
@@ -534,7 +534,7 @@ pub async fn call_mcp_tool(
         match client
             .call_tool(&request.tool_name, request.arguments)
             .await
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
         {
             Ok(data) => McpToolCallResultDto {
                 success: true,
@@ -576,7 +576,7 @@ pub async fn list_mcp_prompts(
         client
             .list_prompts()
             .await
-            .map_err(CommandError::from_service_error)?
+            .map_err(CommandError::from_typed_service_error)?
     };
 
     write_audit_log(
@@ -622,7 +622,7 @@ pub async fn get_mcp_prompt(
         client
             .get_prompt(&prompt_name, arguments)
             .await
-            .map_err(CommandError::from_service_error)?
+            .map_err(CommandError::from_typed_service_error)?
     };
 
     write_audit_log(

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Forensics Workbench** is a Windows-first, single-user desktop digital-forensics application built with **Tauri 2**. It is backend-led: a Rust workspace of 37 crates performs evidence processing (disk images, volume detection, file systems, Windows/Linux/macOS artifacts, search indexing, timeline generation, entity resolution, STIX 2.1 exchange), while a **React 18 + TypeScript + Vite + Tailwind 4** frontend provides the investigator UI.
+**Forensics Workbench** is a Windows-first, single-user desktop digital-forensics application built with **Tauri 2**. It is backend-led: a Rust workspace of 36 crates performs evidence processing (disk images, volume detection, file systems, Windows/Linux/macOS artifacts, search indexing, timeline generation, entity resolution, STIX 2.1 exchange), while a **React 18 + TypeScript + Vite + Tailwind 4** frontend provides the investigator UI.
 
 - **Runtime**: Tauri 2 desktop shell. No HTTP server. All frontend↔backend communication goes through Tauri commands and events.
 - **Primary platform**: `x86_64-pc-windows-msvc` (Windows-primary, desktop-first, single-user).
@@ -273,12 +273,12 @@ Backend → Frontend via Tauri `emit`. Topics are string constants in `crates/tr
 
 | Count | Location | Notes |
 |-------|----------|-------|
-| 37 crates | `Cargo.toml` workspace members + `apps/desktop/src-tauri` | Includes 36 library crates and the Tauri shell |
+| 36 crates | `Cargo.toml` workspace members + `apps/desktop/src-tauri` | Includes 35 library crates and the Tauri shell |
 | 96 Tauri commands | `apps/desktop/src-tauri/src/commands/**/*.rs` | Registered in `src/lib.rs` |
 | 15 SQLite repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` | Includes staging_repo, correlation_repo, entity_repo added in 2026-06 |
 | 33 migration scripts | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | `0001`–`0031` plus `staging_001.sql` |
 | 17 frontend pages | `frontend/src/app/pages/*.tsx` (excluding `*.test.tsx`) | Includes V2 Workbench, V3 Dashboard, V3ScoreCards, CaseHome, FileBrowser, etc. |
-| 75 frontend test files | `frontend/src/**/*.test.{ts,tsx}` | |
+| 79 frontend test files | `frontend/src/**/*.test.{ts,tsx}` | |
 | ~2,061 Rust tests | `cargo test --workspace` (calibrated 2026-06) | |
 | 19 event topics | `crates/transport/src/events/mod.rs` | File extract progress added in 2026-06 |
 | 33 DTO domain files | `crates/transport/src/dto/*.rs` | Includes analysis_browser.rs added in 2026-06 |

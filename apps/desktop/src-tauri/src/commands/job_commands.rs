@@ -17,7 +17,8 @@ pub async fn get_jobs_snapshot(
             return Ok(vec![]);
         }
         let conn = get_case_connection(&app_state)?;
-        app_services::job_service::get_jobs_from_db(&conn).map_err(CommandError::from_service_error)
+        app_services::job_service::get_jobs_from_db(&conn)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?

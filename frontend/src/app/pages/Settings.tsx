@@ -133,7 +133,7 @@ export function Settings() {
         <div className="text-forensics-muted text-[11px] font-mono mt-1">{t('settings.subtitle')}</div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6 space-y-8">
+      <div className="mx-auto w-full max-w-5xl flex-1 space-y-8 overflow-auto p-6">
         <StoragePathsSection
           caseRoot={settings.caseRoot}
           imageSearchPaths={settings.imageSearchPaths}

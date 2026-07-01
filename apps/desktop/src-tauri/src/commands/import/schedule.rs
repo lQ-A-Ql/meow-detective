@@ -105,18 +105,18 @@ pub fn schedule_import_for_active_case(
     let source_name = import_config.source_name.clone();
 
     let conn = app_services::connection::open_case_db(&db_path)
-        .map_err(CommandError::from_service_error)?;
+        .map_err(CommandError::from_typed_service_error)?;
     let job_repo = JobRepo::new(&conn);
     let job_id = job_repo
         .create(&case_id.0, "Import data source")
-        .map_err(CommandError::from_service_error)?;
+        .map_err(CommandError::from_typed_service_error)?;
     let job_id_str = job_id.0.clone();
     if let Some(app) = app {
         event_bridge::emit_job_created(app, &job_id_str, "Import data source");
     }
     job_repo
         .update_progress(&job_id, 1, &format!("Queued import for {source_name}"))
-        .map_err(CommandError::from_service_error)?;
+        .map_err(CommandError::from_typed_service_error)?;
 
     let source_path = source_path.to_string();
     let app_handle = app.cloned();
@@ -166,6 +166,6 @@ pub(crate) fn import_config_error_to_command_error(
     if error.is_invalid_input() {
         CommandError::invalid_input(error.to_string())
     } else {
-        CommandError::from_service_error(error)
+        CommandError::from_typed_service_error(error)
     }
 }

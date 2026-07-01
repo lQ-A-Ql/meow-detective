@@ -317,7 +317,7 @@ export function CorrelationWorkspace({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <div className="space-y-4">
           <div className="rounded border border-[#e0e0e0] bg-white p-4">
             <div className="mb-3 flex items-center gap-2 text-[12px] font-semibold text-[#111]">

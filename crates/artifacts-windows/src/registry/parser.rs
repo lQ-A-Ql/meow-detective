@@ -7,6 +7,7 @@
 //! USRCLASS/Amcache/SECURITY field extraction, transaction-log merge, and
 //! structured warnings.
 
+use crate::registry::error::RegistryError;
 use crate::registry::util::filetime_to_dt;
 use artifacts_core::{
     new_artifact, new_timeline_event, ArtifactContext, ArtifactExtractor, ArtifactSink,
@@ -26,11 +27,13 @@ struct RegistryHive {
 }
 
 impl RegistryExtractor {
-    fn parse_base_block(reader: &mut (impl Read + Seek)) -> Result<RegistryHive, String> {
+    fn parse_base_block(reader: &mut (impl Read + Seek)) -> Result<RegistryHive, RegistryError> {
         let mut magic = [0u8; 4];
-        reader.read_exact(&mut magic).map_err(|e| e.to_string())?;
+        reader.read_exact(&mut magic)?;
         if &magic != b"regf" {
-            return Err("Not a valid registry hive".to_string());
+            return Err(RegistryError::InvalidHive(
+                "Not a valid registry hive".to_string(),
+            ));
         }
 
         let _seq1 = reader.read_u32::<LittleEndian>().unwrap_or(0);
@@ -46,9 +49,7 @@ impl RegistryExtractor {
         let _hbin_data_size = reader.read_u32::<LittleEndian>().unwrap_or(0);
 
         let mut _name_buf = [0u8; 64];
-        reader
-            .read_exact(&mut _name_buf)
-            .map_err(|e| e.to_string())?;
+        reader.read_exact(&mut _name_buf)?;
 
         Ok(RegistryHive {
             last_written,
@@ -59,17 +60,15 @@ impl RegistryExtractor {
     fn read_hive_name(
         reader: &mut (impl Read + Seek),
         hive: &RegistryHive,
-    ) -> Result<String, String> {
-        reader
-            .seek(SeekFrom::Start(hive.root_cell_offset))
-            .map_err(|e| e.to_string())?;
+    ) -> Result<String, RegistryError> {
+        reader.seek(SeekFrom::Start(hive.root_cell_offset))?;
 
         let _size = reader
             .read_i32::<LittleEndian>()
             .map_err(|e| e.to_string())?;
         let signature = {
             let mut sig = [0u8; 2];
-            reader.read_exact(&mut sig).map_err(|e| e.to_string())?;
+            reader.read_exact(&mut sig)?;
             sig
         };
 
@@ -97,16 +96,14 @@ impl RegistryExtractor {
 
         let name_len = name_len.min(128);
         let mut name_bytes = vec![0u8; name_len];
-        reader
-            .read_exact(&mut name_bytes)
-            .map_err(|e| e.to_string())?;
+        reader.read_exact(&mut name_bytes)?;
 
         if name_bytes.len() >= 2 {
             let chars: Vec<u16> = name_bytes
                 .chunks_exact(2)
                 .map(|c| u16::from_le_bytes([c[0], c[1]]))
                 .collect();
-            String::from_utf16(&chars).map_err(|e| e.to_string())
+            String::from_utf16(&chars).map_err(|e| RegistryError::utf16(e.to_string()))
         } else {
             Ok(String::new())
         }

@@ -35,6 +35,20 @@ pub enum CaseServiceError {
     InvalidCaseDir(String),
 }
 
+impl transport::ServiceErrorCategory for CaseServiceError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Io(_) => transport::ErrorCategory::Io,
+            Self::Db(_) => transport::ErrorCategory::Io,
+            Self::Json(_) => transport::ErrorCategory::Parser,
+            Self::AlreadyExists(_) | Self::InvalidCaseDir(_) => {
+                transport::ErrorCategory::Validation
+            }
+            Self::NotFound(_) => transport::ErrorCategory::Validation,
+        }
+    }
+}
+
 pub type Result<T> = std::result::Result<T, CaseServiceError>;
 
 const DIRS: &[&str] = &["evidence", "exports", "reports", "indexes", "cache", "logs"];

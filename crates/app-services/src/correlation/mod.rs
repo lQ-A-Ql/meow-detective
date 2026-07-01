@@ -28,6 +28,17 @@ impl From<rusqlite::Error> for CorrelationError {
     }
 }
 
+impl transport::ServiceErrorCategory for CorrelationError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Db(_) => transport::ErrorCategory::Io,
+            Self::Json(_) => transport::ErrorCategory::Parser,
+            Self::InvalidInput(_) => transport::ErrorCategory::Validation,
+            Self::Other(_) => transport::ErrorCategory::Internal,
+        }
+    }
+}
+
 pub use self::graph::{
     get_correlation_snapshot, get_correlation_snapshot_incremental, invalidate_correlation_cache,
 };

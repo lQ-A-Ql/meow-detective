@@ -70,7 +70,7 @@ export function Artifacts() {
     <div className="flex h-full min-w-0 flex-1 flex-col bg-white">
       <PageSubbar
         title="痕迹家族控制"
-        meta={`Family ${selectedArtifactFamily} / 记录 ${tableRows.length} 条`}
+        meta={`Family ${selectedArtifactFamily} / 记录 ${tableRows.length} 条 / 来源范围：Windows 用户活动 / 壳对象`}
       >
         <div className="flex h-10 shrink-0 items-center gap-1 overflow-x-auto px-2">
           {families?.map((family) => {
@@ -82,7 +82,7 @@ export function Artifacts() {
               <button
                 key={family}
                 onClick={() => setSelectedArtifactFamily(family)}
-                className={`whitespace-nowrap px-3 py-1.5 font-mono text-[11px] transition-colors ${
+                className={`shrink-0 whitespace-nowrap px-3 py-1.5 font-mono text-[11px] transition-colors ${
                   isSelected
                     ? 'rounded-[2px] border border-[#ccc] bg-white font-medium text-[#111]'
                     : 'text-[#666] hover:text-[#111]'
@@ -92,9 +92,6 @@ export function Artifacts() {
               </button>
             );
           })}
-          <div className="ml-auto pr-2 font-mono text-[11px] text-[#888]">
-            来源范围: Windows 用户活动 / 壳对象
-          </div>
         </div>
       </PageSubbar>
 

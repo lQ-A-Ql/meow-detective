@@ -12,20 +12,27 @@ import { useTimelineEventById, useTimelineEvents } from '@/features/timeline/hoo
 import { useSelectionStore } from '@/stores/selection-store';
 import { TimelineEvent } from '@/types/models';
 
-function buildTimelineBars(events: TimelineEvent[], bucketCount: number): number[] {
-  if (!events || events.length === 0) return Array(bucketCount).fill(0);
+function buildTimelineBars(
+  events: TimelineEvent[],
+  bucketCount: number,
+): Array<{ height: number; count: number }> {
+  if (!events || events.length === 0) {
+    return Array(bucketCount).fill({ height: 0, count: 0 });
+  }
   const timestamps = events.map((e) => Date.parse(e.ts)).filter((t) => !isNaN(t));
-  if (timestamps.length === 0) return Array(bucketCount).fill(0);
+  if (timestamps.length === 0) {
+    return Array(bucketCount).fill({ height: 0, count: 0 });
+  }
   const min = Math.min(...timestamps);
   const max = Math.max(...timestamps);
   const range = max - min || 1;
-  const buckets = Array(bucketCount).fill(0);
+  const counts = Array(bucketCount).fill(0);
   for (const ts of timestamps) {
     const idx = Math.min(Math.floor(((ts - min) / range) * bucketCount), bucketCount - 1);
-    buckets[idx]++;
+    counts[idx]++;
   }
-  const maxCount = Math.max(...buckets, 1);
-  return buckets.map((c) => (c / maxCount) * 100);
+  const maxCount = Math.max(...counts, 1);
+  return counts.map((count) => ({ height: (count / maxCount) * 100, count }));
 }
 
 function formatTs(ts: string): string {
@@ -39,19 +46,30 @@ function formatTs(ts: string): string {
   });
 }
 
+function isValidDateInput(value: string): boolean {
+  return value === '' || !isNaN(Date.parse(value));
+}
+
+function toIsoOrUndefined(value: string): string | undefined {
+  return value && isValidDateInput(value) ? new Date(value).toISOString() : undefined;
+}
+
+const MIN_BUCKET_COUNT = 20;
+const MAX_BUCKET_COUNT = 180;
+const BUCKET_STEP = 20;
+const DEFAULT_BUCKET_COUNT = 60;
+
 export function Timeline() {
   const navigate = useNavigate();
+  const [draftTimeStart, setDraftTimeStart] = useState('');
+  const [draftTimeEnd, setDraftTimeEnd] = useState('');
   const [timeStart, setTimeStart] = useState('');
   const [timeEnd, setTimeEnd] = useState('');
   const [eventType, setEventType] = useState('');
-  const normalizedTimeStart = useMemo(
-    () => (timeStart ? new Date(timeStart).toISOString() : undefined),
-    [timeStart],
-  );
-  const normalizedTimeEnd = useMemo(
-    () => (timeEnd ? new Date(timeEnd).toISOString() : undefined),
-    [timeEnd],
-  );
+  const [bucketCount, setBucketCount] = useState(DEFAULT_BUCKET_COUNT);
+  const draftDatesValid = isValidDateInput(draftTimeStart) && isValidDateInput(draftTimeEnd);
+  const normalizedTimeStart = useMemo(() => toIsoOrUndefined(timeStart), [timeStart]);
+  const normalizedTimeEnd = useMemo(() => toIsoOrUndefined(timeEnd), [timeEnd]);
   const { data: timelineData } = useTimelineEvents({
     offset: 0,
     limit: 100,
@@ -94,7 +112,21 @@ export function Timeline() {
     [events],
   );
 
-  const bars = useMemo(() => buildTimelineBars(events, 60), [events]);
+  const bars = useMemo(() => buildTimelineBars(events, bucketCount), [events, bucketCount]);
+
+  function zoomIn() {
+    setBucketCount((current) => Math.min(MAX_BUCKET_COUNT, current + BUCKET_STEP));
+  }
+
+  function zoomOut() {
+    setBucketCount((current) => Math.max(MIN_BUCKET_COUNT, current - BUCKET_STEP));
+  }
+
+  function applyDateRange() {
+    if (!draftDatesValid) return;
+    setTimeStart(draftTimeStart);
+    setTimeEnd(draftTimeEnd);
+  }
 
   const timeRange = useMemo(() => {
     if (events.length === 0) return { start: '-', end: '-' };
@@ -122,44 +154,59 @@ export function Timeline() {
       <PageSubbar title="时间线控制带" meta={`事件 ${events.length} 条 / 数据源 ${sourceCount} 个`}>
         <div className="flex min-h-10 shrink-0 items-center justify-between gap-3 overflow-x-auto px-4 py-1">
           <div className="flex items-center gap-4 whitespace-nowrap">
-            <div className="flex items-center gap-2 font-mono text-[11px] text-[#666]">
-              <Clock size={12} className="text-[#888]" />
-              <span className="text-[#111]">{timeRange.start}</span>
-              <span className="text-[#aaa]">至</span>
-              <span className="text-[#111]">{timeRange.end}</span>
+            <div className="flex items-center gap-2 font-mono text-[11px] text-forensics-muted">
+              <Clock size={12} className="text-forensics-muted-light" />
+              <span className="text-forensics-text">{timeRange.start}</span>
+              <span className="text-forensics-500">至</span>
+              <span className="text-forensics-text">{timeRange.end}</span>
             </div>
-            <div className="h-4 border-l border-[#e0e0e0]" />
-            <div className="flex items-center gap-2 text-[11px] text-[#888]">
+            <div className="h-4 border-l border-forensics-border" />
+            <div className="flex items-center gap-2 text-[11px] text-forensics-muted-light">
               粒度:
-              <span className="border border-[#ccc] bg-white px-1.5 py-0.5 text-[#111]">
+              <span className="border border-forensics-border-strong bg-white px-1.5 py-0.5 text-forensics-text">
                 自适应
               </span>
             </div>
-            <div className="h-4 border-l border-[#e0e0e0]" />
-            <label className="flex items-center gap-1.5 text-[11px] text-[#888]">
+            <div className="h-4 border-l border-forensics-border" />
+            <label className="flex items-center gap-1.5 text-[11px] text-forensics-muted-light">
               起始
               <input
                 type="datetime-local"
-                value={timeStart}
-                onChange={(event) => setTimeStart(event.target.value)}
-                className="border border-[#ccc] bg-white px-1.5 py-0.5 font-mono text-[#111]"
+                value={draftTimeStart}
+                onChange={(event) => setDraftTimeStart(event.target.value)}
+                className={`border bg-white px-1.5 py-0.5 font-mono text-forensics-text ${
+                  isValidDateInput(draftTimeStart) ? 'border-forensics-border-strong' : 'border-red-500'
+                }`}
               />
             </label>
-            <label className="flex items-center gap-1.5 text-[11px] text-[#888]">
+            <label className="flex items-center gap-1.5 text-[11px] text-forensics-muted-light">
               结束
               <input
                 type="datetime-local"
-                value={timeEnd}
-                onChange={(event) => setTimeEnd(event.target.value)}
-                className="border border-[#ccc] bg-white px-1.5 py-0.5 font-mono text-[#111]"
+                value={draftTimeEnd}
+                onChange={(event) => setDraftTimeEnd(event.target.value)}
+                className={`border bg-white px-1.5 py-0.5 font-mono text-forensics-text ${
+                  isValidDateInput(draftTimeEnd) ? 'border-forensics-border-strong' : 'border-red-500'
+                }`}
               />
             </label>
-            <label className="flex items-center gap-1.5 text-[11px] text-[#888]">
+            {!draftDatesValid ? (
+              <span className="text-[11px] text-red-600">日期无效</span>
+            ) : null}
+            <button
+              type="button"
+              onClick={applyDateRange}
+              disabled={!draftDatesValid}
+              className="border border-forensics-border-strong bg-white px-2 py-0.5 text-[11px] text-forensics-muted hover:bg-forensics-hover hover:text-forensics-text disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              应用
+            </button>
+            <label className="flex items-center gap-1.5 text-[11px] text-forensics-muted-light">
               类型
               <select
                 value={eventType}
                 onChange={(event) => setEventType(event.target.value)}
-                className="border border-[#ccc] bg-white px-1.5 py-0.5 text-[#111]"
+                className="border border-forensics-border-strong bg-white px-1.5 py-0.5 text-forensics-text"
               >
                 <option value="">全部</option>
                 {eventTypes.map((type) => (
@@ -172,42 +219,56 @@ export function Timeline() {
             <button
               type="button"
               onClick={() => {
+                setDraftTimeStart('');
+                setDraftTimeEnd('');
                 setTimeStart('');
                 setTimeEnd('');
                 setEventType('');
               }}
-              className="border border-[#ccc] bg-white px-2 py-0.5 text-[11px] text-[#666] hover:bg-[#f0f0f0] hover:text-[#111]"
+              className="border border-forensics-border-strong bg-white px-2 py-0.5 text-[11px] text-forensics-muted hover:bg-forensics-hover hover:text-forensics-text"
             >
               清除
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <button className="rounded p-1 text-[#666] hover:bg-[#f0f0f0] hover:text-[#111]">
+            <button
+              type="button"
+              onClick={zoomOut}
+              disabled={bucketCount <= MIN_BUCKET_COUNT}
+              aria-label="缩小"
+              className="rounded p-1 text-forensics-muted hover:bg-forensics-hover hover:text-forensics-text disabled:cursor-not-allowed disabled:opacity-40"
+            >
               <ZoomOut size={14} />
             </button>
-            <button className="rounded p-1 text-[#666] hover:bg-[#f0f0f0] hover:text-[#111]">
+            <button
+              type="button"
+              onClick={zoomIn}
+              disabled={bucketCount >= MAX_BUCKET_COUNT}
+              aria-label="放大"
+              className="rounded p-1 text-forensics-muted hover:bg-forensics-hover hover:text-forensics-text disabled:cursor-not-allowed disabled:opacity-40"
+            >
               <ZoomIn size={14} />
             </button>
           </div>
         </div>
       </PageSubbar>
 
-      <div className="flex h-24 shrink-0 flex-col border-b border-[#e0e0e0] bg-[#fcfcfc] p-2">
+      <div className="flex min-h-24 shrink-0 flex-col border-b border-forensics-border bg-forensics-panel p-2">
         <div className="flex flex-1 items-end gap-[1px] px-2">
-          {bars.map((height, i) => (
+          {bars.map((bar, i) => (
             <div
               key={i}
-              className={`flex-1 transition-colors ${
-                height > 0 ? 'bg-[#111]' : 'bg-[#e8e8e8]'
+              className={`min-h-[1px] flex-1 transition-colors ${
+                bar.count > 0 ? 'bg-forensics-text' : 'bg-forensics-250'
               }`}
-              style={{ height: `${Math.max(height, 4)}%` }}
-              title={`${Math.round(height)}%`}
+              style={{ height: `${bar.height}%` }}
+              title={`${bar.count} 条事件`}
             />
           ))}
         </div>
-        <div className="mt-1 flex justify-between px-2 pt-1 font-mono text-[9px] text-[#888]">
+        <div className="mt-1 flex justify-between px-2 pt-1 font-mono text-[9px] text-forensics-muted-light">
           <span>{timeRange.start}</span>
-          <span className="font-medium text-[#333]">
+          <span className="font-medium text-forensics-text-secondary">
             {events.length > 0 ? formatTs(events[Math.floor(events.length / 2)].ts) : ''}
           </span>
           <span>{timeRange.end}</span>
@@ -215,7 +276,7 @@ export function Timeline() {
       </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="min-w-0 flex-1 border-r border-[#e0e0e0]">
+        <div className="min-w-0 flex-1 border-r border-forensics-border">
           <DenseDataTable<TimelineEvent>
             rows={tableEvents}
             getRowKey={(row) => row.id}
@@ -227,25 +288,25 @@ export function Timeline() {
               {
                 key: 'ts',
                 title: '时间戳',
-                className: 'w-36 text-[#666]',
+                className: 'w-36 text-forensics-muted',
                 render: (row) => row.ts,
               },
               {
                 key: 'source',
                 title: '数据源',
-                className: 'w-28 text-[#888]',
+                className: 'w-28 text-forensics-muted-light',
                 render: (row) => String(row.attrs.source ?? '-'),
               },
               {
                 key: 'eventType',
                 title: '类型',
-                className: 'w-28 text-[#666]',
+                className: 'w-28 text-forensics-muted',
                 render: (row) => row.eventType,
               },
               {
                 key: 'title',
                 title: '描述',
-                className: 'text-[#333]',
+                className: 'text-forensics-text-secondary',
                 render: (row) => row.title,
               },
             ]}
@@ -275,7 +336,7 @@ export function Timeline() {
             </InspectorSection>
 
             <InspectorSection title="时间上下文">
-              <div className="space-y-1 font-mono text-[10px] text-[#666]">
+              <div className="space-y-1 font-mono text-[10px] text-forensics-muted">
                 <div className="truncate max-w-full">source: {String(selectedEvent?.attrs.source ?? '-')}</div>
                 <div className="truncate max-w-full">window: {selectedEvent?.ts ?? '-'} ± 10m</div>
               </div>
@@ -286,10 +347,10 @@ export function Timeline() {
                 type="button"
                 onClick={jumpToSource}
                 disabled={!selectedEvent}
-                className="flex w-full cursor-pointer items-center justify-between border border-[#ccc] bg-white p-2 font-mono text-[11px] text-[#555] transition-colors hover:bg-[#f0f0f0] disabled:opacity-50"
+                className="flex w-full cursor-pointer items-center justify-between border border-forensics-border-strong bg-white p-2 font-mono text-[11px] text-forensics-text-tertiary transition-colors hover:bg-forensics-hover disabled:opacity-50"
               >
                 <span className="font-medium">跳转到来源对象</span>
-                <ChevronRight size={12} className="text-[#888]" />
+                <ChevronRight size={12} className="text-forensics-muted-light" />
               </button>
             </InspectorSection>
           </div>

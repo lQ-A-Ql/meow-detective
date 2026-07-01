@@ -60,6 +60,26 @@ pub enum McpError {
     Server { code: i64, message: String },
 }
 
+impl transport::ServiceErrorCategory for McpError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Connection(_) | Self::Transport(_) | Self::NotConnected => {
+                transport::ErrorCategory::External
+            }
+            Self::Protocol(_) | Self::InvalidResponse(_) | Self::Server { .. } => {
+                transport::ErrorCategory::External
+            }
+            Self::Timeout => transport::ErrorCategory::Timeout,
+            Self::ToolNotFound(_) | Self::ResourceNotFound(_) | Self::PromptNotFound(_) => {
+                transport::ErrorCategory::Validation
+            }
+            Self::Io(_) => transport::ErrorCategory::Io,
+            Self::Json(_) => transport::ErrorCategory::Parser,
+            Self::Http(_) => transport::ErrorCategory::External,
+        }
+    }
+}
+
 /// MCP Result 类型
 pub type McpResult<T> = Result<T, McpError>;
 

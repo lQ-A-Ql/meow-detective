@@ -272,7 +272,7 @@ export function DataAnalysis() {
                 <TabsTrigger
                   key={value}
                   value={value}
-                  className="h-auto flex-none rounded-none border-x-0 border-t-0 border-b-2 border-transparent bg-transparent px-5 py-3 text-[12px] data-[state=active]:border-forensics-text data-[state=active]:bg-transparent"
+                  className="h-auto flex-none items-center gap-2 whitespace-nowrap rounded-none border-x-0 border-t-0 border-b-2 border-transparent bg-transparent px-5 py-3 text-[12px] data-[state=active]:border-forensics-text data-[state=active]:bg-transparent"
                 >
                   <Icon size={14} />
                   {t(`analysis.tabs.${value}`)}

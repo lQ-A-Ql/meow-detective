@@ -73,15 +73,17 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.102"
+version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
+checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
 
 [[package]]
 name = "app-services"
 version = "0.1.0"
 dependencies = [
  "artifacts-core",
+ "artifacts-linux",
+ "artifacts-macos",
  "artifacts-windows",
  "chrono",
  "containers-pst",
@@ -534,18 +536,6 @@ checksum = "374b7c592d9c00c1f4972ea58390ac6b18cbb6ab79011f3bdc90a0b82ca06b77"
 dependencies = [
  "serde",
  "toml 0.9.12+spec-1.1.0",
-]
-
-[[package]]
-name = "catalog"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "domain",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1356,6 +1346,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "thiserror 2.0.18",
  "transport",
  "uuid",
 ]
@@ -2893,6 +2884,7 @@ dependencies = [
  "tokio",
  "tokio-test",
  "tracing",
+ "transport",
  "uuid",
 ]
 
@@ -3472,6 +3464,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
+ "transport",
  "uuid",
 ]
 

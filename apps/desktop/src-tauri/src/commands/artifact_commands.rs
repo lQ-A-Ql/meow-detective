@@ -20,7 +20,7 @@ pub async fn get_artifact_families(
         }
         let conn = get_case_connection(&app_state)?;
         app_services::artifact_service::get_artifact_families_from_db(&conn)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -48,7 +48,7 @@ pub async fn get_artifact_rows_request(
         }
         let conn = get_case_connection(&app_state)?;
         app_services::artifact_service::get_artifact_rows_from_db(&conn, request.family.as_deref())
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -66,7 +66,7 @@ pub async fn get_artifact_family_counts(
         }
         let conn = get_case_connection(&app_state)?;
         app_services::artifact_service::get_artifact_family_counts(&conn)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -86,7 +86,7 @@ pub async fn get_artifact_by_id(
         }
         let conn = get_case_connection(&app_state)?;
         app_services::artifact_service::get_artifact_row_by_id(&conn, &request.artifact_id)
-            .map_err(CommandError::from_service_error)?
+            .map_err(CommandError::from_typed_service_error)?
             .ok_or_else(|| CommandError::not_found("Artifact"))
     })
     .await

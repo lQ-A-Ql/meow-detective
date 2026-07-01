@@ -33,7 +33,7 @@ pub(crate) fn run_background_import_job(
     cancel_token: Arc<AtomicBool>,
 ) -> Result<(), CommandError> {
     let conn = app_services::connection::open_case_db(&job.db_path)
-        .map_err(CommandError::from_service_error)?;
+        .map_err(CommandError::from_typed_service_error)?;
     let job_repo = JobRepo::new(&conn);
 
     if let Some(app) = app {
@@ -75,7 +75,7 @@ pub(crate) fn run_background_import_job(
         Ok(message) => {
             job_repo
                 .complete(&job.job_id, &message)
-                .map_err(CommandError::from_service_error)?;
+                .map_err(CommandError::from_typed_service_error)?;
             if let Some(app) = app {
                 event_bridge::emit_job_completed(app, &job.job_id.0, &message);
             }

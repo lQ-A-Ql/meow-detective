@@ -109,7 +109,7 @@ function Invoke-E01ImportProfileTest {
 
   $psi = New-Object System.Diagnostics.ProcessStartInfo
   $psi.FileName = $Cargo
-  $psi.Arguments = "test -p forensics-desktop e01_full_import -- --ignored --nocapture"
+  $psi.Arguments = "test -p app-services e01_full_import -- --ignored --nocapture"
   $psi.WorkingDirectory = $WorkingDirectory
   $psi.UseShellExecute = $false
   $psi.RedirectStandardOutput = $true

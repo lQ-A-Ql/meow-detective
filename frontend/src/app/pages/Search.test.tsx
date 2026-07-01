@@ -105,7 +105,7 @@ describe('Search page', () => {
     renderPage();
 
     const input = screen.getByRole('textbox') as HTMLInputElement;
-    expect(input.value).toBe("files WHERE extension IN ('.doc', '.xls') AND size > 10MB");
+    expect(input.value).toBe('content:password AND path:doc');
   });
 
   it('renders search results table when data is available', () => {
@@ -169,9 +169,9 @@ describe('Search page', () => {
 
     await waitFor(() =>
       expect((screen.getByRole('textbox') as HTMLInputElement).value).toBe(
-        "files WHERE extension IN ('.doc', '.xls') AND size > 10MB",
+        'content:password AND path:doc',
       ),
     );
-    expect(mocks.searchResults).toHaveBeenLastCalledWith("files WHERE extension IN ('.doc', '.xls') AND size > 10MB");
+    expect(mocks.searchResults).toHaveBeenLastCalledWith('content:password AND path:doc');
   });
 });

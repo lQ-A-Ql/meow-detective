@@ -1,4 +1,5 @@
 use crate::connection::DbResult;
+use crate::sql_builder::ClauseBuilder;
 use domain::{TimelineEvent, TimelineEventId};
 use rusqlite::{params, Connection};
 
@@ -87,43 +88,29 @@ impl<'a> TimelineRepo<'a> {
         time_end: Option<&str>,
         event_type: Option<&str>,
     ) -> DbResult<Vec<TimelineEvent>> {
-        let mut sql = format!("SELECT {TIMELINE_SELECT_COLUMNS} FROM timeline_events WHERE 1=1");
-        let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
-        let mut param_index = 1;
-
+        let mut builder = ClauseBuilder::new();
         if let Some(case_id) = case_id {
-            sql.push_str(&format!(" AND case_id = ?{}", param_index));
-            param_values.push(Box::new(case_id.to_string()));
-            param_index += 1;
+            builder.push_eq("case_id", case_id.to_string());
         }
         if let Some(start) = time_start {
-            sql.push_str(&format!(" AND ts >= ?{}", param_index));
-            param_values.push(Box::new(start.to_string()));
-            param_index += 1;
+            builder.push_cmp("ts", ">=", start.to_string());
         }
         if let Some(end) = time_end {
-            sql.push_str(&format!(" AND ts <= ?{}", param_index));
-            param_values.push(Box::new(end.to_string()));
-            param_index += 1;
+            builder.push_cmp("ts", "<=", end.to_string());
         }
         if let Some(et) = event_type {
-            sql.push_str(&format!(" AND event_type = ?{}", param_index));
-            param_values.push(Box::new(et.to_string()));
-            param_index += 1;
+            builder.push_eq("event_type", et.to_string());
         }
+        let limit_param = builder.push_param(limit);
+        let offset_param = builder.push_param(offset);
 
-        sql.push_str(&format!(
-            " {TIMELINE_ORDER_BY} LIMIT ?{} OFFSET ?{}",
-            param_index,
-            param_index + 1
-        ));
-        param_values.push(Box::new(limit));
-        param_values.push(Box::new(offset));
+        let sql = format!(
+            "SELECT {TIMELINE_SELECT_COLUMNS} FROM timeline_events {} {TIMELINE_ORDER_BY} LIMIT ?{limit_param} OFFSET ?{offset_param}",
+            builder.where_clause(),
+        );
 
         let mut stmt = self.conn.prepare(&sql)?;
-        let params_refs: Vec<&dyn rusqlite::types::ToSql> =
-            param_values.iter().map(|p| p.as_ref()).collect();
-        let rows = stmt.query_map(params_refs.as_slice(), row_to_timeline_event)?;
+        let rows = stmt.query_map(builder.param_refs().as_slice(), row_to_timeline_event)?;
         let mut events = Vec::new();
         for row in rows {
             events.push(row?);
@@ -148,34 +135,26 @@ impl<'a> TimelineRepo<'a> {
         time_end: Option<&str>,
         event_type: Option<&str>,
     ) -> DbResult<u64> {
-        let mut sql = String::from("SELECT COUNT(*) FROM timeline_events WHERE 1=1");
-        let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
-        let mut param_index = 1;
-
+        let mut builder = ClauseBuilder::new();
         if let Some(case_id) = case_id {
-            sql.push_str(&format!(" AND case_id = ?{}", param_index));
-            param_values.push(Box::new(case_id.to_string()));
-            param_index += 1;
+            builder.push_eq("case_id", case_id.to_string());
         }
         if let Some(start) = time_start {
-            sql.push_str(&format!(" AND ts >= ?{}", param_index));
-            param_values.push(Box::new(start.to_string()));
-            param_index += 1;
+            builder.push_cmp("ts", ">=", start.to_string());
         }
         if let Some(end) = time_end {
-            sql.push_str(&format!(" AND ts <= ?{}", param_index));
-            param_values.push(Box::new(end.to_string()));
-            param_index += 1;
+            builder.push_cmp("ts", "<=", end.to_string());
         }
         if let Some(et) = event_type {
-            sql.push_str(&format!(" AND event_type = ?{}", param_index));
-            param_values.push(Box::new(et.to_string()));
+            builder.push_eq("event_type", et.to_string());
         }
 
+        let sql = format!(
+            "SELECT COUNT(*) FROM timeline_events {}",
+            builder.where_clause()
+        );
         let mut stmt = self.conn.prepare(&sql)?;
-        let params_refs: Vec<&dyn rusqlite::types::ToSql> =
-            param_values.iter().map(|p| p.as_ref()).collect();
-        let n: i64 = stmt.query_row(params_refs.as_slice(), |r| r.get(0))?;
+        let n: i64 = stmt.query_row(builder.param_refs().as_slice(), |r| r.get(0))?;
         Ok(n as u64)
     }
 

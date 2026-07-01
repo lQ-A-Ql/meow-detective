@@ -13,7 +13,6 @@ members = [
   "crates/fs-exfat",
   "crates/image-raw",
   "crates/image-e01",
-  "crates/catalog",
   "crates/ingest",
   "crates/mcp-client",
   "crates/search",
@@ -53,6 +52,7 @@ serde_json = "~1.0"
 thiserror = "~2.0"
 chrono = { version = "~0.4", features = ["serde"] }
 anyhow = "~1.0"
+async-trait = "0.1"
 crossbeam-channel = "~0.5"
 regex = "~1"
 base64 = "~0.22"
@@ -63,6 +63,8 @@ tracing = "~0.1"
 tracing-subscriber = { version = "~0.3", features = ["env-filter", "fmt", "json"] }
 tauri = { version = "~2", features = [] }
 tauri-build = { version = "~2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-updater = "2"
 transport = { path = "crates/transport" }
 app-services = { path = "crates/app-services" }
 domain = { path = "crates/domain" }
@@ -79,7 +81,6 @@ fs-xfs = { path = "crates/fs-xfs" }
 fs-hfsplus = { path = "crates/fs-hfsplus" }
 image-raw = { path = "crates/image-raw" }
 image-e01 = { path = "crates/image-e01" }
-catalog = { path = "crates/catalog" }
 ingest = { path = "crates/ingest" }
 search = { path = "crates/search" }
 timeline = { path = "crates/timeline" }
@@ -93,6 +94,7 @@ reports = { path = "crates/reports" }
 testing = { path = "crates/testing" }
 runtime-cache = { path = "crates/runtime-cache" }
 evtx = { path = "crates/evtx-patched", default-features = false }
+flate2 = "1"
 containers-pst = { path = "crates/containers-pst" }
 exchange = { path = "crates/exchange" }
 cloud-audit = { path = "crates/cloud-audit" }
@@ -110,12 +112,14 @@ encoding_rs = "0.8"
 csv = "1"
 reqwest = { version = "0.12", default-features = false }
 tokio = { version = "1" }
+unicode-normalization = "0.1"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_Compression"] }
 dirs = "6"
 lz4_flex = "~0.13"
 toml = "~0.8"
 ed25519-dalek = "~2"
 sha2 = "~0.10"
+tantivy = "0.26"
 md-5 = "~0.10"
 des = "~0.8"
 aes = "~0.8"

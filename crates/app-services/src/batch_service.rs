@@ -36,6 +36,17 @@ impl From<rusqlite::Error> for BatchServiceError {
     }
 }
 
+impl transport::ServiceErrorCategory for BatchServiceError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Db(_) | Self::Serialization(_) => transport::ErrorCategory::Io,
+            Self::NotFound(_) | Self::InvalidInput(_) => transport::ErrorCategory::Validation,
+            Self::Unsupported(_) => transport::ErrorCategory::Unsupported,
+            Self::Other(_) => transport::ErrorCategory::Internal,
+        }
+    }
+}
+
 /// Build a `BatchPlan` from a request DTO.
 pub fn create_batch_plan(dto: BatchPlanDto) -> Result<BatchPlan, BatchServiceError> {
     let phases: Vec<PhaseKind> = dto

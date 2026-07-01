@@ -118,7 +118,7 @@ impl AppState {
         conn.execute_batch(
             "PRAGMA journal_mode=WAL;
              PRAGMA foreign_keys=ON;
-             PRAGMA busy_timeout=5000;
+             PRAGMA busy_timeout=30000;
              PRAGMA synchronous=NORMAL;",
         )
         .map_err(|e| format!("Failed to set pragmas: {}", e))?;
@@ -138,7 +138,15 @@ impl AppState {
             .ok_or("No active case — open or create a case first")?;
         let db_path = active.db_path();
         drop(guard);
-        rusqlite::Connection::open(&db_path).map_err(|e| format!("Failed to open database: {}", e))
+        let conn = rusqlite::Connection::open(&db_path)
+            .map_err(|e| format!("Failed to open database: {}", e))?;
+        // Each new connection needs its own busy timeout. WAL mode is persistent,
+        // but a generous timeout is required so concurrent readers/writers
+        // (e.g. parallel governance/timeline queries that lazily project MACB
+        // events) queue instead of failing immediately with "database is locked".
+        conn.execute_batch("PRAGMA busy_timeout=30000;")
+            .map_err(|e| format!("Failed to set busy_timeout: {}", e))?;
+        Ok(conn)
     }
 
     /// Clear the database state on case close.

@@ -84,7 +84,7 @@ pub(crate) fn run_enumeration_phase(
 ) -> Result<file_service::EnumerationStats, CommandError> {
     ctx.report_job_progress(25, "Enumerating filesystem...")?;
 
-    let stats = match ctx.import_config.kind {
+    let mut stats = match ctx.import_config.kind {
         domain::DataSourceKind::LogicalDirectory => {
             enumerate_logical_directory(ctx, ds).map_err(CommandError::from_service_error)?
         }
@@ -92,6 +92,12 @@ pub(crate) fn run_enumeration_phase(
             enumerate_image_data_source_with_staging(ctx, ds)?
         }
     };
+
+    if let Err(e) = file_service::populate_file_graph_for_data_source(ctx.conn, &ds.id) {
+        let warning = format!("Graph population warning: {}", e);
+        tracing::warn!(%warning, "Failed to populate file graph after enumeration");
+        stats.warnings.push(warning);
+    }
 
     ctx.counts.add_warnings(stats.warnings.len());
     emit_phase_profile(

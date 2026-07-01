@@ -12,3 +12,13 @@ pub enum ReportError {
     #[error("{0}")]
     Other(String),
 }
+
+impl transport::ServiceErrorCategory for ReportError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Db(_) | Self::Sqlite(_) | Self::Io(_) => transport::ErrorCategory::Io,
+            Self::NotFound(_) => transport::ErrorCategory::Validation,
+            Self::Other(_) => transport::ErrorCategory::Internal,
+        }
+    }
+}

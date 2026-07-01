@@ -55,7 +55,7 @@ async fn create_batch_plan_impl(
             resource_limits,
         };
         app_services::batch_service::create_and_persist_batch(&conn, &active.case_id, &name, plan)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -81,7 +81,7 @@ async fn start_batch_impl(
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         app_services::batch_service::start_batch(&conn, &batch_id)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -107,7 +107,7 @@ async fn pause_batch_impl(
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         app_services::batch_service::pause_batch(&conn, &batch_id)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -137,7 +137,7 @@ async fn resume_batch_impl(
             resource_limits: None,
         };
         app_services::batch_service::resume_batch(&conn, resume)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -163,7 +163,7 @@ async fn cancel_batch_impl(
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         app_services::batch_service::cancel_batch(&conn, &batch_id)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -189,7 +189,7 @@ async fn get_batch_job_impl(
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         app_services::batch_service::get_batch_status(&conn, &batch_id)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -206,7 +206,7 @@ async fn list_batch_jobs_impl(app_state: &AppState) -> Result<Vec<BatchJobDto>, 
         let active = require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         app_services::batch_service::list_batch_jobs(&conn, &active.case_id)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?

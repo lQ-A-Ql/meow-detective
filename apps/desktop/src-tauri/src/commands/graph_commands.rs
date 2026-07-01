@@ -19,7 +19,7 @@ pub async fn get_graph_snapshot(
         let snapshot = require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         app_services::graph_service::get_graph_snapshot(&conn, &snapshot.case_id)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -35,7 +35,7 @@ pub async fn query_graph(
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         app_services::graph_service::query_graph(&conn, query)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -51,7 +51,7 @@ pub async fn get_node_neighborhood(
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         app_services::graph_service::get_node_neighborhood(&conn, &request.node_id, request.depth)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -67,7 +67,7 @@ pub async fn get_provenance_chain(
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         app_services::graph_service::get_provenance_chain(&conn, &request.edge_id)
-            .map_err(CommandError::from_service_error)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?

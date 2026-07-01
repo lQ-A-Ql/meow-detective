@@ -129,7 +129,7 @@
       "files": { "label": "File Browser", "context": "Directory tree, file table and forensics viewer" },
       "analysis": { "label": "Data Source Analysis", "context": "System info, file classification and analysis reports" },
       "v2": { "label": "V2 Governance", "context": "Trusted verification, benchmark, security governance and release scorecard" },
-      "v3": { "label": "V3", "context": "Graph stats, platform coverage, rule pack status and batch status" },
+      "v3": { "label": "Forensics Overview", "context": "Graph stats, data source coverage, artifact correlation and rule pack status" },
       "search": { "label": "Global Search", "context": "Keywords, structured queries and hit details" },
       "timeline": { "label": "Timeline", "context": "Event aggregation, filtering and chronological review" },
       "artifacts": { "label": "Artifact Analysis", "context": "Windows artifact families and parsed fields" },

@@ -75,6 +75,12 @@
   --forensics-muted-light: #888888;
   --forensics-muted-lighter: #999999;
 
+  /* Horizontal scrollbar point-light tokens */
+  --scrollbar-line: var(--forensics-400);
+  --scrollbar-glow-core: #ffffff;
+  --scrollbar-glow-mid: var(--forensics-200);
+  --scrollbar-glow-outer: var(--forensics-400);
+
   /* Forensics GQL syntax tokens */
   --forensics-gql-keyword: #d73a49;
   --forensics-gql-type: #6f42c1;
@@ -104,6 +110,18 @@
   --forensics-success-bg: #f4fbf5;
   --forensics-success-border: #cfe3d3;
   --forensics-success-text: #245c2f;
+
+  /* Forensics error/info status-badge tokens */
+  --forensics-error-bg: #f8d7da;
+  --forensics-error-text: #721c24;
+  --forensics-info-bg: #e8f4fd;
+  --forensics-info-text: #1a5c8a;
+
+  /* Forensics coverage-badge tokens */
+  --forensics-badge-covered-bg: #e6f7e6;
+  --forensics-badge-covered-text: #2d7d2d;
+  --forensics-badge-review-bg: #fff3cd;
+  --forensics-badge-review-text: #856404;
 }
 
 @theme inline {
@@ -210,6 +228,18 @@
   --color-forensics-success-bg: var(--forensics-success-bg);
   --color-forensics-success-border: var(--forensics-success-border);
   --color-forensics-success-text: var(--forensics-success-text);
+
+  /* Forensics error/info status-badge utilities */
+  --color-forensics-error-bg: var(--forensics-error-bg);
+  --color-forensics-error-text: var(--forensics-error-text);
+  --color-forensics-info-bg: var(--forensics-info-bg);
+  --color-forensics-info-text: var(--forensics-info-text);
+
+  /* Forensics coverage-badge utilities */
+  --color-forensics-badge-covered-bg: var(--forensics-badge-covered-bg);
+  --color-forensics-badge-covered-text: var(--forensics-badge-covered-text);
+  --color-forensics-badge-review-bg: var(--forensics-badge-review-bg);
+  --color-forensics-badge-review-text: var(--forensics-badge-review-text);
 }
 
 @layer base {
@@ -279,3 +309,4 @@
     line-height: 1.5;
   }
 }
+

@@ -1,7 +1,7 @@
 # Forensics Workbench 架构模型
 
-**版本**: v1.1
-**日期**: 2026-06-01
+**版本**: v1.2
+**日期**: 2026-07-01
 
 ---
 
@@ -125,7 +125,6 @@
 |-------|------|------|
 | **search** | 全文搜索 | Tantivy 索引 |
 | **timeline** | 时间线分析 | MACB 投影 |
-| **catalog** | 目录管理 | 索引、投影 |
 | **reports** | 报告生成 | HTML, CSV, JSON |
 
 ### 基础设施层
@@ -135,6 +134,39 @@
 | **persistence-sqlite** | 数据库 | SQLite、迁移、仓库 |
 | **runtime-cache** | 运行时缓存 | 文件句柄、搜索缓存 |
 | **mcp-client** | MCP 客户端 | AI 助手集成 |
+
+---
+
+## 🗂️ 关键子模块拆分路径
+
+以下模块已按“生产文件 ≤500 行”原则完成拆分，原单文件已删除：
+
+### `crates/app-services/src/file_service/viewer/`
+
+| 文件 | 职责 |
+|------|------|
+| `mod.rs` | 公共类型：`PreviewDescriptor`、`PreviewPartitionCandidate`、`RangeContentReader`、`PreviewReadContext`；共享工具函数 |
+| `descriptor.rs` | 预览描述符构建与缓存（含 freshness 校验） |
+| `e01_cache.rs` | 每 case 的 E01 reader LRU 缓存 |
+| `handle.rs` | 文件句柄生成、逻辑目录路径解析 |
+| `image_open.rs` | E01/RAW 镜像全文件内容打开 |
+| `partition.rs` | E01/RAW 分区候选发现 |
+| `path.rs` | 安全相对路径校验、镜像路径候选生成 |
+| `range.rs` | 公开 range-read API：`read_file_range_for_case`、`read_file_bytes_for_case` 等 |
+| `range_fs.rs` | NTFS/FAT/exFAT 免物化 range 读取快速路径 |
+
+### `crates/fs-ntfs/src/`
+
+| 文件 | 职责 |
+|------|------|
+| `lib.rs` | 模块声明与公共 re-export |
+| `mft.rs` | MFT 记录解析、`FileSystemReader` 实现 |
+| `attribute.rs` | 属性头、常驻/非常驻数据解析 |
+| `data_runs.rs` | Data run 解析与簇映射 |
+| `reader.rs` | 目录枚举、index record 工具 |
+| `path.rs` | NTFS 路径解析与规范化 |
+| `directory.rs` | 目录遍历实现 |
+| `compression.rs` | NTFS 压缩数据读取 |
 
 ---
 

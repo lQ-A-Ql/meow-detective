@@ -30,17 +30,28 @@ pub enum TimelineServiceError {
     Other(String),
 }
 
+impl transport::ServiceErrorCategory for TimelineServiceError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Db(_) => transport::ErrorCategory::Io,
+            Self::NotFound(_) | Self::InvalidInput(_) => transport::ErrorCategory::Validation,
+            Self::Other(_) => transport::ErrorCategory::Internal,
+        }
+    }
+}
+
 impl From<rusqlite::Error> for TimelineServiceError {
     fn from(e: rusqlite::Error) -> Self {
         Self::Db(persistence_sqlite::DbError::from(e))
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TimelineProjectionStats {
     pub inserted_count: u64,
     pub elapsed_ms: u128,
     pub already_projected: bool,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -90,14 +101,23 @@ pub fn ensure_macb_timeline_projected(
     mark_projection_done(conn, MACB_PROJECTION_KEY, inserted)?;
 
     // Populate investigative graph: TimelineEvent nodes and References edges
+    let mut graph_warnings = Vec::new();
     if inserted > 0 {
-        let _ = populate_timeline_event_graph(conn);
+        match populate_timeline_event_graph(conn) {
+            Ok(warnings) => graph_warnings = warnings,
+            Err(err) => {
+                let message = format!("Timeline graph population failed: {err}");
+                tracing::warn!("{}", message);
+                graph_warnings.push(message);
+            }
+        }
     }
 
     Ok(TimelineProjectionStats {
         inserted_count: inserted,
         elapsed_ms: started.elapsed().as_millis(),
         already_projected: false,
+        warnings: graph_warnings,
     })
 }
 
@@ -508,7 +528,10 @@ fn insert_macb_kind_sql(
 
 /// Write TimelineEvent graph nodes and References edges for all timeline events
 /// in the current case. Called after MACB timeline projection inserts new events.
-fn populate_timeline_event_graph(conn: &Connection) -> Result<(), TimelineServiceError> {
+///
+/// Returns any non-fatal warnings (e.g., events skipped because their
+/// `source_object_id` is empty). Hard failures are returned as `Err`.
+fn populate_timeline_event_graph(conn: &Connection) -> Result<Vec<String>, TimelineServiceError> {
     let case_id: String = conn
         .query_row(
             "SELECT DISTINCT case_id FROM timeline_events LIMIT 1",
@@ -521,6 +544,8 @@ fn populate_timeline_event_graph(conn: &Connection) -> Result<(), TimelineServic
 
     let graph_repo = GraphRepo::new(conn);
     let now = Utc::now().to_rfc3339();
+    let mut warnings = Vec::new();
+    let mut skipped_empty_source: u64 = 0;
 
     const TIMELINE_GRAPH_BATCH: u32 = 5000;
     const GRAPH_WRITE_CHUNK: usize = 2000;
@@ -600,6 +625,8 @@ fn populate_timeline_event_graph(conn: &Connection) -> Result<(), TimelineServic
                     provenance: Some(format!("timeline.macb:{event_type}")),
                     created_at: now.clone(),
                 });
+            } else {
+                skipped_empty_source += 1;
             }
         }
 
@@ -617,7 +644,13 @@ fn populate_timeline_event_graph(conn: &Connection) -> Result<(), TimelineServic
         offset += row_count;
     }
 
-    Ok(())
+    if skipped_empty_source > 0 {
+        warnings.push(format!(
+            "{skipped_empty_source} timeline event(s) skipped because source_object_id was empty; no References edges were created"
+        ));
+    }
+
+    Ok(warnings)
 }
 
 #[cfg(test)]

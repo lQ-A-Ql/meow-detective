@@ -27,6 +27,17 @@ impl From<rusqlite::Error> for GraphServiceError {
     }
 }
 
+impl transport::ServiceErrorCategory for GraphServiceError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Db(_) => transport::ErrorCategory::Io,
+            Self::Json(_) => transport::ErrorCategory::Parser,
+            Self::NotFound(_) | Self::InvalidInput(_) => transport::ErrorCategory::Validation,
+            Self::Other(_) => transport::ErrorCategory::Internal,
+        }
+    }
+}
+
 // ── Public API ──
 
 /// Gather aggregate statistics for the investigative graph in the given case.
@@ -62,7 +73,7 @@ pub fn get_graph_snapshot(
         edge_count_by_type: snapshot.edge_count_by_type,
         total_nodes,
         total_edges,
-        density: (density * 10000.0).round() / 10000.0,
+        density,
         largest_component_size,
     })
 }

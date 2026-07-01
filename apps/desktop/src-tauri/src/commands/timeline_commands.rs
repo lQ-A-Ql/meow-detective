@@ -40,14 +40,14 @@ pub async fn get_timeline_events(
                 req.time_end.as_deref(),
                 req.event_type.as_deref(),
             )
-            .map_err(CommandError::from_service_error)?;
+            .map_err(CommandError::from_typed_service_error)?;
             event_bridge::emit_performance_report_ready(&app, &result.performance_report);
             Ok(result.page)
         } else {
             let result = app_services::timeline_service::query_timeline_instrumented(
                 &conn, req.offset, req.limit,
             )
-            .map_err(CommandError::from_service_error)?;
+            .map_err(CommandError::from_typed_service_error)?;
             event_bridge::emit_performance_report_ready(&app, &result.performance_report);
             Ok(result.page)
         }
@@ -70,7 +70,7 @@ pub async fn get_timeline_event_by_id(
         }
         let conn = get_case_connection(&app_state)?;
         app_services::timeline_service::get_timeline_event_by_id(&conn, &request.event_id)
-            .map_err(CommandError::from_service_error)?
+            .map_err(CommandError::from_typed_service_error)?
             .ok_or_else(|| CommandError::not_found("Timeline event"))
     })
     .await

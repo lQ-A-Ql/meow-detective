@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { Search, Activity, Settings, AlertTriangle } from 'lucide-react';
+import { HorizontalScroll } from '@/components/layout/HorizontalScroll';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import { isDevOrAuditMode } from '@/lib/env';
 import {
@@ -62,7 +63,7 @@ export function TopBar() {
     <div className="shrink-0 border-b border-forensics-border bg-forensics-panel px-4 py-2 text-xs">
       <div className="flex items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-6">
-          <div className="flex items-center gap-5 min-w-0 overflow-x-auto">
+          <HorizontalScroll className="flex min-w-0 items-center gap-5">
             {pageKeys.map((link) => (
               <NavLink
                 key={link.to}
@@ -75,7 +76,7 @@ export function TopBar() {
                 {t(`topBar.links.${link.page}.label`)}
               </NavLink>
             ))}
-          </div>
+          </HorizontalScroll>
           <div className="hidden xl:flex items-center gap-2 min-w-0 border-l border-forensics-border pl-4">
             <span className="text-[10px] uppercase tracking-wider text-forensics-muted-light">{t('topBar.currentPage')}</span>
             <span className="text-[11px] text-forensics-text font-medium">{t(`topBar.links.${activeLink.page}.context`)}</span>

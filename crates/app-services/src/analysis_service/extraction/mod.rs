@@ -1,11 +1,15 @@
 pub(crate) mod browser;
 pub(crate) mod email;
 pub(crate) mod evtx;
+pub(crate) mod linux;
+pub(crate) mod macos;
 pub(crate) mod registry;
 
 use self::browser::extract_browser_candidate;
 use self::email::extract_email_candidate;
 pub use self::evtx::extract_evtx_candidate;
+pub use self::linux::extract_linux_candidate;
+pub use self::macos::extract_macos_candidate;
 pub use self::registry::extract_registry_candidate;
 use crate::analysis_service::candidates::{
     evidence_candidates_for_categories, normalize_evidence_path, EvidenceCandidate,
@@ -42,7 +46,14 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
 ) -> Result<AnalysisExtractionRunDto, AnalysisServiceError> {
     let generated_at = Utc::now().to_rfc3339();
     let selected = if categories.is_empty() {
-        vec!["Registry", "BrowserHistory", "Email", "EventLogs"]
+        vec![
+            "Registry",
+            "BrowserHistory",
+            "Email",
+            "EventLogs",
+            "LinuxArtifacts",
+            "MacArtifacts",
+        ]
     } else {
         categories.to_vec()
     };
@@ -124,7 +135,12 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
     for candidate in candidates {
         if !matches!(
             candidate.category.as_str(),
-            "Registry" | "BrowserHistory" | "Email" | "EventLogs"
+            "Registry"
+                | "BrowserHistory"
+                | "Email"
+                | "EventLogs"
+                | "LinuxArtifacts"
+                | "MacArtifacts"
         ) {
             continue;
         }
@@ -150,7 +166,7 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
                 scanned_count += 1;
                 extract_registry_candidate(&candidate, bytes, boot_key, txlog1, txlog2)
             }
-            "BrowserHistory" | "Email" | "EventLogs" => {
+            "BrowserHistory" | "Email" | "EventLogs" | "LinuxArtifacts" | "MacArtifacts" => {
                 let mut reader = match file_reader(&candidate.file_id) {
                     Ok(reader) => reader,
                     Err(err) => {
@@ -172,6 +188,8 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
                     "BrowserHistory" => extract_browser_candidate(&candidate, &bytes),
                     "Email" => extract_email_candidate(&candidate, &bytes),
                     "EventLogs" => extract_evtx_candidate(&candidate, &bytes),
+                    "LinuxArtifacts" => extract_linux_candidate(&candidate, &bytes),
+                    "MacArtifacts" => extract_macos_candidate(&candidate, &bytes),
                     _ => ExtractionOutcome::default(),
                 }
             }
@@ -1017,6 +1035,22 @@ fn already_has_v1_artifacts(
             "EvtxSecurityEvent",
             "EvtxApplicationEvent",
         ][..],
+        "LinuxArtifacts" => &[
+            "LinuxJournal",
+            "LinuxWtmp",
+            "LinuxBashCommand",
+            "LinuxAptEvent",
+            "LinuxCronJob",
+            "LinuxSudoEvent",
+        ][..],
+        "MacArtifacts" => &[
+            "MacFSEvent",
+            "MacLaunchService",
+            "MacQuarantineEvent",
+            "MacRecentItem",
+            "MacSpotlightEntry",
+            "MacUnifiedLogEntry",
+        ][..],
         _ => &[][..],
     };
     if families.is_empty() {
@@ -1060,7 +1094,7 @@ fn artifacts_by_data_source(artifacts: Vec<Artifact>) -> HashMap<String, Vec<Art
 fn count_analysis_artifacts(conn: &Connection) -> Result<u64, AnalysisServiceError> {
     let count: i64 = conn
         .query_row(
-            "SELECT COUNT(*) FROM artifacts WHERE artifact_type IN ('RegistryValue', 'RegistrySamUser', 'RegistryUserAssist', 'RegistryHive', 'RegistryNetworkAdapter', 'RegistryNetworkProfile', 'RegistryInstalledSoftware', 'RegistrySystemService', 'RegistryUsbDevice', 'RegistryMountedDevice', 'RegistryShutdownTime', 'RegistryShimCache', 'RegistryMachineRunKey', 'RegistryWinlogonConfig', 'RegistryLsaPackage', 'RegistryOpenSaveMru', 'RegistryLastVisitedMru', 'RegistryRunMru', 'RegistryShellbag', 'RegistryMuiCache', 'RegistryAmcacheApplication', 'RegistryAmcacheApplicationFile', 'RegistryAppCompatLayer', 'RegistrySecurityPolicy', 'RegistryLsaSecret', 'RegistryCachedCredential', 'BrowserHistory', 'BrowserDownload', 'BrowserCookie', 'BrowserSessionTab', 'BrowserPassword', 'EmailMessage', 'EvtxBootShutdown', 'EvtxSecurityEvent', 'EvtxApplicationEvent')",
+            "SELECT COUNT(*) FROM artifacts WHERE artifact_type IN ('RegistryValue', 'RegistrySamUser', 'RegistryUserAssist', 'RegistryHive', 'RegistryNetworkAdapter', 'RegistryNetworkProfile', 'RegistryInstalledSoftware', 'RegistrySystemService', 'RegistryUsbDevice', 'RegistryMountedDevice', 'RegistryShutdownTime', 'RegistryShimCache', 'RegistryMachineRunKey', 'RegistryWinlogonConfig', 'RegistryLsaPackage', 'RegistryOpenSaveMru', 'RegistryLastVisitedMru', 'RegistryRunMru', 'RegistryShellbag', 'RegistryMuiCache', 'RegistryAmcacheApplication', 'RegistryAmcacheApplicationFile', 'RegistryAppCompatLayer', 'RegistrySecurityPolicy', 'RegistryLsaSecret', 'RegistryCachedCredential', 'BrowserHistory', 'BrowserDownload', 'BrowserCookie', 'BrowserSessionTab', 'BrowserPassword', 'EmailMessage', 'EvtxBootShutdown', 'EvtxSecurityEvent', 'EvtxApplicationEvent', 'LinuxJournal', 'LinuxWtmp', 'LinuxBashCommand', 'LinuxAptEvent', 'LinuxCronJob', 'LinuxSudoEvent', 'MacFSEvent', 'MacLaunchService', 'MacQuarantineEvent', 'MacRecentItem', 'MacSpotlightEntry', 'MacUnifiedLogEntry')",
             [],
             |row| row.get(0),
         )

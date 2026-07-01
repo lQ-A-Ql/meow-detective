@@ -200,7 +200,7 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
       </div>
 
       {/* 控制栏 */}
-      <div className="flex items-center gap-3 px-4 py-2 bg-[#1a1a1a] text-white text-[12px] shrink-0">
+      <div className="flex flex-wrap items-center gap-3 px-4 py-2 bg-[#1a1a1a] text-white text-[12px] shrink-0">
         {/* 播放/暂停 */}
         <button onClick={togglePlay} className="hover:text-gray-300 p-1">
           {isPlaying ? <Pause size={18} /> : <Play size={18} />}
@@ -272,7 +272,7 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
         {fileName && (
           <>
             <span className="text-[#444]">|</span>
-            <span className="truncate max-w-[200px]">{fileName}</span>
+            <span className="max-w-[50%] truncate">{fileName}</span>
           </>
         )}
       </div>

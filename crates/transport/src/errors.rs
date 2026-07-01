@@ -61,6 +61,27 @@ impl ErrorCategory {
     }
 }
 
+/// Implemented by service-layer error enums (typically `thiserror::Error`) so
+/// `CommandError::from_typed_service_error` can classify them without
+/// substring-matching the rendered message. Each variant should map to the
+/// `ErrorCategory` that best describes it; catch-all/`Other(String)` variants
+/// typically map to `ErrorCategory::Internal`.
+pub trait ServiceErrorCategory {
+    fn category(&self) -> ErrorCategory;
+}
+
+impl ServiceErrorCategory for std::io::Error {
+    fn category(&self) -> ErrorCategory {
+        ErrorCategory::Io
+    }
+}
+
+impl ServiceErrorCategory for serde_json::Error {
+    fn category(&self) -> ErrorCategory {
+        ErrorCategory::Parser
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandError {
@@ -161,10 +182,89 @@ impl CommandError {
         Self::new("TIMEOUT", message, ErrorCategory::Timeout, true)
     }
 
+    /// Convert a typed service-layer error into a `CommandError` using its
+    /// `ServiceErrorCategory::category()` instead of substring-matching the
+    /// rendered message. Prefer this over [`Self::from_service_error`] for any
+    /// error type that implements `ServiceErrorCategory`.
+    pub fn from_typed_service_error<E>(e: E) -> Self
+    where
+        E: std::fmt::Display + ServiceErrorCategory,
+    {
+        let msg = e.to_string();
+        tracing::error!("Service error: {}", msg);
+        let normalized = msg.to_ascii_lowercase();
+
+        if let Some(suggestion) = Self::forensics_suggestion(&normalized, &msg) {
+            return suggestion;
+        }
+
+        match e.category() {
+            ErrorCategory::Timeout => Self::timeout("The operation timed out"),
+            ErrorCategory::Unsupported => {
+                Self::unsupported("The requested operation is not supported")
+            }
+            ErrorCategory::Security => {
+                Self::security("The operation was blocked by the current security policy")
+            }
+            ErrorCategory::Parser => Self::parser("The input could not be parsed reliably"),
+            ErrorCategory::External => Self::external("The external dependency returned an error"),
+            ErrorCategory::Io => Self::io("A file system operation failed"),
+            ErrorCategory::Validation => Self::invalid_input(msg),
+            ErrorCategory::Internal => {
+                Self::internal("An operation failed. Check logs for details.")
+            }
+        }
+    }
+
+    /// Forensics-specific actionable suggestions keyed on message content.
+    /// These are cross-cutting hints tied to the evidence re-import workflow,
+    /// not a general error-category dimension, so they stay message-based
+    /// rather than becoming `ErrorCategory` variants.
+    fn forensics_suggestion(normalized: &str, msg: &str) -> Option<Self> {
+        if normalized.contains("re-import") || normalized.contains("path reconstruction") {
+            return Some(Self::with_suggestion(
+                "IMPORT_NEEDED",
+                msg,
+                ErrorCategory::Internal,
+                true,
+                "建议重新导入 E01 镜像以重建完整的文件路径和分区元数据",
+            ));
+        }
+        if normalized.contains("from any partition") {
+            return Some(Self::with_suggestion(
+                "PARTITION_NOT_FOUND",
+                msg,
+                ErrorCategory::Internal,
+                true,
+                "文件在已存储的所有分区中均未找到。可能原因：路径格式不匹配，或分区元数据缺失。建议重新导入 E01 镜像。",
+            ));
+        }
+        if normalized.contains("no partition metadata") {
+            return Some(Self::with_suggestion(
+                "NO_METADATA",
+                msg,
+                ErrorCategory::Internal,
+                true,
+                "该数据源缺少分区元数据。建议重新导入 E01 镜像以生成分区信息。",
+            ));
+        }
+        None
+    }
+
+    /// Classify a service error by matching substrings in its rendered message.
+    ///
+    /// This is the fallback path for error types that have no static `category()`
+    /// (raw `String`, `std::io::Error` routed through here instead of `From`, or a
+    /// third-party error type we don't own). Prefer [`Self::from_typed_service_error`]
+    /// for any type implementing [`ServiceErrorCategory`].
     pub fn from_service_error(e: impl std::fmt::Display) -> Self {
         let msg = e.to_string();
         tracing::error!("Service error: {}", msg);
         let normalized = msg.to_ascii_lowercase();
+
+        if let Some(suggestion) = Self::forensics_suggestion(&normalized, &msg) {
+            return suggestion;
+        }
 
         if normalized.contains("timeout") {
             return Self::timeout("The operation timed out");
@@ -200,35 +300,6 @@ impl CommandError {
             || normalized.contains("path")
         {
             return Self::io("A file system operation failed");
-        }
-
-        // Attach actionable suggestions for forensics-specific errors
-        if normalized.contains("re-import") || normalized.contains("path reconstruction") {
-            return Self::with_suggestion(
-                "IMPORT_NEEDED",
-                msg,
-                ErrorCategory::Internal,
-                true,
-                "建议重新导入 E01 镜像以重建完整的文件路径和分区元数据",
-            );
-        }
-        if normalized.contains("from any partition") {
-            return Self::with_suggestion(
-                "PARTITION_NOT_FOUND",
-                msg,
-                ErrorCategory::Internal,
-                true,
-                "文件在已存储的所有分区中均未找到。可能原因：路径格式不匹配，或分区元数据缺失。建议重新导入 E01 镜像。",
-            );
-        }
-        if normalized.contains("no partition metadata") {
-            return Self::with_suggestion(
-                "NO_METADATA",
-                msg,
-                ErrorCategory::Internal,
-                true,
-                "该数据源缺少分区元数据。建议重新导入 E01 镜像以生成分区信息。",
-            );
         }
 
         Self::internal("An operation failed. Check logs for details.")

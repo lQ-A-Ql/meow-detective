@@ -16,3 +16,13 @@ impl From<persistence_sqlite::DbError> for GovernanceError {
         }
     }
 }
+
+impl transport::ServiceErrorCategory for GovernanceError {
+    fn category(&self) -> transport::ErrorCategory {
+        match self {
+            Self::Database(_) => transport::ErrorCategory::Io,
+            Self::Parse(_) => transport::ErrorCategory::Parser,
+            Self::Internal(_) => transport::ErrorCategory::Internal,
+        }
+    }
+}

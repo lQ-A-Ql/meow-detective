@@ -57,13 +57,13 @@
 
 | 事实 | 当前值 | 事实源 |
 |---|---:|---|
-| Rust workspace crate | 37 | `crates/` (新增 V4: fs-ext4, fs-xfs, fs-btrfs, fs-apfs, fs-hfsplus, exchange) |
+| Rust workspace crate | 36 | `crates/` (Stage 1: `catalog` crate removed) |
 | Tauri commands | 96 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
 | app-services source modules | 24 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
 | SQLite repositories | 15 | `crates/persistence-sqlite/src/repositories/*_repo.rs` (新增: graph_repo, notebook_repo, batch_repo) |
 | SQLite migration scripts | 33 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0031 + staging_001) |
 | frontend pages | 17 | `frontend/src/app/pages/*.tsx`，排除测试 (新增: V3Dashboard, V3ScoreCards) |
-| frontend test files | 75 | `frontend/src/**/*.test.ts(x)` |
+| frontend test files | 79 | `frontend/src/**/*.test.ts(x)` (Stage 3: CaseActions, GqlAutocomplete, GqlResultView added) |
 | Mermaid 图块 | 15 | `docs/model-architecture-algorithm-diagrams.md` |
 | V3 参考文档 | 9 | `docs/v3-plan.md` 及 8 篇 V3 参考文档 (已实现) |
 | V3 新增 crate | 3 | `crates/containers-pst/`, `crates/artifacts-linux/`, `crates/artifacts-macos/` (已创建) |

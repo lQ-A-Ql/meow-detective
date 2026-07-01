@@ -78,7 +78,7 @@ pub async fn search_files_request(
             request.offset,
             request.limit,
         )
-        .map_err(CommandError::from_service_error)?;
+        .map_err(CommandError::from_typed_service_error)?;
         let elapsed_ms = start.elapsed().as_millis() as u32;
         event_bridge::emit_performance_report_ready(&app, &result.performance_report);
 

@@ -176,15 +176,15 @@ export function RegistryExtractionPanel({
       <AnalysisExtractionProgress progress={progress} />
 
       {/* Sub-tab bar */}
-      <div className="flex gap-0 border-b border-[#e0e0e0] bg-[#fafafa]">
+      <div className="flex gap-0 overflow-x-auto border-b border-[#e0e0e0] bg-[#fafafa]">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => setActiveTab(key)}
             className={[
-              'flex items-center gap-1.5 px-4 py-2 text-[11px] font-medium transition-colors',
+              'flex shrink-0 items-center gap-1.5 whitespace-nowrap px-4 py-2 text-[11px] font-medium transition-colors',
               activeTab === key
-                ? 'border-b-2 border-[#175cd3] text-[#175cd3] bg-white'
+                ? 'border-b-2 border-[#175cd3] bg-white text-[#175cd3]'
                 : 'text-[#667085] hover:text-[#333]',
             ].join(' ')}
           >
