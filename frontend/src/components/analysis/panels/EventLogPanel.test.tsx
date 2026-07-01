@@ -25,6 +25,7 @@ describe('EventLogPanel', () => {
 
   it('renders boot events when summary is provided', () => {
     const summary: EvtxEventSummary = {
+      status: 'parsed',
       bootShutdownCount: 1,
       logonLogoffCount: 0,
       privilegeEscalationCount: 0,

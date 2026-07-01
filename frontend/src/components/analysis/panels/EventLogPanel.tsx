@@ -29,6 +29,7 @@ export function EventLogPanel({
   const [activeTab, setActiveTab] = useState<EventLogTabKey>('boot');
 
   const info = summary ?? {
+    status: 'unavailable' as const,
     bootShutdownCount: 0,
     logonLogoffCount: 0,
     privilegeEscalationCount: 0,
@@ -163,7 +164,7 @@ export function EventLogPanel({
   return (
     <ExtractionTableSection
       title={t('eventLog.title')}
-      status={info.totalCount > 0 ? 'parsed' : 'notFound'}
+      status={info.status}
       generatedAt={info.generatedAt}
       warnings={info.warnings}
       stats={[

@@ -63,20 +63,6 @@ export interface UserAssistEntry {
   suspiciousReason?: string;
 }
 
-// Network Profile / Adapter (structured view)
-export interface NetworkProfile {
-  name: string;
-  ssid?: string;
-  macAddress?: string;
-  ipAddress?: string;
-  gateway?: string;
-  dhcpServer?: string;
-  firstConnect?: string;
-  lastConnect?: string;
-  connectCount: number;
-  description?: string;
-}
-
 // Network Profile from SOFTWARE\NetworkList (structured view)
 export interface NetworkProfileEntry {
   profileGuid: string;

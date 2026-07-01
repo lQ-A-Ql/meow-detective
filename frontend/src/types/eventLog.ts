@@ -1,3 +1,5 @@
+import type { AnalysisParseStatus } from './analysis';
+
 /** EVTX event category — mirrors Rust `EvtxEventCategoryDto`. */
 export type EvtxEventCategory =
   | 'bootShutdown'
@@ -61,6 +63,7 @@ export interface EvtxApplicationEvent {
 
 /** Unified EVTX event log summary. */
 export interface EvtxEventSummary {
+  status: AnalysisParseStatus;
   bootShutdownCount: number;
   logonLogoffCount: number;
   privilegeEscalationCount: number;

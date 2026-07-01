@@ -1,6 +1,6 @@
 {
   "lastVerifiedAt": "2026-06-13T00:00:00Z",
-  "documentedLimitCount": 36,
+  "documentedLimitCount": 38,
   "items": [
     {
       "category": "E01",
@@ -198,9 +198,29 @@
     },
     {
       "category": "Email",
-      "item": "全部",
+      "item": "MSG (Outlook .msg)",
       "status": "unsupported",
-      "summary": "artifacts-windows 中无邮件模块。EML/EMLX/PST/OST/mbox 均无实现。PST/OST/mbox 规划于 V3-2",
+      "summary": "OLE2 复合文档，超出当前范围，规划于 V4 或后续评估",
+      "affectedChains": [
+        "Email"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Email",
+      "item": "TNEF / winmail.dat",
+      "status": "unsupported",
+      "summary": "MS-OXTNEF 格式，规划于 V4 或后续评估",
+      "affectedChains": [
+        "Email"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Email",
+      "item": "加密或密码保护 PST/OST",
+      "status": "unsupported",
+      "summary": "不尝试破解密码；检测并记录 warning",
       "affectedChains": [
         "Email"
       ],
