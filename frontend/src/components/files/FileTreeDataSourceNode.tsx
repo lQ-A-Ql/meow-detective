@@ -1,32 +1,6 @@
-import { Monitor, Server, Folder, ChevronDown, ChevronRight, HardDrive } from 'lucide-react';
-import type { FileTreeNode } from '@/types/models';
-import type { DataSourceSummary } from '@/types/models';
-
-function sourceIcon(kind: string) {
-  switch (kind) {
-    case 'e01':
-      return HardDrive;
-    case 'raw':
-      return Server;
-    case 'logical_directory':
-      return Folder;
-    default:
-      return Monitor;
-  }
-}
-
-function kindLabel(kind: string): string {
-  switch (kind) {
-    case 'e01':
-      return 'E01';
-    case 'raw':
-      return 'RAW';
-    case 'logical_directory':
-      return '目录';
-    default:
-      return kind;
-  }
-}
+import { Monitor, ChevronDown, ChevronRight } from 'lucide-react';
+import type { FileTreeNode, DataSourceSummary } from '@/types/models';
+import { sourceKindLabel, sourceKindIcon } from '@/lib/data-source-utils';
 
 export interface FileTreeDataSourceNodeProps {
   node: FileTreeNode & { active: boolean; expanded: boolean };
@@ -39,7 +13,7 @@ export function FileTreeDataSourceNode({
   dataSource,
   onClick,
 }: FileTreeDataSourceNodeProps) {
-  const Icon = dataSource ? sourceIcon(dataSource.kind) : Monitor;
+  const Icon = dataSource ? sourceKindIcon(dataSource.kind) : Monitor;
   const kind = dataSource?.kind ?? '';
 
   return (
@@ -69,9 +43,11 @@ export function FileTreeDataSourceNode({
       <span className="truncate font-medium text-forensics-text text-[11px]">
         {node.name}
       </span>
-      <span className="ml-1.5 shrink-0 text-[9px] text-forensics-muted-light bg-forensics-surface-muted px-1 py-px rounded">
-        {kindLabel(kind)}
-      </span>
+      {kind ? (
+        <span className="ml-1.5 shrink-0 text-[9px] text-forensics-muted-light bg-forensics-surface-muted px-1 py-px rounded">
+          {sourceKindLabel(kind)}
+        </span>
+      ) : null}
     </div>
   );
 }

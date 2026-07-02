@@ -1,33 +1,7 @@
-import { Monitor, Server, Folder, Database } from 'lucide-react';
 import { ToggleGroup, ToggleGroupItem } from '@/app/components/ui/toggle-group';
 import { cn } from '@/app/components/ui/utils';
 import type { DataSourceSummary } from '@/types/models';
-
-function sourceKindLabel(kind: string): string {
-  switch (kind) {
-    case 'e01':
-      return 'E01';
-    case 'raw':
-      return 'RAW';
-    case 'logical_directory':
-      return '目录';
-    default:
-      return kind;
-  }
-}
-
-function sourceKindIcon(kind: string) {
-  switch (kind) {
-    case 'e01':
-      return Database;
-    case 'raw':
-      return Server;
-    case 'logical_directory':
-      return Folder;
-    default:
-      return Monitor;
-  }
-}
+import { sourceKindLabel, sourceKindIconLarge } from '@/lib/data-source-utils';
 
 export interface DataSourceSelectorProps {
   dataSources: DataSourceSummary[];
@@ -61,7 +35,7 @@ export function DataSourceSelector({
         全部数据源
       </ToggleGroupItem>
       {dataSources.map((ds) => {
-        const Icon = sourceKindIcon(ds.kind);
+        const Icon = sourceKindIconLarge(ds.kind);
         return (
           <ToggleGroupItem
             key={ds.id}
