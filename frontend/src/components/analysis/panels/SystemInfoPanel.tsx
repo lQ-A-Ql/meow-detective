@@ -4,6 +4,7 @@ import type {
   AnalysisExtractionRun,
   AnalysisSystemInfo,
 } from '@/types/models';
+import { DataSourceSelector } from '@/components/analysis/DataSourceSelector';
 import {
   EmptyLine,
   FieldProvenancePanel,
@@ -130,6 +131,9 @@ export function AnalysisHeader({
   onLoadDemoCase,
   onRefresh,
   onRunExtraction,
+  dataSources,
+  selectedDataSourceId,
+  onSelectDataSource,
 }: {
   loading: boolean;
   hasCase: boolean;
@@ -139,6 +143,9 @@ export function AnalysisHeader({
   onLoadDemoCase: () => void;
   onRefresh: () => void;
   onRunExtraction: () => void;
+  dataSources?: import('@/types/models').DataSourceSummary[];
+  selectedDataSourceId?: string;
+  onSelectDataSource?: (id?: string) => void;
 }) {
   return (
     <div className="shrink-0 border-b border-[#e0e0e0] bg-[#fafafa] p-6">
@@ -148,6 +155,14 @@ export function AnalysisHeader({
           <div className="mt-1 font-mono text-[11px] text-[#666]">
             证据分类 · 注册表提取 · 浏览器记录 · 邮件信息
           </div>
+          {dataSources && dataSources.length > 0 && onSelectDataSource ? (
+            <DataSourceSelector
+              dataSources={dataSources}
+              selectedId={selectedDataSourceId}
+              onSelect={onSelectDataSource}
+              className="mt-3"
+            />
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button

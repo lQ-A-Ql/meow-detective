@@ -4,9 +4,17 @@ import { useFileTreeKeyboard } from '@/hooks/use-file-tree-keyboard';
 import { useResizablePanel } from '@/hooks/use-resizable-panel';
 import { formatPartitionRootDisplayName } from '@/lib/partition-display';
 import { mergeTreeNodePages, sameTreeNodeList } from '@/app/pages/file-tree-utils';
-import type { DataSourcePartition, FileTreeNode } from '@/types/models';
+import type {
+  DataSourcePartition,
+  DataSourceSummary,
+  FileTreeNode,
+} from '@/types/models';
 
 const MAX_TREE_CACHE_SIZE = 100;
+
+function dataSourceNodeId(dsId: string): string {
+  return `data-source:${dsId}`;
+}
 
 interface UseFileTreeOptions {
   showHidden: boolean;
@@ -15,6 +23,7 @@ interface UseFileTreeOptions {
   setSelectedDirectoryId: (id?: string) => void;
   setSelectedFileId: (id?: string) => void;
   partitions: DataSourcePartition[];
+  dataSources?: DataSourceSummary[];
 }
 
 export function useFileTree({
@@ -24,6 +33,7 @@ export function useFileTree({
   setSelectedDirectoryId,
   setSelectedFileId,
   partitions,
+  dataSources,
 }: UseFileTreeOptions) {
   const [expandedDirectoryIds, setExpandedDirectoryIds] = useState<string[]>([]);
   const [treeChildren, setTreeChildren] = useState<Record<string, FileTreeNode[]>>({});
@@ -38,7 +48,61 @@ export function useFileTree({
   });
 
   const { data: rootTree } = useFileTreeQuery(showHidden);
-  const activeDirectoryId = selectedDirectoryId ?? rootTree?.[0]?.id;
+
+  // Synthesize data-source parent nodes: wrap partition roots under their
+  // owning data source, so the tree shows DataSource -> Partitions -> Files
+  // instead of a flat list of partition roots.
+  const wrappedRootTree = useMemo<FileTreeNode[]>(() => {
+    if (!dataSources || dataSources.length === 0) return rootTree ?? [];
+    const dsNodes: FileTreeNode[] = [];
+    for (const ds of dataSources) {
+      dsNodes.push({
+        id: dataSourceNodeId(ds.id),
+        name: ds.name,
+        depth: 0,
+        hasChildren: true,
+        deleted: false,
+        hidden: false,
+        system: false,
+      });
+    }
+    return dsNodes;
+  }, [dataSources, rootTree]);
+
+  // Pre-populate tree children so data-source nodes show their partition roots
+  // without needing a backend fetch.
+  useEffect(() => {
+    if (!dataSources || dataSources.length === 0) return;
+    if (!rootTree || rootTree.length === 0) return;
+    setTreeChildren((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const ds of dataSources) {
+        const dsId = dataSourceNodeId(ds.id);
+        if (next[dsId]) continue; // already populated
+        next[dsId] = rootTree.map((node) => ({ ...node, depth: 1 }));
+        changed = true;
+      }
+      return changed ? next : current;
+    });
+  }, [dataSources, rootTree]);
+
+  const rootNodes = wrappedRootTree.length > 0 ? wrappedRootTree : (rootTree ?? []);
+
+  // Auto-expand the first data source node so its partition children are visible
+  // on initial load, matching the pre-wrap behavior where partition roots were at
+  // depth 0 with no parent.
+  useEffect(() => {
+    if (wrappedRootTree.length > 0 && wrappedRootTree[0].hasChildren) {
+      setExpandedDirectoryIds((current) =>
+        current.includes(wrappedRootTree[0].id)
+          ? current
+          : [...current, wrappedRootTree[0].id],
+      );
+    }
+  }, [wrappedRootTree]);
+
+  const activeDirectoryId = selectedDirectoryId ?? rootNodes[0]?.id;
   const activeDirectoryExpanded = Boolean(
     activeDirectoryId && expandedDirectoryIds.includes(activeDirectoryId)
   );
@@ -77,15 +141,15 @@ export function useFileTree({
   }, [activeChildren, activeChildrenOffset, activeDirectoryId]);
 
   useEffect(() => {
-    if (!selectedDirectoryId && rootTree?.[0]?.id) {
-      setSelectedDirectoryId(rootTree[0].id);
+    if (!selectedDirectoryId && rootNodes[0]?.id) {
+      setSelectedDirectoryId(rootNodes[0].id);
       setExpandedDirectoryIds((current) =>
-        current.includes(rootTree[0].id)
+        current.includes(rootNodes[0].id)
           ? current
-          : [...current, rootTree[0].id]
+          : [...current, rootNodes[0].id]
       );
     }
-  }, [rootTree, selectedDirectoryId, setSelectedDirectoryId]);
+  }, [rootNodes, selectedDirectoryId, setSelectedDirectoryId]);
 
   const flatTree = useMemo(() => {
     const visible: FileTreeNode[] = [];
@@ -97,9 +161,9 @@ export function useFileTree({
         }
       }
     };
-    appendNodes(rootTree ?? []);
+    appendNodes(rootNodes);
     return visible;
-  }, [expandedDirectoryIds, rootTree, treeChildren]);
+  }, [expandedDirectoryIds, rootNodes, treeChildren]);
 
   const currentDirectory = flatTree.find((node) => node.id === activeDirectoryId);
   const parentDirectory = useMemo(() => {
@@ -118,8 +182,8 @@ export function useFileTree({
   }, [parentDirectory, setSelectedDirectoryId, setSelectedFileId]);
 
   const activeRootNode = useMemo(() => {
-    if (!activeDirectoryId || !rootTree?.length) return rootTree?.[0];
-    for (const root of rootTree) {
+    if (!activeDirectoryId || !rootNodes.length) return rootNodes[0];
+    for (const root of rootNodes) {
       if (root.id === activeDirectoryId) return root;
       const stack: FileTreeNode[] = [...(treeChildren[root.id] ?? [])];
       while (stack.length > 0) {
@@ -128,14 +192,15 @@ export function useFileTree({
         stack.push(...(treeChildren[next.id] ?? []));
       }
     }
-    return rootTree[0];
-  }, [activeDirectoryId, rootTree, treeChildren]);
+    return rootNodes[0];
+  }, [activeDirectoryId, rootNodes, treeChildren]);
 
   const displayNodeName = useCallback(
-    (nodeName: string, depth = 0) =>
-      depth !== 0
-        ? nodeName
-        : formatPartitionRootDisplayName(nodeName, partitions),
+    (nodeName: string, depth = 0) => {
+      if (depth === 0) return nodeName;
+      if (depth === 1) return formatPartitionRootDisplayName(nodeName, partitions);
+      return nodeName;
+    },
     [partitions]
   );
 
@@ -207,7 +272,7 @@ export function useFileTree({
   }, [activeDirectoryId, pageLimit]);
 
   return {
-    rootTree,
+    rootTree: rootNodes,
     treeChildren,
     expandedDirectoryIds,
     setExpandedDirectoryIds,

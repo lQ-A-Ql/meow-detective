@@ -4,7 +4,8 @@ import { Button } from '@/app/components/ui/button';
 import { TreeConnector } from '@/components/tree/TreeConnector';
 import { TreeSearch } from '@/components/tree/TreeSearch';
 import { FileIconWithStatusOverlay } from '@/components/files/FileIconWithStatusOverlay';
-import type { FileTreeNode } from '@/types/models';
+import { FileTreeDataSourceNode } from '@/components/files/FileTreeDataSourceNode';
+import type { DataSourceSummary, FileTreeNode } from '@/types/models';
 
 export interface FileTreePanelProps {
   filteredTreeNodes: (FileTreeNode & { active: boolean; expanded: boolean })[];
@@ -20,8 +21,13 @@ export interface FileTreePanelProps {
   isResizing: boolean;
   onResizeStart: (e: React.MouseEvent) => void;
   treeContainerRef: Ref<HTMLDivElement>;
+  dataSources?: DataSourceSummary[];
 
   FILE_BROWSER_PAGE_LIMIT: number;
+}
+
+function dataSourceIdFromNodeId(nodeId: string): string {
+  return nodeId.replace(/^data-source:/, '');
 }
 
 export function FileTreePanel({
@@ -38,6 +44,7 @@ export function FileTreePanel({
   isResizing,
   onResizeStart,
   treeContainerRef,
+  dataSources,
   FILE_BROWSER_PAGE_LIMIT,
 }: FileTreePanelProps) {
   return (
@@ -73,10 +80,26 @@ export function FileTreePanel({
           </div>
         ) : null}
         {filteredTreeNodes.map((node, index) => {
-          // 判断是否是父节点的最后一个子节点
           const isLast =
             index === filteredTreeNodes.length - 1 ||
             (filteredTreeNodes[index + 1]?.depth ?? 0) < node.depth;
+
+          // Data source parent nodes use a distinct visual style
+          const isDataSourceNode = node.depth === 0 && node.id.startsWith('data-source:');
+
+          if (isDataSourceNode) {
+            const ds = dataSources?.find(
+              (d) => d.id === dataSourceIdFromNodeId(node.id),
+            );
+            return (
+              <FileTreeDataSourceNode
+                key={node.id}
+                node={node}
+                dataSource={ds}
+                onClick={() => toggleDirectory(node)}
+              />
+            );
+          }
 
           return (
             <button

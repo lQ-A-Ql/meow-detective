@@ -201,7 +201,7 @@ describe('FileBrowser media preview', () => {
       mocks.selectionState.selectedFileId = id;
     });
     Object.assign(mocks.selectionState, {
-      selectedDirectoryId: 'root',
+      selectedDirectoryId: undefined,
       selectedFileId: 'video-1',
       selectedSearchHitId: undefined,
       selectedTimelineId: undefined,
@@ -550,7 +550,7 @@ describe('FileBrowser media preview', () => {
     expect(bothRow?.querySelector('[data-hidden="true"]')).toBeTruthy();
   });
 
-  it('formats partition root names in the tree and breadcrumb using shared partition display rules', () => {
+  it('wraps partition roots under data source parent nodes when data sources exist', async () => {
     mocks.fileTree.mockReturnValue(
       queryState([
         {
@@ -590,7 +590,10 @@ describe('FileBrowser media preview', () => {
 
     renderPage();
 
-    expect(screen.getAllByText('\u5206\u533a1\uff08NTFS\uff09').length).toBeGreaterThan(0);
+    // Data source nodes are rendered at the top of the file tree
+    const dsElements = await screen.findAllByText(/Demo Source/);
+    expect(dsElements.length).toBeGreaterThan(0);
+    // The raw partition root name is never shown \u2014 only the formatted version
     expect(screen.queryByText('Partition 1 (NTFS)')).toBeNull();
   });
 

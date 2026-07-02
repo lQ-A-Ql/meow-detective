@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/features/case/hooks', () => ({
   useCurrentCase: mocks.currentCase,
   useCreateAnalysisDemoCase: mocks.demoCase,
+  useDataSources: () => ({ data: undefined, error: null, isLoading: false, refetch: vi.fn() }),
 }));
 
 vi.mock('@/features/analysis/hooks', () => ({

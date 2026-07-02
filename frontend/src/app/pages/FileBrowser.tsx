@@ -104,6 +104,7 @@ export function FileBrowser() {
           filterQuery={fb.filterQuery}
           setFilterQuery={fb.setFilterQuery}
           treeWidth={fb.treeWidth}
+          dataSources={fb.dataSources}
           isResizing={fb.isResizing}
           onResizeStart={fb.onResizeStart}
           treeContainerRef={fb.treeContainerRef}

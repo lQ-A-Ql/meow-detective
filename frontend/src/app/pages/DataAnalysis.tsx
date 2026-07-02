@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Database, Download, FileClock, FileText, Globe, Mail, Monitor, Shield } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useCreateAnalysisDemoCase, useCurrentCase } from '@/features/case/hooks';
+import { useCreateAnalysisDemoCase, useCurrentCase, useDataSources } from '@/features/case/hooks';
 import {
   useAnalysisClassifications,
   useAnalysisSystemInfo,
@@ -87,6 +87,7 @@ function errorMessage(error: unknown) {
 export function DataAnalysis() {
   const { t } = useTranslation();
   const currentCase = useCurrentCase();
+  const { data: dataSources } = useDataSources();
   const demoCase = useCreateAnalysisDemoCase();
   const systemInfo = useAnalysisSystemInfo();
   const evidenceSummary = useEvidenceClassificationSummary();
@@ -108,6 +109,8 @@ export function DataAnalysis() {
   const setExtractionRunning = useAnalysisStore((s) => s.setExtractionRunning);
   const setProgressExpanded = useAnalysisStore((s) => s.setProgressExpanded);
   const setActiveTab = useAnalysisStore((s) => s.setActiveTab);
+  const selectedDataSourceId = useAnalysisStore((s) => s.selectedDataSourceId);
+  const setSelectedDataSourceId = useAnalysisStore((s) => s.setSelectedDataSourceId);
 
   const labeledExtractionProgress = useMemo(
     () => labeledProgress(extractionProgress, t),
@@ -229,6 +232,9 @@ export function DataAnalysis() {
         onLoadDemoCase={loadDemoCase}
         onRefresh={refresh}
         onRunExtraction={runExtraction}
+        dataSources={dataSources}
+        selectedDataSourceId={selectedDataSourceId}
+        onSelectDataSource={setSelectedDataSourceId}
       />
 
       {hasCase ? (

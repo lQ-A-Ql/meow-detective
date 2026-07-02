@@ -14,25 +14,12 @@ import {
   useRenameDataSource,
 } from '@/features/case/hooks';
 import { useImportDataSource } from '@/features/files/hooks';
-import { cancelImport } from '@/lib/api/files';
 import { useJobsSnapshot, useWarnings } from '@/features/jobs/hooks';
-import type { JobSnapshot } from '@/types/models';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
 import { getAppSettings } from '@/lib/api/settings';
 import { readLocalSettings } from '@/lib/settings';
 import { CaseMetricsStrip, RecentTasksPanel, DataSourcesPanel, RecentObjectsPanel } from './CaseOverview';
-import { CaseWelcomeForms, ImportSection } from './CaseActions';
-
-const importJobPattern = /导入|加载|镜像|数据源|datasource|data source|import|ingest|image|e01|raw|dd|img/i;
-
-function isImportJob(job: JobSnapshot) {
-  return job.status === 'running' && importJobPattern.test(`${job.name} ${job.scope} ${job.detail}`);
-}
-
-function isImportRelatedJob(job: JobSnapshot) {
-  return importJobPattern.test(`${job.name} ${job.scope} ${job.detail}`);
-}
+import { CaseWelcomeForms } from './CaseActions';
+import { ImportDataSourceDialog } from '@/components/import/ImportDataSourceDialog';
 
 export function CaseHome() {
   const { data: currentCase } = useCurrentCase();
@@ -42,13 +29,7 @@ export function CaseHome() {
   const { data: recentObjects } = useRecentObjects();
   const { data: jobs } = useJobsSnapshot();
   const { data: warnings } = useWarnings();
-  const qc = useQueryClient();
   const importMutation = useImportDataSource();
-  const cancelImportMutation = useMutation({
-    mutationFn: (jobId: string) => cancelImport(jobId),
-    onSuccess: () => { toast.success('导入已取消'); qc.invalidateQueries({ queryKey: ['jobs'] }); },
-    onError: (e: Error) => { toast.error('取消失败', { description: e.message }); },
-  });
   const createCaseMutation = useCreateCase();
   const openCaseMutation = useOpenCase();
   const renameDataSourceMutation = useRenameDataSource();
@@ -56,8 +37,7 @@ export function CaseHome() {
   const deleteDataSourceMutation = useDeleteDataSource();
   const removeCaseFromListMutation = useRemoveCaseFromList();
 
-  const [importPath, setImportPath] = useState('');
-  const [showImport, setShowImport] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [caseRoot, setCaseRoot] = useState(() => readLocalSettings().caseRoot);
   const [caseName, setCaseName] = useState('');
   const [openCasePath, setOpenCasePath] = useState('C:\\Cases\\case-001');
@@ -67,10 +47,8 @@ export function CaseHome() {
 
   const runningJobs = jobs?.filter((job) => job.status === 'running') ?? [];
   const runningJob = runningJobs[0];
-  const importJob = runningJobs.find(isImportJob);
   const completedJobs = jobs?.filter((job) => job.status === 'completed') ?? [];
   const partialJobCount = jobs?.filter((job) => job.partial).length ?? 0;
-  const failedImportJob = jobs?.find((job) => job.status === 'failed' && isImportRelatedJob(job));
   const sortedRecentCases = useMemo(() => recentCases ?? [], [recentCases]);
 
   useEffect(() => {
@@ -147,7 +125,7 @@ export function CaseHome() {
               <div className="text-[#111] text-[13px]">{currentCase.examiner ?? '-'}</div>
             </div>
             <button
-              onClick={() => setShowImport((value) => !value)}
+              onClick={() => setImportDialogOpen(true)}
               className="flex items-center gap-1.5 border border-[#111] px-3 py-1.5 text-[12px] hover:bg-[#111] hover:text-white transition-colors"
             >
               <Upload size={12} /> 导入数据源
@@ -156,21 +134,12 @@ export function CaseHome() {
         </div>
       </div>
 
-      {showImport ? (
-        <ImportSection
-          importPath={importPath}
-          setImportPath={setImportPath}
-          onImport={() => { if (importPath.trim()) importMutation.mutate(importPath.trim()); }}
-          importPending={importMutation.isPending}
-          importSuccess={importMutation.data ?? null}
-          importError={(importMutation.error as Error)?.message ?? null}
-          importJob={importJob}
-          cancelImportPending={cancelImportMutation.isPending}
-          onCancelImport={() => importJob && cancelImportMutation.mutate(importJob.id)}
-          failedImportJob={failedImportJob}
-          onClose={() => { setShowImport(false); setImportPath(''); }}
-        />
-      ) : null}
+      <ImportDataSourceDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        onImport={(sourcePath) => importMutation.mutate(sourcePath)}
+        importPending={importMutation.isPending}
+      />
 
       <CaseMetricsStrip
         dataSourceCount={metrics?.dataSourceCount ?? 0}

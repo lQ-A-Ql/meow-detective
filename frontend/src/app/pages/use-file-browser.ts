@@ -35,6 +35,7 @@ export function useFileBrowser() {
     setSelectedDirectoryId,
     setSelectedFileId,
     partitions,
+    dataSources,
   });
 
   const pagination = useFilePagination({
@@ -202,6 +203,7 @@ export function useFileBrowser() {
     executableCount: pagination.executableCount,
     extractFile: preview.extractFile,
     onViewTimeline: preview.onViewTimeline,
+    dataSources,
   };
 }
 

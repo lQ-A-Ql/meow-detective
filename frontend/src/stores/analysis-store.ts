@@ -47,6 +47,7 @@ type AnalysisState = {
   extractionRunning: boolean;
   progressExpanded: boolean;
   activeTab: AnalysisTabKey;
+  selectedDataSourceId?: string;
 
   setExtractionProgress: (
     progress: Record<ExtractionCategory, Omit<AnalysisExtractionProgressInfo, 'label'>>,
@@ -59,6 +60,7 @@ type AnalysisState = {
   setExtractionRunning: (running: boolean) => void;
   setProgressExpanded: (expanded: boolean) => void;
   setActiveTab: (tab: AnalysisTabKey) => void;
+  setSelectedDataSourceId: (id?: string) => void;
   reset: () => void;
 };
 
@@ -70,12 +72,14 @@ const initialState: Omit<
   | 'setExtractionRunning'
   | 'setProgressExpanded'
   | 'setActiveTab'
+  | 'setSelectedDataSourceId'
   | 'reset'
 > = {
   extractionProgress: createDefaultProgress(),
   extractionRunning: false,
   progressExpanded: true,
   activeTab: 'system',
+  selectedDataSourceId: undefined,
 };
 
 export const useAnalysisStore = create<AnalysisState>((set) => ({
@@ -99,6 +103,8 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
   setProgressExpanded: (expanded) => set({ progressExpanded: expanded }),
 
   setActiveTab: (tab) => set({ activeTab: tab }),
+
+  setSelectedDataSourceId: (id) => set({ selectedDataSourceId: id }),
 
   reset: () => set(initialState),
 }));
