@@ -688,11 +688,36 @@ impl XfsReader {
                 Ok(entries)
             }
             FORMAT_EXTENTS => {
-                // Block directory: entries are in extent-backed data blocks.
-                // Use u64::MAX so all extent blocks are read (directory data may
-                // be smaller than the declared size).
                 let data = self.read_extent_data(&inode, u64::MAX)?;
-                Self::parse_block_dir(&data)
+                match Self::parse_block_dir(&data) {
+                    Ok(entries) => Ok(entries),
+                    Err(_) if data.iter().all(|&b| b == 0) => {
+                        // Kernel bug xfs_dir2_sf_to_block (fixed 2019): di_format
+                        // was changed to EXTENTS but block allocation never
+                        // completed — extent blocks are all zeros. Fall back to
+                        // forensic recovery: interpret the inode's residual
+                        // literal area as shortform entries.
+                        let df = Self::data_fork(&inode)?;
+                        if let Ok(raw) = Self::parse_shortform_dir(df, Self::has_ftype(&inode)) {
+                            if !raw.is_empty() {
+                                let mut entries = Vec::with_capacity(raw.len());
+                                for (name, child_ino) in raw {
+                                    let is_dir = self
+                                        .read_inode(child_ino)
+                                        .ok()
+                                        .filter(|ci| ci.len() >= 4)
+                                        .is_some_and(|ci| Self::inode_is_dir(&ci));
+                                    entries.push((name, child_ino, is_dir));
+                                }
+                                return Ok(entries);
+                            }
+                        }
+                        Err(invalid_fs_data(
+                            "block directory all-zero (sf→block conversion artifact), recovery failed",
+                        ))
+                    }
+                    Err(e) => Err(e),
+                }
             }
             FORMAT_BTREE => {
                 let data = self.read_btree_data(&inode, u64::MAX)?;
