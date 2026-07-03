@@ -339,7 +339,11 @@ impl XfsReader {
     /// `agblklog`/`inopblog` are zero on synthetic fixtures that never
     /// populate those superblock fields, so those fixtures fall back to
     /// the flat inode-table formula they were built against.
-    fn inode_offset(&self, ino: u64) -> u64 {
+    fn inode_offset(&self, ino: u64) -> io::Result<u64> {
+        if ino == 0 {
+            return Err(invalid_fs_data("inode 0 is invalid"));
+        }
+
         if self.agblklog > 0 || self.inopblog > 0 {
             let shift = self.agblklog + self.inopblog;
             let ino0 = ino;
@@ -348,18 +352,45 @@ impl XfsReader {
             let blk_num = low_bits >> self.inopblog;
             let ino_in_blk = low_bits & ((1u64 << self.inopblog) - 1);
             let fs_blockno = ag_num
-                .saturating_mul(self._ag_blocks)
-                .saturating_add(blk_num);
-            return self.block_to_offset(fs_blockno) + ino_in_blk * self.inode_size as u64;
+                .checked_mul(self._ag_blocks)
+                .and_then(|base| base.checked_add(blk_num))
+                .ok_or_else(|| invalid_fs_data(format!("inode {} offset overflows", ino)))?;
+            let block_offset = self.block_to_offset(fs_blockno);
+            let inode_delta = ino_in_blk
+                .checked_mul(self.inode_size as u64)
+                .ok_or_else(|| invalid_fs_data(format!("inode {} offset overflows", ino)))?;
+            return block_offset
+                .checked_add(inode_delta)
+                .ok_or_else(|| invalid_fs_data(format!("inode {} offset overflows", ino)));
         }
         // Flat-table fallback for synthetic fixtures.
+        let inode_index = ino - 1;
+        let inode_delta = inode_index
+            .checked_mul(self.inode_size as u64)
+            .ok_or_else(|| invalid_fs_data(format!("inode {} offset overflows", ino)))?;
         self.block_to_offset(self.inode_base_block)
-            + (ino.saturating_sub(1)) * self.inode_size as u64
+            .checked_add(inode_delta)
+            .ok_or_else(|| invalid_fs_data(format!("inode {} offset overflows", ino)))
     }
 
     /// Read the full inode buffer (core + data fork) for `ino`.
     fn read_inode(&self, ino: u64) -> io::Result<Vec<u8>> {
-        let offset = self.inode_offset(ino);
+        if self.agblklog == 0 && self.inopblog == 0 {
+            let max_synthetic_ino = self
+                .reader
+                .borrow()
+                .info()
+                .size
+                .checked_div(u64::from(self.inode_size).max(1))
+                .filter(|max_ino| *max_ino > 0);
+            if max_synthetic_ino.is_some_and(|max_ino| ino == 0 || ino > max_ino) {
+                return Err(invalid_fs_data(format!(
+                    "inode {} outside synthetic fixture range",
+                    ino
+                )));
+            }
+        }
+        let offset = self.inode_offset(ino)?;
         self.read_inode_at_offset(offset)
     }
 
@@ -597,46 +628,70 @@ impl XfsReader {
     /// parse only blocks that carry directory-entry magic and keep valid
     /// entries already recovered from other blocks.
     fn read_extent_directory_entries(&self, inode: &[u8]) -> io::Result<Vec<XfsDirectoryEntry>> {
+        let extents = Self::inline_extents(inode)?;
+        self.read_directory_entries_from_extents(&extents)
+    }
+
+    fn inline_extents(inode: &[u8]) -> io::Result<Vec<XfsExtent>> {
         let df = Self::data_fork(inode)?;
         let max_extents = Self::max_inline_extents(inode);
         let nextents = Self::nextents(inode) as usize;
-        let mut entries = Vec::new();
-        let mut first_error = None;
+        let mut extents = Vec::with_capacity(nextents.min(max_extents));
 
         for i in 0..nextents.min(max_extents) {
             let off = i * BMBT_REC_SIZE;
             if off + BMBT_REC_SIZE > df.len() {
                 break;
             }
-            let extent = Self::decode_extent(&df[off..]);
-            if extent.unwritten {
-                continue;
-            }
-            for blk in 0..extent.block_count {
-                match self.read_block(extent.start_block + blk) {
-                    Ok(block_data) => match Self::parse_block_dir_entries(&block_data) {
-                        Ok(mut block_entries) => entries.append(&mut block_entries),
-                        Err(err) => {
-                            if first_error.is_none() {
-                                first_error = Some(err);
-                            }
-                        }
-                    },
+            extents.push(Self::decode_extent(&df[off..]));
+        }
+
+        Ok(extents)
+    }
+
+    fn read_directory_entries_from_extents(
+        &self,
+        extents: &[XfsExtent],
+    ) -> io::Result<Vec<XfsDirectoryEntry>> {
+        let mut entries = Vec::new();
+        let mut first_error = None;
+
+        for extent in extents {
+            self.read_directory_extent_blocks(*extent, &mut entries, &mut first_error);
+        }
+
+        match (entries.is_empty(), first_error) {
+            (false, _) => Ok(entries),
+            (true, Some(err)) => Err(err),
+            (true, None) => Ok(entries),
+        }
+    }
+
+    fn read_directory_extent_blocks(
+        &self,
+        extent: XfsExtent,
+        entries: &mut Vec<XfsDirectoryEntry>,
+        first_error: &mut Option<io::Error>,
+    ) {
+        if extent.unwritten {
+            return;
+        }
+        for blk in 0..extent.block_count {
+            match self.read_block(extent.start_block + blk) {
+                Ok(block_data) => match Self::parse_block_dir_entries(&block_data) {
+                    Ok(mut block_entries) => entries.append(&mut block_entries),
                     Err(err) => {
                         if first_error.is_none() {
-                            first_error = Some(err);
+                            *first_error = Some(err);
                         }
+                    }
+                },
+                Err(err) => {
+                    if first_error.is_none() {
+                        *first_error = Some(err);
                     }
                 }
             }
-        }
-
-        if !entries.is_empty() {
-            Ok(entries)
-        } else if let Some(err) = first_error {
-            Err(err)
-        } else {
-            Ok(entries)
         }
     }
 
@@ -691,6 +746,30 @@ impl XfsReader {
         // Root node in the inode uses bmdr (8-byte header).
         self.walk_btree_node(df, true, &mut data)?;
         Ok(truncate_data_to_declared_size(data, file_size))
+    }
+
+    fn read_btree_directory_entries(&self, inode: &[u8]) -> io::Result<Vec<XfsDirectoryEntry>> {
+        let extents = self.collect_btree_extents(inode)?;
+        self.read_directory_entries_from_extents(&extents)
+    }
+
+    fn collect_btree_extents(&self, inode: &[u8]) -> io::Result<Vec<XfsExtent>> {
+        let df = Self::data_fork(inode)?;
+        if df.len() < 8 {
+            return Ok(Vec::new());
+        }
+
+        let magic = be_u32(df, 0);
+        if magic != BMAP_MAGIC {
+            return Err(invalid_fs_data(format!(
+                "invalid bmbt block magic 0x{:08X}",
+                magic
+            )));
+        }
+
+        let mut extents = Vec::new();
+        self.walk_btree_node_extents(df, true, &mut extents)?;
+        Ok(extents)
     }
 
     fn read_btree_data_range(
@@ -825,6 +904,43 @@ impl XfsReader {
                     next_offset,
                     data,
                 )?;
+            }
+        }
+        Ok(())
+    }
+
+    fn walk_btree_node_extents(
+        &self,
+        node: &[u8],
+        is_inode_root: bool,
+        extents: &mut Vec<XfsExtent>,
+    ) -> io::Result<()> {
+        let hdr_size: usize = if is_inode_root { 8 } else { 24 };
+        if node.len() < hdr_size {
+            return Ok(());
+        }
+        let level = be_u16(node, 4);
+        let numrecs = be_u16(node, 6) as usize;
+
+        if level == 0 {
+            const LEAF_SLOT: usize = 24;
+            for i in 0..numrecs {
+                let off = hdr_size + i * LEAF_SLOT;
+                if off + LEAF_SLOT > node.len() {
+                    break;
+                }
+                extents.push(Self::decode_extent(&node[off + 8..off + 24]));
+            }
+        } else {
+            const INTERNAL_SLOT: usize = 16;
+            for i in 0..numrecs {
+                let off = hdr_size + i * INTERNAL_SLOT;
+                if off + INTERNAL_SLOT > node.len() {
+                    break;
+                }
+                let child_ptr = be_u64(node, off + 8);
+                let child_block = self.read_block(child_ptr)?;
+                self.walk_btree_node_extents(&child_block, false, extents)?;
             }
         }
         Ok(())
@@ -1043,6 +1159,12 @@ impl XfsReader {
                 if !is_plausible_directory_entry_name(&name) {
                     continue;
                 }
+                if entries
+                    .iter()
+                    .any(|entry: &XfsDirectoryEntry| entry.name == name)
+                {
+                    continue;
+                }
                 entries.push(XfsDirectoryEntry {
                     name,
                     inode: inumber,
@@ -1116,11 +1238,9 @@ impl XfsReader {
                     }
                 }
             }
-            FORMAT_BTREE => {
-                let data = self.read_btree_data(&inode, u64::MAX)?;
-                Self::parse_block_dir_entries(&data)
-                    .map(|entries| self.annotate_directory_entries(entries))
-            }
+            FORMAT_BTREE => self
+                .read_btree_directory_entries(&inode)
+                .map(|entries| self.annotate_directory_entries(entries)),
             other => Err(invalid_fs_data(format!(
                 "directory inode {} uses unsupported format {}",
                 ino, other
@@ -2146,6 +2266,29 @@ mod tests {
         img
     }
 
+    fn build_xfs_fixture_with_btree_xdd3_directory_and_truncated_second_block() -> Vec<u8> {
+        let mut img = build_xfs_fixture_with_xdd3_extent_dir();
+        let block_size = 4096usize;
+
+        let fi = &mut img[8192 + 2 * 256..8192 + 3 * 256];
+        fi[di_off::FORMAT] = FORMAT_BTREE;
+        fi[di_off::SIZE..di_off::SIZE + 8].copy_from_slice(&(2 * block_size as u64).to_be_bytes());
+        fi[di_off::NEXTENTS..di_off::NEXTENTS + 4].copy_from_slice(&2u32.to_be_bytes());
+        fi[di_off::FORKOFF] = 0;
+
+        let df = &mut fi[INODE_CORE_SIZE..];
+        df[0..4].copy_from_slice(&BMAP_MAGIC.to_be_bytes());
+        df[4..6].copy_from_slice(&0u16.to_be_bytes());
+        df[6..8].copy_from_slice(&2u16.to_be_bytes());
+        df[8..16].copy_from_slice(&0u64.to_be_bytes());
+        df[16..32].copy_from_slice(&encode_bmbt_extent(0, 7, 1));
+        df[32..40].copy_from_slice(&1u64.to_be_bytes());
+        df[40..56].copy_from_slice(&encode_bmbt_extent(1, 8, 1));
+
+        img.truncate(8 * block_size);
+        img
+    }
+
     /// Build a block directory buffer with a free-space (0xFFFF) entry
     /// interleaved between two entries.
     fn build_block_dir_data_with_free_space() -> Vec<u8> {
@@ -2271,6 +2414,19 @@ mod tests {
     #[test]
     fn test_extent_directory_keeps_valid_xdd3_entries_when_later_block_is_truncated() {
         let img = build_xfs_fixture_with_truncated_second_xdd3_block();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let xfs = XfsReader::open(reader, 0).unwrap();
+
+        let children = xfs.list_children("test.txt").unwrap();
+
+        assert_eq!(children.len(), 1);
+        assert_eq!(children[0].name, "subdir");
+        assert!(children[0].is_dir);
+    }
+
+    #[test]
+    fn test_btree_directory_keeps_valid_xdd3_entries_when_later_block_is_truncated() {
+        let img = build_xfs_fixture_with_btree_xdd3_directory_and_truncated_second_block();
         let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
         let xfs = XfsReader::open(reader, 0).unwrap();
 
