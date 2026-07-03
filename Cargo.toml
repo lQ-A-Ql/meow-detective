@@ -33,6 +33,7 @@ members = [
   "crates/fs-apfs",
   "crates/fs-xfs",
   "crates/fs-hfsplus",
+  "crates/fs-lvm",
   "crates/exchange",
   "crates/cloud-audit",
   "crates/gql",
@@ -79,6 +80,7 @@ fs-btrfs = { path = "crates/fs-btrfs" }
 fs-apfs = { path = "crates/fs-apfs" }
 fs-xfs = { path = "crates/fs-xfs" }
 fs-hfsplus = { path = "crates/fs-hfsplus" }
+fs-lvm = { path = "crates/fs-lvm" }
 image-raw = { path = "crates/image-raw" }
 image-e01 = { path = "crates/image-e01" }
 ingest = { path = "crates/ingest" }
