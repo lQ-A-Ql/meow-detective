@@ -752,6 +752,27 @@ pub fn expand_lvm_pool_candidates(
     for idx in &remove_indices {
         probe.candidates.remove(*idx);
     }
+
+    // Add partition records for each new LV candidate
+    let next_index = probe.partitions.iter().map(|p| p.index).max().unwrap_or(0) + 1;
+    for (i, lv_candidate) in new_candidates.iter().enumerate() {
+        let lv_index = next_index + i;
+        let kind_label = kind_label(lv_candidate.kind);
+        probe.partitions.push(PartitionRecord {
+            index: lv_index,
+            name: lv_candidate
+                .partition_name
+                .clone()
+                .unwrap_or_else(|| format!("LV_{}", lv_index)),
+            kind_label,
+            type_guid: None,
+            offset: lv_candidate.offset,
+            length: 0, // LV size is unknown at probe time; filled during enumeration
+            status: PartitionStatus::Supported,
+            filesystem: Some(lv_candidate.kind),
+        });
+    }
+
     probe.candidates.extend(new_candidates);
 }
 
