@@ -9,7 +9,6 @@
 /// let lv_box: Box<dyn EvidenceReader> = Box::new(lv);
 /// let ext4 = Ext4Reader::open(lv_box, 0)?; // offset = 0, LV is a clean block device
 /// ```
-
 use std::io::{Read, Seek, SeekFrom};
 
 use evidence_core::EvidenceReader;
@@ -80,17 +79,15 @@ impl LvReader {
             return Ok(0);
         }
 
-        let (ext_idx, offset_in_ext) = self
-            .locate(logical_offset)
-            .ok_or_else(|| {
-                std::io::Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    format!(
-                        "logical offset {} is not covered by any extent",
-                        logical_offset
-                    ),
-                )
-            })?;
+        let (ext_idx, offset_in_ext) = self.locate(logical_offset).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                format!(
+                    "logical offset {} is not covered by any extent",
+                    logical_offset
+                ),
+            )
+        })?;
 
         let ext = &self.extent_map[ext_idx];
         let available_in_ext = ext.length.saturating_sub(offset_in_ext);
@@ -156,7 +153,7 @@ impl EvidenceReader for LvReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
+    
 
     /// A minimal fake reader for testing LvReader.
     struct FakeDevice {
@@ -214,7 +211,7 @@ mod tests {
         }];
 
         let lv = LvReader::new(device, "test_lv".into(), 17, extent_map);
-        let mut reader = std::cell::RefCell::new(Box::new(lv) as Box<dyn EvidenceReader>);
+        let reader = std::cell::RefCell::new(Box::new(lv) as Box<dyn EvidenceReader>);
         let mut lv_ref = reader.borrow_mut();
 
         let mut buf = [0u8; 5];
@@ -236,7 +233,7 @@ mod tests {
         }];
 
         let lv = LvReader::new(device, "test_lv".into(), 10, extent_map);
-        let mut reader = std::cell::RefCell::new(Box::new(lv) as Box<dyn EvidenceReader>);
+        let reader = std::cell::RefCell::new(Box::new(lv) as Box<dyn EvidenceReader>);
         let mut lv_ref = reader.borrow_mut();
 
         // Seek to offset 3, read 2 bytes
@@ -260,7 +257,7 @@ mod tests {
         }];
 
         let lv = LvReader::new(device, "small_lv".into(), 4, extent_map);
-        let mut reader = std::cell::RefCell::new(Box::new(lv) as Box<dyn EvidenceReader>);
+        let reader = std::cell::RefCell::new(Box::new(lv) as Box<dyn EvidenceReader>);
         let mut lv_ref = reader.borrow_mut();
 
         lv_ref.seek(SeekFrom::Start(4)).unwrap();

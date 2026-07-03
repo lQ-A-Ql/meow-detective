@@ -13,7 +13,6 @@
 ///   - N×16 bytes:  data area descriptors (terminated by all-zeros)
 ///   - M×16 bytes:  metadata area descriptors (terminated by all-zeros)
 /// ```
-
 use std::io::{Read, Seek, SeekFrom};
 
 use crate::crc;
@@ -64,10 +63,7 @@ struct RawLabel {
 ///
 /// `pv_offset` is the byte offset of the PV start within the reader (typically
 /// the partition's LBA start × 512).
-pub fn parse_pv_label<R: Read + Seek>(
-    reader: &mut R,
-    pv_offset: u64,
-) -> Result<LvmLabel> {
+pub fn parse_pv_label<R: Read + Seek>(reader: &mut R, pv_offset: u64) -> Result<LvmLabel> {
     let label_offset = pv_offset + LABEL_SECTOR_OFFSET;
     let mut sector = [0u8; LABEL_SECTOR_SIZE];
 
@@ -198,7 +194,7 @@ mod tests {
         // label header
         sector[0..8].copy_from_slice(b"LABELONE");
         sector[8..16].copy_from_slice(&1u64.to_le_bytes()); // sector_number
-        // crc at 16..20, filled after
+                                                            // crc at 16..20, filled after
         sector[20..24].copy_from_slice(&32u32.to_le_bytes()); // data_offset
         sector[24..32].copy_from_slice(b"LVM2 001");
 
@@ -210,14 +206,14 @@ mod tests {
         // one data area
         sector[72..80].copy_from_slice(&2048u64.to_le_bytes()); // offset
         sector[80..88].copy_from_slice(&(pv_size - 2048).to_le_bytes()); // size
-        // terminator
-        // (bytes 88..104 already zero)
+                                                                         // terminator
+                                                                         // (bytes 88..104 already zero)
 
         // one metadata area
         sector[104..112].copy_from_slice(&512u64.to_le_bytes()); // offset=512 (sector 1)
         sector[112..120].copy_from_slice(&(255 * 512u64).to_le_bytes()); // size
-        // terminator
-        // (bytes 120..136 already zero)
+                                                                         // terminator
+                                                                         // (bytes 120..136 already zero)
 
         // Compute and write CRC-32 of bytes 20..512
         let crc = crc::lvm_crc32(&sector[20..512]);

@@ -5,7 +5,6 @@
 ///
 /// For striped logical volumes (stripe_count > 1), extents are interleaved
 /// across multiple PVs according to the stripe width.
-
 use crate::error::{LvmError, Result};
 use crate::metadata::{LvMeta, SegmentMeta, SegmentType, VolumeGroup};
 

@@ -14,7 +14,6 @@
 /// Offset 40-135: 4 × raw_location_descriptors (24 bytes each)
 /// Offset 136-511: reserved (zero-filled)
 /// ```
-
 use std::io::{Read, Seek, SeekFrom};
 
 use crate::crc;
@@ -41,9 +40,9 @@ pub struct VolumeGroup {
 
 #[derive(Debug, Clone)]
 pub struct PvMeta {
-    pub name: String,       // "pv0", "pv1", ...
+    pub name: String, // "pv0", "pv1", ...
     pub uuid: String,
-    pub pe_start: u64,      // sectors
+    pub pe_start: u64, // sectors
     pub pe_count: u64,
 }
 
@@ -107,8 +106,8 @@ pub fn parse_metadata<R: Read + Seek>(
     }
 
     let mda_base = u64::from_le_bytes([
-        header[24], header[25], header[26], header[27],
-        header[28], header[29], header[30], header[31],
+        header[24], header[25], header[26], header[27], header[28], header[29], header[30],
+        header[31],
     ]);
 
     // Parse up to 4 raw location descriptors
@@ -178,18 +177,36 @@ impl RawLocation {
     fn from_bytes(header: &[u8], offset: usize) -> Self {
         Self {
             offset: u64::from_le_bytes([
-                header[offset], header[offset + 1], header[offset + 2], header[offset + 3],
-                header[offset + 4], header[offset + 5], header[offset + 6], header[offset + 7],
+                header[offset],
+                header[offset + 1],
+                header[offset + 2],
+                header[offset + 3],
+                header[offset + 4],
+                header[offset + 5],
+                header[offset + 6],
+                header[offset + 7],
             ]),
             size: u64::from_le_bytes([
-                header[offset + 8], header[offset + 9], header[offset + 10], header[offset + 11],
-                header[offset + 12], header[offset + 13], header[offset + 14], header[offset + 15],
+                header[offset + 8],
+                header[offset + 9],
+                header[offset + 10],
+                header[offset + 11],
+                header[offset + 12],
+                header[offset + 13],
+                header[offset + 14],
+                header[offset + 15],
             ]),
             checksum: u32::from_le_bytes([
-                header[offset + 16], header[offset + 17], header[offset + 18], header[offset + 19],
+                header[offset + 16],
+                header[offset + 17],
+                header[offset + 18],
+                header[offset + 19],
             ]),
             flags: u32::from_le_bytes([
-                header[offset + 20], header[offset + 21], header[offset + 22], header[offset + 23],
+                header[offset + 20],
+                header[offset + 21],
+                header[offset + 22],
+                header[offset + 23],
             ]),
         }
     }
@@ -243,7 +260,11 @@ struct SegmentRaw {
 
 impl<'a> Parser<'a> {
     fn new(text: &'a str) -> Self {
-        Self { text, pos: 0, line: 1 }
+        Self {
+            text,
+            pos: 0,
+            line: 1,
+        }
     }
 
     fn error(&self, msg: &str) -> LvmError {
@@ -257,8 +278,13 @@ impl<'a> Parser<'a> {
         let bytes = self.text.as_bytes();
         while self.pos < bytes.len() {
             match bytes[self.pos] {
-                b' ' | b'\t' | b'\r' => { self.pos += 1; }
-                b'\n' => { self.pos += 1; self.line += 1; }
+                b' ' | b'\t' | b'\r' => {
+                    self.pos += 1;
+                }
+                b'\n' => {
+                    self.pos += 1;
+                    self.line += 1;
+                }
                 b'#' => {
                     while self.pos < bytes.len() && bytes[self.pos] != b'\n' {
                         self.pos += 1;
@@ -308,11 +334,15 @@ impl<'a> Parser<'a> {
                 self.pos += 1;
                 let start = self.pos;
                 while self.pos < bytes.len() && bytes[self.pos] != b'"' {
-                    if bytes[self.pos] == b'\n' { self.line += 1; }
+                    if bytes[self.pos] == b'\n' {
+                        self.line += 1;
+                    }
                     self.pos += 1;
                 }
                 let s = self.text[start..self.pos].to_string();
-                if self.pos < bytes.len() { self.pos += 1; }
+                if self.pos < bytes.len() {
+                    self.pos += 1;
+                }
                 Ok(s)
             }
             b'[' => {
@@ -320,7 +350,9 @@ impl<'a> Parser<'a> {
                 let mut items = Vec::new();
                 loop {
                     self.skip_whitespace_and_comments();
-                    if self.pos >= bytes.len() { break; }
+                    if self.pos >= bytes.len() {
+                        break;
+                    }
                     if bytes[self.pos] == b']' {
                         self.pos += 1;
                         break;
@@ -335,7 +367,9 @@ impl<'a> Parser<'a> {
             }
             _ if bytes[self.pos].is_ascii_digit() || bytes[self.pos] == b'-' => {
                 let start = self.pos;
-                if bytes[self.pos] == b'-' { self.pos += 1; }
+                if bytes[self.pos] == b'-' {
+                    self.pos += 1;
+                }
                 while self.pos < bytes.len() && bytes[self.pos].is_ascii_digit() {
                     self.pos += 1;
                 }
@@ -365,7 +399,9 @@ impl<'a> Parser<'a> {
 
         loop {
             self.skip_whitespace_and_comments();
-            if self.pos >= self.text.len() { break; }
+            if self.pos >= self.text.len() {
+                break;
+            }
             if self.text.as_bytes()[self.pos] == b'}' {
                 self.pos += 1;
                 break;
@@ -394,7 +430,8 @@ impl<'a> Parser<'a> {
                         let mut pv_params = Vec::new();
                         loop {
                             self.skip_whitespace_and_comments();
-                            if self.pos < self.text.len() && self.text.as_bytes()[self.pos] == b'}' {
+                            if self.pos < self.text.len() && self.text.as_bytes()[self.pos] == b'}'
+                            {
                                 self.pos += 1;
                                 break;
                             }
@@ -417,14 +454,16 @@ impl<'a> Parser<'a> {
                         let mut segments = Vec::new();
                         loop {
                             self.skip_whitespace_and_comments();
-                            if self.pos < self.text.len() && self.text.as_bytes()[self.pos] == b'}' {
+                            if self.pos < self.text.len() && self.text.as_bytes()[self.pos] == b'}'
+                            {
                                 self.pos += 1;
                                 break;
                             }
                             let peek_start = self.pos;
                             let key = self.expect_ident()?;
                             self.skip_whitespace_and_comments();
-                            if self.pos < self.text.len() && self.text.as_bytes()[self.pos] == b'=' {
+                            if self.pos < self.text.len() && self.text.as_bytes()[self.pos] == b'='
+                            {
                                 self.pos = peek_start;
                                 let (k, v) = self.parse_param()?;
                                 lv_params.push((k, v));
@@ -433,14 +472,19 @@ impl<'a> Parser<'a> {
                                 let mut seg_params = Vec::new();
                                 loop {
                                     self.skip_whitespace_and_comments();
-                                    if self.pos < self.text.len() && self.text.as_bytes()[self.pos] == b'}' {
+                                    if self.pos < self.text.len()
+                                        && self.text.as_bytes()[self.pos] == b'}'
+                                    {
                                         self.pos += 1;
                                         break;
                                     }
                                     let (k, v) = self.parse_param()?;
                                     seg_params.push((k, v));
                                 }
-                                segments.push(SegmentRaw { name: key, params: seg_params });
+                                segments.push(SegmentRaw {
+                                    name: key,
+                                    params: seg_params,
+                                });
                             } else {
                                 break;
                             }
@@ -467,7 +511,12 @@ impl<'a> Parser<'a> {
             }
         }
 
-        Ok(ParsedSection { name, params, pv_sections, lv_sections })
+        Ok(ParsedSection {
+            name,
+            params,
+            pv_sections,
+            lv_sections,
+        })
     }
 }
 
@@ -480,7 +529,7 @@ fn parse_metadata_text(text: &str) -> Result<VolumeGroup> {
     parser.skip_whitespace_and_comments();
     while parser.pos < text.len() {
         let saved = parser.pos;
-        let ident = parser.expect_ident()?;
+        let _ident = parser.expect_ident()?;
         parser.skip_whitespace_and_comments();
         if parser.pos < text.len() && text.as_bytes()[parser.pos] == b'{' {
             // This is the VG section — rewind to start of its name
@@ -498,11 +547,14 @@ fn parse_metadata_text(text: &str) -> Result<VolumeGroup> {
 
     let id = find_param(&section.params, "id");
     let seqno = find_param(&section.params, "seqno")
-        .parse::<u64>().unwrap_or(0);
+        .parse::<u64>()
+        .unwrap_or(0);
     let extent_size = find_param(&section.params, "extent_size")
-        .parse::<u64>().unwrap_or(8192);
+        .parse::<u64>()
+        .unwrap_or(8192);
 
-    let physical_volumes: Vec<PvMeta> = section.pv_sections
+    let physical_volumes: Vec<PvMeta> = section
+        .pv_sections
         .iter()
         .map(|(name, params)| PvMeta {
             uuid: find_param(params, "id"),
@@ -513,15 +565,20 @@ fn parse_metadata_text(text: &str) -> Result<VolumeGroup> {
         .collect();
 
     let extent_size_bytes = extent_size * 512u64;
-    let logical_volumes: Vec<LvMeta> = section.lv_sections
+    let logical_volumes: Vec<LvMeta> = section
+        .lv_sections
         .iter()
         .map(|lv_raw| {
             let lv_uuid = find_param(&lv_raw.params, "id");
-            let segs: Vec<SegmentMeta> = lv_raw.segments
+            let segs: Vec<SegmentMeta> = lv_raw
+                .segments
                 .iter()
                 .map(|s| parse_segment(s, extent_size_bytes))
                 .collect();
-            let size_bytes: u64 = segs.iter().map(|s| s.extent_count * extent_size_bytes).sum();
+            let size_bytes: u64 = segs
+                .iter()
+                .map(|s| s.extent_count * extent_size_bytes)
+                .sum();
             LvMeta {
                 name: lv_raw.name.clone(),
                 uuid: lv_uuid,
@@ -549,10 +606,7 @@ fn find_param(params: &[(String, String)], key: &str) -> String {
         .unwrap_or_default()
 }
 
-fn parse_segment(
-    seg: &SegmentRaw,
-    _extent_size_bytes: u64,
-) -> SegmentMeta {
+fn parse_segment(seg: &SegmentRaw, _extent_size_bytes: u64) -> SegmentMeta {
     let start_extent: u64 = find_param(&seg.params, "start_extent").parse().unwrap_or(0);
     let extent_count: u64 = find_param(&seg.params, "extent_count").parse().unwrap_or(0);
     let type_name = find_param(&seg.params, "type");
@@ -584,7 +638,10 @@ fn parse_stripes_list(raw: &str) -> Vec<(String, u64)> {
     if clean.is_empty() {
         return Vec::new();
     }
-    let parts: Vec<&str> = clean.split(',').map(|s| s.trim().trim_matches('"')).collect();
+    let parts: Vec<&str> = clean
+        .split(',')
+        .map(|s| s.trim().trim_matches('"'))
+        .collect();
     let mut result = Vec::new();
     let mut i = 0;
     while i + 1 < parts.len() {
@@ -599,7 +656,7 @@ fn parse_stripes_list(raw: &str) -> Vec<(String, u64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::label::DataRegion;
+    
 
     fn build_minimal_metadata_text() -> String {
         r#"contents = "Text Format Volume Group"

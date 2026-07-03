@@ -74,7 +74,10 @@ mod tests {
         // compute over what we have.
         let crc = lvm_crc32(&data[20..]);
         assert_ne!(crc, 0, "CRC should be non-zero for non-empty data");
-        assert_ne!(crc, CRC_INIT, "CRC should differ from initial value after processing data");
+        assert_ne!(
+            crc, CRC_INIT,
+            "CRC should differ from initial value after processing data"
+        );
     }
 
     #[test]

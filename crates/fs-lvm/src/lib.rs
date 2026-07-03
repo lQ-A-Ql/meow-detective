@@ -108,10 +108,7 @@ impl LvmPool {
     ///   single-disk setup this is a single-element vector.
     /// * `pv_offsets` — Byte offset of each PV's start in its corresponding
     ///   reader (typically the MBR/GPT partition's LBA start × 512).
-    pub fn discover(
-        readers: Vec<Box<dyn EvidenceReader>>,
-        pv_offsets: Vec<u64>,
-    ) -> Result<Self> {
+    pub fn discover(readers: Vec<Box<dyn EvidenceReader>>, pv_offsets: Vec<u64>) -> Result<Self> {
         if readers.is_empty() || readers.len() != pv_offsets.len() {
             return Err(crate::error::LvmError::MetadataParseError {
                 line: 0,
@@ -135,33 +132,31 @@ impl LvmPool {
         };
 
         // Phase 2: Parse metadata (separate scope so borrow is released)
-        let vg = {
-            let mda = pv_label
-                .metadata_areas
+        let vg =
+            {
+                let mda = pv_label.metadata_areas.first().ok_or_else(|| {
+                    LvmError::MetadataParseError {
+                        line: 0,
+                        message: "no metadata area found on PV".to_string(),
+                    }
+                })?;
+                let mut r = temp_reader.borrow_mut();
+                metadata::parse_metadata(&mut *r, mda)?
+            };
+
+        // Phase 3: Build PV data offset map
+        let first_data_area =
+            pv_label
+                .data_areas
                 .first()
                 .ok_or_else(|| LvmError::MetadataParseError {
                     line: 0,
-                    message: "no metadata area found on PV".to_string(),
+                    message: "no data area found on PV".to_string(),
                 })?;
-            let mut r = temp_reader.borrow_mut();
-            metadata::parse_metadata(&mut *r, mda)?
-        };
-
-        // Phase 3: Build PV data offset map
-        let first_data_area = pv_label
-            .data_areas
-            .first()
-            .ok_or_else(|| LvmError::MetadataParseError {
-                line: 0,
-                message: "no data area found on PV".to_string(),
-            })?;
 
         let mut pv_data_offsets: Vec<(String, u64)> = Vec::new();
         for pv_meta in &vg.physical_volumes {
-            pv_data_offsets.push((
-                pv_meta.name.clone(),
-                first_data_area.offset,
-            ));
+            pv_data_offsets.push((pv_meta.name.clone(), first_data_area.offset));
         }
 
         let logical_volumes = vg.logical_volumes.clone();
@@ -205,11 +200,7 @@ impl LvmPool {
         }
 
         let lv = self.logical_volumes[index].clone();
-        let extent_map = segment::build_extent_map(
-            &self.volume_group,
-            &lv,
-            &self.pv_data_offsets,
-        )?;
+        let extent_map = segment::build_extent_map(&self.volume_group, &lv, &self.pv_data_offsets)?;
 
         // Take the reader out of the RefCell (single-PV, Phase 1)
         let reader = self.device_readers.remove(0).into_inner();
@@ -244,7 +235,7 @@ mod tests {
 
         // --- Sector 1 (offset 512): PV label + header ---
         {
-            let (label_sec, rest) = disk.split_at_mut(1024);
+            let (label_sec, _rest) = disk.split_at_mut(1024);
             let sec = &mut label_sec[512..1024];
             sec[0..8].copy_from_slice(b"LABELONE");
             sec[8..16].copy_from_slice(&1u64.to_le_bytes());
@@ -373,8 +364,7 @@ mod tests {
         // Write "FORENSIC TEST DATA" at the data area offset (sector 5 = 2560)
         let test_data = b"FORENSIC TEST DATA AT LV OFFSET 0";
         let data_area_start = 2560usize;
-        disk[data_area_start..data_area_start + test_data.len()]
-            .copy_from_slice(test_data);
+        disk[data_area_start..data_area_start + test_data.len()].copy_from_slice(test_data);
 
         let reader: Box<dyn EvidenceReader> = Box::new(FakeDiskReader::new(disk));
         let pool = LvmPool::discover(vec![reader], vec![0]).unwrap();
@@ -386,8 +376,8 @@ mod tests {
     }
 
     // --- Test helpers ---
-    use std::io::{Read as IoRead, Seek as IoSeek};
     use evidence_core::ReaderInfo;
+    use std::io::{Read as IoRead, Seek as IoSeek};
 
     struct FakeDiskReader {
         data: Vec<u8>,

@@ -10,12 +10,18 @@ pub enum LvmError {
     LabelCrcMismatch { expected: u32, actual: u32 },
 
     /// MDA header CRC-32 mismatch.
-    #[error("metadata area header CRC mismatch: expected {expected:#010x}, computed {actual:#010x}")]
+    #[error(
+        "metadata area header CRC mismatch: expected {expected:#010x}, computed {actual:#010x}"
+    )]
     MdaCrcMismatch { expected: u32, actual: u32 },
 
     /// Metadata text block CRC-32 mismatch.
     #[error("metadata text CRC mismatch (copy {index}): expected {expected:#010x}, computed {actual:#010x}")]
-    MetadataCrcMismatch { index: usize, expected: u32, actual: u32 },
+    MetadataCrcMismatch {
+        index: usize,
+        expected: u32,
+        actual: u32,
+    },
 
     /// Metadata text could not be parsed.
     #[error("metadata parse error at line {line}: {message}")]
