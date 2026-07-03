@@ -27,6 +27,10 @@ use persistence_sqlite::repositories::{case_repo::CaseRepo, datasource_repo::Dat
 use rusqlite::Connection;
 use std::path::PathBuf;
 
+const LIUYANG_LVM_POOL_OFFSET: u64 = 1_074_790_400;
+const LIUYANG_ROOT_LV_NAME: &str = "root";
+const LIUYANG_ROOT_LV_VG_NAME: &str = "cl";
+
 fn fixture_path() -> PathBuf {
     std::env::var("FORENSICS_LINUX_E01_FIXTURE")
         .map(PathBuf::from)
@@ -815,7 +819,7 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
     // Try direct LVM crate access first (bypass expand helper)
     eprintln!("=== Direct LVM probe ===");
     let mut e01 = E01Reader::open(&fixture_path()).unwrap();
-    let lvm_offset = 1074790400u64; // Partition 1 offset
+    let lvm_offset = LIUYANG_LVM_POOL_OFFSET; // Partition 1 offset
     match fs_lvm::probe_lvm(&mut e01, lvm_offset) {
         Ok(true) => eprintln!("  fs_lvm::probe_lvm: true"),
         Ok(false) => eprintln!("  fs_lvm::probe_lvm: false — NOT an LVM PV!"),
@@ -1264,5 +1268,61 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
             .iter()
             .any(|c| matches!(c.source, ImageFilesystemSource::LvmLogicalVolume)),
         "should have at least one LvmLogicalVolume candidate after LVM expansion"
+    );
+
+    let root_lv = probe
+        .candidates
+        .iter()
+        .find(|candidate| {
+            matches!(candidate.source, ImageFilesystemSource::LvmLogicalVolume)
+                && candidate
+                    .lvm_identity
+                    .as_ref()
+                    .is_some_and(|identity| identity.lv_name == LIUYANG_ROOT_LV_NAME)
+        })
+        .expect("should discover cl/root logical volume");
+    assert_eq!(root_lv.kind, ImageFilesystemKind::Xfs);
+    let identity = root_lv
+        .lvm_identity
+        .as_ref()
+        .expect("root LV candidate should persist LVM identity");
+    assert_eq!(identity.vg_name, LIUYANG_ROOT_LV_VG_NAME);
+    assert_eq!(identity.lv_name, LIUYANG_ROOT_LV_NAME);
+    assert_eq!(identity.pv_offsets, vec![LIUYANG_LVM_POOL_OFFSET]);
+    assert!(!identity.vg_uuid.is_empty(), "VG UUID must be persisted");
+    assert!(!identity.lv_uuid.is_empty(), "LV UUID must be persisted");
+
+    assert!(
+        probe.partitions.iter().any(|partition| {
+            partition.offset == LIUYANG_LVM_POOL_OFFSET
+                && matches!(
+                    partition.status,
+                    app_services::datasource_service::PartitionStatus::Expanded
+                )
+        }),
+        "original LVM pool partition should be marked Expanded after LV redirection"
+    );
+
+    let e01_reader: Box<dyn EvidenceReader> = Box::new(E01Reader::open(&fixture_path()).unwrap());
+    let pool = fs_lvm::LvmPool::discover(vec![e01_reader], vec![LIUYANG_LVM_POOL_OFFSET])
+        .expect("LVM pool discovery should succeed");
+    let root_index = pool
+        .list_volumes()
+        .iter()
+        .position(|volume| volume.name == LIUYANG_ROOT_LV_NAME)
+        .expect("root LV should be present in direct LVM discovery");
+    let root_reader = pool.open_volume(root_index).expect("root LV should open");
+    let root_fs =
+        fs_xfs::XfsReader::open(Box::new(root_reader), 0).expect("root LV should mount as XFS");
+    let root_children = root_fs
+        .list_children("")
+        .expect("root LV should enumerate root directory");
+    let root_child_names = root_children
+        .iter()
+        .map(|child| child.name.as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        root_child_names.contains(&"boot") && root_child_names.contains(&"etc"),
+        "root LV should expose expected Linux root entries, got {root_child_names:?}"
     );
 }
