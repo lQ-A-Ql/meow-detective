@@ -54,6 +54,27 @@ pub fn generate_html_report(
     output_dir: &Path,
     scope: &ExportScopeDto,
 ) -> Result<String, ReportError> {
+    generate_html_report_with_analysis(conn, case, output_dir, scope, || current_analysis(conn))
+}
+
+pub fn generate_html_report_for_case(
+    conn: &Connection,
+    case: &CaseMeta,
+    output_dir: &Path,
+    scope: &ExportScopeDto,
+) -> Result<String, ReportError> {
+    generate_html_report_with_analysis(conn, case, output_dir, scope, || {
+        current_analysis_for_case(conn, &case.id.0)
+    })
+}
+
+fn generate_html_report_with_analysis(
+    conn: &Connection,
+    case: &CaseMeta,
+    output_dir: &Path,
+    scope: &ExportScopeDto,
+    analysis_loader: impl FnOnce() -> Result<ReportAnalysis, ReportError>,
+) -> Result<String, ReportError> {
     let file_repo = FileRepo::new(conn);
     let tl_repo = TimelineRepo::new(conn);
 
@@ -83,7 +104,7 @@ pub fn generate_html_report(
     } else {
         Vec::new()
     };
-    let analysis = current_analysis(conn)?;
+    let analysis = analysis_loader()?;
     let analysis_rows = html::report_analysis_rows(conn, &case.id.0, &analysis, scope);
     let governance = current_governance(conn, &case.id.0)?;
     let governance_rows = html::report_governance_rows(&governance, scope);
@@ -157,6 +178,35 @@ pub(crate) fn current_analysis(conn: &Connection) -> Result<ReportAnalysis, Repo
         crate::analysis_service::DEFAULT_SAMPLE_SIZE,
         |file_id| {
             crate::file_service::read_file_header_by_id(
+                conn,
+                file_id,
+                crate::analysis_service::MAGIC_HEADER_LIMIT,
+            )
+        },
+    );
+
+    Ok(ReportAnalysis {
+        system_info,
+        classifications,
+    })
+}
+
+pub(crate) fn current_analysis_for_case(
+    conn: &Connection,
+    case_id: &str,
+) -> Result<ReportAnalysis, ReportError> {
+    let header_cache = crate::file_service::FileHeaderReadCache::new(case_id);
+    let system_info =
+        crate::analysis_service::extract_system_info_for_case(conn, |file_id, max_bytes| {
+            header_cache.read_file_header_by_id(conn, file_id, max_bytes)
+        });
+    let files = crate::analysis_service::collect_file_entries(conn)
+        .map_err(|e| ReportError::Other(e.to_string()))?;
+    let classifications = crate::analysis_service::classify_files_by_magic(
+        &files,
+        crate::analysis_service::DEFAULT_SAMPLE_SIZE,
+        |file_id| {
+            header_cache.read_file_header_by_id(
                 conn,
                 file_id,
                 crate::analysis_service::MAGIC_HEADER_LIMIT,

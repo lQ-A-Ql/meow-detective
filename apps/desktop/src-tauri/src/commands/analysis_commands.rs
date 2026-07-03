@@ -62,11 +62,12 @@ pub async fn get_system_info(
     let app_state = state.inner().clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        require_active_case(&app_state)?;
+        let active = require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
+        let header_cache = file_service::FileHeaderReadCache::new(active.case_id);
         Ok(analysis_service::extract_system_info_for_case(
             &conn,
-            |file_id, max_bytes| file_service::read_file_header_by_id(&conn, file_id, max_bytes),
+            |file_id, max_bytes| header_cache.read_file_header_by_id(&conn, file_id, max_bytes),
         ))
     })
     .await
@@ -352,11 +353,12 @@ pub async fn generate_analysis_summary(state: State<'_, AppState>) -> Result<Str
     let app_state = state.inner().clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        require_active_case(&app_state)?;
+        let active = require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
+        let header_cache = file_service::FileHeaderReadCache::new(active.case_id);
         let system_info =
             analysis_service::extract_system_info_for_case(&conn, |file_id, max_bytes| {
-                file_service::read_file_header_by_id(&conn, file_id, max_bytes)
+                header_cache.read_file_header_by_id(&conn, file_id, max_bytes)
             });
         let classifications = analysis_service::classify_files_by_metadata(
             &conn,

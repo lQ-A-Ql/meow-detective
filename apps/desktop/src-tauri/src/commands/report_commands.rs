@@ -44,8 +44,13 @@ pub async fn export_html_report(
         let active = require_active_case(&app_state)?;
         let output_dir = active.case_root.join("reports");
         let conn = get_case_connection(&app_state)?;
-        app_services::report::generate_html_report(&conn, &active.meta, &output_dir, &scope)
-            .map_err(CommandError::from_typed_service_error)
+        app_services::report::generate_html_report_for_case(
+            &conn,
+            &active.meta,
+            &output_dir,
+            &scope,
+        )
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
