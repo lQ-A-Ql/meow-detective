@@ -61,7 +61,7 @@ export function useFileTree(showHidden = false) {
   return useQuery({
     queryKey: ['files', 'tree', showHidden],
     queryFn: () => getFileTree(showHidden),
-    staleTime: Infinity,
+    staleTime: 10_000, // reduced from Infinity to pick up post-import tree updates
   });
 }
 
