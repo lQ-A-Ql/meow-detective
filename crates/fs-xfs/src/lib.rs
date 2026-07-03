@@ -326,15 +326,35 @@ impl XfsReader {
 
     /// Return the slice of the inode buffer that holds the data fork.
     ///
-    /// Returns the full literal area (core end to inode end) regardless
-    /// of `di_forkoff`. The forkoff field only delimits the *attribute*
-    /// fork boundary; our read-only forensic reader does not parse xattrs,
-    /// and truncating at forkoff would drop extent records / directory
-    /// entries that extend beyond it (seen on real CentOS 7 images where
-    /// forkoff=36 but nextents=3 requires 48 bytes of extent data).
+    /// For LOCAL-format (shortform), the data fork fills the entire literal
+    /// area regardless of `di_forkoff`. For EXTENTS/BTREE formats, `di_forkoff`
+    /// correctly delimits the extent/btree region from the attribute fork.
     fn data_fork(inode: &[u8]) -> io::Result<&[u8]> {
         let core_size = Self::inode_core_size(inode);
-        Ok(&inode[core_size..])
+        let literal = &inode[core_size..];
+        let format = inode[di_off::FORMAT];
+        if format == FORMAT_LOCAL {
+            // Shortform directories: entire literal area is data fork
+            Ok(literal)
+        } else {
+            let forkoff = inode[di_off::FORKOFF] as usize;
+            if forkoff == 0 {
+                Ok(literal)
+            } else if forkoff > literal.len() {
+                Err(invalid_fs_data(format!(
+                    "di_forkoff {} exceeds literal area {}",
+                    forkoff,
+                    literal.len()
+                )))
+            } else {
+                Ok(&literal[..forkoff])
+            }
+        }
+    }
+
+    /// Maximum number of complete extent records that fit in the data fork.
+    fn max_inline_extents(inode: &[u8]) -> usize {
+        Self::data_fork(inode).map(|df| df.len() / BMBT_REC_SIZE).unwrap_or(0)
     }
 
     /// Number of extent records declared for this inode.
@@ -435,10 +455,13 @@ impl XfsReader {
     /// Read file data from an extent-mapped inode (di_format = 2).
     fn read_extent_data(&self, inode: &[u8], file_size: u64) -> io::Result<Vec<u8>> {
         let df = Self::data_fork(inode)?;
+        // Cap at complete records fitting in data fork (forkoff may truncate)
+        let max_extents = Self::max_inline_extents(inode);
         let nextents = Self::nextents(inode) as usize;
+        let count = nextents.min(max_extents);
         let mut data = Vec::new();
 
-        for i in 0..nextents {
+        for i in 0..count {
             let off = i * BMBT_REC_SIZE;
             if off + BMBT_REC_SIZE > df.len() {
                 break;
