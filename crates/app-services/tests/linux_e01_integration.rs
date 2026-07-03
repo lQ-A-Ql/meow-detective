@@ -877,65 +877,52 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
                         match fs_xfs::XfsReader::open(lv_box, 0) {
                             Ok(xfs) => {
                                 eprintln!("      === Root LV directory listing ===");
-                                // Recursively list key directories
-                                fn list_dir(
+                                // Walk the root LV tree recursively
+                                fn walk_tree(
                                     xfs: &dyn FileSystemReader,
                                     path: &str,
                                     depth: usize,
+                                    total_files: &mut u64,
+                                    total_dirs: &mut u64,
+                                    failures: &mut u64,
                                 ) {
                                     match xfs.list_children(path) {
                                         Ok(children) => {
-                                            let dirs: Vec<_> = children.iter()
-                                                .filter(|c| c.is_dir).collect();
-                                            let files: Vec<_> = children.iter()
-                                                .filter(|c| !c.is_dir).collect();
-                                            let indent = "  ".repeat(depth + 1);
-                                            if depth == 0 {
-                                                eprintln!(
-                                                    "      /: {} dirs, {} files",
-                                                    dirs.len(),
-                                                    files.len()
-                                                );
-                                            } else {
-                                                eprintln!(
-                                                    "{}  {}: {} dirs, {} files",
-                                                    indent, path, dirs.len(), files.len()
-                                                );
-                                            }
-                                            // Recurse into subdirs (max depth 2)
-                                            if depth < 2 {
-                                                for d in dirs.iter().take(10) {
-                                                    let subpath = if path.is_empty() {
-                                                        d.name.clone()
-                                                    } else {
-                                                        format!("{}/{}", path, d.name)
-                                                    };
-                                                    list_dir(xfs, &subpath, depth + 1);
+                                            for c in &children {
+                                                if c.is_dir {
+                                                    *total_dirs += 1;
+                                                    if depth < 5 {
+                                                        let sub = if path.is_empty() {
+                                                            c.name.clone()
+                                                        } else {
+                                                            format!("{}/{}", path, c.name)
+                                                        };
+                                                        walk_tree(xfs, &sub, depth + 1, total_files, total_dirs, failures);
+                                                    }
+                                                } else {
+                                                    *total_files += 1;
                                                 }
                                             }
-                                            // Show first few files
-                                            for f in files.iter().take(5) {
-                                                eprintln!("{}    {}", indent, f.name);
-                                            }
-                                            if files.len() > 5 {
-                                                eprintln!(
-                                                    "{}    ... and {} more files",
-                                                    indent,
-                                                    files.len() - 5
-                                                );
-                                            }
                                         }
-                                        Err(e) => {
-                                            eprintln!(
-                                                "{}  {}: ERROR — {}",
-                                                "  ".repeat(depth + 1),
-                                                path,
-                                                e
-                                            );
+                                        Err(_e) => {
+                                            *failures += 1;
+                                            if depth <= 1 {
+                                                eprintln!("      FAIL {}: {}", path, _e);
+                                            }
                                         }
                                     }
                                 }
-                                list_dir(&xfs, "", 0);
+
+                                let (mut files, mut dirs, mut fails) = (0u64, 1u64, 0u64); // root itself = 1 dir
+                                walk_tree(&xfs, "", 0, &mut files, &mut dirs, &mut fails);
+                                eprintln!(
+                                    "      Root LV: {} files, {} dirs, {} failed dirs",
+                                    files, dirs, fails
+                                );
+                                assert!(
+                                    files + dirs > 0,
+                                    "root LV should enumerate at least some entries"
+                                );
                             }
                             Err(e) => eprintln!("      ROOT LV XFS open ERROR: {}", e),
                         }
