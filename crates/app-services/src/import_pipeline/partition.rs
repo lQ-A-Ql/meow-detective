@@ -378,33 +378,13 @@ where
                 continue;
             }
             ImageFilesystemKind::LvmPool => {
-                // LVM pool expansion: open the PV, discover LVs, enumerate each one.
-                // For now, log and skip — full expansion with LV sub-partition creation
-                // requires multi-partition work support (Phase 2 integration).
-                tracing::info!(
-                    "LVM pool detected at partition '{}' (offset {}), LV expansion requires \
-                     multi-partition work support (planned). Skipping for now.",
+                // LVM pools are expanded at probe time by expand_lvm_pool_candidates.
+                // This arm exists for safety — if reached, skip gracefully.
+                tracing::warn!(
+                    "LvmPool reached enumeration phase unexpectedly for '{}' — \
+                     expansion should have occurred at probe time. Skipping.",
                     root_name,
-                    candidate.offset,
                 );
-                if let (Some(app), Some(jid)) = (app, job_id) {
-                    let job_repo = persistence_sqlite::repositories::job_repo::JobRepo::new(conn);
-                    let _ = job_repo.update_partition_progress(
-                        jid,
-                        &root_name,
-                        (index as u32) + 1,
-                        total_candidates as u32,
-                        100,
-                    );
-                    crate::import_pipeline::emit::emit_partition_progress(
-                        app,
-                        &jid.0,
-                        &root_name,
-                        (index as u32) + 1,
-                        total_candidates as u32,
-                        100,
-                    );
-                }
                 continue;
             }
         };
