@@ -695,21 +695,22 @@ pub fn expand_lvm_pool_candidates(
         probe.candidates.remove(*idx);
     }
 
-    // Add partition records for each new LV candidate
+    // Add partition records for each new LV candidate; fix candidate indices
+    // to match their PartitionRecord so build_partition_work can find them.
     let next_index = probe.partitions.iter().map(|p| p.index).max().unwrap_or(0) + 1;
-    for (i, lv_candidate) in new_candidates.iter().enumerate() {
+    for (i, lv_candidate) in new_candidates.iter_mut().enumerate() {
         let lv_index = next_index + i;
-        let kind_label = kind_label(lv_candidate.kind);
+        lv_candidate.partition_index = Some(lv_index);
         probe.partitions.push(PartitionRecord {
             index: lv_index,
             name: lv_candidate
                 .partition_name
                 .clone()
                 .unwrap_or_else(|| format!("LV_{}", lv_index)),
-            kind_label,
+            kind_label: kind_label(lv_candidate.kind),
             type_guid: None,
             offset: lv_candidate.offset,
-            length: 0, // LV size is unknown at probe time; filled during enumeration
+            length: 0,
             status: PartitionStatus::Supported,
             filesystem: Some(lv_candidate.kind),
         });
