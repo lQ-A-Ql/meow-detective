@@ -267,8 +267,11 @@ fn probe_and_seed_manifest(
     } else {
         Box::new(RawImageReader::open(path).map_err(CommandError::from_service_error)?)
     };
-    let probe = datasource_service::detect_image_filesystem(&mut probe_reader)
+    let mut probe = datasource_service::detect_image_filesystem(&mut probe_reader)
         .map_err(CommandError::from_service_error)?;
+
+    // Expand LVM pools into per-LV candidates
+    datasource_service::expand_lvm_pool_candidates(&mut probe, path, kind);
 
     emit_phase_profile(
         ctx.app(),

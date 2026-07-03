@@ -56,21 +56,55 @@ pub fn build_extent_map(
                 le_cursor += segment.extent_count;
                 map.extend(stripe_extents);
             }
-            SegmentType::Raid0 { .. }
-            | SegmentType::Raid1 { .. }
-            | SegmentType::Raid5 { .. }
-            | SegmentType::Raid6 { .. }
-            | SegmentType::Raid10 { .. }
-            | SegmentType::ThinPool
+            SegmentType::Raid0 { stripe_count } => {
+                // RAID 0 is identical to striped — data is interleaved across
+                // PVs with no parity. Use the same mapping as Striped.
+                let stripe_extents = build_striped(
+                    segment,
+                    le_cursor,
+                    extent_size_bytes,
+                    *stripe_count,
+                    pv_data_offsets,
+                )?;
+                le_cursor += segment.extent_count;
+                map.extend(stripe_extents);
+            }
+            SegmentType::Raid1 { .. } | SegmentType::Raid10 { .. } => {
+                // RAID 1 (mirroring): read from the first mirror copy.
+                // RAID 10 (striped mirrors): read from first mirror in each stripe.
+                // For forensics, any complete copy suffices — we use the first PV.
+                if segment.stripes.is_empty() {
+                    return Err(LvmError::MetadataParseError {
+                        line: 0,
+                        message: format!("RAID segment in LV '{}' has no stripes", lv.name),
+                    });
+                }
+                // Use only the first copy: map as linear on the first PV in stripes
+                let (pv_name, stripe_pe_start) = &segment.stripes[0];
+                let pv_index = find_pv_index(pv_data_offsets, pv_name)?;
+                let pv_data_start = pv_data_offsets[pv_index].1;
+                let logical_start = le_cursor * extent_size_bytes;
+                let physical_offset = pv_data_start + stripe_pe_start * extent_size_bytes;
+                let length = segment.extent_count * extent_size_bytes;
+                le_cursor += segment.extent_count;
+                map.push(LvExtent {
+                    logical_start,
+                    physical_offset,
+                    length,
+                    pv_index,
+                });
+            }
+            SegmentType::Raid5 { .. } | SegmentType::Raid6 { .. } => {
+                return Err(LvmError::UnsupportedSegment {
+                    lv_name: lv.name.clone(),
+                    seg_type: "raid5/raid6 (parity RAID requires reconstruction logic)".into(),
+                });
+            }
+            SegmentType::ThinPool
             | SegmentType::Snapshot
             | SegmentType::CachePool
             | SegmentType::Unsupported { .. } => {
                 let name = match &segment.seg_type {
-                    SegmentType::Raid0 { .. } => "raid0",
-                    SegmentType::Raid1 { .. } => "raid1",
-                    SegmentType::Raid5 { .. } => "raid5",
-                    SegmentType::Raid6 { .. } => "raid6",
-                    SegmentType::Raid10 { .. } => "raid10",
                     SegmentType::ThinPool => "thin-pool",
                     SegmentType::Snapshot => "snapshot",
                     SegmentType::CachePool => "cache-pool",
@@ -363,5 +397,58 @@ mod tests {
         assert_eq!(map[1].logical_start, 5 * 8192 * 512);
         assert_eq!(map[1].physical_offset, 2048 * 512 + 128 * 8192 * 512);
         assert_eq!(map[1].length, 3 * 8192 * 512);
+    }
+
+    #[test]
+    fn raid0_same_as_striped() {
+        let vg = make_test_vg();
+        let lv = LvMeta {
+            name: "raid0_lv".into(),
+            uuid: "lv-uuid".into(),
+            segments: vec![SegmentMeta {
+                start_extent: 0,
+                extent_count: 2,
+                seg_type: SegmentType::Raid0 { stripe_count: 2 },
+                stripes: vec![("pv0".into(), 0), ("pv0".into(), 100)],
+            }],
+            size_bytes: 0,
+        };
+        let pv_offsets = vec![("pv0".into(), 2048 * 512)];
+        let map = build_extent_map(&vg, &lv, &pv_offsets).unwrap();
+        assert_eq!(map.len(), 2, "RAID0 with 2 stripes → 2 extent entries");
+    }
+
+    #[test]
+    fn raid1_reads_first_mirror() {
+        let vg = VolumeGroup {
+            name: "mirror_vg".into(),
+            id: "vg-id".into(),
+            extent_size: 4096,
+            seqno: 1,
+            physical_volumes: vec![
+                PvMeta { name: "pv0".into(), uuid: "pv0-uuid".into(), pe_start: 2048, pe_count: 1000 },
+                PvMeta { name: "pv1".into(), uuid: "pv1-uuid".into(), pe_start: 2048, pe_count: 1000 },
+            ],
+            logical_volumes: Vec::new(),
+        };
+        let lv = LvMeta {
+            name: "mirrored_lv".into(),
+            uuid: "lv-uuid".into(),
+            segments: vec![SegmentMeta {
+                start_extent: 0,
+                extent_count: 10,
+                seg_type: SegmentType::Raid1 { mirror_count: 2 },
+                stripes: vec![("pv0".into(), 0), ("pv1".into(), 0)],
+            }],
+            size_bytes: 0,
+        };
+        let pv_offsets = vec![("pv0".into(), 2048 * 512), ("pv1".into(), 4096 * 512)];
+
+        let map = build_extent_map(&vg, &lv, &pv_offsets).unwrap();
+        // RAID1: should only map to the first mirror (pv0)
+        assert_eq!(map.len(), 1, "RAID1 maps to single mirror copy");
+        assert_eq!(map[0].pv_index, 0);
+        assert_eq!(map[0].physical_offset, 2048 * 512); // pv0 data start
+        assert_eq!(map[0].length, 10 * 4096 * 512);
     }
 }

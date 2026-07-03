@@ -586,6 +586,175 @@ where
     })
 }
 
+/// Expand LVM pool candidates into individual logical volume candidates.
+///
+/// For each `LvmPool` candidate in the probe, opens the physical volume,
+/// discovers logical volumes, detects the filesystem on each, and replaces
+/// the pool candidate with per-LV candidates.
+///
+/// Call after `detect_image_filesystem` and before storing partition records.
+pub fn expand_lvm_pool_candidates(
+    probe: &mut ImageFilesystemProbe,
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+) {
+    let lvm_indices: Vec<(usize, ImageFilesystemCandidate)> = probe
+        .candidates
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| matches!(c.kind, ImageFilesystemKind::LvmPool))
+        .map(|(i, c)| (i, c.clone()))
+        .collect();
+
+    if lvm_indices.is_empty() {
+        return;
+    }
+
+    let mut new_candidates: Vec<ImageFilesystemCandidate> = Vec::new();
+    let mut remove_indices: Vec<usize> = Vec::new();
+
+    for (idx, candidate) in &lvm_indices {
+        // Open reader for this partition
+        let open_result: std::io::Result<Box<dyn evidence_core::EvidenceReader>> = match source_kind {
+            domain::DataSourceKind::E01 => {
+                image_e01::E01Reader::open(source_path)
+                    .map(|r| Box::new(r) as Box<dyn evidence_core::EvidenceReader>)
+            }
+            _ => evidence_core::RawImageReader::open(source_path)
+                .map(|r| Box::new(r) as Box<dyn evidence_core::EvidenceReader>),
+        };
+
+        let reader = match open_result {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!("LVM expand: cannot open reader at offset {}: {}", candidate.offset, e);
+                continue;
+            }
+        };
+
+        // Discover the volume group
+        let pool = match fs_lvm::LvmPool::discover(vec![reader], vec![candidate.offset]) {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::warn!("LVM expand: discovery failed at offset {}: {}", candidate.offset, e);
+                continue;
+            }
+        };
+
+        let lv_list = pool.list_volumes();
+        tracing::info!(
+            "LVM: {} logical volume(s) discovered at offset {}",
+            lv_list.len(),
+            candidate.offset,
+        );
+
+        // For each LV, re-open reader + re-discover to detect filesystem
+        for lv_info in &lv_list {
+            let lv_reader: Result<Box<dyn evidence_core::EvidenceReader>> = match source_kind {
+                domain::DataSourceKind::E01 => {
+                    let r = match image_e01::E01Reader::open(source_path) {
+                        Ok(r) => r,
+                        Err(e) => {
+                            tracing::warn!("LVM: cannot re-open E01 for LV '{}': {}", lv_info.name, e);
+                            continue;
+                        }
+                    };
+                    let lv_pool = match fs_lvm::LvmPool::discover(
+                        vec![Box::new(r) as Box<dyn evidence_core::EvidenceReader>],
+                        vec![candidate.offset],
+                    ) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            tracing::warn!("LVM: re-discover failed for LV '{}': {}", lv_info.name, e);
+                            continue;
+                        }
+                    };
+                    let lv_idx = lv_pool.list_volumes().iter()
+                        .position(|v| v.name == lv_info.name)
+                        .unwrap_or(0);
+                    match lv_pool.open_volume(lv_idx) {
+                        Ok(lvr) => Ok(Box::new(lvr) as Box<dyn evidence_core::EvidenceReader>),
+                        Err(e) => {
+                            tracing::warn!("LVM: open_volume '{}' failed: {}", lv_info.name, e);
+                            continue;
+                        }
+                    }
+                }
+                _ => {
+                    let r = match evidence_core::RawImageReader::open(source_path) {
+                        Ok(r) => r,
+                        Err(e) => {
+                            tracing::warn!("LVM: cannot re-open RAW for LV '{}': {}", lv_info.name, e);
+                            continue;
+                        }
+                    };
+                    let lv_pool = match fs_lvm::LvmPool::discover(
+                        vec![Box::new(r) as Box<dyn evidence_core::EvidenceReader>],
+                        vec![candidate.offset],
+                    ) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            tracing::warn!("LVM: re-discover failed for LV '{}': {}", lv_info.name, e);
+                            continue;
+                        }
+                    };
+                    let lv_idx = lv_pool.list_volumes().iter()
+                        .position(|v| v.name == lv_info.name)
+                        .unwrap_or(0);
+                    match lv_pool.open_volume(lv_idx) {
+                        Ok(lvr) => Ok(Box::new(lvr) as Box<dyn evidence_core::EvidenceReader>),
+                        Err(e) => {
+                            tracing::warn!("LVM: open_volume '{}' failed: {}", lv_info.name, e);
+                            continue;
+                        }
+                    }
+                }
+            };
+
+            let mut lv_reader = match lv_reader {
+                Ok(r) => r,
+                Err(_) => continue,
+            };
+
+            // Detect filesystem on the LV
+            match read_boot_filesystem(&mut lv_reader, 0) {
+                Ok(Some(fs_kind)) if !matches!(fs_kind, ImageFilesystemKind::LvmPool) => {
+                    let lv_name = format!(
+                        "{}/{}",
+                        candidate.partition_name.as_deref().unwrap_or("LVM"),
+                        lv_info.name
+                    );
+                    new_candidates.push(ImageFilesystemCandidate {
+                        partition_index: candidate.partition_index,
+                        partition_name: Some(lv_name),
+                        kind: fs_kind,
+                        offset: 0, // LV is a clean block device
+                        source: ImageFilesystemSource::LvmLogicalVolume,
+                    });
+                }
+                Ok(_) => {
+                    tracing::debug!(
+                        "LVM LV '{}': no supported filesystem detected, skipping",
+                        lv_info.name
+                    );
+                }
+                Err(e) => {
+                    tracing::debug!("LVM LV '{}': FS detection error: {}", lv_info.name, e);
+                }
+            }
+        }
+
+        remove_indices.push(*idx);
+    }
+
+    // Remove original LvmPool candidates (descending index order)
+    remove_indices.sort_unstable_by(|a, b| b.cmp(a));
+    for idx in &remove_indices {
+        probe.candidates.remove(*idx);
+    }
+    probe.candidates.extend(new_candidates);
+}
+
 /// Assign effective partition indices for candidates where `partition_index` is `None`
 /// (typical for MBR disks). Candidates are sorted by offset so that indices are
 /// deterministic and consistent across probe, import, and viewer paths.

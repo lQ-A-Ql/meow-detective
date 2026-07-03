@@ -114,10 +114,18 @@ pub fn enumerate_image_data_source<R>(
 where
     R: EvidenceReader + std::io::Read + std::io::Seek + 'static,
 {
-    let fs_probe = datasource_service::detect_image_filesystem(&mut reader)
+    let mut fs_probe = datasource_service::detect_image_filesystem(&mut reader)
         .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
     let source_path = reader.info().path.clone();
     let source_kind = reader.info().kind.clone();
+
+    // Expand LVM pools into per-LV candidates
+    let ds_kind = if source_kind.contains("E01") {
+        domain::DataSourceKind::E01
+    } else {
+        domain::DataSourceKind::Raw
+    };
+    datasource_service::expand_lvm_pool_candidates(&mut fs_probe, &source_path, &ds_kind);
 
     if fs_probe.candidates.is_empty() {
         return Ok(file_service::EnumerationStats {
