@@ -15,10 +15,13 @@ use app_services::{
         evidence_candidates_for_categories, get_linux_artifact_summary, run_analysis_extraction,
     },
     datasource_service::{
-        detect_image_filesystem, expand_lvm_pool_candidates, ImageFilesystemKind,
-        ImageFilesystemSource,
+        detect_image_filesystem, expand_lvm_pool_candidates, ImageFilesystemCandidate,
+        ImageFilesystemKind, ImageFilesystemSource, PartitionRecord,
     },
     file_service,
+    import_pipeline::{
+        enumerate_image_data_source, format_partition_record_root_name, format_partition_root_name,
+    },
 };
 use domain::{CaseId, DataSource, DataSourceId, DataSourceKind};
 use evidence_core::{EvidenceReader, FileSystemReader};
@@ -1324,5 +1327,142 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
     assert!(
         root_child_names.contains(&"boot") && root_child_names.contains(&"etc"),
         "root LV should expose expected Linux root entries, got {root_child_names:?}"
+    );
+
+    assert_lvm_root_lv_visible_without_expanded_pool_root(&probe, root_lv);
+}
+
+fn assert_lvm_root_lv_visible_without_expanded_pool_root(
+    expanded_probe: &app_services::datasource_service::ImageFilesystemProbe,
+    root_lv: &ImageFilesystemCandidate,
+) {
+    let fixture = fixture_path();
+    let conn = persistence_sqlite::open_in_memory().unwrap();
+    persistence_sqlite::runner::run_all(&conn).unwrap();
+    setup_case(&conn, "linux-e01-lvm-tree-test");
+
+    let ds_id = DataSourceId("e01-linux-lvm-tree-ds".to_string());
+    DataSourceRepo::new(&conn)
+        .insert(
+            &CaseId("linux-e01-lvm-tree-test".to_string()),
+            &DataSource {
+                id: ds_id.clone(),
+                name: "Linux E01 LVM tree".to_string(),
+                kind: DataSourceKind::E01,
+                source_path: fixture.clone(),
+                imported_at: chrono::Utc::now(),
+                provenance: domain::DataSourceProvenance::unknown(),
+            },
+        )
+        .unwrap();
+
+    let expanded_pool = expanded_probe
+        .partitions
+        .iter()
+        .find(|partition| {
+            partition.offset == LIUYANG_LVM_POOL_OFFSET
+                && matches!(
+                    partition.status,
+                    app_services::datasource_service::PartitionStatus::Expanded
+                )
+        })
+        .expect("expanded probe should retain the redirected LVM pool partition");
+    let expanded_pool_root_name = format_partition_record_root_name(expanded_pool);
+    let root_lv_root_name = format_partition_root_name(root_lv);
+
+    eprintln!("=== LVM visible tree import regression ===");
+    eprintln!(
+        "  Expanded pool root candidate: index={} name='{}' status={:?}",
+        expanded_pool.index, expanded_pool_root_name, expanded_pool.status
+    );
+    eprintln!("  Root LV root candidate: '{}'", root_lv_root_name);
+
+    let stats = enumerate_image_data_source(
+        &conn,
+        &ds_id,
+        E01Reader::open(&fixture).unwrap(),
+        |pct, detail| {
+            eprintln!("  import progress {pct}%: {detail}");
+            Ok(())
+        },
+        None,
+        None,
+    )
+    .unwrap();
+    eprintln!(
+        "  imported via image pipeline: files={} dirs={} total={} warnings={:?}",
+        stats.file_count, stats.dir_count, stats.total_size, stats.warnings
+    );
+    assert!(
+        stats.file_count > 0 || stats.dir_count > 0,
+        "image import should enumerate at least one visible filesystem entry"
+    );
+
+    let tree = file_service::get_file_tree_real_with_visibility(&conn, false).unwrap();
+    let visible_roots = tree
+        .iter()
+        .map(|node| node.name.as_str())
+        .collect::<Vec<_>>();
+    eprintln!("  visible roots after import: {visible_roots:?}");
+    let root_lv_tree = tree
+        .iter()
+        .find(|node| node.name == root_lv_root_name)
+        .expect("visible tree should expose the cl/root logical volume root");
+    assert_eq!(root_lv_tree.node_type.as_deref(), Some("partition"));
+    assert_eq!(root_lv_tree.status.as_deref(), Some("ready"));
+    let root_lv_children = file_service::get_file_children_lazy_with_visibility(
+        &conn,
+        &root_lv_tree.id,
+        0,
+        100,
+        false,
+    )
+    .unwrap();
+    let root_lv_child_names = root_lv_children
+        .children
+        .iter()
+        .map(|child| child.name.as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        root_lv_child_names.contains(&"boot") && root_lv_child_names.contains(&"etc"),
+        "visible cl/root tree root should expose expected Linux root children, got {root_lv_child_names:?}"
+    );
+    assert!(
+        !visible_roots
+            .iter()
+            .any(|name| *name == expanded_pool_root_name.as_str()),
+        "visible tree must not expose the Expanded physical LVM pool partition; roots={visible_roots:?}"
+    );
+
+    assert_no_visible_expanded_pool_root_row(
+        &conn,
+        &ds_id,
+        expanded_pool,
+        &expanded_pool_root_name,
+    );
+}
+
+fn assert_no_visible_expanded_pool_root_row(
+    conn: &Connection,
+    ds_id: &DataSourceId,
+    expanded_pool: &PartitionRecord,
+    expanded_pool_root_name: &str,
+) {
+    let pool_root_rows: i64 = conn
+        .query_row(
+            "SELECT COUNT(*)
+             FROM file_entries
+             WHERE data_source_id = ?1
+               AND parent_id IS NULL
+               AND name = ?2
+               AND path NOT LIKE '__partition_placeholder__/%'",
+            rusqlite::params![ds_id.0, expanded_pool_root_name],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        pool_root_rows, 0,
+        "Expanded LVM pool partition index {} should not become a visible root row",
+        expanded_pool.index
     );
 }

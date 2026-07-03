@@ -780,6 +780,16 @@ mod tests {
     }
 
     fn seed_ds_with_partition(conn: &Connection, ds_id: &str, index: u32, kind: &str) {
+        seed_ds_with_partition_name(conn, ds_id, index, &format!("Part {index}"), kind);
+    }
+
+    fn seed_ds_with_partition_name(
+        conn: &Connection,
+        ds_id: &str,
+        index: u32,
+        name: &str,
+        kind: &str,
+    ) {
         conn.execute(
             "INSERT OR IGNORE INTO cases (id, name, created_at, updated_at) VALUES ('c1','C','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')",
             [],
@@ -793,7 +803,7 @@ mod tests {
         conn.execute(
             "INSERT INTO data_source_partitions (id, data_source_id, partition_index, name, kind_label, status, offset, length)
              VALUES (?1, ?2, ?3, ?4, ?5, 'supported', 0, 1024)",
-            params![format!("p-{index}"), ds_id, index, format!("Part {index}"), kind],
+            params![format!("p-{index}"), ds_id, index, name, kind],
         )
         .unwrap();
     }
@@ -876,5 +886,27 @@ mod tests {
         assert_eq!(tree[0].name, "Partition 2 (NTFS)");
         assert_eq!(tree[0].node_type.as_deref(), Some("partition"));
         assert!(!tree.iter().any(|n| n.name == "\\"));
+    }
+
+    #[test]
+    fn tree_builder_marks_named_lvm_root_as_partition() {
+        let tmp = TempDir::new().unwrap();
+        let conn = open_or_create(&tmp.path().join("case.db")).unwrap();
+        runner::run_all(&conn).unwrap();
+        let ds_id = "ds-tree-lvm";
+        seed_ds_with_partition_name(&conn, ds_id, 2, "cl/root", "XFS");
+
+        conn.execute(
+            "INSERT INTO file_entries (id, parent_id, data_source_id, path, name, entry_type, size)
+             VALUES ('root-lv', NULL, ?1, '', 'cl/root', 'directory', 0)",
+            params![ds_id],
+        )
+        .unwrap();
+
+        let tree = get_file_tree_real_with_visibility(&conn, false).unwrap();
+        assert_eq!(tree.len(), 1);
+        assert_eq!(tree[0].name, "cl/root");
+        assert_eq!(tree[0].node_type.as_deref(), Some("partition"));
+        assert_eq!(tree[0].status.as_deref(), Some("ready"));
     }
 }

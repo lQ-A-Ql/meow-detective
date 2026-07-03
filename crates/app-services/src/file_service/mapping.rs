@@ -33,9 +33,18 @@ pub(crate) fn file_entry_to_tree_node(
     depth: u32,
     expanded: Option<bool>,
 ) -> FileTreeNodeDto {
+    file_entry_to_tree_node_with_partition_hint(entry, depth, expanded, false)
+}
+
+pub(crate) fn file_entry_to_tree_node_with_partition_hint(
+    entry: &FileEntry,
+    depth: u32,
+    expanded: Option<bool>,
+    force_partition_root: bool,
+) -> FileTreeNodeDto {
     let (node_type, status) = if let Some(partition_status) = partition_placeholder_status(entry) {
         ("partition".to_string(), Some(partition_status.to_string()))
-    } else if depth == 0 && looks_like_partition_root_name(&entry.name) {
+    } else if force_partition_root || (depth == 0 && looks_like_partition_root_name(&entry.name)) {
         ("partition".to_string(), Some("ready".to_string()))
     } else {
         ("directory".to_string(), None)

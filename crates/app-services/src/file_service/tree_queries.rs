@@ -1,5 +1,5 @@
 use crate::file_service::{
-    mapping::file_entry_to_tree_node,
+    mapping::{file_entry_to_tree_node, file_entry_to_tree_node_with_partition_hint},
     partition_roots::{
         directory_depth, looks_like_raw_fs_root_name, normalized_bare_root_name_from_partitions,
     },
@@ -30,21 +30,14 @@ pub fn get_file_tree_real_with_visibility(
         )
         .unwrap_or_default();
 
-    let mut partitions_by_ds: std::collections::HashMap<
-        String,
-        Vec<persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord>,
-    > = std::collections::HashMap::new();
-    if roots.iter().any(|r| looks_like_raw_fs_root_name(&r.name)) {
-        let partition_repo = PartitionRepo::new(conn);
-        for entry in &roots {
-            if looks_like_raw_fs_root_name(&entry.name)
-                && !partitions_by_ds.contains_key(&entry.data_source_id.0)
-            {
-                let partitions = partition_repo
-                    .find_by_data_source(&entry.data_source_id.0)
-                    .unwrap_or_default();
-                partitions_by_ds.insert(entry.data_source_id.0.clone(), partitions);
-            }
+    let mut partitions_by_ds: PartitionRecordsByDataSource = std::collections::HashMap::new();
+    let partition_repo = PartitionRepo::new(conn);
+    for entry in &roots {
+        if !partitions_by_ds.contains_key(&entry.data_source_id.0) {
+            let partitions = partition_repo
+                .find_by_data_source(&entry.data_source_id.0)
+                .unwrap_or_default();
+            partitions_by_ds.insert(entry.data_source_id.0.clone(), partitions);
         }
     }
 
@@ -52,19 +45,49 @@ pub fn get_file_tree_real_with_visibility(
         .iter()
         .map(|entry| {
             let has_children = child_counts.get(&entry.id.0).copied().unwrap_or(0) > 0;
+            let partitions = partitions_for_entry(&partitions_by_ds, entry);
             if looks_like_raw_fs_root_name(&entry.name) {
-                let empty = Vec::new();
-                let partitions = partitions_by_ds
-                    .get(&entry.data_source_id.0)
-                    .unwrap_or(&empty);
                 let mut normalized = entry.clone();
                 normalized.name = normalized_bare_root_name_from_partitions(entry, partitions);
-                Ok(file_entry_to_tree_node(&normalized, 0, Some(has_children)))
+                Ok(file_entry_to_tree_node_with_partition_hint(
+                    &normalized,
+                    0,
+                    Some(has_children),
+                    should_mark_root_as_partition(partitions),
+                ))
             } else {
-                Ok(file_entry_to_tree_node(entry, 0, Some(has_children)))
+                Ok(file_entry_to_tree_node_with_partition_hint(
+                    entry,
+                    0,
+                    Some(has_children),
+                    should_mark_root_as_partition(partitions),
+                ))
             }
         })
         .collect()
+}
+
+type PartitionRecordsByDataSource = std::collections::HashMap<
+    String,
+    Vec<persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord>,
+>;
+
+fn partitions_for_entry<'a>(
+    partitions_by_ds: &'a PartitionRecordsByDataSource,
+    entry: &domain::FileEntry,
+) -> &'a [persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord] {
+    partitions_by_ds
+        .get(&entry.data_source_id.0)
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+}
+
+fn should_mark_root_as_partition(
+    partitions: &[persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord],
+) -> bool {
+    partitions
+        .iter()
+        .any(|partition| partition.status != "redirected")
 }
 
 pub fn get_file_children_lazy(
