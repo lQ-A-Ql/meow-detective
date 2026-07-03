@@ -167,14 +167,13 @@ fn parse_descriptors(sector: &[u8; 512], mut offset: usize) -> Vec<DataRegion> {
             sector[offset + 15],
         ]);
         if desc_offset == 0 && desc_size == 0 {
-            break;
+            break; // end-of-list terminator
         }
-        if desc_size > 0 {
-            regions.push(DataRegion {
-                offset: desc_offset,
-                size: desc_size,
-            });
-        }
+        // size=0 means "rest of the device" — include it
+        regions.push(DataRegion {
+            offset: desc_offset,
+            size: desc_size,
+        });
         offset += 16;
     }
     regions

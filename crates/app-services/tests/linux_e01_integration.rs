@@ -14,11 +14,15 @@ use app_services::{
     analysis_service::{
         evidence_candidates_for_categories, get_linux_artifact_summary, run_analysis_extraction,
     },
-    datasource_service::{detect_image_filesystem, ImageFilesystemKind},
+    datasource_service::{
+        detect_image_filesystem, expand_lvm_pool_candidates, ImageFilesystemKind,
+        ImageFilesystemSource,
+    },
     file_service,
 };
 use domain::{CaseId, DataSource, DataSourceId, DataSourceKind};
 use evidence_core::{EvidenceReader, FileSystemReader};
+use fs_lvm;
 use image_e01::E01Reader;
 use persistence_sqlite::repositories::{case_repo::CaseRepo, datasource_repo::DataSourceRepo};
 use rusqlite::Connection;
@@ -194,6 +198,9 @@ fn linux_e01_enumerates_file_tree_and_reconstructs_paths() {
         }
         ImageFilesystemKind::BitLocker => {
             panic!("BitLocker partition cannot be enumerated");
+        }
+        ImageFilesystemKind::LvmPool => {
+            panic!("LVM pool should have been expanded at probe time");
         }
     };
 
@@ -725,6 +732,9 @@ fn linux_e01_analysis_extraction_produces_linux_artifacts() {
         ImageFilesystemKind::BitLocker => {
             panic!("BitLocker partition cannot be enumerated");
         }
+        ImageFilesystemKind::LvmPool => {
+            panic!("LVM pool should have been expanded at probe time");
+        }
     };
 
     // Check that Linux artifact candidates were discovered
@@ -786,4 +796,94 @@ fn linux_e01_analysis_extraction_produces_linux_artifacts() {
             );
         }
     }
+}
+
+/// Verify LVM pool expansion discovers logical volumes on the real E01 sample.
+#[test]
+#[ignore = "requires FORENSICS_LINUX_E01_FIXTURE real Linux E01 sample"]
+fn linux_e01_lvm_expansion_discovers_logical_volumes() {
+    let mut reader = E01Reader::open(&fixture_path()).unwrap();
+    let mut probe = detect_image_filesystem(&mut reader).unwrap();
+
+    eprintln!("=== Before LVM expansion ===");
+    for c in &probe.candidates {
+        eprintln!("  kind={:?} name={:?} offset={}", c.kind, c.partition_name, c.offset);
+    }
+
+    // Try direct LVM crate access first (bypass expand helper)
+    eprintln!("=== Direct LVM probe ===");
+    let mut e01 = E01Reader::open(&fixture_path()).unwrap();
+    let lvm_offset = 1074790400u64; // Partition 1 offset
+    match fs_lvm::probe_lvm(&mut e01, lvm_offset) {
+        Ok(true) => eprintln!("  fs_lvm::probe_lvm: true"),
+        Ok(false) => eprintln!("  fs_lvm::probe_lvm: false — NOT an LVM PV!"),
+        Err(e) => eprintln!("  fs_lvm::probe_lvm error: {}", e),
+    }
+
+    // Dump LVM label sector for diagnosis
+    eprintln!("=== Raw LVM label sector at offset {} ===", lvm_offset);
+    let mut e01_diag = E01Reader::open(&fixture_path()).unwrap();
+    use std::io::{Read, Seek, SeekFrom};
+    e01_diag.seek(SeekFrom::Start(lvm_offset + 512)).unwrap();
+    let mut label_sec = [0u8; 512];
+    e01_diag.read_exact(&mut label_sec).unwrap();
+    eprintln!("  magic[0..8]: {:?}", std::str::from_utf8(&label_sec[0..8]));
+    eprintln!("  type[24..32]: {:?}", std::str::from_utf8(&label_sec[24..32]));
+    let data_off = u32::from_le_bytes([label_sec[20], label_sec[21], label_sec[22], label_sec[23]]);
+    eprintln!("  data_offset: {}", data_off);
+    // Show PV header area
+    eprintln!("  PV header bytes at {}: {:02X?}", data_off, &label_sec[data_off as usize..(data_off as usize + 72).min(512)]);
+    // Dump full sector from byte 32 onwards
+    eprintln!("  Full sector bytes 32..200:");
+    for chunk in label_sec[32..200].chunks(16) {
+        eprintln!("    {:02X?}", chunk);
+    }
+    // Descriptors at data_offset + 40
+    let desc_start = data_off as usize + 40;
+    eprintln!("  Descriptors at offset {}:", desc_start);
+    for i in 0..8 {
+        let off = desc_start + i * 16;
+        if off + 16 > 512 { break; }
+        let d_off = u64::from_le_bytes(label_sec[off..off+8].try_into().unwrap());
+        let d_size = u64::from_le_bytes(label_sec[off+8..off+16].try_into().unwrap());
+        eprintln!("    desc[{}] at offset {}: offset={} size={}", i, off, d_off, d_size);
+        if d_off == 0 && d_size == 0 { eprintln!("    → terminator"); }
+    }
+
+    // Try full discovery
+    eprintln!("=== Direct LVM discovery ===");
+    let e01_reader: Box<dyn EvidenceReader> = Box::new(E01Reader::open(&fixture_path()).unwrap());
+    match fs_lvm::LvmPool::discover(vec![e01_reader], vec![lvm_offset]) {
+        Ok(pool) => {
+            eprintln!("  VG name: {}", pool.volume_group().name);
+            let lvs = pool.list_volumes();
+            eprintln!("  LVs: {}", lvs.len());
+            for lv in &lvs {
+                eprintln!("    LV: name='{}' uuid={} size={}", lv.name, lv.uuid, lv.size_bytes);
+                // Try to read first sector of each LV
+                if let Ok(lv_reader) = pool.open_volume(lvs.iter().position(|v| v.name == lv.name).unwrap()) {
+                    eprintln!("      opened successfully, reading sector 0...");
+                }
+            }
+        }
+        Err(e) => eprintln!("  LVM discovery FAILED: {}", e),
+    }
+
+    let source_kind = domain::DataSourceKind::E01;
+    expand_lvm_pool_candidates(&mut probe, &fixture_path(), &source_kind);
+
+    eprintln!("=== After LVM expansion ({}) candidates ===", probe.candidates.len());
+    for c in &probe.candidates {
+        eprintln!("  kind={:?} name={:?} offset={} source={:?}",
+            c.kind, c.partition_name, c.offset, c.source);
+    }
+    eprintln!("=== Partitions ({}) ===", probe.partitions.len());
+    for p in &probe.partitions {
+        eprintln!("  [{}] name='{}' kind={} status={:?}", p.index, p.name, p.kind_label, p.status);
+    }
+
+    assert!(
+        probe.candidates.iter().any(|c| matches!(c.source, ImageFilesystemSource::LvmLogicalVolume)),
+        "should have at least one LvmLogicalVolume candidate after LVM expansion"
+    );
 }

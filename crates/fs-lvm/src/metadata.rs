@@ -95,12 +95,17 @@ pub enum SegmentType {
 /// Reads the MDA header, locates all raw location descriptors, reads their
 /// data blocks, and returns the parsed volume group (picking the copy with
 /// the highest seqno).
+///
+/// `pv_offset` is the byte offset of the PV start in the reader (needed
+/// because all LVM2 offsets are absolute from the PV start).
 pub fn parse_metadata<R: Read + Seek>(
     reader: &mut R,
     mda_region: &super::label::DataRegion,
+    pv_offset: u64,
 ) -> Result<VolumeGroup> {
-    // Read MDA header
-    reader.seek(SeekFrom::Start(mda_region.offset))?;
+    // Read MDA header at PV-absolute offset
+    let abs_offset = pv_offset + mda_region.offset;
+    reader.seek(SeekFrom::Start(abs_offset))?;
     let mut header = [0u8; 512];
     reader.read_exact(&mut header)?;
 
@@ -140,8 +145,8 @@ pub fn parse_metadata<R: Read + Seek>(
             continue;
         }
 
-        // Read the metadata text
-        let abs_offset = mda_base + locn.offset;
+        // Read the metadata text at PV-absolute offset
+        let abs_offset = pv_offset + mda_base + locn.offset;
         if locn.size == 0 || locn.size > 16 * 1024 * 1024 {
             // safety: max 16 MB metadata
             continue;

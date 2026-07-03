@@ -144,7 +144,7 @@ impl LvmPool {
                     }
                 })?;
                 let mut r = temp_reader.lock().unwrap();
-                metadata::parse_metadata(&mut *r, mda)?
+                metadata::parse_metadata(&mut *r, mda, first_offset)?
             };
 
         // Phase 3: Build PV data offset map
