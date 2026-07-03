@@ -22,6 +22,7 @@ use app_services::{
 };
 use domain::{CaseId, DataSource, DataSourceId, DataSourceKind};
 use evidence_core::{EvidenceReader, FileSystemReader};
+use fs_xfs;
 use image_e01::E01Reader;
 use persistence_sqlite::repositories::{case_repo::CaseRepo, datasource_repo::DataSourceRepo};
 use rusqlite::Connection;
@@ -868,27 +869,32 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
                     }
                     // Build extent map to see resolved mapping
                 }
-                // Try to read first sector of each LV
-                if let Ok(mut lv_reader) = pool.open_volume(lvs.iter().position(|v| v.name == lv.name).unwrap()) {
-                    use std::io::Read;
-                    let mut sector0 = [0u8; 512];
-                    if lv_reader.read_exact(&mut sector0).is_ok() {
-                        let magic = &sector0[0..8];
-                        eprintln!("      sector0[0..8]: {:02X?}", magic);
-                        if magic == b"XFSB\0\0\0\0" || sector0[0..4] == [0x58, 0x46, 0x53, 0x42] {
-                            eprintln!("      → XFS superblock detected!");
+                // Try XFS enumeration on this LV
+                if lv.name == "root" {
+                    if let Ok(mut lv_reader) = pool.open_volume(
+                        lvs.iter().position(|v| v.name == lv.name).unwrap()
+                    ) {
+                        use std::io::Read;
+                        // Read XFS superblock
+                        let mut sector0 = [0u8; 512];
+                        if lv_reader.read_exact(&mut sector0).is_ok() {
+                            eprintln!("      XFS magic: {:02X?}", &sector0[0..4]);
                         }
-                        // Check for ext4 at 1024
-                        use std::io::Seek;
-                        lv_reader.seek(std::io::SeekFrom::Start(1024)).ok();
-                        let mut ext4_magic = [0u8; 2];
-                        if lv_reader.read_exact(&mut ext4_magic).is_ok()
-                            && u16::from_le_bytes(ext4_magic) == 0xEF53 {
-                                eprintln!("      → ext4 superblock at offset 1024!");
+                        // Try opening XfsReader and listing children
+                        let lv_box: Box<dyn EvidenceReader> = Box::new(lv_reader);
+                        match fs_xfs::XfsReader::open(lv_box, 0) {
+                            Ok(xfs) => {
+                                match xfs.list_children("") {
+                                    Ok(children) => {
+                                        eprintln!("      ROOT LV: {} children", children.len());
+                                        for c in children.iter().take(20) {
+                                            eprintln!("        {} (dir={})", c.name, c.is_dir);
+                                        }
+                                    }
+                                    Err(e) => eprintln!("      ROOT LV list_children ERROR: {}", e),
+                                }
                             }
-                        // Check for partition table (MBR magic)
-                        if sector0[510] == 0x55 && sector0[511] == 0xAA {
-                            eprintln!("      → MBR boot signature found — LV contains a partition table!");
+                            Err(e) => eprintln!("      ROOT LV XFS open ERROR: {}", e),
                         }
                     }
                 }
