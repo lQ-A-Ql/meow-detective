@@ -326,23 +326,31 @@ impl XfsReader {
 
     /// Return the slice of the inode buffer that holds the data fork.
     ///
-    /// Respects `di_forkoff`: when zero the data fork starts after the core
-    /// (96 bytes for v2, 176 bytes for v3); otherwise it uses the first
-    /// `di_forkoff` bytes of the literal area.
+    /// For LOCAL-format inodes (di_format == 1), the data fork fills the
+    /// entire literal area regardless of `di_forkoff`. For other formats,
+    /// `di_forkoff` bounds the data fork: when zero the data fork starts
+    /// after the core; otherwise it uses the first `di_forkoff` bytes of
+    /// the literal area.
     fn data_fork(inode: &[u8]) -> io::Result<&[u8]> {
         let core_size = Self::inode_core_size(inode);
-        let forkoff = inode[di_off::FORKOFF] as usize;
         let literal = &inode[core_size..];
-        if forkoff == 0 {
+        let format = inode[di_off::FORMAT];
+        if format == FORMAT_LOCAL {
+            // LOCAL-format directories use the entire literal area
             Ok(literal)
-        } else if forkoff > literal.len() {
-            Err(invalid_fs_data(format!(
-                "di_forkoff {} exceeds literal area {}",
-                forkoff,
-                literal.len()
-            )))
         } else {
-            Ok(&literal[..forkoff])
+            let forkoff = inode[di_off::FORKOFF] as usize;
+            if forkoff == 0 {
+                Ok(literal)
+            } else if forkoff > literal.len() {
+                Err(invalid_fs_data(format!(
+                    "di_forkoff {} exceeds literal area {}",
+                    forkoff,
+                    literal.len()
+                )))
+            } else {
+                Ok(&literal[..forkoff])
+            }
         }
     }
 

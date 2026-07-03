@@ -869,16 +869,81 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
                     }
                     // Build extent map to see resolved mapping
                 }
-                // comprehensive XFS listing on the root LV
+                // Dump raw root inode to diagnose why only 2 entries
                 if lv.name == "root" {
                     let lv_idx = lvs.iter().position(|v| v.name == lv.name).unwrap();
-                    if let Ok(mut lv_reader) = pool.open_volume(lv_idx) {
-                        let lv_box: Box<dyn EvidenceReader> = Box::new(lv_reader);
-                        match fs_xfs::XfsReader::open(lv_box, 0) {
-                            Ok(xfs) => {
-                                eprintln!("      === Root LV directory listing ===");
-                                // Walk the root LV tree recursively
-                                fn walk_tree(
+                    let mut tmp_lv = pool.open_volume(lv_idx).unwrap();
+                    use std::io::{Read, Seek};
+                    let mut sb = [0u8; 512];
+                    tmp_lv.read_exact(&mut sb).unwrap();
+                    let inode_size = u16::from_be_bytes([sb[0x68], sb[0x69]]);
+                    let block_size = u32::from_be_bytes([sb[0x04], sb[0x05], sb[0x06], sb[0x07]]) as u64;
+                    let root_ino = u64::from_be_bytes(sb[0x38..0x40].try_into().unwrap());
+                    let agblklog = sb[0x7C];
+                    let inopblog = sb[0x7B];
+                    let ag_blocks = u32::from_be_bytes([sb[0x54], sb[0x55], sb[0x56], sb[0x57]]) as u64;
+                    let shift = agblklog as u64 + inopblog as u64;
+                    let fs_block = (root_ino >> shift) * ag_blocks + ((root_ino & ((1<<shift)-1)) >> inopblog);
+                    let ino_off = fs_block * block_size + (root_ino & ((1<<inopblog)-1)) * inode_size as u64;
+                    tmp_lv.seek(SeekFrom::Start(ino_off)).unwrap();
+                    let mut ino_buf = vec![0u8; inode_size as usize];
+                    tmp_lv.read_exact(&mut ino_buf).unwrap();
+                    let ver = ino_buf[0x04]; let fmt = ino_buf[0x05]; let fk = ino_buf[0x52];
+                    let next = u32::from_be_bytes([ino_buf[0x4C],ino_buf[0x4D],ino_buf[0x4E],ino_buf[0x4F]]);
+                    let core: usize = if ver >= 3 { 176 } else { 96 };
+                    let df = if fk == 0 { &ino_buf[core..] } else { &ino_buf[core..][..fk as usize] };
+                    eprintln!("      root inode: ver={} fmt={} forkoff={} nextents={} df_len={}", ver, fmt, fk, next, df.len());
+                    eprintln!("      df[0..{}]: {:02X?}", df.len().min(60), &df[..df.len().min(60)]);
+                    eprintln!("      dir: count={} i8count={}", df[0], df[1]);
+                    // Dump forkoff byte and surrounding context
+                    eprintln!("      ino_buf[0x50..0x55]: {:02X?}", &ino_buf[0x50..0x55]);
+                    eprintln!("      literal[0..40] (from byte 176): {:02X?}", &ino_buf[176..216]);
+                    // Check if forkoff=36 really means 36*8=288 bytes
+                    let df_full = &ino_buf[176..];
+                    eprintln!("      literal total length: {}", df_full.len());
+                    eprintln!("      literal[0]={} literal[1]={}", df_full[0], df_full[1]);
+                    // Manually find entries using the full literal area
+                    eprintln!("      Full literal parse (no ftype, from byte 176):");
+                    let mut pos = 6usize; // skip count+i8count+parent4
+                    for i in 0..25 {
+                        if pos + 3 > df_full.len() { eprintln!("        BREAK: pos+3 > len"); break; }
+                        let nl = df_full[pos] as usize;
+                        if nl == 0 { eprintln!("        BREAK: namelen=0 at pos {}", pos); break; }
+                        let name_end = pos + 3 + nl;
+                        if name_end + 4 > df_full.len() { eprintln!("        BREAK: name_end+4 > len at i={}", i); break; }
+                        let name = std::str::from_utf8(&df_full[pos+3..name_end]).unwrap_or("?");
+                        let ino = u32::from_be_bytes([df_full[name_end], df_full[name_end+1], df_full[name_end+2], df_full[name_end+3]]);
+                        eprintln!("        [{}] '{}' ino={}", i, name, ino);
+                        pos = name_end + 4;
+                    }
+                    let cnt = df[0] as usize;
+                    // Check superblock features_incompat for ftype flag
+                    let sb_fincompat = u32::from_be_bytes([sb[0x80], sb[0x81], sb[0x82], sb[0x83]]);
+                    eprintln!("      sb_features_incompat=0x{:08X} (FTYPE bit={})",
+                        sb_fincompat, sb_fincompat & 0x02 != 0);
+                    // Try manual parse WITHOUT ftype
+                    let mut pos = 6usize;
+                    eprintln!("      Manual parse (no ftype):");
+                    for i in 0..cnt.min(10) {
+                        if pos + 3 > df.len() { break; }
+                        let nl = df[pos] as usize;
+                        let name_end = pos + 3 + nl;
+                        if name_end + 4 > df.len() { break; }
+                        let name = std::str::from_utf8(&df[pos+3..name_end]).unwrap_or("?");
+                        let ino = u32::from_be_bytes([df[name_end], df[name_end+1], df[name_end+2], df[name_end+3]]);
+                        eprintln!("        [{}] '{}' ino={}", i, name, ino);
+                        pos = name_end + 4;
+                    }
+                }
+
+                // Recursive tree walk on root LV
+                if lv.name == "root" {
+                    let lv_idx = lvs.iter().position(|v| v.name == lv.name).unwrap();
+                    let lv_reader = pool.open_volume(lv_idx).unwrap();
+                    let lv_box: Box<dyn EvidenceReader> = Box::new(lv_reader);
+                    if let Ok(xfs) = fs_xfs::XfsReader::open(lv_box, 0) {
+                        eprintln!("      === Root LV recursive walk ===");
+                        fn walk_tree(
                                     xfs: &dyn FileSystemReader,
                                     path: &str,
                                     depth: usize,
@@ -924,9 +989,6 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
                                     "root LV should enumerate at least some entries"
                                 );
                             }
-                            Err(e) => eprintln!("      ROOT LV XFS open ERROR: {}", e),
-                        }
-                    }
                 }
             }
         }
