@@ -732,7 +732,6 @@ impl XfsReader {
                         } else {
                             &[df]
                         };
-                        let mut recovered = false;
                         for &slice in recovery_slices {
                             if let Ok(raw) =
                                 Self::parse_shortform_dir(slice, Self::has_ftype(&inode))
@@ -762,12 +761,11 @@ impl XfsReader {
                                             .is_some_and(|ci| Self::inode_is_dir(&ci));
                                         entries.push((name, child_ino, is_dir));
                                     }
-                                    recovered = true;
                                     return Ok(entries);
                                 }
                             }
                         }
-                        if all_zero && !recovered {
+                        if all_zero {
                             Err(invalid_fs_data(
                                 "block dir all-zero (sf→block conversion artifact), recovery failed",
                             ))

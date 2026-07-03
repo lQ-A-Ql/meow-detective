@@ -22,7 +22,6 @@ use app_services::{
 };
 use domain::{CaseId, DataSource, DataSourceId, DataSourceKind};
 use evidence_core::{EvidenceReader, FileSystemReader};
-use fs_xfs;
 use image_e01::E01Reader;
 use persistence_sqlite::repositories::{case_repo::CaseRepo, datasource_repo::DataSourceRepo};
 use rusqlite::Connection;

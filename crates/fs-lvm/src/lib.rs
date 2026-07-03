@@ -91,12 +91,15 @@ pub struct LvInfo {
     pub size_bytes: u64,
 }
 
+/// Shared device reader type used across multiple LV readers.
+type SharedReader = std::sync::Arc<std::sync::Mutex<Box<dyn EvidenceReader>>>;
+
 /// An opened LVM2 volume group with parsed metadata and ready-to-open logical
 /// volumes.
 pub struct LvmPool {
     volume_group: VolumeGroup,
-    /// Shared device readers (Rc allows multiple LvReaders to share one PV reader).
-    device_readers: Vec<std::sync::Arc<std::sync::Mutex<Box<dyn EvidenceReader>>>>,
+    /// Shared device readers (Arc allows multiple LvReaders to share one PV reader).
+    device_readers: Vec<SharedReader>,
     pv_data_offsets: Vec<(String, u64)>, // (pv_name, data_area_start_byte)
     logical_volumes: Vec<LvMeta>,
 }
@@ -120,9 +123,9 @@ impl LvmPool {
         }
 
         // Phase 1: Parse PV label from EACH PV, store reader+label+offset
-        let mut pv_entries: Vec<(Arc<std::sync::Mutex<Box<dyn EvidenceReader>>>, LvmLabel, u64)> =
+        let mut pv_entries: Vec<(SharedReader, LvmLabel, u64)> =
             Vec::with_capacity(readers.len());
-        for (reader, pv_off) in readers.into_iter().zip(pv_offsets.into_iter()) {
+        for (reader, pv_off) in readers.into_iter().zip(pv_offsets) {
             let cell = std::sync::Mutex::new(reader);
             let pv_label = {
                 let mut r = cell.lock().unwrap();
