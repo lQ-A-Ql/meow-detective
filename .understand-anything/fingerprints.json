@@ -1,8 +1,28 @@
 {
   "version": "1.0.0",
-  "gitCommitHash": "d62e729b75f0f762ca007ef73480855a7acf5872",
-  "generatedAt": "2026-07-02T03:59:28.464Z",
+  "gitCommitHash": "3c33ae51ed9f71c2a24c4693e6b52054fc1d6b20",
+  "generatedAt": "2026-07-02T17:11:45.526Z",
   "files": {
+    "_ci_check.bat": {
+      "filePath": "_ci_check.bat",
+      "contentHash": "c34dbe4488b5fd01125b31f989a1fcde37573eca7d0be483e33c2d1ffde96fe9",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 5,
+      "hasStructuralAnalysis": false
+    },
+    "_ci_domain.bat": {
+      "filePath": "_ci_domain.bat",
+      "contentHash": "29583960963dbe6b03e4eecb9f6192a330a6c6b506e314f94b6fed4c38d19060",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 5,
+      "hasStructuralAnalysis": false
+    },
     ".gitattributes": {
       "filePath": ".gitattributes",
       "contentHash": "9ee04a3fa2bced73a486a60582ae4d10d034a7a304e2cb3e0f9da8b74d487ab0",
@@ -13,6 +33,26 @@
       "totalLines": 27,
       "hasStructuralAnalysis": false
     },
+    ".github/workflows/ci-backend.yml": {
+      "filePath": ".github/workflows/ci-backend.yml",
+      "contentHash": "0973faa98c11f8f7ab53224c069b613f916e4dd5cfa8d200525886680ea73181",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 89,
+      "hasStructuralAnalysis": true
+    },
+    ".github/workflows/ci-frontend.yml": {
+      "filePath": ".github/workflows/ci-frontend.yml",
+      "contentHash": "c9e63617c8cbd9d32332c077ff12cd8bfb5924cddfe46a65276ce79c3aa098b6",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 51,
+      "hasStructuralAnalysis": true
+    },
     ".understand-anything/.understandignore": {
       "filePath": ".understand-anything/.understandignore",
       "contentHash": "a27532eb55647da5393837deb2196cf9eac84b35e47536584c76d4e587c4eeb3",
@@ -22,6 +62,26 @@
       "exports": [],
       "totalLines": 64,
       "hasStructuralAnalysis": false
+    },
+    ".understand-anything/config.json": {
+      "filePath": ".understand-anything/config.json",
+      "contentHash": "5c629cf11910487ced156f8696037bc743a08315e31ab78264792be92b8394bb",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2,
+      "hasStructuralAnalysis": true
+    },
+    "AGENTS.md": {
+      "filePath": "AGENTS.md",
+      "contentHash": "291353d58db90b3128ba522059b195d2d149c526e1497038b668f1f21669ae61",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 460,
+      "hasStructuralAnalysis": true
     },
     "apps/desktop/src-tauri/build.rs": {
       "filePath": "apps/desktop/src-tauri/build.rs",
@@ -38,6 +98,26 @@
       "imports": [],
       "exports": [],
       "totalLines": 4,
+      "hasStructuralAnalysis": true
+    },
+    "apps/desktop/src-tauri/capabilities/default.json": {
+      "filePath": "apps/desktop/src-tauri/capabilities/default.json",
+      "contentHash": "ef4b5eea0ce741fc95a560a2fb58b11aa0bea015130ca0c0dea7d3d3c4657d43",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 12,
+      "hasStructuralAnalysis": true
+    },
+    "apps/desktop/src-tauri/Cargo.toml": {
+      "filePath": "apps/desktop/src-tauri/Cargo.toml",
+      "contentHash": "10b628f773faba777396c9820a40c487f1bf8ec46ae92b5c5b41cff4d95d58fe",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 47,
       "hasStructuralAnalysis": true
     },
     "apps/desktop/src-tauri/src/cache_invalidation.rs": {
@@ -103,7 +183,7 @@
     },
     "apps/desktop/src-tauri/src/commands/analysis_commands.rs": {
       "filePath": "apps/desktop/src-tauri/src/commands/analysis_commands.rs",
-      "contentHash": "968b4db124a454790f4ddada9a578fa7bd4c9f3eec457eb3ebf31eaa62bb9d50",
+      "contentHash": "f2e4f4667c1ed351b4e400c7edefd1bc3010e96a7c597f3d216c8187648efe35",
       "functions": [
         {
           "name": "resolve_sample_size",
@@ -234,6 +314,16 @@
           "lineCount": 17
         },
         {
+          "name": "get_linux_artifact_summary",
+          "params": [
+            "state",
+            "request"
+          ],
+          "returnType": "Result<LinuxArtifactSummaryDto, CommandError>",
+          "exported": true,
+          "lineCount": 17
+        },
+        {
           "name": "get_v2_governance_snapshot",
           "params": [
             "state"
@@ -329,12 +419,13 @@
         "get_browser_history_summary",
         "get_email_extraction_summary",
         "get_evtx_event_summary",
+        "get_linux_artifact_summary",
         "get_v2_governance_snapshot",
         "get_v3_governance_snapshot",
         "get_correlation_snapshot",
         "generate_analysis_summary"
       ],
-      "totalLines": 399,
+      "totalLines": 421,
       "hasStructuralAnalysis": true
     },
     "apps/desktop/src-tauri/src/commands/artifact_commands.rs": {
@@ -1835,7 +1926,7 @@
     },
     "apps/desktop/src-tauri/src/commands/job_commands.rs": {
       "filePath": "apps/desktop/src-tauri/src/commands/job_commands.rs",
-      "contentHash": "a50191ede4562ab190fa84c54162679be38701e9b4afb29f4b960bf2ff4bcb53",
+      "contentHash": "9106c4689b67b495c78b14395791d637d72bae444b148fb124e94ae5bffef86a",
       "functions": [
         {
           "name": "get_jobs_snapshot",
@@ -1853,7 +1944,7 @@
           ],
           "returnType": "Result<Vec<WarningItemDto>, CommandError>",
           "exported": true,
-          "lineCount": 11
+          "lineCount": 13
         },
         {
           "name": "get_trace_items",
@@ -1862,7 +1953,7 @@
           ],
           "returnType": "Result<Vec<TraceItemDto>, CommandError>",
           "exported": true,
-          "lineCount": 13
+          "lineCount": 15
         }
       ],
       "classes": [],
@@ -1898,7 +1989,7 @@
         "get_warnings",
         "get_trace_items"
       ],
-      "totalLines": 54,
+      "totalLines": 58,
       "hasStructuralAnalysis": true
     },
     "apps/desktop/src-tauri/src/commands/mcp_commands.rs": {
@@ -3073,13 +3164,13 @@
     },
     "apps/desktop/src-tauri/src/lib.rs": {
       "filePath": "apps/desktop/src-tauri/src/lib.rs",
-      "contentHash": "3ce87ffa17f5a2d79328ab2e83addccdf2fb44ad25a48ef1e409a71faec20c80",
+      "contentHash": "c98f72313d15203485adac83e02b13450c6f5e942ca519454fa5cff80e68c490",
       "functions": [
         {
           "name": "run",
           "params": [],
           "exported": true,
-          "lineCount": 119
+          "lineCount": 120
         }
       ],
       "classes": [],
@@ -3098,7 +3189,7 @@
       "exports": [
         "run"
       ],
-      "totalLines": 286,
+      "totalLines": 287,
       "hasStructuralAnalysis": true
     },
     "apps/desktop/src-tauri/src/main.rs": {
@@ -3889,6 +3980,76 @@
         "get_cancel_token"
       ],
       "totalLines": 316,
+      "hasStructuralAnalysis": true
+    },
+    "apps/desktop/src-tauri/tauri.conf.json": {
+      "filePath": "apps/desktop/src-tauri/tauri.conf.json",
+      "contentHash": "ccbcfcdb71f4ffd351a6334b2ee61cd991279b1d9bd10651452364ba9a6bc0be",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 25,
+      "hasStructuralAnalysis": true
+    },
+    "audit-remediation-plan.md": {
+      "filePath": "audit-remediation-plan.md",
+      "contentHash": "3e8ebd9037cf11530ca6fae087f3d163b904c2f4c254e943f26cbeceb7613a60",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 297,
+      "hasStructuralAnalysis": true
+    },
+    "autopsy-borrowings.md": {
+      "filePath": "autopsy-borrowings.md",
+      "contentHash": "310f3d5c129d4d72ea637293ed03a05b5843ae8a72dd04d0c744a6f8378aae56",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 303,
+      "hasStructuralAnalysis": true
+    },
+    "Cargo.toml": {
+      "filePath": "Cargo.toml",
+      "contentHash": "7947f3606bf667519d164bf6093abd666603b7c73913258fdcc68b01945d5994",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 132,
+      "hasStructuralAnalysis": true
+    },
+    "ci.md": {
+      "filePath": "ci.md",
+      "contentHash": "49e42ab4ffc8ed9c8e158de2c33ffa18470fa7c9b2eece5c36a7a3de06fce65f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 341,
+      "hasStructuralAnalysis": true
+    },
+    "CLAUDE.md": {
+      "filePath": "CLAUDE.md",
+      "contentHash": "e38a38a6dd52bd4f3d34690799ac619d8e037cb00478788c4cca589c88241af4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 171,
+      "hasStructuralAnalysis": true
+    },
+    "crates/app-services/Cargo.toml": {
+      "filePath": "crates/app-services/Cargo.toml",
+      "contentHash": "4dc23d9101b7fac66e6d96a635a6c5d8f42d4ab3cf60b3b8fbb425686128428c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 56,
       "hasStructuralAnalysis": true
     },
     "crates/app-services/src/active_case.rs": {
@@ -5822,7 +5983,7 @@
     },
     "crates/app-services/src/analysis_service/extraction/linux.rs": {
       "filePath": "crates/app-services/src/analysis_service/extraction/linux.rs",
-      "contentHash": "04ed2197b10fff51a50406e24c05082277f43655b82a53cd093d7d38ba111aa4",
+      "contentHash": "3137423a0f44978cfe6cc0ed8d952f0e0249d222e6684f18ed7573be5d5a7c7f",
       "functions": [
         {
           "name": "extract_linux_candidate",
@@ -5842,7 +6003,7 @@
             "outcome"
           ],
           "exported": false,
-          "lineCount": 71
+          "lineCount": 75
         },
         {
           "name": "extract_wtmp",
@@ -5852,7 +6013,7 @@
             "outcome"
           ],
           "exported": false,
-          "lineCount": 62
+          "lineCount": 68
         },
         {
           "name": "wtmp_event_title",
@@ -5871,7 +6032,7 @@
             "outcome"
           ],
           "exported": false,
-          "lineCount": 44
+          "lineCount": 47
         },
         {
           "name": "extract_apt_history",
@@ -5901,7 +6062,7 @@
             "outcome"
           ],
           "exported": false,
-          "lineCount": 40
+          "lineCount": 43
         },
         {
           "name": "extract_crontab",
@@ -5921,7 +6082,7 @@
             "outcome"
           ],
           "exported": false,
-          "lineCount": 55
+          "lineCount": 58
         },
         {
           "name": "insert_opt",
@@ -5983,7 +6144,7 @@
       "exports": [
         "extract_linux_candidate"
       ],
-      "totalLines": 424,
+      "totalLines": 443,
       "hasStructuralAnalysis": true
     },
     "crates/app-services/src/analysis_service/extraction/macos.rs": {
@@ -6125,7 +6286,7 @@
     },
     "crates/app-services/src/analysis_service/extraction/mod.rs": {
       "filePath": "crates/app-services/src/analysis_service/extraction/mod.rs",
-      "contentHash": "bfa5005a0873df574c2b1ef97f4012caa77f6a319f4f16f233f2c6978c54dcfd",
+      "contentHash": "388e9e2d2bd398fa15cda9bdba6399fd566e2ac43733b5c1836e19b101562fb0",
       "functions": [
         {
           "name": "run_analysis_extraction",
@@ -6180,6 +6341,17 @@
           "returnType": "Result<EvtxEventSummaryDto, AnalysisServiceError>",
           "exported": true,
           "lineCount": 135
+        },
+        {
+          "name": "get_linux_artifact_summary",
+          "params": [
+            "conn",
+            "offset",
+            "limit"
+          ],
+          "returnType": "Result<LinuxArtifactSummaryDto, AnalysisServiceError>",
+          "exported": true,
+          "lineCount": 132
         },
         {
           "name": "get_email_extraction_summary",
@@ -6579,6 +6751,13 @@
             "EvtxSecurityEventDto",
             "InstalledSoftwareDto",
             "LastVisitedMruEntryDto",
+            "LinuxAptEventDto",
+            "LinuxArtifactSummaryDto",
+            "LinuxBashCommandDto",
+            "LinuxCronJobDto",
+            "LinuxJournalEntryDto",
+            "LinuxLoginRecordDto",
+            "LinuxSudoEventDto",
             "LsaPackageDto",
             "LsaSecretDto",
             "MountedDeviceDto",
@@ -6609,10 +6788,11 @@
         "get_registry_structured_summary",
         "get_browser_history_summary",
         "get_evtx_event_summary",
+        "get_linux_artifact_summary",
         "get_email_extraction_summary",
         "ExtractionOutcome"
       ],
-      "totalLines": 1354,
+      "totalLines": 1494,
       "hasStructuralAnalysis": true
     },
     "crates/app-services/src/analysis_service/extraction/registry/amcache.rs": {
@@ -7494,7 +7674,7 @@
     },
     "crates/app-services/src/analysis_service/mod.rs": {
       "filePath": "crates/app-services/src/analysis_service/mod.rs",
-      "contentHash": "4804ddb2fa348caf05c7c33f0d8dbfad9e1d206b36917b94c9009c4efc181b7a",
+      "contentHash": "ff85070ec7f6a4198a3b9c7c80c7ca77e32ee8ae2e33893c48622d3c5c0b6153",
       "functions": [],
       "classes": [],
       "imports": [
@@ -7539,6 +7719,7 @@
             "get_browser_history_summary",
             "get_email_extraction_summary",
             "get_evtx_event_summary",
+            "get_linux_artifact_summary",
             "get_registry_extraction_summary",
             "get_registry_structured_summary",
             "run_analysis_extraction",
@@ -7884,7 +8065,7 @@
     },
     "crates/app-services/src/analysis_service/tests.rs": {
       "filePath": "crates/app-services/src/analysis_service/tests.rs",
-      "contentHash": "ccf1802889c2d7d36cfdee6813e45a06c229bfd4fc9c4e69d9ec7b6fb7b2ef66",
+      "contentHash": "fba21ae25cc07bca5fcaffa24f16bf27689c6f23552ffa2aadb3fb1fb45498e2",
       "functions": [
         {
           "name": "file",
@@ -8092,6 +8273,18 @@
           "lineCount": 44
         },
         {
+          "name": "run_analysis_extraction_extracts_linux_artifacts_and_persists",
+          "params": [],
+          "exported": false,
+          "lineCount": 45
+        },
+        {
+          "name": "get_linux_artifact_summary_reports_not_found_without_artifacts",
+          "params": [],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
           "name": "evidence_summary_reports_candidate_found_without_parser_run",
           "params": [],
           "exported": false,
@@ -8203,7 +8396,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 899,
+      "totalLines": 957,
       "hasStructuralAnalysis": true
     },
     "crates/app-services/src/artifact_service.rs": {
@@ -10364,7 +10557,7 @@
     },
     "crates/app-services/src/datasource_service.rs": {
       "filePath": "crates/app-services/src/datasource_service.rs",
-      "contentHash": "52ab120686bd5fd4195d4de0218a1273a44fb3bff074f4dc81ddd4c139674fc7",
+      "contentHash": "e082240b1f2bd695db8d86b06f1058af137f4dabf0c8a6aeb5697a9212932079",
       "functions": [
         {
           "name": "category",
@@ -10434,7 +10627,7 @@
           ],
           "returnType": "Result<ImageFilesystemProbe>",
           "exported": true,
-          "lineCount": 170
+          "lineCount": 176
         },
         {
           "name": "push_candidate",
@@ -10474,7 +10667,7 @@
           ],
           "returnType": "Result<ImageFilesystemProbe>",
           "exported": false,
-          "lineCount": 127
+          "lineCount": 137
         },
         {
           "name": "assign_effective_partition_indices",
@@ -10503,7 +10696,7 @@
           ],
           "returnType": "String",
           "exported": false,
-          "lineCount": 7
+          "lineCount": 10
         },
         {
           "name": "meaningful_partition_name",
@@ -10550,7 +10743,7 @@
           ],
           "returnType": "Result<Option<ImageFilesystemKind>>",
           "exported": false,
-          "lineCount": 7
+          "lineCount": 33
         },
         {
           "name": "read_sector",
@@ -10592,10 +10785,13 @@
           "properties": [
             "Ntfs",
             "Fat",
-            "BitLocker"
+            "BitLocker",
+            "Ext4",
+            "Xfs",
+            "Btrfs"
           ],
           "exported": true,
-          "lineCount": 5
+          "lineCount": 8
         },
         {
           "name": "ImageFilesystemSource",
@@ -10716,7 +10912,7 @@
         "assign_effective_partition_indices",
         "effective_partition_index"
       ],
-      "totalLines": 876,
+      "totalLines": 924,
       "hasStructuralAnalysis": true
     },
     "crates/app-services/src/entity_extraction.rs": {
@@ -12081,7 +12277,7 @@
     },
     "crates/app-services/src/file_service/mapping.rs": {
       "filePath": "crates/app-services/src/file_service/mapping.rs",
-      "contentHash": "bc7c62f148229f916e4f4e28cafa380f999c0774ca7cf1abb4c60289ed711c57",
+      "contentHash": "11d9c3b0fb66dc82db265facc21b636e058422607f46f3866d6d1cc0ff619b92",
       "functions": [
         {
           "name": "file_entry_to_dto",
@@ -12101,7 +12297,7 @@
           ],
           "returnType": "FileTreeNodeDto",
           "exported": true,
-          "lineCount": 33
+          "lineCount": 34
         },
         {
           "name": "mime_for_entry",
@@ -12142,7 +12338,7 @@
         "file_entry_to_tree_node",
         "mime_for_entry"
       ],
-      "totalLines": 79,
+      "totalLines": 80,
       "hasStructuralAnalysis": true
     },
     "crates/app-services/src/file_service/mft.rs": {
@@ -12624,7 +12820,7 @@
     },
     "crates/app-services/src/file_service/partition_roots.rs": {
       "filePath": "crates/app-services/src/file_service/partition_roots.rs",
-      "contentHash": "e6f599ddbbf922a4b2c30be1caa4730ca624e978cc111e1297baa5ded15bf359",
+      "contentHash": "11a2768f2d0222038553e60cfe7321dc53e75c214205a5921a159d94a55a3f58",
       "functions": [
         {
           "name": "insert_partition_placeholder_root",
@@ -12744,7 +12940,7 @@
           ],
           "returnType": "String",
           "exported": false,
-          "lineCount": 7
+          "lineCount": 10
         },
         {
           "name": "partition_unlock_hint",
@@ -12804,7 +13000,7 @@
         "normalized_bare_root_name",
         "store_data_source_partitions"
       ],
-      "totalLines": 239,
+      "totalLines": 242,
       "hasStructuralAnalysis": true
     },
     "crates/app-services/src/file_service/sort.rs": {
@@ -13378,7 +13574,7 @@
     },
     "crates/app-services/src/file_service/viewer/image_open.rs": {
       "filePath": "crates/app-services/src/file_service/viewer/image_open.rs",
-      "contentHash": "6810a2e08da002bc09bca8ff568f4774aae5a2252b5e965fcd93b0859f8845fa",
+      "contentHash": "116ae4ed8a17e6f6f6c8493b40d0dfcf7e094f300f46743b967f7728bb50f3bb",
       "functions": [
         {
           "name": "open_descriptor_image_file",
@@ -13434,7 +13630,7 @@
           ],
           "returnType": "Result<Box<dyn Read>, FileServiceError>",
           "exported": true,
-          "lineCount": 95
+          "lineCount": 116
         },
         {
           "name": "open_e01_file",
@@ -13514,7 +13710,7 @@
         "open_raw_image_file",
         "open_e01_file"
       ],
-      "totalLines": 414,
+      "totalLines": 435,
       "hasStructuralAnalysis": true
     },
     "crates/app-services/src/file_service/viewer/mod.rs": {
@@ -13890,7 +14086,7 @@
     },
     "crates/app-services/src/file_service/viewer/partition.rs": {
       "filePath": "crates/app-services/src/file_service/viewer/partition.rs",
-      "contentHash": "2acfb31b8647a0bdd27acce79c838ac49719b51328abf443f4654a69101dcf22",
+      "contentHash": "a3b01fd9836b575ddffdfb23fedf903aba9dcffb85c64f30145a06425bfb21b7",
       "functions": [
         {
           "name": "e01_partition_candidates",
@@ -13911,7 +14107,7 @@
           ],
           "returnType": "Result<Vec<crate::file_service::viewer::PreviewPartitionCandidate>, FileServiceError>",
           "exported": true,
-          "lineCount": 81
+          "lineCount": 84
         },
         {
           "name": "direct_exfat_raw_partition_candidate",
@@ -13967,7 +14163,7 @@
         "raw_partition_candidates",
         "direct_exfat_raw_partition_candidate"
       ],
-      "totalLines": 183,
+      "totalLines": 186,
       "hasStructuralAnalysis": true
     },
     "crates/app-services/src/file_service/viewer/path.rs": {
@@ -18349,7 +18545,7 @@
     },
     "crates/app-services/src/import_pipeline/partition.rs": {
       "filePath": "crates/app-services/src/import_pipeline/partition.rs",
-      "contentHash": "6f7c1a977157a4406f678fe1e7e8ed641cd768fb1bb42d0b01bd41624730a3ee",
+      "contentHash": "2af399e5e1f1e96db4b2b59af658c14a3c7434247a200d03cffb0b10d79e1d68",
       "functions": [
         {
           "name": "format_partition_root_name",
@@ -18358,7 +18554,7 @@
           ],
           "returnType": "String",
           "exported": true,
-          "lineCount": 21
+          "lineCount": 24
         },
         {
           "name": "format_partition_record_root_name",
@@ -18409,7 +18605,7 @@
           ],
           "returnType": "persistence_sqlite::DbResult<file_service::EnumerationStats>",
           "exported": true,
-          "lineCount": 272
+          "lineCount": 314
         },
         {
           "name": "build_partition_work",
@@ -18423,7 +18619,7 @@
           ],
           "returnType": "Option<parallel_enum::PartitionWork>",
           "exported": true,
-          "lineCount": 48
+          "lineCount": 72
         }
       ],
       "classes": [],
@@ -18475,7 +18671,7 @@
         "enumerate_image_data_source",
         "build_partition_work"
       ],
-      "totalLines": 425,
+      "totalLines": 494,
       "hasStructuralAnalysis": true
     },
     "crates/app-services/src/import_pipeline/phases.rs": {
@@ -19726,7 +19922,7 @@
     },
     "crates/app-services/src/job_service.rs": {
       "filePath": "crates/app-services/src/job_service.rs",
-      "contentHash": "faaa0162a536304dcd3db81b1cb805c3ba5987efec392eb9a18a2f40dfeaa713",
+      "contentHash": "b1d2e0f6e58ac009f6dbca84119929565a6c3ccb98de3b83402dc6f66f11f81c",
       "functions": [
         {
           "name": "category",
@@ -19752,6 +19948,42 @@
           "returnType": "Option<PartitionProgressMeta>",
           "exported": false,
           "lineCount": 22
+        },
+        {
+          "name": "get_warnings_from_db",
+          "params": [
+            "conn"
+          ],
+          "returnType": "Result<Vec<WarningItemDto>, JobServiceError>",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "job_to_warning_item",
+          "params": [
+            "job"
+          ],
+          "returnType": "Option<WarningItemDto>",
+          "exported": false,
+          "lineCount": 37
+        },
+        {
+          "name": "get_trace_items_from_db",
+          "params": [
+            "conn"
+          ],
+          "returnType": "Result<Vec<TraceItemDto>, JobServiceError>",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "job_to_trace_item",
+          "params": [
+            "job"
+          ],
+          "returnType": "TraceItemDto",
+          "exported": false,
+          "lineCount": 16
         },
         {
           "name": "cancel_job",
@@ -19823,7 +20055,8 @@
         {
           "source": "persistence_sqlite::repositories::job_repo",
           "specifiers": [
-            "JobRepo"
+            "JobRepo",
+            "JobSummaryRow"
           ]
         },
         {
@@ -19841,18 +20074,22 @@
         {
           "source": "transport::dto",
           "specifiers": [
-            "JobSnapshotDto"
+            "JobSnapshotDto",
+            "TraceItemDto",
+            "WarningItemDto"
           ]
         }
       ],
       "exports": [
         "JobServiceError",
         "get_jobs_from_db",
+        "get_warnings_from_db",
+        "get_trace_items_from_db",
         "RecoveryResult",
         "cancel_job",
         "recover_interrupted_jobs"
       ],
-      "totalLines": 327,
+      "totalLines": 489,
       "hasStructuralAnalysis": true
     },
     "crates/app-services/src/lib.rs": {
@@ -25206,7 +25443,7 @@
     },
     "crates/app-services/tests/e01_liuyang_regression_test.rs": {
       "filePath": "crates/app-services/tests/e01_liuyang_regression_test.rs",
-      "contentHash": "4056a9862d44561fe7da515bb16d33528d9bba795aba13689f6f34e4d7d7bb80",
+      "contentHash": "6a5ecedf0834f24b3fc747a8c242d384abff2083d60034ed0ba7d6f949694cbb",
       "functions": [
         {
           "name": "sample_path",
@@ -25269,7 +25506,7 @@
             "probe"
           ],
           "exported": false,
-          "lineCount": 41
+          "lineCount": 44
         },
         {
           "name": "assert_honest_display_name",
@@ -25485,7 +25722,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 2703,
+      "totalLines": 2706,
       "hasStructuralAnalysis": true
     },
     "crates/app-services/tests/e01_mft_scan_test.rs": {
@@ -25556,7 +25793,7 @@
     },
     "crates/app-services/tests/e01_preview_debug_test.rs": {
       "filePath": "crates/app-services/tests/e01_preview_debug_test.rs",
-      "contentHash": "43e9df83020ec29ba3258e51b546f9accf18c94b6f797bd5e76ef36abe59ec2a",
+      "contentHash": "c9cc06c03bb7f14549bffa559abdb1d8c49b5cbfb57cf8c2ff5096b03a325678",
       "functions": [
         {
           "name": "jc2_path",
@@ -25579,7 +25816,7 @@
           ],
           "returnType": "(TempDir, app_services::active_case::ActiveCase, String)",
           "exported": false,
-          "lineCount": 131
+          "lineCount": 134
         },
         {
           "name": "assert_file_magic",
@@ -25723,12 +25960,12 @@
         }
       ],
       "exports": [],
-      "totalLines": 540,
+      "totalLines": 543,
       "hasStructuralAnalysis": true
     },
     "crates/app-services/tests/e01_preview_regression_test.rs": {
       "filePath": "crates/app-services/tests/e01_preview_regression_test.rs",
-      "contentHash": "ebb19360aa5d5bf57a674f6ddcee84ba4202d83c70cb69357f00e8d5fe374070",
+      "contentHash": "c0f1091f370f701e2a38c9213b37b2075900774fe3da7b09609d92583bbbc06c",
       "functions": [
         {
           "name": "jc2_path",
@@ -25751,7 +25988,7 @@
           ],
           "returnType": "(TempDir, app_services::active_case::ActiveCase, String)",
           "exported": false,
-          "lineCount": 148
+          "lineCount": 151
         },
         {
           "name": "preview_and_assert",
@@ -25907,12 +26144,12 @@
         }
       ],
       "exports": [],
-      "totalLines": 626,
+      "totalLines": 629,
       "hasStructuralAnalysis": true
     },
     "crates/app-services/tests/e01_probe_real_test.rs": {
       "filePath": "crates/app-services/tests/e01_probe_real_test.rs",
-      "contentHash": "c14dcb3016cdb5f46981cdcfcdc97a9e5b4a8afe4036528e41260217ff527e74",
+      "contentHash": "ffc4adb6d8944addd4d0a87390f38e6378c2322c8f72974fdc00165ee72ea512",
       "functions": [
         {
           "name": "sample_path",
@@ -25931,13 +26168,13 @@
           "name": "opens_detected_filesystem_from_real_e01",
           "params": [],
           "exported": false,
-          "lineCount": 25
+          "lineCount": 28
         },
         {
           "name": "dumps_real_e01_partition_accessibility",
           "params": [],
           "exported": false,
-          "lineCount": 45
+          "lineCount": 46
         },
         {
           "name": "dump_probe_context_for_real_e01",
@@ -25994,7 +26231,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 326,
+      "totalLines": 330,
       "hasStructuralAnalysis": true
     },
     "crates/app-services/tests/e01_registry_structured_summary_test.rs": {
@@ -27649,6 +27886,16 @@
       "totalLines": 217,
       "hasStructuralAnalysis": true
     },
+    "crates/artifacts-android/Cargo.toml": {
+      "filePath": "crates/artifacts-android/Cargo.toml",
+      "contentHash": "8fa5afab01be1772c714fc9c2200eebbd9ee770e9d87ec9b76a458e49deb4d3d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 23,
+      "hasStructuralAnalysis": true
+    },
     "crates/artifacts-android/src/backup.rs": {
       "filePath": "crates/artifacts-android/src/backup.rs",
       "contentHash": "510b85b011f4abed1024854147de287b117c98c7a1a674b3f3c3215069a91eaa",
@@ -28007,6 +28254,16 @@
       "totalLines": 230,
       "hasStructuralAnalysis": true
     },
+    "crates/artifacts-core/Cargo.toml": {
+      "filePath": "crates/artifacts-core/Cargo.toml",
+      "contentHash": "e2d508e240809c3a4cab566e39f630305bd3060745babbf131d75b66cf8b3f66",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 16,
+      "hasStructuralAnalysis": true
+    },
     "crates/artifacts-core/src/lib.rs": {
       "filePath": "crates/artifacts-core/src/lib.rs",
       "contentHash": "cdf4983ff5251935651e3e59a843e54af3bb51a0bcca0ee4009ed37f416ecca2",
@@ -28253,6 +28510,16 @@
         "new_timeline_event"
       ],
       "totalLines": 416,
+      "hasStructuralAnalysis": true
+    },
+    "crates/artifacts-ios/Cargo.toml": {
+      "filePath": "crates/artifacts-ios/Cargo.toml",
+      "contentHash": "420aa847bb632c1221c62333e099ccf78a90c913a3dc88cd253143b77d91db4d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
       "hasStructuralAnalysis": true
     },
     "crates/artifacts-ios/src/backup.rs": {
@@ -28743,6 +29010,16 @@
         "parse_safari_history"
       ],
       "totalLines": 199,
+      "hasStructuralAnalysis": true
+    },
+    "crates/artifacts-linux/Cargo.toml": {
+      "filePath": "crates/artifacts-linux/Cargo.toml",
+      "contentHash": "86c1d065d6f678e56dd91fc11023bdb3c47344f3c078e299bd8fb9bedfb2f0dd",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 16,
       "hasStructuralAnalysis": true
     },
     "crates/artifacts-linux/src/apt.rs": {
@@ -29655,6 +29932,16 @@
       ],
       "exports": [],
       "totalLines": 504,
+      "hasStructuralAnalysis": true
+    },
+    "crates/artifacts-macos/Cargo.toml": {
+      "filePath": "crates/artifacts-macos/Cargo.toml",
+      "contentHash": "ba96532f01ba4f2882b0dc49ab7bc849bcf07097fb417d0f6dd8fb9f57e71ed0",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
       "hasStructuralAnalysis": true
     },
     "crates/artifacts-macos/src/error.rs": {
@@ -30694,6 +30981,16 @@
       ],
       "exports": [],
       "totalLines": 516,
+      "hasStructuralAnalysis": true
+    },
+    "crates/artifacts-windows/Cargo.toml": {
+      "filePath": "crates/artifacts-windows/Cargo.toml",
+      "contentHash": "5ddb2a99b3634dd45ba0aa2d0279390e10e33ae217f7efc94304fedd76859468",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 37,
       "hasStructuralAnalysis": true
     },
     "crates/artifacts-windows/src/browser/chromium.rs": {
@@ -37898,6 +38195,16 @@
       "totalLines": 509,
       "hasStructuralAnalysis": true
     },
+    "crates/cloud-audit/Cargo.toml": {
+      "filePath": "crates/cloud-audit/Cargo.toml",
+      "contentHash": "19c958565501cafae074dd48501f8f3dbb0ca9516c3ba56ab0d4e5b04223378d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 15,
+      "hasStructuralAnalysis": true
+    },
     "crates/cloud-audit/src/aws.rs": {
       "filePath": "crates/cloud-audit/src/aws.rs",
       "contentHash": "36237803a3975704031bd6d29b9bffe2167a28cff41afe1ceb9321954549c51e",
@@ -38257,6 +38564,16 @@
         "CloudAuditEntry"
       ],
       "totalLines": 73,
+      "hasStructuralAnalysis": true
+    },
+    "crates/containers-pst/Cargo.toml": {
+      "filePath": "crates/containers-pst/Cargo.toml",
+      "contentHash": "3e93fb8b2231f7010add1f2bb4eb57289346c299a174d5dc8fd72f4f3de5c6f5",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
       "hasStructuralAnalysis": true
     },
     "crates/containers-pst/examples/generate_fixtures.rs": {
@@ -40048,6 +40365,16 @@
       "totalLines": 514,
       "hasStructuralAnalysis": true
     },
+    "crates/crash_handler/Cargo.toml": {
+      "filePath": "crates/crash_handler/Cargo.toml",
+      "contentHash": "7aa7447884bf3ee82283ca1a2bb60cf53e362bdb105f45089af2a94207da21ec",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 14,
+      "hasStructuralAnalysis": true
+    },
     "crates/crash_handler/src/lib.rs": {
       "filePath": "crates/crash_handler/src/lib.rs",
       "contentHash": "562608771a39b25c44ff8ac616aff3fa6bbdb06879c5da2a05af79f77ede92f3",
@@ -40181,6 +40508,16 @@
         "set_panic_hook"
       ],
       "totalLines": 531,
+      "hasStructuralAnalysis": true
+    },
+    "crates/domain/Cargo.toml": {
+      "filePath": "crates/domain/Cargo.toml",
+      "contentHash": "9571a7cc6ee7c635eb942077b97def9c169f0d4454b56b2150b7184bd3c5fb4d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 14,
       "hasStructuralAnalysis": true
     },
     "crates/domain/src/artifact/mod.rs": {
@@ -41525,6 +41862,16 @@
       "totalLines": 277,
       "hasStructuralAnalysis": true
     },
+    "crates/evidence-core/Cargo.toml": {
+      "filePath": "crates/evidence-core/Cargo.toml",
+      "contentHash": "3bfd94bd7f116a6877923e96ab01bc55b515047dd56b2c2a35a7b9e63927f701",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": true
+    },
     "crates/evidence-core/src/filesystem/logical_fs.rs": {
       "filePath": "crates/evidence-core/src/filesystem/logical_fs.rs",
       "contentHash": "c6a478bdf37c29e6f97d9e7a868042f3b0d135ab5cfbae8a94b5f97bf7c56930",
@@ -42648,6 +42995,16 @@
       "totalLines": 59,
       "hasStructuralAnalysis": true
     },
+    "crates/evtx-patched/Cargo.toml": {
+      "filePath": "crates/evtx-patched/Cargo.toml",
+      "contentHash": "78aa1b57be7ac3e39f4f65f21333f8c83f26d83c6ba8896b1f30ebe5cc95173a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 48,
+      "hasStructuralAnalysis": true
+    },
     "crates/evtx-patched/LICENSE-APACHE": {
       "filePath": "crates/evtx-patched/LICENSE-APACHE",
       "contentHash": "1eb85fc97224598dad1852b5d6483bbcf0aa8608790dcc657a5a2a761ae9c8c6",
@@ -42667,6 +43024,16 @@
       "exports": [],
       "totalLines": 9,
       "hasStructuralAnalysis": false
+    },
+    "crates/evtx-patched/README.md": {
+      "filePath": "crates/evtx-patched/README.md",
+      "contentHash": "7e0dfff7791a3707ad11fa1b3b3c62a4c253fcdda799723408060d816c65eca7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 188,
+      "hasStructuralAnalysis": true
     },
     "crates/evtx-patched/src/binxml/array_expand.rs": {
       "filePath": "crates/evtx-patched/src/binxml/array_expand.rs",
@@ -49948,6 +50315,16 @@
       "totalLines": 380,
       "hasStructuralAnalysis": true
     },
+    "crates/exchange/Cargo.toml": {
+      "filePath": "crates/exchange/Cargo.toml",
+      "contentHash": "2883fbd0b7541f03d3eb699eb0eb00bd6d5767476888c7e9deb009de67a440ca",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
+      "hasStructuralAnalysis": true
+    },
     "crates/exchange/src/case_uco.rs": {
       "filePath": "crates/exchange/src/case_uco.rs",
       "contentHash": "fc980000a16be04776dfcbb766897e97af3185a202a3599350c80ed425fff64e",
@@ -50414,6 +50791,16 @@
         "export_stix_bundle"
       ],
       "totalLines": 792,
+      "hasStructuralAnalysis": true
+    },
+    "crates/fs-apfs/Cargo.toml": {
+      "filePath": "crates/fs-apfs/Cargo.toml",
+      "contentHash": "6ad406bbc62178bd6b4b7e3588e5be40a038a7f9b9fe2a812ff09f3e5e0b9aca",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 16,
       "hasStructuralAnalysis": true
     },
     "crates/fs-apfs/src/checkpoint.rs": {
@@ -51050,6 +51437,16 @@
       "totalLines": 1524,
       "hasStructuralAnalysis": true
     },
+    "crates/fs-btrfs/Cargo.toml": {
+      "filePath": "crates/fs-btrfs/Cargo.toml",
+      "contentHash": "e4b47aa48c81cc552ad79197e62af08466c0e24ee778cd918048b4fff9e896ef",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 15,
+      "hasStructuralAnalysis": true
+    },
     "crates/fs-btrfs/src/lib.rs": {
       "filePath": "crates/fs-btrfs/src/lib.rs",
       "contentHash": "e26a3bd13e62d6c83484e4defa0a7367ab876b5b4dccfd02f09551e8e39342e5",
@@ -51674,6 +52071,16 @@
         "diff_snapshots"
       ],
       "totalLines": 830,
+      "hasStructuralAnalysis": true
+    },
+    "crates/fs-exfat/Cargo.toml": {
+      "filePath": "crates/fs-exfat/Cargo.toml",
+      "contentHash": "69d78ca086a887468cff14ce2a503cf94d0d51f495608b2de4825d48f284a46a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 20,
       "hasStructuralAnalysis": true
     },
     "crates/fs-exfat/src/boot.rs": {
@@ -52589,6 +52996,16 @@
       "totalLines": 67,
       "hasStructuralAnalysis": true
     },
+    "crates/fs-ext4/Cargo.toml": {
+      "filePath": "crates/fs-ext4/Cargo.toml",
+      "contentHash": "c7246e30a5223a3829b1129db76e69f59c524a5a70362c1b21b327cc0a146a0c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 15,
+      "hasStructuralAnalysis": true
+    },
     "crates/fs-ext4/src/journal.rs": {
       "filePath": "crates/fs-ext4/src/journal.rs",
       "contentHash": "5f8ed4e0e06c684dc13d3c9b8d1c80afd415137da797d35657bd993c52f601cd",
@@ -53144,6 +53561,16 @@
       "totalLines": 961,
       "hasStructuralAnalysis": true
     },
+    "crates/fs-fat/Cargo.toml": {
+      "filePath": "crates/fs-fat/Cargo.toml",
+      "contentHash": "4caa6d5d8a863b2a386971ae7d0a94744dbcec4cc360205d8a8708b77c71e5c0",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 15,
+      "hasStructuralAnalysis": true
+    },
     "crates/fs-fat/src/lib.rs": {
       "filePath": "crates/fs-fat/src/lib.rs",
       "contentHash": "dd1999f30ed2265b75d0b62acde4317630360d5242b2e6d9e1c5e620c2e61143",
@@ -53644,6 +54071,16 @@
       "totalLines": 247,
       "hasStructuralAnalysis": true
     },
+    "crates/fs-hfsplus/Cargo.toml": {
+      "filePath": "crates/fs-hfsplus/Cargo.toml",
+      "contentHash": "6b1a8310dead97dffbc0a56a1385d64b1d4dee962cdb8ce3d845fac8bbacb414",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 16,
+      "hasStructuralAnalysis": true
+    },
     "crates/fs-hfsplus/src/constants.rs": {
       "filePath": "crates/fs-hfsplus/src/constants.rs",
       "contentHash": "7e3ff5c32dfbd02b688b1c04d7991f68c97c91a53984e6d5643ca619ba6bcf29",
@@ -54112,6 +54549,16 @@
         "free_blocks"
       ],
       "totalLines": 448,
+      "hasStructuralAnalysis": true
+    },
+    "crates/fs-ntfs/Cargo.toml": {
+      "filePath": "crates/fs-ntfs/Cargo.toml",
+      "contentHash": "67bcdac018938f2ad376f3511e21e16bf61dcfa378b761c67a933f29be9731da",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
       "hasStructuralAnalysis": true
     },
     "crates/fs-ntfs/src/ads.rs": {
@@ -56120,9 +56567,19 @@
       "totalLines": 1247,
       "hasStructuralAnalysis": true
     },
+    "crates/fs-xfs/Cargo.toml": {
+      "filePath": "crates/fs-xfs/Cargo.toml",
+      "contentHash": "4b0cbe17c1c50be26da3dc3229eb5c8e5c90ce644a23a43a1bf63de49b7c3b25",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 15,
+      "hasStructuralAnalysis": true
+    },
     "crates/fs-xfs/src/lib.rs": {
       "filePath": "crates/fs-xfs/src/lib.rs",
-      "contentHash": "de6a0725dbe052641bc1fbe27dfe14e1d0cda5cdd207e79816a05764691b93f0",
+      "contentHash": "d061fd4ff017fe998462204ee20292c7837657b60ab639822a2bdb048309533b",
       "functions": [
         {
           "name": "be_u16",
@@ -56162,7 +56619,7 @@
           ],
           "returnType": "io::Result<Self>",
           "exported": true,
-          "lineCount": 59
+          "lineCount": 65
         },
         {
           "name": "block_to_offset",
@@ -56183,13 +56640,22 @@
           "lineCount": 8
         },
         {
+          "name": "read_inode_at_offset",
+          "params": [
+            "offset"
+          ],
+          "returnType": "io::Result<Vec<u8>>",
+          "exported": false,
+          "lineCount": 7
+        },
+        {
           "name": "inode_offset",
           "params": [
             "ino"
           ],
           "returnType": "u64",
           "exported": false,
-          "lineCount": 4
+          "lineCount": 15
         },
         {
           "name": "read_inode",
@@ -56198,7 +56664,16 @@
           ],
           "returnType": "io::Result<Vec<u8>>",
           "exported": false,
-          "lineCount": 8
+          "lineCount": 4
+        },
+        {
+          "name": "inode_core_size",
+          "params": [
+            "inode"
+          ],
+          "returnType": "usize",
+          "exported": false,
+          "lineCount": 9
         },
         {
           "name": "data_fork",
@@ -56207,7 +56682,7 @@
           ],
           "returnType": "io::Result<&[u8]>",
           "exported": false,
-          "lineCount": 15
+          "lineCount": 16
         },
         {
           "name": "nextents",
@@ -56284,13 +56759,22 @@
           "lineCount": 3
         },
         {
+          "name": "parse_block_dir",
+          "params": [
+            "data"
+          ],
+          "returnType": "io::Result<Vec<(String, u64, bool)>>",
+          "exported": false,
+          "lineCount": 80
+        },
+        {
           "name": "read_directory_entries",
           "params": [
             "ino"
           ],
           "returnType": "io::Result<Vec<(String, u64, bool)>>",
           "exported": false,
-          "lineCount": 31
+          "lineCount": 42
         },
         {
           "name": "resolve_path",
@@ -56341,8 +56825,10 @@
             "open",
             "block_to_offset",
             "read_block",
+            "read_inode_at_offset",
             "inode_offset",
             "read_inode",
+            "inode_core_size",
             "data_fork",
             "nextents",
             "decode_extent",
@@ -56352,6 +56838,7 @@
             "read_file_content",
             "validate_inode_magic",
             "inode_is_dir",
+            "parse_block_dir",
             "read_directory_entries",
             "resolve_path",
             "root",
@@ -56368,10 +56855,12 @@
             "_inopblock",
             "root_ino",
             "volume_offset",
-            "inode_base_block"
+            "inode_base_block",
+            "agblklog",
+            "inopblog"
           ],
           "exported": true,
-          "lineCount": 14
+          "lineCount": 17
         }
       ],
       "imports": [
@@ -56419,7 +56908,7 @@
         "XfsReader",
         "open"
       ],
-      "totalLines": 1007,
+      "totalLines": 1374,
       "hasStructuralAnalysis": true
     },
     "crates/fs-xfs/src/log.rs": {
@@ -56635,6 +57124,16 @@
         "recover_deleted_inodes"
       ],
       "totalLines": 861,
+      "hasStructuralAnalysis": true
+    },
+    "crates/gql/Cargo.toml": {
+      "filePath": "crates/gql/Cargo.toml",
+      "contentHash": "2216cfe182c812d844fe27a9c6572636fc72c73625ab4a26f213b20b8f585465",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 16,
       "hasStructuralAnalysis": true
     },
     "crates/gql/src/engine.rs": {
@@ -57509,6 +58008,16 @@
       "totalLines": 408,
       "hasStructuralAnalysis": true
     },
+    "crates/image-e01/Cargo.toml": {
+      "filePath": "crates/image-e01/Cargo.toml",
+      "contentHash": "ccecd0fdc6eb51c835be28eb6d85ade64a07d472971f0800b840f235fa657925",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 21,
+      "hasStructuralAnalysis": true
+    },
     "crates/image-e01/src/lib.rs": {
       "filePath": "crates/image-e01/src/lib.rs",
       "contentHash": "2ad3e826e1a3ffc748d1157074cc56bf1a025d2bfe8934455d14220d31d57fbd",
@@ -57897,6 +58406,16 @@
       "totalLines": 238,
       "hasStructuralAnalysis": true
     },
+    "crates/image-raw/Cargo.toml": {
+      "filePath": "crates/image-raw/Cargo.toml",
+      "contentHash": "1e1dbd6d14f05db00cf82308efd8748efc1fa1615f29e1985b6b38fc5267a788",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
     "crates/image-raw/src/lib.rs": {
       "filePath": "crates/image-raw/src/lib.rs",
       "contentHash": "f67bc89f4b7fdbe757012f349100cdda1c72cb4f7f701e8e79a08f3da3aeef7f",
@@ -58023,6 +58542,16 @@
         "is_empty"
       ],
       "totalLines": 413,
+      "hasStructuralAnalysis": true
+    },
+    "crates/infrastructure/Cargo.toml": {
+      "filePath": "crates/infrastructure/Cargo.toml",
+      "contentHash": "5698edb7867e5ec0ca66af1d98dba937ae5403b2146a31df279239921c2816cb",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 16,
       "hasStructuralAnalysis": true
     },
     "crates/infrastructure/src/clock/mod.rs": {
@@ -58211,6 +58740,16 @@
         "html_escape"
       ],
       "totalLines": 72,
+      "hasStructuralAnalysis": true
+    },
+    "crates/ingest/Cargo.toml": {
+      "filePath": "crates/ingest/Cargo.toml",
+      "contentHash": "2f37e7862946c4d4d5545e3e8267a017228fbd7de09b66d80f22250a14fab590",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 20,
       "hasStructuralAnalysis": true
     },
     "crates/ingest/src/config.rs": {
@@ -58517,6 +59056,16 @@
         "merge"
       ],
       "totalLines": 40,
+      "hasStructuralAnalysis": true
+    },
+    "crates/mcp-client/Cargo.toml": {
+      "filePath": "crates/mcp-client/Cargo.toml",
+      "contentHash": "783d9087facb448d41561b338d9fac3c88d2595e98741de552fc78e9dc1cdb73",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 22,
       "hasStructuralAnalysis": true
     },
     "crates/mcp-client/src/client.rs": {
@@ -59835,6 +60384,16 @@
       "totalLines": 325,
       "hasStructuralAnalysis": true
     },
+    "crates/persistence-sqlite/Cargo.toml": {
+      "filePath": "crates/persistence-sqlite/Cargo.toml",
+      "contentHash": "2a84268913f87babb50718ee1e37b83b6581e53845cdcfa4c618261c32f7af18",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 22,
+      "hasStructuralAnalysis": true
+    },
     "crates/persistence-sqlite/src/connection.rs": {
       "filePath": "crates/persistence-sqlite/src/connection.rs",
       "contentHash": "dc7470ab2b47789b5796d649eff2a29bdabdd3f2fa4ced84d4e61d1945c27c3a",
@@ -60126,6 +60685,336 @@
         "current_version"
       ],
       "totalLines": 195,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0001_cases.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0001_cases.sql",
+      "contentHash": "a7d114f7dab8b4e5c01ed075a42367210bc3799a0575ca725d7adac1e3308f13",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 10,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0002_data_sources.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0002_data_sources.sql",
+      "contentHash": "5d344df3e0ca2eb58f24df5bfb0a0b9027b44267b850d5e180c73457b9174f25",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 11,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0003_file_entries.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0003_file_entries.sql",
+      "contentHash": "bf039d22e69384f45cd5a64a85b422b7678e97a53af2b3644b0008322d284012",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 21,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0004_artifacts.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0004_artifacts.sql",
+      "contentHash": "3c7d009348ee092e65004ccdf8e79e0bbcf02885f475535db1e5137732e1115c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 16,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0005_timeline_events.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0005_timeline_events.sql",
+      "contentHash": "69bc1ddb2f2534be30da912c83056c1fbbda73e7d70f99724eac747d7c790cd0",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 15,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0006_jobs.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0006_jobs.sql",
+      "contentHash": "4932b99a808ab05a34d963277b30298a4f2bf14d5cec9b98140dbff7ae640cf8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 15,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0007_reports.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0007_reports.sql",
+      "contentHash": "4fafcef6861e2faad98f14611a56950e248fd3fc7293412d18bdaa26e3abc7ed",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 13,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0008_tags.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0008_tags.sql",
+      "contentHash": "173292ea7d653af971e34029f119cb63ea99671ff84a3d907b008489cbf23745",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 16,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0009_data_source_partitions.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0009_data_source_partitions.sql",
+      "contentHash": "7e6d2997e8b9d80df4b23380471f834dcd6931a1890ec472fb36a9b23da51865",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0010_job_partition_progress.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0010_job_partition_progress.sql",
+      "contentHash": "1f9d0e7c8b6b55094c666e058d17d47fa6d79ab4121f4f6e41bb617afba06fde",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 15,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0011_fix_timeline_case_id.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0011_fix_timeline_case_id.sql",
+      "contentHash": "f96624a71a8f12bf8784061113cb370f71990e04c6fc47d265246ea72c958b95",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 15,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0012_add_indexes.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0012_add_indexes.sql",
+      "contentHash": "c875def4985c2ef2e720aeb9ff17cada4a6f19b078d121ac69a7270e072f8c35",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 13,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0013_create_partitions.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0013_create_partitions.sql",
+      "contentHash": "f7c60517763d261830aa5dd903089ec70ea2a53a617f15bd37717783483baa8a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 21,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0014_migrate_partitions.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0014_migrate_partitions.sql",
+      "contentHash": "362e33c5d5c857361fdc88b89eaec1ea54e9cab26c6e8a4d959d96dc75374c96",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 21,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0015_create_audit_log.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0015_create_audit_log.sql",
+      "contentHash": "c35d657540027c43eebd04a443a7eb7d603a21bf624b018d60106777e4b14481",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0016_add_cascade_delete.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0016_add_cascade_delete.sql",
+      "contentHash": "014a3508d09c74946eda1d9118c55b09fa48e8bda15c727f61a24372a4715230",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 114,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0017_add_missing_indexes.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0017_add_missing_indexes.sql",
+      "contentHash": "05a1244c44c0b45265e15fc6fd65fc3b9dcb0533c3a1c6731b6f86b3e8779959",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 14,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0018_job_partial_counts.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0018_job_partial_counts.sql",
+      "contentHash": "2c7606899a19fbc25a87ec9ece5f6265ea2160f1241ea6e5e764e9f708d74f9c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 5,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0019_data_source_provenance.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0019_data_source_provenance.sql",
+      "contentHash": "425443c575593cda7db1a5cbb025780150e8dff080dc681ac8745af3e6809837",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0020_artifact_timeline_provenance.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0020_artifact_timeline_provenance.sql",
+      "contentHash": "a66a80a392026b804ce10ca0621ad0fda99c93817f2e74609f13e1a53aa9b704",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 10,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0021_timeline_query_indexes.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0021_timeline_query_indexes.sql",
+      "contentHash": "214fa4e5f44b524ca909f214c42b0dd9dbf58020b4da13378ff73cccba4a2277",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 5,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0022_file_entry_visibility_flags.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0022_file_entry_visibility_flags.sql",
+      "contentHash": "b9563778cc1ea2447cf835ed4d63cb6347a7b1a38b55255d0478eb486fc06eaf",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 9,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0023_graph.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0023_graph.sql",
+      "contentHash": "4800e5d4fc1f2191f941aa6a539ac734ec30594172782dc61da3c776ea32fc88",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 34,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0024_notebook.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0024_notebook.sql",
+      "contentHash": "98a65b8d76064797d977c085c07589e6534682b2c2f1475c8ba45bc0d56f22bb",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 55,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0025_batch.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0025_batch.sql",
+      "contentHash": "46407899f37d6de2946e94226f99395c5c5b4453211f4f90cb3cc2ef1cb97a6b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 44,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0026_correlation_cache.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0026_correlation_cache.sql",
+      "contentHash": "bf4c7304ea2587c509fd561c64f4ddb4142d6152550d331c357f05e8b70e77c2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 24,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0027_entity_index.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0027_entity_index.sql",
+      "contentHash": "e69f4462691bca35a453f54e7de2eb9008d8c9b36df1ad03dae0823edeb93d6e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 14,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0028_entity_merge.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0028_entity_merge.sql",
+      "contentHash": "b41223f05143d33c899131e9562de9737459bc5496b17aaaa8ea1f42579d2b66",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 31,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0029_entity_relationships.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0029_entity_relationships.sql",
+      "contentHash": "a699f9c7493a1723cba3884a8b07fdb7ec42b46b9846c0930ae78ca680bb2ad4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0030_custody.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0030_custody.sql",
+      "contentHash": "e9231fdebb661436c164b4b00d7ed2aa540dec839c5c8cb177faf98314f54305",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0031_cleanup_partition_triple_representation.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0031_cleanup_partition_triple_representation.sql",
+      "contentHash": "24e1a235383d173654a945ceba34e72d327cd484b07189b3f2bbfc81d6aa43cd",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/0032_file_entry_type_nocase_index.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/0032_file_entry_type_nocase_index.sql",
+      "contentHash": "0ff1844de91b8780a5a47d157ad571d674c4045fab9f9a49afb09b723935e710",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 12,
+      "hasStructuralAnalysis": true
+    },
+    "crates/persistence-sqlite/src/migrations/scripts/staging_001.sql": {
+      "filePath": "crates/persistence-sqlite/src/migrations/scripts/staging_001.sql",
+      "contentHash": "84ebc1c24ad4719f17f21610e020df3b68e54706c8145a9460c6c5cb414af9d9",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 31,
       "hasStructuralAnalysis": true
     },
     "crates/persistence-sqlite/src/repositories/artifact_repo.rs": {
@@ -62147,7 +63036,7 @@
     },
     "crates/persistence-sqlite/src/repositories/job_repo.rs": {
       "filePath": "crates/persistence-sqlite/src/repositories/job_repo.rs",
-      "contentHash": "29d43f944746b2f4ac7cead21a577a10b9d5fed489d13258da8f5dbfe7c5579a",
+      "contentHash": "447cc904efcfbc6fd7bd333a355adffc751e26c0e65a0f86418b35cc6d2329ac",
       "functions": [
         {
           "name": "new",
@@ -62259,7 +63148,7 @@
           ],
           "returnType": "DbResult<Vec<JobSummaryRow>>",
           "exported": true,
-          "lineCount": 39
+          "lineCount": 42
         }
       ],
       "classes": [
@@ -62288,10 +63177,12 @@
             "current_partition",
             "completed_partitions",
             "total_partitions",
-            "partition_progress"
+            "partition_progress",
+            "created_at",
+            "finished_at"
           ],
           "exported": true,
-          "lineCount": 15
+          "lineCount": 17
         }
       ],
       "imports": [
@@ -62336,7 +63227,7 @@
         "find_interrupted",
         "list_recent"
       ],
-      "totalLines": 321,
+      "totalLines": 326,
       "hasStructuralAnalysis": true
     },
     "crates/persistence-sqlite/src/repositories/mod.rs": {
@@ -63769,6 +64660,16 @@
       "totalLines": 317,
       "hasStructuralAnalysis": true
     },
+    "crates/reports/Cargo.toml": {
+      "filePath": "crates/reports/Cargo.toml",
+      "contentHash": "c2544fe48214879301127946e746291afad24f56eeaf8d0309e2542922039660",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": true
+    },
     "crates/reports/src/csv/exporter.rs": {
       "filePath": "crates/reports/src/csv/exporter.rs",
       "contentHash": "e0e6d985ca01e3cac3bb93122f9c08bb85bf8adedd9c88e2d93adf4328bb500c",
@@ -64066,6 +64967,16 @@
       ],
       "exports": [],
       "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "crates/runtime-cache/Cargo.toml": {
+      "filePath": "crates/runtime-cache/Cargo.toml",
+      "contentHash": "760c69dfacdb55d71821441068cb8f193af2bca0efaa1d16208f85ee570ebb80",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 16,
       "hasStructuralAnalysis": true
     },
     "crates/runtime-cache/src/connection.rs": {
@@ -64650,6 +65561,16 @@
       "totalLines": 8,
       "hasStructuralAnalysis": true
     },
+    "crates/search/Cargo.toml": {
+      "filePath": "crates/search/Cargo.toml",
+      "contentHash": "130e79aec083e4941e9a1423581ca59ba2ffb20c08888154cba9a6460ae50d88",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
+      "hasStructuralAnalysis": true
+    },
     "crates/search/src/extractor/mod.rs": {
       "filePath": "crates/search/src/extractor/mod.rs",
       "contentHash": "85365fddd028a4c3e19fd9bd155f9cd2b72f7b3ed5996acecb9da55f47e0b45b",
@@ -65190,6 +66111,16 @@
       "totalLines": 154,
       "hasStructuralAnalysis": true
     },
+    "crates/testing/Cargo.toml": {
+      "filePath": "crates/testing/Cargo.toml",
+      "contentHash": "88e667c0ff3a6cc459a43363e78d6b36479246b4aab0cd3f501f940c6dea1618",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 14,
+      "hasStructuralAnalysis": true
+    },
     "crates/testing/src/bin/generate_tiny_registry_fixtures.rs": {
       "filePath": "crates/testing/src/bin/generate_tiny_registry_fixtures.rs",
       "contentHash": "d570bbf0ca475ce29c6201ce8c36bf05ce1c1c18a3196a8f727f80c36096c72a",
@@ -65440,6 +66371,16 @@
       "totalLines": 16,
       "hasStructuralAnalysis": true
     },
+    "crates/timeline/Cargo.toml": {
+      "filePath": "crates/timeline/Cargo.toml",
+      "contentHash": "2ccf2213f4351349fbca7f6bfe37feac7f9b029dad4d63af9da933e25e65f441",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 16,
+      "hasStructuralAnalysis": true
+    },
     "crates/timeline/src/lib.rs": {
       "filePath": "crates/timeline/src/lib.rs",
       "contentHash": "049f16a3d3d61ee73225dbec21899e645b5a583275402078035346a21817cd4a",
@@ -65511,6 +66452,16 @@
         "project_file_macb"
       ],
       "totalLines": 586,
+      "hasStructuralAnalysis": true
+    },
+    "crates/transport/Cargo.toml": {
+      "filePath": "crates/transport/Cargo.toml",
+      "contentHash": "2cba11e5f8b2064403828e32cf42daad601077d082dd9940a1d80c0ecff7a51e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 13,
       "hasStructuralAnalysis": true
     },
     "crates/transport/src/commands/mod.rs": {
@@ -67284,7 +68235,7 @@
     },
     "crates/transport/src/dto/analysis.rs": {
       "filePath": "crates/transport/src/dto/analysis.rs",
-      "contentHash": "74c59ba33603289663dd8d70d98da94d015d1ca0198fb3804bdff5948508b619",
+      "contentHash": "b10dc4abc2d68671f45b936b6c993fb9d7b2b8abc7804c097bc4fb82950a85ee",
       "functions": [],
       "classes": [],
       "imports": [
@@ -67335,6 +68286,18 @@
             "EvtxBootEventDto",
             "EvtxEventSummaryDto",
             "EvtxSecurityEventDto"
+          ]
+        },
+        {
+          "source": "crate::dto::analysis_linux",
+          "specifiers": [
+            "LinuxAptEventDto",
+            "LinuxArtifactSummaryDto",
+            "LinuxBashCommandDto",
+            "LinuxCronJobDto",
+            "LinuxJournalEntryDto",
+            "LinuxLoginRecordDto",
+            "LinuxSudoEventDto"
           ]
         },
         {
@@ -67410,7 +68373,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 582,
+      "totalLines": 586,
       "hasStructuralAnalysis": true
     },
     "crates/transport/src/dto/android.rs": {
@@ -68134,7 +69097,7 @@
     },
     "crates/transport/src/dto/files.rs": {
       "filePath": "crates/transport/src/dto/files.rs",
-      "contentHash": "a5900ca7f1f2debc15a9ea6b7fec4c12979180b500b47a02c45b856a09ac6d4b",
+      "contentHash": "80b3d5486489ff4ab32593564f3cdf99494f7e34e267aa2be654924d0bccc350",
       "functions": [],
       "classes": [
         {
@@ -68145,6 +69108,7 @@
             "name",
             "depth",
             "has_children",
+            "data_source_id",
             "entry_type",
             "size",
             "deleted",
@@ -68157,7 +69121,7 @@
             "active"
           ],
           "exported": true,
-          "lineCount": 23
+          "lineCount": 25
         },
         {
           "name": "FileChildrenDto",
@@ -68239,7 +69203,7 @@
         "FileJumpContextDto",
         "FileEntryRowDto"
       ],
-      "totalLines": 208,
+      "totalLines": 213,
       "hasStructuralAnalysis": true
     },
     "crates/transport/src/dto/governance.rs": {
@@ -69634,7 +70598,7 @@
     },
     "crates/transport/src/dto/mod.rs": {
       "filePath": "crates/transport/src/dto/mod.rs",
-      "contentHash": "44e892c4b5fd686ae064c88575d05c34226b632bd33a974330359ded6701fa14",
+      "contentHash": "2dfca1e099a10550d40c607e634b05a5bd8f2e29f89424a406719da33b8a1caa",
       "functions": [],
       "classes": [],
       "imports": [
@@ -69688,6 +70652,13 @@
             "KnownLimitationDto",
             "KnownLimitationStatusDto",
             "LastVisitedMruEntryDto",
+            "LinuxAptEventDto",
+            "LinuxArtifactSummaryDto",
+            "LinuxBashCommandDto",
+            "LinuxCronJobDto",
+            "LinuxJournalEntryDto",
+            "LinuxLoginRecordDto",
+            "LinuxSudoEventDto",
             "LsaPackageDto",
             "LsaSecretDto",
             "MountedDeviceDto",
@@ -70001,7 +70972,7 @@
         }
       ],
       "exports": [],
-      "totalLines": 132,
+      "totalLines": 134,
       "hasStructuralAnalysis": true
     },
     "crates/transport/src/dto/notebook.rs": {
@@ -71591,6 +72562,16 @@
       "totalLines": 18,
       "hasStructuralAnalysis": true
     },
+    "crates/updater/Cargo.toml": {
+      "filePath": "crates/updater/Cargo.toml",
+      "contentHash": "59c8e59b6422c731a2a9b7c42485428aabe7eb9a8ac6973fba2ccc9e6f678db3",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 26,
+      "hasStructuralAnalysis": true
+    },
     "crates/updater/src/lib.rs": {
       "filePath": "crates/updater/src/lib.rs",
       "contentHash": "c12d6080ba6e1ffe746c66ede473bdae16672f5a32a25113e24b8b36fb108e3f",
@@ -71707,6 +72688,246 @@
       "totalLines": 542,
       "hasStructuralAnalysis": true
     },
+    "deny.toml": {
+      "filePath": "deny.toml",
+      "contentHash": "6e54e79421cb5df436c36a33441e0f78e2f49be9869749254cd1387dac4bb225",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 78,
+      "hasStructuralAnalysis": true
+    },
+    "design.md": {
+      "filePath": "design.md",
+      "contentHash": "bfe4165d196d3cd91ba550e3adc743a4a8862bd0e1d01313e33f4cc0208c1d74",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 1779,
+      "hasStructuralAnalysis": true
+    },
+    "development-plan.md": {
+      "filePath": "development-plan.md",
+      "contentHash": "0ac08478fe516925c2f0afe290b6509d09b53ab0f0e9ef02d661a4087a5b0df8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 390,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-05-17/session-005-agent-main.md": {
+      "filePath": "development-reports/sessions/2026-05-17/session-005-agent-main.md",
+      "contentHash": "a27053b11a47c890648ab99c339d9b5be3ce0ee3c2c29671bd79b93d5da9df9d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 153,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-05-17/session-006-agent-main.md": {
+      "filePath": "development-reports/sessions/2026-05-17/session-006-agent-main.md",
+      "contentHash": "6e04a0e8edf87d116b58b8091f16ebe9269a1a8f789dbfa02357402edb766b31",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 127,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-05-21/session-007-agent-main.md": {
+      "filePath": "development-reports/sessions/2026-05-21/session-007-agent-main.md",
+      "contentHash": "7ee089edd5b77bdaff0ee419821c9494e0f93d05dd5458ffe6f1b1cc1145cd57",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 226,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-05-21/session-008-agent-main.md": {
+      "filePath": "development-reports/sessions/2026-05-21/session-008-agent-main.md",
+      "contentHash": "abcde2e07ce1ff90da41f7b54c3aa4c3efc64f31b8fc239915a49e1b6578928b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 163,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-05-21/session-009-agent-main.md": {
+      "filePath": "development-reports/sessions/2026-05-21/session-009-agent-main.md",
+      "contentHash": "5091ae6cce0add61598d00a5cd76256f1c5dbaada575c1fe9ee2244374379e01",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 191,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-05-21/session-010-agent-main.md": {
+      "filePath": "development-reports/sessions/2026-05-21/session-010-agent-main.md",
+      "contentHash": "e0f7d8a2b9364af65a09787056f871773decdd3b2834937066a9d29b5a340836",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 153,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-05-22/session-011-agent-main.md": {
+      "filePath": "development-reports/sessions/2026-05-22/session-011-agent-main.md",
+      "contentHash": "cd7b35a4f85863293308d7a51f6ed835d1ad3eef30b97af60197218c39ca7666",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 151,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-05-22/session-012-agent-main.md": {
+      "filePath": "development-reports/sessions/2026-05-22/session-012-agent-main.md",
+      "contentHash": "e0d8d0a53a8dee1ad644334e82ed4806b1fda8b436a5fb419031911f10209591",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 119,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-05-22/session-013-agent-main.md": {
+      "filePath": "development-reports/sessions/2026-05-22/session-013-agent-main.md",
+      "contentHash": "f260009a602fd1c0fad072c4d213332f5855d3ff54f58e5cc2ae5b231d5a2527",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 113,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-05-22/session-014-agent-main.md": {
+      "filePath": "development-reports/sessions/2026-05-22/session-014-agent-main.md",
+      "contentHash": "6eaf734d5d25f9828db99c9209a46dbaa7ab598306affd1a89d37c5545c9897d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 66,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-05-22/session-015-agent-main.md": {
+      "filePath": "development-reports/sessions/2026-05-22/session-015-agent-main.md",
+      "contentHash": "fb18da8c75105b3f59eba415af3663b899e82ff74ed397319cc0881d840c7ac8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 152,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-05-22/session-016-agent-main.md": {
+      "filePath": "development-reports/sessions/2026-05-22/session-016-agent-main.md",
+      "contentHash": "8b9214008c706b1943d3335e64fc9c18db1c1269c6b2f15d0782b5a94de2c887",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 157,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-05-22/session-017-agent-main.md": {
+      "filePath": "development-reports/sessions/2026-05-22/session-017-agent-main.md",
+      "contentHash": "3da947fd3364e4877cdaab0e3b7ed7f89f03e030909523579b47ab361287fc89",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 129,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-05-22/session-018-agent-main.md": {
+      "filePath": "development-reports/sessions/2026-05-22/session-018-agent-main.md",
+      "contentHash": "17961170671688b2481e3a1c17b6832ecf0c4bee794b369c22e388dc464d4bcb",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 129,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-05-22/session-019-agent-main.md": {
+      "filePath": "development-reports/sessions/2026-05-22/session-019-agent-main.md",
+      "contentHash": "f8c1a542c6be5b653b5fd4269822fac9d4999a5e1fc9a4739eee42a817b9a17f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 105,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-05-22/session-020-agent-main.md": {
+      "filePath": "development-reports/sessions/2026-05-22/session-020-agent-main.md",
+      "contentHash": "77c7186014d06d0e2c6ee0aa335f6a6f08e9f8f06b4117f130709612fe681f10",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 102,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-05-26/session-021-agent-main.md": {
+      "filePath": "development-reports/sessions/2026-05-26/session-021-agent-main.md",
+      "contentHash": "6fbb873abd924069ccf0e74c19f5e09c31a66543da3d05d89b1c272297849b78",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 95,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-05-26/session-022-agent-main.md": {
+      "filePath": "development-reports/sessions/2026-05-26/session-022-agent-main.md",
+      "contentHash": "5d0d3312333047118d16420711ea32c5626fd71a093f3f42c2ab69b71f27e57f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 77,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-05-26/session-023-agent-main.md": {
+      "filePath": "development-reports/sessions/2026-05-26/session-023-agent-main.md",
+      "contentHash": "7ec71142ebff99d303e97fd3c75aa4989e34b1f248814b95041fe323403456a0",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 53,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-05-29.md": {
+      "filePath": "development-reports/sessions/2026-05-29.md",
+      "contentHash": "fc7580a2f5c11ee81fdab1a131bf141e37aa3c38016aee09a0cc2370695cb3c5",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 65,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-05-29/session-001-audit-and-fixes.md": {
+      "filePath": "development-reports/sessions/2026-05-29/session-001-audit-and-fixes.md",
+      "contentHash": "9743d007ed91d657d740ca3338f7cd459c0ea926a08cc59022c568e6bc5a958b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 141,
+      "hasStructuralAnalysis": true
+    },
     "development-reports/sessions/2026-05-29/session-001-events.jsonl": {
       "filePath": "development-reports/sessions/2026-05-29/session-001-events.jsonl",
       "contentHash": "240f0c9432ec67e45ae56694f71c540f29474ed07ef78e1c0864f47295d2c311",
@@ -71716,6 +72937,776 @@
       "exports": [],
       "totalLines": 13,
       "hasStructuralAnalysis": false
+    },
+    "development-reports/sessions/2026-06-01.md": {
+      "filePath": "development-reports/sessions/2026-06-01.md",
+      "contentHash": "694ffedef668042211a8074fdd076079624620e8407480483cd8bfb2ca529091",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 325,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-06-02.md": {
+      "filePath": "development-reports/sessions/2026-06-02.md",
+      "contentHash": "55641239d2e4de8b8ab1faba073c3da0c0351ff34327904492dbc89e980310f2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 1163,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-06-17.md": {
+      "filePath": "development-reports/sessions/2026-06-17.md",
+      "contentHash": "b2ff1bfb5b7997d881cb3bc85569e5082299a3f7ba65fde52ba7d96439030f06",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 40,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/2026-06-20-registry-completion.md": {
+      "filePath": "development-reports/sessions/2026-06-20-registry-completion.md",
+      "contentHash": "cd0d72d1eea8fff3a54c29a0cee5793f64bd6c7e40421f6c4226b0d1c632ea99",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 24,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/deep-module-audit-2026-04-28.md": {
+      "filePath": "development-reports/sessions/deep-module-audit-2026-04-28.md",
+      "contentHash": "5ff2e2b1b1353b6224f7c220d8ba80fec836f5ac28f08909260ef7f86e5f9319",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 346,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/fix-plan-windows-forensics-2026-04-28.md": {
+      "filePath": "development-reports/sessions/fix-plan-windows-forensics-2026-04-28.md",
+      "contentHash": "c95aa5b3ecdf3c333c12fa112795baada25f1b3e2e2959af1b12b69bd8fd427f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 869,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/sessions/project-audit-2026-06-21.md": {
+      "filePath": "development-reports/sessions/project-audit-2026-06-21.md",
+      "contentHash": "875a3f6c61d9398a9729ff2a4627ab581523653db6b76860a6e6eaf2c09eb882",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 459,
+      "hasStructuralAnalysis": true
+    },
+    "development-reports/summaries/deep-module-audit-2026-04-28.md": {
+      "filePath": "development-reports/summaries/deep-module-audit-2026-04-28.md",
+      "contentHash": "afe080cb8d266e8fc61255cd9b83ed4124378ed7044609fbb0ba01fb29b4f921",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 27,
+      "hasStructuralAnalysis": true
+    },
+    "docs/.obsidian/app.json": {
+      "filePath": "docs/.obsidian/app.json",
+      "contentHash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 1,
+      "hasStructuralAnalysis": true
+    },
+    "docs/.obsidian/appearance.json": {
+      "filePath": "docs/.obsidian/appearance.json",
+      "contentHash": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 1,
+      "hasStructuralAnalysis": true
+    },
+    "docs/.obsidian/core-plugins.json": {
+      "filePath": "docs/.obsidian/core-plugins.json",
+      "contentHash": "763cf20a921fd9955735b278006820b90b207b2fc04d9e79ca648279c7c14276",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 33,
+      "hasStructuralAnalysis": true
+    },
+    "docs/.obsidian/workspace.json": {
+      "filePath": "docs/.obsidian/workspace.json",
+      "contentHash": "bb4134fc85f480646166694fd3909f40921a0cd80f89596f848ba8f3a068c4a3",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 216,
+      "hasStructuralAnalysis": true
+    },
+    "docs/开发记录.md": {
+      "filePath": "docs/开发记录.md",
+      "contentHash": "e891f052a5665493c68271d54022deef4aeecf9e5c76c718aeee3a02669a0b7b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2007,
+      "hasStructuralAnalysis": true
+    },
+    "docs/algorithm-complexity-analysis.md": {
+      "filePath": "docs/algorithm-complexity-analysis.md",
+      "contentHash": "fcd9f2c229fd8aa3378290ed84fb9a4038012c5aca313d89e3bced4b74c9a327",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 423,
+      "hasStructuralAnalysis": true
+    },
+    "docs/architecture-algorithm-audit-2026-06-08.md": {
+      "filePath": "docs/architecture-algorithm-audit-2026-06-08.md",
+      "contentHash": "508b28744d00a718480b113776b1ec2b051dd7db7601a51c4b989b0db5655d95",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 259,
+      "hasStructuralAnalysis": true
+    },
+    "docs/architecture-model.md": {
+      "filePath": "docs/architecture-model.md",
+      "contentHash": "8c1c0ec5e5a3474c8c93c937aaa4680b1b3e52b56d80cb8d8840d7b2ef9f7534",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 511,
+      "hasStructuralAnalysis": true
+    },
+    "docs/autopsy/autopsy-technical-analysis.md": {
+      "filePath": "docs/autopsy/autopsy-technical-analysis.md",
+      "contentHash": "e804658311aed96c99fd579518d473ca48534992d053bc1ebb2afb0896f9010d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 390,
+      "hasStructuralAnalysis": true
+    },
+    "docs/autopsy/sleuthkit-technical-analysis.md": {
+      "filePath": "docs/autopsy/sleuthkit-technical-analysis.md",
+      "contentHash": "3b15b608be6b16bac02b635ac5983a26936d8c3e41a92ab1870e3c3dda5e7006",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 364,
+      "hasStructuralAnalysis": true
+    },
+    "docs/batch-processing-design.md": {
+      "filePath": "docs/batch-processing-design.md",
+      "contentHash": "c88ccc3f66bbee8848b998478b80ebdea2edd123e7a2b3a870410245df5145dc",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 28,
+      "hasStructuralAnalysis": true
+    },
+    "docs/benchmark-baseline.md": {
+      "filePath": "docs/benchmark-baseline.md",
+      "contentHash": "72c11e1e71aa2a8ef0e1ff8e619cbd3862e7b94f55acd92ea794e79ed9c3666c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 198,
+      "hasStructuralAnalysis": true
+    },
+    "docs/benchmark-results/2026-06-21-email-extraction-bench.md": {
+      "filePath": "docs/benchmark-results/2026-06-21-email-extraction-bench.md",
+      "contentHash": "c60a18dd761a916ef183048030b43a20688cd91de560b305d3b6acf246d3e14e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 55,
+      "hasStructuralAnalysis": true
+    },
+    "docs/benchmark-results/README.md": {
+      "filePath": "docs/benchmark-results/README.md",
+      "contentHash": "3135bc03a8f88c89378a952c8783eb06ac5fe68633e49f4930e0fd6be4e3fe2f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 30,
+      "hasStructuralAnalysis": true
+    },
+    "docs/compose/plans/2026-06-30-forensics-complete-audit-plan.md": {
+      "filePath": "docs/compose/plans/2026-06-30-forensics-complete-audit-plan.md",
+      "contentHash": "f9e2358cc09a1b1c51acbe2bfa5d713f06a1474ab057aed358a88b455cac596f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 290,
+      "hasStructuralAnalysis": true
+    },
+    "docs/compose/reports/2026-06-30-forensics-audit-report.md": {
+      "filePath": "docs/compose/reports/2026-06-30-forensics-audit-report.md",
+      "contentHash": "f5d7bfc380ec1355869a09c2e926d3976c243628e2e6a7a35c993271187df154",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 1485,
+      "hasStructuralAnalysis": true
+    },
+    "docs/compose/reports/audit-raw-notes.md": {
+      "filePath": "docs/compose/reports/audit-raw-notes.md",
+      "contentHash": "f443b5c54d682561e8ed92a5e316b5dbf299f598130932756083b02965fe71db",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 41,
+      "hasStructuralAnalysis": true
+    },
+    "docs/compose/reports/section-architecture.md": {
+      "filePath": "docs/compose/reports/section-architecture.md",
+      "contentHash": "c80d49b1d189500364998d9ac05b5b3f6651a3b8844fb586dc394e11d4490c45",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 296,
+      "hasStructuralAnalysis": true
+    },
+    "docs/compose/reports/section-backend-quality.md": {
+      "filePath": "docs/compose/reports/section-backend-quality.md",
+      "contentHash": "388737a571b6b062951949b784e290d76dd931d99565540112a1bd7014202dc4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 150,
+      "hasStructuralAnalysis": true
+    },
+    "docs/compose/reports/section-forensic-overview.md": {
+      "filePath": "docs/compose/reports/section-forensic-overview.md",
+      "contentHash": "878c94a98cfaabe32bbc0bde0f18a55ceb9834838ece19f89d20a245efb0ddcb",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 94,
+      "hasStructuralAnalysis": true
+    },
+    "docs/compose/reports/section-frontend-quality.md": {
+      "filePath": "docs/compose/reports/section-frontend-quality.md",
+      "contentHash": "632605de691a1c78f5e3bcc5666c7249cc5e05c820a14da9cbcece6c258dd11e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 86,
+      "hasStructuralAnalysis": true
+    },
+    "docs/compose/reports/section-search-catalog.md": {
+      "filePath": "docs/compose/reports/section-search-catalog.md",
+      "contentHash": "3ba5e845f283435652717753744d558154038c834d8319867f3b3a6fff62a528",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 258,
+      "hasStructuralAnalysis": true
+    },
+    "docs/compose/reports/section-timeline.md": {
+      "filePath": "docs/compose/reports/section-timeline.md",
+      "contentHash": "61dad1dcd36641db995736f23061d48e1604a54b6d30d81e8b06d1d7b823393f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 277,
+      "hasStructuralAnalysis": true
+    },
+    "docs/compose/specs/2026-06-30-forensics-complete-audit-design.md": {
+      "filePath": "docs/compose/specs/2026-06-30-forensics-complete-audit-design.md",
+      "contentHash": "900f847cef228f549d25ee5867af7d10666849b5803ca4d4af989c3bf661738d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 44,
+      "hasStructuralAnalysis": true
+    },
+    "docs/comprehensive-review.md": {
+      "filePath": "docs/comprehensive-review.md",
+      "contentHash": "ca54f3acc38cf76c64a425072cd97561facd6ae6d0a974e96568b7c42f931ac6",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 274,
+      "hasStructuralAnalysis": true
+    },
+    "docs/correlation-analysis-design.md": {
+      "filePath": "docs/correlation-analysis-design.md",
+      "contentHash": "45d6295c904efd20f5193fb80d3e9d47d9860f97e5ca989fbe80e1d360e52e34",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 865,
+      "hasStructuralAnalysis": true
+    },
+    "docs/database-analysis.md": {
+      "filePath": "docs/database-analysis.md",
+      "contentHash": "0a574ff1c51978d4bd7366c7a3cd750711465de7fec6baed21da66382d452722",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 333,
+      "hasStructuralAnalysis": true
+    },
+    "docs/database-remediation-plan.md": {
+      "filePath": "docs/database-remediation-plan.md",
+      "contentHash": "9d116d119dad075476fc2917f6a2da2db40037a8ca5376bb1722a28e02106973",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 1108,
+      "hasStructuralAnalysis": true
+    },
+    "docs/dependency-advisory-policy.md": {
+      "filePath": "docs/dependency-advisory-policy.md",
+      "contentHash": "ca16d94fbce57e07a485990bb0a5ba01c7ae1194903c5cf07544d712b936cbcc",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 66,
+      "hasStructuralAnalysis": true
+    },
+    "docs/dependency-decisions.md": {
+      "filePath": "docs/dependency-decisions.md",
+      "contentHash": "08a05653dc5f1063c1ba7d52d81728515694e1158a6fbb7e8545e8e083cbc8a5",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 16,
+      "hasStructuralAnalysis": true
+    },
+    "docs/design-constraints.md": {
+      "filePath": "docs/design-constraints.md",
+      "contentHash": "240c0f959cacb39b87e5b9bd7f9d6f306e801085a0a115b6d0a3db8b5fda16c9",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 131,
+      "hasStructuralAnalysis": true
+    },
+    "docs/development-engineering-guide.md": {
+      "filePath": "docs/development-engineering-guide.md",
+      "contentHash": "0d9d27165a662b90c1297125fca2b301649d8d94c5f12ee033fad65ad9a0cc38",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 282,
+      "hasStructuralAnalysis": true
+    },
+    "docs/documentation-index.md": {
+      "filePath": "docs/documentation-index.md",
+      "contentHash": "30be632cea1021d93e77850108e46d4378925ddeedbaa0ec6948f41fdd98e49d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 215,
+      "hasStructuralAnalysis": true
+    },
+    "docs/engineering-audit-plan.md": {
+      "filePath": "docs/engineering-audit-plan.md",
+      "contentHash": "e6d35c575714faa608141fa59d2f4922e430ffc33b6d1c1ee419ed381a28c91a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 146,
+      "hasStructuralAnalysis": true
+    },
+    "docs/error-classification-manual.md": {
+      "filePath": "docs/error-classification-manual.md",
+      "contentHash": "762ce734601c116d4bfc517cfd7bb69cf50aceb03615e6c644b85a9b4af3925e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 111,
+      "hasStructuralAnalysis": true
+    },
+    "docs/error-taxonomy.md": {
+      "filePath": "docs/error-taxonomy.md",
+      "contentHash": "7de84c81d452cb67867ea13317468565e388f8174b74c07cf494e44d9032d867",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 83,
+      "hasStructuralAnalysis": true
+    },
+    "docs/evtx-dependency-decision.md": {
+      "filePath": "docs/evtx-dependency-decision.md",
+      "contentHash": "065f67fb4e23fd0ef94c9c73aa5c130a9997bb54bd13880320a845aa80683a65",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 73,
+      "hasStructuralAnalysis": true
+    },
+    "docs/expected-json-contract.md": {
+      "filePath": "docs/expected-json-contract.md",
+      "contentHash": "eb46eff5841fbfbf91351dc2eed4643fff04d66803400aea9cfff74fd129aabc",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 141,
+      "hasStructuralAnalysis": true
+    },
+    "docs/export-and-media-safety.md": {
+      "filePath": "docs/export-and-media-safety.md",
+      "contentHash": "9884cb6c93690ae65bb381c51318d380555146af864e7eb9543973a70fc62386",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 86,
+      "hasStructuralAnalysis": true
+    },
+    "docs/final-review-report.md": {
+      "filePath": "docs/final-review-report.md",
+      "contentHash": "1487bb4fcebdec42698181070568c2f263ea13bbf9b8dbaef4132edcbdb24a3e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 166,
+      "hasStructuralAnalysis": true
+    },
+    "docs/fixture-handbook.md": {
+      "filePath": "docs/fixture-handbook.md",
+      "contentHash": "50c9a248a9ecfdcea161c34ff9cddc007896cc5ecf0e73e8e3ae1e8af8261a16",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 177,
+      "hasStructuralAnalysis": true
+    },
+    "docs/frontend-optimization-plan.md": {
+      "filePath": "docs/frontend-optimization-plan.md",
+      "contentHash": "9cc7c2640d257760048e55e4dd9fbc96e28d47fb5eb8837501b5e7f8375eda0f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 1066,
+      "hasStructuralAnalysis": true
+    },
+    "docs/frontend-optimization-proposal.md": {
+      "filePath": "docs/frontend-optimization-proposal.md",
+      "contentHash": "df20ffce87d6306afe1c92a6ff01b19efd0dd44f0108a232d216c40d76a6693e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 525,
+      "hasStructuralAnalysis": true
+    },
+    "docs/frontend-robustness-review.md": {
+      "filePath": "docs/frontend-robustness-review.md",
+      "contentHash": "41303cf54c8a2799912b2a830169c62842c57c232cc90d02d2605fc9484e19cb",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 422,
+      "hasStructuralAnalysis": true
+    },
+    "docs/frontend-state-management.md": {
+      "filePath": "docs/frontend-state-management.md",
+      "contentHash": "be086c6fd5ab6704b926afc5ce1ce454ba4b356c179a5b3334e7be7aca5cc928",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 43,
+      "hasStructuralAnalysis": true
+    },
+    "docs/full-functional-audit-2026-05-29.md": {
+      "filePath": "docs/full-functional-audit-2026-05-29.md",
+      "contentHash": "947c93ebba643325356ede1b9a3607189a0bc65dacb35f443a7272063aee2a0b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 407,
+      "hasStructuralAnalysis": true
+    },
+    "docs/full-project-audit-2026-06-01.md": {
+      "filePath": "docs/full-project-audit-2026-06-01.md",
+      "contentHash": "373a53801064f965bc9d7898864fa0b2f835043195c9d7f0e27ddd4468fd2dbb",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 232,
+      "hasStructuralAnalysis": true
+    },
+    "docs/full-security-audit-2026-05-29.md": {
+      "filePath": "docs/full-security-audit-2026-05-29.md",
+      "contentHash": "81f0a3d03e65678e0c2b4b0df3e95f8d86130103a50e4d1e3eeb4a7b666dc253",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 246,
+      "hasStructuralAnalysis": true
+    },
+    "docs/import-delete-audit.md": {
+      "filePath": "docs/import-delete-audit.md",
+      "contentHash": "3b449a7275149a08f3f673ad248b35da0c00e44917d35b83ccc087121f0e197a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 358,
+      "hasStructuralAnalysis": true
+    },
+    "docs/import-delete-optimization-log.md": {
+      "filePath": "docs/import-delete-optimization-log.md",
+      "contentHash": "05fd7f6f90aeb71462c1d82ee5663ba3e03bb57e5c86847b9fe4102462e17c68",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 112,
+      "hasStructuralAnalysis": true
+    },
+    "docs/import-optimization-proposals.md": {
+      "filePath": "docs/import-optimization-proposals.md",
+      "contentHash": "8e8e717fbcbee46f68a3c504a0e69032446eba734d19e8e81ba09732910eb269",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 364,
+      "hasStructuralAnalysis": true
+    },
+    "docs/import-optimization-review.md": {
+      "filePath": "docs/import-optimization-review.md",
+      "contentHash": "41f4e79fd57d29d1878785bbf07474caa780a123335f73f9a604e178c78d2b67",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 139,
+      "hasStructuralAnalysis": true
+    },
+    "docs/ipc-event-contract.md": {
+      "filePath": "docs/ipc-event-contract.md",
+      "contentHash": "31b570323ab6324400bc7f3aeace0682b1d95e87441c7e147434c0c5334f7aca",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 42,
+      "hasStructuralAnalysis": true
+    },
+    "docs/known-unsupported-formats.md": {
+      "filePath": "docs/known-unsupported-formats.md",
+      "contentHash": "cfdc88a2aa61df4207863c4938ef8aa59034d18b5230c59536025a289a44012a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 122,
+      "hasStructuralAnalysis": true
+    },
+    "docs/large-file-browsing-optimization-design.md": {
+      "filePath": "docs/large-file-browsing-optimization-design.md",
+      "contentHash": "e473e7561baa3bae0747072d6c945104b661c6c6facf5dbd7b3a4b06be3927be",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 317,
+      "hasStructuralAnalysis": true
+    },
+    "docs/mcp-development-log.md": {
+      "filePath": "docs/mcp-development-log.md",
+      "contentHash": "da2e23f254ff1d0652a7c3894a605ef97987ce113f3d1d60c141e612d5696940",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 481,
+      "hasStructuralAnalysis": true
+    },
+    "docs/mcp-security-model.md": {
+      "filePath": "docs/mcp-security-model.md",
+      "contentHash": "3ef057fd6f76d33e798b9c49d5c200da2e882079a55972cf33bd874c78dc4331",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 105,
+      "hasStructuralAnalysis": true
+    },
+    "docs/mcp-test-cases.md": {
+      "filePath": "docs/mcp-test-cases.md",
+      "contentHash": "5c673fa30be384f8dfba5b2d2079611d72e089aeb2ac15c9e1db6c55e587ab19",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 754,
+      "hasStructuralAnalysis": true
+    },
+    "docs/mcp-user-guide.md": {
+      "filePath": "docs/mcp-user-guide.md",
+      "contentHash": "6b6bc255c78eedcb49c87e5d4cc0739f1620a304d9d7c5695115d1cfed74554f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 93,
+      "hasStructuralAnalysis": true
+    },
+    "docs/model-architecture-algorithm-diagrams.md": {
+      "filePath": "docs/model-architecture-algorithm-diagrams.md",
+      "contentHash": "046504d68afba6522ace20c223e4d0c72ea6cb64e203cd60950f93d7e1d98ef8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 373,
+      "hasStructuralAnalysis": true
+    },
+    "docs/multimedia-audit-report.md": {
+      "filePath": "docs/multimedia-audit-report.md",
+      "contentHash": "7bee86c2e4ee292476934e43d441888c22f1478b9b15c5e9707452d1d5639325",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 353,
+      "hasStructuralAnalysis": true
+    },
+    "docs/optimization-completion-report.md": {
+      "filePath": "docs/optimization-completion-report.md",
+      "contentHash": "038c19fde9df0d494af4e4712e30e0d40ea5a03ae2a2c1b4a283d326aaf7b5d3",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 298,
+      "hasStructuralAnalysis": true
+    },
+    "docs/optimization-recommendations.md": {
+      "filePath": "docs/optimization-recommendations.md",
+      "contentHash": "b1cf670a6dae5b53e24b0429e29f2c1325126368f453806b6b3d5777cda10328",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 402,
+      "hasStructuralAnalysis": true
+    },
+    "docs/parser-support-matrix.md": {
+      "filePath": "docs/parser-support-matrix.md",
+      "contentHash": "09675e0df9bc49136d8ebbe623fcdde73dbcdc04009414b8e49bf730105b0523",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 144,
+      "hasStructuralAnalysis": true
+    },
+    "docs/pause-status-2026-06-11-file-tree-sorting.md": {
+      "filePath": "docs/pause-status-2026-06-11-file-tree-sorting.md",
+      "contentHash": "c6e9aaaf14f5bac74c5230cdf5e723462387ee995a140dfe9dd00d3e552744c4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 248,
+      "hasStructuralAnalysis": true
+    },
+    "docs/performance-ux-development-log.md": {
+      "filePath": "docs/performance-ux-development-log.md",
+      "contentHash": "16ff0335ee49c1fbe452159c8163bce4b63671a11b0fea122ef74bf2c77f90b3",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 278,
+      "hasStructuralAnalysis": true
+    },
+    "docs/preview-development-log.md": {
+      "filePath": "docs/preview-development-log.md",
+      "contentHash": "1f4c4f4f0db171050289ba3b8a96d929b0ea90574178aa4d8766b2679c155a5c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 247,
+      "hasStructuralAnalysis": true
+    },
+    "docs/preview-feature-proposal.md": {
+      "filePath": "docs/preview-feature-proposal.md",
+      "contentHash": "f40d0667f57d72b2d272fb4d208658613fbaf2e13d4778b1369003752f411e33",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 1297,
+      "hasStructuralAnalysis": true
+    },
+    "docs/preview-review-report.md": {
+      "filePath": "docs/preview-review-report.md",
+      "contentHash": "c50293ecf8ed192ded18fc53930122e62905bf337ef4bb32ea045efdc08a52df",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 169,
+      "hasStructuralAnalysis": true
     },
     "docs/prototype/app.js": {
       "filePath": "docs/prototype/app.js",
@@ -71847,6 +73838,396 @@
       "totalLines": 671,
       "hasStructuralAnalysis": true
     },
+    "docs/prototype/index.html": {
+      "filePath": "docs/prototype/index.html",
+      "contentHash": "8b94a61416402d47a5c015d628cc816f14186f3425c1ee1b677ad6a58dd0454f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 686,
+      "hasStructuralAnalysis": false
+    },
+    "docs/pst-ost-mbox-support.md": {
+      "filePath": "docs/pst-ost-mbox-support.md",
+      "contentHash": "8b8abe1041a635a827c16db70a5ce6f94f1d19c525503f276b9b5037119a579d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 120,
+      "hasStructuralAnalysis": true
+    },
+    "docs/real-sample-regression/2026-06-13-browser.md": {
+      "filePath": "docs/real-sample-regression/2026-06-13-browser.md",
+      "contentHash": "ed9f847af638582b5093151c5392f6e4d63e4ad61be1a23d515cd9d2c8c103d7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 39,
+      "hasStructuralAnalysis": true
+    },
+    "docs/real-sample-regression/2026-06-13-e01.md": {
+      "filePath": "docs/real-sample-regression/2026-06-13-e01.md",
+      "contentHash": "c7509d0d30ca590e233bee1eb8fa7c0bf7b5f78b0ac70a1690b8013216930c1a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 61,
+      "hasStructuralAnalysis": true
+    },
+    "docs/real-sample-regression/2026-06-13-email.md": {
+      "filePath": "docs/real-sample-regression/2026-06-13-email.md",
+      "contentHash": "e3ea9674aec4153b12dd968bf19497eee7a36c17e807e35818ab01a78d396cbb",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 39,
+      "hasStructuralAnalysis": true
+    },
+    "docs/real-sample-regression/2026-06-13-evtx.md": {
+      "filePath": "docs/real-sample-regression/2026-06-13-evtx.md",
+      "contentHash": "1614bbff3f33af5cc4a42e2d0536cfc0518fd78be2c857285e9c40f3cadc3931",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 42,
+      "hasStructuralAnalysis": true
+    },
+    "docs/real-sample-regression/2026-06-13-lnk.md": {
+      "filePath": "docs/real-sample-regression/2026-06-13-lnk.md",
+      "contentHash": "00e2ab7323efae43bd183f8b1f1f5f41f884ca5a7873f932a3fe42edc42f7065",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 42,
+      "hasStructuralAnalysis": true
+    },
+    "docs/real-sample-regression/2026-06-13-ntfs.md": {
+      "filePath": "docs/real-sample-regression/2026-06-13-ntfs.md",
+      "contentHash": "3829d94cca922906e825934a3569ae4b5e3bef3429dffd70280d1e78044e093b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 59,
+      "hasStructuralAnalysis": true
+    },
+    "docs/real-sample-regression/2026-06-13-prefetch.md": {
+      "filePath": "docs/real-sample-regression/2026-06-13-prefetch.md",
+      "contentHash": "e02f9744ad307009c213a6058be99c61cd1aff3eef1eece02659bb2c5ec0ecfe",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 38,
+      "hasStructuralAnalysis": true
+    },
+    "docs/real-sample-regression/2026-06-13-recycle-bin.md": {
+      "filePath": "docs/real-sample-regression/2026-06-13-recycle-bin.md",
+      "contentHash": "dda91dfa6c232f7a71fd7466ab3d0b6990c6d190e65067ea288cd25dbe9766be",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 35,
+      "hasStructuralAnalysis": true
+    },
+    "docs/real-sample-regression/2026-06-13-registry.md": {
+      "filePath": "docs/real-sample-regression/2026-06-13-registry.md",
+      "contentHash": "cfad8f4b91ca5b99084b06a68463b8ac9f1fcba2399282e476a67d97329977c5",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 148,
+      "hasStructuralAnalysis": true
+    },
+    "docs/real-sample-regression/README.md": {
+      "filePath": "docs/real-sample-regression/README.md",
+      "contentHash": "9182a86c8c6ce41ee75ba988638871dbac98d584225a8bf0fbd164f8b6c331d8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 39,
+      "hasStructuralAnalysis": true
+    },
+    "docs/registry-capability-roadmap.md": {
+      "filePath": "docs/registry-capability-roadmap.md",
+      "contentHash": "b6fe6f09fd92face40530c4c246f05d9b978f5b0c0d2e5f69441628b19a0f0f7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 293,
+      "hasStructuralAnalysis": true
+    },
+    "docs/registry-module-quality-audit-2026-06-21.md": {
+      "filePath": "docs/registry-module-quality-audit-2026-06-21.md",
+      "contentHash": "50d428bd80ae8336455847707dae5e0d32357977c406154029387cfc954e3ded",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 403,
+      "hasStructuralAnalysis": true
+    },
+    "docs/registry-quality-remediation-plan.md": {
+      "filePath": "docs/registry-quality-remediation-plan.md",
+      "contentHash": "c7fef421f925080704eff4a896cfbdb0c104f629ef7ab9f1bff3c3e7cb10b604",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 200,
+      "hasStructuralAnalysis": true
+    },
+    "docs/release-drill/v3-rc1-report.md": {
+      "filePath": "docs/release-drill/v3-rc1-report.md",
+      "contentHash": "6fe4322ae297bfec53fafbc681c01d94562308a979ed22bd450d2e648b4e88b7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 88,
+      "hasStructuralAnalysis": true
+    },
+    "docs/release-drill/v5-rc1-report.md": {
+      "filePath": "docs/release-drill/v5-rc1-report.md",
+      "contentHash": "68f7054ba7f250db5680c01a32060911c0738152bb5ec4d2e65aff53e3a1bf00",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 115,
+      "hasStructuralAnalysis": true
+    },
+    "docs/release-scorecard.md": {
+      "filePath": "docs/release-scorecard.md",
+      "contentHash": "60baa26a7867d847b449c00345ff76eefe9a7956d4a2a04694783dc995fe1c61",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 282,
+      "hasStructuralAnalysis": true
+    },
+    "docs/remediation-plan-2026-06-08.md": {
+      "filePath": "docs/remediation-plan-2026-06-08.md",
+      "contentHash": "84a5350bab727743f7bd0174488cc8d449d018c36fa3d593a15044be693a91f3",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 587,
+      "hasStructuralAnalysis": true
+    },
+    "docs/remediation-plan-review-2026-05-29.md": {
+      "filePath": "docs/remediation-plan-review-2026-05-29.md",
+      "contentHash": "568cb106b25cc1e5ac3d8c9823fbe4793a67873364b2bbd3b4139cda2c1c3fb6",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 219,
+      "hasStructuralAnalysis": true
+    },
+    "docs/remediation-plan-v2.1.md": {
+      "filePath": "docs/remediation-plan-v2.1.md",
+      "contentHash": "5d8a2992149f1436211d2f99ef2aae522fba6a9859319077b1e36d54b694e613",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 179,
+      "hasStructuralAnalysis": true
+    },
+    "docs/remediation-plan-v2.md": {
+      "filePath": "docs/remediation-plan-v2.md",
+      "contentHash": "847e7e804aefbb4493884ca56aa1a665f06dcbad2a62e877774cf2115212fa5e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 437,
+      "hasStructuralAnalysis": true
+    },
+    "docs/runbooks/source-object-id-correlation.md": {
+      "filePath": "docs/runbooks/source-object-id-correlation.md",
+      "contentHash": "353744be1903ecaba790ec650123ab5067b63c5474b60edc6fbb9e7f106ff6aa",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 47,
+      "hasStructuralAnalysis": true
+    },
+    "docs/security-audit-2026-05-29.md": {
+      "filePath": "docs/security-audit-2026-05-29.md",
+      "contentHash": "96f290e666cbc04324c35f6114f7614fa5d9d123eb94b86d9f62365d8def5e4f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 214,
+      "hasStructuralAnalysis": true
+    },
+    "docs/stage-5-risk-register-remediation-status.md": {
+      "filePath": "docs/stage-5-risk-register-remediation-status.md",
+      "contentHash": "f679a32dbc3d97d235927a2097202cc652ef0e987362a0bfb12d3d2ce497cf6d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 108,
+      "hasStructuralAnalysis": true
+    },
+    "docs/trace-ui-comparative-analysis.md": {
+      "filePath": "docs/trace-ui-comparative-analysis.md",
+      "contentHash": "19435cf48d5b3d8b8eb7021388168cdbd6792a89f15463f6dcaf3fcdc85aae43",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 446,
+      "hasStructuralAnalysis": true
+    },
+    "docs/v2-longterm-plan.md": {
+      "filePath": "docs/v2-longterm-plan.md",
+      "contentHash": "c33ab7a2d24a6627e4079e009d4cd08ae655cf8ee744dc73bd1bfea2392dea08",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 365,
+      "hasStructuralAnalysis": true
+    },
+    "docs/v3-plan.md": {
+      "filePath": "docs/v3-plan.md",
+      "contentHash": "726ad99e25d459df63f0b2b8de7fa8b73e48660f4af8b6e14c44f0fabe995338",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 783,
+      "hasStructuralAnalysis": true
+    },
+    "docs/v3-walkthrough.md": {
+      "filePath": "docs/v3-walkthrough.md",
+      "contentHash": "7c31c6a2e7db9e05267e0154bb1db40f7f97d82fadf6ee9ff355d3f3fb33ba9f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 283,
+      "hasStructuralAnalysis": true
+    },
+    "docs/v4-plan.md": {
+      "filePath": "docs/v4-plan.md",
+      "contentHash": "98971d0007e401681ef4aa2f82401d4783ccc40ea0fede09aab0bc8942604e25",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 1077,
+      "hasStructuralAnalysis": true
+    },
+    "docs/v5-plan.md": {
+      "filePath": "docs/v5-plan.md",
+      "contentHash": "d144fe28c26f4a4cdb10c9bbebf6a4876c8ba6be1d050eec4a491ac7b87ec550",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 296,
+      "hasStructuralAnalysis": true
+    },
+    "docs/validation-trust-framework.md": {
+      "filePath": "docs/validation-trust-framework.md",
+      "contentHash": "61abee8be1323748b33ff4d2855eff5c184e2027f5d5c650a5c95e854459dea1",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 292,
+      "hasStructuralAnalysis": true
+    },
+    "docs/walkthroughs/01-windows-ransomware-investigation.md": {
+      "filePath": "docs/walkthroughs/01-windows-ransomware-investigation.md",
+      "contentHash": "c72e96e18be86265fa43ba5e5f87073cfdeee4ef98a68ca06b4a9aaf854ca86f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 235,
+      "hasStructuralAnalysis": true
+    },
+    "docs/walkthroughs/02-cross-platform-email-analysis.md": {
+      "filePath": "docs/walkthroughs/02-cross-platform-email-analysis.md",
+      "contentHash": "26b1c2563f28f34f9e0e46feb177a778747484a843d2c0dbb901606a178aef14",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 216,
+      "hasStructuralAnalysis": true
+    },
+    "docs/walkthroughs/03-linux-server-intrusion.md": {
+      "filePath": "docs/walkthroughs/03-linux-server-intrusion.md",
+      "contentHash": "667bb701f08c46f4f52280922d2e4dfb81ea2eebedc3c253edc4b8f06254bc68",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 259,
+      "hasStructuralAnalysis": true
+    },
+    "docs/windows-first-remediation-rules.md": {
+      "filePath": "docs/windows-first-remediation-rules.md",
+      "contentHash": "d7a9d8588b315843a4b5e7b1ec62b0241d51c8225fd0238f914af8b065c08c3c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 97,
+      "hasStructuralAnalysis": true
+    },
+    "frontend-ui-ux.md": {
+      "filePath": "frontend-ui-ux.md",
+      "contentHash": "b7d947dddc6beea4974ac2fe4a40cc1230d3d0de9138fa9ee48553deb5f67631",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 496,
+      "hasStructuralAnalysis": true
+    },
+    "frontend/.env.production": {
+      "filePath": "frontend/.env.production",
+      "contentHash": "54fb8b684f0c965ff1861167646a22d4b180a55aa2339fd89b46b5a2d85d3fc5",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2,
+      "hasStructuralAnalysis": true
+    },
+    "frontend/ATTRIBUTIONS.md": {
+      "filePath": "frontend/ATTRIBUTIONS.md",
+      "contentHash": "9846aa487c2b6ebeef9dfcae9c9371a5561739dab3269401eaaf6a8666d3577c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 4,
+      "hasStructuralAnalysis": true
+    },
     "frontend/eslint.config.js": {
       "filePath": "frontend/eslint.config.js",
       "contentHash": "392ec36d522d7f4e361948c2c237dad071108d14a5741a5b22192d191136fad7",
@@ -71868,6 +74249,46 @@
       ],
       "exports": [],
       "totalLines": 23,
+      "hasStructuralAnalysis": true
+    },
+    "frontend/guidelines/Guidelines.md": {
+      "filePath": "frontend/guidelines/Guidelines.md",
+      "contentHash": "cc0006b4b9bba8f8df02d35a38ed0ce83061abac8c8a108125a1698a2f6d28ae",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 62,
+      "hasStructuralAnalysis": true
+    },
+    "frontend/index.html": {
+      "filePath": "frontend/index.html",
+      "contentHash": "518befbb1053f8f2cf0df4151f5c3e38e3f3f971d596b129b2989ae4b60b7142",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 13,
+      "hasStructuralAnalysis": false
+    },
+    "frontend/package.json": {
+      "filePath": "frontend/package.json",
+      "contentHash": "d073bb6f551f5c35fdc1412d9a18cd38e2dec6cfcf5b514a2169e1336e5b6891",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 105,
+      "hasStructuralAnalysis": true
+    },
+    "frontend/pnpm-workspace.yaml": {
+      "filePath": "frontend/pnpm-workspace.yaml",
+      "contentHash": "4061001bf646f63da7bd3b1f979bc8e1434ad153cc38d3181039a6c34ca5474a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 11,
       "hasStructuralAnalysis": true
     },
     "frontend/src/app/App.tsx": {
@@ -74379,29 +76800,13 @@
     },
     "frontend/src/app/pages/CaseHome.tsx": {
       "filePath": "frontend/src/app/pages/CaseHome.tsx",
-      "contentHash": "2d9443969b2b3bdffcf4faf8fe89fb24a1ad1e597d4569451772d4d3c875f7d3",
+      "contentHash": "89691c02a9f284a4089599a02f750b1a1bc62d5386888569742d8f9ecbe25624",
       "functions": [
-        {
-          "name": "isImportJob",
-          "params": [
-            "job"
-          ],
-          "exported": false,
-          "lineCount": 3
-        },
-        {
-          "name": "isImportRelatedJob",
-          "params": [
-            "job"
-          ],
-          "exported": false,
-          "lineCount": 3
-        },
         {
           "name": "CaseHome",
           "params": [],
           "exported": true,
-          "lineCount": 173
+          "lineCount": 155
         }
       ],
       "classes": [],
@@ -74444,35 +76849,10 @@
           ]
         },
         {
-          "source": "@/lib/api/files",
-          "specifiers": [
-            "cancelImport"
-          ]
-        },
-        {
           "source": "@/features/jobs/hooks",
           "specifiers": [
             "useJobsSnapshot",
             "useWarnings"
-          ]
-        },
-        {
-          "source": "@/types/models",
-          "specifiers": [
-            "JobSnapshot"
-          ]
-        },
-        {
-          "source": "@tanstack/react-query",
-          "specifiers": [
-            "useMutation",
-            "useQueryClient"
-          ]
-        },
-        {
-          "source": "sonner",
-          "specifiers": [
-            "toast"
           ]
         },
         {
@@ -74499,15 +76879,20 @@
         {
           "source": "./CaseActions",
           "specifiers": [
-            "CaseWelcomeForms",
-            "ImportSection"
+            "CaseWelcomeForms"
+          ]
+        },
+        {
+          "source": "@/components/import/ImportDataSourceDialog",
+          "specifiers": [
+            "ImportDataSourceDialog"
           ]
         }
       ],
       "exports": [
         "CaseHome"
       ],
-      "totalLines": 210,
+      "totalLines": 179,
       "hasStructuralAnalysis": true
     },
     "frontend/src/app/pages/CaseOverview.tsx": {
@@ -74611,7 +76996,7 @@
     },
     "frontend/src/app/pages/DataAnalysis.test.tsx": {
       "filePath": "frontend/src/app/pages/DataAnalysis.test.tsx",
-      "contentHash": "e51f8b13a7c5c3e008878890b508f3171fe5ee228f38ca5f1f65c157bfc30521",
+      "contentHash": "6c29586e54c8aab77694e844963d0da41ecb4bc879a8cf292bd626158b87c3b9",
       "functions": [
         {
           "name": "renderPage",
@@ -74677,12 +77062,12 @@
         }
       ],
       "exports": [],
-      "totalLines": 725,
+      "totalLines": 750,
       "hasStructuralAnalysis": true
     },
     "frontend/src/app/pages/DataAnalysis.tsx": {
       "filePath": "frontend/src/app/pages/DataAnalysis.tsx",
-      "contentHash": "2927c09c2e8b73bacc3ba2e6d8dc7b9e541abfa8a7589f4dffd9ac85cb5c884c",
+      "contentHash": "2436da7773bd6c2e2fc3a00c8a3ad6a52ab1fe7004f816beef5caafab5f2fc68",
       "functions": [
         {
           "name": "errorMessage",
@@ -74696,7 +77081,7 @@
           "name": "DataAnalysis",
           "params": [],
           "exported": true,
-          "lineCount": 293
+          "lineCount": 314
         }
       ],
       "classes": [],
@@ -74717,6 +77102,7 @@
             "Globe",
             "Mail",
             "Monitor",
+            "Server",
             "Shield"
           ]
         },
@@ -74730,7 +77116,8 @@
           "source": "@/features/case/hooks",
           "specifiers": [
             "useCreateAnalysisDemoCase",
-            "useCurrentCase"
+            "useCurrentCase",
+            "useDataSources"
           ]
         },
         {
@@ -74743,6 +77130,7 @@
             "useEvtxEventSummary",
             "useEvidenceClassificationSummary",
             "useGenerateAnalysisSummary",
+            "useLinuxArtifactSummary",
             "useRegistryExtractionSummary",
             "useRegistryStructuredSummary",
             "useRunAnalysisExtraction",
@@ -74763,6 +77151,7 @@
             "EventLogPanel",
             "EvidenceClassificationPanel",
             "FileClassificationPanel",
+            "LinuxArtifactsPanel",
             "RegistryExtractionPanel",
             "SystemInfoPanel"
           ]
@@ -74796,7 +77185,7 @@
       "exports": [
         "DataAnalysis"
       ],
-      "totalLines": 380,
+      "totalLines": 406,
       "hasStructuralAnalysis": true
     },
     "frontend/src/app/pages/file-tree-utils.ts": {
@@ -74850,7 +77239,7 @@
     },
     "frontend/src/app/pages/FileBrowser.test.tsx": {
       "filePath": "frontend/src/app/pages/FileBrowser.test.tsx",
-      "contentHash": "7f615fe9cc2458e322bca980897044e093b005753f46688687ec10bff567eb68",
+      "contentHash": "406f40dea838ca6df35ee2d948a2a87b289873f19c050773778d9afe1017c147",
       "functions": [
         {
           "name": "queryState",
@@ -74903,18 +77292,18 @@
         }
       ],
       "exports": [],
-      "totalLines": 692,
+      "totalLines": 769,
       "hasStructuralAnalysis": true
     },
     "frontend/src/app/pages/FileBrowser.tsx": {
       "filePath": "frontend/src/app/pages/FileBrowser.tsx",
-      "contentHash": "f59e777d98b7bf7f405d8e7d298750bf3daa432ad5667762e873eb958d79a71e",
+      "contentHash": "8cb7e3e50943f7150f67ca12f7b8d27640855a727ccf612d0cb0d322abc84dd7",
       "functions": [
         {
           "name": "FileBrowser",
           "params": [],
           "exported": true,
-          "lineCount": 150
+          "lineCount": 151
         }
       ],
       "classes": [],
@@ -74978,7 +77367,7 @@
       "exports": [
         "FileBrowser"
       ],
-      "totalLines": 161,
+      "totalLines": 162,
       "hasStructuralAnalysis": true
     },
     "frontend/src/app/pages/FileBrowserInspector.tsx": {
@@ -75196,15 +77585,24 @@
     },
     "frontend/src/app/pages/FileTreePanel.tsx": {
       "filePath": "frontend/src/app/pages/FileTreePanel.tsx",
-      "contentHash": "a71014233dd1609bee6a8867e4d2a2172f6d82adb534ca666fa3549afc55eff9",
+      "contentHash": "60e51a768ef2a7f6fd3984e73dbc95aa1cde6341a11dc909b6627abde317eec4",
       "functions": [
+        {
+          "name": "dataSourceIdFromNodeId",
+          "params": [
+            "nodeId"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 3
+        },
         {
           "name": "FileTreePanel",
           "params": [
-            "{\n  filteredTreeNodes,\n  activeChildrenPage,\n  activeTreeChildrenLoaded,\n  canLoadMoreTreeChildren,\n  loadMoreActiveTreeChildren,\n  toggleDirectory,\n  displayNodeName,\n  filterQuery,\n  setFilterQuery,\n  treeWidth,\n  isResizing,\n  onResizeStart,\n  treeContainerRef,\n  FILE_BROWSER_PAGE_LIMIT,\n}"
+            "{\n  filteredTreeNodes,\n  activeChildrenPage,\n  activeTreeChildrenLoaded,\n  canLoadMoreTreeChildren,\n  loadMoreActiveTreeChildren,\n  toggleDirectory,\n  displayNodeName,\n  filterQuery,\n  setFilterQuery,\n  treeWidth,\n  isResizing,\n  onResizeStart,\n  treeContainerRef,\n  dataSources,\n  FILE_BROWSER_PAGE_LIMIT,\n}"
           ],
           "exported": true,
-          "lineCount": 135
+          "lineCount": 152
         }
       ],
       "classes": [],
@@ -75247,8 +77645,15 @@
           ]
         },
         {
+          "source": "@/components/files/FileTreeDataSourceNode",
+          "specifiers": [
+            "FileTreeDataSourceNode"
+          ]
+        },
+        {
           "source": "@/types/models",
           "specifiers": [
+            "DataSourceSummary",
             "FileTreeNode"
           ]
         }
@@ -75256,7 +77661,7 @@
       "exports": [
         "FileTreePanel"
       ],
-      "totalLines": 162,
+      "totalLines": 185,
       "hasStructuralAnalysis": true
     },
     "frontend/src/app/pages/Reports.test.tsx": {
@@ -76129,13 +78534,13 @@
     },
     "frontend/src/app/pages/use-file-browser.ts": {
       "filePath": "frontend/src/app/pages/use-file-browser.ts",
-      "contentHash": "6715d8bdeef5d010e8747106711ec99ca4077b34a237b4313a38aae50218026e",
+      "contentHash": "24f4fca06624c75b540815716e2a5dbe51dc6b053c7b3d52db00156a4a313268",
       "functions": [
         {
           "name": "useFileBrowser",
           "params": [],
           "exported": true,
-          "lineCount": 194
+          "lineCount": 196
         }
       ],
       "classes": [],
@@ -76200,7 +78605,7 @@
       "exports": [
         "useFileBrowser"
       ],
-      "totalLines": 208,
+      "totalLines": 210,
       "hasStructuralAnalysis": true
     },
     "frontend/src/app/pages/V2Workbench.test.tsx": {
@@ -76720,7 +79125,7 @@
     },
     "frontend/src/components/analysis/AnalysisPanels.test.tsx": {
       "filePath": "frontend/src/components/analysis/AnalysisPanels.test.tsx",
-      "contentHash": "b873c3680cc5142c3b7b5f3cc91c1c26fdabc548921236b7bfd094dad8a9fd24",
+      "contentHash": "02938e1e7b693b4fb762b9710d1f038dac2380e75a4faf89a803c7db59d5282b",
       "functions": [],
       "classes": [],
       "imports": [
@@ -76764,12 +79169,12 @@
         }
       ],
       "exports": [],
-      "totalLines": 189,
+      "totalLines": 228,
       "hasStructuralAnalysis": true
     },
     "frontend/src/components/analysis/AnalysisPanels.tsx": {
       "filePath": "frontend/src/components/analysis/AnalysisPanels.tsx",
-      "contentHash": "7c9f22270a2478b8c0d39b5470a258b2519b88e7c79a38353380a6708c598ff7",
+      "contentHash": "9f53fc988a32a325ed90a5f9557923d3a40ba05d41bf324218feff06805ccaee",
       "functions": [],
       "classes": [],
       "imports": [],
@@ -76782,6 +79187,7 @@
         "BrowserHistoryPanel",
         "EmailExtractionPanel",
         "EventLogPanel",
+        "LinuxArtifactsPanel",
         "RegistryExtractionPanel",
         "EvidenceClassificationPanel",
         "FileClassificationPanel",
@@ -76792,7 +79198,7 @@
         "formatSize",
         "statusLabel"
       ],
-      "totalLines": 20,
+      "totalLines": 21,
       "hasStructuralAnalysis": true
     },
     "frontend/src/components/analysis/ClusterView.tsx": {
@@ -78122,7 +80528,7 @@
     },
     "frontend/src/components/analysis/panels/index.ts": {
       "filePath": "frontend/src/components/analysis/panels/index.ts",
-      "contentHash": "2128686ed519627b94a33b1f8a45b9098e7eacd4c890a551cb59e6de4cb7b130",
+      "contentHash": "29720025005774068d1207ba947d4513c28d6b3bc28e0e1c794452491c7a83cc",
       "functions": [],
       "classes": [],
       "imports": [],
@@ -78130,6 +80536,7 @@
         "BrowserHistoryPanel",
         "EmailExtractionPanel",
         "EventLogPanel",
+        "LinuxArtifactsPanel",
         "EvidenceClassificationPanel",
         "FileClassificationPanel",
         "AnalysisReportPanel",
@@ -78145,7 +80552,7 @@
         "formatSize",
         "statusLabel"
       ],
-      "totalLines": 14,
+      "totalLines": 15,
       "hasStructuralAnalysis": true
     },
     "frontend/src/components/analysis/panels/RegistryExtractionPanel.test.tsx": {
@@ -78264,7 +80671,7 @@
     },
     "frontend/src/components/analysis/panels/SystemInfoPanel.tsx": {
       "filePath": "frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
-      "contentHash": "d60e9708156b02afefaed8eaccf620ff2d8024c4f372e6e953d18942ae3034ee",
+      "contentHash": "8ad04b1fb99cc3fbae6016606501227ffd5a37759361edd67274d6a7ab248405",
       "functions": [
         {
           "name": "SystemInfoPanel",
@@ -78277,10 +80684,10 @@
         {
           "name": "AnalysisHeader",
           "params": [
-            "{\n  loading,\n  hasCase,\n  demoPending,\n  extractionPending,\n  extractionRun,\n  onLoadDemoCase,\n  onRefresh,\n  onRunExtraction,\n}"
+            "{\n  loading,\n  hasCase,\n  demoPending,\n  extractionPending,\n  extractionRun,\n  onLoadDemoCase,\n  onRefresh,\n  onRunExtraction,\n  dataSources,\n  selectedDataSourceId,\n  onSelectDataSource,\n}"
           ],
           "exported": true,
-          "lineCount": 69
+          "lineCount": 90
         },
         {
           "name": "AnalysisEmptyState",
@@ -78334,6 +80741,12 @@
           ]
         },
         {
+          "source": "@/components/analysis/DataSourceSelector",
+          "specifiers": [
+            "DataSourceSelector"
+          ]
+        },
+        {
           "source": "./helpers",
           "specifiers": [
             "EmptyLine",
@@ -78354,7 +80767,7 @@
         "AnalysisErrorBanner",
         "AnalysisLoadingPanel"
       ],
-      "totalLines": 253,
+      "totalLines": 275,
       "hasStructuralAnalysis": true
     },
     "frontend/src/components/analysis/V2GovernancePanels.tsx": {
@@ -80343,7 +82756,7 @@
     },
     "frontend/src/components/layout/BottomDrawer.test.tsx": {
       "filePath": "frontend/src/components/layout/BottomDrawer.test.tsx",
-      "contentHash": "b636822e91dbb66bb9ad1286e0a145e87e1155452cb0b7b6d340198536d8d4bd",
+      "contentHash": "bdde45391db140de64444c164bb08cd828d4935e81244e34dfe2e437d4855425",
       "functions": [],
       "classes": [],
       "imports": [
@@ -80372,18 +82785,18 @@
         }
       ],
       "exports": [],
-      "totalLines": 279,
+      "totalLines": 373,
       "hasStructuralAnalysis": true
     },
     "frontend/src/components/layout/BottomDrawer.tsx": {
       "filePath": "frontend/src/components/layout/BottomDrawer.tsx",
-      "contentHash": "6d5df9622f0927629d91dc018995cf02befa6e8001dc6dde2c0610db6b387a00",
+      "contentHash": "a96e8e900d03c24dc46138430716012d8d85ae4a62c7957907d304c8de468fdd",
       "functions": [
         {
           "name": "BottomDrawer",
           "params": [],
           "exported": true,
-          "lineCount": 303
+          "lineCount": 352
         },
         {
           "name": "cacheKeyLabel",
@@ -80487,8 +82900,18 @@
       "exports": [
         "BottomDrawer"
       ],
-      "totalLines": 402,
+      "totalLines": 451,
       "hasStructuralAnalysis": true
+    },
+    "frontend/src/components/layout/HorizontalScroll.css": {
+      "filePath": "frontend/src/components/layout/HorizontalScroll.css",
+      "contentHash": "3f5df2bf6e64754f05153fb3335dec822f8a8afe200e1d99d26f19eeb203dc5a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 68,
+      "hasStructuralAnalysis": false
     },
     "frontend/src/components/layout/HorizontalScroll.tsx": {
       "filePath": "frontend/src/components/layout/HorizontalScroll.tsx",
@@ -82794,7 +85217,7 @@
     },
     "frontend/src/features/analysis/hooks.ts": {
       "filePath": "frontend/src/features/analysis/hooks.ts",
-      "contentHash": "dc196baaa2aae53a521d3c3378bc3ab7c61d15b682b3b7eaa4f9923081589af7",
+      "contentHash": "bc6e2df684add705148204cb27d447f01c28d1fd556be8be1f95647ea9e1a5bd",
       "functions": [
         {
           "name": "useAnalysisSystemInfo",
@@ -82848,6 +85271,14 @@
         },
         {
           "name": "useEvtxEventSummary",
+          "params": [
+            "request"
+          ],
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "useLinuxArtifactSummary",
           "params": [
             "request"
           ],
@@ -82910,6 +85341,7 @@
             "getEmailExtractionSummary",
             "getEvtxEventSummary",
             "getEvidenceClassificationSummary",
+            "getLinuxArtifactSummary",
             "getRegistryExtractionSummary",
             "getRegistryStructuredSummary",
             "getSystemInfo",
@@ -82948,6 +85380,7 @@
         "useBrowserHistorySummary",
         "useEmailExtractionSummary",
         "useEvtxEventSummary",
+        "useLinuxArtifactSummary",
         "useV2GovernanceSnapshot",
         "useCorrelationSnapshot",
         "useV3GovernanceSnapshot",
@@ -82955,7 +85388,7 @@
         "useRunAnalysisExtraction",
         "useGenerateAnalysisSummary"
       ],
-      "totalLines": 198,
+      "totalLines": 212,
       "hasStructuralAnalysis": true
     },
     "frontend/src/features/artifacts/hooks.test.ts": {
@@ -83233,7 +85666,7 @@
     },
     "frontend/src/features/cache-invalidation.test.ts": {
       "filePath": "frontend/src/features/cache-invalidation.test.ts",
-      "contentHash": "96b45ba86b126185bea8a5a7cedfd23bb61f07daef090f42b251865793b72a2c",
+      "contentHash": "03ac9adca13b6f7028a83fb587e17df4494330e091bdd2c0423e0d7daab90149",
       "functions": [
         {
           "name": "createClient",
@@ -83286,12 +85719,12 @@
         }
       ],
       "exports": [],
-      "totalLines": 108,
+      "totalLines": 110,
       "hasStructuralAnalysis": true
     },
     "frontend/src/features/cache-invalidation.ts": {
       "filePath": "frontend/src/features/cache-invalidation.ts",
-      "contentHash": "56b89c4827387b25b1d014cc6d350b6ca6002d7c365c19c972835e81fa9fe25c",
+      "contentHash": "a13d86bbb2843c3b78886d21b8aa69c998585a2e775452f03637e71f8fd1b985",
       "functions": [
         {
           "name": "invalidateProjectionKeys",
@@ -83373,7 +85806,7 @@
         "invalidateCacheStatusQueries",
         "invalidateEventProjectionQueries"
       ],
-      "totalLines": 127,
+      "totalLines": 129,
       "hasStructuralAnalysis": true
     },
     "frontend/src/features/case/hooks.test.ts": {
@@ -84047,15 +86480,43 @@
     },
     "frontend/src/features/files/hooks/use-file-tree.ts": {
       "filePath": "frontend/src/features/files/hooks/use-file-tree.ts",
-      "contentHash": "e3e17ff220a58e518e72eaa6306896882f13e076a8833dcbaeb4951f72362801",
+      "contentHash": "b58c046b868dd37b84753cccf8e7cba82c112965893faba7fc99b4bce5e8d0a6",
       "functions": [
+        {
+          "name": "dataSourceNodeId",
+          "params": [
+            "dsId"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "isDataSourceTreeNodeId",
+          "params": [
+            "nodeId"
+          ],
+          "returnType": "boolean",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "rootsForDataSource",
+          "params": [
+            "rootTree",
+            "dataSourceId",
+            "dataSources"
+          ],
+          "exported": false,
+          "lineCount": 14
+        },
         {
           "name": "useFileTree",
           "params": [
-            "{\n  showHidden,\n  pageLimit,\n  selectedDirectoryId,\n  setSelectedDirectoryId,\n  setSelectedFileId,\n  partitions,\n}"
+            "{\n  showHidden,\n  pageLimit,\n  selectedDirectoryId,\n  setSelectedDirectoryId,\n  setSelectedFileId,\n  partitions,\n  dataSources,\n}"
           ],
           "exported": true,
-          "lineCount": 216
+          "lineCount": 284
         }
       ],
       "classes": [],
@@ -84106,14 +86567,16 @@
           "source": "@/types/models",
           "specifiers": [
             "DataSourcePartition",
+            "DataSourceSummary",
             "FileTreeNode"
           ]
         }
       ],
       "exports": [
+        "isDataSourceTreeNodeId",
         "useFileTree"
       ],
-      "totalLines": 236,
+      "totalLines": 333,
       "hasStructuralAnalysis": true
     },
     "frontend/src/features/graph/hooks.test.ts": {
@@ -85248,6 +87711,16 @@
       "totalLines": 88,
       "hasStructuralAnalysis": true
     },
+    "frontend/src/i18n/en.json": {
+      "filePath": "frontend/src/i18n/en.json",
+      "contentHash": "1436a6ffdb44f6123e263b8c8e8c711fff9ad23e64ecc082afcc91ffda4f5e94",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 442,
+      "hasStructuralAnalysis": true
+    },
     "frontend/src/i18n/index.ts": {
       "filePath": "frontend/src/i18n/index.ts",
       "contentHash": "e7877dc1d3b87c22479a7b3c5cfc796e8a41bb420346e321ac655efbe23398d8",
@@ -85281,6 +87754,26 @@
       ],
       "exports": [],
       "totalLines": 22,
+      "hasStructuralAnalysis": true
+    },
+    "frontend/src/i18n/zh-CN.json": {
+      "filePath": "frontend/src/i18n/zh-CN.json",
+      "contentHash": "2c7c993df4db65a12327ce762f8df57f2a802454f68d3603ff64dd211276562a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 442,
+      "hasStructuralAnalysis": true
+    },
+    "frontend/src/imports/frontend-ui-ux.md": {
+      "filePath": "frontend/src/imports/frontend-ui-ux.md",
+      "contentHash": "9ab3265564dfb3eaf4e1fa781c1aa9541423e3ce90de1bafaf061404ad289e09",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 447,
       "hasStructuralAnalysis": true
     },
     "frontend/src/lib/api/analysis.test.ts": {
@@ -85336,7 +87829,7 @@
     },
     "frontend/src/lib/api/analysis.ts": {
       "filePath": "frontend/src/lib/api/analysis.ts",
-      "contentHash": "3ae1da88abfb6926be31467d214c576e79738f121a35006c3a8f418029575113",
+      "contentHash": "68e33c371c179524cdc7cdd54a720b773474c4376e643c3a5f6a238d9d88a537",
       "functions": [
         {
           "name": "getSystemInfo",
@@ -85423,6 +87916,15 @@
           "lineCount": 5
         },
         {
+          "name": "getLinuxArtifactSummary",
+          "params": [
+            "request"
+          ],
+          "returnType": "Promise<LinuxArtifactSummary>",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
           "name": "getV2GovernanceSnapshot",
           "params": [],
           "returnType": "Promise<V2GovernanceSnapshot>",
@@ -85466,6 +87968,7 @@
             "EmailExtractionSummary",
             "EvtxEventSummary",
             "EvidenceClassificationSummary",
+            "LinuxArtifactSummary",
             "RegistryExtractionSummary",
             "RegistryStructuredSummary",
             "V2GovernanceSnapshot",
@@ -85496,12 +87999,13 @@
         "getBrowserHistorySummary",
         "getEmailExtractionSummary",
         "getEvtxEventSummary",
+        "getLinuxArtifactSummary",
         "getV2GovernanceSnapshot",
         "getV3GovernanceSnapshot",
         "getCorrelationSnapshot",
         "generateAnalysisSummary"
       ],
-      "totalLines": 85,
+      "totalLines": 92,
       "hasStructuralAnalysis": true
     },
     "frontend/src/lib/api/artifacts.test.ts": {
@@ -86105,14 +88609,14 @@
     },
     "frontend/src/lib/api/commands.ts": {
       "filePath": "frontend/src/lib/api/commands.ts",
-      "contentHash": "1a6375b2e1934f40afa57a4c82f42623907c3784b08baafceeacd0b7471acb85",
+      "contentHash": "93092b1f52dd586f6d4168cef3ab0cce61f2fc2389d55615951a1e5c7473c99f",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [
         "COMMANDS"
       ],
-      "totalLines": 129,
+      "totalLines": 130,
       "hasStructuralAnalysis": true
     },
     "frontend/src/lib/api/files.test.ts": {
@@ -88372,7 +90876,7 @@
     },
     "frontend/src/stores/analysis-store.ts": {
       "filePath": "frontend/src/stores/analysis-store.ts",
-      "contentHash": "3adfd701a49f0afd4d59e33d23275dd4287d56163fb4e34a33c4db9e08c7c8f5",
+      "contentHash": "0f66af6bc938490b86bf9fa4f4fed5fcae353369a646123ccd6e8b294ce9bdd3",
       "functions": [
         {
           "name": "emptyProgress",
@@ -88386,7 +90890,7 @@
           "params": [],
           "returnType": "Record<ExtractionCategory, Omit<AnalysisExtractionProgressInfo, 'label'>>",
           "exported": false,
-          "lineCount": 8
+          "lineCount": 9
         },
         {
           "name": "statusFromRun",
@@ -88429,7 +90933,7 @@
         "statusFromRun",
         "labeledProgress"
       ],
-      "totalLines": 129,
+      "totalLines": 138,
       "hasStructuralAnalysis": true
     },
     "frontend/src/stores/mcp-error-utils.ts": {
@@ -88842,6 +91346,46 @@
       "totalLines": 98,
       "hasStructuralAnalysis": true
     },
+    "frontend/src/styles/fonts.css": {
+      "filePath": "frontend/src/styles/fonts.css",
+      "contentHash": "42c3039662f03bb13da89fc3f408bce2ee207824fa84e8d01243af18481f80a8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 85,
+      "hasStructuralAnalysis": false
+    },
+    "frontend/src/styles/index.css": {
+      "filePath": "frontend/src/styles/index.css",
+      "contentHash": "95cb096d6ff1156ec6126412a0f8ad7758cfed44c96d41f7f41cc5d9323d0baa",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 4,
+      "hasStructuralAnalysis": false
+    },
+    "frontend/src/styles/tailwind.css": {
+      "filePath": "frontend/src/styles/tailwind.css",
+      "contentHash": "fd189d776ac5d74ebbdbcdf8ea8693cb281470458c291ce5fa21a4418599d42d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 12,
+      "hasStructuralAnalysis": false
+    },
+    "frontend/src/styles/theme.css": {
+      "filePath": "frontend/src/styles/theme.css",
+      "contentHash": "30cdec39a8354817afc3f65deddb3ad5cd9865e9a90a1bd3502de965eaa91939",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 313,
+      "hasStructuralAnalysis": false
+    },
     "frontend/src/test/setup.ts": {
       "filePath": "frontend/src/test/setup.ts",
       "contentHash": "638db48ab2e56b46ec4535f25dee72c3e748fe3e7e9e730075fbe118630971c2",
@@ -89050,12 +91594,12 @@
     },
     "frontend/src/types/files.ts": {
       "filePath": "frontend/src/types/files.ts",
-      "contentHash": "5e8487d87f03a235fbae42ac56ebd4c0d5ca4122bdbd70d06a9fdb3480150acd",
+      "contentHash": "d198a6802a8702e44cfe05dd6714699e2771d3de774adbd1ce872069f9d0fd18",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 60,
+      "totalLines": 61,
       "hasStructuralAnalysis": true
     },
     "frontend/src/types/governance.ts": {
@@ -89141,7 +91685,7 @@
     },
     "frontend/src/types/jobs.ts": {
       "filePath": "frontend/src/types/jobs.ts",
-      "contentHash": "227ee6f8cf2f2b893946acd257d8991445e5905f2990ffbdc714d3913eeacff5",
+      "contentHash": "0772e744c196096238415462b750158130bfaaf24436c57bcf9aa62b3231a23f",
       "functions": [],
       "classes": [],
       "imports": [],
@@ -89161,12 +91705,12 @@
     },
     "frontend/src/types/models.ts": {
       "filePath": "frontend/src/types/models.ts",
-      "contentHash": "f9a83b99918def33f44cffd3d982c9a3c7b2c96d610a9c4503cdf8b4e235cbc3",
+      "contentHash": "fc10cfa14102f6e60fa1564b8928e226e0efab0528055e04fbfa48de3ab309b0",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 29,
+      "totalLines": 30,
       "hasStructuralAnalysis": true
     },
     "frontend/src/types/notebook.ts": {
@@ -89227,6 +91771,16 @@
       "imports": [],
       "exports": [],
       "totalLines": 10,
+      "hasStructuralAnalysis": true
+    },
+    "frontend/tsconfig.json": {
+      "filePath": "frontend/tsconfig.json",
+      "contentHash": "4969b368af0d5aaa2b6b58928ce8350df6c16330c5b3968a53579e7b9923699f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 22,
       "hasStructuralAnalysis": true
     },
     "frontend/vite.config.ts": {
@@ -89292,6 +91846,206 @@
       "exports": [],
       "totalLines": 30,
       "hasStructuralAnalysis": true
+    },
+    "PRD.md": {
+      "filePath": "PRD.md",
+      "contentHash": "475c9a58d732c070c8891e493c1aacdd632c7f759b87c39f277a89777c2316a8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 320,
+      "hasStructuralAnalysis": true
+    },
+    "README.md": {
+      "filePath": "README.md",
+      "contentHash": "3b30f111161d15593a162fd7bea751c43c930241fd1d91e349fbe48310b94193",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 185,
+      "hasStructuralAnalysis": true
+    },
+    "rust-toolchain.toml": {
+      "filePath": "rust-toolchain.toml",
+      "contentHash": "2c6c06daae576901d5ae1824046862ed1aa59615827de79d9c5e72f5a282183e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 4,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/build-demo.bat": {
+      "filePath": "scripts/build-demo.bat",
+      "contentHash": "b7da1edb4e67ea146428d8ca8d4303555ac8538a29b8bcacb58270bd6c6afdac",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 44,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/check-benchmark-regression.ps1": {
+      "filePath": "scripts/check-benchmark-regression.ps1",
+      "contentHash": "ee95dd0b058e0c10787cb3de38ba6e9cc41b965ee7c980f7c16649bcac6ab2be",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 187,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/check-command-sql-boundary.ps1": {
+      "filePath": "scripts/check-command-sql-boundary.ps1",
+      "contentHash": "b7803b3e7af208c4b8ff19ad467b8fe699dd1f8b708b52996716b94b38f04730",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 89,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/check-dead-code-allow-guard.ps1": {
+      "filePath": "scripts/check-dead-code-allow-guard.ps1",
+      "contentHash": "d72c3f39c3530f95e50a8e5849f843d36f5c348c06c1e07b7f435593b0082237",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 48,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/check-deny-exceptions.ps1": {
+      "filePath": "scripts/check-deny-exceptions.ps1",
+      "contentHash": "ccba7643989053380cab29568c27975d87067de7b3d39d6145f50bc6fe5ca966",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 71,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/check-dependency-security.ps1": {
+      "filePath": "scripts/check-dependency-security.ps1",
+      "contentHash": "e58c72fbaf58e165487c57ad47f8037c903c2b4d3a4b6129abf4e4f7104221b9",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 182,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/check-doc-drift.ps1": {
+      "filePath": "scripts/check-doc-drift.ps1",
+      "contentHash": "d3f722583a81b25766aecbf885e9cfdee43491b09d2e9542dba52669e455f5da",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 288,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/check-dto-drift.ps1": {
+      "filePath": "scripts/check-dto-drift.ps1",
+      "contentHash": "7dbd06fc8d2420565dab046017240631465d901f6084f5eaa56e7759d4cbe6b5",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 168,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/check-e01-import-performance.ps1": {
+      "filePath": "scripts/check-e01-import-performance.ps1",
+      "contentHash": "869ed16eb225e6e03e9ac5a4fa4edbec2f32fe1699192146512960b0a1f701f3",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 150,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/check-event-topic-drift.ps1": {
+      "filePath": "scripts/check-event-topic-drift.ps1",
+      "contentHash": "da6c54da733b7907b933566d9ba90719c98add93c546099f78c8e7ed05225154",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 104,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/check-evtx-dependency-decision.ps1": {
+      "filePath": "scripts/check-evtx-dependency-decision.ps1",
+      "contentHash": "a8e28123cbc54a952bfb560ba297dfe5c63f3035df406187532ea3cfe6e473e4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 69,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/check-frontend-lockfile-policy.ps1": {
+      "filePath": "scripts/check-frontend-lockfile-policy.ps1",
+      "contentHash": "2dba6b68db060d9e9abd45639ecd5104dc077373ec9bb167183802461899a032",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 27,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/check-import-optimization-guard.ps1": {
+      "filePath": "scripts/check-import-optimization-guard.ps1",
+      "contentHash": "c2efacaead894128ae0ed47d5a7e69bf266f4a903fdfccceb89cdea6f27f2fee",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 121,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/check-media-protocol-guard.ps1": {
+      "filePath": "scripts/check-media-protocol-guard.ps1",
+      "contentHash": "48de0301770eb8f79dc2b85a450976f8b49fe246824b78618321854762a8ad91",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 74,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/check-module-size.ps1": {
+      "filePath": "scripts/check-module-size.ps1",
+      "contentHash": "29c0150d3ee4510f9a74cb67fcf040d984373803d3cda32449048c9c64f3b7cd",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 109,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/check-release-guard.ps1": {
+      "filePath": "scripts/check-release-guard.ps1",
+      "contentHash": "62e0bb70911398e1aad635b7a10da231915a60fae722a76ab03484b27cdb96c0",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 32,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/check-stage5-regression-guard.ps1": {
+      "filePath": "scripts/check-stage5-regression-guard.ps1",
+      "contentHash": "1f15ba80d638b1030faff5987d9981678a4d8e2c8cdb3e2ad27a8f7c062f1f47",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 131,
+      "hasStructuralAnalysis": false
     },
     "scripts/generate_medium_email_fixtures.py": {
       "filePath": "scripts/generate_medium_email_fixtures.py",
@@ -89572,6 +92326,146 @@
       "totalLines": 377,
       "hasStructuralAnalysis": true
     },
+    "scripts/generate-tiny-fixtures.ps1": {
+      "filePath": "scripts/generate-tiny-fixtures.ps1",
+      "contentHash": "6eb483d08db1eea5053c1558649eda7c8e675e8fc91158e0678b884ed84929a0",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 91,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/README.md": {
+      "filePath": "scripts/README.md",
+      "contentHash": "501529b3e2c375d9d68b061684daa7fa79f9b5825aa9f96daa5f5b845a7983f2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 194,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/run-benchmark.ps1": {
+      "filePath": "scripts/run-benchmark.ps1",
+      "contentHash": "e72025c912d81c50d1392b5b98fb09c564a03a0efd983e2e7e8da68ba2479d2a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 208,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/run-coverage.ps1": {
+      "filePath": "scripts/run-coverage.ps1",
+      "contentHash": "6a424776fc9d82dac880a4e8f8467133350bb8ba850163f122185ad92b266de3",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 43,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/run-e01-import-profile.ps1": {
+      "filePath": "scripts/run-e01-import-profile.ps1",
+      "contentHash": "073563f03f889a24328270779ff7fa7a6d2b89b36fd54521815ed37efc7b7b44",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 264,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/run-liuyang-artifact-test.ps1": {
+      "filePath": "scripts/run-liuyang-artifact-test.ps1",
+      "contentHash": "c02aa7b474fe4b1ebb1e78fd9bd6ea80bfe0809e46d9dd5a526a932eeddd9e9f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 3,
+      "hasStructuralAnalysis": false
+    },
+    "scripts/run-webview2-media-smoke.ps1": {
+      "filePath": "scripts/run-webview2-media-smoke.ps1",
+      "contentHash": "027f17f66a06baa88e6764b1cb2cb18a1bfe6ada10178e3852abc10a9f0f4740",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 180,
+      "hasStructuralAnalysis": false
+    },
+    "SECURITY.md": {
+      "filePath": "SECURITY.md",
+      "contentHash": "41a5ebb3c2e132f5dcae1a8a8ef68de4e4610afc4a7c1646874c68f59dd4de0c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 25,
+      "hasStructuralAnalysis": true
+    },
+    "spec.md": {
+      "filePath": "spec.md",
+      "contentHash": "c9f2c65e2379cb25ad3fab23a02b29608ddf128f775ae5183cc6bdd18b67fbf7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 565,
+      "hasStructuralAnalysis": true
+    },
+    "test-plan.md": {
+      "filePath": "test-plan.md",
+      "contentHash": "9787e3afd8cbe39df514cfcd49fed5884b9021dfebb07d67055f4669e2c729c6",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 423,
+      "hasStructuralAnalysis": true
+    },
+    "testdata/artifacts/filesystems/ntfs/expected.json": {
+      "filePath": "testdata/artifacts/filesystems/ntfs/expected.json",
+      "contentHash": "a8e90b4062a722e376bc0d1bc46f8a266088150dcc08b8263626f5872b7164c4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 66,
+      "hasStructuralAnalysis": true
+    },
+    "testdata/artifacts/images/e01/expected.json": {
+      "filePath": "testdata/artifacts/images/e01/expected.json",
+      "contentHash": "bc59d4866e1933a70d13eb78b7f0241ac7fd74dc8c5ad6499d4f9542b28e6e4a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 56,
+      "hasStructuralAnalysis": true
+    },
+    "testdata/artifacts/images/raw/expected.json": {
+      "filePath": "testdata/artifacts/images/raw/expected.json",
+      "contentHash": "2b8f233fc9b2ba1dc3a700fe4374b6f5252c5c2fed229b230a6e4cb1a0f34fcb",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 37,
+      "hasStructuralAnalysis": true
+    },
+    "testdata/artifacts/prefetch/README.md": {
+      "filePath": "testdata/artifacts/prefetch/README.md",
+      "contentHash": "d4392e770dcf80918dc16285ea0f159ddf984e42d54836b24b057b130b3e46a0",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 26,
+      "hasStructuralAnalysis": true
+    },
     "testdata/artifacts/windows/lnk/.gitkeep": {
       "filePath": "testdata/artifacts/windows/lnk/.gitkeep",
       "contentHash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
@@ -89581,6 +92475,16 @@
       "exports": [],
       "totalLines": 2,
       "hasStructuralAnalysis": false
+    },
+    "testdata/artifacts/windows/lnk/expected.json": {
+      "filePath": "testdata/artifacts/windows/lnk/expected.json",
+      "contentHash": "213b8fe91dfe11d2bd4cb1a54bd081c2b6c83c477f3869f7a3e914db708f167e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 149,
+      "hasStructuralAnalysis": true
     },
     "testdata/artifacts/windows/prefetch/.gitkeep": {
       "filePath": "testdata/artifacts/windows/prefetch/.gitkeep",
@@ -89592,6 +92496,26 @@
       "totalLines": 2,
       "hasStructuralAnalysis": false
     },
+    "testdata/artifacts/windows/prefetch/expected.json": {
+      "filePath": "testdata/artifacts/windows/prefetch/expected.json",
+      "contentHash": "7208fcf77713b0dd6ac6d8dcdceae6ef61bd681338a154d4cf601397edcd9cc6",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 117,
+      "hasStructuralAnalysis": true
+    },
+    "testdata/artifacts/windows/README.md": {
+      "filePath": "testdata/artifacts/windows/README.md",
+      "contentHash": "8277d277b170e9fc2eee09880959d7b1d2bd7ac13c0a47fd6951348c7505f52e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 85,
+      "hasStructuralAnalysis": true
+    },
     "testdata/artifacts/windows/recycle-bin/.gitkeep": {
       "filePath": "testdata/artifacts/windows/recycle-bin/.gitkeep",
       "contentHash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
@@ -89602,6 +92526,16 @@
       "totalLines": 2,
       "hasStructuralAnalysis": false
     },
+    "testdata/artifacts/windows/recycle-bin/expected.json": {
+      "filePath": "testdata/artifacts/windows/recycle-bin/expected.json",
+      "contentHash": "f33da000a84fd3e9970225791f83c2c2fdcfa26930062d0e62368bc64a45dc1c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 98,
+      "hasStructuralAnalysis": true
+    },
     "testdata/artifacts/windows/registry/.gitkeep": {
       "filePath": "testdata/artifacts/windows/registry/.gitkeep",
       "contentHash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
@@ -89611,6 +92545,36 @@
       "exports": [],
       "totalLines": 2,
       "hasStructuralAnalysis": false
+    },
+    "testdata/artifacts/windows/registry/expected.json": {
+      "filePath": "testdata/artifacts/windows/registry/expected.json",
+      "contentHash": "931d5fc1aad8a71f9ddd11e0ffd33daad20f85fd2497d2fbe9e858b35efc3010",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 109,
+      "hasStructuralAnalysis": true
+    },
+    "testdata/fixtures/public-medium/browser/README.md": {
+      "filePath": "testdata/fixtures/public-medium/browser/README.md",
+      "contentHash": "f43c722d54e6ef0926a964543637c03c97140b48fc7a3c052a646eb011db6066",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 256,
+      "hasStructuralAnalysis": true
+    },
+    "testdata/fixtures/public-medium/email/expected.json": {
+      "filePath": "testdata/fixtures/public-medium/email/expected.json",
+      "contentHash": "ef825ad82000ace602b52439d9d3285f20c5785d7e3439460ec0218b4602e437",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 187,
+      "hasStructuralAnalysis": true
     },
     "testdata/fixtures/public-medium/email/medium-eml/attachment.eml": {
       "filePath": "testdata/fixtures/public-medium/email/medium-eml/attachment.eml",
@@ -89631,6 +92595,16 @@
       "exports": [],
       "totalLines": 11,
       "hasStructuralAnalysis": false
+    },
+    "testdata/fixtures/public-medium/email/medium-eml/expected.json": {
+      "filePath": "testdata/fixtures/public-medium/email/medium-eml/expected.json",
+      "contentHash": "af5e23c6d9d5cef2e04fb066e865f07aed0b71f7ca8719f4195dddb0a8eda758",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 108,
+      "hasStructuralAnalysis": true
     },
     "testdata/fixtures/public-medium/email/medium-eml/html.eml": {
       "filePath": "testdata/fixtures/public-medium/email/medium-eml/html.eml",
@@ -89712,6 +92686,16 @@
       "totalLines": 12,
       "hasStructuralAnalysis": false
     },
+    "testdata/fixtures/public-medium/email/medium-eml/README.md": {
+      "filePath": "testdata/fixtures/public-medium/email/medium-eml/README.md",
+      "contentHash": "3324bc6ac2c02148b040a381b3bec64a19975207d33747f7ed8f1c20f60ea3c6",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 34,
+      "hasStructuralAnalysis": true
+    },
     "testdata/fixtures/public-medium/email/medium-eml/thread_reply.eml": {
       "filePath": "testdata/fixtures/public-medium/email/medium-eml/thread_reply.eml",
       "contentHash": "f1de23444f6e09125ab23a5a0922bdfdb000f0472e8b56eb89400f210942e581",
@@ -89742,6 +92726,26 @@
       "totalLines": 13,
       "hasStructuralAnalysis": false
     },
+    "testdata/fixtures/public-medium/email/medium-mbox/expected.json": {
+      "filePath": "testdata/fixtures/public-medium/email/medium-mbox/expected.json",
+      "contentHash": "f04f79a0de19db21e14dd98a951adc4511e71af78d31ecf1d35760714c9caaf5",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 21,
+      "hasStructuralAnalysis": true
+    },
+    "testdata/fixtures/public-medium/email/medium-mbox/README.md": {
+      "filePath": "testdata/fixtures/public-medium/email/medium-mbox/README.md",
+      "contentHash": "42b2a609007819d64db0603d8ae1c46335d2fd665839491c04c0e4a28d07a492",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 22,
+      "hasStructuralAnalysis": true
+    },
     "testdata/fixtures/public-medium/email/medium-mbox/thunderbird_takeout.mbox": {
       "filePath": "testdata/fixtures/public-medium/email/medium-mbox/thunderbird_takeout.mbox",
       "contentHash": "d81cf17b10ed7d24485b5d2552bb8f0997d85cb9721387cebf14074fe5df928d",
@@ -89751,6 +92755,16 @@
       "exports": [],
       "totalLines": 559,
       "hasStructuralAnalysis": false
+    },
+    "testdata/fixtures/public-medium/email/medium-pst/expected.json": {
+      "filePath": "testdata/fixtures/public-medium/email/medium-pst/expected.json",
+      "contentHash": "fbe463d5b1c51a27a6f9817db6c27a45b839ce843a5dab91422a806a1bdce72c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 41,
+      "hasStructuralAnalysis": true
     },
     "testdata/fixtures/public-medium/email/medium-pst/medium.ost": {
       "filePath": "testdata/fixtures/public-medium/email/medium-pst/medium.ost",
@@ -89771,6 +92785,56 @@
       "exports": [],
       "totalLines": 5,
       "hasStructuralAnalysis": false
+    },
+    "testdata/fixtures/public-medium/email/medium-pst/README.md": {
+      "filePath": "testdata/fixtures/public-medium/email/medium-pst/README.md",
+      "contentHash": "f5d26cad1d32763e62137d04c3e21209b7095b80348e77080021d19ac308ae46",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 24,
+      "hasStructuralAnalysis": true
+    },
+    "testdata/fixtures/public-medium/email/README.md": {
+      "filePath": "testdata/fixtures/public-medium/email/README.md",
+      "contentHash": "18ff67688da97ee6ac101d64c0cda32ad2e0464496d9a75538bc21f14d8f5943",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 30,
+      "hasStructuralAnalysis": true
+    },
+    "testdata/fixtures/public-medium/linux/README.md": {
+      "filePath": "testdata/fixtures/public-medium/linux/README.md",
+      "contentHash": "d24b5f65dd6d0fa63b9677ab3c98d8842a871770977ca25b7957893e17c973aa",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 341,
+      "hasStructuralAnalysis": true
+    },
+    "testdata/fixtures/public-medium/macos/README.md": {
+      "filePath": "testdata/fixtures/public-medium/macos/README.md",
+      "contentHash": "7305a85b1fe375f637b55358557e1e70480e8af38adb566eaecca73c6880cf73",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 353,
+      "hasStructuralAnalysis": true
+    },
+    "testdata/fixtures/public-medium/README.md": {
+      "filePath": "testdata/fixtures/public-medium/README.md",
+      "contentHash": "0d915731851bd5c49aeeda9e638dcbc34d25956b7c73a47260a44f7d6613ae5c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 60,
+      "hasStructuralAnalysis": true
     },
     "testdata/fixtures/public-small/e01/tiny.E01": {
       "filePath": "testdata/fixtures/public-small/e01/tiny.E01",
@@ -89801,6 +92865,16 @@
       "exports": [],
       "totalLines": 11,
       "hasStructuralAnalysis": false
+    },
+    "testdata/fixtures/public-small/email/expected.json": {
+      "filePath": "testdata/fixtures/public-small/email/expected.json",
+      "contentHash": "a53603eb1a81cc08fe1114493bef13484ff04697a0db258ab57ecc7fc23a779b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 299,
+      "hasStructuralAnalysis": true
     },
     "testdata/fixtures/public-small/email/mboxrd_escaped.mbox": {
       "filePath": "testdata/fixtures/public-small/email/mboxrd_escaped.mbox",
@@ -89842,6 +92916,16 @@
       "totalLines": 12,
       "hasStructuralAnalysis": false
     },
+    "testdata/fixtures/public-small/email/README.md": {
+      "filePath": "testdata/fixtures/public-small/email/README.md",
+      "contentHash": "6a25965c3433069fad6b8a28fded853e9dcf4cfa0dc95c59f0f66763b45ef2f6",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 56,
+      "hasStructuralAnalysis": true
+    },
     "testdata/fixtures/public-small/email/simple.mbox": {
       "filePath": "testdata/fixtures/public-small/email/simple.mbox",
       "contentHash": "ca0fd8abf072917d6d7c976767dbafd3db10ecb93355697d8b7bcad12bb94386",
@@ -89872,6 +92956,26 @@
       "totalLines": 2,
       "hasStructuralAnalysis": false
     },
+    "testdata/fixtures/public-small/evtx/expected.json": {
+      "filePath": "testdata/fixtures/public-small/evtx/expected.json",
+      "contentHash": "b80ffe2ffa5d85c8368fca1d99991b9d930317c3601ccc5ef8de66080a929bb3",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 68,
+      "hasStructuralAnalysis": true
+    },
+    "testdata/fixtures/public-small/evtx/README.md": {
+      "filePath": "testdata/fixtures/public-small/evtx/README.md",
+      "contentHash": "9047d4ada5931615e15985012b131d87cfbeb2d3ccd7cb0c6c74dbc3e919dc55",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": true
+    },
     "testdata/fixtures/public-small/evtx/system.evtx": {
       "filePath": "testdata/fixtures/public-small/evtx/system.evtx",
       "contentHash": "db5ee68c8ee6f86fcc76cd80fc85dafc461744f956ead83af8b061a60ef03f67",
@@ -89880,6 +92984,26 @@
       "imports": [],
       "exports": [],
       "totalLines": 3971,
+      "hasStructuralAnalysis": false
+    },
+    "testdata/fixtures/public-small/logical/README.txt": {
+      "filePath": "testdata/fixtures/public-small/logical/README.txt",
+      "contentHash": "fef79366a233f4f05c513b1fcbe627165c0d5ddd9fb5b611a5832a269bd20d01",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 7,
+      "hasStructuralAnalysis": false
+    },
+    "testdata/fixtures/public-small/logical/Users/alice/notes.txt": {
+      "filePath": "testdata/fixtures/public-small/logical/Users/alice/notes.txt",
+      "contentHash": "976faa585db37092af1da043ae3a5a9081a69ef90344aed08e82179a1b8726bf",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 5,
       "hasStructuralAnalysis": false
     },
     "testdata/fixtures/public-small/logical/Windows/System32/config/SOFTWARE": {
@@ -89902,6 +93026,16 @@
       "totalLines": 2,
       "hasStructuralAnalysis": false
     },
+    "testdata/fixtures/public-small/pst/README.md": {
+      "filePath": "testdata/fixtures/public-small/pst/README.md",
+      "contentHash": "f30cf0c9ee0e94cac9a20b31445cf3ffb61a59a4500fbad0fdfb07c9f121de55",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 45,
+      "hasStructuralAnalysis": true
+    },
     "testdata/fixtures/public-small/raw/tiny.raw": {
       "filePath": "testdata/fixtures/public-small/raw/tiny.raw",
       "contentHash": "b9b7972a16443438957cb539d4fae456b25b417b97b321c93065b71ff7c210f0",
@@ -89911,6 +93045,374 @@
       "exports": [],
       "totalLines": 1,
       "hasStructuralAnalysis": false
+    },
+    "testdata/fixtures/public-small/README.md": {
+      "filePath": "testdata/fixtures/public-small/README.md",
+      "contentHash": "c1de29303fcfa1e8b4351ee2ba164c212a102a36048229350aab0ff39e7e1739",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
+      "hasStructuralAnalysis": true
+    },
+    "testdata/fixtures/public-small/registry/expected.json": {
+      "filePath": "testdata/fixtures/public-small/registry/expected.json",
+      "contentHash": "017ae559d9b6ba6692ce608c77260b380bfba53d48c0aeaeddbd5d294d7ce3f2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 173,
+      "hasStructuralAnalysis": true
+    },
+    "testdata/fixtures/public-small/registry/README.md": {
+      "filePath": "testdata/fixtures/public-small/registry/README.md",
+      "contentHash": "f96f07184141086334c430dfe1680a426be6a11b71f9de4bb92adb07a85fbb05",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 40,
+      "hasStructuralAnalysis": true
+    },
+    "testdata/governance/v2-benchmark-baseline.json": {
+      "filePath": "testdata/governance/v2-benchmark-baseline.json",
+      "contentHash": "dc9ea00f29503e8885b63f3f1d2ac35124dbbc54c3c80444dd5359f0cddf8ea5",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 226,
+      "hasStructuralAnalysis": true
+    },
+    "testdata/governance/v2-known-limitations.json": {
+      "filePath": "testdata/governance/v2-known-limitations.json",
+      "contentHash": "c8e5b1b218c1521f88def8e6e65672aa7d5bd4b6dfdc8d06f59a55579c6892ca",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 402,
+      "hasStructuralAnalysis": true
+    },
+    "testdata/governance/v2-release-policy.json": {
+      "filePath": "testdata/governance/v2-release-policy.json",
+      "contentHash": "a8ceb5b94690779b512d7324098c56c93f2f0dfdcc2a543669a4662e308d7484",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 242,
+      "hasStructuralAnalysis": true
+    },
+    "testdata/governance/v2-runtime-results.json": {
+      "filePath": "testdata/governance/v2-runtime-results.json",
+      "contentHash": "a22c75ac8b32e5f64d6413fb05dd0a3f131d41506eb68b98a5d6554fd397a0ba",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 109,
+      "hasStructuralAnalysis": true
+    },
+    "testdata/governance/v2-security-taxonomy.json": {
+      "filePath": "testdata/governance/v2-security-taxonomy.json",
+      "contentHash": "97adcbca2f89904baa8d6f2cb3e33b9fd6ebb6247c9684ffc28978655d343b24",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 132,
+      "hasStructuralAnalysis": true
+    },
+    "testdata/governance/v2-verification-catalog.json": {
+      "filePath": "testdata/governance/v2-verification-catalog.json",
+      "contentHash": "78a0e7f46e375936a816f03432713005b7ac1693d3f10fc112f978312eee99b4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 277,
+      "hasStructuralAnalysis": true
+    },
+    "frontend/src/components/analysis/DataSourceSelector.test.tsx": {
+      "filePath": "frontend/src/components/analysis/DataSourceSelector.test.tsx",
+      "contentHash": "f80ea0f1fe83ae26de817a1aea9d4ff43c1bdc59e0be0cdf5765f62523bd0b0d",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "createElement"
+          ]
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "render",
+            "screen",
+            "fireEvent"
+          ]
+        },
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "expect",
+            "it",
+            "vi"
+          ]
+        },
+        {
+          "source": "./DataSourceSelector",
+          "specifiers": [
+            "DataSourceSelector"
+          ]
+        },
+        {
+          "source": "@/types/models",
+          "specifiers": [
+            "DataSourceSummary"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 104,
+      "hasStructuralAnalysis": true
+    },
+    "frontend/src/components/analysis/DataSourceSelector.tsx": {
+      "filePath": "frontend/src/components/analysis/DataSourceSelector.tsx",
+      "contentHash": "de940ed57ad86bafe3ac75b0a472d1743a0265184f9e63d8f0eabfc62cd2fc56",
+      "functions": [
+        {
+          "name": "DataSourceSelector",
+          "params": [
+            "{\n  dataSources,\n  selectedId,\n  onSelect,\n  className,\n}"
+          ],
+          "exported": true,
+          "lineCount": 44
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/app/components/ui/toggle-group",
+          "specifiers": [
+            "ToggleGroup",
+            "ToggleGroupItem"
+          ]
+        },
+        {
+          "source": "@/app/components/ui/utils",
+          "specifiers": [
+            "cn"
+          ]
+        },
+        {
+          "source": "@/types/models",
+          "specifiers": [
+            "DataSourceSummary"
+          ]
+        },
+        {
+          "source": "@/lib/data-source-utils",
+          "specifiers": [
+            "sourceKindLabel",
+            "sourceKindIconLarge"
+          ]
+        }
+      ],
+      "exports": [
+        "DataSourceSelector"
+      ],
+      "totalLines": 57,
+      "hasStructuralAnalysis": true
+    },
+    "frontend/src/components/files/FileTreeDataSourceNode.test.tsx": {
+      "filePath": "frontend/src/components/files/FileTreeDataSourceNode.test.tsx",
+      "contentHash": "11fd4463d78baba1bc544a6ef99bee384f4e9ea8b718db16918740a5a3451b76",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "createElement"
+          ]
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "render",
+            "screen",
+            "fireEvent"
+          ]
+        },
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "expect",
+            "it",
+            "vi"
+          ]
+        },
+        {
+          "source": "./FileTreeDataSourceNode",
+          "specifiers": [
+            "FileTreeDataSourceNode"
+          ]
+        },
+        {
+          "source": "@/types/models",
+          "specifiers": [
+            "DataSourceSummary",
+            "FileTreeNode"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 129,
+      "hasStructuralAnalysis": true
+    },
+    "frontend/src/components/files/FileTreeDataSourceNode.tsx": {
+      "filePath": "frontend/src/components/files/FileTreeDataSourceNode.tsx",
+      "contentHash": "57fac59471f4d5f37caa181709aaa5a9c2e557ec93cff4ac78c0950f67122bf1",
+      "functions": [
+        {
+          "name": "FileTreeDataSourceNode",
+          "params": [
+            "{\n  node,\n  dataSource,\n  onClick,\n}"
+          ],
+          "exported": true,
+          "lineCount": 43
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "Monitor",
+            "ChevronDown",
+            "ChevronRight"
+          ]
+        },
+        {
+          "source": "@/types/models",
+          "specifiers": [
+            "FileTreeNode",
+            "DataSourceSummary"
+          ]
+        },
+        {
+          "source": "@/lib/data-source-utils",
+          "specifiers": [
+            "sourceKindLabel",
+            "sourceKindIcon"
+          ]
+        }
+      ],
+      "exports": [
+        "FileTreeDataSourceNode"
+      ],
+      "totalLines": 54,
+      "hasStructuralAnalysis": true
+    },
+    "frontend/src/components/import/ImportDataSourceDialog.test.tsx": {
+      "filePath": "frontend/src/components/import/ImportDataSourceDialog.test.tsx",
+      "contentHash": "b8e17918af004e4de305ca9b0526347b739de69de01fb01ca8678cdd9f9c4e32",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "createElement"
+          ]
+        },
+        {
+          "source": "@testing-library/react",
+          "specifiers": [
+            "render",
+            "screen",
+            "fireEvent",
+            "waitFor"
+          ]
+        },
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "expect",
+            "it",
+            "vi",
+            "beforeEach"
+          ]
+        },
+        {
+          "source": "./ImportDataSourceDialog",
+          "specifiers": [
+            "ImportDataSourceDialog"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 109,
+      "hasStructuralAnalysis": true
+    },
+    "frontend/src/lib/data-source-utils.tsx": {
+      "filePath": "frontend/src/lib/data-source-utils.tsx",
+      "contentHash": "26119357a0ef6819df6a0d4f61868e39ee720f553ae7bbd746145fcec5df8b55",
+      "functions": [
+        {
+          "name": "sourceKindLabel",
+          "params": [
+            "kind"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "sourceKindIcon",
+          "params": [
+            "kind"
+          ],
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "sourceKindIconLarge",
+          "params": [
+            "kind"
+          ],
+          "exported": true,
+          "lineCount": 12
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "Monitor",
+            "Server",
+            "Folder",
+            "Database",
+            "HardDrive"
+          ]
+        }
+      ],
+      "exports": [
+        "sourceKindLabel",
+        "sourceKindIcon",
+        "sourceKindIconLarge"
+      ],
+      "totalLines": 44,
+      "hasStructuralAnalysis": true
     }
   }
 }
