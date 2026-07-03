@@ -457,48 +457,60 @@ pub fn build_partition_work(
         })
         .map(|(_, c)| c)?;
 
+    // Open the base evidence reader (or LvReader wrapper for LVM LVs)
+    let is_lvm_lv = matches!(
+        candidate.source,
+        datasource_service::ImageFilesystemSource::LvmLogicalVolume
+    );
+
+    let (base_reader, fs_offset): (Box<dyn EvidenceReader>, u64) = if is_lvm_lv {
+        // For LVM logical volumes: re-open PV, discover pool, open LV
+        let pv_reader: Box<dyn EvidenceReader> = if *source_kind == domain::DataSourceKind::E01 {
+            Box::new(E01Reader::open(source_path).ok()?)
+        } else {
+            Box::new(evidence_core::RawImageReader::open(source_path).ok()?)
+        };
+        let pool = fs_lvm::LvmPool::discover(vec![pv_reader], vec![candidate.offset]).ok()?;
+        let lv_idx = pool
+            .list_volumes()
+            .iter()
+            .position(|lv| {
+                candidate
+                    .partition_name
+                    .as_deref()
+                    .unwrap_or("")
+                    .ends_with(&lv.name)
+            })
+            .unwrap_or(0);
+        let lv_reader = pool.open_volume(lv_idx).ok()?;
+        (Box::new(lv_reader), 0) // LV is a clean block device at offset 0
+    } else {
+        // Normal partition: open the disk image reader directly
+        let r: Box<dyn EvidenceReader> = if *source_kind == domain::DataSourceKind::E01 {
+            Box::new(E01Reader::open(source_path).ok()?)
+        } else {
+            Box::new(evidence_core::RawImageReader::open(source_path).ok()?)
+        };
+        (r, candidate.offset)
+    };
+
     let fs: Box<dyn FileSystemReader + Send> = match candidate.kind {
         ImageFilesystemKind::Ntfs => {
-            let r: Box<dyn EvidenceReader> = if *source_kind == domain::DataSourceKind::E01 {
-                Box::new(E01Reader::open(source_path).ok()?)
-            } else {
-                Box::new(evidence_core::RawImageReader::open(source_path).ok()?)
-            };
-            Box::new(fs_ntfs::NtfsReader::open(r, candidate.offset).ok()?)
+            Box::new(fs_ntfs::NtfsReader::open(base_reader, fs_offset).ok()?)
         }
         ImageFilesystemKind::Fat => {
-            let r: Box<dyn EvidenceReader> = if *source_kind == domain::DataSourceKind::E01 {
-                Box::new(E01Reader::open(source_path).ok()?)
-            } else {
-                Box::new(evidence_core::RawImageReader::open(source_path).ok()?)
-            };
-            Box::new(fs_fat::FatReader::open(r, candidate.offset).ok()?)
+            Box::new(fs_fat::FatReader::open(base_reader, fs_offset).ok()?)
         }
         ImageFilesystemKind::Ext4 => {
-            let r: Box<dyn EvidenceReader> = if *source_kind == domain::DataSourceKind::E01 {
-                Box::new(E01Reader::open(source_path).ok()?)
-            } else {
-                Box::new(evidence_core::RawImageReader::open(source_path).ok()?)
-            };
-            Box::new(fs_ext4::Ext4Reader::open(r, candidate.offset).ok()?)
+            Box::new(fs_ext4::Ext4Reader::open(base_reader, fs_offset).ok()?)
         }
         ImageFilesystemKind::Xfs => {
-            let r: Box<dyn EvidenceReader> = if *source_kind == domain::DataSourceKind::E01 {
-                Box::new(E01Reader::open(source_path).ok()?)
-            } else {
-                Box::new(evidence_core::RawImageReader::open(source_path).ok()?)
-            };
-            Box::new(fs_xfs::XfsReader::open(r, candidate.offset).ok()?)
+            Box::new(fs_xfs::XfsReader::open(base_reader, fs_offset).ok()?)
         }
         ImageFilesystemKind::Btrfs => {
-            let r: Box<dyn EvidenceReader> = if *source_kind == domain::DataSourceKind::E01 {
-                Box::new(E01Reader::open(source_path).ok()?)
-            } else {
-                Box::new(evidence_core::RawImageReader::open(source_path).ok()?)
-            };
-            Box::new(fs_btrfs::BtrfsReader::open(r, candidate.offset).ok()?)
+            Box::new(fs_btrfs::BtrfsReader::open(base_reader, fs_offset).ok()?)
         }
-        _ => return None,
+        ImageFilesystemKind::LvmPool | ImageFilesystemKind::BitLocker => return None,
     };
 
     Some(parallel_enum::PartitionWork {

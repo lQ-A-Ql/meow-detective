@@ -670,7 +670,7 @@ pub fn expand_lvm_pool_candidates(
                         partition_index: candidate.partition_index,
                         partition_name: Some(lv_name),
                         kind: fs_kind,
-                        offset: 0, // LV is a clean block device
+                        offset: candidate.offset, // PV partition offset for LVM re-open
                         source: ImageFilesystemSource::LvmLogicalVolume,
                     });
                 }
