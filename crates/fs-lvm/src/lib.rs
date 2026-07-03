@@ -159,7 +159,8 @@ impl LvmPool {
 
         let mut pv_data_offsets: Vec<(String, u64)> = Vec::new();
         for pv_meta in &vg.physical_volumes {
-            pv_data_offsets.push((pv_meta.name.clone(), first_data_area.offset));
+            // Physical offset = PV start in reader + data area start within PV
+            pv_data_offsets.push((pv_meta.name.clone(), first_offset + first_data_area.offset));
         }
 
         let logical_volumes = vg.logical_volumes.clone();

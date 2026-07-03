@@ -860,9 +860,39 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
             eprintln!("  LVs: {}", lvs.len());
             for lv in &lvs {
                 eprintln!("    LV: name='{}' uuid={} size={}", lv.name, lv.uuid, lv.size_bytes);
+                // Show extent mapping for diagnosis
+                let vg = pool.volume_group();
+                if let Some(lv_meta) = vg.logical_volumes.iter().find(|l| l.name == lv.name) {
+                    for (si, seg) in lv_meta.segments.iter().enumerate() {
+                        eprintln!("      seg[{}]: type={:?} start_ext={} count={} stripes={:?}",
+                            si, seg.seg_type, seg.start_extent, seg.extent_count, seg.stripes);
+                    }
+                    // Build extent map to see resolved mapping
+                }
                 // Try to read first sector of each LV
-                if let Ok(lv_reader) = pool.open_volume(lvs.iter().position(|v| v.name == lv.name).unwrap()) {
-                    eprintln!("      opened successfully, reading sector 0...");
+                if let Ok(mut lv_reader) = pool.open_volume(lvs.iter().position(|v| v.name == lv.name).unwrap()) {
+                    use std::io::Read;
+                    let mut sector0 = [0u8; 512];
+                    if lv_reader.read_exact(&mut sector0).is_ok() {
+                        let magic = &sector0[0..8];
+                        eprintln!("      sector0[0..8]: {:02X?}", magic);
+                        if magic == b"XFSB\0\0\0\0" || sector0[0..4] == [0x58, 0x46, 0x53, 0x42] {
+                            eprintln!("      → XFS superblock detected!");
+                        }
+                        // Check for ext4 at 1024
+                        use std::io::Seek;
+                        lv_reader.seek(std::io::SeekFrom::Start(1024)).ok();
+                        let mut ext4_magic = [0u8; 2];
+                        if lv_reader.read_exact(&mut ext4_magic).is_ok() {
+                            if u16::from_le_bytes(ext4_magic) == 0xEF53 {
+                                eprintln!("      → ext4 superblock at offset 1024!");
+                            }
+                        }
+                        // Check for partition table (MBR magic)
+                        if sector0[510] == 0x55 && sector0[511] == 0xAA {
+                            eprintln!("      → MBR boot signature found — LV contains a partition table!");
+                        }
+                    }
                 }
             }
         }
