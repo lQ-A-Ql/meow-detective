@@ -90,19 +90,20 @@ export function useFileTree({
   // Pre-populate tree children so data-source nodes show their own partition
   // roots without needing a backend fetch. Synthetic data-source IDs never exist
   // in the backend and must not be sent to file children/rows APIs.
+  //
+  // Always writes children directly (no sameTreeNodeList guard) because
+  // React 18 batching can cause the effect to see stale current state
+  // where the DS slot was never populated, while the wrappedRootTree memo
+  // has already computed hasChildren=true from the fresh rootTree.
   useEffect(() => {
     if (!dataSources || dataSources.length === 0) return;
     setTreeChildren((current) => {
-      let changed = false;
       const next = { ...current };
       for (const ds of dataSources) {
         const dsId = dataSourceNodeId(ds.id);
-        const children = rootsForDataSource(rootTree, ds.id, dataSources);
-        if (sameTreeNodeList(next[dsId] ?? [], children)) continue;
-        next[dsId] = children;
-        changed = true;
+        next[dsId] = rootsForDataSource(rootTree, ds.id, dataSources);
       }
-      return changed ? next : current;
+      return next;
     });
   }, [dataSources, rootTree]);
 
