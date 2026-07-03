@@ -733,6 +733,53 @@ mod tests {
     }
 
     #[test]
+    fn analysis_worker_reuses_preview_descriptor_cache_across_content_reads() {
+        let _hook_guard = TEST_HOOK_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let tmp = TempDir::new().unwrap();
+        let evidence_dir = tmp.path().join("evidence");
+        let prefetch_dir = evidence_dir.join("Windows").join("Prefetch");
+        std::fs::create_dir_all(&prefetch_dir).unwrap();
+        let file_name = "APP.EXE-12345678.pf";
+        std::fs::write(prefetch_dir.join(file_name), b"fake prefetch text").unwrap();
+
+        let (db_path, ds_id) = setup_case_db(&tmp);
+        let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
+        conn.execute(
+            "INSERT INTO file_entries
+             (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
+             VALUES ('file-cache-pf', NULL, ?1, 'Windows/Prefetch/APP.EXE-12345678.pf',
+                     'APP.EXE-12345678.pf', 'file', 17, 'txt', 0, 0, 0)",
+            params![ds_id.0],
+        )
+        .unwrap();
+        drop(conn);
+
+        let mut options = analysis_options(
+            &tmp,
+            db_path,
+            ds_id.clone(),
+            ImportAnalysisMode::BudgetedContent,
+        );
+        options.enable_timeline_projection = false;
+        options.enable_content_extraction = true;
+        options.enable_text_indexing = true;
+
+        crate::file_service::reset_preview_descriptor_for_case_call_count();
+        test_hooks::reset();
+        test_hooks::track_file_id("file-cache-pf");
+        let stats = run_import_analysis_staging(options, None).unwrap();
+
+        assert_eq!(stats.processed_count, 1);
+        assert_eq!(test_hooks::artifact_bytes_reads(), 1);
+        assert_eq!(test_hooks::text_index_bytes_reads(), 1);
+        assert_eq!(
+            crate::file_service::preview_descriptor_for_case_call_count(),
+            1,
+            "the worker should reuse one preview descriptor across artifact and text reads"
+        );
+    }
+
+    #[test]
     fn analysis_artifact_extraction_raw_exfat_uses_bytes_only_reader() {
         let _hook_guard = TEST_HOOK_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let tmp = TempDir::new().unwrap();

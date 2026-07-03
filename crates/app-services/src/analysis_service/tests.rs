@@ -1096,7 +1096,7 @@ fn linux_summary_reports_candidates_without_artifacts_and_truncation() {
                 "large-auth",
                 &ds_id,
                 "var/log/auth.log",
-                MAX_ANALYSIS_SOURCE_BYTES as u64 + 1,
+                16 * 1024 * 1024 + 1,
             ),
             file_with_ds(
                 "systemd",
@@ -1120,7 +1120,7 @@ fn linux_summary_reports_candidates_without_artifacts_and_truncation() {
     assert!(summary
         .warnings
         .iter()
-        .any(|warning| warning.contains("128 MiB cap")));
+        .any(|warning| warning.contains("16777216 bytes (per-source cap)")));
     assert!(summary
         .warnings
         .iter()

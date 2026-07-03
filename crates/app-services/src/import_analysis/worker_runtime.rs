@@ -105,6 +105,7 @@ pub(super) fn run_analysis_worker(
 
     let mut stats = WorkerStats::default();
     let registry = artifact_service::create_registry();
+    let header_cache = file_service::FileHeaderReadCache::new(options.case_id.clone());
     let mut artifacts = Vec::with_capacity(WORKER_INSERT_BATCH);
     let mut timeline_events = Vec::with_capacity(WORKER_INSERT_BATCH);
     let mut index_docs = Vec::with_capacity(INDEX_DOC_INSERT_BATCH);
@@ -129,7 +130,7 @@ pub(super) fn run_analysis_worker(
             && should_extract_artifact(&registry, &file)
             && reserve_content_budget(&options.content_budget, &file, &shared)
         {
-            match read_artifact_bytes(&main_conn, &file.id) {
+            match read_artifact_bytes(&header_cache, &main_conn, &file.id) {
                 Ok(bytes) => {
                     let mut sink = VecSink::new();
                     match artifact_service::run_extractors_on_file(
@@ -184,7 +185,7 @@ pub(super) fn run_analysis_worker(
             && shared.indexed_total.load(Ordering::Relaxed)
                 < infrastructure::constants::IMPORT_TEXT_INDEX_LIMIT
         {
-            if let Ok(bytes) = read_text_index_bytes(&main_conn, &file.id) {
+            if let Ok(bytes) = read_text_index_bytes(&header_cache, &main_conn, &file.id) {
                 let mime = mime_hint_for_entry(&file);
                 let text = extract_text(Cursor::new(bytes), &file.id.0, mime);
                 if text.extractable && !text.content.is_empty() {
@@ -362,25 +363,28 @@ fn flush_worker_rows(
 }
 
 fn read_text_index_bytes(
+    header_cache: &file_service::FileHeaderReadCache,
     conn: &Connection,
     file_id: &FileEntryId,
 ) -> Result<Vec<u8>, file_service::FileServiceError> {
-    read_text_index_bytes_impl(conn, file_id)
+    read_text_index_bytes_impl(header_cache, conn, file_id)
 }
 
 fn read_artifact_bytes(
+    header_cache: &file_service::FileHeaderReadCache,
     conn: &Connection,
     file_id: &FileEntryId,
 ) -> Result<Vec<u8>, file_service::FileServiceError> {
-    read_artifact_bytes_impl(conn, file_id)
+    read_artifact_bytes_impl(header_cache, conn, file_id)
 }
 
 #[cfg(not(test))]
 fn read_artifact_bytes_impl(
+    header_cache: &file_service::FileHeaderReadCache,
     conn: &Connection,
     file_id: &FileEntryId,
 ) -> Result<Vec<u8>, file_service::FileServiceError> {
-    file_service::read_file_header_by_id(
+    header_cache.read_file_header_by_id(
         conn,
         file_id,
         infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES as usize,
@@ -389,18 +393,20 @@ fn read_artifact_bytes_impl(
 
 #[cfg(test)]
 fn read_artifact_bytes_impl(
+    header_cache: &file_service::FileHeaderReadCache,
     conn: &Connection,
     file_id: &FileEntryId,
 ) -> Result<Vec<u8>, file_service::FileServiceError> {
-    test_hooks::read_artifact_bytes(conn, file_id)
+    test_hooks::read_artifact_bytes(header_cache, conn, file_id)
 }
 
 #[cfg(not(test))]
 fn read_text_index_bytes_impl(
+    header_cache: &file_service::FileHeaderReadCache,
     conn: &Connection,
     file_id: &FileEntryId,
 ) -> Result<Vec<u8>, file_service::FileServiceError> {
-    file_service::read_file_header_by_id(
+    header_cache.read_file_header_by_id(
         conn,
         file_id,
         infrastructure::constants::IMPORT_TEXT_INDEX_FILE_LIMIT_BYTES as usize,
@@ -409,10 +415,11 @@ fn read_text_index_bytes_impl(
 
 #[cfg(test)]
 fn read_text_index_bytes_impl(
+    header_cache: &file_service::FileHeaderReadCache,
     conn: &Connection,
     file_id: &FileEntryId,
 ) -> Result<Vec<u8>, file_service::FileServiceError> {
-    test_hooks::read_text_index_bytes(conn, file_id)
+    test_hooks::read_text_index_bytes(header_cache, conn, file_id)
 }
 
 #[derive(Debug)]
@@ -525,13 +532,14 @@ pub(super) mod test_hooks {
     static TRACKED_FILE_ID: Mutex<Option<String>> = Mutex::new(None);
 
     pub(in crate::import_analysis) fn read_artifact_bytes(
+        header_cache: &file_service::FileHeaderReadCache,
         conn: &Connection,
         file_id: &FileEntryId,
     ) -> Result<Vec<u8>, file_service::FileServiceError> {
         if should_count_file_id(file_id) {
             ARTIFACT_BYTES_READS.fetch_add(1, Ordering::Relaxed);
         }
-        file_service::read_file_header_by_id(
+        header_cache.read_file_header_by_id(
             conn,
             file_id,
             infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES as usize,
@@ -539,13 +547,14 @@ pub(super) mod test_hooks {
     }
 
     pub(in crate::import_analysis) fn read_text_index_bytes(
+        header_cache: &file_service::FileHeaderReadCache,
         conn: &Connection,
         file_id: &FileEntryId,
     ) -> Result<Vec<u8>, file_service::FileServiceError> {
         if should_count_file_id(file_id) {
             TEXT_INDEX_BYTES_READS.fetch_add(1, Ordering::Relaxed);
         }
-        file_service::read_file_header_by_id(
+        header_cache.read_file_header_by_id(
             conn,
             file_id,
             infrastructure::constants::IMPORT_TEXT_INDEX_FILE_LIMIT_BYTES as usize,

@@ -1399,11 +1399,13 @@ fn linux_summary_observability(
         .count() as u64;
 
     for candidate in &candidates {
-        if candidate.size > MAX_ANALYSIS_SOURCE_BYTES as u64 {
+        let normalized_path = normalize_evidence_path(&candidate.path);
+        let source_limit = linux_candidate_read_limit(&normalized_path);
+        if candidate.size > source_limit as u64 {
             truncated = true;
             warnings.push(format!(
-                "{} is {} bytes; Linux extraction reads only the first {} bytes (128 MiB cap)",
-                candidate.path, candidate.size, MAX_ANALYSIS_SOURCE_BYTES
+                "{} is {} bytes; Linux extraction reads only the first {} bytes (per-source cap)",
+                candidate.path, candidate.size, source_limit
             ));
         }
     }

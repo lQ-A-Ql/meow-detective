@@ -40,6 +40,10 @@ pub use viewer::{
     read_file_header_by_id, read_file_range_for_case, read_file_range_real, safe_relative_path,
     skip_reader_bytes, FileHeaderReadCache,
 };
+#[cfg(test)]
+pub(crate) use viewer::{
+    preview_descriptor_for_case_call_count, reset_preview_descriptor_for_case_call_count,
+};
 
 pub use mft::{
     add_entry_to_path_map, enumerate_filesystem_mft, mft_parent_entry_id, parse_ntfs_data_runs,

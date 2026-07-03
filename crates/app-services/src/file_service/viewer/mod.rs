@@ -162,6 +162,20 @@ thread_local! {
     pub(crate) static READ_FILE_BYTES_FOR_CASE_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
+#[cfg(test)]
+pub(crate) static PREVIEW_DESCRIPTOR_FOR_CASE_CALLS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(test)]
+pub(crate) fn reset_preview_descriptor_for_case_call_count() {
+    PREVIEW_DESCRIPTOR_FOR_CASE_CALLS.store(0, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(test)]
+pub(crate) fn preview_descriptor_for_case_call_count() -> usize {
+    PREVIEW_DESCRIPTOR_FOR_CASE_CALLS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Skip `remaining` bytes on a sequential reader.
 ///
 /// This is exposed because some callers (and tests) need to observe how often
