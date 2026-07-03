@@ -957,38 +957,10 @@ impl XfsReader {
                         let full_literal = &inode[core..];
                         let recovery_slices: &[&[u8]] =
                             if all_zero { &[df, full_literal] } else { &[df] };
-                        for &slice in recovery_slices {
-                            if let Ok(raw) =
-                                Self::parse_shortform_dir(slice, Self::has_ftype(&inode))
-                            {
-                                if !raw.is_empty() {
-                                    let mut entries = Vec::with_capacity(raw.len());
-                                    for (name, child_ino) in raw {
-                                        let is_dir = self
-                                            .read_inode(child_ino)
-                                            .ok()
-                                            .filter(|ci| ci.len() >= 4)
-                                            .is_some_and(|ci| Self::inode_is_dir(&ci));
-                                        entries.push((name, child_ino, is_dir));
-                                    }
-                                    return Ok(entries);
-                                }
-                            }
-                            // Also try without ftype
-                            if let Ok(raw) = Self::parse_shortform_dir(slice, false) {
-                                if !raw.is_empty() {
-                                    let mut entries = Vec::with_capacity(raw.len());
-                                    for (name, child_ino) in raw {
-                                        let is_dir = self
-                                            .read_inode(child_ino)
-                                            .ok()
-                                            .filter(|ci| ci.len() >= 4)
-                                            .is_some_and(|ci| Self::inode_is_dir(&ci));
-                                        entries.push((name, child_ino, is_dir));
-                                    }
-                                    return Ok(entries);
-                                }
-                            }
+                        if let Some(entries) = self
+                            .recover_shortform_dir_entries(recovery_slices, Self::has_ftype(&inode))
+                        {
+                            return Ok(entries);
                         }
                         if all_zero {
                             Err(invalid_fs_data(
@@ -1009,6 +981,63 @@ impl XfsReader {
                 ino, other
             ))),
         }
+    }
+
+    fn recover_shortform_dir_entries(
+        &self,
+        slices: &[&[u8]],
+        prefer_ftype: bool,
+    ) -> Option<Vec<(String, u64, bool)>> {
+        for &slice in slices {
+            if let Some(entries) = self.try_shortform_dir_scan(slice, prefer_ftype) {
+                return Some(entries);
+            }
+            if let Some(entries) = self.try_shortform_dir_scan(slice, !prefer_ftype) {
+                return Some(entries);
+            }
+        }
+        None
+    }
+
+    fn try_shortform_dir_scan(
+        &self,
+        slice: &[u8],
+        has_ftype: bool,
+    ) -> Option<Vec<(String, u64, bool)>> {
+        for start in 0..slice.len().saturating_sub(DIR2_SF_HDR_4) {
+            let count = slice[start] as usize;
+            if count == 0 || count > 128 {
+                continue;
+            }
+            let i8count = slice[start + 1] as usize;
+            if i8count > count {
+                continue;
+            }
+            let raw = match Self::parse_shortform_dir(&slice[start..], has_ftype) {
+                Ok(raw) if raw.len() == count => raw,
+                _ => continue,
+            };
+            if raw
+                .iter()
+                .all(|(name, ino)| is_plausible_shortform_name(name) && *ino > 0)
+            {
+                return Some(self.annotate_shortform_entries(raw));
+            }
+        }
+        None
+    }
+
+    fn annotate_shortform_entries(&self, raw: Vec<(String, u64)>) -> Vec<(String, u64, bool)> {
+        let mut entries = Vec::with_capacity(raw.len());
+        for (name, child_ino) in raw {
+            let is_dir = self
+                .read_inode(child_ino)
+                .ok()
+                .filter(|ci| ci.len() >= 4)
+                .is_some_and(|ci| Self::inode_is_dir(&ci));
+            entries.push((name, child_ino, is_dir));
+        }
+        entries
     }
 
     /// Walk a path string to resolve an inode number and whether it is
@@ -1104,6 +1133,16 @@ fn append_zeroes(data: &mut Vec<u8>, count: u64) -> io::Result<()> {
         .ok_or_else(|| fs_out_of_memory("xfs sparse range exceeds addressable memory"))?;
     data.resize(new_len, 0);
     Ok(())
+}
+
+fn is_plausible_shortform_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 255
+        && !name.contains('\0')
+        && !matches!(name, "." | "..")
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_graphic() || byte == b' ')
 }
 
 // ===========================================================================
@@ -1378,6 +1417,39 @@ mod tests {
         let data_offset = physical_block as usize * block_size as usize;
         img[data_offset..data_offset + marker.len()].copy_from_slice(marker);
         (img, LOGICAL_OFFSET)
+    }
+
+    fn build_xfs_fixture_with_zeroed_block_dir_and_residual_shortform() -> Vec<u8> {
+        let mut img = build_xfs_fixture();
+        let block_size = 4096u64;
+
+        let fi = &mut img[8192 + 2 * 256..8192 + 3 * 256];
+        fi[di_off::MODE..di_off::MODE + 2].copy_from_slice(&(S_IFDIR | 0o755).to_be_bytes());
+        fi[di_off::FORMAT] = FORMAT_EXTENTS;
+        fi[di_off::SIZE..di_off::SIZE + 8].copy_from_slice(&block_size.to_be_bytes());
+        fi[di_off::NEXTENTS..di_off::NEXTENTS + 4].copy_from_slice(&1u32.to_be_bytes());
+        fi[di_off::FORKOFF] = 2;
+
+        let core = INODE_CORE_SIZE;
+        let df_file = &mut fi[core..core + 16];
+        df_file.copy_from_slice(&encode_bmbt_extent(0, 7, 1));
+
+        let residual = &mut fi[core + 16..];
+        residual[0] = 1;
+        residual[1] = 1;
+        residual[2..10].copy_from_slice(&2u64.to_be_bytes());
+        let mut pos = DIR2_SF_HDR_8;
+        residual[pos] = 6;
+        pos += 1;
+        residual[pos..pos + 2].copy_from_slice(&0x0018u16.to_be_bytes());
+        pos += 2;
+        residual[pos..pos + 6].copy_from_slice(b"subdir");
+        pos += 6;
+        residual[pos..pos + 8].copy_from_slice(&4u64.to_be_bytes());
+
+        let block7 = 7usize * block_size as usize;
+        img[block7..block7 + block_size as usize].fill(0);
+        img
     }
 
     // -----------------------------------------------------------------------
@@ -1865,5 +1937,18 @@ mod tests {
         let result = XfsReader::parse_block_dir(&data);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn test_zeroed_block_dir_recovers_residual_shortform_entries() {
+        let img = build_xfs_fixture_with_zeroed_block_dir_and_residual_shortform();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let xfs = XfsReader::open(reader, 0).unwrap();
+
+        let children = xfs.list_children("test.txt").unwrap();
+
+        assert_eq!(children.len(), 1);
+        assert_eq!(children[0].name, "subdir");
+        assert!(children[0].is_dir);
     }
 }
