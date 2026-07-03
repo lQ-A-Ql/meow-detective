@@ -648,72 +648,14 @@ pub fn expand_lvm_pool_candidates(
             candidate.offset,
         );
 
-        // For each LV, re-open reader + re-discover to detect filesystem
-        for lv_info in &lv_list {
-            let lv_reader: Result<Box<dyn evidence_core::EvidenceReader>> = match source_kind {
-                domain::DataSourceKind::E01 => {
-                    let r = match image_e01::E01Reader::open(source_path) {
-                        Ok(r) => r,
-                        Err(e) => {
-                            tracing::warn!("LVM: cannot re-open E01 for LV '{}': {}", lv_info.name, e);
-                            continue;
-                        }
-                    };
-                    let lv_pool = match fs_lvm::LvmPool::discover(
-                        vec![Box::new(r) as Box<dyn evidence_core::EvidenceReader>],
-                        vec![candidate.offset],
-                    ) {
-                        Ok(p) => p,
-                        Err(e) => {
-                            tracing::warn!("LVM: re-discover failed for LV '{}': {}", lv_info.name, e);
-                            continue;
-                        }
-                    };
-                    let lv_idx = lv_pool.list_volumes().iter()
-                        .position(|v| v.name == lv_info.name)
-                        .unwrap_or(0);
-                    match lv_pool.open_volume(lv_idx) {
-                        Ok(lvr) => Ok(Box::new(lvr) as Box<dyn evidence_core::EvidenceReader>),
-                        Err(e) => {
-                            tracing::warn!("LVM: open_volume '{}' failed: {}", lv_info.name, e);
-                            continue;
-                        }
-                    }
-                }
-                _ => {
-                    let r = match evidence_core::RawImageReader::open(source_path) {
-                        Ok(r) => r,
-                        Err(e) => {
-                            tracing::warn!("LVM: cannot re-open RAW for LV '{}': {}", lv_info.name, e);
-                            continue;
-                        }
-                    };
-                    let lv_pool = match fs_lvm::LvmPool::discover(
-                        vec![Box::new(r) as Box<dyn evidence_core::EvidenceReader>],
-                        vec![candidate.offset],
-                    ) {
-                        Ok(p) => p,
-                        Err(e) => {
-                            tracing::warn!("LVM: re-discover failed for LV '{}': {}", lv_info.name, e);
-                            continue;
-                        }
-                    };
-                    let lv_idx = lv_pool.list_volumes().iter()
-                        .position(|v| v.name == lv_info.name)
-                        .unwrap_or(0);
-                    match lv_pool.open_volume(lv_idx) {
-                        Ok(lvr) => Ok(Box::new(lvr) as Box<dyn evidence_core::EvidenceReader>),
-                        Err(e) => {
-                            tracing::warn!("LVM: open_volume '{}' failed: {}", lv_info.name, e);
-                            continue;
-                        }
-                    }
-                }
-            };
-
-            let mut lv_reader = match lv_reader {
+        // Open each LV from the shared pool (no re-open needed)
+        for (lv_idx, lv_info) in lv_list.iter().enumerate() {
+            let mut lv_reader = match pool.open_volume(lv_idx) {
                 Ok(r) => r,
-                Err(_) => continue,
+                Err(e) => {
+                    tracing::warn!("LVM: open_volume '{}' failed: {}", lv_info.name, e);
+                    continue;
+                }
             };
 
             // Detect filesystem on the LV

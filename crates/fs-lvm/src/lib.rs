@@ -50,6 +50,8 @@ pub mod lv_reader;
 pub mod metadata;
 pub mod segment;
 
+use std::sync::Arc;
+
 use evidence_core::EvidenceReader;
 
 use crate::error::Result;
@@ -93,7 +95,8 @@ pub struct LvInfo {
 /// volumes.
 pub struct LvmPool {
     volume_group: VolumeGroup,
-    device_readers: Vec<std::cell::RefCell<Box<dyn EvidenceReader>>>,
+    /// Shared device readers (Rc allows multiple LvReaders to share one PV reader).
+    device_readers: Vec<std::sync::Arc<std::sync::Mutex<Box<dyn EvidenceReader>>>>,
     pv_data_offsets: Vec<(String, u64)>, // (pv_name, data_area_start_byte)
     logical_volumes: Vec<LvMeta>,
 }
@@ -123,11 +126,11 @@ impl LvmPool {
         let first_reader = pv_reader.next().unwrap();
         let first_offset = pv_offset_iter.next().unwrap();
 
-        let temp_reader = std::cell::RefCell::new(first_reader);
+        let temp_reader = std::sync::Mutex::new(first_reader);
 
         // Phase 1: Parse PV label
         let pv_label = {
-            let mut r = temp_reader.borrow_mut();
+            let mut r = temp_reader.lock().unwrap();
             label::parse_pv_label(&mut *r, first_offset)?
         };
 
@@ -140,7 +143,7 @@ impl LvmPool {
                         message: "no metadata area found on PV".to_string(),
                     }
                 })?;
-                let mut r = temp_reader.borrow_mut();
+                let mut r = temp_reader.lock().unwrap();
                 metadata::parse_metadata(&mut *r, mda)?
             };
 
@@ -163,7 +166,7 @@ impl LvmPool {
 
         Ok(LvmPool {
             volume_group: vg,
-            device_readers: vec![temp_reader],
+            device_readers: vec![Arc::new(temp_reader)],
             pv_data_offsets,
             logical_volumes,
         })
@@ -184,14 +187,13 @@ impl LvmPool {
     /// Open a logical volume by index, returning a virtual block device
     /// that implements [`EvidenceReader`].
     ///
-    /// **Note:** This consumes the underlying device reader. For single-PV
-    /// setups (Phase 1), this is fine. Multi-PV support (Phase 2) will
-    /// require shared reader access.
+    /// Uses `Rc`-shared device reader so multiple LVs can be opened
+    /// concurrently from a single pool without consuming it.
     ///
     /// The returned reader can be passed to filesystem readers like
     /// `Ext4Reader::open()`, `XfsReader::open()`, etc. with offset `0`
     /// since a logical volume presents as a clean block device.
-    pub fn open_volume(mut self, index: usize) -> Result<LvReader> {
+    pub fn open_volume(&self, index: usize) -> Result<LvReader> {
         if index >= self.logical_volumes.len() {
             return Err(crate::error::LvmError::LvIndexOutOfRange {
                 index,
@@ -199,13 +201,12 @@ impl LvmPool {
             });
         }
 
-        let lv = self.logical_volumes[index].clone();
-        let extent_map = segment::build_extent_map(&self.volume_group, &lv, &self.pv_data_offsets)?;
+        let lv = &self.logical_volumes[index];
+        let extent_map = segment::build_extent_map(&self.volume_group, lv, &self.pv_data_offsets)?;
 
-        // Take the reader out of the RefCell (single-PV, Phase 1)
-        let reader = self.device_readers.remove(0).into_inner();
+        let shared_reader = self.device_readers[0].clone();
 
-        Ok(LvReader::new(reader, lv.name, lv.size_bytes, extent_map))
+        Ok(LvReader::new_shared(shared_reader, lv.name.clone(), lv.size_bytes, extent_map))
     }
 
     /// Access the parsed volume group metadata.

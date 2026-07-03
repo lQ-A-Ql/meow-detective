@@ -18,8 +18,8 @@ use crate::segment::LvExtent;
 
 /// Read-only access to a logical volume block device.
 pub struct LvReader {
-    /// Underlying physical disk reader (the PV).
-    device_reader: std::cell::RefCell<Box<dyn EvidenceReader>>,
+    /// Underlying physical disk reader (the PV). Uses Rc for multi-LV sharing.
+    device_reader: std::sync::Arc<std::sync::Mutex<Box<dyn EvidenceReader>>>,
     /// Metadata about this logical volume.
     info: ReaderInfo,
     /// Pre-computed LE → physical offset mapping.
@@ -31,7 +31,7 @@ pub struct LvReader {
 }
 
 impl LvReader {
-    /// Create a new logical volume reader.
+    /// Create a new logical volume reader (owns the device reader).
     ///
     /// `device_reader`: the underlying disk image reader for the physical volume.
     /// `lv_name`: human-readable name (used in ReaderInfo).
@@ -43,6 +43,22 @@ impl LvReader {
         total_size: u64,
         extent_map: Vec<LvExtent>,
     ) -> Self {
+        Self::new_shared(
+            std::sync::Arc::new(std::sync::Mutex::new(device_reader)),
+            lv_name,
+            total_size,
+            extent_map,
+        )
+    }
+
+    /// Create a logical volume reader with a shared (Rc) device reader.
+    /// Enables opening multiple LVs from one pool without consuming the reader.
+    pub fn new_shared(
+        device_reader: std::sync::Arc<std::sync::Mutex<Box<dyn EvidenceReader>>>,
+        lv_name: String,
+        total_size: u64,
+        extent_map: Vec<LvExtent>,
+    ) -> Self {
         let info = ReaderInfo {
             path: std::path::PathBuf::from(format!("lvm://{}", lv_name)),
             size: total_size,
@@ -50,7 +66,7 @@ impl LvReader {
         };
 
         Self {
-            device_reader: std::cell::RefCell::new(device_reader),
+            device_reader,
             info,
             extent_map,
             current_pos: 0,
@@ -94,7 +110,7 @@ impl LvReader {
         let to_read = buf.len().min(available_in_ext as usize);
 
         let physical_offset = ext.physical_offset + offset_in_ext;
-        let mut reader = self.device_reader.borrow_mut();
+        let mut reader = self.device_reader.lock().unwrap();
         reader.seek(SeekFrom::Start(physical_offset))?;
         reader.read_exact(&mut buf[..to_read])?;
 
@@ -211,8 +227,8 @@ mod tests {
         }];
 
         let lv = LvReader::new(device, "test_lv".into(), 17, extent_map);
-        let reader = std::cell::RefCell::new(Box::new(lv) as Box<dyn EvidenceReader>);
-        let mut lv_ref = reader.borrow_mut();
+        let reader = std::sync::Mutex::new(Box::new(lv) as Box<dyn EvidenceReader>);
+        let mut lv_ref = reader.lock().unwrap();
 
         let mut buf = [0u8; 5];
         lv_ref.read_exact(&mut buf).unwrap();
@@ -233,8 +249,8 @@ mod tests {
         }];
 
         let lv = LvReader::new(device, "test_lv".into(), 10, extent_map);
-        let reader = std::cell::RefCell::new(Box::new(lv) as Box<dyn EvidenceReader>);
-        let mut lv_ref = reader.borrow_mut();
+        let reader = std::sync::Mutex::new(Box::new(lv) as Box<dyn EvidenceReader>);
+        let mut lv_ref = reader.lock().unwrap();
 
         // Seek to offset 3, read 2 bytes
         lv_ref.seek(SeekFrom::Start(3)).unwrap();
@@ -257,8 +273,8 @@ mod tests {
         }];
 
         let lv = LvReader::new(device, "small_lv".into(), 4, extent_map);
-        let reader = std::cell::RefCell::new(Box::new(lv) as Box<dyn EvidenceReader>);
-        let mut lv_ref = reader.borrow_mut();
+        let reader = std::sync::Mutex::new(Box::new(lv) as Box<dyn EvidenceReader>);
+        let mut lv_ref = reader.lock().unwrap();
 
         lv_ref.seek(SeekFrom::Start(4)).unwrap();
         let mut buf = [0u8; 10];
