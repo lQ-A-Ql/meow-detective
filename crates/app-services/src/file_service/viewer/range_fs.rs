@@ -593,16 +593,19 @@ pub(crate) fn try_read_linux_image_range_from_candidates<F>(
 where
     F: FnMut(&Path) -> std::io::Result<Box<dyn evidence_core::EvidenceReader>>,
 {
+    let mut lvm_cache = crate::file_service::viewer::image_open::LvmPoolRequestCache::new();
+
     for candidate in partition_candidates {
         if !is_linux_filesystem_kind(&candidate.filesystem_kind) {
             continue;
         }
 
         let (boxed_reader, fs_offset) =
-            match crate::file_service::viewer::image_open::open_candidate_block_reader(
+            match crate::file_service::viewer::image_open::open_candidate_block_reader_with_lvm_cache(
                 source_path,
                 candidate,
                 &mut open_reader,
+                &mut lvm_cache,
             ) {
                 Ok(reader) => reader,
                 Err(error) => {

@@ -11,6 +11,7 @@ use crate::file_service::FileServiceError;
 use domain::FileEntry;
 use evidence_core::{EvidenceReader, FileSystemReader};
 use rusqlite::Connection;
+use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
 
@@ -360,6 +361,57 @@ where
     }
 }
 
+pub(crate) struct LvmPoolRequestCache {
+    pools: HashMap<LvmPoolCacheKey, fs_lvm::LvmPool>,
+}
+
+impl LvmPoolRequestCache {
+    pub(crate) fn new() -> Self {
+        Self {
+            pools: HashMap::new(),
+        }
+    }
+
+    pub(crate) fn open_volume<F>(
+        &mut self,
+        source_path: &Path,
+        identity: &PreviewLvmIdentity,
+        open_reader: &mut F,
+    ) -> std::io::Result<fs_lvm::LvReader>
+    where
+        F: FnMut(&Path) -> std::io::Result<Box<dyn EvidenceReader>>,
+    {
+        let key = LvmPoolCacheKey::from_identity(identity);
+        if !self.pools.contains_key(&key) {
+            let pool = discover_lvm_pool(source_path, identity, open_reader)?;
+            self.pools.insert(key.clone(), pool);
+        }
+
+        let pool = self
+            .pools
+            .get(&key)
+            .expect("pool was inserted before lookup");
+        open_lvm_volume_from_pool(pool, identity)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct LvmPoolCacheKey {
+    vg_uuid: String,
+    vg_name: String,
+    pv_offsets: Vec<u64>,
+}
+
+impl LvmPoolCacheKey {
+    fn from_identity(identity: &PreviewLvmIdentity) -> Self {
+        Self {
+            vg_uuid: identity.vg_uuid.clone(),
+            vg_name: identity.vg_name.clone(),
+            pv_offsets: identity.pv_offsets.clone(),
+        }
+    }
+}
+
 pub(crate) fn open_candidate_block_reader<F>(
     source_path: &Path,
     candidate: &PreviewPartitionCandidate,
@@ -371,6 +423,24 @@ where
     match &candidate.lvm_identity {
         Some(identity) => {
             let lv_reader = open_lvm_logical_volume_reader(source_path, identity, open_reader)?;
+            Ok((Box::new(lv_reader) as Box<dyn EvidenceReader>, 0))
+        }
+        None => open_reader(source_path).map(|reader| (reader, candidate.offset)),
+    }
+}
+
+pub(crate) fn open_candidate_block_reader_with_lvm_cache<F>(
+    source_path: &Path,
+    candidate: &PreviewPartitionCandidate,
+    open_reader: &mut F,
+    lvm_cache: &mut LvmPoolRequestCache,
+) -> std::io::Result<(Box<dyn EvidenceReader>, u64)>
+where
+    F: FnMut(&Path) -> std::io::Result<Box<dyn EvidenceReader>>,
+{
+    match &candidate.lvm_identity {
+        Some(identity) => {
+            let lv_reader = lvm_cache.open_volume(source_path, identity, open_reader)?;
             Ok((Box::new(lv_reader) as Box<dyn EvidenceReader>, 0))
         }
         None => open_reader(source_path).map(|reader| (reader, candidate.offset)),
@@ -392,18 +462,42 @@ where
         ));
     }
 
+    let pool = discover_lvm_pool(source_path, identity, open_reader)?;
+    open_lvm_volume_from_pool(&pool, identity)
+}
+
+fn discover_lvm_pool<F>(
+    source_path: &Path,
+    identity: &PreviewLvmIdentity,
+    open_reader: &mut F,
+) -> std::io::Result<fs_lvm::LvmPool>
+where
+    F: FnMut(&Path) -> std::io::Result<Box<dyn EvidenceReader>>,
+{
+    if identity.pv_offsets.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "LVM preview identity has no physical volume offsets",
+        ));
+    }
+
     let mut readers = Vec::with_capacity(identity.pv_offsets.len());
     for _ in &identity.pv_offsets {
         readers.push(open_reader(source_path)?);
     }
 
-    let pool =
-        fs_lvm::LvmPool::discover(readers, identity.pv_offsets.clone()).map_err(|error| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("LVM discovery failed for preview: {error}"),
-            )
-        })?;
+    fs_lvm::LvmPool::discover(readers, identity.pv_offsets.clone()).map_err(|error| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("LVM discovery failed for preview: {error}"),
+        )
+    })
+}
+
+fn open_lvm_volume_from_pool(
+    pool: &fs_lvm::LvmPool,
+    identity: &PreviewLvmIdentity,
+) -> std::io::Result<fs_lvm::LvReader> {
     let lv_index = find_lvm_preview_volume_index(&pool, identity).ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::NotFound,

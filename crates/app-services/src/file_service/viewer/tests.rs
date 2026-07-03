@@ -251,6 +251,91 @@ fn write_large_ext4_raw_fixture(path: &std::path::Path, marker: &[u8]) -> std::i
     Ok(LOGICAL_OFFSET)
 }
 
+fn build_synthetic_lvm_disk() -> Vec<u8> {
+    let pv_uuid = "abcdef1234567890abcdef1234567890";
+    let pv_size = 2_097_152u64;
+    let mut disk = vec![0u8; pv_size as usize];
+
+    {
+        let sec = &mut disk[512..1024];
+        sec[0..8].copy_from_slice(b"LABELONE");
+        sec[8..16].copy_from_slice(&1u64.to_le_bytes());
+        sec[20..24].copy_from_slice(&32u32.to_le_bytes());
+        sec[24..32].copy_from_slice(b"LVM2 001");
+        sec[32..64].copy_from_slice(format!("{:32}", pv_uuid).as_bytes());
+        sec[64..72].copy_from_slice(&pv_size.to_le_bytes());
+        sec[72..80].copy_from_slice(&2560u64.to_le_bytes());
+        sec[80..88].copy_from_slice(&(pv_size - 2560).to_le_bytes());
+        sec[104..112].copy_from_slice(&1024u64.to_le_bytes());
+        sec[112..120].copy_from_slice(&(4 * 512u64).to_le_bytes());
+        let crc = fs_lvm::crc::lvm_crc32(&sec[20..512]);
+        sec[16..20].copy_from_slice(&crc.to_le_bytes());
+    }
+
+    let metadata_text = format!(
+        r#"test_vg {{
+    id = "vg-1234"
+    seqno = 1
+    extent_size = 8192
+
+    physical_volumes {{
+        pv0 {{
+            id = "{}"
+            device = "/dev/sda1"
+            pe_start = 0
+            pe_count = 10
+        }}
+    }}
+
+    logical_volumes {{
+        root {{
+            id = "lv-root-uuid"
+            segment_count = 1
+            segment1 {{
+                start_extent = 0
+                extent_count = 1
+                type = "striped"
+                stripe_count = 1
+                stripes = ["pv0", 0]
+            }}
+        }}
+    }}
+}}
+"#,
+        pv_uuid
+    );
+    write_synthetic_lvm_metadata(&mut disk, &metadata_text);
+    disk
+}
+
+fn write_synthetic_lvm_metadata(disk: &mut [u8], metadata_text: &str) {
+    let text_bytes = metadata_text.as_bytes();
+    let text_offset = 1536usize;
+    let text_end = text_offset + text_bytes.len();
+    assert!(text_end <= disk.len());
+
+    {
+        let mda = &mut disk[1024..1536];
+        mda[4..20].copy_from_slice(b" LVM2 x[5A%r0N*>");
+        mda[20..24].copy_from_slice(&1u32.to_le_bytes());
+        mda[24..32].copy_from_slice(&1024u64.to_le_bytes());
+        mda[32..40].copy_from_slice(&1536u64.to_le_bytes());
+        mda[40..48].copy_from_slice(&512u64.to_le_bytes());
+    }
+
+    disk[text_offset..text_end].copy_from_slice(text_bytes);
+
+    let text_size = text_bytes.len() as u64;
+    let text_crc = fs_lvm::crc::lvm_crc32(text_bytes);
+    {
+        let mda = &mut disk[1024..1536];
+        mda[48..56].copy_from_slice(&text_size.to_le_bytes());
+        mda[56..60].copy_from_slice(&text_crc.to_le_bytes());
+        let mda_crc = fs_lvm::crc::lvm_crc32(&mda[4..512]);
+        mda[0..4].copy_from_slice(&mda_crc.to_le_bytes());
+    }
+}
+
 static LVM_OPEN_READER_CALLS: AtomicUsize = AtomicUsize::new(0);
 
 struct ZeroEvidenceReader {
@@ -283,6 +368,55 @@ impl Seek for ZeroEvidenceReader {
 }
 
 impl evidence_core::EvidenceReader for ZeroEvidenceReader {
+    fn info(&self) -> &evidence_core::ReaderInfo {
+        &self.info
+    }
+}
+
+struct VecEvidenceReader {
+    data: Vec<u8>,
+    pos: u64,
+    info: evidence_core::ReaderInfo,
+}
+
+impl VecEvidenceReader {
+    fn new(path: std::path::PathBuf, data: Vec<u8>) -> Self {
+        let size = data.len() as u64;
+        Self {
+            data,
+            pos: 0,
+            info: evidence_core::ReaderInfo {
+                path,
+                size,
+                kind: "raw".to_string(),
+            },
+        }
+    }
+}
+
+impl Read for VecEvidenceReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let start = self.pos as usize;
+        let end = (start + buf.len()).min(self.data.len());
+        let len = end.saturating_sub(start);
+        buf[..len].copy_from_slice(&self.data[start..end]);
+        self.pos += len as u64;
+        Ok(len)
+    }
+}
+
+impl Seek for VecEvidenceReader {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        self.pos = match pos {
+            SeekFrom::Start(offset) => offset,
+            SeekFrom::End(offset) => (self.data.len() as i64 + offset).max(0) as u64,
+            SeekFrom::Current(offset) => (self.pos as i64 + offset).max(0) as u64,
+        };
+        Ok(self.pos)
+    }
+}
+
+impl evidence_core::EvidenceReader for VecEvidenceReader {
     fn info(&self) -> &evidence_core::ReaderInfo {
         &self.info
     }
@@ -660,6 +794,46 @@ fn linux_lvm_candidate_reopens_one_reader_per_physical_volume() {
 
     assert!(result.is_err());
     assert_eq!(LVM_OPEN_READER_CALLS.load(Ordering::Relaxed), 2);
+}
+
+#[test]
+fn lvm_request_cache_reuses_pool_for_same_volume_group() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let source_path = dir.path().join("lvm.raw");
+    let disk = build_synthetic_lvm_disk();
+    let candidate = PreviewPartitionCandidate {
+        partition_index: 4,
+        filesystem_kind: "XFS".to_string(),
+        offset: 1_048_576,
+        lvm_identity: Some(PreviewLvmIdentity {
+            vg_uuid: "vg-1234".to_string(),
+            vg_name: "test_vg".to_string(),
+            lv_uuid: "lv-root-uuid".to_string(),
+            lv_name: "root".to_string(),
+            pv_offsets: vec![0],
+        }),
+    };
+
+    let mut lvm_cache = image_open::LvmPoolRequestCache::new();
+    LVM_OPEN_READER_CALLS.store(0, Ordering::Relaxed);
+
+    for _ in 0..2 {
+        let result = image_open::open_candidate_block_reader_with_lvm_cache(
+            &source_path,
+            &candidate,
+            &mut |path| {
+                LVM_OPEN_READER_CALLS.fetch_add(1, Ordering::Relaxed);
+                Ok(
+                    Box::new(VecEvidenceReader::new(path.to_path_buf(), disk.clone()))
+                        as Box<dyn evidence_core::EvidenceReader>,
+                )
+            },
+            &mut lvm_cache,
+        );
+        assert!(result.is_ok());
+    }
+
+    assert_eq!(LVM_OPEN_READER_CALLS.load(Ordering::Relaxed), 1);
 }
 
 #[test]
