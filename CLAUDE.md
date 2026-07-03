@@ -66,6 +66,7 @@ These PowerShell scripts encode important architectural/security boundaries. Run
 | `check-deny-exceptions.ps1` | Cargo deny exception validity |
 | `check-evtx-dependency-decision.ps1` | EVTX vendored dependency constraints |
 | `check-import-optimization-guard.ps1` | Import optimization boundaries |
+| `check-lvm-offset-guard.ps1` | LVM offset discipline (absolute vs PV-relative seeks) |
 | `check-doc-drift.ps1` | Documentation consistency |
 | `check-benchmark-regression.ps1` | Benchmark threshold regression in CI |
 | `run-benchmark.ps1` | Benchmark data collection harness |
