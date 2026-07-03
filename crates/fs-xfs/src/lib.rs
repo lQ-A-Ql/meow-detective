@@ -588,6 +588,85 @@ impl XfsReader {
         Ok(data)
     }
 
+    /// Read extent-backed directory blocks independently.
+    ///
+    /// XFS leaf/node directories use data blocks (`XDD2`/`XDD3`) plus separate
+    /// leaf/node blocks. Treating the whole directory fork as one regular file
+    /// blob makes the parser fail on the first non-data/truncated block and
+    /// loses earlier valid entries. Directory enumeration is safer block-wise:
+    /// parse only blocks that carry directory-entry magic and keep valid
+    /// entries already recovered from other blocks.
+    fn read_extent_directory_entries(&self, inode: &[u8]) -> io::Result<Vec<XfsDirectoryEntry>> {
+        let df = Self::data_fork(inode)?;
+        let max_extents = Self::max_inline_extents(inode);
+        let nextents = Self::nextents(inode) as usize;
+        let mut entries = Vec::new();
+        let mut first_error = None;
+
+        for i in 0..nextents.min(max_extents) {
+            let off = i * BMBT_REC_SIZE;
+            if off + BMBT_REC_SIZE > df.len() {
+                break;
+            }
+            let extent = Self::decode_extent(&df[off..]);
+            if extent.unwritten {
+                continue;
+            }
+            for blk in 0..extent.block_count {
+                match self.read_block(extent.start_block + blk) {
+                    Ok(block_data) => match Self::parse_block_dir_entries(&block_data) {
+                        Ok(mut block_entries) => entries.append(&mut block_entries),
+                        Err(err) => {
+                            if first_error.is_none() {
+                                first_error = Some(err);
+                            }
+                        }
+                    },
+                    Err(err) => {
+                        if first_error.is_none() {
+                            first_error = Some(err);
+                        }
+                    }
+                }
+            }
+        }
+
+        if !entries.is_empty() {
+            Ok(entries)
+        } else if let Some(err) = first_error {
+            Err(err)
+        } else {
+            Ok(entries)
+        }
+    }
+
+    fn extent_directory_data_is_all_zero(&self, inode: &[u8]) -> io::Result<bool> {
+        let df = Self::data_fork(inode)?;
+        let max_extents = Self::max_inline_extents(inode);
+        let nextents = Self::nextents(inode) as usize;
+        let mut saw_block = false;
+
+        for i in 0..nextents.min(max_extents) {
+            let off = i * BMBT_REC_SIZE;
+            if off + BMBT_REC_SIZE > df.len() {
+                break;
+            }
+            let extent = Self::decode_extent(&df[off..]);
+            if extent.unwritten {
+                continue;
+            }
+            for blk in 0..extent.block_count {
+                let block_data = self.read_block(extent.start_block + blk)?;
+                saw_block = true;
+                if block_data.iter().any(|&byte| byte != 0) {
+                    return Ok(false);
+                }
+            }
+        }
+
+        Ok(saw_block)
+    }
+
     /// Read file data from a B+tree-mapped inode (di_format = 3).
     ///
     /// The data fork contains a bmbt root node (`xfs_bmdr_block_t`,
@@ -1002,8 +1081,7 @@ impl XfsReader {
                 Ok(entries)
             }
             FORMAT_EXTENTS => {
-                let data = self.read_extent_data(&inode, u64::MAX)?;
-                match Self::parse_block_dir_entries(&data) {
+                match self.read_extent_directory_entries(&inode) {
                     Ok(entries) => Ok(self.annotate_directory_entries(entries)),
                     Err(block_err) => {
                         // Forensic recovery: if block data is corrupted/all-zero
@@ -1011,8 +1089,10 @@ impl XfsReader {
                         // attempt to recover entries from the inode's literal
                         // area — old shortform data may still be resident even
                         // after xfs_idata_realloc freed it.
-                        let all_zero = data.iter().all(|&b| b == 0);
                         let df = Self::data_fork(&inode)?;
+                        let all_zero = self
+                            .extent_directory_data_is_all_zero(&inode)
+                            .unwrap_or(false);
                         // Try shortform parsing on the data fork (may be the
                         // freed-but-not-zeroed shortform residual) AND also on
                         // the full literal area past forkoff (attribute fork
@@ -1229,10 +1309,6 @@ fn decode_dir_entry_tail(
 
     if name_end + 3 <= data_end && be_u16(data, name_end + 1) as usize == entry_start {
         return Some((Some(data[name_end]), name_end + 3));
-    }
-
-    if name_end < data_end {
-        return Some((Some(data[name_end]), name_end + 1));
     }
 
     None
@@ -2031,6 +2107,45 @@ mod tests {
         buf
     }
 
+    fn build_xfs_fixture_with_xdd3_extent_dir() -> Vec<u8> {
+        let mut img = build_xfs_fixture();
+        let block_size = 4096usize;
+
+        let fi = &mut img[8192 + 2 * 256..8192 + 3 * 256];
+        fi[di_off::MODE..di_off::MODE + 2].copy_from_slice(&(S_IFDIR | 0o755).to_be_bytes());
+        fi[di_off::FORMAT] = FORMAT_EXTENTS;
+        fi[di_off::SIZE..di_off::SIZE + 8].copy_from_slice(&(block_size as u64).to_be_bytes());
+        fi[di_off::NEXTENTS..di_off::NEXTENTS + 4].copy_from_slice(&1u32.to_be_bytes());
+        fi[di_off::FORKOFF] = 0;
+        fi[INODE_CORE_SIZE..INODE_CORE_SIZE + 16].copy_from_slice(&encode_bmbt_extent(0, 7, 1));
+
+        let block7 = 7 * block_size;
+        img[block7..block7 + block_size].fill(0);
+        let dir = &mut img[block7..block7 + block_size];
+        dir[0..4].copy_from_slice(&XFS_DIR3_DATA_MAGIC.to_be_bytes());
+        let pos = XFS_DIR3_DATA_HDR_SIZE;
+        let name = b"subdir";
+        dir[pos..pos + 8].copy_from_slice(&4u64.to_be_bytes());
+        dir[pos + 8] = name.len() as u8;
+        dir[pos + 9..pos + 9 + name.len()].copy_from_slice(name);
+        let tag_pos = pos + 9 + name.len();
+        dir[tag_pos..tag_pos + 2].copy_from_slice(&(pos as u16).to_be_bytes());
+
+        img
+    }
+
+    fn build_xfs_fixture_with_truncated_second_xdd3_block() -> Vec<u8> {
+        let mut img = build_xfs_fixture_with_xdd3_extent_dir();
+        let block_size = 4096usize;
+
+        let fi = &mut img[8192 + 2 * 256..8192 + 3 * 256];
+        fi[di_off::SIZE..di_off::SIZE + 8].copy_from_slice(&(2 * block_size as u64).to_be_bytes());
+        fi[INODE_CORE_SIZE..INODE_CORE_SIZE + 16].copy_from_slice(&encode_bmbt_extent(0, 7, 2));
+
+        img.truncate(8 * block_size);
+        img
+    }
+
     /// Build a block directory buffer with a free-space (0xFFFF) entry
     /// interleaved between two entries.
     fn build_block_dir_data_with_free_space() -> Vec<u8> {
@@ -2138,6 +2253,32 @@ mod tests {
 
         let raw = XfsReader::parse_block_dir_entries(&data).unwrap();
         assert_eq!(raw[0].ftype, Some(XFS_DIR3_FT_DIR));
+    }
+
+    #[test]
+    fn test_extent_directory_accepts_xdd3_data_block_and_annotates_child_inode() {
+        let img = build_xfs_fixture_with_xdd3_extent_dir();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let xfs = XfsReader::open(reader, 0).unwrap();
+
+        let children = xfs.list_children("test.txt").unwrap();
+
+        assert_eq!(children.len(), 1);
+        assert_eq!(children[0].name, "subdir");
+        assert!(children[0].is_dir);
+    }
+
+    #[test]
+    fn test_extent_directory_keeps_valid_xdd3_entries_when_later_block_is_truncated() {
+        let img = build_xfs_fixture_with_truncated_second_xdd3_block();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let xfs = XfsReader::open(reader, 0).unwrap();
+
+        let children = xfs.list_children("test.txt").unwrap();
+
+        assert_eq!(children.len(), 1);
+        assert_eq!(children[0].name, "subdir");
+        assert!(children[0].is_dir);
     }
 
     // -----------------------------------------------------------------------

@@ -28,6 +28,7 @@ use evidence_core::{EvidenceReader, FileSystemReader};
 use image_e01::E01Reader;
 use persistence_sqlite::repositories::{case_repo::CaseRepo, datasource_repo::DataSourceRepo};
 use rusqlite::Connection;
+use std::io::Read;
 use std::path::PathBuf;
 
 const LIUYANG_LVM_POOL_OFFSET: u64 = 1_074_790_400;
@@ -54,6 +55,109 @@ fn setup_case(conn: &Connection, case_id: &str) {
         updated_at: chrono::Utc::now(),
     };
     CaseRepo::new(conn).create(&case).unwrap();
+}
+
+fn detect_expanded_linux_probe() -> app_services::datasource_service::ImageFilesystemProbe {
+    let fixture = fixture_path();
+    let mut reader = E01Reader::open(&fixture).unwrap();
+    let mut probe = detect_image_filesystem(&mut reader).unwrap();
+    let source_kind = DataSourceKind::E01;
+    expand_lvm_pool_candidates(&mut probe, &fixture, &source_kind);
+    probe
+}
+
+fn root_lv_candidate<'a>(
+    probe: &'a app_services::datasource_service::ImageFilesystemProbe,
+) -> &'a ImageFilesystemCandidate {
+    probe
+        .candidates
+        .iter()
+        .find(|candidate| {
+            candidate.kind == ImageFilesystemKind::Xfs
+                && matches!(candidate.source, ImageFilesystemSource::LvmLogicalVolume)
+                && candidate
+                    .lvm_identity
+                    .as_ref()
+                    .is_some_and(|identity| identity.lv_name == LIUYANG_ROOT_LV_NAME)
+        })
+        .expect("expanded probe should include the cl/root XFS logical volume")
+}
+
+fn open_root_lv_xfs() -> fs_xfs::XfsReader {
+    let e01_reader: Box<dyn EvidenceReader> = Box::new(E01Reader::open(&fixture_path()).unwrap());
+    let pool = fs_lvm::LvmPool::discover(vec![e01_reader], vec![LIUYANG_LVM_POOL_OFFSET])
+        .expect("LVM pool discovery should succeed");
+    let root_index = pool
+        .list_volumes()
+        .iter()
+        .position(|volume| volume.name == LIUYANG_ROOT_LV_NAME)
+        .expect("root LV should be present in direct LVM discovery");
+    let root_reader = pool.open_volume(root_index).expect("root LV should open");
+    fs_xfs::XfsReader::open(Box::new(root_reader), 0).expect("root LV should mount as XFS")
+}
+
+fn create_linux_test_data_source(conn: &Connection, case_id: &str, ds_id: &DataSourceId) {
+    DataSourceRepo::new(conn)
+        .insert(
+            &CaseId(case_id.to_string()),
+            &DataSource {
+                id: ds_id.clone(),
+                name: "Linux E01".to_string(),
+                kind: DataSourceKind::E01,
+                source_path: fixture_path(),
+                imported_at: chrono::Utc::now(),
+                provenance: domain::DataSourceProvenance::unknown(),
+            },
+        )
+        .unwrap();
+}
+
+fn find_first_readable_file(
+    fs: &dyn FileSystemReader,
+    path: &str,
+    depth: usize,
+) -> Option<(String, usize)> {
+    if depth == 0 {
+        return None;
+    }
+
+    let children = fs.list_children(path).ok()?;
+    for child in &children {
+        let child_path = if path.is_empty() {
+            child.name.clone()
+        } else {
+            format!("{}/{}", path, child.name)
+        };
+        if child.is_dir {
+            continue;
+        }
+        let mut reader = match fs.open_file(&child_path) {
+            Ok(reader) => reader,
+            Err(_) => continue,
+        };
+        let mut buf = [0u8; 512];
+        if let Ok(read) = reader.read(&mut buf) {
+            if read > 0 {
+                return Some((child_path, read));
+            }
+        }
+    }
+
+    for child in children {
+        if !child.is_dir {
+            continue;
+        }
+        let child_path = if path.is_empty() {
+            child.name
+        } else {
+            format!("{}/{}", path, child.name)
+        };
+        if let Some(found) = find_first_readable_file(fs, &child_path, depth - 1) {
+            return Some(found);
+        }
+    }
+
+    None
 }
 
 /// Probe the E01 file and confirm at least one Linux filesystem candidate is
@@ -105,119 +209,62 @@ fn linux_e01_detects_ext_filesystem() {
 #[test]
 #[ignore = "requires FORENSICS_LINUX_E01_FIXTURE real Linux E01 sample"]
 fn linux_e01_enumerates_file_tree_and_reconstructs_paths() {
-    let mut reader = E01Reader::open(&fixture_path()).unwrap();
-    let probe = detect_image_filesystem(&mut reader).unwrap();
-
-    let candidate = probe
-        .candidates
-        .first()
-        .expect("should have at least one candidate");
+    let probe = detect_expanded_linux_probe();
+    let root_lv = root_lv_candidate(&probe);
+    let root_name = format_partition_root_name(root_lv);
+    assert_eq!(root_lv.kind, ImageFilesystemKind::Xfs);
+    assert!(
+        matches!(root_lv.source, ImageFilesystemSource::LvmLogicalVolume),
+        "tree regression should exercise the real cl/root logical volume"
+    );
 
     let conn = persistence_sqlite::open_in_memory().unwrap();
     persistence_sqlite::runner::run_all(&conn).unwrap();
     setup_case(&conn, "linux-e01-test");
 
     let ds_id = DataSourceId("e01-linux-ds".to_string());
-    DataSourceRepo::new(&conn)
-        .insert(
-            &CaseId("linux-e01-test".to_string()),
-            &DataSource {
-                id: ds_id.clone(),
-                name: "Linux E01".to_string(),
-                kind: DataSourceKind::E01,
-                source_path: fixture_path(),
-                imported_at: chrono::Utc::now(),
-                provenance: domain::DataSourceProvenance::unknown(),
-            },
-        )
-        .unwrap();
+    create_linux_test_data_source(&conn, "linux-e01-test", &ds_id);
 
-    // Open the appropriate filesystem reader and enumerate
-    let boxed_reader: Box<dyn EvidenceReader> = Box::new(E01Reader::open(&fixture_path()).unwrap());
+    let fs = open_root_lv_xfs();
+    let root_children = fs
+        .list_children("")
+        .expect("root LV should enumerate the Linux root directory");
+    let root_child_names = root_children
+        .iter()
+        .map(|child| child.name.as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        root_child_names.contains(&"boot")
+            && root_child_names.contains(&"etc")
+            && root_child_names.contains(&"usr"),
+        "root LV should expose expected Linux root entries, got {root_child_names:?}"
+    );
 
-    let (_fs_root_name, stats) = match candidate.kind {
-        ImageFilesystemKind::Ext4 => {
-            let fs = fs_ext4::Ext4Reader::open(boxed_reader, candidate.offset).unwrap();
-            let root = fs.root().unwrap();
-            eprintln!("Ext4 root: name='{}' is_dir={}", root.name, root.is_dir);
-            let stats = file_service::enumerate_filesystem_with_root_name(
-                &conn,
-                &ds_id,
-                &fs,
-                Some("LinuxExt4"),
-                None::<&dyn Fn(u32)>,
-            )
-            .unwrap();
-            (root.name, stats)
-        }
-        ImageFilesystemKind::Xfs => {
-            let fs = fs_xfs::XfsReader::open(boxed_reader, candidate.offset).unwrap();
-            let root = fs.root().unwrap();
-            let stats = file_service::enumerate_filesystem_with_root_name(
-                &conn,
-                &ds_id,
-                &fs,
-                Some("LinuxXFS"),
-                None::<&dyn Fn(u32)>,
-            )
-            .unwrap();
-            (root.name, stats)
-        }
-        ImageFilesystemKind::Btrfs => {
-            let fs = fs_btrfs::BtrfsReader::open(boxed_reader, candidate.offset).unwrap();
-            let root = fs.root().unwrap();
-            let stats = file_service::enumerate_filesystem_with_root_name(
-                &conn,
-                &ds_id,
-                &fs,
-                Some("LinuxBtrfs"),
-                None::<&dyn Fn(u32)>,
-            )
-            .unwrap();
-            (root.name, stats)
-        }
-        ImageFilesystemKind::Ntfs => {
-            let fs = fs_ntfs::NtfsReader::open(boxed_reader, candidate.offset).unwrap();
-            let root = fs.root().unwrap();
-            let stats = file_service::enumerate_filesystem_with_root_name(
-                &conn,
-                &ds_id,
-                &fs,
-                Some("NTFS"),
-                None::<&dyn Fn(u32)>,
-            )
-            .unwrap();
-            (root.name, stats)
-        }
-        ImageFilesystemKind::Fat => {
-            let fs = fs_fat::FatReader::open(boxed_reader, candidate.offset).unwrap();
-            let root = fs.root().unwrap();
-            let stats = file_service::enumerate_filesystem_with_root_name(
-                &conn,
-                &ds_id,
-                &fs,
-                Some("FAT"),
-                None::<&dyn Fn(u32)>,
-            )
-            .unwrap();
-            (root.name, stats)
-        }
-        ImageFilesystemKind::BitLocker => {
-            panic!("BitLocker partition cannot be enumerated");
-        }
-        ImageFilesystemKind::LvmPool => {
-            panic!("LVM pool should have been expanded at probe time");
-        }
-    };
+    let readable = find_first_readable_file(&fs, "", 4)
+        .expect("root LV should expose at least one readable file entry");
+    eprintln!(
+        "First readable root LV sample file: '{}' ({} bytes read)",
+        readable.0, readable.1
+    );
+
+    let stats = file_service::enumerate_filesystem_with_root_name(
+        &conn,
+        &ds_id,
+        &fs,
+        Some(&root_name),
+        None::<&dyn Fn(u32)>,
+    )
+    .unwrap();
 
     eprintln!(
         "Enumerated {} files, {} dirs, total={}",
         stats.file_count, stats.dir_count, stats.total_size
     );
     assert!(
-        stats.file_count > 0,
-        "should enumerate at least some files (root inode resolution via \
-         direct AG/block/index decode should locate real inode data)"
+        stats.file_count >= 100 && stats.dir_count >= 200,
+        "root LV should enumerate a stable useful subset of the damaged sample, got files={} dirs={}",
+        stats.file_count,
+        stats.dir_count
     );
 
     // Query the file tree to verify path reconstruction
@@ -243,13 +290,8 @@ fn linux_e01_enumerates_file_tree_and_reconstructs_paths() {
         "file_entries should be tagged with the data source ID"
     );
 
-    // The first detected candidate on this sample is the XFS /boot
-    // partition (grub/vmlinuz/initramfs), not the Linux root filesystem
-    // (which lives on the unsupported "Linux LVM" partition), so root-fs
-    // paths like /etc or /home are not expected here. Report counts for
-    // visibility without asserting on them.
-    let linux_paths = ["etc", "var/log", "home", "root", "tmp", "grub"];
-    for path_segment in &linux_paths {
+    let required_root_paths = ["boot", "dev", "etc", "usr", "var"];
+    for path_segment in &required_root_paths {
         let found: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM file_entries WHERE LOWER(path) LIKE ?1 AND data_source_id = ?2",
@@ -258,6 +300,10 @@ fn linux_e01_enumerates_file_tree_and_reconstructs_paths() {
             )
             .unwrap();
         eprintln!("  path '{}' found {} entries", path_segment, found);
+        assert!(
+            found > 0,
+            "root LV import should contain at least one path segment '{path_segment}'"
+        );
     }
 }
 
