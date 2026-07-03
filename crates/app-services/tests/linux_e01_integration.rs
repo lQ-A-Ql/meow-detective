@@ -23,10 +23,14 @@ use app_services::{
         enumerate_image_data_source, format_partition_record_root_name, format_partition_root_name,
     },
 };
-use domain::{CaseId, DataSource, DataSourceId, DataSourceKind};
+use domain::{CaseId, DataSource, DataSourceId, DataSourceKind, FileEntryId};
 use evidence_core::{EvidenceReader, FileSystemReader};
 use image_e01::E01Reader;
-use persistence_sqlite::repositories::{case_repo::CaseRepo, datasource_repo::DataSourceRepo};
+use persistence_sqlite::repositories::{
+    case_repo::CaseRepo,
+    datasource_repo::DataSourceRepo,
+    partition_repo::{DataSourcePartitionRecord, PartitionRepo},
+};
 use rusqlite::Connection;
 use std::io::Read;
 use std::path::PathBuf;
@@ -112,6 +116,14 @@ fn create_linux_test_data_source(conn: &Connection, case_id: &str, ds_id: &DataS
         .unwrap();
 }
 
+fn setup_linux_fixture_case(case_id: &str, ds_id: &DataSourceId) -> Connection {
+    let conn = persistence_sqlite::open_in_memory().unwrap();
+    persistence_sqlite::runner::run_all(&conn).unwrap();
+    setup_case(&conn, case_id);
+    create_linux_test_data_source(&conn, case_id, ds_id);
+    conn
+}
+
 fn find_first_readable_file(
     fs: &dyn FileSystemReader,
     path: &str,
@@ -158,6 +170,64 @@ fn find_first_readable_file(
     }
 
     None
+}
+
+fn enumerate_root_lv_into_case(
+    conn: &Connection,
+    ds_id: &DataSourceId,
+) -> app_services::file_service::EnumerationStats {
+    let probe = detect_expanded_linux_probe();
+    let root_lv = root_lv_candidate(&probe);
+    file_service::store_data_source_partitions(conn, ds_id, &probe.partitions).unwrap();
+
+    let fs = open_root_lv_xfs();
+    file_service::enumerate_filesystem_with_root_name(
+        conn,
+        ds_id,
+        &fs,
+        Some(&format_partition_root_name(root_lv)),
+        None::<&dyn Fn(u32)>,
+    )
+    .unwrap()
+}
+
+fn count_entries_like(conn: &Connection, ds_id: &DataSourceId, like: &str) -> i64 {
+    conn.query_row(
+        "SELECT COUNT(*)
+         FROM file_entries
+         WHERE data_source_id = ?1
+           AND LOWER(REPLACE(path, '\\', '/')) LIKE ?2",
+        rusqlite::params![ds_id.0, like],
+        |row| row.get(0),
+    )
+    .unwrap()
+}
+
+fn find_file_id_like(conn: &Connection, ds_id: &DataSourceId, like: &str) -> Option<FileEntryId> {
+    conn.query_row(
+        "SELECT id
+         FROM file_entries
+         WHERE data_source_id = ?1
+           AND entry_type = 'file' COLLATE NOCASE
+           AND LOWER(REPLACE(path, '\\', '/')) LIKE ?2
+         ORDER BY LENGTH(path) ASC
+         LIMIT 1",
+        rusqlite::params![ds_id.0, like],
+        |row| Ok(FileEntryId(row.get(0)?)),
+    )
+    .ok()
+}
+
+fn lvm_root_partition_record(conn: &Connection, ds_id: &DataSourceId) -> DataSourcePartitionRecord {
+    PartitionRepo::new(conn)
+        .find_by_data_source(&ds_id.0)
+        .unwrap()
+        .into_iter()
+        .find(|partition| {
+            partition.filesystem.as_deref() == Some("XFS")
+                && partition.lvm_lv_name.as_deref() == Some(LIUYANG_ROOT_LV_NAME)
+        })
+        .expect("stored partition metadata should include cl/root")
 }
 
 /// Probe the E01 file and confirm at least one Linux filesystem candidate is
@@ -304,6 +374,12 @@ fn linux_e01_enumerates_file_tree_and_reconstructs_paths() {
             found > 0,
             "root LV import should contain at least one path segment '{path_segment}'"
         );
+    }
+
+    let high_value_linux_paths = ["etc/passwd", "etc/os-release", "etc/hostname"];
+    for path in high_value_linux_paths {
+        let found = count_entries_like(&conn, &ds_id, &format!("%{path}%"));
+        eprintln!("  high-value path '{}' found {} entries", path, found);
     }
 }
 
@@ -687,167 +763,159 @@ fn linux_e01_probe_locate_inode_diagnostics() {
     );
 }
 
-/// Run Linux artifact extraction after enumeration and verify it produces
-/// structured artifact output (systemd journal, wtmp/btmp login records, bash
-/// history, apt logs, cron jobs, sudo/auth events).
+/// Run Linux artifact extraction against files actually enumerated from the
+/// real root LV. This must not insert synthetic high-value files.
 #[test]
 #[ignore = "requires FORENSICS_LINUX_E01_FIXTURE real Linux E01 sample"]
 fn linux_e01_analysis_extraction_produces_linux_artifacts() {
-    use std::io::Read;
-
-    let mut reader = E01Reader::open(&fixture_path()).unwrap();
-    let probe = detect_image_filesystem(&mut reader).unwrap();
-
-    let candidate = probe
-        .candidates
-        .first()
-        .expect("should have at least one candidate");
-
-    let conn = persistence_sqlite::open_in_memory().unwrap();
-    persistence_sqlite::runner::run_all(&conn).unwrap();
-    setup_case(&conn, "linux-e01-analysis");
-
     let ds_id = DataSourceId("e01-linux-analysis-ds".to_string());
-    DataSourceRepo::new(&conn)
-        .insert(
-            &CaseId("linux-e01-analysis".to_string()),
-            &DataSource {
-                id: ds_id.clone(),
-                name: "Linux E01 Analysis".to_string(),
-                kind: DataSourceKind::E01,
-                source_path: fixture_path(),
-                imported_at: chrono::Utc::now(),
-                provenance: domain::DataSourceProvenance::unknown(),
-            },
-        )
-        .unwrap();
+    let conn = setup_linux_fixture_case("linux-e01-analysis", &ds_id);
+    let stats = enumerate_root_lv_into_case(&conn, &ds_id);
+    eprintln!(
+        "Root LV enumeration for extraction: files={} dirs={} warnings={:?}",
+        stats.file_count, stats.dir_count, stats.warnings
+    );
+    assert!(
+        stats.file_count >= 100 && stats.dir_count >= 200,
+        "root LV should enumerate a stable useful subset before extraction"
+    );
 
-    // Open the filesystem reader and enumerate
-    let boxed_reader: Box<dyn EvidenceReader> = Box::new(E01Reader::open(&fixture_path()).unwrap());
-
-    let _ = match candidate.kind {
-        ImageFilesystemKind::Ext4 => {
-            let fs = fs_ext4::Ext4Reader::open(boxed_reader, candidate.offset).unwrap();
-            file_service::enumerate_filesystem_with_root_name(
-                &conn,
-                &ds_id,
-                &fs,
-                Some("LinuxExt4"),
-                None::<&dyn Fn(u32)>,
-            )
-            .unwrap()
-        }
-        ImageFilesystemKind::Xfs => {
-            let fs = fs_xfs::XfsReader::open(boxed_reader, candidate.offset).unwrap();
-            file_service::enumerate_filesystem_with_root_name(
-                &conn,
-                &ds_id,
-                &fs,
-                Some("LinuxXFS"),
-                None::<&dyn Fn(u32)>,
-            )
-            .unwrap()
-        }
-        ImageFilesystemKind::Btrfs => {
-            let fs = fs_btrfs::BtrfsReader::open(boxed_reader, candidate.offset).unwrap();
-            file_service::enumerate_filesystem_with_root_name(
-                &conn,
-                &ds_id,
-                &fs,
-                Some("LinuxBtrfs"),
-                None::<&dyn Fn(u32)>,
-            )
-            .unwrap()
-        }
-        ImageFilesystemKind::Ntfs => {
-            let fs = fs_ntfs::NtfsReader::open(boxed_reader, candidate.offset).unwrap();
-            file_service::enumerate_filesystem_with_root_name(
-                &conn,
-                &ds_id,
-                &fs,
-                Some("NTFS"),
-                None::<&dyn Fn(u32)>,
-            )
-            .unwrap()
-        }
-        ImageFilesystemKind::Fat => {
-            let fs = fs_fat::FatReader::open(boxed_reader, candidate.offset).unwrap();
-            file_service::enumerate_filesystem_with_root_name(
-                &conn,
-                &ds_id,
-                &fs,
-                Some("FAT"),
-                None::<&dyn Fn(u32)>,
-            )
-            .unwrap()
-        }
-        ImageFilesystemKind::BitLocker => {
-            panic!("BitLocker partition cannot be enumerated");
-        }
-        ImageFilesystemKind::LvmPool => {
-            panic!("LVM pool should have been expanded at probe time");
-        }
-    };
-
-    // Check that Linux artifact candidates were discovered
     let candidates = evidence_candidates_for_categories(&conn, &["LinuxArtifacts"]).unwrap();
-    eprintln!("Linux artifact candidates discovered: {}", candidates.len());
-    for c in &candidates {
+    eprintln!(
+        "Linux artifact candidates from real root LV traversal: {}",
+        candidates.len()
+    );
+    for candidate in &candidates {
         eprintln!(
             "  path='{}' kind={} parser={} size={}",
-            c.path, c.evidence_kind, c.parser, c.size
+            candidate.path, candidate.evidence_kind, candidate.parser, candidate.size
+        );
+    }
+    assert!(
+        !candidates.is_empty(),
+        "real root LV traversal should discover Linux artifact candidates without synthetic inserts"
+    );
+
+    let run = run_analysis_extraction(
+        &conn,
+        "linux-e01-analysis",
+        &["LinuxArtifacts"],
+        |file_id| {
+            file_service::read_file_header_by_id(
+                &conn,
+                file_id,
+                app_services::analysis_service::MAX_ANALYSIS_SOURCE_BYTES,
+            )
+            .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
+            .map_err(|error| error.to_string())
+        },
+    )
+    .expect("analysis extraction should succeed");
+
+    eprintln!(
+        "Linux artifact extraction: scanned={} artifacts={} timeline_events={} warnings={:?}",
+        run.scanned_count, run.artifact_count, run.timeline_event_count, run.warnings
+    );
+    assert!(
+        run.scanned_count > 0,
+        "expected real Linux artifact sources scanned"
+    );
+
+    let summary = get_linux_artifact_summary(&conn, 0, 200).unwrap();
+    eprintln!(
+        "Linux artifact summary: total={} journal={} login={} bash={} apt={} cron={} sudo={}",
+        summary.total_count,
+        summary.journal_count,
+        summary.login_count,
+        summary.bash_command_count,
+        summary.apt_event_count,
+        summary.cron_job_count,
+        summary.sudo_event_count,
+    );
+    assert!(
+        summary.total_count >= run.artifact_count,
+        "summary should include all persisted Linux artifacts"
+    );
+}
+
+#[test]
+#[ignore = "requires FORENSICS_LINUX_E01_FIXTURE real Linux E01 sample"]
+fn linux_e01_linux_artifact_candidates_survive_lvm_root_prefixes() {
+    let ds_id = DataSourceId("e01-linux-candidate-ds".to_string());
+    let conn = setup_linux_fixture_case("linux-e01-candidates", &ds_id);
+    let stats = enumerate_root_lv_into_case(&conn, &ds_id);
+
+    assert!(
+        stats.file_count >= 100 && stats.dir_count >= 200,
+        "root LV should enumerate a stable useful subset, got files={} dirs={}",
+        stats.file_count,
+        stats.dir_count
+    );
+    for segment in ["boot", "dev", "etc", "usr", "var"] {
+        assert!(
+            count_entries_like(&conn, &ds_id, &format!("%{segment}%")) > 0,
+            "root LV import should expose path segment {segment}"
         );
     }
 
-    // Only run extraction if there are candidates to scan
-    if !candidates.is_empty() {
-        let run = run_analysis_extraction(
-            &conn,
-            "linux-e01-analysis",
-            &["LinuxArtifacts"],
-            |file_id| {
-                file_service::read_file_header_by_id(
-                    &conn,
-                    file_id,
-                    app_services::analysis_service::MAX_ANALYSIS_SOURCE_BYTES,
-                )
-                .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
-                .map_err(|e| format!("{}", e))
-            },
-        )
-        .expect("analysis extraction should succeed");
-
+    let real_candidates = evidence_candidates_for_categories(&conn, &["LinuxArtifacts"]).unwrap();
+    eprintln!(
+        "Linux artifact candidates from current root LV traversal: {}",
+        real_candidates.len()
+    );
+    for candidate in &real_candidates {
         eprintln!(
-            "Linux artifact extraction: scanned={} artifacts={} timeline_events={} warnings={}",
-            run.scanned_count,
-            run.artifact_count,
-            run.timeline_event_count,
-            run.warnings.len(),
+            "  real candidate path='{}' kind={} parser={} size={}",
+            candidate.path, candidate.evidence_kind, candidate.parser, candidate.size
         );
-
-        if run.artifact_count > 0 {
-            let summary = get_linux_artifact_summary(&conn, 0, 200).unwrap();
-            eprintln!(
-                "Linux artifact summary: total={} journal={} login={} bash={} apt={} cron={} sudo={}",
-                summary.total_count,
-                summary.journal_count,
-                summary.login_count,
-                summary.bash_command_count,
-                summary.apt_event_count,
-                summary.cron_job_count,
-                summary.sudo_event_count,
-            );
-            assert!(
-                summary.total_count > 0,
-                "should have at least one Linux artifact"
-            );
-        } else if !candidates.is_empty() {
-            eprintln!(
-                "WARNING: {} candidates found but no artifacts produced",
-                candidates.len()
-            );
-        }
     }
+
+    let paths = real_candidates
+        .iter()
+        .map(|candidate| candidate.path.as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        !paths.is_empty(),
+        "real prefixed Linux paths should match LinuxArtifacts candidates: {paths:?}"
+    );
+}
+
+#[test]
+#[ignore = "requires FORENSICS_LINUX_E01_FIXTURE real Linux E01 sample"]
+fn linux_e01_reads_bytes_from_root_lv_file_entries() {
+    let ds_id = DataSourceId("e01-linux-bytes-ds".to_string());
+    let conn = setup_linux_fixture_case("linux-e01-byte-read", &ds_id);
+    let stats = enumerate_root_lv_into_case(&conn, &ds_id);
+    assert!(
+        stats.file_count >= 100 && stats.dir_count >= 200,
+        "root LV should enumerate enough file entries for byte-read coverage"
+    );
+
+    let partition = lvm_root_partition_record(&conn, &ds_id);
+    assert_eq!(partition.partition_index, 2);
+    assert_eq!(partition.filesystem.as_deref(), Some("XFS"));
+    assert_eq!(partition.lvm_lv_name.as_deref(), Some(LIUYANG_ROOT_LV_NAME));
+    assert_eq!(
+        partition.lvm_pv_offsets_json.as_deref(),
+        Some("[1074790400]"),
+        "preview/open path needs stored LVM PV offsets for root LV byte reads"
+    );
+
+    let file_id = find_file_id_like(&conn, &ds_id, "%boot%")
+        .or_else(|| find_file_id_like(&conn, &ds_id, "%usr%"))
+        .or_else(|| find_file_id_like(&conn, &ds_id, "%bin%"))
+        .expect("root LV enumeration should expose at least one readable file candidate");
+    let bytes = file_service::read_file_header_by_id(&conn, &file_id, 512)
+        .expect("root LV file entry should be preview-readable through stored LVM metadata");
+    eprintln!(
+        "Read {} bytes from root LV file entry {}",
+        bytes.len(),
+        file_id.0
+    );
+    assert!(
+        !bytes.is_empty(),
+        "root LV file preview should return non-empty bytes"
+    );
 }
 
 /// Verify LVM pool expansion discovers logical volumes on the real E01 sample.

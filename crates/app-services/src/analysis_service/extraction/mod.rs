@@ -955,6 +955,7 @@ pub fn get_linux_artifact_summary(
     let apt_event_count = count_artifacts_by_type(conn, "LinuxAptEvent")?;
     let cron_job_count = count_artifacts_by_type(conn, "LinuxCronJob")?;
     let sudo_event_count = count_artifacts_by_type(conn, "LinuxSudoEvent")?;
+    let system_config_count = count_artifacts_by_type(conn, "LinuxSystemConfig")?;
 
     let journal_rows = query_artifact_rows(conn, &["LinuxJournal"], offset, limit)?;
     let login_rows = query_artifact_rows(conn, &["LinuxWtmp"], offset, limit)?;
@@ -1055,7 +1056,8 @@ pub fn get_linux_artifact_summary(
         + bash_command_count
         + apt_event_count
         + cron_job_count
-        + sudo_event_count;
+        + sudo_event_count
+        + system_config_count;
     let observability = linux_summary_observability(conn, total_count)?;
 
     Ok(LinuxArtifactSummaryDto {
@@ -1196,6 +1198,7 @@ fn already_has_v1_artifacts(
             "LinuxAptEvent",
             "LinuxCronJob",
             "LinuxSudoEvent",
+            "LinuxSystemConfig",
         ][..],
         "MacArtifacts" => &[
             "MacFSEvent",
@@ -1248,7 +1251,7 @@ fn artifacts_by_data_source(artifacts: Vec<Artifact>) -> HashMap<String, Vec<Art
 fn count_analysis_artifacts(conn: &Connection) -> Result<u64, AnalysisServiceError> {
     let count: i64 = conn
         .query_row(
-            "SELECT COUNT(*) FROM artifacts WHERE artifact_type IN ('RegistryValue', 'RegistrySamUser', 'RegistryUserAssist', 'RegistryHive', 'RegistryNetworkAdapter', 'RegistryNetworkProfile', 'RegistryInstalledSoftware', 'RegistrySystemService', 'RegistryUsbDevice', 'RegistryMountedDevice', 'RegistryShutdownTime', 'RegistryShimCache', 'RegistryMachineRunKey', 'RegistryWinlogonConfig', 'RegistryLsaPackage', 'RegistryOpenSaveMru', 'RegistryLastVisitedMru', 'RegistryRunMru', 'RegistryShellbag', 'RegistryMuiCache', 'RegistryAmcacheApplication', 'RegistryAmcacheApplicationFile', 'RegistryAppCompatLayer', 'RegistrySecurityPolicy', 'RegistryLsaSecret', 'RegistryCachedCredential', 'BrowserHistory', 'BrowserDownload', 'BrowserCookie', 'BrowserSessionTab', 'BrowserPassword', 'EmailMessage', 'EvtxBootShutdown', 'EvtxSecurityEvent', 'EvtxApplicationEvent', 'LinuxJournal', 'LinuxWtmp', 'LinuxBashCommand', 'LinuxAptEvent', 'LinuxCronJob', 'LinuxSudoEvent', 'MacFSEvent', 'MacLaunchService', 'MacQuarantineEvent', 'MacRecentItem', 'MacSpotlightEntry', 'MacUnifiedLogEntry')",
+            "SELECT COUNT(*) FROM artifacts WHERE artifact_type IN ('RegistryValue', 'RegistrySamUser', 'RegistryUserAssist', 'RegistryHive', 'RegistryNetworkAdapter', 'RegistryNetworkProfile', 'RegistryInstalledSoftware', 'RegistrySystemService', 'RegistryUsbDevice', 'RegistryMountedDevice', 'RegistryShutdownTime', 'RegistryShimCache', 'RegistryMachineRunKey', 'RegistryWinlogonConfig', 'RegistryLsaPackage', 'RegistryOpenSaveMru', 'RegistryLastVisitedMru', 'RegistryRunMru', 'RegistryShellbag', 'RegistryMuiCache', 'RegistryAmcacheApplication', 'RegistryAmcacheApplicationFile', 'RegistryAppCompatLayer', 'RegistrySecurityPolicy', 'RegistryLsaSecret', 'RegistryCachedCredential', 'BrowserHistory', 'BrowserDownload', 'BrowserCookie', 'BrowserSessionTab', 'BrowserPassword', 'EmailMessage', 'EvtxBootShutdown', 'EvtxSecurityEvent', 'EvtxApplicationEvent', 'LinuxJournal', 'LinuxWtmp', 'LinuxBashCommand', 'LinuxAptEvent', 'LinuxCronJob', 'LinuxSudoEvent', 'LinuxSystemConfig', 'MacFSEvent', 'MacLaunchService', 'MacQuarantineEvent', 'MacRecentItem', 'MacSpotlightEntry', 'MacUnifiedLogEntry')",
             [],
             |row| row.get(0),
         )
@@ -1434,7 +1437,7 @@ fn linux_parsed_source_ids(
     let mut stmt = conn.prepare(
         "SELECT source_object_id, COUNT(*)
          FROM artifacts
-         WHERE artifact_type IN ('LinuxJournal', 'LinuxWtmp', 'LinuxBashCommand', 'LinuxAptEvent', 'LinuxCronJob', 'LinuxSudoEvent')
+         WHERE artifact_type IN ('LinuxJournal', 'LinuxWtmp', 'LinuxBashCommand', 'LinuxAptEvent', 'LinuxCronJob', 'LinuxSudoEvent', 'LinuxSystemConfig')
            AND source_object_id IS NOT NULL
          GROUP BY source_object_id",
     )?;

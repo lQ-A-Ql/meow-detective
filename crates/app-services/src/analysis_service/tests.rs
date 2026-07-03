@@ -911,6 +911,8 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
     let fish_history = "- cmd: uname -a\n  when: 1700000200\n";
     let syslog = "Jan 15 10:30:00 ubuntu sshd[1234]: Accepted publickey for alice from 192.168.1.100 port 22\n";
     let authorized_keys = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey alice@example\n";
+    let passwd = "root:x:0:0:root:/root:/bin/bash\nalice:x:1000:1000:Alice:/home/alice:/bin/bash\n";
+    let os_release = "PRETTY_NAME=\"CentOS Stream 9\"\nID=centos\nVERSION_ID=\"9\"\n";
     let auth_rotated = gzip_bytes(
         b"Jan 15 10:31:00 ubuntu sudo: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/id\n",
     );
@@ -923,6 +925,8 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
         "authorized-keys".to_string(),
         authorized_keys.as_bytes().to_vec(),
     );
+    contents.insert("passwd".to_string(), passwd.as_bytes().to_vec());
+    contents.insert("os-release".to_string(), os_release.as_bytes().to_vec());
     contents.insert("auth-rotated".to_string(), auth_rotated);
     FileRepo::new(&conn)
         .insert_batch(&[
@@ -951,6 +955,18 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
                 "home/alice/.ssh/authorized_keys",
                 authorized_keys.len() as u64,
             ),
+            file_with_ds(
+                "passwd",
+                &ds_id,
+                "Partition 2 (XFS) - cl/root/etc/passwd",
+                passwd.len() as u64,
+            ),
+            file_with_ds(
+                "os-release",
+                &ds_id,
+                "[P2]/cl/root/etc/os-release",
+                os_release.len() as u64,
+            ),
             file_with_ds("auth-rotated", &ds_id, "var/log/auth.log.1.gz", 96),
         ])
         .unwrap();
@@ -964,7 +980,7 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
     })
     .unwrap();
 
-    assert_eq!(run.scanned_count, 6);
+    assert_eq!(run.scanned_count, 8);
     let artifact_count: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'LinuxBashCommand'",
@@ -1004,12 +1020,51 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
         sudo_count > 0,
         "expected sudo artifact from gz rotated auth log"
     );
+    let system_config_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'LinuxSystemConfig'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(
+        system_config_count > 0,
+        "expected LinuxSystemConfig artifacts"
+    );
+    let root_uid: i64 = conn
+        .query_row(
+            "SELECT json_extract(attrs, '$.uid')
+             FROM artifacts
+             WHERE artifact_type = 'LinuxSystemConfig'
+               AND json_extract(attrs, '$.configKind') = 'passwdAccount'
+               AND json_extract(attrs, '$.username') = 'root'
+             LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(root_uid, 0);
+    let pretty_name: String = conn
+        .query_row(
+            "SELECT json_extract(attrs, '$.prettyName')
+             FROM artifacts
+             WHERE artifact_type = 'LinuxSystemConfig'
+               AND json_extract(attrs, '$.configKind') = 'osRelease'
+             LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(pretty_name, "CentOS Stream 9");
 
     let summary = get_linux_artifact_summary(&conn, 0, 200).unwrap();
     assert_eq!(summary.bash_command_count, artifact_count as u64);
     assert_eq!(
         summary.total_count,
-        artifact_count as u64 + journal_count as u64 + sudo_count as u64
+        artifact_count as u64
+            + journal_count as u64
+            + sudo_count as u64
+            + system_config_count as u64
     );
     assert_eq!(summary.status, AnalysisParseStatusDto::Parsed);
     assert!(!summary.truncated);
@@ -1049,6 +1104,18 @@ fn discover_evidence_candidates_includes_linux_first_pass_paths() {
     let (conn, _tmp, ds_id) = setup_case_db();
     FileRepo::new(&conn)
         .insert_batch(&[
+            file_with_ds(
+                "passwd-prefixed",
+                &ds_id,
+                "Partition 2 (XFS) - cl/root/etc/passwd",
+                10,
+            ),
+            file_with_ds(
+                "os-release-prefixed",
+                &ds_id,
+                "[P2]/cl/root/etc/os-release",
+                10,
+            ),
             file_with_ds("audit", &ds_id, "var/log/audit/audit.log.1.gz", 10),
             file_with_ds("syslog", &ds_id, "var/log/syslog.1", 10),
             file_with_ds("messages", &ds_id, "var/log/messages", 10),
@@ -1073,7 +1140,13 @@ fn discover_evidence_candidates_includes_linux_first_pass_paths() {
     let candidates = discover_evidence_candidates(&conn).unwrap();
     let linux = candidates.get("LinuxArtifacts").unwrap();
 
-    assert_eq!(linux.len(), 8);
+    assert_eq!(linux.len(), 10);
+    assert!(linux
+        .iter()
+        .any(|item| item.path.ends_with("cl/root/etc/passwd")));
+    assert!(linux
+        .iter()
+        .any(|item| item.path.ends_with("cl/root/etc/os-release")));
     assert!(linux
         .iter()
         .any(|item| item.path.ends_with("audit.log.1.gz")));

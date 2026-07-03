@@ -198,8 +198,18 @@ const EVIDENCE_CATEGORY_DEFS: &[EvidenceCategoryDef] = &[
             "LinuxAptEvent",
             "LinuxCronJob",
             "LinuxSudoEvent",
+            "LinuxSystemConfig",
         ],
         patterns: &[
+            EvidencePathPattern::Suffix("/etc/os-release"),
+            EvidencePathPattern::Suffix("/usr/lib/os-release"),
+            EvidencePathPattern::Suffix("/etc/passwd"),
+            EvidencePathPattern::Suffix("/etc/group"),
+            EvidencePathPattern::Suffix("/etc/hostname"),
+            EvidencePathPattern::Suffix("/etc/hosts"),
+            EvidencePathPattern::Suffix("/etc/fstab"),
+            EvidencePathPattern::Suffix("/etc/resolv.conf"),
+            EvidencePathPattern::Suffix("/etc/machine-id"),
             EvidencePathPattern::Suffix(".journal"),
             EvidencePathPattern::Suffix(".journal~"),
             EvidencePathPattern::Contains("/var/log/journal/"),
@@ -687,12 +697,112 @@ fn artifact_counts_by_source(
 }
 
 pub(crate) fn normalize_evidence_path(path: &str) -> String {
-    let normalized = path.replace('\\', "/").to_ascii_lowercase();
+    let normalized = strip_synthetic_root_prefix(&path.replace('\\', "/")).to_ascii_lowercase();
     if normalized.starts_with('/') {
         normalized
     } else {
         format!("/{normalized}")
     }
+}
+
+fn strip_synthetic_root_prefix(path: &str) -> String {
+    let mut path = path.trim().trim_start_matches('/').to_string();
+    let had_partition_marker = if let Some(stripped) = strip_partition_marker_prefix(&path) {
+        path = stripped.to_string();
+        true
+    } else {
+        false
+    };
+
+    let components = path
+        .split('/')
+        .filter(|component| !component.is_empty())
+        .collect::<Vec<_>>();
+    if components
+        .first()
+        .is_some_and(|component| is_linux_root_component(component))
+    {
+        return path;
+    }
+    if !looks_like_synthetic_linux_prefix(&components, had_partition_marker) {
+        return path;
+    }
+
+    let Some(index) = linux_root_start_index(&components) else {
+        return path;
+    };
+
+    if index == 0 {
+        path
+    } else {
+        components[index..].join("/")
+    }
+}
+
+fn strip_partition_marker_prefix(path: &str) -> Option<&str> {
+    let rest = path.strip_prefix("[P")?;
+    let (partition, after_partition) = rest.split_once(']')?;
+    if partition.is_empty() || !partition.chars().all(|ch| ch.is_ascii_digit()) {
+        return None;
+    }
+    let stripped = after_partition.trim_start_matches('/');
+    (!stripped.is_empty()).then_some(stripped)
+}
+
+fn looks_like_synthetic_linux_prefix(components: &[&str], had_partition_marker: bool) -> bool {
+    had_partition_marker
+        || components
+            .first()
+            .is_some_and(|component| looks_like_partition_or_volume_root(component))
+        || (components.len() >= 3
+            && components[1].eq_ignore_ascii_case("root")
+            && !is_linux_root_component(components[0]))
+}
+
+fn looks_like_partition_or_volume_root(component: &str) -> bool {
+    let lower = component.to_ascii_lowercase();
+    lower.starts_with("partition ") || lower.starts_with("volume")
+}
+
+fn linux_root_start_index(components: &[&str]) -> Option<usize> {
+    for (index, component) in components.iter().enumerate() {
+        if !is_linux_root_component(component) {
+            continue;
+        }
+
+        if component.eq_ignore_ascii_case("root")
+            && index > 0
+            && components
+                .get(index + 1)
+                .is_some_and(|next| is_linux_root_component(next))
+        {
+            continue;
+        }
+
+        return Some(index);
+    }
+    None
+}
+
+fn is_linux_root_component(component: &str) -> bool {
+    matches!(
+        component.to_ascii_lowercase().as_str(),
+        "bin"
+            | "boot"
+            | "dev"
+            | "etc"
+            | "home"
+            | "lib"
+            | "lib64"
+            | "opt"
+            | "root"
+            | "run"
+            | "sbin"
+            | "srv"
+            | "tmp"
+            | "usr"
+            | "var"
+    )
 }
 
 fn evidence_path_matches(path: &str, patterns: &[EvidencePathPattern]) -> bool {
@@ -757,6 +867,26 @@ mod tests {
         assert_eq!(
             email_kind_and_parser("unknown.bin"),
             ("email".to_string(), "email".to_string())
+        );
+    }
+
+    #[test]
+    fn normalize_evidence_path_strips_partition_and_lvm_root_prefixes() {
+        assert_eq!(
+            normalize_evidence_path("Partition 2 (XFS) - cl/root/etc/passwd"),
+            "/etc/passwd"
+        );
+        assert_eq!(
+            normalize_evidence_path("[P2]/cl/root/var/log/auth.log.1.gz"),
+            "/var/log/auth.log.1.gz"
+        );
+        assert_eq!(
+            normalize_evidence_path("cl/root/home/alice/.bash_history"),
+            "/home/alice/.bash_history"
+        );
+        assert_eq!(
+            normalize_evidence_path("cl/root/root/.bash_history"),
+            "/root/.bash_history"
         );
     }
 }

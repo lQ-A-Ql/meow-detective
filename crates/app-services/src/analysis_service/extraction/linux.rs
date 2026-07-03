@@ -67,6 +67,8 @@ pub fn extract_linux_candidate(candidate: &EvidenceCandidate, bytes: &[u8]) -> E
         extract_fish_history(candidate, input, &mut outcome);
     } else if is_plain_shell_history_path(effective_path) {
         extract_plain_shell_history(candidate, input, &mut outcome);
+    } else if is_system_config_path(effective_path) {
+        extract_system_config(candidate, input, &mut outcome);
     } else if is_apt_history_path(effective_path) {
         extract_apt_history(candidate, input, &mut outcome);
     } else if is_dpkg_log_path(effective_path) {
@@ -124,6 +126,7 @@ pub(super) fn linux_candidate_support(normalized_path: &str) -> LinuxCandidateSu
         || is_zsh_history_path(effective_path)
         || is_fish_history_path(effective_path)
         || is_plain_shell_history_path(effective_path)
+        || is_system_config_path(effective_path)
         || is_apt_history_path(effective_path)
         || is_dpkg_log_path(effective_path)
         || is_cron_path(effective_path)
@@ -179,6 +182,18 @@ fn is_fish_history_path(normalized: &str) -> bool {
 
 fn is_plain_shell_history_path(normalized: &str) -> bool {
     normalized.ends_with(".python_history")
+}
+
+fn is_system_config_path(normalized: &str) -> bool {
+    normalized.ends_with("/etc/os-release")
+        || normalized.ends_with("/usr/lib/os-release")
+        || normalized.ends_with("/etc/passwd")
+        || normalized.ends_with("/etc/group")
+        || normalized.ends_with("/etc/hostname")
+        || normalized.ends_with("/etc/hosts")
+        || normalized.ends_with("/etc/fstab")
+        || normalized.ends_with("/etc/resolv.conf")
+        || normalized.ends_with("/etc/machine-id")
 }
 
 fn is_apt_history_path(normalized: &str) -> bool {
@@ -542,6 +557,162 @@ fn extract_plain_shell_history(
         })
         .collect::<Vec<_>>();
     push_shell_history_commands(candidate, commands, "linux.shell_history", outcome);
+}
+
+fn extract_system_config(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    outcome: &mut ExtractionOutcome,
+) {
+    let normalized = normalize_evidence_path(&candidate.path);
+    let text = String::from_utf8_lossy(bytes);
+
+    if normalized.ends_with("/etc/os-release") || normalized.ends_with("/usr/lib/os-release") {
+        match artifacts_linux::parse_os_release(&text) {
+            Ok(info) => {
+                let mut attrs = base_attrs(candidate);
+                attrs.insert(
+                    "configKind".to_string(),
+                    Value::String("osRelease".to_string()),
+                );
+                insert_opt(&mut attrs, "prettyName", info.pretty_name.clone());
+                insert_opt(&mut attrs, "osId", info.id.clone());
+                insert_opt(&mut attrs, "versionId", info.version_id.clone());
+                if !info.fields.is_empty() {
+                    attrs.insert(
+                        "fields".to_string(),
+                        Value::Object(
+                            info.fields
+                                .into_iter()
+                                .map(|(key, value)| (key, Value::String(value)))
+                                .collect(),
+                        ),
+                    );
+                }
+
+                let title = info
+                    .pretty_name
+                    .as_deref()
+                    .map(|name| format!("Linux OS: {name}"))
+                    .unwrap_or_else(|| "Linux OS release".to_string());
+                outcome.artifacts.push(make_artifact(
+                    "LinuxSystemConfig",
+                    title.clone(),
+                    title,
+                    candidate,
+                    "linux.os_release",
+                    attrs,
+                ));
+            }
+            Err(err) => outcome.warnings.push(format!(
+                "{} os-release parse failed: {}",
+                candidate.path, err
+            )),
+        }
+        return;
+    }
+
+    if normalized.ends_with("/etc/passwd") {
+        match artifacts_linux::parse_passwd(&text) {
+            Ok(accounts) => {
+                for account in accounts {
+                    let mut attrs = base_attrs(candidate);
+                    attrs.insert(
+                        "configKind".to_string(),
+                        Value::String("passwdAccount".to_string()),
+                    );
+                    attrs.insert(
+                        "username".to_string(),
+                        Value::String(account.username.clone()),
+                    );
+                    attrs.insert("uid".to_string(), Value::Number(account.uid.into()));
+                    attrs.insert("gid".to_string(), Value::Number(account.gid.into()));
+                    attrs.insert("gecos".to_string(), Value::String(account.gecos.clone()));
+                    attrs.insert("home".to_string(), Value::String(account.home.clone()));
+                    attrs.insert("shell".to_string(), Value::String(account.shell.clone()));
+                    attrs.insert("isUidZero".to_string(), Value::Bool(account.uid == 0));
+                    attrs.insert(
+                        "hasInteractiveShell".to_string(),
+                        Value::Bool(is_interactive_shell(&account.shell)),
+                    );
+
+                    outcome.artifacts.push(make_artifact(
+                        "LinuxSystemConfig",
+                        format!("Linux account: {}", account.username),
+                        format!(
+                            "uid={} gid={} home={} shell={}",
+                            account.uid, account.gid, account.home, account.shell
+                        ),
+                        candidate,
+                        "linux.passwd",
+                        attrs,
+                    ));
+                }
+            }
+            Err(err) => outcome
+                .warnings
+                .push(format!("{} passwd parse failed: {}", candidate.path, err)),
+        }
+        return;
+    }
+
+    extract_key_value_or_lines(candidate, &text, "linux.system_config", outcome);
+}
+
+fn extract_key_value_or_lines(
+    candidate: &EvidenceCandidate,
+    text: &str,
+    parser: &str,
+    outcome: &mut ExtractionOutcome,
+) {
+    let mut emitted = 0usize;
+    for (line_number, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if emitted >= MAX_TEXT_LOG_EVENTS_PER_SOURCE {
+            outcome.warnings.push(format!(
+                "{} system config emitted first {} records only",
+                candidate.path, MAX_TEXT_LOG_EVENTS_PER_SOURCE
+            ));
+            break;
+        }
+
+        let mut attrs = base_attrs(candidate);
+        attrs.insert(
+            "configKind".to_string(),
+            Value::String("textConfig".to_string()),
+        );
+        attrs.insert("line".to_string(), Value::String(trimmed.to_string()));
+        attrs.insert(
+            "lineNumber".to_string(),
+            Value::Number((line_number as u64 + 1).into()),
+        );
+        if let Some((key, value)) = trimmed.split_once('=') {
+            attrs.insert("key".to_string(), Value::String(key.trim().to_string()));
+            attrs.insert("value".to_string(), Value::String(value.trim().to_string()));
+        }
+
+        outcome.artifacts.push(make_artifact(
+            "LinuxSystemConfig",
+            format!("Linux config: {}", truncate(trimmed, 80)),
+            trimmed.to_string(),
+            candidate,
+            parser,
+            attrs,
+        ));
+        emitted += 1;
+    }
+}
+
+fn is_interactive_shell(shell: &str) -> bool {
+    let lower = shell.to_ascii_lowercase();
+    !(lower.ends_with("/false")
+        || lower.ends_with("/nologin")
+        || lower.ends_with("/sync")
+        || lower == "false"
+        || lower == "nologin")
 }
 
 struct ShellHistoryCommand {
