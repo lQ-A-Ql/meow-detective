@@ -962,6 +962,47 @@ fn lvm_root_partition_record(conn: &Connection, ds_id: &DataSourceId) -> DataSou
         .expect("stored partition metadata should include cl/root")
 }
 
+#[test]
+#[ignore = "requires FORENSICS_LINUX_E01_FIXTURE real Linux E01 sample"]
+fn linux_e01_root_lv_etc_directory_has_children() {
+    let fs = open_root_lv_xfs();
+    let root_children = fs
+        .list_children("")
+        .expect("root LV should enumerate the Linux root directory");
+    assert!(
+        root_children
+            .iter()
+            .any(|child| child.name == "etc" && child.is_dir),
+        "root LV root should expose /etc as a directory, got {:?}",
+        root_children
+            .iter()
+            .map(|child| child.name.as_str())
+            .collect::<Vec<_>>()
+    );
+
+    let etc_children = fs
+        .list_children("etc")
+        .expect("root LV should enumerate XFS dir3 /etc children");
+    let etc_child_names = etc_children
+        .iter()
+        .map(|child| child.name.as_str())
+        .collect::<Vec<_>>();
+    eprintln!(
+        "Root LV /etc direct enumeration returned {} children",
+        etc_child_names.len()
+    );
+    assert!(
+        !etc_children.is_empty(),
+        "XFS dir3 /etc should not parse as XDD3 with children=0"
+    );
+    for required_name in ["passwd", "os-release", "hostname"] {
+        assert!(
+            etc_child_names.contains(&required_name),
+            "root LV /etc enumeration must include {required_name}; /etc children={etc_child_names:?}"
+        );
+    }
+}
+
 /// Probe the E01 file and confirm at least one Linux filesystem candidate is
 /// detected (Ext4, XFS, or Btrfs).
 #[test]

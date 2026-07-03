@@ -27,6 +27,9 @@ pub(crate) const XFS_DIR3_FT_REG_FILE: u8 = 1;
 pub(crate) const XFS_DIR3_FT_DIR: u8 = 2;
 const XFS_DIR3_FT_MAX: u8 = 9;
 pub(crate) const XFS_DIR2_DATA_ALIGN: usize = 8;
+const XFS_DIR2_DATA_ENTRY_FIXED_SIZE: usize = 9;
+const XFS_DIR2_DATA_ENTRY_TAG_SIZE: usize = 2;
+const XFS_DIR3_DATA_ENTRY_FTYPE_SIZE: usize = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct XfsDirectoryEntry {
@@ -72,10 +75,20 @@ impl DirectoryReadOutcome {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DirectoryBlockKind {
-    Block { hdr_size: usize },
-    Data { hdr_size: usize },
+    Block { hdr_size: usize, dir3: bool },
+    Data { hdr_size: usize, dir3: bool },
     Zero,
     Unknown(u32),
+}
+
+impl DirectoryBlockKind {
+    fn prefers_ftype(self) -> bool {
+        matches!(
+            self,
+            DirectoryBlockKind::Block { dir3: true, .. }
+                | DirectoryBlockKind::Data { dir3: true, .. }
+        )
+    }
 }
 
 #[derive(Default)]
@@ -417,9 +430,14 @@ impl XfsReader {
                 ..DirectoryBlockParse::default()
             };
         }
-        let (hdr_size, has_block_tail) = match Self::classify_directory_block(data) {
-            DirectoryBlockKind::Block { hdr_size } => (hdr_size, true),
-            DirectoryBlockKind::Data { hdr_size } => (hdr_size, false),
+        let block_kind = Self::classify_directory_block(data);
+        let (hdr_size, has_block_tail, preferred_has_ftype) = match block_kind {
+            DirectoryBlockKind::Block { hdr_size, .. } => {
+                (hdr_size, true, has_ftype || block_kind.prefers_ftype())
+            }
+            DirectoryBlockKind::Data { hdr_size, .. } => {
+                (hdr_size, false, has_ftype || block_kind.prefers_ftype())
+            }
             DirectoryBlockKind::Zero => {
                 if !recoverable_magic {
                     return DirectoryBlockParse {
@@ -466,16 +484,19 @@ impl XfsReader {
         let mut pos = hdr_size;
         let mut entries = Vec::new();
         while pos + 11 <= data_end {
+            if pos % XFS_DIR2_DATA_ALIGN != 0 {
+                break;
+            }
             let freetag = u16::from_be_bytes([data[pos], data[pos + 1]]);
             if freetag == XFS_DIR2_FREE_TAG {
                 if pos + 4 > data.len() {
                     break;
                 }
                 let skip_len = u16::from_be_bytes([data[pos + 2], data[pos + 3]]) as usize;
-                if skip_len < 4 || pos + skip_len > data_end {
+                if !valid_unused_dir_record(data, pos, skip_len, data_end) {
                     break;
                 }
-                pos = pos.saturating_add(skip_len.max(4));
+                pos = pos.saturating_add(skip_len);
                 continue;
             }
 
@@ -494,7 +515,7 @@ impl XfsReader {
                 break;
             }
             let Some((ftype, padded_end)) =
-                decode_dir_entry_tail(data, entry_body_end, pos, data_end, has_ftype)
+                decode_dir_entry_tail(data, entry_body_end, pos, data_end, preferred_has_ftype)
             else {
                 break;
             };
@@ -535,15 +556,19 @@ impl XfsReader {
         match be_u32(data, 0) {
             XFS_DIR3_BLOCK_MAGIC => DirectoryBlockKind::Block {
                 hdr_size: XFS_DIR3_DATA_HDR_SIZE,
+                dir3: true,
             },
             XFS_DIR2_BLOCK_MAGIC | XFS_DIR2_BLOCK_MAGIC_LEGACY => DirectoryBlockKind::Block {
                 hdr_size: XFS_DIR2_DATA_HDR_SIZE,
+                dir3: false,
             },
             XFS_DIR3_DATA_MAGIC => DirectoryBlockKind::Data {
                 hdr_size: XFS_DIR3_DATA_HDR_SIZE,
+                dir3: true,
             },
             XFS_DIR2_DATA_MAGIC | XFS_DIR2_DATA_MAGIC_LEGACY => DirectoryBlockKind::Data {
                 hdr_size: XFS_DIR2_DATA_HDR_SIZE,
+                dir3: false,
             },
             magic => DirectoryBlockKind::Unknown(magic),
         }
@@ -816,15 +841,39 @@ fn decode_dir_entry_tail(
     name_end: usize,
     entry_start: usize,
     data_end: usize,
+    preferred_has_ftype: bool,
+) -> Option<(Option<u8>, usize)> {
+    decode_dir_entry_tail_with_layout(data, name_end, entry_start, data_end, preferred_has_ftype)
+        .or_else(|| {
+            decode_dir_entry_tail_with_layout(
+                data,
+                name_end,
+                entry_start,
+                data_end,
+                !preferred_has_ftype,
+            )
+        })
+}
+
+fn decode_dir_entry_tail_with_layout(
+    data: &[u8],
+    name_end: usize,
+    entry_start: usize,
+    data_end: usize,
     has_ftype: bool,
 ) -> Option<(Option<u8>, usize)> {
-    let raw_end = name_end.checked_add(if has_ftype { 3 } else { 2 })?;
-    let padded_end = align_up(raw_end, XFS_DIR2_DATA_ALIGN)?;
-    if padded_end > data_end || padded_end < 2 {
+    if entry_start % XFS_DIR2_DATA_ALIGN != 0 || name_end < entry_start {
+        return None;
+    }
+    let name_start = entry_start.checked_add(XFS_DIR2_DATA_ENTRY_FIXED_SIZE)?;
+    let namelen = name_end.checked_sub(name_start)?;
+    let record_len = dir_entry_record_size(namelen, has_ftype)?;
+    let padded_end = entry_start.checked_add(record_len)?;
+    if padded_end > data_end || record_len < XFS_DIR2_DATA_ENTRY_TAG_SIZE {
         return None;
     }
 
-    let tag_pos = padded_end - 2;
+    let tag_pos = padded_end.checked_sub(XFS_DIR2_DATA_ENTRY_TAG_SIZE)?;
     if be_u16(data, tag_pos) as usize != entry_start {
         return None;
     }
@@ -844,6 +893,37 @@ fn decode_dir_entry_tail(
     };
 
     Some((ftype, padded_end))
+}
+
+fn dir_entry_record_size(namelen: usize, has_ftype: bool) -> Option<usize> {
+    let ftype_size = if has_ftype {
+        XFS_DIR3_DATA_ENTRY_FTYPE_SIZE
+    } else {
+        0
+    };
+    XFS_DIR2_DATA_ENTRY_FIXED_SIZE
+        .checked_add(namelen)?
+        .checked_add(ftype_size)?
+        .checked_add(XFS_DIR2_DATA_ENTRY_TAG_SIZE)
+        .and_then(|len| align_up(len, XFS_DIR2_DATA_ALIGN))
+}
+
+fn valid_unused_dir_record(
+    data: &[u8],
+    entry_start: usize,
+    record_len: usize,
+    data_end: usize,
+) -> bool {
+    if record_len < XFS_DIR2_DATA_ALIGN || record_len % XFS_DIR2_DATA_ALIGN != 0 {
+        return false;
+    }
+    let Some(record_end) = entry_start.checked_add(record_len) else {
+        return false;
+    };
+    if record_end > data_end || record_end < 2 {
+        return false;
+    }
+    be_u16(data, record_end - 2) as usize == entry_start
 }
 
 fn align_up(value: usize, align: usize) -> Option<usize> {

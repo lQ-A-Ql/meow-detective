@@ -873,18 +873,92 @@ fn build_data_dir_v5_data_with_ftype() -> Vec<u8> {
     buf
 }
 
+fn build_data_dir_v5_multi_entry_with_ftype() -> Vec<u8> {
+    let mut buf = vec![0u8; 512];
+    buf[0..4].copy_from_slice(&XFS_DIR3_DATA_MAGIC.to_be_bytes());
+
+    let mut pos = XFS_DIR3_DATA_HDR_SIZE;
+    append_xdd3_entry(
+        &mut buf,
+        &mut pos,
+        0x0100_0010,
+        b"passwd",
+        Some(XFS_DIR3_FT_REG_FILE),
+    );
+    append_xdd3_entry(
+        &mut buf,
+        &mut pos,
+        0x0100_0011,
+        b"systemd",
+        Some(XFS_DIR3_FT_DIR),
+    );
+    append_xdd3_entry(
+        &mut buf,
+        &mut pos,
+        0x0100_0012,
+        b"hostname",
+        Some(XFS_DIR3_FT_REG_FILE),
+    );
+
+    buf
+}
+
+fn build_data_dir_v5_entry_with_alignment_sensitive_tag() -> Vec<u8> {
+    let mut buf = vec![0u8; 512];
+    buf[0..4].copy_from_slice(&XFS_DIR3_DATA_MAGIC.to_be_bytes());
+    write_xdd3_entry(
+        &mut buf,
+        XFS_DIR3_DATA_HDR_SIZE,
+        0x0100_0020,
+        b"abcde",
+        Some(XFS_DIR3_FT_REG_FILE),
+    );
+    buf
+}
+
+fn build_data_dir_v5_multi_entry_without_ftype() -> Vec<u8> {
+    let mut buf = vec![0u8; 512];
+    buf[0..4].copy_from_slice(&XFS_DIR3_DATA_MAGIC.to_be_bytes());
+
+    let mut pos = XFS_DIR3_DATA_HDR_SIZE;
+    append_xdd3_entry(&mut buf, &mut pos, 0x0100_0030, b"shadow", None);
+    append_xdd3_entry(&mut buf, &mut pos, 0x0100_0031, b"group", None);
+
+    buf
+}
+
 fn write_xdd3_entry(buf: &mut [u8], pos: usize, inumber: u64, name: &[u8], ftype: Option<u8>) {
     buf[pos..pos + 8].copy_from_slice(&inumber.to_be_bytes());
     buf[pos + 8] = name.len() as u8;
     buf[pos + 9..pos + 9 + name.len()].copy_from_slice(name);
-    let raw_end = pos + 9 + name.len() + usize::from(ftype.is_some()) + 2;
-    let padded_end =
-        raw_end + ((XFS_DIR2_DATA_ALIGN - (raw_end % XFS_DIR2_DATA_ALIGN)) % XFS_DIR2_DATA_ALIGN);
+    let record_len = 9 + name.len() + usize::from(ftype.is_some()) + 2;
+    let padded_end = pos
+        + record_len
+        + ((XFS_DIR2_DATA_ALIGN - (record_len % XFS_DIR2_DATA_ALIGN)) % XFS_DIR2_DATA_ALIGN);
     let tag_pos = padded_end - 2;
     if let Some(ftype) = ftype {
         buf[pos + 9 + name.len()] = ftype;
     }
     buf[tag_pos..tag_pos + 2].copy_from_slice(&(pos as u16).to_be_bytes());
+}
+
+fn write_xdd3_unused(buf: &mut [u8], pos: usize, record_len: usize) {
+    buf[pos..pos + 2].copy_from_slice(&XFS_DIR2_FREE_TAG.to_be_bytes());
+    buf[pos + 2..pos + 4].copy_from_slice(&(record_len as u16).to_be_bytes());
+    buf[pos + record_len - 2..pos + record_len].copy_from_slice(&(pos as u16).to_be_bytes());
+}
+
+fn append_xdd3_entry(
+    buf: &mut [u8],
+    pos: &mut usize,
+    inumber: u64,
+    name: &[u8],
+    ftype: Option<u8>,
+) {
+    write_xdd3_entry(buf, *pos, inumber, name, ftype);
+    let record_len = 9 + name.len() + usize::from(ftype.is_some()) + 2;
+    *pos += record_len
+        + ((XFS_DIR2_DATA_ALIGN - (record_len % XFS_DIR2_DATA_ALIGN)) % XFS_DIR2_DATA_ALIGN);
 }
 
 fn build_xfs_fixture_with_xdd3_extent_dir() -> Vec<u8> {
@@ -959,10 +1033,7 @@ fn build_xfs_fixture_with_multi_fsb_directory_block() -> Vec<u8> {
     img[block7..block7 + 2 * block_size].fill(0);
     let dir = &mut img[block7..block7 + 2 * block_size];
     dir[0..4].copy_from_slice(&XFS_DIR3_DATA_MAGIC.to_be_bytes());
-    dir[XFS_DIR3_DATA_HDR_SIZE..XFS_DIR3_DATA_HDR_SIZE + 2]
-        .copy_from_slice(&XFS_DIR2_FREE_TAG.to_be_bytes());
-    dir[XFS_DIR3_DATA_HDR_SIZE + 2..XFS_DIR3_DATA_HDR_SIZE + 4]
-        .copy_from_slice(&(block_size as u16).to_be_bytes());
+    write_xdd3_unused(dir, XFS_DIR3_DATA_HDR_SIZE, block_size);
     let pos = block_size + XFS_DIR3_DATA_HDR_SIZE;
     write_xdd3_entry(dir, pos, 4, b"subdir", None);
 
@@ -1108,9 +1179,8 @@ fn build_block_dir_data_with_free_space() -> Vec<u8> {
     let p1 = e1_end + ((-(e1_end as isize as i64)) & 7) as usize;
 
     // Free-space record spanning 32 bytes
-    buf[p1..p1 + 2].copy_from_slice(&XFS_DIR2_FREE_TAG.to_be_bytes());
     let free_len: u16 = 32;
-    buf[p1 + 2..p1 + 4].copy_from_slice(&free_len.to_be_bytes());
+    write_xdd3_unused(&mut buf, p1, free_len as usize);
     pos = p1 + free_len as usize;
 
     // Entry 2: "keep.txt" → inode 20, DIR
@@ -1206,6 +1276,48 @@ fn test_parse_data_dir_v5_with_ftype() {
 }
 
 #[test]
+fn test_parse_data_dir_v5_tag_is_at_end_of_8_byte_aligned_record() {
+    let data = build_data_dir_v5_entry_with_alignment_sensitive_tag();
+    let entries = XfsReader::parse_block_dir_entries(&data).unwrap();
+
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].name, "abcde");
+    assert_eq!(entries[0].inode, 0x0100_0020);
+    assert_eq!(entries[0].ftype, Some(XFS_DIR3_FT_REG_FILE));
+}
+
+#[test]
+fn test_parse_data_dir_v5_multi_entry_block_with_ftype() {
+    let data = build_data_dir_v5_multi_entry_with_ftype();
+    let entries = XfsReader::parse_block_dir_entries(&data).unwrap();
+    let names = entries
+        .iter()
+        .map(|entry| (entry.name.as_str(), entry.ftype))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        names,
+        vec![
+            ("passwd", Some(XFS_DIR3_FT_REG_FILE)),
+            ("systemd", Some(XFS_DIR3_FT_DIR)),
+            ("hostname", Some(XFS_DIR3_FT_REG_FILE)),
+        ]
+    );
+}
+
+#[test]
+fn test_parse_data_dir_v5_multi_entry_block_without_ftype() {
+    let data = build_data_dir_v5_multi_entry_without_ftype();
+    let entries = XfsReader::parse_block_dir_entries(&data).unwrap();
+    let names = entries
+        .iter()
+        .map(|entry| (entry.name.as_str(), entry.ftype))
+        .collect::<Vec<_>>();
+
+    assert_eq!(names, vec![("shadow", None), ("group", None)]);
+}
+
+#[test]
 fn test_extent_directory_accepts_xdd3_data_block_and_annotates_child_inode() {
     let img = build_xfs_fixture_with_xdd3_extent_dir();
     let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
@@ -1255,6 +1367,66 @@ fn test_parse_block_dir_with_free_space() {
     assert_eq!(entries.len(), 2, "free-space entry should be skipped");
     assert!(entries.iter().any(|(n, _, _)| n == "good.txt"));
     assert!(entries.iter().any(|(n, _, _)| n == "keep.txt"));
+}
+
+#[test]
+fn test_parse_block_dir_rejects_unaligned_free_space_record() {
+    let mut data = vec![0u8; 512];
+    data[0..4].copy_from_slice(&XFS_DIR2_BLOCK_MAGIC.to_be_bytes());
+    let pos = XFS_DIR2_DATA_HDR_SIZE;
+    write_xdd3_unused(&mut data, pos, 10);
+    write_xdd3_entry(
+        &mut data,
+        pos + 10,
+        20,
+        b"bad-after-free",
+        Some(XFS_DIR3_FT_REG_FILE),
+    );
+
+    let entries = XfsReader::parse_block_dir(&data).unwrap();
+
+    assert!(
+        entries.is_empty(),
+        "unaligned free-space records must not advance into a bogus entry"
+    );
+}
+
+#[test]
+fn test_parse_block_dir_rejects_free_space_record_with_bad_tag() {
+    let mut data = vec![0u8; 512];
+    data[0..4].copy_from_slice(&XFS_DIR2_BLOCK_MAGIC.to_be_bytes());
+    let pos = XFS_DIR2_DATA_HDR_SIZE;
+    write_xdd3_unused(&mut data, pos, 16);
+    data[pos + 14..pos + 16].copy_from_slice(&0x1234u16.to_be_bytes());
+    write_xdd3_entry(
+        &mut data,
+        pos + 16,
+        20,
+        b"bad-tag",
+        Some(XFS_DIR3_FT_REG_FILE),
+    );
+
+    let entries = XfsReader::parse_block_dir(&data).unwrap();
+
+    assert!(
+        entries.is_empty(),
+        "free-space records with mismatched tail tags must be rejected"
+    );
+}
+
+#[test]
+fn test_parse_block_dir_rejects_unaligned_active_entry_start() {
+    let mut data = vec![0u8; 512];
+    data[0..4].copy_from_slice(&XFS_DIR2_BLOCK_MAGIC.to_be_bytes());
+    let pos = XFS_DIR2_DATA_HDR_SIZE + 1;
+    write_xdd3_entry(&mut data, pos, 30, b"unaligned", Some(XFS_DIR3_FT_REG_FILE));
+
+    let entries = XfsReader::parse_block_dir(&data).unwrap();
+
+    assert!(
+        entries.is_empty(),
+        "active directory entries must start on XFS 8-byte boundaries"
+    );
 }
 
 // -----------------------------------------------------------------------
