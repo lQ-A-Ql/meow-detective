@@ -78,6 +78,13 @@ struct XfsExtent {
     unwritten: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct XfsDirectoryEntry {
+    name: String,
+    inode: u64,
+    ftype: Option<u8>,
+}
+
 // ---------------------------------------------------------------------------
 // Block directory constants (xfs_dir3_data_hdr / xfs_dir2_data_hdr)
 // ---------------------------------------------------------------------------
@@ -86,6 +93,10 @@ struct XfsExtent {
 const XFS_DIR3_BLOCK_MAGIC: u32 = 0x5844_4233;
 /// v3/v4 block directory magic "XDB2" = 0x58444232 (big-endian).
 const XFS_DIR2_BLOCK_MAGIC: u32 = 0x5844_4232;
+/// v5 data directory magic "XDD3" = 0x58444433 (big-endian).
+const XFS_DIR3_DATA_MAGIC: u32 = 0x5844_4433;
+/// v3/v4 data directory magic "XDD2" = 0x58444432 (big-endian).
+const XFS_DIR2_DATA_MAGIC: u32 = 0x5844_4432;
 /// v5 block data header size in bytes.
 const XFS_DIR3_DATA_HDR_SIZE: usize = 64;
 /// v3/v4 block data header size in bytes.
@@ -264,7 +275,8 @@ impl XfsReader {
     /// Convert a filesystem-block number to a byte offset from the start of
     /// the evidence reader.
     fn block_to_offset(&self, block: u64) -> u64 {
-        self.volume_offset + block * self.block_size
+        self.volume_offset
+            .saturating_add(block.saturating_mul(self.block_size))
     }
 
     /// Read one full filesystem block.
@@ -317,7 +329,9 @@ impl XfsReader {
             let low_bits = ino0 & ((1u64 << shift) - 1);
             let blk_num = low_bits >> self.inopblog;
             let ino_in_blk = low_bits & ((1u64 << self.inopblog) - 1);
-            let fs_blockno = ag_num * self._ag_blocks + blk_num;
+            let fs_blockno = ag_num
+                .saturating_mul(self._ag_blocks)
+                .saturating_add(blk_num);
             return self.block_to_offset(fs_blockno) + ino_in_blk * self.inode_size as u64;
         }
         // Flat-table fallback for synthetic fixtures.
@@ -829,20 +843,36 @@ impl XfsReader {
     /// name(n), ftype(1).  Free-space records tagged with 0xFFFF are
     /// skipped.  The ftype byte (2 = directory) is used directly so no
     /// child-inode read is needed.
+    #[cfg(test)]
     fn parse_block_dir(data: &[u8]) -> io::Result<Vec<(String, u64, bool)>> {
+        Ok(Self::parse_block_dir_entries(data)?
+            .into_iter()
+            .map(|entry| {
+                (
+                    entry.name,
+                    entry.inode,
+                    entry.ftype == Some(XFS_DIR3_FT_DIR),
+                )
+            })
+            .collect())
+    }
+
+    fn parse_block_dir_entries(data: &[u8]) -> io::Result<Vec<XfsDirectoryEntry>> {
         if data.len() < 8 {
             return Ok(Vec::new());
         }
         let magic = be_u32(data, 0);
-        let hdr_size = if magic == XFS_DIR3_BLOCK_MAGIC {
-            XFS_DIR3_DATA_HDR_SIZE
-        } else if magic == XFS_DIR2_BLOCK_MAGIC {
-            XFS_DIR2_DATA_HDR_SIZE
-        } else {
-            return Err(invalid_fs_data(format!(
-                "unknown block directory magic 0x{:08X}",
-                magic
-            )));
+        let (hdr_size, has_block_tail) = match magic {
+            XFS_DIR3_BLOCK_MAGIC => (XFS_DIR3_DATA_HDR_SIZE, true),
+            XFS_DIR2_BLOCK_MAGIC => (XFS_DIR2_DATA_HDR_SIZE, true),
+            XFS_DIR3_DATA_MAGIC => (XFS_DIR3_DATA_HDR_SIZE, false),
+            XFS_DIR2_DATA_MAGIC => (XFS_DIR2_DATA_HDR_SIZE, false),
+            _ => {
+                return Err(invalid_fs_data(format!(
+                    "unknown block directory magic 0x{:08X}",
+                    magic
+                )))
+            }
         };
         if data.len() <= hdr_size {
             return Ok(Vec::new());
@@ -853,7 +883,7 @@ impl XfsReader {
         // `xfs_dir2_block_tail_t` (count, stale) at the very end of the
         // block. Without this the entry loop wanders into the leaf/tail
         // region and decodes it as garbage entries.
-        let data_end = if data.len() >= 8 {
+        let data_end = if has_block_tail && data.len() >= 8 {
             let leaf_count = be_u32(data, data.len() - 8) as usize;
             data.len()
                 .saturating_sub(8)
@@ -865,7 +895,7 @@ impl XfsReader {
 
         let mut pos = hdr_size;
         let mut entries = Vec::new();
-        while pos + 16 <= data_end {
+        while pos + 11 <= data_end {
             // Check for free-space record (freetag = 0xFFFF)
             let freetag = u16::from_be_bytes([data[pos], data[pos + 1]]);
             if freetag == XFS_DIR2_FREE_TAG {
@@ -873,38 +903,54 @@ impl XfsReader {
                     break;
                 }
                 let skip_len = u16::from_be_bytes([data[pos + 2], data[pos + 3]]) as usize;
+                if skip_len < 4 || pos + skip_len > data_end {
+                    break;
+                }
                 pos = pos.saturating_add(skip_len.max(4));
                 continue;
             }
 
-            // Parse xfs_dir2_data_entry: inumber(8) + namelen(1) + name(n) + ftype(1)
+            // Parse xfs_dir2_data_entry:
+            // inumber(8) + namelen(1) + name(n) + optional ftype(1) + tag(2).
             let inumber = be_u64(data, pos);
             let namelen = data[pos + 8] as usize;
+            if inumber == 0 && namelen == 0 {
+                break;
+            }
             let name_start = pos + 9; // skip inumber(8) + namelen(1)
             if namelen == 0 {
                 pos = pos.saturating_add(16);
                 continue;
             }
             let entry_body_end = name_start + namelen;
-            if entry_body_end + 1 > data.len() {
+            if entry_body_end > data_end {
                 break;
             }
-            let ftype = data[entry_body_end];
+            let Some((ftype, raw_end)) = decode_dir_entry_tail(data, entry_body_end, pos, data_end)
+            else {
+                break;
+            };
             let name = String::from_utf8_lossy(&data[name_start..entry_body_end]).to_string();
-            let is_dir = ftype == XFS_DIR3_FT_DIR;
 
             // xfs_dir2_data_entry is inumber(8) + namelen(1) + name(n) +
-            // ftype(1) + tag(2), 8-byte aligned. The trailing 2-byte tag
-            // (the entry's own starting offset, used for reverse lookup)
-            // has no bearing on parsing but must be included when
-            // advancing past the entry, or every later entry in the
-            // block desyncs and decodes as garbage.
-            let raw_end = entry_body_end + 1 + 2; // ftype(1) + tag(2)
+            // optional ftype(1) + tag(2), 8-byte aligned. The trailing
+            // 2-byte tag stores the entry's own starting offset and is the
+            // safest way to distinguish ftype and no-ftype directory entries.
             let padded_end = raw_end + ((-(raw_end as isize as i64)) & 7) as usize;
+            if padded_end <= pos {
+                break;
+            }
             pos = padded_end;
 
             if inumber != 0 {
-                entries.push((name, inumber, is_dir));
+                if !is_plausible_directory_entry_name(&name) {
+                    continue;
+                }
+                entries.push(XfsDirectoryEntry {
+                    name,
+                    inode: inumber,
+                    ftype,
+                });
             }
         }
         Ok(entries)
@@ -939,8 +985,8 @@ impl XfsReader {
             }
             FORMAT_EXTENTS => {
                 let data = self.read_extent_data(&inode, u64::MAX)?;
-                match Self::parse_block_dir(&data) {
-                    Ok(entries) => Ok(entries),
+                match Self::parse_block_dir_entries(&data) {
+                    Ok(entries) => Ok(self.annotate_directory_entries(entries)),
                     Err(block_err) => {
                         // Forensic recovery: if block data is corrupted/all-zero
                         // (known kernel bug xfs_dir2_sf_to_block, fixed 2019),
@@ -974,7 +1020,8 @@ impl XfsReader {
             }
             FORMAT_BTREE => {
                 let data = self.read_btree_data(&inode, u64::MAX)?;
-                Self::parse_block_dir(&data)
+                Self::parse_block_dir_entries(&data)
+                    .map(|entries| self.annotate_directory_entries(entries))
             }
             other => Err(invalid_fs_data(format!(
                 "directory inode {} uses unsupported format {}",
@@ -1038,6 +1085,23 @@ impl XfsReader {
             entries.push((name, child_ino, is_dir));
         }
         entries
+    }
+
+    fn annotate_directory_entries(&self, raw: Vec<XfsDirectoryEntry>) -> Vec<(String, u64, bool)> {
+        raw.into_iter()
+            .map(|entry| {
+                let is_dir = entry.ftype.map_or_else(
+                    || {
+                        self.read_inode(entry.inode)
+                            .ok()
+                            .filter(|ci| ci.len() >= 4)
+                            .is_some_and(|ci| Self::inode_is_dir(&ci))
+                    },
+                    |ftype| ftype == XFS_DIR3_FT_DIR,
+                );
+                (entry.name, entry.inode, is_dir)
+            })
+            .collect()
     }
 
     /// Walk a path string to resolve an inode number and whether it is
@@ -1135,6 +1199,27 @@ fn append_zeroes(data: &mut Vec<u8>, count: u64) -> io::Result<()> {
     Ok(())
 }
 
+fn decode_dir_entry_tail(
+    data: &[u8],
+    name_end: usize,
+    entry_start: usize,
+    data_end: usize,
+) -> Option<(Option<u8>, usize)> {
+    if name_end + 2 <= data_end && be_u16(data, name_end) as usize == entry_start {
+        return Some((None, name_end + 2));
+    }
+
+    if name_end + 3 <= data_end && be_u16(data, name_end + 1) as usize == entry_start {
+        return Some((Some(data[name_end]), name_end + 3));
+    }
+
+    if name_end < data_end {
+        return Some((Some(data[name_end]), name_end + 1));
+    }
+
+    None
+}
+
 fn is_plausible_shortform_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 255
@@ -1143,6 +1228,31 @@ fn is_plausible_shortform_name(name: &str) -> bool {
         && name
             .bytes()
             .all(|byte| byte.is_ascii_graphic() || byte == b' ')
+}
+
+fn is_plausible_directory_entry_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 255
+        && !name.contains('\0')
+        && !matches!(name, "." | "..")
+        && name.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric()
+                || matches!(
+                    byte,
+                    b' ' | b'.'
+                        | b'_'
+                        | b'-'
+                        | b'+'
+                        | b','
+                        | b'@'
+                        | b'='
+                        | b':'
+                        | b'['
+                        | b']'
+                        | b'('
+                        | b')'
+                )
+        })
 }
 
 // ===========================================================================
@@ -1789,7 +1899,8 @@ mod tests {
         buf[pos + 9..pos + 9 + e1_name.len()].copy_from_slice(e1_name);
         let e1_ftype_pos = pos + 9 + e1_name.len();
         buf[e1_ftype_pos] = XFS_DIR3_FT_REG_FILE;
-        let e1_end = e1_ftype_pos + 1;
+        buf[e1_ftype_pos + 1..e1_ftype_pos + 3].copy_from_slice(&(pos as u16).to_be_bytes());
+        let e1_end = e1_ftype_pos + 3;
         pos = e1_end + ((-(e1_end as isize as i64)) & 7) as usize;
 
         // Entry 2: "subdir" → inode 200, ftype=DIR(2)
@@ -1801,6 +1912,7 @@ mod tests {
         buf[pos + 9..pos + 9 + e2_name.len()].copy_from_slice(e2_name);
         let e2_ftype_pos = pos + 9 + e2_name.len();
         buf[e2_ftype_pos] = XFS_DIR3_FT_DIR;
+        buf[e2_ftype_pos + 1..e2_ftype_pos + 3].copy_from_slice(&(pos as u16).to_be_bytes());
 
         buf
     }
@@ -1824,6 +1936,48 @@ mod tests {
         buf[pos + 9..pos + 9 + name.len()].copy_from_slice(name);
         let ftype_pos = pos + 9 + name.len();
         buf[ftype_pos] = XFS_DIR3_FT_REG_FILE;
+        buf[ftype_pos + 1..ftype_pos + 3].copy_from_slice(&(pos as u16).to_be_bytes());
+
+        buf
+    }
+
+    fn build_data_dir_v5_data_without_ftype() -> Vec<u8> {
+        let hdr_size = XFS_DIR3_DATA_HDR_SIZE; // 64
+        let block_size: usize = 512;
+        let mut buf = vec![0u8; block_size];
+
+        buf[0..4].copy_from_slice(&XFS_DIR3_DATA_MAGIC.to_be_bytes());
+
+        let inumber = 0x0100_0001u64;
+        let name = b"shadow";
+        let namelen = name.len() as u8;
+        let pos = hdr_size;
+        buf[pos..pos + 8].copy_from_slice(&inumber.to_be_bytes());
+        buf[pos + 8] = namelen;
+        buf[pos + 9..pos + 9 + name.len()].copy_from_slice(name);
+        let tag_pos = pos + 9 + name.len();
+        buf[tag_pos..tag_pos + 2].copy_from_slice(&(pos as u16).to_be_bytes());
+
+        buf
+    }
+
+    fn build_data_dir_v5_data_with_ftype() -> Vec<u8> {
+        let hdr_size = XFS_DIR3_DATA_HDR_SIZE; // 64
+        let block_size: usize = 512;
+        let mut buf = vec![0u8; block_size];
+
+        buf[0..4].copy_from_slice(&XFS_DIR3_DATA_MAGIC.to_be_bytes());
+
+        let inumber = 0x0100_0002u64;
+        let name = b"systemd";
+        let namelen = name.len() as u8;
+        let pos = hdr_size;
+        buf[pos..pos + 8].copy_from_slice(&inumber.to_be_bytes());
+        buf[pos + 8] = namelen;
+        buf[pos + 9..pos + 9 + name.len()].copy_from_slice(name);
+        let ftype_pos = pos + 9 + name.len();
+        buf[ftype_pos] = XFS_DIR3_FT_DIR;
+        buf[ftype_pos + 1..ftype_pos + 3].copy_from_slice(&(pos as u16).to_be_bytes());
 
         buf
     }
@@ -1847,7 +2001,8 @@ mod tests {
         buf[pos + 9..pos + 9 + name1.len()].copy_from_slice(name1);
         let ft1 = pos + 9 + name1.len();
         buf[ft1] = XFS_DIR3_FT_REG_FILE;
-        let e1_end = ft1 + 1;
+        buf[ft1 + 1..ft1 + 3].copy_from_slice(&(pos as u16).to_be_bytes());
+        let e1_end = ft1 + 3;
         let p1 = e1_end + ((-(e1_end as isize as i64)) & 7) as usize;
 
         // Free-space record spanning 32 bytes
@@ -1865,7 +2020,8 @@ mod tests {
         buf[pos + 9..pos + 9 + name2.len()].copy_from_slice(name2);
         let ft2 = pos + 9 + name2.len();
         buf[ft2] = XFS_DIR3_FT_DIR;
-        let e2_end = ft2 + 1;
+        buf[ft2 + 1..ft2 + 3].copy_from_slice(&(pos as u16).to_be_bytes());
+        let e2_end = ft2 + 3;
         let _p2 = e2_end + ((-(e2_end as isize as i64)) & 7) as usize;
 
         buf
@@ -1902,6 +2058,37 @@ mod tests {
         assert_eq!(entries[0].0, "passwd");
         assert_eq!(entries[0].1, 42);
         assert!(!entries[0].2, "ftype=1 → file");
+    }
+
+    #[test]
+    fn test_parse_data_dir_v5_without_ftype() {
+        let data = build_data_dir_v5_data_without_ftype();
+        let entries = XfsReader::parse_block_dir(&data).unwrap();
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].0, "shadow");
+        assert_eq!(entries[0].1, 0x0100_0001);
+        assert!(
+            !entries[0].2,
+            "no-ftype XDD3 entries require child inode annotation"
+        );
+
+        let raw = XfsReader::parse_block_dir_entries(&data).unwrap();
+        assert_eq!(raw[0].ftype, None);
+    }
+
+    #[test]
+    fn test_parse_data_dir_v5_with_ftype() {
+        let data = build_data_dir_v5_data_with_ftype();
+        let entries = XfsReader::parse_block_dir(&data).unwrap();
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].0, "systemd");
+        assert_eq!(entries[0].1, 0x0100_0002);
+        assert!(entries[0].2);
+
+        let raw = XfsReader::parse_block_dir_entries(&data).unwrap();
+        assert_eq!(raw[0].ftype, Some(XFS_DIR3_FT_DIR));
     }
 
     // -----------------------------------------------------------------------
