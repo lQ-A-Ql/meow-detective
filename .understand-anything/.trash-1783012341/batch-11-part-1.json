@@ -1,0 +1,1391 @@
+{
+  "nodes": [
+    {
+      "id": "file:frontend/src/app/pages/CaseActions.test.tsx",
+      "type": "file",
+      "name": "CaseActions.test.tsx",
+      "filePath": "frontend/src/app/pages/CaseActions.test.tsx",
+      "summary": "CaseActions 组件的单元测试，覆盖案例创建、打开和导入的交互流程，包含表单状态管理和异步操作模拟。",
+      "tags": [
+        "test",
+        "unit-test",
+        "case-management",
+        "frontend"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/app/pages/CaseActions.test.tsx:baseWelcomeProps",
+      "type": "function",
+      "name": "baseWelcomeProps",
+      "filePath": "frontend/src/app/pages/CaseActions.test.tsx",
+      "summary": "测试辅助函数，用于设置 Vitest mock 和渲染测试页面。",
+      "tags": [
+        "test-helper",
+        "unit-test"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        13,
+        31
+      ]
+    },
+    {
+      "id": "function:frontend/src/app/pages/CaseActions.test.tsx:baseImportProps",
+      "type": "function",
+      "name": "baseImportProps",
+      "filePath": "frontend/src/app/pages/CaseActions.test.tsx",
+      "summary": "测试辅助函数，用于设置 Vitest mock 和渲染测试页面。",
+      "tags": [
+        "test-helper",
+        "unit-test"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        33,
+        48
+      ]
+    },
+    {
+      "id": "file:frontend/src/app/pages/CaseActions.tsx",
+      "type": "file",
+      "name": "CaseActions.tsx",
+      "filePath": "frontend/src/app/pages/CaseActions.tsx",
+      "summary": "案例操作面板组件，包含 CaseWelcomeForms（创建/打开案例）和 ImportSection（证据导入）两个子模块，是案例管理入口的核心 UI。",
+      "tags": [
+        "component",
+        "case-management",
+        "entry-point",
+        "ui"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/app/pages/CaseActions.tsx:CaseWelcomeForms",
+      "type": "function",
+      "name": "CaseWelcomeForms",
+      "filePath": "frontend/src/app/pages/CaseActions.tsx",
+      "summary": "导出的 React 组件，负责相关 UI 渲染和交互逻辑。",
+      "tags": [
+        "component",
+        "exported"
+      ],
+      "complexity": "complex",
+      "lineRange": [
+        24,
+        146
+      ]
+    },
+    {
+      "id": "function:frontend/src/app/pages/CaseActions.tsx:ImportSection",
+      "type": "function",
+      "name": "ImportSection",
+      "filePath": "frontend/src/app/pages/CaseActions.tsx",
+      "summary": "导出的 React 组件，负责相关 UI 渲染和交互逻辑。",
+      "tags": [
+        "component",
+        "exported"
+      ],
+      "complexity": "complex",
+      "lineRange": [
+        164,
+        272
+      ]
+    },
+    {
+      "id": "file:frontend/src/app/pages/CaseHome.test.tsx",
+      "type": "file",
+      "name": "CaseHome.test.tsx",
+      "filePath": "frontend/src/app/pages/CaseHome.test.tsx",
+      "summary": "CaseHome 页面的综合单元测试，验证案例首页的数据源展示、作业状态、指标面板和重命名/删除交互。",
+      "tags": [
+        "test",
+        "unit-test",
+        "case-management",
+        "frontend"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/app/pages/CaseHome.test.tsx:mockQueryState",
+      "type": "function",
+      "name": "mockQueryState",
+      "filePath": "frontend/src/app/pages/CaseHome.test.tsx",
+      "summary": "测试辅助函数，用于设置 Vitest mock 和渲染测试页面。",
+      "tags": [
+        "test-helper",
+        "unit-test"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        71,
+        82
+      ]
+    },
+    {
+      "id": "function:frontend/src/app/pages/CaseHome.test.tsx:mockMutationState",
+      "type": "function",
+      "name": "mockMutationState",
+      "filePath": "frontend/src/app/pages/CaseHome.test.tsx",
+      "summary": "测试辅助函数，用于设置 Vitest mock 和渲染测试页面。",
+      "tags": [
+        "test-helper",
+        "unit-test"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        84,
+        95
+      ]
+    },
+    {
+      "id": "function:frontend/src/app/pages/CaseHome.test.tsx:renderPage",
+      "type": "function",
+      "name": "renderPage",
+      "filePath": "frontend/src/app/pages/CaseHome.test.tsx",
+      "summary": "测试辅助函数，用于设置 Vitest mock 和渲染测试页面。",
+      "tags": [
+        "test-helper",
+        "unit-test"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        97,
+        108
+      ]
+    },
+    {
+      "id": "file:frontend/src/app/pages/CaseHome.tsx",
+      "type": "file",
+      "name": "CaseHome.tsx",
+      "filePath": "frontend/src/app/pages/CaseHome.tsx",
+      "summary": "案例首页主组件，集成案例操作、概览指标、数据源管理和导入对话框，是进入案件后的核心枢纽页面。",
+      "tags": [
+        "page",
+        "entry-point",
+        "case-management",
+        "ui"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/app/pages/CaseHome.tsx:CaseHome",
+      "type": "function",
+      "name": "CaseHome",
+      "filePath": "frontend/src/app/pages/CaseHome.tsx",
+      "summary": "导出的 React 组件，负责相关 UI 渲染和交互逻辑。",
+      "tags": [
+        "component",
+        "exported"
+      ],
+      "complexity": "complex",
+      "lineRange": [
+        24,
+        178
+      ]
+    },
+    {
+      "id": "file:frontend/src/app/pages/CaseOverview.tsx",
+      "type": "file",
+      "name": "CaseOverview.tsx",
+      "filePath": "frontend/src/app/pages/CaseOverview.tsx",
+      "summary": "案例概览子面板集合，展示案例指标卡片、数据源列表、最近任务和最近对象，支撑 CaseHome 页面的信息呈现。",
+      "tags": [
+        "component",
+        "dashboard",
+        "case-management",
+        "ui"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/app/pages/CaseOverview.tsx:MetricBlock",
+      "type": "function",
+      "name": "MetricBlock",
+      "filePath": "frontend/src/app/pages/CaseOverview.tsx",
+      "summary": "导出的 React 组件，负责相关 UI 渲染和交互逻辑。",
+      "tags": [
+        "component",
+        "exported"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        9,
+        26
+      ]
+    },
+    {
+      "id": "function:frontend/src/app/pages/CaseOverview.tsx:CaseMetricsStrip",
+      "type": "function",
+      "name": "CaseMetricsStrip",
+      "filePath": "frontend/src/app/pages/CaseOverview.tsx",
+      "summary": "导出的 React 组件，负责相关 UI 渲染和交互逻辑。",
+      "tags": [
+        "component",
+        "exported"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        30,
+        51
+      ]
+    },
+    {
+      "id": "function:frontend/src/app/pages/CaseOverview.tsx:RecentTasksPanel",
+      "type": "function",
+      "name": "RecentTasksPanel",
+      "filePath": "frontend/src/app/pages/CaseOverview.tsx",
+      "summary": "导出的 React 组件，负责相关 UI 渲染和交互逻辑。",
+      "tags": [
+        "component",
+        "exported"
+      ],
+      "complexity": "complex",
+      "lineRange": [
+        55,
+        112
+      ]
+    },
+    {
+      "id": "function:frontend/src/app/pages/CaseOverview.tsx:DataSourcesPanel",
+      "type": "function",
+      "name": "DataSourcesPanel",
+      "filePath": "frontend/src/app/pages/CaseOverview.tsx",
+      "summary": "导出的 React 组件，负责相关 UI 渲染和交互逻辑。",
+      "tags": [
+        "component",
+        "exported"
+      ],
+      "complexity": "complex",
+      "lineRange": [
+        126,
+        275
+      ]
+    },
+    {
+      "id": "function:frontend/src/app/pages/CaseOverview.tsx:RecentObjectsPanel",
+      "type": "function",
+      "name": "RecentObjectsPanel",
+      "filePath": "frontend/src/app/pages/CaseOverview.tsx",
+      "summary": "导出的 React 组件，负责相关 UI 渲染和交互逻辑。",
+      "tags": [
+        "component",
+        "exported"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        279,
+        308
+      ]
+    },
+    {
+      "id": "file:frontend/src/app/pages/Reports.test.tsx",
+      "type": "file",
+      "name": "Reports.test.tsx",
+      "filePath": "frontend/src/app/pages/Reports.test.tsx",
+      "summary": "Reports 报告页面的单元测试，验证报告模板展示和导出功能的基本渲染。",
+      "tags": [
+        "test",
+        "unit-test",
+        "reports",
+        "frontend"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/app/pages/Reports.tsx",
+      "type": "file",
+      "name": "Reports.tsx",
+      "filePath": "frontend/src/app/pages/Reports.tsx",
+      "summary": "报告生成与导出页面，支持选择报告模板、格式（HTML/CSV/JSON）和数据范围，查看导出历史记录。",
+      "tags": [
+        "page",
+        "reports",
+        "export",
+        "ui"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/app/pages/Reports.tsx:Reports",
+      "type": "function",
+      "name": "Reports",
+      "filePath": "frontend/src/app/pages/Reports.tsx",
+      "summary": "导出的 React 组件，负责相关 UI 渲染和交互逻辑。",
+      "tags": [
+        "component",
+        "exported"
+      ],
+      "complexity": "complex",
+      "lineRange": [
+        16,
+        155
+      ]
+    },
+    {
+      "id": "file:frontend/src/app/pages/V3Dashboard.test.tsx",
+      "type": "file",
+      "name": "V3Dashboard.test.tsx",
+      "filePath": "frontend/src/app/pages/V3Dashboard.test.tsx",
+      "summary": "V3Dashboard 的综合单元测试，模拟 IntersectionObserver 和 API 响应以验证仪表盘的统计卡片渲染。",
+      "tags": [
+        "test",
+        "unit-test",
+        "dashboard",
+        "governance"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "type": "file",
+      "name": "V3Dashboard.tsx",
+      "filePath": "frontend/src/app/pages/V3Dashboard.tsx",
+      "summary": "V3 治理仪表盘页面，聚合展示图谱统计、时间线、关联分析、治理评分等多个分析维度的实时数据面板。",
+      "tags": [
+        "page",
+        "dashboard",
+        "governance",
+        "analysis"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/app/pages/V3Dashboard.tsx:V3Dashboard",
+      "type": "function",
+      "name": "V3Dashboard",
+      "filePath": "frontend/src/app/pages/V3Dashboard.tsx",
+      "summary": "导出的 React 组件，负责相关 UI 渲染和交互逻辑。",
+      "tags": [
+        "component",
+        "exported"
+      ],
+      "complexity": "complex",
+      "lineRange": [
+        19,
+        94
+      ]
+    },
+    {
+      "id": "file:frontend/src/app/pages/V3ScoreCards.tsx",
+      "type": "file",
+      "name": "V3ScoreCards.tsx",
+      "filePath": "frontend/src/app/pages/V3ScoreCards.tsx",
+      "summary": "V3 仪表盘的通用展示组件库，提供 StatCard、SectionHeader、EmptyPlaceholder 和 errorMessage 工具函数，供各统计面板复用。",
+      "tags": [
+        "component",
+        "utility",
+        "dashboard",
+        "ui"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/pages/V3ScoreCards.tsx:errorMessage",
+      "type": "function",
+      "name": "errorMessage",
+      "filePath": "frontend/src/app/pages/V3ScoreCards.tsx",
+      "summary": "导出的 React 组件，负责相关 UI 渲染和交互逻辑。",
+      "tags": [
+        "component",
+        "exported"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        5,
+        13
+      ]
+    },
+    {
+      "id": "function:frontend/src/app/pages/V3ScoreCards.tsx:StatCard",
+      "type": "function",
+      "name": "StatCard",
+      "filePath": "frontend/src/app/pages/V3ScoreCards.tsx",
+      "summary": "导出的 React 组件，负责相关 UI 渲染和交互逻辑。",
+      "tags": [
+        "component",
+        "exported"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        15,
+        36
+      ]
+    },
+    {
+      "id": "function:frontend/src/app/pages/V3ScoreCards.tsx:EmptyPlaceholder",
+      "type": "function",
+      "name": "EmptyPlaceholder",
+      "filePath": "frontend/src/app/pages/V3ScoreCards.tsx",
+      "summary": "导出的 React 组件，负责相关 UI 渲染和交互逻辑。",
+      "tags": [
+        "component",
+        "exported"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        38,
+        44
+      ]
+    },
+    {
+      "id": "function:frontend/src/app/pages/V3ScoreCards.tsx:SectionHeader",
+      "type": "function",
+      "name": "SectionHeader",
+      "filePath": "frontend/src/app/pages/V3ScoreCards.tsx",
+      "summary": "导出的 React 组件，负责相关 UI 渲染和交互逻辑。",
+      "tags": [
+        "component",
+        "exported"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        46,
+        64
+      ]
+    },
+    {
+      "id": "file:frontend/src/app/pages/file-tree-utils.ts",
+      "type": "file",
+      "name": "file-tree-utils.ts",
+      "filePath": "frontend/src/app/pages/file-tree-utils.ts",
+      "summary": "文件树工具函数，提供树节点比较（sameTreeNode/sameTreeNodeList）和分页合并（mergeTreeNodePages）的逻辑。",
+      "tags": [
+        "utility",
+        "file-tree",
+        "data-processing"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/app/pages/file-tree-utils.ts:sameTreeNode",
+      "type": "function",
+      "name": "sameTreeNode",
+      "filePath": "frontend/src/app/pages/file-tree-utils.ts",
+      "summary": "导出的 React 组件，负责相关 UI 渲染和交互逻辑。",
+      "tags": [
+        "component",
+        "exported"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        3,
+        16
+      ]
+    },
+    {
+      "id": "function:frontend/src/app/pages/file-tree-utils.ts:sameTreeNodeList",
+      "type": "function",
+      "name": "sameTreeNodeList",
+      "filePath": "frontend/src/app/pages/file-tree-utils.ts",
+      "summary": "导出的 React 组件，负责相关 UI 渲染和交互逻辑。",
+      "tags": [
+        "component",
+        "exported"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        18,
+        30
+      ]
+    },
+    {
+      "id": "function:frontend/src/app/pages/file-tree-utils.ts:mergeTreeNodePages",
+      "type": "function",
+      "name": "mergeTreeNodePages",
+      "filePath": "frontend/src/app/pages/file-tree-utils.ts",
+      "summary": "导出的 React 组件，负责相关 UI 渲染和交互逻辑。",
+      "tags": [
+        "component",
+        "exported"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        32,
+        56
+      ]
+    },
+    {
+      "id": "file:frontend/src/app/pages/use-file-browser.ts",
+      "type": "file",
+      "name": "use-file-browser.ts",
+      "filePath": "frontend/src/app/pages/use-file-browser.ts",
+      "summary": "文件浏览器核心 React Hook，编排文件树、分页、预览、选择、跳转等子功能，管理 UI 状态与数据源的协调。",
+      "tags": [
+        "hook",
+        "file-browser",
+        "state-management",
+        "orchestration"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/app/pages/use-file-browser.ts:useFileBrowser",
+      "type": "function",
+      "name": "useFileBrowser",
+      "filePath": "frontend/src/app/pages/use-file-browser.ts",
+      "summary": "导出的 React 组件，负责相关 UI 渲染和交互逻辑。",
+      "tags": [
+        "component",
+        "exported"
+      ],
+      "complexity": "complex",
+      "lineRange": [
+        13,
+        208
+      ]
+    },
+    {
+      "id": "file:frontend/src/app/providers.tsx",
+      "type": "file",
+      "name": "providers.tsx",
+      "filePath": "frontend/src/app/providers.tsx",
+      "summary": "应用全局 Provider 组件，配置 React Query 客户端、订阅事件驱动的投影失效逻辑，包装 i18n 翻译支持。",
+      "tags": [
+        "provider",
+        "react-query",
+        "events",
+        "i18n"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/app/providers.tsx:subscribeToProjectionInvalidations",
+      "type": "function",
+      "name": "subscribeToProjectionInvalidations",
+      "filePath": "frontend/src/app/providers.tsx",
+      "summary": "内部辅助函数，封装相关逻辑计算。",
+      "tags": [
+        "utility",
+        "internal"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        22,
+        42
+      ]
+    },
+    {
+      "id": "function:frontend/src/app/providers.tsx:AppProviders",
+      "type": "function",
+      "name": "AppProviders",
+      "filePath": "frontend/src/app/providers.tsx",
+      "summary": "导出的 React 组件，负责相关 UI 渲染和交互逻辑。",
+      "tags": [
+        "component",
+        "exported"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        44,
+        64
+      ]
+    },
+    {
+      "id": "file:frontend/src/components/analysis/CorrelationPanel.tsx",
+      "type": "file",
+      "name": "CorrelationPanel.tsx",
+      "filePath": "frontend/src/components/analysis/CorrelationPanel.tsx",
+      "summary": "关联分析发布评分面板，展示关联覆盖度、信号置信度、运行状态和规则族评分，供治理仪表盘使用。",
+      "tags": [
+        "component",
+        "analysis",
+        "correlation",
+        "governance"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/CorrelationPanel.tsx:coverageTone",
+      "type": "function",
+      "name": "coverageTone",
+      "filePath": "frontend/src/components/analysis/CorrelationPanel.tsx",
+      "summary": "内部辅助函数，封装相关逻辑计算。",
+      "tags": [
+        "utility",
+        "internal"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        8,
+        19
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/CorrelationPanel.tsx:coverageLabel",
+      "type": "function",
+      "name": "coverageLabel",
+      "filePath": "frontend/src/components/analysis/CorrelationPanel.tsx",
+      "summary": "内部辅助函数，封装相关逻辑计算。",
+      "tags": [
+        "utility",
+        "internal"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        21,
+        32
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/CorrelationPanel.tsx:ReleaseScorecardPanel",
+      "type": "function",
+      "name": "ReleaseScorecardPanel",
+      "filePath": "frontend/src/components/analysis/CorrelationPanel.tsx",
+      "summary": "导出的 React 组件，负责相关 UI 渲染和交互逻辑。",
+      "tags": [
+        "component",
+        "exported"
+      ],
+      "complexity": "complex",
+      "lineRange": [
+        34,
+        165
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:frontend/src/app/pages/CaseActions.test.tsx",
+      "target": "function:frontend/src/app/pages/CaseActions.test.tsx:baseWelcomeProps",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseActions.test.tsx",
+      "target": "function:frontend/src/app/pages/CaseActions.test.tsx:baseImportProps",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseActions.test.tsx",
+      "target": "file:frontend/src/app/pages/CaseActions.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseActions.tsx",
+      "target": "file:frontend/src/app/pages/CaseActions.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseActions.tsx",
+      "target": "function:frontend/src/app/pages/CaseActions.tsx:CaseWelcomeForms",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseActions.tsx",
+      "target": "function:frontend/src/app/pages/CaseActions.tsx:CaseWelcomeForms",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseActions.tsx",
+      "target": "function:frontend/src/app/pages/CaseActions.tsx:ImportSection",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseActions.tsx",
+      "target": "function:frontend/src/app/pages/CaseActions.tsx:ImportSection",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseActions.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseHome.test.tsx",
+      "target": "function:frontend/src/app/pages/CaseHome.test.tsx:mockQueryState",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseHome.test.tsx",
+      "target": "function:frontend/src/app/pages/CaseHome.test.tsx:mockMutationState",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseHome.test.tsx",
+      "target": "function:frontend/src/app/pages/CaseHome.test.tsx:renderPage",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseHome.test.tsx",
+      "target": "file:frontend/src/app/pages/CaseHome.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseHome.tsx",
+      "target": "file:frontend/src/app/pages/CaseHome.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseHome.tsx",
+      "target": "function:frontend/src/app/pages/CaseHome.tsx:CaseHome",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseHome.tsx",
+      "target": "function:frontend/src/app/pages/CaseHome.tsx:CaseHome",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseHome.tsx",
+      "target": "file:frontend/src/app/pages/CaseActions.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseHome.tsx",
+      "target": "file:frontend/src/app/pages/CaseOverview.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseHome.tsx",
+      "target": "file:frontend/src/features/case/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseHome.tsx",
+      "target": "file:frontend/src/features/files/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseHome.tsx",
+      "target": "file:frontend/src/features/jobs/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseHome.tsx",
+      "target": "file:frontend/src/lib/api/files.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseHome.tsx",
+      "target": "file:frontend/src/lib/api/settings.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseHome.tsx",
+      "target": "file:frontend/src/lib/settings.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseHome.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseOverview.tsx",
+      "target": "function:frontend/src/app/pages/CaseOverview.tsx:MetricBlock",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseOverview.tsx",
+      "target": "function:frontend/src/app/pages/CaseOverview.tsx:MetricBlock",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseOverview.tsx",
+      "target": "function:frontend/src/app/pages/CaseOverview.tsx:CaseMetricsStrip",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseOverview.tsx",
+      "target": "function:frontend/src/app/pages/CaseOverview.tsx:CaseMetricsStrip",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseOverview.tsx",
+      "target": "function:frontend/src/app/pages/CaseOverview.tsx:RecentTasksPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseOverview.tsx",
+      "target": "function:frontend/src/app/pages/CaseOverview.tsx:RecentTasksPanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseOverview.tsx",
+      "target": "function:frontend/src/app/pages/CaseOverview.tsx:DataSourcesPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseOverview.tsx",
+      "target": "function:frontend/src/app/pages/CaseOverview.tsx:DataSourcesPanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseOverview.tsx",
+      "target": "function:frontend/src/app/pages/CaseOverview.tsx:RecentObjectsPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseOverview.tsx",
+      "target": "function:frontend/src/app/pages/CaseOverview.tsx:RecentObjectsPanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseOverview.tsx",
+      "target": "file:frontend/src/components/status/InlineProgressRow.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseOverview.tsx",
+      "target": "file:frontend/src/lib/partition-display.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/CaseOverview.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Reports.test.tsx",
+      "target": "file:frontend/src/app/pages/Reports.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Reports.tsx",
+      "target": "file:frontend/src/app/pages/Reports.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:frontend/src/app/pages/Reports.tsx",
+      "target": "function:frontend/src/app/pages/Reports.tsx:Reports",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/Reports.tsx",
+      "target": "function:frontend/src/app/pages/Reports.tsx:Reports",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/Reports.tsx",
+      "target": "file:frontend/src/features/case/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Reports.tsx",
+      "target": "file:frontend/src/features/jobs/import-event-state.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Reports.tsx",
+      "target": "file:frontend/src/features/reports/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Reports.tsx",
+      "target": "file:frontend/src/lib/api/reports.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Reports.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3Dashboard.test.tsx",
+      "target": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "target": "file:frontend/src/app/pages/V3Dashboard.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "target": "function:frontend/src/app/pages/V3Dashboard.tsx:V3Dashboard",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "target": "function:frontend/src/app/pages/V3Dashboard.tsx:V3Dashboard",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "target": "file:frontend/src/app/components/ui/button.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "target": "file:frontend/src/app/pages/V3ScoreCards.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "target": "file:frontend/src/components/analysis/AnalysisPanels.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "target": "file:frontend/src/components/dashboard/ArtifactStatsSection.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "target": "file:frontend/src/components/dashboard/BatchStatusSection.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "target": "file:frontend/src/components/dashboard/CorrelationStatsSection.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "target": "file:frontend/src/components/dashboard/DataSourceCoverageSection.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "target": "file:frontend/src/components/dashboard/GraphStatsSection.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "target": "file:frontend/src/components/dashboard/PlatformCoverageSection.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "target": "file:frontend/src/components/dashboard/RulePackStatusSection.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "target": "file:frontend/src/components/dashboard/TimelineOverviewSection.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "target": "file:frontend/src/features/analysis/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "target": "file:frontend/src/features/artifacts/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "target": "file:frontend/src/features/case/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "target": "file:frontend/src/features/graph/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "target": "file:frontend/src/features/timeline/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3ScoreCards.tsx",
+      "target": "function:frontend/src/app/pages/V3ScoreCards.tsx:errorMessage",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3ScoreCards.tsx",
+      "target": "function:frontend/src/app/pages/V3ScoreCards.tsx:errorMessage",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3ScoreCards.tsx",
+      "target": "function:frontend/src/app/pages/V3ScoreCards.tsx:StatCard",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3ScoreCards.tsx",
+      "target": "function:frontend/src/app/pages/V3ScoreCards.tsx:StatCard",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3ScoreCards.tsx",
+      "target": "function:frontend/src/app/pages/V3ScoreCards.tsx:EmptyPlaceholder",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3ScoreCards.tsx",
+      "target": "function:frontend/src/app/pages/V3ScoreCards.tsx:EmptyPlaceholder",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3ScoreCards.tsx",
+      "target": "function:frontend/src/app/pages/V3ScoreCards.tsx:SectionHeader",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3ScoreCards.tsx",
+      "target": "function:frontend/src/app/pages/V3ScoreCards.tsx:SectionHeader",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/V3ScoreCards.tsx",
+      "target": "file:frontend/src/lib/api/client.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/file-tree-utils.ts",
+      "target": "function:frontend/src/app/pages/file-tree-utils.ts:sameTreeNode",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/file-tree-utils.ts",
+      "target": "function:frontend/src/app/pages/file-tree-utils.ts:sameTreeNode",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/file-tree-utils.ts",
+      "target": "function:frontend/src/app/pages/file-tree-utils.ts:sameTreeNodeList",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/file-tree-utils.ts",
+      "target": "function:frontend/src/app/pages/file-tree-utils.ts:sameTreeNodeList",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/file-tree-utils.ts",
+      "target": "function:frontend/src/app/pages/file-tree-utils.ts:mergeTreeNodePages",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/file-tree-utils.ts",
+      "target": "function:frontend/src/app/pages/file-tree-utils.ts:mergeTreeNodePages",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/file-tree-utils.ts",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/use-file-browser.ts",
+      "target": "function:frontend/src/app/pages/use-file-browser.ts:useFileBrowser",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/use-file-browser.ts",
+      "target": "function:frontend/src/app/pages/use-file-browser.ts:useFileBrowser",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/use-file-browser.ts",
+      "target": "file:frontend/src/features/case/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/use-file-browser.ts",
+      "target": "file:frontend/src/features/files/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/use-file-browser.ts",
+      "target": "file:frontend/src/features/files/hooks/use-file-pagination.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/use-file-browser.ts",
+      "target": "file:frontend/src/features/files/hooks/use-file-preview.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/use-file-browser.ts",
+      "target": "file:frontend/src/features/files/hooks/use-file-selection.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/use-file-browser.ts",
+      "target": "file:frontend/src/features/files/hooks/use-file-tree.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/use-file-browser.ts",
+      "target": "file:frontend/src/stores/ui-store.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/use-file-browser.ts",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/providers.tsx",
+      "target": "function:frontend/src/app/providers.tsx:subscribeToProjectionInvalidations",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/providers.tsx",
+      "target": "function:frontend/src/app/providers.tsx:AppProviders",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/providers.tsx",
+      "target": "function:frontend/src/app/providers.tsx:AppProviders",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/providers.tsx",
+      "target": "file:frontend/src/features/cache-invalidation.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/providers.tsx",
+      "target": "file:frontend/src/i18n/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/providers.tsx",
+      "target": "file:frontend/src/lib/events/subscribers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/providers.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/CorrelationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/CorrelationPanel.tsx:coverageTone",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/CorrelationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/CorrelationPanel.tsx:coverageLabel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/CorrelationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/CorrelationPanel.tsx:ReleaseScorecardPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/CorrelationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/CorrelationPanel.tsx:ReleaseScorecardPanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/CorrelationPanel.tsx",
+      "target": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/CorrelationPanel.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    }
+  ]
+}

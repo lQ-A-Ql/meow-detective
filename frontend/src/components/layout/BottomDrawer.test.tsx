@@ -172,6 +172,30 @@ describe('BottomDrawer jobs panel', () => {
     expect(screen.getByText('842ms')).toBeDefined();
   });
 
+  it('shows live warning/failed chips from import phase metrics', () => {
+    mocks.importSignals.mockReturnValue({
+      latestPhase: {
+        phase: 'analyze',
+        state: 'running',
+        percent: 64,
+        detail: 'scheduling=draining workerBudget=4',
+        metrics: { rowsProcessed: 640, rowsTotal: 1000, warnings: 3, failed: 1 },
+      },
+      latestCancellation: undefined,
+      partialResults: [],
+      cacheStatuses: [],
+      latestReport: undefined,
+      lastUpdatedAt: undefined,
+    });
+
+    render(<BottomDrawer />);
+
+    const warningChip = screen.getAllByText('警告').find((el) => el.textContent === '警告3');
+    const failedChip = screen.getAllByText('失败').find((el) => el.textContent === '失败1');
+    expect(warningChip).toBeDefined();
+    expect(failedChip).toBeDefined();
+  });
+
   it('surfaces evidence hash caveats in the compact import signal panel', () => {
     mocks.importSignals.mockReturnValue({
       latestPhase: undefined,
@@ -196,6 +220,76 @@ describe('BottomDrawer jobs panel', () => {
     expect(screen.getByText('evidenceHash partial')).toBeDefined();
     expect(screen.getByText('Evidence Hash pending')).toBeDefined();
     expect(screen.getByText('hash caveat pending')).toBeDefined();
+  });
+});
+
+describe('BottomDrawer job status buckets', () => {
+  beforeEach(() => {
+    mocks.warnings.mockReturnValue({ data: [] });
+    mocks.dataSources.mockReturnValue({ data: [] });
+    mocks.trace.mockReturnValue({ data: [] });
+    mocks.uiStore.mockReturnValue({
+      drawerOpen: true,
+      setDrawerOpen: vi.fn(),
+      toggleDrawer: vi.fn(),
+    });
+    mocks.importSignals.mockReturnValue({
+      latestPhase: undefined,
+      latestCancellation: undefined,
+      partialResults: [],
+      cacheStatuses: [],
+      latestReport: undefined,
+      lastUpdatedAt: undefined,
+    });
+  });
+
+  it('renders warning, cancelling, and cancelled jobs instead of dropping them', () => {
+    mocks.jobs.mockReturnValue({
+      data: [
+        {
+          id: 'job-warning',
+          name: 'Registry extraction',
+          scope: 'Post-import',
+          progress: 100,
+          status: 'warning',
+          detail: 'Completed with a caveat',
+          warningCount: 1,
+          skippedCount: 0,
+          failedCount: 0,
+          partial: false,
+        },
+        {
+          id: 'job-cancelling',
+          name: 'Import data source',
+          scope: 'Case ingest',
+          progress: 70,
+          status: 'cancelling',
+          detail: 'Draining workers',
+          warningCount: 0,
+          skippedCount: 0,
+          failedCount: 0,
+          partial: false,
+        },
+        {
+          id: 'job-cancelled',
+          name: 'Import data source',
+          scope: 'Case ingest',
+          progress: 70,
+          status: 'cancelled',
+          detail: 'Cancelled by user',
+          warningCount: 0,
+          skippedCount: 0,
+          failedCount: 0,
+          partial: false,
+        },
+      ],
+    });
+
+    render(<BottomDrawer />);
+
+    expect(screen.getByText('Completed with a caveat')).toBeDefined();
+    expect(screen.getByText('Draining workers')).toBeDefined();
+    expect(screen.getByText('Cancelled by user')).toBeDefined();
   });
 });
 

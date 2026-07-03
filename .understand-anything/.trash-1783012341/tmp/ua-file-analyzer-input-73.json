@@ -1,0 +1,61 @@
+{
+  "projectRoot": "D:/process/forensic",
+  "batchFiles": [
+    {"path": "docs/compose/specs/2026-06-30-forensics-complete-audit-design.md", "language": "markdown", "sizeLines": 43, "fileCategory": "docs"},
+    {"path": "docs/prototype/app.js", "language": "javascript", "sizeLines": 670, "fileCategory": "code"},
+    {"path": "docs/prototype/index.html", "language": "html", "sizeLines": 685, "fileCategory": "markup"},
+    {"path": "docs/release-drill/v3-rc1-report.md", "language": "markdown", "sizeLines": 87, "fileCategory": "docs"},
+    {"path": "docs/release-drill/v5-rc1-report.md", "language": "markdown", "sizeLines": 114, "fileCategory": "docs"},
+    {"path": "docs/runbooks/source-object-id-correlation.md", "language": "markdown", "sizeLines": 46, "fileCategory": "docs"},
+    {"path": "frontend/eslint.config.js", "language": "javascript", "sizeLines": 22, "fileCategory": "code"},
+    {"path": "frontend/guidelines/Guidelines.md", "language": "markdown", "sizeLines": 61, "fileCategory": "docs"},
+    {"path": "frontend/src/app/components/figma/ImageWithFallback.tsx", "language": "typescript", "sizeLines": 27, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/sidebar.test.tsx", "language": "typescript", "sizeLines": 51, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/sidebar/index.tsx", "language": "typescript", "sizeLines": 44, "fileCategory": "code"},
+    {"path": "frontend/src/components/analysis/AnalysisPanels.test.tsx", "language": "typescript", "sizeLines": 188, "fileCategory": "code"},
+    {"path": "frontend/src/components/analysis/DataSourceSelector.test.tsx", "language": "typescript", "sizeLines": 104, "fileCategory": "code"},
+    {"path": "frontend/src/components/analysis/DataSourceSelector.tsx", "language": "typescript", "sizeLines": 57, "fileCategory": "code"},
+    {"path": "frontend/src/components/analysis/panels/index.ts", "language": "typescript", "sizeLines": 13, "fileCategory": "code"},
+    {"path": "frontend/src/components/files/FileTreeDataSourceNode.test.tsx", "language": "typescript", "sizeLines": 129, "fileCategory": "code"},
+    {"path": "frontend/src/components/files/FileTreeDataSourceNode.tsx", "language": "typescript", "sizeLines": 54, "fileCategory": "code"},
+    {"path": "frontend/src/components/import/ImportDataSourceDialog.test.tsx", "language": "typescript", "sizeLines": 109, "fileCategory": "code"},
+    {"path": "frontend/src/components/layout/HorizontalScroll.css", "language": "css", "sizeLines": 67, "fileCategory": "markup"},
+    {"path": "frontend/src/components/tree/TreeContextMenu.tsx", "language": "typescript", "sizeLines": 206, "fileCategory": "code"},
+    {"path": "frontend/src/components/viewers/SyntaxHighlighter.tsx", "language": "typescript", "sizeLines": 143, "fileCategory": "code"},
+    {"path": "frontend/src/i18n/en.json", "language": "json", "sizeLines": 362, "fileCategory": "config"},
+    {"path": "frontend/src/i18n/zh-CN.json", "language": "json", "sizeLines": 362, "fileCategory": "config"},
+    {"path": "frontend/src/imports/frontend-ui-ux.md", "language": "markdown", "sizeLines": 446, "fileCategory": "docs"},
+    {"path": "frontend/src/lib/data-source-utils.tsx", "language": "typescript", "sizeLines": 44, "fileCategory": "code"}
+  ],
+  "batchImportData": {
+    "docs/compose/specs/2026-06-30-forensics-complete-audit-design.md": [],
+    "docs/prototype/app.js": [],
+    "docs/prototype/index.html": [],
+    "docs/release-drill/v3-rc1-report.md": [],
+    "docs/release-drill/v5-rc1-report.md": [],
+    "docs/runbooks/source-object-id-correlation.md": [],
+    "frontend/eslint.config.js": [],
+    "frontend/guidelines/Guidelines.md": [],
+    "frontend/src/app/components/figma/ImageWithFallback.tsx": [],
+    "frontend/src/app/components/ui/sidebar.test.tsx": [
+      "frontend/src/app/components/ui/sidebar/index.tsx"
+    ],
+    "frontend/src/app/components/ui/sidebar/index.tsx": [],
+    "frontend/src/components/analysis/AnalysisPanels.test.tsx": [
+      "frontend/src/components/analysis/panels/index.ts"
+    ],
+    "frontend/src/components/analysis/DataSourceSelector.test.tsx": [],
+    "frontend/src/components/analysis/DataSourceSelector.tsx": [],
+    "frontend/src/components/analysis/panels/index.ts": [],
+    "frontend/src/components/files/FileTreeDataSourceNode.test.tsx": [],
+    "frontend/src/components/files/FileTreeDataSourceNode.tsx": [],
+    "frontend/src/components/import/ImportDataSourceDialog.test.tsx": [],
+    "frontend/src/components/layout/HorizontalScroll.css": [],
+    "frontend/src/components/tree/TreeContextMenu.tsx": [],
+    "frontend/src/components/viewers/SyntaxHighlighter.tsx": [],
+    "frontend/src/i18n/en.json": [],
+    "frontend/src/i18n/zh-CN.json": [],
+    "frontend/src/imports/frontend-ui-ux.md": [],
+    "frontend/src/lib/data-source-utils.tsx": []
+  }
+}

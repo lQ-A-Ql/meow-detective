@@ -1,0 +1,1428 @@
+{
+  "nodes": [
+    {
+      "id": "file:frontend/src/app/components/ui/sheet.tsx",
+      "type": "file",
+      "name": "sheet.tsx",
+      "filePath": "frontend/src/app/components/ui/sheet.tsx",
+      "summary": "Sheet侧边滑出面板UI组件套件，基于Radix Dialog原语封装侧边滑出式面板，支持left/right/top/bottom四个方向，导出Sheet/SheetTrigger/SheetClose/SheetContent/SheetHeader/SheetFooter/SheetTitle/SheetDescription等8个子组件。",
+      "tags": ["ui-component", "sheet", "slideover", "shadcn"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/sidebar/sidebar-group.tsx",
+      "type": "file",
+      "name": "sidebar-group.tsx",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-group.tsx",
+      "summary": "SidebarGroup侧边栏分组布局组件，导出SidebarGroup/SidebarGroupLabel/SidebarGroupAction/SidebarGroupContent四个子组件，构建侧边栏内的分组结构。",
+      "tags": ["ui-component", "sidebar", "layout", "shadcn"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "type": "file",
+      "name": "sidebar-layout.tsx",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "summary": "SidebarLayout侧边栏辅助布局组件，导出SidebarInset/SidebarInput/SidebarHeader/SidebarFooter/SidebarSeparator/SidebarContent六个子组件，提供侧边栏内部排版所需的各种布局元素。",
+      "tags": ["ui-component", "sidebar", "layout", "shadcn"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "type": "file",
+      "name": "sidebar-menu.tsx",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "summary": "SidebarMenu侧边栏菜单组件套件，导出9个子组件（SidebarMenu/SidebarMenuItem/SidebarMenuButton/SidebarMenuAction/SidebarMenuBadge/SidebarMenuSkeleton/SidebarMenuSub/SidebarMenuSubItem/SidebarMenuSubButton），构建完整的侧边栏导航菜单系统。",
+      "tags": ["ui-component", "sidebar", "menu", "shadcn", "navigation"],
+      "complexity": "complex",
+      "languageNotes": "SidebarMenuButton使用useSidebar上下文控制collapsed状态，包含tooltip包装和cva变体系统；SidebarMenuSkeleton使用React.useMemo随机生成骨架屏宽度模拟加载态。"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "type": "file",
+      "name": "sidebar-provider.tsx",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "summary": "SidebarProvider侧边栏状态管理核心，通过React Context提供open/toggle/openMobile/state等状态，集成键盘快捷键（Ctrl+B）切换、移动端响应式检测和cookie持久化。",
+      "tags": ["ui-component", "sidebar", "context-provider", "state-management", "shadcn"],
+      "complexity": "complex",
+      "languageNotes": "使用React Context + useState/useCallback/useEffect模式管理侧边栏状态，支持受控和非受控模式，通过useIsMobile检测移动端自动切换overlay模式。"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/sidebar/sidebar-rail.tsx",
+      "type": "file",
+      "name": "sidebar-rail.tsx",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-rail.tsx",
+      "summary": "SidebarRail侧边栏拖拽调整手柄组件，渲染为位于侧边栏边缘的极窄不可见交互区域，使用useSidebar上下文和国际化。",
+      "tags": ["ui-component", "sidebar", "resize-handle", "i18n"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/sidebar/sidebar-trigger.tsx",
+      "type": "file",
+      "name": "sidebar-trigger.tsx",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-trigger.tsx",
+      "summary": "SidebarTrigger侧边栏触发按钮组件，基于Button封装，点击时调用toggleSidebar切换侧边栏展开状态，含Tooltip和国际化提示。",
+      "tags": ["ui-component", "sidebar", "toggle-button", "i18n"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/sidebar/sidebar.tsx",
+      "type": "file",
+      "name": "sidebar.tsx",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar.tsx",
+      "summary": "Sidebar侧边栏主容器组件，支持left/right侧向、sidebar/floating/inset三种variant和offcanvas/icon/none三种折叠模式，集成Sheet组件在移动端作为滑出面板。",
+      "tags": ["ui-component", "sidebar", "layout", "shadcn", "responsive"],
+      "complexity": "complex",
+      "languageNotes": "使用useSidebar上下文获取状态，根据collapsible和variant条件渲染不同的DOM结构；移动端通过Sheet组件实现overlay模式，桌面端支持icon折叠和offcanvas隐藏。"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/skeleton.tsx",
+      "type": "file",
+      "name": "skeleton.tsx",
+      "filePath": "frontend/src/app/components/ui/skeleton.tsx",
+      "summary": "Skeleton骨架屏UI组件，渲染带脉冲动画的灰色占位块，用于加载状态的视觉反馈。",
+      "tags": ["ui-component", "skeleton", "loading", "shadcn"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/table.tsx",
+      "type": "file",
+      "name": "table.tsx",
+      "filePath": "frontend/src/app/components/ui/table.tsx",
+      "summary": "Table表格UI组件套件，导出8个子组件（Table/TableHeader/TableBody/TableFooter/TableRow/TableHead/TableCell/TableCaption），构建语义化全功能HTML表格。",
+      "tags": ["ui-component", "table", "data-display", "shadcn"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/tabs.tsx",
+      "type": "file",
+      "name": "tabs.tsx",
+      "filePath": "frontend/src/app/components/ui/tabs.tsx",
+      "summary": "Tabs标签页UI组件套件，基于Radix Tabs原语封装4个子组件（Tabs/TabsList/TabsTrigger/TabsContent），构建选项卡式内容切换界面。",
+      "tags": ["ui-component", "tabs", "navigation", "shadcn"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/textarea.tsx",
+      "type": "file",
+      "name": "textarea.tsx",
+      "filePath": "frontend/src/app/components/ui/textarea.tsx",
+      "summary": "Textarea多行文本输入UI组件，封装原生textarea元素，应用统一边框、聚焦环和最小高度样式。",
+      "tags": ["ui-component", "textarea", "form", "shadcn"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/toggle-group.tsx",
+      "type": "file",
+      "name": "toggle-group.tsx",
+      "filePath": "frontend/src/app/components/ui/toggle-group.tsx",
+      "summary": "ToggleGroup切换按钮组UI组件，基于Radix ToggleGroup原语封装，支持single/multiple选择模式，导出ToggleGroup和ToggleGroupItem两个子组件。",
+      "tags": ["ui-component", "toggle-group", "form", "shadcn"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/toggle.tsx",
+      "type": "file",
+      "name": "toggle.tsx",
+      "filePath": "frontend/src/app/components/ui/toggle.tsx",
+      "summary": "Toggle切换按钮UI组件，基于Radix Toggle原语封装，cva定义variant（default/outline）和size（default/sm/lg）变体，支持按下态样式。",
+      "tags": ["ui-component", "toggle", "button", "cva-variants", "shadcn"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sheet.tsx:SheetContent",
+      "type": "function",
+      "name": "SheetContent",
+      "filePath": "frontend/src/app/components/ui/sheet.tsx",
+      "lineRange": [47, 82],
+      "summary": "SheetContent面板内容组件，基于Radix DialogContent封装，根据side属性计算四个方向的滑入动画，渲染含关闭按钮的侧边面板。",
+      "tags": ["ui-component", "sheet", "slideover", "content"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sheet.tsx:SheetHeader",
+      "type": "function",
+      "name": "SheetHeader",
+      "filePath": "frontend/src/app/components/ui/sheet.tsx",
+      "lineRange": [84, 92],
+      "summary": "SheetHeader面板头部组件，提供flex布局和内边距的面板标题区域容器。",
+      "tags": ["ui-component", "sheet", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sheet.tsx:SheetFooter",
+      "type": "function",
+      "name": "SheetFooter",
+      "filePath": "frontend/src/app/components/ui/sheet.tsx",
+      "lineRange": [94, 102],
+      "summary": "SheetFooter面板底部组件，提供右对齐flex布局的操作按钮区域。",
+      "tags": ["ui-component", "sheet", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sheet.tsx:SheetTitle",
+      "type": "function",
+      "name": "SheetTitle",
+      "filePath": "frontend/src/app/components/ui/sheet.tsx",
+      "lineRange": [104, 115],
+      "summary": "SheetTitle面板标题组件，基于Radix DialogTitle封装，应用大号字体和紧凑行高的标题样式，含无障碍sr-only支持。",
+      "tags": ["ui-component", "sheet", "typography", "accessibility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sheet.tsx:SheetDescription",
+      "type": "function",
+      "name": "SheetDescription",
+      "filePath": "frontend/src/app/components/ui/sheet.tsx",
+      "lineRange": [117, 128],
+      "summary": "SheetDescription面板描述组件，基于Radix DialogDescription封装，应用小号浅色文本的描述样式，含无障碍sr-only支持。",
+      "tags": ["ui-component", "sheet", "typography", "accessibility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-group.tsx:SidebarGroup",
+      "type": "function",
+      "name": "SidebarGroup",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-group.tsx",
+      "lineRange": [8, 17],
+      "summary": "SidebarGroup分组容器组件，渲染带data属性标记的侧边栏分组div。",
+      "tags": ["ui-component", "sidebar", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-group.tsx:SidebarGroupLabel",
+      "type": "function",
+      "name": "SidebarGroupLabel",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-group.tsx",
+      "lineRange": [19, 38],
+      "summary": "SidebarGroupLabel分组标签组件，支持asChild模式，渲染带小号大写字体和侧边栏分组间距的标签元素。",
+      "tags": ["ui-component", "sidebar", "label"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-group.tsx:SidebarGroupAction",
+      "type": "function",
+      "name": "SidebarGroupAction",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-group.tsx",
+      "lineRange": [40, 61],
+      "summary": "SidebarGroupAction分组操作按钮组件，支持asChild模式，渲染紧贴在分组标签右侧的紧凑操作按钮。",
+      "tags": ["ui-component", "sidebar", "button"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-group.tsx:SidebarGroupContent",
+      "type": "function",
+      "name": "SidebarGroupContent",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-group.tsx",
+      "lineRange": [63, 75],
+      "summary": "SidebarGroupContent分组内容容器，渲染带内边距的分组内容区域。",
+      "tags": ["ui-component", "sidebar", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx:SidebarInset",
+      "type": "function",
+      "name": "SidebarInset",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "lineRange": [9, 21],
+      "summary": "SidebarInset嵌入区组件，为主内容区域提供相对于侧边栏的内边距偏移容器。",
+      "tags": ["ui-component", "sidebar", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx:SidebarInput",
+      "type": "function",
+      "name": "SidebarInput",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "lineRange": [23, 35],
+      "summary": "SidebarInput侧边栏搜索输入框组件，基于Input封装，应用紧凑高度和侧边栏适配的背景色样式。",
+      "tags": ["ui-component", "sidebar", "input", "search"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx:SidebarHeader",
+      "type": "function",
+      "name": "SidebarHeader",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "lineRange": [37, 46],
+      "summary": "SidebarHeader侧边栏头部容器，渲染带间距的flex列布局头部区域。",
+      "tags": ["ui-component", "sidebar", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx:SidebarFooter",
+      "type": "function",
+      "name": "SidebarFooter",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "lineRange": [48, 57],
+      "summary": "SidebarFooter侧边栏底部容器，渲染带间距的flex列布局底部区域。",
+      "tags": ["ui-component", "sidebar", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx:SidebarSeparator",
+      "type": "function",
+      "name": "SidebarSeparator",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "lineRange": [59, 71],
+      "summary": "SidebarSeparator侧边栏分隔线组件，基于Separator封装，渲染适配侧边栏宽度的水平分割线。",
+      "tags": ["ui-component", "sidebar", "separator"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx:SidebarContent",
+      "type": "function",
+      "name": "SidebarContent",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "lineRange": [73, 85],
+      "summary": "SidebarContent侧边栏内容区组件，渲染flex-1可滚动的主内容容器区域。",
+      "tags": ["ui-component", "sidebar", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenu",
+      "type": "function",
+      "name": "SidebarMenu",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "lineRange": [16, 25],
+      "summary": "SidebarMenu菜单容器组件，渲染带负边距的无序列表ul作为菜单项容器。",
+      "tags": ["ui-component", "sidebar", "menu", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuItem",
+      "type": "function",
+      "name": "SidebarMenuItem",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "lineRange": [27, 36],
+      "summary": "SidebarMenuItem菜单项容器组件，渲染单个菜单项列表元素li。",
+      "tags": ["ui-component", "sidebar", "menu", "item"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuButton",
+      "type": "function",
+      "name": "SidebarMenuButton",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "lineRange": [60, 108],
+      "summary": "SidebarMenuButton菜单按钮组件，基于cva变体系统，支持asChild模式、tooltip提示（collapsed时显示）、isActive高亮状态，使用useSidebar上下文获取侧边栏状态。",
+      "tags": ["ui-component", "sidebar", "menu", "button", "cva-variants"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuAction",
+      "type": "function",
+      "name": "SidebarMenuAction",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "lineRange": [110, 140],
+      "summary": "SidebarMenuAction菜单操作按钮组件，支持showOnHover悬停显示和asChild模式，在菜单项右侧渲染紧凑操作按钮。",
+      "tags": ["ui-component", "sidebar", "menu", "button"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuBadge",
+      "type": "function",
+      "name": "SidebarMenuBadge",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "lineRange": [142, 159],
+      "summary": "SidebarMenuBadge菜单徽章组件，在菜单项右侧渲染右对齐的计数或状态徽章。",
+      "tags": ["ui-component", "sidebar", "menu", "badge"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuSkeleton",
+      "type": "function",
+      "name": "SidebarMenuSkeleton",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "lineRange": [161, 197],
+      "summary": "SidebarMenuSkeleton菜单骨架屏组件，使用React.useMemo和Math.random生成随机宽度的Skeleton骨架块，模拟菜单加载态。",
+      "tags": ["ui-component", "sidebar", "skeleton", "loading"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuSub",
+      "type": "function",
+      "name": "SidebarMenuSub",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "lineRange": [199, 212],
+      "summary": "SidebarMenuSub子菜单容器，渲染带边框左边距的嵌套子菜单ul列表。",
+      "tags": ["ui-component", "sidebar", "menu", "submenu"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuSubItem",
+      "type": "function",
+      "name": "SidebarMenuSubItem",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "lineRange": [214, 226],
+      "summary": "SidebarMenuSubItem子菜单项容器，渲染单个子菜单列表项li。",
+      "tags": ["ui-component", "sidebar", "menu", "submenu", "item"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuSubButton",
+      "type": "function",
+      "name": "SidebarMenuSubButton",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "lineRange": [228, 258],
+      "summary": "SidebarMenuSubButton子菜单按钮组件，支持asChild模式、size变体（md/sm）和isActive高亮状态，渲染子菜单中的可点击按钮项。",
+      "tags": ["ui-component", "sidebar", "menu", "submenu", "button"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-provider.tsx:useSidebar",
+      "type": "function",
+      "name": "useSidebar",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "lineRange": [30, 37],
+      "summary": "useSidebar自定义Hook，通过React.useContext消费SidebarContext，提供侧边栏状态访问。",
+      "tags": ["hook", "sidebar", "context", "state-management"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-provider.tsx:SidebarProvider",
+      "type": "function",
+      "name": "SidebarProvider",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "lineRange": [39, 135],
+      "summary": "SidebarProvider状态提供者组件，管理open/openMobile/state状态，支持受控/非受控模式，注册Ctrl+B键盘快捷键切换侧边栏，集成TooltipProvider和移动端响应式检测。",
+      "tags": ["ui-component", "sidebar", "context-provider", "state-management", "keyboard-shortcut"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-rail.tsx:SidebarRail",
+      "type": "function",
+      "name": "SidebarRail",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-rail.tsx",
+      "lineRange": [9, 33],
+      "summary": "SidebarRail调整手柄组件，渲染侧边栏边缘的不可见交互条，使用useSidebar上下文和国际化标签，提供拖拽/点击调整侧边栏宽度的能力。",
+      "tags": ["ui-component", "sidebar", "resize-handle", "i18n"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar-trigger.tsx:SidebarTrigger",
+      "type": "function",
+      "name": "SidebarTrigger",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar-trigger.tsx",
+      "lineRange": [11, 36],
+      "summary": "SidebarTrigger触发按钮组件，基于Button封装，onClick中调用toggleSidebar切换侧边栏状态，含Tooltip和国际化无障碍标签。",
+      "tags": ["ui-component", "sidebar", "toggle-button", "i18n", "accessibility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/sidebar/sidebar.tsx:Sidebar",
+      "type": "function",
+      "name": "Sidebar",
+      "filePath": "frontend/src/app/components/ui/sidebar/sidebar.tsx",
+      "lineRange": [15, 115],
+      "summary": "Sidebar主容器组件，根据collapsible和variant属性条件渲染不同布局：移动端通过Sheet组件包裹，icon模式渲染紧凑图标栏，offcanvas模式隐藏侧边栏，sidebar模式渲染完整侧边栏。",
+      "tags": ["ui-component", "sidebar", "layout", "responsive", "compound-component"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/skeleton.tsx:Skeleton",
+      "type": "function",
+      "name": "Skeleton",
+      "filePath": "frontend/src/app/components/ui/skeleton.tsx",
+      "lineRange": [3, 11],
+      "summary": "Skeleton骨架屏组件，渲染带animate-pulse脉冲动画和圆角的灰色占位div。",
+      "tags": ["ui-component", "skeleton", "loading"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/table.tsx:Table",
+      "type": "function",
+      "name": "Table",
+      "filePath": "frontend/src/app/components/ui/table.tsx",
+      "lineRange": [7, 20],
+      "summary": "Table表格根组件，渲染带完整宽度、文本大小和边框样式的表格容器div包裹table元素。",
+      "tags": ["ui-component", "table", "data-display"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/table.tsx:TableHeader",
+      "type": "function",
+      "name": "TableHeader",
+      "filePath": "frontend/src/app/components/ui/table.tsx",
+      "lineRange": [22, 30],
+      "summary": "TableHeader表头组件，渲染带顶部圆角边框的表头thead元素。",
+      "tags": ["ui-component", "table", "data-display"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/table.tsx:TableBody",
+      "type": "function",
+      "name": "TableBody",
+      "filePath": "frontend/src/app/components/ui/table.tsx",
+      "lineRange": [32, 40],
+      "summary": "TableBody表体组件，渲染带行间分割线的表格主体tbody元素。",
+      "tags": ["ui-component", "table", "data-display"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/table.tsx:TableFooter",
+      "type": "function",
+      "name": "TableFooter",
+      "filePath": "frontend/src/app/components/ui/table.tsx",
+      "lineRange": [42, 53],
+      "summary": "TableFooter表脚组件，渲染带顶部边框和底部圆角的页脚tfoot元素。",
+      "tags": ["ui-component", "table", "data-display"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/table.tsx:TableRow",
+      "type": "function",
+      "name": "TableRow",
+      "filePath": "frontend/src/app/components/ui/table.tsx",
+      "lineRange": [55, 66],
+      "summary": "TableRow表格行组件，渲染带底部边框和hover/selected状态的行tr元素，使用data-state属性传递选中态。",
+      "tags": ["ui-component", "table", "data-display"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/table.tsx:TableHead",
+      "type": "function",
+      "name": "TableHead",
+      "filePath": "frontend/src/app/components/ui/table.tsx",
+      "lineRange": [68, 79],
+      "summary": "TableHead表头单元格组件，渲染带对齐方式、字体样式和内边距的表头th元素。",
+      "tags": ["ui-component", "table", "data-display"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/table.tsx:TableCell",
+      "type": "function",
+      "name": "TableCell",
+      "filePath": "frontend/src/app/components/ui/table.tsx",
+      "lineRange": [81, 92],
+      "summary": "TableCell表格数据单元格组件，渲染带对齐方式和内边距的数据td元素。",
+      "tags": ["ui-component", "table", "data-display"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/table.tsx:TableCaption",
+      "type": "function",
+      "name": "TableCaption",
+      "filePath": "frontend/src/app/components/ui/table.tsx",
+      "lineRange": [94, 105],
+      "summary": "TableCaption表格标题组件，渲染表格底部居中的小号说明文字caption元素。",
+      "tags": ["ui-component", "table", "data-display", "typography"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/tabs.tsx:Tabs",
+      "type": "function",
+      "name": "Tabs",
+      "filePath": "frontend/src/app/components/ui/tabs.tsx",
+      "lineRange": [8, 19],
+      "summary": "Tabs标签页根组件，基于Radix Tabs封装，应用flex列布局的选项卡容器。",
+      "tags": ["ui-component", "tabs", "navigation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/tabs.tsx:TabsList",
+      "type": "function",
+      "name": "TabsList",
+      "filePath": "frontend/src/app/components/ui/tabs.tsx",
+      "lineRange": [21, 35],
+      "summary": "TabsList标签列表组件，基于Radix TabsList封装，渲染带背景色和内边距的标签页按钮组容器。",
+      "tags": ["ui-component", "tabs", "navigation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/tabs.tsx:TabsTrigger",
+      "type": "function",
+      "name": "TabsTrigger",
+      "filePath": "frontend/src/app/components/ui/tabs.tsx",
+      "lineRange": [37, 51],
+      "summary": "TabsTrigger标签触发按钮组件，基于Radix TabsTrigger封装，渲染带选中态背景和文本颜色切换的标签按钮。",
+      "tags": ["ui-component", "tabs", "button", "navigation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/tabs.tsx:TabsContent",
+      "type": "function",
+      "name": "TabsContent",
+      "filePath": "frontend/src/app/components/ui/tabs.tsx",
+      "lineRange": [53, 64],
+      "summary": "TabsContent标签内容组件，基于Radix TabsContent封装，渲染带聚焦环样式的标签页内容面板。",
+      "tags": ["ui-component", "tabs", "content", "navigation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/textarea.tsx:Textarea",
+      "type": "function",
+      "name": "Textarea",
+      "filePath": "frontend/src/app/components/ui/textarea.tsx",
+      "lineRange": [5, 16],
+      "summary": "Textarea多行文本输入组件，渲染带统一边框、最小高度和聚焦环样式的textarea元素。",
+      "tags": ["ui-component", "textarea", "form"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/toggle-group.tsx:ToggleGroup",
+      "type": "function",
+      "name": "ToggleGroup",
+      "filePath": "frontend/src/app/components/ui/toggle-group.tsx",
+      "lineRange": [17, 41],
+      "summary": "ToggleGroup切换按钮组组件，基于Radix ToggleGroup封装，通过React Context传递variant/size给子项，支持single/multiple选择模式。",
+      "tags": ["ui-component", "toggle-group", "form", "compound-component"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/toggle-group.tsx:ToggleGroupItem",
+      "type": "function",
+      "name": "ToggleGroupItem",
+      "filePath": "frontend/src/app/components/ui/toggle-group.tsx",
+      "lineRange": [43, 71],
+      "summary": "ToggleGroupItem切换组按钮项组件，基于Radix ToggleGroupItem和Toggle封装，通过React Context接收variant/size，渲染切换组中的单个按钮。",
+      "tags": ["ui-component", "toggle-group", "form", "button"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/toggle.tsx:Toggle",
+      "type": "function",
+      "name": "Toggle",
+      "filePath": "frontend/src/app/components/ui/toggle.tsx",
+      "lineRange": [31, 45],
+      "summary": "Toggle切换按钮组件，基于Radix Toggle和cva变体系统（variant: default/outline, size: default/sm/lg），渲染带按下状态样式的切换按钮。",
+      "tags": ["ui-component", "toggle", "button", "cva-variants"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:frontend/src/app/components/ui/sheet.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-group.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "target": "file:frontend/src/app/components/ui/input.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "target": "file:frontend/src/app/components/ui/separator.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "file:frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "file:frontend/src/app/components/ui/skeleton.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "file:frontend/src/app/components/ui/tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "target": "file:frontend/src/app/components/ui/tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "target": "file:frontend/src/app/components/ui/use-mobile.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-rail.tsx",
+      "target": "file:frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-rail.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-trigger.tsx",
+      "target": "file:frontend/src/app/components/ui/button.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-trigger.tsx",
+      "target": "file:frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-trigger.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar.tsx",
+      "target": "file:frontend/src/app/components/ui/sheet.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar.tsx",
+      "target": "file:frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/skeleton.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/table.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/tabs.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/textarea.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/toggle-group.tsx",
+      "target": "file:frontend/src/app/components/ui/toggle.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/toggle-group.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/toggle.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sheet.tsx",
+      "target": "function:frontend/src/app/components/ui/sheet.tsx:SheetContent",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sheet.tsx",
+      "target": "function:frontend/src/app/components/ui/sheet.tsx:SheetHeader",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sheet.tsx",
+      "target": "function:frontend/src/app/components/ui/sheet.tsx:SheetFooter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sheet.tsx",
+      "target": "function:frontend/src/app/components/ui/sheet.tsx:SheetTitle",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sheet.tsx",
+      "target": "function:frontend/src/app/components/ui/sheet.tsx:SheetDescription",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-group.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-group.tsx:SidebarGroup",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-group.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-group.tsx:SidebarGroupLabel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-group.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-group.tsx:SidebarGroupAction",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-group.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-group.tsx:SidebarGroupContent",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx:SidebarInset",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx:SidebarInput",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx:SidebarHeader",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx:SidebarFooter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx:SidebarSeparator",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx:SidebarContent",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenu",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuItem",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuButton",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuAction",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuBadge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuSkeleton",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuSub",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuSubItem",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuSubButton",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-provider.tsx:useSidebar",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-provider.tsx:SidebarProvider",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-rail.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-rail.tsx:SidebarRail",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-trigger.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-trigger.tsx:SidebarTrigger",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar.tsx:Sidebar",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/skeleton.tsx",
+      "target": "function:frontend/src/app/components/ui/skeleton.tsx:Skeleton",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/table.tsx",
+      "target": "function:frontend/src/app/components/ui/table.tsx:Table",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/table.tsx",
+      "target": "function:frontend/src/app/components/ui/table.tsx:TableHeader",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/table.tsx",
+      "target": "function:frontend/src/app/components/ui/table.tsx:TableBody",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/table.tsx",
+      "target": "function:frontend/src/app/components/ui/table.tsx:TableFooter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/table.tsx",
+      "target": "function:frontend/src/app/components/ui/table.tsx:TableRow",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/table.tsx",
+      "target": "function:frontend/src/app/components/ui/table.tsx:TableHead",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/table.tsx",
+      "target": "function:frontend/src/app/components/ui/table.tsx:TableCell",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/table.tsx",
+      "target": "function:frontend/src/app/components/ui/table.tsx:TableCaption",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/tabs.tsx",
+      "target": "function:frontend/src/app/components/ui/tabs.tsx:Tabs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/tabs.tsx",
+      "target": "function:frontend/src/app/components/ui/tabs.tsx:TabsList",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/tabs.tsx",
+      "target": "function:frontend/src/app/components/ui/tabs.tsx:TabsTrigger",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/tabs.tsx",
+      "target": "function:frontend/src/app/components/ui/tabs.tsx:TabsContent",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/textarea.tsx",
+      "target": "function:frontend/src/app/components/ui/textarea.tsx:Textarea",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/toggle-group.tsx",
+      "target": "function:frontend/src/app/components/ui/toggle-group.tsx:ToggleGroup",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/toggle-group.tsx",
+      "target": "function:frontend/src/app/components/ui/toggle-group.tsx:ToggleGroupItem",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/toggle.tsx",
+      "target": "function:frontend/src/app/components/ui/toggle.tsx:Toggle",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sheet.tsx",
+      "target": "function:frontend/src/app/components/ui/sheet.tsx:SheetContent",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sheet.tsx",
+      "target": "function:frontend/src/app/components/ui/sheet.tsx:SheetHeader",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sheet.tsx",
+      "target": "function:frontend/src/app/components/ui/sheet.tsx:SheetFooter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sheet.tsx",
+      "target": "function:frontend/src/app/components/ui/sheet.tsx:SheetTitle",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sheet.tsx",
+      "target": "function:frontend/src/app/components/ui/sheet.tsx:SheetDescription",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-group.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-group.tsx:SidebarGroup",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-group.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-group.tsx:SidebarGroupLabel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-group.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-group.tsx:SidebarGroupAction",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-group.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-group.tsx:SidebarGroupContent",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx:SidebarInset",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx:SidebarInput",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx:SidebarHeader",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx:SidebarFooter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx:SidebarSeparator",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx:SidebarContent",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenu",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuItem",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuButton",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuAction",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuBadge",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuSkeleton",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuSub",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuSubItem",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx:SidebarMenuSubButton",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-provider.tsx:useSidebar",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-provider.tsx:SidebarProvider",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-rail.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-rail.tsx:SidebarRail",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar-trigger.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar-trigger.tsx:SidebarTrigger",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/sidebar/sidebar.tsx",
+      "target": "function:frontend/src/app/components/ui/sidebar/sidebar.tsx:Sidebar",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/skeleton.tsx",
+      "target": "function:frontend/src/app/components/ui/skeleton.tsx:Skeleton",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/table.tsx",
+      "target": "function:frontend/src/app/components/ui/table.tsx:Table",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/table.tsx",
+      "target": "function:frontend/src/app/components/ui/table.tsx:TableHeader",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/table.tsx",
+      "target": "function:frontend/src/app/components/ui/table.tsx:TableBody",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/table.tsx",
+      "target": "function:frontend/src/app/components/ui/table.tsx:TableFooter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/table.tsx",
+      "target": "function:frontend/src/app/components/ui/table.tsx:TableRow",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/table.tsx",
+      "target": "function:frontend/src/app/components/ui/table.tsx:TableHead",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/table.tsx",
+      "target": "function:frontend/src/app/components/ui/table.tsx:TableCell",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/table.tsx",
+      "target": "function:frontend/src/app/components/ui/table.tsx:TableCaption",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/tabs.tsx",
+      "target": "function:frontend/src/app/components/ui/tabs.tsx:Tabs",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/tabs.tsx",
+      "target": "function:frontend/src/app/components/ui/tabs.tsx:TabsList",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/tabs.tsx",
+      "target": "function:frontend/src/app/components/ui/tabs.tsx:TabsTrigger",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/tabs.tsx",
+      "target": "function:frontend/src/app/components/ui/tabs.tsx:TabsContent",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/textarea.tsx",
+      "target": "function:frontend/src/app/components/ui/textarea.tsx:Textarea",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/toggle-group.tsx",
+      "target": "function:frontend/src/app/components/ui/toggle-group.tsx:ToggleGroup",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/toggle-group.tsx",
+      "target": "function:frontend/src/app/components/ui/toggle-group.tsx:ToggleGroupItem",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/toggle.tsx",
+      "target": "function:frontend/src/app/components/ui/toggle.tsx:Toggle",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

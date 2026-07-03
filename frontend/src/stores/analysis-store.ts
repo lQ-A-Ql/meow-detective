@@ -11,16 +11,18 @@ export type AnalysisTabKey =
   | 'browser'
   | 'email'
   | 'eventlogs'
+  | 'linux'
   | 'files'
   | 'report';
 
-export type ExtractionCategory = 'Registry' | 'BrowserHistory' | 'Email' | 'EventLogs';
+export type ExtractionCategory = 'Registry' | 'BrowserHistory' | 'Email' | 'EventLogs' | 'LinuxArtifacts';
 
 const EXTRACTION_CATEGORIES: ExtractionCategory[] = [
   'Registry',
   'BrowserHistory',
   'Email',
   'EventLogs',
+  'LinuxArtifacts',
 ];
 
 function emptyProgress(): Omit<AnalysisExtractionProgressInfo, 'label'> {
@@ -39,6 +41,7 @@ function createDefaultProgress(): Record<ExtractionCategory, Omit<AnalysisExtrac
     BrowserHistory: emptyProgress(),
     Email: emptyProgress(),
     EventLogs: emptyProgress(),
+    LinuxArtifacts: emptyProgress(),
   };
 }
 

@@ -31,7 +31,9 @@ pub async fn get_warnings(state: State<'_, AppState>) -> Result<Vec<WarningItemD
         if snapshot_active_case(&app_state)?.is_none() {
             return Ok(vec![]);
         }
-        Ok(vec![])
+        let conn = get_case_connection(&app_state)?;
+        app_services::job_service::get_warnings_from_db(&conn)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -46,7 +48,9 @@ pub async fn get_trace_items(
         if snapshot_active_case(&app_state)?.is_none() {
             return Ok(vec![]);
         }
-        Ok(vec![])
+        let conn = get_case_connection(&app_state)?;
+        app_services::job_service::get_trace_items_from_db(&conn)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?

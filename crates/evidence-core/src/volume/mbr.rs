@@ -75,7 +75,7 @@ pub fn classify_mbr_partition_type(type_code: u8) -> MbrPartitionClass {
         },
         0x8E => MbrPartitionClass {
             name: "Linux LVM",
-            status: MbrPartitionStatus::Unsupported,
+            status: MbrPartitionStatus::Supported,
         },
         0xA5 => MbrPartitionClass {
             name: "FreeBSD",

@@ -1,0 +1,139 @@
+'vswhere.exe' 不是内部或外部命令，也不是可运行的程序
+或批处理文件。
+**********************************************************************
+** Visual Studio 2022 Developer Command Prompt v17.0
+** Copyright (c) 2025 Microsoft Corporation
+**********************************************************************
+[vcvarsall.bat] Environment initialized for: 'x64'
+    Checking fs-xfs v0.1.0 (D:\process\forensic\crates\fs-xfs)
+    Checking app-services v0.1.0 (D:\process\forensic\crates\app-services)
+error[E0004]: non-exhaustive patterns: `app_services::datasource_service::ImageFilesystemKind::Ext4`, `app_services::datasource_service::ImageFilesystemKind::Xfs` and `app_services::datasource_service::ImageFilesystemKind::Btrfs` not covered
+  --> crates\app-services\tests\e01_probe_real_test.rs:61:11
+   |
+61 |     match candidate.kind {
+   |           ^^^^^^^^^^^^^^ patterns `app_services::datasource_service::ImageFilesystemKind::Ext4`, `app_services::datasource_service::ImageFilesystemKind::Xfs` and `app_services::datasource_service::ImageFilesystemKind::Btrfs` not covered
+   |
+note: `app_services::datasource_service::ImageFilesystemKind` defined here
+  --> crates\app-services\src\datasource_service.rs:34:1
+   |
+34 | pub enum ImageFilesystemKind {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+38 |     Ext4,
+   |     ---- not covered
+39 |     Xfs,
+   |     --- not covered
+40 |     Btrfs,
+   |     ----- not covered
+   = note: the matched value is of type `app_services::datasource_service::ImageFilesystemKind`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern, a match arm with multiple or-patterns as shown, or multiple match arms
+   |
+74 ~         },
+75 +         app_services::datasource_service::ImageFilesystemKind::Ext4 | app_services::datasource_service::ImageFilesystemKind::Xfs | app_services::datasource_service::ImageFilesystemKind::Btrfs => todo!()
+   |
+
+error[E0004]: non-exhaustive patterns: `app_services::datasource_service::ImageFilesystemKind::Ext4`, `app_services::datasource_service::ImageFilesystemKind::Xfs` and `app_services::datasource_service::ImageFilesystemKind::Btrfs` not covered
+   --> crates\app-services\tests\e01_probe_real_test.rs:87:15
+    |
+ 87 |         match candidate.kind {
+    |               ^^^^^^^^^^^^^^ patterns `app_services::datasource_service::ImageFilesystemKind::Ext4`, `app_services::datasource_service::ImageFilesystemKind::Xfs` and `app_services::datasource_service::ImageFilesystemKind::Btrfs` not covered
+    |
+note: `app_services::datasource_service::ImageFilesystemKind` defined here
+   --> crates\app-services\src\datasource_service.rs:34:1
+    |
+ 34 | pub enum ImageFilesystemKind {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+ 38 |     Ext4,
+    |     ---- not covered
+ 39 |     Xfs,
+    |     --- not covered
+ 40 |     Btrfs,
+    |     ----- not covered
+    = note: the matched value is of type `app_services::datasource_service::ImageFilesystemKind`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern, a match arm with multiple or-patterns as shown, or multiple match arms
+    |
+121 ~             ImageFilesystemKind::BitLocker => {},
+122 +             app_services::datasource_service::ImageFilesystemKind::Ext4 | app_services::datasource_service::ImageFilesystemKind::Xfs | app_services::datasource_service::ImageFilesystemKind::Btrfs => todo!()
+    |
+
+error: this `if` statement can be collapsed
+   --> crates\app-services\tests\linux_e01_integration.rs:465:13
+    |
+465 | /             if reader.seek(SeekFrom::Start(dir_data_offset)).is_ok() {
+466 | |                 if reader.read_exact(&mut dir_hdr).is_ok() {
+467 | |                     let dir_magic = u32::from_be_bytes(dir_hdr);
+468 | |                     eprintln!(
+...   |
+473 | |             }
+    | |_____________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.96.0/index.html#collapsible_if
+    = note: `-D clippy::collapsible-if` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::collapsible_if)]`
+help: collapse nested if block
+    |
+465 ~             if reader.seek(SeekFrom::Start(dir_data_offset)).is_ok()
+466 ~                 && reader.read_exact(&mut dir_hdr).is_ok() {
+467 |                     let dir_magic = u32::from_be_bytes(dir_hdr);
+...
+471 |                     );
+472 ~                 }
+    |
+
+For more information about this error, try `rustc --explain E0004`.
+error: could not compile `app-services` (test "e01_probe_real_test") due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...
+error[E0004]: non-exhaustive patterns: `app_services::datasource_service::ImageFilesystemKind::Ext4`, `app_services::datasource_service::ImageFilesystemKind::Xfs` and `app_services::datasource_service::ImageFilesystemKind::Btrfs` not covered
+  --> crates\app-services\tests\e01_preview_regression_test.rs:81:35
+   |
+81 | ...                   match c.kind {
+   |                             ^^^^^^ patterns `app_services::datasource_service::ImageFilesystemKind::Ext4`, `app_services::datasource_service::ImageFilesystemKind::Xfs` and `app_services::datasource_service::ImageFilesystemKind::Btrfs` not covered
+   |
+note: `app_services::datasource_service::ImageFilesystemKind` defined here
+  --> crates\app-services\src\datasource_service.rs:34:1
+   |
+34 | pub enum ImageFilesystemKind {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+38 |     Ext4,
+   |     ---- not covered
+39 |     Xfs,
+   |     --- not covered
+40 |     Btrfs,
+   |     ----- not covered
+   = note: the matched value is of type `app_services::datasource_service::ImageFilesystemKind`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern, a match arm with multiple or-patterns as shown, or multiple match arms
+   |
+84 ~                                 datasource_service::ImageFilesystemKind::BitLocker => "BitLocker",
+85 ~                                 app_services::datasource_service::ImageFilesystemKind::Ext4 | app_services::datasource_service::ImageFilesystemKind::Xfs | app_services::datasource_service::ImageFilesystemKind::Btrfs => todo!(),
+   |
+
+error: could not compile `app-services` (test "linux_e01_integration") due to 1 previous error
+error: could not compile `app-services` (test "e01_preview_regression_test") due to 1 previous error
+error[E0004]: non-exhaustive patterns: `app_services::datasource_service::ImageFilesystemKind::Ext4`, `app_services::datasource_service::ImageFilesystemKind::Xfs` and `app_services::datasource_service::ImageFilesystemKind::Btrfs` not covered
+  --> crates\app-services\tests\e01_preview_debug_test.rs:71:35
+   |
+71 | ...                   match c.kind {
+   |                             ^^^^^^ patterns `app_services::datasource_service::ImageFilesystemKind::Ext4`, `app_services::datasource_service::ImageFilesystemKind::Xfs` and `app_services::datasource_service::ImageFilesystemKind::Btrfs` not covered
+   |
+note: `app_services::datasource_service::ImageFilesystemKind` defined here
+  --> crates\app-services\src\datasource_service.rs:34:1
+   |
+34 | pub enum ImageFilesystemKind {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+38 |     Ext4,
+   |     ---- not covered
+39 |     Xfs,
+   |     --- not covered
+40 |     Btrfs,
+   |     ----- not covered
+   = note: the matched value is of type `app_services::datasource_service::ImageFilesystemKind`
+help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern, a match arm with multiple or-patterns as shown, or multiple match arms
+   |
+74 ~                                 datasource_service::ImageFilesystemKind::BitLocker => "BitLocker",
+75 ~                                 app_services::datasource_service::ImageFilesystemKind::Ext4 | app_services::datasource_service::ImageFilesystemKind::Xfs | app_services::datasource_service::ImageFilesystemKind::Btrfs => todo!(),
+   |
+
+error: could not compile `app-services` (test "e01_preview_debug_test") due to 1 previous error

@@ -46,6 +46,7 @@ pub(crate) fn file_entry_to_tree_node(
         name: entry.name.clone(),
         depth,
         has_children: entry.entry_type == EntryType::Directory,
+        data_source_id: Some(entry.data_source_id.0.clone()),
         entry_type: Some(match entry.entry_type {
             EntryType::Directory => "directory".to_string(),
             EntryType::File => "file".to_string(),

@@ -28,6 +28,7 @@ pub enum GptPartitionType {
     MicrosoftReserved,
     MicrosoftBasicData,
     WindowsRecovery,
+    LinuxLvm,
     Unknown,
 }
 
@@ -111,6 +112,9 @@ const MS_RESERVED: [u8; 16] = [
 const WINDOWS_RECOVERY: [u8; 16] = [
     0xA4, 0xBB, 0x94, 0xDE, 0xD1, 0x06, 0x40, 0x4D, 0xA1, 0x6A, 0xBF, 0xD5, 0x01, 0x79, 0xD6, 0xAC,
 ];
+const LINUX_LVM: [u8; 16] = [
+    0x79, 0xD3, 0xD6, 0xE6, 0x07, 0xF5, 0xC2, 0x44, 0xA2, 0x3C, 0x23, 0x8F, 0x2A, 0x3D, 0xF9, 0x28,
+];
 
 pub fn classify_partition_type(type_guid: &[u8; 16]) -> GptPartitionType {
     match *type_guid {
@@ -118,6 +122,7 @@ pub fn classify_partition_type(type_guid: &[u8; 16]) -> GptPartitionType {
         MS_RESERVED => GptPartitionType::MicrosoftReserved,
         MS_BASIC_DATA => GptPartitionType::MicrosoftBasicData,
         WINDOWS_RECOVERY => GptPartitionType::WindowsRecovery,
+        LINUX_LVM => GptPartitionType::LinuxLvm,
         _ => GptPartitionType::Unknown,
     }
 }
@@ -128,6 +133,7 @@ pub fn partition_type_name(partition_type: GptPartitionType) -> &'static str {
         GptPartitionType::MicrosoftReserved => "Microsoft reserved",
         GptPartitionType::MicrosoftBasicData => "Microsoft basic data",
         GptPartitionType::WindowsRecovery => "Windows recovery",
+        GptPartitionType::LinuxLvm => "Linux LVM",
         GptPartitionType::Unknown => "Unknown",
     }
 }

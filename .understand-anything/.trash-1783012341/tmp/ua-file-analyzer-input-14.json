@@ -1,0 +1,268 @@
+{
+  "projectRoot": "D:/process/forensic",
+  "batchFiles": [
+    {
+      "path": "frontend/src/lib/api/reports.test.ts",
+      "language": "typescript",
+      "sizeLines": 89,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/lib/api/reports.ts",
+      "language": "typescript",
+      "sizeLines": 35,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/lib/api/rule-packs.ts",
+      "language": "typescript",
+      "sizeLines": 15,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/lib/api/search.test.ts",
+      "language": "typescript",
+      "sizeLines": 43,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/lib/api/search.ts",
+      "language": "typescript",
+      "sizeLines": 17,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/lib/api/settings.test.ts",
+      "language": "typescript",
+      "sizeLines": 44,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/lib/api/settings.ts",
+      "language": "typescript",
+      "sizeLines": 11,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/lib/api/timeline.test.ts",
+      "language": "typescript",
+      "sizeLines": 68,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/lib/api/timeline.ts",
+      "language": "typescript",
+      "sizeLines": 32,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/lib/constants.ts",
+      "language": "typescript",
+      "sizeLines": 71,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/lib/events/bus.test.ts",
+      "language": "typescript",
+      "sizeLines": 44,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/lib/events/bus.ts",
+      "language": "typescript",
+      "sizeLines": 43,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/lib/events/subscribers.ts",
+      "language": "typescript",
+      "sizeLines": 9,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/lib/events/tauri-bridge.ts",
+      "language": "typescript",
+      "sizeLines": 54,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/lib/file-sort.test.ts",
+      "language": "typescript",
+      "sizeLines": 78,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/lib/file-sort.ts",
+      "language": "typescript",
+      "sizeLines": 190,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/lib/hex-offset-parser.test.ts",
+      "language": "typescript",
+      "sizeLines": 130,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/lib/hex-offset-parser.ts",
+      "language": "typescript",
+      "sizeLines": 44,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/lib/hex-range-merger.test.ts",
+      "language": "typescript",
+      "sizeLines": 69,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/lib/hex-range-merger.ts",
+      "language": "typescript",
+      "sizeLines": 31,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/lib/partition-display.ts",
+      "language": "typescript",
+      "sizeLines": 71,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/main.tsx",
+      "language": "typescript",
+      "sizeLines": 17,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/stores/ui-store.test.ts",
+      "language": "typescript",
+      "sizeLines": 52,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/stores/ui-store.ts",
+      "language": "typescript",
+      "sizeLines": 97,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/test/setup.ts",
+      "language": "typescript",
+      "sizeLines": 18,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/types/import-contract.test.ts",
+      "language": "typescript",
+      "sizeLines": 159,
+      "fileCategory": "code"
+    },
+    {
+      "path": "frontend/src/types/models.ts",
+      "language": "typescript",
+      "sizeLines": 28,
+      "fileCategory": "code"
+    }
+  ],
+  "batchImportData": {
+    "frontend/src/lib/api/reports.test.ts": [
+      "frontend/src/lib/api/client.ts",
+      "frontend/src/lib/api/commands.ts",
+      "frontend/src/lib/api/reports.ts"
+    ],
+    "frontend/src/lib/api/reports.ts": [
+      "frontend/src/lib/api/client.ts",
+      "frontend/src/lib/api/commands.ts",
+      "frontend/src/types/models.ts"
+    ],
+    "frontend/src/lib/api/rule-packs.ts": [
+      "frontend/src/lib/api/client.ts",
+      "frontend/src/lib/api/commands.ts",
+      "frontend/src/types/models.ts"
+    ],
+    "frontend/src/lib/api/search.test.ts": [
+      "frontend/src/lib/api/client.ts",
+      "frontend/src/lib/api/commands.ts",
+      "frontend/src/lib/api/search.ts"
+    ],
+    "frontend/src/lib/api/search.ts": [
+      "frontend/src/lib/api/client.ts",
+      "frontend/src/lib/api/commands.ts",
+      "frontend/src/types/models.ts"
+    ],
+    "frontend/src/lib/api/settings.test.ts": [
+      "frontend/src/lib/api/client.ts",
+      "frontend/src/lib/api/commands.ts",
+      "frontend/src/lib/api/settings.ts"
+    ],
+    "frontend/src/lib/api/settings.ts": [
+      "frontend/src/lib/api/client.ts",
+      "frontend/src/lib/api/commands.ts",
+      "frontend/src/types/models.ts"
+    ],
+    "frontend/src/lib/api/timeline.test.ts": [
+      "frontend/src/lib/api/client.ts",
+      "frontend/src/lib/api/commands.ts",
+      "frontend/src/lib/api/timeline.ts"
+    ],
+    "frontend/src/lib/api/timeline.ts": [
+      "frontend/src/lib/api/client.ts",
+      "frontend/src/lib/api/commands.ts",
+      "frontend/src/types/models.ts"
+    ],
+    "frontend/src/lib/constants.ts": [],
+    "frontend/src/lib/events/bus.test.ts": [
+      "frontend/src/lib/events/bus.ts",
+      "frontend/src/types/models.ts"
+    ],
+    "frontend/src/lib/events/bus.ts": [
+      "frontend/src/types/models.ts"
+    ],
+    "frontend/src/lib/events/subscribers.ts": [
+      "frontend/src/lib/events/bus.ts",
+      "frontend/src/types/models.ts"
+    ],
+    "frontend/src/lib/events/tauri-bridge.ts": [
+      "frontend/src/lib/events/bus.ts",
+      "frontend/src/types/models.ts"
+    ],
+    "frontend/src/lib/file-sort.test.ts": [
+      "frontend/src/lib/file-sort.ts",
+      "frontend/src/types/models.ts"
+    ],
+    "frontend/src/lib/file-sort.ts": [
+      "frontend/src/types/models.ts"
+    ],
+    "frontend/src/lib/hex-offset-parser.test.ts": [
+      "frontend/src/lib/hex-offset-parser.ts"
+    ],
+    "frontend/src/lib/hex-offset-parser.ts": [],
+    "frontend/src/lib/hex-range-merger.test.ts": [
+      "frontend/src/lib/hex-range-merger.ts"
+    ],
+    "frontend/src/lib/hex-range-merger.ts": [
+      "frontend/src/types/models.ts"
+    ],
+    "frontend/src/lib/partition-display.ts": [
+      "frontend/src/types/models.ts"
+    ],
+    "frontend/src/main.tsx": [
+      "frontend/src/app/App.tsx",
+      "frontend/src/app/providers.tsx",
+      "frontend/src/i18n/index.ts",
+      "frontend/src/lib/events/tauri-bridge.ts",
+      "frontend/src/styles/index.css"
+    ],
+    "frontend/src/stores/ui-store.test.ts": [
+      "frontend/src/stores/ui-store.ts"
+    ],
+    "frontend/src/stores/ui-store.ts": [],
+    "frontend/src/test/setup.ts": [
+      "frontend/src/i18n/index.ts"
+    ],
+    "frontend/src/types/import-contract.test.ts": [
+      "frontend/src/types/models.ts"
+    ],
+    "frontend/src/types/models.ts": []
+  }
+}

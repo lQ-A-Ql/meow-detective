@@ -252,6 +252,7 @@
       "browser": "Browser",
       "email": "Email",
       "eventlogs": "Event Logs",
+      "linux": "Linux Artifacts",
       "files": "Files",
       "report": "Report"
     },
@@ -259,7 +260,8 @@
       "Registry": "Registry Extraction",
       "BrowserHistory": "Browser History Extraction",
       "Email": "Email Extraction",
-      "EventLogs": "Event Log Extraction"
+      "EventLogs": "Event Log Extraction",
+      "LinuxArtifacts": "Linux Artifact Extraction"
     },
     "progressDrawer": {
       "title": "Extraction Progress",
@@ -274,6 +276,7 @@
       "browser": "Reading browser history...",
       "email": "Reading email messages...",
       "eventLogs": "Reading event logs...",
+      "linuxArtifacts": "Reading Linux artifacts...",
       "files": "Classifying files by metadata..."
     }
   },
@@ -350,6 +353,82 @@
       "application": {
         "title": "No application events",
         "description": "Application.evtx crash/install events (1000, 1001, 1002, 1033, 11707, 11708)."
+      }
+    }
+  },
+  "linuxArtifacts": {
+    "title": "Linux Artifact Analysis",
+    "stats": {
+      "total": "Total Artifacts",
+      "journal": "Journal",
+      "login": "Logins",
+      "commands": "Shell Commands",
+      "packages": "Package Events",
+      "cron": "Cron Jobs",
+      "sudo": "Sudo Events"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "journal": "Journal",
+      "login": "Logins",
+      "commands": "Shell Commands",
+      "packages": "Packages",
+      "cron": "Cron",
+      "sudo": "Sudo"
+    },
+    "columns": {
+      "timestamp": "Time",
+      "sourcePath": "Source",
+      "message": "Message",
+      "priority": "Priority",
+      "systemdUnit": "Unit",
+      "syslogIdentifier": "Identifier",
+      "pid": "PID",
+      "user": "User",
+      "targetUser": "Target User",
+      "terminal": "Terminal",
+      "host": "Host",
+      "recordType": "Type",
+      "loginTime": "Login Time",
+      "logoutTime": "Logout Time",
+      "command": "Command",
+      "lineNumber": "Line",
+      "action": "Action",
+      "package": "Package",
+      "version": "Version",
+      "schedule": "Schedule",
+      "sourceFile": "Config File",
+      "workingDirectory": "Working Directory",
+      "success": "Success"
+    },
+    "empty": {
+      "overview": {
+        "title": "No Linux artifacts",
+        "description": "No Linux artifacts have been discovered or extracted from the current data source yet."
+      },
+      "journal": {
+        "title": "No systemd journal entries",
+        "description": "Candidate paths: *.journal, /var/log/journal/."
+      },
+      "login": {
+        "title": "No login sessions",
+        "description": "Candidate paths: /var/log/wtmp, /var/log/btmp."
+      },
+      "commands": {
+        "title": "No shell commands",
+        "description": "Candidate paths: .bash_history under user home directories."
+      },
+      "packages": {
+        "title": "No package events",
+        "description": "Candidate paths: /var/log/apt/history.log, /var/log/dpkg.log."
+      },
+      "cron": {
+        "title": "No cron jobs",
+        "description": "Candidate paths: /etc/crontab, /etc/cron.d/, /var/spool/cron/crontabs/."
+      },
+      "sudo": {
+        "title": "No sudo/auth events",
+        "description": "Candidate paths: /var/log/auth.log, /var/log/secure."
       }
     }
   },

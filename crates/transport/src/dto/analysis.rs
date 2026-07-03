@@ -16,6 +16,10 @@ pub use crate::dto::analysis_email::{
 pub use crate::dto::analysis_evtx::{
     EvtxApplicationEventDto, EvtxBootEventDto, EvtxEventSummaryDto, EvtxSecurityEventDto,
 };
+pub use crate::dto::analysis_linux::{
+    LinuxAptEventDto, LinuxArtifactSummaryDto, LinuxBashCommandDto, LinuxCronJobDto,
+    LinuxJournalEntryDto, LinuxLoginRecordDto, LinuxSudoEventDto,
+};
 pub use crate::dto::analysis_registry::{
     AmcacheApplicationDto, AmcacheApplicationFileDto, AppCompatLayerDto, CachedCredentialDto,
     InstalledSoftwareDto, LastVisitedMruEntryDto, LsaPackageDto, LsaSecretDto, MountedDeviceDto,

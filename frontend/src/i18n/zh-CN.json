@@ -252,6 +252,7 @@
       "browser": "浏览器记录",
       "email": "邮件信息",
       "eventlogs": "事件日志",
+      "linux": "Linux 痕迹",
       "files": "文件分类",
       "report": "报告"
     },
@@ -259,7 +260,8 @@
       "Registry": "注册表提取",
       "BrowserHistory": "浏览器记录提取",
       "Email": "邮件信息提取",
-      "EventLogs": "事件日志提取"
+      "EventLogs": "事件日志提取",
+      "LinuxArtifacts": "Linux 痕迹提取"
     },
     "progressDrawer": {
       "title": "提取进度",
@@ -274,6 +276,7 @@
       "browser": "正在读取浏览器记录...",
       "email": "正在读取邮件信息...",
       "eventLogs": "正在读取事件日志...",
+      "linuxArtifacts": "正在读取 Linux 痕迹...",
       "files": "正在按元数据分类文件..."
     }
   },
@@ -350,6 +353,82 @@
       "application": {
         "title": "暂无应用程序事件",
         "description": "Application.evtx 崩溃/安装事件（1000、1001、1002、1033、11707、11708）。"
+      }
+    }
+  },
+  "linuxArtifacts": {
+    "title": "Linux 痕迹分析",
+    "stats": {
+      "total": "痕迹总数",
+      "journal": "系统日志",
+      "login": "登录会话",
+      "commands": "Shell 命令",
+      "packages": "软件包事件",
+      "cron": "计划任务",
+      "sudo": "sudo 事件"
+    },
+    "tabs": {
+      "overview": "概览",
+      "journal": "系统日志",
+      "login": "登录会话",
+      "commands": "Shell 命令",
+      "packages": "软件包",
+      "cron": "计划任务",
+      "sudo": "sudo"
+    },
+    "columns": {
+      "timestamp": "时间",
+      "sourcePath": "来源",
+      "message": "消息",
+      "priority": "优先级",
+      "systemdUnit": "Unit",
+      "syslogIdentifier": "标识",
+      "pid": "PID",
+      "user": "用户",
+      "targetUser": "目标用户",
+      "terminal": "终端",
+      "host": "主机",
+      "recordType": "类型",
+      "loginTime": "登录时间",
+      "logoutTime": "登出时间",
+      "command": "命令",
+      "lineNumber": "行号",
+      "action": "动作",
+      "package": "包",
+      "version": "版本",
+      "schedule": "计划",
+      "sourceFile": "配置文件",
+      "workingDirectory": "工作目录",
+      "success": "成功"
+    },
+    "empty": {
+      "overview": {
+        "title": "暂无 Linux 痕迹",
+        "description": "尚未从当前数据源发现或提取 Linux 痕迹。"
+      },
+      "journal": {
+        "title": "暂无 systemd 日志",
+        "description": "候选路径：*.journal、/var/log/journal/。"
+      },
+      "login": {
+        "title": "暂无登录会话",
+        "description": "候选路径：/var/log/wtmp、/var/log/btmp。"
+      },
+      "commands": {
+        "title": "暂无 Shell 命令",
+        "description": "候选路径：用户目录下的 .bash_history。"
+      },
+      "packages": {
+        "title": "暂无软件包事件",
+        "description": "候选路径：/var/log/apt/history.log、/var/log/dpkg.log。"
+      },
+      "cron": {
+        "title": "暂无计划任务",
+        "description": "候选路径：/etc/crontab、/etc/cron.d/、/var/spool/cron/crontabs/。"
+      },
+      "sudo": {
+        "title": "暂无 sudo/提权事件",
+        "description": "候选路径：/var/log/auth.log、/var/log/secure。"
       }
     }
   },

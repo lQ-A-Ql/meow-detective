@@ -1,8 +1,8 @@
 use domain::JobId;
-use persistence_sqlite::repositories::job_repo::JobRepo;
+use persistence_sqlite::repositories::job_repo::{JobRepo, JobSummaryRow};
 use rusqlite::Connection;
 use thiserror::Error;
-use transport::dto::JobSnapshotDto;
+use transport::dto::{JobSnapshotDto, TraceItemDto, WarningItemDto};
 
 #[derive(Debug, Error)]
 pub enum JobServiceError {
@@ -131,6 +131,84 @@ fn parse_partition_progress(detail: &str) -> Option<PartitionProgressMeta> {
     })
 }
 
+/// Derive BottomDrawer warning records from job outcome counters and details.
+///
+/// There is no persisted per-warning record store yet; this baseline surfaces
+/// one warning item per job that reported a nonzero warning/skipped/failed
+/// count or that failed outright, using the job's own detail text as the
+/// message. This makes existing warning signals visible without requiring a
+/// new schema.
+pub fn get_warnings_from_db(conn: &Connection) -> Result<Vec<WarningItemDto>, JobServiceError> {
+    let repo = JobRepo::new(conn);
+    let jobs = repo.list_recent(infrastructure::constants::JOB_LIST_LIMIT)?;
+    Ok(jobs.iter().filter_map(job_to_warning_item).collect())
+}
+
+fn job_to_warning_item(job: &JobSummaryRow) -> Option<WarningItemDto> {
+    let has_outcome_warning =
+        job.warning_count > 0 || job.skipped_count > 0 || job.failed_count > 0 || job.partial;
+    let is_failed = job.status == "failed";
+    if !has_outcome_warning && !is_failed {
+        return None;
+    }
+
+    let title = if is_failed {
+        format!("{} 失败", job.kind)
+    } else {
+        format!("{} 存在警告", job.kind)
+    };
+    let mut parts = Vec::new();
+    if job.warning_count > 0 {
+        parts.push(format!("警告 {}", job.warning_count));
+    }
+    if job.skipped_count > 0 {
+        parts.push(format!("跳过 {}", job.skipped_count));
+    }
+    if job.failed_count > 0 {
+        parts.push(format!("失败 {}", job.failed_count));
+    }
+    let counts_summary = parts.join(" · ");
+    let detail = match (counts_summary.is_empty(), job.detail.is_empty()) {
+        (false, false) => format!("{} — {}", counts_summary, job.detail),
+        (false, true) => counts_summary,
+        (true, false) => job.detail.clone(),
+        (true, true) => "无详细信息".to_string(),
+    };
+
+    Some(WarningItemDto {
+        id: job.id.0.clone(),
+        title,
+        detail,
+    })
+}
+
+/// Derive a BottomDrawer trace stream from recent job lifecycle rows.
+///
+/// This baseline reports one trace entry per recent job using its current
+/// status/detail as a coarse activity log, ordered most-recent-first.
+pub fn get_trace_items_from_db(conn: &Connection) -> Result<Vec<TraceItemDto>, JobServiceError> {
+    let repo = JobRepo::new(conn);
+    let jobs = repo.list_recent(infrastructure::constants::JOB_LIST_LIMIT)?;
+    Ok(jobs.iter().map(job_to_trace_item).collect())
+}
+
+fn job_to_trace_item(job: &JobSummaryRow) -> TraceItemDto {
+    let ts = job
+        .finished_at
+        .clone()
+        .unwrap_or_else(|| job.created_at.clone());
+    let message = if job.detail.is_empty() {
+        format!("[{}] {}", job.kind, job.status)
+    } else {
+        format!("[{}] {} — {}", job.kind, job.status, job.detail)
+    };
+    TraceItemDto {
+        id: job.id.0.clone(),
+        ts,
+        message,
+    }
+}
+
 /// Result of recovering interrupted jobs — returns the IDs of jobs that were
 /// recovered (marked as failed after process interruption).
 #[derive(Debug, Clone)]
@@ -173,7 +251,10 @@ pub fn recover_interrupted_jobs(conn: &Connection) -> Result<RecoveryResult, Job
 
 #[cfg(test)]
 mod tests {
-    use super::{cancel_job, get_jobs_from_db, parse_partition_progress, recover_interrupted_jobs};
+    use super::{
+        cancel_job, get_jobs_from_db, get_trace_items_from_db, get_warnings_from_db,
+        parse_partition_progress, recover_interrupted_jobs,
+    };
     use persistence_sqlite::repositories::job_repo::JobRepo;
 
     #[test]
@@ -322,5 +403,86 @@ mod tests {
             .unwrap();
         assert_eq!(already_failed_snapshot.status, "failed");
         assert_eq!(already_failed_snapshot.detail, "disk full");
+    }
+
+    #[test]
+    fn get_warnings_from_db_surfaces_jobs_with_nonzero_outcome_counts() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        persistence_sqlite::runner::run_all(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO cases (id, name, number, examiner) VALUES ('case-1', 'Case', '1', 'qa')",
+            [],
+        )
+        .unwrap();
+
+        let repo = JobRepo::new(&conn);
+        let clean_job = repo.create("case-1", "Search index").unwrap();
+        repo.complete(&clean_job, "All good").unwrap();
+
+        let warning_job = repo.create("case-1", "Import data source").unwrap();
+        repo.update_outcome_counts(&warning_job, 2, 1, 0, true)
+            .unwrap();
+        repo.complete(&warning_job, "Completed with warnings")
+            .unwrap();
+
+        let warnings = get_warnings_from_db(&conn).unwrap();
+
+        assert!(warnings.iter().all(|w| w.id != clean_job.0));
+        let item = warnings
+            .iter()
+            .find(|w| w.id == warning_job.0)
+            .expect("warning job should produce a warning item");
+        assert!(item.title.contains("警告"));
+        assert!(item.detail.contains("警告 2"));
+        assert!(item.detail.contains("跳过 1"));
+        assert!(item.detail.contains("Completed with warnings"));
+    }
+
+    #[test]
+    fn get_warnings_from_db_surfaces_failed_jobs_even_without_outcome_counts() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        persistence_sqlite::runner::run_all(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO cases (id, name, number, examiner) VALUES ('case-1', 'Case', '1', 'qa')",
+            [],
+        )
+        .unwrap();
+
+        let repo = JobRepo::new(&conn);
+        let job_id = repo.create("case-1", "Import data source").unwrap();
+        repo.fail(&job_id, "disk full").unwrap();
+
+        let warnings = get_warnings_from_db(&conn).unwrap();
+        let item = warnings
+            .iter()
+            .find(|w| w.id == job_id.0)
+            .expect("failed job should produce a warning item");
+        assert!(item.title.contains("失败"));
+        assert!(item.detail.contains("disk full"));
+    }
+
+    #[test]
+    fn get_trace_items_from_db_reports_one_entry_per_recent_job() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        persistence_sqlite::runner::run_all(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO cases (id, name, number, examiner) VALUES ('case-1', 'Case', '1', 'qa')",
+            [],
+        )
+        .unwrap();
+
+        let repo = JobRepo::new(&conn);
+        let job_id = repo.create("case-1", "Import data source").unwrap();
+        repo.complete(&job_id, "Imported 42 files").unwrap();
+
+        let trace = get_trace_items_from_db(&conn).unwrap();
+        let item = trace
+            .iter()
+            .find(|t| t.id == job_id.0)
+            .expect("job should produce a trace item");
+        assert!(item.message.contains("Import data source"));
+        assert!(item.message.contains("completed"));
+        assert!(item.message.contains("Imported 42 files"));
+        assert!(!item.ts.is_empty());
     }
 }

@@ -1,0 +1,844 @@
+{
+  "nodes": [
+    {
+      "id": "file:crates/evtx-patched/src/utils/bytes.rs",
+      "type": "file",
+      "name": "bytes.rs",
+      "filePath": "crates/evtx-patched/src/utils/bytes.rs",
+      "summary": "提供 EVTX 二进制数据读取的底层工具函数，包含小端字节序整数读取、数组切片、边界检查与错误报告等安全读取原语。",
+      "tags": ["utility", "binary-parsing", "evtx", "low-level"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/evtx-patched/src/utils/hexdump.rs",
+      "type": "file",
+      "name": "hexdump.rs",
+      "filePath": "crates/evtx-patched/src/utils/hexdump.rs",
+      "summary": "实现十六进制转储（hexdump）功能，用于调试和错误报告时将二进制数据可视化为带地址、hex 列和 ASCII 预览的格式化输出。",
+      "tags": ["utility", "debugging", "hexdump", "binary-visualization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/evtx-patched/src/utils/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "crates/evtx-patched/src/utils/mod.rs",
+      "summary": "utils 模块的 barrel 文件，声明并汇总所有工具子模块（byte_cursor、bytes、hexdump、parse_error、utf16、windows）。",
+      "tags": ["barrel", "module-declaration", "evtx"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/evtx-patched/src/utils/parse_error.rs",
+      "type": "file",
+      "name": "parse_error.rs",
+      "filePath": "crates/evtx-patched/src/utils/parse_error.rs",
+      "summary": "为 EVTX 解析器提供 `invalid_data` 错误构造函数，将偏移量和描述字符串包装为标准反序列化错误类型。",
+      "tags": ["utility", "error-handling", "evtx"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/evtx-patched/src/utils/utf16.rs",
+      "type": "file",
+      "name": "utf16.rs",
+      "filePath": "crates/evtx-patched/src/utils/utf16.rs",
+      "summary": "实现 UTF-16 LE 字符串解码工具集，支持从字节缓冲区解码、trim 空白、零终止符截断、代理对处理及 Bump 分配器友好的零拷贝输出。",
+      "tags": ["utility", "utf16-decoding", "string-processing", "evtx"],
+      "complexity": "complex",
+      "languageNotes": "处理 UTF-16 LE 代理对（surrogate pairs）以正确解码 Windows 宽字符字符串。"
+    },
+    {
+      "id": "file:crates/evtx-patched/src/utils/windows.rs",
+      "type": "file",
+      "name": "windows.rs",
+      "filePath": "crates/evtx-patched/src/utils/windows.rs",
+      "summary": "提供 Windows 时间格式转换工具：将 Windows FILETIME（100 纳秒间隔）转换为 Unix 时间戳，以及将 SYSTEMTIME 结构体字节解析为时间戳。",
+      "tags": ["utility", "windows", "timestamp-conversion", "evtx"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/evtx-patched/src/wevt_templates/cache.rs",
+      "type": "file",
+      "name": "cache.rs",
+      "filePath": "crates/evtx-patched/src/wevt_templates/cache.rs",
+      "summary": "实现 WEVT（Windows Event Template）模板缓存，管理从 WEVT blob 和 CRIM 解析结果中加载的模板定义，支持按 GUID 查找和临时模板存储。",
+      "tags": ["cache", "evtx", "template-management", "wevt"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:crates/evtx-patched/src/wevt_templates/error.rs",
+      "type": "file",
+      "name": "error.rs",
+      "filePath": "crates/evtx-patched/src/wevt_templates/error.rs",
+      "summary": "定义 WEVT 模板提取过程中的错误类型 WevtTemplateExtractError，覆盖无效 PE、畸形 PE、未映射 RVA 和畸形资源等场景。",
+      "tags": ["error-handling", "evtx", "wevt", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/evtx-patched/src/wevt_templates/extract.rs",
+      "type": "file",
+      "name": "extract.rs",
+      "filePath": "crates/evtx-patched/src/wevt_templates/extract.rs",
+      "summary": "从 Windows PE 可执行文件的资源节（.rsrc）中提取 WEVT 事件模板资源，解析资源目录结构并将模板数据（message table DLL 中的 CRIM blob）导出。",
+      "tags": ["evtx", "pe-parsing", "resource-extraction", "wevt"],
+      "complexity": "complex",
+      "languageNotes": "解析 PE 资源目录树，通过 RVA 到文件偏移的映射从 goblin PE 解析结果中提取资源数据。"
+    },
+    {
+      "id": "file:crates/evtx-patched/src/wevt_templates/manifest/error.rs",
+      "type": "file",
+      "name": "error.rs",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/error.rs",
+      "summary": "定义 CRIM manifest 解析错误类型 WevtManifestError，涵盖无效签名、截断数据、越界偏移/大小、无效 UTF-16 字符串和无效 GUID。",
+      "tags": ["error-handling", "evtx", "crim-manifest", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/bytes.rs:slice_r",
+      "type": "function",
+      "name": "slice_r",
+      "filePath": "crates/evtx-patched/src/utils/bytes.rs",
+      "lineRange": [75, 86],
+      "summary": "从字节缓冲区安全获取指定偏移量和长度的切片，失败时返回带上下文的 InputError 错误。",
+      "tags": ["utility", "binary-parsing", "slicing", "error-reporting"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/bytes.rs:read_u32_vec_le_r",
+      "type": "function",
+      "name": "read_u32_vec_le_r",
+      "filePath": "crates/evtx-patched/src/utils/bytes.rs",
+      "lineRange": [127, 144],
+      "summary": "从缓冲区指定偏移量读取指定数量的小端 u32 整数到一个 Vec，包含边界检查和错误报告。",
+      "tags": ["utility", "binary-parsing", "array-reading", "error-reporting"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/hexdump.rs:dump_stream",
+      "type": "function",
+      "name": "dump_stream",
+      "filePath": "crates/evtx-patched/src/utils/hexdump.rs",
+      "lineRange": [9, 30],
+      "summary": "从实现了 Read+Seek 的流中读取数据并生成带十六进制转储的错误诊断字符串，支持可选的 lookbehind 回溯上下文。",
+      "tags": ["utility", "hexdump", "debugging", "io"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/hexdump.rs:hexdump",
+      "type": "function",
+      "name": "hexdump",
+      "filePath": "crates/evtx-patched/src/utils/hexdump.rs",
+      "lineRange": [47, 82],
+      "summary": "将字节切片格式化为十六进制转储字符串，支持分页显示（每页 32 字节），包含地址、hex 列和 ASCII 预览。",
+      "tags": ["utility", "hexdump", "formatting", "debugging"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/hexdump.rs:print_line",
+      "type": "function",
+      "name": "print_line",
+      "filePath": "crates/evtx-patched/src/utils/hexdump.rs",
+      "lineRange": [84, 159],
+      "summary": "格式化单行十六进制转储输出：渲染地址、16 字节 hex 列以及对应的 ASCII 可打印字符预览。",
+      "tags": ["utility", "hexdump", "formatting", "internal"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/parse_error.rs:invalid_data",
+      "type": "function",
+      "name": "invalid_data",
+      "filePath": "crates/evtx-patched/src/utils/parse_error.rs",
+      "lineRange": [6, 11],
+      "summary": "构造带偏移量和描述信息的 DeserializationError，用作 EVTX 解析中数据无效时的标准错误返回值。",
+      "tags": ["utility", "error-handling", "deserialization"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/utils/utf16.rs:Utf16LeDecodeError",
+      "type": "class",
+      "name": "Utf16LeDecodeError",
+      "filePath": "crates/evtx-patched/src/utils/utf16.rs",
+      "lineRange": [14, 19],
+      "summary": "UTF-16 LE 解码错误类型，包含奇数字节长度（OddLength）和无效数据（InvalidData）两种变体。",
+      "tags": ["error-handling", "utf16", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/utils/utf16.rs:Utf16LeSlice",
+      "type": "class",
+      "name": "Utf16LeSlice",
+      "filePath": "crates/evtx-patched/src/utils/utf16.rs",
+      "lineRange": [26, 29],
+      "summary": "UTF-16 LE 字节切片的轻量级引用表示，携带原始字节和字符计数元数据。",
+      "tags": ["data-model", "utf16", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/utf16.rs:decode_utf16le_bytes",
+      "type": "function",
+      "name": "decode_utf16le_bytes",
+      "filePath": "crates/evtx-patched/src/utils/utf16.rs",
+      "lineRange": [68, 79],
+      "summary": "将 UTF-16 LE 字节数组解码为 Rust String，验证字节对齐并将小端 u16 单元转换为合法的 UTF-8 字符串。",
+      "tags": ["utility", "utf16-decoding", "string-conversion"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/utf16.rs:decode_utf16le_bytes_to_bump_str",
+      "type": "function",
+      "name": "decode_utf16le_bytes_to_bump_str",
+      "filePath": "crates/evtx-patched/src/utils/utf16.rs",
+      "lineRange": [82, 113],
+      "summary": "将 UTF-16 LE 字节解码到 Bump 分配器中的 bump_str，支持代理对并指定最大字符数限制，实现零拷贝输出。",
+      "tags": ["utility", "utf16-decoding", "bump-allocation", "zero-copy"],
+      "complexity": "moderate",
+      "languageNotes": "使用 Bump 分配器（bumpalo 风格）实现零拷贝字符串解码，处理 UTF-16 LE 代理对（surrogate pairs）。"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/utf16.rs:decode_utf16le_bytes_z",
+      "type": "function",
+      "name": "decode_utf16le_bytes_z",
+      "filePath": "crates/evtx-patched/src/utils/utf16.rs",
+      "lineRange": [117, 128],
+      "summary": "将零终止的 UTF-16 LE 字节数组解码为 Rust String，在遇到 null 终止符（U+0000）时停止解码。",
+      "tags": ["utility", "utf16-decoding", "null-terminated"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/utf16.rs:trim_utf16le_whitespace",
+      "type": "function",
+      "name": "trim_utf16le_whitespace",
+      "filePath": "crates/evtx-patched/src/utils/utf16.rs",
+      "lineRange": [140, 172],
+      "summary": "对 UTF-16 LE 字节缓冲区进行 whitespace 修剪，返回首尾去除空白字符后的 Utf16LeSlice 引用。",
+      "tags": ["utility", "utf16", "whitespace-trimming"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/utf16.rs:decode_utf16le_at_unit",
+      "type": "function",
+      "name": "decode_utf16le_at_unit",
+      "filePath": "crates/evtx-patched/src/utils/utf16.rs",
+      "lineRange": [174, 192],
+      "summary": "在 UTF-16 LE 字节缓冲区中指定 code unit 索引处解码单个字符，支持 BPM 基本字符和代理对首部。",
+      "tags": ["utility", "utf16-decoding", "single-char"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/utf16.rs:decode_utf16le_unit_value",
+      "type": "function",
+      "name": "decode_utf16le_unit_value",
+      "filePath": "crates/evtx-patched/src/utils/utf16.rs",
+      "lineRange": [194, 230],
+      "summary": "根据给定的 UTF-16 code unit 值解码为完整字符，处理 BPM 直接映射和代理对（surrogate pairs）到 Unicode 标量值的转换。",
+      "tags": ["utility", "utf16-decoding", "surrogate-pairs", "unicode"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/windows.rs:systime_from_bytes",
+      "type": "function",
+      "name": "systime_from_bytes",
+      "filePath": "crates/evtx-patched/src/utils/windows.rs",
+      "lineRange": [20, 56],
+      "summary": "从 16 字节 Windows SYSTEMTIME 结构中解析出年/月/日/时/分/秒/毫秒，构造日期时间并转换为 UTC 时间戳。",
+      "tags": ["utility", "windows", "systemtime", "timestamp-parsing"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/wevt_templates/cache.rs:WevtCacheError",
+      "type": "class",
+      "name": "WevtCacheError",
+      "filePath": "crates/evtx-patched/src/wevt_templates/cache.rs",
+      "lineRange": [12, 37],
+      "summary": "WEVT 模板缓存错误类型，包含临时切片越界、CRIM 解析错误、模板未找到和临时数据过小四种变体。",
+      "tags": ["error-handling", "evtx", "cache", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/wevt_templates/cache.rs:TemplateSource",
+      "type": "class",
+      "name": "TemplateSource",
+      "filePath": "crates/evtx-patched/src/wevt_templates/cache.rs",
+      "lineRange": [53, 62],
+      "summary": "枚举模板来源类型：临时字节（TempBytes）或 CRIM 切片（CrimSlice），后者携带 CRIM blob 索引和字节偏移。",
+      "tags": ["data-model", "evtx", "template", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/wevt_templates/cache.rs:WevtCache",
+      "type": "class",
+      "name": "WevtCache",
+      "filePath": "crates/evtx-patched/src/wevt_templates/cache.rs",
+      "lineRange": [71, 80],
+      "summary": "WEVT 模板缓存核心结构，管理 CRIM blob 列表和 GUID 到模板来源的映射，支持线程安全（Mutex 保护）的模板查找和插入。",
+      "tags": ["cache", "evtx", "template-management", "data-model"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/cache.rs:add_wevt_blob",
+      "type": "function",
+      "name": "add_wevt_blob",
+      "filePath": "crates/evtx-patched/src/wevt_templates/cache.rs",
+      "lineRange": [107, 135],
+      "summary": "将 WEVT blob（包含 CRIM manifest）添加到缓存：提取临时模板、存储 CRIM 数据，并将每个模板 GUID 索引到 CRIM 来源。",
+      "tags": ["cache", "evtx", "template-loading", "wevt"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/cache.rs:load_temp_binxml_fragment_in",
+      "type": "function",
+      "name": "load_temp_binxml_fragment_in",
+      "filePath": "crates/evtx-patched/src/wevt_templates/cache.rs",
+      "lineRange": [141, 162],
+      "summary": "根据模板 GUID 从缓存加载临时 BinXML 片段，将 TempBytes 数据复制到指定的 arena 分配器中。",
+      "tags": ["cache", "evtx", "template-loading", "binxml"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/cache.rs:try_load_from_known_source",
+      "type": "function",
+      "name": "try_load_from_known_source",
+      "filePath": "crates/evtx-patched/src/wevt_templates/cache.rs",
+      "lineRange": [171, 215],
+      "summary": "尝试从已知来源加载模板数据：先查找 sources_by_guid 映射，若为 CRIM 切片则从对应的 CRIM blob 中提取指定范围的字节。",
+      "tags": ["cache", "evtx", "template-lookup", "internal"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/wevt_templates/error.rs:WevtTemplateExtractError",
+      "type": "class",
+      "name": "WevtTemplateExtractError",
+      "filePath": "crates/evtx-patched/src/wevt_templates/error.rs",
+      "lineRange": [4, 19],
+      "summary": "WEVT 模板提取错误枚举，包含无效 PE、畸形 PE、未映射 RVA、畸形资源和无效资源名五种变体。",
+      "tags": ["error-handling", "evtx", "wevt", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/extract.rs:parse_image_resource_directory",
+      "type": "function",
+      "name": "parse_image_resource_directory",
+      "filePath": "crates/evtx-patched/src/wevt_templates/extract.rs",
+      "lineRange": [31, 73],
+      "summary": "解析 PE 文件的 IMAGE_RESOURCE_DIRECTORY 结构，读取特征值、时间戳、版本号以及命名和 ID 条目数量。",
+      "tags": ["pe-parsing", "resource-directory", "binary-parsing"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/extract.rs:parse_resource_name",
+      "type": "function",
+      "name": "parse_resource_name",
+      "filePath": "crates/evtx-patched/src/wevt_templates/extract.rs",
+      "lineRange": [75, 115],
+      "summary": "解析 PE 资源目录中的资源名称字符串，读取 UTF-16 LE 编码的名称字符数并转换为 Rust String。",
+      "tags": ["pe-parsing", "resource-name", "utf16"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/extract.rs:entry_identifier",
+      "type": "function",
+      "name": "entry_identifier",
+      "filePath": "crates/evtx-patched/src/wevt_templates/extract.rs",
+      "lineRange": [117, 130],
+      "summary": "判断资源目录条目是字符串名称还是整数 ID，返回对应的 ResourceIdentifier 枚举。",
+      "tags": ["pe-parsing", "resource-identification", "internal"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/extract.rs:directory_entries",
+      "type": "function",
+      "name": "directory_entries",
+      "filePath": "crates/evtx-patched/src/wevt_templates/extract.rs",
+      "lineRange": [132, 153],
+      "summary": "解析资源目录中的所有条目（IMAGE_RESOURCE_DIRECTORY_ENTRY），返回条目列表供后续遍历使用。",
+      "tags": ["pe-parsing", "resource-directory", "internal"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/extract.rs:parse_resource_data_entry",
+      "type": "function",
+      "name": "parse_resource_data_entry",
+      "filePath": "crates/evtx-patched/src/wevt_templates/extract.rs",
+      "lineRange": [155, 187],
+      "summary": "解析 IMAGE_RESOURCE_DATA_ENTRY 结构，提取资源数据的 RVA、大小、代码页和保留字段。",
+      "tags": ["pe-parsing", "resource-data", "binary-parsing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/extract.rs:extract_wevt_template_resources",
+      "type": "function",
+      "name": "extract_wevt_template_resources",
+      "filePath": "crates/evtx-patched/src/wevt_templates/extract.rs",
+      "lineRange": [196, 324],
+      "summary": "主入口函数：遍历 PE 文件的资源目录树（类型/名称/语言三级），定位 WEVT 模板资源（类型 64），提取模板二进制数据并返回列表。",
+      "tags": ["evtx", "pe-parsing", "resource-extraction", "wevt", "entry-point"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/wevt_templates/manifest/error.rs:WevtManifestError",
+      "type": "class",
+      "name": "WevtManifestError",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/error.rs",
+      "lineRange": [4, 46],
+      "summary": "CRIM manifest 解析错误枚举，涵盖无效签名、截断数据、偏移/大小/计数越界、无效 UTF-16 字符串和无效 GUID 等场景。",
+      "tags": ["error-handling", "evtx", "crim-manifest", "type-definition"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:crates/evtx-patched/src/utils/bytes.rs",
+      "target": "file:crates/evtx-patched/src/err.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/bytes.rs",
+      "target": "function:crates/evtx-patched/src/utils/bytes.rs:slice_r",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/bytes.rs",
+      "target": "function:crates/evtx-patched/src/utils/bytes.rs:read_u32_vec_le_r",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/bytes.rs",
+      "target": "function:crates/evtx-patched/src/utils/bytes.rs:slice_r",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/bytes.rs",
+      "target": "function:crates/evtx-patched/src/utils/bytes.rs:read_u32_vec_le_r",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/hexdump.rs",
+      "target": "file:crates/evtx-patched/src/evtx_parser.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/hexdump.rs",
+      "target": "function:crates/evtx-patched/src/utils/hexdump.rs:dump_stream",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/hexdump.rs",
+      "target": "function:crates/evtx-patched/src/utils/hexdump.rs:hexdump",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/hexdump.rs",
+      "target": "function:crates/evtx-patched/src/utils/hexdump.rs:print_line",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/hexdump.rs",
+      "target": "function:crates/evtx-patched/src/utils/hexdump.rs:dump_stream",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/hexdump.rs",
+      "target": "function:crates/evtx-patched/src/utils/hexdump.rs:hexdump",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/mod.rs",
+      "target": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/mod.rs",
+      "target": "file:crates/evtx-patched/src/utils/bytes.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/mod.rs",
+      "target": "file:crates/evtx-patched/src/utils/hexdump.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/mod.rs",
+      "target": "file:crates/evtx-patched/src/utils/parse_error.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/mod.rs",
+      "target": "file:crates/evtx-patched/src/utils/utf16.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/mod.rs",
+      "target": "file:crates/evtx-patched/src/utils/windows.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/parse_error.rs",
+      "target": "file:crates/evtx-patched/src/err.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/parse_error.rs",
+      "target": "function:crates/evtx-patched/src/utils/parse_error.rs:invalid_data",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/parse_error.rs",
+      "target": "function:crates/evtx-patched/src/utils/parse_error.rs:invalid_data",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/utf16.rs",
+      "target": "class:crates/evtx-patched/src/utils/utf16.rs:Utf16LeDecodeError",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/utf16.rs",
+      "target": "class:crates/evtx-patched/src/utils/utf16.rs:Utf16LeSlice",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/utf16.rs",
+      "target": "function:crates/evtx-patched/src/utils/utf16.rs:decode_utf16le_bytes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/utf16.rs",
+      "target": "function:crates/evtx-patched/src/utils/utf16.rs:decode_utf16le_bytes_to_bump_str",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/utf16.rs",
+      "target": "function:crates/evtx-patched/src/utils/utf16.rs:decode_utf16le_bytes_z",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/utf16.rs",
+      "target": "function:crates/evtx-patched/src/utils/utf16.rs:trim_utf16le_whitespace",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/utf16.rs",
+      "target": "function:crates/evtx-patched/src/utils/utf16.rs:decode_utf16le_at_unit",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/utf16.rs",
+      "target": "function:crates/evtx-patched/src/utils/utf16.rs:decode_utf16le_unit_value",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/utf16.rs",
+      "target": "class:crates/evtx-patched/src/utils/utf16.rs:Utf16LeDecodeError",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/utf16.rs",
+      "target": "class:crates/evtx-patched/src/utils/utf16.rs:Utf16LeSlice",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/utf16.rs",
+      "target": "function:crates/evtx-patched/src/utils/utf16.rs:decode_utf16le_bytes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/utf16.rs",
+      "target": "function:crates/evtx-patched/src/utils/utf16.rs:decode_utf16le_bytes_to_bump_str",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/utf16.rs",
+      "target": "function:crates/evtx-patched/src/utils/utf16.rs:decode_utf16le_bytes_z",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/utf16.rs",
+      "target": "function:crates/evtx-patched/src/utils/utf16.rs:trim_utf16le_whitespace",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/utf16.rs",
+      "target": "function:crates/evtx-patched/src/utils/utf16.rs:decode_utf16le_bytes_to_bump_str",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/windows.rs",
+      "target": "file:crates/evtx-patched/src/err.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/windows.rs",
+      "target": "file:crates/evtx-patched/src/utils/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/windows.rs",
+      "target": "function:crates/evtx-patched/src/utils/windows.rs:systime_from_bytes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/windows.rs",
+      "target": "function:crates/evtx-patched/src/utils/windows.rs:systime_from_bytes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/cache.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/cache.rs:WevtCacheError",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/cache.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/cache.rs:TemplateSource",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/cache.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/cache.rs:WevtCache",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/cache.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/cache.rs:add_wevt_blob",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/cache.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/cache.rs:load_temp_binxml_fragment_in",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/cache.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/cache.rs:try_load_from_known_source",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/cache.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/cache.rs:WevtCacheError",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/cache.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/cache.rs:WevtCache",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/cache.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/cache.rs:add_wevt_blob",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/cache.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/cache.rs:load_temp_binxml_fragment_in",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/cache.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/temp.rs:extract_temp_templates_from_wevt_blob",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/error.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/error.rs:WevtTemplateExtractError",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/error.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/error.rs:WevtTemplateExtractError",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/extract.rs",
+      "target": "file:crates/evtx-patched/src/utils/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/extract.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/extract.rs:parse_image_resource_directory",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/extract.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/extract.rs:parse_resource_name",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/extract.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/extract.rs:entry_identifier",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/extract.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/extract.rs:directory_entries",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/extract.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/extract.rs:parse_resource_data_entry",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/extract.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/extract.rs:extract_wevt_template_resources",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/extract.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/extract.rs:extract_wevt_template_resources",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/extract.rs",
+      "target": "function:crates/evtx-patched/src/utils/bytes.rs:read_u32_vec_le_r",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/error.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/error.rs:WevtManifestError",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/error.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/error.rs:WevtManifestError",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/extract.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/error.rs:WevtTemplateExtractError",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/extract.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/types.rs:ResourceIdentifier",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    }
+  ]
+}

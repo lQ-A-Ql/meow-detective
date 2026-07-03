@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Database, Download, FileClock, FileText, Globe, Mail, Monitor, Shield } from 'lucide-react';
+import { Database, Download, FileClock, FileText, Globe, Mail, Monitor, Server, Shield } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useCreateAnalysisDemoCase, useCurrentCase, useDataSources } from '@/features/case/hooks';
 import {
@@ -10,6 +10,7 @@ import {
   useEvtxEventSummary,
   useEvidenceClassificationSummary,
   useGenerateAnalysisSummary,
+  useLinuxArtifactSummary,
   useRegistryExtractionSummary,
   useRegistryStructuredSummary,
   useRunAnalysisExtraction,
@@ -27,6 +28,7 @@ import {
   EventLogPanel,
   EvidenceClassificationPanel,
   FileClassificationPanel,
+  LinuxArtifactsPanel,
   RegistryExtractionPanel,
   SystemInfoPanel,
 } from '@/components/analysis/AnalysisPanels';
@@ -52,6 +54,7 @@ const ANALYSIS_TAB_KEYS: AnalysisTabKey[] = [
   'browser',
   'email',
   'eventlogs',
+  'linux',
   'files',
   'report',
 ];
@@ -63,6 +66,7 @@ const TAB_ICONS: Record<AnalysisTabKey, React.ComponentType<{ size?: number | st
   browser: Globe,
   email: Mail,
   eventlogs: FileClock,
+  linux: Server,
   files: FileText,
   report: Download,
 };
@@ -72,6 +76,7 @@ const EXTRACTION_CATEGORIES: ExtractionCategory[] = [
   'BrowserHistory',
   'Email',
   'EventLogs',
+  'LinuxArtifacts',
 ];
 
 function errorMessage(error: unknown) {
@@ -98,6 +103,7 @@ export function DataAnalysis() {
   const browserSummary = useBrowserHistorySummary({ limit: 200 });
   const emailSummary = useEmailExtractionSummary({ limit: 200 });
   const eventLogSummary = useEvtxEventSummary({ limit: 200 });
+  const linuxSummary = useLinuxArtifactSummary({ limit: 200 });
   const classifications = useAnalysisClassifications(1000);
   const summaryMutation = useGenerateAnalysisSummary();
 
@@ -126,6 +132,7 @@ export function DataAnalysis() {
     ?? browserSummary.error
     ?? emailSummary.error
     ?? eventLogSummary.error
+    ?? linuxSummary.error
     ?? classifications.error
     ?? summaryMutation.error
     ?? evidenceScan.error
@@ -141,6 +148,7 @@ export function DataAnalysis() {
       browserSummary.refetch(),
       emailSummary.refetch(),
       eventLogSummary.refetch(),
+      linuxSummary.refetch(),
       classifications.refetch(),
     ]);
   }
@@ -158,6 +166,7 @@ export function DataAnalysis() {
       BrowserHistory: browserSummary.refetch,
       Email: emailSummary.refetch,
       EventLogs: eventLogSummary.refetch,
+      LinuxArtifacts: linuxSummary.refetch,
     };
 
     const refetchRegistryStructured = async () => {
@@ -357,6 +366,17 @@ export function DataAnalysis() {
                     <EventLogPanel
                       summary={eventLogSummary.data}
                       progress={labeledExtractionProgress.EventLogs}
+                    />
+                  )}
+                </TabsContent>
+
+                <TabsContent value="linux" className="m-0 data-[state=inactive]:hidden">
+                  {linuxSummary.isLoading ? (
+                    <AnalysisLoadingPanel text={t('analysis.loading.linuxArtifacts')} />
+                  ) : (
+                    <LinuxArtifactsPanel
+                      summary={linuxSummary.data}
+                      progress={labeledExtractionProgress.LinuxArtifacts}
                     />
                   )}
                 </TabsContent>

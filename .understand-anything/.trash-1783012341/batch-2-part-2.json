@@ -1,0 +1,1182 @@
+{
+  "nodes": [
+    {
+      "id": "file:apps/desktop/src-tauri/src/commands/graph_commands.rs",
+      "type": "file",
+      "name": "graph_commands.rs",
+      "filePath": "apps/desktop/src-tauri/src/commands/graph_commands.rs",
+      "summary": "知识图谱查询命令集，提供图谱快照、查询、节点邻域和溯源链查询接口。",
+      "tags": [
+        "api-handler",
+        "command",
+        "knowledge-graph",
+        "ipc"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/desktop/src-tauri/src/commands/import/background_job.rs",
+      "type": "file",
+      "name": "background_job.rs",
+      "filePath": "apps/desktop/src-tauri/src/commands/import/background_job.rs",
+      "summary": "后台导入作业执行器，封装异步导入作业的线程启动、进度追踪、分析触发和取消信号监听逻辑。",
+      "tags": [
+        "import",
+        "job-management",
+        "async"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/desktop/src-tauri/src/commands/import/cancellation.rs",
+      "type": "file",
+      "name": "cancellation.rs",
+      "filePath": "apps/desktop/src-tauri/src/commands/import/cancellation.rs",
+      "summary": "导入取消机制实现，提供 cancel_import 命令和取消状态 DTO 转换工具。",
+      "tags": [
+        "import",
+        "cancellation",
+        "command"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/desktop/src-tauri/src/commands/import/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "apps/desktop/src-tauri/src/commands/import/mod.rs",
+      "summary": "导入命令模块的 Barrel 文件，重新导出 background_job、cancellation、pipeline 和 schedule 四个子模块。",
+      "tags": [
+        "barrel",
+        "import",
+        "module"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust 模块 barrel 模式，6 行纯模块声明。"
+    },
+    {
+      "id": "file:apps/desktop/src-tauri/src/commands/import/pipeline.rs",
+      "type": "file",
+      "name": "pipeline.rs",
+      "filePath": "apps/desktop/src-tauri/src/commands/import/pipeline.rs",
+      "summary": "导入管道命令入口，提供 import_data_source 和 cancel_import 两个顶层 Tauri 命令。",
+      "tags": [
+        "api-handler",
+        "command",
+        "import",
+        "pipeline"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/desktop/src-tauri/src/commands/import/schedule.rs",
+      "type": "file",
+      "name": "schedule.rs",
+      "filePath": "apps/desktop/src-tauri/src/commands/import/schedule.rs",
+      "summary": "导入调度模块，负责加载导入设置、构建导入配置，并调度后台导入作业（含分析模式选择与配置校验）。",
+      "tags": [
+        "import",
+        "scheduling",
+        "configuration"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "6 个函数组成完整的导入调度链路：设置加载 -> 配置构建 -> 后台调度 -> 错误转换。"
+    },
+    {
+      "id": "file:apps/desktop/src-tauri/src/commands/job_commands.rs",
+      "type": "file",
+      "name": "job_commands.rs",
+      "filePath": "apps/desktop/src-tauri/src/commands/job_commands.rs",
+      "summary": "作业状态查询命令集，提供作业快照、警告列表和追踪条目查询接口，支持前端作业监控面板。",
+      "tags": [
+        "api-handler",
+        "command",
+        "job-monitoring",
+        "ipc"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "type": "file",
+      "name": "mcp_commands.rs",
+      "filePath": "apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "summary": "MCP（Model Context Protocol）客户端命令集，管理 MCP 服务器配置（增删改查）、连接/断开、资源/工具/提示列表和工具调用，是 AI 集成功能的 IPC 入口。",
+      "tags": [
+        "api-handler",
+        "command",
+        "mcp",
+        "ai-integration",
+        "ipc"
+      ],
+      "complexity": "complex",
+      "languageNotes": "686 行，29 个函数；包含完整的 DTO <-> 领域模型双向转换函数族，实现 SSE 和 Stdio 两种传输协议支持。"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/graph_commands.rs:get_graph_snapshot",
+      "type": "function",
+      "name": "get_graph_snapshot",
+      "filePath": "apps/desktop/src-tauri/src/commands/graph_commands.rs",
+      "lineRange": [
+        14,
+        26
+      ],
+      "summary": "get_graph_snapshot 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/graph_commands.rs:query_graph",
+      "type": "function",
+      "name": "query_graph",
+      "filePath": "apps/desktop/src-tauri/src/commands/graph_commands.rs",
+      "lineRange": [
+        29,
+        42
+      ],
+      "summary": "query_graph 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/graph_commands.rs:get_node_neighborhood",
+      "type": "function",
+      "name": "get_node_neighborhood",
+      "filePath": "apps/desktop/src-tauri/src/commands/graph_commands.rs",
+      "lineRange": [
+        45,
+        58
+      ],
+      "summary": "get_node_neighborhood 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/graph_commands.rs:get_provenance_chain",
+      "type": "function",
+      "name": "get_provenance_chain",
+      "filePath": "apps/desktop/src-tauri/src/commands/graph_commands.rs",
+      "lineRange": [
+        61,
+        74
+      ],
+      "summary": "get_provenance_chain 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/import/background_job.rs:run_background_import_job",
+      "type": "function",
+      "name": "run_background_import_job",
+      "filePath": "apps/desktop/src-tauri/src/commands/import/background_job.rs",
+      "lineRange": [
+        30,
+        113
+      ],
+      "summary": "run_background_import_job 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:apps/desktop/src-tauri/src/commands/import/background_job.rs:BackgroundImportJob",
+      "type": "class",
+      "name": "BackgroundImportJob",
+      "filePath": "apps/desktop/src-tauri/src/commands/import/background_job.rs",
+      "lineRange": [
+        18,
+        27
+      ],
+      "summary": "BackgroundImportJob 结构体/类。",
+      "tags": [
+        "class"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/import/cancellation.rs:cancel_import",
+      "type": "function",
+      "name": "cancel_import",
+      "filePath": "apps/desktop/src-tauri/src/commands/import/cancellation.rs",
+      "lineRange": [
+        11,
+        61
+      ],
+      "summary": "cancel_import 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/import/cancellation.rs:job_cancellation_dto",
+      "type": "function",
+      "name": "job_cancellation_dto",
+      "filePath": "apps/desktop/src-tauri/src/commands/import/cancellation.rs",
+      "lineRange": [
+        63,
+        85
+      ],
+      "summary": "job_cancellation_dto 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/import/cancellation.rs:is_import_cancelled_message",
+      "type": "function",
+      "name": "is_import_cancelled_message",
+      "filePath": "apps/desktop/src-tauri/src/commands/import/cancellation.rs",
+      "lineRange": [
+        87,
+        89
+      ],
+      "summary": "is_import_cancelled_message 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/import/pipeline.rs:import_data_source",
+      "type": "function",
+      "name": "import_data_source",
+      "filePath": "apps/desktop/src-tauri/src/commands/import/pipeline.rs",
+      "lineRange": [
+        13,
+        19
+      ],
+      "summary": "import_data_source 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/import/pipeline.rs:cancel_import",
+      "type": "function",
+      "name": "cancel_import",
+      "filePath": "apps/desktop/src-tauri/src/commands/import/pipeline.rs",
+      "lineRange": [
+        23,
+        29
+      ],
+      "summary": "cancel_import 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/import/schedule.rs:import_data_source",
+      "type": "function",
+      "name": "import_data_source",
+      "filePath": "apps/desktop/src-tauri/src/commands/import/schedule.rs",
+      "lineRange": [
+        19,
+        52
+      ],
+      "summary": "import_data_source 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/import/schedule.rs:load_import_settings",
+      "type": "function",
+      "name": "load_import_settings",
+      "filePath": "apps/desktop/src-tauri/src/commands/import/schedule.rs",
+      "lineRange": [
+        54,
+        88
+      ],
+      "summary": "load_import_settings 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/import/schedule.rs:schedule_import_for_active_case",
+      "type": "function",
+      "name": "schedule_import_for_active_case",
+      "filePath": "apps/desktop/src-tauri/src/commands/import/schedule.rs",
+      "lineRange": [
+        91,
+        146
+      ],
+      "summary": "schedule_import_for_active_case 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/import/schedule.rs:import_config_error_to_command_error",
+      "type": "function",
+      "name": "import_config_error_to_command_error",
+      "filePath": "apps/desktop/src-tauri/src/commands/import/schedule.rs",
+      "lineRange": [
+        163,
+        171
+      ],
+      "summary": "import_config_error_to_command_error 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/job_commands.rs:get_jobs_snapshot",
+      "type": "function",
+      "name": "get_jobs_snapshot",
+      "filePath": "apps/desktop/src-tauri/src/commands/job_commands.rs",
+      "lineRange": [
+        11,
+        25
+      ],
+      "summary": "get_jobs_snapshot 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/job_commands.rs:get_warnings",
+      "type": "function",
+      "name": "get_warnings",
+      "filePath": "apps/desktop/src-tauri/src/commands/job_commands.rs",
+      "lineRange": [
+        28,
+        40
+      ],
+      "summary": "get_warnings 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/job_commands.rs:get_trace_items",
+      "type": "function",
+      "name": "get_trace_items",
+      "filePath": "apps/desktop/src-tauri/src/commands/job_commands.rs",
+      "lineRange": [
+        43,
+        57
+      ],
+      "summary": "get_trace_items 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:transport_from_dto",
+      "type": "function",
+      "name": "transport_from_dto",
+      "filePath": "apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "lineRange": [
+        31,
+        42
+      ],
+      "summary": "transport_from_dto 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:config_from_dto",
+      "type": "function",
+      "name": "config_from_dto",
+      "filePath": "apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "lineRange": [
+        135,
+        149
+      ],
+      "summary": "config_from_dto 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:status_to_dto",
+      "type": "function",
+      "name": "status_to_dto",
+      "filePath": "apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "lineRange": [
+        151,
+        161
+      ],
+      "summary": "status_to_dto 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:summarize_transport",
+      "type": "function",
+      "name": "summarize_transport",
+      "filePath": "apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "lineRange": [
+        163,
+        182
+      ],
+      "summary": "summarize_transport 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:test_transport_summary_from_request",
+      "type": "function",
+      "name": "test_transport_summary_from_request",
+      "filePath": "apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "lineRange": [
+        184,
+        205
+      ],
+      "summary": "test_transport_summary_from_request 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:get_mcp_config",
+      "type": "function",
+      "name": "get_mcp_config",
+      "filePath": "apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "lineRange": [
+        208,
+        245
+      ],
+      "summary": "get_mcp_config 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:save_mcp_config",
+      "type": "function",
+      "name": "save_mcp_config",
+      "filePath": "apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "lineRange": [
+        248,
+        269
+      ],
+      "summary": "save_mcp_config 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:add_mcp_server",
+      "type": "function",
+      "name": "add_mcp_server",
+      "filePath": "apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "lineRange": [
+        272,
+        304
+      ],
+      "summary": "add_mcp_server 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:remove_mcp_server",
+      "type": "function",
+      "name": "remove_mcp_server",
+      "filePath": "apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "lineRange": [
+        307,
+        330
+      ],
+      "summary": "remove_mcp_server 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:connect_mcp_server",
+      "type": "function",
+      "name": "connect_mcp_server",
+      "filePath": "apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "lineRange": [
+        333,
+        375
+      ],
+      "summary": "connect_mcp_server 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:disconnect_mcp_server",
+      "type": "function",
+      "name": "disconnect_mcp_server",
+      "filePath": "apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "lineRange": [
+        378,
+        399
+      ],
+      "summary": "disconnect_mcp_server 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:test_mcp_connection",
+      "type": "function",
+      "name": "test_mcp_connection",
+      "filePath": "apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "lineRange": [
+        402,
+        451
+      ],
+      "summary": "test_mcp_connection 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:list_mcp_resources",
+      "type": "function",
+      "name": "list_mcp_resources",
+      "filePath": "apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "lineRange": [
+        454,
+        487
+      ],
+      "summary": "list_mcp_resources 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:list_mcp_tools",
+      "type": "function",
+      "name": "list_mcp_tools",
+      "filePath": "apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "lineRange": [
+        490,
+        522
+      ],
+      "summary": "list_mcp_tools 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:call_mcp_tool",
+      "type": "function",
+      "name": "call_mcp_tool",
+      "filePath": "apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "lineRange": [
+        525,
+        565
+      ],
+      "summary": "call_mcp_tool 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:list_mcp_prompts",
+      "type": "function",
+      "name": "list_mcp_prompts",
+      "filePath": "apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "lineRange": [
+        568,
+        608
+      ],
+      "summary": "list_mcp_prompts 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:get_mcp_prompt",
+      "type": "function",
+      "name": "get_mcp_prompt",
+      "filePath": "apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "lineRange": [
+        611,
+        640
+      ],
+      "summary": "get_mcp_prompt 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/graph_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/graph_commands.rs:get_graph_snapshot",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/graph_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/graph_commands.rs:get_graph_snapshot",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/graph_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/graph_commands.rs:query_graph",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/graph_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/graph_commands.rs:query_graph",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/graph_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/graph_commands.rs:get_node_neighborhood",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/graph_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/graph_commands.rs:get_node_neighborhood",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/graph_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/graph_commands.rs:get_provenance_chain",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/graph_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/graph_commands.rs:get_provenance_chain",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/background_job.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/import/background_job.rs:run_background_import_job",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/background_job.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/import/background_job.rs:run_background_import_job",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/background_job.rs",
+      "target": "class:apps/desktop/src-tauri/src/commands/import/background_job.rs:BackgroundImportJob",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/background_job.rs",
+      "target": "class:apps/desktop/src-tauri/src/commands/import/background_job.rs:BackgroundImportJob",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/cancellation.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/import/cancellation.rs:cancel_import",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/cancellation.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/import/cancellation.rs:cancel_import",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/cancellation.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/import/cancellation.rs:job_cancellation_dto",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/cancellation.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/import/cancellation.rs:job_cancellation_dto",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/cancellation.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/import/cancellation.rs:is_import_cancelled_message",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/cancellation.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/import/cancellation.rs:is_import_cancelled_message",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/pipeline.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/import/pipeline.rs:import_data_source",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/pipeline.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/import/pipeline.rs:import_data_source",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/pipeline.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/import/pipeline.rs:cancel_import",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/pipeline.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/import/pipeline.rs:cancel_import",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/schedule.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/import/schedule.rs:import_data_source",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/schedule.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/import/schedule.rs:import_data_source",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/schedule.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/import/schedule.rs:load_import_settings",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/schedule.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/import/schedule.rs:schedule_import_for_active_case",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/schedule.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/import/schedule.rs:schedule_import_for_active_case",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/schedule.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/import/schedule.rs:import_config_error_to_command_error",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/schedule.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/import/schedule.rs:import_config_error_to_command_error",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/job_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/job_commands.rs:get_jobs_snapshot",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/job_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/job_commands.rs:get_jobs_snapshot",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/job_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/job_commands.rs:get_warnings",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/job_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/job_commands.rs:get_warnings",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/job_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/job_commands.rs:get_trace_items",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/job_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/job_commands.rs:get_trace_items",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:transport_from_dto",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:config_from_dto",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:status_to_dto",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:summarize_transport",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:test_transport_summary_from_request",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:get_mcp_config",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:get_mcp_config",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:save_mcp_config",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:save_mcp_config",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:add_mcp_server",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:add_mcp_server",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:remove_mcp_server",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:remove_mcp_server",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:connect_mcp_server",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:connect_mcp_server",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:disconnect_mcp_server",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:disconnect_mcp_server",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:test_mcp_connection",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:test_mcp_connection",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:list_mcp_resources",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:list_mcp_resources",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:list_mcp_tools",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:list_mcp_tools",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:call_mcp_tool",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:call_mcp_tool",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:list_mcp_prompts",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:list_mcp_prompts",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:get_mcp_prompt",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/mcp_commands.rs:get_mcp_prompt",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/graph_commands.rs",
+      "target": "file:apps/desktop/src-tauri/src/state/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/background_job.rs",
+      "target": "file:apps/desktop/src-tauri/src/events/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/cancellation.rs",
+      "target": "file:apps/desktop/src-tauri/src/events/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/cancellation.rs",
+      "target": "file:apps/desktop/src-tauri/src/state/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/mod.rs",
+      "target": "file:apps/desktop/src-tauri/src/commands/import/background_job.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/mod.rs",
+      "target": "file:apps/desktop/src-tauri/src/commands/import/cancellation.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/mod.rs",
+      "target": "file:apps/desktop/src-tauri/src/commands/import/pipeline.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/mod.rs",
+      "target": "file:apps/desktop/src-tauri/src/commands/import/schedule.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/pipeline.rs",
+      "target": "file:apps/desktop/src-tauri/src/state/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/schedule.rs",
+      "target": "file:apps/desktop/src-tauri/src/events/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/import/schedule.rs",
+      "target": "file:apps/desktop/src-tauri/src/state/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/job_commands.rs",
+      "target": "file:apps/desktop/src-tauri/src/state/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "target": "file:apps/desktop/src-tauri/src/state/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    }
+  ]
+}

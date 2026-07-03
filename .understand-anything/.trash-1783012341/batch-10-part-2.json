@@ -1,0 +1,1383 @@
+{
+  "nodes": [
+    {
+      "id": "file:frontend/src/components/analysis/LimitationsPanel.tsx",
+      "type": "file",
+      "name": "LimitationsPanel.tsx",
+      "filePath": "frontend/src/components/analysis/LimitationsPanel.tsx",
+      "summary": "已知限制面板（KnownLimitationsPanel），展示当前版本的已知局限和约束条件，辅助发布决策。",
+      "tags": [
+        "analysis",
+        "governance",
+        "limitations",
+        "ui-component"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "type": "file",
+      "name": "V2GovernancePanels.tsx",
+      "filePath": "frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "summary": "V2 治理面板集合，包含安全审计、错误分类、发布门控、事实来源、运行时结果等面板，并作为分析面板的统一导出入口。",
+      "tags": [
+        "governance",
+        "barrel",
+        "analysis",
+        "audit",
+        "quality"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:frontend/src/components/analysis/VerificationPanel.tsx",
+      "type": "file",
+      "name": "VerificationPanel.tsx",
+      "filePath": "frontend/src/components/analysis/VerificationPanel.tsx",
+      "summary": "验证面板集合，包含 VerificationDashboard、BenchmarkPanel、SupportMatrixPanel 和基准检查行组件。",
+      "tags": [
+        "analysis",
+        "verification",
+        "benchmark",
+        "ui-component"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:frontend/src/components/dashboard/ArtifactStatsSection.tsx",
+      "type": "file",
+      "name": "ArtifactStatsSection.tsx",
+      "filePath": "frontend/src/components/dashboard/ArtifactStatsSection.tsx",
+      "summary": "制品统计仪表板区域，展示取证制品提取的汇总统计信息。",
+      "tags": [
+        "dashboard",
+        "artifact",
+        "stats",
+        "ui-component"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/components/dashboard/BatchStatusSection.tsx",
+      "type": "file",
+      "name": "BatchStatusSection.tsx",
+      "filePath": "frontend/src/components/dashboard/BatchStatusSection.tsx",
+      "summary": "批次状态仪表板区域，展示分析批次处理的状态和进度。",
+      "tags": [
+        "dashboard",
+        "batch",
+        "status",
+        "ui-component"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/components/dashboard/CorrelationStatsSection.tsx",
+      "type": "file",
+      "name": "CorrelationStatsSection.tsx",
+      "filePath": "frontend/src/components/dashboard/CorrelationStatsSection.tsx",
+      "summary": "关联统计仪表板区域，展示实体关联分析的统计指标。",
+      "tags": [
+        "dashboard",
+        "correlation",
+        "stats",
+        "ui-component"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/components/dashboard/DataSourceCoverageSection.tsx",
+      "type": "file",
+      "name": "DataSourceCoverageSection.tsx",
+      "filePath": "frontend/src/components/dashboard/DataSourceCoverageSection.tsx",
+      "summary": "数据源覆盖仪表板区域，展示各数据源的覆盖范围和分析覆盖率。",
+      "tags": [
+        "dashboard",
+        "datasource",
+        "coverage",
+        "ui-component"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/components/dashboard/GraphStatsSection.tsx",
+      "type": "file",
+      "name": "GraphStatsSection.tsx",
+      "filePath": "frontend/src/components/dashboard/GraphStatsSection.tsx",
+      "summary": "知识图谱统计仪表板区域，展示图节点、边和查询统计信息，包含图可视化入口。",
+      "tags": [
+        "dashboard",
+        "graph",
+        "stats",
+        "ui-component"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/components/dashboard/PlatformCoverageSection.tsx",
+      "type": "file",
+      "name": "PlatformCoverageSection.tsx",
+      "filePath": "frontend/src/components/dashboard/PlatformCoverageSection.tsx",
+      "summary": "平台覆盖仪表板区域，展示 Windows/Linux/macOS 多平台取证支持的覆盖范围和成熟度。",
+      "tags": [
+        "dashboard",
+        "platform",
+        "coverage",
+        "ui-component"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/components/dashboard/RulePackStatusSection.tsx",
+      "type": "file",
+      "name": "RulePackStatusSection.tsx",
+      "filePath": "frontend/src/components/dashboard/RulePackStatusSection.tsx",
+      "summary": "规则包状态仪表板区域，展示分析规则包（YARA/Sigma/Detection）的状态和命中统计。",
+      "tags": [
+        "dashboard",
+        "rules",
+        "status",
+        "ui-component"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/components/dashboard/TimelineOverviewSection.tsx",
+      "type": "file",
+      "name": "TimelineOverviewSection.tsx",
+      "filePath": "frontend/src/components/dashboard/TimelineOverviewSection.tsx",
+      "summary": "时间线概览仪表板区域，展示时间线事件数量和跨数据源的时间覆盖范围。",
+      "tags": [
+        "dashboard",
+        "timeline",
+        "overview",
+        "ui-component"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/components/gql/GqlEditor.test.tsx",
+      "type": "file",
+      "name": "GqlEditor.test.tsx",
+      "filePath": "frontend/src/components/gql/GqlEditor.test.tsx",
+      "summary": "GqlEditor 组件的单元测试，验证图查询编辑器的渲染和交互功能。",
+      "tags": [
+        "test",
+        "unit-test",
+        "graphql",
+        "editor"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/components/gql/GqlEditor.tsx",
+      "type": "file",
+      "name": "GqlEditor.tsx",
+      "filePath": "frontend/src/components/gql/GqlEditor.tsx",
+      "summary": "图查询编辑器组件，提供 GraphQL 风格查询输入和结果展示的集成界面。",
+      "tags": [
+        "graphql",
+        "editor",
+        "query",
+        "ui-component"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/components/gql/GqlResultView.test.tsx",
+      "type": "file",
+      "name": "GqlResultView.test.tsx",
+      "filePath": "frontend/src/components/gql/GqlResultView.test.tsx",
+      "summary": "GqlResultView 组件的单元测试，验证图查询结果视图的渲染和数据展示。",
+      "tags": [
+        "test",
+        "unit-test",
+        "graphql",
+        "result-view"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/LimitationsPanel.tsx:knownLimitationTone",
+      "type": "function",
+      "name": "knownLimitationTone",
+      "filePath": "frontend/src/components/analysis/LimitationsPanel.tsx",
+      "summary": "根据已知限制数量返回对应的色调编码，用于限制状态的可视化指示。",
+      "tags": [
+        "utility",
+        "color-coding",
+        "limitations",
+        "helper"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        4,
+        15
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/LimitationsPanel.tsx:knownLimitationLabel",
+      "type": "function",
+      "name": "knownLimitationLabel",
+      "filePath": "frontend/src/components/analysis/LimitationsPanel.tsx",
+      "summary": "根据已知限制数量返回中文标签，用于限制状态的文本呈现。",
+      "tags": [
+        "utility",
+        "label",
+        "limitations",
+        "helper"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        17,
+        28
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/LimitationsPanel.tsx:KnownLimitationsPanel",
+      "type": "function",
+      "name": "KnownLimitationsPanel",
+      "filePath": "frontend/src/components/analysis/LimitationsPanel.tsx",
+      "summary": "已知限制面板，列表展示当前版本的技术局限、未覆盖场景和已知缺陷。",
+      "tags": [
+        "analysis",
+        "limitations",
+        "governance",
+        "panel"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        30,
+        66
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:Metric",
+      "type": "function",
+      "name": "Metric",
+      "filePath": "frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "summary": "通用指标数值展示组件，显示标签和格式化数值。",
+      "tags": [
+        "ui-component",
+        "metric",
+        "reusable"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        18,
+        25
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:OverviewCard",
+      "type": "function",
+      "name": "OverviewCard",
+      "filePath": "frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "summary": "概览卡片组件，带标题和子元素的通用卡片容器。",
+      "tags": [
+        "ui-component",
+        "card",
+        "overview",
+        "reusable"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        27,
+        34
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:MessageBlock",
+      "type": "function",
+      "name": "MessageBlock",
+      "filePath": "frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "summary": "消息块组件，根据消息级别（info/warn/error）显示带色调的消息文本。",
+      "tags": [
+        "ui-component",
+        "message",
+        "alert",
+        "reusable"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        36,
+        64
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:releaseGateTone",
+      "type": "function",
+      "name": "releaseGateTone",
+      "filePath": "frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "summary": "根据发布门控通过状态返回色调编码（通过/警告/失败）。",
+      "tags": [
+        "utility",
+        "color-coding",
+        "release-gate",
+        "helper"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        68,
+        72
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:releaseGateLabel",
+      "type": "function",
+      "name": "releaseGateLabel",
+      "filePath": "frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "summary": "根据发布门控结果返回中文状态标签。",
+      "tags": [
+        "utility",
+        "label",
+        "release-gate",
+        "helper"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        74,
+        85
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:SecurityAuditPanel",
+      "type": "function",
+      "name": "SecurityAuditPanel",
+      "filePath": "frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "summary": "安全审计面板，列表展示各项安全检查（依赖审计、代码签名、CSP 等）的通过/失败状态。",
+      "tags": [
+        "security",
+        "audit",
+        "analysis",
+        "panel"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        89,
+        137
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:ErrorTaxonomyPanel",
+      "type": "function",
+      "name": "ErrorTaxonomyPanel",
+      "filePath": "frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "summary": "错误分类面板，按错误类别统计和展示系统中的错误分布和严重性。",
+      "tags": [
+        "error-handling",
+        "taxonomy",
+        "analysis",
+        "panel"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        139,
+        184
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:ReleaseGatePanel",
+      "type": "function",
+      "name": "ReleaseGatePanel",
+      "filePath": "frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "summary": "发布门控面板，聚合展示所有门控检查项的通过状态，给出整体发布建议。",
+      "tags": [
+        "release-gate",
+        "governance",
+        "analysis",
+        "panel"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        186,
+        215
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:GovernanceOverviewStrip",
+      "type": "function",
+      "name": "GovernanceOverviewStrip",
+      "filePath": "frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "summary": "治理概览横条，汇总展示各项治理指标的快照数据。",
+      "tags": [
+        "governance",
+        "overview",
+        "dashboard"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        217,
+        229
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:GovernanceFactSourcesPanel",
+      "type": "function",
+      "name": "GovernanceFactSourcesPanel",
+      "filePath": "frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "summary": "治理事实来源面板，展示各数据源提供的治理数据的完整性和可信度。",
+      "tags": [
+        "governance",
+        "data-sources",
+        "analysis",
+        "panel"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        231,
+        266
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:GovernanceRuntimeResultsPanel",
+      "type": "function",
+      "name": "GovernanceRuntimeResultsPanel",
+      "filePath": "frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "summary": "运行时治理结果面板，展示系统运行期间收集的治理检查实时结果。",
+      "tags": [
+        "governance",
+        "runtime",
+        "analysis",
+        "panel"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        268,
+        329
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:SecurityAuditRow",
+      "type": "function",
+      "name": "SecurityAuditRow",
+      "filePath": "frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "summary": "安全审计单行组件，显示单项审计检查的名称、状态图标和通过/失败状态。",
+      "tags": [
+        "security",
+        "audit",
+        "ui-component",
+        "row"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        333,
+        356
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/VerificationPanel.tsx:resultLabel",
+      "type": "function",
+      "name": "resultLabel",
+      "filePath": "frontend/src/components/analysis/VerificationPanel.tsx",
+      "summary": "根据验证结果状态码返回中文结果标签。",
+      "tags": [
+        "utility",
+        "label",
+        "verification",
+        "helper"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        17,
+        30
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/VerificationPanel.tsx:maturityLabel",
+      "type": "function",
+      "name": "maturityLabel",
+      "filePath": "frontend/src/components/analysis/VerificationPanel.tsx",
+      "summary": "根据成熟度级别返回中文标签（实验性/稳定/已弃用），供外部复用。",
+      "tags": [
+        "utility",
+        "label",
+        "maturity",
+        "helper"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        32,
+        45
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/VerificationPanel.tsx:guaranteeLabel",
+      "type": "function",
+      "name": "guaranteeLabel",
+      "filePath": "frontend/src/components/analysis/VerificationPanel.tsx",
+      "summary": "根据保证级别返回中文标签，用于验证保证等级的文本呈现。",
+      "tags": [
+        "utility",
+        "label",
+        "guarantee",
+        "helper"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        47,
+        60
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/VerificationPanel.tsx:VerificationDashboard",
+      "type": "function",
+      "name": "VerificationDashboard",
+      "filePath": "frontend/src/components/analysis/VerificationPanel.tsx",
+      "summary": "验证仪表板组件，聚合展示各模块的验证状态、成熟度和保证等级信息。",
+      "tags": [
+        "verification",
+        "dashboard",
+        "analysis",
+        "panel"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        62,
+        102
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/VerificationPanel.tsx:BenchmarkPanel",
+      "type": "function",
+      "name": "BenchmarkPanel",
+      "filePath": "frontend/src/components/analysis/VerificationPanel.tsx",
+      "summary": "基准测试面板，展示各模块的性能基准测试结果，对比基线数值。",
+      "tags": [
+        "benchmark",
+        "performance",
+        "analysis",
+        "panel"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        104,
+        148
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/VerificationPanel.tsx:SupportMatrixPanel",
+      "type": "function",
+      "name": "SupportMatrixPanel",
+      "filePath": "frontend/src/components/analysis/VerificationPanel.tsx",
+      "summary": "支持矩阵面板，以表格形式展示各功能在各平台（Windows/Linux/macOS）的支持状态。",
+      "tags": [
+        "support-matrix",
+        "platform",
+        "analysis",
+        "panel"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        150,
+        194
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/VerificationPanel.tsx:benchmarkCheckTone",
+      "type": "function",
+      "name": "benchmarkCheckTone",
+      "filePath": "frontend/src/components/analysis/VerificationPanel.tsx",
+      "summary": "根据基准测试检查结果返回色调编码。",
+      "tags": [
+        "utility",
+        "color-coding",
+        "benchmark",
+        "helper"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        196,
+        207
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/VerificationPanel.tsx:benchmarkCheckLabel",
+      "type": "function",
+      "name": "benchmarkCheckLabel",
+      "filePath": "frontend/src/components/analysis/VerificationPanel.tsx",
+      "summary": "根据基准测试检查状态返回中文标签。",
+      "tags": [
+        "utility",
+        "label",
+        "benchmark",
+        "helper"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        209,
+        220
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/analysis/VerificationPanel.tsx:BenchmarkRequiredCheckRow",
+      "type": "function",
+      "name": "BenchmarkRequiredCheckRow",
+      "filePath": "frontend/src/components/analysis/VerificationPanel.tsx",
+      "summary": "基准测试必需检查行组件，展示单项基准检查的名称、阈值、实际值和通过/失败状态。",
+      "tags": [
+        "benchmark",
+        "ui-component",
+        "row",
+        "quality"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        222,
+        243
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/dashboard/ArtifactStatsSection.tsx:ArtifactStatsSection",
+      "type": "function",
+      "name": "ArtifactStatsSection",
+      "filePath": "frontend/src/components/dashboard/ArtifactStatsSection.tsx",
+      "summary": "制品统计仪表板区域，展示取证制品提取的汇总统计和分类计数。",
+      "tags": [
+        "dashboard",
+        "artifact",
+        "stats",
+        "section"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        5,
+        31
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/dashboard/BatchStatusSection.tsx:BatchStatusSection",
+      "type": "function",
+      "name": "BatchStatusSection",
+      "filePath": "frontend/src/components/dashboard/BatchStatusSection.tsx",
+      "summary": "批次状态仪表板区域，展示分析批次处理的状态、进度和总体完成情况。",
+      "tags": [
+        "dashboard",
+        "batch",
+        "status",
+        "section"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        5,
+        24
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/dashboard/CorrelationStatsSection.tsx:CorrelationStatsSection",
+      "type": "function",
+      "name": "CorrelationStatsSection",
+      "filePath": "frontend/src/components/dashboard/CorrelationStatsSection.tsx",
+      "summary": "关联统计仪表板区域，展示实体关联分析、跨数据源匹配和实体解析的统计指标。",
+      "tags": [
+        "dashboard",
+        "correlation",
+        "stats",
+        "section"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        5,
+        48
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/dashboard/DataSourceCoverageSection.tsx:DataSourceCoverageSection",
+      "type": "function",
+      "name": "DataSourceCoverageSection",
+      "filePath": "frontend/src/components/dashboard/DataSourceCoverageSection.tsx",
+      "summary": "数据源覆盖仪表板区域，展示各数据源的分析覆盖范围和覆盖率百分比。",
+      "tags": [
+        "dashboard",
+        "datasource",
+        "coverage",
+        "section"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        5,
+        44
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/dashboard/GraphStatsSection.tsx:GraphStatsSection",
+      "type": "function",
+      "name": "GraphStatsSection",
+      "filePath": "frontend/src/components/dashboard/GraphStatsSection.tsx",
+      "summary": "知识图谱统计仪表板区域，展示图节点/边计数、连通性指标和图可视化入口。",
+      "tags": [
+        "dashboard",
+        "graph",
+        "stats",
+        "section"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        6,
+        53
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/dashboard/PlatformCoverageSection.tsx:PlatformCoverageSection",
+      "type": "function",
+      "name": "PlatformCoverageSection",
+      "filePath": "frontend/src/components/dashboard/PlatformCoverageSection.tsx",
+      "summary": "平台覆盖仪表板区域，展示各模块在 Windows、Linux、macOS 平台的支持成熟度矩阵。",
+      "tags": [
+        "dashboard",
+        "platform",
+        "coverage",
+        "section"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        5,
+        86
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/dashboard/RulePackStatusSection.tsx:RulePackStatusSection",
+      "type": "function",
+      "name": "RulePackStatusSection",
+      "filePath": "frontend/src/components/dashboard/RulePackStatusSection.tsx",
+      "summary": "规则包状态仪表板区域，展示 YARA、Sigma 等检测规则包的状态、命中数和启用情况。",
+      "tags": [
+        "dashboard",
+        "rules",
+        "status",
+        "section"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        5,
+        43
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/dashboard/TimelineOverviewSection.tsx:TimelineOverviewSection",
+      "type": "function",
+      "name": "TimelineOverviewSection",
+      "filePath": "frontend/src/components/dashboard/TimelineOverviewSection.tsx",
+      "summary": "时间线概览仪表板区域，展示时间线事件总数和跨数据源的时间范围覆盖。",
+      "tags": [
+        "dashboard",
+        "timeline",
+        "overview",
+        "section"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        4,
+        25
+      ]
+    },
+    {
+      "id": "function:frontend/src/components/gql/GqlEditor.tsx:GqlEditor",
+      "type": "function",
+      "name": "GqlEditor",
+      "filePath": "frontend/src/components/gql/GqlEditor.tsx",
+      "summary": "图查询编辑器组件，集成查询输入框和结果视图，提供知识图谱的交互式查询能力。",
+      "tags": [
+        "graphql",
+        "editor",
+        "query",
+        "ui-component"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        14,
+        38
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:frontend/src/components/analysis/LimitationsPanel.tsx",
+      "target": "function:frontend/src/components/analysis/LimitationsPanel.tsx:knownLimitationTone",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/LimitationsPanel.tsx",
+      "target": "function:frontend/src/components/analysis/LimitationsPanel.tsx:knownLimitationLabel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/LimitationsPanel.tsx",
+      "target": "function:frontend/src/components/analysis/LimitationsPanel.tsx:KnownLimitationsPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:Metric",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:OverviewCard",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:MessageBlock",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:releaseGateTone",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:releaseGateLabel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:SecurityAuditPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:ErrorTaxonomyPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:ReleaseGatePanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:GovernanceOverviewStrip",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:GovernanceFactSourcesPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:GovernanceRuntimeResultsPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:SecurityAuditRow",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/VerificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/VerificationPanel.tsx:resultLabel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/VerificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/VerificationPanel.tsx:maturityLabel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/VerificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/VerificationPanel.tsx:guaranteeLabel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/VerificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/VerificationPanel.tsx:VerificationDashboard",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/VerificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/VerificationPanel.tsx:BenchmarkPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/VerificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/VerificationPanel.tsx:SupportMatrixPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/VerificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/VerificationPanel.tsx:benchmarkCheckTone",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/VerificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/VerificationPanel.tsx:benchmarkCheckLabel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/VerificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/VerificationPanel.tsx:BenchmarkRequiredCheckRow",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/ArtifactStatsSection.tsx",
+      "target": "function:frontend/src/components/dashboard/ArtifactStatsSection.tsx:ArtifactStatsSection",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/BatchStatusSection.tsx",
+      "target": "function:frontend/src/components/dashboard/BatchStatusSection.tsx:BatchStatusSection",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/CorrelationStatsSection.tsx",
+      "target": "function:frontend/src/components/dashboard/CorrelationStatsSection.tsx:CorrelationStatsSection",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/DataSourceCoverageSection.tsx",
+      "target": "function:frontend/src/components/dashboard/DataSourceCoverageSection.tsx:DataSourceCoverageSection",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/GraphStatsSection.tsx",
+      "target": "function:frontend/src/components/dashboard/GraphStatsSection.tsx:GraphStatsSection",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/PlatformCoverageSection.tsx",
+      "target": "function:frontend/src/components/dashboard/PlatformCoverageSection.tsx:PlatformCoverageSection",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/RulePackStatusSection.tsx",
+      "target": "function:frontend/src/components/dashboard/RulePackStatusSection.tsx:RulePackStatusSection",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/TimelineOverviewSection.tsx",
+      "target": "function:frontend/src/components/dashboard/TimelineOverviewSection.tsx:TimelineOverviewSection",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/gql/GqlEditor.tsx",
+      "target": "function:frontend/src/components/gql/GqlEditor.tsx:GqlEditor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/analysis/LimitationsPanel.tsx",
+      "target": "function:frontend/src/components/analysis/LimitationsPanel.tsx:KnownLimitationsPanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:Metric",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:OverviewCard",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:MessageBlock",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:SecurityAuditPanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:ErrorTaxonomyPanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:ReleaseGatePanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:GovernanceOverviewStrip",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:GovernanceFactSourcesPanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "function:frontend/src/components/analysis/V2GovernancePanels.tsx:GovernanceRuntimeResultsPanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/VerificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/VerificationPanel.tsx:maturityLabel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/VerificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/VerificationPanel.tsx:VerificationDashboard",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/VerificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/VerificationPanel.tsx:BenchmarkPanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/VerificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/VerificationPanel.tsx:SupportMatrixPanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/ArtifactStatsSection.tsx",
+      "target": "function:frontend/src/components/dashboard/ArtifactStatsSection.tsx:ArtifactStatsSection",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/BatchStatusSection.tsx",
+      "target": "function:frontend/src/components/dashboard/BatchStatusSection.tsx:BatchStatusSection",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/CorrelationStatsSection.tsx",
+      "target": "function:frontend/src/components/dashboard/CorrelationStatsSection.tsx:CorrelationStatsSection",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/DataSourceCoverageSection.tsx",
+      "target": "function:frontend/src/components/dashboard/DataSourceCoverageSection.tsx:DataSourceCoverageSection",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/GraphStatsSection.tsx",
+      "target": "function:frontend/src/components/dashboard/GraphStatsSection.tsx:GraphStatsSection",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/PlatformCoverageSection.tsx",
+      "target": "function:frontend/src/components/dashboard/PlatformCoverageSection.tsx:PlatformCoverageSection",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/RulePackStatusSection.tsx",
+      "target": "function:frontend/src/components/dashboard/RulePackStatusSection.tsx:RulePackStatusSection",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/TimelineOverviewSection.tsx",
+      "target": "function:frontend/src/components/dashboard/TimelineOverviewSection.tsx:TimelineOverviewSection",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/gql/GqlEditor.tsx",
+      "target": "function:frontend/src/components/gql/GqlEditor.tsx:GqlEditor",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/LimitationsPanel.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/VerificationPanel.tsx",
+      "target": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/VerificationPanel.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/ArtifactStatsSection.tsx",
+      "target": "file:frontend/src/app/pages/V3ScoreCards.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/ArtifactStatsSection.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/BatchStatusSection.tsx",
+      "target": "file:frontend/src/app/pages/V3ScoreCards.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/BatchStatusSection.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/CorrelationStatsSection.tsx",
+      "target": "file:frontend/src/app/pages/V3ScoreCards.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/CorrelationStatsSection.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/DataSourceCoverageSection.tsx",
+      "target": "file:frontend/src/app/pages/V3ScoreCards.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/DataSourceCoverageSection.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/GraphStatsSection.tsx",
+      "target": "file:frontend/src/app/pages/V3ScoreCards.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/GraphStatsSection.tsx",
+      "target": "file:frontend/src/components/graph/GraphVisualizationSection.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/GraphStatsSection.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/PlatformCoverageSection.tsx",
+      "target": "file:frontend/src/app/pages/V3ScoreCards.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/PlatformCoverageSection.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/RulePackStatusSection.tsx",
+      "target": "file:frontend/src/app/pages/V3ScoreCards.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/RulePackStatusSection.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/dashboard/TimelineOverviewSection.tsx",
+      "target": "file:frontend/src/app/pages/V3ScoreCards.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/gql/GqlEditor.test.tsx",
+      "target": "file:frontend/src/components/gql/GqlEditor.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/gql/GqlEditor.test.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/gql/GqlEditor.tsx",
+      "target": "file:frontend/src/components/gql/GqlQueryInput.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/gql/GqlEditor.tsx",
+      "target": "file:frontend/src/components/gql/GqlResultView.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/gql/GqlEditor.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/gql/GqlResultView.test.tsx",
+      "target": "file:frontend/src/components/gql/GqlResultView.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/gql/GqlResultView.test.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/gql/GqlEditor.tsx",
+      "target": "file:frontend/src/components/gql/GqlEditor.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

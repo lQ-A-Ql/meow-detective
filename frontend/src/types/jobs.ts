@@ -3,7 +3,7 @@ export interface JobSnapshot {
   name: string;
   scope: string;
   progress: number;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'warning';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'warning' | 'cancelling' | 'cancelled';
   detail: string;
   warningCount: number;
   skippedCount: number;

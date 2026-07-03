@@ -91,9 +91,13 @@ dependencies = [
  "domain",
  "encoding_rs",
  "evidence-core",
+ "fs-btrfs",
  "fs-exfat",
+ "fs-ext4",
  "fs-fat",
+ "fs-lvm",
  "fs-ntfs",
+ "fs-xfs",
  "hex",
  "image-e01",
  "infrastructure",
@@ -1587,6 +1591,15 @@ dependencies = [
  "serde",
  "tempfile",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "fs-lvm"
+version = "0.1.0"
+dependencies = [
+ "evidence-core",
+ "thiserror 2.0.18",
+ "tracing",
 ]
 
 [[package]]

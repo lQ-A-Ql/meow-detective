@@ -53,7 +53,12 @@ const FORMAT_BTREE: u8 = 3;
 
 /// Size of the v2 inode core in bytes.  The data fork starts immediately
 /// after the core inside the inode buffer.
+/// For v3/v5 inodes the core is 176 bytes; this is detected dynamically
+/// when the inode buffer is processed.
 const INODE_CORE_SIZE: usize = 96;
+/// Size of the v3/v5 inode core (includes the v2 core + 80 bytes of v3
+/// extended fields).
+const INODE_CORE_SIZE_V3: usize = 176;
 
 /// Size of one B+tree block-map record (two big-endian u64s).
 const BMBT_REC_SIZE: usize = 16;
@@ -63,7 +68,37 @@ const BMBT_REC_SIZE: usize = 16;
 /// reader-built fixtures.
 const DIR2_SF_HDR_SIZE: usize = 10;
 
+// ---------------------------------------------------------------------------
+// Block directory constants (xfs_dir3_data_hdr / xfs_dir2_data_hdr)
+// ---------------------------------------------------------------------------
+
+/// v5 block directory magic "XDB3" = 0x58444233 (big-endian).
+const XFS_DIR3_BLOCK_MAGIC: u32 = 0x5844_4233;
+/// v3/v4 block directory magic "XDB2" = 0x58444232 (big-endian).
+const XFS_DIR2_BLOCK_MAGIC: u32 = 0x5844_4232;
+/// v5 block data header size in bytes.
+const XFS_DIR3_DATA_HDR_SIZE: usize = 64;
+/// v3/v4 block data header size in bytes.
+const XFS_DIR2_DATA_HDR_SIZE: usize = 32;
+/// Freetag value for xfs_dir2_data_unused entries.
+const XFS_DIR2_FREE_TAG: u16 = 0xFFFF;
+
+/// ftype values (block directory file-type tag).
+#[allow(dead_code)]
+const XFS_DIR3_FT_REG_FILE: u8 = 1;
+const XFS_DIR3_FT_DIR: u8 = 2;
+
 /// Key field offsets within the XFS superblock (big-endian).
+///
+/// Inode numbers in XFS directly *encode* their location: the high bits
+/// are the AG number, the middle bits are the AG-relative block number,
+/// and the low bits are the inode's index within that block. No B+tree
+/// traversal is needed to resolve an inode by number (the inode B+tree
+/// -- inobt -- exists purely for allocation bookkeeping: tracking which
+/// inodes in a chunk are free/used). This matches SleuthKit's
+/// `xfs_inode_get_offset` (tsk/fs/tsk_xfs.h), which decodes the address
+/// via `ag_num = ino >> (sb_agblklog + sb_inopblog)`, etc. `sb_agblklog`
+/// and `sb_inopblog` are the on-disk log2 values, not derived at runtime.
 mod sb_off {
     pub const MAGIC: usize = 0x00; // u32
     pub const BLOCKSIZE: usize = 0x04; // u32
@@ -74,12 +109,19 @@ mod sb_off {
     pub const _SECTSIZE: usize = 0x66; // u16
     pub const INODESIZE: usize = 0x68; // u16
     pub const INOPBLOCK: usize = 0x6A; // u16
+                                       // sb_fname[12] occupies 0x6C..0x78.
+    pub const _BLOCKLOG: usize = 0x78; // u8 — log2 of sb_blocksize
+    pub const _SECTLOG: usize = 0x79; // u8 — log2 of sb_sectsize
+    pub const _INODELOG: usize = 0x7A; // u8 — log2 of sb_inodesize
+    pub const INOPBLOG: usize = 0x7B; // u8 — log2 of sb_inopblock
+    pub const AGBLKLOG: usize = 0x7C; // u8 — log2 of sb_agblocks (rounded up)
 }
 
 /// Key field offsets within the v2 inode core (big-endian).
 mod di_off {
     pub const MAGIC: usize = 0x00; // u16
     pub const MODE: usize = 0x02; // u16
+    pub const VERSION: usize = 0x04; // u8 — 2 for v2, 3 for v3/v5
     pub const FORMAT: usize = 0x05; // u8
     pub const SIZE: usize = 0x38; // u64
     pub const NEXTENTS: usize = 0x4C; // u32
@@ -119,16 +161,19 @@ fn be_u64(buf: &[u8], off: usize) -> u64 {
 pub struct XfsReader {
     reader: RefCell<Box<dyn EvidenceReader>>,
     block_size: u64,
-    /// Allocation-group block count (used by xfs tests).
     _ag_blocks: u64,
-    /// Allocation-group count (used by xfs tests).
     _ag_count: u32,
     inode_size: u16,
-    /// Inodes per filesystem block (used by xfs tests).
     _inopblock: u16,
     root_ino: u64,
     volume_offset: u64,
     inode_base_block: u64,
+    // On-disk log2 values used to decode an inode number directly into its
+    // AG/block/in-block-index (see `inode_offset`).  Zero on synthetic
+    // fixtures that never populate these superblock fields; real XFS
+    // filesystems always have agblklog >= 6 (XFS_MIN_AG_BLOCKS = 64).
+    agblklog: u8,
+    inopblog: u8,
 }
 
 impl XfsReader {
@@ -178,9 +223,13 @@ impl XfsReader {
             dblocks / ag_count as u64
         };
 
+        let agblklog = sb_buf[sb_off::AGBLKLOG];
+        let inopblog = sb_buf[sb_off::INOPBLOG];
+
         // Place the inode table at a known offset for synthetic fixtures:
-        // start at block 2 (skipping superblock + metadata gap).
-        // A production reader would parse per-AG inode B+trees.
+        // start at block 2 (skipping superblock + metadata gap).  Real XFS
+        // filesystems resolve inode offsets by direct bit-decode instead
+        // (see `inode_offset`); this base block is only used as a fallback.
         let inode_base_block: u64 = 2;
 
         Ok(Self {
@@ -193,6 +242,8 @@ impl XfsReader {
             root_ino,
             volume_offset: offset,
             inode_base_block,
+            agblklog,
+            inopblog,
         })
     }
 
@@ -216,17 +267,8 @@ impl XfsReader {
         Ok(buf)
     }
 
-    /// Byte offset of the start of inode `ino` in the evidence stream.
-    ///
-    /// Uses a flat, zero-indexed table for synthetic fixtures.
-    fn inode_offset(&self, ino: u64) -> u64 {
-        self.block_to_offset(self.inode_base_block)
-            + (ino.saturating_sub(1)) * self.inode_size as u64
-    }
-
-    /// Read the full inode buffer (core + data fork) for `ino`.
-    fn read_inode(&self, ino: u64) -> io::Result<Vec<u8>> {
-        let offset = self.inode_offset(ino);
+    /// Read one full inode buffer at its physical offset.
+    fn read_inode_at_offset(&self, offset: u64) -> io::Result<Vec<u8>> {
         let mut buf = vec![0u8; self.inode_size as usize];
         let mut reader = self.reader.borrow_mut();
         reader.seek(SeekFrom::Start(offset))?;
@@ -234,13 +276,62 @@ impl XfsReader {
         Ok(buf)
     }
 
+    /// Byte offset of the start of inode `ino` in the evidence stream.
+    ///
+    /// Real XFS inode numbers directly encode their location: the AG
+    /// number occupies the high bits, the AG-relative block number the
+    /// middle bits, and the in-block inode index the low bits (matching
+    /// SleuthKit's `xfs_inode_get_offset` in tsk/fs/tsk_xfs.h). No B+tree
+    /// traversal is required — the inode B+tree (inobt) tracks
+    /// free/allocated inodes for allocation bookkeeping, not location.
+    ///
+    /// `agblklog`/`inopblog` are zero on synthetic fixtures that never
+    /// populate those superblock fields, so those fixtures fall back to
+    /// the flat inode-table formula they were built against.
+    fn inode_offset(&self, ino: u64) -> u64 {
+        if self.agblklog > 0 || self.inopblog > 0 {
+            let shift = self.agblklog + self.inopblog;
+            let ino0 = ino;
+            let ag_num = ino0 >> shift;
+            let low_bits = ino0 & ((1u64 << shift) - 1);
+            let blk_num = low_bits >> self.inopblog;
+            let ino_in_blk = low_bits & ((1u64 << self.inopblog) - 1);
+            let fs_blockno = ag_num * self._ag_blocks + blk_num;
+            return self.block_to_offset(fs_blockno) + ino_in_blk * self.inode_size as u64;
+        }
+        // Flat-table fallback for synthetic fixtures.
+        self.block_to_offset(self.inode_base_block)
+            + (ino.saturating_sub(1)) * self.inode_size as u64
+    }
+
+    /// Read the full inode buffer (core + data fork) for `ino`.
+    fn read_inode(&self, ino: u64) -> io::Result<Vec<u8>> {
+        let offset = self.inode_offset(ino);
+        self.read_inode_at_offset(offset)
+    }
+
+    /// Return the size of the inode core based on the inode version.
+    /// v2 inodes have a 96-byte core; v3/v5 inodes have a 176-byte core.
+    /// The data fork starts immediately after the core.
+    fn inode_core_size(inode: &[u8]) -> usize {
+        if inode.len() > di_off::VERSION {
+            let version = inode[di_off::VERSION];
+            if version == 3 {
+                return INODE_CORE_SIZE_V3;
+            }
+        }
+        INODE_CORE_SIZE
+    }
+
     /// Return the slice of the inode buffer that holds the data fork.
     ///
-    /// Respects `di_forkoff`: when zero the data fork uses the entire
-    /// literal area; otherwise it uses the first `di_forkoff` bytes.
+    /// Respects `di_forkoff`: when zero the data fork starts after the core
+    /// (96 bytes for v2, 176 bytes for v3); otherwise it uses the first
+    /// `di_forkoff` bytes of the literal area.
     fn data_fork(inode: &[u8]) -> io::Result<&[u8]> {
+        let core_size = Self::inode_core_size(inode);
         let forkoff = inode[di_off::FORKOFF] as usize;
-        let literal = &inode[INODE_CORE_SIZE..];
+        let literal = &inode[core_size..];
         if forkoff == 0 {
             Ok(literal)
         } else if forkoff > literal.len() {
@@ -436,6 +527,95 @@ impl XfsReader {
         (be_u16(inode, di_off::MODE) & S_IFDIR) != 0
     }
 
+    /// Parse block-format directory entries from extent-backed data.
+    ///
+    /// The data starts with one `xfs_dir3_data_hdr` (v5, 64 bytes) or
+    /// `xfs_dir2_data_hdr` (v3, 32 bytes), determined by magic.  Entries
+    /// are `xfs_dir2_data_entry` records carrying inumber(8), namelen(1),
+    /// name(n), ftype(1).  Free-space records tagged with 0xFFFF are
+    /// skipped.  The ftype byte (2 = directory) is used directly so no
+    /// child-inode read is needed.
+    fn parse_block_dir(data: &[u8]) -> io::Result<Vec<(String, u64, bool)>> {
+        if data.len() < 8 {
+            return Ok(Vec::new());
+        }
+        let magic = be_u32(data, 0);
+        let hdr_size = if magic == XFS_DIR3_BLOCK_MAGIC {
+            XFS_DIR3_DATA_HDR_SIZE
+        } else if magic == XFS_DIR2_BLOCK_MAGIC {
+            XFS_DIR2_DATA_HDR_SIZE
+        } else {
+            return Err(invalid_fs_data(format!(
+                "unknown block directory magic 0x{:08X}",
+                magic
+            )));
+        };
+        if data.len() <= hdr_size {
+            return Ok(Vec::new());
+        }
+
+        // Block-format directories pack the entry region, then a
+        // `xfs_dir2_leaf_entry[count]` array (8 bytes each), then an 8-byte
+        // `xfs_dir2_block_tail_t` (count, stale) at the very end of the
+        // block. Without this the entry loop wanders into the leaf/tail
+        // region and decodes it as garbage entries.
+        let data_end = if data.len() >= 8 {
+            let leaf_count = be_u32(data, data.len() - 8) as usize;
+            data.len()
+                .saturating_sub(8)
+                .saturating_sub(leaf_count * 8)
+                .max(hdr_size)
+        } else {
+            data.len()
+        };
+
+        let mut pos = hdr_size;
+        let mut entries = Vec::new();
+        while pos + 16 <= data_end {
+            // Check for free-space record (freetag = 0xFFFF)
+            let freetag = u16::from_be_bytes([data[pos], data[pos + 1]]);
+            if freetag == XFS_DIR2_FREE_TAG {
+                if pos + 4 > data.len() {
+                    break;
+                }
+                let skip_len = u16::from_be_bytes([data[pos + 2], data[pos + 3]]) as usize;
+                pos = pos.saturating_add(skip_len.max(4));
+                continue;
+            }
+
+            // Parse xfs_dir2_data_entry: inumber(8) + namelen(1) + name(n) + ftype(1)
+            let inumber = be_u64(data, pos);
+            let namelen = data[pos + 8] as usize;
+            let name_start = pos + 9; // skip inumber(8) + namelen(1)
+            if namelen == 0 {
+                pos = pos.saturating_add(16);
+                continue;
+            }
+            let entry_body_end = name_start + namelen;
+            if entry_body_end + 1 > data.len() {
+                break;
+            }
+            let ftype = data[entry_body_end];
+            let name = String::from_utf8_lossy(&data[name_start..entry_body_end]).to_string();
+            let is_dir = ftype == XFS_DIR3_FT_DIR;
+
+            // xfs_dir2_data_entry is inumber(8) + namelen(1) + name(n) +
+            // ftype(1) + tag(2), 8-byte aligned. The trailing 2-byte tag
+            // (the entry's own starting offset, used for reverse lookup)
+            // has no bearing on parsing but must be included when
+            // advancing past the entry, or every later entry in the
+            // block desyncs and decodes as garbage.
+            let raw_end = entry_body_end + 1 + 2; // ftype(1) + tag(2)
+            let padded_end = raw_end + ((-(raw_end as isize as i64)) & 7) as usize;
+            pos = padded_end;
+
+            if inumber != 0 {
+                entries.push((name, inumber, is_dir));
+            }
+        }
+        Ok(entries)
+    }
+
     /// Read a directory's shortform entries from its inode and annotate
     /// each entry with `is_dir` by peeking at the child inode's mode.
     fn read_directory_entries(&self, ino: u64) -> io::Result<Vec<(String, u64, bool)>> {
@@ -447,27 +627,38 @@ impl XfsReader {
         }
 
         let format = inode[di_off::FORMAT];
-        if format != FORMAT_LOCAL {
-            return Err(invalid_fs_data(format!(
-                "directory inode {} uses format {}; only local (1) is supported",
-                ino, format
-            )));
+        match format {
+            FORMAT_LOCAL => {
+                // Shortform directory: entries are inline in the data fork.
+                let df = Self::data_fork(&inode)?;
+                let raw = Self::parse_shortform_dir(df)?;
+                let mut entries = Vec::with_capacity(raw.len());
+                for (name, child_ino) in raw {
+                    let is_dir = self
+                        .read_inode(child_ino)
+                        .ok()
+                        .filter(|ci| ci.len() >= 4)
+                        .is_some_and(|ci| Self::inode_is_dir(&ci));
+                    entries.push((name, child_ino, is_dir));
+                }
+                Ok(entries)
+            }
+            FORMAT_EXTENTS => {
+                // Block directory: entries are in extent-backed data blocks.
+                // Use u64::MAX so all extent blocks are read (directory data may
+                // be smaller than the declared size).
+                let data = self.read_extent_data(&inode, u64::MAX)?;
+                Self::parse_block_dir(&data)
+            }
+            FORMAT_BTREE => {
+                let data = self.read_btree_data(&inode, u64::MAX)?;
+                Self::parse_block_dir(&data)
+            }
+            other => Err(invalid_fs_data(format!(
+                "directory inode {} uses unsupported format {}",
+                ino, other
+            ))),
         }
-
-        let df = Self::data_fork(&inode)?;
-        let raw = Self::parse_shortform_dir(df)?;
-
-        let mut entries = Vec::with_capacity(raw.len());
-        for (name, child_ino) in raw {
-            // Peek at child inode to determine is_dir.
-            let is_dir = self
-                .read_inode(child_ino)
-                .ok()
-                .filter(|ci| ci.len() >= 4)
-                .is_some_and(|ci| Self::inode_is_dir(&ci));
-            entries.push((name, child_ino, is_dir));
-        }
-        Ok(entries)
     }
 
     /// Walk a path string to resolve an inode number and whether it is
@@ -1000,6 +1191,182 @@ mod tests {
 
         // read_file_content validates magic and should fail.
         let result = xfs.read_file_content(2);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::InvalidData);
+    }
+
+    // -----------------------------------------------------------------------
+    // block directory fixture: v3 header (32B), "XDB2" magic, EXTENTS inode
+    // -----------------------------------------------------------------------
+
+    /// Build a block-format directory buffer (v3, 32-byte header) with
+    /// synthetic entries that would be stored in extent-backed data blocks.
+    /// The inode itself is not part of this buffer — this is the raw data
+    /// that `read_extent_data` would return.
+    fn build_block_dir_v3_data() -> Vec<u8> {
+        let hdr_size = XFS_DIR2_DATA_HDR_SIZE; // 32
+        let block_size: usize = 512;
+        let mut buf = vec![0u8; block_size];
+
+        // v3 block header
+        buf[0..4].copy_from_slice(&XFS_DIR2_BLOCK_MAGIC.to_be_bytes());
+
+        // Entry 1: "file1.txt" → inode 100, ftype=REG(1)
+        let e1_inumber = 100u64;
+        let e1_name = b"file1.txt";
+        let e1_namelen = e1_name.len() as u8;
+        let mut pos = hdr_size;
+        buf[pos..pos + 8].copy_from_slice(&e1_inumber.to_be_bytes());
+        buf[pos + 8] = e1_namelen;
+        buf[pos + 9..pos + 9 + e1_name.len()].copy_from_slice(e1_name);
+        let e1_ftype_pos = pos + 9 + e1_name.len();
+        buf[e1_ftype_pos] = XFS_DIR3_FT_REG_FILE;
+        let e1_end = e1_ftype_pos + 1;
+        pos = e1_end + ((-(e1_end as isize as i64)) & 7) as usize;
+
+        // Entry 2: "subdir" → inode 200, ftype=DIR(2)
+        let e2_inumber = 200u64;
+        let e2_name = b"subdir";
+        let e2_namelen = e2_name.len() as u8;
+        buf[pos..pos + 8].copy_from_slice(&e2_inumber.to_be_bytes());
+        buf[pos + 8] = e2_namelen;
+        buf[pos + 9..pos + 9 + e2_name.len()].copy_from_slice(e2_name);
+        let e2_ftype_pos = pos + 9 + e2_name.len();
+        buf[e2_ftype_pos] = XFS_DIR3_FT_DIR;
+
+        buf
+    }
+
+    /// Build a v5 block directory buffer (64-byte header, "XDB3" magic).
+    fn build_block_dir_v5_data() -> Vec<u8> {
+        let hdr_size = XFS_DIR3_DATA_HDR_SIZE; // 64
+        let block_size: usize = 512;
+        let mut buf = vec![0u8; block_size];
+
+        // v5 block header
+        buf[0..4].copy_from_slice(&XFS_DIR3_BLOCK_MAGIC.to_be_bytes());
+
+        // Single entry: "passwd" → inode 42, ftype=REG(1)
+        let inumber = 42u64;
+        let name = b"passwd";
+        let namelen = name.len() as u8;
+        let pos = hdr_size;
+        buf[pos..pos + 8].copy_from_slice(&inumber.to_be_bytes());
+        buf[pos + 8] = namelen;
+        buf[pos + 9..pos + 9 + name.len()].copy_from_slice(name);
+        let ftype_pos = pos + 9 + name.len();
+        buf[ftype_pos] = XFS_DIR3_FT_REG_FILE;
+
+        buf
+    }
+
+    /// Build a block directory buffer with a free-space (0xFFFF) entry
+    /// interleaved between two entries.
+    fn build_block_dir_data_with_free_space() -> Vec<u8> {
+        let hdr_size = XFS_DIR2_DATA_HDR_SIZE; // 32
+        let block_size: usize = 512;
+        let mut buf = vec![0u8; block_size];
+
+        buf[0..4].copy_from_slice(&XFS_DIR2_BLOCK_MAGIC.to_be_bytes());
+
+        // Entry 1: "good.txt" → inode 10, REG
+        let inumber1 = 10u64;
+        let name1 = b"good.txt";
+        let namelen1 = name1.len() as u8;
+        let mut pos = hdr_size;
+        buf[pos..pos + 8].copy_from_slice(&inumber1.to_be_bytes());
+        buf[pos + 8] = namelen1;
+        buf[pos + 9..pos + 9 + name1.len()].copy_from_slice(name1);
+        let ft1 = pos + 9 + name1.len();
+        buf[ft1] = XFS_DIR3_FT_REG_FILE;
+        let e1_end = ft1 + 1;
+        let p1 = e1_end + ((-(e1_end as isize as i64)) & 7) as usize;
+
+        // Free-space record spanning 32 bytes
+        buf[p1..p1 + 2].copy_from_slice(&XFS_DIR2_FREE_TAG.to_be_bytes());
+        let free_len: u16 = 32;
+        buf[p1 + 2..p1 + 4].copy_from_slice(&free_len.to_be_bytes());
+        pos = p1 + free_len as usize;
+
+        // Entry 2: "keep.txt" → inode 20, DIR
+        let inumber2 = 20u64;
+        let name2 = b"keep.txt";
+        let namelen2 = name2.len() as u8;
+        buf[pos..pos + 8].copy_from_slice(&inumber2.to_be_bytes());
+        buf[pos + 8] = namelen2;
+        buf[pos + 9..pos + 9 + name2.len()].copy_from_slice(name2);
+        let ft2 = pos + 9 + name2.len();
+        buf[ft2] = XFS_DIR3_FT_DIR;
+        let e2_end = ft2 + 1;
+        let _p2 = e2_end + ((-(e2_end as isize as i64)) & 7) as usize;
+
+        buf
+    }
+
+    // -----------------------------------------------------------------------
+    // test_parse_block_dir_v3
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_parse_block_dir_v3() {
+        let data = build_block_dir_v3_data();
+        let entries = XfsReader::parse_block_dir(&data).unwrap();
+        assert_eq!(entries.len(), 2, "v3 block should produce 2 entries");
+
+        let file1 = entries.iter().find(|(n, _, _)| n == "file1.txt").unwrap();
+        assert_eq!(file1.1, 100);
+        assert!(!file1.2, "ftype=1 → not a directory");
+
+        let sub = entries.iter().find(|(n, _, _)| n == "subdir").unwrap();
+        assert_eq!(sub.1, 200);
+        assert!(sub.2, "ftype=2 → is a directory");
+    }
+
+    // -----------------------------------------------------------------------
+    // test_parse_block_dir_v5
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_parse_block_dir_v5() {
+        let data = build_block_dir_v5_data();
+        let entries = XfsReader::parse_block_dir(&data).unwrap();
+        assert_eq!(entries.len(), 1, "v5 block should produce 1 entry");
+        assert_eq!(entries[0].0, "passwd");
+        assert_eq!(entries[0].1, 42);
+        assert!(!entries[0].2, "ftype=1 → file");
+    }
+
+    // -----------------------------------------------------------------------
+    // test_parse_block_dir_with_free_space
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_parse_block_dir_with_free_space() {
+        let data = build_block_dir_data_with_free_space();
+        let entries = XfsReader::parse_block_dir(&data).unwrap();
+        assert_eq!(entries.len(), 2, "free-space entry should be skipped");
+        assert!(entries.iter().any(|(n, _, _)| n == "good.txt"));
+        assert!(entries.iter().any(|(n, _, _)| n == "keep.txt"));
+    }
+
+    // -----------------------------------------------------------------------
+    // test_parse_block_dir_empty_data
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_parse_block_dir_empty_data() {
+        let entries = XfsReader::parse_block_dir(&[]).unwrap();
+        assert!(entries.is_empty());
+    }
+
+    // -----------------------------------------------------------------------
+    // test_parse_block_dir_unknown_magic_errors
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_parse_block_dir_unknown_magic_errors() {
+        let data = vec![0u8; 64];
+        let result = XfsReader::parse_block_dir(&data);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().kind(), io::ErrorKind::InvalidData);
     }

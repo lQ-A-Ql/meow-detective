@@ -252,6 +252,27 @@ where
                     }
                 }
             }
+            crate::datasource_service::ImageFilesystemKind::Ext4 => {
+                if let Ok(fs) = fs_ext4::Ext4Reader::open(boxed, candidate.offset) {
+                    if let Ok(r) = open_first_image_path(&fs, &path_candidates) {
+                        return Ok(r);
+                    }
+                }
+            }
+            crate::datasource_service::ImageFilesystemKind::Xfs => {
+                if let Ok(fs) = fs_xfs::XfsReader::open(boxed, candidate.offset) {
+                    if let Ok(r) = open_first_image_path(&fs, &path_candidates) {
+                        return Ok(r);
+                    }
+                }
+            }
+            crate::datasource_service::ImageFilesystemKind::Btrfs => {
+                if let Ok(fs) = fs_btrfs::BtrfsReader::open(boxed, candidate.offset) {
+                    if let Ok(r) = open_first_image_path(&fs, &path_candidates) {
+                        return Ok(r);
+                    }
+                }
+            }
             _ => {}
         }
     }

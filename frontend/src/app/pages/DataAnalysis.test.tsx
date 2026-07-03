@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   browserSummary: vi.fn(),
   emailSummary: vi.fn(),
   eventLogSummary: vi.fn(),
+  linuxSummary: vi.fn(),
   classifications: vi.fn(),
   summaryMutation: vi.fn(),
 }));
@@ -36,6 +37,7 @@ vi.mock('@/features/analysis/hooks', () => ({
   useBrowserHistorySummary: mocks.browserSummary,
   useEmailExtractionSummary: mocks.emailSummary,
   useEvtxEventSummary: mocks.eventLogSummary,
+  useLinuxArtifactSummary: mocks.linuxSummary,
   useAnalysisClassifications: mocks.classifications,
   useGenerateAnalysisSummary: mocks.summaryMutation,
 }));
@@ -401,6 +403,26 @@ describe('DataAnalysis page', () => {
         generatedAt: '2026-06-01T10:14:00Z',
       },
     }));
+    mocks.linuxSummary.mockReturnValue(queryState({
+      data: {
+        status: 'notFound',
+        journalCount: 0,
+        loginCount: 0,
+        bashCommandCount: 0,
+        aptEventCount: 0,
+        cronJobCount: 0,
+        sudoEventCount: 0,
+        totalCount: 0,
+        journalEntries: [],
+        loginRecords: [],
+        bashCommands: [],
+        aptEvents: [],
+        cronJobs: [],
+        sudoEvents: [],
+        warnings: [],
+        generatedAt: '2026-06-01T10:14:00Z',
+      },
+    }));
     mocks.classifications.mockReturnValue(queryState({
       data: [
         {
@@ -541,7 +563,7 @@ describe('DataAnalysis page', () => {
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith([]));
   });
 
-  it('runs Registry, BrowserHistory, Email and EventLogs extraction sequentially from the header toolbar', async () => {
+  it('runs Registry, BrowserHistory, Email, EventLogs and LinuxArtifacts extraction sequentially from the header toolbar', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({
       status: 'parsed',
       scannedCount: 8,
@@ -559,11 +581,12 @@ describe('DataAnalysis page', () => {
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: /运行提取/ }));
 
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(5));
     expect(mutateAsync).toHaveBeenNthCalledWith(1, { categories: ['Registry'] });
     expect(mutateAsync).toHaveBeenNthCalledWith(2, { categories: ['BrowserHistory'] });
     expect(mutateAsync).toHaveBeenNthCalledWith(3, { categories: ['Email'] });
     expect(mutateAsync).toHaveBeenNthCalledWith(4, { categories: ['EventLogs'] });
+    expect(mutateAsync).toHaveBeenNthCalledWith(5, { categories: ['LinuxArtifacts'] });
   });
 
   it('shows extraction progress overview on the first screen and updates it after running extraction', async () => {
@@ -588,15 +611,16 @@ describe('DataAnalysis page', () => {
     expect(within(overview).getByText('浏览器记录提取')).toBeDefined();
     expect(within(overview).getByText('邮件信息提取')).toBeDefined();
     expect(within(overview).getByText('事件日志提取')).toBeDefined();
-    expect(within(overview).getAllByText('等待').length).toBe(4);
+    expect(within(overview).getByText('Linux 痕迹提取')).toBeDefined();
+    expect(within(overview).getAllByText('等待').length).toBe(5);
 
     fireEvent.click(screen.getByRole('button', { name: /运行提取/ }));
 
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(4));
-    await waitFor(() => expect(within(overview).getAllByText('已完成').length).toBe(4));
-    expect(within(overview).getAllByText('scanned=8').length).toBe(4);
-    expect(within(overview).getAllByText('artifacts=7').length).toBe(4);
-    expect(within(overview).getAllByText('timeline=3').length).toBe(4);
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(5));
+    await waitFor(() => expect(within(overview).getAllByText('已完成').length).toBe(5));
+    expect(within(overview).getAllByText('scanned=8').length).toBe(5);
+    expect(within(overview).getAllByText('artifacts=7').length).toBe(5);
+    expect(within(overview).getAllByText('timeline=3').length).toBe(5);
   });
 
   it('toggles the extraction progress drawer manually', () => {

@@ -1,0 +1,1536 @@
+{
+  "nodes": [
+    {
+      "id": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "type": "file",
+      "name": "tokens.rs",
+      "filePath": "crates/evtx-patched/src/binxml/tokens.rs",
+      "summary": "BinXml 令牌解析模块：定义 EVTX 二进制 XML 的令牌结构体（开放元素、属性、实体引用、模板值、替换描述符等）及其从字节流反序列化的解析逻辑。",
+      "tags": [
+        "evtx-parser",
+        "binary-xml",
+        "token-parsing",
+        "deserialization"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/tokens.rs:read_template_values_cursor",
+      "type": "function",
+      "name": "read_template_values_cursor",
+      "filePath": "crates/evtx-patched/src/binxml/tokens.rs",
+      "lineRange": [
+        104,
+        206
+      ],
+      "summary": "读取模板实例值（TemplateValues）令牌，包含模板 ID、定义偏移量和值数组。",
+      "tags": [
+        "parser",
+        "deserialization"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/tokens.rs:read_template_definition_header_cursor",
+      "type": "function",
+      "name": "read_template_definition_header_cursor",
+      "filePath": "crates/evtx-patched/src/binxml/tokens.rs",
+      "lineRange": [
+        208,
+        229
+      ],
+      "summary": "读取template definition header cursor数据。",
+      "tags": [
+        "parser",
+        "deserialization"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/tokens.rs:read_entity_ref_cursor",
+      "type": "function",
+      "name": "read_entity_ref_cursor",
+      "filePath": "crates/evtx-patched/src/binxml/tokens.rs",
+      "lineRange": [
+        231,
+        239
+      ],
+      "summary": "读取entity ref cursor数据。",
+      "tags": [
+        "parser",
+        "deserialization"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/tokens.rs:read_attribute_cursor",
+      "type": "function",
+      "name": "read_attribute_cursor",
+      "filePath": "crates/evtx-patched/src/binxml/tokens.rs",
+      "lineRange": [
+        241,
+        248
+      ],
+      "summary": "读取attribute cursor数据。",
+      "tags": [
+        "parser",
+        "deserialization"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/tokens.rs:read_fragment_header_cursor",
+      "type": "function",
+      "name": "read_fragment_header_cursor",
+      "filePath": "crates/evtx-patched/src/binxml/tokens.rs",
+      "lineRange": [
+        250,
+        262
+      ],
+      "summary": "读取fragment header cursor数据。",
+      "tags": [
+        "parser",
+        "deserialization"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/tokens.rs:read_processing_instruction_target_cursor",
+      "type": "function",
+      "name": "read_processing_instruction_target_cursor",
+      "filePath": "crates/evtx-patched/src/binxml/tokens.rs",
+      "lineRange": [
+        264,
+        276
+      ],
+      "summary": "读取processing instruction target cursor数据。",
+      "tags": [
+        "parser",
+        "deserialization"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/tokens.rs:read_processing_instruction_data_cursor",
+      "type": "function",
+      "name": "read_processing_instruction_data_cursor",
+      "filePath": "crates/evtx-patched/src/binxml/tokens.rs",
+      "lineRange": [
+        278,
+        291
+      ],
+      "summary": "读取processing instruction data cursor数据。",
+      "tags": [
+        "parser",
+        "deserialization"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/tokens.rs:read_substitution_descriptor_cursor",
+      "type": "function",
+      "name": "read_substitution_descriptor_cursor",
+      "filePath": "crates/evtx-patched/src/binxml/tokens.rs",
+      "lineRange": [
+        293,
+        320
+      ],
+      "summary": "读取替换描述符令牌，包含替换索引、值类型和可选标志。",
+      "tags": [
+        "parser",
+        "deserialization"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/tokens.rs:read_open_start_element_cursor",
+      "type": "function",
+      "name": "read_open_start_element_cursor",
+      "filePath": "crates/evtx-patched/src/binxml/tokens.rs",
+      "lineRange": [
+        322,
+        360
+      ],
+      "summary": "读取开放起始元素令牌，包含 data_size、依赖 ID、名称和属性列表。",
+      "tags": [
+        "parser",
+        "deserialization"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/binxml/tokens.rs:BinXMLProcessingInstructionTarget",
+      "type": "class",
+      "name": "BinXMLProcessingInstructionTarget",
+      "filePath": "crates/evtx-patched/src/binxml/tokens.rs",
+      "lineRange": [
+        19,
+        21
+      ],
+      "summary": "BinXMLProcessingInstructionTarget 数据结构。",
+      "tags": [
+        "data-structure",
+        "type-definition"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/binxml/tokens.rs:BinXMLOpenStartElement",
+      "type": "class",
+      "name": "BinXMLOpenStartElement",
+      "filePath": "crates/evtx-patched/src/binxml/tokens.rs",
+      "lineRange": [
+        25,
+        28
+      ],
+      "summary": "BinXMLOpenStartElement 数据结构。",
+      "tags": [
+        "data-model",
+        "ast-node"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/binxml/tokens.rs:BinXmlTemplateDefinitionHeader",
+      "type": "class",
+      "name": "BinXmlTemplateDefinitionHeader",
+      "filePath": "crates/evtx-patched/src/binxml/tokens.rs",
+      "lineRange": [
+        32,
+        37
+      ],
+      "summary": "BinXmlTemplateDefinitionHeader 数据结构。",
+      "tags": [
+        "header",
+        "format"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/binxml/tokens.rs:BinXmlEntityReference",
+      "type": "class",
+      "name": "BinXmlEntityReference",
+      "filePath": "crates/evtx-patched/src/binxml/tokens.rs",
+      "lineRange": [
+        52,
+        54
+      ],
+      "summary": "BinXmlEntityReference 数据结构。",
+      "tags": [
+        "data-structure",
+        "type-definition"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/binxml/tokens.rs:BinXmlTemplateValues",
+      "type": "class",
+      "name": "BinXmlTemplateValues",
+      "filePath": "crates/evtx-patched/src/binxml/tokens.rs",
+      "lineRange": [
+        61,
+        66
+      ],
+      "summary": "模板实例值结构，包含模板 ID、定义偏移量和替换值列表。",
+      "tags": [
+        "value-type",
+        "variant"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/binxml/tokens.rs:TemplateSubstitutionDescriptor",
+      "type": "class",
+      "name": "TemplateSubstitutionDescriptor",
+      "filePath": "crates/evtx-patched/src/binxml/tokens.rs",
+      "lineRange": [
+        77,
+        84
+      ],
+      "summary": "模板替换描述符，包含替换索引、值类型和可选/忽略标志。",
+      "tags": [
+        "data-structure",
+        "type-definition"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/binxml/tokens.rs:BinXMLFragmentHeader",
+      "type": "class",
+      "name": "BinXMLFragmentHeader",
+      "filePath": "crates/evtx-patched/src/binxml/tokens.rs",
+      "lineRange": [
+        89,
+        93
+      ],
+      "summary": "BinXMLFragmentHeader 数据结构。",
+      "tags": [
+        "header",
+        "format"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/binxml/tokens.rs:BinXMLAttribute",
+      "type": "class",
+      "name": "BinXMLAttribute",
+      "filePath": "crates/evtx-patched/src/binxml/tokens.rs",
+      "lineRange": [
+        97,
+        99
+      ],
+      "summary": "BinXMLAttribute 数据结构。",
+      "tags": [
+        "data-model",
+        "ast-node"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "type": "file",
+      "name": "value_render.rs",
+      "filePath": "crates/evtx-patched/src/binxml/value_render.rs",
+      "summary": "BinXml 值渲染器：将 EVTX 的二进制值类型（整数、浮点、十六进制、日期时间、SID 等）格式化为人类可读的 JSON/XML 文本，处理转义和分隔。",
+      "tags": [
+        "evtx-parser",
+        "value-rendering",
+        "string-formatting",
+        "data-display"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_render.rs:new",
+      "type": "function",
+      "name": "new",
+      "filePath": "crates/evtx-patched/src/binxml/value_render.rs",
+      "lineRange": [
+        41,
+        43
+      ],
+      "summary": "构造value_render的new方法。",
+      "tags": [
+        "constructor",
+        "factory"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_render.rs:write_json_value_text",
+      "type": "function",
+      "name": "write_json_value_text",
+      "filePath": "crates/evtx-patched/src/binxml/value_render.rs",
+      "lineRange": [
+        45,
+        51
+      ],
+      "summary": "写入json value text输出。",
+      "tags": [
+        "serialization",
+        "rendering"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_render.rs:write_xml_value_text",
+      "type": "function",
+      "name": "write_xml_value_text",
+      "filePath": "crates/evtx-patched/src/binxml/value_render.rs",
+      "lineRange": [
+        53,
+        60
+      ],
+      "summary": "写入xml value text输出。",
+      "tags": [
+        "serialization",
+        "rendering"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_render.rs:write_value_text",
+      "type": "function",
+      "name": "write_value_text",
+      "filePath": "crates/evtx-patched/src/binxml/value_render.rs",
+      "lineRange": [
+        62,
+        155
+      ],
+      "summary": "渲染 BinXmlValue 为文本字符串，根据格式模式（JSON/XML）选择转义策略。",
+      "tags": [
+        "serialization",
+        "rendering"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_render.rs:write_utf16_escaped",
+      "type": "function",
+      "name": "write_utf16_escaped",
+      "filePath": "crates/evtx-patched/src/binxml/value_render.rs",
+      "lineRange": [
+        165,
+        185
+      ],
+      "summary": "写 UTF-16 字符串并转义 XML/JSON 特殊字符。",
+      "tags": [
+        "serialization",
+        "rendering"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_render.rs:write_str_escaped",
+      "type": "function",
+      "name": "write_str_escaped",
+      "filePath": "crates/evtx-patched/src/binxml/value_render.rs",
+      "lineRange": [
+        187,
+        202
+      ],
+      "summary": "写入str escaped输出。",
+      "tags": [
+        "serialization",
+        "rendering"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_render.rs:write_xml_escaped_str",
+      "type": "function",
+      "name": "write_xml_escaped_str",
+      "filePath": "crates/evtx-patched/src/binxml/value_render.rs",
+      "lineRange": [
+        204,
+        225
+      ],
+      "summary": "写 XML 转义后的字符串。",
+      "tags": [
+        "serialization",
+        "rendering"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_render.rs:write_hex_u32_lower",
+      "type": "function",
+      "name": "write_hex_u32_lower",
+      "filePath": "crates/evtx-patched/src/binxml/value_render.rs",
+      "lineRange": [
+        255,
+        274
+      ],
+      "summary": "写 u32 为小写十六进制字符串到缓冲区（如 '0x12ab'）。",
+      "tags": [
+        "serialization",
+        "rendering"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_render.rs:write_hex_u64_lower",
+      "type": "function",
+      "name": "write_hex_u64_lower",
+      "filePath": "crates/evtx-patched/src/binxml/value_render.rs",
+      "lineRange": [
+        276,
+        294
+      ],
+      "summary": "写入hex u64 lower输出。",
+      "tags": [
+        "serialization",
+        "rendering"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_render.rs:write_hex_list_u32",
+      "type": "function",
+      "name": "write_hex_list_u32",
+      "filePath": "crates/evtx-patched/src/binxml/value_render.rs",
+      "lineRange": [
+        296,
+        306
+      ],
+      "summary": "写 u32 十六进制值列表。",
+      "tags": [
+        "serialization",
+        "rendering"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_render.rs:write_hex_list_u64",
+      "type": "function",
+      "name": "write_hex_list_u64",
+      "filePath": "crates/evtx-patched/src/binxml/value_render.rs",
+      "lineRange": [
+        308,
+        318
+      ],
+      "summary": "写入hex list u64输出。",
+      "tags": [
+        "serialization",
+        "rendering"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_render.rs:write_float_list",
+      "type": "function",
+      "name": "write_float_list",
+      "filePath": "crates/evtx-patched/src/binxml/value_render.rs",
+      "lineRange": [
+        325,
+        340
+      ],
+      "summary": "写浮点数列表。",
+      "tags": [
+        "serialization",
+        "rendering"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_render.rs:write_datetime",
+      "type": "function",
+      "name": "write_datetime",
+      "filePath": "crates/evtx-patched/src/binxml/value_render.rs",
+      "lineRange": [
+        342,
+        362
+      ],
+      "summary": "写 FileTime 值格式化为 ISO 8601 日期时间字符串。",
+      "tags": [
+        "serialization",
+        "rendering"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_render.rs:write_datetime_list",
+      "type": "function",
+      "name": "write_datetime_list",
+      "filePath": "crates/evtx-patched/src/binxml/value_render.rs",
+      "lineRange": [
+        364,
+        378
+      ],
+      "summary": "写日期时间列表。",
+      "tags": [
+        "serialization",
+        "rendering"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_render.rs:write_4_digits",
+      "type": "function",
+      "name": "write_4_digits",
+      "filePath": "crates/evtx-patched/src/binxml/value_render.rs",
+      "lineRange": [
+        388,
+        398
+      ],
+      "summary": "写入4 digits输出。",
+      "tags": [
+        "serialization",
+        "rendering"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_render.rs:write_6_digits",
+      "type": "function",
+      "name": "write_6_digits",
+      "filePath": "crates/evtx-patched/src/binxml/value_render.rs",
+      "lineRange": [
+        400,
+        414
+      ],
+      "summary": "写入6 digits输出。",
+      "tags": [
+        "serialization",
+        "rendering"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_render.rs:write_delimited",
+      "type": "function",
+      "name": "write_delimited",
+      "filePath": "crates/evtx-patched/src/binxml/value_render.rs",
+      "lineRange": [
+        416,
+        430
+      ],
+      "summary": "写分隔列表（如逗号分隔的十六进制值列表）。",
+      "tags": [
+        "serialization",
+        "rendering"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/binxml/value_render.rs:StringEscapeMode",
+      "type": "class",
+      "name": "StringEscapeMode",
+      "filePath": "crates/evtx-patched/src/binxml/value_render.rs",
+      "lineRange": [
+        17,
+        23
+      ],
+      "summary": "StringEscapeMode 数据结构。",
+      "tags": [
+        "data-structure",
+        "type-definition"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/binxml/value_render.rs:ValueRenderer",
+      "type": "class",
+      "name": "ValueRenderer",
+      "filePath": "crates/evtx-patched/src/binxml/value_render.rs",
+      "lineRange": [
+        26,
+        29
+      ],
+      "summary": "值渲染器，将 BinXmlValue 类型格式化为人可读的字符串（支持 JSON 和 XML 两种格式）。",
+      "tags": [
+        "value-type",
+        "variant"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "type": "file",
+      "name": "value_variant.rs",
+      "filePath": "crates/evtx-patched/src/binxml/value_variant.rs",
+      "summary": "BinXml 值类型定义与反序列化：定义 EVTX 所有支持的 BinXmlValue 枚举变体（标量和数组类型共 50+ 种），实现从二进制游标反序列化、数组展开和数组项提取。",
+      "tags": [
+        "evtx-parser",
+        "value-types",
+        "deserialization",
+        "variant-enum",
+        "array-handling"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_variant.rs:new",
+      "type": "function",
+      "name": "new",
+      "filePath": "crates/evtx-patched/src/binxml/value_variant.rs",
+      "lineRange": [
+        23,
+        25
+      ],
+      "summary": "构造value_variant的new方法。",
+      "tags": [
+        "constructor",
+        "factory"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_variant.rs:as_bytes",
+      "type": "function",
+      "name": "as_bytes",
+      "filePath": "crates/evtx-patched/src/binxml/value_variant.rs",
+      "lineRange": [
+        27,
+        29
+      ],
+      "summary": "执行as bytes操作。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_variant.rs:fmt",
+      "type": "function",
+      "name": "fmt",
+      "filePath": "crates/evtx-patched/src/binxml/value_variant.rs",
+      "lineRange": [
+        33,
+        60
+      ],
+      "summary": "执行fmt操作。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_variant.rs:from_u8",
+      "type": "function",
+      "name": "from_u8",
+      "filePath": "crates/evtx-patched/src/binxml/value_variant.rs",
+      "lineRange": [
+        230,
+        232
+      ],
+      "summary": "从数据源u8解析。",
+      "tags": [
+        "parser",
+        "deserialization"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_variant.rs:from_binxml_cursor_in",
+      "type": "function",
+      "name": "from_binxml_cursor_in",
+      "filePath": "crates/evtx-patched/src/binxml/value_variant.rs",
+      "lineRange": [
+        236,
+        262
+      ],
+      "summary": "从二进制 XML 游标就地反序列化值类型，支持嵌套类型读取。",
+      "tags": [
+        "parser",
+        "deserialization"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_variant.rs:from_binxml_stream_in",
+      "type": "function",
+      "name": "from_binxml_stream_in",
+      "filePath": "crates/evtx-patched/src/binxml/value_variant.rs",
+      "lineRange": [
+        264,
+        277
+      ],
+      "summary": "从数据源binxml_stream_in解析。",
+      "tags": [
+        "parser",
+        "deserialization"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_variant.rs:deserialize_value_type_cursor",
+      "type": "function",
+      "name": "deserialize_value_type_cursor",
+      "filePath": "crates/evtx-patched/src/binxml/value_variant.rs",
+      "lineRange": [
+        279,
+        288
+      ],
+      "summary": "执行deserialize value type cursor操作。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_variant.rs:deserialize_value_type_cursor_in",
+      "type": "function",
+      "name": "deserialize_value_type_cursor_in",
+      "filePath": "crates/evtx-patched/src/binxml/value_variant.rs",
+      "lineRange": [
+        290,
+        648
+      ],
+      "summary": "核心值类型反序列化：从字节游标读取类型标签，根据类型变体读取对应长度的数据。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_variant.rs:deserialize_value_type_in",
+      "type": "function",
+      "name": "deserialize_value_type_in",
+      "filePath": "crates/evtx-patched/src/binxml/value_variant.rs",
+      "lineRange": [
+        650,
+        666
+      ],
+      "summary": "执行deserialize value type in操作。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_variant.rs:expandable_array_len",
+      "type": "function",
+      "name": "expandable_array_len",
+      "filePath": "crates/evtx-patched/src/binxml/value_variant.rs",
+      "lineRange": [
+        673,
+        702
+      ],
+      "summary": "检查值是否为数组类型并返回其可展开的元素数量。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_variant.rs:array_item_as_value",
+      "type": "function",
+      "name": "array_item_as_value",
+      "filePath": "crates/evtx-patched/src/binxml/value_variant.rs",
+      "lineRange": [
+        706,
+        757
+      ],
+      "summary": "从数组值中提取指定索引的单个标量值。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/binxml/value_variant.rs:fmt_2",
+      "type": "function",
+      "name": "fmt",
+      "filePath": "crates/evtx-patched/src/binxml/value_variant.rs",
+      "lineRange": [
+        761,
+        771
+      ],
+      "summary": "执行fmt操作。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/binxml/value_variant.rs:SidRef",
+      "type": "class",
+      "name": "SidRef",
+      "filePath": "crates/evtx-patched/src/binxml/value_variant.rs",
+      "lineRange": [
+        18,
+        20
+      ],
+      "summary": "SidRef 数据结构。",
+      "tags": [
+        "data-structure",
+        "type-definition"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/binxml/value_variant.rs:BinXmlValue",
+      "type": "class",
+      "name": "BinXmlValue",
+      "filePath": "crates/evtx-patched/src/binxml/value_variant.rs",
+      "lineRange": [
+        64,
+        120
+      ],
+      "summary": "EVTX 二进制 XML 值类型的完整枚举，包含 50+ 种标量和数组类型变体。",
+      "tags": [
+        "value-type",
+        "variant"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/binxml/value_variant.rs:BinXmlValueType",
+      "type": "class",
+      "name": "BinXmlValueType",
+      "filePath": "crates/evtx-patched/src/binxml/value_variant.rs",
+      "lineRange": [
+        123,
+        173
+      ],
+      "summary": "EVTX 值类型的标签枚举，用于反序列化时区分不同值类型的数据大小。",
+      "tags": [
+        "value-type",
+        "variant"
+      ],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "file:crates/evtx-patched/src/binxml/name.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "file:crates/evtx-patched/src/err.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "file:crates/evtx-patched/src/evtx_chunk.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "file:crates/evtx-patched/src/utils/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "function:crates/evtx-patched/src/binxml/tokens.rs:read_template_values_cursor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "function:crates/evtx-patched/src/binxml/tokens.rs:read_template_values_cursor",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "function:crates/evtx-patched/src/binxml/tokens.rs:read_template_definition_header_cursor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "function:crates/evtx-patched/src/binxml/tokens.rs:read_entity_ref_cursor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "function:crates/evtx-patched/src/binxml/tokens.rs:read_entity_ref_cursor",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "function:crates/evtx-patched/src/binxml/tokens.rs:read_attribute_cursor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "function:crates/evtx-patched/src/binxml/tokens.rs:read_attribute_cursor",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "function:crates/evtx-patched/src/binxml/tokens.rs:read_fragment_header_cursor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "function:crates/evtx-patched/src/binxml/tokens.rs:read_fragment_header_cursor",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "function:crates/evtx-patched/src/binxml/tokens.rs:read_processing_instruction_target_cursor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "function:crates/evtx-patched/src/binxml/tokens.rs:read_processing_instruction_target_cursor",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "function:crates/evtx-patched/src/binxml/tokens.rs:read_processing_instruction_data_cursor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "function:crates/evtx-patched/src/binxml/tokens.rs:read_processing_instruction_data_cursor",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "function:crates/evtx-patched/src/binxml/tokens.rs:read_substitution_descriptor_cursor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "function:crates/evtx-patched/src/binxml/tokens.rs:read_substitution_descriptor_cursor",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "function:crates/evtx-patched/src/binxml/tokens.rs:read_open_start_element_cursor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "function:crates/evtx-patched/src/binxml/tokens.rs:read_open_start_element_cursor",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "class:crates/evtx-patched/src/binxml/tokens.rs:BinXMLProcessingInstructionTarget",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "class:crates/evtx-patched/src/binxml/tokens.rs:BinXMLProcessingInstructionTarget",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "class:crates/evtx-patched/src/binxml/tokens.rs:BinXMLOpenStartElement",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "class:crates/evtx-patched/src/binxml/tokens.rs:BinXMLOpenStartElement",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "class:crates/evtx-patched/src/binxml/tokens.rs:BinXmlTemplateDefinitionHeader",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "class:crates/evtx-patched/src/binxml/tokens.rs:BinXmlTemplateDefinitionHeader",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "class:crates/evtx-patched/src/binxml/tokens.rs:BinXmlEntityReference",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "class:crates/evtx-patched/src/binxml/tokens.rs:BinXmlEntityReference",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "class:crates/evtx-patched/src/binxml/tokens.rs:BinXmlTemplateValues",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "class:crates/evtx-patched/src/binxml/tokens.rs:BinXmlTemplateValues",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "class:crates/evtx-patched/src/binxml/tokens.rs:TemplateSubstitutionDescriptor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "class:crates/evtx-patched/src/binxml/tokens.rs:TemplateSubstitutionDescriptor",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "class:crates/evtx-patched/src/binxml/tokens.rs:BinXMLFragmentHeader",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "class:crates/evtx-patched/src/binxml/tokens.rs:BinXMLFragmentHeader",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "class:crates/evtx-patched/src/binxml/tokens.rs:BinXMLAttribute",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/tokens.rs",
+      "target": "class:crates/evtx-patched/src/binxml/tokens.rs:BinXMLAttribute",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "file:crates/evtx-patched/src/err.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "file:crates/evtx-patched/src/utils/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_render.rs:new",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_render.rs:new",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_render.rs:write_json_value_text",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_render.rs:write_json_value_text",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_render.rs:write_xml_value_text",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_render.rs:write_xml_value_text",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_render.rs:write_value_text",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_render.rs:write_utf16_escaped",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_render.rs:write_str_escaped",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_render.rs:write_xml_escaped_str",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_render.rs:write_hex_u32_lower",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_render.rs:write_hex_u64_lower",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_render.rs:write_hex_list_u32",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_render.rs:write_hex_list_u64",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_render.rs:write_float_list",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_render.rs:write_datetime",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_render.rs:write_datetime_list",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_render.rs:write_4_digits",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_render.rs:write_6_digits",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_render.rs:write_delimited",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "class:crates/evtx-patched/src/binxml/value_render.rs:StringEscapeMode",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "class:crates/evtx-patched/src/binxml/value_render.rs:StringEscapeMode",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "class:crates/evtx-patched/src/binxml/value_render.rs:ValueRenderer",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_render.rs",
+      "target": "class:crates/evtx-patched/src/binxml/value_render.rs:ValueRenderer",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "file:crates/evtx-patched/src/err.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "file:crates/evtx-patched/src/evtx_chunk.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "file:crates/evtx-patched/src/utils/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "file:crates/evtx-patched/src/utils/windows.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:new",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:new",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:as_bytes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:as_bytes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:fmt",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:from_u8",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:from_u8",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:from_binxml_cursor_in",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:from_binxml_cursor_in",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:from_binxml_stream_in",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:from_binxml_stream_in",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:deserialize_value_type_cursor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:deserialize_value_type_cursor",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:deserialize_value_type_cursor_in",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:deserialize_value_type_cursor_in",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:deserialize_value_type_in",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:deserialize_value_type_in",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:expandable_array_len",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:expandable_array_len",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:array_item_as_value",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:array_item_as_value",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "function:crates/evtx-patched/src/binxml/value_variant.rs:fmt_2",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "class:crates/evtx-patched/src/binxml/value_variant.rs:SidRef",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "class:crates/evtx-patched/src/binxml/value_variant.rs:SidRef",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "class:crates/evtx-patched/src/binxml/value_variant.rs:BinXmlValue",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "class:crates/evtx-patched/src/binxml/value_variant.rs:BinXmlValue",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "class:crates/evtx-patched/src/binxml/value_variant.rs:BinXmlValueType",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "target": "class:crates/evtx-patched/src/binxml/value_variant.rs:BinXmlValueType",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

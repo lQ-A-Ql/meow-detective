@@ -1,0 +1,1330 @@
+{
+  "nodes": [
+    {
+      "id": "file:crates/app-services/src/file_service/viewer/descriptor.rs",
+      "type": "file",
+      "name": "descriptor.rs",
+      "filePath": "crates/app-services/src/file_service/viewer/descriptor.rs",
+      "summary": "预览描述符（PreviewDescriptor）的生成和管理：根据案例和文件条目信息构建描述符，支持缓存和新鲜度检查，用于文件预览的元数据准备。",
+      "tags": [
+        "preview",
+        "descriptor",
+        "cache",
+        "file-viewer"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/descriptor.rs:preview_descriptor_for_case",
+      "type": "function",
+      "name": "preview_descriptor_for_case",
+      "filePath": "crates/app-services/src/file_service/viewer/descriptor.rs",
+      "lineRange": [
+        20,
+        33
+      ],
+      "summary": "为整个案例构建预览描述符，包含数据源信息和分区列表。",
+      "tags": [
+        "preview",
+        "descriptor",
+        "case"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/descriptor.rs:descriptor_for_file_with_cache",
+      "type": "function",
+      "name": "descriptor_for_file_with_cache",
+      "filePath": "crates/app-services/src/file_service/viewer/descriptor.rs",
+      "lineRange": [
+        55,
+        115
+      ],
+      "summary": "为文件条目构建预览描述符（带缓存），包含文件元数据、路径解析、MIME 类型、镜像路径候选和数据源信息。",
+      "tags": [
+        "preview",
+        "descriptor",
+        "cache",
+        "file"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/descriptor.rs:descriptor_cache_key",
+      "type": "function",
+      "name": "descriptor_cache_key",
+      "filePath": "crates/app-services/src/file_service/viewer/descriptor.rs",
+      "lineRange": [
+        128,
+        132
+      ],
+      "summary": "为文件条目生成缓存键，基于文件 ID 和数据源 ID 的组合。",
+      "tags": [
+        "cache",
+        "key",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/app-services/src/file_service/viewer/e01_cache.rs",
+      "type": "file",
+      "name": "e01_cache.rs",
+      "filePath": "crates/app-services/src/file_service/viewer/e01_cache.rs",
+      "summary": "E01 证据文件读取器缓存：管理 E01 文件的打开缓存，按案例和文件路径分桶，支持按案例清理缓存。",
+      "tags": [
+        "cache",
+        "e01",
+        "evidence",
+        "reader"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:crates/app-services/src/file_service/viewer/e01_cache.rs:E01ReaderCache",
+      "type": "class",
+      "name": "E01ReaderCache",
+      "filePath": "crates/app-services/src/file_service/viewer/e01_cache.rs",
+      "lineRange": [
+        17,
+        135
+      ],
+      "summary": "E01 读取器缓存管理器：按文件路径分桶存储已打开的 E01 读取器，提供 get_or_open、clear_case、clear_e01_reader_cache 等方法。",
+      "tags": [
+        "cache",
+        "e01",
+        "reader",
+        "singleton"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/app-services/src/file_service/viewer/handle.rs",
+      "type": "file",
+      "name": "handle.rs",
+      "filePath": "crates/app-services/src/file_service/viewer/handle.rs",
+      "summary": "文件查看句柄管理：打开文件句柄（open_file_handle_real/uncached）、获取文件路径、解析逻辑文件路径，支持直接从证据读取器或通过文件系统路径打开。",
+      "tags": [
+        "file-handle",
+        "viewer",
+        "evidence",
+        "file-system"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/handle.rs:open_file_handle_real",
+      "type": "function",
+      "name": "open_file_handle_real",
+      "filePath": "crates/app-services/src/file_service/viewer/handle.rs",
+      "lineRange": [
+        17,
+        48
+      ],
+      "summary": "打开文件查看句柄：根据条目信息从证据读取器获取文件内容，返回带可选文件系统路径和 mime 类型的句柄。",
+      "tags": [
+        "file-handle",
+        "viewer",
+        "evidence"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/handle.rs:get_file_path_for_entry",
+      "type": "function",
+      "name": "get_file_path_for_entry",
+      "filePath": "crates/app-services/src/file_service/viewer/handle.rs",
+      "lineRange": [
+        60,
+        89
+      ],
+      "summary": "获取文件条目的宿主机文件系统路径，用于支持直接文件系统操作的文件类型。",
+      "tags": [
+        "file-path",
+        "file-system",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/app-services/src/file_service/viewer/image_open.rs",
+      "type": "file",
+      "name": "image_open.rs",
+      "filePath": "crates/app-services/src/file_service/viewer/image_open.rs",
+      "summary": "磁盘镜像文件的打开逻辑：支持 RAW、E01、FAT/exFAT 镜像文件的打开，处理分区偏移、文件系统检测（exFAT boot sector 识别）和镜像读取器创建。",
+      "tags": [
+        "image",
+        "viewer",
+        "raw",
+        "e01",
+        "fat",
+        "exfat"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/image_open.rs:open_descriptor_image_file",
+      "type": "function",
+      "name": "open_descriptor_image_file",
+      "filePath": "crates/app-services/src/file_service/viewer/image_open.rs",
+      "lineRange": [
+        24,
+        44
+      ],
+      "summary": "根据预览描述符打开对应的磁盘镜像文件用于预览，根据证据类型分发到 RAW/E01/FAT 等具体打开方法。",
+      "tags": [
+        "image",
+        "viewer",
+        "descriptor",
+        "dispatch"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/image_open.rs:open_e01_file",
+      "type": "function",
+      "name": "open_e01_file",
+      "filePath": "crates/app-services/src/file_service/viewer/image_open.rs",
+      "lineRange": [
+        185,
+        226
+      ],
+      "summary": "打开 E01 证据文件用于读取：从缓存获取或新建 E01 读取器，处理分区偏移和大小限制。",
+      "tags": [
+        "e01",
+        "viewer",
+        "evidence",
+        "cache"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "crates/app-services/src/file_service/viewer/mod.rs",
+      "summary": "文件查看器模块的入口和聚合文件：声明所有 viewer 子模块（descriptor、e01_cache、handle、image_open、partition、path、range、range_fs、tests），提供预览范围读取（read_file_range/bytes）、文件内容打开和字节级读取等核心预览功能，以及辅助函数（MFT 分区索引解析、FAT/exFAT 检测、镜像文件打开）。",
+      "tags": [
+        "barrel",
+        "entry-point",
+        "viewer",
+        "preview",
+        "module"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/mod.rs:read_file_range_for_case",
+      "type": "function",
+      "name": "read_file_range_for_case",
+      "filePath": "crates/app-services/src/file_service/viewer/mod.rs",
+      "lineRange": [
+        368,
+        391
+      ],
+      "summary": "按案例 ID 和文件条目 ID 读取文件指定范围的字节内容，用于预览。",
+      "tags": [
+        "preview",
+        "file-read",
+        "range",
+        "case"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/mod.rs:read_file_bytes_for_case",
+      "type": "function",
+      "name": "read_file_bytes_for_case",
+      "filePath": "crates/app-services/src/file_service/viewer/mod.rs",
+      "lineRange": [
+        395,
+        415
+      ],
+      "summary": "按案例读取文件完整字节内容，受 READ_BOUND 限制。",
+      "tags": [
+        "preview",
+        "file-read",
+        "case"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/mod.rs:open_file_content_by_id",
+      "type": "function",
+      "name": "open_file_content_by_id",
+      "filePath": "crates/app-services/src/file_service/viewer/mod.rs",
+      "lineRange": [
+        399,
+        410
+      ],
+      "summary": "按文件条目 ID 打开文件内容读取器，返回 Box<dyn Read>。",
+      "tags": [
+        "file-read",
+        "viewer",
+        "content"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/mod.rs:skip_reader_bytes",
+      "type": "function",
+      "name": "skip_reader_bytes",
+      "filePath": "crates/app-services/src/file_service/viewer/mod.rs",
+      "lineRange": [
+        156,
+        189
+      ],
+      "summary": "跳过读取器中的指定字节数，通过循环读取丢弃缓冲区实现。包含调用计数（用于测试）。",
+      "tags": [
+        "reader",
+        "skip",
+        "utility",
+        "io"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/mod.rs:mft_partition_index_from_entry_id",
+      "type": "function",
+      "name": "mft_partition_index_from_entry_id",
+      "filePath": "crates/app-services/src/file_service/viewer/mod.rs",
+      "lineRange": [
+        218,
+        224
+      ],
+      "summary": "从复合文件条目 ID 中提取 MFT 分区索引，ID 格式为 \"data_source_id:partition_idx:mft_record\".split。",
+      "tags": [
+        "mft",
+        "partition",
+        "parsing",
+        "id"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/mod.rs:root_partition_index_for_entry",
+      "type": "function",
+      "name": "root_partition_index_for_entry",
+      "filePath": "crates/app-services/src/file_service/viewer/mod.rs",
+      "lineRange": [
+        226,
+        251
+      ],
+      "summary": "通过遍历父节点链查找文件条目所属的根分区索引，处理占位符根名称解析。",
+      "tags": [
+        "partition",
+        "root",
+        "lookup"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/mod.rs:is_fat_filesystem_kind",
+      "type": "function",
+      "name": "is_fat_filesystem_kind",
+      "filePath": "crates/app-services/src/file_service/viewer/mod.rs",
+      "lineRange": [
+        297,
+        299
+      ],
+      "summary": "判断文件系统类型字符串是否为 FAT 变体（不区分大小写）。",
+      "tags": [
+        "fat",
+        "filesystem",
+        "check",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/mod.rs:looks_like_exfat_boot_sector",
+      "type": "function",
+      "name": "looks_like_exfat_boot_sector",
+      "filePath": "crates/app-services/src/file_service/viewer/mod.rs",
+      "lineRange": [
+        309,
+        319
+      ],
+      "summary": "检测读取器的前 8 字节是否为 exFAT 引导扇区签名 \"EXFAT\"。",
+      "tags": [
+        "exfat",
+        "detection",
+        "filesystem",
+        "boot-sector"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/mod.rs:open_first_image_path",
+      "type": "function",
+      "name": "open_first_image_path",
+      "filePath": "crates/app-services/src/file_service/viewer/mod.rs",
+      "lineRange": [
+        321,
+        339
+      ],
+      "summary": "尝试从候选文件系统路径列表中打开第一个可用的镜像文件。",
+      "tags": [
+        "image",
+        "file-open",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/app-services/src/file_service/viewer/partition.rs",
+      "type": "file",
+      "name": "partition.rs",
+      "filePath": "crates/app-services/src/file_service/viewer/partition.rs",
+      "summary": "分区相关的预览功能：为 E01 和 RAW 证据生成分区候选列表，包括直接的 exFAT RAW 分区检测。",
+      "tags": [
+        "partition",
+        "preview",
+        "e01",
+        "raw",
+        "exfat"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/partition.rs:e01_partition_candidates",
+      "type": "function",
+      "name": "e01_partition_candidates",
+      "filePath": "crates/app-services/src/file_service/viewer/partition.rs",
+      "lineRange": [
+        14,
+        26
+      ],
+      "summary": "为 E01 证据类型生成分区候选列表，包含每个分区的偏移、大小和文件系统类型信息。",
+      "tags": [
+        "e01",
+        "partition",
+        "candidates"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/partition.rs:raw_partition_candidates",
+      "type": "function",
+      "name": "raw_partition_candidates",
+      "filePath": "crates/app-services/src/file_service/viewer/partition.rs",
+      "lineRange": [
+        28,
+        40
+      ],
+      "summary": "为 RAW 镜像生成分区候选列表，如果未检测到文件系统则添加直接 exFAT 候选。",
+      "tags": [
+        "raw",
+        "partition",
+        "candidates"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/app-services/src/file_service/viewer/path.rs",
+      "type": "file",
+      "name": "path.rs",
+      "filePath": "crates/app-services/src/file_service/viewer/path.rs",
+      "summary": "文件预览路径解析工具：根据文件条目构建镜像文件路径候选列表，处理分区前缀剥离、相对路径安全化、URL 编码解码和 Windows 保留名称检测。",
+      "tags": [
+        "path",
+        "preview",
+        "resolution",
+        "utility"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/path.rs:descriptor_file_entry",
+      "type": "function",
+      "name": "descriptor_file_entry",
+      "filePath": "crates/app-services/src/file_service/viewer/path.rs",
+      "lineRange": [
+        13,
+        24
+      ],
+      "summary": "根据文件条目信息创建描述符专用的简化文件条目结构。",
+      "tags": [
+        "descriptor",
+        "file-entry",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/path.rs:entry_image_path_candidates",
+      "type": "function",
+      "name": "entry_image_path_candidates",
+      "filePath": "crates/app-services/src/file_service/viewer/path.rs",
+      "lineRange": [
+        56,
+        90
+      ],
+      "summary": "为文件条目生成镜像文件路径候选列表：先构建分区相对路径，再进行 URL 解码、Windows 名称过滤和分区前缀剥离。",
+      "tags": [
+        "path",
+        "candidates",
+        "preview",
+        "resolution"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/path.rs:safe_relative_path",
+      "type": "function",
+      "name": "safe_relative_path",
+      "filePath": "crates/app-services/src/file_service/viewer/path.rs",
+      "lineRange": [
+        112,
+        119
+      ],
+      "summary": "确保路径安全：剥离开头的 `/` 和 Windows 盘符前缀，防止路径遍历攻击。",
+      "tags": [
+        "path",
+        "security",
+        "sanitization"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/app-services/src/file_service/viewer/range.rs",
+      "type": "file",
+      "name": "range.rs",
+      "filePath": "crates/app-services/src/file_service/viewer/range.rs",
+      "summary": "文件范围读取核心实现：支持按范围和字节数读取证据文件内容，处理 E01、RAW、NTFS 分区、FAT/exFAT 镜像、逻辑文件等多种来源的范围请求。包含十六进制预览功能。",
+      "tags": [
+        "range",
+        "preview",
+        "evidence",
+        "hex",
+        "reader"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/range.rs:read_file_range_real",
+      "type": "function",
+      "name": "read_file_range_real",
+      "filePath": "crates/app-services/src/file_service/viewer/range.rs",
+      "lineRange": [
+        18,
+        68
+      ],
+      "summary": "实现文件范围读取的核心逻辑：根据文件来源（E01/RAW/逻辑/直接）分发到对应的读取方法，返回字节内容。",
+      "tags": [
+        "range",
+        "read",
+        "evidence",
+        "dispatch"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/range.rs:open_logical_file",
+      "type": "function",
+      "name": "open_logical_file",
+      "filePath": "crates/app-services/src/file_service/viewer/range.rs",
+      "lineRange": [
+        123,
+        145
+      ],
+      "summary": "打开宿主机上的逻辑文件用于预览读取。",
+      "tags": [
+        "logical-file",
+        "read",
+        "preview"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/app-services/src/file_service/viewer/range_fs.rs",
+      "type": "file",
+      "name": "range_fs.rs",
+      "filePath": "crates/app-services/src/file_service/viewer/range_fs.rs",
+      "summary": "文件系统级别的范围读取实现：通过 NTFS/FAT/exFAT 文件系统接口直接从镜像中读取文件的内容范围，而非宿主机文件系统路径。处理分支文件系统和镜像文件系统两种模式。",
+      "tags": [
+        "filesystem",
+        "range",
+        "ntfs",
+        "fat",
+        "exfat",
+        "evidence"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/range_fs.rs:try_read_ntfs_image_range_for_descriptor",
+      "type": "function",
+      "name": "try_read_ntfs_image_range_for_descriptor",
+      "filePath": "crates/app-services/src/file_service/viewer/range_fs.rs",
+      "lineRange": [
+        16,
+        56
+      ],
+      "summary": "尝试通过 NTFS 文件系统从镜像描述符中读取文件指定范围的内容。",
+      "tags": [
+        "ntfs",
+        "range",
+        "read",
+        "filesystem"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/range_fs.rs:try_read_fat_image_range_for_descriptor",
+      "type": "function",
+      "name": "try_read_fat_image_range_for_descriptor",
+      "filePath": "crates/app-services/src/file_service/viewer/range_fs.rs",
+      "lineRange": [
+        58,
+        98
+      ],
+      "summary": "尝试通过 FAT 文件系统从镜像描述符中读取文件指定范围的内容。",
+      "tags": [
+        "fat",
+        "range",
+        "read",
+        "filesystem"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/range_fs.rs:try_read_exfat_image_range_for_descriptor",
+      "type": "function",
+      "name": "try_read_exfat_image_range_for_descriptor",
+      "filePath": "crates/app-services/src/file_service/viewer/range_fs.rs",
+      "lineRange": [
+        100,
+        140
+      ],
+      "summary": "尝试通过 exFAT 文件系统从镜像描述符中读取文件指定范围的内容。",
+      "tags": [
+        "exfat",
+        "range",
+        "read",
+        "filesystem"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/viewer/range_fs.rs:try_read_ntfs_image_range_from_candidates",
+      "type": "function",
+      "name": "try_read_ntfs_image_range_from_candidates",
+      "filePath": "crates/app-services/src/file_service/viewer/range_fs.rs",
+      "lineRange": [
+        172,
+        210
+      ],
+      "summary": "从多个镜像候选路径中尝试 NTFS 文件系统读取，返回第一个成功的结果。",
+      "tags": [
+        "ntfs",
+        "range",
+        "candidates",
+        "read"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/app-services/src/file_service/viewer/tests.rs",
+      "type": "file",
+      "name": "tests.rs",
+      "filePath": "crates/app-services/src/file_service/viewer/tests.rs",
+      "summary": "文件查看器模块的测试套件：包含 skip_reader_bytes、read_file_range、open_file_content 等核心预览功能的集成测试，使用 E01 和 RAW NTFS 测试夹具。",
+      "tags": [
+        "test",
+        "viewer",
+        "preview",
+        "integration"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:crates/app-services/src/file_service/visibility.rs",
+      "type": "file",
+      "name": "visibility.rs",
+      "filePath": "crates/app-services/src/file_service/visibility.rs",
+      "summary": "文件可见性判断工具：基于文件名和路径推断文件的可见性标志（隐藏、系统），支持点号前缀和 Windows 系统目录匹配。",
+      "tags": [
+        "visibility",
+        "file-tree",
+        "filter",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/visibility.rs:visibility_flags_for_node",
+      "type": "function",
+      "name": "visibility_flags_for_node",
+      "filePath": "crates/app-services/src/file_service/visibility.rs",
+      "lineRange": [
+        1,
+        8
+      ],
+      "summary": "为文件树节点确定可见性标志，组合 inferred_hidden_name 和 inferred_system_name/inferred_system_path 的结果。",
+      "tags": [
+        "visibility",
+        "filter",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/visibility.rs:inferred_hidden_name",
+      "type": "function",
+      "name": "inferred_hidden_name",
+      "filePath": "crates/app-services/src/file_service/visibility.rs",
+      "lineRange": [
+        10,
+        12
+      ],
+      "summary": "检查文件名是否以点号开头，判断是否为隐藏文件。",
+      "tags": [
+        "visibility",
+        "hidden",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/visibility.rs:inferred_system_name",
+      "type": "function",
+      "name": "inferred_system_name",
+      "filePath": "crates/app-services/src/file_service/visibility.rs",
+      "lineRange": [
+        14,
+        23
+      ],
+      "summary": "检查文件名是否匹配 Windows 系统目录/文件名模式（如 $、System Volume Information 等）。",
+      "tags": [
+        "visibility",
+        "system",
+        "windows",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/visibility.rs:inferred_system_path",
+      "type": "function",
+      "name": "inferred_system_path",
+      "filePath": "crates/app-services/src/file_service/visibility.rs",
+      "lineRange": [
+        25,
+        27
+      ],
+      "summary": "检查路径中是否包含 Windows 系统目录名称（如 Windows、System32 等）。",
+      "tags": [
+        "visibility",
+        "system",
+        "windows",
+        "path"
+      ],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/descriptor.rs",
+      "target": "file:crates/app-services/src/file_service/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/descriptor.rs",
+      "target": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/descriptor.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/descriptor.rs:preview_descriptor_for_case",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/descriptor.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/descriptor.rs:descriptor_for_file_with_cache",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/descriptor.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/descriptor.rs:descriptor_cache_key",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/descriptor.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/descriptor.rs:preview_descriptor_for_case",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/descriptor.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/descriptor.rs:descriptor_for_file_with_cache",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/descriptor.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/descriptor.rs:descriptor_cache_key",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/e01_cache.rs",
+      "target": "class:crates/app-services/src/file_service/viewer/e01_cache.rs:E01ReaderCache",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/e01_cache.rs",
+      "target": "class:crates/app-services/src/file_service/viewer/e01_cache.rs:E01ReaderCache",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/handle.rs",
+      "target": "file:crates/app-services/src/file_service/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/handle.rs",
+      "target": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/handle.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/handle.rs:open_file_handle_real",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/handle.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/handle.rs:get_file_path_for_entry",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/handle.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/handle.rs:open_file_handle_real",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/handle.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/handle.rs:get_file_path_for_entry",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/image_open.rs",
+      "target": "file:crates/app-services/src/file_service/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/image_open.rs",
+      "target": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/image_open.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/image_open.rs:open_descriptor_image_file",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/image_open.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/image_open.rs:open_e01_file",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/image_open.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/image_open.rs:open_descriptor_image_file",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/image_open.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/image_open.rs:open_e01_file",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "file:crates/app-services/src/file_service/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "file:crates/app-services/src/file_service/viewer/descriptor.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "file:crates/app-services/src/file_service/viewer/e01_cache.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "file:crates/app-services/src/file_service/viewer/handle.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "file:crates/app-services/src/file_service/viewer/image_open.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "file:crates/app-services/src/file_service/viewer/partition.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "file:crates/app-services/src/file_service/viewer/path.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "file:crates/app-services/src/file_service/viewer/range_fs.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "file:crates/app-services/src/file_service/viewer/range.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "file:crates/app-services/src/file_service/viewer/tests.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/mod.rs:read_file_range_for_case",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/mod.rs:read_file_bytes_for_case",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/mod.rs:open_file_content_by_id",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/mod.rs:skip_reader_bytes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/mod.rs:mft_partition_index_from_entry_id",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/mod.rs:root_partition_index_for_entry",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/mod.rs:is_fat_filesystem_kind",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/mod.rs:looks_like_exfat_boot_sector",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/mod.rs:open_first_image_path",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/mod.rs:read_file_range_for_case",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/mod.rs:read_file_bytes_for_case",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/mod.rs:open_file_content_by_id",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/mod.rs:skip_reader_bytes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/mod.rs:mft_partition_index_from_entry_id",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/mod.rs:root_partition_index_for_entry",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/mod.rs:is_fat_filesystem_kind",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/mod.rs:looks_like_exfat_boot_sector",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/mod.rs:open_first_image_path",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/partition.rs",
+      "target": "file:crates/app-services/src/file_service/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/partition.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/partition.rs:e01_partition_candidates",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/partition.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/partition.rs:raw_partition_candidates",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/partition.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/partition.rs:e01_partition_candidates",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/partition.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/partition.rs:raw_partition_candidates",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/path.rs",
+      "target": "file:crates/app-services/src/file_service/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/path.rs",
+      "target": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/path.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/path.rs:descriptor_file_entry",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/path.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/path.rs:entry_image_path_candidates",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/path.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/path.rs:safe_relative_path",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/path.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/path.rs:descriptor_file_entry",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/path.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/path.rs:entry_image_path_candidates",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/path.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/path.rs:safe_relative_path",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/range.rs",
+      "target": "file:crates/app-services/src/file_service/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/range.rs",
+      "target": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/range.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/range.rs:read_file_range_real",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/range.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/range.rs:open_logical_file",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/range.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/range.rs:read_file_range_real",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/range_fs.rs",
+      "target": "file:crates/app-services/src/file_service/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/range_fs.rs",
+      "target": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/range_fs.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/range_fs.rs:try_read_ntfs_image_range_for_descriptor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/range_fs.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/range_fs.rs:try_read_fat_image_range_for_descriptor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/range_fs.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/range_fs.rs:try_read_exfat_image_range_for_descriptor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/range_fs.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/range_fs.rs:try_read_ntfs_image_range_from_candidates",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/range_fs.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/range_fs.rs:try_read_ntfs_image_range_for_descriptor",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/range_fs.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/range_fs.rs:try_read_fat_image_range_for_descriptor",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/range_fs.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/range_fs.rs:try_read_exfat_image_range_for_descriptor",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/viewer/range_fs.rs",
+      "target": "function:crates/app-services/src/file_service/viewer/range_fs.rs:try_read_ntfs_image_range_from_candidates",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/visibility.rs",
+      "target": "function:crates/app-services/src/file_service/visibility.rs:visibility_flags_for_node",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/visibility.rs",
+      "target": "function:crates/app-services/src/file_service/visibility.rs:inferred_hidden_name",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/visibility.rs",
+      "target": "function:crates/app-services/src/file_service/visibility.rs:inferred_system_name",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/visibility.rs",
+      "target": "function:crates/app-services/src/file_service/visibility.rs:inferred_system_path",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/visibility.rs",
+      "target": "function:crates/app-services/src/file_service/visibility.rs:visibility_flags_for_node",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/visibility.rs",
+      "target": "function:crates/app-services/src/file_service/visibility.rs:inferred_hidden_name",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/visibility.rs",
+      "target": "function:crates/app-services/src/file_service/visibility.rs:inferred_system_name",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/visibility.rs",
+      "target": "function:crates/app-services/src/file_service/visibility.rs:inferred_system_path",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

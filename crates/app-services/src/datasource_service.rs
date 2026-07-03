@@ -35,6 +35,10 @@ pub enum ImageFilesystemKind {
     Ntfs,
     Fat,
     BitLocker,
+    Ext4,
+    Xfs,
+    Btrfs,
+    LvmPool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,6 +46,7 @@ pub enum ImageFilesystemSource {
     DirectVolume,
     MbrPartition,
     GptPartition,
+    LvmLogicalVolume,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -236,6 +241,10 @@ where
                         PartitionStatus::Supported
                     }
                     ImageFilesystemKind::BitLocker => PartitionStatus::EncryptedBitLocker,
+                    ImageFilesystemKind::Ext4
+                    | ImageFilesystemKind::Xfs
+                    | ImageFilesystemKind::Btrfs
+                    | ImageFilesystemKind::LvmPool => PartitionStatus::Supported,
                 },
                 filesystem: Some(kind),
             }],
@@ -297,6 +306,10 @@ where
                         PartitionStatus::Supported
                     }
                     ImageFilesystemKind::BitLocker => PartitionStatus::EncryptedBitLocker,
+                    ImageFilesystemKind::Ext4
+                    | ImageFilesystemKind::Xfs
+                    | ImageFilesystemKind::Btrfs
+                    | ImageFilesystemKind::LvmPool => PartitionStatus::Supported,
                 }
             } else {
                 match class.status {
@@ -324,6 +337,12 @@ where
                     "Partition {} '{}' is not yet supported (type 0x{:02X})",
                     entry.partition_number, display_name, entry.partition_type,
                 ));
+            } else if matches!(fs_kind, Some(ImageFilesystemKind::LvmPool)) {
+                // LVM pool detected — log discovery, expansion happens in import pipeline
+                tracing::info!(
+                    "LVM2 physical volume detected at partition {} ({}), LV expansion deferred to import",
+                    entry.partition_number, display_name,
+                );
             }
 
             partitions.push(PartitionRecord {
@@ -485,11 +504,23 @@ where
             status = match kind {
                 ImageFilesystemKind::Ntfs | ImageFilesystemKind::Fat => PartitionStatus::Supported,
                 ImageFilesystemKind::BitLocker => PartitionStatus::EncryptedBitLocker,
+                ImageFilesystemKind::Ext4
+                | ImageFilesystemKind::Xfs
+                | ImageFilesystemKind::Btrfs
+                | ImageFilesystemKind::LvmPool => PartitionStatus::Supported,
             };
         }
 
         if let Some(kind) = fs_kind {
-            if matches!(kind, ImageFilesystemKind::Ntfs | ImageFilesystemKind::Fat) {
+            if matches!(
+                kind,
+                ImageFilesystemKind::Ntfs
+                    | ImageFilesystemKind::Fat
+                    | ImageFilesystemKind::Ext4
+                    | ImageFilesystemKind::Xfs
+                    | ImageFilesystemKind::Btrfs
+                    | ImageFilesystemKind::LvmPool
+            ) {
                 candidates.push(ImageFilesystemCandidate {
                     partition_index: Some(partition.index),
                     partition_name: Some(partition.name.clone()),
@@ -595,6 +626,10 @@ fn kind_label(kind: ImageFilesystemKind) -> String {
         ImageFilesystemKind::Ntfs => "NTFS".to_string(),
         ImageFilesystemKind::Fat => "FAT".to_string(),
         ImageFilesystemKind::BitLocker => "BitLocker".to_string(),
+        ImageFilesystemKind::Ext4 => "Ext4".to_string(),
+        ImageFilesystemKind::Xfs => "XFS".to_string(),
+        ImageFilesystemKind::Btrfs => "Btrfs".to_string(),
+        ImageFilesystemKind::LvmPool => "LVM".to_string(),
     }
 }
 
@@ -675,7 +710,42 @@ where
     R: Read + Seek,
 {
     let sector = read_sector(reader, offset)?;
-    Ok(detect_boot_filesystem(&sector))
+    if let Some(kind) = detect_boot_filesystem(&sector) {
+        return Ok(Some(kind));
+    }
+
+    // Check for XFS at sector 0 (big-endian magic "XFSB")
+    if offset.is_multiple_of(512) {
+        let magic = u32::from_be_bytes([sector[0], sector[1], sector[2], sector[3]]);
+        if magic == 0x5846_5342 {
+            return Ok(Some(ImageFilesystemKind::Xfs));
+        }
+    }
+
+    // Check for ext4 superblock at offset 1024 within the partition
+    reader.seek(SeekFrom::Start(offset + 1024))?;
+    let mut sb = [0u8; 2];
+    if reader.read_exact(&mut sb).is_ok() && u16::from_le_bytes(sb) == 0xEF53 {
+        return Ok(Some(ImageFilesystemKind::Ext4));
+    }
+
+    // Check for Btrfs superblock at offset 0x10000 within the partition
+    reader.seek(SeekFrom::Start(offset + 0x10000))?;
+    let mut btrfs_magic = [0u8; 8];
+    if reader.read_exact(&mut btrfs_magic).is_ok() && &btrfs_magic == b"_BHRfS_M" {
+        return Ok(Some(ImageFilesystemKind::Btrfs));
+    }
+
+    // Check for LVM2 PV label at sector 1 of the partition
+    match fs_lvm::probe_lvm(reader, offset) {
+        Ok(true) => return Ok(Some(ImageFilesystemKind::LvmPool)),
+        Ok(false) => {}
+        Err(_e) => {
+            tracing::debug!("LVM probe error at offset {}: {}", offset, _e);
+        }
+    }
+
+    Ok(None)
 }
 
 fn read_sector<R>(reader: &mut R, offset: u64) -> Result<[u8; 512]>

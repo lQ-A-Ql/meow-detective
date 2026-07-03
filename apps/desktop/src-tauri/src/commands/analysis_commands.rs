@@ -12,8 +12,9 @@ use transport::{
     dto::{
         AnalysisExtractionRunDto, AnalysisFileClassificationDto, AnalysisSystemInfoDto,
         BrowserHistorySummaryDto, CorrelationSnapshotDto, EmailExtractionSummaryDto,
-        EvidenceClassificationSummaryDto, EvtxEventSummaryDto, RegistryExtractionSummaryDto,
-        RegistryStructuredSummaryDto, V2GovernanceSnapshotDto, V3GovernanceSnapshotDto,
+        EvidenceClassificationSummaryDto, EvtxEventSummaryDto, LinuxArtifactSummaryDto,
+        RegistryExtractionSummaryDto, RegistryStructuredSummaryDto, V2GovernanceSnapshotDto,
+        V3GovernanceSnapshotDto,
     },
     CommandError,
 };
@@ -265,6 +266,27 @@ pub async fn get_evtx_event_summary(
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         analysis_service::get_evtx_event_summary(&conn, req.offset, req.limit)
+            .map_err(CommandError::from_typed_service_error)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+/// Get Linux artifact summary: systemd journal, wtmp/btmp logins, bash history,
+/// apt/dpkg package events, cron jobs, and sudo/auth events.
+#[tauri::command]
+pub async fn get_linux_artifact_summary(
+    state: State<'_, AppState>,
+    request: Option<GetAnalysisExtractionRequest>,
+) -> Result<LinuxArtifactSummaryDto, CommandError> {
+    let app_state = state.inner().clone();
+    let mut req = request.unwrap_or_default();
+    req.validate().map_err(CommandError::invalid_input)?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        require_active_case(&app_state)?;
+        let conn = get_case_connection(&app_state)?;
+        analysis_service::get_linux_artifact_summary(&conn, req.offset, req.limit)
             .map_err(CommandError::from_typed_service_error)
     })
     .await

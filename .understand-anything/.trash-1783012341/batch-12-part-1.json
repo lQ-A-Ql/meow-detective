@@ -1,0 +1,1502 @@
+{
+  "nodes": [
+    {
+      "id": "file:frontend/src/components/gql/GqlResultView.tsx",
+      "type": "file",
+      "name": "GqlResultView.tsx",
+      "filePath": "frontend/src/components/gql/GqlResultView.tsx",
+      "summary": "知识图谱查询结果可视化组件，支持节点和边的展开/折叠查看、JSON 复制及元数据展示。",
+      "tags": ["graphql", "result-viewer", "component", "visualization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/components/gql/GqlResultView.tsx:CopyButton",
+      "type": "function",
+      "name": "CopyButton",
+      "filePath": "frontend/src/components/gql/GqlResultView.tsx",
+      "lineRange": [10, 29],
+      "summary": "内联复制按钮组件，点击时将指定内容写入剪贴板并显示复制成功状态。",
+      "tags": ["ui-component", "clipboard", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/gql/GqlResultView.tsx:ExpandRow",
+      "type": "function",
+      "name": "ExpandRow",
+      "filePath": "frontend/src/components/gql/GqlResultView.tsx",
+      "lineRange": [31, 61],
+      "summary": "可展开行组件，控制节点详情区域的展开/折叠交互及子内容渲染。",
+      "tags": ["ui-component", "expand-collapse", "interaction"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/gql/GqlResultView.tsx:GqlResultView",
+      "type": "function",
+      "name": "GqlResultView",
+      "filePath": "frontend/src/components/gql/GqlResultView.tsx",
+      "lineRange": [63, 205],
+      "summary": "知识图谱查询结果主组件，渲染节点列表和边列表，支持字段详情展开、复制及权重可视化。",
+      "tags": ["graphql", "result-viewer", "visualization", "component"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/components/graph/ForceGraph.tsx",
+      "type": "file",
+      "name": "ForceGraph.tsx",
+      "filePath": "frontend/src/components/graph/ForceGraph.tsx",
+      "summary": "基于 Canvas 力导向布局的图谱可视化引擎，支持节点拖拽、缩放平移、边类型筛选及覆盖层控制。",
+      "tags": ["graph-visualization", "force-layout", "canvas", "component"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/components/graph/ForceGraph.tsx:ForceGraph",
+      "type": "function",
+      "name": "ForceGraph",
+      "filePath": "frontend/src/components/graph/ForceGraph.tsx",
+      "lineRange": [29, 338],
+      "summary": "Canvas 力导向图谱渲染组件，实现节点/边绘制、力仿真动画、点选拖拽交互及缩放平移操控。",
+      "tags": ["graph-visualization", "force-layout", "canvas-render", "interaction"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/components/graph/ForceGraph.tsx:GraphOverlay",
+      "type": "function",
+      "name": "GraphOverlay",
+      "filePath": "frontend/src/components/graph/ForceGraph.tsx",
+      "lineRange": [340, 373],
+      "summary": "图谱覆盖层控制面板组件，提供缩放、适应画布和重置力布局的按钮操作。",
+      "tags": ["ui-overlay", "graph-control", "zoom"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/components/graph/GraphVisualizationSection.tsx",
+      "type": "file",
+      "name": "GraphVisualizationSection.tsx",
+      "filePath": "frontend/src/components/graph/GraphVisualizationSection.tsx",
+      "summary": "图谱可视化综合面板组件，整合力导向图渲染、节点/边详情、图谱查询及邻域展开功能。",
+      "tags": ["graph-visualization", "dashboard", "interaction", "component"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/components/graph/GraphVisualizationSection.tsx:GraphVisualizationSection",
+      "type": "function",
+      "name": "GraphVisualizationSection",
+      "filePath": "frontend/src/components/graph/GraphVisualizationSection.tsx",
+      "lineRange": [26, 299],
+      "summary": "图谱可视化的主面板，协调图谱数据获取、节点选中交互、邻域展开、边类型筛选及画布自适应。",
+      "tags": ["graph-visualization", "panel", "state-management", "interaction"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/components/graph/GraphVisualizationSection.tsx:NodeMiniDetails",
+      "type": "function",
+      "name": "NodeMiniDetails",
+      "filePath": "frontend/src/components/graph/GraphVisualizationSection.tsx",
+      "lineRange": [301, 347],
+      "summary": "节点迷你详情面板，展示节点的类型、标签、关联边及快速操作入口。",
+      "tags": ["detail-panel", "node-info", "ui-component"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/components/graph/GraphVisualizationSection.tsx:EdgeMiniDetails",
+      "type": "function",
+      "name": "EdgeMiniDetails",
+      "filePath": "frontend/src/components/graph/GraphVisualizationSection.tsx",
+      "lineRange": [349, 410],
+      "summary": "边迷你详情面板，展示源/目标节点信息、边类型、权重及溯源链数据。",
+      "tags": ["detail-panel", "edge-info", "provenance", "ui-component"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/components/graph/graph-utils.test.ts",
+      "type": "file",
+      "name": "graph-utils.test.ts",
+      "filePath": "frontend/src/components/graph/graph-utils.test.ts",
+      "summary": "图谱工具函数单元测试，验证节点/边构建、度映射和仿真算法的正确性。",
+      "tags": ["test", "graph", "unit-test", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/components/graph/graph-utils.ts",
+      "type": "file",
+      "name": "graph-utils.ts",
+      "filePath": "frontend/src/components/graph/graph-utils.ts",
+      "summary": "图谱核心工具库，提供节点/边类型颜色映射、度计算、力仿真迭代和视图自适应变换函数。",
+      "tags": ["utility", "graph", "force-layout", "simulation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/components/graph/graph-utils.ts:degreeMap",
+      "type": "function",
+      "name": "degreeMap",
+      "filePath": "frontend/src/components/graph/graph-utils.ts",
+      "lineRange": [76, 86],
+      "summary": "构建节点度数映射表，统计每个节点关联的边数用于力仿真中的节点质量计算。",
+      "tags": ["utility", "graph-metrics", "degree"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/graph/graph-utils.ts:tickSimulation",
+      "type": "function",
+      "name": "tickSimulation",
+      "filePath": "frontend/src/components/graph/graph-utils.ts",
+      "lineRange": [88, 174],
+      "summary": "力导向仿真核心算法，每帧迭代计算斥力/引力/中心力及边界约束，更新节点位置。",
+      "tags": ["simulation", "force-layout", "algorithm", "physics"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/components/graph/graph-utils.ts:fitTransform",
+      "type": "function",
+      "name": "fitTransform",
+      "filePath": "frontend/src/components/graph/graph-utils.ts",
+      "lineRange": [176, 202],
+      "summary": "计算自适应视图变换参数，使图谱所有节点恰好适配当前画布视口。",
+      "tags": ["utility", "viewport", "transform", "graph"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/components/layout/BottomDrawer.test.tsx",
+      "type": "file",
+      "name": "BottomDrawer.test.tsx",
+      "filePath": "frontend/src/components/layout/BottomDrawer.test.tsx",
+      "summary": "底部抽屉组件的综合测试，覆盖导入状态、作业面板、警告及追踪信息的渲染验证。",
+      "tags": ["test", "layout", "integration-test", "ui"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:frontend/src/components/layout/BottomDrawer.tsx",
+      "type": "file",
+      "name": "BottomDrawer.tsx",
+      "filePath": "frontend/src/components/layout/BottomDrawer.tsx",
+      "summary": "应用程序底部可拖拽状态抽屉，聚合展示导入进度、作业状态、警告及追踪信息的全局监控面板。",
+      "tags": ["layout", "drawer", "job-monitoring", "import-status", "component"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/components/layout/BottomDrawer.tsx:BottomDrawer",
+      "type": "function",
+      "name": "BottomDrawer",
+      "filePath": "frontend/src/components/layout/BottomDrawer.tsx",
+      "lineRange": [20, 371],
+      "summary": "底部状态抽屉主组件，集成导入信号、作业快照、警告追踪，提供分标签页的状态总览面板。",
+      "tags": ["layout", "drawer", "job-monitoring", "state-aggregation"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/components/layout/BottomDrawer.tsx:cacheKeyLabel",
+      "type": "function",
+      "name": "cacheKeyLabel",
+      "filePath": "frontend/src/components/layout/BottomDrawer.tsx",
+      "lineRange": [373, 387],
+      "summary": "缓存键名映射为可读中文标签的辅助函数。",
+      "tags": ["utility", "i18n-label", "cache"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/layout/BottomDrawer.tsx:DrawerChip",
+      "type": "function",
+      "name": "DrawerChip",
+      "filePath": "frontend/src/components/layout/BottomDrawer.tsx",
+      "lineRange": [389, 398],
+      "summary": "带色调的标签徽章组件，用于显示导入阶段或缓存状态的视觉标签。",
+      "tags": ["ui-component", "badge", "status"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/layout/BottomDrawer.tsx:getToneClass",
+      "type": "function",
+      "name": "getToneClass",
+      "filePath": "frontend/src/components/layout/BottomDrawer.tsx",
+      "lineRange": [400, 423],
+      "summary": "根据色调关键字映射到对应 Tailwind CSS 类名的样式辅助函数。",
+      "tags": ["utility", "styling", "tone-mapping"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/layout/BottomDrawer.tsx:JobOutcomeBadges",
+      "type": "function",
+      "name": "JobOutcomeBadges",
+      "filePath": "frontend/src/components/layout/BottomDrawer.tsx",
+      "lineRange": [425, 450],
+      "summary": "作业结果徽章组件，根据作业产出类型（文件数、记录数、摘要）显示统计标签。",
+      "tags": ["ui-component", "badge", "job-outcome"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/components/marketplace/MarketplaceBrowser.tsx",
+      "type": "file",
+      "name": "MarketplaceBrowser.tsx",
+      "filePath": "frontend/src/components/marketplace/MarketplaceBrowser.tsx",
+      "summary": "规则包市场浏览器，支持从远程市场浏览、下载和评分 YARA/检测规则包及导入结果展示。",
+      "tags": ["marketplace", "rule-pack", "component", "download"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/components/marketplace/MarketplaceBrowser.tsx:useMarketplace",
+      "type": "function",
+      "name": "useMarketplace",
+      "filePath": "frontend/src/components/marketplace/MarketplaceBrowser.tsx",
+      "lineRange": [77, 164],
+      "summary": "市场数据管理 Hook，封装规则包列表获取、下载、评分状态逻辑和错误处理。",
+      "tags": ["hook", "state-management", "marketplace", "api-integration"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/components/marketplace/MarketplaceBrowser.tsx:MarketplaceBrowser",
+      "type": "function",
+      "name": "MarketplaceBrowser",
+      "filePath": "frontend/src/components/marketplace/MarketplaceBrowser.tsx",
+      "lineRange": [170, 238],
+      "summary": "市场浏览器 UI 组件，渲染规则包卡片列表、导入结果横幅和空/错误状态。",
+      "tags": ["marketplace", "ui-component", "card-list"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/components/marketplace/MarketplaceBrowser.tsx:ImportBanner",
+      "type": "function",
+      "name": "ImportBanner",
+      "filePath": "frontend/src/components/marketplace/MarketplaceBrowser.tsx",
+      "lineRange": [244, 271],
+      "summary": "规则包导入结果显示横幅，展示成功/失败状态及操作建议。",
+      "tags": ["ui-component", "banner", "import-result"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/marketplace/MarketplaceBrowser.tsx:RulePackCard",
+      "type": "function",
+      "name": "RulePackCard",
+      "filePath": "frontend/src/components/marketplace/MarketplaceBrowser.tsx",
+      "lineRange": [273, 362],
+      "summary": "市场规则包卡片组件，展示名称、描述、家族标签、下载状态及评分交互。",
+      "tags": ["ui-component", "card", "rule-pack", "download"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/components/marketplace/MarketplaceBrowser.tsx:StarRating",
+      "type": "function",
+      "name": "StarRating",
+      "filePath": "frontend/src/components/marketplace/MarketplaceBrowser.tsx",
+      "lineRange": [364, 393],
+      "summary": "五星评分交互组件，支持悬停预览和点击评分操作。",
+      "tags": ["ui-component", "rating", "interaction"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/components/status/InlineProgressRow.tsx",
+      "type": "file",
+      "name": "InlineProgressRow.tsx",
+      "filePath": "frontend/src/components/status/InlineProgressRow.tsx",
+      "summary": "轻量级内联进度行组件，展示任务标题、副标题、详情和进度指示器。",
+      "tags": ["ui-component", "progress", "status", "inline"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/status/InlineProgressRow.tsx:InlineProgressRow",
+      "type": "function",
+      "name": "InlineProgressRow",
+      "filePath": "frontend/src/components/status/InlineProgressRow.tsx",
+      "lineRange": [8, 24],
+      "summary": "内联进度行渲染组件，支持标题、副标题、详情文本和进度条的布局展示。",
+      "tags": ["ui-component", "progress", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/features/analysis/hooks.test.ts",
+      "type": "file",
+      "name": "hooks.test.ts",
+      "filePath": "frontend/src/features/analysis/hooks.test.ts",
+      "summary": "分析功能 React Query Hooks 的单元测试，覆盖系统信息、分类、提取摘要及治理快照等所有查询和变更。",
+      "tags": ["test", "analysis", "react-query", "hooks"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:frontend/src/features/analysis/hooks.ts",
+      "type": "file",
+      "name": "hooks.ts",
+      "filePath": "frontend/src/features/analysis/hooks.ts",
+      "summary": "分析功能 React Query Hooks 集合，封装系统信息、证据分类、注册表/浏览器/邮件/EVTX/Linux 提取及治理快照的查询与变更。",
+      "tags": ["hooks", "analysis", "react-query", "api-integration"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/features/analysis/hooks.ts:useAnalysisSystemInfo",
+      "type": "function",
+      "name": "useAnalysisSystemInfo",
+      "filePath": "frontend/src/features/analysis/hooks.ts",
+      "lineRange": [31, 40],
+      "summary": "查询当前案件的操作系统信息快照的 React Query Hook。",
+      "tags": ["hook", "react-query", "system-info", "analysis"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/features/analysis/hooks.ts:useAnalysisClassifications",
+      "type": "function",
+      "name": "useAnalysisClassifications",
+      "filePath": "frontend/src/features/analysis/hooks.ts",
+      "lineRange": [42, 51],
+      "summary": "查询文件分类结果（按采样量）的 React Query Hook。",
+      "tags": ["hook", "react-query", "classification", "analysis"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/features/analysis/hooks.ts:useEvidenceClassificationSummary",
+      "type": "function",
+      "name": "useEvidenceClassificationSummary",
+      "filePath": "frontend/src/features/analysis/hooks.ts",
+      "lineRange": [53, 62],
+      "summary": "查询证据分类摘要统计的 React Query Hook。",
+      "tags": ["hook", "react-query", "classification-summary", "analysis"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/features/analysis/hooks.ts:useRegistryExtractionSummary",
+      "type": "function",
+      "name": "useRegistryExtractionSummary",
+      "filePath": "frontend/src/features/analysis/hooks.ts",
+      "lineRange": [64, 75],
+      "summary": "查询 Windows 注册表提取摘要（按请求参数）的 React Query Hook。",
+      "tags": ["hook", "react-query", "registry", "extraction"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/features/analysis/hooks.ts:useBrowserHistorySummary",
+      "type": "function",
+      "name": "useBrowserHistorySummary",
+      "filePath": "frontend/src/features/analysis/hooks.ts",
+      "lineRange": [88, 99],
+      "summary": "查询浏览器历史记录提取摘要的 React Query Hook。",
+      "tags": ["hook", "react-query", "browser", "extraction"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/features/analysis/hooks.ts:useEmailExtractionSummary",
+      "type": "function",
+      "name": "useEmailExtractionSummary",
+      "filePath": "frontend/src/features/analysis/hooks.ts",
+      "lineRange": [101, 112],
+      "summary": "查询邮件提取摘要的 React Query Hook。",
+      "tags": ["hook", "react-query", "email", "extraction"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/features/analysis/hooks.ts:useEvtxEventSummary",
+      "type": "function",
+      "name": "useEvtxEventSummary",
+      "filePath": "frontend/src/features/analysis/hooks.ts",
+      "lineRange": [114, 125],
+      "summary": "查询 Windows EVTX 事件日志摘要的 React Query Hook。",
+      "tags": ["hook", "react-query", "evtx", "extraction"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/features/analysis/hooks.ts:useLinuxArtifactSummary",
+      "type": "function",
+      "name": "useLinuxArtifactSummary",
+      "filePath": "frontend/src/features/analysis/hooks.ts",
+      "lineRange": [127, 138],
+      "summary": "查询 Linux 证据提取摘要的 React Query Hook。",
+      "tags": ["hook", "react-query", "linux", "extraction"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/features/analysis/hooks.ts:useRunEvidenceClassification",
+      "type": "function",
+      "name": "useRunEvidenceClassification",
+      "filePath": "frontend/src/features/analysis/hooks.ts",
+      "lineRange": [173, 185],
+      "summary": "触发证据分类执行的 React Query Mutation Hook，完成后自动刷新相关缓存。",
+      "tags": ["hook", "react-query", "mutation", "classification"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/features/analysis/hooks.ts:useRunAnalysisExtraction",
+      "type": "function",
+      "name": "useRunAnalysisExtraction",
+      "filePath": "frontend/src/features/analysis/hooks.ts",
+      "lineRange": [187, 205],
+      "summary": "触发分析提取执行的 React Query Mutation Hook，完成后批量刷新多个提取结果缓存。",
+      "tags": ["hook", "react-query", "mutation", "extraction"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/features/artifacts/hooks.test.ts",
+      "type": "file",
+      "name": "hooks.test.ts",
+      "filePath": "frontend/src/features/artifacts/hooks.test.ts",
+      "summary": "证据项 Hooks 的单元测试，覆盖 artifact 家族列表、行数据和详情查询的验证。",
+      "tags": ["test", "artifacts", "react-query", "hooks"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/features/artifacts/hooks.ts",
+      "type": "file",
+      "name": "hooks.ts",
+      "filePath": "frontend/src/features/artifacts/hooks.ts",
+      "summary": "证据项查询 Hooks，封装 artifact 家族列表、按家族行、计数和按 ID 详情的轻量级 React Query 封装。",
+      "tags": ["hooks", "artifacts", "react-query", "api-integration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/features/artifacts/hooks.ts:useArtifactFamilies",
+      "type": "function",
+      "name": "useArtifactFamilies",
+      "filePath": "frontend/src/features/artifacts/hooks.ts",
+      "lineRange": [4, 6],
+      "summary": "查询可用 artifact 家族列表的 React Query Hook。",
+      "tags": ["hook", "react-query", "artifacts"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/features/artifacts/hooks.ts:useArtifactRows",
+      "type": "function",
+      "name": "useArtifactRows",
+      "filePath": "frontend/src/features/artifacts/hooks.ts",
+      "lineRange": [8, 13],
+      "summary": "按家族查询 artifact 行数据的 React Query Hook。",
+      "tags": ["hook", "react-query", "artifacts", "rows"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/features/artifacts/hooks.ts:useArtifactFamilyCounts",
+      "type": "function",
+      "name": "useArtifactFamilyCounts",
+      "filePath": "frontend/src/features/artifacts/hooks.ts",
+      "lineRange": [15, 17],
+      "summary": "查询各 artifact 家族的条目数量的 React Query Hook。",
+      "tags": ["hook", "react-query", "artifacts", "counts"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/features/artifacts/hooks.ts:useArtifactById",
+      "type": "function",
+      "name": "useArtifactById",
+      "filePath": "frontend/src/features/artifacts/hooks.ts",
+      "lineRange": [19, 26],
+      "summary": "按 ID 查询单个 artifact 详情的 React Query Hook，根据 artifactId 存在性启用。",
+      "tags": ["hook", "react-query", "artifacts", "detail"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/features/batch/hooks.test.ts",
+      "type": "file",
+      "name": "hooks.test.ts",
+      "filePath": "frontend/src/features/batch/hooks.test.ts",
+      "summary": "批量作业 Hooks 的单元测试，覆盖批量作业列表查询、详情获取及生命周期变更的验证。",
+      "tags": ["test", "batch", "react-query", "hooks"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/features/batch/hooks.ts",
+      "type": "file",
+      "name": "hooks.ts",
+      "filePath": "frontend/src/features/batch/hooks.ts",
+      "summary": "批量作业管理 Hooks，封装列表查询、详情获取及创建/启动/暂停/恢复/取消等生命周期变更操作。",
+      "tags": ["hooks", "batch", "react-query", "job-management"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/features/batch/hooks.ts:useListBatchJobs",
+      "type": "function",
+      "name": "useListBatchJobs",
+      "filePath": "frontend/src/features/batch/hooks.ts",
+      "lineRange": [19, 31],
+      "summary": "查询批量作业列表的 React Query Hook，根据是否还有运行中的作业调整轮询间隔。",
+      "tags": ["hook", "react-query", "batch", "list"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/features/batch/hooks.ts:useBatchJob",
+      "type": "function",
+      "name": "useBatchJob",
+      "filePath": "frontend/src/features/batch/hooks.ts",
+      "lineRange": [33, 44],
+      "summary": "按 ID 查询单个批量作业详情的 React Query Hook。",
+      "tags": ["hook", "react-query", "batch", "detail"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/features/batch/hooks.ts:useCreateBatchPlan",
+      "type": "function",
+      "name": "useCreateBatchPlan",
+      "filePath": "frontend/src/features/batch/hooks.ts",
+      "lineRange": [46, 55],
+      "summary": "创建批量作业计划的 React Query Mutation Hook，成功后刷新列表缓存。",
+      "tags": ["hook", "react-query", "mutation", "batch"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/features/batch/hooks.ts:useStartBatch",
+      "type": "function",
+      "name": "useStartBatch",
+      "filePath": "frontend/src/features/batch/hooks.ts",
+      "lineRange": [57, 66],
+      "summary": "启动批量作业的 React Query Mutation Hook，成功后刷新列表缓存。",
+      "tags": ["hook", "react-query", "mutation", "batch"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/features/batch/hooks.ts:usePauseBatch",
+      "type": "function",
+      "name": "usePauseBatch",
+      "filePath": "frontend/src/features/batch/hooks.ts",
+      "lineRange": [68, 77],
+      "summary": "暂停批量作业的 React Query Mutation Hook，成功后刷新列表缓存。",
+      "tags": ["hook", "react-query", "mutation", "batch"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/features/batch/hooks.ts:useResumeBatch",
+      "type": "function",
+      "name": "useResumeBatch",
+      "filePath": "frontend/src/features/batch/hooks.ts",
+      "lineRange": [79, 88],
+      "summary": "恢复批量作业的 React Query Mutation Hook，成功后刷新列表缓存。",
+      "tags": ["hook", "react-query", "mutation", "batch"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/features/batch/hooks.ts:useCancelBatch",
+      "type": "function",
+      "name": "useCancelBatch",
+      "filePath": "frontend/src/features/batch/hooks.ts",
+      "lineRange": [90, 99],
+      "summary": "取消批量作业的 React Query Mutation Hook，成功后刷新列表缓存。",
+      "tags": ["hook", "react-query", "mutation", "batch"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:frontend/src/components/gql/GqlResultView.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/gql/GqlResultView.tsx",
+      "target": "function:frontend/src/components/gql/GqlResultView.tsx:CopyButton",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/gql/GqlResultView.tsx",
+      "target": "function:frontend/src/components/gql/GqlResultView.tsx:ExpandRow",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/gql/GqlResultView.tsx",
+      "target": "function:frontend/src/components/gql/GqlResultView.tsx:GqlResultView",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/gql/GqlResultView.tsx",
+      "target": "function:frontend/src/components/gql/GqlResultView.tsx:GqlResultView",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/graph/ForceGraph.tsx",
+      "target": "file:frontend/src/components/graph/graph-utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/graph/ForceGraph.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/graph/ForceGraph.tsx",
+      "target": "function:frontend/src/components/graph/ForceGraph.tsx:ForceGraph",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/graph/ForceGraph.tsx",
+      "target": "function:frontend/src/components/graph/ForceGraph.tsx:GraphOverlay",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/graph/ForceGraph.tsx",
+      "target": "function:frontend/src/components/graph/ForceGraph.tsx:ForceGraph",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/graph/ForceGraph.tsx",
+      "target": "function:frontend/src/components/graph/graph-utils.ts:degreeMap",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/graph/ForceGraph.tsx",
+      "target": "function:frontend/src/components/graph/graph-utils.ts:tickSimulation",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/graph/ForceGraph.tsx",
+      "target": "function:frontend/src/components/graph/graph-utils.ts:fitTransform",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/graph/GraphVisualizationSection.tsx",
+      "target": "file:frontend/src/app/components/ui/button.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/graph/GraphVisualizationSection.tsx",
+      "target": "file:frontend/src/app/pages/V3ScoreCards.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/graph/GraphVisualizationSection.tsx",
+      "target": "file:frontend/src/components/graph/ForceGraph.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/graph/GraphVisualizationSection.tsx",
+      "target": "file:frontend/src/components/graph/graph-utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/graph/GraphVisualizationSection.tsx",
+      "target": "file:frontend/src/features/case/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/graph/GraphVisualizationSection.tsx",
+      "target": "file:frontend/src/features/files/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/graph/GraphVisualizationSection.tsx",
+      "target": "file:frontend/src/features/graph/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/graph/GraphVisualizationSection.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/graph/GraphVisualizationSection.tsx",
+      "target": "function:frontend/src/components/graph/GraphVisualizationSection.tsx:GraphVisualizationSection",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/graph/GraphVisualizationSection.tsx",
+      "target": "function:frontend/src/components/graph/GraphVisualizationSection.tsx:NodeMiniDetails",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/graph/GraphVisualizationSection.tsx",
+      "target": "function:frontend/src/components/graph/GraphVisualizationSection.tsx:EdgeMiniDetails",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/graph/GraphVisualizationSection.tsx",
+      "target": "function:frontend/src/components/graph/GraphVisualizationSection.tsx:GraphVisualizationSection",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:frontend/src/components/graph/GraphVisualizationSection.tsx:GraphVisualizationSection",
+      "target": "function:frontend/src/features/case/hooks.ts:useCurrentCase",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:frontend/src/components/graph/GraphVisualizationSection.tsx:GraphVisualizationSection",
+      "target": "function:frontend/src/features/graph/hooks.ts:useGraphSnapshot",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:frontend/src/components/graph/GraphVisualizationSection.tsx:GraphVisualizationSection",
+      "target": "function:frontend/src/features/graph/hooks.ts:useGraphQuery",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/graph/graph-utils.test.ts",
+      "target": "file:frontend/src/components/graph/graph-utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/graph/graph-utils.test.ts",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/graph/graph-utils.test.ts",
+      "target": "file:frontend/src/components/graph/graph-utils.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:frontend/src/components/graph/graph-utils.ts",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/graph/graph-utils.ts",
+      "target": "function:frontend/src/components/graph/graph-utils.ts:degreeMap",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/graph/graph-utils.ts",
+      "target": "function:frontend/src/components/graph/graph-utils.ts:tickSimulation",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/graph/graph-utils.ts",
+      "target": "function:frontend/src/components/graph/graph-utils.ts:fitTransform",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/graph/graph-utils.ts",
+      "target": "function:frontend/src/components/graph/graph-utils.ts:degreeMap",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/graph/graph-utils.ts",
+      "target": "function:frontend/src/components/graph/graph-utils.ts:tickSimulation",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/graph/graph-utils.ts",
+      "target": "function:frontend/src/components/graph/graph-utils.ts:fitTransform",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/layout/BottomDrawer.test.tsx",
+      "target": "file:frontend/src/components/layout/BottomDrawer.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/layout/BottomDrawer.test.tsx",
+      "target": "file:frontend/src/components/layout/BottomDrawer.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:frontend/src/components/layout/BottomDrawer.tsx",
+      "target": "file:frontend/src/features/case/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/layout/BottomDrawer.tsx",
+      "target": "file:frontend/src/features/jobs/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/layout/BottomDrawer.tsx",
+      "target": "file:frontend/src/features/jobs/import-event-state.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/layout/BottomDrawer.tsx",
+      "target": "file:frontend/src/hooks/use-resizable-height.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/layout/BottomDrawer.tsx",
+      "target": "file:frontend/src/stores/ui-store.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/layout/BottomDrawer.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/layout/BottomDrawer.tsx",
+      "target": "function:frontend/src/components/layout/BottomDrawer.tsx:BottomDrawer",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/layout/BottomDrawer.tsx",
+      "target": "function:frontend/src/components/layout/BottomDrawer.tsx:cacheKeyLabel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/layout/BottomDrawer.tsx",
+      "target": "function:frontend/src/components/layout/BottomDrawer.tsx:DrawerChip",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/layout/BottomDrawer.tsx",
+      "target": "function:frontend/src/components/layout/BottomDrawer.tsx:getToneClass",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/layout/BottomDrawer.tsx",
+      "target": "function:frontend/src/components/layout/BottomDrawer.tsx:JobOutcomeBadges",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/layout/BottomDrawer.tsx",
+      "target": "function:frontend/src/components/layout/BottomDrawer.tsx:BottomDrawer",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:frontend/src/components/layout/BottomDrawer.tsx:BottomDrawer",
+      "target": "function:frontend/src/features/case/hooks.ts:useDataSources",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:frontend/src/components/layout/BottomDrawer.tsx:BottomDrawer",
+      "target": "function:frontend/src/features/jobs/hooks.ts:useJobsSnapshot",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:frontend/src/components/layout/BottomDrawer.tsx:BottomDrawer",
+      "target": "function:frontend/src/features/jobs/hooks.ts:useWarnings",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:frontend/src/components/layout/BottomDrawer.tsx:BottomDrawer",
+      "target": "function:frontend/src/features/jobs/hooks.ts:useTraceItems",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:frontend/src/components/layout/BottomDrawer.tsx:BottomDrawer",
+      "target": "function:frontend/src/features/jobs/import-event-state.ts:useImportEventState",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:frontend/src/components/layout/BottomDrawer.tsx:BottomDrawer",
+      "target": "function:frontend/src/features/jobs/import-event-state.ts:getImportPhaseLabel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:frontend/src/components/layout/BottomDrawer.tsx:BottomDrawer",
+      "target": "function:frontend/src/features/jobs/import-event-state.ts:getImportPhaseStateLabel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:frontend/src/components/layout/BottomDrawer.tsx:BottomDrawer",
+      "target": "function:frontend/src/features/jobs/import-event-state.ts:getCacheStateLabel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:frontend/src/components/layout/BottomDrawer.tsx:BottomDrawer",
+      "target": "function:frontend/src/features/jobs/import-event-state.ts:deriveEvidenceHashStatus",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:frontend/src/components/layout/BottomDrawer.tsx:BottomDrawer",
+      "target": "function:frontend/src/features/jobs/import-event-state.ts:getEvidenceHashStatusLabel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:frontend/src/components/layout/BottomDrawer.tsx:BottomDrawer",
+      "target": "function:frontend/src/features/jobs/import-event-state.ts:getEvidenceHashCaveatText",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:frontend/src/components/layout/BottomDrawer.tsx:BottomDrawer",
+      "target": "function:frontend/src/features/jobs/import-event-state.ts:getPartialKindLabel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:frontend/src/components/layout/BottomDrawer.tsx:BottomDrawer",
+      "target": "function:frontend/src/features/jobs/import-event-state.ts:getFreshnessLabel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/marketplace/MarketplaceBrowser.tsx",
+      "target": "file:frontend/src/lib/api/rule-packs.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/marketplace/MarketplaceBrowser.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/marketplace/MarketplaceBrowser.tsx",
+      "target": "function:frontend/src/components/marketplace/MarketplaceBrowser.tsx:useMarketplace",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/marketplace/MarketplaceBrowser.tsx",
+      "target": "function:frontend/src/components/marketplace/MarketplaceBrowser.tsx:MarketplaceBrowser",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/marketplace/MarketplaceBrowser.tsx",
+      "target": "function:frontend/src/components/marketplace/MarketplaceBrowser.tsx:ImportBanner",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/marketplace/MarketplaceBrowser.tsx",
+      "target": "function:frontend/src/components/marketplace/MarketplaceBrowser.tsx:RulePackCard",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/marketplace/MarketplaceBrowser.tsx",
+      "target": "function:frontend/src/components/marketplace/MarketplaceBrowser.tsx:StarRating",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/marketplace/MarketplaceBrowser.tsx",
+      "target": "function:frontend/src/components/marketplace/MarketplaceBrowser.tsx:useMarketplace",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/marketplace/MarketplaceBrowser.tsx",
+      "target": "function:frontend/src/components/marketplace/MarketplaceBrowser.tsx:MarketplaceBrowser",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/status/InlineProgressRow.tsx",
+      "target": "function:frontend/src/components/status/InlineProgressRow.tsx:InlineProgressRow",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/status/InlineProgressRow.tsx",
+      "target": "function:frontend/src/components/status/InlineProgressRow.tsx:InlineProgressRow",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.test.ts",
+      "target": "file:frontend/src/features/analysis/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.test.ts",
+      "target": "file:frontend/src/features/analysis/hooks.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "file:frontend/src/features/case/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "file:frontend/src/lib/api/analysis.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "function:frontend/src/features/analysis/hooks.ts:useAnalysisSystemInfo",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "function:frontend/src/features/analysis/hooks.ts:useAnalysisClassifications",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "function:frontend/src/features/analysis/hooks.ts:useEvidenceClassificationSummary",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "function:frontend/src/features/analysis/hooks.ts:useRegistryExtractionSummary",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "function:frontend/src/features/analysis/hooks.ts:useBrowserHistorySummary",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "function:frontend/src/features/analysis/hooks.ts:useEmailExtractionSummary",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "function:frontend/src/features/analysis/hooks.ts:useEvtxEventSummary",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "function:frontend/src/features/analysis/hooks.ts:useLinuxArtifactSummary",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "function:frontend/src/features/analysis/hooks.ts:useRunEvidenceClassification",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "function:frontend/src/features/analysis/hooks.ts:useRunAnalysisExtraction",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "function:frontend/src/features/analysis/hooks.ts:useAnalysisSystemInfo",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "function:frontend/src/features/analysis/hooks.ts:useAnalysisClassifications",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "function:frontend/src/features/analysis/hooks.ts:useEvidenceClassificationSummary",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "function:frontend/src/features/analysis/hooks.ts:useRegistryExtractionSummary",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "function:frontend/src/features/analysis/hooks.ts:useBrowserHistorySummary",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "function:frontend/src/features/analysis/hooks.ts:useEmailExtractionSummary",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "function:frontend/src/features/analysis/hooks.ts:useEvtxEventSummary",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "function:frontend/src/features/analysis/hooks.ts:useLinuxArtifactSummary",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "function:frontend/src/features/analysis/hooks.ts:useRunEvidenceClassification",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/analysis/hooks.ts",
+      "target": "function:frontend/src/features/analysis/hooks.ts:useRunAnalysisExtraction",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:frontend/src/features/analysis/hooks.ts:useAnalysisSystemInfo",
+      "target": "function:frontend/src/features/case/hooks.ts:useCurrentCase",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:frontend/src/features/analysis/hooks.ts:useRunEvidenceClassification",
+      "target": "function:frontend/src/features/case/hooks.ts:useCurrentCase",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:frontend/src/features/analysis/hooks.ts:useRunAnalysisExtraction",
+      "target": "function:frontend/src/features/case/hooks.ts:useCurrentCase",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/artifacts/hooks.test.ts",
+      "target": "file:frontend/src/features/artifacts/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/features/artifacts/hooks.test.ts",
+      "target": "file:frontend/src/features/artifacts/hooks.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:frontend/src/features/artifacts/hooks.ts",
+      "target": "file:frontend/src/lib/api/artifacts.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/features/artifacts/hooks.ts",
+      "target": "function:frontend/src/features/artifacts/hooks.ts:useArtifactFamilies",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/artifacts/hooks.ts",
+      "target": "function:frontend/src/features/artifacts/hooks.ts:useArtifactRows",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/artifacts/hooks.ts",
+      "target": "function:frontend/src/features/artifacts/hooks.ts:useArtifactFamilyCounts",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/artifacts/hooks.ts",
+      "target": "function:frontend/src/features/artifacts/hooks.ts:useArtifactById",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/artifacts/hooks.ts",
+      "target": "function:frontend/src/features/artifacts/hooks.ts:useArtifactFamilies",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/artifacts/hooks.ts",
+      "target": "function:frontend/src/features/artifacts/hooks.ts:useArtifactRows",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/artifacts/hooks.ts",
+      "target": "function:frontend/src/features/artifacts/hooks.ts:useArtifactFamilyCounts",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/artifacts/hooks.ts",
+      "target": "function:frontend/src/features/artifacts/hooks.ts:useArtifactById",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/batch/hooks.test.ts",
+      "target": "file:frontend/src/features/batch/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/features/batch/hooks.test.ts",
+      "target": "file:frontend/src/features/batch/hooks.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:frontend/src/features/batch/hooks.ts",
+      "target": "file:frontend/src/lib/api/batch.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/features/batch/hooks.ts",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/features/batch/hooks.ts",
+      "target": "function:frontend/src/features/batch/hooks.ts:useListBatchJobs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/batch/hooks.ts",
+      "target": "function:frontend/src/features/batch/hooks.ts:useBatchJob",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/batch/hooks.ts",
+      "target": "function:frontend/src/features/batch/hooks.ts:useCreateBatchPlan",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/batch/hooks.ts",
+      "target": "function:frontend/src/features/batch/hooks.ts:useStartBatch",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/batch/hooks.ts",
+      "target": "function:frontend/src/features/batch/hooks.ts:usePauseBatch",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/batch/hooks.ts",
+      "target": "function:frontend/src/features/batch/hooks.ts:useResumeBatch",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/batch/hooks.ts",
+      "target": "function:frontend/src/features/batch/hooks.ts:useCancelBatch",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/batch/hooks.ts",
+      "target": "function:frontend/src/features/batch/hooks.ts:useListBatchJobs",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/batch/hooks.ts",
+      "target": "function:frontend/src/features/batch/hooks.ts:useBatchJob",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/batch/hooks.ts",
+      "target": "function:frontend/src/features/batch/hooks.ts:useCreateBatchPlan",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/batch/hooks.ts",
+      "target": "function:frontend/src/features/batch/hooks.ts:useStartBatch",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/batch/hooks.ts",
+      "target": "function:frontend/src/features/batch/hooks.ts:usePauseBatch",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/batch/hooks.ts",
+      "target": "function:frontend/src/features/batch/hooks.ts:useResumeBatch",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/batch/hooks.ts",
+      "target": "function:frontend/src/features/batch/hooks.ts:useCancelBatch",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

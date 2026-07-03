@@ -8,6 +8,8 @@ pub struct FileTreeNodeDto {
     pub depth: u32,
     pub has_children: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub data_source_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub entry_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<u64>,
@@ -131,6 +133,7 @@ mod tests {
             name: "System Volume Information".to_string(),
             depth: 1,
             has_children: false,
+            data_source_id: Some("ds-1".to_string()),
             entry_type: Some("directory".to_string()),
             size: None,
             deleted: false,
@@ -146,10 +149,12 @@ mod tests {
         let value = serde_json::to_value(dto).unwrap();
 
         assert_eq!(value["hasChildren"], false);
+        assert_eq!(value["dataSourceId"], "ds-1");
         assert_eq!(value["entryType"], "directory");
         assert_eq!(value["deleted"], false);
         assert_eq!(value["hidden"], true);
         assert_eq!(value["system"], true);
+        assert!(value.get("data_source_id").is_none());
         assert!(value.get("has_children").is_none());
     }
 

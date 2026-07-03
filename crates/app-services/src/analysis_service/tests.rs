@@ -844,6 +844,64 @@ fn run_analysis_extraction_extracts_eventlogs_and_persists() {
 }
 
 #[test]
+fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
+    let (conn, _tmp, ds_id) = setup_case_db();
+    let bash_history = "#1700000000\nls -la /home\ncat /etc/hostname\n";
+    let mut contents: HashMap<String, Vec<u8>> = HashMap::new();
+    contents.insert("bash-history".to_string(), bash_history.as_bytes().to_vec());
+    FileRepo::new(&conn)
+        .insert_batch(&[file_with_ds(
+            "bash-history",
+            &ds_id,
+            "home/alice/.bash_history",
+            bash_history.len() as u64,
+        )])
+        .unwrap();
+
+    let run = run_analysis_extraction(&conn, "case-analysis", &["LinuxArtifacts"], |file_id| {
+        contents
+            .get(&file_id.0)
+            .cloned()
+            .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
+            .ok_or_else(|| format!("missing bytes for {}", file_id.0))
+    })
+    .unwrap();
+
+    assert_eq!(run.scanned_count, 1);
+    let artifact_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'LinuxBashCommand'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(artifact_count > 0, "expected LinuxBashCommand artifacts");
+
+    let summary = get_linux_artifact_summary(&conn, 0, 200).unwrap();
+    assert_eq!(summary.bash_command_count, artifact_count as u64);
+    assert_eq!(summary.total_count, artifact_count as u64);
+    assert_eq!(summary.status, AnalysisParseStatusDto::Parsed);
+    let first = summary
+        .bash_commands
+        .iter()
+        .find(|cmd| cmd.command == "ls -la /home")
+        .expect("bash command should be present in summary");
+    assert_eq!(first.source_path, "home/alice/.bash_history");
+    assert!(first.timestamp.is_some());
+}
+
+#[test]
+fn get_linux_artifact_summary_reports_not_found_without_artifacts() {
+    let (conn, _tmp, _ds_id) = setup_case_db();
+
+    let summary = get_linux_artifact_summary(&conn, 0, 200).unwrap();
+
+    assert_eq!(summary.status, AnalysisParseStatusDto::NotFound);
+    assert_eq!(summary.total_count, 0);
+    assert!(summary.bash_commands.is_empty());
+}
+
+#[test]
 fn evidence_summary_reports_candidate_found_without_parser_run() {
     let (conn, _tmp, ds_id) = setup_case_db();
     FileRepo::new(&conn)

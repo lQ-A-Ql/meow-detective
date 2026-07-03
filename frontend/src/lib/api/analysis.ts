@@ -9,6 +9,7 @@ import {
   EmailExtractionSummary,
   EvtxEventSummary,
   EvidenceClassificationSummary,
+  LinuxArtifactSummary,
   RegistryExtractionSummary,
   RegistryStructuredSummary,
   V2GovernanceSnapshot,
@@ -65,6 +66,12 @@ export async function getEvtxEventSummary(
   request: AnalysisExtractionPageRequest = {},
 ): Promise<EvtxEventSummary> {
   return apiClient.request(COMMANDS.analysis.GET_EVTX_EVENT_SUMMARY, { request });
+}
+
+export async function getLinuxArtifactSummary(
+  request: AnalysisExtractionPageRequest = {},
+): Promise<LinuxArtifactSummary> {
+  return apiClient.request(COMMANDS.analysis.GET_LINUX_ARTIFACT_SUMMARY, { request });
 }
 
 export async function getV2GovernanceSnapshot(): Promise<V2GovernanceSnapshot> {

@@ -9,7 +9,7 @@ use commands::{
     analysis_commands::{
         classify_files, generate_analysis_summary, get_browser_history_summary,
         get_correlation_snapshot, get_email_extraction_summary,
-        get_evidence_classification_summary, get_evtx_event_summary,
+        get_evidence_classification_summary, get_evtx_event_summary, get_linux_artifact_summary,
         get_registry_extraction_summary, get_registry_structured_summary, get_system_info,
         get_v2_governance_snapshot, get_v3_governance_snapshot, run_analysis_extraction,
         run_evidence_classification,
@@ -133,6 +133,7 @@ pub fn run() {
             get_browser_history_summary,
             get_email_extraction_summary,
             get_evtx_event_summary,
+            get_linux_artifact_summary,
             get_v2_governance_snapshot,
             get_v3_governance_snapshot,
             get_correlation_snapshot,

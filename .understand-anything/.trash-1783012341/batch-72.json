@@ -1,0 +1,545 @@
+{
+  "nodes": [
+    {
+      "id": "file:crates/reports/src/evidence_bundle/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "crates/reports/src/evidence_bundle/mod.rs",
+      "summary": "evidence_bundle 模块的 Rust 模块声明文件，将该目录注册为 Rust 模块树的一部分。",
+      "tags": ["barrel", "module-declaration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:crates/runtime-cache/Cargo.toml",
+      "type": "config",
+      "name": "Cargo.toml",
+      "filePath": "crates/runtime-cache/Cargo.toml",
+      "summary": "runtime-cache 辅助 crate 的 Cargo 清单，定义包元数据及依赖项，提供临时运行缓存支持。",
+      "tags": ["configuration", "cargo", "build-system", "cache"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:crates/search/Cargo.toml",
+      "type": "config",
+      "name": "Cargo.toml",
+      "filePath": "crates/search/Cargo.toml",
+      "summary": "search 搜索 crate 的 Cargo 清单，定义包元数据、运行时依赖（含 tantivy 全文检索引擎）及开发依赖。",
+      "tags": ["configuration", "cargo", "build-system", "search"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/search/src/query/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "crates/search/src/query/mod.rs",
+      "summary": "search 查询子模块的 Rust 模块声明文件。",
+      "tags": ["barrel", "module-declaration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/search/src/repository/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "crates/search/src/repository/mod.rs",
+      "summary": "search 仓库子模块的 Rust 模块声明文件。",
+      "tags": ["barrel", "module-declaration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/search/tests/extractor_test.rs",
+      "type": "file",
+      "name": "extractor_test.rs",
+      "filePath": "crates/search/tests/extractor_test.rs",
+      "summary": "搜索文本提取器的集成测试，验证 UTF-8/UTF-16 文本提取、二进制文件检测及空文件处理。",
+      "tags": ["test", "search", "text-extraction"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/search/tests/extractor_test.rs:extract_utf16_le_text",
+      "type": "function",
+      "name": "extract_utf16_le_text",
+      "filePath": "crates/search/tests/extractor_test.rs",
+      "lineRange": [13, 22],
+      "summary": "测试 UTF-16 LE 编码文本的提取能力，验证编码转换和内容提取的正确性。",
+      "tags": ["test", "utf16", "text-extraction"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/search/tests/indexer_test.rs",
+      "type": "file",
+      "name": "indexer_test.rs",
+      "filePath": "crates/search/tests/indexer_test.rs",
+      "summary": "搜索索引器的集成测试套件，覆盖索引创建、文档替换、二进制过滤、多字节高亮偏移及空结果查询。",
+      "tags": ["test", "search", "indexing", "tantivy"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/search/tests/indexer_test.rs:create_and_search_index",
+      "type": "function",
+      "name": "create_and_search_index",
+      "filePath": "crates/search/tests/indexer_test.rs",
+      "lineRange": [5, 38],
+      "summary": "测试索引创建与基本全文搜索流程，验证 SearchIndex 的创建、文档索引及关键词查询能力。",
+      "tags": ["test", "search", "indexing", "tantivy"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/search/tests/indexer_test.rs:reindex_same_file_id_replaces_existing_document",
+      "type": "function",
+      "name": "reindex_same_file_id_replaces_existing_document",
+      "filePath": "crates/search/tests/indexer_test.rs",
+      "lineRange": [41, 70],
+      "summary": "测试相同文件 ID 重新索引时旧文档被正确替换，验证旧词条不再可搜而新词条可搜。",
+      "tags": ["test", "search", "indexing", "reindex"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/search/tests/indexer_test.rs:binary_documents_are_not_indexed_or_left_stale",
+      "type": "function",
+      "name": "binary_documents_are_not_indexed_or_left_stale",
+      "filePath": "crates/search/tests/indexer_test.rs",
+      "lineRange": [73, 107],
+      "summary": "测试二进制文件不会被索引且不会残留过期数据，验证搜索仅返回可索引文本文件结果。",
+      "tags": ["test", "search", "binary", "indexing-filter"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/search/tests/indexer_test.rs:highlight_offsets_remain_inside_multibyte_snippet_boundaries",
+      "type": "function",
+      "name": "highlight_offsets_remain_inside_multibyte_snippet_boundaries",
+      "filePath": "crates/search/tests/indexer_test.rs",
+      "lineRange": [110, 137],
+      "summary": "测试多字节 Unicode 文本中高亮偏移量不跨越片段边界，确保 CJK 字符片段截断正确。",
+      "tags": ["test", "search", "unicode", "highlight", "multibyte"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/search/tests/indexer_test.rs:search_no_results",
+      "type": "function",
+      "name": "search_no_results",
+      "filePath": "crates/search/tests/indexer_test.rs",
+      "lineRange": [140, 153],
+      "summary": "测试搜索不存在的词条时返回空结果集。",
+      "tags": ["test", "search", "empty-results"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:crates/testing/Cargo.toml",
+      "type": "config",
+      "name": "Cargo.toml",
+      "filePath": "crates/testing/Cargo.toml",
+      "summary": "testing 共享测试工具 crate 的 Cargo 清单，定义包元数据及测试辅助依赖。",
+      "tags": ["configuration", "cargo", "build-system", "testing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/testing/src/bin/generate_tiny_registry_fixtures.rs",
+      "type": "file",
+      "name": "generate_tiny_registry_fixtures.rs",
+      "filePath": "crates/testing/src/bin/generate_tiny_registry_fixtures.rs",
+      "summary": "小型注册表测试固件生成工具，调用 registry 模块的 synthetic 方法生成 SYSTEM 和 SOFTWARE 注册表 hive 文件。",
+      "tags": ["tool", "fixture-generation", "registry", "testing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/testing/src/bin/generate_tiny_registry_fixtures.rs:main",
+      "type": "function",
+      "name": "main",
+      "filePath": "crates/testing/src/bin/generate_tiny_registry_fixtures.rs",
+      "lineRange": [5, 30],
+      "summary": "入口点函数，解析命令行参数获取输出目录，调用合成 hive 生成逻辑并写入文件系统。",
+      "tags": ["entry-point", "fixture-generation", "registry"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:crates/timeline/Cargo.toml",
+      "type": "config",
+      "name": "Cargo.toml",
+      "filePath": "crates/timeline/Cargo.toml",
+      "summary": "timeline 时间线 crate 的 Cargo 清单，定义包元数据及依赖项（含 domain、chrono、uuid）。",
+      "tags": ["configuration", "cargo", "build-system", "timeline"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/timeline/src/lib.rs",
+      "type": "file",
+      "name": "lib.rs",
+      "filePath": "crates/timeline/src/lib.rs",
+      "summary": "时间线模块核心实现，提供将文件条目（FileEntry）投影为 MACB 时间线事件的功能，包含内联测试套件覆盖单文件、多文件、目录及边界场景。",
+      "tags": ["timeline", "macb", "event-projection", "file-analysis", "test"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/timeline/src/lib.rs:project_file_macb",
+      "type": "function",
+      "name": "project_file_macb",
+      "filePath": "crates/timeline/src/lib.rs",
+      "lineRange": [12, 60],
+      "summary": "将单个文件条目投影为 MACB 时间线事件向量，过滤零值（epoch）时间戳，为 Modified/Accessed/Created/Changed 四个时间点各生成一个 TimelineEvent。",
+      "tags": ["timeline", "macb", "event-projection", "file-analysis"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/timeline/src/lib.rs:make_event",
+      "type": "function",
+      "name": "make_event",
+      "filePath": "crates/timeline/src/lib.rs",
+      "lineRange": [62, 82],
+      "summary": "构造单个 TimelineEvent，填充 ID（UUID v4）、来源对象 ID、事件类型、时间戳、标题和描述等字段。",
+      "tags": ["timeline", "event-factory", "helper"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:crates/transport/Cargo.toml",
+      "type": "config",
+      "name": "Cargo.toml",
+      "filePath": "crates/transport/Cargo.toml",
+      "summary": "transport IPC 传输层 crate 的 Cargo 清单，定义包元数据及 serde 序列化依赖，是前后端 DTO 契约的单一来源。",
+      "tags": ["configuration", "cargo", "build-system", "ipc", "transport"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/updater/build.rs",
+      "type": "file",
+      "name": "build.rs",
+      "filePath": "crates/updater/build.rs",
+      "summary": "Windows 平台构建脚本，为更新器可执行文件嵌入应用程序清单（manifest），确保 DPI 感知和高权限执行。",
+      "tags": ["build-script", "windows", "manifest", "dpi-awareness"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/updater/build.rs:main",
+      "type": "function",
+      "name": "main",
+      "filePath": "crates/updater/build.rs",
+      "lineRange": [1, 17],
+      "summary": "构建脚本入口，检测目标操作系统为 Windows 时通过 winres 嵌入应用程序清单资源。",
+      "tags": ["build-script", "windows", "manifest"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:crates/updater/Cargo.toml",
+      "type": "config",
+      "name": "Cargo.toml",
+      "filePath": "crates/updater/Cargo.toml",
+      "summary": "updater 自动更新 crate 的 Cargo 清单，定义包元数据、运行时依赖（reqwest、serde、sha2、hex）、开发依赖（wiremock、tempfile）及构建依赖（winres）。",
+      "tags": ["configuration", "cargo", "build-system", "auto-update"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/updater/src/lib.rs",
+      "type": "file",
+      "name": "lib.rs",
+      "filePath": "crates/updater/src/lib.rs",
+      "summary": "自动更新模块核心实现，提供版本检查、安装包下载（含 SHA-256 校验）、Windows 安装程序执行及语义版本对比功能，包含完整的 mock 集成测试套件。",
+      "tags": ["auto-update", "versioning", "download", "sha256", "test"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/updater/src/lib.rs:check_for_update",
+      "type": "function",
+      "name": "check_for_update",
+      "filePath": "crates/updater/src/lib.rs",
+      "lineRange": [59, 105],
+      "summary": "向更新端点发起 HTTP GET 请求获取 UpdateManifest，通过语义版本对比判断是否有新版本可用。",
+      "tags": ["auto-update", "version-check", "http-client", "reqwest"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/updater/src/lib.rs:download_update",
+      "type": "function",
+      "name": "download_update",
+      "filePath": "crates/updater/src/lib.rs",
+      "lineRange": [111, 178],
+      "summary": "下载更新安装包到临时文件，通过 SHA-256 哈希校验完整性，校验失败返回 HashMismatch 错误。",
+      "tags": ["auto-update", "download", "sha256", "integrity-check"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/updater/src/lib.rs:apply_update",
+      "type": "function",
+      "name": "apply_update",
+      "filePath": "crates/updater/src/lib.rs",
+      "lineRange": [184, 216],
+      "summary": "在 Windows 上通过 cmd.exe /WAIT 同步启动安装程序，等待安装完成并检查退出状态。",
+      "tags": ["auto-update", "installer", "windows", "process-management"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/updater/src/lib.rs:is_newer",
+      "type": "function",
+      "name": "is_newer",
+      "filePath": "crates/updater/src/lib.rs",
+      "lineRange": [224, 244],
+      "summary": "语义版本比较函数，将版本号字符串解析为数字分量数组，逐位比较判断候选版本是否严格大于参考版本。",
+      "tags": ["versioning", "semver", "comparison", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/updater/src/lib.rs:UpdateManifest",
+      "type": "class",
+      "name": "UpdateManifest",
+      "filePath": "crates/updater/src/lib.rs",
+      "lineRange": [15, 28],
+      "summary": "更新清单数据结构，反序列化自服务端 JSON，包含版本号、更新日志、发布时间、下载地址、SHA-256 哈希及文件大小。",
+      "tags": ["data-model", "serde", "update-manifest"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/updater/src/lib.rs:UpdateError",
+      "type": "class",
+      "name": "UpdateError",
+      "filePath": "crates/updater/src/lib.rs",
+      "lineRange": [32, 53],
+      "summary": "更新过程错误枚举，覆盖 TLS 错误、请求失败、下载失败、哈希不匹配、安装程序缺失及安装失败等场景。",
+      "tags": ["error-handling", "enum", "auto-update"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:development-reports/sessions/2026-05-17/session-005-agent-main.md",
+      "type": "document",
+      "name": "session-005-agent-main.md",
+      "filePath": "development-reports/sessions/2026-05-17/session-005-agent-main.md",
+      "summary": "2026-05-17 第 5 轮开发会话报告，记录 NTFS list_children 接入目标、E01 到 NTFS 枚举链路的架构决策、变更文件清单及测试/代码质量状态。",
+      "tags": ["documentation", "session-report", "development", "ntfs", "e01"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:development-reports/sessions/2026-05-17/session-006-agent-main.md",
+      "type": "document",
+      "name": "session-006-agent-main.md",
+      "filePath": "development-reports/sessions/2026-05-17/session-006-agent-main.md",
+      "summary": "2026-05-17 第 6 轮开发会话报告，涵盖 TSK 源码分析产出、E01 压缩块验证、NTFS 路径解析验证及后续解析器扩展计划。",
+      "tags": ["documentation", "session-report", "development", "tsk", "e01", "ntfs"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:development-reports/sessions/2026-05-29/session-001-audit-and-fixes.md",
+      "type": "document",
+      "name": "session-001-audit-and-fixes.md",
+      "filePath": "development-reports/sessions/2026-05-29/session-001-audit-and-fixes.md",
+      "summary": "2026-05-29 全面审计与修复会话报告，记录架构与实现层面的关键决策、新增/修改文件清单、测试结果及风险评估。",
+      "tags": ["documentation", "session-report", "audit", "fixes", "development"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:development-reports/sessions/2026-05-29/session-001-events.jsonl",
+      "type": "file",
+      "name": "session-001-events.jsonl",
+      "filePath": "development-reports/sessions/2026-05-29/session-001-events.jsonl",
+      "summary": "会话事件日志文件（JSONL 格式），记录开发会话期间的结构化事件流。",
+      "tags": ["data", "events", "development-log", "jsonl"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:development-reports/summaries/deep-module-audit-2026-04-28.md",
+      "type": "document",
+      "name": "deep-module-audit-2026-04-28.md",
+      "filePath": "development-reports/summaries/deep-module-audit-2026-04-28.md",
+      "summary": "2026-04-28 逐模块深度审计摘要，列出关键代码健康指标、最需关注的模块及取证完整性关键缺口。",
+      "tags": ["documentation", "audit", "code-health", "forensics"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/autopsy/autopsy-technical-analysis.md",
+      "type": "document",
+      "name": "autopsy-technical-analysis.md",
+      "filePath": "docs/autopsy/autopsy-technical-analysis.md",
+      "summary": "Autopsy 数字取证平台的远程技术分析报告，覆盖架构图谱、主要模块（Core、Ingest Pipeline、Blackboard、Keyword Search）、数据/控制流模型、扩展点、构建与测试状态及集成建议。",
+      "tags": ["documentation", "analysis", "autopsy", "forensics", "competitor-research"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/autopsy/sleuthkit-technical-analysis.md",
+      "type": "document",
+      "name": "sleuthkit-technical-analysis.md",
+      "filePath": "docs/autopsy/sleuthkit-technical-analysis.md",
+      "summary": "Sleuth Kit（TSK）取证库的远程技术分析报告，详述原生 C 核心库、CLI 工具、Java JNI 绑定、CASE/UCO 导出、文件系统遍历算法模型及 Forensics Workbench 集成评估。",
+      "tags": ["documentation", "analysis", "sleuthkit", "tsk", "forensics", "competitor-research"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/benchmark-results/2026-06-21-email-extraction-bench.md",
+      "type": "document",
+      "name": "2026-06-21-email-extraction-bench.md",
+      "filePath": "docs/benchmark-results/2026-06-21-email-extraction-bench.md",
+      "summary": "2026-06-21 邮件提取性能基准测试报告，记录不同邮件数据集（PST/mbox）的提取吞吐量、边界条件说明及 CI 集成建议。",
+      "tags": ["documentation", "benchmark", "email", "pst", "mbox", "performance"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/benchmark-results/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "docs/benchmark-results/README.md",
+      "summary": "基准测试结果目录索引，说明该目录存放各类性能基准测试报告。",
+      "tags": ["documentation", "benchmark", "readme", "performance"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/compose/plans/2026-06-30-forensics-complete-audit-plan.md",
+      "type": "document",
+      "name": "2026-06-30-forensics-complete-audit-plan.md",
+      "filePath": "docs/compose/plans/2026-06-30-forensics-complete-audit-plan.md",
+      "summary": "Forensics Workbench 完整审计执行计划，定义 9 项审计任务：项目扫描、门禁检查、后端/前端代码质量分析、架构与数据流分析、搜索/时间线/取证总览深入审查及整合报告。",
+      "tags": ["documentation", "audit-plan", "code-quality", "architecture", "forensics"],
+      "complexity": "complex"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:crates/search/tests/extractor_test.rs",
+      "target": "function:crates/search/tests/extractor_test.rs:extract_utf16_le_text",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/search/tests/indexer_test.rs",
+      "target": "function:crates/search/tests/indexer_test.rs:create_and_search_index",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/search/tests/indexer_test.rs",
+      "target": "function:crates/search/tests/indexer_test.rs:reindex_same_file_id_replaces_existing_document",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/search/tests/indexer_test.rs",
+      "target": "function:crates/search/tests/indexer_test.rs:binary_documents_are_not_indexed_or_left_stale",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/search/tests/indexer_test.rs",
+      "target": "function:crates/search/tests/indexer_test.rs:highlight_offsets_remain_inside_multibyte_snippet_boundaries",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/search/tests/indexer_test.rs",
+      "target": "function:crates/search/tests/indexer_test.rs:search_no_results",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/testing/src/bin/generate_tiny_registry_fixtures.rs",
+      "target": "function:crates/testing/src/bin/generate_tiny_registry_fixtures.rs:main",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/timeline/src/lib.rs",
+      "target": "function:crates/timeline/src/lib.rs:project_file_macb",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/timeline/src/lib.rs",
+      "target": "function:crates/timeline/src/lib.rs:make_event",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/timeline/src/lib.rs",
+      "target": "function:crates/timeline/src/lib.rs:project_file_macb",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/updater/build.rs",
+      "target": "function:crates/updater/build.rs:main",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/updater/src/lib.rs",
+      "target": "function:crates/updater/src/lib.rs:check_for_update",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/updater/src/lib.rs",
+      "target": "function:crates/updater/src/lib.rs:download_update",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/updater/src/lib.rs",
+      "target": "function:crates/updater/src/lib.rs:apply_update",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/updater/src/lib.rs",
+      "target": "function:crates/updater/src/lib.rs:is_newer",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/updater/src/lib.rs",
+      "target": "class:crates/updater/src/lib.rs:UpdateManifest",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/updater/src/lib.rs",
+      "target": "class:crates/updater/src/lib.rs:UpdateError",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/updater/src/lib.rs",
+      "target": "function:crates/updater/src/lib.rs:check_for_update",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/updater/src/lib.rs",
+      "target": "function:crates/updater/src/lib.rs:download_update",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/updater/src/lib.rs",
+      "target": "function:crates/updater/src/lib.rs:apply_update",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/updater/src/lib.rs",
+      "target": "class:crates/updater/src/lib.rs:UpdateManifest",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/updater/src/lib.rs",
+      "target": "class:crates/updater/src/lib.rs:UpdateError",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

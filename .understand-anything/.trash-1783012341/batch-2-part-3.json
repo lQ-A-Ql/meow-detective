@@ -1,0 +1,1583 @@
+{
+  "nodes": [
+    {
+      "id": "file:apps/desktop/src-tauri/src/commands/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "apps/desktop/src-tauri/src/commands/mod.rs",
+      "summary": "Commands 模块的 Barrel 文件，声明并重新导出全部 18 个命令子模块。",
+      "tags": [
+        "barrel",
+        "command",
+        "module"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Rust 模块 barrel 模式，18 行纯模块声明。"
+    },
+    {
+      "id": "file:apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "type": "file",
+      "name": "notebook_commands.rs",
+      "filePath": "apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "summary": "调查笔记本命令集，提供笔记条目 CRUD、调查线程、证据引用和调查步骤列表等调查文档功能。",
+      "tags": [
+        "api-handler",
+        "command",
+        "notebook",
+        "investigation",
+        "ipc"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "type": "file",
+      "name": "report_commands.rs",
+      "filePath": "apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "summary": "报告导出命令集，支持 HTML、CSV、CSV 关联分析和 JSON 四种格式的报告生成与导出。",
+      "tags": [
+        "api-handler",
+        "command",
+        "report",
+        "export",
+        "ipc"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs",
+      "type": "file",
+      "name": "rule_pack_commands.rs",
+      "filePath": "apps/desktop/src-tauri/src/commands/rule_pack_commands.rs",
+      "summary": "规则包管理命令集，提供规则包加载、验证和已加载列表查询功能。",
+      "tags": [
+        "api-handler",
+        "command",
+        "rules",
+        "validation"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/desktop/src-tauri/src/commands/search_commands.rs",
+      "type": "file",
+      "name": "search_commands.rs",
+      "filePath": "apps/desktop/src-tauri/src/commands/search_commands.rs",
+      "summary": "搜索命令集，提供全文本文件搜索功能，支持分页和过滤参数。",
+      "tags": [
+        "api-handler",
+        "command",
+        "search",
+        "ipc"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "查询委托给 app_services::search_service，命令层仅负责参数转换与状态获取。"
+    },
+    {
+      "id": "file:apps/desktop/src-tauri/src/commands/settings_commands.rs",
+      "type": "file",
+      "name": "settings_commands.rs",
+      "filePath": "apps/desktop/src-tauri/src/commands/settings_commands.rs",
+      "summary": "应用设置命令集，提供读取、保存和加载应用设置的持久化接口。",
+      "tags": [
+        "api-handler",
+        "command",
+        "settings",
+        "configuration",
+        "ipc"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/desktop/src-tauri/src/commands/timeline_commands.rs",
+      "type": "file",
+      "name": "timeline_commands.rs",
+      "filePath": "apps/desktop/src-tauri/src/commands/timeline_commands.rs",
+      "summary": "时间线命令集，提供时间线事件分页查询和按 ID 检索功能。",
+      "tags": [
+        "api-handler",
+        "command",
+        "timeline",
+        "ipc"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "type": "file",
+      "name": "event_bridge.rs",
+      "filePath": "apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "summary": "Tauri 事件桥接层，封装所有应用事件（案件开关、作业生命周期、数据源导入、工件更新、时间线、搜索索引、分区进度等）的标准发射接口。",
+      "tags": [
+        "event-handler",
+        "ipc",
+        "bridge",
+        "pubsub"
+      ],
+      "complexity": "complex",
+      "languageNotes": "使用统一的事件信封（envelope）模式包装所有事件负载，确保前后端事件格式一致性。"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/notebook_commands.rs:create_notebook_entry",
+      "type": "function",
+      "name": "create_notebook_entry",
+      "filePath": "apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "lineRange": [
+        18,
+        42
+      ],
+      "summary": "create_notebook_entry 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/notebook_commands.rs:update_notebook_entry",
+      "type": "function",
+      "name": "update_notebook_entry",
+      "filePath": "apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "lineRange": [
+        45,
+        65
+      ],
+      "summary": "update_notebook_entry 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/notebook_commands.rs:list_notebook_entries",
+      "type": "function",
+      "name": "list_notebook_entries",
+      "filePath": "apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "lineRange": [
+        68,
+        102
+      ],
+      "summary": "list_notebook_entries 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/notebook_commands.rs:get_notebook_thread",
+      "type": "function",
+      "name": "get_notebook_thread",
+      "filePath": "apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "lineRange": [
+        105,
+        118
+      ],
+      "summary": "get_notebook_thread 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/notebook_commands.rs:add_evidence_citation",
+      "type": "function",
+      "name": "add_evidence_citation",
+      "filePath": "apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "lineRange": [
+        123,
+        143
+      ],
+      "summary": "add_evidence_citation 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/notebook_commands.rs:list_investigation_steps",
+      "type": "function",
+      "name": "list_investigation_steps",
+      "filePath": "apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "lineRange": [
+        148,
+        170
+      ],
+      "summary": "list_investigation_steps 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/report_commands.rs:get_report_templates",
+      "type": "function",
+      "name": "get_report_templates",
+      "filePath": "apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "lineRange": [
+        13,
+        15
+      ],
+      "summary": "get_report_templates 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/report_commands.rs:get_report_history",
+      "type": "function",
+      "name": "get_report_history",
+      "filePath": "apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "lineRange": [
+        19,
+        33
+      ],
+      "summary": "get_report_history 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/report_commands.rs:export_html_report",
+      "type": "function",
+      "name": "export_html_report",
+      "filePath": "apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "lineRange": [
+        37,
+        52
+      ],
+      "summary": "export_html_report 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/report_commands.rs:export_csv_report",
+      "type": "function",
+      "name": "export_csv_report",
+      "filePath": "apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "lineRange": [
+        56,
+        71
+      ],
+      "summary": "export_csv_report 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/report_commands.rs:export_csv_correlation_report",
+      "type": "function",
+      "name": "export_csv_correlation_report",
+      "filePath": "apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "lineRange": [
+        75,
+        90
+      ],
+      "summary": "export_csv_correlation_report 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/report_commands.rs:export_json_report",
+      "type": "function",
+      "name": "export_json_report",
+      "filePath": "apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "lineRange": [
+        94,
+        109
+      ],
+      "summary": "export_json_report 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs:list_loaded_rule_packs",
+      "type": "function",
+      "name": "list_loaded_rule_packs",
+      "filePath": "apps/desktop/src-tauri/src/commands/rule_pack_commands.rs",
+      "lineRange": [
+        35,
+        49
+      ],
+      "summary": "list_loaded_rule_packs 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs:load_rule_pack",
+      "type": "function",
+      "name": "load_rule_pack",
+      "filePath": "apps/desktop/src-tauri/src/commands/rule_pack_commands.rs",
+      "lineRange": [
+        53,
+        86
+      ],
+      "summary": "load_rule_pack 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs:validate_rule_pack",
+      "type": "function",
+      "name": "validate_rule_pack",
+      "filePath": "apps/desktop/src-tauri/src/commands/rule_pack_commands.rs",
+      "lineRange": [
+        90,
+        115
+      ],
+      "summary": "validate_rule_pack 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs:LoadRulePackRequest",
+      "type": "class",
+      "name": "LoadRulePackRequest",
+      "filePath": "apps/desktop/src-tauri/src/commands/rule_pack_commands.rs",
+      "lineRange": [
+        21,
+        23
+      ],
+      "summary": "LoadRulePackRequest 结构体/类。",
+      "tags": [
+        "class"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs:ValidateRulePackRequest",
+      "type": "class",
+      "name": "ValidateRulePackRequest",
+      "filePath": "apps/desktop/src-tauri/src/commands/rule_pack_commands.rs",
+      "lineRange": [
+        27,
+        29
+      ],
+      "summary": "ValidateRulePackRequest 结构体/类。",
+      "tags": [
+        "class"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/search_commands.rs:search_files",
+      "type": "function",
+      "name": "search_files",
+      "filePath": "apps/desktop/src-tauri/src/commands/search_commands.rs",
+      "lineRange": [
+        10,
+        25
+      ],
+      "summary": "search_files 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/search_commands.rs:search_files_request",
+      "type": "function",
+      "name": "search_files_request",
+      "filePath": "apps/desktop/src-tauri/src/commands/search_commands.rs",
+      "lineRange": [
+        29,
+        111
+      ],
+      "summary": "search_files_request 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/settings_commands.rs:get_app_settings",
+      "type": "function",
+      "name": "get_app_settings",
+      "filePath": "apps/desktop/src-tauri/src/commands/settings_commands.rs",
+      "lineRange": [
+        12,
+        17
+      ],
+      "summary": "get_app_settings 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/settings_commands.rs:save_app_settings",
+      "type": "function",
+      "name": "save_app_settings",
+      "filePath": "apps/desktop/src-tauri/src/commands/settings_commands.rs",
+      "lineRange": [
+        21,
+        38
+      ],
+      "summary": "save_app_settings 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/settings_commands.rs:load_app_settings",
+      "type": "function",
+      "name": "load_app_settings",
+      "filePath": "apps/desktop/src-tauri/src/commands/settings_commands.rs",
+      "lineRange": [
+        40,
+        49
+      ],
+      "summary": "load_app_settings 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/timeline_commands.rs:get_timeline_events",
+      "type": "function",
+      "name": "get_timeline_events",
+      "filePath": "apps/desktop/src-tauri/src/commands/timeline_commands.rs",
+      "lineRange": [
+        15,
+        57
+      ],
+      "summary": "get_timeline_events 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/commands/timeline_commands.rs:get_timeline_event_by_id",
+      "type": "function",
+      "name": "get_timeline_event_by_id",
+      "filePath": "apps/desktop/src-tauri/src/commands/timeline_commands.rs",
+      "lineRange": [
+        61,
+        78
+      ],
+      "summary": "get_timeline_event_by_id 函数。",
+      "tags": [
+        "function"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_event",
+      "type": "function",
+      "name": "emit_event",
+      "filePath": "apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "lineRange": [
+        15,
+        21
+      ],
+      "summary": "底层事件发射函数，将事件负载序列化后通过 Tauri AppHandle 发送。",
+      "tags": [
+        "events",
+        "emit",
+        "core"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_case_opened",
+      "type": "function",
+      "name": "emit_case_opened",
+      "filePath": "apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "lineRange": [
+        32,
+        43
+      ],
+      "summary": "发射案件打开事件，携带案件元数据。",
+      "tags": [
+        "events",
+        "case",
+        "opened"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_case_closed",
+      "type": "function",
+      "name": "emit_case_closed",
+      "filePath": "apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "lineRange": [
+        45,
+        55
+      ],
+      "summary": "发射案件关闭事件。",
+      "tags": [
+        "events",
+        "case",
+        "closed"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_job_created",
+      "type": "function",
+      "name": "emit_job_created",
+      "filePath": "apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "lineRange": [
+        57,
+        68
+      ],
+      "summary": "发射作业创建事件，携带作业 ID 和类型。",
+      "tags": [
+        "events",
+        "job",
+        "created"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_job_started",
+      "type": "function",
+      "name": "emit_job_started",
+      "filePath": "apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "lineRange": [
+        70,
+        81
+      ],
+      "summary": "发射作业开始事件，携带作业进度信息。",
+      "tags": [
+        "events",
+        "job",
+        "started"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_job_progress",
+      "type": "function",
+      "name": "emit_job_progress",
+      "filePath": "apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "lineRange": [
+        83,
+        95
+      ],
+      "summary": "发射作业进度更新事件，携带百分比和当前步骤描述。",
+      "tags": [
+        "events",
+        "job",
+        "progress"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_job_completed",
+      "type": "function",
+      "name": "emit_job_completed",
+      "filePath": "apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "lineRange": [
+        97,
+        108
+      ],
+      "summary": "发射作业完成事件，携带结果摘要。",
+      "tags": [
+        "events",
+        "job",
+        "completed"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_job_failed",
+      "type": "function",
+      "name": "emit_job_failed",
+      "filePath": "apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "lineRange": [
+        110,
+        126
+      ],
+      "summary": "发射作业失败事件，携带错误信息和堆栈追踪。",
+      "tags": [
+        "events",
+        "job",
+        "failed"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_job_cancelled",
+      "type": "function",
+      "name": "emit_job_cancelled",
+      "filePath": "apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "lineRange": [
+        128,
+        139
+      ],
+      "summary": "发射作业取消事件。",
+      "tags": [
+        "events",
+        "job",
+        "cancelled"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_job_cancellation",
+      "type": "function",
+      "name": "emit_job_cancellation",
+      "filePath": "apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "lineRange": [
+        141,
+        150
+      ],
+      "summary": "发射作业取消信号事件（与 cancelled 事件区分阶段）。",
+      "tags": [
+        "events",
+        "job",
+        "cancellation"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_data_source_imported",
+      "type": "function",
+      "name": "emit_data_source_imported",
+      "filePath": "apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "lineRange": [
+        152,
+        173
+      ],
+      "summary": "发射数据源导入完成事件，携带数据源元数据和统计信息。",
+      "tags": [
+        "events",
+        "import",
+        "completed"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_artifact_added",
+      "type": "function",
+      "name": "emit_artifact_added",
+      "filePath": "apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "lineRange": [
+        175,
+        190
+      ],
+      "summary": "发射新工件发现事件，携带工件族和 ID。",
+      "tags": [
+        "events",
+        "artifacts",
+        "added"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_timeline_updated",
+      "type": "function",
+      "name": "emit_timeline_updated",
+      "filePath": "apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "lineRange": [
+        192,
+        202
+      ],
+      "summary": "发射时间线更新事件，通知前端刷新时间线视图。",
+      "tags": [
+        "events",
+        "timeline",
+        "updated"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_search_index_progress",
+      "type": "function",
+      "name": "emit_search_index_progress",
+      "filePath": "apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "lineRange": [
+        204,
+        215
+      ],
+      "summary": "发射搜索索引构建进度事件。",
+      "tags": [
+        "events",
+        "search",
+        "index"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_partition_progress",
+      "type": "function",
+      "name": "emit_partition_progress",
+      "filePath": "apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "lineRange": [
+        217,
+        242
+      ],
+      "summary": "发射分区处理进度事件（文件系统分区扫描）。",
+      "tags": [
+        "events",
+        "partition",
+        "progress"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_import_phase_progress",
+      "type": "function",
+      "name": "emit_import_phase_progress",
+      "filePath": "apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "lineRange": [
+        244,
+        253
+      ],
+      "summary": "发射导入阶段进度事件（如解析、索引、分析进度）。",
+      "tags": [
+        "events",
+        "import",
+        "phase"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_import_partial_result",
+      "type": "function",
+      "name": "emit_import_partial_result",
+      "filePath": "apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "lineRange": [
+        255,
+        264
+      ],
+      "summary": "发射导入局部结果事件，支持增量导入结果通知。",
+      "tags": [
+        "events",
+        "import",
+        "partial"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_cache_index_status",
+      "type": "function",
+      "name": "emit_cache_index_status",
+      "filePath": "apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "lineRange": [
+        266,
+        275
+      ],
+      "summary": "发射缓存索引状态事件，通知前端缓存可用性。",
+      "tags": [
+        "events",
+        "cache",
+        "index"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_performance_report_ready",
+      "type": "function",
+      "name": "emit_performance_report_ready",
+      "filePath": "apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "lineRange": [
+        277,
+        286
+      ],
+      "summary": "发射性能报告就绪事件，通知基准测试或性能分析结果可用。",
+      "tags": [
+        "events",
+        "performance",
+        "report"
+      ],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/notebook_commands.rs:create_notebook_entry",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/notebook_commands.rs:create_notebook_entry",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/notebook_commands.rs:update_notebook_entry",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/notebook_commands.rs:update_notebook_entry",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/notebook_commands.rs:list_notebook_entries",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/notebook_commands.rs:list_notebook_entries",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/notebook_commands.rs:get_notebook_thread",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/notebook_commands.rs:get_notebook_thread",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/notebook_commands.rs:add_evidence_citation",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/notebook_commands.rs:add_evidence_citation",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/notebook_commands.rs:list_investigation_steps",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/notebook_commands.rs:list_investigation_steps",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/report_commands.rs:get_report_templates",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/report_commands.rs:get_report_templates",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/report_commands.rs:get_report_history",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/report_commands.rs:get_report_history",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/report_commands.rs:export_html_report",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/report_commands.rs:export_html_report",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/report_commands.rs:export_csv_report",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/report_commands.rs:export_csv_report",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/report_commands.rs:export_csv_correlation_report",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/report_commands.rs:export_csv_correlation_report",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/report_commands.rs:export_json_report",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/report_commands.rs:export_json_report",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs:list_loaded_rule_packs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs:list_loaded_rule_packs",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs:load_rule_pack",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs:load_rule_pack",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs:validate_rule_pack",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs:validate_rule_pack",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs",
+      "target": "class:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs:LoadRulePackRequest",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs",
+      "target": "class:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs:LoadRulePackRequest",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs",
+      "target": "class:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs:ValidateRulePackRequest",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs",
+      "target": "class:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs:ValidateRulePackRequest",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/search_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/search_commands.rs:search_files",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/search_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/search_commands.rs:search_files",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/search_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/search_commands.rs:search_files_request",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/search_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/search_commands.rs:search_files_request",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/settings_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/settings_commands.rs:get_app_settings",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/settings_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/settings_commands.rs:get_app_settings",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/settings_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/settings_commands.rs:save_app_settings",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/settings_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/settings_commands.rs:save_app_settings",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/settings_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/settings_commands.rs:load_app_settings",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/settings_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/settings_commands.rs:load_app_settings",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/timeline_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/timeline_commands.rs:get_timeline_events",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/timeline_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/timeline_commands.rs:get_timeline_events",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/timeline_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/timeline_commands.rs:get_timeline_event_by_id",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/timeline_commands.rs",
+      "target": "function:apps/desktop/src-tauri/src/commands/timeline_commands.rs:get_timeline_event_by_id",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_event",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_event",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_case_opened",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_case_opened",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_case_closed",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_case_closed",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_job_created",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_job_created",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_job_started",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_job_started",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_job_progress",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_job_progress",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_job_completed",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_job_completed",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_job_failed",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_job_failed",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_job_cancelled",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_job_cancelled",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_job_cancellation",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_job_cancellation",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_data_source_imported",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_data_source_imported",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_artifact_added",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_artifact_added",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_timeline_updated",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_timeline_updated",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_search_index_progress",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_search_index_progress",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_partition_progress",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_partition_progress",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_import_phase_progress",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_import_phase_progress",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_import_partial_result",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_import_partial_result",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_cache_index_status",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_cache_index_status",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_performance_report_ready",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/events/event_bridge.rs",
+      "target": "function:apps/desktop/src-tauri/src/events/event_bridge.rs:emit_performance_report_ready",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mod.rs",
+      "target": "file:apps/desktop/src-tauri/src/commands/analysis_commands.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mod.rs",
+      "target": "file:apps/desktop/src-tauri/src/commands/artifact_commands.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mod.rs",
+      "target": "file:apps/desktop/src-tauri/src/commands/batch_commands.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mod.rs",
+      "target": "file:apps/desktop/src-tauri/src/commands/benchmarks.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mod.rs",
+      "target": "file:apps/desktop/src-tauri/src/commands/case_commands.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mod.rs",
+      "target": "file:apps/desktop/src-tauri/src/commands/command_support.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mod.rs",
+      "target": "file:apps/desktop/src-tauri/src/commands/file_commands.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mod.rs",
+      "target": "file:apps/desktop/src-tauri/src/commands/graph_commands.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mod.rs",
+      "target": "file:apps/desktop/src-tauri/src/commands/import/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mod.rs",
+      "target": "file:apps/desktop/src-tauri/src/commands/job_commands.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mod.rs",
+      "target": "file:apps/desktop/src-tauri/src/commands/mcp_commands.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mod.rs",
+      "target": "file:apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mod.rs",
+      "target": "file:apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mod.rs",
+      "target": "file:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mod.rs",
+      "target": "file:apps/desktop/src-tauri/src/commands/search_commands.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mod.rs",
+      "target": "file:apps/desktop/src-tauri/src/commands/settings_commands.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/mod.rs",
+      "target": "file:apps/desktop/src-tauri/src/commands/timeline_commands.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/notebook_commands.rs",
+      "target": "file:apps/desktop/src-tauri/src/state/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/report_commands.rs",
+      "target": "file:apps/desktop/src-tauri/src/state/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/rule_pack_commands.rs",
+      "target": "file:apps/desktop/src-tauri/src/state/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/search_commands.rs",
+      "target": "file:apps/desktop/src-tauri/src/events/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/search_commands.rs",
+      "target": "file:apps/desktop/src-tauri/src/state/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/settings_commands.rs",
+      "target": "file:apps/desktop/src-tauri/src/state/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/timeline_commands.rs",
+      "target": "file:apps/desktop/src-tauri/src/events/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/desktop/src-tauri/src/commands/timeline_commands.rs",
+      "target": "file:apps/desktop/src-tauri/src/state/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    }
+  ]
+}

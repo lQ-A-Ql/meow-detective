@@ -4,6 +4,7 @@ mod analysis_browser;
 mod analysis_classification;
 mod analysis_email;
 mod analysis_evtx;
+mod analysis_linux;
 mod analysis_registry;
 mod analysis_system;
 pub mod android;
@@ -46,15 +47,16 @@ pub use analysis::{
     EvtxEventSummaryDto, EvtxSecurityEventDto, GovernanceFactSourceDto, GovernanceRuntimeCheckDto,
     GovernanceRuntimeResultsDto, GovernanceRuntimeSignalsDto, GovernanceRuntimeSubcheckDto,
     InstalledSoftwareDto, KnownLimitationDto, KnownLimitationStatusDto, LastVisitedMruEntryDto,
-    LsaPackageDto, LsaSecretDto, MountedDeviceDto, MuiCacheEntryDto, NetworkProfileDto,
-    OpenSaveMruEntryDto, ParserSupportMatrixEntryDto, ParserSupportMatrixSummaryDto,
-    RegistryExtractionSummaryDto, RegistryHiveOverviewDto, RegistryStructuredSummaryDto,
-    RegistryValueDto, ReleaseGateEntryDto, ReleaseGateStatusDto, ReleaseScoreBreakdownEntryDto,
-    ReleaseScorecardDto, RunMruEntryDto, SamUserAccountDto, SecurityAuditEntryDto,
-    SecurityAuditSummaryDto, SecurityPolicyDto, ShellbagEntryDto, ShimCacheEntryDto,
-    ShutdownTimeDto, SupportMaturityDto, SystemServiceDto, UsbDeviceHistoryDto, UserAssistEntryDto,
-    V2GovernanceSnapshotDto, VerificationChainStatusDto, VerificationGuaranteeLevelDto,
-    VerificationResultDto, WinlogonConfigDto,
+    LinuxAptEventDto, LinuxArtifactSummaryDto, LinuxBashCommandDto, LinuxCronJobDto,
+    LinuxJournalEntryDto, LinuxLoginRecordDto, LinuxSudoEventDto, LsaPackageDto, LsaSecretDto,
+    MountedDeviceDto, MuiCacheEntryDto, NetworkProfileDto, OpenSaveMruEntryDto,
+    ParserSupportMatrixEntryDto, ParserSupportMatrixSummaryDto, RegistryExtractionSummaryDto,
+    RegistryHiveOverviewDto, RegistryStructuredSummaryDto, RegistryValueDto, ReleaseGateEntryDto,
+    ReleaseGateStatusDto, ReleaseScoreBreakdownEntryDto, ReleaseScorecardDto, RunMruEntryDto,
+    SamUserAccountDto, SecurityAuditEntryDto, SecurityAuditSummaryDto, SecurityPolicyDto,
+    ShellbagEntryDto, ShimCacheEntryDto, ShutdownTimeDto, SupportMaturityDto, SystemServiceDto,
+    UsbDeviceHistoryDto, UserAssistEntryDto, V2GovernanceSnapshotDto, VerificationChainStatusDto,
+    VerificationGuaranteeLevelDto, VerificationResultDto, WinlogonConfigDto,
 };
 pub use android::{
     AndroidBackupDto, AndroidCallDto, AndroidChromeVisitDto, AndroidContactDto, AndroidSmsDto,

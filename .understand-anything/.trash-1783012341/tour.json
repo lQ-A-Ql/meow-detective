@@ -1,0 +1,145 @@
+[
+  {
+    "order": 1,
+    "title": "项目概览与架构全景",
+    "description": "从项目文档出发，了解 Forensics Workbench 的定位——一款 Windows 桌面数字取证应用。README 提供架构概述、快速开始指南和各版本功能状态；PRD 定义第一版核心目标（案件管理、证据导入、文件浏览、搜索、时间线、Windows 痕迹、报告导出）；design.md 以 1779 行篇幅详述 Rust workspace 划分、依赖方向、16 大核心模块设计和前端架构。这些文档构成了理解整个代码库的知识地图。",
+    "nodeIds": [
+      "document:README.md",
+      "document:PRD.md",
+      "document:design.md",
+      "document:spec.md"
+    ]
+  },
+  {
+    "order": 2,
+    "title": "核心基础层 —— 领域模型与 IPC 传输契约",
+    "description": "domain crate 定义了案件（Case）、数据源（DataSource）、文件条目（FileEntry）、制品（Artifact）、作业（Job）等核心领域实体和类型标识。transport crate 是前后端 IPC 边界的唯一真相来源——所有 DTO 定义在 dto/ 目录下，使用 #[serde(rename_all = \"camelCase\")] 序列化，前端 TypeScript 接口需手动同步。这里没有代码生成，两端的契约通过人工维护保持一致性，是整个系统最关键的架构约束。",
+    "nodeIds": [
+      "file:crates/domain/src/lib.rs",
+      "file:crates/transport/src/lib.rs",
+      "file:crates/transport/src/dto/mod.rs",
+      "file:crates/transport/src/errors.rs"
+    ],
+    "languageLesson": "Rust workspace 中通过路径依赖声明内部 crate 引用（如 transport = { workspace = true }），所有外部依赖版本集中在根 Cargo.toml 的 [workspace.dependencies] 中管理。DTO 使用 serde 的 camelCase 重命名，确保 Rust 的 snake_case 字段在 JSON 中以 camelCase 呈现给前端。"
+  },
+  {
+    "order": 3,
+    "title": "桌面应用入口与启动流程",
+    "description": "Tauri 2 桌面宿主层是应用的后端骨架。main.rs 初始化 tracing 日志订阅器并启动 Tauri 主循环；lib.rs 注册所有后端命令（analysis、case、file、import、search、timeline 等 16 组命令处理器）、插件（对话框、进程管理）、evidence-media:// 媒体协议和事件总线；AppState 持有活跃案例、任务管理器、MCP 客户端集合和数据库连接池，是整个后端运行时的共享状态中枢。",
+    "nodeIds": [
+      "file:apps/desktop/src-tauri/src/main.rs",
+      "file:apps/desktop/src-tauri/src/lib.rs",
+      "file:apps/desktop/src-tauri/src/state/app_state.rs",
+      "config:apps/desktop/src-tauri/tauri.conf.json"
+    ],
+    "languageLesson": "Tauri 2 使用 #[tauri::command] 声明命令函数，通过 invoke_handler 宏集中注册。事件推送使用 Emitter trait，与 v1 的事件 API 完全不同。AppState 通过 Tauri 的 managed state 机制注入到每个命令处理器中，实现无依赖注入的全局状态共享。"
+  },
+  {
+    "order": 4,
+    "title": "证据引擎 —— 磁盘映像与文件系统读取",
+    "description": "证据引擎层是只读取证数据的读取基础。evidence-core 定义 EvidenceReader trait、逻辑文件系统抽象、GPT/MBR 分区探测和卷管理；fs-ntfs 实现 NTFS 的 MFT 解析、$DATA 属性读取、INDX 目录遍历和压缩/加密属性处理；image-e01 支持 Expert Witness 格式的几何解析与 chunk table 构建。多文件系统支持覆盖 FAT、exFAT、ext4、XFS、Btrfs、APFS 和 HFS+，确保跨平台证据读取能力。",
+    "nodeIds": [
+      "file:crates/evidence-core/src/lib.rs",
+      "file:crates/fs-ntfs/src/lib.rs",
+      "file:crates/image-e01/src/lib.rs",
+      "file:crates/evidence-core/src/image/mod.rs"
+    ]
+  },
+  {
+    "order": 5,
+    "title": "Windows 取证制品解析",
+    "description": "artifacts-windows crate 是 Windows 取证能力的核心，涵盖浏览器历史（Chromium/Firefox）、EVTX 事件日志、Jump List、LNK 快捷方式、Prefetch 预取文件、回收站和注册表解析。注册表模块是最复杂的子系统——从 NTUSER.dat 提取 UserAssist、RecentDocs、Shell Folders 和挂载点，从 SYSTEM 提取计算机名、USB 设备和驱动信息，从 SAM 提取本地用户和组成员关系，并支持 .LOG1/.LOG2 事务日志解析以恢复已删除的注册表数据。",
+    "nodeIds": [
+      "file:crates/artifacts-windows/src/lib.rs",
+      "file:crates/artifacts-windows/src/registry/mod.rs",
+      "file:crates/artifacts-windows/src/evtx/mod.rs",
+      "file:crates/artifacts-windows/src/registry/lookup/mod.rs"
+    ]
+  },
+  {
+    "order": 6,
+    "title": "证据导入管线",
+    "description": "导入管线（import_pipeline）将原始证据数据转换为可查询的结构化信息。datasource_service 管理数据源的注册与生命周期；import_pipeline 协调分区探测、文件枚举（并行 MFT 扫描）、哈希计算、文本索引、制品提取和时间线事件构建等多个阶段（phases）。导入作为异步后台作业运行，通过事件机制向前端推送进度（总进度 + 分区级子进度），完成后自动刷新文件树、时间线和制品查询缓存。",
+    "nodeIds": [
+      "file:crates/app-services/src/import_pipeline/mod.rs",
+      "file:crates/app-services/src/import_pipeline/phases.rs",
+      "file:crates/app-services/src/datasource_service.rs",
+      "file:crates/ingest/src/pipeline.rs"
+    ],
+    "languageLesson": "Rust 中的 async 导入并非使用 async/await 语法运行整个管线，而是将导入命令快速返回并在后台线程（std::thread::spawn）中执行实际导入逻辑。进度通过 Tauri 事件（EventBus）推送到前端，避免阻塞 Tauri 的命令响应线程。"
+  },
+  {
+    "order": 7,
+    "title": "案件管理与文件浏览服务",
+    "description": "case_service 管理案件生命周期——创建、打开（初始化 SQLite 连接池并启用 WAL/外键/超时配置）、关闭和删除，包含案件名称验证。file_service 是文件浏览的后端核心，提供按需加载的树形结构查询、分页文件列表、排序（支持 MFT 内聚排序）、文件内容查看——通过 viewer 子系统安全读取证据内容（按 FileEntryId 和分区信息路由，不构造宿主机文件系统路径）。该服务被 Step 3 的命令处理器和 Step 6 的导入管线消费。",
+    "nodeIds": [
+      "file:crates/app-services/src/case_service.rs",
+      "file:crates/app-services/src/file_service/mod.rs",
+      "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "file:crates/app-services/src/file_service/tree_queries.rs"
+    ]
+  },
+  {
+    "order": 8,
+    "title": "搜索、时间线与关联分析",
+    "description": "search crate 基于 Tantivy 实现全文搜索引擎——text_extractor 从文件内容中提取可索引文本，indexer 管理索引写入，query 模块构建查询。timeline crate 将文件的 MACB 时间戳投影为统一的时间线事件模型。correlation 模块进行跨证据源的关联分析——通过规则引擎（rules）发现实体间的隐含关联，coverage 评估证据覆盖度，graph 构建关联图用于可视化。这些功能服务共同支撑取证分析的核心工作流。",
+    "nodeIds": [
+      "file:crates/search/src/lib.rs",
+      "file:crates/timeline/src/lib.rs",
+      "file:crates/app-services/src/correlation/mod.rs",
+      "file:crates/app-services/src/search_service.rs"
+    ],
+    "languageLesson": "Tantivy 是 Rust 生态的全文搜索引擎库，性能接近 Lucene。在取证场景中，索引构建在导入阶段完成（Step 6），查询时直接从索引中检索，避免每次搜索都遍历原始证据数据。indexer 使用 Tantivy 的 IndexWriter 进行批量写入，支持多线程并发索引。"
+  },
+  {
+    "order": 9,
+    "title": "持久化层 —— SQLite 数据库架构",
+    "description": "persistence-sqlite crate 管理所有案例数据的持久化。connection 模块提供四种连接工厂（创建/打开/内存/暂存），自动启用 WAL 模式和外键约束。migrations 目录包含 32 个版本化迁移脚本——从 cases 根表开始，逐步添加 data_sources、file_entries、artifacts、timeline_events、jobs、tags、graph_nodes、notebook_entries、entity_index 和 chain_of_custody 等表。repositories 子模块为每个实体提供 CRUD 封装，确保 SQL 逻辑不泄露到上层的命令处理器中。",
+    "nodeIds": [
+      "file:crates/persistence-sqlite/src/lib.rs",
+      "file:crates/persistence-sqlite/src/connection.rs",
+      "table:crates/persistence-sqlite/src/migrations/scripts/0001_cases.sql",
+      "table:crates/persistence-sqlite/src/migrations/scripts/0003_file_entries.sql",
+      "table:crates/persistence-sqlite/src/migrations/scripts/0004_artifacts.sql"
+    ],
+    "languageLesson": "SQLite 取证场景最佳实践：WAL 模式允许并发读写而不阻塞查询；外键约束防止数据源被删除后留下孤立文件条目；busy_timeout 处理并发访问冲突。迁移脚本应保持幂等和有序——每个版本添加增量的 schema 变更，使数据库能与应用代码同步演化。"
+  },
+  {
+    "order": 10,
+    "title": "前端应用层架构",
+    "description": "前端是 React/TypeScript 单页应用，通过 @tauri-apps/api/core 调用后端命令。main.tsx 初始化 React DOM、启动 Tauri 事件桥接；App.tsx 集成路由器、错误边界和全局样式；routes.tsx 使用懒加载（lazy）定义 8 个路由（CaseHome、DataAnalysis、Files、Search、Timeline、Artifacts、Reports、Settings）；providers.tsx 配置 React Query（30 秒 stale time、无窗口聚焦重取）和国际化；lib/api/ 封装所有 Tauri 命令调用；features/ 下的 React Query hooks 封装 API 调用和缓存失效逻辑；stores/ 用 Zustand 管理 UI/选择/MCP 本地状态。",
+    "nodeIds": [
+      "file:frontend/src/main.tsx",
+      "file:frontend/src/app/App.tsx",
+      "file:frontend/src/app/routes.tsx",
+      "file:frontend/src/app/providers.tsx",
+      "file:frontend/src/types/models.ts"
+    ],
+    "languageLesson": "React Query 作为服务端状态层，staleTime=30s 配合 no refetch on window focus 减少不必要的 Tauri IPC 调用。Zustand 本地 store 不持久化——UI 状态（选中行、面板尺寸）在应用重启后重置。EventBus 订阅后端事件以在导入完成后自动触发相关查询的缓存失效，保证前端数据一致性。"
+  },
+  {
+    "order": 11,
+    "title": "报告导出与 STIX 情报交换",
+    "description": "报告模块支持 HTML、CSV、JSON 和证据包四种导出格式，从案件数据中提取信息并生成可交付的取证报告。exchange crate 实现 STIX 2.1 威胁情报交换标准——将取证线索、制品、注册表值和邮件转换为 STIX Bundle 对象，支持 UCO（统一网络观测）案例映射。signing 模块提供 Ed25519 数字签名引擎，为导出数据生成可验证的签名，custody 模块记录链式保管（chain-of-custody），确保导出证据的完整性和不可否认性。",
+    "nodeIds": [
+      "file:crates/app-services/src/report/mod.rs",
+      "file:crates/exchange/src/stix.rs",
+      "file:crates/exchange/src/signing.rs",
+      "file:crates/exchange/src/custody.rs"
+    ],
+    "languageLesson": "STIX 2.1 是 OASIS 标准化的威胁情报交换格式，使用 JSON 序列化。Ed25519 是 Edwards-curve 数字签名算法，提供 128 位安全强度，签名短小（64 字节）且验证速度快，适合取证报告场景中的签名验证。链式保管（Chain of Custody）记录证据从采集到提交的每一步操作者和操作时间，是法庭可采纳证据的关键要求。"
+  },
+  {
+    "order": 12,
+    "title": "工程基础设施 —— 构建、CI 与质量保障",
+    "description": "根 Cargo.toml 定义 36 个 workspace member crate 和所有外部依赖版本，rust-toolchain.toml 锁定编译器版本。CI 分为后端流水线（格式检查、Clippy 静态分析、cargo test、桌面构建、deny 依赖审计、CycloneDX SBOM 生成）和前端流水线（类型检查、ESLint、生产构建、Vitest 测试、覆盖率）。scripts/ 目录包含 14 个 PowerShell 守卫脚本（check-command-sql-boundary、check-media-protocol-guard 等），编码了关键的架构和安全边界。项目遵循 Windows-first 策略，所有 cargo build 命令需在 VS 2022 vcvars64 环境中运行。",
+    "nodeIds": [
+      "config:Cargo.toml",
+      "pipeline:.github/workflows/ci-backend.yml",
+      "pipeline:.github/workflows/ci-frontend.yml",
+      "config:rust-toolchain.toml",
+      "config:deny.toml"
+    ],
+    "languageLesson": "cargo-deny 是 Rust 生态的依赖审计工具，deny.toml 配置许可证合规检查（禁止 copyleft 许可证的 crate）、安全公告扫描（RUSTSEC）、重复依赖检测和源码来源白名单。CycloneDX SBOM 是 OWASP 标准化的软件物料清单格式，为供应链安全审计提供完整的依赖清单。PowerShell 守卫脚本在 CI 中作为额外的架构边界检查，确保关键约束（如 SQL 不泄露到命令处理器）不会被代码变更意外违反。"
+  }
+]

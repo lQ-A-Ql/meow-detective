@@ -11,9 +11,29 @@ import type {
 } from '@/types/models';
 
 const MAX_TREE_CACHE_SIZE = 100;
+const DATA_SOURCE_NODE_PREFIX = 'data-source:';
 
 function dataSourceNodeId(dsId: string): string {
-  return `data-source:${dsId}`;
+  return `${DATA_SOURCE_NODE_PREFIX}${dsId}`;
+}
+
+export function isDataSourceTreeNodeId(nodeId: string | undefined): boolean {
+  return Boolean(nodeId?.startsWith(DATA_SOURCE_NODE_PREFIX));
+}
+
+function rootsForDataSource(
+  rootTree: FileTreeNode[] | undefined,
+  dataSourceId: string,
+  dataSources: DataSourceSummary[] | undefined,
+) {
+  const roots = rootTree ?? [];
+  const hasSourceTaggedRoots = roots.some((node) => node.dataSourceId);
+  if (!hasSourceTaggedRoots && dataSources?.length === 1) {
+    return roots.map((node) => ({ ...node, depth: 1, dataSourceId }));
+  }
+  return roots
+    .filter((node) => node.dataSourceId === dataSourceId)
+    .map((node) => ({ ...node, depth: 1 }));
 }
 
 interface UseFileTreeOptions {
@@ -49,38 +69,37 @@ export function useFileTree({
 
   const { data: rootTree } = useFileTreeQuery(showHidden);
 
-  // Synthesize data-source parent nodes: wrap partition roots under their
-  // owning data source, so the tree shows DataSource -> Partitions -> Files
-  // instead of a flat list of partition roots.
+  // Synthesize data-source parent nodes: wrap only each source's own root
+  // directories/partition placeholders under that source. The backend tree nodes
+  // carry dataSourceId, so we can avoid duplicating the whole case tree under
+  // every data source.
   const wrappedRootTree = useMemo<FileTreeNode[]>(() => {
     if (!dataSources || dataSources.length === 0) return rootTree ?? [];
-    const dsNodes: FileTreeNode[] = [];
-    for (const ds of dataSources) {
-      dsNodes.push({
-        id: dataSourceNodeId(ds.id),
-        name: ds.name,
-        depth: 0,
-        hasChildren: true,
-        deleted: false,
-        hidden: false,
-        system: false,
-      });
-    }
-    return dsNodes;
+    return dataSources.map((ds) => ({
+      id: dataSourceNodeId(ds.id),
+      name: ds.name,
+      depth: 0,
+      hasChildren: rootsForDataSource(rootTree, ds.id, dataSources).length > 0,
+      dataSourceId: ds.id,
+      deleted: false,
+      hidden: false,
+      system: false,
+    }));
   }, [dataSources, rootTree]);
 
-  // Pre-populate tree children so data-source nodes show their partition roots
-  // without needing a backend fetch.
+  // Pre-populate tree children so data-source nodes show their own partition
+  // roots without needing a backend fetch. Synthetic data-source IDs never exist
+  // in the backend and must not be sent to file children/rows APIs.
   useEffect(() => {
     if (!dataSources || dataSources.length === 0) return;
-    if (!rootTree || rootTree.length === 0) return;
     setTreeChildren((current) => {
       let changed = false;
       const next = { ...current };
       for (const ds of dataSources) {
         const dsId = dataSourceNodeId(ds.id);
-        if (next[dsId]) continue; // already populated
-        next[dsId] = rootTree.map((node) => ({ ...node, depth: 1 }));
+        const children = rootsForDataSource(rootTree, ds.id, dataSources);
+        if (sameTreeNodeList(next[dsId] ?? [], children)) continue;
+        next[dsId] = children;
         changed = true;
       }
       return changed ? next : current;
@@ -103,27 +122,38 @@ export function useFileTree({
   }, [wrappedRootTree]);
 
   const activeDirectoryId = selectedDirectoryId ?? rootNodes[0]?.id;
+  const activeDirectoryIsDataSource = isDataSourceTreeNodeId(activeDirectoryId);
   const activeDirectoryExpanded = Boolean(
     activeDirectoryId && expandedDirectoryIds.includes(activeDirectoryId)
   );
   const activeChildrenOffset = activeDirectoryId
     ? (treeChildOffsets[activeDirectoryId] ?? 0)
     : 0;
+  const backendChildrenParentId =
+    activeDirectoryExpanded && !activeDirectoryIsDataSource ? activeDirectoryId : undefined;
   const { data: activeChildrenPage } = useFileChildrenPage(
-    activeDirectoryExpanded ? activeDirectoryId : undefined,
+    backendChildrenParentId,
     activeChildrenOffset,
     pageLimit,
     showHidden
   );
   const activeChildren = activeChildrenPage?.children;
 
+  const showHiddenMountedRef = useRef(false);
   useEffect(() => {
+    // Skip the reset on initial mount: firing here would race with (and wipe out)
+    // the data-source children pre-population effect above, since both effects
+    // run in declaration order during the same commit.
+    if (!showHiddenMountedRef.current) {
+      showHiddenMountedRef.current = true;
+      return;
+    }
     setTreeChildren({});
     setTreeChildOffsets({});
   }, [showHidden]);
 
   useEffect(() => {
-    if (!activeDirectoryId || !activeChildren) return;
+    if (!activeDirectoryId || activeDirectoryIsDataSource || !activeChildren) return;
     const pageOffset = activeChildrenOffset;
     setTreeChildren((current) => {
       const keys = Object.keys(current);
@@ -138,7 +168,7 @@ export function useFileTree({
       }
       return { ...current, [activeDirectoryId]: nextChildren };
     });
-  }, [activeChildren, activeChildrenOffset, activeDirectoryId]);
+  }, [activeChildren, activeChildrenOffset, activeDirectoryId, activeDirectoryIsDataSource]);
 
   useEffect(() => {
     if (!selectedDirectoryId && rootNodes[0]?.id) {
@@ -260,16 +290,17 @@ export function useFileTree({
     : 0;
   const canLoadMoreTreeChildren = Boolean(
     activeDirectoryId &&
+      !activeDirectoryIsDataSource &&
       activeChildrenPage?.truncated &&
       activeTreeChildrenLoaded < (activeChildrenPage?.totalCount ?? 0)
   );
   const loadMoreActiveTreeChildren = useCallback(() => {
-    if (!activeDirectoryId) return;
+    if (!activeDirectoryId || activeDirectoryIsDataSource) return;
     setTreeChildOffsets((current) => ({
       ...current,
       [activeDirectoryId]: (current[activeDirectoryId] ?? 0) + pageLimit,
     }));
-  }, [activeDirectoryId, pageLimit]);
+  }, [activeDirectoryId, activeDirectoryIsDataSource, pageLimit]);
 
   return {
     rootTree: rootNodes,
@@ -277,6 +308,7 @@ export function useFileTree({
     expandedDirectoryIds,
     setExpandedDirectoryIds,
     activeDirectoryId,
+    activeDirectoryIsDataSource,
     activeChildrenPage,
     activeTreeChildrenLoaded,
     canLoadMoreTreeChildren,

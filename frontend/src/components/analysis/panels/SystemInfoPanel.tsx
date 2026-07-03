@@ -156,12 +156,19 @@ export function AnalysisHeader({
             证据分类 · 注册表提取 · 浏览器记录 · 邮件信息
           </div>
           {dataSources && dataSources.length > 0 && onSelectDataSource ? (
-            <DataSourceSelector
-              dataSources={dataSources}
-              selectedId={selectedDataSourceId}
-              onSelect={onSelectDataSource}
-              className="mt-3"
-            />
+            <>
+              <DataSourceSelector
+                dataSources={dataSources}
+                selectedId={selectedDataSourceId}
+                onSelect={onSelectDataSource}
+                className="mt-3"
+              />
+              {selectedDataSourceId ? (
+                <div className="mt-2 max-w-md text-[11px] leading-5 text-[#999]">
+                  当前分析结果仍为案件级汇总；按所选数据源过滤将在后端支持后启用。
+                </div>
+              ) : null}
+            </>
           ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">

@@ -22,6 +22,8 @@ pub struct JobSummaryRow {
     pub completed_partitions: u32,
     pub total_partitions: u32,
     pub partition_progress: u32,
+    pub created_at: String,
+    pub finished_at: Option<String>,
 }
 
 impl<'a> JobRepo<'a> {
@@ -134,7 +136,8 @@ impl<'a> JobRepo<'a> {
         let mut stmt = self.conn.prepare(
             "SELECT id, kind, status, progress, detail,
                     warning_count, skipped_count, failed_count, partial,
-                    current_partition, completed_partitions, total_partitions, partition_progress
+                    current_partition, completed_partitions, total_partitions, partition_progress,
+                    created_at, finished_at
              FROM jobs
              ORDER BY
                  CASE
@@ -161,6 +164,8 @@ impl<'a> JobRepo<'a> {
                 completed_partitions: row.get::<_, Option<u32>>(10)?.unwrap_or(0),
                 total_partitions: row.get::<_, Option<u32>>(11)?.unwrap_or(0),
                 partition_progress: row.get::<_, Option<u32>>(12)?.unwrap_or(0),
+                created_at: row.get(13)?,
+                finished_at: row.get(14)?,
             })
         })?;
         let mut result = Vec::new();

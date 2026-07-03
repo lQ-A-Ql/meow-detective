@@ -1,0 +1,137 @@
+{
+  "projectRoot": "D:\\process\\forensic",
+  "batchFiles": [
+    {"path": "frontend/src/app/App.tsx", "language": "typescript", "sizeLines": 12, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ErrorBoundary.test.tsx", "language": "typescript", "sizeLines": 53, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ErrorBoundary.tsx", "language": "typescript", "sizeLines": 76, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/badge.tsx", "language": "typescript", "sizeLines": 46, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/button.tsx", "language": "typescript", "sizeLines": 58, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/card.tsx", "language": "typescript", "sizeLines": 92, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/checkbox.tsx", "language": "typescript", "sizeLines": 32, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/command.tsx", "language": "typescript", "sizeLines": 177, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/dialog.tsx", "language": "typescript", "sizeLines": 135, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/input.tsx", "language": "typescript", "sizeLines": 21, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/label.tsx", "language": "typescript", "sizeLines": 24, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/progress.tsx", "language": "typescript", "sizeLines": 31, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/scroll-area.tsx", "language": "typescript", "sizeLines": 58, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/select.tsx", "language": "typescript", "sizeLines": 189, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/separator.tsx", "language": "typescript", "sizeLines": 28, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/sheet.tsx", "language": "typescript", "sizeLines": 139, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/sidebar/sidebar-group.tsx", "language": "typescript", "sizeLines": 82, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/sidebar/sidebar-layout.tsx", "language": "typescript", "sizeLines": 94, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/sidebar/sidebar-menu.tsx", "language": "typescript", "sizeLines": 271, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/sidebar/sidebar-provider.tsx", "language": "typescript", "sizeLines": 148, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/sidebar/sidebar-rail.tsx", "language": "typescript", "sizeLines": 35, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/sidebar/sidebar-trigger.tsx", "language": "typescript", "sizeLines": 38, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/sidebar/sidebar.tsx", "language": "typescript", "sizeLines": 117, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/skeleton.tsx", "language": "typescript", "sizeLines": 13, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/table.tsx", "language": "typescript", "sizeLines": 116, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/tabs.tsx", "language": "typescript", "sizeLines": 66, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/textarea.tsx", "language": "typescript", "sizeLines": 18, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/toggle-group.tsx", "language": "typescript", "sizeLines": 73, "fileCategory": "code"},
+    {"path": "frontend/src/app/components/ui/toggle.tsx", "language": "typescript", "sizeLines": 47, "fileCategory": "code"}
+  ],
+  "batchImportData": {
+    "frontend/src/app/App.tsx": [
+      "frontend/src/app/components/ErrorBoundary.tsx",
+      "frontend/src/app/routes.tsx",
+      "frontend/src/styles/fonts.css"
+    ],
+    "frontend/src/app/components/ErrorBoundary.test.tsx": [
+      "frontend/src/app/components/ErrorBoundary.tsx"
+    ],
+    "frontend/src/app/components/ErrorBoundary.tsx": [],
+    "frontend/src/app/components/ui/badge.tsx": [
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/button.tsx": [
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/card.tsx": [
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/checkbox.tsx": [
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/command.tsx": [
+      "frontend/src/app/components/ui/dialog.tsx",
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/dialog.tsx": [
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/input.tsx": [
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/label.tsx": [
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/progress.tsx": [
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/scroll-area.tsx": [
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/select.tsx": [
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/separator.tsx": [
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/sheet.tsx": [
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/sidebar/sidebar-group.tsx": [
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/sidebar/sidebar-layout.tsx": [
+      "frontend/src/app/components/ui/input.tsx",
+      "frontend/src/app/components/ui/separator.tsx",
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/sidebar/sidebar-menu.tsx": [
+      "frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "frontend/src/app/components/ui/skeleton.tsx",
+      "frontend/src/app/components/ui/tooltip.tsx",
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/sidebar/sidebar-provider.tsx": [
+      "frontend/src/app/components/ui/tooltip.tsx",
+      "frontend/src/app/components/ui/use-mobile.ts",
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/sidebar/sidebar-rail.tsx": [
+      "frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/sidebar/sidebar-trigger.tsx": [
+      "frontend/src/app/components/ui/button.tsx",
+      "frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/sidebar/sidebar.tsx": [
+      "frontend/src/app/components/ui/sheet.tsx",
+      "frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/skeleton.tsx": [
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/table.tsx": [
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/tabs.tsx": [
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/textarea.tsx": [
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/toggle-group.tsx": [
+      "frontend/src/app/components/ui/toggle.tsx",
+      "frontend/src/app/components/ui/utils.ts"
+    ],
+    "frontend/src/app/components/ui/toggle.tsx": [
+      "frontend/src/app/components/ui/utils.ts"
+    ]
+  }
+}

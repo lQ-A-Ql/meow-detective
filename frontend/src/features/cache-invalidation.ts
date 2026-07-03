@@ -33,6 +33,7 @@ export const projectionQueryKeys = {
   artifacts: ['artifacts'] as const,
   search: ['search'] as const,
   reports: ['reports'] as const,
+  analysis: ['analysis'] as const,
   jobWarnings: ['jobs', 'warnings'] as const,
   jobTrace: ['jobs', 'trace'] as const,
 } as const;
@@ -48,6 +49,7 @@ const importProjectionKeys: ProjectionKey[] = [
   'timeline',
   'artifacts',
   'search',
+  'analysis',
 ];
 
 const postJobProjectionKeys: ProjectionKey[] = [

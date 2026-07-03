@@ -554,10 +554,11 @@ describe('FileBrowser media preview', () => {
     mocks.fileTree.mockReturnValue(
       queryState([
         {
-          id: 'root',
+          id: 'root-ds-1',
           name: 'Partition 1 (NTFS)',
           depth: 0,
           hasChildren: true,
+          dataSourceId: 'ds-1',
           expanded: true,
           hidden: false,
           system: false,
@@ -595,6 +596,79 @@ describe('FileBrowser media preview', () => {
     expect(dsElements.length).toBeGreaterThan(0);
     // The raw partition root name is never shown \u2014 only the formatted version
     expect(screen.queryByText('Partition 1 (NTFS)')).toBeNull();
+  });
+
+  it('keeps roots isolated per data source and does not fetch rows for synthetic nodes', async () => {
+    Object.assign(mocks.selectionState, {
+      selectedDirectoryId: undefined,
+      selectedFileId: undefined,
+    });
+    mocks.fileTree.mockReturnValue(
+      queryState([
+        {
+          id: 'root-ds-1',
+          name: 'Partition 1 (NTFS)',
+          depth: 0,
+          hasChildren: true,
+          dataSourceId: 'ds-1',
+          expanded: false,
+          hidden: false,
+          system: false,
+          deleted: false,
+        },
+        {
+          id: 'root-ds-2',
+          name: 'Partition 2 (FAT)',
+          depth: 0,
+          hasChildren: true,
+          dataSourceId: 'ds-2',
+          expanded: false,
+          hidden: false,
+          system: false,
+          deleted: false,
+        },
+      ]),
+    );
+    mocks.dataSources.mockReturnValue(
+      queryState([
+        {
+          id: 'ds-1',
+          name: 'Windows Source',
+          kind: 'e01',
+          sourcePath: 'E:/windows.E01',
+          importedAt: '2026-06-01T10:00:00Z',
+          partitions: [{ index: 1, name: 'Windows', kindLabel: 'NTFS', status: 'supported', offset: 0, length: 1024, filesystem: 'NTFS' }],
+        },
+        {
+          id: 'ds-2',
+          name: 'Linux Source',
+          kind: 'raw',
+          sourcePath: 'E:/linux.raw',
+          importedAt: '2026-06-02T10:00:00Z',
+          partitions: [{ index: 2, name: 'Linux', kindLabel: 'FAT', status: 'supported', offset: 1024, length: 2048, filesystem: 'FAT' }],
+        },
+      ]),
+    );
+
+    renderPage();
+
+    // FileTreeDataSourceNode rows are the only elements with role="button" whose
+    // accessible name includes the data source name — this disambiguates them from
+    // the breadcrumb and inspector panel, which also render the same source name.
+    const windowsTreeNode = await screen.findByRole('button', { name: /Windows Source/ });
+    const linuxTreeNode = screen.getByRole('button', { name: /Linux Source/ });
+    expect(windowsTreeNode).toBeDefined();
+    expect(linuxTreeNode).toBeDefined();
+
+    // ds-1 (Windows Source) auto-expands first; only its own root should show.
+    await waitFor(() => expect(screen.getByText('分区1（NTFS）')).toBeDefined());
+    expect(screen.queryByText('分区2（FAT）')).toBeNull();
+    expect(mocks.fileRows).toHaveBeenCalledWith(undefined, 0, 500, false, 'name', 'asc');
+
+    fireEvent.click(windowsTreeNode); // collapse ds-1
+    fireEvent.click(linuxTreeNode); // expand ds-2
+    await waitFor(() => expect(screen.getByText('分区2（FAT）')).toBeDefined());
+    expect(screen.queryByText('分区1（NTFS）')).toBeNull();
   });
 
   it('uses jump context to reveal off-page selected files and enable hidden visibility when needed', async () => {

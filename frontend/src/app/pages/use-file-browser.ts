@@ -39,7 +39,7 @@ export function useFileBrowser() {
   });
 
   const pagination = useFilePagination({
-    activeDirectoryId: tree.activeDirectoryId,
+    activeDirectoryId: tree.activeDirectoryIsDataSource ? undefined : tree.activeDirectoryId,
     pageLimit: FILE_BROWSER_PAGE_LIMIT,
     showHidden,
   });

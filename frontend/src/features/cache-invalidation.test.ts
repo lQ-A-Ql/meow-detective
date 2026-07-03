@@ -34,7 +34,7 @@ describe('projection cache invalidation', () => {
     ]);
   });
 
-  it('invalidates the import projections used by files, timeline, artifacts, and search', () => {
+  it('invalidates the import projections used by files, timeline, artifacts, search, and analysis', () => {
     const { queryClient, invalidateSpy } = createClient();
 
     invalidateImportProjectionQueries(queryClient);
@@ -47,6 +47,7 @@ describe('projection cache invalidation', () => {
       ['timeline'],
       ['artifacts'],
       ['search'],
+      ['analysis'],
     ]);
   });
 
@@ -63,6 +64,7 @@ describe('projection cache invalidation', () => {
       ['timeline'],
       ['artifacts'],
       ['search'],
+      ['analysis'],
       ['jobs', 'warnings'],
       ['jobs', 'trace'],
     ]);

@@ -1,0 +1,1689 @@
+{
+  "nodes": [
+    {
+      "id": "file:crates/app-services/src/artifact_service.rs",
+      "type": "file",
+      "name": "artifact_service.rs",
+      "filePath": "crates/app-services/src/artifact_service.rs",
+      "summary": "实现证据文件的工件（artifact）提取服务，包括提取器注册、单文件提取、批量并行提取、数据库存储以及工件图谱填充。支持针对证据类别进行定向扫描。",
+      "tags": [
+        "api-handler",
+        "service",
+        "artifact-extraction",
+        "extraction"
+      ],
+      "complexity": "complex",
+      "languageNotes": "使用 rayon 进行并行提取（par_iter），通过 ExtractorRegistry 注册多种工件提取器，支持 sink 模式收集结果。"
+    },
+    {
+      "id": "class:crates/app-services/src/artifact_service.rs:ArtifactServiceError",
+      "type": "class",
+      "name": "ArtifactServiceError",
+      "filePath": "crates/app-services/src/artifact_service.rs",
+      "lineRange": [
+        14,
+        25
+      ],
+      "summary": "工件服务错误枚举，涵盖数据库（Db）、IO（Io）、提取器（Extractor）、未找到（NotFound）和通用（Other）错误变体。",
+      "tags": [
+        "error-handling",
+        "enum",
+        "error"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/app-services/src/artifact_service.rs:ArtifactExtractionStats",
+      "type": "class",
+      "name": "ArtifactExtractionStats",
+      "filePath": "crates/app-services/src/artifact_service.rs",
+      "lineRange": [
+        80,
+        84
+      ],
+      "summary": "工件提取统计数据结构，记录警告数、跳过数、失败数等指标。",
+      "tags": [
+        "data-model",
+        "statistics",
+        "extraction"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/app-services/src/artifact_service.rs:EvidenceScanStats",
+      "type": "class",
+      "name": "EvidenceScanStats",
+      "filePath": "crates/app-services/src/artifact_service.rs",
+      "lineRange": [
+        87,
+        95
+      ],
+      "summary": "证据扫描统计结构，跟踪候选文件数、已扫描数、产生的工件数及各状态计数。",
+      "tags": [
+        "data-model",
+        "statistics",
+        "evidence-scan"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/artifact_service.rs:create_registry",
+      "type": "function",
+      "name": "create_registry",
+      "filePath": "crates/app-services/src/artifact_service.rs",
+      "lineRange": [
+        97,
+        108
+      ],
+      "summary": "创建并注册所有内置工件提取器（Windows Browser、EVTX、Prefetch、LNK等）的 ExtractorRegistry 实例。",
+      "tags": [
+        "factory",
+        "registry",
+        "extraction"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/artifact_service.rs:run_extractors_on_file",
+      "type": "function",
+      "name": "run_extractors_on_file",
+      "filePath": "crates/app-services/src/artifact_service.rs",
+      "lineRange": [
+        110,
+        152
+      ],
+      "summary": "对单个文件运行匹配的工件提取器，读取文件内容（受 ARTIFACT_FILE_LIMIT_BYTES 限制），将结果收集到 sink 中并返回统计信息。",
+      "tags": [
+        "extraction",
+        "file-processing",
+        "artifact"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/artifact_service.rs:store_artifacts",
+      "type": "function",
+      "name": "store_artifacts",
+      "filePath": "crates/app-services/src/artifact_service.rs",
+      "lineRange": [
+        154,
+        172
+      ],
+      "summary": "将提取出的工件批量写入数据库，并调用 populate_artifact_graph 填充工件之间的图谱关系。",
+      "tags": [
+        "persistence",
+        "artifact",
+        "graph"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/artifact_service.rs:populate_artifact_graph",
+      "type": "function",
+      "name": "populate_artifact_graph",
+      "filePath": "crates/app-services/src/artifact_service.rs",
+      "lineRange": [
+        175,
+        230
+      ],
+      "summary": "为工件列表构建知识图谱节点和边：为每个工件创建节点，将工件连接到其源文件（ARTIFACT_OF 边），批量写入图谱仓库。",
+      "tags": [
+        "graph",
+        "artifact",
+        "knowledge-graph"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/artifact_service.rs:run_targeted_evidence_scan",
+      "type": "function",
+      "name": "run_targeted_evidence_scan",
+      "filePath": "crates/app-services/src/artifact_service.rs",
+      "lineRange": [
+        232,
+        293
+      ],
+      "summary": "根据指定的证据类别在数据源中定向扫描候选文件，依次运行提取器，将命中的工件存储到数据库。支持限制扫描数量。",
+      "tags": [
+        "evidence-scan",
+        "extraction",
+        "targeted-scan"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/app-services/src/artifact_service.rs:already_has_artifact_for_source",
+      "type": "function",
+      "name": "already_has_artifact_for_source",
+      "filePath": "crates/app-services/src/artifact_service.rs",
+      "lineRange": [
+        295,
+        307
+      ],
+      "summary": "检查给定 source_object_id 是否在数据库中已有对应工件记录，用于去重判断。",
+      "tags": [
+        "deduplication",
+        "database",
+        "check"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/artifact_service.rs:run_extractors_parallel",
+      "type": "function",
+      "name": "run_extractors_parallel",
+      "filePath": "crates/app-services/src/artifact_service.rs",
+      "lineRange": [
+        316,
+        397
+      ],
+      "summary": "使用 rayon 并行遍历文件列表，对每个文件运行匹配的提取器，合并所有工件和统计数据。受 limit 参数控制处理数量。",
+      "tags": [
+        "parallel",
+        "extraction",
+        "rayon",
+        "batch"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/app-services/src/artifact_service.rs:get_artifact_families_from_db",
+      "type": "function",
+      "name": "get_artifact_families_from_db",
+      "filePath": "crates/app-services/src/artifact_service.rs",
+      "lineRange": [
+        401,
+        406
+      ],
+      "summary": "从数据库查询所有工件族（artifact family）列表。",
+      "tags": [
+        "database",
+        "query",
+        "artifact-family"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/artifact_service.rs:get_artifact_rows_from_db",
+      "type": "function",
+      "name": "get_artifact_rows_from_db",
+      "filePath": "crates/app-services/src/artifact_service.rs",
+      "lineRange": [
+        408,
+        415
+      ],
+      "summary": "按工件族名称从数据库查询该族下的所有工件行。",
+      "tags": [
+        "database",
+        "query",
+        "artifact"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/artifact_service.rs:get_artifact_row_by_id",
+      "type": "function",
+      "name": "get_artifact_row_by_id",
+      "filePath": "crates/app-services/src/artifact_service.rs",
+      "lineRange": [
+        417,
+        424
+      ],
+      "summary": "根据工件 ID 从数据库查询单个工件行。",
+      "tags": [
+        "database",
+        "query",
+        "artifact"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/artifact_service.rs:get_artifact_family_counts",
+      "type": "function",
+      "name": "get_artifact_family_counts",
+      "filePath": "crates/app-services/src/artifact_service.rs",
+      "lineRange": [
+        426,
+        435
+      ],
+      "summary": "按工件族聚合计数，返回每个工件族下有多少条记录。",
+      "tags": [
+        "database",
+        "aggregation",
+        "artifact-family"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/app-services/src/file_service/data_sources.rs",
+      "type": "file",
+      "name": "data_sources.rs",
+      "filePath": "crates/app-services/src/file_service/data_sources.rs",
+      "summary": "提供数据源查询和重命名服务：获取数据源列表（含分区信息和 DTO 映射）、重命名数据源、获取最近访问对象。",
+      "tags": [
+        "service",
+        "data-source",
+        "query"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/data_sources.rs:get_data_sources_real",
+      "type": "function",
+      "name": "get_data_sources_real",
+      "filePath": "crates/app-services/src/file_service/data_sources.rs",
+      "lineRange": [
+        11,
+        68
+      ],
+      "summary": "从数据库查询指定案例的所有数据源，并组装包含分区信息、哈希状态、来源状态、警告的 DataSourceSummaryDto 列表。",
+      "tags": [
+        "database",
+        "query",
+        "data-source",
+        "dto"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/data_sources.rs:rename_data_source_real",
+      "type": "function",
+      "name": "rename_data_source_real",
+      "filePath": "crates/app-services/src/file_service/data_sources.rs",
+      "lineRange": [
+        91,
+        105
+      ],
+      "summary": "重命名指定的数据源，名称去空格后校验非空，然后通过 DataSourceRepo 持久化。",
+      "tags": [
+        "rename",
+        "data-source",
+        "validation"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/data_sources.rs:get_recent_objects_real",
+      "type": "function",
+      "name": "get_recent_objects_real",
+      "filePath": "crates/app-services/src/file_service/data_sources.rs",
+      "lineRange": [
+        107,
+        147
+      ],
+      "summary": "BFS 遍历文件树获取最近修改/创建/访问的对象列表，用于快速导航到最近使用的文件。",
+      "tags": [
+        "recent-files",
+        "query",
+        "navigation",
+        "bfs"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/app-services/src/file_service/enumeration.rs",
+      "type": "file",
+      "name": "enumeration.rs",
+      "filePath": "crates/app-services/src/file_service/enumeration.rs",
+      "summary": "提供文件系统枚举功能：遍历证据镜像的文件系统树，通过 BFS 递归插入子条目，支持取消检查和进度计算。",
+      "tags": [
+        "enumeration",
+        "file-system",
+        "bfs",
+        "cancellation"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/enumeration.rs:enumerate_filesystem",
+      "type": "function",
+      "name": "enumerate_filesystem",
+      "filePath": "crates/app-services/src/file_service/enumeration.rs",
+      "lineRange": [
+        20,
+        26
+      ],
+      "summary": "枚举文件系统的入口函数，委托到带根名称和取消支持的变体。",
+      "tags": [
+        "entry-point",
+        "enumeration",
+        "file-system"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/enumeration.rs:enumerate_filesystem_with_root_name",
+      "type": "function",
+      "name": "enumerate_filesystem_with_root_name",
+      "filePath": "crates/app-services/src/file_service/enumeration.rs",
+      "lineRange": [
+        33,
+        55
+      ],
+      "summary": "带根目录名称的文件系统枚举，默认不取消。",
+      "tags": [
+        "enumeration",
+        "file-system"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/enumeration.rs:enumerate_filesystem_with_root_name_and_cancel",
+      "type": "function",
+      "name": "enumerate_filesystem_with_root_name_and_cancel",
+      "filePath": "crates/app-services/src/file_service/enumeration.rs",
+      "lineRange": [
+        57,
+        112
+      ],
+      "summary": "支持取消的文件系统枚举核心实现：遍历根条目，调用 walk_and_insert_children 递归插入子节点。",
+      "tags": [
+        "enumeration",
+        "file-system",
+        "cancellation"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/enumeration.rs:walk_and_insert_children",
+      "type": "function",
+      "name": "walk_and_insert_children",
+      "filePath": "crates/app-services/src/file_service/enumeration.rs",
+      "lineRange": [
+        151,
+        242
+      ],
+      "summary": "BFS 递归遍历并插入子文件条目的核心函数，支持取消检查、进度计算和 mime 类型推断。",
+      "tags": [
+        "enumeration",
+        "bfs",
+        "insert",
+        "cancellation"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:crates/app-services/src/file_service/error.rs",
+      "type": "file",
+      "name": "error.rs",
+      "filePath": "crates/app-services/src/file_service/error.rs",
+      "summary": "文件服务的错误类型定义：FileServiceError 枚举，包含 NotFound、InvalidInput、PathTraversal、Other 变体及 Db 转换。",
+      "tags": [
+        "error-handling",
+        "error",
+        "service"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/app-services/src/file_service/error.rs:FileServiceError",
+      "type": "class",
+      "name": "FileServiceError",
+      "filePath": "crates/app-services/src/file_service/error.rs",
+      "lineRange": [
+        10,
+        61
+      ],
+      "summary": "文件服务统一错误枚举，包含 NotFound（文件未找到）、InvalidInput（无效输入）、PathTraversal（路径遍历检测）、Other（通用错误）和 Db（数据库）变体，含 ReadOffsetBeyondSize 辅助方法。",
+      "tags": [
+        "error-handling",
+        "enum",
+        "error"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/app-services/src/file_service/export.rs",
+      "type": "file",
+      "name": "export.rs",
+      "filePath": "crates/app-services/src/file_service/export.rs",
+      "summary": "文件导出功能：将证据中的文件提取到宿主机文件系统的目标路径。",
+      "tags": [
+        "export",
+        "file-extraction",
+        "evidence"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/export.rs:extract_file_to_destination",
+      "type": "function",
+      "name": "extract_file_to_destination",
+      "filePath": "crates/app-services/src/file_service/export.rs",
+      "lineRange": [
+        13,
+        88
+      ],
+      "summary": "将指定文件条目从证据读取器中提取并写入宿主机目标路径，支持路径名称清洗和目录自动创建。",
+      "tags": [
+        "export",
+        "file-extraction",
+        "evidence"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/app-services/src/file_service/file_rows.rs",
+      "type": "file",
+      "name": "file_rows.rs",
+      "filePath": "crates/app-services/src/file_service/file_rows.rs",
+      "summary": "按分页请求从数据库获取文件行数据，映射为 FileViewDto 返回前端。",
+      "tags": [
+        "query",
+        "pagination",
+        "dto",
+        "file-view"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/file_rows.rs:get_file_rows_for_request",
+      "type": "function",
+      "name": "get_file_rows_for_request",
+      "filePath": "crates/app-services/src/file_service/file_rows.rs",
+      "lineRange": [
+        14,
+        44
+      ],
+      "summary": "根据 FileRequestDto（含分页、排序、过滤）从 FileRepo 查询并组装 FileViewDto 列表返回。",
+      "tags": [
+        "query",
+        "pagination",
+        "dto"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/app-services/src/file_service/mapping.rs",
+      "type": "file",
+      "name": "mapping.rs",
+      "filePath": "crates/app-services/src/file_service/mapping.rs",
+      "summary": "提供文件条目到 DTO 的映射函数：FileEntry 转 FileViewDto/TreeNodeDto，以及基于扩展名的 MIME 类型推断。",
+      "tags": [
+        "mapping",
+        "dto",
+        "conversion",
+        "mime"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/mapping.rs:file_entry_to_dto",
+      "type": "function",
+      "name": "file_entry_to_dto",
+      "filePath": "crates/app-services/src/file_service/mapping.rs",
+      "lineRange": [
+        10,
+        33
+      ],
+      "summary": "将数据库 FileEntry 行映射为前端 FileViewDto，包含 id、name、path、size、时间戳、mime 类型等字段。",
+      "tags": [
+        "mapping",
+        "dto",
+        "conversion"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/mapping.rs:file_entry_to_tree_node",
+      "type": "function",
+      "name": "file_entry_to_tree_node",
+      "filePath": "crates/app-services/src/file_service/mapping.rs",
+      "lineRange": [
+        36,
+        54
+      ],
+      "summary": "将文件条目映射为前端文件树的 TreeNodeDto，包含 id、name、type、childCount、status。",
+      "tags": [
+        "mapping",
+        "tree",
+        "dto"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/mapping.rs:mime_for_entry",
+      "type": "function",
+      "name": "mime_for_entry",
+      "filePath": "crates/app-services/src/file_service/mapping.rs",
+      "lineRange": [
+        57,
+        78
+      ],
+      "summary": "基于文件扩展名推断 MIME 类型，将目录标记为 inode/directory。",
+      "tags": [
+        "mime",
+        "inference",
+        "extension"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/app-services/src/file_service/mft.rs",
+      "type": "file",
+      "name": "mft.rs",
+      "filePath": "crates/app-services/src/file_service/mft.rs",
+      "summary": "NTFS MFT（主文件表）解析和枚举核心模块：直接从 NTFS $MFT 文件解析记录，支持数据运行列表解析、fixup 修复、路径重建、父 ID 关联和文件图谱填充。",
+      "tags": [
+        "ntfs",
+        "mft",
+        "parsing",
+        "enumeration",
+        "file-system"
+      ],
+      "complexity": "complex",
+      "languageNotes": "实现低层级 NTFS MFT 记录解析：处理 FILE 记录头、属性头、$DATA 属性的数据运行列表（data runs），支持稀疏/压缩运行和 fixup 数组校验。使用 u64::from_le_bytes 读取小端整数。"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/mft.rs:enumerate_filesystem_mft",
+      "type": "function",
+      "name": "enumerate_filesystem_mft",
+      "filePath": "crates/app-services/src/file_service/mft.rs",
+      "lineRange": [
+        27,
+        54
+      ],
+      "summary": "MFT 枚举入口函数：读取 $MFT 流、解析记录为 FileEntry 行，写入数据库并填充文件图谱。",
+      "tags": [
+        "entry-point",
+        "mft",
+        "enumeration"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/mft.rs:enumerate_filesystem_mft_with_partition",
+      "type": "function",
+      "name": "enumerate_filesystem_mft_with_partition",
+      "filePath": "crates/app-services/src/file_service/mft.rs",
+      "lineRange": [
+        56,
+        100
+      ],
+      "summary": "带分区信息的 MFT 枚举：从给定分区打开 NTFS 文件系统，获取 $MFT 入口，读取记录并委托通用逻辑处理。",
+      "tags": [
+        "mft",
+        "enumeration",
+        "partition"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/mft.rs:read_ntfs_mft_data_runs",
+      "type": "function",
+      "name": "read_ntfs_mft_data_runs",
+      "filePath": "crates/app-services/src/file_service/mft.rs",
+      "lineRange": [
+        102,
+        148
+      ],
+      "summary": "读取 NTFS MFT 的 $DATA 属性数据运行列表（data runs），跨运行块拼接出完整文件内容。",
+      "tags": [
+        "ntfs",
+        "data-runs",
+        "parsing",
+        "mft"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/mft.rs:parse_ntfs_data_runs",
+      "type": "function",
+      "name": "parse_ntfs_data_runs",
+      "filePath": "crates/app-services/src/file_service/mft.rs",
+      "lineRange": [
+        195,
+        225
+      ],
+      "summary": "解析 NTFS 数据运行列表的二进制编码：从运行列表头部字节中解出偏移长度和长度字段的字节数，逐项读取运行。",
+      "tags": [
+        "ntfs",
+        "parsing",
+        "data-runs",
+        "binary"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/mft.rs:records_to_file_entries",
+      "type": "function",
+      "name": "records_to_file_entries",
+      "filePath": "crates/app-services/src/file_service/mft.rs",
+      "lineRange": [
+        511,
+        540
+      ],
+      "summary": "将解析出的 MFT 记录列表转换为 FileEntryRow 列表，提取文件名、路径、大小、时间戳等元数据。",
+      "tags": [
+        "mft",
+        "conversion",
+        "file-entry"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/mft.rs:add_entry_to_path_map",
+      "type": "function",
+      "name": "add_entry_to_path_map",
+      "filePath": "crates/app-services/src/file_service/mft.rs",
+      "lineRange": [
+        542,
+        565
+      ],
+      "summary": "将文件条目按父 MFT 引用号分组加入路径映射表，用于后续路径重建。",
+      "tags": [
+        "mft",
+        "path",
+        "map"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/mft.rs:update_entry_paths",
+      "type": "function",
+      "name": "update_entry_paths",
+      "filePath": "crates/app-services/src/file_service/mft.rs",
+      "lineRange": [
+        567,
+        611
+      ],
+      "summary": "递归重建完整文件系统路径：从根向下遍历，将父目录路径与条目名称拼接为完整路径。",
+      "tags": [
+        "mft",
+        "path",
+        "reconstruction"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/mft.rs:update_entry_parent_ids",
+      "type": "function",
+      "name": "update_entry_parent_ids",
+      "filePath": "crates/app-services/src/file_service/mft.rs",
+      "lineRange": [
+        613,
+        680
+      ],
+      "summary": "为每个 MFT 文件条目确定父级 FileEntryId：通过父 MFT 引用号在映射表中查找对应的数据库 ID。",
+      "tags": [
+        "mft",
+        "parent",
+        "id-resolution"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/mft.rs:mft_parent_entry_id",
+      "type": "function",
+      "name": "mft_parent_entry_id",
+      "filePath": "crates/app-services/src/file_service/mft.rs",
+      "lineRange": [
+        682,
+        700
+      ],
+      "summary": "根据 MFT 父引用号和条目序号解析父级 FileEntryId，处理常见的自引用（如根目录 5->5）。",
+      "tags": [
+        "mft",
+        "parent",
+        "lookup"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/app-services/src/file_service/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "crates/app-services/src/file_service/mod.rs",
+      "summary": "文件服务模块的入口和聚合文件：声明所有子模块（data_sources、enumeration、error、export、file_rows、mapping、mft、partition_roots、sort、tree_queries、viewer、visibility），重新导出公共 API，并提供文件跳转上下文（jump context）功能。",
+      "tags": [
+        "barrel",
+        "entry-point",
+        "module",
+        "service"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/mod.rs:get_file_jump_context",
+      "type": "function",
+      "name": "get_file_jump_context",
+      "filePath": "crates/app-services/src/file_service/mod.rs",
+      "lineRange": [
+        51,
+        94
+      ],
+      "summary": "根据请求查询文件跳转上下文：目标条目、父目录、兄弟节点列表和祖先面包屑路径，用于前端文件导航。",
+      "tags": [
+        "navigation",
+        "query",
+        "file-tree",
+        "context"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/app-services/src/file_service/partition_roots.rs",
+      "type": "file",
+      "name": "partition_roots.rs",
+      "filePath": "crates/app-services/src/file_service/partition_roots.rs",
+      "summary": "分区根目录管理：插入/替换占位符根节点、计算目录深度、识别分区根名称模式（如 \"Partition 1\"）、规范化裸根名称，以及存储数据源分区记录的仓库操作。",
+      "tags": [
+        "partition",
+        "root",
+        "placeholder",
+        "normalization"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/partition_roots.rs:insert_partition_placeholder_root",
+      "type": "function",
+      "name": "insert_partition_placeholder_root",
+      "filePath": "crates/app-services/src/file_service/partition_roots.rs",
+      "lineRange": [
+        18,
+        51
+      ],
+      "summary": "为数据源的每个分区插入占位符根节点到文件树中，使用 \"Partition N\" 作为默认名称，等实际枚举后替换。",
+      "tags": [
+        "partition",
+        "placeholder",
+        "insert"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/partition_roots.rs:replace_placeholder_root_with_real",
+      "type": "function",
+      "name": "replace_placeholder_root_with_real",
+      "filePath": "crates/app-services/src/file_service/partition_roots.rs",
+      "lineRange": [
+        53,
+        87
+      ],
+      "summary": "用真实枚举得到的根目录条目替换分区占位符节点，更新名称、路径和 MFT 入口等属性。",
+      "tags": [
+        "partition",
+        "placeholder",
+        "replace"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/partition_roots.rs:store_data_source_partitions",
+      "type": "function",
+      "name": "store_data_source_partitions",
+      "filePath": "crates/app-services/src/file_service/partition_roots.rs",
+      "lineRange": [
+        148,
+        177
+      ],
+      "summary": "将检测到的分区信息持久化到数据库中的 data_source_partitions 表。",
+      "tags": [
+        "partition",
+        "persistence",
+        "database"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/app-services/src/file_service/sort.rs",
+      "type": "file",
+      "name": "sort.rs",
+      "filePath": "crates/app-services/src/file_service/sort.rs",
+      "summary": "文件条目排序工具：按条目类型（目录优先）、状态桶和自然排序（含数字段比较）实现目录优先的用户友好排序。",
+      "tags": [
+        "sort",
+        "utility",
+        "file-tree",
+        "natural-sort"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/sort.rs:sort_entries",
+      "type": "function",
+      "name": "sort_entries",
+      "filePath": "crates/app-services/src/file_service/sort.rs",
+      "lineRange": [
+        69,
+        95
+      ],
+      "summary": "对文件条目列表排序：目录在前，名称按自然排序（序号数字按数值比较）。",
+      "tags": [
+        "sort",
+        "file-tree",
+        "natural-sort"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/sort.rs:sort_directories_for_tree",
+      "type": "function",
+      "name": "sort_directories_for_tree",
+      "filePath": "crates/app-services/src/file_service/sort.rs",
+      "lineRange": [
+        98,
+        112
+      ],
+      "summary": "对树节点的目录子节点排序：将目录排在前面，其他类型排在后面。",
+      "tags": [
+        "sort",
+        "tree",
+        "directory"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/sort.rs:natural_cmp",
+      "type": "function",
+      "name": "natural_cmp",
+      "filePath": "crates/app-services/src/file_service/sort.rs",
+      "lineRange": [
+        30,
+        58
+      ],
+      "summary": "自然排序比较函数：分割字符串的数字和非数字段，数字段按数值比较（如 \"file2\" < \"file10\"）。",
+      "tags": [
+        "sort",
+        "natural-sort",
+        "comparison"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/app-services/src/file_service/tree_queries.rs",
+      "type": "file",
+      "name": "tree_queries.rs",
+      "filePath": "crates/app-services/src/file_service/tree_queries.rs",
+      "summary": "文件树查询服务：提供递归树构建（get_file_tree_real）和延迟子节点加载（get_file_children_lazy），支持可见性过滤。",
+      "tags": [
+        "tree",
+        "query",
+        "file-tree",
+        "visibility"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/tree_queries.rs:get_file_tree_real",
+      "type": "function",
+      "name": "get_file_tree_real",
+      "filePath": "crates/app-services/src/file_service/tree_queries.rs",
+      "lineRange": [
+        12,
+        44
+      ],
+      "summary": "递归构建完整文件树：从根节点开始查询所有子节点，按可见性和排序规则组织 TreeNodeDto 列表。",
+      "tags": [
+        "tree",
+        "query",
+        "recursive",
+        "file-tree"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_service/tree_queries.rs:get_file_children_lazy",
+      "type": "function",
+      "name": "get_file_children_lazy",
+      "filePath": "crates/app-services/src/file_service/tree_queries.rs",
+      "lineRange": [
+        86,
+        131
+      ],
+      "summary": "延迟加载指定节点的直接子节点：按父 ID 查询子条目，映射为 TreeNodeDto 列表，仅返回直接子级。",
+      "tags": [
+        "tree",
+        "lazy-load",
+        "children",
+        "query"
+      ],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "class:crates/app-services/src/artifact_service.rs:ArtifactServiceError",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "class:crates/app-services/src/artifact_service.rs:ArtifactExtractionStats",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "class:crates/app-services/src/artifact_service.rs:EvidenceScanStats",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "function:crates/app-services/src/artifact_service.rs:create_registry",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "function:crates/app-services/src/artifact_service.rs:run_extractors_on_file",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "function:crates/app-services/src/artifact_service.rs:store_artifacts",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "function:crates/app-services/src/artifact_service.rs:populate_artifact_graph",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "function:crates/app-services/src/artifact_service.rs:run_targeted_evidence_scan",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "function:crates/app-services/src/artifact_service.rs:already_has_artifact_for_source",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "function:crates/app-services/src/artifact_service.rs:run_extractors_parallel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "function:crates/app-services/src/artifact_service.rs:get_artifact_families_from_db",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "function:crates/app-services/src/artifact_service.rs:get_artifact_rows_from_db",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "function:crates/app-services/src/artifact_service.rs:get_artifact_row_by_id",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "function:crates/app-services/src/artifact_service.rs:get_artifact_family_counts",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "class:crates/app-services/src/artifact_service.rs:ArtifactServiceError",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "class:crates/app-services/src/artifact_service.rs:ArtifactExtractionStats",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "class:crates/app-services/src/artifact_service.rs:EvidenceScanStats",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "function:crates/app-services/src/artifact_service.rs:create_registry",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "function:crates/app-services/src/artifact_service.rs:run_extractors_on_file",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "function:crates/app-services/src/artifact_service.rs:store_artifacts",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "function:crates/app-services/src/artifact_service.rs:run_targeted_evidence_scan",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "function:crates/app-services/src/artifact_service.rs:run_extractors_parallel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "function:crates/app-services/src/artifact_service.rs:get_artifact_families_from_db",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "function:crates/app-services/src/artifact_service.rs:get_artifact_rows_from_db",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "function:crates/app-services/src/artifact_service.rs:get_artifact_row_by_id",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "function:crates/app-services/src/artifact_service.rs:get_artifact_family_counts",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/artifact_service.rs",
+      "target": "file:crates/app-services/src/file_service/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/data_sources.rs",
+      "target": "file:crates/app-services/src/file_service/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/data_sources.rs",
+      "target": "function:crates/app-services/src/file_service/data_sources.rs:get_data_sources_real",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/data_sources.rs",
+      "target": "function:crates/app-services/src/file_service/data_sources.rs:rename_data_source_real",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/data_sources.rs",
+      "target": "function:crates/app-services/src/file_service/data_sources.rs:get_recent_objects_real",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/data_sources.rs",
+      "target": "function:crates/app-services/src/file_service/data_sources.rs:get_data_sources_real",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/data_sources.rs",
+      "target": "function:crates/app-services/src/file_service/data_sources.rs:rename_data_source_real",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/data_sources.rs",
+      "target": "function:crates/app-services/src/file_service/data_sources.rs:get_recent_objects_real",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/enumeration.rs",
+      "target": "file:crates/app-services/src/file_service/visibility.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/enumeration.rs",
+      "target": "function:crates/app-services/src/file_service/enumeration.rs:enumerate_filesystem",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/enumeration.rs",
+      "target": "function:crates/app-services/src/file_service/enumeration.rs:enumerate_filesystem_with_root_name",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/enumeration.rs",
+      "target": "function:crates/app-services/src/file_service/enumeration.rs:enumerate_filesystem_with_root_name_and_cancel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/enumeration.rs",
+      "target": "function:crates/app-services/src/file_service/enumeration.rs:walk_and_insert_children",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/enumeration.rs",
+      "target": "function:crates/app-services/src/file_service/enumeration.rs:enumerate_filesystem",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/enumeration.rs",
+      "target": "function:crates/app-services/src/file_service/enumeration.rs:enumerate_filesystem_with_root_name",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/enumeration.rs",
+      "target": "function:crates/app-services/src/file_service/enumeration.rs:enumerate_filesystem_with_root_name_and_cancel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/enumeration.rs",
+      "target": "function:crates/app-services/src/file_service/enumeration.rs:walk_and_insert_children",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/error.rs",
+      "target": "class:crates/app-services/src/file_service/error.rs:FileServiceError",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/error.rs",
+      "target": "class:crates/app-services/src/file_service/error.rs:FileServiceError",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/export.rs",
+      "target": "file:crates/app-services/src/file_service/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/export.rs",
+      "target": "function:crates/app-services/src/file_service/export.rs:extract_file_to_destination",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/export.rs",
+      "target": "function:crates/app-services/src/file_service/export.rs:extract_file_to_destination",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/file_rows.rs",
+      "target": "file:crates/app-services/src/file_service/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/file_rows.rs",
+      "target": "function:crates/app-services/src/file_service/file_rows.rs:get_file_rows_for_request",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/file_rows.rs",
+      "target": "function:crates/app-services/src/file_service/file_rows.rs:get_file_rows_for_request",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mapping.rs",
+      "target": "file:crates/app-services/src/file_service/partition_roots.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mapping.rs",
+      "target": "function:crates/app-services/src/file_service/mapping.rs:file_entry_to_dto",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mapping.rs",
+      "target": "function:crates/app-services/src/file_service/mapping.rs:file_entry_to_tree_node",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mapping.rs",
+      "target": "function:crates/app-services/src/file_service/mapping.rs:mime_for_entry",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mapping.rs",
+      "target": "function:crates/app-services/src/file_service/mapping.rs:file_entry_to_dto",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mapping.rs",
+      "target": "function:crates/app-services/src/file_service/mapping.rs:file_entry_to_tree_node",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mapping.rs",
+      "target": "function:crates/app-services/src/file_service/mapping.rs:mime_for_entry",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mft.rs",
+      "target": "function:crates/app-services/src/file_service/mft.rs:enumerate_filesystem_mft",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mft.rs",
+      "target": "function:crates/app-services/src/file_service/mft.rs:enumerate_filesystem_mft_with_partition",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mft.rs",
+      "target": "function:crates/app-services/src/file_service/mft.rs:read_ntfs_mft_data_runs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mft.rs",
+      "target": "function:crates/app-services/src/file_service/mft.rs:parse_ntfs_data_runs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mft.rs",
+      "target": "function:crates/app-services/src/file_service/mft.rs:records_to_file_entries",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mft.rs",
+      "target": "function:crates/app-services/src/file_service/mft.rs:add_entry_to_path_map",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mft.rs",
+      "target": "function:crates/app-services/src/file_service/mft.rs:update_entry_paths",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mft.rs",
+      "target": "function:crates/app-services/src/file_service/mft.rs:update_entry_parent_ids",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mft.rs",
+      "target": "function:crates/app-services/src/file_service/mft.rs:mft_parent_entry_id",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mft.rs",
+      "target": "function:crates/app-services/src/file_service/mft.rs:enumerate_filesystem_mft",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mft.rs",
+      "target": "function:crates/app-services/src/file_service/mft.rs:enumerate_filesystem_mft_with_partition",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mft.rs",
+      "target": "function:crates/app-services/src/file_service/mft.rs:parse_ntfs_data_runs",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mft.rs",
+      "target": "function:crates/app-services/src/file_service/mft.rs:records_to_file_entries",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mft.rs",
+      "target": "function:crates/app-services/src/file_service/mft.rs:add_entry_to_path_map",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mft.rs",
+      "target": "function:crates/app-services/src/file_service/mft.rs:update_entry_paths",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mft.rs",
+      "target": "function:crates/app-services/src/file_service/mft.rs:update_entry_parent_ids",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mft.rs",
+      "target": "function:crates/app-services/src/file_service/mft.rs:mft_parent_entry_id",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mod.rs",
+      "target": "file:crates/app-services/src/file_service/data_sources.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mod.rs",
+      "target": "file:crates/app-services/src/file_service/enumeration.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mod.rs",
+      "target": "file:crates/app-services/src/file_service/error.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mod.rs",
+      "target": "file:crates/app-services/src/file_service/export.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mod.rs",
+      "target": "file:crates/app-services/src/file_service/file_rows.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mod.rs",
+      "target": "file:crates/app-services/src/file_service/mapping.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mod.rs",
+      "target": "file:crates/app-services/src/file_service/mft.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mod.rs",
+      "target": "file:crates/app-services/src/file_service/partition_roots.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mod.rs",
+      "target": "file:crates/app-services/src/file_service/sort.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mod.rs",
+      "target": "file:crates/app-services/src/file_service/tree_queries.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mod.rs",
+      "target": "file:crates/app-services/src/file_service/viewer/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mod.rs",
+      "target": "file:crates/app-services/src/file_service/visibility.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mod.rs",
+      "target": "function:crates/app-services/src/file_service/mod.rs:get_file_jump_context",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/mod.rs",
+      "target": "function:crates/app-services/src/file_service/mod.rs:get_file_jump_context",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/partition_roots.rs",
+      "target": "function:crates/app-services/src/file_service/partition_roots.rs:insert_partition_placeholder_root",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/partition_roots.rs",
+      "target": "function:crates/app-services/src/file_service/partition_roots.rs:replace_placeholder_root_with_real",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/partition_roots.rs",
+      "target": "function:crates/app-services/src/file_service/partition_roots.rs:store_data_source_partitions",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/partition_roots.rs",
+      "target": "function:crates/app-services/src/file_service/partition_roots.rs:insert_partition_placeholder_root",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/partition_roots.rs",
+      "target": "function:crates/app-services/src/file_service/partition_roots.rs:replace_placeholder_root_with_real",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/partition_roots.rs",
+      "target": "function:crates/app-services/src/file_service/partition_roots.rs:store_data_source_partitions",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/sort.rs",
+      "target": "function:crates/app-services/src/file_service/sort.rs:sort_entries",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/sort.rs",
+      "target": "function:crates/app-services/src/file_service/sort.rs:sort_directories_for_tree",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/sort.rs",
+      "target": "function:crates/app-services/src/file_service/sort.rs:natural_cmp",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/sort.rs",
+      "target": "function:crates/app-services/src/file_service/sort.rs:natural_cmp",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/sort.rs",
+      "target": "function:crates/app-services/src/file_service/sort.rs:sort_entries",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/sort.rs",
+      "target": "function:crates/app-services/src/file_service/sort.rs:sort_directories_for_tree",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/tree_queries.rs",
+      "target": "file:crates/app-services/src/file_service/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/tree_queries.rs",
+      "target": "function:crates/app-services/src/file_service/tree_queries.rs:get_file_tree_real",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/tree_queries.rs",
+      "target": "function:crates/app-services/src/file_service/tree_queries.rs:get_file_children_lazy",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/tree_queries.rs",
+      "target": "function:crates/app-services/src/file_service/tree_queries.rs:get_file_tree_real",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_service/tree_queries.rs",
+      "target": "function:crates/app-services/src/file_service/tree_queries.rs:get_file_children_lazy",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

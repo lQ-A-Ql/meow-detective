@@ -1,0 +1,4472 @@
+[
+  {
+    "path": "crates/app-services/src/import_analysis/mod.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 1020,
+    "nonEmptyLines": 932,
+    "functions": [],
+    "classes": [],
+    "exports": [],
+    "metrics": {
+      "importCount": 10,
+      "exportCount": 0,
+      "functionCount": 0,
+      "classCount": 0
+    },
+    "callGraphCount": 552,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/import_analysis/options.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 116,
+    "nonEmptyLines": 103,
+    "functions": [
+      {
+        "name": "as_str",
+        "startLine": 21,
+        "endLine": 27,
+        "params": []
+      },
+      {
+        "name": "allows_content",
+        "startLine": 29,
+        "endLine": 31,
+        "params": []
+      },
+      {
+        "name": "add_warnings",
+        "startLine": 75,
+        "endLine": 77,
+        "params": [
+          "count"
+        ]
+      },
+      {
+        "name": "add_skipped",
+        "startLine": 79,
+        "endLine": 81,
+        "params": [
+          "count"
+        ]
+      },
+      {
+        "name": "add_failed",
+        "startLine": 83,
+        "endLine": 85,
+        "params": [
+          "count"
+        ]
+      },
+      {
+        "name": "is_partial",
+        "startLine": 87,
+        "endLine": 89,
+        "params": []
+      }
+    ],
+    "classes": [
+      {
+        "name": "ImportAnalysisMode",
+        "startLine": 13,
+        "endLine": 18,
+        "methods": [
+          "as_str",
+          "allows_content"
+        ],
+        "properties": [
+          "MetadataOnly",
+          "BudgetedContent",
+          "FullContent"
+        ]
+      },
+      {
+        "name": "ImportAnalysisOptions",
+        "startLine": 35,
+        "endLine": 53,
+        "methods": [],
+        "properties": [
+          "case_root",
+          "db_path",
+          "case_id",
+          "data_source_id",
+          "index_dir",
+          "max_analysis_workers",
+          "cancel_token",
+          "enable_timeline_projection",
+          "enable_content_extraction",
+          "enable_text_indexing",
+          "analysis_mode",
+          "content_budget",
+          "memory_soft_limit_mb",
+          "memory_hard_limit_mb",
+          "tier_state"
+        ]
+      },
+      {
+        "name": "ImportAnalysisStats",
+        "startLine": 56,
+        "endLine": 65,
+        "methods": [],
+        "properties": [
+          "processed_count",
+          "artifact_count",
+          "timeline_count",
+          "indexed_count",
+          "warning_count",
+          "skipped_count",
+          "failed_count",
+          "worker_ids"
+        ]
+      },
+      {
+        "name": "JobOutcomeCounts",
+        "startLine": 68,
+        "endLine": 72,
+        "methods": [
+          "add_warnings",
+          "add_skipped",
+          "add_failed",
+          "is_partial"
+        ],
+        "properties": [
+          "warning_count",
+          "skipped_count",
+          "failed_count"
+        ]
+      },
+      {
+        "name": "PostImportPipelineOptions",
+        "startLine": 93,
+        "endLine": 110,
+        "methods": [],
+        "properties": [
+          "case_root",
+          "db_path",
+          "case_id",
+          "data_source_id",
+          "index_dir",
+          "max_analysis_workers",
+          "cancel_token",
+          "enable_timeline_projection",
+          "enable_content_extraction",
+          "enable_text_indexing",
+          "analysis_mode",
+          "tier_state"
+        ]
+      },
+      {
+        "name": "PostImportPipelineError",
+        "startLine": 113,
+        "endLine": 116,
+        "methods": [],
+        "properties": [
+          "message",
+          "counts"
+        ]
+      }
+    ],
+    "exports": [
+      {
+        "name": "ImportAnalysisMode",
+        "line": 13,
+        "isDefault": false
+      },
+      {
+        "name": "as_str",
+        "line": 21,
+        "isDefault": false
+      },
+      {
+        "name": "allows_content",
+        "line": 29,
+        "isDefault": false
+      },
+      {
+        "name": "ImportAnalysisOptions",
+        "line": 35,
+        "isDefault": false
+      },
+      {
+        "name": "ImportAnalysisStats",
+        "line": 56,
+        "isDefault": false
+      },
+      {
+        "name": "JobOutcomeCounts",
+        "line": 68,
+        "isDefault": false
+      },
+      {
+        "name": "add_warnings",
+        "line": 75,
+        "isDefault": false
+      },
+      {
+        "name": "add_skipped",
+        "line": 79,
+        "isDefault": false
+      },
+      {
+        "name": "add_failed",
+        "line": 83,
+        "isDefault": false
+      },
+      {
+        "name": "is_partial",
+        "line": 87,
+        "isDefault": false
+      },
+      {
+        "name": "PostImportPipelineOptions",
+        "line": 93,
+        "isDefault": false
+      },
+      {
+        "name": "PostImportPipelineError",
+        "line": 113,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 0,
+      "exportCount": 12,
+      "functionCount": 6,
+      "classCount": 6
+    },
+    "callGraphCount": 3,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/import_analysis/priority_queue.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 205,
+    "nonEmptyLines": 176,
+    "functions": [
+      {
+        "name": "default",
+        "startLine": 58,
+        "endLine": 64,
+        "params": []
+      },
+      {
+        "name": "new",
+        "startLine": 69,
+        "endLine": 71,
+        "params": []
+      },
+      {
+        "name": "push",
+        "startLine": 74,
+        "endLine": 80,
+        "params": [
+          "item",
+          "priority"
+        ]
+      },
+      {
+        "name": "pop",
+        "startLine": 86,
+        "endLine": 94,
+        "params": []
+      },
+      {
+        "name": "is_empty",
+        "startLine": 97,
+        "endLine": 99,
+        "params": []
+      },
+      {
+        "name": "len",
+        "startLine": 102,
+        "endLine": 104,
+        "params": []
+      }
+    ],
+    "classes": [
+      {
+        "name": "TaskPriority",
+        "startLine": 16,
+        "endLine": 27,
+        "methods": [],
+        "properties": [
+          "High",
+          "Normal",
+          "Low"
+        ]
+      },
+      {
+        "name": "PriorityTaskQueue",
+        "startLine": 51,
+        "endLine": 55,
+        "methods": [],
+        "properties": [
+          "high",
+          "normal",
+          "low"
+        ]
+      }
+    ],
+    "exports": [
+      {
+        "name": "TaskPriority",
+        "line": 16,
+        "isDefault": false
+      },
+      {
+        "name": "PriorityTaskQueue",
+        "line": 51,
+        "isDefault": false
+      },
+      {
+        "name": "new",
+        "line": 69,
+        "isDefault": false
+      },
+      {
+        "name": "push",
+        "line": 74,
+        "isDefault": false
+      },
+      {
+        "name": "pop",
+        "line": 86,
+        "isDefault": false
+      },
+      {
+        "name": "is_empty",
+        "line": 97,
+        "isDefault": false
+      },
+      {
+        "name": "len",
+        "line": 102,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 0,
+      "exportCount": 7,
+      "functionCount": 6,
+      "classCount": 2
+    },
+    "callGraphCount": 42,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/import_analysis/progress.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 123,
+    "nonEmptyLines": 111,
+    "functions": [
+      {
+        "name": "current_rss_mb",
+        "startLine": 5,
+        "endLine": 11,
+        "params": []
+      },
+      {
+        "name": "rows_per_sec",
+        "startLine": 13,
+        "endLine": 20,
+        "params": [
+          "rows",
+          "duration"
+        ]
+      },
+      {
+        "name": "bool_word",
+        "startLine": 22,
+        "endLine": 28,
+        "params": [
+          "value"
+        ]
+      },
+      {
+        "name": "scheduling_state",
+        "startLine": 30,
+        "endLine": 42,
+        "params": [
+          "cancel_requested",
+          "rss_mb",
+          "memory_soft_limit_mb"
+        ]
+      },
+      {
+        "name": "memory_hard_limit_exceeded",
+        "startLine": 44,
+        "endLine": 47,
+        "params": [
+          "limit_mb"
+        ]
+      },
+      {
+        "name": "test_rss_override_mb",
+        "startLine": 53,
+        "endLine": 58,
+        "params": []
+      },
+      {
+        "name": "set_test_rss_override_mb",
+        "startLine": 61,
+        "endLine": 63,
+        "params": [
+          "value"
+        ]
+      },
+      {
+        "name": "current_rss_bytes",
+        "startLine": 66,
+        "endLine": 118,
+        "params": []
+      },
+      {
+        "name": "current_rss_bytes",
+        "startLine": 121,
+        "endLine": 123,
+        "params": []
+      }
+    ],
+    "classes": [],
+    "exports": [
+      {
+        "name": "current_rss_mb",
+        "line": 5,
+        "isDefault": false
+      },
+      {
+        "name": "rows_per_sec",
+        "line": 13,
+        "isDefault": false
+      },
+      {
+        "name": "bool_word",
+        "line": 22,
+        "isDefault": false
+      },
+      {
+        "name": "scheduling_state",
+        "line": 30,
+        "isDefault": false
+      },
+      {
+        "name": "memory_hard_limit_exceeded",
+        "line": 44,
+        "isDefault": false
+      },
+      {
+        "name": "set_test_rss_override_mb",
+        "line": 61,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 0,
+      "exportCount": 6,
+      "functionCount": 9,
+      "classCount": 0
+    },
+    "callGraphCount": 13,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/import_analysis/task_feed.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 155,
+    "nonEmptyLines": 145,
+    "functions": [
+      {
+        "name": "analysis_task_queue_bound",
+        "startLine": 16,
+        "endLine": 18,
+        "params": [
+          "worker_count"
+        ]
+      },
+      {
+        "name": "count_analysis_file_tasks",
+        "startLine": 20,
+        "endLine": 32,
+        "params": [
+          "db_path",
+          "data_source_id"
+        ]
+      },
+      {
+        "name": "fetch_analysis_file_page",
+        "startLine": 34,
+        "endLine": 55,
+        "params": [
+          "conn",
+          "data_source_id",
+          "offset",
+          "limit"
+        ]
+      },
+      {
+        "name": "enqueue_analysis_tasks_prioritized",
+        "startLine": 70,
+        "endLine": 117,
+        "params": [
+          "options",
+          "task_tx",
+          "shared"
+        ]
+      },
+      {
+        "name": "row_to_file_task",
+        "startLine": 119,
+        "endLine": 155,
+        "params": [
+          "row"
+        ]
+      }
+    ],
+    "classes": [],
+    "exports": [
+      {
+        "name": "analysis_task_queue_bound",
+        "line": 16,
+        "isDefault": false
+      },
+      {
+        "name": "count_analysis_file_tasks",
+        "line": 20,
+        "isDefault": false
+      },
+      {
+        "name": "fetch_analysis_file_page",
+        "line": 34,
+        "isDefault": false
+      },
+      {
+        "name": "enqueue_analysis_tasks_prioritized",
+        "line": 70,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 0,
+      "exportCount": 4,
+      "functionCount": 5,
+      "classCount": 0
+    },
+    "callGraphCount": 65,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/import_analysis/tier.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 183,
+    "nonEmptyLines": 160,
+    "functions": [
+      {
+        "name": "fmt",
+        "startLine": 23,
+        "endLine": 29,
+        "params": [
+          "f"
+        ]
+      },
+      {
+        "name": "new",
+        "startLine": 51,
+        "endLine": 56,
+        "params": []
+      },
+      {
+        "name": "default",
+        "startLine": 60,
+        "endLine": 62,
+        "params": []
+      },
+      {
+        "name": "advance_tier",
+        "startLine": 71,
+        "endLine": 100,
+        "params": [
+          "state"
+        ]
+      }
+    ],
+    "classes": [
+      {
+        "name": "Tier",
+        "startLine": 13,
+        "endLine": 20,
+        "methods": [
+          "fmt"
+        ],
+        "properties": [
+          "Catalog",
+          "ExtractArtifacts",
+          "CorrelateAndIndex"
+        ]
+      },
+      {
+        "name": "TierResult",
+        "startLine": 34,
+        "endLine": 38,
+        "methods": [],
+        "properties": [
+          "completed",
+          "stats",
+          "warnings"
+        ]
+      },
+      {
+        "name": "TierStateMachine",
+        "startLine": 43,
+        "endLine": 48,
+        "methods": [
+          "new",
+          "default"
+        ],
+        "properties": [
+          "current_tier",
+          "tier_results"
+        ]
+      }
+    ],
+    "exports": [
+      {
+        "name": "Tier",
+        "line": 13,
+        "isDefault": false
+      },
+      {
+        "name": "TierResult",
+        "line": 34,
+        "isDefault": false
+      },
+      {
+        "name": "TierStateMachine",
+        "line": 43,
+        "isDefault": false
+      },
+      {
+        "name": "new",
+        "line": 51,
+        "isDefault": false
+      },
+      {
+        "name": "advance_tier",
+        "line": 71,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 0,
+      "exportCount": 5,
+      "functionCount": 4,
+      "classCount": 3
+    },
+    "callGraphCount": 21,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/import_analysis/worker_pool.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 453,
+    "nonEmptyLines": 429,
+    "functions": [
+      {
+        "name": "run_post_import_pipeline_with_counts",
+        "startLine": 26,
+        "endLine": 137,
+        "params": [
+          "options",
+          "progress_cb"
+        ]
+      },
+      {
+        "name": "default_analysis_worker_count",
+        "startLine": 139,
+        "endLine": 143,
+        "params": []
+      },
+      {
+        "name": "resolve_analysis_worker_count",
+        "startLine": 145,
+        "endLine": 150,
+        "params": [
+          "max_analysis_workers"
+        ]
+      },
+      {
+        "name": "run_import_analysis_staging",
+        "startLine": 152,
+        "endLine": 453,
+        "params": [
+          "options",
+          "progress_cb"
+        ]
+      }
+    ],
+    "classes": [],
+    "exports": [
+      {
+        "name": "run_post_import_pipeline_with_counts",
+        "line": 26,
+        "isDefault": false
+      },
+      {
+        "name": "default_analysis_worker_count",
+        "line": 139,
+        "isDefault": false
+      },
+      {
+        "name": "resolve_analysis_worker_count",
+        "line": 145,
+        "isDefault": false
+      },
+      {
+        "name": "run_import_analysis_staging",
+        "line": 152,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 0,
+      "exportCount": 4,
+      "functionCount": 4,
+      "classCount": 0
+    },
+    "callGraphCount": 165,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/import_analysis/worker_runtime.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 580,
+    "nonEmptyLines": 538,
+    "functions": [
+      {
+        "name": "to_file_entry",
+        "startLine": 49,
+        "endLine": 69,
+        "params": []
+      },
+      {
+        "name": "new",
+        "startLine": 83,
+        "endLine": 92,
+        "params": []
+      },
+      {
+        "name": "run_analysis_worker",
+        "startLine": 95,
+        "endLine": 242,
+        "params": [
+          "worker_id",
+          "options",
+          "task_rx",
+          "shared"
+        ]
+      },
+      {
+        "name": "clear_analysis_worker_rows",
+        "startLine": 244,
+        "endLine": 250,
+        "params": [
+          "conn"
+        ]
+      },
+      {
+        "name": "persist_worker_stats",
+        "startLine": 252,
+        "endLine": 261,
+        "params": [
+          "conn",
+          "stats"
+        ]
+      },
+      {
+        "name": "flush_worker_rows",
+        "startLine": 263,
+        "endLine": 362,
+        "params": [
+          "conn",
+          "artifacts",
+          "timeline_events",
+          "index_docs"
+        ]
+      },
+      {
+        "name": "read_text_index_bytes",
+        "startLine": 364,
+        "endLine": 369,
+        "params": [
+          "conn",
+          "file_id"
+        ]
+      },
+      {
+        "name": "read_artifact_bytes",
+        "startLine": 371,
+        "endLine": 376,
+        "params": [
+          "conn",
+          "file_id"
+        ]
+      },
+      {
+        "name": "read_artifact_bytes_impl",
+        "startLine": 379,
+        "endLine": 388,
+        "params": [
+          "conn",
+          "file_id"
+        ]
+      },
+      {
+        "name": "read_artifact_bytes_impl",
+        "startLine": 391,
+        "endLine": 396,
+        "params": [
+          "conn",
+          "file_id"
+        ]
+      },
+      {
+        "name": "read_text_index_bytes_impl",
+        "startLine": 399,
+        "endLine": 408,
+        "params": [
+          "conn",
+          "file_id"
+        ]
+      },
+      {
+        "name": "read_text_index_bytes_impl",
+        "startLine": 411,
+        "endLine": 416,
+        "params": [
+          "conn",
+          "file_id"
+        ]
+      },
+      {
+        "name": "add_worker_stats",
+        "startLine": 427,
+        "endLine": 435,
+        "params": [
+          "stats",
+          "worker"
+        ]
+      },
+      {
+        "name": "mime_hint_for_entry",
+        "startLine": 437,
+        "endLine": 444,
+        "params": [
+          "file"
+        ]
+      },
+      {
+        "name": "normalized_ext",
+        "startLine": 446,
+        "endLine": 452,
+        "params": [
+          "file"
+        ]
+      },
+      {
+        "name": "should_index_file",
+        "startLine": 454,
+        "endLine": 466,
+        "params": [
+          "file"
+        ]
+      },
+      {
+        "name": "should_extract_artifact",
+        "startLine": 468,
+        "endLine": 477,
+        "params": [
+          "registry",
+          "file"
+        ]
+      },
+      {
+        "name": "reserve_content_budget",
+        "startLine": 479,
+        "endLine": 515,
+        "params": [
+          "budget",
+          "file",
+          "shared"
+        ]
+      }
+    ],
+    "classes": [
+      {
+        "name": "WorkerStats",
+        "startLine": 18,
+        "endLine": 26,
+        "methods": [],
+        "properties": [
+          "processed_count",
+          "artifact_count",
+          "timeline_count",
+          "indexed_count",
+          "warning_count",
+          "skipped_count",
+          "failed_count"
+        ]
+      },
+      {
+        "name": "FileTask",
+        "startLine": 29,
+        "endLine": 46,
+        "methods": [
+          "to_file_entry"
+        ],
+        "properties": [
+          "id",
+          "data_source_id",
+          "path",
+          "name",
+          "entry_type",
+          "size",
+          "ext",
+          "deleted",
+          "hidden",
+          "system",
+          "encrypted",
+          "created_at",
+          "modified_at",
+          "accessed_at",
+          "changed_at",
+          "hash_sha256"
+        ]
+      },
+      {
+        "name": "SharedAnalysisState",
+        "startLine": 73,
+        "endLine": 80,
+        "methods": [
+          "new"
+        ],
+        "properties": [
+          "processed_total",
+          "active_workers",
+          "indexed_total",
+          "queued_total",
+          "content_files_used",
+          "content_bytes_used"
+        ]
+      },
+      {
+        "name": "IndexDocRow",
+        "startLine": 419,
+        "endLine": 425,
+        "methods": [],
+        "properties": [
+          "file_id",
+          "path",
+          "text",
+          "language",
+          "truncated"
+        ]
+      }
+    ],
+    "exports": [
+      {
+        "name": "WorkerStats",
+        "line": 18,
+        "isDefault": false
+      },
+      {
+        "name": "FileTask",
+        "line": 29,
+        "isDefault": false
+      },
+      {
+        "name": "to_file_entry",
+        "line": 49,
+        "isDefault": false
+      },
+      {
+        "name": "SharedAnalysisState",
+        "line": 73,
+        "isDefault": false
+      },
+      {
+        "name": "new",
+        "line": 83,
+        "isDefault": false
+      },
+      {
+        "name": "run_analysis_worker",
+        "line": 95,
+        "isDefault": false
+      },
+      {
+        "name": "clear_analysis_worker_rows",
+        "line": 244,
+        "isDefault": false
+      },
+      {
+        "name": "add_worker_stats",
+        "line": 427,
+        "isDefault": false
+      },
+      {
+        "name": "should_index_file",
+        "line": 454,
+        "isDefault": false
+      },
+      {
+        "name": "should_extract_artifact",
+        "line": 468,
+        "isDefault": false
+      },
+      {
+        "name": "reserve_content_budget",
+        "line": 479,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 0,
+      "exportCount": 11,
+      "functionCount": 18,
+      "classCount": 4
+    },
+    "callGraphCount": 178,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/import_pipeline/emit.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 163,
+    "nonEmptyLines": 152,
+    "functions": [
+      {
+        "name": "envelope",
+        "startLine": 13,
+        "endLine": 20,
+        "params": [
+          "topic",
+          "payload"
+        ]
+      },
+      {
+        "name": "emit_event",
+        "startLine": 22,
+        "endLine": 28,
+        "params": [
+          "app",
+          "topic",
+          "event"
+        ]
+      },
+      {
+        "name": "emit_job_progress",
+        "startLine": 30,
+        "endLine": 42,
+        "params": [
+          "app",
+          "job_id",
+          "progress",
+          "detail"
+        ]
+      },
+      {
+        "name": "emit_partition_progress",
+        "startLine": 44,
+        "endLine": 69,
+        "params": [
+          "app",
+          "job_id",
+          "current_partition",
+          "completed",
+          "total",
+          "partition_pct"
+        ]
+      },
+      {
+        "name": "emit_timeline_updated",
+        "startLine": 71,
+        "endLine": 81,
+        "params": [
+          "app",
+          "event_count"
+        ]
+      },
+      {
+        "name": "emit_search_index_progress",
+        "startLine": 83,
+        "endLine": 94,
+        "params": [
+          "app",
+          "progress",
+          "detail"
+        ]
+      },
+      {
+        "name": "emit_data_source_imported",
+        "startLine": 96,
+        "endLine": 119,
+        "params": [
+          "app",
+          "case_id",
+          "data_source",
+          "job_id"
+        ]
+      },
+      {
+        "name": "emit_import_phase_progress",
+        "startLine": 121,
+        "endLine": 130,
+        "params": [
+          "app",
+          "progress"
+        ]
+      },
+      {
+        "name": "emit_import_partial_result",
+        "startLine": 132,
+        "endLine": 141,
+        "params": [
+          "app",
+          "result"
+        ]
+      },
+      {
+        "name": "emit_cache_index_status",
+        "startLine": 143,
+        "endLine": 152,
+        "params": [
+          "app",
+          "status"
+        ]
+      },
+      {
+        "name": "emit_job_cancellation",
+        "startLine": 154,
+        "endLine": 163,
+        "params": [
+          "app",
+          "cancellation"
+        ]
+      }
+    ],
+    "classes": [],
+    "exports": [
+      {
+        "name": "emit_job_progress",
+        "line": 30,
+        "isDefault": false
+      },
+      {
+        "name": "emit_partition_progress",
+        "line": 44,
+        "isDefault": false
+      },
+      {
+        "name": "emit_timeline_updated",
+        "line": 71,
+        "isDefault": false
+      },
+      {
+        "name": "emit_search_index_progress",
+        "line": 83,
+        "isDefault": false
+      },
+      {
+        "name": "emit_data_source_imported",
+        "line": 96,
+        "isDefault": false
+      },
+      {
+        "name": "emit_import_phase_progress",
+        "line": 121,
+        "isDefault": false
+      },
+      {
+        "name": "emit_import_partial_result",
+        "line": 132,
+        "isDefault": false
+      },
+      {
+        "name": "emit_cache_index_status",
+        "line": 143,
+        "isDefault": false
+      },
+      {
+        "name": "emit_job_cancellation",
+        "line": 154,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 0,
+      "exportCount": 9,
+      "functionCount": 11,
+      "classCount": 0
+    },
+    "callGraphCount": 26,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/import_pipeline/execute.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 738,
+    "nonEmptyLines": 693,
+    "functions": [
+      {
+        "name": "import_config_error_to_command_error",
+        "startLine": 25,
+        "endLine": 33,
+        "params": [
+          "error"
+        ]
+      },
+      {
+        "name": "execute_import_job",
+        "startLine": 36,
+        "endLine": 47,
+        "params": [
+          "conn",
+          "case_id",
+          "case_root",
+          "source_path",
+          "job_id",
+          "options"
+        ]
+      },
+      {
+        "name": "execute_import_job_with_counts",
+        "startLine": 50,
+        "endLine": 111,
+        "params": [
+          "conn",
+          "case_id",
+          "case_root",
+          "source_path",
+          "job_id",
+          "options"
+        ]
+      },
+      {
+        "name": "emit_import_cancellation_state",
+        "startLine": 117,
+        "endLine": 130,
+        "params": [
+          "app",
+          "job_id",
+          "state",
+          "safe_to_close",
+          "detail"
+        ]
+      },
+      {
+        "name": "job_cancellation_dto",
+        "startLine": 132,
+        "endLine": 154,
+        "params": [
+          "job_id",
+          "state",
+          "safe_to_close",
+          "detail"
+        ]
+      },
+      {
+        "name": "mark_import_cancelling",
+        "startLine": 156,
+        "endLine": 160,
+        "params": [
+          "job_repo",
+          "job_id",
+          "detail"
+        ]
+      },
+      {
+        "name": "is_import_cancelled_message",
+        "startLine": 162,
+        "endLine": 164,
+        "params": [
+          "message"
+        ]
+      },
+      {
+        "name": "emit_phase_profile",
+        "startLine": 170,
+        "endLine": 188,
+        "params": [
+          "app",
+          "job_id",
+          "case_id",
+          "data_source_id",
+          "progress",
+          "detail",
+          "cancel_requested"
+        ]
+      },
+      {
+        "name": "emit_import_profile_progress",
+        "startLine": 190,
+        "endLine": 220,
+        "params": [
+          "app",
+          "job_id",
+          "case_id",
+          "data_source_id",
+          "progress",
+          "detail",
+          "cancel_requested"
+        ]
+      },
+      {
+        "name": "import_phase_progress_from_profile",
+        "startLine": 222,
+        "endLine": 243,
+        "params": [
+          "job_id",
+          "case_id",
+          "data_source_id",
+          "progress",
+          "detail",
+          "cancel_requested"
+        ]
+      },
+      {
+        "name": "partial_results_from_profile",
+        "startLine": 252,
+        "endLine": 340,
+        "params": [
+          "data_source_id",
+          "detail"
+        ]
+      },
+      {
+        "name": "analysis_ready_results",
+        "startLine": 342,
+        "endLine": 369,
+        "params": [
+          "scope_id",
+          "counts"
+        ]
+      },
+      {
+        "name": "cache_statuses_from_profile",
+        "startLine": 371,
+        "endLine": 444,
+        "params": [
+          "data_source_id",
+          "detail"
+        ]
+      },
+      {
+        "name": "analysis_cache_ready_statuses",
+        "startLine": 446,
+        "endLine": 476,
+        "params": [
+          "scope_id",
+          "counts"
+        ]
+      },
+      {
+        "name": "analysis_cache_statuses",
+        "startLine": 478,
+        "endLine": 511,
+        "params": [
+          "scope_id",
+          "state",
+          "indexed_count",
+          "total_count",
+          "message"
+        ]
+      },
+      {
+        "name": "cache_status",
+        "startLine": 513,
+        "endLine": 529,
+        "params": [
+          "key_prefix",
+          "scope_id",
+          "state",
+          "indexed_count",
+          "total_count",
+          "message"
+        ]
+      },
+      {
+        "name": "analysis_slice_results",
+        "startLine": 531,
+        "endLine": 563,
+        "params": [
+          "scope_id",
+          "ready_count",
+          "total_estimate",
+          "freshness"
+        ]
+      },
+      {
+        "name": "partial_result",
+        "startLine": 565,
+        "endLine": 581,
+        "params": [
+          "kind",
+          "scope_id",
+          "ready_count",
+          "total_estimate",
+          "key_prefix",
+          "freshness"
+        ]
+      },
+      {
+        "name": "post_import_counts_from_profile",
+        "startLine": 583,
+        "endLine": 589,
+        "params": [
+          "detail"
+        ]
+      },
+      {
+        "name": "post_import_counts_from_message",
+        "startLine": 591,
+        "endLine": 599,
+        "params": [
+          "message"
+        ]
+      },
+      {
+        "name": "value_after_label",
+        "startLine": 601,
+        "endLine": 607,
+        "params": [
+          "parts",
+          "label"
+        ]
+      },
+      {
+        "name": "import_phase_from_profile",
+        "startLine": 609,
+        "endLine": 624,
+        "params": [
+          "detail",
+          "progress"
+        ]
+      },
+      {
+        "name": "import_phase_state_from_profile",
+        "startLine": 626,
+        "endLine": 647,
+        "params": [
+          "detail",
+          "cancel_requested"
+        ]
+      },
+      {
+        "name": "import_phase_metrics_from_profile",
+        "startLine": 649,
+        "endLine": 676,
+        "params": [
+          "detail"
+        ]
+      },
+      {
+        "name": "rows_from_profile",
+        "startLine": 678,
+        "endLine": 692,
+        "params": [
+          "detail"
+        ]
+      },
+      {
+        "name": "profile_u64",
+        "startLine": 694,
+        "endLine": 696,
+        "params": [
+          "detail",
+          "key"
+        ]
+      },
+      {
+        "name": "profile_nonzero_u64",
+        "startLine": 698,
+        "endLine": 700,
+        "params": [
+          "detail",
+          "key"
+        ]
+      },
+      {
+        "name": "profile_f64",
+        "startLine": 702,
+        "endLine": 704,
+        "params": [
+          "detail",
+          "key"
+        ]
+      },
+      {
+        "name": "profile_value",
+        "startLine": 706,
+        "endLine": 712,
+        "params": [
+          "detail",
+          "key"
+        ]
+      },
+      {
+        "name": "elapsed_ms",
+        "startLine": 714,
+        "endLine": 716,
+        "params": [
+          "duration"
+        ]
+      },
+      {
+        "name": "rows_per_sec",
+        "startLine": 718,
+        "endLine": 725,
+        "params": [
+          "rows",
+          "duration"
+        ]
+      },
+      {
+        "name": "bytes_to_mb",
+        "startLine": 727,
+        "endLine": 729,
+        "params": [
+          "bytes"
+        ]
+      },
+      {
+        "name": "mb_per_sec",
+        "startLine": 731,
+        "endLine": 738,
+        "params": [
+          "bytes",
+          "duration"
+        ]
+      }
+    ],
+    "classes": [
+      {
+        "name": "PostImportResultCounts",
+        "startLine": 246,
+        "endLine": 250,
+        "methods": [],
+        "properties": [
+          "timeline_events",
+          "artifact_count",
+          "indexed_count"
+        ]
+      }
+    ],
+    "exports": [
+      {
+        "name": "execute_import_job",
+        "line": 36,
+        "isDefault": false
+      },
+      {
+        "name": "execute_import_job_with_counts",
+        "line": 50,
+        "isDefault": false
+      },
+      {
+        "name": "emit_import_cancellation_state",
+        "line": 117,
+        "isDefault": false
+      },
+      {
+        "name": "job_cancellation_dto",
+        "line": 132,
+        "isDefault": false
+      },
+      {
+        "name": "mark_import_cancelling",
+        "line": 156,
+        "isDefault": false
+      },
+      {
+        "name": "is_import_cancelled_message",
+        "line": 162,
+        "isDefault": false
+      },
+      {
+        "name": "emit_phase_profile",
+        "line": 170,
+        "isDefault": false
+      },
+      {
+        "name": "emit_import_profile_progress",
+        "line": 190,
+        "isDefault": false
+      },
+      {
+        "name": "import_phase_progress_from_profile",
+        "line": 222,
+        "isDefault": false
+      },
+      {
+        "name": "PostImportResultCounts",
+        "line": 246,
+        "isDefault": false
+      },
+      {
+        "name": "partial_results_from_profile",
+        "line": 252,
+        "isDefault": false
+      },
+      {
+        "name": "cache_statuses_from_profile",
+        "line": 371,
+        "isDefault": false
+      },
+      {
+        "name": "post_import_counts_from_profile",
+        "line": 583,
+        "isDefault": false
+      },
+      {
+        "name": "post_import_counts_from_message",
+        "line": 591,
+        "isDefault": false
+      },
+      {
+        "name": "elapsed_ms",
+        "line": 714,
+        "isDefault": false
+      },
+      {
+        "name": "rows_per_sec",
+        "line": 718,
+        "isDefault": false
+      },
+      {
+        "name": "bytes_to_mb",
+        "line": 727,
+        "isDefault": false
+      },
+      {
+        "name": "mb_per_sec",
+        "line": 731,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 0,
+      "exportCount": 18,
+      "functionCount": 33,
+      "classCount": 1
+    },
+    "callGraphCount": 220,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/import_pipeline/mod.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 23,
+    "nonEmptyLines": 20,
+    "functions": [],
+    "classes": [],
+    "exports": [],
+    "metrics": {
+      "importCount": 7,
+      "exportCount": 0,
+      "functionCount": 0,
+      "classCount": 0
+    },
+    "callGraphCount": 0,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/import_pipeline/options.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 48,
+    "nonEmptyLines": 40,
+    "functions": [
+      {
+        "name": "add_warnings",
+        "startLine": 27,
+        "endLine": 29,
+        "params": [
+          "count"
+        ]
+      },
+      {
+        "name": "add_failed",
+        "startLine": 31,
+        "endLine": 33,
+        "params": [
+          "count"
+        ]
+      },
+      {
+        "name": "is_partial",
+        "startLine": 35,
+        "endLine": 37,
+        "params": []
+      },
+      {
+        "name": "from",
+        "startLine": 41,
+        "endLine": 47,
+        "params": [
+          "counts"
+        ]
+      }
+    ],
+    "classes": [
+      {
+        "name": "JobOutcomeCounts",
+        "startLine": 10,
+        "endLine": 14,
+        "methods": [
+          "add_warnings",
+          "add_failed",
+          "is_partial",
+          "from"
+        ],
+        "properties": [
+          "warning_count",
+          "skipped_count",
+          "failed_count"
+        ]
+      },
+      {
+        "name": "ImportJobOptions",
+        "startLine": 18,
+        "endLine": 24,
+        "methods": [],
+        "properties": [
+          "app",
+          "cancel_token",
+          "max_import_workers",
+          "max_analysis_workers",
+          "analysis_mode"
+        ]
+      }
+    ],
+    "exports": [
+      {
+        "name": "JobOutcomeCounts",
+        "line": 10,
+        "isDefault": false
+      },
+      {
+        "name": "ImportJobOptions",
+        "line": 18,
+        "isDefault": false
+      },
+      {
+        "name": "add_warnings",
+        "line": 27,
+        "isDefault": false
+      },
+      {
+        "name": "add_failed",
+        "line": 31,
+        "isDefault": false
+      },
+      {
+        "name": "is_partial",
+        "line": 35,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 0,
+      "exportCount": 5,
+      "functionCount": 4,
+      "classCount": 2
+    },
+    "callGraphCount": 2,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/import_pipeline/partition.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 493,
+    "nonEmptyLines": 472,
+    "functions": [
+      {
+        "name": "format_partition_root_name",
+        "startLine": 11,
+        "endLine": 34,
+        "params": [
+          "candidate"
+        ]
+      },
+      {
+        "name": "format_partition_record_root_name",
+        "startLine": 37,
+        "endLine": 54,
+        "params": [
+          "partition"
+        ]
+      },
+      {
+        "name": "format_partition_progress_detail",
+        "startLine": 57,
+        "endLine": 72,
+        "params": [
+          "completed_partitions",
+          "total_partitions",
+          "partition_progress",
+          "current_partition",
+          "detail"
+        ]
+      },
+      {
+        "name": "enumerate_partition_with_fs",
+        "startLine": 75,
+        "endLine": 102,
+        "params": [
+          "conn",
+          "data_source_id",
+          "fs",
+          "root_name",
+          "placeholder_roots",
+          "candidate",
+          "progress_cb"
+        ]
+      },
+      {
+        "name": "enumerate_image_data_source",
+        "startLine": 105,
+        "endLine": 418,
+        "params": [
+          "conn",
+          "data_source_id",
+          "reader",
+          "progress",
+          "app",
+          "job_id"
+        ]
+      },
+      {
+        "name": "build_partition_work",
+        "startLine": 422,
+        "endLine": 493,
+        "params": [
+          "source_path",
+          "source_kind",
+          "partition_index",
+          "partition_name",
+          "fs_kind",
+          "probe_candidates"
+        ]
+      }
+    ],
+    "classes": [],
+    "exports": [
+      {
+        "name": "format_partition_root_name",
+        "line": 11,
+        "isDefault": false
+      },
+      {
+        "name": "format_partition_record_root_name",
+        "line": 37,
+        "isDefault": false
+      },
+      {
+        "name": "format_partition_progress_detail",
+        "line": 57,
+        "isDefault": false
+      },
+      {
+        "name": "enumerate_partition_with_fs",
+        "line": 75,
+        "isDefault": false
+      },
+      {
+        "name": "enumerate_image_data_source",
+        "line": 105,
+        "isDefault": false
+      },
+      {
+        "name": "build_partition_work",
+        "line": 422,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 1,
+      "exportCount": 6,
+      "functionCount": 6,
+      "classCount": 0
+    },
+    "callGraphCount": 177,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/import_pipeline/phases.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 970,
+    "nonEmptyLines": 894,
+    "functions": [
+      {
+        "name": "run_attach_phase",
+        "startLine": 44,
+        "endLine": 78,
+        "params": [
+          "ctx"
+        ]
+      },
+      {
+        "name": "run_enumeration_phase",
+        "startLine": 81,
+        "endLine": 146,
+        "params": [
+          "ctx",
+          "ds"
+        ]
+      },
+      {
+        "name": "enumerate_logical_directory",
+        "startLine": 148,
+        "endLine": 162,
+        "params": [
+          "ctx",
+          "ds"
+        ]
+      },
+      {
+        "name": "enumerate_image_data_source_with_staging",
+        "startLine": 164,
+        "endLine": 253,
+        "params": [
+          "ctx",
+          "ds"
+        ]
+      },
+      {
+        "name": "probe_and_seed_manifest",
+        "startLine": 255,
+        "endLine": 352,
+        "params": [
+          "ctx",
+          "ds",
+          "path",
+          "kind",
+          "case_root",
+          "manifest",
+          "probe_candidates"
+        ]
+      },
+      {
+        "name": "refresh_partition_statuses_from_staging",
+        "startLine": 354,
+        "endLine": 384,
+        "params": [
+          "case_root",
+          "ds_id",
+          "manifest"
+        ]
+      },
+      {
+        "name": "probe_resume",
+        "startLine": 386,
+        "endLine": 417,
+        "params": [
+          "ctx",
+          "ds",
+          "path",
+          "kind",
+          "probe_candidates"
+        ]
+      },
+      {
+        "name": "build_pending_partition_work",
+        "startLine": 419,
+        "endLine": 480,
+        "params": [
+          "ctx",
+          "ds",
+          "path",
+          "kind",
+          "probe_candidates",
+          "manifest"
+        ]
+      },
+      {
+        "name": "handle_no_pending_partitions",
+        "startLine": 482,
+        "endLine": 512,
+        "params": [
+          "ctx",
+          "manifest",
+          "build_failures"
+        ]
+      },
+      {
+        "name": "enumerate_pending_partitions",
+        "startLine": 514,
+        "endLine": 647,
+        "params": [
+          "ctx",
+          "ds",
+          "case_root",
+          "manifest",
+          "pending"
+        ]
+      },
+      {
+        "name": "merge_enumeration_results",
+        "startLine": 649,
+        "endLine": 749,
+        "params": [
+          "ctx",
+          "ds",
+          "case_root",
+          "manifest"
+        ]
+      },
+      {
+        "name": "run_post_import_phase",
+        "startLine": 752,
+        "endLine": 881,
+        "params": [
+          "ctx",
+          "ds"
+        ]
+      },
+      {
+        "name": "run_finalize_phase",
+        "startLine": 884,
+        "endLine": 970,
+        "params": [
+          "ctx",
+          "ds",
+          "stats",
+          "pipeline_msg",
+          "import_started"
+        ]
+      }
+    ],
+    "classes": [],
+    "exports": [
+      {
+        "name": "run_attach_phase",
+        "line": 44,
+        "isDefault": false
+      },
+      {
+        "name": "run_enumeration_phase",
+        "line": 81,
+        "isDefault": false
+      },
+      {
+        "name": "run_post_import_phase",
+        "line": 752,
+        "isDefault": false
+      },
+      {
+        "name": "run_finalize_phase",
+        "line": 884,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 1,
+      "exportCount": 4,
+      "functionCount": 13,
+      "classCount": 0
+    },
+    "callGraphCount": 342,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/import_pipeline/tests.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 1000,
+    "nonEmptyLines": 918,
+    "functions": [
+      {
+        "name": "filetime",
+        "startLine": 19,
+        "endLine": 22,
+        "params": [
+          "dt"
+        ]
+      },
+      {
+        "name": "assert_partial_result",
+        "startLine": 24,
+        "endLine": 39,
+        "params": [
+          "result",
+          "kind",
+          "scope_id",
+          "ready_count",
+          "total_estimate",
+          "query_key",
+          "freshness"
+        ]
+      },
+      {
+        "name": "assert_cache_status",
+        "startLine": 41,
+        "endLine": 53,
+        "params": [
+          "status",
+          "cache_key",
+          "state",
+          "indexed_count",
+          "total_count"
+        ]
+      },
+      {
+        "name": "partition_root_names_reject_misleading_filesystem_names",
+        "startLine": 56,
+        "endLine": 98,
+        "params": []
+      },
+      {
+        "name": "partition_root_names_preserve_meaningful_names",
+        "startLine": 101,
+        "endLine": 114,
+        "params": []
+      },
+      {
+        "name": "prefetch_fixture",
+        "startLine": 116,
+        "endLine": 149,
+        "params": [
+          "exe_name",
+          "run_count",
+          "last_run"
+        ]
+      },
+      {
+        "name": "import_profile_progress_maps_enumeration_metrics_to_typed_dto",
+        "startLine": 152,
+        "endLine": 178,
+        "params": []
+      },
+      {
+        "name": "enum_merge_progress_exposes_ready_file_results",
+        "startLine": 181,
+        "endLine": 212,
+        "params": []
+      },
+      {
+        "name": "analysis_progress_exposes_partial_search_index_result",
+        "startLine": 215,
+        "endLine": 235,
+        "params": []
+      },
+      {
+        "name": "scheduling_profiles_expose_worker_budget_and_deferred_states",
+        "startLine": 238,
+        "endLine": 276,
+        "params": []
+      },
+      {
+        "name": "scheduling_profiles_expose_throttled_and_draining_states",
+        "startLine": 279,
+        "endLine": 317,
+        "params": []
+      },
+      {
+        "name": "post_import_profiles_expose_deferred_ready_stale_and_invalidated_results",
+        "startLine": 320,
+        "endLine": 413,
+        "params": []
+      },
+      {
+        "name": "cache_status_profiles_expose_warming_ready_deferred_reused_stale_and_invalidated_states",
+        "startLine": 416,
+        "endLine": 465,
+        "params": []
+      },
+      {
+        "name": "import_profile_progress_maps_analysis_and_cancel_state",
+        "startLine": 468,
+        "endLine": 486,
+        "params": []
+      },
+      {
+        "name": "import_profile_progress_serializes_as_phase_progress_payload",
+        "startLine": 489,
+        "endLine": 507,
+        "params": []
+      },
+      {
+        "name": "job_cancellation_dto_maps_requested_and_draining_states",
+        "startLine": 510,
+        "endLine": 539,
+        "params": []
+      },
+      {
+        "name": "cancellation_after_attach_marks_job_cancelling_without_failure",
+        "startLine": 542,
+        "endLine": 589,
+        "params": []
+      },
+      {
+        "name": "logical_import_post_pipeline_indexes_marker_and_extracts_artifact",
+        "startLine": 592,
+        "endLine": 670,
+        "params": []
+      },
+      {
+        "name": "image_backed_metadata_only_post_import_defers_timeline_until_query",
+        "startLine": 673,
+        "endLine": 751,
+        "params": []
+      },
+      {
+        "name": "e01_full_import",
+        "startLine": 755,
+        "endLine": 1000,
+        "params": []
+      }
+    ],
+    "classes": [],
+    "exports": [],
+    "metrics": {
+      "importCount": 1,
+      "exportCount": 0,
+      "functionCount": 20,
+      "classCount": 0
+    },
+    "callGraphCount": 368,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/import_pipeline/types.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 93,
+    "nonEmptyLines": 81,
+    "functions": [
+      {
+        "name": "cancel_requested",
+        "startLine": 38,
+        "endLine": 40,
+        "params": []
+      },
+      {
+        "name": "app",
+        "startLine": 43,
+        "endLine": 45,
+        "params": []
+      },
+      {
+        "name": "report_job_progress",
+        "startLine": 49,
+        "endLine": 61,
+        "params": [
+          "progress",
+          "detail"
+        ]
+      },
+      {
+        "name": "new",
+        "startLine": 74,
+        "endLine": 78,
+        "params": []
+      },
+      {
+        "name": "elapsed",
+        "startLine": 80,
+        "endLine": 82,
+        "params": []
+      },
+      {
+        "name": "elapsed_ms",
+        "startLine": 84,
+        "endLine": 86,
+        "params": []
+      },
+      {
+        "name": "default",
+        "startLine": 90,
+        "endLine": 92,
+        "params": []
+      }
+    ],
+    "classes": [
+      {
+        "name": "ImportJobContext",
+        "startLine": 23,
+        "endLine": 34,
+        "methods": [],
+        "properties": [
+          "conn",
+          "case_id",
+          "case_root",
+          "source_path",
+          "job_id",
+          "options",
+          "import_config",
+          "ds",
+          "job_repo",
+          "counts"
+        ]
+      },
+      {
+        "name": "PhaseTelemetry",
+        "startLine": 69,
+        "endLine": 71,
+        "methods": [
+          "new",
+          "elapsed",
+          "elapsed_ms",
+          "default"
+        ],
+        "properties": [
+          "started"
+        ]
+      }
+    ],
+    "exports": [
+      {
+        "name": "ImportJobContext",
+        "line": 23,
+        "isDefault": false
+      },
+      {
+        "name": "cancel_requested",
+        "line": 38,
+        "isDefault": false
+      },
+      {
+        "name": "app",
+        "line": 43,
+        "isDefault": false
+      },
+      {
+        "name": "report_job_progress",
+        "line": 49,
+        "isDefault": false
+      },
+      {
+        "name": "PhaseTelemetry",
+        "line": 69,
+        "isDefault": false
+      },
+      {
+        "name": "new",
+        "line": 74,
+        "isDefault": false
+      },
+      {
+        "name": "elapsed",
+        "line": 80,
+        "isDefault": false
+      },
+      {
+        "name": "elapsed_ms",
+        "line": 84,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 2,
+      "exportCount": 8,
+      "functionCount": 7,
+      "classCount": 2
+    },
+    "callGraphCount": 11,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/import_precheck.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 441,
+    "nonEmptyLines": 384,
+    "functions": [
+      {
+        "name": "category",
+        "startLine": 44,
+        "endLine": 51,
+        "params": []
+      },
+      {
+        "name": "is_image_backed",
+        "startLine": 55,
+        "endLine": 57,
+        "params": []
+      },
+      {
+        "name": "staging_kind",
+        "startLine": 59,
+        "endLine": 64,
+        "params": []
+      },
+      {
+        "name": "is_invalid_input",
+        "startLine": 68,
+        "endLine": 75,
+        "params": []
+      },
+      {
+        "name": "prepare_import_source_config",
+        "startLine": 78,
+        "endLine": 85,
+        "params": [
+          "request"
+        ]
+      },
+      {
+        "name": "prepare_import_source_config_from_path",
+        "startLine": 87,
+        "endLine": 103,
+        "params": [
+          "source_path"
+        ]
+      },
+      {
+        "name": "validate_import_source_for_filesystem",
+        "startLine": 105,
+        "endLine": 113,
+        "params": [
+          "path"
+        ]
+      },
+      {
+        "name": "derive_source_name",
+        "startLine": 115,
+        "endLine": 119,
+        "params": [
+          "path"
+        ]
+      },
+      {
+        "name": "import_source_mode",
+        "startLine": 121,
+        "endLine": 131,
+        "params": [
+          "kind"
+        ]
+      },
+      {
+        "name": "pre_import_check",
+        "startLine": 145,
+        "endLine": 188,
+        "params": [
+          "source_path",
+          "kind"
+        ]
+      },
+      {
+        "name": "analyze_directory",
+        "startLine": 191,
+        "endLine": 217,
+        "params": [
+          "path",
+          "warnings"
+        ]
+      },
+      {
+        "name": "count_directory_recursive",
+        "startLine": 220,
+        "endLine": 240,
+        "params": [
+          "path"
+        ]
+      },
+      {
+        "name": "analyze_image",
+        "startLine": 243,
+        "endLine": 256,
+        "params": [
+          "path",
+          "warnings"
+        ]
+      },
+      {
+        "name": "estimate_files_from_size",
+        "startLine": 259,
+        "endLine": 262,
+        "params": [
+          "size"
+        ]
+      },
+      {
+        "name": "select_strategy",
+        "startLine": 265,
+        "endLine": 276,
+        "params": [
+          "total_files",
+          "total_size"
+        ]
+      }
+    ],
+    "classes": [
+      {
+        "name": "ImportSourceConfig",
+        "startLine": 16,
+        "endLine": 22,
+        "methods": [
+          "is_image_backed",
+          "staging_kind"
+        ],
+        "properties": [
+          "source_path",
+          "source_path_display",
+          "source_name",
+          "kind",
+          "mode"
+        ]
+      },
+      {
+        "name": "ImportSourceMode",
+        "startLine": 26,
+        "endLine": 29,
+        "methods": [],
+        "properties": [
+          "LogicalDirectory",
+          "Image"
+        ]
+      },
+      {
+        "name": "ImportSourceConfigError",
+        "startLine": 32,
+        "endLine": 41,
+        "methods": [
+          "category",
+          "is_invalid_input"
+        ],
+        "properties": [
+          "InvalidRequest",
+          "MissingOrInaccessibleSource",
+          "UnsupportedSourceType",
+          "Classification"
+        ]
+      },
+      {
+        "name": "PreCheckResult",
+        "startLine": 135,
+        "endLine": 142,
+        "methods": [],
+        "properties": [
+          "plan",
+          "warnings",
+          "errors"
+        ]
+      }
+    ],
+    "exports": [
+      {
+        "name": "ImportSourceConfig",
+        "line": 16,
+        "isDefault": false
+      },
+      {
+        "name": "ImportSourceMode",
+        "line": 26,
+        "isDefault": false
+      },
+      {
+        "name": "ImportSourceConfigError",
+        "line": 32,
+        "isDefault": false
+      },
+      {
+        "name": "is_image_backed",
+        "line": 55,
+        "isDefault": false
+      },
+      {
+        "name": "staging_kind",
+        "line": 59,
+        "isDefault": false
+      },
+      {
+        "name": "is_invalid_input",
+        "line": 68,
+        "isDefault": false
+      },
+      {
+        "name": "prepare_import_source_config",
+        "line": 78,
+        "isDefault": false
+      },
+      {
+        "name": "prepare_import_source_config_from_path",
+        "line": 87,
+        "isDefault": false
+      },
+      {
+        "name": "PreCheckResult",
+        "line": 135,
+        "isDefault": false
+      },
+      {
+        "name": "pre_import_check",
+        "line": 145,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 0,
+      "exportCount": 10,
+      "functionCount": 15,
+      "classCount": 4
+    },
+    "callGraphCount": 110,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/import_report.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 308,
+    "nonEmptyLines": 274,
+    "functions": [
+      {
+        "name": "new",
+        "startLine": 81,
+        "endLine": 90,
+        "params": [
+          "data_source"
+        ]
+      },
+      {
+        "name": "add_event",
+        "startLine": 93,
+        "endLine": 100,
+        "params": [
+          "event_type",
+          "message"
+        ]
+      },
+      {
+        "name": "add_warning",
+        "startLine": 103,
+        "endLine": 105,
+        "params": [
+          "message"
+        ]
+      },
+      {
+        "name": "add_error",
+        "startLine": 108,
+        "endLine": 114,
+        "params": [
+          "file_path",
+          "error_message"
+        ]
+      },
+      {
+        "name": "update_performance",
+        "startLine": 117,
+        "endLine": 126,
+        "params": [
+          "duration"
+        ]
+      },
+      {
+        "name": "summary",
+        "startLine": 129,
+        "endLine": 139,
+        "params": []
+      },
+      {
+        "name": "to_markdown",
+        "startLine": 142,
+        "endLine": 213,
+        "params": []
+      },
+      {
+        "name": "default",
+        "startLine": 217,
+        "endLine": 227,
+        "params": []
+      }
+    ],
+    "classes": [
+      {
+        "name": "ImportReport",
+        "startLine": 10,
+        "endLine": 23,
+        "methods": [
+          "new",
+          "add_event",
+          "add_warning",
+          "add_error",
+          "update_performance",
+          "summary",
+          "to_markdown"
+        ],
+        "properties": [
+          "data_source",
+          "statistics",
+          "timeline",
+          "warnings",
+          "errors",
+          "performance"
+        ]
+      },
+      {
+        "name": "DataSourceSummary",
+        "startLine": 27,
+        "endLine": 33,
+        "methods": [],
+        "properties": [
+          "id",
+          "name",
+          "kind",
+          "source_path",
+          "imported_at"
+        ]
+      },
+      {
+        "name": "ImportStatistics",
+        "startLine": 37,
+        "endLine": 48,
+        "methods": [],
+        "properties": [
+          "total_files",
+          "total_directories",
+          "total_size",
+          "imported_files",
+          "skipped_files",
+          "error_files",
+          "hash_computed",
+          "artifacts_extracted",
+          "timeline_events",
+          "text_indexed"
+        ]
+      },
+      {
+        "name": "ImportEvent",
+        "startLine": 52,
+        "endLine": 57,
+        "methods": [],
+        "properties": [
+          "timestamp",
+          "event_type",
+          "message",
+          "details"
+        ]
+      },
+      {
+        "name": "ImportError",
+        "startLine": 61,
+        "endLine": 65,
+        "methods": [],
+        "properties": [
+          "file_path",
+          "error_message",
+          "error_type"
+        ]
+      },
+      {
+        "name": "PerformanceMetrics",
+        "startLine": 69,
+        "endLine": 77,
+        "methods": [
+          "default"
+        ],
+        "properties": [
+          "total_duration_ms",
+          "classification_ms",
+          "enumeration_ms",
+          "post_processing_ms",
+          "files_per_second",
+          "bytes_per_second",
+          "peak_memory_bytes"
+        ]
+      }
+    ],
+    "exports": [
+      {
+        "name": "ImportReport",
+        "line": 10,
+        "isDefault": false
+      },
+      {
+        "name": "DataSourceSummary",
+        "line": 27,
+        "isDefault": false
+      },
+      {
+        "name": "ImportStatistics",
+        "line": 37,
+        "isDefault": false
+      },
+      {
+        "name": "ImportEvent",
+        "line": 52,
+        "isDefault": false
+      },
+      {
+        "name": "ImportError",
+        "line": 61,
+        "isDefault": false
+      },
+      {
+        "name": "PerformanceMetrics",
+        "line": 69,
+        "isDefault": false
+      },
+      {
+        "name": "new",
+        "line": 81,
+        "isDefault": false
+      },
+      {
+        "name": "add_event",
+        "line": 93,
+        "isDefault": false
+      },
+      {
+        "name": "add_warning",
+        "line": 103,
+        "isDefault": false
+      },
+      {
+        "name": "add_error",
+        "line": 108,
+        "isDefault": false
+      },
+      {
+        "name": "update_performance",
+        "line": 117,
+        "isDefault": false
+      },
+      {
+        "name": "summary",
+        "line": 129,
+        "isDefault": false
+      },
+      {
+        "name": "to_markdown",
+        "line": 142,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 0,
+      "exportCount": 13,
+      "functionCount": 8,
+      "classCount": 6
+    },
+    "callGraphCount": 65,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/import_state.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 309,
+    "nonEmptyLines": 272,
+    "functions": [
+      {
+        "name": "category",
+        "startLine": 17,
+        "endLine": 22,
+        "params": []
+      },
+      {
+        "name": "new",
+        "startLine": 106,
+        "endLine": 119,
+        "params": [
+          "job_id",
+          "data_source_id"
+        ]
+      },
+      {
+        "name": "update_progress",
+        "startLine": 122,
+        "endLine": 126,
+        "params": [
+          "processed",
+          "total"
+        ]
+      },
+      {
+        "name": "set_phase",
+        "startLine": 129,
+        "endLine": 132,
+        "params": [
+          "phase"
+        ]
+      },
+      {
+        "name": "add_error",
+        "startLine": 135,
+        "endLine": 142,
+        "params": [
+          "message",
+          "file_path"
+        ]
+      },
+      {
+        "name": "set_last_processed",
+        "startLine": 145,
+        "endLine": 148,
+        "params": [
+          "path"
+        ]
+      },
+      {
+        "name": "can_resume",
+        "startLine": 151,
+        "endLine": 153,
+        "params": []
+      },
+      {
+        "name": "progress_percent",
+        "startLine": 156,
+        "endLine": 161,
+        "params": []
+      },
+      {
+        "name": "save",
+        "startLine": 164,
+        "endLine": 168,
+        "params": [
+          "path"
+        ]
+      },
+      {
+        "name": "load",
+        "startLine": 171,
+        "endLine": 174,
+        "params": [
+          "path"
+        ]
+      },
+      {
+        "name": "new",
+        "startLine": 179,
+        "endLine": 190,
+        "params": [
+          "strategy",
+          "total_files",
+          "total_size"
+        ]
+      },
+      {
+        "name": "estimate_time",
+        "startLine": 193,
+        "endLine": 207,
+        "params": [
+          "files",
+          "size",
+          "strategy"
+        ]
+      },
+      {
+        "name": "estimate_memory",
+        "startLine": 210,
+        "endLine": 217,
+        "params": [
+          "strategy",
+          "_size"
+        ]
+      }
+    ],
+    "classes": [
+      {
+        "name": "ImportStateError",
+        "startLine": 9,
+        "endLine": 14,
+        "methods": [
+          "category"
+        ],
+        "properties": [
+          "Io",
+          "Serde"
+        ]
+      },
+      {
+        "name": "ImportPhase",
+        "startLine": 27,
+        "endLine": 40,
+        "methods": [],
+        "properties": [
+          "Classifying",
+          "Enumerating",
+          "PostProcessing",
+          "Completed",
+          "Failed",
+          "Paused"
+        ]
+      },
+      {
+        "name": "ImportState",
+        "startLine": 44,
+        "endLine": 63,
+        "methods": [
+          "new",
+          "update_progress",
+          "set_phase",
+          "add_error",
+          "set_last_processed",
+          "can_resume",
+          "progress_percent",
+          "save",
+          "load"
+        ],
+        "properties": [
+          "job_id",
+          "data_source_id",
+          "phase",
+          "processed_files",
+          "total_files",
+          "last_processed_path",
+          "errors",
+          "started_at",
+          "updated_at"
+        ]
+      },
+      {
+        "name": "ImportError",
+        "startLine": 67,
+        "endLine": 74,
+        "methods": [],
+        "properties": [
+          "message",
+          "file_path",
+          "timestamp"
+        ]
+      },
+      {
+        "name": "ImportPlan",
+        "startLine": 78,
+        "endLine": 89,
+        "methods": [
+          "new",
+          "estimate_time",
+          "estimate_memory"
+        ],
+        "properties": [
+          "strategy",
+          "estimated_time_secs",
+          "estimated_memory_bytes",
+          "total_files",
+          "total_size"
+        ]
+      },
+      {
+        "name": "ImportStrategy",
+        "startLine": 93,
+        "endLine": 102,
+        "methods": [],
+        "properties": [
+          "Sequential",
+          "Parallel",
+          "Streaming",
+          "Adaptive"
+        ]
+      }
+    ],
+    "exports": [
+      {
+        "name": "ImportStateError",
+        "line": 9,
+        "isDefault": false
+      },
+      {
+        "name": "ImportPhase",
+        "line": 27,
+        "isDefault": false
+      },
+      {
+        "name": "ImportState",
+        "line": 44,
+        "isDefault": false
+      },
+      {
+        "name": "ImportError",
+        "line": 67,
+        "isDefault": false
+      },
+      {
+        "name": "ImportPlan",
+        "line": 78,
+        "isDefault": false
+      },
+      {
+        "name": "ImportStrategy",
+        "line": 93,
+        "isDefault": false
+      },
+      {
+        "name": "new",
+        "line": 106,
+        "isDefault": false
+      },
+      {
+        "name": "update_progress",
+        "line": 122,
+        "isDefault": false
+      },
+      {
+        "name": "set_phase",
+        "line": 129,
+        "isDefault": false
+      },
+      {
+        "name": "add_error",
+        "line": 135,
+        "isDefault": false
+      },
+      {
+        "name": "set_last_processed",
+        "line": 145,
+        "isDefault": false
+      },
+      {
+        "name": "can_resume",
+        "line": 151,
+        "isDefault": false
+      },
+      {
+        "name": "progress_percent",
+        "line": 156,
+        "isDefault": false
+      },
+      {
+        "name": "save",
+        "line": 164,
+        "isDefault": false
+      },
+      {
+        "name": "load",
+        "line": 171,
+        "isDefault": false
+      },
+      {
+        "name": "new",
+        "line": 179,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 0,
+      "exportCount": 16,
+      "functionCount": 13,
+      "classCount": 6
+    },
+    "callGraphCount": 60,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/job_service.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 488,
+    "nonEmptyLines": 430,
+    "functions": [
+      {
+        "name": "category",
+        "startLine": 20,
+        "endLine": 26,
+        "params": []
+      },
+      {
+        "name": "get_jobs_from_db",
+        "startLine": 29,
+        "endLine": 99,
+        "params": [
+          "conn"
+        ]
+      },
+      {
+        "name": "parse_partition_progress",
+        "startLine": 111,
+        "endLine": 132,
+        "params": [
+          "detail"
+        ]
+      },
+      {
+        "name": "get_warnings_from_db",
+        "startLine": 141,
+        "endLine": 145,
+        "params": [
+          "conn"
+        ]
+      },
+      {
+        "name": "job_to_warning_item",
+        "startLine": 147,
+        "endLine": 183,
+        "params": [
+          "job"
+        ]
+      },
+      {
+        "name": "get_trace_items_from_db",
+        "startLine": 189,
+        "endLine": 193,
+        "params": [
+          "conn"
+        ]
+      },
+      {
+        "name": "job_to_trace_item",
+        "startLine": 195,
+        "endLine": 210,
+        "params": [
+          "job"
+        ]
+      },
+      {
+        "name": "cancel_job",
+        "startLine": 223,
+        "endLine": 227,
+        "params": [
+          "conn",
+          "job_id",
+          "reason"
+        ]
+      },
+      {
+        "name": "recover_interrupted_jobs",
+        "startLine": 235,
+        "endLine": 250,
+        "params": [
+          "conn"
+        ]
+      }
+    ],
+    "classes": [
+      {
+        "name": "JobServiceError",
+        "startLine": 8,
+        "endLine": 17,
+        "methods": [
+          "category"
+        ],
+        "properties": [
+          "Db",
+          "NotFound",
+          "InvalidState",
+          "Other"
+        ]
+      },
+      {
+        "name": "PartitionProgressMeta",
+        "startLine": 102,
+        "endLine": 109,
+        "methods": [],
+        "properties": [
+          "scope",
+          "detail",
+          "current_partition",
+          "completed_partitions",
+          "total_partitions",
+          "partition_progress"
+        ]
+      },
+      {
+        "name": "RecoveryResult",
+        "startLine": 215,
+        "endLine": 217,
+        "methods": [],
+        "properties": [
+          "recovered_job_ids"
+        ]
+      }
+    ],
+    "exports": [
+      {
+        "name": "JobServiceError",
+        "line": 8,
+        "isDefault": false
+      },
+      {
+        "name": "get_jobs_from_db",
+        "line": 29,
+        "isDefault": false
+      },
+      {
+        "name": "get_warnings_from_db",
+        "line": 141,
+        "isDefault": false
+      },
+      {
+        "name": "get_trace_items_from_db",
+        "line": 189,
+        "isDefault": false
+      },
+      {
+        "name": "RecoveryResult",
+        "line": 215,
+        "isDefault": false
+      },
+      {
+        "name": "cancel_job",
+        "line": 223,
+        "isDefault": false
+      },
+      {
+        "name": "recover_interrupted_jobs",
+        "line": 235,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 0,
+      "exportCount": 7,
+      "functionCount": 9,
+      "classCount": 3
+    },
+    "callGraphCount": 234,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/lib.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 52,
+    "nonEmptyLines": 50,
+    "functions": [],
+    "classes": [],
+    "exports": [],
+    "metrics": {
+      "importCount": 36,
+      "exportCount": 0,
+      "functionCount": 0,
+      "classCount": 0
+    },
+    "callGraphCount": 0,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/notebook_service/error.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 22,
+    "nonEmptyLines": 21,
+    "functions": [
+      {
+        "name": "category",
+        "startLine": 15,
+        "endLine": 21,
+        "params": []
+      }
+    ],
+    "classes": [
+      {
+        "name": "NotebookError",
+        "startLine": 3,
+        "endLine": 12,
+        "methods": [
+          "category"
+        ],
+        "properties": [
+          "Db",
+          "Sqlite",
+          "NotFound",
+          "Other"
+        ]
+      }
+    ],
+    "exports": [
+      {
+        "name": "NotebookError",
+        "line": 3,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 0,
+      "exportCount": 1,
+      "functionCount": 1,
+      "classCount": 1
+    },
+    "callGraphCount": 0,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/notebook_service/mod.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 689,
+    "nonEmptyLines": 618,
+    "functions": [
+      {
+        "name": "entry_type_to_dto",
+        "startLine": 21,
+        "endLine": 29,
+        "params": [
+          "et"
+        ]
+      },
+      {
+        "name": "entry_type_from_dto",
+        "startLine": 31,
+        "endLine": 39,
+        "params": [
+          "dto"
+        ]
+      },
+      {
+        "name": "status_to_dto",
+        "startLine": 41,
+        "endLine": 47,
+        "params": [
+          "s"
+        ]
+      },
+      {
+        "name": "status_from_dto",
+        "startLine": 49,
+        "endLine": 55,
+        "params": [
+          "dto"
+        ]
+      },
+      {
+        "name": "node_type_to_dto",
+        "startLine": 57,
+        "endLine": 66,
+        "params": [
+          "nt"
+        ]
+      },
+      {
+        "name": "node_type_from_dto",
+        "startLine": 68,
+        "endLine": 77,
+        "params": [
+          "dto"
+        ]
+      },
+      {
+        "name": "entry_to_dto",
+        "startLine": 79,
+        "endLine": 93,
+        "params": [
+          "entry"
+        ]
+      },
+      {
+        "name": "citation_to_dto",
+        "startLine": 95,
+        "endLine": 105,
+        "params": [
+          "c"
+        ]
+      },
+      {
+        "name": "step_to_dto",
+        "startLine": 107,
+        "endLine": 119,
+        "params": [
+          "s"
+        ]
+      },
+      {
+        "name": "create_entry",
+        "startLine": 125,
+        "endLine": 161,
+        "params": [
+          "conn",
+          "case_id",
+          "author",
+          "entry_type",
+          "title",
+          "body_markdown",
+          "tags",
+          "status",
+          "parent_id"
+        ]
+      },
+      {
+        "name": "update_entry",
+        "startLine": 166,
+        "endLine": 193,
+        "params": [
+          "conn",
+          "entry_id",
+          "title",
+          "body_markdown",
+          "tags",
+          "status"
+        ]
+      },
+      {
+        "name": "list_entries",
+        "startLine": 196,
+        "endLine": 204,
+        "params": [
+          "conn",
+          "case_id",
+          "filters"
+        ]
+      },
+      {
+        "name": "get_thread",
+        "startLine": 210,
+        "endLine": 220,
+        "params": [
+          "conn",
+          "entry_id"
+        ]
+      },
+      {
+        "name": "add_citation",
+        "startLine": 223,
+        "endLine": 248,
+        "params": [
+          "conn",
+          "entry_id",
+          "target_node_type",
+          "target_node_id",
+          "display_label",
+          "snippet"
+        ]
+      },
+      {
+        "name": "record_step",
+        "startLine": 254,
+        "endLine": 283,
+        "params": [
+          "conn",
+          "case_id",
+          "step_kind",
+          "params_json",
+          "timestamp",
+          "duration_ms",
+          "success",
+          "error_code",
+          "case_state_hash"
+        ]
+      },
+      {
+        "name": "list_steps",
+        "startLine": 286,
+        "endLine": 294,
+        "params": [
+          "conn",
+          "case_id",
+          "filters"
+        ]
+      },
+      {
+        "name": "find_root_id",
+        "startLine": 299,
+        "endLine": 310,
+        "params": [
+          "repo",
+          "entry_id"
+        ]
+      }
+    ],
+    "classes": [],
+    "exports": [
+      {
+        "name": "create_entry",
+        "line": 125,
+        "isDefault": false
+      },
+      {
+        "name": "update_entry",
+        "line": 166,
+        "isDefault": false
+      },
+      {
+        "name": "list_entries",
+        "line": 196,
+        "isDefault": false
+      },
+      {
+        "name": "get_thread",
+        "line": 210,
+        "isDefault": false
+      },
+      {
+        "name": "add_citation",
+        "line": 223,
+        "isDefault": false
+      },
+      {
+        "name": "record_step",
+        "line": 254,
+        "isDefault": false
+      },
+      {
+        "name": "list_steps",
+        "line": 286,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 1,
+      "exportCount": 7,
+      "functionCount": 17,
+      "classCount": 0
+    },
+    "callGraphCount": 222,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/parallel_enum/error.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 42,
+    "nonEmptyLines": 37,
+    "functions": [
+      {
+        "name": "from",
+        "startLine": 17,
+        "endLine": 19,
+        "params": [
+          "msg"
+        ]
+      },
+      {
+        "name": "from",
+        "startLine": 23,
+        "endLine": 25,
+        "params": [
+          "msg"
+        ]
+      },
+      {
+        "name": "from",
+        "startLine": 29,
+        "endLine": 31,
+        "params": [
+          "e"
+        ]
+      },
+      {
+        "name": "category",
+        "startLine": 35,
+        "endLine": 41,
+        "params": []
+      }
+    ],
+    "classes": [
+      {
+        "name": "ParallelEnumError",
+        "startLine": 5,
+        "endLine": 14,
+        "methods": [
+          "from",
+          "from",
+          "from",
+          "category"
+        ],
+        "properties": [
+          "Cancelled",
+          "Io",
+          "MftParams",
+          "Db"
+        ]
+      }
+    ],
+    "exports": [
+      {
+        "name": "ParallelEnumError",
+        "line": 5,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 0,
+      "exportCount": 1,
+      "functionCount": 4,
+      "classCount": 1
+    },
+    "callGraphCount": 5,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/parallel_enum/mod.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 1025,
+    "nonEmptyLines": 937,
+    "functions": [],
+    "classes": [],
+    "exports": [],
+    "metrics": {
+      "importCount": 6,
+      "exportCount": 0,
+      "functionCount": 0,
+      "classCount": 0
+    },
+    "callGraphCount": 436,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/parallel_enum/ntfs_mft.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 1211,
+    "nonEmptyLines": 1136,
+    "functions": [
+      {
+        "name": "enumerate_ntfs_mft_to_staging",
+        "startLine": 20,
+        "endLine": 171,
+        "params": [
+          "conn",
+          "partition",
+          "ds_id",
+          "cancel_token",
+          "progress_cb"
+        ]
+      },
+      {
+        "name": "validate_mft_staging_shape",
+        "startLine": 173,
+        "endLine": 194,
+        "params": [
+          "conn",
+          "ds_id",
+          "partition_index"
+        ]
+      },
+      {
+        "name": "mft_root_child_count",
+        "startLine": 196,
+        "endLine": 209,
+        "params": [
+          "conn",
+          "ds_id",
+          "root_id",
+          "name"
+        ]
+      },
+      {
+        "name": "mft_directory_name_count",
+        "startLine": 211,
+        "endLine": 227,
+        "params": [
+          "conn",
+          "ds_id",
+          "partition_index",
+          "name"
+        ]
+      },
+      {
+        "name": "read_ntfs_mft_parameters",
+        "startLine": 240,
+        "endLine": 290,
+        "params": [
+          "partition",
+          "reader"
+        ]
+      },
+      {
+        "name": "open_partition_evidence_reader",
+        "startLine": 292,
+        "endLine": 304,
+        "params": [
+          "partition"
+        ]
+      },
+      {
+        "name": "partition_offset",
+        "startLine": 306,
+        "endLine": 308,
+        "params": [
+          "partition"
+        ]
+      },
+      {
+        "name": "mft_record_size_from_boot",
+        "startLine": 310,
+        "endLine": 324,
+        "params": [
+          "boot"
+        ]
+      },
+      {
+        "name": "parse_mft_data_size",
+        "startLine": 326,
+        "endLine": 349,
+        "params": [
+          "record"
+        ]
+      },
+      {
+        "name": "apply_ntfs_record_fixup",
+        "startLine": 351,
+        "endLine": 386,
+        "params": [
+          "record",
+          "sector_size"
+        ]
+      },
+      {
+        "name": "parse_mft_data_runs_from_record",
+        "startLine": 388,
+        "endLine": 423,
+        "params": [
+          "record"
+        ]
+      },
+      {
+        "name": "parse_ntfs_data_runs",
+        "startLine": 425,
+        "endLine": 460,
+        "params": [
+          "data"
+        ]
+      },
+      {
+        "name": "read_ntfs_mft_stream",
+        "startLine": 462,
+        "endLine": 520,
+        "params": [
+          "reader",
+          "volume_offset",
+          "cluster_size",
+          "runs",
+          "stream_offset",
+          "out"
+        ]
+      },
+      {
+        "name": "read_sized_le",
+        "startLine": 522,
+        "endLine": 528,
+        "params": [
+          "bytes"
+        ]
+      },
+      {
+        "name": "read_sized_le_signed",
+        "startLine": 530,
+        "endLine": 545,
+        "params": [
+          "bytes"
+        ]
+      },
+      {
+        "name": "backfill_ntfs_directory_index_entries",
+        "startLine": 548,
+        "endLine": 630,
+        "params": [
+          "conn",
+          "ds_id",
+          "evidence_reader",
+          "partition",
+          "partition_index",
+          "path_map",
+          "file_count",
+          "dir_count"
+        ]
+      },
+      {
+        "name": "mft_directory_index_backfill_actions",
+        "startLine": 642,
+        "endLine": 674,
+        "params": [
+          "path_map",
+          "dir_ref",
+          "entries"
+        ]
+      },
+      {
+        "name": "mft_directory_index_entry_should_update",
+        "startLine": 676,
+        "endLine": 697,
+        "params": [
+          "path_map",
+          "record_key",
+          "parent_key",
+          "entry"
+        ]
+      },
+      {
+        "name": "stage_mft_records",
+        "startLine": 699,
+        "endLine": 781,
+        "params": [
+          "stmt",
+          "records",
+          "ds_id",
+          "partition_index",
+          "path_map",
+          "deleted_records",
+          "file_count",
+          "dir_count",
+          "total_size"
+        ]
+      },
+      {
+        "name": "records_to_partition_file_entries",
+        "startLine": 784,
+        "endLine": 848,
+        "params": [
+          "records",
+          "ds_id",
+          "partition_index"
+        ]
+      },
+      {
+        "name": "mft_entry_id",
+        "startLine": 850,
+        "endLine": 852,
+        "params": [
+          "partition_index",
+          "record_number"
+        ]
+      },
+      {
+        "name": "visibility_flags_for_name",
+        "startLine": 854,
+        "endLine": 860,
+        "params": [
+          "name",
+          "hidden",
+          "system"
+        ]
+      },
+      {
+        "name": "inferred_hidden_name",
+        "startLine": 862,
+        "endLine": 864,
+        "params": [
+          "name"
+        ]
+      },
+      {
+        "name": "inferred_system_name",
+        "startLine": 866,
+        "endLine": 875,
+        "params": [
+          "name"
+        ]
+      },
+      {
+        "name": "mft_entry_id_from_key",
+        "startLine": 877,
+        "endLine": 879,
+        "params": [
+          "partition_index",
+          "record_key"
+        ]
+      },
+      {
+        "name": "mft_record_key",
+        "startLine": 882,
+        "endLine": 886,
+        "params": [
+          "partition_index",
+          "entry_id"
+        ]
+      },
+      {
+        "name": "add_partition_entry_to_path_map",
+        "startLine": 889,
+        "endLine": 909,
+        "params": [
+          "path_map",
+          "entry",
+          "partition_index"
+        ]
+      },
+      {
+        "name": "update_mft_staging_paths",
+        "startLine": 912,
+        "endLine": 943,
+        "params": [
+          "conn",
+          "ds_id",
+          "partition_index",
+          "path_map",
+          "deleted_records"
+        ]
+      },
+      {
+        "name": "update_mft_staging_paths_and_parent_ids",
+        "startLine": 946,
+        "endLine": 986,
+        "params": [
+          "conn",
+          "ds_id",
+          "partition_index",
+          "path_map",
+          "deleted_records"
+        ]
+      },
+      {
+        "name": "resolve_mft_path",
+        "startLine": 988,
+        "endLine": 1075,
+        "params": [
+          "record",
+          "path_map",
+          "deleted_records",
+          "resolved",
+          "_visiting",
+          "partition_index"
+        ]
+      },
+      {
+        "name": "update_mft_staging_parent_ids",
+        "startLine": 1078,
+        "endLine": 1104,
+        "params": [
+          "conn",
+          "ds_id",
+          "partition_index",
+          "path_map"
+        ]
+      },
+      {
+        "name": "update_mft_staging_paths_via_sqlite",
+        "startLine": 1106,
+        "endLine": 1211,
+        "params": [
+          "conn",
+          "ds_id",
+          "partition_index",
+          "path_map",
+          "deleted_records"
+        ]
+      }
+    ],
+    "classes": [
+      {
+        "name": "NtfsMftParams",
+        "startLine": 230,
+        "endLine": 238,
+        "methods": [],
+        "properties": [
+          "volume_offset",
+          "mft_cluster",
+          "cluster_size",
+          "record_size",
+          "bytes_per_sector",
+          "mft_data_size",
+          "mft_data_runs"
+        ]
+      },
+      {
+        "name": "MftDirectoryIndexBackfillAction",
+        "startLine": 633,
+        "endLine": 640,
+        "methods": [],
+        "properties": [
+          "name",
+          "is_dir",
+          "size",
+          "mft_ref",
+          "hidden",
+          "system"
+        ]
+      }
+    ],
+    "exports": [
+      {
+        "name": "enumerate_ntfs_mft_to_staging",
+        "line": 20,
+        "isDefault": false
+      },
+      {
+        "name": "validate_mft_staging_shape",
+        "line": 173,
+        "isDefault": false
+      },
+      {
+        "name": "NtfsMftParams",
+        "line": 230,
+        "isDefault": false
+      },
+      {
+        "name": "read_ntfs_mft_parameters",
+        "line": 240,
+        "isDefault": false
+      },
+      {
+        "name": "open_partition_evidence_reader",
+        "line": 292,
+        "isDefault": false
+      },
+      {
+        "name": "read_ntfs_mft_stream",
+        "line": 462,
+        "isDefault": false
+      },
+      {
+        "name": "MftDirectoryIndexBackfillAction",
+        "line": 633,
+        "isDefault": false
+      },
+      {
+        "name": "mft_directory_index_backfill_actions",
+        "line": 642,
+        "isDefault": false
+      },
+      {
+        "name": "records_to_partition_file_entries",
+        "line": 784,
+        "isDefault": false
+      },
+      {
+        "name": "visibility_flags_for_name",
+        "line": 854,
+        "isDefault": false
+      },
+      {
+        "name": "mft_record_key",
+        "line": 882,
+        "isDefault": false
+      },
+      {
+        "name": "add_partition_entry_to_path_map",
+        "line": 889,
+        "isDefault": false
+      },
+      {
+        "name": "update_mft_staging_paths",
+        "line": 912,
+        "isDefault": false
+      },
+      {
+        "name": "update_mft_staging_paths_and_parent_ids",
+        "line": 946,
+        "isDefault": false
+      },
+      {
+        "name": "update_mft_staging_parent_ids",
+        "line": 1078,
+        "isDefault": false
+      },
+      {
+        "name": "update_mft_staging_paths_via_sqlite",
+        "line": 1106,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 0,
+      "exportCount": 16,
+      "functionCount": 32,
+      "classCount": 2
+    },
+    "callGraphCount": 458,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/parallel_enum/partition_worker.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 253,
+    "nonEmptyLines": 232,
+    "functions": [
+      {
+        "name": "enumerate_single_partition",
+        "startLine": 31,
+        "endLine": 123,
+        "params": [
+          "case_root",
+          "ds_id",
+          "partition",
+          "cancel_token",
+          "progress_cb"
+        ]
+      },
+      {
+        "name": "enumerate_fs_to_staging",
+        "startLine": 131,
+        "endLine": 253,
+        "params": [
+          "conn",
+          "fs",
+          "ds_id",
+          "cancel_token",
+          "progress_cb"
+        ]
+      }
+    ],
+    "classes": [
+      {
+        "name": "PartitionWork",
+        "startLine": 10,
+        "endLine": 18,
+        "methods": [],
+        "properties": [
+          "index",
+          "name",
+          "fs_kind",
+          "fs",
+          "source_path",
+          "source_kind",
+          "volume_offset"
+        ]
+      },
+      {
+        "name": "PartitionResult",
+        "startLine": 21,
+        "endLine": 28,
+        "methods": [],
+        "properties": [
+          "index",
+          "file_count",
+          "dir_count",
+          "total_size",
+          "warnings",
+          "error"
+        ]
+      }
+    ],
+    "exports": [
+      {
+        "name": "PartitionWork",
+        "line": 10,
+        "isDefault": false
+      },
+      {
+        "name": "PartitionResult",
+        "line": 21,
+        "isDefault": false
+      },
+      {
+        "name": "enumerate_single_partition",
+        "line": 31,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 0,
+      "exportCount": 3,
+      "functionCount": 2,
+      "classCount": 2
+    },
+    "callGraphCount": 86,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/parallel_enum/progress.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 22,
+    "nonEmptyLines": 19,
+    "functions": [
+      {
+        "name": "heartbeat_percent",
+        "startLine": 11,
+        "endLine": 22,
+        "params": [
+          "done_count",
+          "submitted_count",
+          "entries"
+        ]
+      }
+    ],
+    "classes": [],
+    "exports": [
+      {
+        "name": "heartbeat_percent",
+        "line": 11,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 0,
+      "exportCount": 1,
+      "functionCount": 1,
+      "classCount": 0
+    },
+    "callGraphCount": 2,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  },
+  {
+    "path": "crates/app-services/src/parallel_enum/scheduler.rs",
+    "language": "rust",
+    "fileCategory": "code",
+    "totalLines": 154,
+    "nonEmptyLines": 137,
+    "functions": [
+      {
+        "name": "enumerate_partitions_parallel",
+        "startLine": 18,
+        "endLine": 154,
+        "params": [
+          "case_root",
+          "data_source_id",
+          "partitions",
+          "max_workers",
+          "cancel_token",
+          "progress_cb"
+        ]
+      }
+    ],
+    "classes": [],
+    "exports": [
+      {
+        "name": "enumerate_partitions_parallel",
+        "line": 18,
+        "isDefault": false
+      }
+    ],
+    "metrics": {
+      "importCount": 0,
+      "exportCount": 1,
+      "functionCount": 1,
+      "classCount": 0
+    },
+    "callGraphCount": 63,
+    "hasSections": false,
+    "hasDefinitions": false,
+    "hasServices": false,
+    "hasEndpoints": false,
+    "hasSteps": false,
+    "hasResources": false
+  }
+]

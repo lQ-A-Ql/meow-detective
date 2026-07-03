@@ -7,6 +7,7 @@ export {
   BrowserHistoryPanel,
   EmailExtractionPanel,
   EventLogPanel,
+  LinuxArtifactsPanel,
   RegistryExtractionPanel,
   EvidenceClassificationPanel,
   FileClassificationPanel,

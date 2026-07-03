@@ -1,0 +1,1228 @@
+{
+  "nodes": [
+    {
+      "id": "file:frontend/src/app/App.tsx",
+      "type": "file",
+      "name": "App.tsx",
+      "filePath": "frontend/src/app/App.tsx",
+      "summary": "应用根组件，默认导出App函数组件，负责组合ErrorBoundary错误边界、路由系统和全局字体样式。",
+      "tags": ["entry-point", "root-component", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/app/components/ErrorBoundary.test.tsx",
+      "type": "file",
+      "name": "ErrorBoundary.test.tsx",
+      "filePath": "frontend/src/app/components/ErrorBoundary.test.tsx",
+      "summary": "ErrorBoundary组件的单元测试套件，验证错误捕获、错误展示和重置恢复行为。",
+      "tags": ["test", "error-boundary", "unit-test"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/app/components/ErrorBoundary.tsx",
+      "type": "file",
+      "name": "ErrorBoundary.tsx",
+      "filePath": "frontend/src/app/components/ErrorBoundary.tsx",
+      "summary": "React错误边界实现，基于类组件捕获子组件渲染错误，支持Reload恢复和Reset按钮操作，提供国际化错误提示。",
+      "tags": ["error-boundary", "component", "error-handling", "i18n"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/badge.tsx",
+      "type": "file",
+      "name": "badge.tsx",
+      "filePath": "frontend/src/app/components/ui/badge.tsx",
+      "summary": "Badge徽章UI组件，基于cva定义多颜色变体样式（default/secondary/destructive/outline），支持asChild插槽模式。",
+      "tags": ["ui-component", "badge", "cva-variants", "shadcn"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/button.tsx",
+      "type": "file",
+      "name": "button.tsx",
+      "filePath": "frontend/src/app/components/ui/button.tsx",
+      "summary": "Button按钮UI组件，基于cva提供variant（default/destructive/outline/secondary/ghost/link）和size（default/sm/lg/icon）变体，支持asChild渲染。",
+      "tags": ["ui-component", "button", "cva-variants", "shadcn"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/card.tsx",
+      "type": "file",
+      "name": "card.tsx",
+      "filePath": "frontend/src/app/components/ui/card.tsx",
+      "summary": "Card卡片UI组件套件，导出Card/CardHeader/CardTitle/CardDescription/CardAction/CardContent/CardFooter七个子组件，构建语义化卡片布局。",
+      "tags": ["ui-component", "card", "layout", "shadcn"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/checkbox.tsx",
+      "type": "file",
+      "name": "checkbox.tsx",
+      "filePath": "frontend/src/app/components/ui/checkbox.tsx",
+      "summary": "Checkbox复选框UI组件，封装Radix Checkbox原语，提供选中/未选中状态样式含对勾图标指示器。",
+      "tags": ["ui-component", "checkbox", "form", "shadcn"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/command.tsx",
+      "type": "file",
+      "name": "command.tsx",
+      "filePath": "frontend/src/app/components/ui/command.tsx",
+      "summary": "Command命令面板UI套件，基于cmdk实现快速搜索/命令选择，导出Command/CommandDialog/CommandInput/CommandList/CommandEmpty/CommandGroup/CommandItem等9个子组件。",
+      "tags": ["ui-component", "command-palette", "cmdk", "shadcn"],
+      "complexity": "complex",
+      "languageNotes": "基于cmdk库构建命令面板，嵌套Dialog组件实现弹窗模式，使用forwardRef传递ref以支持键盘导航。"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/dialog.tsx",
+      "type": "file",
+      "name": "dialog.tsx",
+      "filePath": "frontend/src/app/components/ui/dialog.tsx",
+      "summary": "Dialog对话框UI组件套件，基于Radix Dialog原语封装10个子组件（Dialog/DialogTrigger/DialogPortal/DialogClose/DialogOverlay/DialogContent/DialogHeader/DialogFooter/DialogTitle/DialogDescription）。",
+      "tags": ["ui-component", "dialog", "modal", "shadcn"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/input.tsx",
+      "type": "file",
+      "name": "input.tsx",
+      "filePath": "frontend/src/app/components/ui/input.tsx",
+      "summary": "Input输入框UI组件，封装原生input元素，应用统一边框、聚焦环和文件上传按钮样式。",
+      "tags": ["ui-component", "input", "form", "shadcn"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/label.tsx",
+      "type": "file",
+      "name": "label.tsx",
+      "filePath": "frontend/src/app/components/ui/label.tsx",
+      "summary": "Label标签UI组件，基于Radix Label原语封装，提供与表单控件关联的标签样式，支持peer-disabled状态。",
+      "tags": ["ui-component", "label", "form", "shadcn"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/progress.tsx",
+      "type": "file",
+      "name": "progress.tsx",
+      "filePath": "frontend/src/app/components/ui/progress.tsx",
+      "summary": "Progress进度条UI组件，基于Radix Progress原语封装，支持value属性控制进度，含CSS transition动画。",
+      "tags": ["ui-component", "progress", "loading", "shadcn"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/scroll-area.tsx",
+      "type": "file",
+      "name": "scroll-area.tsx",
+      "filePath": "frontend/src/app/components/ui/scroll-area.tsx",
+      "summary": "ScrollArea滚动区域UI组件，基于Radix ScrollArea原语封装，导出ScrollArea和ScrollBar子组件，提供自定义滚动条样式。",
+      "tags": ["ui-component", "scroll-area", "layout", "shadcn"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/select.tsx",
+      "type": "file",
+      "name": "select.tsx",
+      "filePath": "frontend/src/app/components/ui/select.tsx",
+      "summary": "Select下拉选择UI组件套件，基于Radix Select原语封装10个子组件（Select/SelectGroup/SelectValue/SelectTrigger/SelectContent/SelectLabel/SelectItem/SelectSeparator/SelectScrollUpButton/SelectScrollDownButton）。",
+      "tags": ["ui-component", "select", "dropdown", "shadcn"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/separator.tsx",
+      "type": "file",
+      "name": "separator.tsx",
+      "filePath": "frontend/src/app/components/ui/separator.tsx",
+      "summary": "Separator分隔线UI组件，基于Radix Separator原语封装，支持horizontal/vertical方向切换。",
+      "tags": ["ui-component", "separator", "layout", "shadcn"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/App.tsx:App",
+      "type": "function",
+      "name": "App",
+      "filePath": "frontend/src/app/App.tsx",
+      "lineRange": [6, 12],
+      "summary": "应用根函数组件，渲染ErrorBoundary包裹的RouterProvider路由系统，并导入全局字体样式。",
+      "tags": ["root-component", "entry-point", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:frontend/src/app/components/ErrorBoundary.tsx:ErrorBoundaryBase",
+      "type": "class",
+      "name": "ErrorBoundaryBase",
+      "filePath": "frontend/src/app/components/ErrorBoundary.tsx",
+      "lineRange": [14, 74],
+      "summary": "React错误边界基类，通过getDerivedStateFromError捕获子组件错误，componentDidCatch记录错误日志，render方法根据错误状态渲染国际化错误提示或Reload/Reset操作按钮。",
+      "tags": ["error-boundary", "class-component", "error-handling", "i18n"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/badge.tsx:Badge",
+      "type": "function",
+      "name": "Badge",
+      "filePath": "frontend/src/app/components/ui/badge.tsx",
+      "lineRange": [28, 44],
+      "summary": "Badge徽章函数组件，基于cva变体系统渲染span元素，通过cn工具函数合并className与变体样式。",
+      "tags": ["ui-component", "badge", "cva-variants"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/button.tsx:Button",
+      "type": "function",
+      "name": "Button",
+      "filePath": "frontend/src/app/components/ui/button.tsx",
+      "lineRange": [37, 56],
+      "summary": "Button按钮函数组件，基于cva变体系统渲染button元素，通过cn合并className与variant/size样式。",
+      "tags": ["ui-component", "button", "cva-variants"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/card.tsx:Card",
+      "type": "function",
+      "name": "Card",
+      "filePath": "frontend/src/app/components/ui/card.tsx",
+      "lineRange": [5, 16],
+      "summary": "Card容器组件，渲染带圆角和阴影样式的div，应用cn合并自定义className。",
+      "tags": ["ui-component", "card", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/card.tsx:CardHeader",
+      "type": "function",
+      "name": "CardHeader",
+      "filePath": "frontend/src/app/components/ui/card.tsx",
+      "lineRange": [18, 29],
+      "summary": "CardHeader头部容器组件，提供flex布局和内边距样式的卡片标题区域。",
+      "tags": ["ui-component", "card", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/card.tsx:CardTitle",
+      "type": "function",
+      "name": "CardTitle",
+      "filePath": "frontend/src/app/components/ui/card.tsx",
+      "lineRange": [31, 39],
+      "summary": "CardTitle标题组件，渲染带字体样式的卡片标题文本容器。",
+      "tags": ["ui-component", "card", "typography"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/card.tsx:CardDescription",
+      "type": "function",
+      "name": "CardDescription",
+      "filePath": "frontend/src/app/components/ui/card.tsx",
+      "lineRange": [41, 49],
+      "summary": "CardDescription描述组件，渲染小号浅色文本的卡片描述内容。",
+      "tags": ["ui-component", "card", "typography"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/card.tsx:CardAction",
+      "type": "function",
+      "name": "CardAction",
+      "filePath": "frontend/src/app/components/ui/card.tsx",
+      "lineRange": [51, 62],
+      "summary": "CardAction操作区组件，在卡片底部提供右对齐的操作按钮区域。",
+      "tags": ["ui-component", "card", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/card.tsx:CardContent",
+      "type": "function",
+      "name": "CardContent",
+      "filePath": "frontend/src/app/components/ui/card.tsx",
+      "lineRange": [64, 72],
+      "summary": "CardContent内容区组件，提供卡片主体内容的内边距容器。",
+      "tags": ["ui-component", "card", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/card.tsx:CardFooter",
+      "type": "function",
+      "name": "CardFooter",
+      "filePath": "frontend/src/app/components/ui/card.tsx",
+      "lineRange": [74, 82],
+      "summary": "CardFooter底部组件，渲染flex布局的卡片页脚区域。",
+      "tags": ["ui-component", "card", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/checkbox.tsx:Checkbox",
+      "type": "function",
+      "name": "Checkbox",
+      "filePath": "frontend/src/app/components/ui/checkbox.tsx",
+      "lineRange": [9, 30],
+      "summary": "Checkbox复选框组件，封装Radix Checkbox原语，渲染带对勾图标指示器和焦点环样式的复选框按钮。",
+      "tags": ["ui-component", "checkbox", "form"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/command.tsx:Command",
+      "type": "function",
+      "name": "Command",
+      "filePath": "frontend/src/app/components/ui/command.tsx",
+      "lineRange": [16, 30],
+      "summary": "Command根组件，基于cmdk.Command封装，应用overlay和弹出动画样式。",
+      "tags": ["ui-component", "command-palette", "cmdk"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/command.tsx:CommandDialog",
+      "type": "function",
+      "name": "CommandDialog",
+      "filePath": "frontend/src/app/components/ui/command.tsx",
+      "lineRange": [32, 54],
+      "summary": "CommandDialog命令弹窗组件，将Command嵌入Dialog中实现模态命令面板，支持title/description自定义。",
+      "tags": ["ui-component", "command-palette", "dialog", "cmdk"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/command.tsx:CommandInput",
+      "type": "function",
+      "name": "CommandInput",
+      "filePath": "frontend/src/app/components/ui/command.tsx",
+      "lineRange": [56, 76],
+      "summary": "CommandInput搜索输入组件，基于cmdk.CommandInput封装，包裹搜索图标和输入框的容器布局。",
+      "tags": ["ui-component", "command-palette", "search", "cmdk"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/command.tsx:CommandList",
+      "type": "function",
+      "name": "CommandList",
+      "filePath": "frontend/src/app/components/ui/command.tsx",
+      "lineRange": [78, 92],
+      "summary": "CommandList列表容器组件，基于cmdk.CommandList封装，应用max-height滚动区域样式。",
+      "tags": ["ui-component", "command-palette", "cmdk"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/command.tsx:CommandEmpty",
+      "type": "function",
+      "name": "CommandEmpty",
+      "filePath": "frontend/src/app/components/ui/command.tsx",
+      "lineRange": [94, 104],
+      "summary": "CommandEmpty空状态组件，基于cmdk.CommandEmpty封装，在无搜索结果时显示提示文本。",
+      "tags": ["ui-component", "command-palette", "empty-state", "cmdk"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/command.tsx:CommandGroup",
+      "type": "function",
+      "name": "CommandGroup",
+      "filePath": "frontend/src/app/components/ui/command.tsx",
+      "lineRange": [106, 120],
+      "summary": "CommandGroup分组组件，基于cmdk.CommandGroup封装，以加粗小字heading开头的命令分组容器。",
+      "tags": ["ui-component", "command-palette", "cmdk"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/command.tsx:CommandSeparator",
+      "type": "function",
+      "name": "CommandSeparator",
+      "filePath": "frontend/src/app/components/ui/command.tsx",
+      "lineRange": [122, 133],
+      "summary": "CommandSeparator分隔线组件，基于cmdk.CommandSeparator封装，渲染命令分组之间的分割线。",
+      "tags": ["ui-component", "command-palette", "separator", "cmdk"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/command.tsx:CommandItem",
+      "type": "function",
+      "name": "CommandItem",
+      "filePath": "frontend/src/app/components/ui/command.tsx",
+      "lineRange": [135, 149],
+      "summary": "CommandItem命令项组件，基于cmdk.CommandItem封装，渲染单个可选命令项含aria-selected高亮和aria-disabled禁用样式。",
+      "tags": ["ui-component", "command-palette", "cmdk"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/command.tsx:CommandShortcut",
+      "type": "function",
+      "name": "CommandShortcut",
+      "filePath": "frontend/src/app/components/ui/command.tsx",
+      "lineRange": [151, 165],
+      "summary": "CommandShortcut快捷键提示组件，渲染右对齐的灰色小字键盘快捷键提示文本。",
+      "tags": ["ui-component", "command-palette", "shortcut", "cmdk"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/dialog.tsx:DialogOverlay",
+      "type": "function",
+      "name": "DialogOverlay",
+      "filePath": "frontend/src/app/components/ui/dialog.tsx",
+      "lineRange": [33, 47],
+      "summary": "DialogOverlay遮罩层组件，基于Radix DialogOverlay封装，渲染半透明背景遮罩含淡入动画。",
+      "tags": ["ui-component", "dialog", "overlay", "modal"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/dialog.tsx:DialogContent",
+      "type": "function",
+      "name": "DialogContent",
+      "filePath": "frontend/src/app/components/ui/dialog.tsx",
+      "lineRange": [49, 73],
+      "summary": "DialogContent对话框内容组件，基于Radix DialogContent封装，渲染居中的对话框面板含关闭按钮、淡入缩放动画和焦点捕获。",
+      "tags": ["ui-component", "dialog", "modal", "content"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/dialog.tsx:DialogHeader",
+      "type": "function",
+      "name": "DialogHeader",
+      "filePath": "frontend/src/app/components/ui/dialog.tsx",
+      "lineRange": [75, 83],
+      "summary": "DialogHeader对话框头部组件，提供flex布局的标题区域容器。",
+      "tags": ["ui-component", "dialog", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/dialog.tsx:DialogFooter",
+      "type": "function",
+      "name": "DialogFooter",
+      "filePath": "frontend/src/app/components/ui/dialog.tsx",
+      "lineRange": [85, 96],
+      "summary": "DialogFooter对话框底部组件，提供右对齐的flex操作按钮区域。",
+      "tags": ["ui-component", "dialog", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/dialog.tsx:DialogTitle",
+      "type": "function",
+      "name": "DialogTitle",
+      "filePath": "frontend/src/app/components/ui/dialog.tsx",
+      "lineRange": [98, 109],
+      "summary": "DialogTitle对话框标题组件，基于Radix DialogTitle封装，应用大号字体和紧凑行高的标题样式。",
+      "tags": ["ui-component", "dialog", "typography"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/dialog.tsx:DialogDescription",
+      "type": "function",
+      "name": "DialogDescription",
+      "filePath": "frontend/src/app/components/ui/dialog.tsx",
+      "lineRange": [111, 122],
+      "summary": "DialogDescription对话框描述组件，基于Radix DialogDescription封装，应用小号浅色文本的描述样式。",
+      "tags": ["ui-component", "dialog", "typography"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/input.tsx:Input",
+      "type": "function",
+      "name": "Input",
+      "filePath": "frontend/src/app/components/ui/input.tsx",
+      "lineRange": [5, 19],
+      "summary": "Input输入框组件，渲染带统一边框、背景色和聚焦环样式的input元素，处理file类型特殊按钮样式。",
+      "tags": ["ui-component", "input", "form"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/label.tsx:Label",
+      "type": "function",
+      "name": "Label",
+      "filePath": "frontend/src/app/components/ui/label.tsx",
+      "lineRange": [8, 22],
+      "summary": "Label标签组件，基于Radix Label封装，渲染带字体样式和peer-disabled状态感知的label元素。",
+      "tags": ["ui-component", "label", "form", "accessibility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/progress.tsx:Progress",
+      "type": "function",
+      "name": "Progress",
+      "filePath": "frontend/src/app/components/ui/progress.tsx",
+      "lineRange": [8, 29],
+      "summary": "Progress进度条组件，基于Radix Progress封装，渲染带CSS transition动画的进度指示器，使用transform translateX控制进度宽度。",
+      "tags": ["ui-component", "progress", "loading"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/scroll-area.tsx:ScrollArea",
+      "type": "function",
+      "name": "ScrollArea",
+      "filePath": "frontend/src/app/components/ui/scroll-area.tsx",
+      "lineRange": [8, 29],
+      "summary": "ScrollArea滚动区域组件，基于Radix ScrollArea封装，提供可滚动容器含自定义Viewport和ScrollBar。",
+      "tags": ["ui-component", "scroll-area", "layout"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/scroll-area.tsx:ScrollBar",
+      "type": "function",
+      "name": "ScrollBar",
+      "filePath": "frontend/src/app/components/ui/scroll-area.tsx",
+      "lineRange": [31, 56],
+      "summary": "ScrollBar滚动条组件，基于Radix Scrollbar封装，支持vertical/horizontal方向，渲染自定义圆角滚动条滑块。",
+      "tags": ["ui-component", "scroll-area", "scrollbar"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/select.tsx:SelectTrigger",
+      "type": "function",
+      "name": "SelectTrigger",
+      "filePath": "frontend/src/app/components/ui/select.tsx",
+      "lineRange": [31, 55],
+      "summary": "SelectTrigger触发器组件，基于Radix SelectTrigger封装，渲染带边框、下拉图标和size变体的选择框按钮。",
+      "tags": ["ui-component", "select", "dropdown", "form"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/select.tsx:SelectContent",
+      "type": "function",
+      "name": "SelectContent",
+      "filePath": "frontend/src/app/components/ui/select.tsx",
+      "lineRange": [57, 90],
+      "summary": "SelectContent下拉内容组件，基于Radix SelectContent封装，渲染带弹出动画和popper定位的下拉选项面板，含max-height限制。",
+      "tags": ["ui-component", "select", "dropdown", "popper"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/select.tsx:SelectLabel",
+      "type": "function",
+      "name": "SelectLabel",
+      "filePath": "frontend/src/app/components/ui/select.tsx",
+      "lineRange": [92, 103],
+      "summary": "SelectLabel分组标签组件，基于Radix SelectLabel封装，渲染下拉列表中的分组标题文本。",
+      "tags": ["ui-component", "select", "dropdown", "label"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/select.tsx:SelectItem",
+      "type": "function",
+      "name": "SelectItem",
+      "filePath": "frontend/src/app/components/ui/select.tsx",
+      "lineRange": [105, 127],
+      "summary": "SelectItem选择项组件，基于Radix SelectItem封装，渲染单个可选下拉项含对勾选中图标和focus高亮样式。",
+      "tags": ["ui-component", "select", "dropdown"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/select.tsx:SelectSeparator",
+      "type": "function",
+      "name": "SelectSeparator",
+      "filePath": "frontend/src/app/components/ui/select.tsx",
+      "lineRange": [129, 140],
+      "summary": "SelectSeparator分隔组件，基于Radix SelectSeparator封装，渲染下拉列表分组之间的分割线。",
+      "tags": ["ui-component", "select", "separator"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/select.tsx:SelectScrollUpButton",
+      "type": "function",
+      "name": "SelectScrollUpButton",
+      "filePath": "frontend/src/app/components/ui/select.tsx",
+      "lineRange": [142, 158],
+      "summary": "SelectScrollUpButton上滚按钮组件，基于Radix SelectScrollUpButton封装，在下拉列表顶部渲染向上滚动的箭头按钮。",
+      "tags": ["ui-component", "select", "dropdown", "scroll"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/select.tsx:SelectScrollDownButton",
+      "type": "function",
+      "name": "SelectScrollDownButton",
+      "filePath": "frontend/src/app/components/ui/select.tsx",
+      "lineRange": [160, 176],
+      "summary": "SelectScrollDownButton下滚按钮组件，基于Radix SelectScrollDownButton封装，在下拉列表底部渲染向下滚动的箭头按钮。",
+      "tags": ["ui-component", "select", "dropdown", "scroll"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/separator.tsx:Separator",
+      "type": "function",
+      "name": "Separator",
+      "filePath": "frontend/src/app/components/ui/separator.tsx",
+      "lineRange": [8, 26],
+      "summary": "Separator分隔线组件，基于Radix Separator封装，支持horizontal/vertical方向切换和decorative属性控制。",
+      "tags": ["ui-component", "separator", "layout"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:frontend/src/app/App.tsx",
+      "target": "file:frontend/src/app/components/ErrorBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/App.tsx",
+      "target": "file:frontend/src/app/routes.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/App.tsx",
+      "target": "file:frontend/src/styles/fonts.css",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ErrorBoundary.test.tsx",
+      "target": "file:frontend/src/app/components/ErrorBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/badge.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/button.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/card.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/checkbox.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/command.tsx",
+      "target": "file:frontend/src/app/components/ui/dialog.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/command.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/dialog.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/input.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/label.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/progress.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/scroll-area.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/select.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/separator.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/App.tsx",
+      "target": "function:frontend/src/app/App.tsx:App",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ErrorBoundary.tsx",
+      "target": "class:frontend/src/app/components/ErrorBoundary.tsx:ErrorBoundaryBase",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/badge.tsx",
+      "target": "function:frontend/src/app/components/ui/badge.tsx:Badge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/button.tsx",
+      "target": "function:frontend/src/app/components/ui/button.tsx:Button",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/card.tsx",
+      "target": "function:frontend/src/app/components/ui/card.tsx:Card",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/card.tsx",
+      "target": "function:frontend/src/app/components/ui/card.tsx:CardHeader",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/card.tsx",
+      "target": "function:frontend/src/app/components/ui/card.tsx:CardTitle",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/card.tsx",
+      "target": "function:frontend/src/app/components/ui/card.tsx:CardDescription",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/card.tsx",
+      "target": "function:frontend/src/app/components/ui/card.tsx:CardAction",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/card.tsx",
+      "target": "function:frontend/src/app/components/ui/card.tsx:CardContent",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/card.tsx",
+      "target": "function:frontend/src/app/components/ui/card.tsx:CardFooter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/checkbox.tsx",
+      "target": "function:frontend/src/app/components/ui/checkbox.tsx:Checkbox",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/command.tsx",
+      "target": "function:frontend/src/app/components/ui/command.tsx:Command",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/command.tsx",
+      "target": "function:frontend/src/app/components/ui/command.tsx:CommandDialog",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/command.tsx",
+      "target": "function:frontend/src/app/components/ui/command.tsx:CommandInput",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/command.tsx",
+      "target": "function:frontend/src/app/components/ui/command.tsx:CommandList",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/command.tsx",
+      "target": "function:frontend/src/app/components/ui/command.tsx:CommandEmpty",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/command.tsx",
+      "target": "function:frontend/src/app/components/ui/command.tsx:CommandGroup",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/command.tsx",
+      "target": "function:frontend/src/app/components/ui/command.tsx:CommandSeparator",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/command.tsx",
+      "target": "function:frontend/src/app/components/ui/command.tsx:CommandItem",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/command.tsx",
+      "target": "function:frontend/src/app/components/ui/command.tsx:CommandShortcut",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/dialog.tsx",
+      "target": "function:frontend/src/app/components/ui/dialog.tsx:DialogOverlay",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/dialog.tsx",
+      "target": "function:frontend/src/app/components/ui/dialog.tsx:DialogContent",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/dialog.tsx",
+      "target": "function:frontend/src/app/components/ui/dialog.tsx:DialogHeader",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/dialog.tsx",
+      "target": "function:frontend/src/app/components/ui/dialog.tsx:DialogFooter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/dialog.tsx",
+      "target": "function:frontend/src/app/components/ui/dialog.tsx:DialogTitle",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/dialog.tsx",
+      "target": "function:frontend/src/app/components/ui/dialog.tsx:DialogDescription",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/input.tsx",
+      "target": "function:frontend/src/app/components/ui/input.tsx:Input",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/label.tsx",
+      "target": "function:frontend/src/app/components/ui/label.tsx:Label",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/progress.tsx",
+      "target": "function:frontend/src/app/components/ui/progress.tsx:Progress",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/scroll-area.tsx",
+      "target": "function:frontend/src/app/components/ui/scroll-area.tsx:ScrollArea",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/scroll-area.tsx",
+      "target": "function:frontend/src/app/components/ui/scroll-area.tsx:ScrollBar",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/select.tsx",
+      "target": "function:frontend/src/app/components/ui/select.tsx:SelectTrigger",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/select.tsx",
+      "target": "function:frontend/src/app/components/ui/select.tsx:SelectContent",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/select.tsx",
+      "target": "function:frontend/src/app/components/ui/select.tsx:SelectLabel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/select.tsx",
+      "target": "function:frontend/src/app/components/ui/select.tsx:SelectItem",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/select.tsx",
+      "target": "function:frontend/src/app/components/ui/select.tsx:SelectSeparator",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/select.tsx",
+      "target": "function:frontend/src/app/components/ui/select.tsx:SelectScrollUpButton",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/select.tsx",
+      "target": "function:frontend/src/app/components/ui/select.tsx:SelectScrollDownButton",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/separator.tsx",
+      "target": "function:frontend/src/app/components/ui/separator.tsx:Separator",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/App.tsx",
+      "target": "function:frontend/src/app/App.tsx:App",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ErrorBoundary.tsx",
+      "target": "class:frontend/src/app/components/ErrorBoundary.tsx:ErrorBoundaryBase",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/badge.tsx",
+      "target": "function:frontend/src/app/components/ui/badge.tsx:Badge",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/button.tsx",
+      "target": "function:frontend/src/app/components/ui/button.tsx:Button",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/card.tsx",
+      "target": "function:frontend/src/app/components/ui/card.tsx:Card",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/card.tsx",
+      "target": "function:frontend/src/app/components/ui/card.tsx:CardHeader",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/card.tsx",
+      "target": "function:frontend/src/app/components/ui/card.tsx:CardTitle",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/card.tsx",
+      "target": "function:frontend/src/app/components/ui/card.tsx:CardDescription",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/card.tsx",
+      "target": "function:frontend/src/app/components/ui/card.tsx:CardAction",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/card.tsx",
+      "target": "function:frontend/src/app/components/ui/card.tsx:CardContent",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/card.tsx",
+      "target": "function:frontend/src/app/components/ui/card.tsx:CardFooter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/checkbox.tsx",
+      "target": "function:frontend/src/app/components/ui/checkbox.tsx:Checkbox",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/command.tsx",
+      "target": "function:frontend/src/app/components/ui/command.tsx:Command",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/command.tsx",
+      "target": "function:frontend/src/app/components/ui/command.tsx:CommandDialog",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/command.tsx",
+      "target": "function:frontend/src/app/components/ui/command.tsx:CommandInput",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/command.tsx",
+      "target": "function:frontend/src/app/components/ui/command.tsx:CommandList",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/command.tsx",
+      "target": "function:frontend/src/app/components/ui/command.tsx:CommandEmpty",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/command.tsx",
+      "target": "function:frontend/src/app/components/ui/command.tsx:CommandGroup",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/command.tsx",
+      "target": "function:frontend/src/app/components/ui/command.tsx:CommandSeparator",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/command.tsx",
+      "target": "function:frontend/src/app/components/ui/command.tsx:CommandItem",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/command.tsx",
+      "target": "function:frontend/src/app/components/ui/command.tsx:CommandShortcut",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/dialog.tsx",
+      "target": "function:frontend/src/app/components/ui/dialog.tsx:DialogOverlay",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/dialog.tsx",
+      "target": "function:frontend/src/app/components/ui/dialog.tsx:DialogContent",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/dialog.tsx",
+      "target": "function:frontend/src/app/components/ui/dialog.tsx:DialogHeader",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/dialog.tsx",
+      "target": "function:frontend/src/app/components/ui/dialog.tsx:DialogFooter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/dialog.tsx",
+      "target": "function:frontend/src/app/components/ui/dialog.tsx:DialogTitle",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/dialog.tsx",
+      "target": "function:frontend/src/app/components/ui/dialog.tsx:DialogDescription",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/input.tsx",
+      "target": "function:frontend/src/app/components/ui/input.tsx:Input",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/label.tsx",
+      "target": "function:frontend/src/app/components/ui/label.tsx:Label",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/progress.tsx",
+      "target": "function:frontend/src/app/components/ui/progress.tsx:Progress",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/scroll-area.tsx",
+      "target": "function:frontend/src/app/components/ui/scroll-area.tsx:ScrollArea",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/scroll-area.tsx",
+      "target": "function:frontend/src/app/components/ui/scroll-area.tsx:ScrollBar",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/select.tsx",
+      "target": "function:frontend/src/app/components/ui/select.tsx:SelectTrigger",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/select.tsx",
+      "target": "function:frontend/src/app/components/ui/select.tsx:SelectContent",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/select.tsx",
+      "target": "function:frontend/src/app/components/ui/select.tsx:SelectLabel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/select.tsx",
+      "target": "function:frontend/src/app/components/ui/select.tsx:SelectItem",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/select.tsx",
+      "target": "function:frontend/src/app/components/ui/select.tsx:SelectSeparator",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/select.tsx",
+      "target": "function:frontend/src/app/components/ui/select.tsx:SelectScrollUpButton",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/select.tsx",
+      "target": "function:frontend/src/app/components/ui/select.tsx:SelectScrollDownButton",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/separator.tsx",
+      "target": "function:frontend/src/app/components/ui/separator.tsx:Separator",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ErrorBoundary.test.tsx",
+      "target": "file:frontend/src/app/components/ErrorBoundary.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

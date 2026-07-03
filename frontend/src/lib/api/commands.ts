@@ -82,6 +82,7 @@ export const COMMANDS = {
     GET_BROWSER_HISTORY_SUMMARY: 'get_browser_history_summary',
     GET_EMAIL_EXTRACTION_SUMMARY: 'get_email_extraction_summary',
     GET_EVTX_EVENT_SUMMARY: 'get_evtx_event_summary',
+    GET_LINUX_ARTIFACT_SUMMARY: 'get_linux_artifact_summary',
     GET_V2_GOVERNANCE_SNAPSHOT: 'get_v2_governance_snapshot',
     GET_V3_GOVERNANCE_SNAPSHOT: 'get_v3_governance_snapshot',
     GET_CORRELATION_SNAPSHOT: 'get_correlation_snapshot',

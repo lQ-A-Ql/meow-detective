@@ -33,6 +33,9 @@ export function BottomDrawer() {
   const runningJobs = jobs?.filter((job) => job.status === 'running') ?? [];
   const completedJobs = jobs?.filter((job) => job.status === 'completed') ?? [];
   const failedJobs = jobs?.filter((job) => job.status === 'failed') ?? [];
+  const warningJobs = jobs?.filter((job) => job.status === 'warning') ?? [];
+  const cancellingJobs = jobs?.filter((job) => job.status === 'cancelling') ?? [];
+  const cancelledJobs = jobs?.filter((job) => job.status === 'cancelled') ?? [];
   const partialJobs = jobs?.filter((job) => job.partial) ?? [];
   const jobWarningCount = jobs?.reduce((sum, job) => sum + job.warningCount, 0) ?? 0;
   const jobSkippedCount = jobs?.reduce((sum, job) => sum + job.skippedCount, 0) ?? 0;
@@ -46,7 +49,9 @@ export function BottomDrawer() {
   const headline =
     typedHeadline ||
     runningJobs[0]?.detail ||
+    warningJobs[0]?.detail ||
     failedJobs[0]?.detail ||
+    cancellingJobs[0]?.detail ||
     completedJobs[0]?.detail ||
     t('bottomDrawer.headline.waiting');
 
@@ -93,7 +98,7 @@ export function BottomDrawer() {
             {drawerOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
           </button>
           <div className="hidden xl:flex border-l border-forensics-border pl-4">
-            {t('bottomDrawer.status.recent')} <span className="text-forensics-text">{runningJobs[0]?.scope || failedJobs[0]?.scope || completedJobs[0]?.scope || t('bottomDrawer.status.idle')}</span>
+            {t('bottomDrawer.status.recent')} <span className="text-forensics-text">{runningJobs[0]?.scope || warningJobs[0]?.scope || cancellingJobs[0]?.scope || failedJobs[0]?.scope || completedJobs[0]?.scope || t('bottomDrawer.status.idle')}</span>
           </div>
         </div>
       </div>
@@ -181,6 +186,20 @@ export function BottomDrawer() {
                       <DrawerChip
                         tone={evidenceHashStatus}
                         label={`${t('bottomDrawer.labels.evidenceHash')} ${getEvidenceHashStatusLabel(evidenceHashStatus)}`}
+                      />
+                    ) : null}
+                    {importSignals.latestPhase && importSignals.latestPhase.metrics.warnings > 0 ? (
+                      <DrawerChip
+                        tone="warning"
+                        label={t('bottomDrawer.labels.warnings')}
+                        detail={importSignals.latestPhase.metrics.warnings.toString()}
+                      />
+                    ) : null}
+                    {importSignals.latestPhase && importSignals.latestPhase.metrics.failed > 0 ? (
+                      <DrawerChip
+                        tone="failed"
+                        label={t('bottomDrawer.labels.failed')}
+                        detail={importSignals.latestPhase.metrics.failed.toString()}
                       />
                     ) : null}
                   </div>
@@ -273,6 +292,36 @@ export function BottomDrawer() {
                     <span className="truncate">{job.detail}</span>
                   </div>
                   <div className="mt-1 text-red-600/80 truncate">{job.scope || t('bottomDrawer.jobs.failedFallback')}</div>
+                  <JobOutcomeBadges job={job} />
+                </div>
+              ))}
+              {warningJobs.map((job) => (
+                <div key={job.id} className="border border-forensics-warning-border bg-forensics-warning-bg p-3 text-[11px] text-forensics-warning-text">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium">{job.name}</span>
+                    <span className="truncate">{job.detail}</span>
+                  </div>
+                  <div className="mt-1 truncate opacity-80">{job.scope}</div>
+                  <JobOutcomeBadges job={job} />
+                </div>
+              ))}
+              {cancellingJobs.map((job) => (
+                <div key={job.id} className="border border-forensics-border bg-forensics-surface p-3 text-[11px] text-forensics-text-tertiary">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium text-forensics-text">{job.name}</span>
+                    <span className="truncate">{job.detail}</span>
+                  </div>
+                  <div className="mt-1 truncate">{job.scope}</div>
+                  <JobOutcomeBadges job={job} />
+                </div>
+              ))}
+              {cancelledJobs.map((job) => (
+                <div key={job.id} className="border border-forensics-border-light bg-forensics-panel p-3 text-[11px] text-forensics-text-tertiary">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium">{job.name}</span>
+                    <span className="truncate">{job.detail}</span>
+                  </div>
+                  <div className="mt-1 truncate">{job.scope}</div>
                   <JobOutcomeBadges job={job} />
                 </div>
               ))}

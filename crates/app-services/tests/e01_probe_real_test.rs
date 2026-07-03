@@ -72,6 +72,9 @@ fn opens_detected_filesystem_from_real_e01() {
         ImageFilesystemKind::BitLocker => {
             panic!("expected first real sample candidate to be directly readable");
         }
+        ImageFilesystemKind::Ext4 | ImageFilesystemKind::Xfs | ImageFilesystemKind::Btrfs => {
+            panic!("expected first real sample candidate to be NTFS or FAT");
+        }
     }
 }
 
@@ -119,6 +122,7 @@ fn dumps_real_e01_partition_accessibility() {
                 );
             }
             ImageFilesystemKind::BitLocker => {}
+            ImageFilesystemKind::Ext4 | ImageFilesystemKind::Xfs | ImageFilesystemKind::Btrfs => {}
         }
     }
 }

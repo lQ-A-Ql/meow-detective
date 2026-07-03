@@ -74,6 +74,10 @@ fn extract_journal(candidate: &EvidenceCandidate, bytes: &[u8], outcome: &mut Ex
                     );
                 }
 
+                if let Some(ts) = entry.timestamp {
+                    attrs.insert("timestamp".to_string(), Value::String(ts.to_rfc3339()));
+                }
+
                 let title = entry
                     .message
                     .as_deref()
@@ -123,6 +127,12 @@ fn extract_wtmp(candidate: &EvidenceCandidate, bytes: &[u8], outcome: &mut Extra
                     "recordType".to_string(),
                     Value::Number(record.record_type.into()),
                 );
+                if let Some(ts) = record.login_time {
+                    attrs.insert("loginTime".to_string(), Value::String(ts.to_rfc3339()));
+                }
+                if let Some(ts) = record.logout_time {
+                    attrs.insert("logoutTime".to_string(), Value::String(ts.to_rfc3339()));
+                }
 
                 let (event_type, title) = wtmp_event_title(&record);
                 outcome.artifacts.push(make_artifact(
@@ -214,6 +224,9 @@ fn extract_bash_history(
                     "lineNumber".to_string(),
                     Value::Number(cmd.line_number.into()),
                 );
+                if let Some(ts) = cmd.timestamp {
+                    attrs.insert("timestamp".to_string(), Value::String(ts.to_rfc3339()));
+                }
 
                 outcome.artifacts.push(make_artifact(
                     "LinuxBashCommand",
@@ -286,6 +299,9 @@ fn push_apt_event(
     attrs.insert("action".to_string(), Value::String(event.action.clone()));
     attrs.insert("package".to_string(), Value::String(event.package.clone()));
     attrs.insert("version".to_string(), Value::String(event.version.clone()));
+    if let Some(ts) = event.timestamp {
+        attrs.insert("timestamp".to_string(), Value::String(ts.to_rfc3339()));
+    }
 
     outcome.artifacts.push(make_artifact(
         "LinuxAptEvent",
@@ -366,6 +382,9 @@ fn extract_sudo_log(candidate: &EvidenceCandidate, bytes: &[u8], outcome: &mut E
                 );
                 insert_opt(&mut attrs, "terminal", event.terminal.clone());
                 attrs.insert("success".to_string(), Value::Bool(event.success));
+                if let Some(ts) = event.timestamp {
+                    attrs.insert("timestamp".to_string(), Value::String(ts.to_rfc3339()));
+                }
 
                 outcome.artifacts.push(make_artifact(
                     "LinuxSudoEvent",

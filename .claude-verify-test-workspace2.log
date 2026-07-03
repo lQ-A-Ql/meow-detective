@@ -1,0 +1,2815 @@
+'vswhere.exe' 不是内部或外部命令，也不是可运行的程序
+或批处理文件。
+**********************************************************************
+** Visual Studio 2022 Developer Command Prompt v17.0
+** Copyright (c) 2025 Microsoft Corporation
+**********************************************************************
+[vcvarsall.bat] Environment initialized for: 'x64'
+   Compiling forensics-desktop v0.1.0 (D:\process\forensic\apps\desktop\src-tauri)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 16.91s
+     Running unittests src\lib.rs (target\debug\deps\app_services-1934cb0b0ba6057b.exe)
+
+running 434 tests
+test analysis_service::candidates::tests::email_kind_and_parser_splits_by_extension ... ok
+test analysis_service::tests::classification_uses_file_id_reader_and_limits_sample ... ok
+test analysis_service::extraction::email::tests::strips_emlx_size_prefix ... ok
+test analysis_service::extraction::email::tests::decodes_encoded_headers ... ok
+test analysis_service::extraction::email::tests::parses_thread_headers ... ok
+test analysis_service::extraction::email::tests::parses_simple_plain_email ... ok
+test analysis_service::extraction::email::tests::parses_multipart_attachment ... ok
+test analysis_service::extraction::registry::tests::system_shutdown_emits_timeline_event ... ok
+test analysis_service::extraction::registry::tests::ntuser_user_assist_derives_subject_username_and_emits_timeline ... ok
+test analysis_service::tests::classification_carries_read_error_provenance ... ok
+test analysis_service::extraction::registry::tests::sam_user_artifact_carries_subject_attribution ... ok
+test analysis_service::extraction::email::tests::parses_html_alternative ... ok
+test analysis_service::tests::exact_length_magic_signatures_are_detected ... ok
+test analysis_service::extraction::email::tests::public_small_email_fixtures_match_expected ... ok
+test analysis_service::extraction::email::tests::public_medium_email_fixtures_match_expected ... ok
+test artifact_service::tests::create_registry_returns_extractors ... ok
+test artifact_service::tests::get_artifact_families_from_db_returns_distinct ... ok
+test artifact_service::tests::get_artifact_family_counts_returns_counts ... ok
+test artifact_service::tests::get_artifact_rows_from_db_filter_by_family ... ok
+test artifact_service::tests::parallel_extraction_limit_applies_after_extractor_filter ... ok
+test artifact_service::tests::parallel_extraction_reader_error_counts_warning_and_skipped ... ok
+test artifact_service::tests::parallel_extraction_skips_non_matching_files_without_reader ... ok
+test artifact_service::tests::run_extractors_no_matching_extractor ... ok
+test artifact_service::tests::store_artifacts_and_retrieve ... ok
+test artifact_service::tests::store_artifacts_empty_is_noop ... ok
+test analysis_service::tests::summary_does_not_emit_fake_default_facts ... ok
+test analysis_service::tests::get_linux_artifact_summary_reports_not_found_without_artifacts ... ok
+test analysis_service::tests::system_info_is_not_fabricated_without_parsers ... ok
+test analysis_service::tests::malformed_evtx_source_is_not_parsed_and_generates_no_boot_records ... ok
+test batch_service::tests::create_plan_parses_phases ... ok
+test batch_service::tests::create_plan_rejects_unknown_phase ... ok
+test batch_service::tests::create_and_get_batch_status ... ok
+test batch_service::tests::get_batch_status_for_unknown_id_returns_error ... ok
+test analysis_service::tests::malformed_registry_hive_presence_keeps_system_fields_empty_with_provenance ... ok
+test analysis_service::tests::run_analysis_extraction_can_use_bounded_bytes_reader_without_full_open ... ok
+test analysis_service::tests::evidence_discovery_maps_registry_evtx_prefetch_lnk_paths_to_categories ... ok
+test analysis_service::tests::corrupted_registry_hive_records_warning_without_facts ... ok
+test correlation::tests::artifact_family_maps_all_registry_families_to_registry ... ok
+test batch_service::tests::list_batch_jobs_returns_for_case ... ok
+test analysis_service::tests::targeted_evidence_scan_can_use_bounded_bytes_reader_without_full_open ... ok
+test batch_service::tests::start_pause_resume_cancel_are_stubs ... ok
+test analysis_service::tests::evidence_summary_reports_candidate_found_without_parser_run ... ok
+test analysis_service::tests::registry_hive_fields_are_parsed_with_field_provenance ... ok
+test analysis_service::tests::evidence_summary_reports_parsed_when_artifacts_exist ... ok
+test analysis_service::tests::run_analysis_extraction_extracts_linux_artifacts_and_persists ... ok
+test artifact_service::tests::targeted_scan_deduplicates_existing_artifacts ... ok
+test analysis_service::tests::run_analysis_extraction_extracts_registry_browser_email_and_persists ... ok
+test artifact_service::tests::targeted_scan_skips_files_without_matching_extractor ... ok
+test artifact_service::tests::targeted_scan_records_warning_for_read_error ... ok
+test case_service::tests::no_running_jobs_drains_immediately ... ok
+test correlation::tests::cache_invalidates_on_new_import ... ok
+test case_service::tests::drain_completes_when_jobs_finish_quickly ... ok
+test case_service::tests::drain_timeout_marks_jobs_interrupted ... ok
+test datasource_service::tests::assign_indices_empty ... ok
+test datasource_service::tests::assign_indices_preserves_existing ... ok
+test datasource_service::tests::assign_indices_single_candidate ... ok
+test datasource_service::tests::assign_indices_sorts_by_offset ... ok
+test correlation::tests::correlation_groups_registry_sam_and_timeline_into_registry_family ... ok
+test correlation::tests::cached_snapshot_matches_recomputed ... ok
+test correlation::tests::correlation_snapshot_adds_proximity_timeline_signal_for_email_message ... ok
+test correlation::tests::correlation_snapshot_adds_proximity_timeline_signal_for_browser_download ... ok
+test correlation::tests::correlation_snapshot_adds_proximity_timeline_signal_for_browser_history ... ok
+test correlation::tests::correlation_snapshot_matches_jumplist_target_path_to_file ... ok
+test correlation::tests::correlation_snapshot_groups_artifact_and_timeline_by_source_object ... ok
+test correlation::tests::correlation_snapshot_matches_lnk_target_path_to_file ... ok
+test correlation::tests::correlation_snapshot_matches_prefetch_executable_name_to_file_name ... ok
+test entity_extraction::tests::hash_differs_for_different_inputs ... ok
+test entity_extraction::tests::hash_is_stable ... ok
+test correlation::tests::correlation_snapshot_matches_recycle_bin_original_path_to_deleted_file ... ok
+test correlation::tests::correlation_snapshot_matches_registry_value_path_to_file ... ok
+test correlation::tests::incremental_only_processes_new_artifacts ... ok
+test entity_extraction::tests::extract_falls_back_when_index_empty ... ok
+test correlation::tests::second_call_under_200ms ... ok
+test entity_extraction::tests::normalize_lowercase_and_trim ... ok
+test entity_extraction::tests::normalize_nfkd_decomposes ... ok
+test entity_extraction::tests::deduplicates_same_email_across_artifacts ... ok
+test entity_extraction::tests::extract_uses_index_when_available ... ok
+test entity_extraction::tests::empty_case_returns_zero ... ok
+test correlation::tests::correlation_snapshot_rule_group_uses_related_timeline_as_context ... ok
+test datasource_service::tests::attach_data_source_records_file_provenance ... ok
+test entity_extraction::tests::extracts_email_as_person_entity ... ok
+test entity_extraction::tests::extracts_hostname_as_device_entity ... ok
+test entity_resolution::merge::tests::canonicalize_empty_becomes_empty ... ok
+test entity_resolution::merge::tests::canonicalize_nfkd_normalizes_unicode ... ok
+test entity_resolution::merge::tests::canonicalize_strips_mailto_prefix ... ok
+test entity_resolution::merge::tests::canonicalize_strips_sid_prefix ... ok
+test datasource_service::tests::attach_data_source_records_directory_provenance_without_size ... ok
+test entity_resolution::merge::tests::canonicalize_trims_whitespace ... ok
+test entity_extraction::tests::extracts_sid_as_account_entity ... ok
+test analysis_service::tests::run_analysis_extraction_extracts_eventlogs_and_persists ... ok
+test entity_extraction::tests::index_and_lookup_entity ... ok
+test entity_extraction::tests::index_deduplicates_across_artifacts ... ok
+test entity_extraction::tests::index_preserves_existing_on_reindex ... ok
+test entity_resolution::merge::tests::test_canonicalize_normalizes_email ... ok
+test entity_extraction::tests::normalized_lookup_matches_regex_scan ... ok
+test entity_extraction::tests::lookup_under_10ms ... ok
+test entity_extraction::tests::no_matching_patterns_returns_zero ... ok
+test entity_resolution::merge::tests::deduplicate_empty_case ... ok
+test entity_resolution::merge::tests::deduplicate_merges_entity_nodes ... ok
+test entity_resolution::merge::tests::deduplicate_no_duplicates_merges_zero ... ok
+test entity_resolution::cross_case::tests::test_single_db_rejected ... ok
+test entity_resolution::merge::tests::merge_different_types_not_grouped ... ok
+test entity_resolution::merge::tests::merge_empty_case_returns_empty ... ok
+test entity_resolution::merge::tests::resolved_entity_id_is_deterministic ... ok
+test entity_resolution::merge::tests::test_different_entities_not_merged ... ok
+test error_ext::tests::test_context_error ... ok
+test error_ext::tests::test_context_ok ... ok
+test error_ext::tests::test_to_string_err_error ... ok
+test error_ext::tests::test_to_string_err_ok ... ok
+test error_ext::tests::test_to_string_err_with_io_error ... ok
+test file_carving::tests::carve_jpeg_multiple_in_stream ... ok
+test file_carving::tests::carve_jpeg_with_header_and_footer ... ok
+test file_carving::tests::carve_jpeg_without_footer_truncates ... ok
+test file_carving::tests::carve_multiple_formats_in_one_stream ... ok
+test file_carving::tests::carve_pdf_pdf_eof_only_header_truncates ... ok
+test file_carving::tests::carve_pdf_with_eof ... ok
+test file_carving::tests::carve_zip_with_eocd ... ok
+test file_carving::tests::carve_zip_without_eocd_limited_confidence ... ok
+test file_carving::tests::empty_stream_returns_empty ... ok
+test file_carving::tests::find_magic_at_middle ... ok
+test file_carving::tests::find_magic_at_start ... ok
+test file_carving::tests::find_magic_empty_needle ... ok
+test entity_resolution::merge::tests::test_merge_confidence_increases_with_source_count ... ok
+test file_carving::tests::find_magic_needle_longer_than_haystack ... ok
+test file_carving::tests::find_magic_not_found ... ok
+test file_carving::tests::pdf_specific_version_detected ... ok
+test file_carving::tests::stream_with_no_known_headers_returns_empty ... ok
+test entity_resolution::merge::tests::test_merge_same_email_across_artifacts ... ok
+test entity_resolution::relationships::tests::test_confidence_increases_with_multiple_edges ... ok
+test file_service::tests::enumerate_filesystem_cancel_rolls_back_transaction ... ok
+test entity_resolution::relationships::tests::test_infer_communicates_with_from_email ... ok
+test file_service::tests::mft_deleted_orphan_path_uses_deleted_orphans_prefix ... ok
+test file_service::tests::mft_entry_partition_index_parsing ... ok
+test file_service::tests::mft_orphan_records_are_anchored_to_root ... ok
+test file_service::tests::mft_partition_prefixed_id_exposes_partition_index ... ok
+test file_service::tests::mft_root_record_becomes_tree_root ... ok
+test file_service::tests::natural_sort_orders_numeric_suffixes_like_explorer ... ok
+test entity_resolution::relationships::tests::test_empty_case_returns_empty ... ok
+test file_service::tests::parse_ntfs_data_runs_decodes_fragmented_runs ... ok
+test file_service::tests::raw_fs_root_name_detection ... ok
+test file_service::tests::read_ntfs_mft_stream_rejects_negative_lcn ... ok
+test file_service::tests::read_ntfs_mft_stream_stitches_fragmented_runs ... ok
+test file_service::tests::read_ntfs_mft_stream_stitches_read_crossing_run_boundary ... ok
+test file_service::tests::safe_path_accepts_valid_paths ... ok
+test file_service::tests::safe_path_allows_normal_names ... ok
+test file_service::tests::safe_path_rejects_absolute_path ... ok
+test file_service::tests::safe_path_rejects_dot_dot_traversal ... ok
+test file_service::tests::safe_path_rejects_empty_path ... ok
+test file_service::tests::safe_path_rejects_null_byte ... ok
+test file_service::tests::safe_path_rejects_url_encoded_traversal ... ok
+test file_service::tests::safe_path_rejects_windows_reserved_names ... ok
+test file_service::tests::sort_by_size_descending_within_files ... ok
+test file_service::tests::sort_keeps_directories_before_files_even_when_descending ... ok
+test file_service::tests::sort_sinks_hidden_system_deleted_after_normal ... ok
+test file_service::tests::sort_status_buckets_are_fixed_under_descending_name ... ok
+test file_service::tests::sort_uses_natural_name_order_for_files ... ok
+test entity_resolution::relationships::tests::test_infer_executed_from_prefetch ... ok
+test file_service::viewer::tests::cache_clear_on_poison ... ok
+test file_service::viewer::tests::e01_reader_cache_is_bucketed_by_case ... ok
+test file_service::viewer::tests::fresh_e01_reader_opens_successfully ... ok
+test file_service::viewer::tests::fresh_e01_readers_have_independent_positions ... ok
+test entity_resolution::relationships::tests::test_infer_logged_into_from_wtmp ... ok
+test entity_resolution::relationships::tests::test_infer_ownership_from_registry ... ok
+test entity_resolution::cross_case::tests::test_empty_cases ... ok
+test file_service::viewer::tests::mft_partition_index_from_entry_id_parses_partition_record_format ... ok
+test file_service::viewer::tests::mft_partition_index_from_entry_id_returns_none_for_legacy_format ... ok
+test file_service::viewer::tests::multi_partition_resolves_partition_index_correctly ... ok
+test entity_resolution::relationships::tests::test_no_relationship_when_no_edges ... ok
+test entity_resolution::cross_case::tests::test_fuzzy_match_across_cases ... ok
+test file_service::viewer::tests::lru_evicts_oldest_when_full ... ok
+test file_service::viewer::tests::raw_fat_mid_file_range_uses_fat_range_reader_without_materialize ... ok
+test file_service::viewer::tests::raw_ntfs_mid_file_range_uses_ntfs_range_reader_without_materialize ... ok
+test entity_resolution::relationships::tests::test_persist_and_reload ... ok
+test file_service::viewer::tests::truncated_e01_segment_no_panic ... ok
+test file_service::viewer::tests::truncated_e01_chunk_read_no_panic ... ok
+test entity_resolution::cross_case::tests::test_match_same_email_across_two_cases ... ok
+test entity_resolution::cross_case::tests::test_no_match_different_entities ... ok
+test file_service::tests::bare_root_renamed_via_mft_partition_index ... ok
+test file_service::tests::bare_root_renamed_via_sole_partition_when_no_mft_index ... ok
+test file_service::tests::tree_builder_normalizes_residual_bare_root ... ok
+test file_service::tests::bare_root_unknown_when_unattributable ... ok
+test hash_service::tests::sha256_bytes_hello_world ... ok
+test hash_service::tests::sha256_file_nonexistent ... ok
+test hash_service::tests::sha256_reader_basic ... ok
+test hash_service::tests::verify_sha256_correct ... ok
+test hash_service::tests::verify_sha256_incorrect ... ok
+test import_analysis::priority_queue::tests::default_queue_is_empty ... ok
+test import_analysis::priority_queue::tests::empty_queue_returns_none ... ok
+test import_analysis::priority_queue::tests::high_priority_popped_before_normal ... ok
+test import_analysis::priority_queue::tests::len_and_is_empty_track_correctly ... ok
+test import_analysis::priority_queue::tests::normal_popped_before_low ... ok
+test import_analysis::priority_queue::tests::priority_order_preserved_under_concurrent_push ... ok
+test file_service::tests::placeholder_path_encodes_partition_index ... ok
+test import_analysis::tests::analysis_artifact_extraction_skips_large_candidates ... ok
+test import_analysis::tests::analysis_indexing_skips_large_or_unknown_extension_files ... ok
+test file_service::tests::get_file_rows_sorts_full_set_then_paginates ... ok
+test file_service::viewer::tests::logical_directory_mid_file_range_uses_seek_not_linear_skip ... ok
+test file_service::viewer::tests::logical_directory_repeated_range_uses_preview_descriptor_cache ... ok
+test graph_service::tests::node_neighborhood_returns_connected_subgraph ... ok
+test governance::tests::governance_snapshot_aggregates_runtime_signals ... FAILED
+test graph_service::tests::provenance_chain_with_correlation_provenance ... ok
+test graph_service::tests::provenance_chain_without_provenance_metadata ... ok
+test file_service::viewer::tests::raw_exfat_mid_file_range_uses_exfat_range_reader_without_materialize ... ok
+test import_analysis::tests::content_budget_blocks_large_file_and_disabled_mode ... ok
+test graph_service::tests::query_graph_respects_confidence_floor ... ok
+test import_analysis::tests::analysis_worker_staging_open_creates_expected_tables ... ok
+test graph_service::tests::query_graph_traversal ... ok
+test file_service::viewer::tests::raw_exfat_text_header_reads_via_bytes_only_fast_path ... ok
+test import_analysis::tests::post_import_skip_uses_progress_sink_without_running_workers ... ok
+test graph_service::tests::snapshot_empty_graph ... ok
+test import_analysis::tests::producer_never_buffers_more_than_queue_bound ... ok
+test graph_service::tests::snapshot_with_nodes_and_edges ... ok
+test import_analysis::tier::tests::all_tiers_complete ... ok
+test import_analysis::tier::tests::partial_results_accessible_at_catalog_tier ... ok
+test import_analysis::tier::tests::tier_advances_catalog_to_extract ... ok
+test import_pipeline::tests::analysis_progress_exposes_partial_search_index_result ... ok
+test import_pipeline::tests::cache_status_profiles_expose_warming_ready_deferred_reused_stale_and_invalidated_states ... ok
+test entity_resolution::cross_case::tests::test_multiple_case_match ... ok
+test import_pipeline::tests::e01_full_import ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test import_pipeline::tests::enum_merge_progress_exposes_ready_file_results ... ok
+test import_analysis::tests::analysis_memory_guard_cancels_over_limit ... ok
+test import_pipeline::tests::import_profile_progress_maps_analysis_and_cancel_state ... ok
+test import_pipeline::tests::import_profile_progress_maps_enumeration_metrics_to_typed_dto ... ok
+test import_pipeline::tests::import_profile_progress_serializes_as_phase_progress_payload ... ok
+test import_pipeline::tests::job_cancellation_dto_maps_requested_and_draining_states ... ok
+test import_analysis::tests::analysis_artifact_extraction_raw_exfat_uses_bytes_only_reader ... ok
+test import_pipeline::tests::partition_root_names_preserve_meaningful_names ... ok
+test import_pipeline::tests::partition_root_names_reject_misleading_filesystem_names ... ok
+test import_pipeline::tests::post_import_profiles_expose_deferred_ready_stale_and_invalidated_results ... ok
+test import_pipeline::tests::scheduling_profiles_expose_throttled_and_draining_states ... ok
+test import_pipeline::tests::scheduling_profiles_expose_worker_budget_and_deferred_states ... ok
+test import_precheck::tests::import_source_config_classifies_e01_by_magic ... ok
+test import_precheck::tests::import_source_config_classifies_e01_by_name ... ok
+test import_precheck::tests::import_source_config_classifies_logical_directory ... ok
+test import_precheck::tests::import_source_config_classifies_raw_file ... ok
+test import_precheck::tests::import_source_config_preserves_request_validation_semantics ... ok
+test import_precheck::tests::import_source_config_rejects_missing_source ... ok
+test import_precheck::tests::test_estimate_files ... ok
+test import_precheck::tests::test_import_plan_memory_estimate ... ok
+test import_precheck::tests::test_import_plan_time_estimate ... ok
+test import_precheck::tests::test_pre_check_nonexistent ... ok
+test import_precheck::tests::test_select_strategy_large_file ... ok
+test import_precheck::tests::test_select_strategy_medium ... ok
+test import_precheck::tests::test_select_strategy_small ... ok
+test import_report::tests::test_performance_calculation ... ok
+test import_report::tests::test_report_add_error ... ok
+test import_report::tests::test_report_add_event ... ok
+test import_report::tests::test_report_add_warning ... ok
+test import_report::tests::test_report_creation ... ok
+test import_report::tests::test_report_markdown ... ok
+test import_report::tests::test_report_summary ... ok
+test import_state::tests::test_import_plan_parallel ... ok
+test import_state::tests::test_import_plan_sequential ... ok
+test import_state::tests::test_import_plan_streaming ... ok
+test import_state::tests::test_import_state_can_resume ... ok
+test import_state::tests::test_import_state_errors ... ok
+test import_state::tests::test_import_state_new ... ok
+test import_state::tests::test_import_state_progress ... ok
+test import_state::tests::test_import_state_progress_zero ... ok
+test import_state::tests::test_import_state_serialization ... ok
+test job_service::tests::cancel_job_sets_status_to_cancelled ... ok
+test job_service::tests::derives_partial_when_counts_are_non_zero ... ok
+test import_pipeline::tests::cancellation_after_attach_marks_job_cancelling_without_failure ... ok
+test import_pipeline::tests::image_backed_metadata_only_post_import_defers_timeline_until_query ... ok
+test import_analysis::tests::done_merged_analysis_worker_dbs_are_left_untouched ... ok
+test import_analysis::tests::done_unmerged_matching_layout_resumes_with_merge_only ... ok
+test job_service::tests::parses_partition_progress_payload ... ok
+test import_analysis::tests::post_import_cancel_failure_preserves_partial_counts ... ok
+test job_service::tests::get_trace_items_from_db_reports_one_entry_per_recent_job ... ok
+test job_service::tests::get_warnings_from_db_surfaces_failed_jobs_even_without_outcome_counts ... ok
+test import_analysis::tests::analysis_warning_partial_semantics_are_preserved_after_startup_guard ... ok
+test import_analysis::tests::cancelled_analysis_keeps_cancel_error_and_unmerged_worker_status ... ok
+test import_analysis::tests::stale_unmerged_worker_layout_is_reinitialized_when_worker_count_changes ... ok
+test job_service::tests::get_warnings_from_db_surfaces_jobs_with_nonzero_outcome_counts ... ok
+test import_analysis::tests::disabled_import_content_reads_keep_analysis_bounded ... ok
+test job_service::tests::maps_job_partial_counts_from_repository ... ok
+test parallel_enum::tests::mft_large_record_count_uses_sqlite_resolver ... ok
+test parallel_enum::tests::ntfs_directory_index_backfill_traverses_newly_discovered_directories ... ok
+test import_analysis::tests::analysis_tasks_include_title_case_file_entry_type ... ok
+test parallel_enum::tests::ntfs_directory_index_parentage_corrects_existing_misparented_rows ... ok
+test parallel_enum::tests::ntfs_mft_deleted_orphan_uses_deleted_orphans_path ... ok
+test parallel_enum::tests::ntfs_mft_fast_path_writes_partition_prefixed_ids ... ok
+test import_analysis::tests::post_import_worker_staging_success_preserves_summary_and_counts ... ok
+test parallel_enum::tests::ntfs_mft_stream_reads_split_runs ... ok
+test parallel_enum::tests::ntfs_mft_flat_windows_shape_is_rejected ... ok
+test parallel_enum::tests::ntfs_mft_update_uses_record_key_without_numeric_fallback ... ok
+test parallel_enum::tests::ntfs_mft_updates_paths_and_parent_ids ... ok
+test import_analysis::tests::analysis_pool_respects_worker_limit_and_writes_temp_db ... ok
+test job_service::tests::recover_interrupted_jobs_marks_running_and_cancelling_as_failed ... ok
+test parallel_enum::tests::real_e01_mft_parser_keeps_windows_parent_chain ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test parallel_enum::tests::real_e01_ntfs_mft_parameters_include_data_runs ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test notebook_service::tests::create_and_retrieve_entry ... ok
+test notebook_service::tests::add_citation_and_retrieve ... ok
+test parallel_enum::tests::test_default_worker_count ... ok
+test parallel_enum::tests::test_resolve_worker_count ... ok
+test parallel_enum::tests::test_resolve_worker_count_one ... ok
+test parallel_enum::tests::test_staging_db_insert_and_count ... ok
+test parallel_enum::tests::test_staging_db_preserves_data ... ok
+test performance::tests::elapsed_ms_saturates_to_u64 ... ok
+test performance::tests::measure_rows_records_result_and_non_negative_elapsed ... ok
+test performance::tests::report_uses_stable_metric_shape ... ok
+test performance::tests::rows_per_sec_is_stable_for_fixed_inputs ... ok
+test report::tests::analysis_rows_include_field_and_boot_provenance ... ok
+test notebook_service::tests::create_entry_with_parent ... ok
+test notebook_service::tests::list_entries_with_filters ... ok
+test notebook_service::tests::record_and_list_steps ... ok
+test notebook_service::tests::get_thread_returns_full_parent_chain_and_replies ... ok
+test parallel_enum::tests::parallel_enum_uses_external_cancel_token ... ok
+test parallel_enum::tests::ntfs_mft_fast_path_fallback_records_warning ... ok
+test parallel_enum::tests::recursive_enum_cancel_rolls_back_current_staging_transaction ... ok
+test notebook_service::tests::update_entry_fields ... ok
+test notebook_service::tests::update_entry_partial ... ok
+test import_analysis::tests::analysis_worker_writes_only_own_temp_db ... ok
+test parallel_enum::tests::single_partition_emits_entry_progress ... ok
+test parallel_enum::tests::progress_backpressure_does_not_block_worker ... ok
+test parallel_enum::tests::parallel_enum_respects_max_workers ... ok
+test report::tests::csv_correlation_export_includes_all_columns ... ok
+test import_analysis::tests::analysis_text_indexing_raw_exfat_uses_bytes_only_reader ... ok
+test report::tests::report_scope_warning_reports_empty_raw_export_bundle ... ok
+test report::tests::csv_correlation_export_persists_history ... ok
+test report::tests::csv_correlation_export_scope_gates_empty_when_no_scope ... ok
+test import_pipeline::tests::logical_import_post_pipeline_indexes_marker_and_extracts_artifact ... ok
+test report::tests::html_report_escapes_analysis_provenance ... ok
+test report::tests::json_export_scope_can_hide_file_classifications ... ok
+test report::tests::csv_report_keeps_formula_sanitization_for_analysis_rows ... ok
+test report::tests::json_export_includes_analysis_provenance_without_fake_facts ... ok
+test rule_pack::parser::tests::parse_all_edge_types ... ok
+test rule_pack::parser::tests::parse_all_operators ... ok
+test rule_pack::parser::tests::parse_empty_rules_is_valid ... ok
+test rule_pack::parser::tests::parse_match_signals_without_caveats ... ok
+test rule_pack::parser::tests::parse_minimal_valid_pack ... ok
+test rule_pack::parser::tests::reject_invalid_toml_syntax ... ok
+test rule_pack::parser::tests::reject_missing_required_manifest_fields ... ok
+test rule_pack::validator::tests::rejects_duplicate_rule_ids ... ok
+test rule_pack::validator::tests::rejects_empty_manifest_name ... ok
+test rule_pack::validator::tests::rejects_empty_manifest_scope ... ok
+test rule_pack::parser::tests::parse_valid_v2_standard_pack ... ok
+test rule_pack::validator::tests::rejects_unknown_confidence_level ... ok
+test rule_pack::validator::tests::rejects_empty_rule_id ... ok
+test rule_pack::validator::tests::rejects_unknown_source_family ... ok
+test rule_pack::validator::tests::valid_pack_passes_validation ... ok
+test rule_pack::validator::tests::warns_on_temporal_proximity_without_timeline_types ... ok
+test report::tests::report_export_returns_error_when_history_insert_fails ... ok
+test report::tests::json_export_warns_when_evidence_hash_is_pending_or_unavailable ... ok
+test report::tests::json_export_scope_gates_registry_timeline_and_exports_raw_bundle ... ok
+test report::tests::report_exports_include_artifact_provenance ... ok
+test staging::tests::analysis_merge_skips_already_merged_worker_db ... ok
+test staging::tests::analysis_staging_open_creates_expected_tables ... ok
+test report::tests::report_exports_include_timeline_provenance ... ok
+test rule_pack::engine::tests::execute_incremental_skips_executed_rules ... ok
+test report::tests::report_exports_include_correlation_section ... ok
+test staging::tests::manifest_all_partitions_done_false_when_empty ... ok
+test rule_pack::engine::tests::execute_lnk_path_match_rule ... ok
+test staging::tests::manifest_all_partitions_done_false_when_one_pending ... ok
+test staging::tests::manifest_all_partitions_done_true_when_all_done ... ok
+test staging::tests::manifest_create_and_serialize ... ok
+test staging::tests::manifest_pending_partitions ... ok
+test rule_pack::engine::tests::execute_pack_with_no_matching_artifacts ... ok
+test rule_pack::engine::tests::execute_prefetch_name_match_rule ... ok
+test rule_pack::engine::tests::execute_rule_pack_returns_zero_for_unknown_source_types ... ok
+test rule_pack::engine::tests::execute_v2_standard_pack ... ok
+test staging::tests::manifest_save_and_load_roundtrip ... ok
+test staging::tests::cleanup_staging_removes_directory ... ok
+test staging::tests::enum_staging_bulk_schema_has_no_secondary_indexes_during_insert ... ok
+test report::tests::report_exports_persist_history_for_active_case_only ... ok
+test staging::tests::enum_and_analysis_staging_use_aggressive_temp_pragmas ... ok
+test search_service::tests::search_query_instrumentation_reports_query_metrics ... ok
+test report::tests::report_exports_tolerate_legacy_missing_provenance ... ok
+test staging::tests::analysis_staging_open_upgrades_legacy_provenance_columns ... ok
+test staging::tests::merge_failure_rolls_back_and_detaches_staging ... ok
+test staging::tests::placeholder_index_lookup_does_not_collide_on_digit_prefix ... ok
+test search_service::tests::search_index_instrumentation_reports_bounded_metrics ... ok
+test staging::tests::merge_all_staging_empty_db ... ok
+test staging::tests::merge_all_staging_progress_callback_invoked ... ok
+test staging::tests::merge_folds_self_referential_root ... ok
+test staging::tests::merge_keeps_fat_top_level_entries_under_partition_root ... ok
+test staging::tests::merge_folds_null_parent_synthetic_root_and_reparents_children ... ok
+test staging::tests::merge_skips_partition_already_marked_merged ... ok
+test staging::tests::merge_folds_slash_named_root ... ok
+test staging::tests::staging_db_create_and_insert ... ok
+test staging::tests::set_and_get_staging_meta_roundtrip ... ok
+test staging::tests::staging_db_row_count_empty_returns_zero ... ok
+test streaming::tests::test_process_file_streaming ... ok
+test streaming::tests::test_streaming_hasher ... ok
+test streaming::tests::test_streaming_reader ... ok
+test text_service::tests::decode_text_utf8 ... ok
+test text_service::tests::detect_gbk ... ok
+test text_service::tests::detect_utf16_be ... ok
+test text_service::tests::detect_utf16_le ... ok
+test text_service::tests::detect_utf8 ... ok
+test text_service::tests::detect_utf8_bom ... ok
+test text_service::tests::extract_text_preview_binary ... ok
+test text_service::tests::extract_text_preview_empty ... ok
+test text_service::tests::extract_text_preview_truncated ... ok
+test staging::tests::merge_staging_to_main ... ok
+test text_service::tests::extract_text_preview_utf8 ... ok
+test text_service::tests::get_language_all_supported ... ok
+test text_service::tests::get_language_from_extension_js ... ok
+test text_service::tests::get_language_from_extension_unknown ... ok
+test text_service::tests::is_likely_text_empty ... ok
+test text_service::tests::is_likely_text_false ... ok
+test text_service::tests::is_likely_text_true ... ok
+test staging::tests::merge_synthesizes_root_when_placeholder_missing ... ok
+test staging::tests::merge_reports_conflicting_staging_rows_as_errors ... ok
+test timeline_service::tests::aggregate_groups_by_event_type ... ok
+test timeline_service::tests::cluster_contains_correct_count_and_range ... ok
+test staging::tests::merge_marks_staging_merged_and_repeat_is_idempotent ... ok
+test staging::tests::merge_all_staging_two_partitions ... ok
+test timeline_service::tests::project_and_store_macb_empty_files ... ok
+test timeline_service::tests::ensure_macb_timeline_projected_is_lazy_and_idempotent ... ok
+test timeline_service::tests::query_timeline_filtered_instrumented_reports_filtered_rows ... ok
+test timeline_service::tests::query_timeline_instrumented_reports_bounded_metrics ... ok
+test timeline_service::tests::project_and_store_macb_inserts_events ... ok
+test v3_governance_service::tests::get_platform_maps_known_families ... ok
+test v3_governance_service::tests::get_platform_defaults_to_windows_for_unknown ... ok
+test v3_governance_service::tests::build_rule_pack_status_parses_builtin_pack ... ok
+test timeline_service::tests::query_timeline_returns_inserted_events ... ok
+test step_recorder::tests::case_state_hash_changes_when_counts_change ... ok
+test step_recorder::tests::case_state_hash_is_deterministic ... ok
+test staging::tests::index_merge_uses_pages_not_full_vec ... ok
+test step_recorder::tests::record_step_failure_captures_error_code ... ok
+test timeline_service::tests::large_timeline_aggregation_is_fast ... ok
+test step_recorder::tests::recorded_steps_are_persisted_and_listable ... ok
+test step_replay::tests::invalid_range_returns_caveat ... ok
+test step_recorder::tests::record_step_returns_dto_with_hash ... ok
+test step_replay::tests::non_search_steps_are_not_yet_replayable ... ok
+test v3_governance_service::tests::v3_snapshot_includes_graph_statistics ... ok
+test v3_governance_service::tests::v3_snapshot_includes_batch_status ... ok
+test v3_governance_service::tests::v3_snapshot_includes_notebook_stats ... ok
+test v3_governance_service::tests::v3_snapshot_includes_all_v2_fields ... ok
+test v3_governance_service::tests::v3_snapshot_includes_platform_coverage ... ok
+test v3_governance_service::tests::v3_snapshot_includes_rule_pack_status ... ok
+test step_replay::tests::replay_search_step_parses_query_and_replays ... ok
+test staging::tests::analysis_merge_rolls_back_and_detaches_on_failure ... ok
+
+failures:
+
+---- governance::tests::governance_snapshot_aggregates_runtime_signals stdout ----
+
+thread 'governance::tests::governance_snapshot_aggregates_runtime_signals' (27344) panicked at crates\app-services\src\governance\tests.rs:167:5:
+assertion `left == right` failed
+  left: 38
+ right: 36
+
+
+failures:
+    governance::tests::governance_snapshot_aggregates_runtime_signals
+
+test result: FAILED. 430 passed; 1 failed; 3 ignored; 0 measured; 0 filtered out; finished in 11.78s
+
+error: test failed, to rerun pass `-p app-services --lib`
+     Running tests\case_service_test.rs (target\debug\deps\case_service_test-206d70085454c91a.exe)
+
+running 11 tests
+test open_case_without_json_fails ... ok
+test open_nonexistent_case_fails ... ok
+test create_case_creates_directory_structure ... ok
+test delete_data_source_cascades_rows_and_writes_audit_log ... ok
+test active_case_connection_works ... ok
+test create_duplicate_name_fails ... ok
+test create_case_initializes_db ... ok
+test open_case_reads_metadata ... ok
+test reopen_case_shares_no_state ... ok
+test delete_case_removes_valid_case_directory_outside_default_root ... ok
+test delete_case_rejects_non_case_directory_without_removing_it ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+     Running tests\e01_full_pipeline_test.rs (target\debug\deps\e01_full_pipeline_test-b6348e4d1ba4e67d.exe)
+
+running 7 tests
+test e01_fat_root_listing ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test e01_job_tracking ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test e01_ntfs_mft_enumeration_builds_navigable_tree ... ignored, requires local multi-GB E01 sample and is excluded from default gate
+test e01_ntfs_root_listing ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test e01_ntfs_windows_config_listing_and_hive_headers ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test e01_probe_and_partition_detection ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test e01_timeline_projection ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+
+test result: ok. 0 passed; 0 failed; 7 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\e01_liuyang_regression_test.rs (target\debug\deps\e01_liuyang_regression_test-c2bcb7e566ff7850.exe)
+
+running 12 tests
+test liuyang_e01_artifact_extraction_and_correlation_rules ... ignored, requires FORENSICS_LIUYANG_E01_FIXTURE real sample
+test liuyang_e01_browser_history_extraction ... ignored, requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample
+test liuyang_e01_correlation_snapshot_and_governance ... ignored, requires FORENSICS_LIUYANG_E01_FIXTURE real sample
+test liuyang_e01_email_extraction_regression ... ignored, requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample
+test liuyang_e01_lnk_extraction_and_correlation ... ignored, requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample
+test liuyang_e01_mft_enumeration_surfaces_expected_path ... ignored, requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample
+test liuyang_e01_parallel_mft_backfill_surfaces_system_volume_information_children ... ignored, requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample
+test liuyang_e01_parallel_mft_backfill_surfaces_users_tree ... ignored, requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample
+test liuyang_e01_prefetch_extraction ... ignored, requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample
+test liuyang_e01_prints_parsed_system_info_and_evidence_summary ... ignored, requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample
+test liuyang_e01_recycle_bin_extraction ... ignored, requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample
+test liuyang_e01_visibility_filters_surface_hidden_system_entries_only_when_requested ... ignored, requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample
+
+test result: ok. 0 passed; 0 failed; 12 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\e01_mft_scan_test.rs (target\debug\deps\e01_mft_scan_test-ba939f80771cb4fc.exe)
+
+running 2 tests
+test mft_full_enumeration_via_multithread ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test mft_scanner_reads_real_e01_records ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+
+test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\e01_preview_debug_test.rs (target\debug\deps\e01_preview_debug_test-b2cfa763e12071fc.exe)
+
+running 12 tests
+test jc2_list_root_and_read_any_text_file ... ignored, requires FORENSICS_JC2_E01
+test jc2_preview_boot_sector ... ignored, requires FORENSICS_JC2_E01
+test jc2_preview_png_magic ... ignored, requires FORENSICS_JC2_E01
+test liuyang_direct_ntfs_read_screenshots_png ... ignored, requires FORENSICS_LIUYANG_E01
+test liuyang_full_scan_read_first_8_bytes ... ignored, requires FORENSICS_LIUYANG_E01
+test liuyang_preview_exe_magic ... ignored, requires FORENSICS_LIUYANG_E01
+test liuyang_preview_jpeg_magic ... ignored, requires FORENSICS_LIUYANG_E01
+test liuyang_preview_jpg_magic ... ignored, requires FORENSICS_LIUYANG_E01
+test liuyang_preview_pdf_magic ... ignored, requires FORENSICS_LIUYANG_E01
+test liuyang_preview_png_magic ... ignored, requires FORENSICS_LIUYANG_E01
+test liuyang_preview_zip_magic ... ignored, requires FORENSICS_LIUYANG_E01
+test liuyang_walk_to_screenshots_via_resolve_path ... ignored, requires FORENSICS_LIUYANG_E01
+
+test result: ok. 0 passed; 0 failed; 12 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\e01_preview_regression_test.rs (target\debug\deps\e01_preview_regression_test-f8623bd9c2b7e97a.exe)
+
+running 7 tests
+test jc2_preview_returns_file_content ... ignored, requires FORENSICS_JC2_E01
+test liuyang_attribute_list_7z_inode_128026_reads_head_and_middle ... ignored, requires FORENSICS_LIUYANG_E01
+test liuyang_direct_ntfs_inode_128026_reads_head_and_middle ... ignored, requires FORENSICS_LIUYANG_E01
+test liuyang_large_7z_hex_head_range_is_bounded_and_bytes_only ... ignored, requires FORENSICS_LIUYANG_E01
+test liuyang_preview_chinese_path ... ignored, requires FORENSICS_LIUYANG_E01
+test liuyang_preview_returns_file_content ... ignored, requires FORENSICS_LIUYANG_E01
+test liuyang_seeded_app_services_inode_128026_reads_open_and_ranges ... ignored, requires FORENSICS_LIUYANG_E01
+
+test result: ok. 0 passed; 0 failed; 7 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\e01_probe_real_test.rs (target\debug\deps\e01_probe_real_test-eb35ba059eabf695.exe)
+
+running 5 tests
+test detects_supported_filesystem_in_real_e01 ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test dump_probe_context_for_real_e01 ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test dump_real_e01_ntfs_root_record_details ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test dumps_real_e01_partition_accessibility ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test opens_detected_filesystem_from_real_e01 ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+
+test result: ok. 0 passed; 0 failed; 5 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\e01_registry_structured_summary_test.rs (target\debug\deps\e01_registry_structured_summary_test-c933fbbdf993b05b.exe)
+
+running 2 tests
+test e01_registry_network_adapters_and_default_browser ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test e01_registry_sam_users_and_installed_software ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+
+test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\evtx_e01_regression_test.rs (target\debug\deps\evtx_e01_regression_test-7574daccfedc55eb.exe)
+
+running 2 tests
+test jc2_evtx_extraction_surfaces_boot_and_security_events ... ignored, requires FORENSICS_JC2_E01_FIXTURE real E01 sample
+test liuyang_evtx_extraction_surfaces_boot_and_security_events ... ignored, requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample
+
+test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\extractor_source_object_id_enforcement.rs (target\debug\deps\extractor_source_object_id_enforcement-28d8e34a903c299f.exe)
+
+running 5 tests
+test prefetch_extractor_sets_source_object_id ... ok
+test lnk_extractor_sets_source_object_id ... ok
+test registry_extractor_sets_source_object_id ... ok
+test recycle_bin_extractor_sets_source_object_id ... ok
+test canonical_registry_extraction_sets_source_object_id ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\fat_exfat_probe_test.rs (target\debug\deps\fat_exfat_probe_test-72378962e43e59f5.exe)
+
+running 2 tests
+test fat_exfat_candidates_are_probed_and_openable ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test fat_exfat_probe_metadata_is_consistent ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+
+test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\file_service_real_test.rs (target\debug\deps\file_service_real_test-812a5f14876cab08.exe)
+
+running 9 tests
+test file_tree_real_contains_nested_directories_for_navigation ... ok
+test directory_tree_and_children_return_only_directories ... ok
+test file_browser_visibility_respects_show_hidden_for_rows_and_tree ... ok
+test file_rows_and_children_are_limited_for_lazy_loading ... ok
+test deterministic_handle_reads_real_logical_file_bytes_as_hex ... ok
+test read_file_range_rejects_invalid_handles_instead_of_faking_bytes ... ok
+test file_rows_request_returns_direct_children_for_parent ... ok
+test open_file_content_by_id_reads_uuid_backed_logical_file ... ok
+test open_file_content_rejects_traversal_paths_from_database ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+     Running tests\fixture_builder.rs (target\debug\deps\fixture_builder-7a09c4972806e407.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\gpt_test.rs (target\debug\deps\gpt_test-4c05d5e2148c4a79.exe)
+
+running 7 tests
+test classify_known_partition_types ... ok
+test parse_header_valid ... ok
+test parse_entries_finds_partition ... ok
+test partition_display_name_preserves_meaningful_gpt_name ... ok
+test detect_image_filesystem_returns_multiple_gpt_candidates ... ok
+test detect_image_filesystem_marks_bitlocker_partition ... ok
+test partition_display_name_rejects_root_and_first_child_like_names ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\integration_test.rs (target\debug\deps\integration_test-df7b0f6df2fec80f.exe)
+
+running 1 test
+test full_case_lifecycle ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+     Running tests\jc2_pipeline.rs (target\debug\deps\jc2_pipeline-eeb77b1457a16996.exe)
+
+running 3 tests
+test jc2_artifact_extraction has been running for over 60 seconds
+test jc2_full_pipeline has been running for over 60 seconds
+test jc2_visibility_and_partitions has been running for over 60 seconds
+test jc2_visibility_and_partitions ... ok
+test jc2_full_pipeline ... ok
+test jc2_artifact_extraction ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 139.80s
+
+     Running tests\linux_e01_integration.rs (target\debug\deps\linux_e01_integration-88b3e2c9e33c6c1f.exe)
+
+running 6 tests
+test linux_e01_analysis_extraction_produces_linux_artifacts ... ignored, requires FORENSICS_LINUX_E01_FIXTURE real Linux E01 sample
+test linux_e01_detects_ext_filesystem ... ignored, requires FORENSICS_LINUX_E01_FIXTURE real Linux E01 sample
+test linux_e01_enumerates_file_tree_and_reconstructs_paths ... ignored, requires FORENSICS_LINUX_E01_FIXTURE real Linux E01 sample
+test linux_e01_probe_locate_inode_diagnostics ... ignored, requires FORENSICS_LINUX_E01_FIXTURE real Linux E01 sample
+test linux_e01_probe_xfs_root_inode_format ... ignored, requires FORENSICS_LINUX_E01_FIXTURE real Linux E01 sample
+test linux_e01_probe_xfs_superblock_features ... ignored, requires FORENSICS_LINUX_E01_FIXTURE real Linux E01 sample
+
+test result: ok. 0 passed; 0 failed; 6 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\linux_macos_artifact_extraction.rs (target\debug\deps\linux_macos_artifact_extraction-1dd8ad2df40b07a7.exe)
+
+running 10 tests
+test linux_apt_history_extraction_produces_events ... ok
+test mac_launch_services_extraction_produces_artifacts ... ok
+test linux_bash_history_extraction_produces_events ... ok
+test mac_recent_items_extraction_produces_events ... ok
+test linux_wtmp_extraction_produces_events ... ok
+test linux_sudo_log_extraction_produces_events ... ok
+test mac_fsevents_extraction_produces_events ... ok
+test linux_dpkg_log_extraction_produces_events ... ok
+test linux_crontab_extraction_produces_artifacts ... ok
+test candidate_discovery_recognizes_linux_and_macos_paths ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\liuyang_registry_extract_test.rs (target\debug\deps\liuyang_registry_extract_test-3cfe565aea29978f.exe)
+
+running 1 test
+test liuyang_registry_extractors_surface_families ... ignored, requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real E01 sample
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\mbr_test.rs (target\debug\deps\mbr_test-981bb9a0be033503.exe)
+
+running 3 tests
+test empty_mbr_returns_empty ... ok
+test find_first_ntfs ... ok
+test parse_partition_table ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\partition_root_folding_e2e_test.rs (target\debug\deps\partition_root_folding_e2e_test-e443519268a8c772.exe)
+
+running 2 tests
+test repeated_merge_is_idempotent_and_stays_folded ... ok
+test full_merge_yields_only_partition_roots_no_bare_fs_roots ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests\real_artifact_extraction_test.rs (target\debug\deps\real_artifact_extraction_test-7bd28122ec9de4fa.exe)
+
+running 1 test
+test real_e01_lnk_browser_prefetch_artifact_extraction ... ignored, requires FORENSICS_REAL_ARTIFACT_E01 real E01 sample
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\registry_e01_regression_test.rs (target\debug\deps\registry_e01_regression_test-d268f9ac99cb2208.exe)
+
+running 1 test
+test jc2_registry_extractors_surface_new_families ... ignored, requires FORENSICS_JC2_E01_FIXTURE real E01 sample
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\registry_fixture_expected_test.rs (target\debug\deps\registry_fixture_expected_test-edafbfde6a11b354.exe)
+
+running 1 test
+test registry_fixture_expected_regression ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\sam_check2.rs (target\debug\deps\sam_check2-8205b056bd0af3d7.exe)
+
+running 1 test
+test sam_extraction_from_liuyang_e01 ... ignored, requires FORENSICS_LIUYANG_E01_FIXTURE Liu Yang real sample
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\search_service_test.rs (target\debug\deps\search_service_test-979caab8622ec91f.exe)
+
+running 4 tests
+test index_and_search_basic ... ok
+test search_with_pagination ... ok
+test search_no_results ... ok
+test reindex_keeps_existing_documents_for_unmodified_files ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.15s
+
+     Running tests\timeline_service_test.rs (target\debug\deps\timeline_service_test-4224e95f7242349d.exe)
+
+running 3 tests
+test timeline_filtered_by_event_type ... ok
+test project_and_query_timeline ... ok
+test timeline_pagination ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running unittests src\lib.rs (target\debug\deps\artifacts_android-04f1b32c41f9983e.exe)
+
+running 25 tests
+test backup::tests::parse_empty_data_returns_error ... ok
+test backup::tests::parse_non_backup_data_returns_none ... ok
+test backup::tests::parse_valid_header_uncompressed ... ok
+test backup::tests::parse_valid_header_compressed ... ok
+test calls::tests::parse_empty_data ... ok
+test chrome::tests::convert_chrome_timestamp_valid ... ok
+test chrome::tests::parse_empty_data ... ok
+test backup::tests::parse_valid_header_encrypted ... ok
+test backup::tests::parse_truncated_header_with_magic_returns_error ... ok
+test chrome::tests::convert_chrome_timestamp_zero ... ok
+test chrome::tests::convert_chrome_timestamp_negative ... ok
+test contacts::tests::parse_empty_data ... ok
+test sms::tests::parse_empty_data ... ok
+test calls::tests::parse_invalid_sqlite_handles_gracefully ... ok
+test chrome::tests::parse_invalid_sqlite_handles_gracefully ... ok
+test contacts::tests::parse_invalid_sqlite_handles_gracefully ... ok
+test sms::tests::parse_invalid_sqlite_handles_gracefully ... ok
+test contacts::tests::parse_contacts_empty_database ... ok
+test calls::tests::parse_calls_null_fields ... ok
+test contacts::tests::parse_contacts_extracts_entries ... ok
+test sms::tests::parse_sms_zero_date_returns_none ... ok
+test sms::tests::parse_sms_with_null_fields ... ok
+test calls::tests::parse_calls_extracts_entries ... ok
+test sms::tests::parse_sms_extracts_entries ... ok
+test chrome::tests::parse_chrome_history_extracts_entries ... ok
+
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running unittests src\lib.rs (target\debug\deps\artifacts_core-9bb17fcfa9110764.exe)
+
+running 12 tests
+test tests::test_extractor_registry_default ... ok
+test tests::test_artifact_context_construction ... ok
+test tests::test_vec_sink_default ... ok
+test tests::test_extractor_registry_find_by_path ... ok
+test tests::test_extractor_registry_new ... ok
+test tests::test_new_artifact_no_source ... ok
+test tests::test_new_artifact ... ok
+test tests::test_new_timeline_event ... ok
+test tests::test_vec_sink_collects_artifacts ... ok
+test tests::test_vec_sink_collects_timeline_events ... ok
+test tests::test_extractor_registry_empty_for_unknown ... ok
+test tests::test_vec_sink_new ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\artifacts_ios-337447cdbfba730f.exe)
+
+running 29 tests
+test contacts::tests::parse_contacts_not_a_db ... ok
+test calls::tests::parse_call_history_not_a_db ... ok
+test backup::tests::parse_manifest_not_a_db ... ok
+test messages::tests::parse_messages_not_a_db ... ok
+test backup::tests::parse_manifest_empty_db ... ok
+test notes::tests::parse_notes_not_a_db ... ok
+test calls::tests::parse_call_history_empty_db ... ok
+test notes::tests::parse_notes_empty_db ... ok
+test contacts::tests::parse_contacts_empty_db ... ok
+test photos::tests::parse_photos_not_a_db ... ok
+test calls::tests::parse_call_history_outgoing_timestamps ... ok
+test messages::tests::parse_messages_coredata_timestamp ... ok
+test messages::tests::parse_messages_no_handles ... ok
+test backup::tests::parse_manifest_basic ... ok
+test notes::tests::parse_notes_content_only ... ok
+test safari::tests::parse_safari_history_not_a_db ... ok
+test photos::tests::parse_photos_empty_db ... ok
+test photos::tests::parse_photos_no_albums_table ... ok
+test contacts::tests::parse_contacts_organization_only ... ok
+test messages::tests::parse_messages_empty_db ... ok
+test safari::tests::parse_safari_history_empty_db ... ok
+test notes::tests::parse_notes_basic ... ok
+test calls::tests::parse_call_history_basic ... ok
+test safari::tests::parse_safari_history_no_visits ... ok
+test contacts::tests::parse_contacts_basic ... ok
+test safari::tests::parse_safari_history_basic ... ok
+test photos::tests::parse_photos_basic ... ok
+test messages::tests::parse_messages_basic ... ok
+test backup::tests::parse_manifest_many_files ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.97s
+
+     Running unittests src\lib.rs (target\debug\deps\artifacts_linux-e8554f1f534e21fd.exe)
+
+running 30 tests
+test apt::tests::parse_empty_input ... ok
+test bash::tests::empty_input ... ok
+test cron::tests::empty_input ... ok
+test journal::tests::reject_empty_data ... ok
+test journal::tests::reject_non_journal_data ... ok
+test journal::tests::reject_short_header ... ok
+test bash::tests::parse_without_timestamps ... ok
+test bash::tests::trailing_timestamp_no_command ... ok
+test cron::tests::skip_comments_and_blanks ... ok
+test bash::tests::skip_comments ... ok
+test cron::tests::parse_with_source_file ... ok
+test bash::tests::command_after_command_reuses_no_timestamp ... ok
+test bash::tests::parse_with_timestamps ... ok
+test cron::tests::skip_env_assignments ... ok
+test cron::tests::parse_keyword_schedules ... ok
+test cron::tests::parse_user_crontab ... ok
+test cron::tests::parse_system_crontab_with_user_field ... ok
+test journal::tests::parse_synthetic_journal_entries ... ok
+test sudo::tests::parse_empty_input ... ok
+test wtmp::tests::parse_wtmp_32bit_layout ... ok
+test apt::tests::parse_apt_history_install ... ok
+test sudo::tests::rhel_secure_log_format ... ok
+test sudo::tests::skip_non_sudo_lines ... ok
+test wtmp::tests::parse_wtmp_64_login_logout ... ok
+test apt::tests::parse_apt_history_upgrade_and_remove ... ok
+test sudo::tests::parse_sudo_auth_failure ... ok
+test wtmp::tests::parse_wtmp_boot_record ... ok
+test sudo::tests::parse_sudo_command_lines ... ok
+test apt::tests::parse_dpkg_log_entries ... ok
+test wtmp::tests::reject_empty_data ... ok
+
+test result: ok. 30 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\integration_test.rs (target\debug\deps\integration_test-79cf9f281f1a81df.exe)
+
+running 17 tests
+test apt_empty_input ... ok
+test bash_empty_input ... ok
+test cron_empty_input ... ok
+test sudo_empty_input ... ok
+test journal_rejects_short_data ... ok
+test journal_rejects_empty_input ... ok
+test wtmp_rejects_empty_input ... ok
+test wtmp_parses_login_logout_fixture ... ok
+test bash_history_parses_complete_fixture ... ok
+test crontab_parses_complete_fixture ... ok
+test wtmp_parses_boot_record ... ok
+test wtmp_and_bash_different_timestamps_are_correctly_ordered ... ok
+test journal_parses_synthetic_fixture ... ok
+test wtmp_and_bash_timestamps_are_chrono_compatible ... ok
+test dpkg_log_parses_complete_fixture ... ok
+test apt_history_parses_complete_fixture ... ok
+test sudo_auth_log_parses_complete_fixture ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\artifacts_macos-6d3c8aad974eb1a1.exe)
+
+running 37 tests
+test fsevents::tests::detect_fsevents_magic ... ok
+test launch_services::tests::parse_empty_data ... ok
+test fsevents::tests::parse_fsevents_rejects_non_fsevents ... ok
+test fsevents::tests::read_path_string_valid_path ... ok
+test fsevents::tests::parse_fsevents_extracts_events ... ok
+test fsevents::tests::parse_fsevents_rejects_short_data ... ok
+test launch_services::tests::parse_launch_services_with_bundle_id ... ok
+test plist::tests::parse_bplist_rejects_short_data ... ok
+test launch_services::tests::parse_xml_launch_services_with_handlers ... ok
+test fsevents::tests::read_path_string_no_slash_returns_empty ... ok
+test plist::tests::parse_xml_plist_basic ... ok
+test plist::tests::detect_binary_magic ... ok
+test plist::tests::detect_xml_plist ... ok
+test plist::tests::parse_bplist_minimal ... ok
+test plist::tests::parse_bplist_rejects_non_bplist ... ok
+test launch_services::tests::parse_xml_launch_services_empty_handlers ... ok
+test plist::tests::parse_xml_plist_empty ... ok
+test plist::tests::parse_xml_plist_with_integer_and_boolean ... ok
+test quarantine::tests::convert_apple_timestamp_large_negative_returns_none ... ok
+test quarantine::tests::convert_apple_timestamp_valid ... ok
+test quarantine::tests::parse_empty_data ... ok
+test recent_items::tests::parse_empty_data ... ok
+test recent_items::tests::parse_xml_recent_applications ... ok
+test recent_items::tests::parse_xml_recent_servers ... ok
+test recent_items::tests::parse_xml_recent_files ... ok
+test spotlight::tests::parse_empty_data ... ok
+test unified_log::tests::detect_tracev3_magic ... ok
+test unified_log::tests::extract_message_finds_ascii ... ok
+test unified_log::tests::extract_process_name_finds_known ... ok
+test unified_log::tests::parse_tracev3_extracts_entries ... ok
+test unified_log::tests::parse_tracev3_rejects_non_tracev3 ... ok
+test unified_log::tests::parse_tracev3_rejects_short_data ... ok
+test spotlight::tests::get_column_names_works ... ok
+test quarantine::tests::parse_invalid_sqlite_handles_gracefully ... ok
+test spotlight::tests::parse_invalid_db_handles_gracefully ... ok
+test spotlight::tests::parse_spotlight_store_extracts_entries ... ok
+test quarantine::tests::parse_quarantine_events_extracts_entries ... ok
+
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests\integration_test.rs (target\debug\deps\integration_test-8910fee65a2c0b85.exe)
+
+running 14 tests
+test binary_plist_rejects_non_plist ... ok
+test binary_plist_parses_minimal_fixture ... ok
+test both_plist_formats_parse ... ok
+test launch_services_parses_xml_fixture ... ok
+test fsevents_parses_synthetic_fixture ... ok
+test spotlight_rejects_empty_input ... ok
+test recent_items_parses_xml_fixture ... ok
+test unified_log_parses_synthetic_fixture ... ok
+test xml_plist_parses_empty_dict ... ok
+test xml_plist_parses_fixture ... ok
+test spotlight_handles_empty_database ... ok
+test quarantine_parses_synthetic_fixture ... ok
+test spotlight_parses_synthetic_fixture ... ok
+test spotlight_handles_missing_expected_table ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running unittests src\lib.rs (target\debug\deps\artifacts_windows-75537cfbdac805ea.exe)
+
+running 268 tests
+test browser::chromium::tests::is_likely_encrypted_short_value ... ok
+test browser::chromium::tests::is_likely_encrypted_plain_text ... ok
+test browser::chromium::tests::is_likely_encrypted_binary_blob ... ok
+test browser::chromium::tests::webkit_time_conversion ... ok
+test browser::chromium::tests::parse_chrome_session_empty_json ... ok
+test browser::chromium::tests::parse_chrome_session_invalid_utf8 ... ok
+test browser::chromium::tests::parse_chrome_session_json ... ok
+test browser::chromium::tests::webkit_time_zero_is_none ... ok
+test browser::chromium::tests::parse_chrome_session_skips_tabs_without_url ... ok
+test browser::chromium::tests::parse_chrome_session_top_level_array ... ok
+test browser::firefox::tests::firefox_time_conversion ... ok
+test browser::firefox::tests::firefox_time_zero_is_none ... ok
+test browser::firefox::tests::is_likely_encrypted_binary_blob ... ok
+test browser::firefox::tests::is_likely_encrypted_plain_text ... ok
+test browser::firefox::tests::is_likely_encrypted_short_value ... ok
+test browser::firefox::tests::mozlz4_rejects_bad_magic ... ok
+test browser::firefox::tests::mozlz4_rejects_short_data ... ok
+test browser::firefox::tests::mozlz4_roundtrip ... ok
+test browser::firefox::tests::parse_firefox_downloads_json_basic ... ok
+test browser::firefox::tests::parse_firefox_downloads_json_empty ... ok
+test browser::firefox::tests::parse_firefox_downloads_json_millis_timestamps ... ok
+test browser::firefox::tests::parse_firefox_downloads_json_top_level_array ... ok
+test browser::firefox::tests::parse_firefox_downloads_skips_empty_entries ... ok
+test browser::chromium::tests::parse_chrome_history_not_a_db ... ok
+test browser::firefox::tests::parse_firefox_session_empty_json ... ok
+test browser::firefox::tests::parse_firefox_session_inline_tabs ... ok
+test browser::firefox::tests::parse_firefox_session_invalid_utf8 ... ok
+test browser::firefox::tests::parse_firefox_session_mozlz4_basic ... ok
+test browser::firefox::tests::parse_firefox_session_multiple_windows_and_tabs ... ok
+test browser::firefox::tests::parse_firefox_session_plain_json ... ok
+test browser::firefox::tests::parse_firefox_session_skips_entries_without_url ... ok
+test browser::firefox::tests::parse_iso_no_timezone ... ok
+test browser::firefox::tests::parse_iso_timestamp ... ok
+test browser::firefox::tests::parse_millis_string ... ok
+test browser::firefox::tests::unix_millis_conversion ... ok
+test browser::firefox::tests::unix_seconds_conversion ... ok
+test browser::profile_detect::tests::chromelike_dir_to_name_default ... ok
+test browser::profile_detect::tests::chromelike_dir_to_name_profile_with_space ... ok
+test browser::profile_detect::tests::chromelike_dir_to_name_with_underscore ... ok
+test browser::profile_detect::tests::detect_chrome_archived_history ... ok
+test browser::profile_detect::tests::detect_chrome_default_profile ... ok
+test browser::profile_detect::tests::detect_chrome_last_session ... ok
+test browser::profile_detect::tests::detect_chrome_multiple_profiles ... ok
+test browser::profile_detect::tests::detect_deduplicates_duplicate_paths ... ok
+test browser::profile_detect::tests::detect_edge_profiles ... ok
+test browser::profile_detect::tests::detect_empty_input ... ok
+test browser::profile_detect::tests::detect_firefox_profiles ... ok
+test browser::profile_detect::tests::detect_handles_windows_backslashes ... ok
+test browser::profile_detect::tests::detect_mixed_browsers ... ok
+test browser::profile_detect::tests::detect_no_browser_paths ... ok
+test browser::profile_detect::tests::firefox_dir_to_name_hyphenated ... ok
+test browser::profile_detect::tests::firefox_dir_to_name_no_dot ... ok
+test browser::profile_detect::tests::firefox_dir_to_name_single_word ... ok
+test evtx::capability::tests::capability_documents_bounded_evtx_surface ... ok
+test evtx::capability::tests::path_guard_accepts_any_evtx_under_winevt_logs ... ok
+test evtx::capability::tests::path_guard_accepts_defender_operational ... ok
+test evtx::capability::tests::path_guard_accepts_powershell_operational ... ok
+test evtx::capability::tests::path_guard_accepts_security_and_application ... ok
+test evtx::capability::tests::path_guard_accepts_sysmon_operational ... ok
+test evtx::capability::tests::path_guard_accepts_system_evtx_suffix ... ok
+test evtx::capability::tests::path_guard_accepts_terminalservices_operational ... ok
+test evtx::capability::tests::path_guard_rejects_evtx_outside_winevt_logs ... ok
+test evtx::parser::tests::boot_events_dont_have_details ... ok
+test evtx::parser::tests::chunk_warning_includes_chunk_id_offset_and_reason ... ok
+test evtx::parser::tests::clean_evtx_uses_declared_chunk_count_to_ignore_tail_slack ... ok
+test evtx::parser::tests::dirty_evtx_keeps_tail_for_recovery_scan ... ok
+test evtx::parser::tests::dump_fixture_to_expected_json ... ignored, manual fixture regeneration helper
+test evtx::parser::tests::event_data_map_handles_various_json_shapes ... ok
+test evtx::parser::tests::extract_application_1000_flattened_event_data ... ok
+test evtx::parser::tests::extract_application_1000_unnamed_data_positions ... ok
+test evtx::parser::tests::extract_application_1001_named_wer_p1_p4_fields ... ok
+test evtx::parser::tests::extract_application_1033_unnamed_data_positions ... ok
+test evtx::parser::tests::extract_defender_1116_threat_from_json ... ok
+test evtx::parser::tests::extract_eventlog_started_6005_from_json ... ok
+test evtx::parser::tests::extract_powershell_4104_script_block_from_json ... ok
+test evtx::parser::tests::extract_rdp_21_session_connect_from_json ... ok
+test evtx::parser::tests::extract_security_4624_flattened_event_data ... ok
+test evtx::parser::tests::extract_security_4625_failure_from_flattened_event_data ... ok
+test evtx::parser::tests::extract_security_4688_falls_back_to_creator_process_name ... ok
+test evtx::parser::tests::extract_security_4688_prefers_parent_process_name ... ok
+test evtx::parser::tests::extract_security_event_data_map_merges_legacy_and_flattened_shapes ... ok
+test evtx::parser::tests::extract_shutdown_candidates_from_json_string_event_id ... ok
+test evtx::parser::tests::extract_sysmon_1_process_create_from_json ... ok
+test evtx::parser::tests::ignores_unsupported_event_ids ... ok
+test evtx::parser::tests::malformed_evtx_returns_error_not_panic ... ok
+test evtx::parser::tests::oversized_evtx_returns_error ... ok
+test browser::firefox::tests::parse_firefox_history_not_a_db ... ok
+test evtx::parser::tests::truncated_evtx_magic_returns_error_not_panic ... ok
+test evtx::parser::tests::unsupported_path_returns_error ... ok
+test jumplist::tests::jump_list_supports_path ... ok
+test jumplist::tests::jump_list_truncated_no_panic ... ok
+test prefetch::parser::tests::mam_prefetch_without_payload_fails_closed ... ok
+test registry::hash_decrypt::tests::aes128_cbc_decrypt_known_vector ... ok
+test registry::hash_decrypt::tests::decrypt_user_hashes_aes_roundtrip ... ok
+test registry::hash_decrypt::tests::derive_hashed_boot_key_aes_roundtrip ... ok
+test registry::hash_decrypt::tests::expand_des_key_known_vector ... ok
+test registry::hash_decrypt::tests::rc4_crypt_known_vector ... ok
+test registry::hash_decrypt::tests::rid_to_des_keys_known_vector ... ok
+test registry::lookup::amcache::tests::extract_amcache_application_files_from_fixture ... ok
+test registry::lookup::amcache::tests::extract_amcache_applications_from_fixture ... ok
+test registry::lookup::muicache::tests::extract_muicache_from_fixture ... ok
+test registry::lookup::muicache::tests::extract_muicache_returns_empty_when_key_missing ... ok
+test registry::lookup::ntuser::tests::extract_appcompat_layers_from_ntuser_fixture ... ok
+test registry::lookup::ntuser::tests::extract_last_visited_mru_from_fixture ... ok
+test registry::lookup::ntuser::tests::extract_ntuser_combined ... ok
+test registry::lookup::ntuser::tests::extract_ntuser_combined_group2 ... ok
+test registry::lookup::ntuser::tests::extract_ntuser_handles_missing_keys ... ok
+test registry::lookup::ntuser::tests::extract_ntuser_mount_points ... ok
+test registry::lookup::ntuser::tests::extract_ntuser_recent_docs ... ok
+test registry::lookup::ntuser::tests::extract_ntuser_run_keys ... ok
+test registry::lookup::ntuser::tests::extract_ntuser_run_once ... ok
+test registry::lookup::ntuser::tests::extract_ntuser_typed_urls ... ok
+test registry::lookup::ntuser::tests::extract_ntuser_word_wheel_query ... ok
+test registry::lookup::ntuser::tests::extract_open_save_mru_from_fixture ... ok
+test registry::lookup::ntuser::tests::extract_run_mru_from_fixture ... ok
+test registry::lookup::ntuser::tests::ntuser_hive_with_txlog_overrides_run_key_command ... ok
+test registry::lookup::ntuser::tests::test_empty_userassist_key ... ok
+test registry::lookup::ntuser::tests::test_rot13_decode_basic ... ok
+test registry::lookup::ntuser::tests::test_rot13_decode_roundtrip ... ok
+test registry::lookup::ntuser::tests::test_userassist_extraction ... ok
+test registry::lookup::ntuser::tests::windows_filetime_converts_to_rfc3339 ... ok
+test registry::lookup::ntuser::tests::windows_filetime_zero_returns_none ... ok
+test registry::lookup::sam::tests::extract_sam_fields_admin_count ... ok
+test registry::lookup::sam::tests::extract_sam_fields_empty_hive ... ok
+test registry::lookup::sam::tests::extract_sam_fields_from_synthetic_hive ... ok
+test registry::lookup::sam::tests::extract_sam_fields_group_memberships ... ok
+test registry::lookup::sam::tests::extract_sam_fields_password_policy ... ok
+test registry::lookup::sam::tests::extract_sam_fields_password_policy_when_account_f_missing ... ok
+test registry::lookup::sam::tests::extract_sam_fields_timestamps ... ok
+test registry::lookup::sam::tests::extract_sam_fields_user_account_control ... ok
+test registry::lookup::sam::tests::extract_sam_fields_v_record_too_short ... ok
+test registry::lookup::sam::tests::extract_sam_fields_v_record_unexpected_type ... ok
+test registry::lookup::sam::tests::extract_sam_fields_with_txlog_overrides_password_policy ... ok
+test registry::lookup::security::tests::extract_cached_credentials_from_fixture ... ok
+test registry::lookup::security::tests::extract_lsa_secrets_from_fixture ... ok
+test registry::lookup::security::tests::extract_security_policy_from_fixture ... ok
+test registry::lookup::security::tests::extract_security_policy_with_txlog_overrides_domain_name ... ok
+test registry::lookup::security::tests::missing_policy_key_returns_error ... ok
+test registry::lookup::shellbags::tests::extract_shellbags_from_fixture ... ok
+test registry::lookup::shellbags::tests::extract_shellbags_returns_empty_when_bagmru_missing ... ok
+test registry::lookup::software::tests::extract_appcompat_layers_from_software_fixture ... ok
+test registry::lookup::software::tests::extract_machine_run_keys_from_fixture ... ok
+test registry::lookup::software::tests::extract_network_profiles_from_fixture ... ok
+test registry::lookup::software::tests::extract_software_fields_from_committed_tiny_fixture ... ok
+test registry::lookup::software::tests::extract_software_fields_from_fixture ... ok
+test registry::lookup::software::tests::extract_winlogon_from_fixture ... ok
+test registry::lookup::software::tests::software_hive_with_txlog_overrides_product_name ... ok
+test registry::lookup::system::tests::extract_lsa_packages_from_fixture ... ok
+test registry::lookup::system::tests::extract_mounted_devices_from_system_hive_parses_dos_and_volume ... ok
+test registry::lookup::system::tests::extract_services_deduplicates_across_control_sets ... ok
+test registry::lookup::system::tests::extract_services_maps_kernel_driver ... ok
+test registry::lookup::system::tests::extract_services_maps_type_and_start ... ok
+test registry::lookup::system::tests::extract_services_resolves_svchost_service_dll ... ok
+test registry::lookup::system::tests::extract_shimcache_fallback_embedded_paths ... ok
+test registry::lookup::system::tests::extract_shimcache_from_fixture ... ok
+test registry::lookup::system::tests::extract_shutdown_time_accepts_qword_value ... ok
+test registry::lookup::system::tests::extract_shutdown_time_from_fixture ... ok
+test registry::lookup::system::tests::extract_system_fields_falls_back_when_select_is_corrupt ... ok
+test registry::lookup::system::tests::extract_system_fields_from_committed_tiny_fixture ... ok
+test registry::lookup::system::tests::extract_system_fields_from_fixture ... ok
+test registry::lookup::system::tests::extract_usb_devices_from_system_hive_parses_class_and_serial ... ok
+test registry::lookup::system::tests::system_hive_with_txlog_no_match_leaves_field_unchanged ... ok
+test registry::lookup::system::tests::system_hive_with_txlog_overrides_computer_name ... ok
+test registry::lookup::system::tests::txlog_uses_highest_sequence_number ... ok
+test registry::lookup::tests::bounds_rejects_bad_cell_offset ... ok
+test registry::lookup::tests::bounds_rejects_truncated_value_list_cell ... ok
+test registry::lookup::tests::corrupt_hive_returns_error_not_panic ... ok
+test registry::lookup::tests::inline_value_longer_than_four_bytes_is_rejected ... ok
+test registry::lookup::tests::key_path_depth_at_limit_is_allowed ... ok
+test registry::lookup::tests::key_path_depth_exceeds_limit ... ok
+test registry::lookup::tests::odd_utf16_value_data_is_rejected ... ok
+test registry::lookup::tests::parse_base_block_regf ... ok
+test registry::lookup::tests::parse_nk_compressed_name ... ok
+test registry::lookup::tests::parse_nk_utf16_name ... ok
+test registry::lookup::tests::read_subkeys_lf_and_vk_string ... ok
+test registry::lookup::tests::read_subkeys_lf_offset_first_real_layout ... ok
+test registry::lookup::tests::read_subkeys_lh_list ... ok
+test registry::lookup::tests::read_subkeys_li_list ... ok
+test registry::lookup::tests::read_subkeys_ri_list ... ok
+test registry::lookup::tests::read_value_list_uses_registry_cell_header ... ok
+test registry::lookup::tests::read_vk_reg_dword_inline ... ok
+test registry::lookup::tests::read_vk_reg_expand_sz ... ok
+test registry::lookup::tests::read_vk_reg_multi_sz_preserves_all_items ... ok
+test registry::lookup::tests::read_vk_reg_qword_external ... ok
+test registry::lookup::tests::reject_missing_hbin_magic ... ok
+test registry::lookup::tests::reject_non_page_aligned_hbin_size ... ok
+test registry::lookup::tests::reject_non_regf ... ok
+test registry::lookup::tests::reject_root_cell_offset_exceeds_hbin ... ok
+test registry::lookup::tests::reject_truncated_before_hbin ... ok
+test registry::lookup::tests::reject_zero_hbin_size ... ok
+test registry::lookup::tests::short_external_dword_is_rejected_instead_of_zero_filled ... ok
+test registry::recovery::tests::test_confidence_high_when_intact ... ok
+test registry::recovery::tests::test_detect_free_cells_in_hbin ... ok
+test registry::recovery::tests::test_free_cell_without_signature_is_skipped ... ok
+test registry::recovery::tests::test_hbin_chain_walking ... ok
+test registry::recovery::tests::test_invalid_hive_rejected ... ok
+test registry::recovery::tests::test_no_free_cells_returns_empty ... ok
+test registry::recovery::tests::test_parent_path_hint_resolution ... ok
+test registry::recovery::tests::test_partially_overwritten_cell_low_confidence ... ok
+test registry::recovery::tests::test_recover_deleted_nk_from_free_cell ... ok
+test registry::recovery::tests::test_recover_deleted_vk_from_free_cell ... ok
+test registry::recovery::tests::test_recover_multiple_cells ... ok
+test registry::sam_structs::tests::extract_boot_key_empty_hive_returns_none ... ok
+test registry::sam_structs::tests::extract_boot_key_fallback_when_select_corrupt ... ok
+test registry::sam_structs::tests::extract_boot_key_from_synthetic_hive ... ok
+test registry::sam_structs::tests::extract_boot_key_invalid_hex_class_returns_none ... ok
+test registry::sam_structs::tests::extract_boot_key_missing_lsa_returns_none ... ok
+test registry::sam_structs::tests::extract_boot_key_missing_subkey_returns_none ... ok
+test registry::sam_structs::tests::extract_boot_key_select_current_dword ... ok
+test registry::sam_structs::tests::parse_domain_account_f_default_policy ... ok
+test registry::sam_structs::tests::parse_domain_account_f_never_expires ... ok
+test registry::sam_structs::tests::parse_domain_account_f_too_short ... ok
+test registry::sam_structs::tests::parse_domain_account_f_typical_policy ... ok
+test registry::sam_structs::tests::parse_user_f_roundtrip ... ok
+test registry::sam_structs::tests::parse_user_f_too_short ... ok
+test registry::sam_structs::tests::parse_user_f_valid ... ok
+test registry::sam_structs::tests::parse_user_v_all_fields_present ... ok
+test registry::sam_structs::tests::parse_user_v_nul_terminated_string ... ok
+test registry::sam_structs::tests::parse_user_v_out_of_bounds_offset_survives ... ok
+test registry::sam_structs::tests::parse_user_v_rid_500_administrator_template ... ok
+test registry::sam_structs::tests::parse_user_v_too_short ... ok
+test registry::sam_structs::tests::parse_user_v_unicode_characters ... ok
+test registry::sam_structs::tests::parse_user_v_with_full_name_and_profile ... ok
+test registry::sam_structs::tests::parse_username_from_v_record_too_short ... ok
+test registry::sam_structs::tests::parse_username_from_v_record_valid ... ok
+test registry::sam_structs::tests::parse_username_from_v_record_zero_length ... ok
+test registry::txlog::tests::accept_dirt_magic ... ok
+test registry::txlog::tests::accept_hvle_magic ... ok
+test registry::txlog::tests::detect_wraparound_non_monotonic_sequence ... ok
+test registry::txlog::tests::empty_log_yields_no_transactions ... ok
+test registry::txlog::tests::implausible_timestamp_yields_none ... ok
+test registry::txlog::tests::log2_is_not_primary ... ok
+test registry::txlog::tests::monotonic_sequence_no_wraparound_warning ... ok
+test registry::txlog::tests::parse_multiple_entry_types ... ok
+test registry::txlog::tests::parse_rename_key_entry ... ok
+test registry::txlog::tests::parse_single_set_value_entry ... ok
+test registry::txlog::tests::parse_unicode_key_path ... ok
+test registry::txlog::tests::parse_unicode_value_name ... ok
+test registry::txlog::tests::parse_value_with_before_and_after ... ok
+test registry::txlog::tests::reject_invalid_magic ... ok
+test registry::txlog::tests::reject_too_short ... ok
+test registry::txlog::tests::truncated_entry_warns_and_stops ... ok
+test registry::txlog::tests::unknown_operation_type_is_skipped ... ok
+test registry::txlog::tests::zero_size_entry_stops_parsing ... ok
+test sru::tests::sru_ese_header_creates_file_level_artifact ... ok
+test sru::tests::sru_ese_header_extracts_page_size_and_state ... ok
+test sru::tests::sru_invalid_data_no_panic ... ok
+test sru::tests::sru_sqlite_header_is_rejected ... ok
+test sru::tests::sru_supports_path ... ok
+test thumbcache::tests::thumbcache_enumerates_entries ... ok
+test thumbcache::tests::thumbcache_invalid_data_no_panic ... ok
+test thumbcache::tests::thumbcache_supports_path ... ok
+test thumbcache::tests::thumbcache_valid_header ... ok
+test browser::chromium::tests::parse_chrome_cookies_empty_db ... ok
+test browser::firefox::tests::parse_firefox_downloads_from_sqlite_no_tables ... ok
+test browser::firefox::tests::parse_firefox_history_no_moz_places ... ok
+test browser::firefox::tests::parse_firefox_cookies_no_table ... ok
+test browser::chromium::tests::parse_chrome_cookies_encrypted_value ... ok
+test browser::chromium::tests::parse_chrome_history_empty_db ... ok
+test browser::firefox::tests::parse_firefox_history_empty_db ... ok
+test browser::firefox::tests::parse_firefox_cookies_encrypted_value ... ok
+test browser::chromium::tests::parse_chrome_cookies_basic ... ok
+test browser::firefox::tests::parse_firefox_cookies_basic ... ok
+test browser::chromium::tests::parse_chrome_history_basic ... ok
+test browser::firefox::tests::parse_firefox_history_basic ... ok
+test browser::chromium::tests::parse_chrome_history_two_visits ... ok
+test browser::firefox::tests::parse_firefox_downloads_from_sqlite_basic ... ok
+test evtx::parser::tests::parses_real_system_evtx_fixture_boot_candidates ... ok
+
+test result: ok. 267 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.30s
+
+     Running tests\evtx_fixture_expected_test.rs (target\debug\deps\evtx_fixture_expected_test-7f2086f236043907.exe)
+
+running 1 test
+test evtx_fixture_expected_regression ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.27s
+
+     Running tests\fixture_builder.rs (target\debug\deps\fixture_builder-260831bb0c7c72c5.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\fixture_real_test.rs (target\debug\deps\fixture_real_test-d579fea68bae40a9.exe)
+
+running 4 tests
+test lnk_real_fixtures ... ignored
+test prefetch_real_fixtures ... ignored
+test recycle_bin_real_fixtures ... ignored
+test registry_real_fixtures ... ignored
+
+test result: ok. 0 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\parser_test.rs (target\debug\deps\parser_test-9cc9aefb3f94ed54.exe)
+
+running 20 tests
+test extractor_registry_matches_by_path ... ok
+test evtx_binary_parser_fail_closed_for_unsupported_log_path ... ok
+test evtx_json_records_fail_closed_for_unsupported_log_path ... ok
+test prefetch_truncated_no_panic ... ok
+test lnk_truncated_no_panic ... ok
+test jumplist_no_embedded_lnk_reports_generic_artifact ... ok
+test recycle_bin_fixture_extracts_path_and_time ... ok
+test lnk_fixture_extracts_target_path ... ok
+test prefetch_utf16_name_uses_aligned_nul_terminator ... ok
+test registry_hive_fixture_parses_name ... ok
+test prefetch_fixture_extracts_exe_and_runs ... ok
+test mam_prefetch_fixture_extracts_exe_and_runs ... ok
+test registry_supports_standard_extensionless_hives_only_in_config_path ... ok
+test evtx_json_records_extract_boot_shutdown_candidates ... ok
+test registry_random_bytes_no_panic ... ok
+test sru_ese_header_reports_file_level_artifact ... ok
+test sru_invalid_minimal_content_reports_sqlite_error_without_artifacts ... ok
+test mam_prefetch_fails_closed_without_decompression ... ok
+test sru_sqlite_header_reports_format_mismatch_without_artifacts ... ok
+test thumbcache_minimal_header_extracts_metadata_artifact ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\cloud_audit-1c84266fc3e4023d.exe)
+
+running 15 tests
+test aws::tests::parse_empty_data ... ok
+test azure::tests::parse_empty_data ... ok
+test gcp::tests::parse_empty_data ... ok
+test m365::tests::parse_empty_data ... ok
+test aws::tests::parse_cloudtrail_minimal_record ... ok
+test azure::tests::parse_azure_single_object ... ok
+test gcp::tests::parse_gcp_single_object ... ok
+test azure::tests::parse_azure_json_array ... ok
+test gcp::tests::parse_gcp_json_array ... ok
+test aws::tests::parse_cloudtrail_json_lines ... ok
+test normalize::tests::cloud_audit_entry_minimal ... ok
+test normalize::tests::cloud_audit_entry_serialization_roundtrip ... ok
+test m365::tests::parse_m365_malformed_audit_data_not_fatal ... ok
+test aws::tests::parse_cloudtrail_wrapped_records ... ok
+test m365::tests::parse_m365_csv_with_audit_data ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src\lib.rs (target\debug\deps\containers_pst-72616fa741525313.exe)
+
+running 65 tests
+test mbox::tests::test_detect_variant_mboxo ... ok
+test mbox::tests::test_detect_variant_mboxcl2 ... ok
+test mbox::tests::test_detect_variant_mboxrd ... ok
+test mbox::tests::test_detect_variant_mboxcl ... ok
+test mbox::tests::test_extract_filename_from_content_type ... ok
+test mbox::tests::test_extract_boundary_no_quotes ... ok
+test mbox::tests::test_extract_filename_from_disposition ... ok
+test mbox::tests::test_extract_boundary ... ok
+test mbox::tests::test_find_header_folded ... ok
+test mbox::tests::test_is_message_separator_invalid ... ok
+test mbox::tests::test_is_message_separator_valid ... ok
+test mbox::tests::test_parse_address_email_only ... ok
+test mbox::tests::test_find_header ... ok
+test mbox::tests::test_parse_address_with_angle_brackets_but_no_name ... ok
+test mbox::tests::test_parse_date_invalid_returns_none ... ok
+test mbox::tests::test_parse_address_name_and_email ... ok
+test mbox::tests::test_parse_date_iso_format ... ok
+test mbox::tests::test_parse_empty ... ok
+test mbox::tests::test_parse_mbox_handles_crlf ... ok
+test mbox::tests::test_parse_mbox_handles_html_content ... ok
+test mbox::tests::test_parse_mbox_handles_no_blank_line_separator ... ok
+test mbox::tests::test_parse_mbox_handles_multipart_alternative ... ok
+test mbox::tests::test_parse_mbox_returns_mbox_message_struct ... ok
+test mbox::tests::test_parse_mboxcl ... ok
+test mbox::tests::test_parse_mboxcl2 ... ok
+test mbox::tests::test_parse_mboxrd_unescaping ... ok
+test mbox::tests::test_quoted_printable_decode ... ok
+test mbox::tests::test_parse_multipart_with_attachment ... ok
+test mbox::tests::test_split_headers_and_body ... ok
+test mbox::tests::test_parse_single_message ... ok
+test mbox::tests::test_unescape_from_lines_double_escape ... ok
+test mbox::tests::test_unescape_from_lines_no_escape ... ok
+test mbox::tests::test_unescape_from_lines_non_from_greater_than ... ok
+test mbox::tests::test_unescape_from_lines_single_level ... ok
+test mbox::tests::test_variant_detection_handles_no_escape_no_cl ... ok
+test pst::tests::synthetic_pst_header_magic ... ok
+test tests::ansi_header_root_offset_is_176 ... ok
+test tests::detect_ansi_pst_version_14 ... ok
+test tests::detect_ansi_pst_version_15 ... ok
+test tests::detect_pst_by_magic_bytes ... ok
+test tests::detect_unicode_pst_version_23 ... ok
+test tests::detect_variant_mboxcl2_by_status_headers ... ok
+test tests::detect_variant_mboxcl_by_content_length ... ok
+test tests::detect_variant_mboxo_by_no_escaping ... ok
+test tests::detect_variant_mboxrd_by_escaped_from ... ok
+test tests::empty_data_defaults_to_mboxo ... ok
+test tests::inline_binary_header_is_512_bytes ... ok
+test tests::inline_pst_magic_bytes_match_constant ... ok
+test tests::reject_file_too_small ... ok
+test tests::reject_file_without_magic ... ok
+test tests::unicode_header_root_offset_is_188 ... ok
+test tests::variant_detection_ignores_body_content_length ... ok
+test ost::tests::ost_file_kind_defaults_to_pst_for_pst_extension ... ok
+test ost::tests::ost_file_kind_detected_by_extension ... ok
+test ost::tests::ost_opens_valid_ndb_file ... ok
+test ost::tests::ost_ost_properties_accessible ... ok
+test ost::tests::ost_rejects_invalid_file ... ok
+test pst::tests::empty_file_rejected ... ok
+test ost::tests::ost_reader_delegates_to_pst ... ok
+test pst::tests::synthetic_pst_nbt_entries ... ok
+test pst::tests::synthetic_pst_property_context ... ok
+test pst::tests::open_synthetic_pst ... ok
+test pst::tests::fold_and_read_nbt_structure ... ok
+test pst::tests::synthetic_pst_read_messages ... ok
+test pst::tests::invalid_pst_rejected ... ok
+
+test result: ok. 65 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\email_real_regression_test.rs (target\debug\deps\email_real_regression_test-ac41e725274720d4.exe)
+
+running 4 tests
+test real_email_fixtures_parse_without_crash_and_expose_key_fields ... ignored, requires FORENSICS_EMAIL_FIXTURE_DIR real email samples
+test real_fixture_eml_subject_from_are_non_empty ... ignored, requires FORENSICS_EMAIL_FIXTURE_DIR real email samples
+test real_fixture_mbox_message_count_is_stable ... ignored, requires FORENSICS_EMAIL_FIXTURE_DIR real email samples
+test real_fixture_pst_ost_messages_are_non_empty ... ignored, requires FORENSICS_EMAIL_FIXTURE_DIR real email samples
+
+test result: ok. 0 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\email_throughput_test.rs (target\debug\deps\email_throughput_test-7501a1cfd652b84e.exe)
+
+running 2 tests
+test synthetic_pst_10_messages_parses_under_100ms ... ok
+test mbox_1mb_parses_under_one_second ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+     Running tests\integration_test.rs (target\debug\deps\integration_test-585c3f4cdd444580.exe)
+
+running 20 tests
+test mbox_empty_input_returns_empty ... ok
+test detect_variant_mboxcl2_from_sample ... ok
+test detect_variant_mboxo_from_sample ... ok
+test detect_variant_mboxrd_from_sample ... ok
+test detect_variant_mboxcl_from_sample ... ok
+test parse_mboxo_single_message_fields ... ok
+test parse_mboxcl2_single_message ... ok
+test parse_mboxrd_unescaping_works ... ok
+test mbox_multipart_attachment_parsed ... ok
+test parse_mboxcl_two_messages ... ok
+test ost_reader_rejects_invalid_file ... ok
+test ost_reader_reads_messages_via_pst_delegation ... ok
+test ost_reader_properties_accessible ... ok
+test pst_rejects_empty_file ... ok
+test ost_reader_reads_folders_via_pst_delegation ... ok
+test ost_reader_opens_synthetic_file ... ok
+test pst_rejects_non_pst_data ... ok
+test pst_roundtrip_message_class_detection ... ok
+test pst_roundtrip_synthetic_to_open_succeeds ... ok
+test pst_roundtrip_folder_count_matches_expected ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src\lib.rs (target\debug\deps\crash_handler-c0dfa3a4778b49b8.exe)
+
+running 12 tests
+test tests::test_sanitize_path_preserves_app_path ... ok
+test tests::test_sanitize_path_removes_case_path ... ok
+test tests::test_crash_report_contains_stack_trace ... ok
+test tests::test_sanitize_path_unc_long ... ok
+test tests::test_crash_report_serialization ... ok
+test tests::test_crash_report_excludes_case_data ... ok
+test tests::test_sanitize_path ... ok
+test tests::test_sanitize_path_removes_user_profile ... ok
+test tests::test_write_crash_report_creates_file ... ok
+test tests::test_multiple_crash_reports_unique ... ok
+test tests::test_empty_crash_report_handled ... ok
+test tests::test_crash_report_json_structure ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src\lib.rs (target\debug\deps\domain-5b13080ad7a89088.exe)
+
+running 45 tests
+test case::tests::display_name_with_number ... ok
+test case::tests::is_active_old ... ok
+test case::tests::display_name_without_number ... ok
+test case::tests::has_examiner_none ... ok
+test case::tests::has_examiner_true ... ok
+test case::tests::has_examiner_empty ... ok
+test case::tests::is_active_recent ... ok
+test error::tests::error_from_boxed_error ... ok
+test case::tests::session_indexes_path ... ok
+test error::tests::error_from_string ... ok
+test case::tests::summary_with_examiner ... ok
+test case::tests::summary_without_examiner ... ok
+test error::tests::error_cancelled ... ok
+test error::tests::error_display ... ok
+test case::tests::session_db_path ... ok
+test error::tests::error_not_supported ... ok
+test error::tests::error_from_io ... ok
+test file_entry::tests::extension_basic ... ok
+test file_entry::tests::extension_none ... ok
+test file_entry::tests::has_hash_false ... ok
+test file_entry::tests::has_hash_true ... ok
+test file_entry::tests::is_deleted ... ok
+test file_entry::tests::is_directory_true ... ok
+test file_entry::tests::is_file_false ... ok
+test file_entry::tests::is_file_true ... ok
+test file_entry::tests::is_hidden_false ... ok
+test file_entry::tests::is_hidden_true ... ok
+test file_entry::tests::is_root_false ... ok
+test file_entry::tests::is_root_true ... ok
+test file_entry::tests::size_or_zero_directory ... ok
+test file_entry::tests::size_or_zero_file ... ok
+test timestamp::tests::exfat_to_datetime_unknown_offset ... ok
+test timestamp::tests::exfat_to_datetime_valid ... ok
+test timestamp::tests::exfat_to_datetime_with_negative_offset ... ok
+test timestamp::tests::exfat_to_datetime_with_positive_offset ... ok
+test timestamp::tests::exfat_to_datetime_zero ... ok
+test timestamp::tests::filetime_to_datetime_high_bit_set ... ok
+test timestamp::tests::filetime_to_datetime_valid ... ok
+test timestamp::tests::filetime_to_datetime_zero ... ok
+test timestamp::tests::ntfs_time_to_datetime_valid ... ok
+test timestamp::tests::ntfs_time_to_datetime_zero ... ok
+test timestamp::tests::unix_to_datetime_valid ... ok
+test timestamp::tests::validate_timestamp_too_far_future ... ok
+test timestamp::tests::validate_timestamp_too_old ... ok
+test timestamp::tests::validate_timestamp_valid ... ok
+
+test result: ok. 45 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\evidence_core-c9331c7645d131c3.exe)
+
+running 24 tests
+test filesystem::tests::fs_node_builds_pathless_child_metadata ... ok
+test filesystem::tests::filesystem_error_helpers_use_expected_kinds_and_messages ... ok
+test filesystem::tests::join_child_path_can_preserve_backslash_convention ... ok
+test filesystem::tests::child_nodes_with_parent_path_assigns_paths_in_bulk ... ok
+test filesystem::tests::join_child_path_normalizes_to_forward_slash ... ok
+test filesystem::tests::node_with_parent_path_preserves_metadata ... ok
+test volume::gpt::tests::format_guid_basic ... ok
+test filesystem::tests::root_node_uses_empty_path ... ok
+test filesystem::tests::special_directory_names_match_dot_entries_only ... ok
+test filesystem::tests::standard_path_errors_use_expected_kinds ... ok
+test filesystem::tests::truncate_data_to_declared_size_keeps_buffers_for_extremely_large_size ... ok
+test filesystem::tests::truncate_data_to_declared_size_keeps_short_buffers ... ok
+test filesystem::tests::truncate_data_to_declared_size_trims_cluster_padding ... ok
+test filesystem::tests::path_components_splits_slash_and_backslash_paths ... ok
+test volume::gpt::tests::parse_gpt_entries_rejects_small_entry_size ... ok
+test volume::gpt::tests::parse_gpt_entries_skips_empty_partitions ... ok
+test volume::gpt::tests::parse_gpt_entries_with_larger_entry_size ... ok
+test volume::gpt::tests::parse_gpt_entries_with_minimum_entry_size ... ok
+test volume::mbr::tests::all_ntfs_returns_primary_and_logical ... ok
+test volume::mbr::tests::classify_mbr_partition_type_known_types ... ok
+test volume::mbr::tests::parse_mbr_full_excludes_empty_and_extended_from_partition_records ... ok
+test volume::mbr::tests::parses_ebr_chain ... ok
+test volume::mbr::tests::parses_four_primary_partitions ... ok
+test filesystem::logical_fs::tests::list_children_does_not_descend_into_symlinked_directories ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\logical_fs_test.rs (target\debug\deps\logical_fs_test-70a624602b4252de.exe)
+
+running 5 tests
+test open_file_reads_content ... ok
+test stat_returns_metadata ... ok
+test list_children_of_subdir ... ok
+test directories_sorted_first ... ok
+test enumerate_root ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\raw_reader_test.rs (target\debug\deps\raw_reader_test-90127fc6efb9f3e1.exe)
+
+running 5 tests
+test probe_rejects_nonexistent ... ok
+test probe_identifies_logical_directory ... ok
+test open_and_read_first_sector ... ok
+test probe_identifies_raw ... ok
+test seek_and_read ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\evtx-d570796a4f639185.exe)
+
+running 10 tests
+test model::ir::drop_free_tests::ir_and_value_types_are_drop_free ... ok
+test binxml::array_expand::tests::no_expansion_when_no_arrays_exist ... ok
+test binxml::array_expand::tests::expands_numeric_array_in_attribute_value ... ok
+test binxml::array_expand::tests::string_array_in_attribute_omits_attribute_when_item_is_empty ... ok
+test binxml::array_expand::tests::empty_string_items_omit_the_node ... ok
+test binxml::array_expand::tests::preserves_surrounding_nodes_when_expanding_child_array ... ok
+test binxml::array_expand::tests::expands_string_array_child_into_repeated_elements ... ok
+test binxml::array_expand::tests::multiple_arrays_in_same_element_expand_deterministically ... ok
+test binxml::array_expand::tests::spec_example_repeats_containing_element_for_each_array_item ... ok
+test binxml::array_expand::tests::ignores_single_item_arrays_and_still_expands_later_arrays ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\exchange-b1cc49f55f0c1214.exe)
+
+running 28 tests
+test custody::tests::test_empty_merkle_tree ... ok
+test custody::tests::test_single_entry_chain_is_valid ... ok
+test custody::tests::test_merkle_proof_out_of_bounds ... ok
+test custody::tests::test_chain_append_creates_sequential_hash ... ok
+test custody::tests::test_tampered_prev_hash_detected ... ok
+test custody::tests::test_chain_integrity_verification ... ok
+test custody::tests::test_tampered_chain_detected ... ok
+test custody::tests::test_export_custody_log ... ok
+test custody::tests::test_merkle_proof_rejects_wrong_leaf ... ok
+test stix::tests::test_browser_download_falls_back_to_summary_when_url_missing ... ok
+test custody::tests::test_merkle_tree_odd_leaf_count ... ok
+test stix::tests::test_empty_case_produces_empty_bundle ... ok
+test stix::tests::test_indicator_from_correlation_lead ... ok
+test custody::tests::test_merkle_proof_verification ... ok
+test stix::tests::test_lnk_artifact_falls_back_to_summary_when_target_path_missing ... ok
+test stix::tests::test_observed_data_from_artifact ... ok
+test stix::tests::test_observed_data_from_browser_download_artifact ... ok
+test stix::tests::test_export_stix_bundle_produces_valid_json ... ok
+test stix::tests::test_observed_data_from_registry ... ok
+test stix::tests::test_relationship_object ... ok
+test stix::tests::test_observed_data_from_email ... ok
+test stix::tests::test_stix_confidence_mapping ... ok
+test stix::tests::test_unsupported_artifact_type_returns_none ... ok
+test stix::tests::test_relationships_generated_for_lead_supporting_nodes ... ok
+test signing::tests::test_deterministic_signing ... ok
+test signing::tests::test_sign_and_verify_roundtrip ... ok
+test signing::tests::test_sign_case_export_produces_valid_structure ... ok
+test signing::tests::test_invalid_signature_detected ... ok
+
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src\lib.rs (target\debug\deps\forensics_desktop_lib-f161658645d509fc.exe)
+
+running 67 tests
+test commands::analysis_commands::tests::sample_size_defaults_and_validates_bounds ... ok
+test commands::analysis_commands::tests::limited_header_cursor_passes_limit_and_returns_bytes_reader ... ok
+test cache_invalidation::tests::payload_deserializes_with_camel_case ... ok
+test commands::batch_commands::tests::batch_commands_require_active_case ... ok
+test commands::case_commands::tests::recent_cases_file_is_restricted_and_round_trips ... ok
+test commands::file_commands::tests::media_preview_logical_directory_reads_direct_without_service_fallback ... ok
+test commands::file_commands::tests::image_preview_logical_directory_reads_direct_without_service_fallback ... ok
+test commands::case_commands::tests::active_case_pool_is_guarded_by_active_case_lifecycle ... ok
+test commands::command_support::tests::active_case_snapshot_and_pool_connection_stay_in_sync ... ok
+test commands::batch_commands::tests::batch_plan_roundtrip_persists_job ... ok
+test commands::case_commands::tests::command_support_helpers_follow_active_case_lifecycle ... ok
+test commands::file_commands::tests::extract_file_uses_entry_reader_and_writes_destination ... ok
+test commands::batch_commands::tests::cancel_batch_returns_unsupported_stub ... ok
+test commands::file_commands::tests::image_preview_raw_image_reads_via_bytes_only_service_path ... ok
+test commands::batch_commands::tests::start_batch_returns_unsupported_stub ... ok
+test commands::batch_commands::tests::resume_batch_returns_unsupported_stub ... ok
+test commands::import::pipeline::tests::job_cancellation_dto_maps_requested_and_draining_states ... ok
+test commands::mcp_commands::tests::test_transport_summary_rejects_invalid_transport ... ok
+test commands::batch_commands::tests::pause_batch_returns_unsupported_stub ... ok
+test commands::mcp_commands::tests::transport_from_dto_rejects_invalid_transport ... ok
+test media_protocol::tests::content_range_is_standard ... ok
+test media_protocol::tests::parse_range_bytes_start_end ... ok
+test media_protocol::tests::parse_range_bytes_start_open ... ok
+test commands::settings_commands::tests::load_app_settings_returns_default_when_file_is_missing ... ok
+test media_protocol::tests::parse_range_file_size_one_byte ... ok
+test media_protocol::tests::parse_range_concurrent_independent_calls ... ok
+test media_protocol::tests::parse_range_invalid_syntax_returns_416 ... ok
+test media_protocol::tests::parse_range_max_chunk_of_one ... ok
+test media_protocol::tests::parse_range_missing_dash_returns_error ... ok
+test media_protocol::tests::parse_range_multiple_ranges_rejected ... ok
+test media_protocol::tests::parse_range_no_header_is_bounded ... ok
+test media_protocol::tests::parse_range_out_of_bounds_returns_416 ... ok
+test media_protocol::tests::parse_range_overflow_safe ... ok
+test media_protocol::tests::parse_range_oversized_end_clamped_to_max_chunk ... ok
+test media_protocol::tests::parse_range_reverse_returns_error ... ok
+test media_protocol::tests::parse_range_single_byte_start_zero ... ok
+test media_protocol::tests::parse_range_single_byte_suffix_one ... ok
+test media_protocol::tests::parse_range_start_at_last_byte ... ok
+test media_protocol::tests::parse_range_start_exactly_at_total_size_is_unsatisfiable ... ok
+test media_protocol::tests::parse_range_start_past_total_size_is_unsatisfiable ... ok
+test media_protocol::tests::parse_range_suffix ... ok
+test media_protocol::tests::parse_range_suffix_larger_than_file_returns_entire_file ... ok
+test media_protocol::tests::parse_range_suffix_zero_returns_error ... ok
+test media_protocol::tests::parse_range_zero_size ... ok
+test media_protocol::tests::protocol_url_encodes_opaque_handle ... ok
+test commands::settings_commands::tests::persisted_app_settings_roundtrip ... ok
+test state::app_state::tests::sync_mcp_clients_with_config_removes_stale_clients ... ok
+test commands::case_commands::tests::remember_recent_case_uses_actual_case_directory ... ok
+test platform_security::tests::restrict_succeeds_for_regular_file ... ok
+test state::task_manager::tests::cancel_all_tasks ... ok
+test state::task_manager::tests::register_and_cancel ... ok
+test tests::every_tauri_command_is_registered_in_invoke_handler ... ok
+test commands::file_commands::tests::media_preview_raw_image_reads_via_bytes_only_service_path ... ok
+test commands::file_commands::tests::media_range_mid_file_reads_raw_bytes_without_hex_viewer_path ... ok
+test commands::file_commands::tests::media_range_clamps_length_to_one_megabyte ... ok
+test commands::file_commands::tests::media_preview_returns_data_url_without_host_path ... ok
+test state::task_manager::tests::cleanup_finished_tasks ... ok
+test commands::file_commands::tests::media_range_mid_raw_image_reads_via_bytes_only_service_path ... ok
+test state::task_manager::tests::task_elapsed ... ok
+test commands::file_commands::tests::media_range_offset_at_size_returns_empty_eof ... ok
+test commands::file_commands::tests::media_range_rejects_invalid_handle ... ok
+test commands::file_commands::tests::media_range_response_does_not_leak_host_path ... ok
+test media_protocol::tests::protocol_mid_raw_image_range_reads_via_bytes_only_service_path ... ok
+test commands::file_commands::tests::text_preview_raw_image_header_reads_via_bytes_only_service_path ... ok
+test commands::file_commands::tests::oversized_media_preview_returns_scoped_handle_and_range_reads ... ok
+test commands::case_commands::tests::analysis_demo_seed_supports_real_analysis_flow ... ok
+test commands::benchmarks::benchmark_tests::bench_all_scenarios ... ok
+
+test result: ok. 67 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.11s
+
+     Running unittests src\main.rs (target\debug\deps\forensics_desktop-d7610662891b0f0a.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\fs_apfs-a760880f512343f7.exe)
+
+running 20 tests
+test checkpoint::tests::test_diff_file_lists_empty ... ok
+test checkpoint::tests::test_checkpoint_out_of_range ... ok
+test checkpoint::tests::test_diff_file_lists_changed_size ... ok
+test tests::test_container_superblock ... ok
+test checkpoint::tests::test_checkpoint_descriptor_parsing ... ok
+test tests::test_container_superblock_info ... ok
+test tests::test_invalid_magic_rejected ... ok
+test tests::test_inode_parsing ... ok
+test tests::test_file_read ... ok
+test checkpoint::tests::test_rewind_to_current_checkpoint ... ok
+test checkpoint::tests::test_rewind_to_older_checkpoint ... ok
+test tests::test_nested_file_read ... ok
+test checkpoint::tests::test_recover_deleted_files ... ok
+test tests::test_nonexistent_path ... ok
+test tests::test_nested_three_levels ... ok
+test checkpoint::tests::test_diff_checkpoints ... ok
+test tests::test_nonexistent_volume ... ok
+test tests::test_object_map_for_root_inode ... ok
+test tests::test_root_directory_listing ... ok
+test tests::test_volume_listing ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\fs_btrfs-cd5efc763c03e04b.exe)
+
+running 19 tests
+test snapshot::tests::test_diff_file_trees_size_change ... ok
+test tests::test_chunk_mapping ... ok
+test snapshot::tests::test_snapshot_nonexistent ... ok
+test tests::test_invalid_magic_rejected ... ok
+test tests::test_chunk_identity_mapping ... ok
+test snapshot::tests::test_read_default_as_subvolume ... ok
+test snapshot::tests::test_diff_same_snapshot ... ok
+test tests::test_root_directory_listing ... ok
+test snapshot::tests::test_diff_snapshots ... ok
+test snapshot::tests::test_list_snapshots ... ok
+test snapshot::tests::test_read_snapshot ... ok
+test tests::test_nested_file_read ... ok
+test tests::test_subvolume_count ... ok
+test tests::test_file_read ... ok
+test tests::test_subvolume_listing ... ok
+test tests::test_subdir_listing ... ok
+test tests::test_nonexistent_path ... ok
+test tests::test_superblock_values ... ok
+test tests::test_superblock_magic ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\fs_exfat-42ab9fd47a3ad72c.exe)
+
+running 38 tests
+test boot::tests::parse_valid_boot_sector ... ok
+test boot::tests::cluster_to_offset_calculation ... ok
+test dir::tests::parse_deleted_entry ... ok
+test boot::tests::reject_invalid_magic ... ok
+test boot::tests::reject_invalid_signature ... ok
+test dir::tests::parse_exfat_timestamp_zero ... ok
+test boot::tests::reject_invalid_jump_boot ... ok
+test dir::tests::parse_exfat_timestamp_unknown_offset_treated_as_utc ... ok
+test dir::tests::parse_directory_entries_complete ... ok
+test dir::tests::parse_exfat_timestamp_valid ... ok
+test dir::tests::parse_exfat_timestamp_with_negative_utc_offset ... ok
+test dir::tests::parse_exfat_timestamp_with_positive_utc_offset ... ok
+test boot::tests::reject_nonzero_mustbezero ... ok
+test dir::tests::parse_file_directory_entry ... ok
+test dir::tests::parse_filename_entry ... ok
+test boot::tests::too_small_data_rejected ... ok
+test dir::tests::parse_stream_entry ... ok
+test dir::tests::reject_oversized_volume_label_without_panic ... ok
+test fat::tests::fat_entry_from_raw ... ok
+test fat::tests::fat_entry_methods ... ok
+test fat::tests::fat_reader_entry_offset ... ok
+test fat::tests::walk_chain_limit_errors ... ok
+test fat::tests::walk_cycle_detected ... ok
+test fat::tests::walk_empty_chain ... ok
+test fat::tests::walk_simple_chain ... ok
+test fat::tests::walk_single_cluster_chain ... ok
+test fat::tests::walk_unexpected_free_cluster_errors ... ok
+test tests::exfat_data_source_name ... ok
+test tests::exfat_list_root ... ok
+test tests::exfat_open_file ... ok
+test tests::exfat_open_file_errors_on_chain_longer_than_cluster_count ... ok
+test tests::exfat_open_file_honors_no_fat_chain ... ok
+test tests::exfat_open_file_errors_on_no_fat_chain_extent_past_cluster_count ... ok
+test tests::exfat_open_file_errors_on_out_of_range_file_cluster ... ok
+test tests::exfat_open_nonexistent ... ok
+test tests::exfat_range_read_nonzero_offset_reads_only_requested_extent ... ok
+test tests::exfat_open_valid ... ok
+test tests::exfat_root_properties ... ok
+
+test result: ok. 38 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\fs_ext4-c20863b4fa582362.exe)
+
+running 27 tests
+test journal::tests::test_align_up ... ok
+test journal::tests::test_journal_header_revoke ... ok
+test journal::tests::test_is_plausible_deleted_inode ... ok
+test journal::tests::test_collect_descriptor_blocks ... ok
+test journal::tests::test_block_tag_flags ... ok
+test journal::tests::test_non_descriptor_block_rejected ... ok
+test journal::tests::test_journal_superblock_invalid_magic ... ok
+test journal::tests::test_confidence_scoring ... ok
+test journal::tests::test_parse_descriptor_block ... ok
+test journal::tests::test_parse_journal_header ... ok
+test journal::tests::test_recover_deleted_inodes_empty_journal ... ok
+test journal::tests::test_recover_deleted_inodes_from_journal ... ok
+test tests::test_64bit_block_number ... ok
+test tests::test_block_size_calculation ... ok
+test journal::tests::test_parse_journal_superblock ... ok
+test tests::test_directory_listing ... ok
+test tests::test_data_source_name ... ok
+test tests::test_extent_tree_depth_one ... ok
+test tests::test_fast_symlink ... ok
+test tests::test_inode_parsing ... ok
+test tests::test_invalid_magic_rejected ... ok
+test tests::test_list_nonexistent_path ... ok
+test tests::test_open_and_read_file ... ok
+test tests::test_open_file_in_subdirectory ... ok
+test tests::test_open_nonexistent_file ... ok
+test tests::test_root_is_directory ... ok
+test tests::test_superblock_magic ... ok
+
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\fs_fat-1d6b7c7aec95a082.exe)
+
+running 7 tests
+test tests::test_fat_type_detection ... ok
+test tests::test_join_child_path ... ok
+test tests::fat_open_file_still_returns_complete_file ... ok
+test tests::fat_range_read_nonzero_offset_reads_only_target_cluster_data ... ok
+test tests::test_join_child_path_backslash ... ok
+test tests::test_read_sfn_name ... ok
+test tests::test_read_sfn_name_no_ext ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\fat_test.rs (target\debug\deps\fat_test-479f4c64dd28dd0b.exe)
+
+running 9 tests
+test fat32_open_file_reads_content ... ok
+test fat32_open_nonexistent_errors ... ok
+test fat32_list_subdir_errors_on_directory_chain_cycle ... ok
+test fat32_open_nested_file ... ok
+test fat32_list_subdir ... ok
+test fat32_open_file_errors_on_bad_cluster_marker ... ok
+test fat32_open_file_errors_on_unexpected_free_cluster ... ok
+test fat32_open_file_errors_on_cycle ... ok
+test fat32_list_root ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\fs_hfsplus-f3aa2446866c52c5.exe)
+
+running 12 tests
+test tests::test_case_sensitive_exact ... ok
+test tests::test_file_inode_and_extents ... ok
+test tests::test_deeply_nested_path ... ok
+test tests::test_btree_key_existence_via_subdirectory ... ok
+test tests::test_case_insensitive_lookup ... ok
+test tests::test_invalid_magic_rejected ... ok
+test tests::test_volume_header ... ok
+test tests::test_nonexistent_path ... ok
+test tests::test_root_catalog_listing ... ok
+test tests::test_missing_subdirectory ... ok
+test tests::test_timestamp_format ... ok
+test tests::test_root_node ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\fs_ntfs-c331508359569a47.exe)
+
+running 28 tests
+test logfile::tests::attribute_type_code_mapped_correctly ... ok
+test ads::tests::list_ads_no_streams_returns_empty ... ok
+test ads::tests::list_ads_multiple_streams ... ok
+test logfile::tests::rstr_page_skipped_gracefully ... ok
+test ads::tests::list_ads_returns_named_stream ... ok
+test ads::tests::read_ads_case_insensitive_name ... ok
+test ads::tests::read_ads_returns_stream_content ... ok
+test logfile::tests::corrupt_rcrd_page_does_not_panic ... ok
+test logfile::tests::multiple_records_extracted ... ok
+test ads::tests::read_ads_nonexistent_returns_empty ... ok
+test logfile::tests::timestamp_extracted_from_records ... ok
+test mft_scanner::tests::file_name_real_size_is_fallback_when_data_attr_unavailable ... ok
+test ads::tests::list_ads_nonexistent_path_returns_empty ... ok
+test logfile::tests::empty_logfile_returns_no_changes ... ok
+test mft_scanner::tests::ntfs_time_conversion ... ok
+test mft_scanner::tests::named_data_stream_does_not_override_primary_file_size ... ok
+test logfile::tests::single_create_record_extracted ... ok
+test logfile::tests::logfile_with_zero_pages_returns_no_changes ... ok
+test mft_scanner::tests::parse_directory_record ... ok
+test mft_scanner::tests::parse_inactive_hidden_system_record ... ok
+test mft_scanner::tests::parse_inactive_record ... ok
+test mft_scanner::tests::parse_invalid_record ... ok
+test mft_scanner::tests::parse_multiple_file_name_attrs_keeps_selected_parent_ref ... ok
+test mft_scanner::tests::parse_valid_file_record ... ok
+test mft_scanner::tests::scanner_parse_chunk ... ok
+test mft_scanner::tests::zero_time_returns_none ... ok
+test utils::mft_inode_fast_path_handles_legacy_format ... ok
+test utils::mft_inode_fast_path_handles_partition_record_format ... ok
+
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\mft_test.rs (target\debug\deps\mft_test-8464434c29366e5f.exe)
+
+running 18 tests
+test data_run_parse_zero_length_runs_skipped ... ok
+test read_external_attribute_list_data_by_inode_and_range ... ok
+test read_nonresident_file_data ... ok
+test open_file_truncated_record_no_panic ... ok
+test open_nonexistent_file_errors ... ok
+test efs_encrypted_file_detected ... ok
+test par_ref_mismatch_returns_none ... ok
+test list_root_children_returns_3_nodes ... ok
+test read_resident_file_data ... ok
+test open_file_nested_path ... ok
+test malformed_record_no_panic ... ok
+test list_children_subdir_returns_empty ... ok
+test index_alloc_entries_are_directories ... ok
+test later_file_name_parent_match_resolves_directory ... ok
+test list_children_returns_files_and_dirs ... ok
+test list_root_with_index_alloc_returns_all_entries ... ok
+test resolve_nested_path_lists_children ... ok
+test wrong_path_returns_empty ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\fs_xfs-25dfeed5ed004e31.exe)
+
+running 29 tests
+test log::tests::test_extract_dirent_from_buf ... ok
+test log::tests::test_extract_dirent_from_buf_no_valid_entry ... ok
+test log::tests::test_log_record_header_invalid_magic ... ok
+test log::tests::test_collect_log_records ... ok
+test tests::test_ag_geometry_computation ... ok
+test tests::test_data_source_name ... ok
+test log::tests::test_parse_logged_inode_core_nlink_nonzero ... ok
+test log::tests::test_recover_deleted_inodes ... ok
+test log::tests::test_recover_metadata_operations ... ok
+test tests::test_ag_count ... ok
+test log::tests::test_parse_inode_item ... ok
+test log::tests::test_parse_log_record_header ... ok
+test log::tests::test_empty_log_data ... ok
+test log::tests::test_record_len_when_zero ... ok
+test tests::test_file_read ... ok
+test tests::test_btree_format_file_read ... ok
+test tests::test_inode_magic ... ok
+test tests::test_inode_size_and_sectsize ... ok
+test tests::test_inode_validation_rejects_bad_magic ... ok
+test tests::test_invalid_magic_rejected ... ok
+test tests::test_list_nonexistent_path ... ok
+test tests::test_parse_block_dir_empty_data ... ok
+test tests::test_open_nonexistent_file ... ok
+test tests::test_parse_block_dir_unknown_magic_errors ... ok
+test tests::test_parse_block_dir_v3 ... ok
+test tests::test_parse_block_dir_v5 ... ok
+test tests::test_parse_block_dir_with_free_space ... ok
+test tests::test_root_directory ... ok
+test tests::test_superblock_magic ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\gql-98eeddb495e9d709.exe)
+
+running 42 tests
+test parser::tests::parse_error_on_invalid ... ok
+test parser::tests::parse_error_unterminated_string ... ok
+test parser::tests::parse_limit ... ok
+test parser::tests::parse_bare_edge_no_brackets ... ok
+test parser::tests::parse_bool_values ... ok
+test parser::tests::parse_case_insensitive_keywords ... ok
+test parser::tests::display_match_no_where_no_limit ... ok
+test parser::tests::display_roundtrip_simple ... ok
+test parser::tests::parse_match_no_type_annotations ... ok
+test parser::tests::parse_match_reverse_direction ... ok
+test parser::tests::parse_no_limit ... ok
+test parser::tests::parse_null_value ... ok
+test parser::tests::parse_return_count_star ... ok
+test parser::tests::parse_return_count_var ... ok
+test parser::tests::parse_return_multiple_items ... ok
+test parser::tests::parse_simple_match_with_types ... ok
+test parser::tests::parse_reverse_direction_bare_arrow ... ok
+test parser::tests::parse_where_contains_operator ... ok
+test parser::tests::parse_where_like_operator ... ok
+test parser::tests::parse_where_multiple_predicates_and ... ok
+test parser::tests::parse_where_multiple_predicates_or ... ok
+test parser::tests::parse_where_not_eq ... ok
+test parser::tests::parse_where_predicate_gt_number ... ok
+test parser::tests::parse_where_predicate_gte_number ... ok
+test parser::tests::parse_where_predicate_lte_number ... ok
+test parser::tests::parse_where_single_predicate_eq_string ... ok
+test parser::tests::parse_with_aggregate_max ... ok
+test parser::tests::parse_with_aggregate_min ... ok
+test plan::tests::plan_for_typed_match ... ok
+test plan::tests::plan_for_untyped_match_has_higher_cost ... ok
+test plan::tests::plan_outgoing_direction_uses_source_index ... ok
+test plan::tests::plan_reverse_direction_uses_target_index ... ok
+test plan::tests::plan_total_cost_aggregates_all_steps ... ok
+test plan::tests::plan_with_limit ... ok
+test plan::tests::plan_with_count_aggregate_has_project_step ... ok
+test plan::tests::plan_with_where_adds_filter_step ... ok
+test engine::tests::engine_reverse_direction ... ok
+test engine::tests::engine_where_confidence_filter ... ok
+test engine::tests::engine_where_label_filter ... ok
+test engine::tests::engine_count_aggregate ... ok
+test engine::tests::engine_limit ... ok
+test engine::tests::engine_match_file_to_artifact ... ok
+
+test result: ok. 42 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running unittests src\lib.rs (target\debug\deps\image_e01-8ba124e22b12e764.exe)
+
+running 9 tests
+test tests::test_build_segment_path_first ... ok
+test tests::test_build_segment_path_lowercase ... ok
+test tests::test_build_segment_path_second ... ok
+test tests::test_build_segment_path_third ... ok
+test tests::test_section_descriptor_size ... ok
+test tests::test_v1_table_header_size ... ok
+test tests::sequential_reads_populate_bounded_neighbor_cache ... ok
+test tests::cloned_reader_reads_same_data ... ok
+test tests::seek_resets_sequential_prefetch_hint ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\e01_dump.rs (target\debug\deps\e01_dump-e165a6e0d24007f8.exe)
+
+running 2 tests
+test dump_first_table_bytes ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test dump_section_walk ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+
+test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\e01_regression_test.rs (target\debug\deps\e01_regression_test-edfb0917bd431b0f.exe)
+
+running 9 tests
+test cross_chunk_4k ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test open_real_file ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test read_first_sector ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test read_mid_image_block ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test seek_end_read_last ... ignored, requires FORENSICS_E01_FIXTURE real E01 sample
+test tiny_e01_fixture_supports_seek_and_eof ... ok
+test opens_committed_tiny_e01_fixture ... ok
+test multi_segment_with_only_first_file_works ... ok
+test prefers_primary_table_over_table2_duplicates ... ok
+
+test result: ok. 4 passed; 0 failed; 5 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src\lib.rs (target\debug\deps\image_raw-57755bdb7f95903f.exe)
+
+running 16 tests
+test tests::test_open_directory ... ok
+test tests::test_info_returns_path ... ok
+test tests::test_open_nonexistent_file ... ok
+test tests::test_open_valid_raw_image ... ok
+test tests::test_read_beyond_eof ... ok
+test tests::test_read_sector_zero ... ok
+test tests::test_seek_and_read ... ok
+test tests::test_clone_and_read ... ok
+test tests::test_multiple_clones_can_read ... ok
+test tests::test_len_and_is_empty ... ok
+test tests::test_read_exact_partial_read ... ok
+test tests::test_seek_current ... ok
+test tests::test_read_multiple_sectors ... ok
+test tests::test_seek_from_end ... ok
+test tests::test_reads_return_consistent_data ... ok
+test tests::test_seek_past_eof_then_seek_back ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src\lib.rs (target\debug\deps\infrastructure-b54e4ffc2f37d28b.exe)
+
+running 16 tests
+test hashing::tests::sha256_empty ... ok
+test hashing::tests::sha256_reader_empty ... ok
+test hashing::tests::sha256_reader_basic ... ok
+test hashing::tests::sha256_hello_world ... ok
+test hashing::tests::verify_sha256_match ... ok
+test hashing::tests::verify_sha256_mismatch ... ok
+test text::tests::html_escape_empty_string ... ok
+test text::tests::html_escape_escapes_all_special_chars ... ok
+test text::tests::html_escape_escapes_ampersand ... ok
+test text::tests::html_escape_escapes_angle_brackets ... ok
+test text::tests::html_escape_escapes_quotes ... ok
+test text::tests::html_escape_no_special_chars ... ok
+test hashing::tests::verify_sha256_empty ... ok
+test text::tests::html_escape_preserves_normal_text ... ok
+test text::tests::html_escape_unicode_passthrough ... ok
+test hashing::tests::sha256_large_data ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src\lib.rs (target\debug\deps\ingest-1893c16fdedb97fd.exe)
+
+running 15 tests
+test tests::classify_source_e01 ... ok
+test tests::classify_source_e01_lowercase ... ok
+test tests::classify_source_raw_dd ... ok
+test tests::classify_source_raw_img ... ok
+test tests::classify_source_raw_raw ... ok
+test tests::classify_source_unknown_file ... ok
+test tests::ingest_config_default ... ok
+test tests::ingest_stats_default ... ok
+test tests::ingest_stats_merge ... ok
+test tests::classify_source_directory ... ok
+test graph_writer::tests::test_write_nodes_empty ... ok
+test graph_writer::tests::test_write_edges_empty ... ok
+test graph_writer::tests::test_write_nodes_single ... ok
+test graph_writer::tests::test_write_nodes_and_edges ... ok
+test graph_writer::tests::test_write_edges_single ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src\lib.rs (target\debug\deps\mcp_client-147cbffe32920bc1.exe)
+
+running 48 tests
+test client::tests::test_client_config_sse ... ok
+test client::tests::test_client_capabilities_default_before_connect ... ok
+test client::tests::test_client_config_stdio ... ok
+test client::tests::test_client_new ... ok
+test client::tests::test_client_not_connected ... ok
+test error::tests::test_error_display_connection ... ok
+test error::tests::test_error_display_not_connected ... ok
+test error::tests::test_error_display_protocol ... ok
+test error::tests::test_error_display_resource_not_found ... ok
+test error::tests::test_error_display_server ... ok
+test error::tests::test_error_display_timeout ... ok
+test error::tests::test_error_display_tool_not_found ... ok
+test error::tests::test_error_display_transport ... ok
+test error::tests::test_error_from_io ... ok
+test error::tests::test_error_from_json ... ok
+test transport::stdio::tests::test_stdio_transport_rejects_empty_command ... ok
+test transport::sse::tests::test_sse_transport_rejects_invalid_url ... ok
+test transport::stdio::tests::test_stdio_transport_new ... ok
+test transport::stdio::tests::test_request_id_increment ... ok
+test types::tests::fills_stdio_allow_list_with_command_by_default ... ok
+test types::tests::normalizes_allowed_command_casing_and_spacing ... ok
+test types::tests::rejects_duplicate_mcp_server_ids ... ok
+test types::tests::rejects_sse_urls_with_embedded_credentials ... ok
+test types::tests::rejects_stdio_command_paths ... ok
+test types::tests::rejects_unsupported_sse_url_schemes ... ok
+test types::tests::test_mcp_capabilities_default ... ok
+test types::tests::test_json_rpc_request ... ok
+test client::tests::test_client_blocks_disabled_tool_access_before_transport ... ok
+test client::tests::test_client_read_resource_not_connected ... ok
+test client::tests::test_client_list_prompts_not_connected ... ok
+test client::tests::test_client_call_tool_not_connected ... ok
+test client::tests::test_client_blocks_tool_not_in_allow_list ... ok
+test client::tests::test_client_not_connected_error ... ok
+test client::tests::test_client_rejects_invalid_transport_before_connect ... ok
+test types::tests::test_mcp_config_default ... ok
+test client::tests::test_client_list_tools_not_connected ... ok
+test client::tests::test_client_get_prompt_not_connected ... ok
+test types::tests::test_mcp_server_config_stdio ... ok
+test types::tests::test_mcp_server_status ... ok
+test types::tests::test_mcp_server_config_sse ... ok
+test types::tests::test_mcp_resource ... ok
+test types::tests::test_mcp_tool ... ok
+test types::tests::validates_and_normalizes_sse_urls ... ok
+test types::tests::validates_and_normalizes_stdio_command ... ok
+test types::tests::validates_stdio_permissions_against_allow_list ... ok
+test types::tests::validates_localhost_policy_for_sse ... ok
+test transport::sse::tests::test_request_id_increment ... ok
+test transport::sse::tests::test_sse_transport_new ... ok
+
+test result: ok. 48 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\integration_test.rs (target\debug\deps\integration_test-cd2366da3b776fc8.exe)
+
+running 12 tests
+test test_mcp_client_lifecycle ... ok
+test test_json_rpc_error_response_parsing ... ok
+test test_json_rpc_response_parsing ... ok
+test test_mcp_prompt_with_arguments ... ok
+test test_mcp_error_types ... ok
+test test_mcp_server_config_creation ... ok
+test test_json_rpc_request_format ... ok
+test test_mcp_tool_list ... ok
+test test_mcp_resource_list ... ok
+test test_mcp_server_status ... ok
+test test_mcp_config_serialization_roundtrip ... ok
+test test_mcp_client_operations_when_not_connected ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\persistence_sqlite-2ce434763530b8f4.exe)
+
+running 103 tests
+test connection::tests::open_existing_fails_if_missing ... ok
+test connection::tests::open_in_memory_can_query ... ok
+test repositories::audit_repo::tests::count_filters_by_case ... ok
+test repositories::artifact_repo::tests::insert_batch_then_count_returns_correct_number ... ok
+test repositories::artifact_repo::tests::count_by_family_returns_grouped_counts ... ok
+test migrations::partition_migration::tests::migrate_partitions_succeeds_without_migration_log_table ... ok
+test repositories::artifact_repo::tests::families_returns_distinct_types ... ok
+test repositories::artifact_repo::tests::list_by_family_filters_correctly ... ok
+test repositories::artifact_repo::tests::artifact_provenance_round_trips ... ok
+test repositories::audit_repo::tests::log_and_query_roundtrip ... ok
+test migrations::partition_migration::tests::migrate_partitions_updates_0014_migration_log ... ok
+test repositories::audit_repo::tests::query_by_action_filters_entries ... ok
+test repositories::case_repo::tests::create_then_find_by_id_returns_it ... ok
+test repositories::case_repo::tests::delete_removes_the_case ... ok
+test repositories::artifact_repo::tests::artifact_null_provenance_loads_as_missing ... ok
+test connection::tests::open_in_memory_foreign_keys_enabled ... ok
+test repositories::case_repo::tests::find_by_id_nonexistent_returns_none ... ok
+test repositories::batch_repo::tests::upsert_and_get_phases ... ok
+test repositories::batch_repo::tests::checkpoint_missing_returns_none ... ok
+test repositories::batch_repo::tests::checkpoint_read_write ... ok
+test repositories::case_repo::tests::list_all_returns_all_cases ... ok
+test repositories::batch_repo::tests::create_and_get_batch_job ... ok
+test repositories::batch_repo::tests::list_jobs_by_case ... ok
+test repositories::batch_repo::tests::update_job_status ... ok
+test repositories::correlation_repo::tests::clear_cache_removes_both_tables ... ok
+test repositories::correlation_repo::tests::compute_artifact_hash_changes_when_data_changes ... ok
+test repositories::correlation_repo::tests::compute_artifact_hash_is_stable ... ok
+test repositories::correlation_repo::tests::collect_artifact_ids_returns_sorted ... ok
+test repositories::correlation_repo::tests::resolve_case_id_returns_none_when_empty ... ok
+test repositories::correlation_repo::tests::store_and_get_snapshot_cache ... ok
+test repositories::correlation_repo::tests::store_cache_overwrites_previous ... ok
+test repositories::correlation_repo::tests::resolve_case_id_returns_first_distinct ... ok
+test repositories::datasource_repo::tests::insert_then_find_by_case_returns_it ... ok
+test repositories::datasource_repo::tests::delete_cascade_removes_the_record ... ok
+test repositories::datasource_repo::tests::legacy_null_provenance_loads_safe_defaults ... ok
+test repositories::datasource_repo::tests::rename_changes_the_name ... ok
+test repositories::entity_repo::tests::entity_relationship_upsert ... ok
+test repositories::datasource_repo::tests::insert_then_find_by_case_round_trips_provenance ... ok
+test repositories::entity_repo::tests::delete_entity_nodes_removes_only_entity_type ... ok
+test repositories::entity_repo::tests::get_artifact_rows_for_case_includes_attrs ... ok
+test repositories::entity_repo::tests::merge_log_roundtrip ... ok
+test repositories::entity_repo::tests::get_artifact_ids_for_case_returns_correct_ids ... ok
+test repositories::entity_repo::tests::repoint_edges_and_delete_node ... ok
+test repositories::entity_repo::tests::resolved_entity_upsert ... ok
+test repositories::entity_repo::tests::upsert_entity_index_overwrites_on_conflict ... ok
+test repositories::entity_repo::tests::upsert_and_find_entity_index ... ok
+test connection::tests::open_or_create_wal_mode ... ok
+test connection::tests::open_or_create_creates_file ... ok
+test connection::tests::open_staging_creates_meta_table ... ok
+test connection::tests::open_existing_works_on_existing_file ... ok
+test connection::tests::open_staging_is_idempotent ... ok
+test repositories::job_repo::tests::cancellation_methods_update_status_without_schema_changes ... ok
+test repositories::job_repo::tests::complete_sets_status_to_completed ... ok
+test repositories::job_repo::tests::create_returns_job_id ... ok
+test repositories::job_repo::tests::fail_sets_status_to_failed ... ok
+test repositories::job_repo::tests::find_interrupted_returns_only_running_and_cancelling ... ok
+test repositories::job_repo::tests::list_recent_returns_jobs_ordered ... ok
+test repositories::job_repo::tests::update_progress_changes_progress ... ok
+test repositories::graph_repo::tests::neighbors_both ... ok
+test repositories::graph_repo::tests::neighbors_filtered_by_edge_type ... ok
+test repositories::graph_repo::tests::neighbors_incoming ... ok
+test repositories::graph_repo::tests::delete_case_graph_removes_all ... ok
+test repositories::graph_repo::tests::snapshot_counts_by_type ... ok
+test repositories::graph_repo::tests::insert_and_get_edge ... ok
+test repositories::graph_repo::tests::empty_batch_returns_zero ... ok
+test repositories::graph_repo::tests::insert_and_get_node ... ok
+test repositories::graph_repo::tests::get_node_nonexistent_returns_none ... ok
+test repositories::partition_repo::tests::count_by_data_source_returns_correct_count ... ok
+test repositories::partition_repo::tests::delete_by_data_source_removes_all ... ok
+test repositories::partition_repo::tests::insert_batch_then_find_by_data_source ... ok
+test repositories::report_repo::tests::insert_then_list_by_case_returns_record ... ok
+test repositories::report_repo::tests::list_by_case_wrong_id_returns_empty ... ok
+test repositories::report_repo::tests::update_status_changes_field ... ok
+test repositories::timeline_repo::tests::count_filtered_with_time_range ... ok
+test repositories::timeline_repo::tests::identical_timestamp_pagination_is_stable ... ok
+test repositories::timeline_repo::tests::insert_batch_then_count_returns_correct_number ... ok
+test repositories::file_repo::tests::find_by_path_prefix_escapes_like_wildcards ... ok
+test repositories::timeline_repo::tests::missing_timestamp_rows_sort_last_and_load_as_default_timestamp ... ok
+test repositories::timeline_repo::tests::query_filtered_filters_by_event_type ... ok
+test repositories::timeline_repo::tests::query_filtered_for_case_type_and_time_is_deterministic ... ok
+test repositories::timeline_repo::tests::query_returns_events_ordered_by_timestamp ... ok
+test repositories::timeline_repo::tests::query_large_unfiltered_uses_deterministic_timestamp_and_id_order ... ok
+test repositories::timeline_repo::tests::timeline_provenance_round_trips ... ok
+test repositories::timeline_repo::tests::timeline_missing_confidence_loads_as_unknown ... ok
+test sql_builder::tests::clause_builder_tracks_param_indices ... ok
+test sql_builder::tests::empty_builder_produces_empty_where_clause ... ok
+test sql_builder::tests::placeholders_generates_sequential_list ... ok
+test sql_builder::tests::push_raw_appends_clause_and_values_after_existing_params ... ok
+test sql_builder::tests::set_clause_joins_with_commas ... ok
+test repositories::file_repo::tests::legacy_capitalized_entry_type_is_treated_as_directory ... ok
+test repositories::graph_repo::tests::traverse_respects_max_depth ... ok
+test repositories::graph_repo::tests::traverse_bfs_simple_path ... ok
+test repositories::graph_repo::tests::traverse_respects_limit ... ok
+test repositories::notebook_repo::tests::add_and_list_citations ... ok
+test repositories::notebook_repo::tests::batch_citations_maps_correctly ... ok
+test repositories::notebook_repo::tests::create_and_get_entry ... ok
+test repositories::notebook_repo::tests::delete_case_notebook_removes_all ... ok
+test repositories::notebook_repo::tests::get_nonexistent_entry_returns_none ... ok
+test repositories::notebook_repo::tests::get_thread_recursive_cte ... ok
+test repositories::notebook_repo::tests::soft_delete_entry ... ok
+test repositories::notebook_repo::tests::update_entry_fields ... ok
+test repositories::notebook_repo::tests::list_entries_with_filters ... ok
+test repositories::notebook_repo::tests::record_and_list_steps ... ok
+
+test result: ok. 103 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.68s
+
+     Running tests\case_repo_test.rs (target\debug\deps\case_repo_test-c265ed63b875ba71.exe)
+
+running 5 tests
+test list_all_cases ... ok
+test update_fields ... ok
+test find_nonexistent_returns_none ... ok
+test delete_case ... ok
+test create_and_find ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests\connection_test.rs (target\debug\deps\connection_test-51c8c0c42e0d7f7d.exe)
+
+running 8 tests
+test failed_migration_is_not_marked_applied ... ok
+test upgrades_legacy_schema_to_latest_with_partition_job_columns ... ok
+test tables_exist_after_migration ... ok
+test idempotent_rerun ... ok
+test run_all_migrations ... ok
+test version_query ... ok
+test create_new_db ... ok
+test open_existing_db ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running unittests src\lib.rs (target\debug\deps\reports-e48321b098864061.exe)
+
+running 16 tests
+test csv::exporter::tests::test_sanitize_csv_cell_formula ... ok
+test csv::exporter::tests::test_export_artifacts ... ok
+test json::exporter::tests::export_empty_object ... ok
+test html::exporter::tests::governance_rows_are_html_escaped ... ok
+test csv::exporter::tests::test_export_correlation_leads ... ok
+test html::exporter::tests::correlation_rows_are_html_escaped ... ok
+test json::exporter::tests::export_produces_pretty_printed_json ... ok
+test json::exporter::tests::export_empty_array ... ok
+test csv::exporter::tests::test_sanitize_csv_cell_normal ... ok
+test html::exporter::tests::structured_correlation_sections_are_html_escaped ... ok
+test json::exporter::tests::export_invalid_value_returns_empty_string ... ok
+test html::exporter::tests::analysis_provenance_is_html_escaped ... ok
+test json::exporter::tests::export_nested_object ... ok
+test csv::exporter::tests::test_export_correlation_leads_sanitizes_formula ... ok
+test json::exporter::tests::export_preserves_special_characters ... ok
+test json::exporter::tests::export_large_array ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\runtime_cache-14d1437c3c4be7e6.exe)
+
+running 16 tests
+test repositories::cache_repo::tests::cache_cleanup_expired ... ok
+test repositories::handle_repo::tests::handle_create_get_delete ... ok
+test tests::runtime_cache_full_workflow ... ok
+test tests::test_cache_miss_returns_none ... ok
+test tests::test_cache_insert_and_get ... ok
+test repositories::cache_repo::tests::cache_get_or_insert_case_sets_case_id_and_clear_case_removes_it ... ok
+test repositories::handle_repo::tests::handle_expired ... ok
+test repositories::cache_repo::tests::cache_set_get_delete ... ok
+test tests::test_cache_eviction_lru ... ok
+test repositories::handle_repo::tests::handle_cleanup ... ok
+test repositories::cache_repo::tests::cache_get_or_insert ... ok
+test tests::test_cache_clear ... ok
+test repositories::cache_repo::tests::cache_get_or_insert_case_hits_until_clear_case_invalidates ... ok
+test repositories::cache_repo::tests::cache_get_or_insert_case_does_not_hit_different_namespace ... ok
+test tests::test_concurrent_access ... ok
+test tests::test_cache_capacity_limit ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src\lib.rs (target\debug\deps\search-95415a3c11202017.exe)
+
+running 35 tests
+test extractor::text_extractor::tests::test_extract_text_binary ... ok
+test extractor::text_extractor::tests::test_extracted_text_fields ... ok
+test extractor::text_extractor::tests::test_extract_text_utf8 ... ok
+test extractor::text_extractor::tests::test_extract_text_json ... ok
+test highlighter::tests::highlight_empty_query ... ok
+test highlighter::tests::highlight_no_match ... ok
+test highlighter::tests::highlight_highlights_contain_correct_offsets ... ok
+test highlighter::tests::highlight_case_insensitive ... ok
+test extractor::text_extractor::tests::test_extract_text_empty ... ok
+test highlighter::tests::highlight_multiple_terms ... ok
+test highlighter::tests::highlight_query_with_quotes ... ok
+test highlighter::tests::highlight_empty_content ... ok
+test highlighter::tests::highlight_single_match ... ok
+test highlighter::tests::highlight_snippets_sorted_by_position ... ok
+test highlighter::tests::highlight_special_characters_in_content ... ok
+test highlighter::tests::highlight_utf8_content ... ok
+test highlighter::tests::highlight_whitespace_only_query ... ok
+test highlighter::tests::highlight_limits_snippets_for_large_repeated_content ... ok
+test highlighter::tests::highlight_caps_scanned_content_at_indexing_budget ... ok
+test highlighter::tests::highlight_limits_dense_match_snippet_text ... ok
+test indexer::tantivy_writer::tests::create_search_index_creates_directory ... ok
+test indexer::tantivy_writer::tests::index_documents_skips_empty_content ... ok
+test indexer::tantivy_writer::tests::open_existing_index ... ok
+test indexer::tantivy_writer::tests::index_documents_returns_count ... ok
+test indexer::tantivy_writer::tests::search_finds_indexed_document ... ok
+test indexer::tantivy_writer::tests::search_respects_limit ... ok
+test indexer::tantivy_writer::tests::search_no_results ... ok
+test indexer::tantivy_writer::tests::create_reuses_existing_index_without_clearing_documents ... ok
+test indexer::tantivy_writer::tests::index_documents_skips_non_extractable ... ok
+test indexer::tantivy_writer::tests::search_score_is_positive ... ok
+test indexer::tantivy_writer::tests::search_returns_snippets_with_highlights ... ok
+test indexer::tantivy_writer::tests::incremental_index_only_adds_new_files ... ok
+test indexer::tantivy_writer::tests::chunked_index_produces_same_results_as_batch ... ok
+test indexer::tantivy_writer::tests::partial_index_is_searchable_mid_build ... ok
+test indexer::tantivy_writer::tests::index_documents_replaces_existing ... ok
+
+test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.72s
+
+     Running tests\extractor_test.rs (target\debug\deps\extractor_test-a7cd48abac1d6627.exe)
+
+running 4 tests
+test binary_file_not_extractable ... ok
+test extract_utf16_le_text ... ok
+test extract_utf8_text ... ok
+test empty_file_returns_empty ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\indexer_test.rs (target\debug\deps\indexer_test-a9f94f3333b30d76.exe)
+
+running 5 tests
+test search_no_results ... ok
+test highlight_offsets_remain_inside_multibyte_snippet_boundaries ... ok
+test create_and_search_index ... ok
+test binary_documents_are_not_indexed_or_left_stale ... ok
+test reindex_same_file_id_replaces_existing_document ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.47s
+
+     Running unittests src\lib.rs (target\debug\deps\testing-0c44ee3ac2fa76e4.exe)
+
+running 10 tests
+test fixtures::tests::local_liuyang_e01_fixture_is_opt_in ... ok
+test fixtures::tests::local_e01_fixture_is_opt_in ... ok
+test builders::registry::tests::software_hive_has_registry_header ... ok
+test builders::registry::tests::system_hive_has_registry_header ... ok
+test fixtures::tests::tiny_logical_fixture_exists ... ok
+test fixtures::tests::tiny_raw_fixture_exists_and_has_mbr_signature ... ok
+test fixtures::tests::tiny_registry_software_fixture_matches_builder ... ok
+test fixtures::tests::tiny_e01_fixture_exists_and_has_evf_header ... ok
+test fixtures::tests::tiny_registry_system_fixture_matches_builder ... ok
+test fixtures::tests::tiny_system_evtx_fixture_exists_and_has_evtx_header ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\generate_tiny_registry_fixtures.rs (target\debug\deps\generate_tiny_registry_fixtures-ced95402c73b30ef.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\timeline-00194e6160da2afe.exe)
+
+running 15 tests
+test tests::test_empty_slice_no_events ... ok
+test tests::test_project_file_created_only ... ok
+test tests::test_project_directory ... ok
+test tests::test_project_file_deleted_file ... ok
+test tests::test_project_single_file_macb ... ok
+test tests::test_macb_event_types ... ok
+test tests::test_event_source_object_id_matches ... ok
+test tests::test_project_file_no_timestamps ... ok
+test tests::test_timestamp_ordering ... ok
+test tests::test_project_file_mixed_timestamps ... ok
+test tests::test_projection_deterministic ... ok
+test tests::test_project_multiple_files ... ok
+test tests::test_zero_timestamp_filtered ... ok
+test tests::test_project_file_with_future_timestamp ... ok
+test tests::test_project_batch_25_files ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\transport-54b3b6af74e2e62e.exe)
+
+running 121 tests
+test commands::tests::artifact_by_id_request_requires_id ... ok
+test commands::tests::import_source_rejects_reserved_device_names ... ok
+test commands::tests::export_scope_defaults_enable_existing_sections_only ... ok
+test commands::tests::file_children_request_deserializes_show_hidden_camel_case ... ok
+test commands::tests::app_settings_rejects_missing_case_root ... ok
+test commands::tests::classify_files_request_deserializes_sample_size ... ok
+test commands::tests::file_rows_request_deserializes_show_hidden_camel_case ... ok
+test commands::tests::file_tree_request_defaults_show_hidden_to_false ... ok
+test commands::tests::file_jump_context_request_deserializes_sort_and_limit ... ok
+test commands::tests::extract_file_request_rejects_device_destination ... ok
+test commands::tests::import_source_rejects_windows_device_paths ... ok
+test commands::tests::import_source_rejects_extended_length_paths ... ok
+test commands::tests::app_settings_rejects_unknown_import_analysis_mode ... ok
+test commands::tests::app_settings_rejects_zero_analysis_workers ... ok
+test commands::tests::app_settings_rejects_zero_import_workers ... ok
+test commands::tests::app_settings_defaults_to_metadata_only_import_analysis ... ok
+test dto::analysis::tests::future_provenance_contract_includes_hash_version_and_confidence ... ignored, future provenance contract: add after DataSource/Artifact/Timeline schema migrations
+test commands::tests::timeline_event_by_id_request_requires_id ... ok
+test commands::tests::timeline_request_clamps_limit ... ok
+test commands::tests::timeline_request_rejects_reversed_time_range ... ok
+test dto::analysis::tests::provenance_serializes_required_camel_case_fields ... ok
+test dto::analysis_linux::tests::linux_sudo_event_omits_optional_fields_when_none ... ok
+test dto::analysis::tests::classification_serializes_camel_case ... ok
+test dto::analysis::tests::current_provenance_contract_is_bounded_to_source_attribution ... ok
+test dto::analysis_linux::tests::linux_artifact_summary_serializes_camel_case ... ok
+test dto::artifacts::tests::artifact_row_dto_serializes_optional_provenance_as_camel_case ... ok
+test dto::analysis::tests::system_info_serializes_camel_case_and_status ... ok
+test dto::artifacts::tests::artifact_row_dto_skips_missing_optional_provenance ... ok
+test dto::case::tests::data_source_summary_skips_missing_optional_provenance_fields ... ok
+test dto::case::tests::data_source_summary_serializes_provenance_fields_as_frontend_contract ... ok
+test dto::analysis::tests::governance_snapshot_serializes_camel_case ... ok
+test dto::entity_resolution::tests::entity_relationship_serializes_camel_case ... ok
+test dto::entity_resolution::tests::merge_result_serializes_camel_case ... ok
+test dto::entity_resolution::tests::relationship_type_serializes_camel_case ... ok
+test dto::correlation::tests::correlation_snapshot_serializes_camel_case_contract ... ok
+test dto::entity_resolution::tests::relationship_result_serializes_camel_case ... ok
+test dto::entity_resolution::tests::resolved_entity_serializes_camel_case ... ok
+test dto::exchange::tests::stix_export_request_serializes_camel_case ... ok
+test dto::exchange::tests::stix_export_request_skips_optional_filter ... ok
+test dto::exchange::tests::stix_export_result_serializes_camel_case ... ok
+test dto::files::tests::file_entry_row_serializes_visibility_flags_as_camel_case ... ok
+test dto::files::tests::file_jump_context_serializes_camel_case_fields ... ok
+test dto::files::tests::file_tree_node_serializes_visibility_flags_as_camel_case ... ok
+test dto::graph::tests::graph_edge_dto_omits_none_confidence ... ok
+test dto::graph::tests::graph_edge_dto_serializes_camel_case ... ok
+test dto::graph::tests::graph_node_dto_serializes_camel_case ... ok
+test dto::graph::tests::graph_query_dto_defaults_and_camel_case ... ok
+test dto::graph::tests::graph_query_dto_deserializes_with_defaults ... ok
+test dto::graph::tests::graph_query_result_dto_serializes_camel_case ... ok
+test dto::graph::tests::graph_snapshot_dto_serializes_camel_case ... ok
+test dto::import::tests::cache_and_performance_summaries_serialize_camel_case_contract ... ok
+test dto::import::tests::cache_status_contract_allows_observability_state_strings ... ok
+test dto::import::tests::cancellation_contract_serializes_design_request_and_state ... ok
+test dto::import::tests::import_enums_accept_stable_lower_camel_case_design_values ... ok
+test dto::import::tests::import_phase_progress_serializes_design_contract_as_camel_case ... ok
+test dto::import::tests::performance_report_serializes_bounded_metric_keys ... ok
+test dto::import::tests::partial_result_base_dto_has_no_required_payload ... ok
+test dto::jobs::tests::job_snapshot_defaults_stage4_counts ... ok
+test dto::jobs::tests::job_snapshot_serializes_stage4_counts_as_camel_case ... ok
+test dto::macos::tests::fsevent_dto_serializes ... ok
+test dto::macos::tests::plist_entry_dto_serializes_camel_case ... ok
+test dto::macos::tests::quarantine_entry_dto_serializes ... ok
+test dto::macos::tests::recent_item_dto_serializes ... ok
+test dto::macos::tests::spotlight_entry_dto_serializes ... ok
+test dto::macos::tests::unified_log_entry_dto_serializes ... ok
+test dto::mcp::tests::server_config_serializes_current_snake_case_response_fields ... ok
+test dto::mcp::tests::server_status_serializes_current_snake_case_capability_fields ... ok
+test dto::mcp::tests::test_connection_request_accepts_permissions ... ok
+test dto::mcp::tests::tool_call_request_accepts_current_snake_case_request_fields ... ok
+test dto::mcp::tests::tool_call_request_documents_camel_case_boundary_is_top_level_only ... ok
+test dto::notebook::tests::evidence_citation_dto_omits_none_snippet ... ok
+test dto::notebook::tests::evidence_citation_dto_deserializes_from_camel_case ... ok
+test dto::notebook::tests::evidence_citation_dto_roundtrip ... ok
+test dto::notebook::tests::evidence_citation_dto_serializes_camel_case ... ok
+test dto::notebook::tests::investigation_step_dto_deserializes_from_camel_case ... ok
+test dto::notebook::tests::investigation_step_dto_roundtrip ... ok
+test dto::notebook::tests::investigation_step_dto_serializes_camel_case ... ok
+test dto::notebook::tests::investigation_step_dto_serializes_failed_step ... ok
+test dto::notebook::tests::notebook_entry_dto_deserializes_from_camel_case ... ok
+test dto::notebook::tests::notebook_entry_dto_roundtrip ... ok
+test dto::notebook::tests::notebook_entry_dto_serializes_camel_case ... ok
+test dto::notebook::tests::notebook_entry_dto_serializes_with_parent_id ... ok
+test dto::notebook::tests::notebook_export_dto_deserializes_from_camel_case ... ok
+test dto::notebook::tests::notebook_export_dto_roundtrip ... ok
+test dto::notebook::tests::notebook_export_dto_serializes_camel_case ... ok
+test dto::notebook::tests::notebook_thread_edge_dto_roundtrip ... ok
+test dto::notebook::tests::notebook_thread_edge_dto_serializes_camel_case ... ok
+test dto::notebook::tests::step_replay_dto_deserializes_from_camel_case ... ok
+test dto::notebook::tests::step_replay_dto_roundtrip ... ok
+test dto::notebook::tests::step_replay_dto_serializes_camel_case ... ok
+test dto::recovery::tests::test_deleted_file_recovery_dto_deserializes_camel_case ... ok
+test dto::recovery::tests::test_deleted_file_recovery_dto_optional_fields_skip_when_none ... ok
+test dto::recovery::tests::test_deleted_file_recovery_dto_serializes_camel_case ... ok
+test dto::registry::tests::registry_transaction_dto_serializes_as_camel_case ... ok
+test dto::registry::tests::registry_transaction_dto_skips_optional_fields ... ok
+test dto::reports::tests::report_history_item_serializes_existing_contract_only_as_camel_case ... ok
+test dto::reports::tests::report_history_item_skips_missing_progress ... ok
+test dto::timeline::tests::timeline_event_dto_serializes_optional_provenance_as_camel_case ... ok
+test dto::timeline::tests::timeline_event_dto_skips_missing_optional_provenance ... ok
+test dto::viewer::tests::media_range_request_clamps_oversized_length ... ok
+test dto::viewer::tests::media_range_request_rejects_zero_length ... ok
+test dto::v3_governance::tests::empty_v3_snapshot_serializes_without_errors ... ok
+test dto::v3_governance::tests::v3_snapshot_serializes_camel_case ... ok
+test dto::viewer::tests::test_image_preview_dto_serialization ... ok
+test dto::viewer::tests::test_media_url_dto_serialization ... ok
+test dto::viewer::tests::test_media_url_protocol_serialization ... ok
+test dto::viewer::tests::test_text_preview_dto_serialization ... ok
+test dto::viewer::tests::test_viewer_handle_dto_no_mime ... ok
+test dto::viewer::tests::test_viewer_handle_dto_serialization ... ok
+test dto::viewer::tests::test_viewer_range_request_deserialization ... ok
+test dto::viewer::tests::viewer_range_request_clamps_oversized_length ... ok
+test dto::viewer::tests::viewer_range_request_rejects_empty_handle ... ok
+test dto::viewer::tests::viewer_range_request_rejects_zero_length ... ok
+test errors::tests::api_error_dto_omits_suggestion_when_none ... ok
+test errors::tests::api_error_dto_serializes_suggestion_in_camel_case ... ok
+test events::tests::event_topic_serializes_as_wire_topic ... ok
+test events::tests::new_event_topics_match_constant_strings ... ok
+test events::tests::runtime_event_topics_are_tauri_safe ... ok
+test paging::tests::page_request_clamps_unbounded_limit ... ok
+test events::tests::unknown_event_topic_is_rejected ... ok
+test paging::tests::page_request_replaces_zero_with_default ... ok
+
+test result: ok. 120 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src\lib.rs (target\debug\deps\updater-b622ecdfeba94548.exe)
+
+running 14 tests
+test tests::test_apply_update_path_does_not_exist ... ok
+test tests::test_is_newer ... ok
+test tests::test_manifest_version_comparison ... ok
+test tests::test_parse_update_manifest_invalid_json ... ok
+test tests::test_update_manifest_serialization_optional_fields_none ... ok
+test tests::test_parse_update_manifest_missing_fields ... ok
+test tests::test_update_manifest_serialization ... ok
+test tests::test_parse_update_manifest_valid ... ok
+test tests::test_parse_update_manifest_valid_minimal ... ok
+test tests::test_check_update_returns_some_when_newer ... ok
+test tests::test_download_update_hash_mismatch ... ok
+test tests::test_check_update_returns_none_when_current ... ok
+test tests::test_download_update_invalid_url ... ok
+test tests::test_check_update_fetch_error ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+   Doc-tests app_services
+
+running 2 tests
+test crates\app-services\src\rule_pack\mod.rs - rule_pack (line 11) ... ignored
+test crates\app-services\src\import_analysis\priority_queue.rs - import_analysis::priority_queue::PriorityTaskQueue (line 37) ... ok
+
+test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 3.25s
+
+   Doc-tests artifacts_android
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests artifacts_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests artifacts_ios
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests artifacts_linux
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests artifacts_macos
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests artifacts_windows
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests cloud_audit
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests containers_pst
+
+running 2 tests
+test crates\containers-pst\src\ost.rs - ost::OstReader (line 66) ... ignored
+test crates\containers-pst\src\reader.rs - reader::PstReader (line 31) ... ignored
+
+test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests crash_handler
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests domain
+
+running 3 tests
+test crates\domain\src\timestamp.rs - timestamp::validate_timestamp (line 20) ... ok
+test crates\domain\src\timestamp.rs - timestamp::unix_to_datetime (line 87) ... ok
+test crates\domain\src\timestamp.rs - timestamp::filetime_to_datetime (line 47) ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.06s
+
+   Doc-tests evidence_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests exchange
+
+running 1 test
+test crates\exchange\src\signing.rs - signing::SigningEngine::generate_keypair (line 44) ... ignored
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests forensics_desktop_lib
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests fs_apfs
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests fs_btrfs
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests fs_exfat
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests fs_ext4
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests fs_fat
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests fs_hfsplus
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests fs_ntfs
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests fs_xfs
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests gql
+
+running 2 tests
+test crates\gql\src\lib.rs - (line 9) ... ignored
+test crates\gql\src\parser.rs - parser::parse (line 940) ... ok
+
+test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.65s
+
+   Doc-tests image_e01
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests image_raw
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests infrastructure
+
+running 4 tests
+test crates\infrastructure\src\hashing\mod.rs - hashing::sha256_reader (line 15) - compile ... ok
+test crates\infrastructure\src\hashing\mod.rs - hashing::sha256_file (line 72) - compile ... ok
+test crates\infrastructure\src\hashing\mod.rs - hashing::verify_sha256 (line 57) ... ok
+test crates\infrastructure\src\hashing\mod.rs - hashing::sha256_bytes (line 42) ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.70s
+
+   Doc-tests ingest
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests mcp_client
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests persistence_sqlite
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests reports
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests runtime_cache
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests search
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests testing
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests timeline
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests transport
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests updater
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: 1 target failed:
+    `-p app-services --lib`

@@ -7,6 +7,7 @@ import {
   getEmailExtractionSummary,
   getEvtxEventSummary,
   getEvidenceClassificationSummary,
+  getLinuxArtifactSummary,
   getRegistryExtractionSummary,
   getRegistryStructuredSummary,
   getSystemInfo,
@@ -117,6 +118,19 @@ export function useEvtxEventSummary(request: AnalysisExtractionPageRequest = {})
   return useQuery({
     queryKey: ['analysis', 'evtx-events', currentCase.data?.id ?? null, offset, limit],
     queryFn: () => getEvtxEventSummary({ offset, limit }),
+    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+    retry: false,
+    ...ANALYSIS_QUERY_OPTIONS,
+  });
+}
+
+export function useLinuxArtifactSummary(request: AnalysisExtractionPageRequest = {}) {
+  const currentCase = useCurrentCase();
+  const offset = request.offset ?? 0;
+  const limit = request.limit ?? 200;
+  return useQuery({
+    queryKey: ['analysis', 'linux-artifacts', currentCase.data?.id ?? null, offset, limit],
+    queryFn: () => getLinuxArtifactSummary({ offset, limit }),
     enabled: currentCase.isSuccess && Boolean(currentCase.data),
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,

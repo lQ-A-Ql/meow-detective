@@ -3,6 +3,7 @@ export interface FileTreeNode {
   name: string;
   depth: number;
   hasChildren: boolean;
+  dataSourceId?: string;
   entryType?: 'file' | 'directory';
   size?: number;
   deleted: boolean;

@@ -1,0 +1,519 @@
+{
+  "nodes": [
+    {
+      "id": "file:crates/evidence-core/tests/logical_fs_test.rs",
+      "type": "file",
+      "name": "logical_fs_test.rs",
+      "filePath": "crates/evidence-core/tests/logical_fs_test.rs",
+      "summary": "逻辑文件系统抽象层的集成测试，验证目录枚举、文件元数据读取、内容读取及排序行为。",
+      "tags": ["test", "filesystem", "logical-fs", "integration-test"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evidence-core/tests/logical_fs_test.rs:enumerate_root",
+      "type": "function",
+      "name": "enumerate_root",
+      "filePath": "crates/evidence-core/tests/logical_fs_test.rs",
+      "lineRange": [7, 23],
+      "summary": "验证根目录枚举返回预期的顶层条目列表。",
+      "tags": ["test", "filesystem", "enumeration", "root"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evidence-core/tests/logical_fs_test.rs:list_children_of_subdir",
+      "type": "function",
+      "name": "list_children_of_subdir",
+      "filePath": "crates/evidence-core/tests/logical_fs_test.rs",
+      "lineRange": [26, 37],
+      "summary": "验证子目录的子项列表枚举正确。",
+      "tags": ["test", "filesystem", "children", "subdirectory"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evidence-core/tests/logical_fs_test.rs:stat_returns_metadata",
+      "type": "function",
+      "name": "stat_returns_metadata",
+      "filePath": "crates/evidence-core/tests/logical_fs_test.rs",
+      "lineRange": [40, 49],
+      "summary": "验证 stat 调用返回正确的文件元数据（大小、类型等）。",
+      "tags": ["test", "filesystem", "metadata", "stat"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evidence-core/tests/logical_fs_test.rs:open_file_reads_content",
+      "type": "function",
+      "name": "open_file_reads_content",
+      "filePath": "crates/evidence-core/tests/logical_fs_test.rs",
+      "lineRange": [52, 61],
+      "summary": "验证打开文件并读取内容返回正确的字节数据。",
+      "tags": ["test", "filesystem", "file-read", "content"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evidence-core/tests/logical_fs_test.rs:directories_sorted_first",
+      "type": "function",
+      "name": "directories_sorted_first",
+      "filePath": "crates/evidence-core/tests/logical_fs_test.rs",
+      "lineRange": [64, 74],
+      "summary": "验证目录条目在文件列表中被优先排列的排序约定。",
+      "tags": ["test", "filesystem", "sorting", "directories"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/evidence-core/tests/raw_reader_test.rs",
+      "type": "file",
+      "name": "raw_reader_test.rs",
+      "filePath": "crates/evidence-core/tests/raw_reader_test.rs",
+      "summary": "RAW 镜像读取器和探针功能的集成测试，验证扇区读取、随机访问及格式探测。",
+      "tags": ["test", "raw-reader", "evidence", "integration-test"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evidence-core/tests/raw_reader_test.rs:open_and_read_first_sector",
+      "type": "function",
+      "name": "open_and_read_first_sector",
+      "filePath": "crates/evidence-core/tests/raw_reader_test.rs",
+      "lineRange": [6, 19],
+      "summary": "验证 RAW 读取器打开镜像并正确读取第一个扇区数据。",
+      "tags": ["test", "raw-reader", "sector-read"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evidence-core/tests/raw_reader_test.rs:seek_and_read",
+      "type": "function",
+      "name": "seek_and_read",
+      "filePath": "crates/evidence-core/tests/raw_reader_test.rs",
+      "lineRange": [22, 35],
+      "summary": "验证 RAW 读取器 seek 后读取指定偏移量数据的一致性。",
+      "tags": ["test", "raw-reader", "seek"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:crates/evtx-patched/Cargo.toml",
+      "type": "config",
+      "name": "Cargo.toml",
+      "filePath": "crates/evtx-patched/Cargo.toml",
+      "summary": "evtx-patched 包的 Cargo 配置，定义 vendored/patched EVTX 解析器的元数据、版本和依赖项，包括 serde、chrono 和编码支持。",
+      "tags": ["configuration", "cargo", "evtx", "vendored", "patch"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/evtx-patched/LICENSE-APACHE",
+      "type": "file",
+      "name": "LICENSE-APACHE",
+      "filePath": "crates/evtx-patched/LICENSE-APACHE",
+      "summary": "Apache License 2.0 许可证文本，定义 evtx-patched 包的版权和使用条款。",
+      "tags": ["license", "apache-2.0", "legal"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:crates/evtx-patched/LICENSE-MIT",
+      "type": "file",
+      "name": "LICENSE-MIT",
+      "filePath": "crates/evtx-patched/LICENSE-MIT",
+      "summary": "MIT 许可证文本，定义 evtx-patched 包的版权和使用条款。",
+      "tags": ["license", "mit", "legal"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:crates/evtx-patched/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "crates/evtx-patched/README.md",
+      "summary": "evtx-patched 包的说明文档，涵盖 EVTX 解析器概述、XML 解析与 JSON 序列化功能、使用示例、增量解析和 Cargo 特性说明。",
+      "tags": ["documentation", "evtx", "readme", "parser", "serialization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/exchange/Cargo.toml",
+      "type": "config",
+      "name": "Cargo.toml",
+      "filePath": "crates/exchange/Cargo.toml",
+      "summary": "exchange 包的 Cargo 配置，定义 STIX 2.1 交换、Ed25519 签名和链式监护模块的依赖项。",
+      "tags": ["configuration", "cargo", "exchange", "stix"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/fs-apfs/Cargo.toml",
+      "type": "config",
+      "name": "Cargo.toml",
+      "filePath": "crates/fs-apfs/Cargo.toml",
+      "summary": "fs-apfs 包的 Cargo 配置，定义 Apple APFS 文件系统只读解析器的依赖项。",
+      "tags": ["configuration", "cargo", "apfs", "filesystem"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/fs-apfs/src/checkpoint.rs",
+      "type": "file",
+      "name": "checkpoint.rs",
+      "filePath": "crates/fs-apfs/src/checkpoint.rs",
+      "summary": "APFS 检查点差异分析与文件恢复模块，实现检查点描述符解析、快照回退、OID 映射重构及基于检查点差异的已删除文件恢复。",
+      "tags": ["apfs", "checkpoint", "recovery", "diff", "filesystem", "deleted-files"],
+      "complexity": "complex",
+      "languageNotes": "APFS 检查点机制用于一致性保护；此模块通过比较不同检查点的文件列表差异来恢复已删除的 inode。"
+    },
+    {
+      "id": "class:crates/fs-apfs/src/checkpoint.rs:CheckpointDescriptor",
+      "type": "class",
+      "name": "CheckpointDescriptor",
+      "filePath": "crates/fs-apfs/src/checkpoint.rs",
+      "lineRange": [31, 42],
+      "summary": "APFS 检查点描述符数据结构，记录容器超级块中检查点的偏移量信息。",
+      "tags": ["data-model", "apfs", "checkpoint", "exported"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/fs-apfs/src/checkpoint.rs:CheckpointDiff",
+      "type": "class",
+      "name": "CheckpointDiff",
+      "filePath": "crates/fs-apfs/src/checkpoint.rs",
+      "lineRange": [46, 53],
+      "summary": "两个检查点之间的差异摘要，统计新增、删除和修改的文件数量。",
+      "tags": ["data-model", "apfs", "diff", "exported"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/fs-apfs/src/checkpoint.rs:FsNodeChange",
+      "type": "class",
+      "name": "FsNodeChange",
+      "filePath": "crates/fs-apfs/src/checkpoint.rs",
+      "lineRange": [57, 64],
+      "summary": "文件系统节点变更记录，描述文件的新增、删除或修改类型。",
+      "tags": ["data-model", "apfs", "diff", "exported"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/fs-apfs/src/checkpoint.rs:RecoveredFile",
+      "type": "class",
+      "name": "RecoveredFile",
+      "filePath": "crates/fs-apfs/src/checkpoint.rs",
+      "lineRange": [69, 75],
+      "summary": "通过检查点差异分析恢复的已删除文件记录，包含路径和文件大小。",
+      "tags": ["data-model", "apfs", "recovery", "exported"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/fs-apfs/src/checkpoint.rs:parse_checkpoint_descriptor",
+      "type": "function",
+      "name": "parse_checkpoint_descriptor",
+      "filePath": "crates/fs-apfs/src/checkpoint.rs",
+      "lineRange": [88, 131],
+      "summary": "从 APFS 容器超级块中解析检查点描述符数组。",
+      "tags": ["apfs", "checkpoint", "parsing", "exported"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/fs-apfs/src/checkpoint.rs:rewind_to_checkpoint",
+      "type": "function",
+      "name": "rewind_to_checkpoint",
+      "filePath": "crates/fs-apfs/src/checkpoint.rs",
+      "lineRange": [138, 152],
+      "summary": "将读取器回退到指定检查点，并重建 OID 映射以实现一致性读取。",
+      "tags": ["apfs", "checkpoint", "rewind", "exported"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/fs-apfs/src/checkpoint.rs:diff_checkpoints",
+      "type": "function",
+      "name": "diff_checkpoints",
+      "filePath": "crates/fs-apfs/src/checkpoint.rs",
+      "lineRange": [159, 164],
+      "summary": "比较两个检查点的文件列表差异并生成摘要。",
+      "tags": ["apfs", "checkpoint", "diff", "exported"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/fs-apfs/src/checkpoint.rs:recover_deleted_files",
+      "type": "function",
+      "name": "recover_deleted_files",
+      "filePath": "crates/fs-apfs/src/checkpoint.rs",
+      "lineRange": [171, 208],
+      "summary": "通过遍历检查点之间的文件列表差异，恢复已删除的文件记录。",
+      "tags": ["apfs", "recovery", "deleted-files", "exported"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/fs-apfs/src/checkpoint.rs:read_checkpoint_oid_map",
+      "type": "function",
+      "name": "read_checkpoint_oid_map",
+      "filePath": "crates/fs-apfs/src/checkpoint.rs",
+      "lineRange": [214, 236],
+      "summary": "从检查点读取并重建对象标识符到物理地址的映射。",
+      "tags": ["apfs", "oid-map", "checkpoint"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/fs-apfs/src/checkpoint.rs:list_all_files_recursive",
+      "type": "function",
+      "name": "list_all_files_recursive",
+      "filePath": "crates/fs-apfs/src/checkpoint.rs",
+      "lineRange": [244, 293],
+      "summary": "递归遍历 APFS 卷的目录 B 树，收集所有文件的完整列表。",
+      "tags": ["apfs", "file-listing", "recursive", "traversal"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/fs-apfs/src/checkpoint.rs:read_btree_node_with_map",
+      "type": "function",
+      "name": "read_btree_node_with_map",
+      "filePath": "crates/fs-apfs/src/checkpoint.rs",
+      "lineRange": [302, 350],
+      "summary": "使用 OID 映射读取并解析 APFS B 树节点。",
+      "tags": ["apfs", "btree", "parsing", "oid-map"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/fs-apfs/src/checkpoint.rs:list_directory_with_map",
+      "type": "function",
+      "name": "list_directory_with_map",
+      "filePath": "crates/fs-apfs/src/checkpoint.rs",
+      "lineRange": [357, 368],
+      "summary": "使用 OID 映射列出指定 inode 的目录内容。",
+      "tags": ["apfs", "directory", "listing", "oid-map"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/fs-apfs/src/checkpoint.rs:diff_file_lists",
+      "type": "function",
+      "name": "diff_file_lists",
+      "filePath": "crates/fs-apfs/src/checkpoint.rs",
+      "lineRange": [376, 422],
+      "summary": "对两个文件列表执行集合差异运算，按路径分类新增、删除和修改的文件。",
+      "tags": ["apfs", "diff", "file-lists", "comparison", "exported"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:crates/evidence-core/tests/logical_fs_test.rs",
+      "target": "function:crates/evidence-core/tests/logical_fs_test.rs:enumerate_root",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evidence-core/tests/logical_fs_test.rs",
+      "target": "function:crates/evidence-core/tests/logical_fs_test.rs:list_children_of_subdir",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evidence-core/tests/logical_fs_test.rs",
+      "target": "function:crates/evidence-core/tests/logical_fs_test.rs:stat_returns_metadata",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evidence-core/tests/logical_fs_test.rs",
+      "target": "function:crates/evidence-core/tests/logical_fs_test.rs:open_file_reads_content",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evidence-core/tests/logical_fs_test.rs",
+      "target": "function:crates/evidence-core/tests/logical_fs_test.rs:directories_sorted_first",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evidence-core/tests/raw_reader_test.rs",
+      "target": "function:crates/evidence-core/tests/raw_reader_test.rs:open_and_read_first_sector",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evidence-core/tests/raw_reader_test.rs",
+      "target": "function:crates/evidence-core/tests/raw_reader_test.rs:seek_and_read",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "class:crates/fs-apfs/src/checkpoint.rs:CheckpointDescriptor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "class:crates/fs-apfs/src/checkpoint.rs:CheckpointDiff",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "class:crates/fs-apfs/src/checkpoint.rs:FsNodeChange",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "class:crates/fs-apfs/src/checkpoint.rs:RecoveredFile",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "function:crates/fs-apfs/src/checkpoint.rs:parse_checkpoint_descriptor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "function:crates/fs-apfs/src/checkpoint.rs:rewind_to_checkpoint",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "function:crates/fs-apfs/src/checkpoint.rs:diff_checkpoints",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "function:crates/fs-apfs/src/checkpoint.rs:recover_deleted_files",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "function:crates/fs-apfs/src/checkpoint.rs:read_checkpoint_oid_map",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "function:crates/fs-apfs/src/checkpoint.rs:list_all_files_recursive",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "function:crates/fs-apfs/src/checkpoint.rs:read_btree_node_with_map",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "function:crates/fs-apfs/src/checkpoint.rs:list_directory_with_map",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "function:crates/fs-apfs/src/checkpoint.rs:diff_file_lists",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "class:crates/fs-apfs/src/checkpoint.rs:CheckpointDescriptor",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "class:crates/fs-apfs/src/checkpoint.rs:CheckpointDiff",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "class:crates/fs-apfs/src/checkpoint.rs:FsNodeChange",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "class:crates/fs-apfs/src/checkpoint.rs:RecoveredFile",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "function:crates/fs-apfs/src/checkpoint.rs:parse_checkpoint_descriptor",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "function:crates/fs-apfs/src/checkpoint.rs:rewind_to_checkpoint",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "function:crates/fs-apfs/src/checkpoint.rs:diff_checkpoints",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "function:crates/fs-apfs/src/checkpoint.rs:recover_deleted_files",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/fs-apfs/src/checkpoint.rs",
+      "target": "function:crates/fs-apfs/src/checkpoint.rs:diff_file_lists",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "config:crates/fs-apfs/Cargo.toml",
+      "target": "file:crates/fs-apfs/src/checkpoint.rs",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "document:crates/evtx-patched/README.md",
+      "target": "config:crates/evtx-patched/Cargo.toml",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:crates/evtx-patched/README.md",
+      "target": "file:crates/evtx-patched/LICENSE-APACHE",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:crates/evtx-patched/README.md",
+      "target": "file:crates/evtx-patched/LICENSE-MIT",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

@@ -1,0 +1,1411 @@
+{
+  "nodes": [
+    {
+      "id": "file:crates/evtx-patched/src/wevt_templates/manifest/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/mod.rs",
+      "summary": "CRIM manifest 子模块的 barrel 文件，声明并汇总 error、parse、types 和 util 四个子模块。",
+      "tags": ["barrel", "module-declaration", "evtx", "crim-manifest"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "type": "file",
+      "name": "parse.rs",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "summary": "CRIM（Componentized Resource Index Manifest）二进制格式解析器，解析 Windows 事件提供者的完整元数据：头、提供者、通道、事件、关键字、级别、操作码、任务、模板表和值映射。",
+      "tags": ["evtx", "crim-manifest", "binary-parser", "wevt", "event-metadata"],
+      "complexity": "complex",
+      "languageNotes": "解析 Windows CRIM 二进制格式的完整实现，包含 15 个解析函数处理 PE 资源节中的模板元数据结构。"
+    },
+    {
+      "id": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "type": "file",
+      "name": "types.rs",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "summary": "定义 CRIM manifest 解析的所有数据模型类型（29 个 struct/enum），包括清单、头、提供者、事件定义、模板、关键字、级别、操作码、任务和值映射等完整类型体系。",
+      "tags": ["type-definition", "data-model", "evtx", "crim-manifest"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "type": "file",
+      "name": "util.rs",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "summary": "CRIM manifest 解析的辅助工具集，提供带上下文的命名读取函数（read_u8_named 等）、UTF-16 字符串解码、边界检查和类型转换工具。",
+      "tags": ["utility", "binary-parsing", "evtx", "crim-manifest"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/evtx-patched/src/wevt_templates/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "crates/evtx-patched/src/wevt_templates/mod.rs",
+      "summary": "wevt_templates 模块的 barrel 文件，声明并汇总 cache、error、extract、manifest、render、temp、types 和 wevtcache 八个子模块。",
+      "tags": ["barrel", "module-declaration", "evtx", "wevt"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/evtx-patched/src/wevt_templates/render.rs",
+      "type": "file",
+      "name": "render.rs",
+      "filePath": "crates/evtx-patched/src/wevt_templates/render.rs",
+      "summary": "将 WEVT 模板定义和临时模板 BinXML 数据渲染为 XML 字符串，支持带替换值的全事件 XML 生成和空占位符的默认渲染。",
+      "tags": ["evtx", "template-rendering", "xml", "wevt"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/evtx-patched/src/wevt_templates/temp.rs",
+      "type": "file",
+      "name": "temp.rs",
+      "filePath": "crates/evtx-patched/src/wevt_templates/temp.rs",
+      "summary": "从 WEVT blob 原始数据中提取临时模板列表，解析 CRIM manifest 并为每个提供者的模板表条目创建带 GUID 和偏移量的引用。",
+      "tags": ["evtx", "template-extraction", "wevt", "crim-manifest"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/evtx-patched/src/wevt_templates/types.rs",
+      "type": "file",
+      "name": "types.rs",
+      "filePath": "crates/evtx-patched/src/wevt_templates/types.rs",
+      "summary": "定义 WEVT 模板相关的核心数据类型：资源标识符（名称或 ID）、模板资源、临时模板头和临时模板引用。",
+      "tags": ["type-definition", "data-model", "evtx", "wevt"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "type": "file",
+      "name": "wevtcache.rs",
+      "filePath": "crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "summary": "实现 WEVT 模板缓存的持久化层：提供二进制格式的缓存文件读写（Writer/Reader），支持 CRIM blob 的序列化存储和逐条目读取遍历。",
+      "tags": ["evtx", "cache", "serialization", "wevt", "persistence"],
+      "complexity": "complex",
+      "languageNotes": "自定义二进制缓存文件格式，包含 header（magic/version/entry_count）和条目 header（kind/len），用于离线存储 WEVT 模板数据。"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse",
+      "type": "function",
+      "name": "parse",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "lineRange": [14, 80],
+      "summary": "CRIM manifest 解析入口，解析二进制数据头、所有提供者及其描述符偏移，返回完整的 CrimManifest 结构。",
+      "tags": ["evtx", "crim-manifest", "parser", "entry-point"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:build_index",
+      "type": "function",
+      "name": "build_index",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "lineRange": [86, 133],
+      "summary": "构建 CRIM manifest 的查找索引：创建模板 GUID -> 模板列表映射和事件键（provider+id+version）-> 模板 GUID 列表映射。",
+      "tags": ["evtx", "crim-manifest", "indexing", "lookup"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_crim_header",
+      "type": "function",
+      "name": "parse_crim_header",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "lineRange": [136, 165],
+      "summary": "解析 CRIM 二进制文件头：验证 'CRIM' 签名，读取版本号和提供者数量。",
+      "tags": ["evtx", "crim-manifest", "header-parsing", "internal"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_provider",
+      "type": "function",
+      "name": "parse_provider",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "lineRange": [167, 265],
+      "summary": "解析单个事件提供者：读取 GUID、大小、元素描述符列表和未知数据，调用 parse_provider_elements 解析子元素。",
+      "tags": ["evtx", "crim-manifest", "provider-parsing", "internal"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_provider_elements",
+      "type": "function",
+      "name": "parse_provider_elements",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "lineRange": [267, 329],
+      "summary": "根据提供者的元素描述符列表分派解析：按签名选择调用 channels、events、keywords、levels、maps、opcodes、tasks、ttbl 解析器。",
+      "tags": ["evtx", "crim-manifest", "dispatcher", "internal"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_channels",
+      "type": "function",
+      "name": "parse_channels",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "lineRange": [331, 419],
+      "summary": "解析事件通道定义表：读取 'CHAN' 签名、大小、条目数和每个通道的标识符、名称偏移和消息标识符。",
+      "tags": ["evtx", "crim-manifest", "channel-parsing", "internal"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_events",
+      "type": "function",
+      "name": "parse_events",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "lineRange": [421, 547],
+      "summary": "解析事件定义表：读取 'EVNT' 签名、48 字节事件定义结构（标识符、版本、通道、级别、操作码、任务、关键字、模板偏移等），并提取尾部数据。",
+      "tags": ["evtx", "crim-manifest", "event-parsing", "internal"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_keywords",
+      "type": "function",
+      "name": "parse_keywords",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "lineRange": [549, 635],
+      "summary": "解析关键字定义表：读取 'KEYW' 签名、16 字节条目（64 位掩码标识符、消息标识符、数据偏移），按需解析名称字符串。",
+      "tags": ["evtx", "crim-manifest", "keyword-parsing", "internal"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_levels",
+      "type": "function",
+      "name": "parse_levels",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "lineRange": [637, 722],
+      "summary": "解析事件级别定义表：读取 'LEVL' 签名、12 字节条目（标识符、消息标识符、数据偏移），按需解析级别名称。",
+      "tags": ["evtx", "crim-manifest", "level-parsing", "internal"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_opcodes",
+      "type": "function",
+      "name": "parse_opcodes",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "lineRange": [724, 809],
+      "summary": "解析操作码定义表：读取 'OPCD' 签名、12 字节条目（标识符、消息标识符、数据偏移），按需解析操作码名称。",
+      "tags": ["evtx", "crim-manifest", "opcode-parsing", "internal"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_tasks",
+      "type": "function",
+      "name": "parse_tasks",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "lineRange": [811, 898],
+      "summary": "解析任务定义表：读取 'TASK' 签名、28 字节条目（标识符、消息标识符、GUID、数据偏移），按需解析任务名称。",
+      "tags": ["evtx", "crim-manifest", "task-parsing", "internal"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_ttbl",
+      "type": "function",
+      "name": "parse_ttbl",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "lineRange": [900, 1051],
+      "summary": "解析模板表：读取 'TTBL' 签名和头部，遍历每个模板条目（含 GUID、BinXML 片段大小），调用 parse_template_items 解析模板项定义。",
+      "tags": ["evtx", "crim-manifest", "template-table", "internal"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_template_items",
+      "type": "function",
+      "name": "parse_template_items",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "lineRange": [1053, 1188],
+      "summary": "解析模板项（TemplateItem）列表：每个 20 字节条目包含输入/输出类型、count、length、名称偏移等字段，按需解析项名称字符串。",
+      "tags": ["evtx", "crim-manifest", "template-items", "internal"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_maps",
+      "type": "function",
+      "name": "parse_maps",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "lineRange": [1190, 1334],
+      "summary": "解析值映射/位图定义表：读取 'MAPS' 签名、偏移列表，按签名（VMAP/BMAP）分派到 parse_vmap 或创建 BitmapMap。",
+      "tags": ["evtx", "crim-manifest", "map-parsing", "internal"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_vmap",
+      "type": "function",
+      "name": "parse_vmap",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "lineRange": [1336, 1427],
+      "summary": "解析单个值映射（VMAP）：读取头部（大小、条目数、map 字符串偏移）、8 字节条目表（标识符+消息标识符），按需解析 map 字符串名称。",
+      "tags": ["evtx", "crim-manifest", "value-map", "internal"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:CrimManifest",
+      "type": "class",
+      "name": "CrimManifest",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "lineRange": [5, 10],
+      "summary": "CRIM manifest 顶层结构，包含原始数据、解析头和提供者列表。",
+      "tags": ["data-model", "evtx", "crim-manifest", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:Provider",
+      "type": "class",
+      "name": "Provider",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "lineRange": [21, 26],
+      "summary": "事件提供者结构，绑定 GUID、在 CRIM 数据中的偏移量和解析后的 WEVT 提供者元素。",
+      "tags": ["data-model", "evtx", "provider", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:WevtProvider",
+      "type": "class",
+      "name": "WevtProvider",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "lineRange": [29, 36],
+      "summary": "WEVT 提供者的完整元数据，包含大小、消息标识符、元素描述符和解析后的 ProviderElements。",
+      "tags": ["data-model", "evtx", "provider", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:ProviderElements",
+      "type": "class",
+      "name": "ProviderElements",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "lineRange": [47, 57],
+      "summary": "提供者的所有解析元素集合：channels、events、keywords、levels、maps、opcodes、tasks、templates 和未知元素。",
+      "tags": ["data-model", "evtx", "provider", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:EventDefinitions",
+      "type": "class",
+      "name": "EventDefinitions",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "lineRange": [84, 91],
+      "summary": "事件定义表，包含偏移量、大小、事件列表和尾部原始数据。",
+      "tags": ["data-model", "evtx", "event", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:EventDefinition",
+      "type": "class",
+      "name": "EventDefinition",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "lineRange": [94, 110],
+      "summary": "单个事件定义，包含标识符、版本、通道、级别、操作码、任务、关键字掩码、消息标识符和模板/操作码/级别/任务偏移量。",
+      "tags": ["data-model", "evtx", "event", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:EventKey",
+      "type": "class",
+      "name": "EventKey",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "lineRange": [117, 126],
+      "summary": "事件的复合键，由提供者 GUID、事件 ID、版本、通道、级别、操作码、任务和关键字组成，用于索引查找。",
+      "tags": ["data-model", "evtx", "indexing", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:CrimManifestIndex",
+      "type": "class",
+      "name": "CrimManifestIndex",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "lineRange": [129, 134],
+      "summary": "CRIM manifest 的查找索引，包含模板 GUID 到模板列表的映射和事件键到模板 GUID 列表的映射。",
+      "tags": ["data-model", "evtx", "indexing", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:TemplateDefinition",
+      "type": "class",
+      "name": "TemplateDefinition",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "lineRange": [205, 215],
+      "summary": "模板定义结构，包含偏移量、大小、项描述符计数、项名称计数、GUID、原始 BinXML 数据和解析后的 TemplateItem 列表。",
+      "tags": ["data-model", "evtx", "template", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:MapDefinition",
+      "type": "class",
+      "name": "MapDefinition",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "lineRange": [238, 246],
+      "summary": "映射定义的枚举类型：ValueMap（键值对映射）、Bitmap（位图）和 Unknown（未知类型）。",
+      "tags": ["data-model", "evtx", "map", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/manifest/util.rs:read_sized_utf16_string",
+      "type": "function",
+      "name": "read_sized_utf16_string",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "lineRange": [6, 25],
+      "summary": "从缓冲区偏移量处读取带长度前缀的 UTF-16 LE 字符串，先读 4 字节大小再解码为 Rust String。",
+      "tags": ["utility", "utf16-decoding", "string-reading"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/manifest/util.rs:read_guid_named",
+      "type": "function",
+      "name": "read_guid_named",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "lineRange": [77, 88],
+      "summary": "从缓冲区偏移量处读取 16 字节 GUID 数组并构造 Guid 对象，失败时报告带名称的上下文错误。",
+      "tags": ["utility", "guid-parsing", "error-reporting"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/manifest/util.rs:u32_to_usize",
+      "type": "function",
+      "name": "u32_to_usize",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "lineRange": [90, 100],
+      "summary": "将 u32 偏移量安全转换为 usize，验证不超出给定的缓冲区长度上限。",
+      "tags": ["utility", "type-conversion", "bounds-checking"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/manifest/util.rs:require_len",
+      "type": "function",
+      "name": "require_len",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "lineRange": [106, 116],
+      "summary": "验证缓冲区在指定偏移量处有足够的剩余字节数，不足则返回 SizeOutOfBounds 错误。",
+      "tags": ["utility", "bounds-checking", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/manifest/util.rs:checked_end",
+      "type": "function",
+      "name": "checked_end",
+      "filePath": "crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "lineRange": [118, 140],
+      "summary": "计算偏移量+大小的结束位置，验证其不超过缓冲区总长度，返回验证后的结束偏移量。",
+      "tags": ["utility", "bounds-checking", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/render.rs:render_temp_to_xml",
+      "type": "function",
+      "name": "render_temp_to_xml",
+      "filePath": "crates/evtx-patched/src/wevt_templates/render.rs",
+      "lineRange": [21, 35],
+      "summary": "将临时模板的 BinXML 字节渲染为 XML 字符串，使用空占位符值并应用 ANSI 编解码器。",
+      "tags": ["evtx", "template-rendering", "xml", "wevt"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/render.rs:render_temp_to_xml_with_values",
+      "type": "function",
+      "name": "render_temp_to_xml_with_values",
+      "filePath": "crates/evtx-patched/src/wevt_templates/render.rs",
+      "lineRange": [42, 60],
+      "summary": "将临时模板 BinXML 渲染为 XML，使用提供的 BinXmlValue 替换值填充模板占位符。",
+      "tags": ["evtx", "template-rendering", "xml", "value-substitution"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/render.rs:render_template_definition_to_xml",
+      "type": "function",
+      "name": "render_template_definition_to_xml",
+      "filePath": "crates/evtx-patched/src/wevt_templates/render.rs",
+      "lineRange": [63, 77],
+      "summary": "将 TemplateDefinition 渲染为 XML，使用模板项名称作为占位符标签生成默认事件 XML。",
+      "tags": ["evtx", "template-rendering", "xml", "wevt"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/render.rs:render_template_definition_to_xml_with_values",
+      "type": "function",
+      "name": "render_template_definition_to_xml_with_values",
+      "filePath": "crates/evtx-patched/src/wevt_templates/render.rs",
+      "lineRange": [84, 94],
+      "summary": "将 TemplateDefinition 渲染为 XML 并使用提供的 BinXmlValue 值填充模板占位符。",
+      "tags": ["evtx", "template-rendering", "xml", "value-substitution"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/render.rs:max_placeholder_id",
+      "type": "function",
+      "name": "max_placeholder_id",
+      "filePath": "crates/evtx-patched/src/wevt_templates/render.rs",
+      "lineRange": [103, 122],
+      "summary": "遍历 IR 树计算最大的占位符 ID（包括 %n 和 %%n 两种模式），用于确定占位符值数组大小。",
+      "tags": ["evtx", "ir-tree", "placeholder", "internal"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/render.rs:placeholder_values",
+      "type": "function",
+      "name": "placeholder_values",
+      "filePath": "crates/evtx-patched/src/wevt_templates/render.rs",
+      "lineRange": [124, 143],
+      "summary": "根据模板项名称列表创建占位符值向量，若名称在 names 中存在则设为 ANSI String 类型，否则为 Null。",
+      "tags": ["evtx", "template-rendering", "placeholder", "internal"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/render.rs:template_values_from_binxml_values",
+      "type": "function",
+      "name": "template_values_from_binxml_values",
+      "filePath": "crates/evtx-patched/src/wevt_templates/render.rs",
+      "lineRange": [145, 157],
+      "summary": "将 BinXmlValue 列表转换为 TemplateValue 列表，将 EvtHandle/BinXmlType/EvtXml 映射为 Null（离线渲染不支持嵌套替换）。",
+      "tags": ["evtx", "template-rendering", "value-conversion"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/temp.rs:extract_temp_templates_from_wevt_blob",
+      "type": "function",
+      "name": "extract_temp_templates_from_wevt_blob",
+      "filePath": "crates/evtx-patched/src/wevt_templates/temp.rs",
+      "lineRange": [17, 45],
+      "summary": "从 WEVT blob 中提取临时模板列表：解析 CRIM manifest，遍历每个提供者的模板表，创建带 GUID、偏移量和大小的 WevtTempTemplateRef。",
+      "tags": ["evtx", "template-extraction", "wevt", "crim-manifest"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/wevt_templates/types.rs:WevtTemplateResource",
+      "type": "class",
+      "name": "WevtTemplateResource",
+      "filePath": "crates/evtx-patched/src/wevt_templates/types.rs",
+      "lineRange": [10, 17],
+      "summary": "从 PE 资源中提取的 WEVT 模板资源，包含资源标识符、语言 ID 和原始模板数据字节。",
+      "tags": ["data-model", "evtx", "template", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/wevt_templates/types.rs:WevtTempTemplateHeader",
+      "type": "class",
+      "name": "WevtTempTemplateHeader",
+      "filePath": "crates/evtx-patched/src/wevt_templates/types.rs",
+      "lineRange": [27, 38],
+      "summary": "WEVT 临时模板的头部结构，包含项描述符计数、项名称计数、模板项偏移量、事件类型和 GUID。",
+      "tags": ["data-model", "evtx", "template", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/wevt_templates/types.rs:WevtTempTemplateRef",
+      "type": "class",
+      "name": "WevtTempTemplateRef",
+      "filePath": "crates/evtx-patched/src/wevt_templates/types.rs",
+      "lineRange": [41, 49],
+      "summary": "WEVT 临时模板引用，记录模板在 TTBL 表中的偏移量、临时数据偏移量大写和解析后的头部信息。",
+      "tags": ["data-model", "evtx", "template", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/wevt_templates/wevtcache.rs:WevtCacheFileError",
+      "type": "class",
+      "name": "WevtCacheFileError",
+      "filePath": "crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "lineRange": [113, 143],
+      "summary": "WEVT 缓存文件错误类型，涵盖输出已存在、I/O 错误、无效 magic、版本不支持、未知条目类型等场景。",
+      "tags": ["error-handling", "evtx", "cache", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/wevt_templates/wevtcache.rs:WevtCacheWriter",
+      "type": "class",
+      "name": "WevtCacheWriter",
+      "filePath": "crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "lineRange": [147, 151],
+      "summary": "WEVT 缓存写入器，负责创建缓存文件、写入 CRIM blob 条目和最终完成写入（更新 header 中的 entry_count）。",
+      "tags": ["evtx", "cache", "serialization", "writer"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/wevt_templates/wevtcache.rs:WevtCacheReader",
+      "type": "class",
+      "name": "WevtCacheReader",
+      "filePath": "crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "lineRange": [247, 251],
+      "summary": "WEVT 缓存读取器，负责打开缓存文件、解析 header 并按顺序读取条目（next_entry）。",
+      "tags": ["evtx", "cache", "serialization", "reader"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/wevtcache.rs:create",
+      "type": "function",
+      "name": "create",
+      "filePath": "crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "lineRange": [154, 181],
+      "summary": "创建新的 WEVT 缓存文件：检查 overwrite 选项，创建文件、写入初始 header（entry_count=0），返回 WevtCacheWriter。",
+      "tags": ["evtx", "cache", "file-creation", "writer"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/wevtcache.rs:write_entry",
+      "type": "function",
+      "name": "write_entry",
+      "filePath": "crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "lineRange": [187, 215],
+      "summary": "向缓存文件写入一个条目：序列化 EntryKind 和长度作为条目头，随后写入字节数据，递增条目计数。",
+      "tags": ["evtx", "cache", "serialization", "writer"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/wevtcache.rs:finish",
+      "type": "function",
+      "name": "finish",
+      "filePath": "crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "lineRange": [217, 244],
+      "summary": "完成缓存写入：seek 回文件开头，用实际条目计数更新 header，然后 flush 文件。",
+      "tags": ["evtx", "cache", "serialization", "finalization"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/wevtcache.rs:open",
+      "type": "function",
+      "name": "open",
+      "filePath": "crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "lineRange": [254, 287],
+      "summary": "打开已存在的 WEVT 缓存文件：读取并验证 header（magic/version），返回 WevtCacheReader 准备迭代条目。",
+      "tags": ["evtx", "cache", "file-opening", "reader"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/wevtcache.rs:next_entry",
+      "type": "function",
+      "name": "next_entry",
+      "filePath": "crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "lineRange": [289, 329],
+      "summary": "从缓存文件读取下一个条目：解析条目头（kind+len），验证 kind 和长度，然后读取条目数据字节。",
+      "tags": ["evtx", "cache", "serialization", "reader"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/wevtcache.rs:for_each_crim_blob",
+      "type": "function",
+      "name": "for_each_crim_blob",
+      "filePath": "crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "lineRange": [332, 354],
+      "summary": "打开缓存文件并遍历所有 CRIM 条目，对每个 CRIM blob 调用回调函数。",
+      "tags": ["evtx", "cache", "iteration", "convenience"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/wevt_templates/wevtcache.rs:for_each_crim_blob_with",
+      "type": "function",
+      "name": "for_each_crim_blob_with",
+      "filePath": "crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "lineRange": [357, 379],
+      "summary": "与 for_each_crim_blob 类似，但接受带状态的回调函数（FnMut），允许在遍历过程中累积状态。",
+      "tags": ["evtx", "cache", "iteration", "convenience"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/mod.rs",
+      "target": "file:crates/evtx-patched/src/wevt_templates/manifest/error.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/mod.rs",
+      "target": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/mod.rs",
+      "target": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/mod.rs",
+      "target": "file:crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "file:crates/evtx-patched/src/wevt_templates/error.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "file:crates/evtx-patched/src/wevt_templates/types.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:build_index",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_crim_header",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_provider",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_provider_elements",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_channels",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_events",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_keywords",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_levels",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_opcodes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_tasks",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_ttbl",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_template_items",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_maps",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse_vmap",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:build_index",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/error.rs:WevtManifestError",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/util.rs:read_sized_utf16_string",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/util.rs:read_guid_named",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:CrimManifest",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:Provider",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:WevtProvider",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:ProviderElements",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:EventDefinitions",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:EventDefinition",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:EventKey",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:CrimManifestIndex",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:TemplateDefinition",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:MapDefinition",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:CrimManifest",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:Provider",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:WevtProvider",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:ProviderElements",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:EventDefinitions",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:EventDefinition",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:EventKey",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:CrimManifestIndex",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:TemplateDefinition",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:MapDefinition",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "target": "file:crates/evtx-patched/src/utils/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "target": "file:crates/evtx-patched/src/wevt_templates/error.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/util.rs:read_sized_utf16_string",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/util.rs:read_guid_named",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/util.rs:u32_to_usize",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/util.rs:require_len",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/util.rs:checked_end",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/util.rs:read_sized_utf16_string",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/util.rs:read_guid_named",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/util.rs:u32_to_usize",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/util.rs:require_len",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/util.rs:checked_end",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "target": "function:crates/evtx-patched/src/utils/bytes.rs:read_u32_vec_le_r",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "target": "function:crates/evtx-patched/src/utils/utf16.rs:decode_utf16le_bytes_z",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/util.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/error.rs:WevtTemplateExtractError",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/mod.rs",
+      "target": "file:crates/evtx-patched/src/wevt_templates/cache.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/mod.rs",
+      "target": "file:crates/evtx-patched/src/wevt_templates/error.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/mod.rs",
+      "target": "file:crates/evtx-patched/src/wevt_templates/extract.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/mod.rs",
+      "target": "file:crates/evtx-patched/src/wevt_templates/manifest/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/mod.rs",
+      "target": "file:crates/evtx-patched/src/wevt_templates/render.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/mod.rs",
+      "target": "file:crates/evtx-patched/src/wevt_templates/temp.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/mod.rs",
+      "target": "file:crates/evtx-patched/src/wevt_templates/types.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/mod.rs",
+      "target": "file:crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/render.rs",
+      "target": "file:crates/evtx-patched/src/binxml/ir_xml.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/render.rs",
+      "target": "file:crates/evtx-patched/src/binxml/ir.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/render.rs",
+      "target": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/render.rs",
+      "target": "file:crates/evtx-patched/src/err.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/render.rs",
+      "target": "file:crates/evtx-patched/src/model/ir.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/render.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/render.rs:render_temp_to_xml",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/render.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/render.rs:render_temp_to_xml_with_values",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/render.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/render.rs:render_template_definition_to_xml",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/render.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/render.rs:render_template_definition_to_xml_with_values",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/render.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/render.rs:max_placeholder_id",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/render.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/render.rs:placeholder_values",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/render.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/render.rs:template_values_from_binxml_values",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/render.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/render.rs:render_temp_to_xml",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/render.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/render.rs:render_temp_to_xml_with_values",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/render.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/render.rs:render_template_definition_to_xml",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/render.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/render.rs:render_template_definition_to_xml_with_values",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/temp.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/temp.rs:extract_temp_templates_from_wevt_blob",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/temp.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/temp.rs:extract_temp_templates_from_wevt_blob",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/temp.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/manifest/parse.rs:parse",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/types.rs:WevtTemplateResource",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/types.rs:WevtTempTemplateHeader",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/types.rs:WevtTempTemplateRef",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/types.rs:WevtTemplateResource",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/types.rs:WevtTempTemplateHeader",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/types.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/types.rs:WevtTempTemplateRef",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/wevtcache.rs:WevtCacheFileError",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/wevtcache.rs:WevtCacheWriter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/wevtcache.rs:WevtCacheReader",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/wevtcache.rs:create",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/wevtcache.rs:write_entry",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/wevtcache.rs:finish",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/wevtcache.rs:open",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/wevtcache.rs:next_entry",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/wevtcache.rs:for_each_crim_blob",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/wevtcache.rs:for_each_crim_blob_with",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/wevtcache.rs:WevtCacheFileError",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/wevtcache.rs:WevtCacheWriter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/wevtcache.rs:WevtCacheReader",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/wevtcache.rs:create",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/wevtcache.rs:finish",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/wevtcache.rs:open",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/wevtcache.rs:next_entry",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/wevtcache.rs:for_each_crim_blob",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/wevtcache.rs",
+      "target": "function:crates/evtx-patched/src/wevt_templates/wevtcache.rs:for_each_crim_blob_with",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:CrimManifest",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:Provider",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:crates/evtx-patched/src/wevt_templates/manifest/parse.rs",
+      "target": "class:crates/evtx-patched/src/wevt_templates/manifest/types.rs:MapDefinition",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    }
+  ]
+}

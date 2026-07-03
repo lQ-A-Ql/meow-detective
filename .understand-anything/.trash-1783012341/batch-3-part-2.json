@@ -1,0 +1,1160 @@
+{
+  "nodes": [
+    {
+      "id": "file:crates/app-services/src/entity_resolution/relationships.rs",
+      "type": "file",
+      "name": "relationships.rs",
+      "filePath": "crates/app-services/src/entity_resolution/relationships.rs",
+      "summary": "实体关系推理引擎：从实体共现模式中推断通信、所有权、登录和执行关系，构建实体关系图并持久化。",
+      "tags": [
+        "entity-resolution",
+        "relationships",
+        "inference",
+        "graph"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/app-services/src/entity_resolution/relationships.rs:infer_relationships",
+      "type": "function",
+      "name": "infer_relationships",
+      "filePath": "crates/app-services/src/entity_resolution/relationships.rs",
+      "lineRange": [
+        65,
+        80
+      ],
+      "summary": "推断实体关系的编排函数：依次调用通信、所有权、登录和执行四种关系推断器，收集并返回所有推断结果。",
+      "tags": [
+        "entity-resolution",
+        "relationships",
+        "inference",
+        "orchestration"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/entity_resolution/relationships.rs:persist_relationships",
+      "type": "function",
+      "name": "persist_relationships",
+      "filePath": "crates/app-services/src/entity_resolution/relationships.rs",
+      "lineRange": [
+        90,
+        131
+      ],
+      "summary": "将推断出的实体关系持久化到数据库：去重后批量插入关系边，使用 INSERT OR IGNORE 避免重复写入。",
+      "tags": [
+        "entity-resolution",
+        "persistence",
+        "relationships"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/entity_resolution/relationships.rs:build_relationships",
+      "type": "function",
+      "name": "build_relationships",
+      "filePath": "crates/app-services/src/entity_resolution/relationships.rs",
+      "lineRange": [
+        345,
+        378
+      ],
+      "summary": "构建关系的主编排器：从数据库加载实体共现索引，推断所有关系类型，合并去重后持久化并返回统计计数。",
+      "tags": [
+        "entity-resolution",
+        "relationships",
+        "build"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/app-services/src/error_ext.rs",
+      "type": "file",
+      "name": "error_ext.rs",
+      "filePath": "crates/app-services/src/error_ext.rs",
+      "summary": "错误处理扩展 trait：为 Result 类型添加 to_string_err 和 context 方法，简化错误转换和上下文附加。",
+      "tags": [
+        "error-handling",
+        "trait",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/app-services/src/error_ext.rs:ResultExt",
+      "type": "class",
+      "name": "ResultExt",
+      "filePath": "crates/app-services/src/error_ext.rs",
+      "lineRange": [
+        4,
+        7
+      ],
+      "summary": "Result 扩展 trait：提供 to_string_err() 方法，将任意错误类型转换为字符串错误。",
+      "tags": [
+        "error-handling",
+        "trait",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/app-services/src/file_carving.rs",
+      "type": "file",
+      "name": "file_carving.rs",
+      "filePath": "crates/app-services/src/file_carving.rs",
+      "summary": "文件雕刻引擎：从磁盘镜像未分配空间中按文件签名（magic bytes）扫描和恢复已删除/丢失的文件。",
+      "tags": [
+        "file-carving",
+        "data-recovery",
+        "forensics"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/file_carving.rs:carve_from_unallocated",
+      "type": "function",
+      "name": "carve_from_unallocated",
+      "filePath": "crates/app-services/src/file_carving.rs",
+      "lineRange": [
+        102,
+        190
+      ],
+      "summary": "从未分配空间雕刻文件：读取原始字节流，按文件签名（magic bytes）扫描匹配，提取并保存恢复的文件片段。",
+      "tags": [
+        "file-carving",
+        "data-recovery",
+        "forensics"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:crates/app-services/src/governance/error.rs",
+      "type": "file",
+      "name": "error.rs",
+      "filePath": "crates/app-services/src/governance/error.rs",
+      "summary": "治理模块错误类型定义：区分数据库错误和内部错误，提供统一的 GovernanceError 枚举。",
+      "tags": [
+        "governance",
+        "error-handling"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/app-services/src/governance/error.rs:GovernanceError",
+      "type": "class",
+      "name": "GovernanceError",
+      "filePath": "crates/app-services/src/governance/error.rs",
+      "lineRange": [
+        2,
+        9
+      ],
+      "summary": "治理模块错误枚举：区分数据库错误和内部处理错误。",
+      "tags": [
+        "governance",
+        "error-handling"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/app-services/src/governance/fact_loader.rs",
+      "type": "file",
+      "name": "fact_loader.rs",
+      "filePath": "crates/app-services/src/governance/fact_loader.rs",
+      "summary": "治理事实加载器：定义治理链目录、基准基线、安全分类、发布策略等数据模型，并提供运行时结果和验证链的 DTO 转换。",
+      "tags": [
+        "governance",
+        "data-model",
+        "fact-loading",
+        "dto"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/app-services/src/governance/fact_loader.rs:governance_fact_sources",
+      "type": "function",
+      "name": "governance_fact_sources",
+      "filePath": "crates/app-services/src/governance/fact_loader.rs",
+      "lineRange": [
+        215,
+        281
+      ],
+      "summary": "加载治理事实源：从治理链目录、基准基线、安全分类等文件中读取事实数据，转换为治理快照中的事实条目。",
+      "tags": [
+        "governance",
+        "fact-loading",
+        "data-ingestion"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/governance/fact_loader.rs:governance_runtime_results_dto",
+      "type": "function",
+      "name": "governance_runtime_results_dto",
+      "filePath": "crates/app-services/src/governance/fact_loader.rs",
+      "lineRange": [
+        283,
+        346
+      ],
+      "summary": "将治理运行时结果转换为 DTO：把原始运行时检查事实映射为前端可消费的快照格式，包括检查状态和子检查详情。",
+      "tags": [
+        "governance",
+        "dto",
+        "snapshot"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/governance/fact_loader.rs:verification_chains",
+      "type": "function",
+      "name": "verification_chains",
+      "filePath": "crates/app-services/src/governance/fact_loader.rs",
+      "lineRange": [
+        358,
+        375
+      ],
+      "summary": "加载验证链数据：从治理链目录中读取各验证链的条目，包括链名称、步骤和需求。",
+      "tags": [
+        "governance",
+        "verification",
+        "chain"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/app-services/src/governance/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "crates/app-services/src/governance/mod.rs",
+      "summary": "治理模块入口：聚合并导出 V2 治理快照，整合运行时信号、安全审计、验证链和支持矩阵。",
+      "tags": [
+        "governance",
+        "entry-point",
+        "aggregation"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/governance/mod.rs:get_v2_governance_snapshot",
+      "type": "function",
+      "name": "get_v2_governance_snapshot",
+      "filePath": "crates/app-services/src/governance/mod.rs",
+      "lineRange": [
+        21,
+        99
+      ],
+      "summary": "生成 V2 治理快照的主入口：聚合运行时信号、安全审计、治理链目录、验证链和支持矩阵为统一的治理快照 DTO。",
+      "tags": [
+        "governance",
+        "snapshot",
+        "entry-point",
+        "aggregation"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/app-services/src/governance/runtime.rs",
+      "type": "file",
+      "name": "runtime.rs",
+      "filePath": "crates/app-services/src/governance/runtime.rs",
+      "summary": "治理运行时监控：构建运行时信号快照，包括数据源计数、任务状态、关联缓存状态和安全审计摘要。",
+      "tags": [
+        "governance",
+        "runtime",
+        "monitoring",
+        "audit"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/governance/runtime.rs:build_runtime_signals",
+      "type": "function",
+      "name": "build_runtime_signals",
+      "filePath": "crates/app-services/src/governance/runtime.rs",
+      "lineRange": [
+        24,
+        75
+      ],
+      "summary": "构建运行时信号快照：统计案例数据源数量、活跃/完成/失败任务数、关联缓存条目数和缓存失效标记。",
+      "tags": [
+        "governance",
+        "runtime",
+        "signals",
+        "monitoring"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/governance/runtime.rs:security_audit_snapshot",
+      "type": "function",
+      "name": "security_audit_snapshot",
+      "filePath": "crates/app-services/src/governance/runtime.rs",
+      "lineRange": [
+        142,
+        172
+      ],
+      "summary": "构建安全审计快照：扫描数据库审计日志表，识别敏感操作条目（权限变更、案例删除等），生成审计摘要。",
+      "tags": [
+        "governance",
+        "security",
+        "audit",
+        "snapshot"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/app-services/src/governance/scoring.rs",
+      "type": "file",
+      "name": "scoring.rs",
+      "filePath": "crates/app-services/src/governance/scoring.rs",
+      "summary": "治理评分引擎：定义发布关卡（核心夹具、基准、安全），计算发布记分卡和维度分解，支持门禁状态判定和评分策略应用。",
+      "tags": [
+        "governance",
+        "scoring",
+        "gates",
+        "benchmark"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/app-services/src/governance/scoring.rs:release_gates",
+      "type": "function",
+      "name": "release_gates",
+      "filePath": "crates/app-services/src/governance/scoring.rs",
+      "lineRange": [
+        10,
+        145
+      ],
+      "summary": "评估所有发布关卡：依次检查核心夹具完整性、基准测试通过率、安全审计状态，合并运行时事实后生成 GateStatus。",
+      "tags": [
+        "governance",
+        "scoring",
+        "gates",
+        "release"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/app-services/src/governance/scoring.rs:release_scorecard",
+      "type": "function",
+      "name": "release_scorecard",
+      "filePath": "crates/app-services/src/governance/scoring.rs",
+      "lineRange": [
+        244,
+        328
+      ],
+      "summary": "计算发布记分卡：聚合验证、关联、性能和安全四个维度的贡献分，应用评分策略后加权求和得到总分和等级。",
+      "tags": [
+        "governance",
+        "scoring",
+        "scorecard",
+        "release"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/app-services/src/governance/scoring.rs:core_fixture_gate",
+      "type": "function",
+      "name": "core_fixture_gate",
+      "filePath": "crates/app-services/src/governance/scoring.rs",
+      "lineRange": [
+        582,
+        652
+      ],
+      "summary": "核心夹具关卡检查：验证核心测试夹具的完整性和正确性，检查夹具数量是否达到基线阈值。",
+      "tags": [
+        "governance",
+        "gates",
+        "fixtures",
+        "testing"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/governance/scoring.rs:benchmark_gate",
+      "type": "function",
+      "name": "benchmark_gate",
+      "filePath": "crates/app-services/src/governance/scoring.rs",
+      "lineRange": [
+        654,
+        705
+      ],
+      "summary": "基准关卡检查：读取基准基线数据，逐项比对运行时结果的基准指标，判断是否通过性能/正确性阈值。",
+      "tags": [
+        "governance",
+        "gates",
+        "benchmark",
+        "performance"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/governance/scoring.rs:security_gate",
+      "type": "function",
+      "name": "security_gate",
+      "filePath": "crates/app-services/src/governance/scoring.rs",
+      "lineRange": [
+        739,
+        792
+      ],
+      "summary": "安全关卡检查：评估安全审计快照中的敏感操作，检查是否触发安全默认策略中的告警规则。",
+      "tags": [
+        "governance",
+        "gates",
+        "security",
+        "audit"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:crates/app-services/src/governance/tests.rs",
+      "type": "file",
+      "name": "tests.rs",
+      "filePath": "crates/app-services/src/governance/tests.rs",
+      "summary": "治理集成测试：验证治理快照能正确聚合运行时信号，包括数据源计数、任务状态和缓存指标。",
+      "tags": [
+        "test",
+        "governance",
+        "integration-test"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/governance/tests.rs:governance_snapshot_aggregates_runtime_signals",
+      "type": "function",
+      "name": "governance_snapshot_aggregates_runtime_signals",
+      "filePath": "crates/app-services/src/governance/tests.rs",
+      "lineRange": [
+        19,
+        237
+      ],
+      "summary": "集成测试：验证治理快照能正确聚合运行时信号——在内存数据库中插入模拟数据，确认数据源计数和任务状态准确。",
+      "tags": [
+        "test",
+        "governance",
+        "integration-test",
+        "snapshot"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:crates/app-services/src/graph_service.rs",
+      "type": "file",
+      "name": "graph_service.rs",
+      "filePath": "crates/app-services/src/graph_service.rs",
+      "summary": "图谱查询服务：提供图谱快照获取、图查询、节点邻域探索、溯源链追踪和解析器版本信息补全。",
+      "tags": [
+        "graph",
+        "query",
+        "provenance",
+        "service"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:crates/app-services/src/graph_service.rs:GraphServiceError",
+      "type": "class",
+      "name": "GraphServiceError",
+      "filePath": "crates/app-services/src/graph_service.rs",
+      "lineRange": [
+        11,
+        22
+      ],
+      "summary": "图谱服务错误枚举：区分数据库错误、序列化错误和节点未找到错误。",
+      "tags": [
+        "error-handling",
+        "graph"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/app-services/src/graph_service.rs:get_graph_snapshot",
+      "type": "function",
+      "name": "get_graph_snapshot",
+      "filePath": "crates/app-services/src/graph_service.rs",
+      "lineRange": [
+        44,
+        79
+      ],
+      "summary": "获取案例的全量图谱快照：从数据库读取节点和边记录，转换为 DTO 格式并附加解析器版本元数据。",
+      "tags": [
+        "graph",
+        "snapshot",
+        "dto"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/graph_service.rs:query_graph",
+      "type": "function",
+      "name": "query_graph",
+      "filePath": "crates/app-services/src/graph_service.rs",
+      "lineRange": [
+        82,
+        115
+      ],
+      "summary": "图谱查询接口：按节点/边类型过滤、支持分页和节点 ID 精确查找，返回匹配的图谱片段。",
+      "tags": [
+        "graph",
+        "query",
+        "filtering"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/graph_service.rs:get_node_neighborhood",
+      "type": "function",
+      "name": "get_node_neighborhood",
+      "filePath": "crates/app-services/src/graph_service.rs",
+      "lineRange": [
+        121,
+        195
+      ],
+      "summary": "获取节点邻域：以指定节点为中心，沿指定边类型遍历 1-2 跳，收集邻居节点和连接边，返回子图。",
+      "tags": [
+        "graph",
+        "neighborhood",
+        "traversal"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/graph_service.rs:get_provenance_chain",
+      "type": "function",
+      "name": "get_provenance_chain",
+      "filePath": "crates/app-services/src/graph_service.rs",
+      "lineRange": [
+        202,
+        294
+      ],
+      "summary": "获取溯源链：从目标节点反向追踪其来源节点，构建完整的溯源路径（artifact -> file -> data_source），支持最大深度限制。",
+      "tags": [
+        "graph",
+        "provenance",
+        "chain-of-custody"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:crates/app-services/src/hash_service.rs",
+      "type": "file",
+      "name": "hash_service.rs",
+      "filePath": "crates/app-services/src/hash_service.rs",
+      "summary": "哈希计算服务：封装 SHA-256 哈希计算，支持从 Reader、文件和字节切片计算摘要并验证。",
+      "tags": [
+        "hashing",
+        "sha256",
+        "utility",
+        "service"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/app-services/src/hash_service.rs:HashService",
+      "type": "class",
+      "name": "HashService",
+      "filePath": "crates/app-services/src/hash_service.rs",
+      "lineRange": [
+        10,
+        10
+      ],
+      "summary": "哈希计算服务单元结构体：封装 SHA-256 哈希的 reader/文件/字节计算和验证方法。",
+      "tags": [
+        "hashing",
+        "sha256",
+        "service"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/app-services/src/import_analysis/budget.rs",
+      "type": "file",
+      "name": "budget.rs",
+      "filePath": "crates/app-services/src/import_analysis/budget.rs",
+      "summary": "分析内容预算管理：定义 ContentBudget 结构体及其预设模式（禁用/保守/完整），控制分析阶段的内容处理开销。",
+      "tags": [
+        "import-analysis",
+        "budget",
+        "configuration"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/app-services/src/import_analysis/budget.rs:ContentBudget",
+      "type": "class",
+      "name": "ContentBudget",
+      "filePath": "crates/app-services/src/import_analysis/budget.rs",
+      "lineRange": [
+        7,
+        12
+      ],
+      "summary": "内容预算配置：定义允许分析的最大内容大小、文件类型白名单和扩展名过滤规则。",
+      "tags": [
+        "import-analysis",
+        "budget",
+        "configuration"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/app-services/src/import_analysis/error.rs",
+      "type": "file",
+      "name": "error.rs",
+      "filePath": "crates/app-services/src/import_analysis/error.rs",
+      "summary": "导入分析错误类型：区分分析错误（无法读取/解析内容）、暂存错误和预算错误。",
+      "tags": [
+        "import-analysis",
+        "error-handling"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/app-services/src/import_analysis/error.rs:ImportAnalysisError",
+      "type": "class",
+      "name": "ImportAnalysisError",
+      "filePath": "crates/app-services/src/import_analysis/error.rs",
+      "lineRange": [
+        5,
+        26
+      ],
+      "summary": "导入分析错误枚举：区分内容分析错误（不可读/不可解析）、暂存错误和预算超限错误。",
+      "tags": [
+        "import-analysis",
+        "error-handling"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/app-services/src/import_analysis/finalize.rs",
+      "type": "file",
+      "name": "finalize.rs",
+      "filePath": "crates/app-services/src/import_analysis/finalize.rs",
+      "summary": "导入分析终态处理：将分析暂存结果合并到主数据库，管理分析 worker 的生命周期（发现、初始化、清理、统计收集）。",
+      "tags": [
+        "import-analysis",
+        "finalization",
+        "staging",
+        "worker-management"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/import_analysis/finalize.rs:merge_finished_analysis_staging",
+      "type": "function",
+      "name": "merge_finished_analysis_staging",
+      "filePath": "crates/app-services/src/import_analysis/finalize.rs",
+      "lineRange": [
+        14,
+        67
+      ],
+      "summary": "将已完成的分析暂存结果合并到主数据库：遍历 worker 生成的暂存数据，批量插入 artifact 和时间线条目。",
+      "tags": [
+        "import-analysis",
+        "finalization",
+        "staging",
+        "merge"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/app-services/src/import_analysis/finalize.rs:prepare_analysis_staging_startup",
+      "type": "function",
+      "name": "prepare_analysis_staging_startup",
+      "filePath": "crates/app-services/src/import_analysis/finalize.rs",
+      "lineRange": [
+        84,
+        172
+      ],
+      "summary": "准备分析暂存启动环境：检测已完成/未完成的 worker 数据库，协调分析 worker 的初始化、恢复或清理。",
+      "tags": [
+        "import-analysis",
+        "startup",
+        "worker-management"
+      ],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:crates/app-services/src/entity_resolution/relationships.rs",
+      "target": "function:crates/app-services/src/entity_resolution/relationships.rs:infer_relationships",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/entity_resolution/relationships.rs",
+      "target": "function:crates/app-services/src/entity_resolution/relationships.rs:persist_relationships",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/entity_resolution/relationships.rs",
+      "target": "function:crates/app-services/src/entity_resolution/relationships.rs:build_relationships",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/error_ext.rs",
+      "target": "class:crates/app-services/src/error_ext.rs:ResultExt",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/file_carving.rs",
+      "target": "function:crates/app-services/src/file_carving.rs:carve_from_unallocated",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/governance/error.rs",
+      "target": "class:crates/app-services/src/governance/error.rs:GovernanceError",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/governance/fact_loader.rs",
+      "target": "function:crates/app-services/src/governance/fact_loader.rs:governance_fact_sources",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/governance/fact_loader.rs",
+      "target": "function:crates/app-services/src/governance/fact_loader.rs:governance_runtime_results_dto",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/governance/fact_loader.rs",
+      "target": "function:crates/app-services/src/governance/fact_loader.rs:verification_chains",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/governance/mod.rs",
+      "target": "function:crates/app-services/src/governance/mod.rs:get_v2_governance_snapshot",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/governance/runtime.rs",
+      "target": "function:crates/app-services/src/governance/runtime.rs:build_runtime_signals",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/governance/runtime.rs",
+      "target": "function:crates/app-services/src/governance/runtime.rs:security_audit_snapshot",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/governance/scoring.rs",
+      "target": "function:crates/app-services/src/governance/scoring.rs:release_gates",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/governance/scoring.rs",
+      "target": "function:crates/app-services/src/governance/scoring.rs:release_scorecard",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/governance/scoring.rs",
+      "target": "function:crates/app-services/src/governance/scoring.rs:core_fixture_gate",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/governance/scoring.rs",
+      "target": "function:crates/app-services/src/governance/scoring.rs:benchmark_gate",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/governance/scoring.rs",
+      "target": "function:crates/app-services/src/governance/scoring.rs:security_gate",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/governance/tests.rs",
+      "target": "function:crates/app-services/src/governance/tests.rs:governance_snapshot_aggregates_runtime_signals",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/graph_service.rs",
+      "target": "class:crates/app-services/src/graph_service.rs:GraphServiceError",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/graph_service.rs",
+      "target": "function:crates/app-services/src/graph_service.rs:get_graph_snapshot",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/graph_service.rs",
+      "target": "function:crates/app-services/src/graph_service.rs:query_graph",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/graph_service.rs",
+      "target": "function:crates/app-services/src/graph_service.rs:get_node_neighborhood",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/graph_service.rs",
+      "target": "function:crates/app-services/src/graph_service.rs:get_provenance_chain",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/hash_service.rs",
+      "target": "class:crates/app-services/src/hash_service.rs:HashService",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/import_analysis/budget.rs",
+      "target": "class:crates/app-services/src/import_analysis/budget.rs:ContentBudget",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/import_analysis/error.rs",
+      "target": "class:crates/app-services/src/import_analysis/error.rs:ImportAnalysisError",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/import_analysis/finalize.rs",
+      "target": "function:crates/app-services/src/import_analysis/finalize.rs:merge_finished_analysis_staging",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/import_analysis/finalize.rs",
+      "target": "function:crates/app-services/src/import_analysis/finalize.rs:prepare_analysis_staging_startup",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:crates/app-services/src/entity_resolution/relationships.rs",
+      "target": "function:crates/app-services/src/entity_resolution/relationships.rs:infer_relationships",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/entity_resolution/relationships.rs",
+      "target": "function:crates/app-services/src/entity_resolution/relationships.rs:persist_relationships",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/error_ext.rs",
+      "target": "class:crates/app-services/src/error_ext.rs:ResultExt",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/file_carving.rs",
+      "target": "function:crates/app-services/src/file_carving.rs:carve_from_unallocated",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/governance/error.rs",
+      "target": "class:crates/app-services/src/governance/error.rs:GovernanceError",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/governance/fact_loader.rs",
+      "target": "function:crates/app-services/src/governance/fact_loader.rs:governance_fact_sources",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/governance/fact_loader.rs",
+      "target": "function:crates/app-services/src/governance/fact_loader.rs:governance_runtime_results_dto",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/governance/fact_loader.rs",
+      "target": "function:crates/app-services/src/governance/fact_loader.rs:verification_chains",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/governance/mod.rs",
+      "target": "function:crates/app-services/src/governance/mod.rs:get_v2_governance_snapshot",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/governance/runtime.rs",
+      "target": "function:crates/app-services/src/governance/runtime.rs:build_runtime_signals",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/governance/runtime.rs",
+      "target": "function:crates/app-services/src/governance/runtime.rs:security_audit_snapshot",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/governance/scoring.rs",
+      "target": "function:crates/app-services/src/governance/scoring.rs:release_gates",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/governance/scoring.rs",
+      "target": "function:crates/app-services/src/governance/scoring.rs:release_scorecard",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/governance/scoring.rs",
+      "target": "function:crates/app-services/src/governance/scoring.rs:core_fixture_gate",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/governance/scoring.rs",
+      "target": "function:crates/app-services/src/governance/scoring.rs:benchmark_gate",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/governance/scoring.rs",
+      "target": "function:crates/app-services/src/governance/scoring.rs:security_gate",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/graph_service.rs",
+      "target": "class:crates/app-services/src/graph_service.rs:GraphServiceError",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/graph_service.rs",
+      "target": "function:crates/app-services/src/graph_service.rs:get_graph_snapshot",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/graph_service.rs",
+      "target": "function:crates/app-services/src/graph_service.rs:query_graph",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/graph_service.rs",
+      "target": "function:crates/app-services/src/graph_service.rs:get_node_neighborhood",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/graph_service.rs",
+      "target": "function:crates/app-services/src/graph_service.rs:get_provenance_chain",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/hash_service.rs",
+      "target": "class:crates/app-services/src/hash_service.rs:HashService",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/import_analysis/budget.rs",
+      "target": "class:crates/app-services/src/import_analysis/budget.rs:ContentBudget",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/import_analysis/error.rs",
+      "target": "class:crates/app-services/src/import_analysis/error.rs:ImportAnalysisError",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/import_analysis/finalize.rs",
+      "target": "function:crates/app-services/src/import_analysis/finalize.rs:merge_finished_analysis_staging",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/import_analysis/finalize.rs",
+      "target": "function:crates/app-services/src/import_analysis/finalize.rs:prepare_analysis_staging_startup",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/app-services/src/governance/mod.rs",
+      "target": "file:crates/app-services/src/governance/error.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/governance/mod.rs",
+      "target": "file:crates/app-services/src/governance/fact_loader.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/governance/mod.rs",
+      "target": "file:crates/app-services/src/governance/runtime.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/governance/mod.rs",
+      "target": "file:crates/app-services/src/governance/scoring.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/governance/mod.rs",
+      "target": "file:crates/app-services/src/governance/tests.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/governance/runtime.rs",
+      "target": "file:crates/app-services/src/governance/error.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/governance/scoring.rs",
+      "target": "file:crates/app-services/src/governance/fact_loader.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/governance/tests.rs",
+      "target": "file:crates/app-services/src/governance/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/app-services/src/governance/mod.rs",
+      "target": "file:crates/app-services/src/governance/runtime.rs",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:crates/app-services/src/governance/mod.rs",
+      "target": "file:crates/app-services/src/governance/scoring.rs",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:crates/app-services/src/governance/mod.rs",
+      "target": "file:crates/app-services/src/governance/fact_loader.rs",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:crates/app-services/src/governance/scoring.rs",
+      "target": "file:crates/app-services/src/governance/fact_loader.rs",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:crates/app-services/src/entity_resolution/relationships.rs",
+      "target": "file:crates/app-services/src/entity_resolution/merge.rs",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:crates/app-services/src/governance/tests.rs",
+      "target": "file:crates/app-services/src/governance/mod.rs",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:crates/app-services/src/governance/tests.rs",
+      "target": "file:crates/app-services/src/governance/scoring.rs",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

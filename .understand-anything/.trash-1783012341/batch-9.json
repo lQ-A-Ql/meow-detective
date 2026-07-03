@@ -1,0 +1,1662 @@
+{
+  "nodes": [
+    {
+      "id": "file:frontend/src/app/pages/Artifacts.test.tsx",
+      "type": "file",
+      "name": "Artifacts.test.tsx",
+      "filePath": "frontend/src/app/pages/Artifacts.test.tsx",
+      "summary": "Artifacts 页面的 Vitest 单元测试，通过 Mock artifacts hooks 和 selection store 验证 artifacts 列表渲染、族选择和数据展示功能。",
+      "tags": [
+        "test",
+        "artifacts",
+        "frontend",
+        "unit-test"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/app/pages/Artifacts.tsx",
+      "type": "file",
+      "name": "Artifacts.tsx",
+      "filePath": "frontend/src/app/pages/Artifacts.tsx",
+      "summary": "取证 Artifacts 浏览页面，展示 artifacts 族列表和选定 artifact 的详细数据表格，支持 artifact 选择、族切换和详情面板查看。",
+      "tags": [
+        "page",
+        "artifacts",
+        "frontend",
+        "ui-component"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:frontend/src/app/pages/FileBrowser.test.tsx",
+      "type": "file",
+      "name": "FileBrowser.test.tsx",
+      "filePath": "frontend/src/app/pages/FileBrowser.test.tsx",
+      "summary": "FileBrowser 页面的综合 Vitest 测试，覆盖文件浏览器的空状态渲染、文件树展示、列表排序、查看器标签页切换和媒体预览等核心交互场景。",
+      "tags": [
+        "test",
+        "file-browser",
+        "frontend",
+        "ui-test"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:frontend/src/app/pages/FileBrowser.tsx",
+      "type": "file",
+      "name": "FileBrowser.tsx",
+      "filePath": "frontend/src/app/pages/FileBrowser.tsx",
+      "summary": "文件浏览器主页面，组合 FileTreePanel、FileListPanel、FilePreviewPanel 和 FileBrowserInspector 四个子面板，通过 useFileBrowser hook 驱动所有子组件的数据和交互状态。",
+      "tags": [
+        "page",
+        "file-browser",
+        "frontend",
+        "composite-component"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/app/pages/FileBrowserInspector.tsx",
+      "type": "file",
+      "name": "FileBrowserInspector.tsx",
+      "filePath": "frontend/src/app/pages/FileBrowserInspector.tsx",
+      "summary": "文件浏览器右侧详情面板，展示选中文件/目录的元数据信息，包括路径、大小、时间戳和取证属性，并提供文件导出和时间线跳转操作。",
+      "tags": [
+        "inspector",
+        "file-browser",
+        "frontend",
+        "detail-panel"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/app/pages/FileListPanel.tsx",
+      "type": "file",
+      "name": "FileListPanel.tsx",
+      "filePath": "frontend/src/app/pages/FileListPanel.tsx",
+      "summary": "文件列表面板，以 DenseDataTable 展示扁平化文件行数据，支持排序、分页导航、父子目录跳转和文件/目录选择，是文件浏览器的核心数据视图。",
+      "tags": [
+        "file-browser",
+        "frontend",
+        "data-table",
+        "list-view"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/app/pages/FileTreePanel.tsx",
+      "type": "file",
+      "name": "FileTreePanel.tsx",
+      "filePath": "frontend/src/app/pages/FileTreePanel.tsx",
+      "summary": "文件树面板，渲染虚拟滚动文件树和树搜索过滤功能，支持目录展开/折叠、数据源根节点切换和面板宽度拖拽调整。",
+      "tags": [
+        "file-browser",
+        "frontend",
+        "tree-view",
+        "virtual-scroll"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/app/pages/Search.test.tsx",
+      "type": "file",
+      "name": "Search.test.tsx",
+      "filePath": "frontend/src/app/pages/Search.test.tsx",
+      "summary": "Search 页面的 Vitest 单元测试，验证搜索输入、结果列表渲染、搜索结果选择和高分命中计数等搜索交互功能。",
+      "tags": [
+        "test",
+        "search",
+        "frontend",
+        "unit-test"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/app/pages/Search.tsx",
+      "type": "file",
+      "name": "Search.tsx",
+      "filePath": "frontend/src/app/pages/Search.tsx",
+      "summary": "全文搜索页面，支持 Tantivy 查询语法输入、URL 参数持久化查询词、已保存查询的增删改管理和搜索结果详情查看。",
+      "tags": [
+        "page",
+        "search",
+        "frontend",
+        "fulltext-search"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:frontend/src/app/pages/Timeline.test.tsx",
+      "type": "file",
+      "name": "Timeline.test.tsx",
+      "filePath": "frontend/src/app/pages/Timeline.test.tsx",
+      "summary": "Timeline 页面的 Vitest 单元测试，验证时间线桶状图渲染、事件列表展示、日期范围过滤和事件详情面板功能。",
+      "tags": [
+        "test",
+        "timeline",
+        "frontend",
+        "unit-test"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/app/pages/Timeline.tsx",
+      "type": "file",
+      "name": "Timeline.tsx",
+      "filePath": "frontend/src/app/pages/Timeline.tsx",
+      "summary": "时间线页面，以桶状直方图展示事件密度分布，支持缩放调整粒度、日期范围过滤，并通过 DenseDataTable 展示详细事件列表和选中事件详情。",
+      "tags": [
+        "page",
+        "timeline",
+        "frontend",
+        "visualization"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:frontend/src/components/files/FileIconWithStatusOverlay.tsx",
+      "type": "file",
+      "name": "FileIconWithStatusOverlay.tsx",
+      "filePath": "frontend/src/components/files/FileIconWithStatusOverlay.tsx",
+      "summary": "文件图标组件，根据文件类型和扩展名渲染对应图标和颜色，并叠加隐藏/系统/已删除状态徽章，为文件树和列表提供统一视觉标识。",
+      "tags": [
+        "component",
+        "file-icons",
+        "frontend",
+        "ui-component"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/components/files/FileVisibilityToggle.tsx",
+      "type": "file",
+      "name": "FileVisibilityToggle.tsx",
+      "filePath": "frontend/src/components/files/FileVisibilityToggle.tsx",
+      "summary": "隐藏文件显示切换开关组件，提供复选框控件控制文件浏览器中隐藏/系统文件的可见性。",
+      "tags": [
+        "component",
+        "file-browser",
+        "frontend",
+        "toggle"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/components/layout/InspectorPane.tsx",
+      "type": "file",
+      "name": "InspectorPane.tsx",
+      "filePath": "frontend/src/components/layout/InspectorPane.tsx",
+      "summary": "详情面板布局组件集，提供 InspectorPane（右侧滑出面板）、InspectorSection（分组区块）和 InspectorValue（格式化值显示）三个可组合子组件。",
+      "tags": [
+        "component",
+        "layout",
+        "frontend",
+        "inspector",
+        "ui-component"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/components/layout/PageSubbar.tsx",
+      "type": "file",
+      "name": "PageSubbar.tsx",
+      "filePath": "frontend/src/components/layout/PageSubbar.tsx",
+      "summary": "页面副标题栏组件，显示当前页面的标题和元数据信息，并容纳页面级操作控件（如过滤、排序等），位于页面顶部导航栏下方。",
+      "tags": [
+        "component",
+        "layout",
+        "frontend",
+        "ui-component"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/components/tree/TreeConnector.tsx",
+      "type": "file",
+      "name": "TreeConnector.tsx",
+      "filePath": "frontend/src/components/tree/TreeConnector.tsx",
+      "summary": "树层级连接线组件，根据节点深度和是否为最后子节点渲染 VS Code 风格的缩进连接线，为文件树提供清晰的层级视觉引导。",
+      "tags": [
+        "component",
+        "tree",
+        "frontend",
+        "visual-guide"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/components/tree/TreeNodeIcon.tsx",
+      "type": "file",
+      "name": "TreeNodeIcon.tsx",
+      "filePath": "frontend/src/components/tree/TreeNodeIcon.tsx",
+      "summary": "树节点图标组件，将 FileTreeNode 数据适配后委托给 FileIconWithStatusOverlay 渲染，为虚拟文件树提供一致的图标显示接口。",
+      "tags": [
+        "component",
+        "tree",
+        "frontend",
+        "adapter"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/components/tree/TreeSearch.tsx",
+      "type": "file",
+      "name": "TreeSearch.tsx",
+      "filePath": "frontend/src/components/tree/TreeSearch.tsx",
+      "summary": "树搜索过滤组件，提供带防抖的实时文本过滤输入框，支持模糊匹配和大/小写不敏感过滤文件树节点。",
+      "tags": [
+        "component",
+        "tree",
+        "frontend",
+        "search",
+        "filter"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/components/tree/VirtualFileTree.test.tsx",
+      "type": "file",
+      "name": "VirtualFileTree.test.tsx",
+      "filePath": "frontend/src/components/tree/VirtualFileTree.test.tsx",
+      "summary": "VirtualFileTree 的 Vitest 单元测试，验证虚拟滚动只渲染可见窗口内的节点（10000 节点列表中仅渲染 12 个 DOM 元素）。",
+      "tags": [
+        "test",
+        "tree",
+        "frontend",
+        "virtual-scroll"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/components/tree/VirtualFileTree.tsx",
+      "type": "file",
+      "name": "VirtualFileTree.tsx",
+      "filePath": "frontend/src/components/tree/VirtualFileTree.tsx",
+      "summary": "基于 @tanstack/react-virtual 的虚拟滚动文件树组件，仅渲染可视区域内的节点以支持大规模文件列表的高性能展示。",
+      "tags": [
+        "component",
+        "tree",
+        "frontend",
+        "virtual-scroll",
+        "performance"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/features/files/hooks/use-file-selection.ts",
+      "type": "file",
+      "name": "use-file-selection.ts",
+      "filePath": "frontend/src/features/files/hooks/use-file-selection.ts",
+      "summary": "文件选择 Hook，封装 Zustand selection store 的文件/目录/时间线选择状态读写，为文件浏览器组件提供统一的选择状态接口。",
+      "tags": [
+        "hook",
+        "selection",
+        "frontend",
+        "zustand"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/features/search/hooks.test.ts",
+      "type": "file",
+      "name": "hooks.test.ts",
+      "filePath": "frontend/src/features/search/hooks.test.ts",
+      "summary": "搜索 hooks 的 Vitest 测试，验证 useSearchResults 的查询传递、结果返回、空结果和错误状态处理，以及失败不重试行为。",
+      "tags": [
+        "test",
+        "search",
+        "frontend",
+        "hook-test"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/features/search/hooks.ts",
+      "type": "file",
+      "name": "hooks.ts",
+      "filePath": "frontend/src/features/search/hooks.ts",
+      "summary": "搜索 React Query Hook，封装 searchFiles API 调用，以查询字符串为缓存键提供自动缓存和重新获取的搜索结果数据。",
+      "tags": [
+        "hook",
+        "search",
+        "frontend",
+        "react-query"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/lib/file-icons.ts",
+      "type": "file",
+      "name": "file-icons.ts",
+      "filePath": "frontend/src/lib/file-icons.ts",
+      "summary": "文件图标映射系统，维护 100+ 扩展名到 Lucide 图标和颜色的映射表，提供 getFileIcon 和 getFileTypeLabel 两个工具函数，支持目录、加密分区和取证特有文件类型。",
+      "tags": [
+        "utility",
+        "file-icons",
+        "frontend",
+        "icon-mapping"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:frontend/src/lib/saved-queries.test.ts",
+      "type": "file",
+      "name": "saved-queries.test.ts",
+      "filePath": "frontend/src/lib/saved-queries.test.ts",
+      "summary": "已保存搜索查询的 Vitest 单元测试，验证 localStorage 持久化读写、按名称更新和按 ID 删除功能。",
+      "tags": [
+        "test",
+        "search",
+        "frontend",
+        "utility-test"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/lib/saved-queries.ts",
+      "type": "file",
+      "name": "saved-queries.ts",
+      "filePath": "frontend/src/lib/saved-queries.ts",
+      "summary": "已保存搜索查询管理工具，基于 localStorage 提供查询的读写、新增/更新、删除和类型校验功能，上限 20 条。",
+      "tags": [
+        "utility",
+        "search",
+        "frontend",
+        "local-storage"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/stores/selection-store.test.ts",
+      "type": "file",
+      "name": "selection-store.test.ts",
+      "filePath": "frontend/src/stores/selection-store.test.ts",
+      "summary": "selection-store 的 Vitest 单元测试，验证初始状态为空选择、文件选择和 artifact 族切换等 Zustand store 操作。",
+      "tags": [
+        "test",
+        "store",
+        "frontend",
+        "zustand"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/stores/selection-store.ts",
+      "type": "file",
+      "name": "selection-store.ts",
+      "filePath": "frontend/src/stores/selection-store.ts",
+      "summary": "Zustand 全局选择状态 store，管理文件浏览器、搜索、时间线和 artifacts 页面中共用的选中项 ID 状态，默认 artifact 族为 LNK。",
+      "tags": [
+        "store",
+        "zustand",
+        "frontend",
+        "selection",
+        "state-management"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/pages/Artifacts.tsx:Artifacts",
+      "type": "function",
+      "name": "Artifacts",
+      "filePath": "frontend/src/app/pages/Artifacts.tsx",
+      "lineRange": [
+        19,
+        211
+      ],
+      "summary": "Artifacts 页面主组件，渲染 artifact 族选择器、artifact 行数据表格和选中 artifact 的详情面板，通过 selection store 管理选择状态。",
+      "tags": [
+        "component",
+        "page",
+        "artifacts",
+        "react"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/app/pages/FileBrowser.tsx:FileBrowser",
+      "type": "function",
+      "name": "FileBrowser",
+      "filePath": "frontend/src/app/pages/FileBrowser.tsx",
+      "lineRange": [
+        11,
+        161
+      ],
+      "summary": "文件浏览器主组件，空案件时显示引导提示，有案件时渲染四面板布局（树、列表、预览、详情），通过 useFileBrowser hook 驱动全部交互。",
+      "tags": [
+        "component",
+        "page",
+        "file-browser",
+        "react"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/app/pages/FileBrowserInspector.tsx:FileBrowserInspector",
+      "type": "function",
+      "name": "FileBrowserInspector",
+      "filePath": "frontend/src/app/pages/FileBrowserInspector.tsx",
+      "lineRange": [
+        20,
+        127
+      ],
+      "summary": "文件详情检查器组件，展示文件路径、大小、MACB 时间戳、取证属性和目录信息，提供文件导出和时间线查看操作按钮。",
+      "tags": [
+        "component",
+        "inspector",
+        "file-browser",
+        "react"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/app/pages/FileListPanel.tsx:FileListPanel",
+      "type": "function",
+      "name": "FileListPanel",
+      "filePath": "frontend/src/app/pages/FileListPanel.tsx",
+      "lineRange": [
+        27,
+        175
+      ],
+      "summary": "文件列表面板组件，渲染带排序和分页的 DenseDataTable，支持选中行高亮、目录导航和面包屑路径显示。",
+      "tags": [
+        "component",
+        "file-browser",
+        "data-table",
+        "react"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/app/pages/FileTreePanel.tsx:FileTreePanel",
+      "type": "function",
+      "name": "FileTreePanel",
+      "filePath": "frontend/src/app/pages/FileTreePanel.tsx",
+      "lineRange": [
+        33,
+        184
+      ],
+      "summary": "文件树面板组件，集成 VirtualFileTree、TreeSearch 过滤和数据源切换，支持面板宽度拖拽调整和多数据源根节点选择。",
+      "tags": [
+        "component",
+        "file-browser",
+        "tree-view",
+        "react"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/app/pages/Search.tsx:Search",
+      "type": "function",
+      "name": "Search",
+      "filePath": "frontend/src/app/pages/Search.tsx",
+      "lineRange": [
+        19,
+        253
+      ],
+      "summary": "搜索页面主组件，提供查询输入框、已保存查询管理面板、搜索结果表格和选中结果详情面板，支持 URL 参数同步和默认查询回退。",
+      "tags": [
+        "component",
+        "page",
+        "search",
+        "react"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/app/pages/Timeline.tsx:buildTimelineBars",
+      "type": "function",
+      "name": "buildTimelineBars",
+      "filePath": "frontend/src/app/pages/Timeline.tsx",
+      "lineRange": [
+        15,
+        36
+      ],
+      "summary": "构建时间线桶状图数据，将事件时间戳分配到指定数量的桶中，计算每个桶的高度比例和事件计数用于直方图渲染。",
+      "tags": [
+        "utility",
+        "timeline",
+        "histogram",
+        "data-transform"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/pages/Timeline.tsx:formatTs",
+      "type": "function",
+      "name": "formatTs",
+      "filePath": "frontend/src/app/pages/Timeline.tsx",
+      "lineRange": [
+        38,
+        47
+      ],
+      "summary": "时间戳格式化辅助函数，将 ISO 时间字符串格式化为中文短日期时间格式（月/日 时:分），无效值时回退到截断显示。",
+      "tags": [
+        "utility",
+        "timeline",
+        "formatting",
+        "date"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/pages/Timeline.tsx:Timeline",
+      "type": "function",
+      "name": "Timeline",
+      "filePath": "frontend/src/app/pages/Timeline.tsx",
+      "lineRange": [
+        62,
+        361
+      ],
+      "summary": "时间线页面主组件，渲染可缩放的事件密度直方图、日期范围过滤器和详细事件表格，支持桶数量动态调整和选中事件详情展示。",
+      "tags": [
+        "component",
+        "page",
+        "timeline",
+        "react"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/components/files/FileIconWithStatusOverlay.tsx:FileIconWithStatusOverlay",
+      "type": "function",
+      "name": "FileIconWithStatusOverlay",
+      "filePath": "frontend/src/components/files/FileIconWithStatusOverlay.tsx",
+      "lineRange": [
+        28,
+        65
+      ],
+      "summary": "文件图标叠加组件，调用 getFileIcon 获取图标和颜色后渲染，并在文件有隐藏/系统/已删除状态时叠加对应徽章标记。",
+      "tags": [
+        "component",
+        "file-icons",
+        "react",
+        "overlay"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/files/FileVisibilityToggle.tsx:FileVisibilityToggle",
+      "type": "function",
+      "name": "FileVisibilityToggle",
+      "filePath": "frontend/src/components/files/FileVisibilityToggle.tsx",
+      "lineRange": [
+        3,
+        24
+      ],
+      "summary": "隐藏文件可见性切换复选框，控制文件浏览器中隐藏文件和系统文件的显示与隐藏。",
+      "tags": [
+        "component",
+        "toggle",
+        "file-browser",
+        "react"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/layout/InspectorPane.tsx:InspectorPane",
+      "type": "function",
+      "name": "InspectorPane",
+      "filePath": "frontend/src/components/layout/InspectorPane.tsx",
+      "lineRange": [
+        10,
+        20
+      ],
+      "summary": "详情面板容器组件，渲染右侧滑出的固定宽度面板，包含标题栏和可滚动内容区域，支持自定义宽度类名。",
+      "tags": [
+        "component",
+        "layout",
+        "inspector",
+        "react"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/layout/InspectorPane.tsx:InspectorValue",
+      "type": "function",
+      "name": "InspectorValue",
+      "filePath": "frontend/src/components/layout/InspectorPane.tsx",
+      "lineRange": [
+        31,
+        43
+      ],
+      "summary": "详情值显示组件，以带边框的格式化文本块展示属性值，支持等宽字体和加粗样式切换。",
+      "tags": [
+        "component",
+        "layout",
+        "inspector",
+        "react"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/layout/PageSubbar.tsx:PageSubbar",
+      "type": "function",
+      "name": "PageSubbar",
+      "filePath": "frontend/src/components/layout/PageSubbar.tsx",
+      "lineRange": [
+        8,
+        20
+      ],
+      "summary": "页面副标题栏组件，显示大写标题和等宽字体元数据行，下方容纳页面级操作控件。",
+      "tags": [
+        "component",
+        "layout",
+        "react"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/tree/TreeConnector.tsx:TreeConnector",
+      "type": "function",
+      "name": "TreeConnector",
+      "filePath": "frontend/src/components/tree/TreeConnector.tsx",
+      "lineRange": [
+        14,
+        46
+      ],
+      "summary": "树层级连接线组件，根据 depth 和 isLast 渲染缩进竖线和 L 形连接线，实现 VS Code/Explorer 风格的文件树视觉层级。",
+      "tags": [
+        "component",
+        "tree",
+        "visual-guide",
+        "react"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/tree/TreeNodeIcon.tsx:TreeNodeIcon",
+      "type": "function",
+      "name": "TreeNodeIcon",
+      "filePath": "frontend/src/components/tree/TreeNodeIcon.tsx",
+      "lineRange": [
+        23,
+        37
+      ],
+      "summary": "树节点图标适配器，将 FileTreeNode 的 name/entryType/status 属性转发给 FileIconWithStatusOverlay 组件渲染。",
+      "tags": [
+        "component",
+        "tree",
+        "adapter",
+        "react"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/tree/TreeSearch.tsx:TreeSearch",
+      "type": "function",
+      "name": "TreeSearch",
+      "filePath": "frontend/src/components/tree/TreeSearch.tsx",
+      "lineRange": [
+        22,
+        70
+      ],
+      "summary": "树搜索过滤组件，提供带防抖（默认 150ms）的文本输入框，支持实时过滤回调和清除按钮，用于过滤文件树节点。",
+      "tags": [
+        "component",
+        "tree",
+        "search",
+        "filter",
+        "react"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/tree/VirtualFileTree.tsx:VirtualFileTree",
+      "type": "function",
+      "name": "VirtualFileTree",
+      "filePath": "frontend/src/components/tree/VirtualFileTree.tsx",
+      "lineRange": [
+        26,
+        135
+      ],
+      "summary": "虚拟滚动文件树组件，使用 @tanstack/react-virtual 只渲染可视窗口内的节点，支持自定义行高和过扫描数量。",
+      "tags": [
+        "component",
+        "tree",
+        "virtual-scroll",
+        "performance",
+        "react"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/features/files/hooks/use-file-selection.ts:useFileSelection",
+      "type": "function",
+      "name": "useFileSelection",
+      "filePath": "frontend/src/features/files/hooks/use-file-selection.ts",
+      "lineRange": [
+        3,
+        17
+      ],
+      "summary": "文件选择 Hook，从 Zustand selection store 读取并封装 directoryId、fileId、timelineId 的选择状态和 setter。",
+      "tags": [
+        "hook",
+        "selection",
+        "zustand",
+        "react"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/lib/file-icons.ts:getFileIcon",
+      "type": "function",
+      "name": "getFileIcon",
+      "filePath": "frontend/src/lib/file-icons.ts",
+      "lineRange": [
+        156,
+        179
+      ],
+      "summary": "根据文件节点信息返回对应的 Lucide 图标和颜色，区分目录（普通/加密/不支持）和文件（按扩展名查表），无匹配时回退到通用文件图标。",
+      "tags": [
+        "utility",
+        "file-icons",
+        "icon-lookup",
+        "pure-function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/lib/file-icons.ts:getFileTypeLabel",
+      "type": "function",
+      "name": "getFileTypeLabel",
+      "filePath": "frontend/src/lib/file-icons.ts",
+      "lineRange": [
+        184,
+        216
+      ],
+      "summary": "根据文件节点返回中文文件类型标签（如'可执行文件'、'PDF 文档'），目录返回'目录'，未知扩展名回退为大写扩展名拼接。",
+      "tags": [
+        "utility",
+        "file-icons",
+        "label-lookup",
+        "pure-function"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/lib/saved-queries.ts:readSavedSearchQueries",
+      "type": "function",
+      "name": "readSavedSearchQueries",
+      "filePath": "frontend/src/lib/saved-queries.ts",
+      "lineRange": [
+        10,
+        20
+      ],
+      "summary": "从 localStorage 读取已保存搜索查询列表，解析 JSON 并过滤出合法的 SavedSearchQuery 条目，异常时返回空数组。",
+      "tags": [
+        "utility",
+        "search",
+        "local-storage",
+        "data-read"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/lib/saved-queries.ts:writeSavedSearchQueries",
+      "type": "function",
+      "name": "writeSavedSearchQueries",
+      "filePath": "frontend/src/lib/saved-queries.ts",
+      "lineRange": [
+        22,
+        24
+      ],
+      "summary": "将已保存搜索查询列表序列化为 JSON 并写入 localStorage。",
+      "tags": [
+        "utility",
+        "search",
+        "local-storage",
+        "data-write"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/lib/saved-queries.ts:upsertSavedSearchQuery",
+      "type": "function",
+      "name": "upsertSavedSearchQuery",
+      "filePath": "frontend/src/lib/saved-queries.ts",
+      "lineRange": [
+        26,
+        52
+      ],
+      "summary": "新增或更新已保存搜索查询，按名称匹配更新已有条目，否则创建新条目并限制总数不超过 20 条。",
+      "tags": [
+        "utility",
+        "search",
+        "local-storage",
+        "crud"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/lib/saved-queries.ts:removeSavedSearchQuery",
+      "type": "function",
+      "name": "removeSavedSearchQuery",
+      "filePath": "frontend/src/lib/saved-queries.ts",
+      "lineRange": [
+        61,
+        66
+      ],
+      "summary": "按 ID 从已保存搜索查询列表中移除指定条目。",
+      "tags": [
+        "utility",
+        "search",
+        "local-storage",
+        "crud"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/features/search/hooks.ts:useSearchResults",
+      "type": "function",
+      "name": "useSearchResults",
+      "filePath": "frontend/src/features/search/hooks.ts",
+      "lineRange": [
+        4,
+        9
+      ],
+      "summary": "搜索 React Query Hook，以查询字符串为缓存键调用 searchFiles API，自动管理加载、成功和错误状态。",
+      "tags": [
+        "hook",
+        "search",
+        "react-query",
+        "api-wrapper"
+      ],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:frontend/src/app/pages/Artifacts.tsx",
+      "target": "function:frontend/src/app/pages/Artifacts.tsx:Artifacts",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileBrowser.tsx",
+      "target": "function:frontend/src/app/pages/FileBrowser.tsx:FileBrowser",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileBrowserInspector.tsx",
+      "target": "function:frontend/src/app/pages/FileBrowserInspector.tsx:FileBrowserInspector",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileListPanel.tsx",
+      "target": "function:frontend/src/app/pages/FileListPanel.tsx:FileListPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileTreePanel.tsx",
+      "target": "function:frontend/src/app/pages/FileTreePanel.tsx:FileTreePanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/pages/Search.tsx",
+      "target": "function:frontend/src/app/pages/Search.tsx:Search",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/pages/Timeline.tsx",
+      "target": "function:frontend/src/app/pages/Timeline.tsx:buildTimelineBars",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/pages/Timeline.tsx",
+      "target": "function:frontend/src/app/pages/Timeline.tsx:formatTs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/pages/Timeline.tsx",
+      "target": "function:frontend/src/app/pages/Timeline.tsx:Timeline",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/files/FileIconWithStatusOverlay.tsx",
+      "target": "function:frontend/src/components/files/FileIconWithStatusOverlay.tsx:FileIconWithStatusOverlay",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/files/FileVisibilityToggle.tsx",
+      "target": "function:frontend/src/components/files/FileVisibilityToggle.tsx:FileVisibilityToggle",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/layout/InspectorPane.tsx",
+      "target": "function:frontend/src/components/layout/InspectorPane.tsx:InspectorPane",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/layout/InspectorPane.tsx",
+      "target": "function:frontend/src/components/layout/InspectorPane.tsx:InspectorValue",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/layout/PageSubbar.tsx",
+      "target": "function:frontend/src/components/layout/PageSubbar.tsx:PageSubbar",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/tree/TreeConnector.tsx",
+      "target": "function:frontend/src/components/tree/TreeConnector.tsx:TreeConnector",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/tree/TreeNodeIcon.tsx",
+      "target": "function:frontend/src/components/tree/TreeNodeIcon.tsx:TreeNodeIcon",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/tree/TreeSearch.tsx",
+      "target": "function:frontend/src/components/tree/TreeSearch.tsx:TreeSearch",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/components/tree/VirtualFileTree.tsx",
+      "target": "function:frontend/src/components/tree/VirtualFileTree.tsx:VirtualFileTree",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/files/hooks/use-file-selection.ts",
+      "target": "function:frontend/src/features/files/hooks/use-file-selection.ts:useFileSelection",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/lib/file-icons.ts",
+      "target": "function:frontend/src/lib/file-icons.ts:getFileIcon",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/lib/file-icons.ts",
+      "target": "function:frontend/src/lib/file-icons.ts:getFileTypeLabel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/lib/saved-queries.ts",
+      "target": "function:frontend/src/lib/saved-queries.ts:readSavedSearchQueries",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/lib/saved-queries.ts",
+      "target": "function:frontend/src/lib/saved-queries.ts:writeSavedSearchQueries",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/lib/saved-queries.ts",
+      "target": "function:frontend/src/lib/saved-queries.ts:upsertSavedSearchQuery",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/lib/saved-queries.ts",
+      "target": "function:frontend/src/lib/saved-queries.ts:removeSavedSearchQuery",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/features/search/hooks.ts",
+      "target": "function:frontend/src/features/search/hooks.ts:useSearchResults",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:frontend/src/app/pages/Artifacts.tsx",
+      "target": "function:frontend/src/app/pages/Artifacts.tsx:Artifacts",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileBrowser.tsx",
+      "target": "function:frontend/src/app/pages/FileBrowser.tsx:FileBrowser",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileBrowserInspector.tsx",
+      "target": "function:frontend/src/app/pages/FileBrowserInspector.tsx:FileBrowserInspector",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileListPanel.tsx",
+      "target": "function:frontend/src/app/pages/FileListPanel.tsx:FileListPanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileTreePanel.tsx",
+      "target": "function:frontend/src/app/pages/FileTreePanel.tsx:FileTreePanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/Search.tsx",
+      "target": "function:frontend/src/app/pages/Search.tsx:Search",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/Timeline.tsx",
+      "target": "function:frontend/src/app/pages/Timeline.tsx:Timeline",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/files/FileIconWithStatusOverlay.tsx",
+      "target": "function:frontend/src/components/files/FileIconWithStatusOverlay.tsx:FileIconWithStatusOverlay",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/files/FileVisibilityToggle.tsx",
+      "target": "function:frontend/src/components/files/FileVisibilityToggle.tsx:FileVisibilityToggle",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/layout/InspectorPane.tsx",
+      "target": "function:frontend/src/components/layout/InspectorPane.tsx:InspectorPane",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/layout/InspectorPane.tsx",
+      "target": "function:frontend/src/components/layout/InspectorPane.tsx:InspectorValue",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/layout/PageSubbar.tsx",
+      "target": "function:frontend/src/components/layout/PageSubbar.tsx:PageSubbar",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/tree/TreeConnector.tsx",
+      "target": "function:frontend/src/components/tree/TreeConnector.tsx:TreeConnector",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/tree/TreeNodeIcon.tsx",
+      "target": "function:frontend/src/components/tree/TreeNodeIcon.tsx:TreeNodeIcon",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/tree/TreeSearch.tsx",
+      "target": "function:frontend/src/components/tree/TreeSearch.tsx:TreeSearch",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/tree/VirtualFileTree.tsx",
+      "target": "function:frontend/src/components/tree/VirtualFileTree.tsx:VirtualFileTree",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/files/hooks/use-file-selection.ts",
+      "target": "function:frontend/src/features/files/hooks/use-file-selection.ts:useFileSelection",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/lib/file-icons.ts",
+      "target": "function:frontend/src/lib/file-icons.ts:getFileIcon",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/lib/file-icons.ts",
+      "target": "function:frontend/src/lib/file-icons.ts:getFileTypeLabel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/lib/saved-queries.ts",
+      "target": "function:frontend/src/lib/saved-queries.ts:readSavedSearchQueries",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/lib/saved-queries.ts",
+      "target": "function:frontend/src/lib/saved-queries.ts:writeSavedSearchQueries",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/lib/saved-queries.ts",
+      "target": "function:frontend/src/lib/saved-queries.ts:upsertSavedSearchQuery",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/lib/saved-queries.ts",
+      "target": "function:frontend/src/lib/saved-queries.ts:removeSavedSearchQuery",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/features/search/hooks.ts",
+      "target": "function:frontend/src/features/search/hooks.ts:useSearchResults",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/Artifacts.test.tsx",
+      "target": "file:frontend/src/app/pages/Artifacts.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Artifacts.tsx",
+      "target": "file:frontend/src/components/layout/InspectorPane.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Artifacts.tsx",
+      "target": "file:frontend/src/components/layout/PageSubbar.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Artifacts.tsx",
+      "target": "file:frontend/src/components/tables/DenseDataTable.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Artifacts.tsx",
+      "target": "file:frontend/src/features/artifacts/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Artifacts.tsx",
+      "target": "file:frontend/src/stores/selection-store.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Artifacts.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileBrowser.test.tsx",
+      "target": "file:frontend/src/app/pages/FileBrowser.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileBrowser.tsx",
+      "target": "file:frontend/src/app/pages/FileBrowserInspector.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileBrowser.tsx",
+      "target": "file:frontend/src/app/pages/FileListPanel.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileBrowser.tsx",
+      "target": "file:frontend/src/app/pages/FilePreviewPanel.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileBrowser.tsx",
+      "target": "file:frontend/src/app/pages/FileTreePanel.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileBrowser.tsx",
+      "target": "file:frontend/src/app/pages/use-file-browser.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileBrowser.tsx",
+      "target": "file:frontend/src/components/files/FileVisibilityToggle.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileBrowser.tsx",
+      "target": "file:frontend/src/components/layout/PageSubbar.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileBrowserInspector.tsx",
+      "target": "file:frontend/src/components/layout/InspectorPane.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileBrowserInspector.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileListPanel.tsx",
+      "target": "file:frontend/src/app/components/ui/button.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileListPanel.tsx",
+      "target": "file:frontend/src/components/files/FileIconWithStatusOverlay.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileListPanel.tsx",
+      "target": "file:frontend/src/components/tables/DenseDataTable.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileListPanel.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileTreePanel.tsx",
+      "target": "file:frontend/src/app/components/ui/button.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileTreePanel.tsx",
+      "target": "file:frontend/src/components/files/FileIconWithStatusOverlay.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileTreePanel.tsx",
+      "target": "file:frontend/src/components/tree/TreeConnector.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileTreePanel.tsx",
+      "target": "file:frontend/src/components/tree/TreeSearch.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileTreePanel.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Search.test.tsx",
+      "target": "file:frontend/src/app/pages/Search.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Search.tsx",
+      "target": "file:frontend/src/components/layout/InspectorPane.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Search.tsx",
+      "target": "file:frontend/src/components/layout/PageSubbar.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Search.tsx",
+      "target": "file:frontend/src/components/tables/DenseDataTable.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Search.tsx",
+      "target": "file:frontend/src/features/search/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Search.tsx",
+      "target": "file:frontend/src/lib/saved-queries.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Search.tsx",
+      "target": "file:frontend/src/stores/selection-store.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Search.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Timeline.test.tsx",
+      "target": "file:frontend/src/app/pages/Timeline.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Timeline.tsx",
+      "target": "file:frontend/src/components/layout/InspectorPane.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Timeline.tsx",
+      "target": "file:frontend/src/components/layout/PageSubbar.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Timeline.tsx",
+      "target": "file:frontend/src/components/tables/DenseDataTable.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Timeline.tsx",
+      "target": "file:frontend/src/features/timeline/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Timeline.tsx",
+      "target": "file:frontend/src/stores/selection-store.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Timeline.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/files/FileIconWithStatusOverlay.tsx",
+      "target": "file:frontend/src/lib/file-icons.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/tree/TreeNodeIcon.tsx",
+      "target": "file:frontend/src/components/files/FileIconWithStatusOverlay.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/tree/TreeNodeIcon.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/tree/VirtualFileTree.test.tsx",
+      "target": "file:frontend/src/components/tree/VirtualFileTree.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/tree/VirtualFileTree.test.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/tree/VirtualFileTree.tsx",
+      "target": "file:frontend/src/components/files/FileIconWithStatusOverlay.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/tree/VirtualFileTree.tsx",
+      "target": "file:frontend/src/components/tree/TreeConnector.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/tree/VirtualFileTree.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/features/files/hooks/use-file-selection.ts",
+      "target": "file:frontend/src/stores/selection-store.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/features/search/hooks.test.ts",
+      "target": "file:frontend/src/features/search/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/features/search/hooks.ts",
+      "target": "file:frontend/src/lib/api/search.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/lib/saved-queries.test.ts",
+      "target": "file:frontend/src/lib/saved-queries.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/stores/selection-store.test.ts",
+      "target": "file:frontend/src/stores/selection-store.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/Artifacts.test.tsx",
+      "target": "file:frontend/src/app/pages/Artifacts.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:frontend/src/app/pages/FileBrowser.test.tsx",
+      "target": "file:frontend/src/app/pages/FileBrowser.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:frontend/src/app/pages/Search.test.tsx",
+      "target": "file:frontend/src/app/pages/Search.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:frontend/src/app/pages/Timeline.test.tsx",
+      "target": "file:frontend/src/app/pages/Timeline.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:frontend/src/components/tree/VirtualFileTree.test.tsx",
+      "target": "file:frontend/src/components/tree/VirtualFileTree.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:frontend/src/features/search/hooks.test.ts",
+      "target": "file:frontend/src/features/search/hooks.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:frontend/src/lib/saved-queries.test.ts",
+      "target": "file:frontend/src/lib/saved-queries.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:frontend/src/stores/selection-store.test.ts",
+      "target": "file:frontend/src/stores/selection-store.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "function:frontend/src/components/files/FileIconWithStatusOverlay.tsx:FileIconWithStatusOverlay",
+      "target": "function:frontend/src/lib/file-icons.ts:getFileIcon",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

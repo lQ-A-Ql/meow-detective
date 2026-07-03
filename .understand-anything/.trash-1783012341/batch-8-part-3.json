@@ -1,0 +1,1545 @@
+{
+  "nodes": [
+    {
+      "id": "file:frontend/src/components/analysis/panels/ClassificationPanel.tsx",
+      "type": "file",
+      "name": "ClassificationPanel.tsx",
+      "filePath": "frontend/src/components/analysis/panels/ClassificationPanel.tsx",
+      "summary": "证据分类面板，包含证据分类概览（EvidenceClassificationPanel）、文件分类详情（FileClassificationPanel）和分析报告（AnalysisReportPanel）三个子组件。",
+      "tags": [
+        "component",
+        "analysis",
+        "classification",
+        "panel"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "type": "file",
+      "name": "EmailExtractionPanel.tsx",
+      "filePath": "frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "summary": "邮件提取分析面板，展示邮件概要统计、邮件详情卡片（含附件、正文预览、邮件头）、HTML 正文渲染和支持多维字段展示。",
+      "tags": [
+        "component",
+        "analysis",
+        "email",
+        "extraction",
+        "panel"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:frontend/src/components/analysis/panels/EventLogPanel.test.tsx",
+      "type": "file",
+      "name": "EventLogPanel.test.tsx",
+      "filePath": "frontend/src/components/analysis/panels/EventLogPanel.test.tsx",
+      "summary": "事件日志分析面板的单元测试，覆盖安全事件过滤和面板组件渲染验证。",
+      "tags": [
+        "test",
+        "unit-test",
+        "event-log",
+        "evtx"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/components/analysis/panels/EventLogPanel.tsx",
+      "type": "file",
+      "name": "EventLogPanel.tsx",
+      "filePath": "frontend/src/components/analysis/panels/EventLogPanel.tsx",
+      "summary": "Windows 事件日志（EVTX）分析面板，分类展示安全事件（登录/注销、进程执行、计划任务等）、启动/关机记录及应用崩溃统计。",
+      "tags": [
+        "component",
+        "analysis",
+        "event-log",
+        "evtx",
+        "panel"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/components/analysis/panels/RegistryExtractionPanel.test.tsx",
+      "type": "file",
+      "name": "RegistryExtractionPanel.test.tsx",
+      "filePath": "frontend/src/components/analysis/panels/RegistryExtractionPanel.test.tsx",
+      "summary": "注册表提取分析面板的单元测试，验证多注册表 Hive 数据展示和 UI 渲染。",
+      "tags": [
+        "test",
+        "unit-test",
+        "registry",
+        "extraction"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/components/analysis/panels/RegistryExtractionPanel.tsx",
+      "type": "file",
+      "name": "RegistryExtractionPanel.tsx",
+      "filePath": "frontend/src/components/analysis/panels/RegistryExtractionPanel.tsx",
+      "summary": "注册表提取分析面板，提供 SAM 用户账户、UserAssist 执行历史、USB 设备连接、网络适配器及多 Hive 结构化摘要的多标签页展示。",
+      "tags": [
+        "component",
+        "analysis",
+        "registry",
+        "extraction",
+        "panel"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "type": "file",
+      "name": "SystemInfoPanel.tsx",
+      "filePath": "frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "summary": "系统信息面板集合，包含系统概要面板、分析页眉（含提取进度）、空状态引导、错误横幅及加载状态等 5 个子组件。",
+      "tags": [
+        "component",
+        "analysis",
+        "system-info",
+        "panel"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "type": "file",
+      "name": "helpers.tsx",
+      "filePath": "frontend/src/components/analysis/panels/helpers.tsx",
+      "summary": "分析面板通用工具组件库，提供格式化函数（formatSize、statusLabel）、提取进度组件、表格框架、来源溯源面板、统计卡片、状态标签等 19 个可复用导出。",
+      "tags": [
+        "utility",
+        "component",
+        "helpers",
+        "analysis",
+        "panel"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:frontend/src/components/batch/BatchHistory.test.tsx",
+      "type": "file",
+      "name": "BatchHistory.test.tsx",
+      "filePath": "frontend/src/components/batch/BatchHistory.test.tsx",
+      "summary": "批量任务历史组件的单元测试，验证任务数据结构的渲染展示。",
+      "tags": [
+        "test",
+        "unit-test",
+        "batch",
+        "history"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/ClassificationPanel.tsx:EvidenceClassificationPanel",
+      "type": "function",
+      "name": "EvidenceClassificationPanel",
+      "filePath": "frontend/src/components/analysis/panels/ClassificationPanel.tsx",
+      "lineRange": [
+        21,
+        130
+      ],
+      "summary": "证据分类概览面板，展示分类总数、候选文件数、产出物数量及各类别详情（包含告警和来源信息）。",
+      "tags": [
+        "component",
+        "analysis",
+        "classification",
+        "evidence"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/ClassificationPanel.tsx:FileClassificationPanel",
+      "type": "function",
+      "name": "FileClassificationPanel",
+      "filePath": "frontend/src/components/analysis/panels/ClassificationPanel.tsx",
+      "lineRange": [
+        132,
+        207
+      ],
+      "summary": "文件分类详情面板，展示分类统计聚合（扩展名/类别映射）、各类别文件大小及前 20 个文件清单。",
+      "tags": [
+        "component",
+        "analysis",
+        "classification",
+        "file"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/ClassificationPanel.tsx:AnalysisReportPanel",
+      "type": "function",
+      "name": "AnalysisReportPanel",
+      "filePath": "frontend/src/components/analysis/panels/ClassificationPanel.tsx",
+      "lineRange": [
+        209,
+        231
+      ],
+      "summary": "分析报告面板，展示可下载的 HTML/CSV/JSON 分析报告入口，含文件大小和生成时间信息。",
+      "tags": [
+        "component",
+        "analysis",
+        "report",
+        "download"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx:EmailExtractionPanel",
+      "type": "function",
+      "name": "EmailExtractionPanel",
+      "filePath": "frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "lineRange": [
+        31,
+        158
+      ],
+      "summary": "邮件提取分析面板（128 行），提供邮件概要、搜索过滤、邮件详情卡片展开、附件预览和邮件头查看功能。",
+      "tags": [
+        "component",
+        "analysis",
+        "email",
+        "extraction",
+        "panel"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx:EmailDetailCard",
+      "type": "function",
+      "name": "EmailDetailCard",
+      "filePath": "frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "lineRange": [
+        160,
+        297
+      ],
+      "summary": "邮件详情卡片组件（138 行），展示单封邮件的发件人/收件人/主题/日期、正文预览、附件列表及完整邮件头。",
+      "tags": [
+        "component",
+        "email",
+        "detail",
+        "card"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx:Field",
+      "type": "function",
+      "name": "Field",
+      "filePath": "frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "lineRange": [
+        299,
+        323
+      ],
+      "summary": "通用字段展示小组件，渲染标签-值对并支持 onClick 交互。",
+      "tags": [
+        "component",
+        "ui",
+        "field",
+        "label-value"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx:AttachmentBadge",
+      "type": "function",
+      "name": "AttachmentBadge",
+      "filePath": "frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "lineRange": [
+        325,
+        338
+      ],
+      "summary": "附件标签徽章组件，展示附件文件名和文件大小的格式化标签。",
+      "tags": [
+        "component",
+        "email",
+        "attachment",
+        "badge"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx:HtmlPreview",
+      "type": "function",
+      "name": "HtmlPreview",
+      "filePath": "frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "lineRange": [
+        348,
+        363
+      ],
+      "summary": "HTML 邮件正文预览组件，使用 iframe 的 srcdoc 安全渲染 HTML 格式邮件内容。",
+      "tags": [
+        "component",
+        "email",
+        "html",
+        "preview"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx:HeaderList",
+      "type": "function",
+      "name": "HeaderList",
+      "filePath": "frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "lineRange": [
+        365,
+        387
+      ],
+      "summary": "邮件头列表组件，将邮件头键值对渲染为可折叠的标签-值列表。",
+      "tags": [
+        "component",
+        "email",
+        "headers",
+        "list"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/EventLogPanel.tsx:EventLogPanel",
+      "type": "function",
+      "name": "EventLogPanel",
+      "filePath": "frontend/src/components/analysis/panels/EventLogPanel.tsx",
+      "lineRange": [
+        21,
+        200
+      ],
+      "summary": "Windows 事件日志（EVTX）分析面板（180 行），分类展示安全事件、启动/关机、进程执行、应用崩溃等多维度统计，支持标签页切换。",
+      "tags": [
+        "component",
+        "analysis",
+        "event-log",
+        "evtx",
+        "panel"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/RegistryExtractionPanel.tsx:RegistryExtractionPanel",
+      "type": "function",
+      "name": "RegistryExtractionPanel",
+      "filePath": "frontend/src/components/analysis/panels/RegistryExtractionPanel.tsx",
+      "lineRange": [
+        29,
+        255
+      ],
+      "summary": "注册表提取分析面板（227 行），分标签页展示 SAM 账户、UserAssist 执行历史、USB 设备、网络适配器及多 Hive 结构化数据。",
+      "tags": [
+        "component",
+        "analysis",
+        "registry",
+        "extraction",
+        "panel"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/SystemInfoPanel.tsx:SystemInfoPanel",
+      "type": "function",
+      "name": "SystemInfoPanel",
+      "filePath": "frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "lineRange": [
+        19,
+        123
+      ],
+      "summary": "系统信息主面板（105 行），展示系统概要、来源溯源、磁盘容量、网络适配器及启动历史等系统级信息。",
+      "tags": [
+        "component",
+        "analysis",
+        "system-info",
+        "panel"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/SystemInfoPanel.tsx:AnalysisHeader",
+      "type": "function",
+      "name": "AnalysisHeader",
+      "filePath": "frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "lineRange": [
+        125,
+        214
+      ],
+      "summary": "分析页眉组件（90 行），包含数据源选择器、扫描/提取操作按钮、进度条和产出物统计（扫描文件数/产出物事件数）。",
+      "tags": [
+        "component",
+        "analysis",
+        "header",
+        "controls"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/SystemInfoPanel.tsx:AnalysisEmptyState",
+      "type": "function",
+      "name": "AnalysisEmptyState",
+      "filePath": "frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "lineRange": [
+        216,
+        243
+      ],
+      "summary": "分析空状态引导组件，当未选择数据源或未运行提取时显示引导提示和操作入口。",
+      "tags": [
+        "component",
+        "analysis",
+        "empty-state",
+        "onboarding"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/SystemInfoPanel.tsx:AnalysisErrorBanner",
+      "type": "function",
+      "name": "AnalysisErrorBanner",
+      "filePath": "frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "lineRange": [
+        245,
+        265
+      ],
+      "summary": "分析错误横幅组件，以醒目样式展示分析过程中的错误信息。",
+      "tags": [
+        "component",
+        "analysis",
+        "error",
+        "banner"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/SystemInfoPanel.tsx:AnalysisLoadingPanel",
+      "type": "function",
+      "name": "AnalysisLoadingPanel",
+      "filePath": "frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "lineRange": [
+        267,
+        274
+      ],
+      "summary": "分析加载状态面板，在数据加载期间显示脉动骨架屏。",
+      "tags": [
+        "component",
+        "analysis",
+        "loading",
+        "skeleton"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/helpers.tsx:formatSize",
+      "type": "function",
+      "name": "formatSize",
+      "filePath": "frontend/src/components/analysis/panels/helpers.tsx",
+      "lineRange": [
+        83,
+        88
+      ],
+      "summary": "文件大小格式化函数，将字节数转换为 KB/MB/GB 的人类可读格式。",
+      "tags": [
+        "utility",
+        "formatting",
+        "size",
+        "bytes"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/helpers.tsx:statusLabel",
+      "type": "function",
+      "name": "statusLabel",
+      "filePath": "frontend/src/components/analysis/panels/helpers.tsx",
+      "lineRange": [
+        90,
+        109
+      ],
+      "summary": "状态标签函数，将提取状态枚举值（pending/scanning/extracting/done/error）映射为中文标签和颜色语义。",
+      "tags": [
+        "utility",
+        "status",
+        "label",
+        "analysis"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/helpers.tsx:extractionProgressLabel",
+      "type": "function",
+      "name": "extractionProgressLabel",
+      "filePath": "frontend/src/components/analysis/panels/helpers.tsx",
+      "lineRange": [
+        111,
+        125
+      ],
+      "summary": "提取进度标签函数，根据当前提取进度状态生成可读的阶段描述文本。",
+      "tags": [
+        "utility",
+        "progress",
+        "label",
+        "extraction"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/helpers.tsx:AnalysisExtractionProgress",
+      "type": "function",
+      "name": "AnalysisExtractionProgress",
+      "filePath": "frontend/src/components/analysis/panels/helpers.tsx",
+      "lineRange": [
+        127,
+        165
+      ],
+      "summary": "提取进度面板组件，以进度条和步骤列表形式展示多类别提取的当前状态和告警信息。",
+      "tags": [
+        "component",
+        "analysis",
+        "progress",
+        "extraction"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/helpers.tsx:ExtractionTableSection",
+      "type": "function",
+      "name": "ExtractionTableSection",
+      "filePath": "frontend/src/components/analysis/panels/helpers.tsx",
+      "lineRange": [
+        167,
+        198
+      ],
+      "summary": "提取表格区域组件，为提取数据表格提供标题栏和内容的布局包装。",
+      "tags": [
+        "component",
+        "analysis",
+        "table",
+        "section"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/helpers.tsx:SummaryStrip",
+      "type": "function",
+      "name": "SummaryStrip",
+      "filePath": "frontend/src/components/analysis/panels/helpers.tsx",
+      "lineRange": [
+        200,
+        208
+      ],
+      "summary": "摘要信息条组件，水平排列展示一组度量指标的标签-值对。",
+      "tags": [
+        "component",
+        "ui",
+        "summary",
+        "metrics"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/helpers.tsx:TableBlock",
+      "type": "function",
+      "name": "TableBlock",
+      "filePath": "frontend/src/components/analysis/panels/helpers.tsx",
+      "lineRange": [
+        210,
+        217
+      ],
+      "summary": "表格块组件，为提取结果表格提供标题和内容的容器布局。",
+      "tags": [
+        "component",
+        "ui",
+        "table",
+        "block"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/helpers.tsx:DenseTableFrame",
+      "type": "function",
+      "name": "DenseTableFrame",
+      "filePath": "frontend/src/components/analysis/panels/helpers.tsx",
+      "lineRange": [
+        219,
+        225
+      ],
+      "summary": "紧凑表格框架组件，提供高密度数据展示的表格样式容器。",
+      "tags": [
+        "component",
+        "ui",
+        "table",
+        "dense"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/helpers.tsx:ProvenancePanel",
+      "type": "function",
+      "name": "ProvenancePanel",
+      "filePath": "frontend/src/components/analysis/panels/helpers.tsx",
+      "lineRange": [
+        227,
+        262
+      ],
+      "summary": "溯源信息面板组件，展示分析结果的来源路径、提取方法和完整性验证信息。",
+      "tags": [
+        "component",
+        "analysis",
+        "provenance",
+        "traceability"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/helpers.tsx:FieldProvenancePanel",
+      "type": "function",
+      "name": "FieldProvenancePanel",
+      "filePath": "frontend/src/components/analysis/panels/helpers.tsx",
+      "lineRange": [
+        264,
+        301
+      ],
+      "summary": "字段级溯源面板，展示每个数据字段级别的来源信息、提取方法和置信度。",
+      "tags": [
+        "component",
+        "analysis",
+        "provenance",
+        "field-level"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/helpers.tsx:formatProvenanceSummary",
+      "type": "function",
+      "name": "formatProvenanceSummary",
+      "filePath": "frontend/src/components/analysis/panels/helpers.tsx",
+      "lineRange": [
+        303,
+        305
+      ],
+      "summary": "溯源摘要格式化函数，将溯源数据对象格式化为包含状态标签的可读摘要。",
+      "tags": [
+        "utility",
+        "provenance",
+        "formatting",
+        "summary"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/helpers.tsx:RunMetric",
+      "type": "function",
+      "name": "RunMetric",
+      "filePath": "frontend/src/components/analysis/panels/helpers.tsx",
+      "lineRange": [
+        307,
+        314
+      ],
+      "summary": "运行度量指标组件，展示单次分析运行的统计键值对。",
+      "tags": [
+        "component",
+        "ui",
+        "metric",
+        "run-stats"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/helpers.tsx:InfoCard",
+      "type": "function",
+      "name": "InfoCard",
+      "filePath": "frontend/src/components/analysis/panels/helpers.tsx",
+      "lineRange": [
+        316,
+        323
+      ],
+      "summary": "信息卡片组件，带标题、图标的通用信息展示卡片。",
+      "tags": [
+        "component",
+        "ui",
+        "card",
+        "info"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/helpers.tsx:StatCard",
+      "type": "function",
+      "name": "StatCard",
+      "filePath": "frontend/src/components/analysis/panels/helpers.tsx",
+      "lineRange": [
+        325,
+        332
+      ],
+      "summary": "统计卡片组件，以大号数字突出展示关键统计指标。",
+      "tags": [
+        "component",
+        "ui",
+        "card",
+        "stat"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/helpers.tsx:Metric",
+      "type": "function",
+      "name": "Metric",
+      "filePath": "frontend/src/components/analysis/panels/helpers.tsx",
+      "lineRange": [
+        334,
+        341
+      ],
+      "summary": "通用度量指标展示小组件，渲染标签-值对，用于统计面板。",
+      "tags": [
+        "component",
+        "ui",
+        "metric",
+        "stat"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/helpers.tsx:StatusPill",
+      "type": "function",
+      "name": "StatusPill",
+      "filePath": "frontend/src/components/analysis/panels/helpers.tsx",
+      "lineRange": [
+        343,
+        349
+      ],
+      "summary": "状态丸组件，以彩色胶囊形状展示运行状态（完成/进行中/错误等）。",
+      "tags": [
+        "component",
+        "ui",
+        "status",
+        "pill"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/helpers.tsx:WarningList",
+      "type": "function",
+      "name": "WarningList",
+      "filePath": "frontend/src/components/analysis/panels/helpers.tsx",
+      "lineRange": [
+        351,
+        359
+      ],
+      "summary": "告警列表组件，以醒目样式展示分析过程中的警告信息列表。",
+      "tags": [
+        "component",
+        "ui",
+        "warning",
+        "list"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/analysis/panels/helpers.tsx:EmptyLine",
+      "type": "function",
+      "name": "EmptyLine",
+      "filePath": "frontend/src/components/analysis/panels/helpers.tsx",
+      "lineRange": [
+        361,
+        367
+      ],
+      "summary": "空行占位组件，在无数据时展示提示占位信息。",
+      "tags": [
+        "component",
+        "ui",
+        "empty",
+        "placeholder"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/components/batch/BatchHistory.test.tsx:makeJob",
+      "type": "function",
+      "name": "makeJob",
+      "filePath": "frontend/src/components/batch/BatchHistory.test.tsx",
+      "lineRange": [
+        7,
+        24
+      ],
+      "summary": "BatchHistory 测试辅助函数，构造批量任务模拟数据。",
+      "tags": [
+        "test-helper",
+        "mock",
+        "job"
+      ],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:frontend/src/components/analysis/panels/ClassificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/ClassificationPanel.tsx:EvidenceClassificationPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/ClassificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/ClassificationPanel.tsx:EvidenceClassificationPanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/ClassificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/ClassificationPanel.tsx:FileClassificationPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/ClassificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/ClassificationPanel.tsx:FileClassificationPanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/ClassificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/ClassificationPanel.tsx:AnalysisReportPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/ClassificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/ClassificationPanel.tsx:AnalysisReportPanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx:EmailExtractionPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx:EmailExtractionPanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx:EmailDetailCard",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx:Field",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx:AttachmentBadge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx:HtmlPreview",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx:HeaderList",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EventLogPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/EventLogPanel.tsx:EventLogPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EventLogPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/EventLogPanel.tsx:EventLogPanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/RegistryExtractionPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/RegistryExtractionPanel.tsx:RegistryExtractionPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/RegistryExtractionPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/RegistryExtractionPanel.tsx:RegistryExtractionPanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/SystemInfoPanel.tsx:SystemInfoPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/SystemInfoPanel.tsx:SystemInfoPanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/SystemInfoPanel.tsx:AnalysisHeader",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/SystemInfoPanel.tsx:AnalysisHeader",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/SystemInfoPanel.tsx:AnalysisEmptyState",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/SystemInfoPanel.tsx:AnalysisEmptyState",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/SystemInfoPanel.tsx:AnalysisErrorBanner",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/SystemInfoPanel.tsx:AnalysisErrorBanner",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/SystemInfoPanel.tsx:AnalysisLoadingPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/SystemInfoPanel.tsx:AnalysisLoadingPanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:formatSize",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:formatSize",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:statusLabel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:statusLabel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:extractionProgressLabel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:AnalysisExtractionProgress",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:AnalysisExtractionProgress",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:ExtractionTableSection",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:ExtractionTableSection",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:SummaryStrip",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:SummaryStrip",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:TableBlock",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:TableBlock",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:DenseTableFrame",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:DenseTableFrame",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:ProvenancePanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:ProvenancePanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:FieldProvenancePanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:FieldProvenancePanel",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:formatProvenanceSummary",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:formatProvenanceSummary",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:RunMetric",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:RunMetric",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:InfoCard",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:InfoCard",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:StatCard",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:StatCard",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:Metric",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:Metric",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:StatusPill",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:StatusPill",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:WarningList",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:WarningList",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:EmptyLine",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:EmptyLine",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/batch/BatchHistory.test.tsx",
+      "target": "function:frontend/src/components/batch/BatchHistory.test.tsx:makeJob",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/ClassificationPanel.tsx",
+      "target": "file:frontend/src/app/components/ui/button.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/ClassificationPanel.tsx",
+      "target": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/ClassificationPanel.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "target": "file:frontend/src/app/components/ui/badge.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "target": "file:frontend/src/app/components/ui/button.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "target": "file:frontend/src/app/components/ui/tabs.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "target": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "target": "file:frontend/src/components/tables/DenseDataTable.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EventLogPanel.test.tsx",
+      "target": "file:frontend/src/components/analysis/panels/EventLogPanel.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EventLogPanel.test.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EventLogPanel.tsx",
+      "target": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EventLogPanel.tsx",
+      "target": "file:frontend/src/components/tables/DenseDataTable.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EventLogPanel.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/RegistryExtractionPanel.test.tsx",
+      "target": "file:frontend/src/components/analysis/panels/RegistryExtractionPanel.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/RegistryExtractionPanel.test.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/RegistryExtractionPanel.tsx",
+      "target": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/RegistryExtractionPanel.tsx",
+      "target": "file:frontend/src/components/tables/DenseDataTable.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/RegistryExtractionPanel.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "target": "file:frontend/src/app/components/ui/button.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "target": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "file:frontend/src/app/components/ui/progress.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/batch/BatchHistory.test.tsx",
+      "target": "file:frontend/src/components/batch/BatchHistory.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/batch/BatchHistory.test.tsx",
+      "target": "file:frontend/src/types/models.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/ClassificationPanel.tsx",
+      "target": "file:frontend/src/app/components/ui/button.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "target": "file:frontend/src/app/components/ui/badge.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "target": "file:frontend/src/app/components/ui/button.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "target": "file:frontend/src/app/components/ui/tabs.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "target": "file:frontend/src/components/tables/DenseDataTable.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EventLogPanel.tsx",
+      "target": "file:frontend/src/components/tables/DenseDataTable.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/RegistryExtractionPanel.tsx",
+      "target": "file:frontend/src/components/tables/DenseDataTable.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "target": "file:frontend/src/app/components/ui/button.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "file:frontend/src/app/components/ui/progress.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/components/batch/BatchHistory.test.tsx",
+      "target": "file:frontend/src/components/batch/BatchHistory.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/ClassificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:formatSize",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/ClassificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:statusLabel",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/ClassificationPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:formatProvenanceSummary",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:formatSize",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EventLogPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:DenseTableFrame",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/RegistryExtractionPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:DenseTableFrame",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:formatSize",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:formatProvenanceSummary",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "target": "function:frontend/src/components/analysis/panels/helpers.tsx:AnalysisExtractionProgress",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "target": "function:frontend/src/components/analysis/correlation-helpers.tsx:Metric",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/EventLogPanel.tsx",
+      "target": "file:frontend/src/components/analysis/panels/EventLogPanel.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:frontend/src/components/analysis/panels/RegistryExtractionPanel.tsx",
+      "target": "file:frontend/src/components/analysis/panels/RegistryExtractionPanel.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

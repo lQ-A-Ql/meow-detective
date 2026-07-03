@@ -1,0 +1,895 @@
+{
+  "nodes": [
+    {
+      "id": "file:crates/evtx-patched/src/string_cache.rs",
+      "type": "file",
+      "name": "string_cache.rs",
+      "filePath": "crates/evtx-patched/src/string_cache.rs",
+      "summary": "EVTX 字符串缓存：在 EVTX chunk 解析时按偏移量/长度索引预计算的字符串表，加速 BinXml 名称查找。",
+      "tags": [
+        "evtx-parser",
+        "string-cache",
+        "performance",
+        "lookup"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/string_cache.rs:populate",
+      "type": "function",
+      "name": "populate",
+      "filePath": "crates/evtx-patched/src/string_cache.rs",
+      "lineRange": [
+        13,
+        41
+      ],
+      "summary": "从二进制字符串表数据填充字符串缓存。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/string_cache.rs:get_cached_string",
+      "type": "function",
+      "name": "get_cached_string",
+      "filePath": "crates/evtx-patched/src/string_cache.rs",
+      "lineRange": [
+        43,
+        45
+      ],
+      "summary": "获取cached string。",
+      "tags": [
+        "query",
+        "lookup"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/string_cache.rs:len",
+      "type": "function",
+      "name": "len",
+      "filePath": "crates/evtx-patched/src/string_cache.rs",
+      "lineRange": [
+        47,
+        49
+      ],
+      "summary": "执行len操作。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/string_cache.rs:StringCache",
+      "type": "class",
+      "name": "StringCache",
+      "filePath": "crates/evtx-patched/src/string_cache.rs",
+      "lineRange": [
+        10,
+        10
+      ],
+      "summary": "EVTX 字符串缓存，按偏移量/长度索引字符串表以加速名称查找。",
+      "tags": [
+        "cache",
+        "performance"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "type": "file",
+      "name": "byte_cursor.rs",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "summary": "字节游标工具：提供 ByteCursor 结构体封装缓冲区位置追踪和类型化读取（u8/u16/u32/u64、SID、UTF-16 字符串、长度前缀字符串），统一 EVTX 二进制数据的读取模式。",
+      "tags": [
+        "evtx-parser",
+        "binary-parsing",
+        "cursor",
+        "utility",
+        "low-level"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:with_pos",
+      "type": "function",
+      "name": "with_pos",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        23,
+        27
+      ],
+      "summary": "构造byte_cursor的with_pos方法。",
+      "tags": [
+        "constructor",
+        "factory"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:buf",
+      "type": "function",
+      "name": "buf",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        30,
+        32
+      ],
+      "summary": "执行buf操作。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:pos",
+      "type": "function",
+      "name": "pos",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        35,
+        37
+      ],
+      "summary": "执行pos操作。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:position",
+      "type": "function",
+      "name": "position",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        40,
+        42
+      ],
+      "summary": "执行position操作。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:set_pos",
+      "type": "function",
+      "name": "set_pos",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        45,
+        49
+      ],
+      "summary": "执行set pos操作。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:set_pos_u64",
+      "type": "function",
+      "name": "set_pos_u64",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        52,
+        64
+      ],
+      "summary": "执行set pos u64操作。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:take_bytes",
+      "type": "function",
+      "name": "take_bytes",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        67,
+        75
+      ],
+      "summary": "执行take bytes操作。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:array",
+      "type": "function",
+      "name": "array",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        78,
+        85
+      ],
+      "summary": "执行array操作。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u8",
+      "type": "function",
+      "name": "u8",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        88,
+        90
+      ],
+      "summary": "执行u8操作。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u8_named",
+      "type": "function",
+      "name": "u8_named",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        93,
+        103
+      ],
+      "summary": "执行u8 named操作。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u16",
+      "type": "function",
+      "name": "u16",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        106,
+        108
+      ],
+      "summary": "执行u16操作。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u16_named",
+      "type": "function",
+      "name": "u16_named",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        111,
+        115
+      ],
+      "summary": "执行u16 named操作。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u32",
+      "type": "function",
+      "name": "u32",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        118,
+        120
+      ],
+      "summary": "执行u32操作。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u32_named",
+      "type": "function",
+      "name": "u32_named",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        123,
+        127
+      ],
+      "summary": "执行u32 named操作。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u64",
+      "type": "function",
+      "name": "u64",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        130,
+        132
+      ],
+      "summary": "执行u64操作。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u64_named",
+      "type": "function",
+      "name": "u64_named",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        135,
+        139
+      ],
+      "summary": "执行u64 named操作。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:read_sid_ref",
+      "type": "function",
+      "name": "read_sid_ref",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        141,
+        183
+      ],
+      "summary": "读取安全标识符(SID)引用结构。",
+      "tags": [
+        "parser",
+        "deserialization"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:read_sized_slice_aligned_in",
+      "type": "function",
+      "name": "read_sized_slice_aligned_in",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        185,
+        229
+      ],
+      "summary": "读取大小前缀的切片并确保对齐。",
+      "tags": [
+        "parser",
+        "deserialization"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:utf16_by_char_count",
+      "type": "function",
+      "name": "utf16_by_char_count",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        241,
+        274
+      ],
+      "summary": "按字符数读取 UTF-16 编码字符串。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:len_prefixed_utf16_string",
+      "type": "function",
+      "name": "len_prefixed_utf16_string",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        278,
+        289
+      ],
+      "summary": "读取长度前缀的 UTF-16 字符串。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:len_prefixed_utf16_string_utf8",
+      "type": "function",
+      "name": "len_prefixed_utf16_string_utf8",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        294,
+        308
+      ],
+      "summary": "读取长度前缀的 UTF-16 字符串并转换为 UTF-8。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:null_terminated_utf16_string",
+      "type": "function",
+      "name": "null_terminated_utf16_string",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        311,
+        339
+      ],
+      "summary": "读取空字符终止的 UTF-16 字符串。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:crates/evtx-patched/src/utils/byte_cursor.rs:len_prefixed_utf16_string_bump",
+      "type": "function",
+      "name": "len_prefixed_utf16_string_bump",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        342,
+        360
+      ],
+      "summary": "读取长度前缀的 UTF-16 字符串存入 bump allocator。",
+      "tags": [
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:crates/evtx-patched/src/utils/byte_cursor.rs:ByteCursor",
+      "type": "class",
+      "name": "ByteCursor",
+      "filePath": "crates/evtx-patched/src/utils/byte_cursor.rs",
+      "lineRange": [
+        16,
+        19
+      ],
+      "summary": "字节游标工具，封装缓冲区引用和位置索引，提供类型化二进制读取方法。",
+      "tags": [
+        "data-structure",
+        "type-definition"
+      ],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:crates/evtx-patched/src/string_cache.rs",
+      "target": "file:crates/evtx-patched/src/binxml/name.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/string_cache.rs",
+      "target": "file:crates/evtx-patched/src/err.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/string_cache.rs",
+      "target": "file:crates/evtx-patched/src/utils/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/string_cache.rs",
+      "target": "function:crates/evtx-patched/src/string_cache.rs:populate",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/string_cache.rs",
+      "target": "function:crates/evtx-patched/src/string_cache.rs:populate",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/string_cache.rs",
+      "target": "function:crates/evtx-patched/src/string_cache.rs:get_cached_string",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/string_cache.rs",
+      "target": "function:crates/evtx-patched/src/string_cache.rs:get_cached_string",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/string_cache.rs",
+      "target": "function:crates/evtx-patched/src/string_cache.rs:len",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/string_cache.rs",
+      "target": "function:crates/evtx-patched/src/string_cache.rs:len",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/string_cache.rs",
+      "target": "class:crates/evtx-patched/src/string_cache.rs:StringCache",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/string_cache.rs",
+      "target": "class:crates/evtx-patched/src/string_cache.rs:StringCache",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "file:crates/evtx-patched/src/binxml/value_variant.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "file:crates/evtx-patched/src/err.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "file:crates/evtx-patched/src/utils/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:with_pos",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:with_pos",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:buf",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:buf",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:pos",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:pos",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:position",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:position",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:set_pos",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:set_pos",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:set_pos_u64",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:set_pos_u64",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:take_bytes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:take_bytes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:array",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:array",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u8",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u8",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u8_named",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u8_named",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u16",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u16",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u16_named",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u16_named",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u32",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u32",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u32_named",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u32_named",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u64",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u64",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u64_named",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:u64_named",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:read_sid_ref",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:read_sid_ref",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:read_sized_slice_aligned_in",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:read_sized_slice_aligned_in",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:utf16_by_char_count",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:utf16_by_char_count",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:len_prefixed_utf16_string",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:len_prefixed_utf16_string",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:len_prefixed_utf16_string_utf8",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:len_prefixed_utf16_string_utf8",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:null_terminated_utf16_string",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:null_terminated_utf16_string",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:len_prefixed_utf16_string_bump",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "function:crates/evtx-patched/src/utils/byte_cursor.rs:len_prefixed_utf16_string_bump",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "class:crates/evtx-patched/src/utils/byte_cursor.rs:ByteCursor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:crates/evtx-patched/src/utils/byte_cursor.rs",
+      "target": "class:crates/evtx-patched/src/utils/byte_cursor.rs:ByteCursor",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

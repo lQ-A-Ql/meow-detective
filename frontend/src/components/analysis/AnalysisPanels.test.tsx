@@ -184,5 +184,44 @@ describe('AnalysisPanels sub-components', () => {
       expect(screen.getByRole('button', { name: /刷新/ })).toBeDefined();
       expect(screen.getByRole('button', { name: /运行提取/ })).toBeDefined();
     });
+
+    it('does not show the case-wide scope notice when no data source is selected', () => {
+      render(
+        createElement(AnalysisHeader, {
+          loading: false,
+          hasCase: true,
+          demoPending: false,
+          extractionPending: false,
+          onLoadDemoCase: () => {},
+          onRefresh: () => {},
+          onRunExtraction: () => {},
+          dataSources: [
+            { id: 'ds-1', name: 'Win10-C盘', kind: 'logical_directory', sourcePath: 'C:\\Cases\\win10', importedAt: '2026-06-01T10:00:00Z' },
+          ],
+          onSelectDataSource: () => {},
+        }),
+      );
+      expect(screen.queryByText(/仍为案件级汇总/)).toBeNull();
+    });
+
+    it('shows a case-wide scope notice once a data source is selected, since analysis queries are not yet source-scoped', () => {
+      render(
+        createElement(AnalysisHeader, {
+          loading: false,
+          hasCase: true,
+          demoPending: false,
+          extractionPending: false,
+          onLoadDemoCase: () => {},
+          onRefresh: () => {},
+          onRunExtraction: () => {},
+          dataSources: [
+            { id: 'ds-1', name: 'Win10-C盘', kind: 'logical_directory', sourcePath: 'C:\\Cases\\win10', importedAt: '2026-06-01T10:00:00Z' },
+          ],
+          selectedDataSourceId: 'ds-1',
+          onSelectDataSource: () => {},
+        }),
+      );
+      expect(screen.getByText(/仍为案件级汇总/)).toBeDefined();
+    });
   });
 });

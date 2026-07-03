@@ -1,0 +1,1003 @@
+{
+  "nodes": [
+    {
+      "id": "file:frontend/src/app/components/ui/tooltip.tsx",
+      "type": "file",
+      "name": "tooltip.tsx",
+      "filePath": "frontend/src/app/components/ui/tooltip.tsx",
+      "summary": "基于 Radix UI 的 Tooltip 组件封装，提供 TooltipProvider / Tooltip / TooltipTrigger / TooltipContent 四个子组件，支持延迟显示和自定义样式。",
+      "tags": [
+        "component",
+        "ui",
+        "tooltip",
+        "radix-ui"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/use-mobile.ts",
+      "type": "file",
+      "name": "use-mobile.ts",
+      "filePath": "frontend/src/app/components/ui/use-mobile.ts",
+      "summary": "响应式设计辅助 Hook，通过 matchMedia 监听视口宽度变化，返回当前是否为移动端（<768px）的布尔值。",
+      "tags": [
+        "hook",
+        "ui",
+        "responsive",
+        "mobile"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "file",
+      "name": "utils.ts",
+      "filePath": "frontend/src/app/components/ui/utils.ts",
+      "summary": "Tailwind CSS 类名合并工具函数，使用 clsx 和 tailwind-merge 实现条件类名拼接与冲突去重。",
+      "tags": [
+        "utility",
+        "tailwind",
+        "css",
+        "styling"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/app/pages/DataAnalysis.test.tsx",
+      "type": "file",
+      "name": "DataAnalysis.test.tsx",
+      "filePath": "frontend/src/app/pages/DataAnalysis.test.tsx",
+      "summary": "DataAnalysis 页面的集成测试套件，涵盖数据源选择、分析分类扫描、提取进度面板和摘要生成的渲染验证。",
+      "tags": [
+        "test",
+        "integration-test",
+        "analysis",
+        "page"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:frontend/src/app/pages/DataAnalysis.tsx",
+      "type": "file",
+      "name": "DataAnalysis.tsx",
+      "filePath": "frontend/src/app/pages/DataAnalysis.tsx",
+      "summary": "数据分析主页面组件，整合系统信息、证据分类、注册表提取、浏览器历史、邮件、EVTX 事件和 Linux 痕迹等分析面板，支持按分类运行提取和 AI 摘要生成。",
+      "tags": [
+        "page",
+        "analysis",
+        "entry-point",
+        "dashboard"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:frontend/src/app/pages/V2Workbench.test.tsx",
+      "type": "file",
+      "name": "V2Workbench.test.tsx",
+      "filePath": "frontend/src/app/pages/V2Workbench.test.tsx",
+      "summary": "V2 工作台的集成测试套件，验证 V2 治理快照和关联快照的查询、刷新及 Demo 案例加载流程。",
+      "tags": [
+        "test",
+        "integration-test",
+        "v2",
+        "workbench"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:frontend/src/app/pages/V2Workbench.tsx",
+      "type": "file",
+      "name": "V2Workbench.tsx",
+      "filePath": "frontend/src/app/pages/V2Workbench.tsx",
+      "summary": "V2 分析工作台页面，提供治理快照面板和关联分析工作区的组合视图，支持 Demo 案例快捷加载。",
+      "tags": [
+        "page",
+        "analysis",
+        "v2",
+        "workbench"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/app/routes.test.ts",
+      "type": "file",
+      "name": "routes.test.ts",
+      "filePath": "frontend/src/app/routes.test.ts",
+      "summary": "路由配置的单元测试，验证 appRoutes 定义和 router 实例的正确创建。",
+      "tags": [
+        "test",
+        "unit-test",
+        "routing"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:frontend/src/app/routes.tsx",
+      "type": "file",
+      "name": "routes.tsx",
+      "filePath": "frontend/src/app/routes.tsx",
+      "summary": "应用路由配置模块，定义所有页面路由映射（懒加载），创建并导出 React Router 实例供全局使用。",
+      "tags": [
+        "routing",
+        "entry-point",
+        "configuration",
+        "react-router"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:frontend/src/components/analysis/AnalysisPanels.tsx",
+      "type": "file",
+      "name": "AnalysisPanels.tsx",
+      "filePath": "frontend/src/components/analysis/AnalysisPanels.tsx",
+      "summary": "分析面板模块的桶文件（barrel），集中重导出所有分析面板组件、状态指示器和工具函数，简化其他模块的导入路径。",
+      "tags": [
+        "barrel",
+        "re-export",
+        "analysis",
+        "index"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/tooltip.tsx:TooltipProvider",
+      "type": "function",
+      "name": "TooltipProvider",
+      "filePath": "frontend/src/app/components/ui/tooltip.tsx",
+      "lineRange": [
+        8,
+        19
+      ],
+      "summary": "Tooltip 上下文提供者组件，设置全局延迟时间参数（默认 0），包裹 Tooltip 子组件树。",
+      "tags": [
+        "component",
+        "tooltip",
+        "provider",
+        "context"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/tooltip.tsx:Tooltip",
+      "type": "function",
+      "name": "Tooltip",
+      "filePath": "frontend/src/app/components/ui/tooltip.tsx",
+      "lineRange": [
+        21,
+        29
+      ],
+      "summary": "Tooltip 根组件，基于 Radix UI Tooltip 原语封装，接收并透传所有属性。",
+      "tags": [
+        "component",
+        "tooltip",
+        "wrapper"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/tooltip.tsx:TooltipTrigger",
+      "type": "function",
+      "name": "TooltipTrigger",
+      "filePath": "frontend/src/app/components/ui/tooltip.tsx",
+      "lineRange": [
+        31,
+        35
+      ],
+      "summary": "Tooltip 触发器组件，包裹触发悬浮提示的交互元素（如按钮、图标）。",
+      "tags": [
+        "component",
+        "tooltip",
+        "trigger"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/tooltip.tsx:TooltipContent",
+      "type": "function",
+      "name": "TooltipContent",
+      "filePath": "frontend/src/app/components/ui/tooltip.tsx",
+      "lineRange": [
+        37,
+        59
+      ],
+      "summary": "Tooltip 内容弹出层组件，使用 cn 工具合并样式类，支持自定义侧偏移量和 Portal 渲染。",
+      "tags": [
+        "component",
+        "tooltip",
+        "content",
+        "popover"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/use-mobile.ts:useIsMobile",
+      "type": "function",
+      "name": "useIsMobile",
+      "filePath": "frontend/src/app/components/ui/use-mobile.ts",
+      "lineRange": [
+        5,
+        21
+      ],
+      "summary": "响应式移动端检测 Hook，监听 matchMedia 查询变化，返回当前视口宽度是否小于 768px。",
+      "tags": [
+        "hook",
+        "responsive",
+        "mobile",
+        "detection"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/components/ui/utils.ts:cn",
+      "type": "function",
+      "name": "cn",
+      "filePath": "frontend/src/app/components/ui/utils.ts",
+      "lineRange": [
+        4,
+        6
+      ],
+      "summary": "类名合并工具函数，结合 clsx（条件类名）和 tailwind-merge（冲突去重）处理 Tailwind CSS 类名字符串。",
+      "tags": [
+        "utility",
+        "tailwind",
+        "css",
+        "classnames"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/pages/DataAnalysis.test.tsx:renderPage",
+      "type": "function",
+      "name": "renderPage",
+      "filePath": "frontend/src/app/pages/DataAnalysis.test.tsx",
+      "lineRange": [
+        45,
+        56
+      ],
+      "summary": "DataAnalysis 页面测试辅助函数，创建包裹必要 Provider 的组件渲染实例。",
+      "tags": [
+        "test-helper",
+        "render",
+        "setup"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/pages/DataAnalysis.test.tsx:queryState",
+      "type": "function",
+      "name": "queryState",
+      "filePath": "frontend/src/app/pages/DataAnalysis.test.tsx",
+      "lineRange": [
+        58,
+        67
+      ],
+      "summary": "DataAnalysis 页面测试辅助函数，构造模拟的 React Query 查询状态对象。",
+      "tags": [
+        "test-helper",
+        "mock",
+        "query-state"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/pages/DataAnalysis.tsx:DataAnalysis",
+      "type": "function",
+      "name": "DataAnalysis",
+      "filePath": "frontend/src/app/pages/DataAnalysis.tsx",
+      "lineRange": [
+        92,
+        405
+      ],
+      "summary": "数据分析主页面组件（314 行），管理分析数据源选择、分类扫描、多类别提交流程刷新、提取进度跟踪及 AI 摘要生成与下载。",
+      "tags": [
+        "component",
+        "page",
+        "analysis",
+        "dashboard"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:frontend/src/app/pages/V2Workbench.test.tsx:queryState",
+      "type": "function",
+      "name": "queryState",
+      "filePath": "frontend/src/app/pages/V2Workbench.test.tsx",
+      "lineRange": [
+        44,
+        53
+      ],
+      "summary": "DataAnalysis 页面测试辅助函数，构造模拟的 React Query 查询状态对象。",
+      "tags": [
+        "test-helper",
+        "mock",
+        "query-state"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:frontend/src/app/pages/V2Workbench.tsx:V2Workbench",
+      "type": "function",
+      "name": "V2Workbench",
+      "filePath": "frontend/src/app/pages/V2Workbench.tsx",
+      "lineRange": [
+        32,
+        124
+      ],
+      "summary": "V2 分析工作台页面组件（93 行），整合治理快照面板和关联分析工作区，支持 Demo 案例一键载入。",
+      "tags": [
+        "component",
+        "page",
+        "v2",
+        "workbench"
+      ],
+      "complexity": "complex"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:frontend/src/app/components/ui/tooltip.tsx",
+      "target": "function:frontend/src/app/components/ui/tooltip.tsx:TooltipProvider",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/tooltip.tsx",
+      "target": "function:frontend/src/app/components/ui/tooltip.tsx:TooltipProvider",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/tooltip.tsx",
+      "target": "function:frontend/src/app/components/ui/tooltip.tsx:Tooltip",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/tooltip.tsx",
+      "target": "function:frontend/src/app/components/ui/tooltip.tsx:Tooltip",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/tooltip.tsx",
+      "target": "function:frontend/src/app/components/ui/tooltip.tsx:TooltipTrigger",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/tooltip.tsx",
+      "target": "function:frontend/src/app/components/ui/tooltip.tsx:TooltipTrigger",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/tooltip.tsx",
+      "target": "function:frontend/src/app/components/ui/tooltip.tsx:TooltipContent",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/tooltip.tsx",
+      "target": "function:frontend/src/app/components/ui/tooltip.tsx:TooltipContent",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/use-mobile.ts",
+      "target": "function:frontend/src/app/components/ui/use-mobile.ts:useIsMobile",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/use-mobile.ts",
+      "target": "function:frontend/src/app/components/ui/use-mobile.ts:useIsMobile",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "function:frontend/src/app/components/ui/utils.ts:cn",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "function:frontend/src/app/components/ui/utils.ts:cn",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/DataAnalysis.test.tsx",
+      "target": "function:frontend/src/app/pages/DataAnalysis.test.tsx:renderPage",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/DataAnalysis.test.tsx",
+      "target": "function:frontend/src/app/pages/DataAnalysis.test.tsx:queryState",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/DataAnalysis.tsx",
+      "target": "function:frontend/src/app/pages/DataAnalysis.tsx:DataAnalysis",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/DataAnalysis.tsx",
+      "target": "function:frontend/src/app/pages/DataAnalysis.tsx:DataAnalysis",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/pages/V2Workbench.test.tsx",
+      "target": "function:frontend/src/app/pages/V2Workbench.test.tsx:queryState",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/V2Workbench.tsx",
+      "target": "function:frontend/src/app/pages/V2Workbench.tsx:V2Workbench",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:frontend/src/app/pages/V2Workbench.tsx",
+      "target": "function:frontend/src/app/pages/V2Workbench.tsx:V2Workbench",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/tooltip.tsx",
+      "target": "file:frontend/src/app/components/ui/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/DataAnalysis.test.tsx",
+      "target": "file:frontend/src/app/pages/DataAnalysis.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/DataAnalysis.test.tsx",
+      "target": "file:frontend/src/stores/analysis-store.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/DataAnalysis.tsx",
+      "target": "file:frontend/src/app/components/ui/tabs.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/DataAnalysis.tsx",
+      "target": "file:frontend/src/components/analysis/AnalysisPanels.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/DataAnalysis.tsx",
+      "target": "file:frontend/src/features/analysis/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/DataAnalysis.tsx",
+      "target": "file:frontend/src/features/case/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/DataAnalysis.tsx",
+      "target": "file:frontend/src/lib/api/client.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/DataAnalysis.tsx",
+      "target": "file:frontend/src/stores/analysis-store.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V2Workbench.test.tsx",
+      "target": "file:frontend/src/app/pages/V2Workbench.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V2Workbench.tsx",
+      "target": "file:frontend/src/app/components/ui/button.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V2Workbench.tsx",
+      "target": "file:frontend/src/components/analysis/AnalysisPanels.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V2Workbench.tsx",
+      "target": "file:frontend/src/components/analysis/CorrelationWorkspace.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V2Workbench.tsx",
+      "target": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V2Workbench.tsx",
+      "target": "file:frontend/src/features/analysis/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V2Workbench.tsx",
+      "target": "file:frontend/src/features/case/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/pages/V2Workbench.tsx",
+      "target": "file:frontend/src/lib/api/client.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/routes.test.ts",
+      "target": "file:frontend/src/app/routes.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/routes.tsx",
+      "target": "file:frontend/src/components/layout/Layout.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/routes.tsx",
+      "target": "file:frontend/src/lib/env.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/tooltip.tsx",
+      "target": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/tooltip.tsx",
+      "target": "file:frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/use-mobile.ts",
+      "target": "file:frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/badge.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/button.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/card.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/checkbox.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/command.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/dialog.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/input.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/label.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/progress.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/scroll-area.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/select.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/separator.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/sheet.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/sidebar/sidebar-group.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/sidebar/sidebar-layout.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/sidebar/sidebar-menu.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/sidebar/sidebar-provider.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/sidebar/sidebar-rail.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/sidebar/sidebar-trigger.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/sidebar/sidebar.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/skeleton.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/table.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/tabs.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/textarea.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/toggle-group.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/app/components/ui/toggle.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/components/ui/utils.ts",
+      "target": "file:frontend/src/components/layout/HorizontalScroll.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/pages/DataAnalysis.test.tsx",
+      "target": "file:frontend/src/stores/analysis-store.ts",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/pages/DataAnalysis.tsx",
+      "target": "file:frontend/src/app/components/ui/tabs.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/pages/DataAnalysis.tsx",
+      "target": "file:frontend/src/features/analysis/hooks.ts",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/pages/DataAnalysis.tsx",
+      "target": "file:frontend/src/features/case/hooks.ts",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/pages/DataAnalysis.tsx",
+      "target": "file:frontend/src/lib/api/client.ts",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/pages/DataAnalysis.tsx",
+      "target": "file:frontend/src/stores/analysis-store.ts",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/pages/V2Workbench.tsx",
+      "target": "file:frontend/src/app/components/ui/button.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/pages/V2Workbench.tsx",
+      "target": "file:frontend/src/components/analysis/V2GovernancePanels.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/pages/V2Workbench.tsx",
+      "target": "file:frontend/src/features/analysis/hooks.ts",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/pages/V2Workbench.tsx",
+      "target": "file:frontend/src/features/case/hooks.ts",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/pages/V2Workbench.tsx",
+      "target": "file:frontend/src/lib/api/client.ts",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/routes.tsx",
+      "target": "file:frontend/src/components/layout/Layout.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/routes.tsx",
+      "target": "file:frontend/src/lib/env.ts",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/routes.tsx",
+      "target": "file:frontend/src/app/App.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/components/analysis/AnalysisPanels.tsx",
+      "target": "file:frontend/src/app/pages/V3Dashboard.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/components/analysis/AnalysisPanels.tsx",
+      "target": "file:frontend/src/stores/analysis-store.ts",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:frontend/src/app/pages/DataAnalysis.tsx",
+      "target": "file:frontend/src/app/pages/DataAnalysis.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:frontend/src/app/pages/V2Workbench.tsx",
+      "target": "file:frontend/src/app/pages/V2Workbench.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:frontend/src/app/routes.tsx",
+      "target": "file:frontend/src/app/routes.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:frontend/src/components/analysis/AnalysisPanels.tsx",
+      "target": "file:frontend/src/components/analysis/panels/SystemInfoPanel.tsx",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/AnalysisPanels.tsx",
+      "target": "file:frontend/src/components/analysis/panels/BrowserHistoryPanel.tsx",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/AnalysisPanels.tsx",
+      "target": "file:frontend/src/components/analysis/panels/EmailExtractionPanel.tsx",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/AnalysisPanels.tsx",
+      "target": "file:frontend/src/components/analysis/panels/EventLogPanel.tsx",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/AnalysisPanels.tsx",
+      "target": "file:frontend/src/components/analysis/panels/RegistryExtractionPanel.tsx",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/AnalysisPanels.tsx",
+      "target": "file:frontend/src/components/analysis/panels/ClassificationPanel.tsx",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:frontend/src/components/analysis/AnalysisPanels.tsx",
+      "target": "file:frontend/src/components/analysis/panels/helpers.tsx",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

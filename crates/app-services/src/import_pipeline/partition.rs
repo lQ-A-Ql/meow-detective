@@ -15,6 +15,10 @@ pub fn format_partition_root_name(
         ImageFilesystemKind::Ntfs => "NTFS",
         ImageFilesystemKind::Fat => "FAT",
         ImageFilesystemKind::BitLocker => "BitLocker",
+        ImageFilesystemKind::Ext4 => "Ext4",
+        ImageFilesystemKind::Xfs => "XFS",
+        ImageFilesystemKind::Btrfs => "Btrfs",
+        ImageFilesystemKind::LvmPool => "LVM",
     };
 
     match candidate.partition_index {
@@ -207,6 +211,10 @@ where
             ImageFilesystemKind::Ntfs => format!("Enumerating {root_name}"),
             ImageFilesystemKind::Fat => format!("Enumerating {root_name}"),
             ImageFilesystemKind::BitLocker => format!("Skipping locked {root_name}"),
+            ImageFilesystemKind::Ext4 => format!("Enumerating {root_name}"),
+            ImageFilesystemKind::Xfs => format!("Enumerating {root_name}"),
+            ImageFilesystemKind::Btrfs => format!("Enumerating {root_name}"),
+            ImageFilesystemKind::LvmPool => format!("Discovering LVM logical volumes in {root_name}"),
         };
         let progress_detail = format_partition_progress_detail(
             index as u32,
@@ -299,6 +307,45 @@ where
                     progress_cb,
                 )?
             }
+            ImageFilesystemKind::Ext4 => {
+                let fs = fs_ext4::Ext4Reader::open(partition_reader, candidate.offset)
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+                enumerate_partition_with_fs(
+                    conn,
+                    data_source_id,
+                    &fs,
+                    &root_name,
+                    &placeholder_roots,
+                    &candidate,
+                    progress_cb,
+                )?
+            }
+            ImageFilesystemKind::Xfs => {
+                let fs = fs_xfs::XfsReader::open(partition_reader, candidate.offset)
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+                enumerate_partition_with_fs(
+                    conn,
+                    data_source_id,
+                    &fs,
+                    &root_name,
+                    &placeholder_roots,
+                    &candidate,
+                    progress_cb,
+                )?
+            }
+            ImageFilesystemKind::Btrfs => {
+                let fs = fs_btrfs::BtrfsReader::open(partition_reader, candidate.offset)
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+                enumerate_partition_with_fs(
+                    conn,
+                    data_source_id,
+                    &fs,
+                    &root_name,
+                    &placeholder_roots,
+                    &candidate,
+                    progress_cb,
+                )?
+            }
             ImageFilesystemKind::BitLocker => {
                 if let (Some(app), Some(jid)) = (app, job_id) {
                     let job_repo = persistence_sqlite::repositories::job_repo::JobRepo::new(conn);
@@ -311,6 +358,36 @@ where
                     ) {
                         tracing::debug!("Failed to update BitLocker partition progress: {}", e);
                     }
+                    crate::import_pipeline::emit::emit_partition_progress(
+                        app,
+                        &jid.0,
+                        &root_name,
+                        (index as u32) + 1,
+                        total_candidates as u32,
+                        100,
+                    );
+                }
+                continue;
+            }
+            ImageFilesystemKind::LvmPool => {
+                // LVM pool expansion: open the PV, discover LVs, enumerate each one.
+                // For now, log and skip — full expansion with LV sub-partition creation
+                // requires multi-partition work support (Phase 2 integration).
+                tracing::info!(
+                    "LVM pool detected at partition '{}' (offset {}), LV expansion requires \
+                     multi-partition work support (planned). Skipping for now.",
+                    root_name,
+                    candidate.offset,
+                );
+                if let (Some(app), Some(jid)) = (app, job_id) {
+                    let job_repo = persistence_sqlite::repositories::job_repo::JobRepo::new(conn);
+                    let _ = job_repo.update_partition_progress(
+                        jid,
+                        &root_name,
+                        (index as u32) + 1,
+                        total_candidates as u32,
+                        100,
+                    );
                     crate::import_pipeline::emit::emit_partition_progress(
                         app,
                         &jid.0,
@@ -408,6 +485,30 @@ pub fn build_partition_work(
                 Box::new(evidence_core::RawImageReader::open(source_path).ok()?)
             };
             Box::new(fs_fat::FatReader::open(r, candidate.offset).ok()?)
+        }
+        ImageFilesystemKind::Ext4 => {
+            let r: Box<dyn EvidenceReader> = if *source_kind == domain::DataSourceKind::E01 {
+                Box::new(E01Reader::open(source_path).ok()?)
+            } else {
+                Box::new(evidence_core::RawImageReader::open(source_path).ok()?)
+            };
+            Box::new(fs_ext4::Ext4Reader::open(r, candidate.offset).ok()?)
+        }
+        ImageFilesystemKind::Xfs => {
+            let r: Box<dyn EvidenceReader> = if *source_kind == domain::DataSourceKind::E01 {
+                Box::new(E01Reader::open(source_path).ok()?)
+            } else {
+                Box::new(evidence_core::RawImageReader::open(source_path).ok()?)
+            };
+            Box::new(fs_xfs::XfsReader::open(r, candidate.offset).ok()?)
+        }
+        ImageFilesystemKind::Btrfs => {
+            let r: Box<dyn EvidenceReader> = if *source_kind == domain::DataSourceKind::E01 {
+                Box::new(E01Reader::open(source_path).ok()?)
+            } else {
+                Box::new(evidence_core::RawImageReader::open(source_path).ok()?)
+            };
+            Box::new(fs_btrfs::BtrfsReader::open(r, candidate.offset).ok()?)
         }
         _ => return None,
     };
