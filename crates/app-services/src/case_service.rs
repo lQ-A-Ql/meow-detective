@@ -175,6 +175,7 @@ pub fn open_case(root: &Path) -> Result<ActiveCase> {
 
     let db_path = root.join("app.db");
     let conn = open_existing(&db_path)?;
+    runner::run_all(&conn)?;
 
     let stored = CaseRepo::new(&conn)
         .find_by_id(&case_from_json.id)?

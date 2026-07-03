@@ -205,6 +205,33 @@ pub fn store_data_source_partitions(
                 length: partition.length,
                 filesystem: partition.filesystem.map(image_filesystem_kind_label),
                 unlock_hint: partition_unlock_hint(partition),
+                lvm_vg_uuid: partition
+                    .lvm_identity
+                    .as_ref()
+                    .map(|identity| identity.vg_uuid.clone()),
+                lvm_vg_name: partition
+                    .lvm_identity
+                    .as_ref()
+                    .map(|identity| identity.vg_name.clone()),
+                lvm_lv_uuid: partition
+                    .lvm_identity
+                    .as_ref()
+                    .map(|identity| identity.lv_uuid.clone()),
+                lvm_lv_name: partition
+                    .lvm_identity
+                    .as_ref()
+                    .map(|identity| identity.lv_name.clone()),
+                lvm_pv_offsets_json: partition.lvm_identity.as_ref().and_then(|identity| {
+                    serde_json::to_string(&identity.pv_offsets)
+                        .map_err(|error| {
+                            tracing::warn!(
+                                partition_index = partition.index,
+                                %error,
+                                "Failed to serialize LVM PV offsets for partition metadata"
+                            );
+                        })
+                        .ok()
+                }),
             }
         })
         .collect::<Vec<_>>();
@@ -216,6 +243,7 @@ pub fn store_data_source_partitions(
 fn partition_status_label(status: crate::datasource_service::PartitionStatus) -> &'static str {
     match status {
         crate::datasource_service::PartitionStatus::Supported => "supported",
+        crate::datasource_service::PartitionStatus::Expanded => "redirected",
         crate::datasource_service::PartitionStatus::EncryptedBitLocker => "locked",
         crate::datasource_service::PartitionStatus::Unsupported => "unsupported",
     }
@@ -238,5 +266,77 @@ fn partition_unlock_hint(partition: &crate::datasource_service::PartitionRecord)
         Some("BitLocker 分区需要先解锁后才能浏览文件内容。".to_string())
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::datasource_service::{
+        ImageFilesystemKind, LvmLogicalVolumeIdentity, PartitionRecord, PartitionStatus,
+    };
+
+    #[test]
+    fn store_data_source_partitions_persists_lvm_identity() {
+        let conn = persistence_sqlite::connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE data_source_partitions (
+                id TEXT PRIMARY KEY,
+                data_source_id TEXT NOT NULL,
+                partition_index INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                kind_label TEXT NOT NULL,
+                status TEXT NOT NULL,
+                type_guid TEXT,
+                offset INTEGER NOT NULL,
+                length INTEGER NOT NULL,
+                filesystem TEXT,
+                unlock_hint TEXT,
+                lvm_vg_uuid TEXT,
+                lvm_vg_name TEXT,
+                lvm_lv_uuid TEXT,
+                lvm_lv_name TEXT,
+                lvm_pv_offsets_json TEXT
+            );",
+        )
+        .unwrap();
+
+        let data_source_id = DataSourceId("ds-lvm".to_string());
+        store_data_source_partitions(
+            &conn,
+            &data_source_id,
+            &[PartitionRecord {
+                index: 2,
+                name: "vg/root".to_string(),
+                kind_label: "XFS".to_string(),
+                type_guid: None,
+                offset: 1_048_576,
+                length: 0,
+                status: PartitionStatus::Supported,
+                filesystem: Some(ImageFilesystemKind::Xfs),
+                lvm_identity: Some(LvmLogicalVolumeIdentity {
+                    vg_uuid: "vg-uuid".to_string(),
+                    vg_name: "vg".to_string(),
+                    lv_uuid: "lv-uuid".to_string(),
+                    lv_name: "root".to_string(),
+                    pv_offsets: vec![1_048_576, 2_097_152],
+                }),
+            }],
+        )
+        .unwrap();
+
+        let record = PartitionRepo::new(&conn)
+            .find_by_data_source(&data_source_id.0)
+            .unwrap()
+            .pop()
+            .unwrap();
+        assert_eq!(record.lvm_vg_uuid.as_deref(), Some("vg-uuid"));
+        assert_eq!(record.lvm_vg_name.as_deref(), Some("vg"));
+        assert_eq!(record.lvm_lv_uuid.as_deref(), Some("lv-uuid"));
+        assert_eq!(record.lvm_lv_name.as_deref(), Some("root"));
+        assert_eq!(
+            record.lvm_pv_offsets_json.as_deref(),
+            Some("[1048576,2097152]")
+        );
     }
 }

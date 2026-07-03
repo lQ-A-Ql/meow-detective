@@ -1,38 +1,231 @@
 use super::ExtractionOutcome;
 use crate::analysis_service::artifact_builders::{base_attrs, make_artifact, make_timeline_event};
 use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandidate};
+use crate::analysis_service::MAX_ANALYSIS_SOURCE_BYTES;
+use chrono::{DateTime, TimeZone, Utc};
+use flate2::read::GzDecoder;
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::io::Read;
+
+const MAX_TEXT_LOG_EVENTS_PER_SOURCE: usize = 10_000;
+const MAX_LINUX_TEXT_SOURCE_BYTES: usize = 16 * 1024 * 1024;
+const MAX_LINUX_SMALL_SOURCE_BYTES: usize = 4 * 1024 * 1024;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum LinuxCandidateSupport {
+    Structured,
+    TextFallback,
+    Unsupported,
+}
 
 pub fn extract_linux_candidate(candidate: &EvidenceCandidate, bytes: &[u8]) -> ExtractionOutcome {
     let mut outcome = ExtractionOutcome::default();
     let normalized = normalize_evidence_path(&candidate.path);
-
-    if normalized.ends_with(".journal") || normalized.contains("/var/log/journal/") {
-        extract_journal(candidate, bytes, &mut outcome);
-    } else if normalized.ends_with("/var/log/wtmp") || normalized.ends_with("/var/log/btmp") {
-        extract_wtmp(candidate, bytes, &mut outcome);
-    } else if normalized.ends_with(".bash_history") {
-        extract_bash_history(candidate, bytes, &mut outcome);
-    } else if normalized.contains("/var/log/apt/history.log") {
-        extract_apt_history(candidate, bytes, &mut outcome);
-    } else if normalized.contains("/var/log/dpkg.log") {
-        extract_dpkg_log(candidate, bytes, &mut outcome);
-    } else if normalized.ends_with("/etc/crontab")
-        || normalized.contains("/etc/cron.d/")
-        || normalized.contains("/var/spool/cron/crontabs/")
-    {
-        extract_crontab(candidate, bytes, &mut outcome);
-    } else if normalized.ends_with("/var/log/auth.log") || normalized.ends_with("/var/log/secure") {
-        extract_sudo_log(candidate, bytes, &mut outcome);
+    let decoded;
+    let effective_path = normalized.strip_suffix(".gz").unwrap_or(&normalized);
+    let input = if normalized.ends_with(".gz") {
+        match decode_gzip(bytes) {
+            Ok((data, decoded_truncated)) => {
+                decoded = data;
+                if decoded_truncated {
+                    outcome.warnings.push(format!(
+                        "{} gzip decoded output exceeds the 128 MiB analysis cap; decoded content was truncated before parsing",
+                        candidate.path
+                    ));
+                }
+                decoded.as_slice()
+            }
+            Err(err) => {
+                outcome
+                    .warnings
+                    .push(format!("{} gzip decode failed: {}", candidate.path, err));
+                return outcome;
+            }
+        }
     } else {
+        bytes
+    };
+
+    let source_limit = linux_candidate_read_limit(&normalized);
+    if candidate.size > source_limit as u64 {
         outcome.warnings.push(format!(
-            "{} 未被识别为已支持的 Linux 痕迹类型",
-            candidate.path
+            "{} exceeds the Linux analysis cap; only the first {} bytes were scanned",
+            candidate.path, source_limit
+        ));
+    }
+
+    if is_journal_path(effective_path) {
+        extract_journal(candidate, input, &mut outcome);
+    } else if is_wtmp_path(effective_path) {
+        extract_wtmp(candidate, input, &mut outcome);
+    } else if is_bash_history_path(effective_path) {
+        extract_bash_history(candidate, input, &mut outcome);
+    } else if is_zsh_history_path(effective_path) {
+        extract_zsh_history(candidate, input, &mut outcome);
+    } else if is_fish_history_path(effective_path) {
+        extract_fish_history(candidate, input, &mut outcome);
+    } else if is_plain_shell_history_path(effective_path) {
+        extract_plain_shell_history(candidate, input, &mut outcome);
+    } else if is_apt_history_path(effective_path) {
+        extract_apt_history(candidate, input, &mut outcome);
+    } else if is_dpkg_log_path(effective_path) {
+        extract_dpkg_log(candidate, input, &mut outcome);
+    } else if is_cron_path(effective_path) {
+        extract_crontab(candidate, input, &mut outcome);
+    } else if is_auth_log_path(effective_path) {
+        let before = outcome.artifacts.len();
+        extract_sudo_log(candidate, input, &mut outcome);
+        if outcome.artifacts.len() == before {
+            extract_text_log(candidate, input, "linux.auth_log", "auth", &mut outcome);
+        }
+    } else if is_text_log_path(effective_path) {
+        extract_text_log(candidate, input, "linux.text_log", "log", &mut outcome);
+    } else if is_ssh_text_path(effective_path) {
+        extract_text_log(candidate, input, "linux.ssh_text", "ssh", &mut outcome);
+    } else {
+        let source_path = if candidate.path.is_empty() {
+            "<unknown>"
+        } else {
+            candidate.path.as_str()
+        };
+        outcome.warnings.push(format!(
+            "{source_path} is a Linux artifact candidate, but this first-pass parser does not yet extract structured records for it"
         ));
     }
 
     outcome
+}
+
+pub(super) fn linux_candidate_read_limit(normalized_path: &str) -> usize {
+    let effective_path = normalized_path
+        .strip_suffix(".gz")
+        .unwrap_or(normalized_path);
+    if is_journal_path(effective_path) || is_wtmp_path(effective_path) {
+        MAX_ANALYSIS_SOURCE_BYTES
+    } else if is_text_log_path(effective_path)
+        || is_auth_log_path(effective_path)
+        || is_apt_history_path(effective_path)
+        || is_dpkg_log_path(effective_path)
+    {
+        MAX_LINUX_TEXT_SOURCE_BYTES
+    } else {
+        MAX_LINUX_SMALL_SOURCE_BYTES
+    }
+}
+
+pub(super) fn linux_candidate_support(normalized_path: &str) -> LinuxCandidateSupport {
+    let effective_path = normalized_path
+        .strip_suffix(".gz")
+        .unwrap_or(normalized_path);
+    if is_journal_path(effective_path)
+        || is_wtmp_path(effective_path)
+        || is_bash_history_path(effective_path)
+        || is_zsh_history_path(effective_path)
+        || is_fish_history_path(effective_path)
+        || is_plain_shell_history_path(effective_path)
+        || is_apt_history_path(effective_path)
+        || is_dpkg_log_path(effective_path)
+        || is_cron_path(effective_path)
+        || is_auth_log_path(effective_path)
+    {
+        LinuxCandidateSupport::Structured
+    } else if is_text_log_path(effective_path) || is_ssh_text_path(effective_path) {
+        LinuxCandidateSupport::TextFallback
+    } else {
+        LinuxCandidateSupport::Unsupported
+    }
+}
+
+fn decode_gzip(bytes: &[u8]) -> Result<(Vec<u8>, bool), std::io::Error> {
+    let mut decoder = GzDecoder::new(bytes);
+    let mut decoded = Vec::new();
+    decoder
+        .by_ref()
+        .take(MAX_ANALYSIS_SOURCE_BYTES as u64 + 1)
+        .read_to_end(&mut decoded)?;
+    let truncated = decoded.len() > MAX_ANALYSIS_SOURCE_BYTES;
+    if truncated {
+        decoded.truncate(MAX_ANALYSIS_SOURCE_BYTES);
+    }
+    Ok((decoded, truncated))
+}
+
+fn is_journal_path(normalized: &str) -> bool {
+    normalized.ends_with(".journal")
+        || normalized.ends_with(".journal~")
+        || normalized.contains("/var/log/journal/")
+        || normalized.contains("/run/log/journal/")
+}
+
+fn is_wtmp_path(normalized: &str) -> bool {
+    normalized.ends_with("/var/log/wtmp")
+        || normalized.contains("/var/log/wtmp.")
+        || normalized.ends_with("/var/log/btmp")
+        || normalized.contains("/var/log/btmp.")
+}
+
+fn is_bash_history_path(normalized: &str) -> bool {
+    normalized.ends_with(".bash_history")
+}
+
+fn is_zsh_history_path(normalized: &str) -> bool {
+    normalized.ends_with(".zsh_history")
+}
+
+fn is_fish_history_path(normalized: &str) -> bool {
+    normalized.ends_with(".fish_history") || normalized.contains("/.local/share/fish/fish_history")
+}
+
+fn is_plain_shell_history_path(normalized: &str) -> bool {
+    normalized.ends_with(".python_history")
+}
+
+fn is_apt_history_path(normalized: &str) -> bool {
+    normalized.contains("/var/log/apt/history.log")
+}
+
+fn is_dpkg_log_path(normalized: &str) -> bool {
+    normalized.contains("/var/log/dpkg.log")
+}
+
+fn is_cron_path(normalized: &str) -> bool {
+    normalized.ends_with("/etc/crontab")
+        || normalized.contains("/etc/cron.d/")
+        || normalized.contains("/etc/cron.daily/")
+        || normalized.contains("/etc/cron.hourly/")
+        || normalized.contains("/etc/cron.monthly/")
+        || normalized.contains("/etc/cron.weekly/")
+        || normalized.contains("/var/spool/cron/")
+}
+
+fn is_auth_log_path(normalized: &str) -> bool {
+    normalized.ends_with("/var/log/auth.log")
+        || normalized.contains("/var/log/auth.log.")
+        || normalized.ends_with("/var/log/secure")
+        || normalized.contains("/var/log/secure.")
+}
+
+fn is_text_log_path(normalized: &str) -> bool {
+    normalized.ends_with("/var/log/audit/audit.log")
+        || normalized.contains("/var/log/audit/audit.log.")
+        || normalized.ends_with("/var/log/syslog")
+        || normalized.contains("/var/log/syslog.")
+        || normalized.ends_with("/var/log/messages")
+        || normalized.contains("/var/log/messages.")
+        || normalized.ends_with("/var/log/kern.log")
+        || normalized.contains("/var/log/kern.log.")
+        || normalized.ends_with("/var/log/cloud-init.log")
+        || normalized.contains("/var/log/cloud-init.log.")
+}
+
+fn is_ssh_text_path(normalized: &str) -> bool {
+    normalized.contains("/.ssh/authorized_keys")
+        || normalized.contains("/.ssh/known_hosts")
+        || normalized.ends_with("/etc/ssh/ssh_config")
+        || normalized.ends_with("/etc/ssh/sshd_config")
+        || normalized.contains("/etc/ssh/ssh_config.d/")
+        || normalized.contains("/etc/ssh/sshd_config.d/")
 }
 
 fn extract_journal(candidate: &EvidenceCandidate, bytes: &[u8], outcome: &mut ExtractionOutcome) {
@@ -257,6 +450,170 @@ fn extract_bash_history(
     }
 }
 
+fn extract_zsh_history(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    outcome: &mut ExtractionOutcome,
+) {
+    let text = String::from_utf8_lossy(bytes);
+    let mut commands = Vec::new();
+    for (line_number, line) in (1u64..).zip(text.lines()) {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let (timestamp, command) = parse_zsh_history_line(trimmed);
+        if command.is_empty() {
+            continue;
+        }
+        commands.push(ShellHistoryCommand {
+            command,
+            timestamp,
+            line_number,
+            shell: "zsh",
+        });
+    }
+    push_shell_history_commands(candidate, commands, "linux.zsh_history", outcome);
+}
+
+fn extract_fish_history(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    outcome: &mut ExtractionOutcome,
+) {
+    let text = String::from_utf8_lossy(bytes);
+    let mut commands = Vec::new();
+    let mut current_command: Option<(u64, String)> = None;
+    let mut current_timestamp: Option<DateTime<Utc>> = None;
+
+    for (line_number, line) in (1u64..).zip(text.lines()) {
+        let trimmed = line.trim();
+        if let Some(command) = trimmed.strip_prefix("- cmd:") {
+            if let Some((previous_line, previous_command)) = current_command.take() {
+                commands.push(ShellHistoryCommand {
+                    command: previous_command,
+                    timestamp: current_timestamp.take(),
+                    line_number: previous_line,
+                    shell: "fish",
+                });
+            }
+            current_command = Some((line_number, unescape_fish_value(command.trim())));
+        } else if let Some(when) = trimmed.strip_prefix("when:") {
+            current_timestamp = when
+                .trim()
+                .parse::<i64>()
+                .ok()
+                .and_then(|epoch| Utc.timestamp_opt(epoch, 0).single());
+        }
+    }
+
+    if let Some((line_number, command)) = current_command {
+        commands.push(ShellHistoryCommand {
+            command,
+            timestamp: current_timestamp,
+            line_number,
+            shell: "fish",
+        });
+    }
+
+    push_shell_history_commands(candidate, commands, "linux.fish_history", outcome);
+}
+
+fn extract_plain_shell_history(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    outcome: &mut ExtractionOutcome,
+) {
+    let text = String::from_utf8_lossy(bytes);
+    let commands = text
+        .lines()
+        .enumerate()
+        .filter_map(|(index, line)| {
+            let command = line.trim();
+            if command.is_empty() || command.starts_with('#') {
+                return None;
+            }
+            Some(ShellHistoryCommand {
+                command: command.to_string(),
+                timestamp: None,
+                line_number: index as u64 + 1,
+                shell: "shell",
+            })
+        })
+        .collect::<Vec<_>>();
+    push_shell_history_commands(candidate, commands, "linux.shell_history", outcome);
+}
+
+struct ShellHistoryCommand {
+    command: String,
+    timestamp: Option<DateTime<Utc>>,
+    line_number: u64,
+    shell: &'static str,
+}
+
+fn push_shell_history_commands(
+    candidate: &EvidenceCandidate,
+    commands: Vec<ShellHistoryCommand>,
+    parser: &str,
+    outcome: &mut ExtractionOutcome,
+) {
+    for cmd in commands {
+        let mut attrs = base_attrs(candidate);
+        attrs.insert("command".to_string(), Value::String(cmd.command.clone()));
+        attrs.insert(
+            "lineNumber".to_string(),
+            Value::Number(cmd.line_number.into()),
+        );
+        attrs.insert("shell".to_string(), Value::String(cmd.shell.to_string()));
+        if let Some(ts) = cmd.timestamp {
+            attrs.insert("timestamp".to_string(), Value::String(ts.to_rfc3339()));
+        }
+
+        outcome.artifacts.push(make_artifact(
+            "LinuxBashCommand",
+            format!("{}: {}", cmd.shell, truncate(&cmd.command, 80)),
+            cmd.command.clone(),
+            candidate,
+            parser,
+            attrs.clone(),
+        ));
+
+        if let Some(ts) = cmd.timestamp {
+            outcome.timeline_events.push(make_timeline_event(
+                &candidate.file_id,
+                "linux.shell_command",
+                ts,
+                format!("{} command: {}", cmd.shell, truncate(&cmd.command, 80)),
+                cmd.command,
+                attrs,
+                parser,
+            ));
+        }
+    }
+}
+
+fn parse_zsh_history_line(line: &str) -> (Option<DateTime<Utc>>, String) {
+    if let Some(rest) = line.strip_prefix(": ") {
+        let mut parts = rest.splitn(2, ';');
+        if let (Some(meta), Some(command)) = (parts.next(), parts.next()) {
+            let epoch = meta
+                .split(':')
+                .next()
+                .and_then(|raw| raw.trim().parse::<i64>().ok())
+                .and_then(|value| Utc.timestamp_opt(value, 0).single());
+            return (epoch, command.trim().to_string());
+        }
+    }
+    (None, line.trim().to_string())
+}
+
+fn unescape_fish_value(value: &str) -> String {
+    value
+        .replace("\\n", "\n")
+        .replace("\\:", ":")
+        .replace("\\\\", "\\")
+}
+
 fn extract_apt_history(
     candidate: &EvidenceCandidate,
     bytes: &[u8],
@@ -422,6 +779,196 @@ fn extract_sudo_log(candidate: &EvidenceCandidate, bytes: &[u8], outcome: &mut E
         Err(err) => outcome
             .warnings
             .push(format!("{} sudo log parse failed: {}", candidate.path, err)),
+    }
+}
+
+fn extract_text_log(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    parser: &str,
+    label: &str,
+    outcome: &mut ExtractionOutcome,
+) {
+    let text = String::from_utf8_lossy(bytes);
+    let mut emitted = 0usize;
+    for (line_number, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if emitted >= MAX_TEXT_LOG_EVENTS_PER_SOURCE {
+            outcome.warnings.push(format!(
+                "{} text log emitted first {} records only",
+                candidate.path, MAX_TEXT_LOG_EVENTS_PER_SOURCE
+            ));
+            break;
+        }
+
+        let parsed = parse_syslog_like_line(trimmed);
+        let mut attrs = base_attrs(candidate);
+        attrs.insert("message".to_string(), Value::String(parsed.message.clone()));
+        attrs.insert(
+            "lineNumber".to_string(),
+            Value::Number((line_number as u64 + 1).into()),
+        );
+        attrs.insert("logKind".to_string(), Value::String(label.to_string()));
+        insert_opt(&mut attrs, "hostname", parsed.hostname.clone());
+        insert_opt(
+            &mut attrs,
+            "syslogIdentifier",
+            parsed.syslog_identifier.clone(),
+        );
+        if let Some(pid) = parsed.pid {
+            attrs.insert("pid".to_string(), Value::Number(pid.into()));
+        }
+        if let Some(priority) = parsed.priority {
+            attrs.insert("priority".to_string(), Value::Number(priority.into()));
+        }
+        if let Some(ts) = parsed.timestamp {
+            attrs.insert("timestamp".to_string(), Value::String(ts.to_rfc3339()));
+        }
+
+        outcome.artifacts.push(make_artifact(
+            "LinuxJournal",
+            format!("{} log: {}", label, truncate(&parsed.message, 80)),
+            parsed.message.clone(),
+            candidate,
+            parser,
+            attrs.clone(),
+        ));
+
+        if let Some(ts) = parsed.timestamp {
+            outcome.timeline_events.push(make_timeline_event(
+                &candidate.file_id,
+                parser,
+                ts,
+                format!("{} log: {}", label, truncate(&parsed.message, 80)),
+                parsed.message,
+                attrs,
+                parser,
+            ));
+        }
+        emitted += 1;
+    }
+}
+
+struct ParsedTextLogLine {
+    timestamp: Option<DateTime<Utc>>,
+    hostname: Option<String>,
+    syslog_identifier: Option<String>,
+    pid: Option<u32>,
+    priority: Option<u32>,
+    message: String,
+}
+
+fn parse_syslog_like_line(line: &str) -> ParsedTextLogLine {
+    if let Some(parsed) = parse_rfc3339_log_line(line) {
+        return parsed;
+    }
+    if let Some(parsed) = parse_classic_syslog_line(line) {
+        return parsed;
+    }
+    ParsedTextLogLine {
+        timestamp: None,
+        hostname: None,
+        syslog_identifier: None,
+        pid: None,
+        priority: audit_priority(line),
+        message: line.to_string(),
+    }
+}
+
+fn parse_rfc3339_log_line(line: &str) -> Option<ParsedTextLogLine> {
+    let (head, rest) = line.split_once(' ')?;
+    let timestamp = DateTime::parse_from_rfc3339(head)
+        .ok()
+        .map(|dt| dt.with_timezone(&Utc))?;
+    let mut parsed = parse_syslog_body(rest);
+    parsed.timestamp = Some(timestamp);
+    Some(parsed)
+}
+
+fn parse_classic_syslog_line(line: &str) -> Option<ParsedTextLogLine> {
+    let mut parts = line.splitn(4, ' ');
+    let month = parts.next()?;
+    let day = parts.next()?;
+    let time = parts.next()?;
+    let rest = parts.next()?;
+    if !is_classic_syslog_timestamp_shape(month, day, time) {
+        return None;
+    }
+    Some(parse_syslog_body(rest))
+}
+
+fn parse_syslog_body(body: &str) -> ParsedTextLogLine {
+    let (hostname, remainder) = body
+        .split_once(' ')
+        .map(|(host, rest)| (Some(host.to_string()), rest.trim()))
+        .unwrap_or((None, body.trim()));
+    let (identifier, pid, message) = parse_identifier_and_message(remainder);
+    ParsedTextLogLine {
+        timestamp: None,
+        hostname,
+        syslog_identifier: identifier,
+        pid,
+        priority: audit_priority(message).or_else(|| syslog_priority(message)),
+        message: message.to_string(),
+    }
+}
+
+fn parse_identifier_and_message(input: &str) -> (Option<String>, Option<u32>, &str) {
+    let Some((prefix, message)) = input.split_once(':') else {
+        return (None, None, input);
+    };
+    let prefix = prefix.trim();
+    if prefix.is_empty() || prefix.contains(' ') {
+        return (None, None, input);
+    }
+    if let Some((identifier, pid_text)) = prefix.split_once('[') {
+        let pid = pid_text.trim_end_matches(']').parse::<u32>().ok();
+        return (Some(identifier.to_string()), pid, message.trim());
+    }
+    (Some(prefix.to_string()), None, message.trim())
+}
+
+fn is_classic_syslog_timestamp_shape(month: &str, day: &str, time: &str) -> bool {
+    matches!(
+        month,
+        "Jan"
+            | "Feb"
+            | "Mar"
+            | "Apr"
+            | "May"
+            | "Jun"
+            | "Jul"
+            | "Aug"
+            | "Sep"
+            | "Oct"
+            | "Nov"
+            | "Dec"
+    ) && day.parse::<u32>().is_ok()
+        && time.split(':').count() == 3
+        && time.split(':').all(|part| part.parse::<u32>().is_ok())
+}
+
+fn audit_priority(line: &str) -> Option<u32> {
+    if line.contains("type=SYSCALL") || line.contains("type=EXECVE") {
+        Some(5)
+    } else if line.contains("type=USER_AUTH") || line.contains("type=USER_LOGIN") {
+        Some(6)
+    } else {
+        None
+    }
+}
+
+fn syslog_priority(message: &str) -> Option<u32> {
+    let lower = message.to_ascii_lowercase();
+    if lower.contains("error") || lower.contains("fail") || lower.contains("denied") {
+        Some(3)
+    } else if lower.contains("warn") {
+        Some(4)
+    } else {
+        None
     }
 }
 

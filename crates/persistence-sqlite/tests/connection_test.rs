@@ -285,6 +285,26 @@ fn upgrades_legacy_schema_to_latest_with_partition_job_columns() {
         assert!(exists, "jobs.{column} should exist after upgrade");
     }
 
+    for column in [
+        "lvm_vg_uuid",
+        "lvm_vg_name",
+        "lvm_lv_uuid",
+        "lvm_lv_name",
+        "lvm_pv_offsets_json",
+    ] {
+        let exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('data_source_partitions') WHERE name = ?1",
+                [column],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(
+            exists,
+            "data_source_partitions.{column} should exist after upgrade"
+        );
+    }
+
     for (table, column) in [
         ("artifacts", "extractor_id"),
         ("artifacts", "extractor_version"),

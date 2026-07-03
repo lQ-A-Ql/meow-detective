@@ -85,6 +85,8 @@ export interface LinuxArtifactSummary {
   cronJobCount: number;
   sudoEventCount: number;
   totalCount: number;
+  truncated: boolean;
+  coverageRatio: number;
   journalEntries: LinuxJournalEntry[];
   loginRecords: LinuxLoginRecord[];
   bashCommands: LinuxBashCommand[];

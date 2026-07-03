@@ -91,6 +91,7 @@ dependencies = [
  "domain",
  "encoding_rs",
  "evidence-core",
+ "flate2",
  "fs-btrfs",
  "fs-exfat",
  "fs-ext4",

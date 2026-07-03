@@ -60,6 +60,7 @@ fn partition_root_names_reject_misleading_filesystem_names() {
         kind: crate::datasource_service::ImageFilesystemKind::Ntfs,
         offset: 2048,
         source: crate::datasource_service::ImageFilesystemSource::GptPartition,
+        lvm_identity: None,
     };
     assert_eq!(format_partition_root_name(&candidate), "Partition 3 (NTFS)");
 
@@ -81,6 +82,7 @@ fn partition_root_names_reject_misleading_filesystem_names() {
         length: 4096,
         status: crate::datasource_service::PartitionStatus::Supported,
         filesystem: Some(crate::datasource_service::ImageFilesystemKind::Ntfs),
+        lvm_identity: None,
     };
     assert_eq!(
         format_partition_record_root_name(&record),
@@ -105,6 +107,7 @@ fn partition_root_names_preserve_meaningful_names() {
         kind: crate::datasource_service::ImageFilesystemKind::Ntfs,
         offset: 4096,
         source: crate::datasource_service::ImageFilesystemSource::GptPartition,
+        lvm_identity: None,
     };
 
     assert_eq!(

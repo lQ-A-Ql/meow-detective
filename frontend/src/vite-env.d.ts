@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  // Intentionally empty: the application no longer supports a mock API mode.
+  // Intentionally empty: runtime API feature flags are not exposed here.
 }
 
 interface ImportMeta {

@@ -14,9 +14,9 @@
 pub mod journal;
 
 use evidence_core::filesystem::{
-    child_nodes_with_parent_path, file_not_found, fs_node_without_timestamps, invalid_fs_data,
-    is_special_directory_name, path_components, path_is_directory, path_not_found, root_node,
-    truncate_data_to_declared_size, FileSystemReader, FsNode,
+    child_nodes_with_parent_path, file_not_found, fs_node_without_timestamps, fs_out_of_memory,
+    invalid_fs_data, is_special_directory_name, path_components, path_is_directory, path_not_found,
+    root_node, truncate_data_to_declared_size, FileSystemReader, FsNode,
 };
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
@@ -113,6 +113,17 @@ impl Ext4Reader {
         Ok(buf)
     }
 
+    fn read_bytes_at(&self, offset: u64, length: usize) -> io::Result<Vec<u8>> {
+        let mut buf = vec![0u8; length];
+        if length == 0 {
+            return Ok(buf);
+        }
+        let mut reader = self.reader.borrow_mut();
+        reader.seek(SeekFrom::Start(offset))?;
+        reader.read_exact(&mut buf)?;
+        Ok(buf)
+    }
+
     fn read_bg_descriptor(&self, bg: u32) -> io::Result<[u8; 32]> {
         const DESC_SIZE: u64 = 32;
         let desc_per_block = self.block_size / DESC_SIZE;
@@ -193,6 +204,41 @@ impl Ext4Reader {
         }
     }
 
+    fn read_extent_data_range(
+        &self,
+        i_block: &[u8],
+        file_size: u64,
+        offset: u64,
+        length: usize,
+    ) -> io::Result<Vec<u8>> {
+        if i_block.len() < 12 || length == 0 || offset >= file_size {
+            return Ok(Vec::new());
+        }
+
+        let range_end = offset.saturating_add(length as u64).min(file_size);
+        let capacity = usize::try_from(range_end.saturating_sub(offset))
+            .map_err(|_| fs_out_of_memory("ext4 range exceeds addressable memory"))?;
+        let mut data = Vec::with_capacity(capacity);
+        let mut next_offset = offset;
+        let header = Ext4ExtentHeader::parse(i_block)?;
+
+        if header.eh_depth == 0 {
+            self.read_extent_leaves_range(i_block, offset, range_end, &mut next_offset, &mut data)?;
+        } else {
+            self.walk_extent_tree_range(
+                i_block,
+                header.eh_depth,
+                offset,
+                range_end,
+                &mut next_offset,
+                &mut data,
+            )?;
+        }
+
+        append_zeroes(&mut data, range_end.saturating_sub(next_offset))?;
+        Ok(data)
+    }
+
     fn read_extent_leaves(&self, node_data: &[u8], file_size: u64) -> io::Result<Vec<u8>> {
         let header = Ext4ExtentHeader::parse(node_data)?;
         let mut data = Vec::new();
@@ -203,12 +249,73 @@ impl Ext4Reader {
             }
             let extent = Ext4Extent::parse(&node_data[off..off + 12])?;
             let start_block = ((extent.ee_start_hi as u64) << 32) | (extent.ee_start_lo as u64);
-            for blk in 0..extent.ee_len as u64 {
-                let block_data = self.read_block(start_block + blk)?;
-                data.extend_from_slice(&block_data);
+            let block_count = extent.block_count() as u64;
+            if extent.is_unwritten() {
+                append_zeroes(&mut data, block_count.saturating_mul(self.block_size))?;
+            } else {
+                for blk in 0..block_count {
+                    let block_data = self.read_block(start_block + blk)?;
+                    data.extend_from_slice(&block_data);
+                }
             }
         }
         Ok(truncate_data_to_declared_size(data, file_size))
+    }
+
+    fn read_extent_leaves_range(
+        &self,
+        node_data: &[u8],
+        range_start: u64,
+        range_end: u64,
+        next_offset: &mut u64,
+        data: &mut Vec<u8>,
+    ) -> io::Result<()> {
+        let header = Ext4ExtentHeader::parse(node_data)?;
+        for i in 0..header.eh_entries as usize {
+            let off = 12 + i * 12;
+            if off + 12 > node_data.len() {
+                break;
+            }
+            let extent = Ext4Extent::parse(&node_data[off..off + 12])?;
+            self.read_extent_range(extent, range_start, range_end, next_offset, data)?;
+        }
+        Ok(())
+    }
+
+    fn read_extent_range(
+        &self,
+        extent: Ext4Extent,
+        range_start: u64,
+        range_end: u64,
+        next_offset: &mut u64,
+        data: &mut Vec<u8>,
+    ) -> io::Result<()> {
+        let extent_start = extent.ee_block as u64 * self.block_size;
+        let extent_len = extent.block_count() as u64 * self.block_size;
+        let extent_end = extent_start.saturating_add(extent_len);
+        let overlap_start = extent_start.max(range_start);
+        let overlap_end = extent_end.min(range_end);
+        if overlap_start >= overlap_end {
+            return Ok(());
+        }
+
+        if *next_offset < overlap_start {
+            append_zeroes(data, overlap_start - *next_offset)?;
+        }
+
+        let read_len = usize::try_from(overlap_end - overlap_start)
+            .map_err(|_| fs_out_of_memory("ext4 extent range exceeds addressable memory"))?;
+        if extent.is_unwritten() {
+            append_zeroes(data, read_len as u64)?;
+        } else {
+            let start_block = ((extent.ee_start_hi as u64) << 32) | extent.ee_start_lo as u64;
+            let physical_offset =
+                self.block_to_offset(start_block) + overlap_start.saturating_sub(extent_start);
+            let chunk = self.read_bytes_at(physical_offset, read_len)?;
+            data.extend_from_slice(&chunk);
+        }
+        *next_offset = overlap_end;
+        Ok(())
     }
 
     fn walk_extent_tree(
@@ -241,6 +348,51 @@ impl Ext4Reader {
             }
         }
         Ok(truncate_data_to_declared_size(data, file_size))
+    }
+
+    fn walk_extent_tree_range(
+        &self,
+        node_data: &[u8],
+        depth: u16,
+        range_start: u64,
+        range_end: u64,
+        next_offset: &mut u64,
+        data: &mut Vec<u8>,
+    ) -> io::Result<()> {
+        let header = Ext4ExtentHeader::parse(node_data)?;
+        for i in 0..header.eh_entries as usize {
+            let off = 12 + i * 12;
+            if off + 12 > node_data.len() {
+                break;
+            }
+            let leaf_lo = u32::from_le_bytes(
+                node_data[off + 4..off + 8]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("disk parse error"))?,
+            ) as u64;
+            let leaf_hi = u16::from_le_bytes([node_data[off + 8], node_data[off + 9]]) as u64;
+            let child_block = leaf_lo | (leaf_hi << 32);
+            let child_data = self.read_block(child_block)?;
+            if depth == 1 {
+                self.read_extent_leaves_range(
+                    &child_data,
+                    range_start,
+                    range_end,
+                    next_offset,
+                    data,
+                )?;
+            } else {
+                self.walk_extent_tree_range(
+                    &child_data,
+                    depth - 1,
+                    range_start,
+                    range_end,
+                    next_offset,
+                    data,
+                )?;
+            }
+        }
+        Ok(())
     }
 
     fn parse_directory_entries(&self, data: &[u8]) -> io::Result<Vec<(String, u32, u8)>> {
@@ -380,9 +532,45 @@ impl FileSystemReader for Ext4Reader {
         Ok(Box::new(io::Cursor::new(data)))
     }
 
+    fn read_file_range(&self, path: &str, offset: u64, length: usize) -> io::Result<Vec<u8>> {
+        let (inode_num, is_dir) = self
+            .resolve_path(path)?
+            .ok_or_else(|| file_not_found(path))?;
+        if is_dir {
+            return Err(path_is_directory(path));
+        }
+
+        let inode = self.read_inode(inode_num)?;
+        let mode = Self::inode_mode(&inode);
+        if mode & 0xF000 == S_IFLNK {
+            let target = self.read_symlink_target(&inode)?.into_bytes();
+            let start = usize::try_from(offset)
+                .ok()
+                .map(|start| start.min(target.len()))
+                .unwrap_or(target.len());
+            let end = start.saturating_add(length).min(target.len());
+            return Ok(target[start..end].to_vec());
+        }
+
+        let i_block = Self::inode_i_block(&inode);
+        let size = Self::inode_size(&inode)?;
+        self.read_extent_data_range(i_block, size, offset, length)
+    }
+
     fn data_source_name(&self) -> &str {
         "ext4"
     }
+}
+
+fn append_zeroes(data: &mut Vec<u8>, count: u64) -> io::Result<()> {
+    let count = usize::try_from(count)
+        .map_err(|_| fs_out_of_memory("ext4 sparse range exceeds addressable memory"))?;
+    let new_len = data
+        .len()
+        .checked_add(count)
+        .ok_or_else(|| fs_out_of_memory("ext4 sparse range exceeds addressable memory"))?;
+    data.resize(new_len, 0);
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -412,8 +600,7 @@ impl Ext4ExtentHeader {
 
 #[derive(Debug)]
 struct Ext4Extent {
-    /// Logical block offset of this extent (parsed for format completeness).
-    _ee_block: u32,
+    ee_block: u32,
     ee_len: u16,
     ee_start_hi: u16,
     ee_start_lo: u32,
@@ -422,7 +609,7 @@ struct Ext4Extent {
 impl Ext4Extent {
     fn parse(data: &[u8]) -> io::Result<Self> {
         Ok(Self {
-            _ee_block: u32::from_le_bytes(
+            ee_block: u32::from_le_bytes(
                 data[0..4]
                     .try_into()
                     .map_err(|_| invalid_fs_data("disk parse error"))?,
@@ -436,6 +623,14 @@ impl Ext4Extent {
             ),
         })
     }
+
+    fn block_count(&self) -> u16 {
+        self.ee_len & 0x7FFF
+    }
+
+    fn is_unwritten(&self) -> bool {
+        self.ee_len & 0x8000 != 0
+    }
 }
 
 // ===========================================================================
@@ -447,6 +642,10 @@ mod tests {
     use super::*;
     use evidence_core::ReaderInfo;
     use std::io::{Read, Seek};
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
 
     // -----------------------------------------------------------------------
     // Fake evidence reader for in-memory fixtures
@@ -497,6 +696,40 @@ mod tests {
     impl EvidenceReader for FakeReader {
         fn info(&self) -> &ReaderInfo {
             &self.info
+        }
+    }
+
+    struct CountingReader {
+        inner: FakeReader,
+        bytes_read: Arc<AtomicUsize>,
+    }
+
+    impl CountingReader {
+        fn new(data: Vec<u8>, bytes_read: Arc<AtomicUsize>) -> Self {
+            Self {
+                inner: FakeReader::new(data),
+                bytes_read,
+            }
+        }
+    }
+
+    impl Read for CountingReader {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            let n = self.inner.read(buf)?;
+            self.bytes_read.fetch_add(n, Ordering::Relaxed);
+            Ok(n)
+        }
+    }
+
+    impl Seek for CountingReader {
+        fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+            self.inner.seek(pos)
+        }
+    }
+
+    impl EvidenceReader for CountingReader {
+        fn info(&self) -> &ReaderInfo {
+            self.inner.info()
         }
     }
 
@@ -650,6 +883,27 @@ mod tests {
         img
     }
 
+    fn build_large_sparse_ext4_fixture(marker: &[u8]) -> (Vec<u8>, u64) {
+        const LOGICAL_OFFSET: u64 = 128 * 1024 * 1024;
+        let mut img = build_ext4_fixture();
+        let block_size = 4096u64;
+        let logical_block = (LOGICAL_OFFSET / block_size) as u32;
+        let physical_block = 7u32;
+        let file_size = LOGICAL_OFFSET + marker.len() as u64;
+
+        let file_inode = &mut img[8192 + 512..8192 + 768];
+        file_inode[0x04..0x08].copy_from_slice(&(file_size as u32).to_le_bytes());
+        file_inode[0x6C..0x70].copy_from_slice(&((file_size >> 32) as u32).to_le_bytes());
+        file_inode[0x34..0x38].copy_from_slice(&logical_block.to_le_bytes());
+        file_inode[0x38..0x3A].copy_from_slice(&1u16.to_le_bytes());
+        file_inode[0x3A..0x3C].copy_from_slice(&0u16.to_le_bytes());
+        file_inode[0x3C..0x40].copy_from_slice(&physical_block.to_le_bytes());
+
+        let data_offset = physical_block as usize * block_size as usize;
+        img[data_offset..data_offset + marker.len()].copy_from_slice(marker);
+        (img, LOGICAL_OFFSET)
+    }
+
     // -----------------------------------------------------------------------
     // test_superblock_magic
     // -----------------------------------------------------------------------
@@ -767,6 +1021,51 @@ mod tests {
         let mut content = String::new();
         file.read_to_string(&mut content).unwrap();
         assert_eq!(content, "Hello World");
+    }
+
+    #[test]
+    fn test_large_sparse_file_range_reads_only_requested_extent() {
+        let marker = b"EXT4-RANGE-ONLY";
+        let (img, offset) = build_large_sparse_ext4_fixture(marker);
+        let bytes_read = Arc::new(AtomicUsize::new(0));
+        let reader: Box<dyn EvidenceReader> =
+            Box::new(CountingReader::new(img, Arc::clone(&bytes_read)));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+
+        bytes_read.store(0, Ordering::Relaxed);
+        let bytes = ext4
+            .read_file_range("test.txt", offset, marker.len())
+            .unwrap();
+
+        assert_eq!(bytes, marker);
+        assert!(
+            bytes_read.load(Ordering::Relaxed) < 32 * 1024,
+            "range path should not read the 128 MiB sparse prefix"
+        );
+    }
+
+    #[test]
+    fn test_unwritten_extent_range_zero_fills_without_reading_data_block() {
+        let mut img = build_ext4_fixture();
+        let file_inode = &mut img[8192 + 512..8192 + 768];
+        file_inode[0x04..0x08].copy_from_slice(&4096u32.to_le_bytes());
+        file_inode[0x38..0x3A].copy_from_slice(&(0x8000u16 | 1).to_le_bytes());
+        file_inode[0x3C..0x40].copy_from_slice(&4u32.to_le_bytes());
+        img[16384..16384 + 11].copy_from_slice(b"NOT-ZERO!!!");
+
+        let bytes_read = Arc::new(AtomicUsize::new(0));
+        let reader: Box<dyn EvidenceReader> =
+            Box::new(CountingReader::new(img, Arc::clone(&bytes_read)));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+
+        bytes_read.store(0, Ordering::Relaxed);
+        let bytes = ext4.read_file_range("test.txt", 0, 16).unwrap();
+
+        assert_eq!(bytes, vec![0u8; 16]);
+        assert!(
+            bytes_read.load(Ordering::Relaxed) < 16 * 1024,
+            "unwritten data extent should not read the physical data block"
+        );
     }
 
     // -----------------------------------------------------------------------

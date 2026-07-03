@@ -52,6 +52,36 @@
       "viewTimeline": "View in Timeline"
     }
   },
+  "importDataSource": {
+    "openButton": "Import Data Source",
+    "title": "Import Data Source",
+    "steps": {
+      "platform": "Step 1/2: Select target platform",
+      "form": "Step 2/2: Enter data source details"
+    },
+    "fields": {
+      "name": "Data Source Name",
+      "path": "Data Source Path"
+    },
+    "placeholders": {
+      "name": "Example: Win10-C",
+      "path": "Image path or logical directory path"
+    },
+    "buttons": {
+      "next": "Next",
+      "back": "Back",
+      "file": "File",
+      "directory": "Directory",
+      "import": "Import",
+      "importing": "Importing..."
+    },
+    "errors": {
+      "pathRequired": "Select a data source path"
+    },
+    "dialogFilters": {
+      "dataSources": "Data Sources"
+    }
+  },
   "settings": {
     "title": "Settings",
     "subtitle": "Application configuration and data directories",
@@ -365,7 +395,9 @@
       "commands": "Shell Commands",
       "packages": "Package Events",
       "cron": "Cron Jobs",
-      "sudo": "Sudo Events"
+      "sudo": "Sudo Events",
+      "coverage": "Coverage",
+      "truncated": "Truncated"
     },
     "tabs": {
       "overview": "Overview",
@@ -401,6 +433,11 @@
       "workingDirectory": "Working Directory",
       "success": "Success"
     },
+    "values": {
+      "yes": "Yes",
+      "no": "No"
+    },
+    "fallbackWarning": "Linux artifact summary is unavailable.",
     "empty": {
       "overview": {
         "title": "No Linux artifacts",

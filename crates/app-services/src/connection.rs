@@ -13,5 +13,7 @@ use rusqlite::Connection;
 /// This is a thin wrapper around `persistence_sqlite::open_or_create` so the
 /// command layer can delegate connection creation through `app-services`.
 pub fn open_case_db(path: &Path) -> Result<Connection, persistence_sqlite::DbError> {
-    persistence_sqlite::open_or_create(path)
+    let conn = persistence_sqlite::open_or_create(path)?;
+    persistence_sqlite::runner::run_all(&conn)?;
+    Ok(conn)
 }

@@ -3,7 +3,7 @@
 use crate::file_service::FileServiceError;
 use domain::FileEntry;
 use evidence_core::RawImageReader;
-use persistence_sqlite::repositories::partition_repo::PartitionRepo;
+use persistence_sqlite::repositories::partition_repo::{DataSourcePartitionRecord, PartitionRepo};
 use rusqlite::Connection;
 use std::path::Path;
 
@@ -36,34 +36,14 @@ pub(crate) fn e01_partition_candidates(
                 .iter()
                 .filter(|partition| {
                     partition.partition_index as usize == expected
-                        && partition.status != "EncryptedBitLocker"
+                        && is_previewable_partition_status(&partition.status)
                 })
-                .map(
-                    |partition| crate::file_service::viewer::PreviewPartitionCandidate {
-                        partition_index: partition.partition_index as usize,
-                        filesystem_kind: partition
-                            .filesystem
-                            .as_deref()
-                            .unwrap_or(&partition.kind_label)
-                            .to_string(),
-                        offset: partition.offset,
-                    },
-                )
+                .map(preview_partition_candidate_from_record)
                 .collect(),
             None => partitions
                 .iter()
-                .filter(|partition| partition.status != "EncryptedBitLocker")
-                .map(
-                    |partition| crate::file_service::viewer::PreviewPartitionCandidate {
-                        partition_index: partition.partition_index as usize,
-                        filesystem_kind: partition
-                            .filesystem
-                            .as_deref()
-                            .unwrap_or(&partition.kind_label)
-                            .to_string(),
-                        offset: partition.offset,
-                    },
-                )
+                .filter(|partition| is_previewable_partition_status(&partition.status))
+                .map(preview_partition_candidate_from_record)
                 .collect(),
         };
 
@@ -82,13 +62,25 @@ pub(crate) fn e01_partition_candidates(
     Ok(candidates)
 }
 
+pub(crate) fn is_previewable_partition_status(status: &str) -> bool {
+    matches!(
+        status.to_ascii_lowercase().as_str(),
+        "supported" | "queued" | "done" | "ready"
+    )
+}
+
 pub(crate) fn raw_partition_candidates(
     source_path: &str,
     expected_partition_index: Option<usize>,
 ) -> Result<Vec<crate::file_service::viewer::PreviewPartitionCandidate>, FileServiceError> {
     let mut reader = RawImageReader::open(Path::new(source_path))?;
-    let probe = crate::datasource_service::detect_image_filesystem(&mut reader)
+    let mut probe = crate::datasource_service::detect_image_filesystem(&mut reader)
         .map_err(|e| FileServiceError::other(format!("Failed to detect RAW filesystem: {e}")))?;
+    crate::datasource_service::expand_lvm_pool_candidates(
+        &mut probe,
+        Path::new(source_path),
+        &domain::DataSourceKind::Raw,
+    );
     if probe.candidates.is_empty() {
         if let Some(candidate) = direct_exfat_raw_partition_candidate(source_path)? {
             if expected_partition_index.is_none_or(|expected| expected == candidate.partition_index)
@@ -128,6 +120,10 @@ pub(crate) fn raw_partition_candidates(
             partition_index,
             filesystem_kind: filesystem_kind.to_string(),
             offset: candidate.offset,
+            lvm_identity: candidate
+                .lvm_identity
+                .as_ref()
+                .map(preview_lvm_identity_from_datasource),
         });
     }
 
@@ -153,6 +149,7 @@ pub(crate) fn raw_partition_candidates(
             partition_index: partition.index,
             filesystem_kind: "EXFAT".to_string(),
             offset: partition.offset,
+            lvm_identity: None,
         });
     }
 
@@ -181,6 +178,109 @@ pub(crate) fn direct_exfat_raw_partition_candidate(
             partition_index: 0,
             filesystem_kind: "EXFAT".to_string(),
             offset: 0,
+            lvm_identity: None,
         },
     ))
+}
+
+pub(crate) fn preview_partition_candidate_from_record(
+    partition: &DataSourcePartitionRecord,
+) -> crate::file_service::viewer::PreviewPartitionCandidate {
+    crate::file_service::viewer::PreviewPartitionCandidate {
+        partition_index: partition.partition_index as usize,
+        filesystem_kind: partition
+            .filesystem
+            .as_deref()
+            .unwrap_or(&partition.kind_label)
+            .to_string(),
+        offset: partition.offset,
+        lvm_identity: preview_lvm_identity_from_record(partition),
+    }
+}
+
+pub(crate) fn preview_lvm_identity_from_datasource(
+    identity: &crate::datasource_service::LvmLogicalVolumeIdentity,
+) -> crate::file_service::viewer::PreviewLvmIdentity {
+    crate::file_service::viewer::PreviewLvmIdentity {
+        vg_uuid: identity.vg_uuid.clone(),
+        vg_name: identity.vg_name.clone(),
+        lv_uuid: identity.lv_uuid.clone(),
+        lv_name: identity.lv_name.clone(),
+        pv_offsets: identity.pv_offsets.clone(),
+    }
+}
+
+fn preview_lvm_identity_from_record(
+    partition: &DataSourcePartitionRecord,
+) -> Option<crate::file_service::viewer::PreviewLvmIdentity> {
+    let offsets_json = partition.lvm_pv_offsets_json.as_deref()?;
+    let pv_offsets = serde_json::from_str::<Vec<u64>>(offsets_json).ok()?;
+    if pv_offsets.is_empty() {
+        return None;
+    }
+
+    let lv_uuid = partition.lvm_lv_uuid.clone().unwrap_or_default();
+    let lv_name = partition.lvm_lv_name.clone().unwrap_or_default();
+    if lv_uuid.is_empty() && lv_name.is_empty() {
+        return None;
+    }
+
+    Some(crate::file_service::viewer::PreviewLvmIdentity {
+        vg_uuid: partition.lvm_vg_uuid.clone().unwrap_or_default(),
+        vg_name: partition.lvm_vg_name.clone().unwrap_or_default(),
+        lv_uuid,
+        lv_name,
+        pv_offsets,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn partition_record() -> DataSourcePartitionRecord {
+        DataSourcePartitionRecord {
+            id: "p-lvm".to_string(),
+            data_source_id: "ds-lvm".to_string(),
+            partition_index: 4,
+            name: "vg/root".to_string(),
+            kind_label: "XFS".to_string(),
+            status: "supported".to_string(),
+            type_guid: None,
+            offset: 1_048_576,
+            length: 0,
+            filesystem: Some("XFS".to_string()),
+            unlock_hint: None,
+            lvm_vg_uuid: Some("vg-uuid".to_string()),
+            lvm_vg_name: Some("vg".to_string()),
+            lvm_lv_uuid: Some("lv-uuid".to_string()),
+            lvm_lv_name: Some("root".to_string()),
+            lvm_pv_offsets_json: Some("[1048576,2097152]".to_string()),
+        }
+    }
+
+    #[test]
+    fn preview_candidate_decodes_lvm_identity_from_partition_record() {
+        let candidate = preview_partition_candidate_from_record(&partition_record());
+
+        assert_eq!(candidate.partition_index, 4);
+        assert_eq!(candidate.filesystem_kind, "XFS");
+        assert_eq!(candidate.offset, 1_048_576);
+        let identity = candidate.lvm_identity.unwrap();
+        assert_eq!(identity.vg_uuid, "vg-uuid");
+        assert_eq!(identity.vg_name, "vg");
+        assert_eq!(identity.lv_uuid, "lv-uuid");
+        assert_eq!(identity.lv_name, "root");
+        assert_eq!(identity.pv_offsets, vec![1_048_576, 2_097_152]);
+    }
+
+    #[test]
+    fn preview_candidate_ignores_incomplete_lvm_identity() {
+        let mut record = partition_record();
+        record.lvm_pv_offsets_json = None;
+
+        let candidate = preview_partition_candidate_from_record(&record);
+
+        assert!(candidate.lvm_identity.is_none());
+    }
 }

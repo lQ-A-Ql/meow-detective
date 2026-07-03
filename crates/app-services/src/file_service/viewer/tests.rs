@@ -6,6 +6,7 @@ use rusqlite::params;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom, Write};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use transport::dto::ViewerRangeRequestDto;
 
 fn reset_skip_reader_bytes_call_count() {
@@ -176,6 +177,115 @@ fn write_large_ntfs_raw_fixture(path: &std::path::Path, marker: &[u8]) -> std::i
 
     data[data_off..data_off + marker.len()].copy_from_slice(marker);
     std::fs::write(path, data)
+}
+
+fn write_large_ext4_raw_fixture(path: &std::path::Path, marker: &[u8]) -> std::io::Result<u64> {
+    const BLOCK_SIZE: u64 = 4096;
+    const LOGICAL_OFFSET: u64 = 128 * 1024 * 1024;
+    const TOTAL_BLOCKS: u64 = 10;
+    const INODE_TABLE_OFF: usize = 8192;
+    const ROOT_BLOCK: u32 = 3;
+    const FILE_BLOCK: u32 = 7;
+
+    let total_size = (TOTAL_BLOCKS * BLOCK_SIZE) as usize;
+    let mut data = vec![0u8; total_size];
+    let file_size = LOGICAL_OFFSET + marker.len() as u64;
+    let logical_block = (LOGICAL_OFFSET / BLOCK_SIZE) as u32;
+
+    let sb = &mut data[1024..2048];
+    sb[0x00..0x04].copy_from_slice(&16u32.to_le_bytes());
+    sb[0x04..0x08].copy_from_slice(&(TOTAL_BLOCKS as u32).to_le_bytes());
+    sb[0x14..0x18].copy_from_slice(&0u32.to_le_bytes());
+    sb[0x18..0x1C].copy_from_slice(&2u32.to_le_bytes());
+    sb[0x20..0x24].copy_from_slice(&32768u32.to_le_bytes());
+    sb[0x28..0x2C].copy_from_slice(&16u32.to_le_bytes());
+    sb[0x38..0x3A].copy_from_slice(&0xEF53u16.to_le_bytes());
+    sb[0x58..0x5A].copy_from_slice(&256u16.to_le_bytes());
+
+    data[4096 + 0x08..4096 + 0x0C].copy_from_slice(&2u32.to_le_bytes());
+
+    let root_inode = &mut data[INODE_TABLE_OFF + 256..INODE_TABLE_OFF + 512];
+    root_inode[0x00..0x02].copy_from_slice(&0x41EDu16.to_le_bytes());
+    root_inode[0x04..0x08].copy_from_slice(&BLOCK_SIZE.to_le_bytes()[..4]);
+    root_inode[0x1C..0x20].copy_from_slice(&8u32.to_le_bytes());
+    root_inode[0x28..0x2A].copy_from_slice(&0xF30Au16.to_le_bytes());
+    root_inode[0x2A..0x2C].copy_from_slice(&1u16.to_le_bytes());
+    root_inode[0x2C..0x2E].copy_from_slice(&4u16.to_le_bytes());
+    root_inode[0x38..0x3A].copy_from_slice(&1u16.to_le_bytes());
+    root_inode[0x3C..0x40].copy_from_slice(&ROOT_BLOCK.to_le_bytes());
+
+    let file_inode = &mut data[INODE_TABLE_OFF + 512..INODE_TABLE_OFF + 768];
+    file_inode[0x00..0x02].copy_from_slice(&0x81A4u16.to_le_bytes());
+    file_inode[0x04..0x08].copy_from_slice(&(file_size as u32).to_le_bytes());
+    file_inode[0x1C..0x20].copy_from_slice(&8u32.to_le_bytes());
+    file_inode[0x28..0x2A].copy_from_slice(&0xF30Au16.to_le_bytes());
+    file_inode[0x2A..0x2C].copy_from_slice(&1u16.to_le_bytes());
+    file_inode[0x2C..0x2E].copy_from_slice(&4u16.to_le_bytes());
+    file_inode[0x34..0x38].copy_from_slice(&logical_block.to_le_bytes());
+    file_inode[0x38..0x3A].copy_from_slice(&1u16.to_le_bytes());
+    file_inode[0x3C..0x40].copy_from_slice(&FILE_BLOCK.to_le_bytes());
+    file_inode[0x6C..0x70].copy_from_slice(&((file_size >> 32) as u32).to_le_bytes());
+
+    let root_dir = &mut data[ROOT_BLOCK as usize * BLOCK_SIZE as usize
+        ..(ROOT_BLOCK as usize + 1) * BLOCK_SIZE as usize];
+    root_dir[0x00..0x04].copy_from_slice(&2u32.to_le_bytes());
+    root_dir[0x04..0x06].copy_from_slice(&12u16.to_le_bytes());
+    root_dir[0x06] = 1;
+    root_dir[0x07] = 2;
+    root_dir[0x08] = b'.';
+    root_dir[12..16].copy_from_slice(&2u32.to_le_bytes());
+    root_dir[16..18].copy_from_slice(&12u16.to_le_bytes());
+    root_dir[18] = 2;
+    root_dir[19] = 2;
+    root_dir[20..22].copy_from_slice(b"..");
+    root_dir[24..28].copy_from_slice(&3u32.to_le_bytes());
+    root_dir[28..30].copy_from_slice(&(BLOCK_SIZE as u16 - 24).to_le_bytes());
+    root_dir[30] = 9;
+    root_dir[31] = 1;
+    root_dir[32..41].copy_from_slice(b"large.bin");
+
+    let file_offset = FILE_BLOCK as usize * BLOCK_SIZE as usize;
+    data[file_offset..file_offset + marker.len()].copy_from_slice(marker);
+
+    std::fs::write(path, data)?;
+    Ok(LOGICAL_OFFSET)
+}
+
+static LVM_OPEN_READER_CALLS: AtomicUsize = AtomicUsize::new(0);
+
+struct ZeroEvidenceReader {
+    info: evidence_core::ReaderInfo,
+}
+
+impl ZeroEvidenceReader {
+    fn new(path: std::path::PathBuf) -> Self {
+        Self {
+            info: evidence_core::ReaderInfo {
+                path,
+                size: 4096,
+                kind: "test".to_string(),
+            },
+        }
+    }
+}
+
+impl Read for ZeroEvidenceReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        buf.fill(0);
+        Ok(buf.len())
+    }
+}
+
+impl Seek for ZeroEvidenceReader {
+    fn seek(&mut self, _pos: SeekFrom) -> std::io::Result<u64> {
+        Ok(0)
+    }
+}
+
+impl evidence_core::EvidenceReader for ZeroEvidenceReader {
+    fn info(&self) -> &evidence_core::ReaderInfo {
+        &self.info
+    }
 }
 
 fn write_fat32_raw_fixture(path: &std::path::Path) -> std::io::Result<()> {
@@ -474,6 +584,7 @@ fn raw_ntfs_mid_file_range_uses_ntfs_range_reader_without_materialize() {
             partition_index: 1,
             filesystem_kind: "NTFS".to_string(),
             offset: 0,
+            lvm_identity: None,
         }],
         entry_size: huge_size,
         entry_modified_at: None,
@@ -486,6 +597,69 @@ fn raw_ntfs_mid_file_range_uses_ntfs_range_reader_without_materialize() {
 
     assert_eq!(bytes, marker);
     assert_eq!(skip_reader_bytes_call_count(), 0);
+}
+
+#[test]
+fn raw_ext4_mid_file_range_uses_linux_range_reader_without_materialize() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let raw_path = dir.path().join("large_ext4.raw");
+    let marker = b"EXT4-VIEWER-RANGE";
+    let offset = write_large_ext4_raw_fixture(&raw_path, marker).unwrap();
+
+    let descriptor = PreviewDescriptor {
+        case_id: "case-raw-ext4-range".to_string(),
+        file_id: "ext4-file-range".to_string(),
+        source_kind: "raw".to_string(),
+        source_path: raw_path.display().to_string(),
+        partition_index: Some(0),
+        filesystem_kind: Some("Ext4".to_string()),
+        path: "[P0]/large.bin".to_string(),
+        mime: Some("application/octet-stream".to_string()),
+        size: offset + marker.len() as u64,
+        data_source_id: "ds-raw-ext4-range".to_string(),
+        partition_candidates: vec![PreviewPartitionCandidate {
+            partition_index: 0,
+            filesystem_kind: "Ext4".to_string(),
+            offset: 0,
+            lvm_identity: None,
+        }],
+        entry_size: offset + marker.len() as u64,
+        entry_modified_at: None,
+    };
+
+    reset_skip_reader_bytes_call_count();
+    let bytes = read_file_bytes_for_descriptor(&descriptor, offset, marker.len() as u32).unwrap();
+
+    assert_eq!(bytes, marker);
+    assert_eq!(skip_reader_bytes_call_count(), 0);
+}
+
+#[test]
+fn linux_lvm_candidate_reopens_one_reader_per_physical_volume() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let source_path = dir.path().join("lvm.raw");
+    let candidate = PreviewPartitionCandidate {
+        partition_index: 4,
+        filesystem_kind: "XFS".to_string(),
+        offset: 1_048_576,
+        lvm_identity: Some(PreviewLvmIdentity {
+            vg_uuid: "vg-uuid".to_string(),
+            vg_name: "vg".to_string(),
+            lv_uuid: "lv-uuid".to_string(),
+            lv_name: "root".to_string(),
+            pv_offsets: vec![1_048_576, 2_097_152],
+        }),
+    };
+
+    LVM_OPEN_READER_CALLS.store(0, Ordering::Relaxed);
+    let result = image_open::open_candidate_block_reader(&source_path, &candidate, &mut |path| {
+        LVM_OPEN_READER_CALLS.fetch_add(1, Ordering::Relaxed);
+        Ok(Box::new(ZeroEvidenceReader::new(path.to_path_buf()))
+            as Box<dyn evidence_core::EvidenceReader>)
+    });
+
+    assert!(result.is_err());
+    assert_eq!(LVM_OPEN_READER_CALLS.load(Ordering::Relaxed), 2);
 }
 
 #[test]
@@ -509,6 +683,7 @@ fn raw_fat_mid_file_range_uses_fat_range_reader_without_materialize() {
             partition_index: 0,
             filesystem_kind: "FAT".to_string(),
             offset: 0,
+            lvm_identity: None,
         }],
         entry_size: 1536,
         entry_modified_at: None,

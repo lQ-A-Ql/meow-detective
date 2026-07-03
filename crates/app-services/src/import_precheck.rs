@@ -9,7 +9,7 @@ use crate::{
 use domain::DataSourceKind;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
-use transport::commands::ImportDataSourceRequest;
+use transport::commands::{ImportDataSourceRequest, ImportTargetPlatformDto};
 
 /// Bounded import configuration prepared before the Tauri job orchestration starts.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,6 +18,8 @@ pub struct ImportSourceConfig {
     pub source_path_display: String,
     pub source_name: String,
     pub kind: DataSourceKind,
+    pub platform: Option<ImportTargetPlatformDto>,
+    pub profile: Option<String>,
     pub mode: ImportSourceMode,
 }
 
@@ -81,7 +83,10 @@ pub fn prepare_import_source_config(
     request
         .validate()
         .map_err(ImportSourceConfigError::InvalidRequest)?;
-    prepare_import_source_config_from_path(&request.source_path)
+    let mut config = prepare_import_source_config_from_path(&request.source_path)?;
+    config.platform = request.platform;
+    config.profile = request.profile.clone();
+    Ok(config)
 }
 
 pub fn prepare_import_source_config_from_path(
@@ -98,6 +103,8 @@ pub fn prepare_import_source_config_from_path(
         source_path_display: source_path.to_string(),
         source_name,
         kind,
+        platform: None,
+        profile: None,
         mode,
     })
 }
@@ -332,6 +339,8 @@ mod tests {
         std::fs::create_dir(&evidence_dir).unwrap();
         let request = ImportDataSourceRequest {
             source_path: evidence_dir.display().to_string(),
+            platform: None,
+            profile: None,
         };
 
         let config = prepare_import_source_config(&request).unwrap();
@@ -345,12 +354,32 @@ mod tests {
     }
 
     #[test]
+    fn import_source_config_preserves_optional_platform_profile_contract() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let evidence_dir = tmp.path().join("linux-logical");
+        std::fs::create_dir(&evidence_dir).unwrap();
+        let request = ImportDataSourceRequest {
+            source_path: evidence_dir.display().to_string(),
+            platform: Some(ImportTargetPlatformDto::Linux),
+            profile: Some("ubuntu-server".to_string()),
+        };
+
+        let config = prepare_import_source_config(&request).unwrap();
+
+        assert_eq!(config.platform, Some(ImportTargetPlatformDto::Linux));
+        assert_eq!(config.profile.as_deref(), Some("ubuntu-server"));
+        assert_eq!(config.source_path, evidence_dir);
+    }
+
+    #[test]
     fn import_source_config_classifies_raw_file() {
         let tmp = tempfile::TempDir::new().unwrap();
         let source = tmp.path().join("disk.raw");
         std::fs::write(&source, b"not an e01 image").unwrap();
         let request = ImportDataSourceRequest {
             source_path: source.display().to_string(),
+            platform: None,
+            profile: None,
         };
 
         let config = prepare_import_source_config(&request).unwrap();
@@ -375,6 +404,8 @@ mod tests {
         std::fs::write(&source, b"short").unwrap();
         let request = ImportDataSourceRequest {
             source_path: source.display().to_string(),
+            platform: None,
+            profile: None,
         };
 
         let config = prepare_import_source_config(&request).unwrap();
@@ -397,6 +428,8 @@ mod tests {
         std::fs::write(&source, b"EVF\x09\x0d\x0a\xff\x00payload").unwrap();
         let request = ImportDataSourceRequest {
             source_path: source.display().to_string(),
+            platform: None,
+            profile: None,
         };
 
         let config = prepare_import_source_config(&request).unwrap();
@@ -411,6 +444,8 @@ mod tests {
         let tmp = tempfile::TempDir::new().unwrap();
         let request = ImportDataSourceRequest {
             source_path: tmp.path().join("missing.raw").display().to_string(),
+            platform: None,
+            profile: None,
         };
 
         let error = prepare_import_source_config(&request).unwrap_err();
@@ -430,6 +465,8 @@ mod tests {
     fn import_source_config_preserves_request_validation_semantics() {
         let request = ImportDataSourceRequest {
             source_path: "CON".to_string(),
+            platform: None,
+            profile: None,
         };
 
         let error = prepare_import_source_config(&request).unwrap_err();

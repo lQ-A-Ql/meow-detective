@@ -413,6 +413,8 @@ describe('DataAnalysis page', () => {
         cronJobCount: 0,
         sudoEventCount: 0,
         totalCount: 0,
+        truncated: false,
+        coverageRatio: 0,
         journalEntries: [],
         loginRecords: [],
         bashCommands: [],

@@ -67,17 +67,30 @@ pub struct SegmentMeta {
 #[derive(Debug, Clone)]
 pub enum SegmentType {
     Linear,
-    Striped { stripe_count: u64 },
+    Striped {
+        stripe_count: u64,
+    },
     /// RAID 0 — stripe_count > 1, no redundancy
-    Raid0 { stripe_count: u64 },
+    Raid0 {
+        stripe_count: u64,
+    },
     /// RAID 1 — mirroring
-    Raid1 { mirror_count: u64 },
+    Raid1 {
+        mirror_count: u64,
+    },
     /// RAID 5 — distributed parity, single-disk fault tolerance
-    Raid5 { stripe_count: u64 },
+    Raid5 {
+        stripe_count: u64,
+    },
     /// RAID 6 — double distributed parity
-    Raid6 { stripe_count: u64 },
+    Raid6 {
+        stripe_count: u64,
+    },
     /// RAID 10 — striped mirrors
-    Raid10 { stripe_count: u64, mirror_count: u64 },
+    Raid10 {
+        stripe_count: u64,
+        mirror_count: u64,
+    },
     /// Thin-provisioned logical volume (requires thin pool metadata)
     ThinPool,
     /// Snapshot (CoW origin)
@@ -85,7 +98,9 @@ pub enum SegmentType {
     /// Cache pool (dm-cache)
     CachePool,
     /// Unknown or unsupported segment type
-    Unsupported { type_name: String },
+    Unsupported {
+        type_name: String,
+    },
 }
 
 // --- Public API ---
@@ -600,8 +615,9 @@ fn parse_metadata_text(text: &str) -> Result<VolumeGroup> {
                 .collect();
             let size_bytes: u64 = segs
                 .iter()
-                .map(|s| s.extent_count * extent_size_bytes)
-                .sum();
+                .map(|s| s.start_extent.saturating_add(s.extent_count) * extent_size_bytes)
+                .max()
+                .unwrap_or(0);
             LvMeta {
                 name: lv_raw.name.clone(),
                 uuid: lv_uuid,
@@ -638,18 +654,27 @@ fn parse_segment(seg: &SegmentRaw, _extent_size_bytes: u64) -> SegmentMeta {
     let seg_type = match (type_name.as_str(), stripe_count) {
         ("striped", 1) | ("linear", _) => SegmentType::Linear,
         ("striped", n) if n > 1 => SegmentType::Striped { stripe_count: n },
-        ("raid0", n) => SegmentType::Raid0 { stripe_count: n.max(2) },
-        ("raid1", _) => SegmentType::Raid1 { mirror_count: stripe_count.max(2) },
-        ("raid5", n) | ("raid5_la", n) | ("raid5_ls", n) | ("raid5_n", n)
-        | ("raid5_ra", n) | ("raid5_rs", n) => {
-            SegmentType::Raid5 { stripe_count: n.max(3) }
-        }
-        ("raid6", n) | ("raid6_nc", n) | ("raid6_nr", n) | ("raid6_zr", n) => {
-            SegmentType::Raid6 { stripe_count: n.max(4) }
-        }
-        ("raid10", n) | ("raid10_near", n) => {
-            SegmentType::Raid10 { stripe_count: n.max(2), mirror_count: 2 }
-        }
+        ("raid0", n) => SegmentType::Raid0 {
+            stripe_count: n.max(2),
+        },
+        ("raid1", _) => SegmentType::Raid1 {
+            mirror_count: stripe_count.max(2),
+        },
+        ("raid5", n)
+        | ("raid5_la", n)
+        | ("raid5_ls", n)
+        | ("raid5_n", n)
+        | ("raid5_ra", n)
+        | ("raid5_rs", n) => SegmentType::Raid5 {
+            stripe_count: n.max(3),
+        },
+        ("raid6", n) | ("raid6_nc", n) | ("raid6_nr", n) | ("raid6_zr", n) => SegmentType::Raid6 {
+            stripe_count: n.max(4),
+        },
+        ("raid10", n) | ("raid10_near", n) => SegmentType::Raid10 {
+            stripe_count: n.max(2),
+            mirror_count: 2,
+        },
         ("thin", _) | ("thin-pool", _) => SegmentType::ThinPool,
         ("snapshot", _) => SegmentType::Snapshot,
         ("cache", _) | ("cache-pool", _) | ("writecache", _) => SegmentType::CachePool,
@@ -694,7 +719,6 @@ fn parse_stripes_list(raw: &str) -> Vec<(String, u64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     fn build_minimal_metadata_text() -> String {
         let mut s = String::new();
@@ -779,6 +803,30 @@ mod tests {
     }
 
     #[test]
+    fn metadata_text_lv_size_uses_logical_end_extent() {
+        let text = concat!(
+            "test_vg {\n",
+            "    id = \"vg-size\"\n",
+            "    seqno = 1\n",
+            "    extent_size = 8192\n",
+            "    physical_volumes { pv0 { id = \"pv0\" pe_start = 2048 pe_count = 1000 } }\n",
+            "    logical_volumes {\n",
+            "        gapped {\n",
+            "            id = \"lv-gapped\"\n",
+            "            segment_count = 2\n",
+            "            segment1 { start_extent = 0 extent_count = 2 type = \"linear\" stripes = [\"pv0\", 0] }\n",
+            "            segment2 { start_extent = 5 extent_count = 2 type = \"linear\" stripes = [\"pv0\", 20] }\n",
+            "        }\n",
+            "    }\n",
+            "}\n",
+        );
+        let vg = parse_metadata_text(text).unwrap();
+        let extent_bytes = vg.extent_size * 512;
+
+        assert_eq!(vg.logical_volumes[0].size_bytes, 7 * extent_bytes);
+    }
+
+    #[test]
     fn parse_raid_segment_types() {
         let text = concat!(
             "test_vg {\n",
@@ -821,9 +869,15 @@ mod tests {
         assert_eq!(vg.logical_volumes.len(), 2);
 
         let raid5 = &vg.logical_volumes[0];
-        assert!(matches!(raid5.segments[0].seg_type, SegmentType::Raid5 { .. }));
+        assert!(matches!(
+            raid5.segments[0].seg_type,
+            SegmentType::Raid5 { .. }
+        ));
 
         let mirror = &vg.logical_volumes[1];
-        assert!(matches!(mirror.segments[0].seg_type, SegmentType::Raid1 { .. }));
+        assert!(matches!(
+            mirror.segments[0].seg_type,
+            SegmentType::Raid1 { .. }
+        ));
     }
 }

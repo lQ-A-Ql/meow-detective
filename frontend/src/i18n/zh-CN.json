@@ -52,6 +52,36 @@
       "viewTimeline": "在时间线中查看"
     }
   },
+  "importDataSource": {
+    "openButton": "导入数据源",
+    "title": "导入数据源",
+    "steps": {
+      "platform": "步骤 1/2：选择目标平台",
+      "form": "步骤 2/2：填写数据源信息"
+    },
+    "fields": {
+      "name": "数据源名称",
+      "path": "数据源路径"
+    },
+    "placeholders": {
+      "name": "例如：Win10-C盘",
+      "path": "镜像路径或逻辑目录路径"
+    },
+    "buttons": {
+      "next": "下一步",
+      "back": "上一步",
+      "file": "文件",
+      "directory": "目录",
+      "import": "导入",
+      "importing": "导入中..."
+    },
+    "errors": {
+      "pathRequired": "请选择数据源路径"
+    },
+    "dialogFilters": {
+      "dataSources": "数据源"
+    }
+  },
   "settings": {
     "title": "设置",
     "subtitle": "应用配置与数据目录",
@@ -365,7 +395,9 @@
       "commands": "Shell 命令",
       "packages": "软件包事件",
       "cron": "计划任务",
-      "sudo": "sudo 事件"
+      "sudo": "sudo 事件",
+      "coverage": "覆盖率",
+      "truncated": "截断"
     },
     "tabs": {
       "overview": "概览",
@@ -401,6 +433,11 @@
       "workingDirectory": "工作目录",
       "success": "成功"
     },
+    "values": {
+      "yes": "是",
+      "no": "否"
+    },
+    "fallbackWarning": "Linux 痕迹摘要暂不可用。",
     "empty": {
       "overview": {
         "title": "暂无 Linux 痕迹",

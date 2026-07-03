@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Upload } from 'lucide-react';
 import {
   useCreateCase,
@@ -22,6 +23,7 @@ import { CaseWelcomeForms } from './CaseActions';
 import { ImportDataSourceDialog } from '@/components/import/ImportDataSourceDialog';
 
 export function CaseHome() {
+  const { t } = useTranslation();
   const { data: currentCase } = useCurrentCase();
   const { data: metrics } = useCaseMetrics();
   const { data: dataSources } = useDataSources();
@@ -128,7 +130,7 @@ export function CaseHome() {
               onClick={() => setImportDialogOpen(true)}
               className="flex items-center gap-1.5 border border-[#111] px-3 py-1.5 text-[12px] hover:bg-[#111] hover:text-white transition-colors"
             >
-              <Upload size={12} /> 导入数据源
+              <Upload size={12} /> {t('importDataSource.openButton')}
             </button>
           </div>
         </div>
@@ -137,7 +139,7 @@ export function CaseHome() {
       <ImportDataSourceDialog
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
-        onImport={(sourcePath) => importMutation.mutate(sourcePath)}
+        onImport={(request) => importMutation.mutate(request)}
         importPending={importMutation.isPending}
       />
 

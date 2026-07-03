@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Monitor, Server, FolderOpen, Loader2 } from 'lucide-react';
 import * as tauriDialog from '@tauri-apps/plugin-dialog';
 import { Button } from '@/app/components/ui/button';
@@ -16,13 +17,14 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from '@/app/components/ui/toggle-group';
+import type { ImportDataSourceRequest } from '@/types/models';
 
 type Platform = 'windows' | 'linux';
 
 export interface ImportDataSourceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onImport: (sourcePath: string) => void;
+  onImport: (request: ImportDataSourceRequest) => void;
   importPending: boolean;
 }
 
@@ -32,6 +34,7 @@ export function ImportDataSourceDialog({
   onImport,
   importPending,
 }: ImportDataSourceDialogProps) {
+  const { t } = useTranslation();
   const [step, setStep] = useState<'platform' | 'form'>('platform');
   const [platform, setPlatform] = useState<Platform>('windows');
   const [name, setName] = useState('');
@@ -71,7 +74,7 @@ export function ImportDataSourceDialog({
         directory: false,
         multiple: false,
         filters: [
-          { name: 'Data Sources', extensions: ['e01', 'E01', 'dd', 'raw', 'img'] },
+          { name: t('importDataSource.dialogFilters.dataSources'), extensions: ['e01', 'E01', 'dd', 'raw', 'img'] },
         ],
       });
       if (selected) setPath(selected as string);
@@ -92,22 +95,26 @@ export function ImportDataSourceDialog({
   function handleImport() {
     const trimmedPath = path.trim();
     if (!trimmedPath) {
-      setError('请选择数据源路径');
+      setError(t('importDataSource.errors.pathRequired'));
       return;
     }
     setError('');
-    onImport(trimmedPath);
+    onImport({
+      sourcePath: trimmedPath,
+      platform,
+      profile: name.trim() || undefined,
+    });
   }
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>导入数据源</DialogTitle>
+          <DialogTitle>{t('importDataSource.title')}</DialogTitle>
           <DialogDescription>
             {step === 'platform'
-              ? '步骤 1/2：选择目标平台'
-              : '步骤 2/2：填写数据源信息'}
+              ? t('importDataSource.steps.platform')
+              : t('importDataSource.steps.form')}
           </DialogDescription>
         </DialogHeader>
 
@@ -138,39 +145,39 @@ export function ImportDataSourceDialog({
             </ToggleGroup>
             <div className="flex justify-end">
               <Button onClick={goNext} size="sm">
-                下一步
+                {t('importDataSource.buttons.next')}
               </Button>
             </div>
           </div>
         ) : (
           <div className="py-4 space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="ds-name">数据源名称</Label>
+              <Label htmlFor="ds-name">{t('importDataSource.fields.name')}</Label>
               <Input
                 id="ds-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="例如：Win10-C盘"
+                placeholder={t('importDataSource.placeholders.name')}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="ds-path">数据源路径</Label>
+              <Label htmlFor="ds-path">{t('importDataSource.fields.path')}</Label>
               <div className="flex gap-2">
                 <Input
                   id="ds-path"
                   value={path}
                   onChange={(e) => setPath(e.target.value)}
-                  placeholder="镜像路径或逻辑目录路径"
+                  placeholder={t('importDataSource.placeholders.path')}
                   className="flex-1"
                 />
                 <Button variant="outline" size="sm" onClick={pickFile} className="shrink-0 gap-1">
                   <FolderOpen size={12} />
-                  文件
+                  {t('importDataSource.buttons.file')}
                 </Button>
                 <Button variant="outline" size="sm" onClick={pickDirectory} className="shrink-0 gap-1">
                   <FolderOpen size={12} />
-                  目录
+                  {t('importDataSource.buttons.directory')}
                 </Button>
               </div>
               {error ? (
@@ -180,7 +187,7 @@ export function ImportDataSourceDialog({
 
             <DialogFooter className="gap-2">
               <Button variant="outline" size="sm" onClick={goBack}>
-                上一步
+                {t('importDataSource.buttons.back')}
               </Button>
               <Button
                 size="sm"
@@ -190,10 +197,10 @@ export function ImportDataSourceDialog({
                 {importPending ? (
                   <>
                     <Loader2 size={14} className="animate-spin" />
-                    导入中...
+                    {t('importDataSource.buttons.importing')}
                   </>
                 ) : (
-                  '导入'
+                  t('importDataSource.buttons.import')
                 )}
               </Button>
             </DialogFooter>

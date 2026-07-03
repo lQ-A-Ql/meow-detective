@@ -3,8 +3,9 @@
 use crate::file_service::viewer::{
     descriptor_file_entry, descriptor_for_file_with_cache, empty_hex_response, read_bounded,
     read_seekable_range, try_read_exfat_image_range_for_descriptor,
-    try_read_fat_image_range_for_descriptor, try_read_ntfs_image_range_for_descriptor,
-    PreviewDescriptor, PreviewReadContext, RangeContentReader, FILE_HANDLE_PREFIX,
+    try_read_fat_image_range_for_descriptor, try_read_linux_image_range_for_descriptor,
+    try_read_ntfs_image_range_for_descriptor, PreviewDescriptor, PreviewReadContext,
+    RangeContentReader, FILE_HANDLE_PREFIX,
 };
 use crate::file_service::FileServiceError;
 use domain::{EntryType, FileEntry, FileEntryId};
@@ -124,6 +125,11 @@ pub(crate) fn read_file_bytes_for_entry(
     )? {
         return Ok(bytes);
     }
+    if let Some(bytes) = crate::file_service::viewer::try_read_linux_image_range_for_entry(
+        conn, repo, entry, offset, length,
+    )? {
+        return Ok(bytes);
+    }
 
     match open_range_content_for_entry(conn, repo, entry)? {
         RangeContentReader::Seekable(mut reader) => {
@@ -158,6 +164,11 @@ pub fn read_file_bytes_for_descriptor(
     }
     if let Some(bytes) =
         try_read_exfat_image_range_for_descriptor(descriptor, offset, length, &mut reasons)?
+    {
+        return Ok(bytes);
+    }
+    if let Some(bytes) =
+        try_read_linux_image_range_for_descriptor(descriptor, offset, length, &mut reasons)?
     {
         return Ok(bytes);
     }

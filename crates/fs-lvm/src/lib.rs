@@ -94,13 +94,33 @@ pub struct LvInfo {
 /// Shared device reader type used across multiple LV readers.
 type SharedReader = std::sync::Arc<std::sync::Mutex<Box<dyn EvidenceReader>>>;
 
+/// Parsed PV label and reader paired with the partition offset supplied by the caller.
+struct DiscoveredPv {
+    reader: SharedReader,
+    label: LvmLabel,
+    pv_offset: u64,
+}
+
+fn lvm_uuid_matches(label_uuid: &str, metadata_uuid: &str) -> bool {
+    let label = normalize_lvm_uuid(label_uuid);
+    let metadata = normalize_lvm_uuid(metadata_uuid);
+    !label.is_empty() && label == metadata
+}
+
+fn normalize_lvm_uuid(uuid: &str) -> String {
+    uuid.trim().chars().filter(|ch| *ch != '-').collect()
+}
+
 /// An opened LVM2 volume group with parsed metadata and ready-to-open logical
 /// volumes.
 pub struct LvmPool {
     volume_group: VolumeGroup,
-    /// Shared device readers (Arc allows multiple LvReaders to share one PV reader).
+    /// Shared device readers in the same order as `volume_group.physical_volumes`.
     device_readers: Vec<SharedReader>,
-    pv_data_offsets: Vec<(String, u64)>, // (pv_name, data_area_start_byte)
+    /// Stable mapping from metadata PV name to the caller-supplied PV start offset.
+    pv_start_offsets: Vec<(String, u64)>,
+    /// Stable mapping from metadata PV name to absolute data-area start offset.
+    pv_data_offsets: Vec<(String, u64)>,
     logical_volumes: Vec<LvMeta>,
 }
 
@@ -123,64 +143,69 @@ impl LvmPool {
         }
 
         // Phase 1: Parse PV label from EACH PV, store reader+label+offset
-        let mut pv_entries: Vec<(SharedReader, LvmLabel, u64)> =
-            Vec::with_capacity(readers.len());
+        let mut pv_entries: Vec<DiscoveredPv> = Vec::with_capacity(readers.len());
         for (reader, pv_off) in readers.into_iter().zip(pv_offsets) {
             let cell = std::sync::Mutex::new(reader);
             let pv_label = {
                 let mut r = cell.lock().unwrap();
                 label::parse_pv_label(&mut *r, pv_off)?
             };
-            pv_entries.push((Arc::new(cell), pv_label, pv_off));
+            pv_entries.push(DiscoveredPv {
+                reader: Arc::new(cell),
+                label: pv_label,
+                pv_offset: pv_off,
+            });
         }
 
         // Phase 2: Parse VG metadata from the first PV
-        let (ref first_reader, ref first_label, first_offset) = pv_entries[0];
+        let first_entry = &pv_entries[0];
         let vg = {
-            let mda = first_label.metadata_areas.first().ok_or_else(|| {
+            let mda = first_entry.label.metadata_areas.first().ok_or_else(|| {
                 LvmError::MetadataParseError {
                     line: 0,
                     message: "no metadata area found on PV".to_string(),
                 }
             })?;
-            let mut r = first_reader.lock().unwrap();
-            metadata::parse_metadata(&mut *r, mda, first_offset)?
+            let mut r = first_entry.reader.lock().unwrap();
+            metadata::parse_metadata(&mut *r, mda, first_entry.pv_offset)?
         };
 
         // Phase 3: Match PV UUIDs from metadata to reader entries,
         // building absolute (reader-start) data area offsets for each PV.
-        let mut pv_data_offsets: Vec<(String, u64)> = Vec::new();
+        let mut device_readers = Vec::with_capacity(vg.physical_volumes.len());
+        let mut pv_start_offsets = Vec::with_capacity(vg.physical_volumes.len());
+        let mut pv_data_offsets = Vec::with_capacity(vg.physical_volumes.len());
         for pv_meta in &vg.physical_volumes {
             // Find matching reader by PV UUID
-            let matched = pv_entries.iter().find(|(_, lbl, _)| lbl.pv_uuid == pv_meta.uuid);
-            let data_offset = if let Some((_, lbl, pv_off)) = matched {
-                let da = lbl.data_areas.first().ok_or_else(|| {
-                    LvmError::MetadataParseError {
+            let matched = pv_entries
+                .iter()
+                .find(|entry| lvm_uuid_matches(&entry.label.pv_uuid, &pv_meta.uuid))
+                .ok_or_else(|| LvmError::MissingPhysicalVolumeReader {
+                    pv_name: pv_meta.name.clone(),
+                    pv_uuid: pv_meta.uuid.clone(),
+                })?;
+            let data_area =
+                matched
+                    .label
+                    .data_areas
+                    .first()
+                    .ok_or_else(|| LvmError::MetadataParseError {
                         line: 0,
                         message: format!("PV '{}' has no data area", pv_meta.name),
-                    }
-                })?;
-                pv_off + da.offset
-            } else {
-                // PV not among provided readers — use first reader's offset
-                // (single-disk case where all PVs are on the same device)
-                let da = first_label.data_areas.first().ok_or_else(|| {
-                    LvmError::MetadataParseError {
-                        line: 0,
-                        message: "no data area found on primary PV".to_string(),
-                    }
-                })?;
-                first_offset + da.offset
-            };
+                    })?;
+            let data_offset = matched.pv_offset + data_area.offset;
+
+            device_readers.push(matched.reader.clone());
+            pv_start_offsets.push((pv_meta.name.clone(), matched.pv_offset));
             pv_data_offsets.push((pv_meta.name.clone(), data_offset));
         }
 
         let logical_volumes = vg.logical_volumes.clone();
-        let device_readers: Vec<_> = pv_entries.into_iter().map(|(r, _, _)| r).collect();
 
         Ok(LvmPool {
             volume_group: vg,
             device_readers,
+            pv_start_offsets,
             pv_data_offsets,
             logical_volumes,
         })
@@ -201,7 +226,7 @@ impl LvmPool {
     /// Open a logical volume by index, returning a virtual block device
     /// that implements [`EvidenceReader`].
     ///
-    /// Uses `Rc`-shared device reader so multiple LVs can be opened
+    /// Uses Arc-shared device readers so multiple LVs can be opened
     /// concurrently from a single pool without consuming it.
     ///
     /// The returned reader can be passed to filesystem readers like
@@ -218,14 +243,25 @@ impl LvmPool {
         let lv = &self.logical_volumes[index];
         let extent_map = segment::build_extent_map(&self.volume_group, lv, &self.pv_data_offsets)?;
 
-        let shared_reader = self.device_readers[0].clone();
-
-        Ok(LvReader::new_shared(shared_reader, lv.name.clone(), lv.size_bytes, extent_map))
+        Ok(LvReader::new_shared(
+            self.device_readers.clone(),
+            lv.name.clone(),
+            lv.size_bytes,
+            extent_map,
+        ))
     }
 
     /// Access the parsed volume group metadata.
     pub fn volume_group(&self) -> &VgMeta {
         &self.volume_group
+    }
+
+    /// Return stable `(pv_name, pv_start_byte)` mappings in VG metadata PV order.
+    ///
+    /// These are the offsets that callers must pass back into [`LvmPool::discover`].
+    /// Segment mapping uses the separate internal data-area offsets.
+    pub fn physical_volume_offsets(&self) -> &[(String, u64)] {
+        &self.pv_start_offsets
     }
 }
 
@@ -339,6 +375,111 @@ mod tests {
         disk
     }
 
+    const SYNTHETIC_PV_SIZE: u64 = 2_097_152;
+    const SYNTHETIC_DATA_AREA_START: u64 = 2560;
+    const PV0_UUID: &str = "00000000000000000000000000000000";
+    const PV1_UUID: &str = "11111111111111111111111111111111";
+
+    fn build_synthetic_multi_pv_disks() -> (Vec<u8>, Vec<u8>) {
+        let metadata_text = format!(
+            r#"test_vg {{
+    id = "vg-multi-pv-1234"
+    seqno = 2
+    extent_size = 1
+
+    physical_volumes {{
+        pv0 {{
+            id = "{}"
+            device = "/dev/sda1"
+            pe_start = 0
+            pe_count = 16
+        }}
+        pv1 {{
+            id = "{}"
+            device = "/dev/sdb1"
+            pe_start = 0
+            pe_count = 16
+        }}
+    }}
+
+    logical_volumes {{
+        stripe {{
+            id = "lv-striped-uuid"
+            segment_count = 1
+            segment1 {{
+                start_extent = 0
+                extent_count = 2
+                type = "striped"
+                stripe_count = 2
+                stripes = ["pv0", 0, "pv1", 0]
+            }}
+        }}
+    }}
+}}
+"#,
+            PV0_UUID, PV1_UUID
+        );
+
+        let mut pv0 = vec![0u8; SYNTHETIC_PV_SIZE as usize];
+        let mut pv1 = vec![0u8; SYNTHETIC_PV_SIZE as usize];
+        write_synthetic_pv_label(&mut pv0, PV0_UUID);
+        write_synthetic_pv_label(&mut pv1, PV1_UUID);
+        write_synthetic_metadata(&mut pv0, &metadata_text);
+        write_synthetic_metadata(&mut pv1, &metadata_text);
+        (pv0, pv1)
+    }
+
+    fn write_synthetic_pv_label(disk: &mut [u8], pv_uuid: &str) {
+        let pv_size = disk.len() as u64;
+        let sec = &mut disk[512..1024];
+        sec[0..8].copy_from_slice(b"LABELONE");
+        sec[8..16].copy_from_slice(&1u64.to_le_bytes());
+        sec[20..24].copy_from_slice(&32u32.to_le_bytes());
+        sec[24..32].copy_from_slice(b"LVM2 001");
+
+        let uuid_padded = format!("{:32}", pv_uuid);
+        sec[32..64].copy_from_slice(&uuid_padded.as_bytes()[..32]);
+        sec[64..72].copy_from_slice(&pv_size.to_le_bytes());
+        sec[72..80].copy_from_slice(&SYNTHETIC_DATA_AREA_START.to_le_bytes());
+        sec[80..88].copy_from_slice(&(pv_size - SYNTHETIC_DATA_AREA_START).to_le_bytes());
+        sec[104..112].copy_from_slice(&1024u64.to_le_bytes());
+        sec[112..120].copy_from_slice(&(4 * 512u64).to_le_bytes());
+
+        let crc = crc::lvm_crc32(&sec[20..512]);
+        sec[16..20].copy_from_slice(&crc.to_le_bytes());
+    }
+
+    fn write_synthetic_metadata(disk: &mut [u8], metadata_text: &str) {
+        let text_bytes = metadata_text.as_bytes();
+        let text_offset = 1536usize;
+        let text_end = text_offset + text_bytes.len();
+        assert!(text_end <= disk.len());
+
+        {
+            let mda = &mut disk[1024..1536];
+            mda[4..20].copy_from_slice(b" LVM2 x[5A%r0N*>");
+            mda[20..24].copy_from_slice(&1u32.to_le_bytes());
+            mda[24..32].copy_from_slice(&1024u64.to_le_bytes());
+            mda[32..40].copy_from_slice(&1536u64.to_le_bytes());
+
+            let rl_base: usize = 40;
+            mda[rl_base..rl_base + 8].copy_from_slice(&512u64.to_le_bytes());
+        }
+
+        disk[text_offset..text_end].copy_from_slice(text_bytes);
+
+        let text_size = text_bytes.len() as u64;
+        let text_crc = crc::lvm_crc32(text_bytes);
+        {
+            let mda = &mut disk[1024..1536];
+            let rl_base: usize = 40;
+            mda[rl_base + 8..rl_base + 16].copy_from_slice(&text_size.to_le_bytes());
+            mda[rl_base + 16..rl_base + 20].copy_from_slice(&text_crc.to_le_bytes());
+            let mda_crc = crc::lvm_crc32(&mda[4..512]);
+            mda[0..4].copy_from_slice(&mda_crc.to_le_bytes());
+        }
+    }
+
     #[test]
     fn probe_detects_lvm() {
         let disk = build_synthetic_lvm_disk();
@@ -370,6 +511,53 @@ mod tests {
         assert_eq!(vols.len(), 1);
         assert_eq!(vols[0].name, "root");
         assert_eq!(vols[0].size_bytes, 5 * 8192 * 512); // 5 extents
+        assert_eq!(pool.physical_volume_offsets(), &[("pv0".to_string(), 0)]);
+    }
+
+    #[test]
+    fn discover_matches_label_uuid_to_dashed_metadata_uuid() {
+        let mut disk = build_synthetic_lvm_disk();
+        let metadata_text = r#"test_vg {
+    id = "vg-dashed-pv-uuid"
+    seqno = 2
+    extent_size = 8192
+
+    physical_volumes {
+        pv0 {
+            id = "abcdef12-3456-7890-abcd-ef1234567890"
+            device = "/dev/sda1"
+            pe_start = 0
+            pe_count = 10
+        }
+    }
+
+    logical_volumes {
+        root {
+            id = "lv-root-uuid-1234-5678"
+            segment_count = 1
+            segment1 {
+                start_extent = 0
+                extent_count = 5
+                type = "striped"
+                stripe_count = 1
+                stripes = ["pv0", 0]
+            }
+        }
+    }
+}
+"#;
+        write_synthetic_metadata(&mut disk, metadata_text);
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeDiskReader::new(disk));
+        let pool = LvmPool::discover(vec![reader], vec![0]).unwrap();
+
+        assert_eq!(pool.volume_group().physical_volumes[0].name, "pv0");
+        assert_eq!(
+            pool.volume_group().physical_volumes[0].uuid,
+            "abcdef12-3456-7890-abcd-ef1234567890"
+        );
+        assert_eq!(pool.physical_volume_offsets(), &[("pv0".to_string(), 0)]);
+        assert_eq!(pool.list_volumes().len(), 1);
     }
 
     #[test]
@@ -388,6 +576,49 @@ mod tests {
         let mut buf = vec![0u8; test_data.len()];
         lv.read_exact(&mut buf).unwrap();
         assert_eq!(&buf, test_data);
+    }
+
+    #[test]
+    fn discover_binds_readers_in_metadata_pv_order() {
+        let (mut pv0, mut pv1) = build_synthetic_multi_pv_disks();
+        let first_extent = SYNTHETIC_DATA_AREA_START as usize;
+        pv0[first_extent..first_extent + 512].fill(b'A');
+        pv1[first_extent..first_extent + 512].fill(b'B');
+
+        let pv1_reader: Box<dyn EvidenceReader> = Box::new(FakeDiskReader::new(pv1));
+        let pv0_reader: Box<dyn EvidenceReader> = Box::new(FakeDiskReader::new(pv0));
+        let pool = LvmPool::discover(vec![pv1_reader, pv0_reader], vec![0, 0]).unwrap();
+
+        assert_eq!(
+            pool.physical_volume_offsets(),
+            &[("pv0".to_string(), 0), ("pv1".to_string(), 0)]
+        );
+
+        let mut lv = pool.open_volume(0).unwrap();
+        let mut buf = vec![0u8; 1024];
+        lv.read_exact(&mut buf).unwrap();
+
+        assert!(buf[..512].iter().all(|b| *b == b'A'));
+        assert!(buf[512..].iter().all(|b| *b == b'B'));
+    }
+
+    #[test]
+    fn discover_missing_metadata_pv_reader_fails_closed() {
+        let (pv0, _pv1) = build_synthetic_multi_pv_disks();
+        let pv0_reader: Box<dyn EvidenceReader> = Box::new(FakeDiskReader::new(pv0));
+
+        let err = match LvmPool::discover(vec![pv0_reader], vec![0]) {
+            Ok(_) => panic!("expected missing PV reader error"),
+            Err(err) => err,
+        };
+
+        assert!(matches!(
+            err,
+            LvmError::MissingPhysicalVolumeReader {
+                pv_name,
+                pv_uuid
+            } if pv_name == "pv1" && pv_uuid == PV1_UUID
+        ));
     }
 
     // --- Test helpers ---

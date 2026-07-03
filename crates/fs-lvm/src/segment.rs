@@ -32,28 +32,26 @@ pub fn build_extent_map(
 ) -> Result<Vec<LvExtent>> {
     let extent_size_bytes = vg.extent_size * 512;
     let mut map = Vec::new();
-    let mut le_cursor: u64 = 0; // current logical extent index
 
     for segment in &lv.segments {
+        let base_le = segment.start_extent;
         match &segment.seg_type {
             SegmentType::Linear => {
                 map.extend(build_linear(
                     segment,
-                    le_cursor,
+                    base_le,
                     extent_size_bytes,
                     pv_data_offsets,
                 )?);
-                le_cursor += segment.extent_count;
             }
             SegmentType::Striped { stripe_count } => {
                 let stripe_extents = build_striped(
                     segment,
-                    le_cursor,
+                    base_le,
                     extent_size_bytes,
                     *stripe_count,
                     pv_data_offsets,
                 )?;
-                le_cursor += segment.extent_count;
                 map.extend(stripe_extents);
             }
             SegmentType::Raid0 { stripe_count } => {
@@ -61,12 +59,11 @@ pub fn build_extent_map(
                 // PVs with no parity. Use the same mapping as Striped.
                 let stripe_extents = build_striped(
                     segment,
-                    le_cursor,
+                    base_le,
                     extent_size_bytes,
                     *stripe_count,
                     pv_data_offsets,
                 )?;
-                le_cursor += segment.extent_count;
                 map.extend(stripe_extents);
             }
             SegmentType::Raid1 { .. } | SegmentType::Raid10 { .. } => {
@@ -83,10 +80,9 @@ pub fn build_extent_map(
                 let (pv_name, stripe_pe_start) = &segment.stripes[0];
                 let pv_index = find_pv_index(pv_data_offsets, pv_name)?;
                 let pv_data_start = pv_data_offsets[pv_index].1;
-                let logical_start = le_cursor * extent_size_bytes;
+                let logical_start = base_le * extent_size_bytes;
                 let physical_offset = pv_data_start + stripe_pe_start * extent_size_bytes;
                 let length = segment.extent_count * extent_size_bytes;
-                le_cursor += segment.extent_count;
                 map.push(LvExtent {
                     logical_start,
                     physical_offset,
@@ -119,6 +115,7 @@ pub fn build_extent_map(
         }
     }
 
+    map.sort_by_key(|extent| extent.logical_start);
     Ok(map)
 }
 
@@ -338,10 +335,7 @@ mod tests {
             }],
             size_bytes: 0,
         };
-        let pv_offsets = vec![
-            ("pv0".into(), 2048 * 512),
-            ("pv1".into(), 2048 * 512),
-        ];
+        let pv_offsets = vec![("pv0".into(), 2048 * 512), ("pv1".into(), 2048 * 512)];
 
         let map = build_extent_map(&vg, &lv, &pv_offsets).unwrap();
         assert_eq!(map.len(), 4, "4 logical extents → 4 extent entries");
@@ -349,11 +343,11 @@ mod tests {
         assert_eq!(map[0].logical_start, 0);
         assert_eq!(map[0].pv_index, 0);
         assert_eq!(map[0].physical_offset, 2048 * 512); // pv0 data start
-        // LE 1 → PV 1
+                                                        // LE 1 → PV 1
         assert_eq!(map[1].logical_start, 8192 * 512);
         assert_eq!(map[1].pv_index, 1);
         assert_eq!(map[1].physical_offset, 2048 * 512); // pv1 data start
-        // LE 2 → PV 0
+                                                        // LE 2 → PV 0
         assert_eq!(map[2].logical_start, 2 * 8192 * 512);
         assert_eq!(map[2].pv_index, 0);
         assert_eq!(map[2].physical_offset, 2048 * 512 + 8192 * 512);
@@ -378,7 +372,7 @@ mod tests {
                     stripes: vec![("pv0".into(), 0)],
                 },
                 SegmentMeta {
-                    start_extent: 0,
+                    start_extent: 5,
                     extent_count: 3,
                     seg_type: SegmentType::Linear,
                     stripes: vec![("pv0".into(), 128)],
@@ -397,6 +391,36 @@ mod tests {
         assert_eq!(map[1].logical_start, 5 * 8192 * 512);
         assert_eq!(map[1].physical_offset, 2048 * 512 + 128 * 8192 * 512);
         assert_eq!(map[1].length, 3 * 8192 * 512);
+    }
+
+    #[test]
+    fn non_contiguous_segment_uses_declared_start_extent() {
+        let vg = make_test_vg();
+        let lv = LvMeta {
+            name: "gapped".into(),
+            uuid: "lv-uuid".into(),
+            segments: vec![
+                SegmentMeta {
+                    start_extent: 0,
+                    extent_count: 2,
+                    seg_type: SegmentType::Linear,
+                    stripes: vec![("pv0".into(), 0)],
+                },
+                SegmentMeta {
+                    start_extent: 5,
+                    extent_count: 2,
+                    seg_type: SegmentType::Linear,
+                    stripes: vec![("pv0".into(), 100)],
+                },
+            ],
+            size_bytes: 0,
+        };
+        let pv_offsets = vec![("pv0".into(), 2048 * 512)];
+
+        let map = build_extent_map(&vg, &lv, &pv_offsets).unwrap();
+        assert_eq!(map.len(), 2);
+        assert_eq!(map[0].logical_start, 0);
+        assert_eq!(map[1].logical_start, 5 * 8192 * 512);
     }
 
     #[test]
@@ -426,8 +450,18 @@ mod tests {
             extent_size: 4096,
             seqno: 1,
             physical_volumes: vec![
-                PvMeta { name: "pv0".into(), uuid: "pv0-uuid".into(), pe_start: 2048, pe_count: 1000 },
-                PvMeta { name: "pv1".into(), uuid: "pv1-uuid".into(), pe_start: 2048, pe_count: 1000 },
+                PvMeta {
+                    name: "pv0".into(),
+                    uuid: "pv0-uuid".into(),
+                    pe_start: 2048,
+                    pe_count: 1000,
+                },
+                PvMeta {
+                    name: "pv1".into(),
+                    uuid: "pv1-uuid".into(),
+                    pe_start: 2048,
+                    pe_count: 1000,
+                },
             ],
             logical_volumes: Vec::new(),
         };

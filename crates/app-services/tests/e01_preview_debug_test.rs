@@ -80,6 +80,11 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                             .to_string(),
                         ),
                         unlock_hint: None,
+                        lvm_vg_uuid: None,
+                        lvm_vg_name: None,
+                        lvm_lv_uuid: None,
+                        lvm_lv_name: None,
+                        lvm_pv_offsets_json: None,
                     }
                 })
                 .collect();

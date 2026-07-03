@@ -39,6 +39,10 @@ pub enum LvmError {
     #[error("logical volume index {index} out of range (0..{count})")]
     LvIndexOutOfRange { index: usize, count: usize },
 
+    /// Volume group metadata references a PV that does not have a supplied reader.
+    #[error("missing reader for physical volume '{pv_name}' ({pv_uuid})")]
+    MissingPhysicalVolumeReader { pv_name: String, pv_uuid: String },
+
     /// I/O error from underlying reader.
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),

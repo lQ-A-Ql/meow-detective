@@ -50,17 +50,28 @@ pub enum ImageFilesystemSource {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LvmLogicalVolumeIdentity {
+    pub vg_uuid: String,
+    pub vg_name: String,
+    pub lv_uuid: String,
+    pub lv_name: String,
+    pub pv_offsets: Vec<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImageFilesystemCandidate {
     pub partition_index: Option<usize>,
     pub partition_name: Option<String>,
     pub kind: ImageFilesystemKind,
     pub offset: u64,
     pub source: ImageFilesystemSource,
+    pub lvm_identity: Option<LvmLogicalVolumeIdentity>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PartitionStatus {
     Supported,
+    Expanded,
     EncryptedBitLocker,
     Unsupported,
 }
@@ -75,6 +86,7 @@ pub struct PartitionRecord {
     pub length: u64,
     pub status: PartitionStatus,
     pub filesystem: Option<ImageFilesystemKind>,
+    pub lvm_identity: Option<LvmLogicalVolumeIdentity>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -226,6 +238,7 @@ where
             kind,
             offset: 0,
             source: ImageFilesystemSource::DirectVolume,
+            lvm_identity: None,
         });
         return Ok(ImageFilesystemProbe {
             candidates,
@@ -247,6 +260,7 @@ where
                     | ImageFilesystemKind::LvmPool => PartitionStatus::Supported,
                 },
                 filesystem: Some(kind),
+                lvm_identity: None,
             }],
             warnings,
         });
@@ -354,6 +368,7 @@ where
                 length,
                 status,
                 filesystem: fs_kind,
+                lvm_identity: None,
             });
         }
     }
@@ -416,6 +431,7 @@ fn push_candidate(
         kind,
         offset,
         source,
+        lvm_identity: None,
     });
 }
 
@@ -527,6 +543,7 @@ where
                     kind,
                     offset,
                     source: ImageFilesystemSource::GptPartition,
+                    lvm_identity: None,
                 });
             }
         }
@@ -576,6 +593,7 @@ where
             length,
             status,
             filesystem: fs_kind,
+            lvm_identity: None,
         });
     }
 
@@ -612,34 +630,70 @@ pub fn expand_lvm_pool_candidates(
 
     let mut new_candidates: Vec<ImageFilesystemCandidate> = Vec::new();
     let mut remove_indices: Vec<usize> = Vec::new();
+    let mut expanded_vgs = std::collections::HashSet::new();
 
-    for (idx, candidate) in &lvm_indices {
-        // Open reader for this partition
-        let open_result: std::io::Result<Box<dyn evidence_core::EvidenceReader>> = match source_kind {
-            domain::DataSourceKind::E01 => {
-                image_e01::E01Reader::open(source_path)
-                    .map(|r| Box::new(r) as Box<dyn evidence_core::EvidenceReader>)
+    for (_, candidate) in &lvm_indices {
+        let pv_offsets = ordered_lvm_pv_offsets(candidate.offset, &lvm_indices);
+        let mut readers = Vec::with_capacity(pv_offsets.len());
+        for pv_offset in &pv_offsets {
+            match open_evidence_reader(source_path, source_kind) {
+                Ok(reader) => readers.push(reader),
+                Err(e) => {
+                    probe.warnings.push(format!(
+                        "LVM expand: cannot open reader for PV offset {}: {}",
+                        pv_offset, e
+                    ));
+                    tracing::warn!(
+                        "LVM expand: cannot open reader at offset {}: {}",
+                        pv_offset,
+                        e
+                    );
+                    readers.clear();
+                    break;
+                }
             }
-            _ => evidence_core::RawImageReader::open(source_path)
-                .map(|r| Box::new(r) as Box<dyn evidence_core::EvidenceReader>),
-        };
-
-        let reader = match open_result {
-            Ok(r) => r,
-            Err(e) => {
-                tracing::warn!("LVM expand: cannot open reader at offset {}: {}", candidate.offset, e);
-                continue;
-            }
-        };
+        }
+        if readers.is_empty() {
+            continue;
+        }
 
         // Discover the volume group
-        let pool = match fs_lvm::LvmPool::discover(vec![reader], vec![candidate.offset]) {
+        let pool = match fs_lvm::LvmPool::discover(readers, pv_offsets.clone()) {
             Ok(p) => p,
             Err(e) => {
-                tracing::warn!("LVM expand: discovery failed at offset {}: {}", candidate.offset, e);
+                probe.warnings.push(format!(
+                    "LVM expand: discovery failed for PV offset {}: {}",
+                    candidate.offset, e
+                ));
+                tracing::warn!(
+                    "LVM expand: discovery failed at offset {}: {}",
+                    candidate.offset,
+                    e
+                );
                 continue;
             }
         };
+
+        let vg_pv_offsets = pool
+            .physical_volume_offsets()
+            .iter()
+            .map(|(_, offset)| *offset)
+            .collect::<Vec<_>>();
+        let expanded_offsets = if vg_pv_offsets.is_empty() {
+            vec![candidate.offset]
+        } else {
+            vg_pv_offsets
+        };
+
+        let vg = pool.volume_group();
+        let vg_key = if vg.id.is_empty() {
+            vg.name.clone()
+        } else {
+            vg.id.clone()
+        };
+        if !expanded_vgs.insert(vg_key) {
+            continue;
+        }
 
         let lv_list = pool.list_volumes();
         tracing::info!(
@@ -649,10 +703,15 @@ pub fn expand_lvm_pool_candidates(
         );
 
         // Open each LV from the shared pool (no re-open needed)
+        let candidates_before = new_candidates.len();
         for (lv_idx, lv_info) in lv_list.iter().enumerate() {
             let mut lv_reader = match pool.open_volume(lv_idx) {
                 Ok(r) => r,
                 Err(e) => {
+                    probe.warnings.push(format!(
+                        "LVM expand: open logical volume '{}/{}' failed: {}",
+                        vg.name, lv_info.name, e
+                    ));
                     tracing::warn!("LVM: open_volume '{}' failed: {}", lv_info.name, e);
                     continue;
                 }
@@ -663,30 +722,58 @@ pub fn expand_lvm_pool_candidates(
                 Ok(Some(fs_kind)) if !matches!(fs_kind, ImageFilesystemKind::LvmPool) => {
                     let lv_name = format!(
                         "{}/{}",
-                        candidate.partition_name.as_deref().unwrap_or("LVM"),
+                        if vg.name.is_empty() {
+                            candidate.partition_name.as_deref().unwrap_or("LVM")
+                        } else {
+                            vg.name.as_str()
+                        },
                         lv_info.name
                     );
+                    let lvm_identity = LvmLogicalVolumeIdentity {
+                        vg_uuid: vg.id.clone(),
+                        vg_name: vg.name.clone(),
+                        lv_uuid: lv_info.uuid.clone(),
+                        lv_name: lv_info.name.clone(),
+                        pv_offsets: expanded_offsets.clone(),
+                    };
                     new_candidates.push(ImageFilesystemCandidate {
                         partition_index: candidate.partition_index,
                         partition_name: Some(lv_name),
                         kind: fs_kind,
                         offset: candidate.offset, // PV partition offset for LVM re-open
                         source: ImageFilesystemSource::LvmLogicalVolume,
+                        lvm_identity: Some(lvm_identity),
                     });
                 }
                 Ok(_) => {
+                    probe.warnings.push(format!(
+                        "LVM expand: logical volume '{}/{}' has no supported filesystem",
+                        vg.name, lv_info.name
+                    ));
                     tracing::debug!(
                         "LVM LV '{}': no supported filesystem detected, skipping",
                         lv_info.name
                     );
                 }
                 Err(e) => {
+                    probe.warnings.push(format!(
+                        "LVM expand: filesystem detection failed for logical volume '{}/{}': {}",
+                        vg.name, lv_info.name, e
+                    ));
                     tracing::debug!("LVM LV '{}': FS detection error: {}", lv_info.name, e);
                 }
             }
         }
 
-        remove_indices.push(*idx);
+        if new_candidates.len() > candidates_before {
+            mark_lvm_partitions_expanded(probe, &expanded_offsets);
+            remove_lvm_candidates_for_offsets(&mut remove_indices, &lvm_indices, &expanded_offsets);
+        } else {
+            probe.warnings.push(format!(
+                "LVM expand: volume group '{}' produced no supported logical volume candidates",
+                vg.name
+            ));
+        }
     }
 
     // Remove original LvmPool candidates (descending index order)
@@ -713,10 +800,58 @@ pub fn expand_lvm_pool_candidates(
             length: 0,
             status: PartitionStatus::Supported,
             filesystem: Some(lv_candidate.kind),
+            lvm_identity: lv_candidate.lvm_identity.clone(),
         });
     }
 
     probe.candidates.extend(new_candidates);
+}
+
+fn ordered_lvm_pv_offsets(
+    seed_offset: u64,
+    lvm_indices: &[(usize, ImageFilesystemCandidate)],
+) -> Vec<u64> {
+    let mut offsets = vec![seed_offset];
+    for (_, candidate) in lvm_indices {
+        if candidate.offset != seed_offset && !offsets.contains(&candidate.offset) {
+            offsets.push(candidate.offset);
+        }
+    }
+    offsets
+}
+
+fn open_evidence_reader(
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+) -> std::io::Result<Box<dyn evidence_core::EvidenceReader>> {
+    match source_kind {
+        domain::DataSourceKind::E01 => image_e01::E01Reader::open(source_path)
+            .map(|r| Box::new(r) as Box<dyn evidence_core::EvidenceReader>),
+        _ => evidence_core::RawImageReader::open(source_path)
+            .map(|r| Box::new(r) as Box<dyn evidence_core::EvidenceReader>),
+    }
+}
+
+fn remove_lvm_candidates_for_offsets(
+    remove_indices: &mut Vec<usize>,
+    lvm_indices: &[(usize, ImageFilesystemCandidate)],
+    pv_offsets: &[u64],
+) {
+    for (idx, candidate) in lvm_indices {
+        if pv_offsets.contains(&candidate.offset) && !remove_indices.contains(idx) {
+            remove_indices.push(*idx);
+        }
+    }
+}
+
+fn mark_lvm_partitions_expanded(probe: &mut ImageFilesystemProbe, pv_offsets: &[u64]) {
+    for partition in &mut probe.partitions {
+        if pv_offsets.contains(&partition.offset)
+            && matches!(partition.filesystem, Some(ImageFilesystemKind::LvmPool))
+        {
+            partition.status = PartitionStatus::Expanded;
+        }
+    }
 }
 
 /// Assign effective partition indices for candidates where `partition_index` is `None`
@@ -1030,6 +1165,7 @@ mod tests {
             kind: ImageFilesystemKind::Ntfs,
             offset,
             source: ImageFilesystemSource::MbrPartition,
+            lvm_identity: None,
         }
     }
 

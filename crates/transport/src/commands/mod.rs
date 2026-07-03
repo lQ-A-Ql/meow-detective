@@ -51,12 +51,34 @@ impl OpenCaseRequest {
 #[serde(rename_all = "camelCase")]
 pub struct ImportDataSourceRequest {
     pub source_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub platform: Option<ImportTargetPlatformDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
 }
 
 impl ImportDataSourceRequest {
     pub fn validate(&self) -> Result<(), String> {
-        validate_import_source_path(&self.source_path)
+        validate_import_source_path(&self.source_path)?;
+        if let Some(profile) = &self.profile {
+            if profile.trim().is_empty() {
+                return Err("profile must not be empty when provided".to_string());
+            }
+            if profile.contains('\0') {
+                return Err("profile contains a null byte".to_string());
+            }
+        }
+        Ok(())
     }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum ImportTargetPlatformDto {
+    Windows,
+    Linux,
+    Macos,
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -655,6 +677,8 @@ mod tests {
     fn import_source_rejects_reserved_device_names() {
         let request = ImportDataSourceRequest {
             source_path: "CON".to_string(),
+            platform: None,
+            profile: None,
         };
 
         assert!(request.validate().is_err());
@@ -675,6 +699,8 @@ mod tests {
     fn import_source_rejects_windows_device_paths() {
         let request = ImportDataSourceRequest {
             source_path: r"\\.\PhysicalDrive0".to_string(),
+            platform: None,
+            profile: None,
         };
 
         assert!(request.validate().is_err());
@@ -684,9 +710,28 @@ mod tests {
     fn import_source_rejects_extended_length_paths() {
         let request = ImportDataSourceRequest {
             source_path: r"\\?\C:\evidence.E01".to_string(),
+            platform: None,
+            profile: None,
         };
 
         assert!(request.validate().is_err());
+    }
+
+    #[test]
+    fn import_source_accepts_optional_platform_profile_contract() {
+        let request: ImportDataSourceRequest =
+            serde_json::from_str(r#"{"sourcePath":"C:/evidence/linux.raw","platform":"linux","profile":"ubuntu-server"}"#)
+                .unwrap();
+
+        assert_eq!(request.platform, Some(ImportTargetPlatformDto::Linux));
+        assert_eq!(request.profile.as_deref(), Some("ubuntu-server"));
+        assert!(request.validate().is_ok());
+
+        let value = serde_json::to_value(request).unwrap();
+        assert_eq!(value["sourcePath"], "C:/evidence/linux.raw");
+        assert_eq!(value["platform"], "linux");
+        assert_eq!(value["profile"], "ubuntu-server");
+        assert!(value.get("source_path").is_none());
     }
 
     #[test]

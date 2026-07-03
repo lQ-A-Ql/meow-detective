@@ -806,7 +806,10 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
 
     eprintln!("=== Before LVM expansion ===");
     for c in &probe.candidates {
-        eprintln!("  kind={:?} name={:?} offset={}", c.kind, c.partition_name, c.offset);
+        eprintln!(
+            "  kind={:?} name={:?} offset={}",
+            c.kind, c.partition_name, c.offset
+        );
     }
 
     // Try direct LVM crate access first (bypass expand helper)
@@ -827,11 +830,18 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
     let mut label_sec = [0u8; 512];
     e01_diag.read_exact(&mut label_sec).unwrap();
     eprintln!("  magic[0..8]: {:?}", std::str::from_utf8(&label_sec[0..8]));
-    eprintln!("  type[24..32]: {:?}", std::str::from_utf8(&label_sec[24..32]));
+    eprintln!(
+        "  type[24..32]: {:?}",
+        std::str::from_utf8(&label_sec[24..32])
+    );
     let data_off = u32::from_le_bytes([label_sec[20], label_sec[21], label_sec[22], label_sec[23]]);
     eprintln!("  data_offset: {}", data_off);
     // Show PV header area
-    eprintln!("  PV header bytes at {}: {:02X?}", data_off, &label_sec[data_off as usize..(data_off as usize + 72).min(512)]);
+    eprintln!(
+        "  PV header bytes at {}: {:02X?}",
+        data_off,
+        &label_sec[data_off as usize..(data_off as usize + 72).min(512)]
+    );
     // Dump full sector from byte 32 onwards
     eprintln!("  Full sector bytes 32..200:");
     for chunk in label_sec[32..200].chunks(16) {
@@ -842,11 +852,18 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
     eprintln!("  Descriptors at offset {}:", desc_start);
     for i in 0..8 {
         let off = desc_start + i * 16;
-        if off + 16 > 512 { break; }
-        let d_off = u64::from_le_bytes(label_sec[off..off+8].try_into().unwrap());
-        let d_size = u64::from_le_bytes(label_sec[off+8..off+16].try_into().unwrap());
-        eprintln!("    desc[{}] at offset {}: offset={} size={}", i, off, d_off, d_size);
-        if d_off == 0 && d_size == 0 { eprintln!("    → terminator"); }
+        if off + 16 > 512 {
+            break;
+        }
+        let d_off = u64::from_le_bytes(label_sec[off..off + 8].try_into().unwrap());
+        let d_size = u64::from_le_bytes(label_sec[off + 8..off + 16].try_into().unwrap());
+        eprintln!(
+            "    desc[{}] at offset {}: offset={} size={}",
+            i, off, d_off, d_size
+        );
+        if d_off == 0 && d_size == 0 {
+            eprintln!("    → terminator");
+        }
     }
 
     // Try full discovery
@@ -858,13 +875,18 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
             let lvs = pool.list_volumes();
             eprintln!("  LVs: {}", lvs.len());
             for lv in &lvs {
-                eprintln!("    LV: name='{}' uuid={} size={}", lv.name, lv.uuid, lv.size_bytes);
+                eprintln!(
+                    "    LV: name='{}' uuid={} size={}",
+                    lv.name, lv.uuid, lv.size_bytes
+                );
                 // Show extent mapping for diagnosis
                 let vg = pool.volume_group();
                 if let Some(lv_meta) = vg.logical_volumes.iter().find(|l| l.name == lv.name) {
                     for (si, seg) in lv_meta.segments.iter().enumerate() {
-                        eprintln!("      seg[{}]: type={:?} start_ext={} count={} stripes={:?}",
-                            si, seg.seg_type, seg.start_extent, seg.extent_count, seg.stripes);
+                        eprintln!(
+                            "      seg[{}]: type={:?} start_ext={} count={} stripes={:?}",
+                            si, seg.seg_type, seg.start_extent, seg.extent_count, seg.stripes
+                        );
                     }
                     // Build extent map to see resolved mapping
                 }
@@ -876,64 +898,125 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
                     let mut sb = [0u8; 512];
                     tmp_lv.read_exact(&mut sb).unwrap();
                     let inode_size = u16::from_be_bytes([sb[0x68], sb[0x69]]);
-                    let block_size = u32::from_be_bytes([sb[0x04], sb[0x05], sb[0x06], sb[0x07]]) as u64;
+                    let block_size =
+                        u32::from_be_bytes([sb[0x04], sb[0x05], sb[0x06], sb[0x07]]) as u64;
                     let root_ino = u64::from_be_bytes(sb[0x38..0x40].try_into().unwrap());
                     let agblklog = sb[0x7C];
                     let inopblog = sb[0x7B];
-                    let ag_blocks = u32::from_be_bytes([sb[0x54], sb[0x55], sb[0x56], sb[0x57]]) as u64;
+                    let ag_blocks =
+                        u32::from_be_bytes([sb[0x54], sb[0x55], sb[0x56], sb[0x57]]) as u64;
                     let shift = agblklog as u64 + inopblog as u64;
-                    let fs_block = (root_ino >> shift) * ag_blocks + ((root_ino & ((1<<shift)-1)) >> inopblog);
-                    let ino_off = fs_block * block_size + (root_ino & ((1<<inopblog)-1)) * inode_size as u64;
+                    let fs_block = (root_ino >> shift) * ag_blocks
+                        + ((root_ino & ((1 << shift) - 1)) >> inopblog);
+                    let ino_off = fs_block * block_size
+                        + (root_ino & ((1 << inopblog) - 1)) * inode_size as u64;
                     tmp_lv.seek(SeekFrom::Start(ino_off)).unwrap();
                     let mut ino_buf = vec![0u8; inode_size as usize];
                     tmp_lv.read_exact(&mut ino_buf).unwrap();
-                    let ver = ino_buf[0x04]; let fmt = ino_buf[0x05]; let fk = ino_buf[0x52];
-                    let next = u32::from_be_bytes([ino_buf[0x4C],ino_buf[0x4D],ino_buf[0x4E],ino_buf[0x4F]]);
+                    let ver = ino_buf[0x04];
+                    let fmt = ino_buf[0x05];
+                    let fk = ino_buf[0x52];
+                    let next = u32::from_be_bytes([
+                        ino_buf[0x4C],
+                        ino_buf[0x4D],
+                        ino_buf[0x4E],
+                        ino_buf[0x4F],
+                    ]);
                     let core: usize = if ver >= 3 { 176 } else { 96 };
-                    let df = if fk == 0 { &ino_buf[core..] } else { &ino_buf[core..][..fk as usize] };
-                    eprintln!("      root inode: ver={} fmt={} forkoff={} nextents={} df_len={}", ver, fmt, fk, next, df.len());
-                    eprintln!("      df[0..{}]: {:02X?}", df.len().min(60), &df[..df.len().min(60)]);
+                    let df = if fk == 0 {
+                        &ino_buf[core..]
+                    } else {
+                        &ino_buf[core..][..fk as usize]
+                    };
+                    eprintln!(
+                        "      root inode: ver={} fmt={} forkoff={} nextents={} df_len={}",
+                        ver,
+                        fmt,
+                        fk,
+                        next,
+                        df.len()
+                    );
+                    eprintln!(
+                        "      df[0..{}]: {:02X?}",
+                        df.len().min(60),
+                        &df[..df.len().min(60)]
+                    );
                     eprintln!("      dir: count={} i8count={}", df[0], df[1]);
                     // Dump forkoff byte and surrounding context
                     eprintln!("      ino_buf[0x50..0x55]: {:02X?}", &ino_buf[0x50..0x55]);
-                    eprintln!("      literal[0..40] (from byte 176): {:02X?}", &ino_buf[176..216]);
+                    eprintln!(
+                        "      literal[0..40] (from byte 176): {:02X?}",
+                        &ino_buf[176..216]
+                    );
                     // Check residual data in full literal area (recovery attempt)
                     let df_full = &ino_buf[176..];
                     let non_zero = df_full.iter().filter(|&&b| b != 0).count();
-                    eprintln!("      literal area: {} bytes, {} non-zero", df_full.len(), non_zero);
+                    eprintln!(
+                        "      literal area: {} bytes, {} non-zero",
+                        df_full.len(),
+                        non_zero
+                    );
                     if non_zero > 0 {
-                        eprintln!("      literal first 80 non-zero bytes: {:02X?}",
-                            &df_full[..80.min(df_full.len())]);
+                        eprintln!(
+                            "      literal first 80 non-zero bytes: {:02X?}",
+                            &df_full[..80.min(df_full.len())]
+                        );
                     }
                     // Manually find entries using the full literal area
                     eprintln!("      Full literal parse (no ftype, from byte 176):");
                     let mut pos = 6usize; // skip count+i8count+parent4
                     for i in 0..25 {
-                        if pos + 3 > df_full.len() { eprintln!("        BREAK: pos+3 > len"); break; }
+                        if pos + 3 > df_full.len() {
+                            eprintln!("        BREAK: pos+3 > len");
+                            break;
+                        }
                         let nl = df_full[pos] as usize;
-                        if nl == 0 { eprintln!("        BREAK: namelen=0 at pos {}", pos); break; }
+                        if nl == 0 {
+                            eprintln!("        BREAK: namelen=0 at pos {}", pos);
+                            break;
+                        }
                         let name_end = pos + 3 + nl;
-                        if name_end + 4 > df_full.len() { eprintln!("        BREAK: name_end+4 > len at i={}", i); break; }
-                        let name = std::str::from_utf8(&df_full[pos+3..name_end]).unwrap_or("?");
-                        let ino = u32::from_be_bytes([df_full[name_end], df_full[name_end+1], df_full[name_end+2], df_full[name_end+3]]);
+                        if name_end + 4 > df_full.len() {
+                            eprintln!("        BREAK: name_end+4 > len at i={}", i);
+                            break;
+                        }
+                        let name = std::str::from_utf8(&df_full[pos + 3..name_end]).unwrap_or("?");
+                        let ino = u32::from_be_bytes([
+                            df_full[name_end],
+                            df_full[name_end + 1],
+                            df_full[name_end + 2],
+                            df_full[name_end + 3],
+                        ]);
                         eprintln!("        [{}] '{}' ino={}", i, name, ino);
                         pos = name_end + 4;
                     }
                     let cnt = df[0] as usize;
                     // Check superblock features_incompat for ftype flag
                     let sb_fincompat = u32::from_be_bytes([sb[0x80], sb[0x81], sb[0x82], sb[0x83]]);
-                    eprintln!("      sb_features_incompat=0x{:08X} (FTYPE bit={})",
-                        sb_fincompat, sb_fincompat & 0x02 != 0);
+                    eprintln!(
+                        "      sb_features_incompat=0x{:08X} (FTYPE bit={})",
+                        sb_fincompat,
+                        sb_fincompat & 0x02 != 0
+                    );
                     // Try manual parse WITHOUT ftype
                     let mut pos = 6usize;
                     eprintln!("      Manual parse (no ftype):");
                     for i in 0..cnt.min(10) {
-                        if pos + 3 > df.len() { break; }
+                        if pos + 3 > df.len() {
+                            break;
+                        }
                         let nl = df[pos] as usize;
                         let name_end = pos + 3 + nl;
-                        if name_end + 4 > df.len() { break; }
-                        let name = std::str::from_utf8(&df[pos+3..name_end]).unwrap_or("?");
-                        let ino = u32::from_be_bytes([df[name_end], df[name_end+1], df[name_end+2], df[name_end+3]]);
+                        if name_end + 4 > df.len() {
+                            break;
+                        }
+                        let name = std::str::from_utf8(&df[pos + 3..name_end]).unwrap_or("?");
+                        let ino = u32::from_be_bytes([
+                            df[name_end],
+                            df[name_end + 1],
+                            df[name_end + 2],
+                            df[name_end + 3],
+                        ]);
                         eprintln!("        [{}] '{}' ino={}", i, name, ino);
                         pos = name_end + 4;
                     }
@@ -957,27 +1040,34 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
                         raw_lv.seek(SeekFrom::Start(8_590_450_688)).unwrap();
                         let mut test = [0u8; 16];
                         raw_lv.read_exact(&mut test).unwrap();
-                        eprintln!("      Data at LV offset 8.6GB (etc extent[0]): {:02X?}", test);
-                        let block_size = u32::from_be_bytes([sb[0x04],sb[0x05],sb[0x06],sb[0x07]]) as u64;
-                        let inode_size = u16::from_be_bytes([sb[0x68],sb[0x69]]) as u64;
+                        eprintln!(
+                            "      Data at LV offset 8.6GB (etc extent[0]): {:02X?}",
+                            test
+                        );
+                        let block_size =
+                            u32::from_be_bytes([sb[0x04], sb[0x05], sb[0x06], sb[0x07]]) as u64;
+                        let inode_size = u16::from_be_bytes([sb[0x68], sb[0x69]]) as u64;
                         let agblklog = sb[0x7C] as u64;
                         let inopblog = sb[0x7B] as u64;
-                        let ag_blocks = u32::from_be_bytes([sb[0x54],sb[0x55],sb[0x56],sb[0x57]]) as u64;
+                        let ag_blocks =
+                            u32::from_be_bytes([sb[0x54], sb[0x55], sb[0x56], sb[0x57]]) as u64;
                         let shift = agblklog + inopblog;
                         // Read etc's inode: we need its inode number from the root dir entry.
                         // From earlier manual parse: "etc" has ino from the full literal area.
                         // Let me re-read root dir's full data fork and find etc's inode.
                         let root_ino = u64::from_be_bytes(sb[0x38..0x40].try_into().unwrap());
                         // Read root inode
-                        let root_fsblk = (root_ino >> shift) * ag_blocks + ((root_ino & ((1<<shift)-1)) >> inopblog);
-                        let root_off = root_fsblk * block_size + (root_ino & ((1<<inopblog)-1)) * inode_size;
+                        let root_fsblk = (root_ino >> shift) * ag_blocks
+                            + ((root_ino & ((1 << shift) - 1)) >> inopblog);
+                        let root_off = root_fsblk * block_size
+                            + (root_ino & ((1 << inopblog) - 1)) * inode_size;
                         raw_lv.seek(SeekFrom::Start(root_off)).unwrap();
                         let mut root_buf = vec![0u8; inode_size as usize];
                         raw_lv.read_exact(&mut root_buf).unwrap();
                         let root_ver = root_buf[0x04];
                         let root_core: usize = if root_ver >= 3 { 176 } else { 96 };
                         let root_lit = &root_buf[root_core..]; // full literal (LOCAL format fix)
-                        // Parse entries WITHOUT ftype (sb_features_incompat=0)
+                                                               // Parse entries WITHOUT ftype (sb_features_incompat=0)
                         let root_count = root_lit[0] as usize;
                         let root_i8 = root_lit[1] as usize;
                         eprintln!("      root dir: count={} i8count={}", root_count, root_i8);
@@ -985,54 +1075,102 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
                         let mut pos: usize = 6; // count+i8count+parent4 (i8count=0)
                         let mut etc_ino: Option<u64> = None;
                         for _i in 0..root_count {
-                            if pos + 3 > root_lit.len() { break; }
+                            if pos + 3 > root_lit.len() {
+                                break;
+                            }
                             let nl = root_lit[pos] as usize;
                             let name_end = pos + 3 + nl;
                             let tail = 5; // ftype(1) + inode4(4)
-                            if name_end + tail > root_lit.len() { break; }
-                            let name = std::str::from_utf8(&root_lit[pos+3..name_end]).unwrap_or("?");
-                            let ino = u32::from_be_bytes([root_lit[name_end+1], root_lit[name_end+2], root_lit[name_end+3], root_lit[name_end+4]]) as u64;
-                            if name == "etc" { etc_ino = Some(ino); break; }
+                            if name_end + tail > root_lit.len() {
+                                break;
+                            }
+                            let name =
+                                std::str::from_utf8(&root_lit[pos + 3..name_end]).unwrap_or("?");
+                            let ino = u32::from_be_bytes([
+                                root_lit[name_end + 1],
+                                root_lit[name_end + 2],
+                                root_lit[name_end + 3],
+                                root_lit[name_end + 4],
+                            ]) as u64;
+                            if name == "etc" {
+                                etc_ino = Some(ino);
+                                break;
+                            }
                             pos = name_end + tail;
                         }
                         if let Some(ino) = etc_ino {
                             eprintln!("      etc inode={}", ino);
-                            let fsblk = (ino >> shift) * ag_blocks + ((ino & ((1<<shift)-1)) >> inopblog);
-                            let etc_off = fsblk * block_size + (ino & ((1<<inopblog)-1)) * inode_size;
+                            let fsblk = (ino >> shift) * ag_blocks
+                                + ((ino & ((1 << shift) - 1)) >> inopblog);
+                            let etc_off =
+                                fsblk * block_size + (ino & ((1 << inopblog) - 1)) * inode_size;
                             raw_lv.seek(SeekFrom::Start(etc_off)).unwrap();
                             let mut etc_buf = vec![0u8; inode_size as usize];
                             raw_lv.read_exact(&mut etc_buf).unwrap();
                             let fmt = etc_buf[0x05];
                             let fk = etc_buf[0x52];
-                            let nextents = u32::from_be_bytes([etc_buf[0x4C],etc_buf[0x4D],etc_buf[0x4E],etc_buf[0x4F]]);
-                            eprintln!("      etc inode: format={} forkoff={} nextents={}", fmt, fk, nextents);
+                            let nextents = u32::from_be_bytes([
+                                etc_buf[0x4C],
+                                etc_buf[0x4D],
+                                etc_buf[0x4E],
+                                etc_buf[0x4F],
+                            ]);
+                            eprintln!(
+                                "      etc inode: format={} forkoff={} nextents={}",
+                                fmt, fk, nextents
+                            );
                             let etc_ver = etc_buf[0x04];
                             let etc_core: usize = if etc_ver >= 3 { 176 } else { 96 };
                             // Check residual data in full literal for recovery
                             let etc_literal = &etc_buf[etc_core..];
                             let non_zero = etc_literal.iter().filter(|&&b| b != 0).count();
-                            eprintln!("      etc literal: {} bytes, {} non-zero", etc_literal.len(), non_zero);
+                            eprintln!(
+                                "      etc literal: {} bytes, {} non-zero",
+                                etc_literal.len(),
+                                non_zero
+                            );
                             // Dump raw extent bytes for diagnosis
                             let df = etc_literal;
-                            eprintln!("      etc extent raw bytes (first 48): {:02X?}", &df[..48.min(df.len())]);
+                            eprintln!(
+                                "      etc extent raw bytes (first 48): {:02X?}",
+                                &df[..48.min(df.len())]
+                            );
                             // Read extent from data fork
-                            if fmt == 2 { // EXTENTS
+                            if fmt == 2 {
+                                // EXTENTS
                                 let df = &etc_buf[etc_core..]; // extent records in literal area
                                 for ei in 0..nextents as usize {
                                     let rec_off = ei * 16;
-                                    if rec_off + 16 > df.len() { break; }
-                                    let l0 = u64::from_be_bytes(df[rec_off..rec_off+8].try_into().unwrap());
-                                    let l1 = u64::from_be_bytes(df[rec_off+8..rec_off+16].try_into().unwrap());
+                                    if rec_off + 16 > df.len() {
+                                        break;
+                                    }
+                                    let l0 = u64::from_be_bytes(
+                                        df[rec_off..rec_off + 8].try_into().unwrap(),
+                                    );
+                                    let l1 = u64::from_be_bytes(
+                                        df[rec_off + 8..rec_off + 16].try_into().unwrap(),
+                                    );
                                     let start_block = l1 >> 21;
                                     let block_count = l1 & 0x1F_FFFF;
-                                    eprintln!("      extent[{}]: logical={} start_block={} count={}", ei, l0, start_block, block_count);
+                                    eprintln!(
+                                        "      extent[{}]: logical={} start_block={} count={}",
+                                        ei, l0, start_block, block_count
+                                    );
                                     // Read first block data
-                                    raw_lv.seek(SeekFrom::Start(start_block * block_size)).unwrap();
+                                    raw_lv
+                                        .seek(SeekFrom::Start(start_block * block_size))
+                                        .unwrap();
                                     let mut blk = vec![0u8; block_size as usize];
                                     raw_lv.read_exact(&mut blk).unwrap();
-                                    let magic = u32::from_be_bytes([blk[0],blk[1],blk[2],blk[3]]);
-                                    eprintln!("      block[{}] offset={} magic=0x{:08X} first16={:02X?}",
-                                        ei, start_block * block_size, magic, &blk[..16]);
+                                    let magic =
+                                        u32::from_be_bytes([blk[0], blk[1], blk[2], blk[3]]);
+                                    eprintln!(
+                                        "      block[{}] offset={} magic=0x{:08X} first16={:02X?}",
+                                        ei,
+                                        start_block * block_size,
+                                        magic,
+                                        &blk[..16]
+                                    );
                                 }
                             }
                         } else {
@@ -1041,51 +1179,58 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
 
                         eprintln!("      === Root LV recursive walk ===");
                         fn walk_tree(
-                                    xfs: &dyn FileSystemReader,
-                                    path: &str,
-                                    depth: usize,
-                                    total_files: &mut u64,
-                                    total_dirs: &mut u64,
-                                    failures: &mut u64,
-                                ) {
-                                    match xfs.list_children(path) {
-                                        Ok(children) => {
-                                            for c in &children {
-                                                if c.is_dir {
-                                                    *total_dirs += 1;
-                                                    if depth < 5 {
-                                                        let sub = if path.is_empty() {
-                                                            c.name.clone()
-                                                        } else {
-                                                            format!("{}/{}", path, c.name)
-                                                        };
-                                                        walk_tree(xfs, &sub, depth + 1, total_files, total_dirs, failures);
-                                                    }
+                            xfs: &dyn FileSystemReader,
+                            path: &str,
+                            depth: usize,
+                            total_files: &mut u64,
+                            total_dirs: &mut u64,
+                            failures: &mut u64,
+                        ) {
+                            match xfs.list_children(path) {
+                                Ok(children) => {
+                                    for c in &children {
+                                        if c.is_dir {
+                                            *total_dirs += 1;
+                                            if depth < 5 {
+                                                let sub = if path.is_empty() {
+                                                    c.name.clone()
                                                 } else {
-                                                    *total_files += 1;
-                                                }
+                                                    format!("{}/{}", path, c.name)
+                                                };
+                                                walk_tree(
+                                                    xfs,
+                                                    &sub,
+                                                    depth + 1,
+                                                    total_files,
+                                                    total_dirs,
+                                                    failures,
+                                                );
                                             }
-                                        }
-                                        Err(_e) => {
-                                            *failures += 1;
-                                            if depth <= 1 {
-                                                eprintln!("      FAIL {}: {}", path, _e);
-                                            }
+                                        } else {
+                                            *total_files += 1;
                                         }
                                     }
                                 }
-
-                                let (mut files, mut dirs, mut fails) = (0u64, 1u64, 0u64); // root itself = 1 dir
-                                walk_tree(&xfs, "", 0, &mut files, &mut dirs, &mut fails);
-                                eprintln!(
-                                    "      Root LV: {} files, {} dirs, {} failed dirs",
-                                    files, dirs, fails
-                                );
-                                assert!(
-                                    files + dirs > 0,
-                                    "root LV should enumerate at least some entries"
-                                );
+                                Err(_e) => {
+                                    *failures += 1;
+                                    if depth <= 1 {
+                                        eprintln!("      FAIL {}: {}", path, _e);
+                                    }
+                                }
                             }
+                        }
+
+                        let (mut files, mut dirs, mut fails) = (0u64, 1u64, 0u64); // root itself = 1 dir
+                        walk_tree(&xfs, "", 0, &mut files, &mut dirs, &mut fails);
+                        eprintln!(
+                            "      Root LV: {} files, {} dirs, {} failed dirs",
+                            files, dirs, fails
+                        );
+                        assert!(
+                            files + dirs > 0,
+                            "root LV should enumerate at least some entries"
+                        );
+                    }
                 }
             }
         }
@@ -1095,18 +1240,29 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
     let source_kind = domain::DataSourceKind::E01;
     expand_lvm_pool_candidates(&mut probe, &fixture_path(), &source_kind);
 
-    eprintln!("=== After LVM expansion ({}) candidates ===", probe.candidates.len());
+    eprintln!(
+        "=== After LVM expansion ({}) candidates ===",
+        probe.candidates.len()
+    );
     for c in &probe.candidates {
-        eprintln!("  kind={:?} name={:?} offset={} source={:?}",
-            c.kind, c.partition_name, c.offset, c.source);
+        eprintln!(
+            "  kind={:?} name={:?} offset={} source={:?}",
+            c.kind, c.partition_name, c.offset, c.source
+        );
     }
     eprintln!("=== Partitions ({}) ===", probe.partitions.len());
     for p in &probe.partitions {
-        eprintln!("  [{}] name='{}' kind={} status={:?}", p.index, p.name, p.kind_label, p.status);
+        eprintln!(
+            "  [{}] name='{}' kind={} status={:?}",
+            p.index, p.name, p.kind_label, p.status
+        );
     }
 
     assert!(
-        probe.candidates.iter().any(|c| matches!(c.source, ImageFilesystemSource::LvmLogicalVolume)),
+        probe
+            .candidates
+            .iter()
+            .any(|c| matches!(c.source, ImageFilesystemSource::LvmLogicalVolume)),
         "should have at least one LvmLogicalVolume candidate after LVM expansion"
     );
 }

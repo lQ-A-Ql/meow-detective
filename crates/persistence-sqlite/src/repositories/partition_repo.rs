@@ -14,6 +14,11 @@ pub struct DataSourcePartitionRecord {
     pub length: u64,
     pub filesystem: Option<String>,
     pub unlock_hint: Option<String>,
+    pub lvm_vg_uuid: Option<String>,
+    pub lvm_vg_name: Option<String>,
+    pub lvm_lv_uuid: Option<String>,
+    pub lvm_lv_name: Option<String>,
+    pub lvm_pv_offsets_json: Option<String>,
 }
 
 pub struct PartitionRepo<'a> {
@@ -39,8 +44,10 @@ impl<'a> PartitionRepo<'a> {
         {
             let mut stmt = tx.prepare_cached(
                 "INSERT INTO data_source_partitions
-                 (id, data_source_id, partition_index, name, kind_label, status, type_guid, offset, length, filesystem, unlock_hint)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                 (id, data_source_id, partition_index, name, kind_label, status, type_guid,
+                  offset, length, filesystem, unlock_hint, lvm_vg_uuid, lvm_vg_name,
+                  lvm_lv_uuid, lvm_lv_name, lvm_pv_offsets_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             )?;
             for record in records {
                 stmt.execute(params![
@@ -55,6 +62,11 @@ impl<'a> PartitionRepo<'a> {
                     record.length,
                     record.filesystem,
                     record.unlock_hint,
+                    record.lvm_vg_uuid,
+                    record.lvm_vg_name,
+                    record.lvm_lv_uuid,
+                    record.lvm_lv_name,
+                    record.lvm_pv_offsets_json,
                 ])?;
             }
         }
@@ -68,7 +80,9 @@ impl<'a> PartitionRepo<'a> {
         data_source_id: &str,
     ) -> DbResult<Vec<DataSourcePartitionRecord>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, data_source_id, partition_index, name, kind_label, status, type_guid, offset, length, filesystem, unlock_hint
+            "SELECT id, data_source_id, partition_index, name, kind_label, status, type_guid,
+                    offset, length, filesystem, unlock_hint, lvm_vg_uuid, lvm_vg_name,
+                    lvm_lv_uuid, lvm_lv_name, lvm_pv_offsets_json
              FROM data_source_partitions
              WHERE data_source_id = ?1
              ORDER BY partition_index ASC",
@@ -86,6 +100,11 @@ impl<'a> PartitionRepo<'a> {
                 length: row.get(8)?,
                 filesystem: row.get(9)?,
                 unlock_hint: row.get(10)?,
+                lvm_vg_uuid: row.get(11)?,
+                lvm_vg_name: row.get(12)?,
+                lvm_lv_uuid: row.get(13)?,
+                lvm_lv_name: row.get(14)?,
+                lvm_pv_offsets_json: row.get(15)?,
             })
         })?;
 
@@ -102,8 +121,10 @@ impl<'a> PartitionRepo<'a> {
         {
             let mut stmt = tx.prepare_cached(
                 "INSERT INTO data_source_partitions
-                 (id, data_source_id, partition_index, name, kind_label, status, type_guid, offset, length, filesystem, unlock_hint)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                 (id, data_source_id, partition_index, name, kind_label, status, type_guid,
+                  offset, length, filesystem, unlock_hint, lvm_vg_uuid, lvm_vg_name,
+                  lvm_lv_uuid, lvm_lv_name, lvm_pv_offsets_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             )?;
             for record in records {
                 stmt.execute(params![
@@ -118,6 +139,11 @@ impl<'a> PartitionRepo<'a> {
                     record.length,
                     record.filesystem,
                     record.unlock_hint,
+                    record.lvm_vg_uuid,
+                    record.lvm_vg_name,
+                    record.lvm_lv_uuid,
+                    record.lvm_lv_name,
+                    record.lvm_pv_offsets_json,
                 ])?;
             }
         }
@@ -163,7 +189,12 @@ mod tests {
                 offset INTEGER NOT NULL,
                 length INTEGER NOT NULL,
                 filesystem TEXT,
-                unlock_hint TEXT
+                unlock_hint TEXT,
+                lvm_vg_uuid TEXT,
+                lvm_vg_name TEXT,
+                lvm_lv_uuid TEXT,
+                lvm_lv_name TEXT,
+                lvm_pv_offsets_json TEXT
             );",
         )
         .unwrap();
@@ -183,6 +214,11 @@ mod tests {
             length: 1024000,
             filesystem: Some("NTFS".to_string()),
             unlock_hint: None,
+            lvm_vg_uuid: None,
+            lvm_vg_name: None,
+            lvm_lv_uuid: None,
+            lvm_lv_name: None,
+            lvm_pv_offsets_json: None,
         }
     }
 
@@ -231,5 +267,31 @@ mod tests {
         let deleted = repo.delete_by_data_source("ds-1").unwrap();
         assert_eq!(deleted, 2);
         assert_eq!(repo.count_by_data_source("ds-1").unwrap(), 0);
+    }
+
+    #[test]
+    fn lvm_identity_round_trips() {
+        let conn = setup_db();
+        let repo = PartitionRepo::new(&conn);
+        let mut record = make_partition("p-lvm", "ds-lvm", 2, "vg/root");
+        record.filesystem = Some("XFS".to_string());
+        record.lvm_vg_uuid = Some("vg-uuid".to_string());
+        record.lvm_vg_name = Some("vg".to_string());
+        record.lvm_lv_uuid = Some("lv-uuid".to_string());
+        record.lvm_lv_name = Some("root".to_string());
+        record.lvm_pv_offsets_json = Some("[1048576,2097152]".to_string());
+
+        repo.insert_batch(&[record]).unwrap();
+
+        let found = repo.find_by_data_source("ds-lvm").unwrap();
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].lvm_vg_uuid.as_deref(), Some("vg-uuid"));
+        assert_eq!(found[0].lvm_vg_name.as_deref(), Some("vg"));
+        assert_eq!(found[0].lvm_lv_uuid.as_deref(), Some("lv-uuid"));
+        assert_eq!(found[0].lvm_lv_name.as_deref(), Some("root"));
+        assert_eq!(
+            found[0].lvm_pv_offsets_json.as_deref(),
+            Some("[1048576,2097152]")
+        );
     }
 }

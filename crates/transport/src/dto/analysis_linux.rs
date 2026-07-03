@@ -13,6 +13,8 @@ pub struct LinuxArtifactSummaryDto {
     pub cron_job_count: u64,
     pub sudo_event_count: u64,
     pub total_count: u64,
+    pub truncated: bool,
+    pub coverage_ratio: f32,
     pub journal_entries: Vec<LinuxJournalEntryDto>,
     pub login_records: Vec<LinuxLoginRecordDto>,
     pub bash_commands: Vec<LinuxBashCommandDto>,
@@ -136,6 +138,8 @@ mod tests {
             cron_job_count: 5,
             sudo_event_count: 6,
             total_count: 21,
+            truncated: true,
+            coverage_ratio: 0.75,
             journal_entries: vec![LinuxJournalEntryDto {
                 artifact_id: "artifact-1".to_string(),
                 file_id: "file-1".to_string(),
@@ -164,9 +168,12 @@ mod tests {
         assert_eq!(value["bashCommandCount"], 3);
         assert_eq!(value["sudoEventCount"], 6);
         assert_eq!(value["totalCount"], 21);
+        assert_eq!(value["truncated"], true);
+        assert!((value["coverageRatio"].as_f64().unwrap() - 0.75).abs() < 0.000_001);
         assert_eq!(value["journalEntries"][0]["artifactId"], "artifact-1");
         assert_eq!(value["journalEntries"][0]["pid"], 42);
         assert!(value["journalEntries"][0].get("executable").is_none());
+        assert!(value.get("coverage_ratio").is_none());
         assert!(value.get("journal_count").is_none());
     }
 

@@ -6,6 +6,7 @@ import {
   FileRowsPage,
   FileTreeNode,
   ImagePreviewResponse,
+  ImportDataSourceRequest,
   MediaRangeRequest,
   MediaRangeResponse,
   MediaUrl,
@@ -46,8 +47,9 @@ export async function getFileRowsPage(
   });
 }
 
-export async function importDataSource(sourcePath: string): Promise<string> {
-  return apiClient.request(COMMANDS.files.IMPORT_DATA_SOURCE, { request: { sourcePath } });
+export async function importDataSource(request: string | ImportDataSourceRequest): Promise<string> {
+  const payload = typeof request === 'string' ? { sourcePath: request } : request;
+  return apiClient.request(COMMANDS.files.IMPORT_DATA_SOURCE, { request: payload });
 }
 
 export async function getFileChildren(parentId: string, showHidden = false): Promise<FileTreeNode[]> {

@@ -57,13 +57,15 @@ export function LinuxArtifactsPanel({
     cronJobCount: 0,
     sudoEventCount: 0,
     totalCount: 0,
+    truncated: false,
+    coverageRatio: 0,
     journalEntries: [],
     loginRecords: [],
     bashCommands: [],
     aptEvents: [],
     cronJobs: [],
     sudoEvents: [],
-    warnings: ['Linux 痕迹摘要暂不可用。'],
+    warnings: [t('linuxArtifacts.fallbackWarning')],
     generatedAt: '',
   };
 
@@ -232,6 +234,8 @@ export function LinuxArtifactsPanel({
         [t('linuxArtifacts.stats.journal'), info.journalCount.toString()],
         [t('linuxArtifacts.stats.login'), info.loginCount.toString()],
         [t('linuxArtifacts.stats.commands'), info.bashCommandCount.toString()],
+        [t('linuxArtifacts.stats.coverage'), `${Math.round(info.coverageRatio * 100)}%`],
+        [t('linuxArtifacts.stats.truncated'), info.truncated ? t('linuxArtifacts.values.yes') : t('linuxArtifacts.values.no')],
       ]}
     >
       <AnalysisExtractionProgress progress={progress} />

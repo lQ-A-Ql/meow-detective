@@ -58,3 +58,11 @@ export interface FileJumpContext {
   rowOffset: number;
   requiresShowHidden: boolean;
 }
+
+export type ImportTargetPlatform = 'windows' | 'linux' | 'macos' | 'unknown';
+
+export interface ImportDataSourceRequest {
+  sourcePath: string;
+  platform?: ImportTargetPlatform;
+  profile?: string;
+}

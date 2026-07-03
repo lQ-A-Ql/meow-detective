@@ -43,6 +43,7 @@ pub(crate) use range::read_file_bytes_for_descriptor;
 pub(crate) use range_fs::{
     try_read_exfat_image_range_for_descriptor, try_read_exfat_image_range_for_entry,
     try_read_fat_image_range_for_descriptor, try_read_fat_image_range_for_entry,
+    try_read_linux_image_range_for_descriptor, try_read_linux_image_range_for_entry,
     try_read_ntfs_image_range_for_descriptor, try_read_ntfs_image_range_for_entry,
 };
 
@@ -95,6 +96,18 @@ pub struct PreviewPartitionCandidate {
     pub partition_index: usize,
     pub filesystem_kind: String,
     pub offset: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lvm_identity: Option<PreviewLvmIdentity>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewLvmIdentity {
+    pub vg_uuid: String,
+    pub vg_name: String,
+    pub lv_uuid: String,
+    pub lv_name: String,
+    pub pv_offsets: Vec<u64>,
 }
 
 pub trait PreviewReadContext {
@@ -302,8 +315,17 @@ pub(crate) fn is_exfat_filesystem_kind(kind: &str) -> bool {
     kind.eq_ignore_ascii_case("exfat") || kind.to_ascii_uppercase().contains("EXFAT")
 }
 
+pub(crate) fn is_linux_filesystem_kind(kind: &str) -> bool {
+    kind.eq_ignore_ascii_case("ext4")
+        || kind.eq_ignore_ascii_case("xfs")
+        || kind.eq_ignore_ascii_case("btrfs")
+}
+
 pub(crate) fn is_preview_image_filesystem_kind(kind: &str) -> bool {
-    kind == "NTFS" || is_fat_filesystem_kind(kind) || is_exfat_filesystem_kind(kind)
+    kind == "NTFS"
+        || is_fat_filesystem_kind(kind)
+        || is_exfat_filesystem_kind(kind)
+        || is_linux_filesystem_kind(kind)
 }
 
 pub(crate) fn looks_like_exfat_boot_sector<R>(reader: &mut R, offset: u64) -> std::io::Result<bool>

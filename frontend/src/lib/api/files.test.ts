@@ -88,6 +88,23 @@ describe('files API', () => {
     expect(result).toBe('job-1');
   });
 
+  it('importDataSource sends optional platform and profile in request', async () => {
+    requestMock.mockResolvedValueOnce('job-2' as never);
+    const result = await importDataSource({
+      sourcePath: '/evidence/linux.raw',
+      platform: 'linux',
+      profile: 'ubuntu-server',
+    });
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.files.IMPORT_DATA_SOURCE, {
+      request: {
+        sourcePath: '/evidence/linux.raw',
+        platform: 'linux',
+        profile: 'ubuntu-server',
+      },
+    });
+    expect(result).toBe('job-2');
+  });
+
   it('getFileChildrenPage sends paging parameters', async () => {
     requestMock.mockResolvedValueOnce({ children: [], total: 0 } as never);
     await getFileChildrenPage('parent-2', 5, 50, false);

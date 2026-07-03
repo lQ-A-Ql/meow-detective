@@ -130,6 +130,13 @@ fn parse_and_migrate_partitions(
             length,
             filesystem,
             unlock_hint,
+            lvm_vg_uuid: partition["lvm_vg_uuid"].as_str().map(|s| s.to_string()),
+            lvm_vg_name: partition["lvm_vg_name"].as_str().map(|s| s.to_string()),
+            lvm_lv_uuid: partition["lvm_lv_uuid"].as_str().map(|s| s.to_string()),
+            lvm_lv_name: partition["lvm_lv_name"].as_str().map(|s| s.to_string()),
+            lvm_pv_offsets_json: partition["lvm_pv_offsets_json"]
+                .as_str()
+                .map(|s| s.to_string()),
         });
     }
 
@@ -200,7 +207,12 @@ mod tests {
                 offset INTEGER,
                 length INTEGER,
                 filesystem TEXT,
-                unlock_hint TEXT
+                unlock_hint TEXT,
+                lvm_vg_uuid TEXT,
+                lvm_vg_name TEXT,
+                lvm_lv_uuid TEXT,
+                lvm_lv_name TEXT,
+                lvm_pv_offsets_json TEXT
             );
             CREATE TABLE migration_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -268,7 +280,12 @@ mod tests {
                 offset INTEGER,
                 length INTEGER,
                 filesystem TEXT,
-                unlock_hint TEXT
+                unlock_hint TEXT,
+                lvm_vg_uuid TEXT,
+                lvm_vg_name TEXT,
+                lvm_lv_uuid TEXT,
+                lvm_lv_name TEXT,
+                lvm_pv_offsets_json TEXT
             );",
         )
         .unwrap();

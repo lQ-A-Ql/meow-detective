@@ -52,7 +52,7 @@ export function Settings() {
         }));
       })
       .catch(() => {
-        // Standalone mock/dev mode keeps local settings as the fallback.
+        // Keep local settings as the fallback when the desktop settings command is unavailable.
       });
     return () => {
       cancelled = true;

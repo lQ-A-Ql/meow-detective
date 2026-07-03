@@ -16,10 +16,12 @@ use evidence_core::ReaderInfo;
 
 use crate::segment::LvExtent;
 
+type SharedReader = std::sync::Arc<std::sync::Mutex<Box<dyn EvidenceReader>>>;
+
 /// Read-only access to a logical volume block device.
 pub struct LvReader {
-    /// Underlying physical disk reader (the PV). Uses Rc for multi-LV sharing.
-    device_reader: std::sync::Arc<std::sync::Mutex<Box<dyn EvidenceReader>>>,
+    /// Underlying PV readers in the same order as the VG metadata PV list.
+    device_readers: Vec<SharedReader>,
     /// Metadata about this logical volume.
     info: ReaderInfo,
     /// Pre-computed LE → physical offset mapping.
@@ -44,17 +46,17 @@ impl LvReader {
         extent_map: Vec<LvExtent>,
     ) -> Self {
         Self::new_shared(
-            std::sync::Arc::new(std::sync::Mutex::new(device_reader)),
+            vec![std::sync::Arc::new(std::sync::Mutex::new(device_reader))],
             lv_name,
             total_size,
             extent_map,
         )
     }
 
-    /// Create a logical volume reader with a shared (Rc) device reader.
+    /// Create a logical volume reader with shared PV readers.
     /// Enables opening multiple LVs from one pool without consuming the reader.
     pub fn new_shared(
-        device_reader: std::sync::Arc<std::sync::Mutex<Box<dyn EvidenceReader>>>,
+        device_readers: Vec<SharedReader>,
         lv_name: String,
         total_size: u64,
         extent_map: Vec<LvExtent>,
@@ -66,7 +68,7 @@ impl LvReader {
         };
 
         Self {
-            device_reader,
+            device_readers,
             info,
             extent_map,
             current_pos: 0,
@@ -110,7 +112,17 @@ impl LvReader {
         let to_read = buf.len().min(available_in_ext as usize);
 
         let physical_offset = ext.physical_offset + offset_in_ext;
-        let mut reader = self.device_reader.lock().unwrap();
+        let device_reader = self.device_readers.get(ext.pv_index).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "extent references PV reader index {} but only {} readers are available",
+                    ext.pv_index,
+                    self.device_readers.len()
+                ),
+            )
+        })?;
+        let mut reader = device_reader.lock().unwrap();
         reader.seek(SeekFrom::Start(physical_offset))?;
         reader.read_exact(&mut buf[..to_read])?;
 
@@ -169,7 +181,6 @@ impl EvidenceReader for LvReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     /// A minimal fake reader for testing LvReader.
     struct FakeDevice {
@@ -233,6 +244,41 @@ mod tests {
         let mut buf = [0u8; 5];
         lv_ref.read_exact(&mut buf).unwrap();
         assert_eq!(&buf, b"HELLO");
+    }
+
+    #[test]
+    fn read_across_extents_uses_extent_pv_index() {
+        let mut pv0_data = vec![0u8; 32];
+        pv0_data[8..12].copy_from_slice(b"PV00");
+        let mut pv1_data = vec![0u8; 32];
+        pv1_data[8..12].copy_from_slice(b"PV11");
+
+        let pv0: Box<dyn EvidenceReader> = Box::new(FakeDevice::new(pv0_data));
+        let pv1: Box<dyn EvidenceReader> = Box::new(FakeDevice::new(pv1_data));
+        let device_readers = vec![
+            std::sync::Arc::new(std::sync::Mutex::new(pv0)),
+            std::sync::Arc::new(std::sync::Mutex::new(pv1)),
+        ];
+        let extent_map = vec![
+            LvExtent {
+                logical_start: 0,
+                physical_offset: 8,
+                length: 4,
+                pv_index: 0,
+            },
+            LvExtent {
+                logical_start: 4,
+                physical_offset: 8,
+                length: 4,
+                pv_index: 1,
+            },
+        ];
+
+        let mut lv = LvReader::new_shared(device_readers, "striped_lv".into(), 8, extent_map);
+
+        let mut buf = [0u8; 8];
+        lv.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf, b"PV00PV11");
     }
 
     #[test]

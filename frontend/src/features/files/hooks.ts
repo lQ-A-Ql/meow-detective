@@ -21,6 +21,7 @@ import {
   FileHexViewerState,
   HexByteWindowLines,
   HexLoadedRange,
+  ImportDataSourceRequest,
   MediaPreview,
   ViewerRangeResponse,
 } from '@/types/models';
@@ -130,7 +131,7 @@ export function useFileChildrenPage(parentId?: string, offset = 0, limit = 500, 
 export function useImportDataSource() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (sourcePath: string) => importDataSource(sourcePath),
+    mutationFn: (request: string | ImportDataSourceRequest) => importDataSource(request),
     onMutate: () => {
       expectJobsSnapshotActivity(qc.getQueryData(['jobs', 'snapshot']));
       qc.invalidateQueries({ queryKey: ['jobs', 'snapshot'] });

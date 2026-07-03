@@ -103,6 +103,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0032_file_entry_type_nocase_index",
         include_str!("scripts/0032_file_entry_type_nocase_index.sql"),
     ),
+    (
+        "0033_lvm_partition_identity",
+        include_str!("scripts/0033_lvm_partition_identity.sql"),
+    ),
 ];
 
 pub fn latest_version() -> &'static str {
@@ -143,7 +147,12 @@ pub fn run_all(conn: &Connection) -> DbResult<u32> {
             conn.execute_batch("BEGIN").map_err(|e| {
                 DbError::Migration(format!("Failed to begin transaction for {}: {}", name, e))
             })?;
-            match conn.execute_batch(sql) {
+            let migration_result = if *name == "0033_lvm_partition_identity" {
+                add_missing_lvm_partition_identity_columns(conn)
+            } else {
+                conn.execute_batch(sql).map_err(DbError::from)
+            };
+            match migration_result {
                 Ok(()) => {
                     conn.execute("INSERT INTO schema_migrations (name) VALUES (?1)", [name])
                         .map_err(|e| {
@@ -168,6 +177,29 @@ pub fn run_all(conn: &Connection) -> DbResult<u32> {
         }
     }
     Ok(count)
+}
+
+fn add_missing_lvm_partition_identity_columns(conn: &Connection) -> DbResult<()> {
+    for column in [
+        "lvm_vg_uuid",
+        "lvm_vg_name",
+        "lvm_lv_uuid",
+        "lvm_lv_name",
+        "lvm_pv_offsets_json",
+    ] {
+        let exists: bool = conn.query_row(
+            "SELECT COUNT(*) > 0 FROM pragma_table_info('data_source_partitions') WHERE name = ?1",
+            [column],
+            |row| row.get(0),
+        )?;
+        if !exists {
+            conn.execute(
+                &format!("ALTER TABLE data_source_partitions ADD COLUMN {column} TEXT"),
+                [],
+            )?;
+        }
+    }
+    Ok(())
 }
 
 pub fn current_version(conn: &Connection) -> DbResult<Option<String>> {

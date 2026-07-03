@@ -147,5 +147,5 @@ pub(crate) fn descriptor_is_fresh(
 }
 
 pub(crate) fn descriptor_cache_key(case_id: &str, file_id: &FileEntryId) -> String {
-    format!("preview-descriptor:{case_id}:{}", file_id.0)
+    format!("preview-descriptor:v2:{case_id}:{}", file_id.0)
 }

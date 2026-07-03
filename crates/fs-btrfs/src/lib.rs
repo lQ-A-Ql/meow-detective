@@ -15,7 +15,7 @@
 pub mod snapshot;
 
 use evidence_core::filesystem::{
-    child_nodes_with_parent_path, file_not_found, fs_node, invalid_fs_data,
+    child_nodes_with_parent_path, file_not_found, fs_node, fs_out_of_memory, invalid_fs_data,
     is_special_directory_name, path_components, path_is_directory, path_not_found, root_node,
     truncate_data_to_declared_size, FileSystemReader, FsNode,
 };
@@ -575,10 +575,89 @@ impl BtrfsReader {
         }
     }
 
+    fn collect_candidate_leaves(
+        &self,
+        root_bytenr: u64,
+        lower_bound: &BtrfsKey,
+        upper_bound: &BtrfsKey,
+    ) -> io::Result<Vec<(Vec<u8>, Vec<LeafItem>)>> {
+        let mut leaves = Vec::new();
+        self.collect_candidate_leaves_from_node(
+            root_bytenr,
+            lower_bound,
+            upper_bound,
+            &mut leaves,
+        )?;
+        leaves.sort_by(|(_, left), (_, right)| {
+            left.first()
+                .map(|item| &item.key)
+                .cmp(&right.first().map(|item| &item.key))
+        });
+        Ok(leaves)
+    }
+
+    fn collect_candidate_leaves_from_node(
+        &self,
+        node_bytenr: u64,
+        lower_bound: &BtrfsKey,
+        upper_bound: &BtrfsKey,
+        leaves: &mut Vec<(Vec<u8>, Vec<LeafItem>)>,
+    ) -> io::Result<()> {
+        let node_data = self.read_logical_block(node_bytenr)?;
+        let header = Self::parse_header(&node_data)?;
+        if header.level == 0 {
+            let items = Self::parse_leaf_items(&node_data, header.nritems)?;
+            if items.iter().any(|item| {
+                item.key.objectid == lower_bound.objectid
+                    && item.key.ty == lower_bound.ty
+                    && item.key.offset <= upper_bound.offset
+            }) {
+                leaves.push((node_data, items));
+            }
+            return Ok(());
+        }
+
+        let internal = Self::parse_internal_items(&node_data, header.nritems)?;
+        if internal.is_empty() {
+            return Ok(());
+        }
+
+        for (idx, item) in internal.iter().enumerate() {
+            let next_key = internal.get(idx + 1).map(|next| &next.key);
+            if next_key.is_some_and(|key| key <= lower_bound) {
+                continue;
+            }
+            if item.key > *upper_bound {
+                break;
+            }
+            self.collect_candidate_leaves_from_node(
+                item.blockptr,
+                lower_bound,
+                upper_bound,
+                leaves,
+            )?;
+        }
+
+        Ok(())
+    }
+
     fn read_logical_block(&self, logical: u64) -> io::Result<Vec<u8>> {
         let physical = self.translate_logical(logical)?;
         let absolute = self.volume_offset + physical;
         let mut buf = vec![0u8; self.nodesize as usize];
+        let mut reader = self.reader.borrow_mut();
+        reader.seek(SeekFrom::Start(absolute))?;
+        reader.read_exact(&mut buf)?;
+        Ok(buf)
+    }
+
+    fn read_logical_range(&self, logical: u64, length: usize) -> io::Result<Vec<u8>> {
+        let physical = self.translate_logical(logical)?;
+        let absolute = self.volume_offset + physical;
+        let mut buf = vec![0u8; length];
+        if length == 0 {
+            return Ok(buf);
+        }
         let mut reader = self.reader.borrow_mut();
         reader.seek(SeekFrom::Start(absolute))?;
         reader.read_exact(&mut buf)?;
@@ -660,44 +739,161 @@ impl BtrfsReader {
             ty: EXTENT_DATA_KEY,
             offset: 0,
         };
-        let (leaf_data, items) = self.walk_to_leaf(tree_root_bytenr, &search_key)?;
-        let indices = Self::find_items_by_object_and_type(&items, inode_objectid, EXTENT_DATA_KEY);
-
         let mut data = Vec::new();
-        for &idx in &indices {
-            let item_data = Self::get_item_data(&leaf_data, &items[idx]);
-            if item_data.len() < 21 {
-                continue;
-            }
-            let extent_type = item_data[20];
-            match extent_type {
-                EXTENT_INLINE => {
-                    data.extend_from_slice(&item_data[21..]);
+        let upper_bound = BtrfsKey {
+            objectid: inode_objectid,
+            ty: EXTENT_DATA_KEY,
+            offset: u64::MAX,
+        };
+        let leaves = self.collect_candidate_leaves(tree_root_bytenr, &search_key, &upper_bound)?;
+        for (leaf_data, items) in leaves {
+            let indices =
+                Self::find_items_by_object_and_type(&items, inode_objectid, EXTENT_DATA_KEY);
+            for idx in indices {
+                let item_data = Self::get_item_data(&leaf_data, &items[idx]);
+                if item_data.len() < 21 {
+                    continue;
                 }
-                _ => {
-                    if item_data.len() < 53 {
-                        continue;
+                let extent_type = item_data[20];
+                match extent_type {
+                    EXTENT_INLINE => {
+                        data.extend_from_slice(&item_data[21..]);
                     }
-                    let disk_bytenr = u64::from_le_bytes(
-                        item_data[21..29]
-                            .try_into()
-                            .map_err(|_| invalid_fs_data("disk parse error"))?,
-                    );
-                    let num_bytes = u64::from_le_bytes(
-                        item_data[45..53]
-                            .try_into()
-                            .map_err(|_| invalid_fs_data("disk parse error"))?,
-                    );
-                    let absolute = self.volume_offset + disk_bytenr;
-                    let mut buf = vec![0u8; num_bytes as usize];
-                    let mut reader = self.reader.borrow_mut();
-                    reader.seek(SeekFrom::Start(absolute))?;
-                    reader.read_exact(&mut buf)?;
-                    data.extend_from_slice(&buf);
+                    _ => {
+                        if item_data.len() < 53 {
+                            continue;
+                        }
+                        let disk_bytenr = u64::from_le_bytes(
+                            item_data[21..29]
+                                .try_into()
+                                .map_err(|_| invalid_fs_data("disk parse error"))?,
+                        );
+                        let num_bytes = u64::from_le_bytes(
+                            item_data[45..53]
+                                .try_into()
+                                .map_err(|_| invalid_fs_data("disk parse error"))?,
+                        );
+                        let absolute = self.volume_offset + disk_bytenr;
+                        let mut buf = vec![0u8; num_bytes as usize];
+                        let mut reader = self.reader.borrow_mut();
+                        reader.seek(SeekFrom::Start(absolute))?;
+                        reader.read_exact(&mut buf)?;
+                        data.extend_from_slice(&buf);
+                    }
                 }
             }
         }
         Ok(truncate_data_to_declared_size(data, declared_size))
+    }
+
+    fn read_file_extents_range(
+        &self,
+        tree_root_bytenr: u64,
+        inode_objectid: u64,
+        declared_size: u64,
+        offset: u64,
+        length: usize,
+    ) -> io::Result<Vec<u8>> {
+        if length == 0 || offset >= declared_size {
+            return Ok(Vec::new());
+        }
+
+        let range_end = offset.saturating_add(length as u64).min(declared_size);
+        let capacity = usize::try_from(range_end.saturating_sub(offset))
+            .map_err(|_| fs_out_of_memory("btrfs range exceeds addressable memory"))?;
+        let mut data = Vec::with_capacity(capacity);
+        let mut next_offset = offset;
+        let search_key = BtrfsKey {
+            objectid: inode_objectid,
+            ty: EXTENT_DATA_KEY,
+            offset: 0,
+        };
+        let upper_bound = BtrfsKey {
+            objectid: inode_objectid,
+            ty: EXTENT_DATA_KEY,
+            offset: range_end,
+        };
+        let leaves = self.collect_candidate_leaves(tree_root_bytenr, &search_key, &upper_bound)?;
+
+        for (leaf_data, items) in leaves {
+            let indices =
+                Self::find_items_by_object_and_type(&items, inode_objectid, EXTENT_DATA_KEY);
+            for idx in indices {
+                let item = &items[idx];
+                let item_data = Self::get_item_data(&leaf_data, item);
+                if item_data.len() < 21 {
+                    continue;
+                }
+
+                match item_data[20] {
+                    EXTENT_INLINE => {
+                        let extent_start = item.key.offset;
+                        let extent_end = extent_start.saturating_add(item_data[21..].len() as u64);
+                        let overlap_start = extent_start.max(offset);
+                        let overlap_end = extent_end.min(range_end);
+                        if overlap_start >= overlap_end {
+                            continue;
+                        }
+                        if next_offset < overlap_start {
+                            append_zeroes(&mut data, overlap_start - next_offset)?;
+                        }
+                        let inline_start =
+                            usize::try_from(overlap_start - extent_start).map_err(|_| {
+                                fs_out_of_memory("btrfs inline range exceeds addressable memory")
+                            })?;
+                        let inline_end =
+                            usize::try_from(overlap_end - extent_start).map_err(|_| {
+                                fs_out_of_memory("btrfs inline range exceeds addressable memory")
+                            })?;
+                        data.extend_from_slice(&item_data[21 + inline_start..21 + inline_end]);
+                        next_offset = overlap_end;
+                    }
+                    _ => {
+                        if item_data.len() < 53 {
+                            continue;
+                        }
+                        let disk_bytenr = u64::from_le_bytes(
+                            item_data[21..29]
+                                .try_into()
+                                .map_err(|_| invalid_fs_data("disk parse error"))?,
+                        );
+                        let extent_offset = u64::from_le_bytes(
+                            item_data[37..45]
+                                .try_into()
+                                .map_err(|_| invalid_fs_data("disk parse error"))?,
+                        );
+                        let num_bytes = u64::from_le_bytes(
+                            item_data[45..53]
+                                .try_into()
+                                .map_err(|_| invalid_fs_data("disk parse error"))?,
+                        );
+                        let extent_start = item.key.offset;
+                        let extent_end = extent_start.saturating_add(num_bytes);
+                        let overlap_start = extent_start.max(offset);
+                        let overlap_end = extent_end.min(range_end);
+                        if overlap_start >= overlap_end {
+                            continue;
+                        }
+                        if next_offset < overlap_start {
+                            append_zeroes(&mut data, overlap_start - next_offset)?;
+                        }
+                        let logical = disk_bytenr
+                            + extent_offset
+                            + overlap_start.saturating_sub(extent_start);
+                        let read_len =
+                            usize::try_from(overlap_end - overlap_start).map_err(|_| {
+                                fs_out_of_memory("btrfs extent range exceeds addressable memory")
+                            })?;
+                        let chunk = self.read_logical_range(logical, read_len)?;
+                        data.extend_from_slice(&chunk);
+                        next_offset = overlap_end;
+                    }
+                }
+            }
+        }
+
+        append_zeroes(&mut data, range_end.saturating_sub(next_offset))?;
+        Ok(data)
     }
 
     fn get_inode_size(&self, tree_root_bytenr: u64, inode_objectid: u64) -> io::Result<u64> {
@@ -843,9 +1039,47 @@ impl FileSystemReader for BtrfsReader {
         Ok(Box::new(io::Cursor::new(data)))
     }
 
+    fn read_file_range(&self, path: &str, offset: u64, length: usize) -> io::Result<Vec<u8>> {
+        let first_slash = path.find(['/', '\\']);
+        let (subvol_name, sub_path) = match first_slash {
+            Some(pos) => (&path[..pos], &path[pos + 1..]),
+            None => return Err(file_not_found(path)),
+        };
+
+        let subvol = self
+            .subvolumes
+            .iter()
+            .find(|s| s.name == subvol_name)
+            .ok_or_else(|| file_not_found(path))?;
+        let (inode_obj, is_dir, file_size) = self
+            .resolve_path_in_tree(subvol.tree_root_bytenr, subvol.root_dirid, sub_path)?
+            .ok_or_else(|| file_not_found(path))?;
+        if is_dir {
+            return Err(path_is_directory(path));
+        }
+        self.read_file_extents_range(
+            subvol.tree_root_bytenr,
+            inode_obj,
+            file_size,
+            offset,
+            length,
+        )
+    }
+
     fn data_source_name(&self) -> &str {
         "btrfs"
     }
+}
+
+fn append_zeroes(data: &mut Vec<u8>, count: u64) -> io::Result<()> {
+    let count = usize::try_from(count)
+        .map_err(|_| fs_out_of_memory("btrfs sparse range exceeds addressable memory"))?;
+    let new_len = data
+        .len()
+        .checked_add(count)
+        .ok_or_else(|| fs_out_of_memory("btrfs sparse range exceeds addressable memory"))?;
+    data.resize(new_len, 0);
+    Ok(())
 }
 
 // ===========================================================================
@@ -913,6 +1147,44 @@ impl EvidenceReader for FakeReader {
 mod tests {
     use super::*;
     use std::io::Read;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+
+    struct CountingReader {
+        inner: FakeReader,
+        bytes_read: Arc<AtomicUsize>,
+    }
+
+    impl CountingReader {
+        fn new(data: Vec<u8>, bytes_read: Arc<AtomicUsize>) -> Self {
+            Self {
+                inner: FakeReader::new(data),
+                bytes_read,
+            }
+        }
+    }
+
+    impl Read for CountingReader {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            let n = self.inner.read(buf)?;
+            self.bytes_read.fetch_add(n, Ordering::Relaxed);
+            Ok(n)
+        }
+    }
+
+    impl std::io::Seek for CountingReader {
+        fn seek(&mut self, pos: std::io::SeekFrom) -> io::Result<u64> {
+            self.inner.seek(pos)
+        }
+    }
+
+    impl EvidenceReader for CountingReader {
+        fn info(&self) -> &evidence_core::ReaderInfo {
+            self.inner.info()
+        }
+    }
 
     // -------------------------------------------------------------------
     // Minimal Btrfs fixture
@@ -1195,6 +1467,125 @@ mod tests {
         img
     }
 
+    fn build_large_sparse_btrfs_fixture(marker: &[u8]) -> (Vec<u8>, u64) {
+        const LOGICAL_OFFSET: u64 = 128 * 1024 * 1024;
+        let mut img = build_btrfs_fixture();
+        let block = |n: u64| -> usize { (n * 4096) as usize };
+        let file_size = LOGICAL_OFFSET + marker.len() as u64;
+
+        {
+            let fs = &mut img[block(19)..block(20)];
+            let items = BtrfsReader::parse_leaf_items(fs, 9).unwrap();
+            let inode = items
+                .iter()
+                .find(|item| item.key.objectid == 257 && item.key.ty == INODE_ITEM_KEY)
+                .unwrap();
+            let inode_start = inode.data_offset as usize;
+            fs[inode_start + 16..inode_start + 24].copy_from_slice(&file_size.to_le_bytes());
+
+            let extent_index = items
+                .iter()
+                .position(|item| item.key.objectid == 257 && item.key.ty == EXTENT_DATA_KEY)
+                .unwrap();
+            let key_offset = BTRFS_HEADER_SIZE + extent_index * LEAF_ITEM_SIZE + 9;
+            fs[key_offset..key_offset + 8].copy_from_slice(&LOGICAL_OFFSET.to_le_bytes());
+
+            let extent = &items[extent_index];
+            let extent_start = extent.data_offset as usize;
+            fs[extent_start + 45..extent_start + 53]
+                .copy_from_slice(&(marker.len() as u64).to_le_bytes());
+        }
+
+        img[block(20)..block(20) + marker.len()].copy_from_slice(marker);
+        (img, LOGICAL_OFFSET)
+    }
+
+    fn build_cross_leaf_btrfs_fixture() -> Vec<u8> {
+        let mut img = build_btrfs_fixture();
+        let block = |n: u64| -> usize { (n * 4096) as usize };
+
+        {
+            let fs = &mut img[block(19)..block(20)];
+            fs[0x61] = 1;
+            fs[0x5D..0x61].copy_from_slice(&2u32.to_le_bytes());
+            let first = BTRFS_HEADER_SIZE;
+            fs[first..first + 8].copy_from_slice(&256u64.to_le_bytes());
+            fs[first + 8] = INODE_ITEM_KEY;
+            fs[first + 9..first + 17].copy_from_slice(&0u64.to_le_bytes());
+            fs[first + 17..first + 25].copy_from_slice(&0x15000u64.to_le_bytes());
+            fs[first + 25..first + 33].copy_from_slice(&1u64.to_le_bytes());
+            let second = first + INTERNAL_ITEM_SIZE;
+            fs[second..second + 8].copy_from_slice(&257u64.to_le_bytes());
+            fs[second + 8] = EXTENT_DATA_KEY;
+            fs[second + 9..second + 17].copy_from_slice(&6u64.to_le_bytes());
+            fs[second + 17..second + 25].copy_from_slice(&0x16000u64.to_le_bytes());
+            fs[second + 25..second + 33].copy_from_slice(&1u64.to_le_bytes());
+        }
+
+        fn put_item(
+            leaf: &mut [u8],
+            idx: usize,
+            key_obj: u64,
+            key_type: u8,
+            key_off: u64,
+            data_bytes: &[u8],
+            data_off: &mut usize,
+        ) {
+            let kbase = BTRFS_HEADER_SIZE + idx * LEAF_ITEM_SIZE;
+            leaf[kbase..kbase + 8].copy_from_slice(&key_obj.to_le_bytes());
+            leaf[kbase + 8] = key_type;
+            leaf[kbase + 9..kbase + 17].copy_from_slice(&key_off.to_le_bytes());
+            *data_off -= data_bytes.len();
+            leaf[kbase + 17..kbase + 21].copy_from_slice(&(*data_off as u32).to_le_bytes());
+            leaf[kbase + 21..kbase + 25].copy_from_slice(&(data_bytes.len() as u32).to_le_bytes());
+            leaf[*data_off..*data_off + data_bytes.len()].copy_from_slice(data_bytes);
+        }
+
+        let first_chunk = b"hello ";
+        let second_chunk = b"world";
+        let mut inline_first = vec![0u8; 21 + first_chunk.len()];
+        inline_first[20] = EXTENT_INLINE;
+        inline_first[21..].copy_from_slice(first_chunk);
+        let mut inline_second = vec![0u8; 21 + second_chunk.len()];
+        inline_second[20] = EXTENT_INLINE;
+        inline_second[21..].copy_from_slice(second_chunk);
+
+        {
+            let leaf = &mut img[block(21)..block(22)];
+            leaf[0x30..0x38].copy_from_slice(&0x15000u64.to_le_bytes());
+            leaf[0x5D..0x61].copy_from_slice(&1u32.to_le_bytes());
+            leaf[0x61] = 0;
+            let mut data_off = 4096usize;
+            put_item(
+                leaf,
+                0,
+                257,
+                EXTENT_DATA_KEY,
+                0,
+                &inline_first,
+                &mut data_off,
+            );
+        }
+        {
+            let leaf = &mut img[block(22)..block(23)];
+            leaf[0x30..0x38].copy_from_slice(&0x16000u64.to_le_bytes());
+            leaf[0x5D..0x61].copy_from_slice(&1u32.to_le_bytes());
+            leaf[0x61] = 0;
+            let mut data_off = 4096usize;
+            put_item(
+                leaf,
+                0,
+                257,
+                EXTENT_DATA_KEY,
+                first_chunk.len() as u64,
+                &inline_second,
+                &mut data_off,
+            );
+        }
+
+        img
+    }
+
     // -------------------------------------------------------------------
     // test_superblock_magic
     // -------------------------------------------------------------------
@@ -1290,6 +1681,40 @@ mod tests {
         let mut s = String::new();
         f.read_to_string(&mut s).unwrap();
         assert_eq!(s, "Hello from Btrfs!");
+    }
+
+    #[test]
+    fn test_large_sparse_file_range_reads_only_requested_extent() {
+        let marker = b"BTRFS-RANGE-ONLY";
+        let (img, offset) = build_large_sparse_btrfs_fixture(marker);
+        let bytes_read = Arc::new(AtomicUsize::new(0));
+        let reader: Box<dyn EvidenceReader> =
+            Box::new(CountingReader::new(img, Arc::clone(&bytes_read)));
+        let btrfs = BtrfsReader::open(reader, 0).unwrap();
+
+        bytes_read.store(0, Ordering::Relaxed);
+        let bytes = btrfs
+            .read_file_range("default/file.txt", offset, marker.len())
+            .unwrap();
+
+        assert_eq!(bytes, marker);
+        assert!(
+            bytes_read.load(Ordering::Relaxed) < 64 * 1024,
+            "range path should not read the 128 MiB sparse prefix"
+        );
+    }
+
+    #[test]
+    fn test_file_range_reads_extent_items_across_multiple_leaves() {
+        let img = build_cross_leaf_btrfs_fixture();
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let btrfs = BtrfsReader::open(reader, 0).unwrap();
+
+        let bytes = btrfs
+            .read_file_extents_range(0x13000, 257, 11, 0, 11)
+            .unwrap();
+
+        assert_eq!(bytes, b"hello world");
     }
 
     // -------------------------------------------------------------------

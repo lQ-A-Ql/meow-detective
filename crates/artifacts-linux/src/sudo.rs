@@ -41,8 +41,6 @@ pub struct SudoEvent {
 /// as well as session open/close lines.
 pub fn parse_auth_log_sudo(content: &str) -> Result<Vec<SudoEvent>, crate::LinuxArtifactError> {
     let mut events: Vec<SudoEvent> = Vec::new();
-    // Track session opens to mark command lines successful
-    let mut session_open_users: Vec<(String, String)> = Vec::new(); // (target_user, invoking_user)
 
     for line in content.lines() {
         let trimmed = line.trim();
@@ -57,28 +55,9 @@ pub fn parse_auth_log_sudo(content: &str) -> Result<Vec<SudoEvent>, crate::Linux
 
         let timestamp = parse_syslog_timestamp(trimmed);
 
-        // ---- session opened ----
-        // Format: "...sudo: pam_unix(sudo:session): session opened for user root by alice(uid=0)"
-        if let Some(rest) = trimmed.split("session opened for user ").nth(1) {
-            let target_user = rest.split_whitespace().next().unwrap_or("unknown");
-            let invoking_user = rest
-                .split(" by ")
-                .nth(1)
-                .and_then(|s| s.split('(').next())
-                .unwrap_or("unknown");
-            session_open_users.push((target_user.to_string(), invoking_user.to_string()));
-            continue;
-        }
-
-        // ---- session closed ----
-        if trimmed.contains("session closed for user") {
-            let target_user = trimmed
-                .split("session closed for user ")
-                .nth(1)
-                .and_then(|s| s.split_whitespace().next())
-                .unwrap_or("unknown");
-            // Remove matching session open
-            session_open_users.retain(|(tu, _)| tu != target_user);
+        if trimmed.contains("session opened for user")
+            || trimmed.contains("session closed for user")
+        {
             continue;
         }
 
@@ -110,12 +89,6 @@ pub fn parse_auth_log_sudo(content: &str) -> Result<Vec<SudoEvent>, crate::Linux
                 "unknown".to_string()
             };
 
-            // Check if this user/target has an active session
-            let success = !command.is_empty()
-                && session_open_users
-                    .iter()
-                    .any(|(tu, iu)| tu == &target_user_field && iu == &user);
-
             if !command.is_empty() {
                 events.push(SudoEvent {
                     user,
@@ -128,17 +101,18 @@ pub fn parse_auth_log_sudo(content: &str) -> Result<Vec<SudoEvent>, crate::Linux
                     },
                     terminal: if tty.is_empty() { None } else { Some(tty) },
                     timestamp,
-                    success,
+                    // A plain COMMAND= line is emitted after sudo
+                    // authorization and records an executed command. Some
+                    // auth-failure formats also include COMMAND=; keep those
+                    // explicitly failed.
+                    success: !is_sudo_auth_failure(trimmed),
                 });
             }
             continue;
         }
 
         // ---- unsuccessful sudo attempt ----
-        if trimmed.contains("authentication failure")
-            || trimmed.contains("incorrect password")
-            || trimmed.contains("3 incorrect password attempts")
-        {
+        if is_sudo_auth_failure(trimmed) {
             let user = extract_sudo_user(trimmed);
             if !user.is_empty() {
                 events.push(SudoEvent {
@@ -155,6 +129,12 @@ pub fn parse_auth_log_sudo(content: &str) -> Result<Vec<SudoEvent>, crate::Linux
     }
 
     Ok(events)
+}
+
+fn is_sudo_auth_failure(line: &str) -> bool {
+    line.contains("authentication failure")
+        || line.contains("incorrect password")
+        || line.contains("3 incorrect password attempts")
 }
 
 /// Parse a syslog-style timestamp at the start of a line.
@@ -249,10 +229,25 @@ Jan 15 10:35:00 ubuntu sudo: pam_unix(sudo:session): session closed for user roo
         );
         assert_eq!(alice_event.target_user.as_deref(), Some("root"));
         assert_eq!(alice_event.terminal.as_deref(), Some("pts/0"));
+        assert!(alice_event.success);
 
         let bob_event = &cmds[1];
         assert_eq!(bob_event.user, "bob");
         assert_eq!(bob_event.command, "/usr/bin/systemctl restart nginx");
+        assert!(bob_event.success);
+    }
+
+    #[test]
+    fn command_before_session_open_is_successful() {
+        let input = "\
+Jan 15 10:30:00 ubuntu sudo:   alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/id
+Jan 15 10:30:05 ubuntu sudo: pam_unix(sudo:session): session opened for user root by alice(uid=0)";
+
+        let events = parse_auth_log_sudo(input).expect("should parse auth log");
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].command, "/usr/bin/id");
+        assert!(events[0].success);
     }
 
     #[test]

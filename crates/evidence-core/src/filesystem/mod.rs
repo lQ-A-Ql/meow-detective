@@ -29,6 +29,16 @@ pub trait FileSystemReader {
     fn list_children(&self, path: &str) -> io::Result<Vec<FsNode>>;
     fn open_file(&self, path: &str) -> io::Result<Box<dyn Read>>;
 
+    /// Read a bounded byte range without requiring callers to materialize the
+    /// entire file. Filesystems that cannot provide an efficient range path
+    /// should leave this default and let callers fall back explicitly.
+    fn read_file_range(&self, _path: &str, _offset: u64, _length: usize) -> io::Result<Vec<u8>> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "range file access is not implemented for this filesystem",
+        ))
+    }
+
     /// Open a file with guaranteed seek support. Readers whose underlying
     /// implementation is not seekable (for example streaming decompressors)
     /// should leave the default implementation, which returns

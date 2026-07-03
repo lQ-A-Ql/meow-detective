@@ -310,9 +310,13 @@ fn probe_and_seed_manifest(
     for partition in &probe.partitions {
         let status = match partition.status {
             datasource_service::PartitionStatus::Supported => "queued",
+            datasource_service::PartitionStatus::Expanded => "redirected",
             datasource_service::PartitionStatus::EncryptedBitLocker => "locked",
             datasource_service::PartitionStatus::Unsupported => "unsupported",
         };
+        if partition.status == datasource_service::PartitionStatus::Expanded {
+            continue;
+        }
         let root_name = candidate_root_names
             .get(&partition.index)
             .cloned()
@@ -399,8 +403,9 @@ fn probe_resume(
     } else {
         Box::new(RawImageReader::open(path).map_err(CommandError::from_service_error)?)
     };
-    let probe = datasource_service::detect_image_filesystem(&mut probe_reader)
+    let mut probe = datasource_service::detect_image_filesystem(&mut probe_reader)
         .map_err(CommandError::from_service_error)?;
+    datasource_service::expand_lvm_pool_candidates(&mut probe, path, kind);
     emit_phase_profile(
         ctx.app(),
         ctx.job_id,

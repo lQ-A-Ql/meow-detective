@@ -54,7 +54,12 @@ fn seed_main_db(conn: &Connection) {
             offset INTEGER NOT NULL,
             length INTEGER NOT NULL,
             filesystem TEXT,
-            unlock_hint TEXT
+            unlock_hint TEXT,
+            lvm_vg_uuid TEXT,
+            lvm_vg_name TEXT,
+            lvm_lv_uuid TEXT,
+            lvm_lv_name TEXT,
+            lvm_pv_offsets_json TEXT
         );",
     )
     .unwrap();
@@ -75,6 +80,11 @@ fn seed_partitions_table(conn: &Connection) {
             length: 1024,
             filesystem: Some("NTFS".to_string()),
             unlock_hint: None,
+            lvm_vg_uuid: None,
+            lvm_vg_name: None,
+            lvm_lv_uuid: None,
+            lvm_lv_name: None,
+            lvm_pv_offsets_json: None,
         },
         DataSourcePartitionRecord {
             id: "part-1".to_string(),
@@ -88,6 +98,11 @@ fn seed_partitions_table(conn: &Connection) {
             length: 1024,
             filesystem: Some("FAT".to_string()),
             unlock_hint: None,
+            lvm_vg_uuid: None,
+            lvm_vg_name: None,
+            lvm_lv_uuid: None,
+            lvm_lv_name: None,
+            lvm_pv_offsets_json: None,
         },
     ])
     .unwrap();

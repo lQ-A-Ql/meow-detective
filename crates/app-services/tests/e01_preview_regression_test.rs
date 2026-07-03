@@ -90,6 +90,11 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                             .to_string(),
                         ),
                         unlock_hint: None,
+                        lvm_vg_uuid: None,
+                        lvm_vg_name: None,
+                        lvm_lv_uuid: None,
+                        lvm_lv_name: None,
+                        lvm_pv_offsets_json: None,
                     }
                 })
                 .collect();
@@ -561,6 +566,11 @@ fn liuyang_seeded_app_services_inode_128026_reads_open_and_ranges() {
                         length: 0,
                         filesystem: Some("NTFS".to_string()),
                         unlock_hint: None,
+                        lvm_vg_uuid: None,
+                        lvm_vg_name: None,
+                        lvm_lv_uuid: None,
+                        lvm_lv_name: None,
+                        lvm_pv_offsets_json: None,
                     }],
                 )
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;

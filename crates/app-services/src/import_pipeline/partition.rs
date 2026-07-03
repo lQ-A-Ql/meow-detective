@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use evidence_core::{EvidenceReader, FileSystemReader};
 use image_e01::E01Reader;
 
-use crate::datasource_service::{self, ImageFilesystemKind};
+use crate::datasource_service::{
+    self, ImageFilesystemKind, ImageFilesystemSource, LvmLogicalVolumeIdentity,
+};
 use crate::file_service;
 use crate::parallel_enum;
 
@@ -120,7 +122,7 @@ where
     let source_kind = reader.info().kind.clone();
 
     // Expand LVM pools into per-LV candidates
-    let ds_kind = if source_kind.contains("E01") {
+    let ds_kind = if source_kind.eq_ignore_ascii_case("e01") {
         domain::DataSourceKind::E01
     } else {
         domain::DataSourceKind::Raw
@@ -153,6 +155,9 @@ where
         let detail = match partition.status {
             datasource_service::PartitionStatus::Supported => {
                 format!("Detected {root_name}; queued for import")
+            }
+            datasource_service::PartitionStatus::Expanded => {
+                format!("Detected {root_name}; expanded into logical volumes")
             }
             datasource_service::PartitionStatus::EncryptedBitLocker => {
                 format!("Detected locked {root_name}")
@@ -198,9 +203,13 @@ where
         }
         let status = match partition.status {
             datasource_service::PartitionStatus::Supported => "queued",
+            datasource_service::PartitionStatus::Expanded => "redirected",
             datasource_service::PartitionStatus::EncryptedBitLocker => "locked",
             datasource_service::PartitionStatus::Unsupported => "unsupported",
         };
+        if partition.status == datasource_service::PartitionStatus::Expanded {
+            continue;
+        }
         let placeholder_id = file_service::insert_partition_placeholder_root(
             conn,
             data_source_id,
@@ -222,7 +231,9 @@ where
             ImageFilesystemKind::Ext4 => format!("Enumerating {root_name}"),
             ImageFilesystemKind::Xfs => format!("Enumerating {root_name}"),
             ImageFilesystemKind::Btrfs => format!("Enumerating {root_name}"),
-            ImageFilesystemKind::LvmPool => format!("Discovering LVM logical volumes in {root_name}"),
+            ImageFilesystemKind::LvmPool => {
+                format!("Discovering LVM logical volumes in {root_name}")
+            }
         };
         let progress_detail = format_partition_progress_detail(
             index as u32,
@@ -253,17 +264,6 @@ where
                 0,
             );
         }
-        let partition_reader: Box<dyn EvidenceReader> = match source_kind.as_str() {
-            "e01" => Box::new(
-                E01Reader::open(&source_path)
-                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?,
-            ),
-            _ => Box::new(
-                evidence_core::RawImageReader::open(&source_path)
-                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?,
-            ),
-        };
-
         // Create progress callback for partition-level progress updates
         let emit_progress = |pct: u32| {
             if let (Some(a), Some(j)) = (app, job_id) {
@@ -290,7 +290,14 @@ where
 
         let stats = match candidate.kind {
             ImageFilesystemKind::Ntfs => {
-                let fs = fs_ntfs::NtfsReader::open(partition_reader, candidate.offset)
+                let (partition_reader, fs_offset) =
+                    open_candidate_reader(&source_path, &ds_kind, &candidate).map_err(|e| {
+                        persistence_sqlite::DbError::System(format!(
+                            "open reader for partition '{}': {}",
+                            root_name, e
+                        ))
+                    })?;
+                let fs = fs_ntfs::NtfsReader::open(partition_reader, fs_offset)
                     .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
                 enumerate_partition_with_fs(
                     conn,
@@ -303,7 +310,14 @@ where
                 )?
             }
             ImageFilesystemKind::Fat => {
-                let fs = fs_fat::FatReader::open(partition_reader, candidate.offset)
+                let (partition_reader, fs_offset) =
+                    open_candidate_reader(&source_path, &ds_kind, &candidate).map_err(|e| {
+                        persistence_sqlite::DbError::System(format!(
+                            "open reader for partition '{}': {}",
+                            root_name, e
+                        ))
+                    })?;
+                let fs = fs_fat::FatReader::open(partition_reader, fs_offset)
                     .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
                 enumerate_partition_with_fs(
                     conn,
@@ -316,7 +330,14 @@ where
                 )?
             }
             ImageFilesystemKind::Ext4 => {
-                let fs = fs_ext4::Ext4Reader::open(partition_reader, candidate.offset)
+                let (partition_reader, fs_offset) =
+                    open_candidate_reader(&source_path, &ds_kind, &candidate).map_err(|e| {
+                        persistence_sqlite::DbError::System(format!(
+                            "open reader for partition '{}': {}",
+                            root_name, e
+                        ))
+                    })?;
+                let fs = fs_ext4::Ext4Reader::open(partition_reader, fs_offset)
                     .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
                 enumerate_partition_with_fs(
                     conn,
@@ -329,7 +350,14 @@ where
                 )?
             }
             ImageFilesystemKind::Xfs => {
-                let fs = fs_xfs::XfsReader::open(partition_reader, candidate.offset)
+                let (partition_reader, fs_offset) =
+                    open_candidate_reader(&source_path, &ds_kind, &candidate).map_err(|e| {
+                        persistence_sqlite::DbError::System(format!(
+                            "open reader for partition '{}': {}",
+                            root_name, e
+                        ))
+                    })?;
+                let fs = fs_xfs::XfsReader::open(partition_reader, fs_offset)
                     .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
                 enumerate_partition_with_fs(
                     conn,
@@ -342,7 +370,14 @@ where
                 )?
             }
             ImageFilesystemKind::Btrfs => {
-                let fs = fs_btrfs::BtrfsReader::open(partition_reader, candidate.offset)
+                let (partition_reader, fs_offset) =
+                    open_candidate_reader(&source_path, &ds_kind, &candidate).map_err(|e| {
+                        persistence_sqlite::DbError::System(format!(
+                            "open reader for partition '{}': {}",
+                            root_name, e
+                        ))
+                    })?;
+                let fs = fs_btrfs::BtrfsReader::open(partition_reader, fs_offset)
                     .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
                 enumerate_partition_with_fs(
                     conn,
@@ -457,56 +492,18 @@ pub fn build_partition_work(
         })
         .map(|(_, c)| c)?;
 
-    // Open the base evidence reader (or LvReader wrapper for LVM LVs)
-    let is_lvm_lv = matches!(
-        candidate.source,
-        datasource_service::ImageFilesystemSource::LvmLogicalVolume
-    );
-
-    let (base_reader, fs_offset): (Box<dyn EvidenceReader>, u64) = if is_lvm_lv {
-        // For LVM logical volumes: re-open PV, discover pool, open LV
-        let pv_reader: Box<dyn EvidenceReader> = if *source_kind == domain::DataSourceKind::E01 {
-            Box::new(E01Reader::open(source_path).ok()?)
-        } else {
-            Box::new(evidence_core::RawImageReader::open(source_path).ok()?)
-        };
-        let pool = fs_lvm::LvmPool::discover(vec![pv_reader], vec![candidate.offset]).ok()?;
-        let lv_idx = pool
-            .list_volumes()
-            .iter()
-            .position(|lv| {
-                candidate
-                    .partition_name
-                    .as_deref()
-                    .unwrap_or("")
-                    .ends_with(&lv.name)
-            })
-            .unwrap_or(0);
-        let lv_reader = pool.open_volume(lv_idx).ok()?;
-        (Box::new(lv_reader), 0) // LV is a clean block device at offset 0
-    } else {
-        // Normal partition: open the disk image reader directly
-        let r: Box<dyn EvidenceReader> = if *source_kind == domain::DataSourceKind::E01 {
-            Box::new(E01Reader::open(source_path).ok()?)
-        } else {
-            Box::new(evidence_core::RawImageReader::open(source_path).ok()?)
-        };
-        (r, candidate.offset)
-    };
+    let (base_reader, fs_offset) =
+        open_candidate_reader(source_path, source_kind, candidate).ok()?;
 
     let fs: Box<dyn FileSystemReader + Send> = match candidate.kind {
         ImageFilesystemKind::Ntfs => {
             Box::new(fs_ntfs::NtfsReader::open(base_reader, fs_offset).ok()?)
         }
-        ImageFilesystemKind::Fat => {
-            Box::new(fs_fat::FatReader::open(base_reader, fs_offset).ok()?)
-        }
+        ImageFilesystemKind::Fat => Box::new(fs_fat::FatReader::open(base_reader, fs_offset).ok()?),
         ImageFilesystemKind::Ext4 => {
             Box::new(fs_ext4::Ext4Reader::open(base_reader, fs_offset).ok()?)
         }
-        ImageFilesystemKind::Xfs => {
-            Box::new(fs_xfs::XfsReader::open(base_reader, fs_offset).ok()?)
-        }
+        ImageFilesystemKind::Xfs => Box::new(fs_xfs::XfsReader::open(base_reader, fs_offset).ok()?),
         ImageFilesystemKind::Btrfs => {
             Box::new(fs_btrfs::BtrfsReader::open(base_reader, fs_offset).ok()?)
         }
@@ -522,4 +519,67 @@ pub fn build_partition_work(
         source_kind: format!("{:?}", source_kind),
         volume_offset: candidate.offset,
     })
+}
+
+fn open_lvm_physical_volume_readers(
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+    identity: &LvmLogicalVolumeIdentity,
+) -> Option<Vec<Box<dyn EvidenceReader>>> {
+    if identity.pv_offsets.is_empty() {
+        return None;
+    }
+
+    let mut readers = Vec::with_capacity(identity.pv_offsets.len());
+    for _ in &identity.pv_offsets {
+        let reader: Box<dyn EvidenceReader> = if *source_kind == domain::DataSourceKind::E01 {
+            Box::new(E01Reader::open(source_path).ok()?)
+        } else {
+            Box::new(evidence_core::RawImageReader::open(source_path).ok()?)
+        };
+        readers.push(reader);
+    }
+    Some(readers)
+}
+
+fn open_candidate_reader(
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+    candidate: &datasource_service::ImageFilesystemCandidate,
+) -> Result<(Box<dyn EvidenceReader>, u64), String> {
+    if matches!(candidate.source, ImageFilesystemSource::LvmLogicalVolume) {
+        let identity = candidate
+            .lvm_identity
+            .as_ref()
+            .ok_or_else(|| "LVM logical volume candidate missing identity".to_string())?;
+        let readers = open_lvm_physical_volume_readers(source_path, source_kind, identity)
+            .ok_or_else(|| "failed to open LVM physical volume readers".to_string())?;
+        let pool = fs_lvm::LvmPool::discover(readers, identity.pv_offsets.clone())
+            .map_err(|e| e.to_string())?;
+        let lv_idx = find_lvm_volume_index(&pool, identity)
+            .ok_or_else(|| "LVM logical volume identity not found in pool".to_string())?;
+        let lv_reader = pool.open_volume(lv_idx).map_err(|e| e.to_string())?;
+        return Ok((Box::new(lv_reader), 0));
+    }
+
+    let reader: Box<dyn EvidenceReader> = if *source_kind == domain::DataSourceKind::E01 {
+        Box::new(E01Reader::open(source_path).map_err(|e| e.to_string())?)
+    } else {
+        Box::new(evidence_core::RawImageReader::open(source_path).map_err(|e| e.to_string())?)
+    };
+    Ok((reader, candidate.offset))
+}
+
+fn find_lvm_volume_index(
+    pool: &fs_lvm::LvmPool,
+    identity: &LvmLogicalVolumeIdentity,
+) -> Option<usize> {
+    let volumes = pool.list_volumes();
+    if !identity.lv_uuid.is_empty() {
+        if let Some(index) = volumes.iter().position(|lv| lv.uuid == identity.lv_uuid) {
+            return Some(index);
+        }
+    }
+
+    volumes.iter().position(|lv| lv.name == identity.lv_name)
 }

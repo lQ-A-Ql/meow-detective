@@ -4,7 +4,8 @@ use crate::file_service::viewer::{
     descriptor_image_path_candidates, entry_image_path_candidates, is_exfat_filesystem_kind,
     is_fat_filesystem_kind, is_preview_image_filesystem_kind, looks_like_exfat_boot_sector,
     open_e01_reader_cached, open_first_image_path, open_first_image_path_seekable,
-    PreviewDescriptor, PreviewPartitionCandidate, RangeContentReader,
+    partition::{is_previewable_partition_status, preview_partition_candidate_from_record},
+    PreviewDescriptor, PreviewLvmIdentity, PreviewPartitionCandidate, RangeContentReader,
 };
 use crate::file_service::FileServiceError;
 use domain::FileEntry;
@@ -45,6 +46,9 @@ where
                     continue;
                 }
             }
+        } else if crate::file_service::viewer::is_linux_filesystem_kind(&candidate.filesystem_kind)
+        {
+            open_linux_image_candidate(source_path, candidate, &path_candidates, &mut open_reader)
         } else if is_fat_filesystem_kind(&candidate.filesystem_kind) {
             open_fat_or_exfat_image_candidate(
                 source_path,
@@ -176,6 +180,7 @@ where
     let probe = crate::datasource_service::detect_image_filesystem(&mut reader)
         .map_err(|e| FileServiceError::other(format!("Failed to detect RAW filesystem: {e}")))?;
     let source_path = reader.info().path.clone();
+    let source_kind = reader.info().kind.clone();
     let path_candidates = entry_image_path_candidates(entry);
     if probe.candidates.is_empty() {
         if expected_partition_index.is_none_or(|expected| expected == 0)
@@ -207,6 +212,13 @@ where
             "No supported filesystem detected in RAW image",
         ));
     }
+    let mut probe = probe;
+    let ds_kind = if source_kind.contains("E01") {
+        domain::DataSourceKind::E01
+    } else {
+        domain::DataSourceKind::Raw
+    };
+    crate::datasource_service::expand_lvm_pool_candidates(&mut probe, &source_path, &ds_kind);
     let candidates =
         crate::datasource_service::assign_effective_partition_indices(&probe.candidates);
     for (ci, candidate) in probe.candidates.iter().enumerate() {
@@ -253,21 +265,27 @@ where
                 }
             }
             crate::datasource_service::ImageFilesystemKind::Ext4 => {
-                if let Ok(fs) = fs_ext4::Ext4Reader::open(boxed, candidate.offset) {
+                let (reader, fs_offset) =
+                    raw_candidate_reader(&source_path, candidate, boxed, &ds_kind)?;
+                if let Ok(fs) = fs_ext4::Ext4Reader::open(reader, fs_offset) {
                     if let Ok(r) = open_first_image_path(&fs, &path_candidates) {
                         return Ok(r);
                     }
                 }
             }
             crate::datasource_service::ImageFilesystemKind::Xfs => {
-                if let Ok(fs) = fs_xfs::XfsReader::open(boxed, candidate.offset) {
+                let (reader, fs_offset) =
+                    raw_candidate_reader(&source_path, candidate, boxed, &ds_kind)?;
+                if let Ok(fs) = fs_xfs::XfsReader::open(reader, fs_offset) {
                     if let Ok(r) = open_first_image_path(&fs, &path_candidates) {
                         return Ok(r);
                     }
                 }
             }
             crate::datasource_service::ImageFilesystemKind::Btrfs => {
-                if let Ok(fs) = fs_btrfs::BtrfsReader::open(boxed, candidate.offset) {
+                let (reader, fs_offset) =
+                    raw_candidate_reader(&source_path, candidate, boxed, &ds_kind)?;
+                if let Ok(fs) = fs_btrfs::BtrfsReader::open(reader, fs_offset) {
                     if let Ok(r) = open_first_image_path(&fs, &path_candidates) {
                         return Ok(r);
                     }
@@ -280,6 +298,142 @@ where
         "Cannot open RAW image file '{}' from any partition",
         entry.path
     )))
+}
+
+fn raw_candidate_reader(
+    source_path: &Path,
+    candidate: &crate::datasource_service::ImageFilesystemCandidate,
+    boxed_reader: Box<dyn EvidenceReader>,
+    source_kind: &domain::DataSourceKind,
+) -> std::io::Result<(Box<dyn EvidenceReader>, u64)> {
+    match &candidate.lvm_identity {
+        Some(identity) => {
+            let preview_identity =
+                crate::file_service::viewer::partition::preview_lvm_identity_from_datasource(
+                    identity,
+                );
+            let mut open_reader = |path: &Path| -> std::io::Result<Box<dyn EvidenceReader>> {
+                match source_kind {
+                    domain::DataSourceKind::E01 => image_e01::E01Reader::open(path)
+                        .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>),
+                    _ => evidence_core::RawImageReader::open(path)
+                        .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>),
+                }
+            };
+            let lv_reader =
+                open_lvm_logical_volume_reader(source_path, &preview_identity, &mut open_reader)?;
+            Ok((Box::new(lv_reader), 0))
+        }
+        None => Ok((boxed_reader, candidate.offset)),
+    }
+}
+
+pub(crate) fn open_linux_image_candidate<F>(
+    source_path: &Path,
+    candidate: &PreviewPartitionCandidate,
+    path_candidates: &[String],
+    open_reader: &mut F,
+) -> std::io::Result<RangeContentReader>
+where
+    F: FnMut(&Path) -> std::io::Result<Box<dyn EvidenceReader>>,
+{
+    let (boxed_reader, fs_offset) =
+        open_candidate_block_reader(source_path, candidate, open_reader)?;
+
+    match candidate.filesystem_kind.as_str() {
+        kind if kind.eq_ignore_ascii_case("ext4") => {
+            let fs = fs_ext4::Ext4Reader::open(boxed_reader, fs_offset)?;
+            open_first_image_path_seekable(&fs, path_candidates)
+        }
+        kind if kind.eq_ignore_ascii_case("xfs") => {
+            let fs = fs_xfs::XfsReader::open(boxed_reader, fs_offset)?;
+            open_first_image_path_seekable(&fs, path_candidates)
+        }
+        kind if kind.eq_ignore_ascii_case("btrfs") => {
+            let fs = fs_btrfs::BtrfsReader::open(boxed_reader, fs_offset)?;
+            open_first_image_path_seekable(&fs, path_candidates)
+        }
+        _ => Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            format!("unsupported Linux filesystem {}", candidate.filesystem_kind),
+        )),
+    }
+}
+
+pub(crate) fn open_candidate_block_reader<F>(
+    source_path: &Path,
+    candidate: &PreviewPartitionCandidate,
+    open_reader: &mut F,
+) -> std::io::Result<(Box<dyn EvidenceReader>, u64)>
+where
+    F: FnMut(&Path) -> std::io::Result<Box<dyn EvidenceReader>>,
+{
+    match &candidate.lvm_identity {
+        Some(identity) => {
+            let lv_reader = open_lvm_logical_volume_reader(source_path, identity, open_reader)?;
+            Ok((Box::new(lv_reader) as Box<dyn EvidenceReader>, 0))
+        }
+        None => open_reader(source_path).map(|reader| (reader, candidate.offset)),
+    }
+}
+
+pub(crate) fn open_lvm_logical_volume_reader<F>(
+    source_path: &Path,
+    identity: &PreviewLvmIdentity,
+    open_reader: &mut F,
+) -> std::io::Result<fs_lvm::LvReader>
+where
+    F: FnMut(&Path) -> std::io::Result<Box<dyn EvidenceReader>>,
+{
+    if identity.pv_offsets.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "LVM preview identity has no physical volume offsets",
+        ));
+    }
+
+    let mut readers = Vec::with_capacity(identity.pv_offsets.len());
+    for _ in &identity.pv_offsets {
+        readers.push(open_reader(source_path)?);
+    }
+
+    let pool =
+        fs_lvm::LvmPool::discover(readers, identity.pv_offsets.clone()).map_err(|error| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("LVM discovery failed for preview: {error}"),
+            )
+        })?;
+    let lv_index = find_lvm_preview_volume_index(&pool, identity).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!(
+                "LVM logical volume not found for preview: {}/{}",
+                identity.vg_name, identity.lv_name
+            ),
+        )
+    })?;
+
+    pool.open_volume(lv_index).map_err(|error| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("LVM logical volume open failed for preview: {error}"),
+        )
+    })
+}
+
+pub(crate) fn find_lvm_preview_volume_index(
+    pool: &fs_lvm::LvmPool,
+    identity: &PreviewLvmIdentity,
+) -> Option<usize> {
+    let volumes = pool.list_volumes();
+    if !identity.lv_uuid.is_empty() {
+        if let Some(index) = volumes.iter().position(|lv| lv.uuid == identity.lv_uuid) {
+            return Some(index);
+        }
+    }
+
+    volumes.iter().position(|lv| lv.name == identity.lv_name)
 }
 
 pub(crate) fn open_e01_file(
@@ -314,7 +468,9 @@ pub(crate) fn open_e01_file(
     > = match expected_partition_index {
         Some(expected) => partitions
             .iter()
-            .filter(|p| p.partition_index as usize == expected && p.status != "EncryptedBitLocker")
+            .filter(|p| {
+                p.partition_index as usize == expected && is_previewable_partition_status(&p.status)
+            })
             .collect(),
         None => {
             // Fallback: try the first non-encrypted NTFS partition for entries
@@ -322,7 +478,7 @@ pub(crate) fn open_e01_file(
             let previewable: Vec<_> = partitions
                 .iter()
                 .filter(|p| {
-                    p.status != "EncryptedBitLocker"
+                    is_previewable_partition_status(&p.status)
                         && is_preview_image_filesystem_kind(
                             p.filesystem.as_deref().unwrap_or(&p.kind_label),
                         )
@@ -349,31 +505,40 @@ pub(crate) fn open_e01_file(
         let fs_kind = target.filesystem.as_deref().unwrap_or(&target.kind_label);
         let exfat_hint = if is_exfat_filesystem_kind(fs_kind) {
             true
+        } else if crate::file_service::viewer::is_linux_filesystem_kind(fs_kind)
+            || target.lvm_pv_offsets_json.is_some()
+        {
+            false
         } else {
             let mut probe_reader = open_e01_reader_cached(Path::new(source_path), "")?;
             looks_like_exfat_boot_sector(&mut probe_reader, target.offset).unwrap_or(false)
         };
 
-        let reader = open_e01_reader_cached(Path::new(source_path), "")?;
-        let boxed_reader: Box<dyn EvidenceReader> = Box::new(reader);
+        let candidate = preview_partition_candidate_from_record(target);
 
         let result = match fs_kind {
-            "NTFS" => match fs_ntfs::NtfsReader::open(boxed_reader, target.offset) {
-                Ok(fs) => fs
-                    .open_file(&entry.path)
-                    .or_else(|_| fs.open_file(&entry.id.0)),
-                Err(e) => {
-                    tracing::warn!(
-                        path = %entry.path,
-                        partition = %target.name,
-                        offset = %target.offset,
-                        error = %e,
-                        "E01 NTFS open failed"
-                    );
-                    continue;
+            "NTFS" => {
+                let reader = open_e01_reader_cached(Path::new(source_path), "")?;
+                let boxed_reader: Box<dyn EvidenceReader> = Box::new(reader);
+                match fs_ntfs::NtfsReader::open(boxed_reader, target.offset) {
+                    Ok(fs) => fs
+                        .open_file(&entry.path)
+                        .or_else(|_| fs.open_file(&entry.id.0)),
+                    Err(e) => {
+                        tracing::warn!(
+                            path = %entry.path,
+                            partition = %target.name,
+                            offset = %target.offset,
+                            error = %e,
+                            "E01 NTFS open failed"
+                        );
+                        continue;
+                    }
                 }
-            },
+            }
             "FAT" | "FAT32" | "FAT16" | "FAT12" => {
+                let reader = open_e01_reader_cached(Path::new(source_path), "")?;
+                let boxed_reader: Box<dyn EvidenceReader> = Box::new(reader);
                 match fs_fat::FatReader::open(boxed_reader, target.offset) {
                     Ok(fs) => open_first_image_path(&fs, &path_candidates),
                     Err(e) => {
@@ -397,19 +562,36 @@ pub(crate) fn open_e01_file(
                     }
                 }
             }
-            _ if exfat_hint => match fs_exfat::ExfatReader::open(boxed_reader, target.offset) {
-                Ok(fs) => open_first_image_path(&fs, &path_candidates),
-                Err(e) => {
-                    tracing::warn!(
-                        path = %entry.path,
-                        partition = %target.name,
-                        offset = %target.offset,
-                        error = %e,
-                        "E01 exFAT open failed"
-                    );
-                    continue;
+            _ if exfat_hint => {
+                let reader = open_e01_reader_cached(Path::new(source_path), "")?;
+                let boxed_reader: Box<dyn EvidenceReader> = Box::new(reader);
+                match fs_exfat::ExfatReader::open(boxed_reader, target.offset) {
+                    Ok(fs) => open_first_image_path(&fs, &path_candidates),
+                    Err(e) => {
+                        tracing::warn!(
+                            path = %entry.path,
+                            partition = %target.name,
+                            offset = %target.offset,
+                            error = %e,
+                            "E01 exFAT open failed"
+                        );
+                        continue;
+                    }
                 }
-            },
+            }
+            _ if crate::file_service::viewer::is_linux_filesystem_kind(fs_kind) => {
+                let mut open_reader = |path: &Path| {
+                    open_e01_reader_cached(path, "")
+                        .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>)
+                };
+                open_linux_image_candidate(
+                    Path::new(source_path),
+                    &candidate,
+                    &path_candidates,
+                    &mut open_reader,
+                )
+                .map(range_content_reader_into_read)
+            }
             _ => continue,
         };
 
@@ -431,4 +613,11 @@ pub(crate) fn open_e01_file(
         "Cannot open image-backed file '{}' from any partition",
         entry.path
     )))
+}
+
+fn range_content_reader_into_read(reader: RangeContentReader) -> Box<dyn Read> {
+    match reader {
+        RangeContentReader::Seekable(reader) => reader as Box<dyn Read>,
+        RangeContentReader::Streaming(reader) => reader,
+    }
 }

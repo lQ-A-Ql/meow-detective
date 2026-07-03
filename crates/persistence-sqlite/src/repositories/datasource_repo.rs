@@ -298,7 +298,12 @@ mod tests {
                 offset INTEGER NOT NULL,
                 length INTEGER NOT NULL,
                 filesystem TEXT,
-                unlock_hint TEXT
+                unlock_hint TEXT,
+                lvm_vg_uuid TEXT,
+                lvm_vg_name TEXT,
+                lvm_lv_uuid TEXT,
+                lvm_lv_name TEXT,
+                lvm_pv_offsets_json TEXT
             );",
         )
         .unwrap();

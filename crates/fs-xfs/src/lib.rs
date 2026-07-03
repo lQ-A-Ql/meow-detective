@@ -19,9 +19,10 @@
 pub mod log;
 
 use evidence_core::filesystem::{
-    child_nodes_with_parent_path, file_not_found, fs_node_without_timestamps, invalid_fs_data,
-    is_special_directory_name, path_components, path_is_directory, path_is_not_directory,
-    path_not_found, root_node, truncate_data_to_declared_size, FileSystemReader, FsNode,
+    child_nodes_with_parent_path, file_not_found, fs_node_without_timestamps, fs_out_of_memory,
+    invalid_fs_data, is_special_directory_name, path_components, path_is_directory,
+    path_is_not_directory, path_not_found, root_node, truncate_data_to_declared_size,
+    FileSystemReader, FsNode,
 };
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
@@ -68,6 +69,14 @@ const BMBT_REC_SIZE: usize = 16;
 /// When i8count == 0, parent is 4 bytes → header = 6 bytes.
 const DIR2_SF_HDR_8: usize = 10;
 const DIR2_SF_HDR_4: usize = 6;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct XfsExtent {
+    logical: u64,
+    start_block: u64,
+    block_count: u64,
+    unwritten: bool,
+}
 
 // ---------------------------------------------------------------------------
 // Block directory constants (xfs_dir3_data_hdr / xfs_dir2_data_hdr)
@@ -268,6 +277,17 @@ impl XfsReader {
         Ok(buf)
     }
 
+    fn read_bytes_at(&self, offset: u64, length: usize) -> io::Result<Vec<u8>> {
+        let mut buf = vec![0u8; length];
+        if length == 0 {
+            return Ok(buf);
+        }
+        let mut reader = self.reader.borrow_mut();
+        reader.seek(SeekFrom::Start(offset))?;
+        reader.read_exact(&mut buf)?;
+        Ok(buf)
+    }
+
     /// Read one full inode buffer at its physical offset.
     fn read_inode_at_offset(&self, offset: u64) -> io::Result<Vec<u8>> {
         let mut buf = vec![0u8; self.inode_size as usize];
@@ -337,24 +357,32 @@ impl XfsReader {
             // Shortform directories: entire literal area is data fork
             Ok(literal)
         } else {
-            let forkoff = inode[di_off::FORKOFF] as usize;
-            if forkoff == 0 {
+            let forkoff_units = inode[di_off::FORKOFF] as usize;
+            if forkoff_units == 0 {
                 Ok(literal)
-            } else if forkoff > literal.len() {
-                Err(invalid_fs_data(format!(
-                    "di_forkoff {} exceeds literal area {}",
-                    forkoff,
-                    literal.len()
-                )))
             } else {
-                Ok(&literal[..forkoff])
+                let forkoff = forkoff_units.checked_mul(8).ok_or_else(|| {
+                    invalid_fs_data(format!("di_forkoff {} overflows bytes", forkoff_units))
+                })?;
+                if forkoff > literal.len() {
+                    Err(invalid_fs_data(format!(
+                        "di_forkoff {} ({} bytes) exceeds literal area {}",
+                        forkoff_units,
+                        forkoff,
+                        literal.len()
+                    )))
+                } else {
+                    Ok(&literal[..forkoff])
+                }
             }
         }
     }
 
     /// Maximum number of complete extent records that fit in the data fork.
     fn max_inline_extents(inode: &[u8]) -> usize {
-        Self::data_fork(inode).map(|df| df.len() / BMBT_REC_SIZE).unwrap_or(0)
+        Self::data_fork(inode)
+            .map(|df| df.len() / BMBT_REC_SIZE)
+            .unwrap_or(0)
     }
 
     /// Number of extent records declared for this inode.
@@ -362,17 +390,20 @@ impl XfsReader {
         be_u32(inode, di_off::NEXTENTS)
     }
 
-    /// Decode a single bmbt record’s physical start-block and block count.
-    ///
-    /// Encoding: l0 holds the file logical offset, l1 encodes start-block
-    /// in the high 43 bits and block count in the low 21 bits.
-    fn decode_extent(rec: &[u8]) -> (u64, u64, u64) {
+    /// Decode a single packed XFS BMBT record.
+    fn decode_extent(rec: &[u8]) -> XfsExtent {
         let l0 = be_u64(rec, 0);
         let l1 = be_u64(rec, 8);
-        let logical = l0; // file block offset
-        let start_block = l1 >> 21;
+        let state = (l0 >> 63) != 0;
+        let logical = (l0 >> 9) & ((1u64 << 54) - 1);
+        let start_block = ((l0 & 0x1FF) << 43) | (l1 >> 21);
         let block_count = l1 & 0x1F_FFFF;
-        (logical, start_block, block_count)
+        XfsExtent {
+            logical,
+            start_block,
+            block_count,
+            unwritten: state,
+        }
     }
 
     // ------------------------------------------------------------------
@@ -391,10 +422,7 @@ impl XfsReader {
         inode.len() > di_off::VERSION && inode[di_off::VERSION] >= 3
     }
 
-    fn parse_shortform_dir(
-        data_fork: &[u8],
-        has_ftype: bool,
-    ) -> io::Result<Vec<(String, u64)>> {
+    fn parse_shortform_dir(data_fork: &[u8], has_ftype: bool) -> io::Result<Vec<(String, u64)>> {
         // Dynamic header: parent is 4 bytes when i8count==0, 8 bytes otherwise.
         let min_hdr = DIR2_SF_HDR_4;
         if data_fork.len() < min_hdr {
@@ -404,7 +432,11 @@ impl XfsReader {
         let i8count = data_fork[1] as usize;
 
         // Header layout: count(1) + i8count(1) + parent(4 or 8 bytes).
-        let hdr_size = if i8count == 0 { DIR2_SF_HDR_4 } else { DIR2_SF_HDR_8 };
+        let hdr_size = if i8count == 0 {
+            DIR2_SF_HDR_4
+        } else {
+            DIR2_SF_HDR_8
+        };
         if data_fork.len() < hdr_size {
             return Err(invalid_fs_data("shortform dir header truncated"));
         }
@@ -423,26 +455,35 @@ impl XfsReader {
             let namelen = data_fork[pos] as usize;
             let name_start = pos + 3;
             let name_end = name_start + namelen;
-            let name = String::from_utf8_lossy(&data_fork[name_start..name_end.min(data_fork.len())])
-                .to_string();
+            let name =
+                String::from_utf8_lossy(&data_fork[name_start..name_end.min(data_fork.len())])
+                    .to_string();
 
             let uses_8byte = i >= first_8byte_idx;
             let (inode_val, tail_len) = if has_ftype {
                 // v3/v5: ftype(1) + inode(4 or 8)
                 let inode_off = name_end + 1;
                 if uses_8byte {
-                    if inode_off + 8 > data_fork.len() { break; }
+                    if inode_off + 8 > data_fork.len() {
+                        break;
+                    }
                     (be_u64(data_fork, inode_off), 9)
                 } else {
-                    if inode_off + 4 > data_fork.len() { break; }
+                    if inode_off + 4 > data_fork.len() {
+                        break;
+                    }
                     (be_u32(data_fork, inode_off) as u64, 5)
                 }
             } else {
                 if uses_8byte {
-                    if name_end + 8 > data_fork.len() { break; }
+                    if name_end + 8 > data_fork.len() {
+                        break;
+                    }
                     (be_u64(data_fork, name_end), 8)
                 } else {
-                    if name_end + 4 > data_fork.len() { break; }
+                    if name_end + 4 > data_fork.len() {
+                        break;
+                    }
                     (be_u32(data_fork, name_end) as u64, 4)
                 }
             };
@@ -466,14 +507,53 @@ impl XfsReader {
             if off + BMBT_REC_SIZE > df.len() {
                 break;
             }
-            let (_logical, start_block, block_count) = Self::decode_extent(&df[off..]);
-            for blk in 0..block_count {
-                let block_data = self.read_block(start_block + blk)?;
-                data.extend_from_slice(&block_data);
+            let extent = Self::decode_extent(&df[off..]);
+            if extent.unwritten {
+                append_zeroes(
+                    &mut data,
+                    extent.block_count.saturating_mul(self.block_size),
+                )?;
+            } else {
+                for blk in 0..extent.block_count {
+                    let block_data = self.read_block(extent.start_block + blk)?;
+                    data.extend_from_slice(&block_data);
+                }
             }
         }
 
         Ok(truncate_data_to_declared_size(data, file_size))
+    }
+
+    fn read_extent_data_range(
+        &self,
+        inode: &[u8],
+        file_size: u64,
+        offset: u64,
+        length: usize,
+    ) -> io::Result<Vec<u8>> {
+        if length == 0 || offset >= file_size {
+            return Ok(Vec::new());
+        }
+        let range_end = offset.saturating_add(length as u64).min(file_size);
+        let capacity = usize::try_from(range_end.saturating_sub(offset))
+            .map_err(|_| fs_out_of_memory("xfs range exceeds addressable memory"))?;
+        let mut data = Vec::with_capacity(capacity);
+        let mut next_offset = offset;
+
+        let df = Self::data_fork(inode)?;
+        let max_extents = Self::max_inline_extents(inode);
+        let nextents = Self::nextents(inode) as usize;
+        for i in 0..nextents.min(max_extents) {
+            let off = i * BMBT_REC_SIZE;
+            if off + BMBT_REC_SIZE > df.len() {
+                break;
+            }
+            let extent = Self::decode_extent(&df[off..]);
+            self.read_extent_range(extent, offset, range_end, &mut next_offset, &mut data)?;
+        }
+
+        append_zeroes(&mut data, range_end.saturating_sub(next_offset))?;
+        Ok(data)
     }
 
     /// Read file data from a B+tree-mapped inode (di_format = 3).
@@ -502,6 +582,38 @@ impl XfsReader {
         Ok(truncate_data_to_declared_size(data, file_size))
     }
 
+    fn read_btree_data_range(
+        &self,
+        inode: &[u8],
+        file_size: u64,
+        offset: u64,
+        length: usize,
+    ) -> io::Result<Vec<u8>> {
+        if length == 0 || offset >= file_size {
+            return Ok(Vec::new());
+        }
+        let df = Self::data_fork(inode)?;
+        if df.len() < 8 {
+            return Ok(Vec::new());
+        }
+        let magic = be_u32(df, 0);
+        if magic != BMAP_MAGIC {
+            return Err(invalid_fs_data(format!(
+                "invalid bmbt block magic 0x{:08X}",
+                magic
+            )));
+        }
+
+        let range_end = offset.saturating_add(length as u64).min(file_size);
+        let capacity = usize::try_from(range_end.saturating_sub(offset))
+            .map_err(|_| fs_out_of_memory("xfs btree range exceeds addressable memory"))?;
+        let mut data = Vec::with_capacity(capacity);
+        let mut next_offset = offset;
+        self.walk_btree_node_range(df, true, offset, range_end, &mut next_offset, &mut data)?;
+        append_zeroes(&mut data, range_end.saturating_sub(next_offset))?;
+        Ok(data)
+    }
+
     /// Walk a BMBT node. `is_inode_root` distinguishes the compact bmdr
     /// header (8 bytes, in the inode) from the on-disk lblock header
     /// (24 bytes, with left/right sibling pointers).
@@ -528,11 +640,17 @@ impl XfsReader {
                 if off + LEAF_SLOT > node.len() {
                     break;
                 }
-                let (_logical, start_block, block_count) =
-                    Self::decode_extent(&node[off + 8..off + 24]);
-                for blk in 0..block_count {
-                    let block_data = self.read_block(start_block + blk)?;
-                    data.extend_from_slice(&block_data);
+                let extent = Self::decode_extent(&node[off + 8..off + 24]);
+                if extent.unwritten {
+                    append_zeroes(
+                        &mut *data,
+                        extent.block_count.saturating_mul(self.block_size),
+                    )?;
+                } else {
+                    for blk in 0..extent.block_count {
+                        let block_data = self.read_block(extent.start_block + blk)?;
+                        data.extend_from_slice(&block_data);
+                    }
                 }
             }
         } else {
@@ -553,6 +671,87 @@ impl XfsReader {
         Ok(())
     }
 
+    fn walk_btree_node_range(
+        &self,
+        node: &[u8],
+        is_inode_root: bool,
+        range_start: u64,
+        range_end: u64,
+        next_offset: &mut u64,
+        data: &mut Vec<u8>,
+    ) -> io::Result<()> {
+        let hdr_size: usize = if is_inode_root { 8 } else { 24 };
+        if node.len() < hdr_size {
+            return Ok(());
+        }
+        let level = be_u16(node, 4);
+        let numrecs = be_u16(node, 6) as usize;
+
+        if level == 0 {
+            const LEAF_SLOT: usize = 24;
+            for i in 0..numrecs {
+                let off = hdr_size + i * LEAF_SLOT;
+                if off + LEAF_SLOT > node.len() {
+                    break;
+                }
+                let extent = Self::decode_extent(&node[off + 8..off + 24]);
+                self.read_extent_range(extent, range_start, range_end, next_offset, data)?;
+            }
+        } else {
+            const INTERNAL_SLOT: usize = 16;
+            for i in 0..numrecs {
+                let off = hdr_size + i * INTERNAL_SLOT;
+                if off + INTERNAL_SLOT > node.len() {
+                    break;
+                }
+                let child_ptr = be_u64(node, off + 8);
+                let child_block = self.read_block(child_ptr)?;
+                self.walk_btree_node_range(
+                    &child_block,
+                    false,
+                    range_start,
+                    range_end,
+                    next_offset,
+                    data,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    fn read_extent_range(
+        &self,
+        extent: XfsExtent,
+        range_start: u64,
+        range_end: u64,
+        next_offset: &mut u64,
+        data: &mut Vec<u8>,
+    ) -> io::Result<()> {
+        let extent_start = extent.logical.saturating_mul(self.block_size);
+        let extent_len = extent.block_count.saturating_mul(self.block_size);
+        let extent_end = extent_start.saturating_add(extent_len);
+        let overlap_start = extent_start.max(range_start);
+        let overlap_end = extent_end.min(range_end);
+        if overlap_start >= overlap_end {
+            return Ok(());
+        }
+        if *next_offset < overlap_start {
+            append_zeroes(data, overlap_start - *next_offset)?;
+        }
+        let read_len = usize::try_from(overlap_end - overlap_start)
+            .map_err(|_| fs_out_of_memory("xfs extent range exceeds addressable memory"))?;
+        if extent.unwritten {
+            append_zeroes(data, read_len as u64)?;
+        } else {
+            let physical_offset = self.block_to_offset(extent.start_block)
+                + overlap_start.saturating_sub(extent_start);
+            let chunk = self.read_bytes_at(physical_offset, read_len)?;
+            data.extend_from_slice(&chunk);
+        }
+        *next_offset = overlap_end;
+        Ok(())
+    }
+
     /// Read an inode's data bytes according to its `di_format`.
     fn read_file_content(&self, ino: u64) -> io::Result<Vec<u8>> {
         let inode = self.read_inode(ino)?;
@@ -569,6 +768,35 @@ impl XfsReader {
             }
             FORMAT_EXTENTS => self.read_extent_data(&inode, size),
             FORMAT_BTREE => self.read_btree_data(&inode, size),
+            other => Err(invalid_fs_data(format!("unsupported di_format {}", other))),
+        }
+    }
+
+    fn read_file_content_range(&self, ino: u64, offset: u64, length: usize) -> io::Result<Vec<u8>> {
+        let inode = self.read_inode(ino)?;
+        Self::validate_inode_magic(&inode)?;
+        let format = inode[di_off::FORMAT];
+        let size = be_u64(&inode, di_off::SIZE);
+        if length == 0 || offset >= size {
+            return Ok(Vec::new());
+        }
+
+        match format {
+            FORMAT_LOCAL => {
+                let df = Self::data_fork(&inode)?;
+                let start = usize::try_from(offset)
+                    .ok()
+                    .map(|start| start.min(df.len()))
+                    .unwrap_or(df.len());
+                let declared_end = usize::try_from(size)
+                    .ok()
+                    .map(|end| end.min(df.len()))
+                    .unwrap_or(df.len());
+                let end = start.saturating_add(length).min(declared_end);
+                Ok(df[start..end].to_vec())
+            }
+            FORMAT_EXTENTS => self.read_extent_data_range(&inode, size, offset, length),
+            FORMAT_BTREE => self.read_btree_data_range(&inode, size, offset, length),
             other => Err(invalid_fs_data(format!("unsupported di_format {}", other))),
         }
     }
@@ -727,11 +955,8 @@ impl XfsReader {
                         // area, which may also contain residual data).
                         let core = Self::inode_core_size(&inode);
                         let full_literal = &inode[core..];
-                        let recovery_slices: &[&[u8]] = if all_zero {
-                            &[df, full_literal]
-                        } else {
-                            &[df]
-                        };
+                        let recovery_slices: &[&[u8]] =
+                            if all_zero { &[df, full_literal] } else { &[df] };
                         for &slice in recovery_slices {
                             if let Ok(raw) =
                                 Self::parse_shortform_dir(slice, Self::has_ftype(&inode))
@@ -855,9 +1080,30 @@ impl FileSystemReader for XfsReader {
         Ok(Box::new(io::Cursor::new(data)))
     }
 
+    fn read_file_range(&self, path: &str, offset: u64, length: usize) -> io::Result<Vec<u8>> {
+        let (ino, is_dir) = self
+            .resolve_path(path)?
+            .ok_or_else(|| file_not_found(path))?;
+        if is_dir {
+            return Err(path_is_directory(path));
+        }
+        self.read_file_content_range(ino, offset, length)
+    }
+
     fn data_source_name(&self) -> &str {
         "xfs"
     }
+}
+
+fn append_zeroes(data: &mut Vec<u8>, count: u64) -> io::Result<()> {
+    let count = usize::try_from(count)
+        .map_err(|_| fs_out_of_memory("xfs sparse range exceeds addressable memory"))?;
+    let new_len = data
+        .len()
+        .checked_add(count)
+        .ok_or_else(|| fs_out_of_memory("xfs sparse range exceeds addressable memory"))?;
+    data.resize(new_len, 0);
+    Ok(())
 }
 
 // ===========================================================================
@@ -869,6 +1115,10 @@ mod tests {
     use super::*;
     use evidence_core::ReaderInfo;
     use std::io::{Read, Seek};
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
 
     // -----------------------------------------------------------------------
     // Fake evidence reader for in-memory fixtures
@@ -920,6 +1170,49 @@ mod tests {
         fn info(&self) -> &ReaderInfo {
             &self.info
         }
+    }
+
+    struct CountingReader {
+        inner: FakeReader,
+        bytes_read: Arc<AtomicUsize>,
+    }
+
+    impl CountingReader {
+        fn new(data: Vec<u8>, bytes_read: Arc<AtomicUsize>) -> Self {
+            Self {
+                inner: FakeReader::new(data),
+                bytes_read,
+            }
+        }
+    }
+
+    impl Read for CountingReader {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            let n = self.inner.read(buf)?;
+            self.bytes_read.fetch_add(n, Ordering::Relaxed);
+            Ok(n)
+        }
+    }
+
+    impl Seek for CountingReader {
+        fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+            self.inner.seek(pos)
+        }
+    }
+
+    impl EvidenceReader for CountingReader {
+        fn info(&self) -> &ReaderInfo {
+            self.inner.info()
+        }
+    }
+
+    fn encode_bmbt_extent(logical: u64, start_block: u64, block_count: u64) -> [u8; 16] {
+        let l0 = ((logical & ((1u64 << 54) - 1)) << 9) | (start_block >> 43);
+        let l1 = ((start_block & ((1u64 << 43) - 1)) << 21) | (block_count & 0x1F_FFFF);
+        let mut encoded = [0u8; 16];
+        encoded[0..8].copy_from_slice(&l0.to_be_bytes());
+        encoded[8..16].copy_from_slice(&l1.to_be_bytes());
+        encoded
     }
 
     // -----------------------------------------------------------------------
@@ -1016,9 +1309,7 @@ mod tests {
 
         // One extent record: logical=0, start=block 4, count=1.
         let df_file = &mut fi[INODE_CORE_SIZE..];
-        df_file[0..8].copy_from_slice(&0u64.to_be_bytes()); // l0: logical offset 0
-        let l1: u64 = (4u64 << 21) | 1; // start block 4, 1 block
-        df_file[8..16].copy_from_slice(&l1.to_be_bytes());
+        df_file[0..16].copy_from_slice(&encode_bmbt_extent(0, 4, 1));
 
         // -- Inode 4: subdir (LOCAL / shortform) --
         let sd = &mut img[ino_base + 3 * ino_size..ino_base + 4 * ino_size];
@@ -1056,13 +1347,11 @@ mod tests {
         df_hi[0..4].copy_from_slice(&BMAP_MAGIC.to_be_bytes()); // bb_magic
         df_hi[4..6].copy_from_slice(&0u16.to_be_bytes()); // bb_level = 0 (leaf)
         df_hi[6..8].copy_from_slice(&1u16.to_be_bytes()); // bb_numrecs = 1
-        // bmdr header is 8 bytes; leaf records follow immediately.
-        // Leaf record: key(8) + extent l0(8) + extent l1(8) = 24 bytes.
+                                                          // bmdr header is 8 bytes; leaf records follow immediately.
+                                                          // Leaf record: key(8) + extent l0(8) + extent l1(8) = 24 bytes.
         let rec_off: usize = 8;
         df_hi[rec_off..rec_off + 8].copy_from_slice(&0u64.to_be_bytes()); // key = file block 0
-        df_hi[rec_off + 8..rec_off + 16].copy_from_slice(&0u64.to_be_bytes()); // extent l0 = 0
-        let l1_val: u64 = (6u64 << 21) | 1; // start block 6, 1 block
-        df_hi[rec_off + 16..rec_off + 24].copy_from_slice(&l1_val.to_be_bytes());
+        df_hi[rec_off + 8..rec_off + 24].copy_from_slice(&encode_bmbt_extent(0, 6, 1));
 
         // ---- Block 4: test.txt data "Hello World" ----
         img[16384..16384 + 11].copy_from_slice(b"Hello World");
@@ -1071,6 +1360,24 @@ mod tests {
         img[24576..24576 + 13].copy_from_slice(b"Hello subdir!");
 
         img
+    }
+
+    fn build_large_sparse_xfs_fixture(marker: &[u8]) -> (Vec<u8>, u64) {
+        const LOGICAL_OFFSET: u64 = 128 * 1024 * 1024;
+        let mut img = build_xfs_fixture();
+        let block_size = 4096u64;
+        let logical_block = LOGICAL_OFFSET / block_size;
+        let physical_block = 4u64;
+        let file_size = LOGICAL_OFFSET + marker.len() as u64;
+
+        let fi = &mut img[8192 + 2 * 256..8192 + 3 * 256];
+        fi[di_off::SIZE..di_off::SIZE + 8].copy_from_slice(&file_size.to_be_bytes());
+        let df_file = &mut fi[INODE_CORE_SIZE..];
+        df_file[0..16].copy_from_slice(&encode_bmbt_extent(logical_block, physical_block, 1));
+
+        let data_offset = physical_block as usize * block_size as usize;
+        img[data_offset..data_offset + marker.len()].copy_from_slice(marker);
+        (img, LOGICAL_OFFSET)
     }
 
     // -----------------------------------------------------------------------
@@ -1172,6 +1479,70 @@ mod tests {
         let mut content2 = String::new();
         file2.read_to_string(&mut content2).unwrap();
         assert_eq!(content2, "Hello subdir!");
+    }
+
+    #[test]
+    fn test_large_sparse_file_range_reads_only_requested_extent() {
+        let marker = b"XFS-RANGE-ONLY";
+        let (img, offset) = build_large_sparse_xfs_fixture(marker);
+        let bytes_read = Arc::new(AtomicUsize::new(0));
+        let reader: Box<dyn EvidenceReader> =
+            Box::new(CountingReader::new(img, Arc::clone(&bytes_read)));
+        let xfs = XfsReader::open(reader, 0).unwrap();
+
+        bytes_read.store(0, Ordering::Relaxed);
+        let bytes = xfs
+            .read_file_range("test.txt", offset, marker.len())
+            .unwrap();
+
+        assert_eq!(bytes, marker);
+        assert!(
+            bytes_read.load(Ordering::Relaxed) < 32 * 1024,
+            "range path should not read the 128 MiB sparse prefix"
+        );
+    }
+
+    #[test]
+    fn test_bmbt_extent_decode_real_bit_layout() {
+        let logical = (1u64 << 40) + 7;
+        let start_block = (1u64 << 44) + 0x12345;
+        let block_count = 0x1F;
+        let encoded = encode_bmbt_extent(logical, start_block, block_count);
+
+        let decoded = XfsReader::decode_extent(&encoded);
+
+        assert_eq!(decoded.logical, logical);
+        assert_eq!(decoded.start_block, start_block);
+        assert_eq!(decoded.block_count, block_count);
+        assert!(!decoded.unwritten);
+    }
+
+    #[test]
+    fn test_data_fork_forkoff_is_64bit_word_units() {
+        let mut inode = vec![0u8; 256];
+        inode[di_off::FORMAT] = FORMAT_EXTENTS;
+        inode[di_off::FORKOFF] = 2;
+        inode[INODE_CORE_SIZE..INODE_CORE_SIZE + 16].copy_from_slice(&encode_bmbt_extent(0, 4, 1));
+
+        let data_fork = XfsReader::data_fork(&inode).unwrap();
+
+        assert_eq!(data_fork.len(), 16);
+        assert_eq!(XfsReader::decode_extent(data_fork).start_block, 4);
+    }
+
+    #[test]
+    fn test_truncated_physical_read_returns_unexpected_eof() {
+        let marker = b"TRUNCATED";
+        let (mut img, offset) = build_large_sparse_xfs_fixture(marker);
+        img.truncate(4 * 4096 + marker.len() - 1);
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let xfs = XfsReader::open(reader, 0).unwrap();
+
+        let err = xfs
+            .read_file_range("test.txt", offset, marker.len())
+            .unwrap_err();
+
+        assert_eq!(err.kind(), io::ErrorKind::UnexpectedEof);
     }
 
     // -----------------------------------------------------------------------
