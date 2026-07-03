@@ -25,7 +25,7 @@ pub use handle::{get_file_path_for_entry, open_file_handle_real};
 pub use path::safe_relative_path;
 pub use range::{
     open_file_content_by_id, read_file_bytes_for_case, read_file_header_by_id,
-    read_file_range_for_case, read_file_range_real,
+    read_file_range_for_case, read_file_range_real, FileHeaderReadCache,
 };
 
 // Re-exports used by tests and sibling modules.

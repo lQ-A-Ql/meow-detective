@@ -11,6 +11,9 @@ use crate::file_service::FileServiceError;
 use domain::{EntryType, FileEntry, FileEntryId};
 use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
+use serde_json::Value;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::io::Read;
 use transport::dto::{ViewerRangeRequestDto, ViewerRangeResponseDto};
 
@@ -434,6 +437,75 @@ pub fn read_file_header_by_id(
     }
 
     Ok(bytes)
+}
+
+pub struct FileHeaderReadCache {
+    case_id: String,
+    descriptors: RefCell<HashMap<String, Value>>,
+}
+
+impl FileHeaderReadCache {
+    pub fn new(case_id: impl Into<String>) -> Self {
+        Self {
+            case_id: case_id.into(),
+            descriptors: RefCell::new(HashMap::new()),
+        }
+    }
+
+    pub fn read_file_header_by_id(
+        &self,
+        conn: &Connection,
+        file_id: &FileEntryId,
+        max_bytes: usize,
+    ) -> Result<Vec<u8>, FileServiceError> {
+        if self.case_id.is_empty() {
+            return read_file_header_by_id(conn, file_id, max_bytes);
+        }
+
+        let mut bytes =
+            Vec::with_capacity(max_bytes.min(infrastructure::constants::MAX_RANGE_LENGTH));
+        let mut offset = 0u64;
+        let mut remaining = max_bytes;
+
+        while remaining > 0 {
+            let chunk_len = remaining
+                .min(infrastructure::constants::MAX_RANGE_LENGTH)
+                .min(u32::MAX as usize) as u32;
+            if chunk_len == 0 {
+                break;
+            }
+
+            let get_cache = |key: &str| self.descriptors.borrow().get(key).cloned();
+            let set_cache = |key: &str, value: &Value| {
+                self.descriptors
+                    .borrow_mut()
+                    .insert(key.to_string(), value.clone());
+            };
+            let chunk = match read_file_bytes_for_case(
+                (conn, self.case_id.as_str(), get_cache, set_cache),
+                file_id,
+                offset,
+                chunk_len,
+            ) {
+                Ok(chunk) => chunk,
+                Err(error) if error.is_read_offset_beyond_size() => break,
+                Err(error) => return Err(error),
+            };
+            if chunk.is_empty() {
+                break;
+            }
+
+            let is_short_read = chunk.len() < chunk_len as usize;
+            offset = offset.saturating_add(chunk.len() as u64);
+            remaining = remaining.saturating_sub(chunk.len());
+            bytes.extend_from_slice(&chunk);
+            if is_short_read {
+                break;
+            }
+        }
+
+        Ok(bytes)
+    }
 }
 
 pub(crate) fn file_id_from_handle(handle_id: &str) -> Result<&str, FileServiceError> {

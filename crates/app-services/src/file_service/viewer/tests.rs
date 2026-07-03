@@ -696,6 +696,71 @@ fn logical_directory_repeated_range_uses_preview_descriptor_cache() {
 }
 
 #[test]
+fn header_read_cache_reuses_preview_descriptor_across_chunks() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let evidence_dir = dir.path().join("evidence");
+    std::fs::create_dir_all(&evidence_dir).unwrap();
+    let bytes = vec![b'A'; infrastructure::constants::MAX_RANGE_LENGTH + 17];
+    std::fs::write(evidence_dir.join("large.bin"), &bytes).unwrap();
+
+    let conn = persistence_sqlite::open_or_create(&dir.path().join("case.db")).unwrap();
+    runner::run_all(&conn).unwrap();
+    conn.execute(
+        "INSERT INTO cases (id, name, created_at, updated_at)
+         VALUES ('case-header-cache', 'Header Cache Case', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        [],
+    )
+    .unwrap();
+
+    let ds_id = DataSourceId("ds-header-cache".to_string());
+    DataSourceRepo::new(&conn)
+        .insert(
+            &CaseId("case-header-cache".to_string()),
+            &DataSource {
+                id: ds_id.clone(),
+                name: "logical evidence".to_string(),
+                kind: DataSourceKind::LogicalDirectory,
+                source_path: evidence_dir,
+                imported_at: chrono::Utc::now(),
+                provenance: DataSourceProvenance::unknown(),
+            },
+        )
+        .unwrap();
+
+    conn.execute(
+        "INSERT INTO file_entries
+         (id, parent_id, data_source_id, path, name, entry_type, size, ext, deleted, hidden, system)
+         VALUES ('file-header-cache', NULL, ?1, 'large.bin', 'large.bin', 'file', ?2, 'bin', 0, 0, 0)",
+        params![ds_id.0, bytes.len() as i64],
+    )
+    .unwrap();
+
+    reset_read_file_bytes_for_case_call_count();
+    reset_open_file_content_by_id_call_count();
+    let cache = FileHeaderReadCache::new("case-header-cache");
+    let read = cache
+        .read_file_header_by_id(
+            &conn,
+            &FileEntryId("file-header-cache".to_string()),
+            bytes.len(),
+        )
+        .unwrap();
+
+    assert_eq!(read, bytes);
+    assert_eq!(read_file_bytes_for_case_call_count(), 2);
+    assert_eq!(open_file_content_by_id_call_count(), 0);
+
+    reset_read_file_bytes_for_case_call_count();
+    reset_open_file_content_by_id_call_count();
+    let again = cache
+        .read_file_header_by_id(&conn, &FileEntryId("file-header-cache".to_string()), 8)
+        .unwrap();
+    assert_eq!(again, bytes[..8].to_vec());
+    assert_eq!(read_file_bytes_for_case_call_count(), 1);
+    assert_eq!(open_file_content_by_id_call_count(), 0);
+}
+
+#[test]
 fn raw_ntfs_mid_file_range_uses_ntfs_range_reader_without_materialize() {
     let dir = tempfile::TempDir::new().unwrap();
     let raw_path = dir.path().join("large_ntfs.raw");

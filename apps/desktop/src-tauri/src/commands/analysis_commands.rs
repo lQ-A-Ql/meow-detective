@@ -162,11 +162,12 @@ pub async fn run_analysis_extraction(
             .iter()
             .map(String::as_str)
             .collect::<Vec<_>>();
+        let header_cache = file_service::FileHeaderReadCache::new(active.case_id.clone());
         analysis_service::run_analysis_extraction(&conn, &active.case_id, &categories, |file_id| {
-            read_file_header_cursor_by_id(
-                &conn,
+            limited_header_cursor(
                 file_id,
                 analysis_service::MAX_ANALYSIS_SOURCE_BYTES,
+                |file_id, max_bytes| header_cache.read_file_header_by_id(&conn, file_id, max_bytes),
             )
         })
         .map_err(CommandError::from_typed_service_error)

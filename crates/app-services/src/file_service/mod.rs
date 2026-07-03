@@ -38,7 +38,7 @@ pub use viewer::{
     clear_e01_reader_cache, clear_e01_reader_cache_for_case, get_file_path_for_entry,
     open_file_content_by_id, open_file_handle_real, read_file_bytes_for_case,
     read_file_header_by_id, read_file_range_for_case, read_file_range_real, safe_relative_path,
-    skip_reader_bytes,
+    skip_reader_bytes, FileHeaderReadCache,
 };
 
 pub use mft::{
