@@ -869,30 +869,73 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
                     }
                     // Build extent map to see resolved mapping
                 }
-                // Try XFS enumeration on this LV
+                // comprehensive XFS listing on the root LV
                 if lv.name == "root" {
-                    if let Ok(mut lv_reader) = pool.open_volume(
-                        lvs.iter().position(|v| v.name == lv.name).unwrap()
-                    ) {
-                        use std::io::Read;
-                        // Read XFS superblock
-                        let mut sector0 = [0u8; 512];
-                        if lv_reader.read_exact(&mut sector0).is_ok() {
-                            eprintln!("      XFS magic: {:02X?}", &sector0[0..4]);
-                        }
-                        // Try opening XfsReader and listing children
+                    let lv_idx = lvs.iter().position(|v| v.name == lv.name).unwrap();
+                    if let Ok(mut lv_reader) = pool.open_volume(lv_idx) {
                         let lv_box: Box<dyn EvidenceReader> = Box::new(lv_reader);
                         match fs_xfs::XfsReader::open(lv_box, 0) {
                             Ok(xfs) => {
-                                match xfs.list_children("") {
-                                    Ok(children) => {
-                                        eprintln!("      ROOT LV: {} children", children.len());
-                                        for c in children.iter().take(20) {
-                                            eprintln!("        {} (dir={})", c.name, c.is_dir);
+                                eprintln!("      === Root LV directory listing ===");
+                                // Recursively list key directories
+                                fn list_dir(
+                                    xfs: &dyn FileSystemReader,
+                                    path: &str,
+                                    depth: usize,
+                                ) {
+                                    match xfs.list_children(path) {
+                                        Ok(children) => {
+                                            let dirs: Vec<_> = children.iter()
+                                                .filter(|c| c.is_dir).collect();
+                                            let files: Vec<_> = children.iter()
+                                                .filter(|c| !c.is_dir).collect();
+                                            let indent = "  ".repeat(depth + 1);
+                                            if depth == 0 {
+                                                eprintln!(
+                                                    "      /: {} dirs, {} files",
+                                                    dirs.len(),
+                                                    files.len()
+                                                );
+                                            } else {
+                                                eprintln!(
+                                                    "{}  {}: {} dirs, {} files",
+                                                    indent, path, dirs.len(), files.len()
+                                                );
+                                            }
+                                            // Recurse into subdirs (max depth 2)
+                                            if depth < 2 {
+                                                for d in dirs.iter().take(10) {
+                                                    let subpath = if path.is_empty() {
+                                                        d.name.clone()
+                                                    } else {
+                                                        format!("{}/{}", path, d.name)
+                                                    };
+                                                    list_dir(xfs, &subpath, depth + 1);
+                                                }
+                                            }
+                                            // Show first few files
+                                            for f in files.iter().take(5) {
+                                                eprintln!("{}    {}", indent, f.name);
+                                            }
+                                            if files.len() > 5 {
+                                                eprintln!(
+                                                    "{}    ... and {} more files",
+                                                    indent,
+                                                    files.len() - 5
+                                                );
+                                            }
+                                        }
+                                        Err(e) => {
+                                            eprintln!(
+                                                "{}  {}: ERROR — {}",
+                                                "  ".repeat(depth + 1),
+                                                path,
+                                                e
+                                            );
                                         }
                                     }
-                                    Err(e) => eprintln!("      ROOT LV list_children ERROR: {}", e),
                                 }
+                                list_dir(&xfs, "", 0);
                             }
                             Err(e) => eprintln!("      ROOT LV XFS open ERROR: {}", e),
                         }
