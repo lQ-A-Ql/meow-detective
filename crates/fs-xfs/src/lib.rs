@@ -63,10 +63,11 @@ const INODE_CORE_SIZE_V3: usize = 176;
 /// Size of one B+tree block-map record (two big-endian u64s).
 const BMBT_REC_SIZE: usize = 16;
 
-/// Base size of the shortform-directory header: count(1) + i8count(1) +
-/// parent-inode(8).  The i8count=1 path (8-byte inodes) is used for all
-/// reader-built fixtures.
-const DIR2_SF_HDR_SIZE: usize = 10;
+/// Base size of the shortform-directory header (i8count > 0):
+/// count(1) + i8count(1) + parent-inode(8) = 10.
+/// When i8count == 0, parent is 4 bytes → header = 6 bytes.
+const DIR2_SF_HDR_8: usize = 10;
+const DIR2_SF_HDR_4: usize = 6;
 
 // ---------------------------------------------------------------------------
 // Block directory constants (xfs_dir3_data_hdr / xfs_dir2_data_hdr)
@@ -374,40 +375,69 @@ impl XfsReader {
     /// `di_mode` of the target inode, but the shortform entry itself
     /// does not carry a file-type byte in v2 (no `ftype`).  We store
     /// `is_dir = false` here and let higher-level resolution decide.
-    fn parse_shortform_dir(data_fork: &[u8]) -> io::Result<Vec<(String, u64)>> {
-        if data_fork.len() < DIR2_SF_HDR_SIZE {
+    /// Whether this inode's filesystem has the `ftype` feature (di_version >= 3).
+    fn has_ftype(inode: &[u8]) -> bool {
+        inode.len() > di_off::VERSION && inode[di_off::VERSION] >= 3
+    }
+
+    fn parse_shortform_dir(
+        data_fork: &[u8],
+        has_ftype: bool,
+    ) -> io::Result<Vec<(String, u64)>> {
+        // Dynamic header: parent is 4 bytes when i8count==0, 8 bytes otherwise.
+        let min_hdr = DIR2_SF_HDR_4;
+        if data_fork.len() < min_hdr {
             return Err(invalid_fs_data("shortform dir too small for header"));
         }
-
         let count = data_fork[0] as usize;
-        let i8count = data_fork[1];
-        if i8count == 0 {
-            return Err(invalid_fs_data(
-                "shortform dir with i8count=0 not supported in this reader",
-            ));
+        let i8count = data_fork[1] as usize;
+
+        // Header layout: count(1) + i8count(1) + parent(4 or 8 bytes).
+        let hdr_size = if i8count == 0 { DIR2_SF_HDR_4 } else { DIR2_SF_HDR_8 };
+        if data_fork.len() < hdr_size {
+            return Err(invalid_fs_data("shortform dir header truncated"));
         }
 
-        // Header: count(1) + i8count(1) + parent(8) = 10 bytes.
-        let mut pos = DIR2_SF_HDR_SIZE;
-        let mut entries = Vec::with_capacity(count);
+        // The LAST `i8count` entries have 8-byte inode numbers.
+        // The first `count - i8count` entries have 4-byte inode numbers.
+        // When i8count == 0, ALL entries use 4-byte inodes.
+        let first_8byte_idx = count.saturating_sub(i8count);
 
-        for _ in 0..count {
+        let mut pos = hdr_size;
+        let mut entries = Vec::with_capacity(count);
+        for i in 0..count {
             if pos + 3 > data_fork.len() {
                 break;
             }
             let namelen = data_fork[pos] as usize;
-            // offset (u16 BE) at pos+1..pos+3 — skipped here.
             let name_start = pos + 3;
             let name_end = name_start + namelen;
-            if name_end + 8 > data_fork.len() {
-                break;
-            }
-            let name = String::from_utf8_lossy(&data_fork[name_start..name_end]).to_string();
-            let inode = be_u64(data_fork, name_end);
-            entries.push((name, inode));
-            pos = name_end + 8; // 8-byte inode (i8count=1)
-        }
+            let name = String::from_utf8_lossy(&data_fork[name_start..name_end.min(data_fork.len())])
+                .to_string();
 
+            let uses_8byte = i >= first_8byte_idx;
+            let (inode_val, tail_len) = if has_ftype {
+                // v3/v5: ftype(1) + inode(4 or 8)
+                let inode_off = name_end + 1;
+                if uses_8byte {
+                    if inode_off + 8 > data_fork.len() { break; }
+                    (be_u64(data_fork, inode_off), 9)
+                } else {
+                    if inode_off + 4 > data_fork.len() { break; }
+                    (be_u32(data_fork, inode_off) as u64, 5)
+                }
+            } else {
+                if uses_8byte {
+                    if name_end + 8 > data_fork.len() { break; }
+                    (be_u64(data_fork, name_end), 8)
+                } else {
+                    if name_end + 4 > data_fork.len() { break; }
+                    (be_u32(data_fork, name_end) as u64, 4)
+                }
+            };
+            entries.push((name, inode_val));
+            pos = name_end + tail_len;
+        }
         Ok(entries)
     }
 
@@ -631,7 +661,7 @@ impl XfsReader {
             FORMAT_LOCAL => {
                 // Shortform directory: entries are inline in the data fork.
                 let df = Self::data_fork(&inode)?;
-                let raw = Self::parse_shortform_dir(df)?;
+                let raw = Self::parse_shortform_dir(df, Self::has_ftype(&inode))?;
                 let mut entries = Vec::with_capacity(raw.len());
                 for (name, child_ino) in raw {
                     let is_dir = self
@@ -856,9 +886,9 @@ mod tests {
         // Data fork: shortform dir with 2 entries.
         let df_root = &mut ri[INODE_CORE_SIZE..];
         df_root[0] = 2; // count
-        df_root[1] = 1; // i8count (8-byte inodes)
+        df_root[1] = 2; // i8count=count → all entries 8-byte inodes
         df_root[2..10].copy_from_slice(&2u64.to_be_bytes()); // parent = ino 2
-        let mut pos = DIR2_SF_HDR_SIZE;
+        let mut pos = DIR2_SF_HDR_8;
 
         // Entry: "test.txt" → ino 3
         df_root[pos] = 8; // namelen
@@ -907,7 +937,7 @@ mod tests {
         df_sd[0] = 1; // count
         df_sd[1] = 1; // i8count
         df_sd[2..10].copy_from_slice(&2u64.to_be_bytes()); // parent = ino 2
-        let mut sd_pos = DIR2_SF_HDR_SIZE;
+        let mut sd_pos = DIR2_SF_HDR_8;
 
         // Entry: "hello.dat" → ino 5
         df_sd[sd_pos] = 9; // namelen
