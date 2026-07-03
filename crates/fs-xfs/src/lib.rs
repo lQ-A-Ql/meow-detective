@@ -289,6 +289,24 @@ impl XfsReader {
         Ok(buf)
     }
 
+    fn read_block_lossy_zero_filled(&self, block: u64) -> io::Result<Vec<u8>> {
+        let offset = self.block_to_offset(block);
+        let mut buf = vec![0u8; self.block_size as usize];
+        let mut reader = self.reader.borrow_mut();
+        reader.seek(SeekFrom::Start(offset))?;
+        let mut filled = 0usize;
+        while filled < buf.len() {
+            match reader.read(&mut buf[filled..]) {
+                Ok(0) => break,
+                Ok(n) => filled += n,
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => break,
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(buf)
+    }
+
     fn read_bytes_at(&self, offset: u64, length: usize) -> io::Result<Vec<u8>> {
         let mut buf = vec![0u8; length];
         if length == 0 {
@@ -529,7 +547,7 @@ impl XfsReader {
                 )?;
             } else {
                 for blk in 0..extent.block_count {
-                    let block_data = self.read_block(extent.start_block + blk)?;
+                    let block_data = self.read_block_lossy_zero_filled(extent.start_block + blk)?;
                     data.extend_from_slice(&block_data);
                 }
             }
@@ -1529,6 +1547,21 @@ mod tests {
         (img, LOGICAL_OFFSET)
     }
 
+    fn build_truncated_extent_xfs_fixture(marker: &[u8]) -> Vec<u8> {
+        let mut img = build_xfs_fixture();
+        let block_size = 4096usize;
+
+        let fi = &mut img[8192 + 2 * 256..8192 + 3 * 256];
+        fi[di_off::SIZE..di_off::SIZE + 8].copy_from_slice(&(block_size as u64).to_be_bytes());
+        let df_file = &mut fi[INODE_CORE_SIZE..];
+        df_file[0..16].copy_from_slice(&encode_bmbt_extent(0, 4, 1));
+
+        let data_offset = 4 * block_size;
+        img.truncate(data_offset + marker.len());
+        img[data_offset..data_offset + marker.len()].copy_from_slice(marker);
+        img
+    }
+
     fn build_xfs_fixture_with_zeroed_block_dir_and_residual_shortform() -> Vec<u8> {
         let mut img = build_xfs_fixture();
         let block_size = 4096u64;
@@ -1725,6 +1758,22 @@ mod tests {
             .unwrap_err();
 
         assert_eq!(err.kind(), io::ErrorKind::UnexpectedEof);
+    }
+
+    #[test]
+    fn test_full_extent_read_zero_fills_truncated_tail() {
+        let marker = b"PARTIAL";
+        let img = build_truncated_extent_xfs_fixture(marker);
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let xfs = XfsReader::open(reader, 0).unwrap();
+
+        let mut file = xfs.open_file("test.txt").unwrap();
+        let mut data = Vec::new();
+        file.read_to_end(&mut data).unwrap();
+
+        assert_eq!(&data[..marker.len()], marker);
+        assert_eq!(data.len(), 4096);
+        assert!(data[marker.len()..].iter().all(|byte| *byte == 0));
     }
 
     // -----------------------------------------------------------------------
