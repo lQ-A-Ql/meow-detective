@@ -326,32 +326,15 @@ impl XfsReader {
 
     /// Return the slice of the inode buffer that holds the data fork.
     ///
-    /// For LOCAL-format inodes (di_format == 1), the data fork fills the
-    /// entire literal area regardless of `di_forkoff`. For other formats,
-    /// `di_forkoff` bounds the data fork: when zero the data fork starts
-    /// after the core; otherwise it uses the first `di_forkoff` bytes of
-    /// the literal area.
+    /// Returns the full literal area (core end to inode end) regardless
+    /// of `di_forkoff`. The forkoff field only delimits the *attribute*
+    /// fork boundary; our read-only forensic reader does not parse xattrs,
+    /// and truncating at forkoff would drop extent records / directory
+    /// entries that extend beyond it (seen on real CentOS 7 images where
+    /// forkoff=36 but nextents=3 requires 48 bytes of extent data).
     fn data_fork(inode: &[u8]) -> io::Result<&[u8]> {
         let core_size = Self::inode_core_size(inode);
-        let literal = &inode[core_size..];
-        let format = inode[di_off::FORMAT];
-        if format == FORMAT_LOCAL {
-            // LOCAL-format directories use the entire literal area
-            Ok(literal)
-        } else {
-            let forkoff = inode[di_off::FORKOFF] as usize;
-            if forkoff == 0 {
-                Ok(literal)
-            } else if forkoff > literal.len() {
-                Err(invalid_fs_data(format!(
-                    "di_forkoff {} exceeds literal area {}",
-                    forkoff,
-                    literal.len()
-                )))
-            } else {
-                Ok(&literal[..forkoff])
-            }
-        }
+        Ok(&inode[core_size..])
     }
 
     /// Number of extent records declared for this inode.
