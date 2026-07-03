@@ -713,32 +713,68 @@ impl XfsReader {
                 let data = self.read_extent_data(&inode, u64::MAX)?;
                 match Self::parse_block_dir(&data) {
                     Ok(entries) => Ok(entries),
-                    Err(_) if data.iter().all(|&b| b == 0) => {
-                        // Kernel bug xfs_dir2_sf_to_block (fixed 2019): di_format
-                        // was changed to EXTENTS but block allocation never
-                        // completed — extent blocks are all zeros. Fall back to
-                        // forensic recovery: interpret the inode's residual
-                        // literal area as shortform entries.
+                    Err(block_err) => {
+                        // Forensic recovery: if block data is corrupted/all-zero
+                        // (known kernel bug xfs_dir2_sf_to_block, fixed 2019),
+                        // attempt to recover entries from the inode's literal
+                        // area — old shortform data may still be resident even
+                        // after xfs_idata_realloc freed it.
+                        let all_zero = data.iter().all(|&b| b == 0);
                         let df = Self::data_fork(&inode)?;
-                        if let Ok(raw) = Self::parse_shortform_dir(df, Self::has_ftype(&inode)) {
-                            if !raw.is_empty() {
-                                let mut entries = Vec::with_capacity(raw.len());
-                                for (name, child_ino) in raw {
-                                    let is_dir = self
-                                        .read_inode(child_ino)
-                                        .ok()
-                                        .filter(|ci| ci.len() >= 4)
-                                        .is_some_and(|ci| Self::inode_is_dir(&ci));
-                                    entries.push((name, child_ino, is_dir));
+                        // Try shortform parsing on the data fork (may be the
+                        // freed-but-not-zeroed shortform residual) AND also on
+                        // the full literal area past forkoff (attribute fork
+                        // area, which may also contain residual data).
+                        let core = Self::inode_core_size(&inode);
+                        let full_literal = &inode[core..];
+                        let recovery_slices: &[&[u8]] = if all_zero {
+                            &[df, full_literal]
+                        } else {
+                            &[df]
+                        };
+                        let mut recovered = false;
+                        for &slice in recovery_slices {
+                            if let Ok(raw) =
+                                Self::parse_shortform_dir(slice, Self::has_ftype(&inode))
+                            {
+                                if !raw.is_empty() {
+                                    let mut entries = Vec::with_capacity(raw.len());
+                                    for (name, child_ino) in raw {
+                                        let is_dir = self
+                                            .read_inode(child_ino)
+                                            .ok()
+                                            .filter(|ci| ci.len() >= 4)
+                                            .is_some_and(|ci| Self::inode_is_dir(&ci));
+                                        entries.push((name, child_ino, is_dir));
+                                    }
+                                    return Ok(entries);
                                 }
-                                return Ok(entries);
+                            }
+                            // Also try without ftype
+                            if let Ok(raw) = Self::parse_shortform_dir(slice, false) {
+                                if !raw.is_empty() {
+                                    let mut entries = Vec::with_capacity(raw.len());
+                                    for (name, child_ino) in raw {
+                                        let is_dir = self
+                                            .read_inode(child_ino)
+                                            .ok()
+                                            .filter(|ci| ci.len() >= 4)
+                                            .is_some_and(|ci| Self::inode_is_dir(&ci));
+                                        entries.push((name, child_ino, is_dir));
+                                    }
+                                    recovered = true;
+                                    return Ok(entries);
+                                }
                             }
                         }
-                        Err(invalid_fs_data(
-                            "block directory all-zero (sf→block conversion artifact), recovery failed",
-                        ))
+                        if all_zero && !recovered {
+                            Err(invalid_fs_data(
+                                "block dir all-zero (sf→block conversion artifact), recovery failed",
+                            ))
+                        } else {
+                            Err(block_err)
+                        }
                     }
-                    Err(e) => Err(e),
                 }
             }
             FORMAT_BTREE => {

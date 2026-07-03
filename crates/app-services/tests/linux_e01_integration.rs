@@ -898,10 +898,14 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
                     // Dump forkoff byte and surrounding context
                     eprintln!("      ino_buf[0x50..0x55]: {:02X?}", &ino_buf[0x50..0x55]);
                     eprintln!("      literal[0..40] (from byte 176): {:02X?}", &ino_buf[176..216]);
-                    // Check if forkoff=36 really means 36*8=288 bytes
+                    // Check residual data in full literal area (recovery attempt)
                     let df_full = &ino_buf[176..];
-                    eprintln!("      literal total length: {}", df_full.len());
-                    eprintln!("      literal[0]={} literal[1]={}", df_full[0], df_full[1]);
+                    let non_zero = df_full.iter().filter(|&&b| b != 0).count();
+                    eprintln!("      literal area: {} bytes, {} non-zero", df_full.len(), non_zero);
+                    if non_zero > 0 {
+                        eprintln!("      literal first 80 non-zero bytes: {:02X?}",
+                            &df_full[..80.min(df_full.len())]);
+                    }
                     // Manually find entries using the full literal area
                     eprintln!("      Full literal parse (no ftype, from byte 176):");
                     let mut pos = 6usize; // skip count+i8count+parent4
@@ -1005,8 +1009,12 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
                             eprintln!("      etc inode: format={} forkoff={} nextents={}", fmt, fk, nextents);
                             let etc_ver = etc_buf[0x04];
                             let etc_core: usize = if etc_ver >= 3 { 176 } else { 96 };
+                            // Check residual data in full literal for recovery
+                            let etc_literal = &etc_buf[etc_core..];
+                            let non_zero = etc_literal.iter().filter(|&&b| b != 0).count();
+                            eprintln!("      etc literal: {} bytes, {} non-zero", etc_literal.len(), non_zero);
                             // Dump raw extent bytes for diagnosis
-                            let df = &etc_buf[etc_core..];
+                            let df = etc_literal;
                             eprintln!("      etc extent raw bytes (first 48): {:02X?}", &df[..48.min(df.len())]);
                             // Read extent from data fork
                             if fmt == 2 { // EXTENTS
