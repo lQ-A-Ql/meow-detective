@@ -56,10 +56,30 @@ pub fn build_extent_map(
                 le_cursor += segment.extent_count;
                 map.extend(stripe_extents);
             }
-            SegmentType::Unsupported { type_name } => {
+            SegmentType::Raid0 { .. }
+            | SegmentType::Raid1 { .. }
+            | SegmentType::Raid5 { .. }
+            | SegmentType::Raid6 { .. }
+            | SegmentType::Raid10 { .. }
+            | SegmentType::ThinPool
+            | SegmentType::Snapshot
+            | SegmentType::CachePool
+            | SegmentType::Unsupported { .. } => {
+                let name = match &segment.seg_type {
+                    SegmentType::Raid0 { .. } => "raid0",
+                    SegmentType::Raid1 { .. } => "raid1",
+                    SegmentType::Raid5 { .. } => "raid5",
+                    SegmentType::Raid6 { .. } => "raid6",
+                    SegmentType::Raid10 { .. } => "raid10",
+                    SegmentType::ThinPool => "thin-pool",
+                    SegmentType::Snapshot => "snapshot",
+                    SegmentType::CachePool => "cache-pool",
+                    SegmentType::Unsupported { type_name } => type_name.as_str(),
+                    _ => unreachable!(),
+                };
                 return Err(LvmError::UnsupportedSegment {
                     lv_name: lv.name.clone(),
-                    seg_type: type_name.clone(),
+                    seg_type: name.to_string(),
                 });
             }
         }
@@ -248,5 +268,100 @@ mod tests {
 
         let err = build_extent_map(&vg, &lv, &pv_offsets).unwrap_err();
         assert!(err.to_string().contains("thin-pool"));
+    }
+
+    #[test]
+    fn striped_two_pv_mapping() {
+        let vg = VolumeGroup {
+            name: "test_vg".into(),
+            id: "vg-id".into(),
+            extent_size: 8192,
+            seqno: 1,
+            physical_volumes: vec![
+                PvMeta {
+                    name: "pv0".into(),
+                    uuid: "pv0-uuid".into(),
+                    pe_start: 2048,
+                    pe_count: 2560,
+                },
+                PvMeta {
+                    name: "pv1".into(),
+                    uuid: "pv1-uuid".into(),
+                    pe_start: 2048,
+                    pe_count: 2560,
+                },
+            ],
+            logical_volumes: Vec::new(),
+        };
+        let lv = LvMeta {
+            name: "striped_lv".into(),
+            uuid: "lv-uuid".into(),
+            segments: vec![SegmentMeta {
+                start_extent: 0,
+                extent_count: 4, // 4 LEs, 2 per PV
+                seg_type: SegmentType::Striped { stripe_count: 2 },
+                stripes: vec![("pv0".into(), 0), ("pv1".into(), 0)],
+            }],
+            size_bytes: 0,
+        };
+        let pv_offsets = vec![
+            ("pv0".into(), 2048 * 512),
+            ("pv1".into(), 2048 * 512),
+        ];
+
+        let map = build_extent_map(&vg, &lv, &pv_offsets).unwrap();
+        assert_eq!(map.len(), 4, "4 logical extents → 4 extent entries");
+        // LE 0 → PV 0
+        assert_eq!(map[0].logical_start, 0);
+        assert_eq!(map[0].pv_index, 0);
+        assert_eq!(map[0].physical_offset, 2048 * 512); // pv0 data start
+        // LE 1 → PV 1
+        assert_eq!(map[1].logical_start, 1 * 8192 * 512);
+        assert_eq!(map[1].pv_index, 1);
+        assert_eq!(map[1].physical_offset, 2048 * 512); // pv1 data start
+        // LE 2 → PV 0
+        assert_eq!(map[2].logical_start, 2 * 8192 * 512);
+        assert_eq!(map[2].pv_index, 0);
+        assert_eq!(map[2].physical_offset, 2048 * 512 + 1 * 8192 * 512);
+        // LE 3 → PV 1
+        assert_eq!(map[3].logical_start, 3 * 8192 * 512);
+        assert_eq!(map[3].pv_index, 1);
+        assert_eq!(map[3].physical_offset, 2048 * 512 + 1 * 8192 * 512);
+    }
+
+    #[test]
+    fn multi_segment_linear() {
+        // Two contiguous segments: first 5 LEs on PV0, next 3 LEs also on PV0
+        let vg = make_test_vg();
+        let lv = LvMeta {
+            name: "multi_seg".into(),
+            uuid: "lv-uuid".into(),
+            segments: vec![
+                SegmentMeta {
+                    start_extent: 0,
+                    extent_count: 5,
+                    seg_type: SegmentType::Linear,
+                    stripes: vec![("pv0".into(), 0)],
+                },
+                SegmentMeta {
+                    start_extent: 0,
+                    extent_count: 3,
+                    seg_type: SegmentType::Linear,
+                    stripes: vec![("pv0".into(), 128)],
+                },
+            ],
+            size_bytes: 0,
+        };
+        let pv_offsets = vec![("pv0".into(), 2048 * 512)];
+
+        let map = build_extent_map(&vg, &lv, &pv_offsets).unwrap();
+        assert_eq!(map.len(), 2);
+        // Segment 1: 5 extents
+        assert_eq!(map[0].logical_start, 0);
+        assert_eq!(map[0].length, 5 * 8192 * 512);
+        // Segment 2: 3 extents (starts after segment 1)
+        assert_eq!(map[1].logical_start, 5 * 8192 * 512);
+        assert_eq!(map[1].physical_offset, 2048 * 512 + 128 * 8192 * 512);
+        assert_eq!(map[1].length, 3 * 8192 * 512);
     }
 }

@@ -68,6 +68,23 @@ pub struct SegmentMeta {
 pub enum SegmentType {
     Linear,
     Striped { stripe_count: u64 },
+    /// RAID 0 — stripe_count > 1, no redundancy
+    Raid0 { stripe_count: u64 },
+    /// RAID 1 — mirroring
+    Raid1 { mirror_count: u64 },
+    /// RAID 5 — distributed parity, single-disk fault tolerance
+    Raid5 { stripe_count: u64 },
+    /// RAID 6 — double distributed parity
+    Raid6 { stripe_count: u64 },
+    /// RAID 10 — striped mirrors
+    Raid10 { stripe_count: u64, mirror_count: u64 },
+    /// Thin-provisioned logical volume (requires thin pool metadata)
+    ThinPool,
+    /// Snapshot (CoW origin)
+    Snapshot,
+    /// Cache pool (dm-cache)
+    CachePool,
+    /// Unknown or unsupported segment type
     Unsupported { type_name: String },
 }
 
@@ -615,8 +632,23 @@ fn parse_segment(seg: &SegmentRaw, _extent_size_bytes: u64) -> SegmentMeta {
     let seg_type = match (type_name.as_str(), stripe_count) {
         ("striped", 1) | ("linear", _) => SegmentType::Linear,
         ("striped", n) if n > 1 => SegmentType::Striped { stripe_count: n },
-        (other, _) => SegmentType::Unsupported {
-            type_name: other.to_string(),
+        ("raid0", n) => SegmentType::Raid0 { stripe_count: n.max(2) },
+        ("raid1", _) => SegmentType::Raid1 { mirror_count: stripe_count.max(2) },
+        ("raid5", n) | ("raid5_la", n) | ("raid5_ls", n) | ("raid5_n", n)
+        | ("raid5_ra", n) | ("raid5_rs", n) => {
+            SegmentType::Raid5 { stripe_count: n.max(3) }
+        }
+        ("raid6", n) | ("raid6_nc", n) | ("raid6_nr", n) | ("raid6_zr", n) => {
+            SegmentType::Raid6 { stripe_count: n.max(4) }
+        }
+        ("raid10", n) | ("raid10_near", n) => {
+            SegmentType::Raid10 { stripe_count: n.max(2), mirror_count: 2 }
+        }
+        ("thin", _) | ("thin-pool", _) => SegmentType::ThinPool,
+        ("snapshot", _) => SegmentType::Snapshot,
+        ("cache", _) | ("cache-pool", _) | ("writecache", _) => SegmentType::CachePool,
+        (other, n) => SegmentType::Unsupported {
+            type_name: format!("{} (stripe_count={})", other, n),
         },
     };
 
@@ -659,50 +691,50 @@ mod tests {
     
 
     fn build_minimal_metadata_text() -> String {
-        r#"contents = "Text Format Volume Group"
-version = 1
-
-test_vg {
-    id = "vg-uuid-1234-5678-90ab-cdef"
-    seqno = 42
-    extent_size = 8192
-
-    physical_volumes {
-        pv0 {
-            id = "pv-uuid-1234-5678-90ab-cdef"
-            device = "/dev/sda1"
-            pe_start = 2048
-            pe_count = 2559
-        }
-    }
-
-    logical_volumes {
-        root {
-            id = "lv-root-uuid-1234-5678"
-            segment_count = 1
-            segment1 {
-                start_extent = 0
-                extent_count = 1280
-                type = "striped"
-                stripe_count = 1
-                stripes = ["pv0", 0]
-            }
-        }
-        home {
-            id = "lv-home-uuid-1234-5678"
-            segment_count = 1
-            segment1 {
-                start_extent = 0
-                extent_count = 512
-                type = "striped"
-                stripe_count = 1
-                stripes = ["pv0", 1280]
-            }
-        }
-    }
-}
-"#
-        .to_string()
+        let mut s = String::new();
+        s.push_str("contents = \"Text Format Volume Group\"\n");
+        s.push_str("version = 1\n");
+        s.push_str("\n");
+        s.push_str("test_vg {\n");
+        s.push_str("    id = \"vg-uuid-1234-5678-90ab-cdef\"\n");
+        s.push_str("    seqno = 42\n");
+        s.push_str("    extent_size = 8192\n");
+        s.push_str("\n");
+        s.push_str("    physical_volumes {\n");
+        s.push_str("        pv0 {\n");
+        s.push_str("            id = \"pv-uuid-1234-5678-90ab-cdef\"\n");
+        s.push_str("            device = \"/dev/sda1\"\n");
+        s.push_str("            pe_start = 2048\n");
+        s.push_str("            pe_count = 2559\n");
+        s.push_str("        }\n");
+        s.push_str("    }\n");
+        s.push_str("\n");
+        s.push_str("    logical_volumes {\n");
+        s.push_str("        root {\n");
+        s.push_str("            id = \"lv-root-uuid-1234-5678\"\n");
+        s.push_str("            segment_count = 1\n");
+        s.push_str("            segment1 {\n");
+        s.push_str("                start_extent = 0\n");
+        s.push_str("                extent_count = 1280\n");
+        s.push_str("                type = \"striped\"\n");
+        s.push_str("                stripe_count = 1\n");
+        s.push_str("                stripes = [\"pv0\", 0]\n");
+        s.push_str("            }\n");
+        s.push_str("        }\n");
+        s.push_str("        home {\n");
+        s.push_str("            id = \"lv-home-uuid-1234-5678\"\n");
+        s.push_str("            segment_count = 1\n");
+        s.push_str("            segment1 {\n");
+        s.push_str("                start_extent = 0\n");
+        s.push_str("                extent_count = 512\n");
+        s.push_str("                type = \"striped\"\n");
+        s.push_str("                stripe_count = 1\n");
+        s.push_str("                stripes = [\"pv0\", 1280]\n");
+        s.push_str("            }\n");
+        s.push_str("        }\n");
+        s.push_str("    }\n");
+        s.push_str("}\n");
+        s
     }
 
     #[test]
@@ -738,5 +770,54 @@ test_vg {
         assert_eq!(root.size_bytes, 1280 * extent_bytes);
         let home = &vg.logical_volumes[1];
         assert_eq!(home.size_bytes, 512 * extent_bytes);
+    }
+
+    #[test]
+    fn parse_raid_segment_types() {
+        let text = concat!(
+            "test_vg {\n",
+            "    id = \"vg-raid\"\n",
+            "    seqno = 1\n",
+            "    extent_size = 4096\n",
+            "\n",
+            "    physical_volumes { pv0 { id = \"pv0\" device = \"/dev/sda\" pe_start = 0 pe_count = 100 }\n",
+            "                       pv1 { id = \"pv1\" device = \"/dev/sdb\" pe_start = 0 pe_count = 100 }\n",
+            "                       pv2 { id = \"pv2\" device = \"/dev/sdc\" pe_start = 0 pe_count = 100 } }\n",
+            "\n",
+            "    logical_volumes {\n",
+            "        lv_raid5 {\n",
+            "            id = \"lv-raid5\"\n",
+            "            segment_count = 1\n",
+            "            segment1 {\n",
+            "                start_extent = 0\n",
+            "                extent_count = 30\n",
+            "                type = \"raid5\"\n",
+            "                stripe_count = 3\n",
+            "                stripes = [\"pv0\", 0, \"pv1\", 0, \"pv2\", 0]\n",
+            "            }\n",
+            "        }\n",
+            "        lv_mirror {\n",
+            "            id = \"lv-mirror\"\n",
+            "            segment_count = 1\n",
+            "            segment1 {\n",
+            "                start_extent = 0\n",
+            "                extent_count = 10\n",
+            "                type = \"raid1\"\n",
+            "                stripe_count = 2\n",
+            "                stripes = [\"pv0\", 0, \"pv1\", 0]\n",
+            "            }\n",
+            "        }\n",
+            "    }\n",
+            "}\n",
+        );
+        let vg = parse_metadata_text(text).unwrap();
+        assert_eq!(vg.name, "test_vg");
+        assert_eq!(vg.logical_volumes.len(), 2);
+
+        let raid5 = &vg.logical_volumes[0];
+        assert!(matches!(raid5.segments[0].seg_type, SegmentType::Raid5 { .. }));
+
+        let mirror = &vg.logical_volumes[1];
+        assert!(matches!(mirror.segments[0].seg_type, SegmentType::Raid1 { .. }));
     }
 }
