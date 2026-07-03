@@ -498,7 +498,7 @@ fn open_lvm_volume_from_pool(
     pool: &fs_lvm::LvmPool,
     identity: &PreviewLvmIdentity,
 ) -> std::io::Result<fs_lvm::LvReader> {
-    let lv_index = find_lvm_preview_volume_index(&pool, identity).ok_or_else(|| {
+    let lv_index = find_lvm_preview_volume_index(pool, identity).ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::NotFound,
             format!(

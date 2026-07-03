@@ -79,16 +79,72 @@ impl LvReader {
     /// Find the extent that contains the given logical byte offset.
     /// Returns `(extent_index, offset_within_extent)`.
     fn locate(&self, logical_offset: u64) -> Option<(usize, u64)> {
-        self.extent_map
-            .iter()
-            .position(|ext| {
-                logical_offset >= ext.logical_start
-                    && logical_offset < ext.logical_start + ext.length
-            })
-            .map(|idx| {
-                let ext = &self.extent_map[idx];
-                (idx, logical_offset - ext.logical_start)
-            })
+        let idx = self
+            .extent_map
+            .partition_point(|ext| ext.logical_start <= logical_offset)
+            .checked_sub(1)?;
+
+        self.extent_map.get(idx).and_then(|ext| {
+            let logical_end = ext.logical_start.checked_add(ext.length)?;
+            if logical_offset < logical_end {
+                Some((idx, logical_offset - ext.logical_start))
+            } else {
+                None
+            }
+        })
+    }
+
+    fn read_contiguous(
+        &self,
+        mut logical_offset: u64,
+        mut buf: &mut [u8],
+    ) -> std::io::Result<usize> {
+        let mut total_read = 0usize;
+
+        while !buf.is_empty() && logical_offset < self.total_size {
+            let (ext_idx, offset_in_ext) = self.locate(logical_offset).ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    format!(
+                        "logical offset {} is not covered by any extent",
+                        logical_offset
+                    ),
+                )
+            })?;
+
+            let ext = &self.extent_map[ext_idx];
+            let available_in_ext = ext.length.saturating_sub(offset_in_ext);
+            let remaining_in_volume = self.total_size.saturating_sub(logical_offset);
+            let to_read = buf
+                .len()
+                .min(available_in_ext.min(remaining_in_volume) as usize);
+            if to_read == 0 {
+                break;
+            }
+
+            let physical_offset = ext.physical_offset + offset_in_ext;
+            let device_reader = self.device_readers.get(ext.pv_index).ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!(
+                        "extent references PV reader index {} but only {} readers are available",
+                        ext.pv_index,
+                        self.device_readers.len()
+                    ),
+                )
+            })?;
+            let mut reader = device_reader.lock().unwrap();
+            reader.seek(SeekFrom::Start(physical_offset))?;
+            reader.read_exact(&mut buf[..to_read])?;
+            drop(reader);
+
+            total_read += to_read;
+            logical_offset += to_read as u64;
+            let (_, rest) = buf.split_at_mut(to_read);
+            buf = rest;
+        }
+
+        Ok(total_read)
     }
 
     /// Read at most `len` bytes starting at `logical_offset`.
@@ -97,36 +153,7 @@ impl LvReader {
             return Ok(0);
         }
 
-        let (ext_idx, offset_in_ext) = self.locate(logical_offset).ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                format!(
-                    "logical offset {} is not covered by any extent",
-                    logical_offset
-                ),
-            )
-        })?;
-
-        let ext = &self.extent_map[ext_idx];
-        let available_in_ext = ext.length.saturating_sub(offset_in_ext);
-        let to_read = buf.len().min(available_in_ext as usize);
-
-        let physical_offset = ext.physical_offset + offset_in_ext;
-        let device_reader = self.device_readers.get(ext.pv_index).ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!(
-                    "extent references PV reader index {} but only {} readers are available",
-                    ext.pv_index,
-                    self.device_readers.len()
-                ),
-            )
-        })?;
-        let mut reader = device_reader.lock().unwrap();
-        reader.seek(SeekFrom::Start(physical_offset))?;
-        reader.read_exact(&mut buf[..to_read])?;
-
-        Ok(to_read)
+        self.read_contiguous(logical_offset, buf)
     }
 }
 
@@ -278,6 +305,44 @@ mod tests {
 
         let mut buf = [0u8; 8];
         lv.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf, b"PV00PV11");
+    }
+
+    #[test]
+    fn plain_read_fills_across_extent_boundaries() {
+        let mut pv0_data = vec![0u8; 32];
+        pv0_data[8..12].copy_from_slice(b"PV00");
+        let mut pv1_data = vec![0u8; 32];
+        pv1_data[8..12].copy_from_slice(b"PV11");
+
+        let device_readers = vec![
+            std::sync::Arc::new(std::sync::Mutex::new(
+                Box::new(FakeDevice::new(pv0_data)) as Box<dyn EvidenceReader>
+            )),
+            std::sync::Arc::new(std::sync::Mutex::new(
+                Box::new(FakeDevice::new(pv1_data)) as Box<dyn EvidenceReader>
+            )),
+        ];
+        let extent_map = vec![
+            LvExtent {
+                logical_start: 0,
+                physical_offset: 8,
+                length: 4,
+                pv_index: 0,
+            },
+            LvExtent {
+                logical_start: 4,
+                physical_offset: 8,
+                length: 4,
+                pv_index: 1,
+            },
+        ];
+
+        let mut lv = LvReader::new_shared(device_readers, "striped_lv".into(), 8, extent_map);
+        let mut buf = [0u8; 8];
+        let n = lv.read(&mut buf).unwrap();
+
+        assert_eq!(n, 8);
         assert_eq!(&buf, b"PV00PV11");
     }
 

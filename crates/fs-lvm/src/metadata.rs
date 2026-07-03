@@ -1,8 +1,9 @@
 /// LVM2 Metadata Area parser.
 ///
 /// The metadata area is a circular buffer containing ASCII text in LVM's
-/// custom key-value format. Multiple copies may exist (with different seqno
-/// values); the one with the highest seqno is authoritative.
+/// custom key-value format. Each metadata area has a committed raw_locn slot 0;
+/// later slots are transient/precommit locations and are not used for ordinary
+/// discovery. Across metadata areas and PV copies, the highest valid seqno wins.
 ///
 /// MDA Header (512 bytes, located at mda_region.offset):
 /// ```text
@@ -22,6 +23,8 @@ use crate::error::{LvmError, Result};
 // --- Magic ---
 const MDA_MAGIC: [u8; 16] = *b" LVM2 x[5A%r0N*>";
 const RAW_LOCN_IGNORED: u32 = 0x0000_0001;
+const MDA_HEADER_SIZE: u64 = 512;
+const MAX_METADATA_TEXT_SIZE: u64 = 16 * 1024 * 1024;
 
 // --- Public types ---
 
@@ -69,10 +72,12 @@ pub enum SegmentType {
     Linear,
     Striped {
         stripe_count: u64,
+        stripe_size: u64,
     },
     /// RAID 0 — stripe_count > 1, no redundancy
     Raid0 {
         stripe_count: u64,
+        stripe_size: u64,
     },
     /// RAID 1 — mirroring
     Raid1 {
@@ -107,9 +112,8 @@ pub enum SegmentType {
 
 /// Parse metadata from a metadata area region.
 ///
-/// Reads the MDA header, locates all raw location descriptors, reads their
-/// data blocks, and returns the parsed volume group (picking the copy with
-/// the highest seqno).
+/// Reads the MDA header, reads the committed raw_locn slot 0, and returns the
+/// parsed volume group.
 ///
 /// `pv_offset` is the byte offset of the PV start in the reader (needed
 /// because all LVM2 offsets are absolute from the PV start).
@@ -118,87 +122,158 @@ pub fn parse_metadata<R: Read + Seek>(
     mda_region: &super::label::DataRegion,
     pv_offset: u64,
 ) -> Result<VolumeGroup> {
-    // Read MDA header at PV-absolute offset
-    let abs_offset = pv_offset + mda_region.offset;
-    reader.seek(SeekFrom::Start(abs_offset))?;
-    let mut header = [0u8; 512];
-    reader.read_exact(&mut header)?;
-
-    // Validate MDA magic
-    if header[4..20] != MDA_MAGIC {
-        return Err(LvmError::MetadataParseError {
+    match parse_metadata_region(reader, mda_region, pv_offset) {
+        Ok(Some(vg)) => Ok(vg),
+        Ok(None) => Err(LvmError::MetadataParseError {
             line: 0,
-            message: "MDA header magic mismatch".to_string(),
-        });
+            message: "no valid committed metadata copy found".to_string(),
+        }),
+        Err(err) => Err(err.into_lvm_error()),
     }
+}
 
-    // Verify MDA CRC
-    if !crc::verify_mda_header_crc(&header) {
-        let stored = u32::from_le_bytes([header[0], header[1], header[2], header[3]]);
-        let computed = crc::lvm_crc32(&header[4..512]);
-        return Err(LvmError::MdaCrcMismatch {
-            expected: stored,
-            actual: computed,
-        });
-    }
-
-    let mda_base = u64::from_le_bytes([
-        header[24], header[25], header[26], header[27], header[28], header[29], header[30],
-        header[31],
-    ]);
-
-    // Parse up to 4 raw location descriptors
+pub(crate) fn parse_metadata_from_regions<R: Read + Seek>(
+    reader: &mut R,
+    mda_regions: &[super::label::DataRegion],
+    pv_offset: u64,
+) -> Result<VolumeGroup> {
     let mut best_vg: Option<VolumeGroup> = None;
-    let mut best_seqno: i64 = -1;
 
-    for i in 0..4 {
-        let rl_offset = 40 + i * 24;
-        let locn = RawLocation::from_bytes(&header, rl_offset);
-
-        // Skip ignored or empty descriptors
-        if locn.is_ignored() || locn.is_empty() {
-            continue;
-        }
-
-        // Read the metadata text at PV-absolute offset
-        let abs_offset = pv_offset + mda_base + locn.offset;
-        if locn.size == 0 || locn.size > 16 * 1024 * 1024 {
-            // safety: max 16 MB metadata
-            continue;
-        }
-
-        reader.seek(SeekFrom::Start(abs_offset))?;
-        let mut text_bytes = vec![0u8; locn.size as usize];
-        if reader.read_exact(&mut text_bytes).is_err() {
-            continue; // skip unreadable descriptors
-        }
-
-        // Verify metadata CRC
-        let computed_crc = crc::lvm_crc32(&text_bytes);
-        if computed_crc != locn.checksum {
-            continue; // skip corrupted copies, try next
-        }
-
-        // Parse the ASCII text
-        let text = String::from_utf8_lossy(&text_bytes);
-        match parse_metadata_text(&text) {
-            Ok(vg) => {
-                if vg.seqno as i64 > best_seqno {
-                    best_seqno = vg.seqno as i64;
+    for mda_region in mda_regions {
+        match parse_metadata_region(reader, mda_region, pv_offset) {
+            Ok(Some(vg)) => {
+                if best_vg
+                    .as_ref()
+                    .is_none_or(|current| vg.seqno > current.seqno)
+                {
                     best_vg = Some(vg);
                 }
             }
-            Err(_e) => {
-                // Try next copy if this one can't be parsed
+            Ok(None) | Err(MetadataRegionError::Recoverable(_)) => {
+                // Redundant MDA/PV copies are expected; one corrupt or
+                // unreadable copy must not abort discovery when another works.
                 continue;
             }
-        }
+            Err(MetadataRegionError::Fatal(err)) => return Err(err),
+        };
     }
 
     best_vg.ok_or_else(|| LvmError::MetadataParseError {
         line: 0,
         message: "no valid metadata copy found".to_string(),
     })
+}
+
+fn parse_metadata_region<R: Read + Seek>(
+    reader: &mut R,
+    mda_region: &super::label::DataRegion,
+    pv_offset: u64,
+) -> std::result::Result<Option<VolumeGroup>, MetadataRegionError> {
+    // Read MDA header at PV-absolute offset
+    let abs_offset = pv_offset.checked_add(mda_region.offset).ok_or_else(|| {
+        recoverable_metadata_error("metadata area offset overflows reader address".to_string())
+    })?;
+    reader
+        .seek(SeekFrom::Start(abs_offset))
+        .map_err(|err| MetadataRegionError::Recoverable(LvmError::Io(err)))?;
+    let mut header = [0u8; 512];
+    reader
+        .read_exact(&mut header)
+        .map_err(|err| MetadataRegionError::Recoverable(LvmError::Io(err)))?;
+
+    // Validate MDA magic
+    if header[4..20] != MDA_MAGIC {
+        return Err(recoverable_metadata_error(
+            "MDA header magic mismatch".to_string(),
+        ));
+    }
+
+    // Verify MDA CRC
+    if !crc::verify_mda_header_crc(&header) {
+        let stored = u32::from_le_bytes([header[0], header[1], header[2], header[3]]);
+        let computed = crc::lvm_crc32(&header[4..512]);
+        return Err(MetadataRegionError::Recoverable(LvmError::MdaCrcMismatch {
+            expected: stored,
+            actual: computed,
+        }));
+    }
+
+    let mda_base = u64::from_le_bytes([
+        header[24], header[25], header[26], header[27], header[28], header[29], header[30],
+        header[31],
+    ]);
+    let mda_size = u64::from_le_bytes([
+        header[32], header[33], header[34], header[35], header[36], header[37], header[38],
+        header[39],
+    ]);
+    if mda_size <= MDA_HEADER_SIZE {
+        return Err(recoverable_metadata_error(format!(
+            "metadata area size {} is too small",
+            mda_size
+        )));
+    }
+    if mda_base != mda_region.offset {
+        return Err(recoverable_metadata_error(format!(
+            "metadata area header base {} does not match label offset {}",
+            mda_base, mda_region.offset
+        )));
+    }
+    if mda_region.size != 0 && mda_size > mda_region.size {
+        return Err(recoverable_metadata_error(format!(
+            "metadata area header size {} exceeds label region size {}",
+            mda_size, mda_region.size
+        )));
+    }
+
+    // Ordinary discovery uses the committed copy in raw_locn slot 0 only.
+    // Slot 1 may contain a higher-seqno precommit image and must not win.
+    let locn = RawLocation::from_bytes(&header, 40);
+    if locn.is_ignored()
+        || locn.is_empty()
+        || !locn.is_within(mda_size)
+        || locn.size > MAX_METADATA_TEXT_SIZE
+    {
+        return Ok(None);
+    }
+
+    let text_bytes = read_raw_location(reader, pv_offset, mda_base, mda_size, &locn)
+        .map_err(MetadataRegionError::Recoverable)?;
+
+    let computed_crc = crc::lvm_crc32(&text_bytes);
+    if computed_crc != locn.checksum {
+        return Ok(None);
+    }
+
+    let text = String::from_utf8_lossy(&text_bytes);
+    parse_metadata_text(&text)
+        .map(Some)
+        .map_err(fatal_metadata_region_error)
+}
+
+enum MetadataRegionError {
+    Recoverable(LvmError),
+    Fatal(LvmError),
+}
+
+impl MetadataRegionError {
+    fn into_lvm_error(self) -> LvmError {
+        match self {
+            MetadataRegionError::Recoverable(err) | MetadataRegionError::Fatal(err) => err,
+        }
+    }
+}
+
+fn recoverable_metadata_error(message: String) -> MetadataRegionError {
+    MetadataRegionError::Recoverable(LvmError::MetadataParseError { line: 0, message })
+}
+
+fn fatal_metadata_region_error(err: LvmError) -> MetadataRegionError {
+    match err {
+        LvmError::MetadataParseError { line, message } => {
+            MetadataRegionError::Fatal(LvmError::FatalMetadataParseError { line, message })
+        }
+        other => MetadataRegionError::Fatal(other),
+    }
 }
 
 // --- Raw location descriptor ---
@@ -255,6 +330,58 @@ impl RawLocation {
     fn is_empty(&self) -> bool {
         self.offset == 0 && self.size == 0 && self.checksum == 0
     }
+
+    fn is_within(&self, mda_size: u64) -> bool {
+        if self.size == 0 || self.offset < MDA_HEADER_SIZE || self.offset >= mda_size {
+            return false;
+        }
+        self.size <= mda_size - MDA_HEADER_SIZE
+    }
+}
+
+fn read_raw_location<R: Read + Seek>(
+    reader: &mut R,
+    pv_offset: u64,
+    mda_base: u64,
+    mda_size: u64,
+    locn: &RawLocation,
+) -> Result<Vec<u8>> {
+    let mut remaining = locn.size;
+    let mut raw_offset = locn.offset;
+    let mut text_bytes = Vec::with_capacity(locn.size as usize);
+
+    while remaining > 0 {
+        let available =
+            mda_size
+                .checked_sub(raw_offset)
+                .ok_or_else(|| LvmError::MetadataParseError {
+                    line: 0,
+                    message: format!(
+                        "raw metadata location offset {} exceeds metadata area size {}",
+                        raw_offset, mda_size
+                    ),
+                })?;
+        let chunk_len = remaining.min(available);
+        let abs_offset = pv_offset
+            .checked_add(mda_base)
+            .and_then(|offset| offset.checked_add(raw_offset))
+            .ok_or_else(|| LvmError::MetadataParseError {
+                line: 0,
+                message: "raw metadata location overflows reader address".to_string(),
+            })?;
+        reader.seek(SeekFrom::Start(abs_offset))?;
+        let current_len = text_bytes.len();
+        text_bytes.resize(current_len + chunk_len as usize, 0);
+        reader.read_exact(&mut text_bytes[current_len..])?;
+
+        remaining -= chunk_len;
+        raw_offset += chunk_len;
+        if remaining > 0 {
+            raw_offset = MDA_HEADER_SIZE;
+        }
+    }
+
+    Ok(text_bytes)
 }
 
 // --- ASCII Metadata Text Parser ---
@@ -276,7 +403,6 @@ struct Parser<'a> {
 
 /// Intermediate parse result for a section block.
 struct ParsedSection {
-    #[allow(dead_code)]
     name: String,
     params: Vec<(String, String)>,
     pv_sections: Vec<(String, Vec<(String, String)>)>,
@@ -291,7 +417,6 @@ struct LvSectionRaw {
 
 #[derive(Debug)]
 struct SegmentRaw {
-    #[allow(dead_code)]
     name: String,
     params: Vec<(String, String)>,
 }
@@ -341,7 +466,8 @@ impl<'a> Parser<'a> {
             && (bytes[self.pos].is_ascii_alphanumeric()
                 || bytes[self.pos] == b'_'
                 || bytes[self.pos] == b'-'
-                || bytes[self.pos] == b'.')
+                || bytes[self.pos] == b'.'
+                || bytes[self.pos] == b'+')
         {
             self.pos += 1;
         }
@@ -583,49 +709,35 @@ fn parse_metadata_text(text: &str) -> Result<VolumeGroup> {
 
     let section = parser.parse_section()?;
 
-    let id = find_param(&section.params, "id");
-    let seqno = find_param(&section.params, "seqno")
-        .parse::<u64>()
-        .unwrap_or(0);
-    let extent_size = find_param(&section.params, "extent_size")
-        .parse::<u64>()
-        .unwrap_or(8192);
+    let id = required_string(&section.params, "id", "volume group")?;
+    let seqno = required_u64(&section.params, "seqno", "volume group")?;
+    let extent_size = required_u64(&section.params, "extent_size", "volume group")?;
 
     let physical_volumes: Vec<PvMeta> = section
         .pv_sections
         .iter()
-        .map(|(name, params)| PvMeta {
-            uuid: find_param(params, "id"),
-            pe_start: find_param(params, "pe_start").parse().unwrap_or(0),
-            pe_count: find_param(params, "pe_count").parse().unwrap_or(0),
-            name: name.clone(),
+        .map(|(name, params)| {
+            Ok(PvMeta {
+                uuid: required_string(params, "id", &format!("physical volume '{}'", name))?,
+                pe_start: required_u64(params, "pe_start", &format!("physical volume '{}'", name))?,
+                pe_count: required_u64(params, "pe_count", &format!("physical volume '{}'", name))?,
+                name: name.clone(),
+            })
         })
-        .collect();
+        .collect::<Result<Vec<_>>>()?;
 
-    let extent_size_bytes = extent_size * 512u64;
+    let extent_size_bytes =
+        extent_size
+            .checked_mul(512u64)
+            .ok_or_else(|| LvmError::MetadataParseError {
+                line: 0,
+                message: "volume group extent size overflows bytes".to_string(),
+            })?;
     let logical_volumes: Vec<LvMeta> = section
         .lv_sections
         .iter()
-        .map(|lv_raw| {
-            let lv_uuid = find_param(&lv_raw.params, "id");
-            let segs: Vec<SegmentMeta> = lv_raw
-                .segments
-                .iter()
-                .map(|s| parse_segment(s, extent_size_bytes))
-                .collect();
-            let size_bytes: u64 = segs
-                .iter()
-                .map(|s| s.start_extent.saturating_add(s.extent_count) * extent_size_bytes)
-                .max()
-                .unwrap_or(0);
-            LvMeta {
-                name: lv_raw.name.clone(),
-                uuid: lv_uuid,
-                segments: segs,
-                size_bytes,
-            }
-        })
-        .collect();
+        .map(|lv_raw| parse_logical_volume(lv_raw, extent_size_bytes))
+        .collect::<Result<Vec<_>>>()?;
 
     Ok(VolumeGroup {
         name: section.name,
@@ -637,247 +749,374 @@ fn parse_metadata_text(text: &str) -> Result<VolumeGroup> {
     })
 }
 
-fn find_param(params: &[(String, String)], key: &str) -> String {
+fn parse_logical_volume(lv_raw: &LvSectionRaw, extent_size_bytes: u64) -> Result<LvMeta> {
+    let context = format!("logical volume '{}'", lv_raw.name);
+    let lv_uuid = required_string(&lv_raw.params, "id", &context)?;
+    let declared_segment_count = required_u64(&lv_raw.params, "segment_count", &context)?;
+
+    let mut segs = Vec::with_capacity(lv_raw.segments.len());
+    let mut unsupported_reason = None;
+    for segment in &lv_raw.segments {
+        match parse_segment(segment, &context) {
+            Ok(segment_meta) => segs.push(segment_meta),
+            Err(SegmentParseError::Unsupported { segment, reason }) => {
+                segs.push(segment);
+                if unsupported_reason.is_none() {
+                    unsupported_reason = Some(reason);
+                }
+            }
+            Err(SegmentParseError::Fatal(err)) => return Err(err),
+        }
+    }
+
+    if declared_segment_count != lv_raw.segments.len() as u64 {
+        unsupported_reason = Some(format!(
+            "{} declares segment_count {} but contains {} segment blocks",
+            context,
+            declared_segment_count,
+            lv_raw.segments.len()
+        ));
+    } else if let Some(type_name) = segs.iter().find_map(unsupported_segment_type_name) {
+        unsupported_reason = Some(format!(
+            "{} uses unsupported segment type '{}'",
+            context, type_name
+        ));
+    } else if let Err(err) = validate_segment_layout(&segs, &context) {
+        unsupported_reason = Some(err);
+    }
+
+    if let Some(reason) = unsupported_reason {
+        let size_extents = max_segment_end(&segs)?;
+        segs = vec![unsupported_lv_segment(size_extents, reason)];
+    }
+
+    let size_bytes = logical_volume_size_bytes(&segs, extent_size_bytes)?;
+    Ok(LvMeta {
+        name: lv_raw.name.clone(),
+        uuid: lv_uuid,
+        segments: segs,
+        size_bytes,
+    })
+}
+
+fn required_string(params: &[(String, String)], key: &str, context: &str) -> Result<String> {
     params
         .iter()
         .find(|(k, _)| k == key)
         .map(|(_, v)| v.clone())
-        .unwrap_or_default()
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| LvmError::MetadataParseError {
+            line: 0,
+            message: format!("missing required field '{}' in {}", key, context),
+        })
 }
 
-fn parse_segment(seg: &SegmentRaw, _extent_size_bytes: u64) -> SegmentMeta {
-    let start_extent: u64 = find_param(&seg.params, "start_extent").parse().unwrap_or(0);
-    let extent_count: u64 = find_param(&seg.params, "extent_count").parse().unwrap_or(0);
-    let type_name = find_param(&seg.params, "type");
-    let stripe_count: u64 = find_param(&seg.params, "stripe_count").parse().unwrap_or(1);
+fn required_u64(params: &[(String, String)], key: &str, context: &str) -> Result<u64> {
+    let value = required_string(params, key, context)?;
+    value
+        .parse::<u64>()
+        .map_err(|_| LvmError::MetadataParseError {
+            line: 0,
+            message: format!("invalid integer field '{}' in {}", key, context),
+        })
+}
 
-    let seg_type = match (type_name.as_str(), stripe_count) {
-        ("striped", 1) | ("linear", _) => SegmentType::Linear,
-        ("striped", n) if n > 1 => SegmentType::Striped { stripe_count: n },
-        ("raid0", n) => SegmentType::Raid0 {
-            stripe_count: n.max(2),
-        },
-        ("raid1", _) => SegmentType::Raid1 {
-            mirror_count: stripe_count.max(2),
-        },
-        ("raid5", n)
-        | ("raid5_la", n)
-        | ("raid5_ls", n)
-        | ("raid5_n", n)
-        | ("raid5_ra", n)
-        | ("raid5_rs", n) => SegmentType::Raid5 {
-            stripe_count: n.max(3),
-        },
-        ("raid6", n) | ("raid6_nc", n) | ("raid6_nr", n) | ("raid6_zr", n) => SegmentType::Raid6 {
-            stripe_count: n.max(4),
-        },
-        ("raid10", n) | ("raid10_near", n) => SegmentType::Raid10 {
-            stripe_count: n.max(2),
-            mirror_count: 2,
-        },
-        ("thin", _) | ("thin-pool", _) => SegmentType::ThinPool,
-        ("snapshot", _) => SegmentType::Snapshot,
-        ("cache", _) | ("cache-pool", _) | ("writecache", _) => SegmentType::CachePool,
-        (other, n) => SegmentType::Unsupported {
-            type_name: format!("{} (stripe_count={})", other, n),
-        },
+fn logical_volume_size_bytes(segs: &[SegmentMeta], extent_size_bytes: u64) -> Result<u64> {
+    let mut max_end = 0u64;
+    for segment in segs {
+        let end_extent = segment
+            .start_extent
+            .checked_add(segment.extent_count)
+            .ok_or_else(|| LvmError::MetadataParseError {
+                line: 0,
+                message: "logical volume extent range overflows u64".to_string(),
+            })?;
+        max_end = max_end.max(end_extent);
+    }
+    max_end
+        .checked_mul(extent_size_bytes)
+        .ok_or_else(|| LvmError::MetadataParseError {
+            line: 0,
+            message: "logical volume byte size overflows u64".to_string(),
+        })
+}
+
+enum SegmentParseError {
+    Unsupported {
+        segment: SegmentMeta,
+        reason: String,
+    },
+    Fatal(LvmError),
+}
+
+impl SegmentParseError {
+    fn fatal(message: String) -> Self {
+        SegmentParseError::Fatal(LvmError::MetadataParseError { line: 0, message })
+    }
+}
+
+fn parse_segment(
+    seg: &SegmentRaw,
+    lv_context: &str,
+) -> std::result::Result<SegmentMeta, SegmentParseError> {
+    let context = format!("{} segment '{}'", lv_context, seg.name);
+    let start_extent =
+        required_u64(&seg.params, "start_extent", &context).map_err(SegmentParseError::Fatal)?;
+    let extent_count =
+        required_u64(&seg.params, "extent_count", &context).map_err(SegmentParseError::Fatal)?;
+    if extent_count == 0 {
+        return Err(SegmentParseError::fatal(format!(
+            "extent_count must be greater than zero in {}",
+            context
+        )));
+    }
+    let type_name =
+        required_string(&seg.params, "type", &context).map_err(SegmentParseError::Fatal)?;
+
+    let (seg_type, stripes) = match type_name.as_str() {
+        "linear" => {
+            let stripe_count = required_u64(&seg.params, "stripe_count", &context)
+                .map_err(SegmentParseError::Fatal)?;
+            if stripe_count != 1 {
+                return Err(SegmentParseError::fatal(format!(
+                    "linear stripe_count must be 1 in {}",
+                    context
+                )));
+            }
+            let stripes = parse_required_stripes(&seg.params, &context, stripe_count)
+                .map_err(SegmentParseError::Fatal)?;
+            (SegmentType::Linear, stripes)
+        }
+        "striped" => {
+            let stripe_count = required_u64(&seg.params, "stripe_count", &context)
+                .map_err(SegmentParseError::Fatal)?;
+            if stripe_count == 0 {
+                return Err(SegmentParseError::fatal(format!(
+                    "stripe_count must be greater than zero in {}",
+                    context
+                )));
+            }
+            let stripes = parse_required_stripes(&seg.params, &context, stripe_count)
+                .map_err(SegmentParseError::Fatal)?;
+            if stripe_count == 1 {
+                (SegmentType::Linear, stripes)
+            } else {
+                let stripe_size = match required_stripe_size(&seg.params, &context) {
+                    Ok(stripe_size) => stripe_size,
+                    Err(err) => {
+                        let reason = lvm_error_message(&err);
+                        return Err(SegmentParseError::Unsupported {
+                            segment: unsupported_segment(
+                                start_extent,
+                                extent_count,
+                                reason.clone(),
+                            ),
+                            reason,
+                        });
+                    }
+                };
+                (
+                    SegmentType::Striped {
+                        stripe_count,
+                        stripe_size,
+                    },
+                    stripes,
+                )
+            }
+        }
+        "raid0" => {
+            let reason = format!(
+                "{} uses unsupported LVM2 raid0 component LV mapping",
+                context
+            );
+            return Err(SegmentParseError::Unsupported {
+                segment: unsupported_segment(start_extent, extent_count, reason.clone()),
+                reason,
+            });
+        }
+        other => (
+            SegmentType::Unsupported {
+                type_name: other.to_string(),
+            },
+            Vec::new(),
+        ),
     };
 
-    // Parse stripes list
-    let stripes_raw = find_param(&seg.params, "stripes");
-    let stripes = parse_stripes_list(&stripes_raw);
-
-    SegmentMeta {
+    Ok(SegmentMeta {
         start_extent,
         extent_count,
         seg_type,
         stripes,
+    })
+}
+
+fn unsupported_segment(start_extent: u64, extent_count: u64, reason: String) -> SegmentMeta {
+    SegmentMeta {
+        start_extent,
+        extent_count,
+        seg_type: SegmentType::Unsupported { type_name: reason },
+        stripes: Vec::new(),
     }
 }
 
-/// Parse "pv0, 0, pv1, 1024" → [(pv0, 0), (pv1, 1024)]
-fn parse_stripes_list(raw: &str) -> Vec<(String, u64)> {
+fn lvm_error_message(err: &LvmError) -> String {
+    match err {
+        LvmError::MetadataParseError { message, .. } => message.clone(),
+        other => other.to_string(),
+    }
+}
+
+fn parse_required_stripes(
+    params: &[(String, String)],
+    context: &str,
+    stripe_count: u64,
+) -> Result<Vec<(String, u64)>> {
+    let stripes_raw = required_string(params, "stripes", context)?;
+    let stripes = parse_stripes_list(&stripes_raw, context)?;
+    if stripes.len() != stripe_count as usize {
+        return Err(LvmError::MetadataParseError {
+            line: 0,
+            message: format!(
+                "{} expects {} stripe entries but found {}",
+                context,
+                stripe_count,
+                stripes.len()
+            ),
+        });
+    }
+    Ok(stripes)
+}
+
+fn required_stripe_size(params: &[(String, String)], context: &str) -> Result<u64> {
+    let stripe_size = required_u64(params, "stripe_size", context)?;
+    if stripe_size == 0 {
+        return Err(LvmError::MetadataParseError {
+            line: 0,
+            message: format!("stripe_size must be greater than zero in {}", context),
+        });
+    }
+    stripe_size
+        .checked_mul(512)
+        .ok_or_else(|| LvmError::MetadataParseError {
+            line: 0,
+            message: format!("stripe_size overflows bytes in {}", context),
+        })?;
+    Ok(stripe_size)
+}
+
+fn unsupported_segment_type_name(segment: &SegmentMeta) -> Option<&str> {
+    match &segment.seg_type {
+        SegmentType::Unsupported { type_name } => Some(type_name.as_str()),
+        SegmentType::ThinPool => Some("thin-pool"),
+        SegmentType::Snapshot => Some("snapshot"),
+        SegmentType::CachePool => Some("cache-pool"),
+        SegmentType::Raid1 { .. } => Some("raid1"),
+        SegmentType::Raid5 { .. } => Some("raid5"),
+        SegmentType::Raid6 { .. } => Some("raid6"),
+        SegmentType::Raid10 { .. } => Some("raid10"),
+        SegmentType::Linear | SegmentType::Striped { .. } | SegmentType::Raid0 { .. } => None,
+    }
+}
+
+fn unsupported_lv_segment(extent_count: u64, reason: String) -> SegmentMeta {
+    SegmentMeta {
+        start_extent: 0,
+        extent_count,
+        seg_type: SegmentType::Unsupported { type_name: reason },
+        stripes: Vec::new(),
+    }
+}
+
+fn max_segment_end(segs: &[SegmentMeta]) -> Result<u64> {
+    let mut max_end = 0u64;
+    for segment in segs {
+        let end = segment
+            .start_extent
+            .checked_add(segment.extent_count)
+            .ok_or_else(|| LvmError::MetadataParseError {
+                line: 0,
+                message: "logical volume extent range overflows u64".to_string(),
+            })?;
+        max_end = max_end.max(end);
+    }
+    Ok(max_end)
+}
+
+fn validate_segment_layout(segs: &[SegmentMeta], context: &str) -> std::result::Result<(), String> {
+    if segs.is_empty() {
+        return Err(format!("{} contains no segment blocks", context));
+    }
+
+    let mut ranges = Vec::with_capacity(segs.len());
+    for segment in segs {
+        let end = segment
+            .start_extent
+            .checked_add(segment.extent_count)
+            .ok_or_else(|| format!("{} segment extent range overflows u64", context))?;
+        ranges.push((segment.start_extent, end));
+    }
+    ranges.sort_by_key(|(start, _)| *start);
+
+    let mut expected_start = 0u64;
+    for (start, end) in ranges {
+        if start != expected_start {
+            let relation = if start > expected_start {
+                "gap"
+            } else {
+                "overlap"
+            };
+            return Err(format!(
+                "{} has segment {}: expected start_extent {} but found {}",
+                context, relation, expected_start, start
+            ));
+        }
+        expected_start = end;
+    }
+
+    Ok(())
+}
+
+/// Parse "pv0, 0, pv1, 1024" into [(pv0, 0), (pv1, 1024)].
+fn parse_stripes_list(raw: &str, context: &str) -> Result<Vec<(String, u64)>> {
     let clean = raw.trim_matches(|c| c == '[' || c == ']' || c == '"');
     if clean.is_empty() {
-        return Vec::new();
+        return Err(LvmError::MetadataParseError {
+            line: 0,
+            message: format!("missing stripes entries in {}", context),
+        });
     }
     let parts: Vec<&str> = clean
         .split(',')
         .map(|s| s.trim().trim_matches('"'))
         .collect();
+    if !parts.len().is_multiple_of(2) {
+        return Err(LvmError::MetadataParseError {
+            line: 0,
+            message: format!("stripes list has an odd number of entries in {}", context),
+        });
+    }
     let mut result = Vec::new();
     let mut i = 0;
     while i + 1 < parts.len() {
         let pv = parts[i].to_string();
-        let extent: u64 = parts[i + 1].parse().unwrap_or(0);
+        if pv.is_empty() {
+            return Err(LvmError::MetadataParseError {
+                line: 0,
+                message: format!("empty PV name in stripes list in {}", context),
+            });
+        }
+        let extent = parts[i + 1]
+            .parse::<u64>()
+            .map_err(|_| LvmError::MetadataParseError {
+                line: 0,
+                message: format!("invalid stripe extent in {}", context),
+            })?;
         result.push((pv, extent));
         i += 2;
     }
-    result
+    Ok(result)
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn build_minimal_metadata_text() -> String {
-        let mut s = String::new();
-        s.push_str("contents = \"Text Format Volume Group\"\n");
-        s.push_str("version = 1\n");
-        s.push('\n');
-        s.push_str("test_vg {\n");
-        s.push_str("    id = \"vg-uuid-1234-5678-90ab-cdef\"\n");
-        s.push_str("    seqno = 42\n");
-        s.push_str("    extent_size = 8192\n");
-        s.push('\n');
-        s.push_str("    physical_volumes {\n");
-        s.push_str("        pv0 {\n");
-        s.push_str("            id = \"pv-uuid-1234-5678-90ab-cdef\"\n");
-        s.push_str("            device = \"/dev/sda1\"\n");
-        s.push_str("            pe_start = 2048\n");
-        s.push_str("            pe_count = 2559\n");
-        s.push_str("        }\n");
-        s.push_str("    }\n");
-        s.push('\n');
-        s.push_str("    logical_volumes {\n");
-        s.push_str("        root {\n");
-        s.push_str("            id = \"lv-root-uuid-1234-5678\"\n");
-        s.push_str("            segment_count = 1\n");
-        s.push_str("            segment1 {\n");
-        s.push_str("                start_extent = 0\n");
-        s.push_str("                extent_count = 1280\n");
-        s.push_str("                type = \"striped\"\n");
-        s.push_str("                stripe_count = 1\n");
-        s.push_str("                stripes = [\"pv0\", 0]\n");
-        s.push_str("            }\n");
-        s.push_str("        }\n");
-        s.push_str("        home {\n");
-        s.push_str("            id = \"lv-home-uuid-1234-5678\"\n");
-        s.push_str("            segment_count = 1\n");
-        s.push_str("            segment1 {\n");
-        s.push_str("                start_extent = 0\n");
-        s.push_str("                extent_count = 512\n");
-        s.push_str("                type = \"striped\"\n");
-        s.push_str("                stripe_count = 1\n");
-        s.push_str("                stripes = [\"pv0\", 1280]\n");
-        s.push_str("            }\n");
-        s.push_str("        }\n");
-        s.push_str("    }\n");
-        s.push_str("}\n");
-        s
-    }
-
-    #[test]
-    fn parse_minimal_metadata() {
-        let text = build_minimal_metadata_text();
-        let vg = parse_metadata_text(&text).unwrap();
-
-        assert_eq!(vg.name, "test_vg");
-        assert_eq!(vg.extent_size, 8192);
-        assert_eq!(vg.seqno, 42);
-        assert_eq!(vg.physical_volumes.len(), 1);
-        assert_eq!(vg.logical_volumes.len(), 2);
-
-        let root = &vg.logical_volumes[0];
-        assert_eq!(root.name, "root");
-        assert_eq!(root.segments.len(), 1);
-        assert_eq!(root.segments[0].extent_count, 1280);
-        assert!(matches!(root.segments[0].seg_type, SegmentType::Linear));
-
-        let home = &vg.logical_volumes[1];
-        assert_eq!(home.name, "home");
-        assert_eq!(home.segments.len(), 1);
-        assert_eq!(home.segments[0].extent_count, 512);
-    }
-
-    #[test]
-    fn metadata_text_lv_sizes() {
-        let text = build_minimal_metadata_text();
-        let vg = parse_metadata_text(&text).unwrap();
-
-        let extent_bytes = vg.extent_size * 512;
-        let root = &vg.logical_volumes[0];
-        assert_eq!(root.size_bytes, 1280 * extent_bytes);
-        let home = &vg.logical_volumes[1];
-        assert_eq!(home.size_bytes, 512 * extent_bytes);
-    }
-
-    #[test]
-    fn metadata_text_lv_size_uses_logical_end_extent() {
-        let text = concat!(
-            "test_vg {\n",
-            "    id = \"vg-size\"\n",
-            "    seqno = 1\n",
-            "    extent_size = 8192\n",
-            "    physical_volumes { pv0 { id = \"pv0\" pe_start = 2048 pe_count = 1000 } }\n",
-            "    logical_volumes {\n",
-            "        gapped {\n",
-            "            id = \"lv-gapped\"\n",
-            "            segment_count = 2\n",
-            "            segment1 { start_extent = 0 extent_count = 2 type = \"linear\" stripes = [\"pv0\", 0] }\n",
-            "            segment2 { start_extent = 5 extent_count = 2 type = \"linear\" stripes = [\"pv0\", 20] }\n",
-            "        }\n",
-            "    }\n",
-            "}\n",
-        );
-        let vg = parse_metadata_text(text).unwrap();
-        let extent_bytes = vg.extent_size * 512;
-
-        assert_eq!(vg.logical_volumes[0].size_bytes, 7 * extent_bytes);
-    }
-
-    #[test]
-    fn parse_raid_segment_types() {
-        let text = concat!(
-            "test_vg {\n",
-            "    id = \"vg-raid\"\n",
-            "    seqno = 1\n",
-            "    extent_size = 4096\n",
-            "\n",
-            "    physical_volumes { pv0 { id = \"pv0\" device = \"/dev/sda\" pe_start = 0 pe_count = 100 }\n",
-            "                       pv1 { id = \"pv1\" device = \"/dev/sdb\" pe_start = 0 pe_count = 100 }\n",
-            "                       pv2 { id = \"pv2\" device = \"/dev/sdc\" pe_start = 0 pe_count = 100 } }\n",
-            "\n",
-            "    logical_volumes {\n",
-            "        lv_raid5 {\n",
-            "            id = \"lv-raid5\"\n",
-            "            segment_count = 1\n",
-            "            segment1 {\n",
-            "                start_extent = 0\n",
-            "                extent_count = 30\n",
-            "                type = \"raid5\"\n",
-            "                stripe_count = 3\n",
-            "                stripes = [\"pv0\", 0, \"pv1\", 0, \"pv2\", 0]\n",
-            "            }\n",
-            "        }\n",
-            "        lv_mirror {\n",
-            "            id = \"lv-mirror\"\n",
-            "            segment_count = 1\n",
-            "            segment1 {\n",
-            "                start_extent = 0\n",
-            "                extent_count = 10\n",
-            "                type = \"raid1\"\n",
-            "                stripe_count = 2\n",
-            "                stripes = [\"pv0\", 0, \"pv1\", 0]\n",
-            "            }\n",
-            "        }\n",
-            "    }\n",
-            "}\n",
-        );
-        let vg = parse_metadata_text(text).unwrap();
-        assert_eq!(vg.name, "test_vg");
-        assert_eq!(vg.logical_volumes.len(), 2);
-
-        let raid5 = &vg.logical_volumes[0];
-        assert!(matches!(
-            raid5.segments[0].seg_type,
-            SegmentType::Raid5 { .. }
-        ));
-
-        let mirror = &vg.logical_volumes[1];
-        assert!(matches!(
-            mirror.segments[0].seg_type,
-            SegmentType::Raid1 { .. }
-        ));
-    }
-}
+#[path = "metadata_tests.rs"]
+mod metadata_tests;

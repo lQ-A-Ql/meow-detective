@@ -157,18 +157,37 @@ impl LvmPool {
             });
         }
 
-        // Phase 2: Parse VG metadata from the first PV
-        let first_entry = &pv_entries[0];
-        let vg = {
-            let mda = first_entry.label.metadata_areas.first().ok_or_else(|| {
-                LvmError::MetadataParseError {
-                    line: 0,
-                    message: "no metadata area found on PV".to_string(),
-                }
-            })?;
-            let mut r = first_entry.reader.lock().unwrap();
-            metadata::parse_metadata(&mut *r, mda, first_entry.pv_offset)?
-        };
+        // Phase 2: On each supplied PV, consider all metadata areas and keep
+        // the highest valid seqno. This mirrors LVM2's redundant metadata copy
+        // selection while staying tolerant of stale or corrupt copies.
+        let mut vg: Option<VolumeGroup> = None;
+        for entry in &pv_entries {
+            if entry.label.metadata_areas.is_empty() {
+                continue;
+            }
+            let mut r = entry.reader.lock().unwrap();
+            let candidate = match metadata::parse_metadata_from_regions(
+                &mut *r,
+                &entry.label.metadata_areas,
+                entry.pv_offset,
+            ) {
+                Ok(candidate) => candidate,
+                Err(LvmError::MetadataParseError { .. })
+                | Err(LvmError::MdaCrcMismatch { .. })
+                | Err(LvmError::MetadataCrcMismatch { .. }) => continue,
+                Err(err) => return Err(err),
+            };
+            if vg
+                .as_ref()
+                .is_none_or(|current| candidate.seqno > current.seqno)
+            {
+                vg = Some(candidate);
+            }
+        }
+        let vg = vg.ok_or_else(|| LvmError::MetadataParseError {
+            line: 0,
+            message: "no valid metadata copy found on supplied physical volumes".to_string(),
+        })?;
 
         // Phase 3: Match PV UUIDs from metadata to reader entries,
         // building absolute (reader-start) data area offsets for each PV.
@@ -184,16 +203,21 @@ impl LvmPool {
                     pv_name: pv_meta.name.clone(),
                     pv_uuid: pv_meta.uuid.clone(),
                 })?;
-            let data_area =
-                matched
-                    .label
-                    .data_areas
-                    .first()
+            let pe_start_bytes =
+                pv_meta
+                    .pe_start
+                    .checked_mul(512)
                     .ok_or_else(|| LvmError::MetadataParseError {
                         line: 0,
-                        message: format!("PV '{}' has no data area", pv_meta.name),
+                        message: format!("PV '{}' pe_start overflows bytes", pv_meta.name),
                     })?;
-            let data_offset = matched.pv_offset + data_area.offset;
+            let data_offset = matched
+                .pv_offset
+                .checked_add(pe_start_bytes)
+                .ok_or_else(|| LvmError::MetadataParseError {
+                    line: 0,
+                    message: format!("PV '{}' data offset overflows bytes", pv_meta.name),
+                })?;
 
             device_readers.push(matched.reader.clone());
             pv_start_offsets.push((pv_meta.name.clone(), matched.pv_offset));
@@ -316,7 +340,7 @@ mod tests {
         pv0 {{
             id = "{}"
             device = "/dev/sda1"
-            pe_start = 0
+            pe_start = 5
             pe_count = 10
         }}
     }}
@@ -391,13 +415,13 @@ mod tests {
         pv0 {{
             id = "{}"
             device = "/dev/sda1"
-            pe_start = 0
+            pe_start = 5
             pe_count = 16
         }}
         pv1 {{
             id = "{}"
             device = "/dev/sdb1"
-            pe_start = 0
+            pe_start = 5
             pe_count = 16
         }}
     }}
@@ -411,6 +435,7 @@ mod tests {
                 extent_count = 2
                 type = "striped"
                 stripe_count = 2
+                stripe_size = 1
                 stripes = ["pv0", 0, "pv1", 0]
             }}
         }}
@@ -512,6 +537,10 @@ mod tests {
         assert_eq!(vols[0].name, "root");
         assert_eq!(vols[0].size_bytes, 5 * 8192 * 512); // 5 extents
         assert_eq!(pool.physical_volume_offsets(), &[("pv0".to_string(), 0)]);
+        assert_eq!(
+            pool.pv_data_offsets,
+            vec![("pv0".to_string(), SYNTHETIC_DATA_AREA_START)]
+        );
     }
 
     #[test]
@@ -526,7 +555,7 @@ mod tests {
         pv0 {
             id = "abcdef12-3456-7890-abcd-ef1234567890"
             device = "/dev/sda1"
-            pe_start = 0
+            pe_start = 5
             pe_count = 10
         }
     }
@@ -566,7 +595,7 @@ mod tests {
 
         // Write "FORENSIC TEST DATA" at the data area offset (sector 5 = 2560)
         let test_data = b"FORENSIC TEST DATA AT LV OFFSET 0";
-        let data_area_start = 2560usize;
+        let data_area_start = SYNTHETIC_DATA_AREA_START as usize;
         disk[data_area_start..data_area_start + test_data.len()].copy_from_slice(test_data);
 
         let reader: Box<dyn EvidenceReader> = Box::new(FakeDiskReader::new(disk));

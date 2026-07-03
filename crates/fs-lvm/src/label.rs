@@ -13,13 +13,14 @@
 ///   - N×16 bytes:  data area descriptors (terminated by all-zeros)
 ///   - M×16 bytes:  metadata area descriptors (terminated by all-zeros)
 /// ```
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{ErrorKind, Read, Seek, SeekFrom};
 
 use crate::crc;
 use crate::error::{LvmError, Result};
 
 // --- Magic constants ---
-const LABEL_SECTOR_OFFSET: u64 = 512;
+const LABEL_SCAN_SECTORS: u64 = 4;
+const LABEL_SECTOR_SIZE_U64: u64 = 512;
 const LABEL_SECTOR_SIZE: usize = 512;
 const LABEL_MAGIC: &[u8; 8] = b"LABELONE";
 const TYPE_INDICATOR: &[u8; 8] = b"LVM2 001";
@@ -58,23 +59,61 @@ struct RawLabel {
 
 // --- Public API ---
 
-/// Read and parse the LVM2 PV label from sector 1 of the PV.
+/// Read and parse the LVM2 PV label from the first four sectors of the PV.
 ///
 /// `pv_offset` is the byte offset of the PV start within the reader (typically
 /// the partition's LBA start × 512).
 pub fn parse_pv_label<R: Read + Seek>(reader: &mut R, pv_offset: u64) -> Result<LvmLabel> {
-    let label_offset = pv_offset + LABEL_SECTOR_OFFSET;
-    let mut sector = [0u8; LABEL_SECTOR_SIZE];
+    let mut first_candidate_error = None;
 
-    reader.seek(SeekFrom::Start(label_offset))?;
-    reader.read_exact(&mut sector)?;
+    for sector_index in 0..LABEL_SCAN_SECTORS {
+        let label_offset = pv_offset + sector_index * LABEL_SECTOR_SIZE_U64;
+        let mut sector = [0u8; LABEL_SECTOR_SIZE];
 
+        reader.seek(SeekFrom::Start(label_offset))?;
+        match reader.read_exact(&mut sector) {
+            Ok(()) => {}
+            Err(err) if err.kind() == ErrorKind::UnexpectedEof => break,
+            Err(err) => return Err(err.into()),
+        }
+
+        match parse_label_sector(sector, sector_index) {
+            Ok(label) => return Ok(label),
+            Err(LvmError::NotLvm) => continue,
+            Err(err) => {
+                if first_candidate_error.is_none() {
+                    first_candidate_error = Some(err);
+                }
+            }
+        }
+    }
+
+    Err(first_candidate_error.unwrap_or(LvmError::NotLvm))
+}
+
+// --- Internal helpers ---
+
+fn parse_label_sector(sector: [u8; LABEL_SECTOR_SIZE], sector_index: u64) -> Result<LvmLabel> {
     // Validate magic
     if &sector[0..8] != LABEL_MAGIC {
         return Err(LvmError::NotLvm);
     }
     if &sector[24..32] != TYPE_INDICATOR {
         return Err(LvmError::NotLvm);
+    }
+
+    let stored_sector = u64::from_le_bytes([
+        sector[8], sector[9], sector[10], sector[11], sector[12], sector[13], sector[14],
+        sector[15],
+    ]);
+    if stored_sector != sector_index {
+        return Err(LvmError::MetadataParseError {
+            line: 0,
+            message: format!(
+                "label sector header points to sector {} but was found at sector {}",
+                stored_sector, sector_index
+            ),
+        });
     }
 
     // Verify CRC-32
@@ -111,9 +150,18 @@ pub fn parse_pv_label<R: Read + Seek>(reader: &mut R, pv_offset: u64) -> Result<
     };
 
     let desc_start = data_offset as usize + 40; // after UUID(32) + size(8)
-    let data_areas = parse_descriptors(&raw.raw_bytes, desc_start);
+    let data_areas = parse_descriptors(&raw.raw_bytes, desc_start, "data")?;
     let meta_start = desc_start + data_areas.len() * 16 + 16; // +16 for terminator
-    let metadata_areas = parse_descriptors(&raw.raw_bytes, meta_start.min(LABEL_SECTOR_SIZE));
+    if meta_start >= LABEL_SECTOR_SIZE {
+        return Err(LvmError::MetadataParseError {
+            line: 0,
+            message: format!(
+                "metadata descriptor list starts at offset {} outside label sector",
+                meta_start
+            ),
+        });
+    }
+    let metadata_areas = parse_descriptors(&raw.raw_bytes, meta_start, "metadata")?;
 
     Ok(LvmLabel {
         pv_uuid: raw.pv_uuid,
@@ -122,8 +170,6 @@ pub fn parse_pv_label<R: Read + Seek>(reader: &mut R, pv_offset: u64) -> Result<
         metadata_areas,
     })
 }
-
-// --- Internal helpers ---
 
 fn parse_pv_uuid(sector: &[u8; 512], data_offset: u32) -> String {
     let start = data_offset as usize;
@@ -138,11 +184,31 @@ fn parse_pv_uuid(sector: &[u8; 512], data_offset: u32) -> String {
 }
 
 /// Parse null-terminated descriptor array from the label sector.
-fn parse_descriptors(sector: &[u8; 512], mut offset: usize) -> Vec<DataRegion> {
+fn parse_descriptors(
+    sector: &[u8; LABEL_SECTOR_SIZE],
+    mut offset: usize,
+    list_name: &str,
+) -> Result<Vec<DataRegion>> {
+    if offset >= sector.len() {
+        return Err(LvmError::MetadataParseError {
+            line: 0,
+            message: format!(
+                "{} descriptor list starts at offset {} outside label sector",
+                list_name, offset
+            ),
+        });
+    }
+
     let mut regions = Vec::new();
     loop {
         if offset + 16 > sector.len() {
-            break;
+            return Err(LvmError::MetadataParseError {
+                line: 0,
+                message: format!(
+                    "{} descriptor list is missing an all-zero terminator within label sector",
+                    list_name
+                ),
+            });
         }
         let desc_offset = u64::from_le_bytes([
             sector[offset],
@@ -165,7 +231,7 @@ fn parse_descriptors(sector: &[u8; 512], mut offset: usize) -> Vec<DataRegion> {
             sector[offset + 15],
         ]);
         if desc_offset == 0 && desc_size == 0 {
-            break; // end-of-list terminator
+            return Ok(regions); // end-of-list terminator
         }
         // size=0 means "rest of the device" — include it
         regions.push(DataRegion {
@@ -174,7 +240,6 @@ fn parse_descriptors(sector: &[u8; 512], mut offset: usize) -> Vec<DataRegion> {
         });
         offset += 16;
     }
-    regions
 }
 
 // --- Tests ---
@@ -186,12 +251,18 @@ mod tests {
 
     /// Build a minimal disk image with sector 0 (empty) + sector 1 (PV label).
     fn build_label_disk(pv_uuid: &str, pv_size: u64) -> Vec<u8> {
+        build_label_disk_at_sector(pv_uuid, pv_size, 1)
+    }
+
+    fn build_label_disk_at_sector(pv_uuid: &str, pv_size: u64, sector_index: u64) -> Vec<u8> {
         let mut disk = vec![0u8; 1024]; // sector 0 empty, sector 1 = label
-        let sector = &mut disk[512..1024];
+        let label_offset = sector_index as usize * LABEL_SECTOR_SIZE;
+        disk.resize(label_offset + LABEL_SECTOR_SIZE, 0);
+        let sector = &mut disk[label_offset..label_offset + LABEL_SECTOR_SIZE];
         // label header
         sector[0..8].copy_from_slice(b"LABELONE");
-        sector[8..16].copy_from_slice(&1u64.to_le_bytes()); // sector_number
-                                                            // crc at 16..20, filled after
+        sector[8..16].copy_from_slice(&sector_index.to_le_bytes()); // sector_number
+                                                                    // crc at 16..20, filled after
         sector[20..24].copy_from_slice(&32u32.to_le_bytes()); // data_offset
         sector[24..32].copy_from_slice(b"LVM2 001");
 
@@ -228,6 +299,13 @@ mod tests {
         Cursor::new(padded)
     }
 
+    fn refresh_label_crc(disk: &mut [u8], sector_index: u64) {
+        let label_offset = sector_index as usize * LABEL_SECTOR_SIZE;
+        let sector = &mut disk[label_offset..label_offset + LABEL_SECTOR_SIZE];
+        let crc = crc::lvm_crc32(&sector[20..512]);
+        sector[16..20].copy_from_slice(&crc.to_le_bytes());
+    }
+
     #[test]
     fn parse_valid_label() {
         let disk = build_label_disk("9LBcEB7PQTGIlLI0KxrtzrynjuSL983W", 10_737_418_240);
@@ -240,6 +318,27 @@ mod tests {
         assert_eq!(label.data_areas[0].offset, 2048);
         assert_eq!(label.metadata_areas.len(), 1);
         assert_eq!(label.metadata_areas[0].offset, 512);
+    }
+
+    #[test]
+    fn parse_label_in_first_four_scan_sectors() {
+        let disk =
+            build_label_disk_at_sector("9LBcEB7PQTGIlLI0KxrtzrynjuSL983W", 10_737_418_240, 3);
+        let mut reader = fake_reader(disk);
+        let label = parse_pv_label(&mut reader, 0).unwrap();
+
+        assert_eq!(label.pv_uuid, "9LBcEB7PQTGIlLI0KxrtzrynjuSL983W");
+        assert_eq!(label.metadata_areas.len(), 1);
+    }
+
+    #[test]
+    fn ignores_label_beyond_first_four_scan_sectors() {
+        let disk =
+            build_label_disk_at_sector("9LBcEB7PQTGIlLI0KxrtzrynjuSL983W", 10_737_418_240, 4);
+        let mut reader = fake_reader(disk);
+        let err = parse_pv_label(&mut reader, 0).unwrap_err();
+
+        assert!(matches!(err, LvmError::NotLvm));
     }
 
     #[test]
@@ -276,5 +375,37 @@ mod tests {
         let mut reader = fake_reader(disk);
         let err = parse_pv_label(&mut reader, 0).unwrap_err();
         assert!(matches!(err, LvmError::LabelCrcMismatch { .. }));
+    }
+
+    #[test]
+    fn reject_missing_metadata_descriptor_terminator() {
+        let mut disk = build_label_disk("test1234test1234test1234test1234", 1_000_000);
+        let label_offset = LABEL_SECTOR_SIZE;
+        let sector = &mut disk[label_offset..label_offset + LABEL_SECTOR_SIZE];
+        for offset in (120..LABEL_SECTOR_SIZE).step_by(16) {
+            sector[offset..offset + 8].copy_from_slice(&1u64.to_le_bytes());
+        }
+        refresh_label_crc(&mut disk, 1);
+
+        let mut reader = fake_reader(disk);
+        let err = parse_pv_label(&mut reader, 0).unwrap_err();
+
+        assert!(matches!(err, LvmError::MetadataParseError { .. }));
+    }
+
+    #[test]
+    fn reject_metadata_descriptor_start_outside_label_sector() {
+        let mut disk = build_label_disk("test1234test1234test1234test1234", 1_000_000);
+        let label_offset = LABEL_SECTOR_SIZE;
+        let sector = &mut disk[label_offset..label_offset + LABEL_SECTOR_SIZE];
+        for offset in (88..LABEL_SECTOR_SIZE).step_by(16) {
+            sector[offset..offset + 8].copy_from_slice(&1u64.to_le_bytes());
+        }
+        refresh_label_crc(&mut disk, 1);
+
+        let mut reader = fake_reader(disk);
+        let err = parse_pv_label(&mut reader, 0).unwrap_err();
+
+        assert!(matches!(err, LvmError::MetadataParseError { .. }));
     }
 }

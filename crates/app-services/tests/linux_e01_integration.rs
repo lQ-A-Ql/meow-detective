@@ -32,12 +32,40 @@ use persistence_sqlite::repositories::{
     partition_repo::{DataSourcePartitionRecord, PartitionRepo},
 };
 use rusqlite::Connection;
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 
 const LIUYANG_LVM_POOL_OFFSET: u64 = 1_074_790_400;
 const LIUYANG_ROOT_LV_NAME: &str = "root";
 const LIUYANG_ROOT_LV_VG_NAME: &str = "cl";
+const HIGH_VALUE_LINUX_SYSTEM_INFO_PATHS: &[&str] =
+    &["/etc/passwd", "/etc/os-release", "/etc/hostname"];
+const CRITICAL_LINUX_ARTIFACT_CANDIDATE_PATHS: &[&str] = &[
+    "/etc/passwd",
+    "/etc/os-release",
+    "/etc/hostname",
+    "/etc/crontab",
+    "/root/.bash_history",
+    "/var/log/wtmp",
+    "/var/log/messages",
+    "/var/log/secure",
+    "/var/spool/cron/root",
+];
+const ARBITRARY_PREVIEW_READ_PATHS: &[&str] =
+    &["/etc/fstab", "/root/.bash_history", "/var/log/wtmp"];
+const MIN_LIUYANG_ROOT_LV_FILE_COUNT: u64 = 50_000;
+const MIN_LIUYANG_ROOT_LV_DIR_COUNT: u64 = 7_000;
+const MIN_LIUYANG_LINUX_ARTIFACT_CANDIDATES: usize = 100;
+const SYNTHETIC_PV_SIZE: u64 = 2_097_152;
+const SYNTHETIC_DATA_AREA_START: u64 = 2560;
+const SYNTHETIC_LV_MARKER_OFFSET: usize = SYNTHETIC_DATA_AREA_START as usize;
+
+#[derive(Debug)]
+struct LinuxPathEntry {
+    file_id: FileEntryId,
+    path: String,
+    size: u64,
+}
 
 fn fixture_path() -> PathBuf {
     std::env::var("FORENSICS_LINUX_E01_FIXTURE")
@@ -46,6 +74,449 @@ fn fixture_path() -> PathBuf {
             // Default fallback — only works in the test author's environment.
             PathBuf::from(r"D:\獬豸杯\检材3.E01")
         })
+}
+
+fn build_synthetic_lvm_pv(
+    vg_name: &str,
+    vg_uuid: &str,
+    lv_name: &str,
+    lv_uuid: &str,
+    pv_uuid: &str,
+    seqno: u64,
+) -> Vec<u8> {
+    build_synthetic_lvm_pv_with_metadata(
+        pv_uuid,
+        &single_pv_lvm_metadata_text(vg_name, vg_uuid, lv_name, lv_uuid, pv_uuid, seqno),
+    )
+}
+
+fn build_synthetic_lvm_pv_with_metadata(pv_uuid: &str, metadata_text: &str) -> Vec<u8> {
+    let mut pv = vec![0u8; SYNTHETIC_PV_SIZE as usize];
+    write_synthetic_lvm_label(&mut pv, pv_uuid);
+    write_synthetic_lvm_metadata(&mut pv, metadata_text);
+    write_ext4_marker(&mut pv);
+    pv
+}
+
+fn single_pv_lvm_metadata_text(
+    vg_name: &str,
+    vg_uuid: &str,
+    lv_name: &str,
+    lv_uuid: &str,
+    pv_uuid: &str,
+    seqno: u64,
+) -> String {
+    format!(
+        r#"{vg_name} {{
+    id = "{vg_uuid}"
+    seqno = {seqno}
+    extent_size = 2
+
+    physical_volumes {{
+        pv0 {{
+            id = "{pv_uuid}"
+            device = "/dev/sda1"
+            pe_start = 5
+            pe_count = 128
+        }}
+    }}
+
+    logical_volumes {{
+        {lv_name} {{
+            id = "{lv_uuid}"
+            segment_count = 1
+            segment1 {{
+                start_extent = 0
+                extent_count = 64
+                type = "striped"
+                stripe_count = 1
+                stripes = ["pv0", 0]
+            }}
+        }}
+    }}
+}}
+"#
+    )
+}
+
+fn two_pv_lvm_metadata_text(
+    vg_name: &str,
+    vg_uuid: &str,
+    lv_name: &str,
+    lv_uuid: &str,
+    pv0_uuid: &str,
+    pv1_uuid: &str,
+    seqno: u64,
+) -> String {
+    format!(
+        r#"{vg_name} {{
+    id = "{vg_uuid}"
+    seqno = {seqno}
+    extent_size = 2
+
+    physical_volumes {{
+        pv0 {{
+            id = "{pv0_uuid}"
+            device = "/dev/sda1"
+            pe_start = 5
+            pe_count = 128
+        }}
+        pv1 {{
+            id = "{pv1_uuid}"
+            device = "/dev/sdb1"
+            pe_start = 5
+            pe_count = 128
+        }}
+    }}
+
+    logical_volumes {{
+        {lv_name} {{
+            id = "{lv_uuid}"
+            segment_count = 1
+            segment1 {{
+                start_extent = 0
+                extent_count = 64
+                type = "striped"
+                stripe_count = 1
+                stripes = ["pv0", 0]
+            }}
+        }}
+    }}
+}}
+"#
+    )
+}
+
+fn write_synthetic_lvm_label(pv: &mut [u8], pv_uuid: &str) {
+    let sec = &mut pv[512..1024];
+    sec[0..8].copy_from_slice(b"LABELONE");
+    sec[8..16].copy_from_slice(&1u64.to_le_bytes());
+    sec[20..24].copy_from_slice(&32u32.to_le_bytes());
+    sec[24..32].copy_from_slice(b"LVM2 001");
+    sec[32..64].copy_from_slice(format!("{:32}", pv_uuid).as_bytes());
+    sec[64..72].copy_from_slice(&SYNTHETIC_PV_SIZE.to_le_bytes());
+    sec[72..80].copy_from_slice(&SYNTHETIC_DATA_AREA_START.to_le_bytes());
+    sec[80..88].copy_from_slice(&(SYNTHETIC_PV_SIZE - SYNTHETIC_DATA_AREA_START).to_le_bytes());
+    sec[104..112].copy_from_slice(&1024u64.to_le_bytes());
+    sec[112..120].copy_from_slice(&(4 * 512u64).to_le_bytes());
+
+    let crc = fs_lvm::crc::lvm_crc32(&sec[20..512]);
+    sec[16..20].copy_from_slice(&crc.to_le_bytes());
+}
+
+fn write_synthetic_lvm_metadata(pv: &mut [u8], metadata_text: &str) {
+    let text_bytes = metadata_text.as_bytes();
+    let text_offset = 1536usize;
+    let text_end = text_offset + text_bytes.len();
+    assert!(text_end <= pv.len());
+
+    {
+        let mda = &mut pv[1024..1536];
+        mda[4..20].copy_from_slice(b" LVM2 x[5A%r0N*>");
+        mda[20..24].copy_from_slice(&1u32.to_le_bytes());
+        mda[24..32].copy_from_slice(&1024u64.to_le_bytes());
+        mda[32..40].copy_from_slice(&1536u64.to_le_bytes());
+        mda[40..48].copy_from_slice(&512u64.to_le_bytes());
+    }
+
+    pv[text_offset..text_end].copy_from_slice(text_bytes);
+
+    let text_crc = fs_lvm::crc::lvm_crc32(text_bytes);
+    {
+        let mda = &mut pv[1024..1536];
+        mda[48..56].copy_from_slice(&(text_bytes.len() as u64).to_le_bytes());
+        mda[56..60].copy_from_slice(&text_crc.to_le_bytes());
+        let mda_crc = fs_lvm::crc::lvm_crc32(&mda[4..512]);
+        mda[0..4].copy_from_slice(&mda_crc.to_le_bytes());
+    }
+}
+
+fn write_ext4_marker(pv: &mut [u8]) {
+    let marker_offset = SYNTHETIC_LV_MARKER_OFFSET + 1024;
+    pv[marker_offset..marker_offset + 2].copy_from_slice(&0xEF53u16.to_le_bytes());
+}
+
+#[test]
+fn lvm_expansion_iterates_independent_volume_groups_by_remaining_pv_offsets() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let source_path = tmp.path().join("two-vgs.raw");
+    let low_offset = 1_048_576u64;
+    let high_offset = low_offset + SYNTHETIC_PV_SIZE + 1_048_576;
+    let low_pv = build_synthetic_lvm_pv(
+        "low_vg",
+        "vg-low",
+        "low_root",
+        "lv-low-root",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        1,
+    );
+    let high_pv = build_synthetic_lvm_pv(
+        "high_vg",
+        "vg-high",
+        "high_root",
+        "lv-high-root",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        99,
+    );
+    let mut disk = vec![0u8; (high_offset + SYNTHETIC_PV_SIZE) as usize];
+    disk[low_offset as usize..low_offset as usize + low_pv.len()].copy_from_slice(&low_pv);
+    disk[high_offset as usize..high_offset as usize + high_pv.len()].copy_from_slice(&high_pv);
+    std::fs::write(&source_path, disk).unwrap();
+
+    let (low_candidate, low_partition) = synthetic_lvm_partition(1, "low pv", low_offset);
+    let (high_candidate, high_partition) = synthetic_lvm_partition(2, "high pv", high_offset);
+    let mut probe = app_services::datasource_service::ImageFilesystemProbe {
+        candidates: vec![low_candidate, high_candidate],
+        partitions: vec![low_partition, high_partition],
+        warnings: Vec::new(),
+    };
+
+    let source_kind = DataSourceKind::Raw;
+    let direct_reader: Box<dyn EvidenceReader> =
+        Box::new(evidence_core::RawImageReader::open(&source_path).unwrap());
+    let direct_pool = fs_lvm::LvmPool::discover(vec![direct_reader], vec![low_offset]).unwrap();
+    let mut direct_lv = direct_pool.open_volume(0).unwrap();
+    let mut direct_magic = [0u8; 2];
+    direct_lv.seek(SeekFrom::Start(1024)).unwrap();
+    direct_lv.read_exact(&mut direct_magic).unwrap();
+    assert_eq!(u16::from_le_bytes(direct_magic), 0xEF53);
+    expand_lvm_pool_candidates(&mut probe, &source_path, &source_kind);
+    assert!(probe.warnings.is_empty(), "warnings={:?}", probe.warnings);
+
+    let identities = probe
+        .candidates
+        .iter()
+        .filter_map(|candidate| candidate.lvm_identity.as_ref())
+        .collect::<Vec<_>>();
+    assert!(
+        identities.iter().any(|identity| {
+            identity.vg_name == "low_vg"
+                && identity.lv_name == "low_root"
+                && identity.pv_offsets == vec![low_offset]
+        }),
+        "iterative expansion must still discover the lower-seqno independent VG; identities={identities:?}"
+    );
+    assert!(
+        identities.iter().any(|identity| {
+            identity.vg_name == "high_vg"
+                && identity.lv_name == "high_root"
+                && identity.pv_offsets == vec![high_offset]
+        }),
+        "iterative expansion must discover the higher-seqno independent VG; identities={identities:?}"
+    );
+    assert!(
+        probe
+            .candidates
+            .iter()
+            .filter(|candidate| matches!(candidate.source, ImageFilesystemSource::LvmLogicalVolume))
+            .all(|candidate| candidate.kind == ImageFilesystemKind::Ext4),
+        "synthetic LV filesystem markers should become Ext4 candidates"
+    );
+    assert!(
+        probe.partitions.iter().any(|partition| {
+            partition.offset == low_offset
+                && matches!(
+                    partition.status,
+                    app_services::datasource_service::PartitionStatus::Expanded
+                )
+        }),
+        "lower-seqno PV partition should be marked expanded"
+    );
+    assert!(
+        probe.partitions.iter().any(|partition| {
+            partition.offset == high_offset
+                && matches!(
+                    partition.status,
+                    app_services::datasource_service::PartitionStatus::Expanded
+                )
+        }),
+        "higher-seqno PV partition should be marked expanded"
+    );
+}
+
+#[test]
+fn lvm_expansion_skips_incomplete_high_seqno_vg_but_expands_complete_vg() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let source_path = tmp.path().join("incomplete-high-vg.raw");
+    let low_offset = 1_048_576u64;
+    let high_offset = low_offset + SYNTHETIC_PV_SIZE + 1_048_576;
+    let missing_high_pv_uuid = "cccccccccccccccccccccccccccccccc";
+    let low_pv = build_synthetic_lvm_pv(
+        "low_complete_vg",
+        "vg-low-complete",
+        "low_root",
+        "lv-low-root",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        1,
+    );
+    let high_metadata = two_pv_lvm_metadata_text(
+        "high_incomplete_vg",
+        "vg-high-incomplete",
+        "high_root",
+        "lv-high-root",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        missing_high_pv_uuid,
+        99,
+    );
+    let high_pv =
+        build_synthetic_lvm_pv_with_metadata("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", &high_metadata);
+    let mut disk = vec![0u8; (high_offset + SYNTHETIC_PV_SIZE) as usize];
+    disk[low_offset as usize..low_offset as usize + low_pv.len()].copy_from_slice(&low_pv);
+    disk[high_offset as usize..high_offset as usize + high_pv.len()].copy_from_slice(&high_pv);
+    std::fs::write(&source_path, disk).unwrap();
+
+    let (low_candidate, low_partition) = synthetic_lvm_partition(1, "low pv", low_offset);
+    let (high_candidate, high_partition) = synthetic_lvm_partition(2, "high pv", high_offset);
+    let mut probe = app_services::datasource_service::ImageFilesystemProbe {
+        candidates: vec![low_candidate, high_candidate],
+        partitions: vec![low_partition, high_partition],
+        warnings: Vec::new(),
+    };
+
+    let source_kind = DataSourceKind::Raw;
+    expand_lvm_pool_candidates(&mut probe, &source_path, &source_kind);
+
+    let identities = probe
+        .candidates
+        .iter()
+        .filter_map(|candidate| candidate.lvm_identity.as_ref())
+        .collect::<Vec<_>>();
+    assert!(
+        identities.iter().any(|identity| {
+            identity.vg_name == "low_complete_vg"
+                && identity.lv_name == "low_root"
+                && identity.pv_offsets == vec![low_offset]
+        }),
+        "complete lower-seqno VG should expand despite incomplete higher-seqno VG; identities={identities:?}, warnings={:?}",
+        probe.warnings
+    );
+    assert!(
+        identities
+            .iter()
+            .all(|identity| identity.vg_name != "high_incomplete_vg"),
+        "incomplete higher-seqno VG should not produce LV candidates; identities={identities:?}"
+    );
+    assert!(
+        probe
+            .candidates
+            .iter()
+            .all(|candidate| candidate.offset != low_offset
+                || !matches!(candidate.kind, ImageFilesystemKind::LvmPool)),
+        "expanded low VG pool candidate should be redirected out of expandable candidates"
+    );
+    assert!(
+        probe.partitions.iter().any(|partition| {
+            partition.offset == low_offset
+                && matches!(
+                    partition.status,
+                    app_services::datasource_service::PartitionStatus::Expanded
+                )
+        }),
+        "complete low VG PV partition should be marked Expanded/redirected"
+    );
+    let low_lv_partition = probe
+        .partitions
+        .iter()
+        .find(|partition| {
+            partition.lvm_identity.as_ref().is_some_and(|identity| {
+                identity.vg_name == "low_complete_vg" && identity.lv_name == "low_root"
+            })
+        })
+        .expect("expanded low VG should create a logical-volume partition record");
+    assert!(matches!(
+        low_lv_partition.status,
+        app_services::datasource_service::PartitionStatus::Supported
+    ));
+    assert!(matches!(
+        low_lv_partition.filesystem,
+        Some(ImageFilesystemKind::Ext4)
+    ));
+    assert!(
+        probe.partitions.iter().any(|partition| {
+            partition.offset == high_offset
+                && matches!(
+                    partition.status,
+                    app_services::datasource_service::PartitionStatus::Supported
+                )
+        }),
+        "incomplete high VG PV partition should remain supported but not redirected"
+    );
+    assert!(
+        probe
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("high_incomplete_vg")
+                && warning.contains(missing_high_pv_uuid)),
+        "incomplete VG should be reported with missing PV UUID; warnings={:?}",
+        probe.warnings
+    );
+}
+
+#[test]
+fn lvm_expansion_reports_metadata_parse_diagnostics() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let source_path = tmp.path().join("corrupt-metadata.raw");
+    let pv_offset = 1_048_576u64;
+    let mut pv = build_synthetic_lvm_pv(
+        "corrupt_vg",
+        "vg-corrupt",
+        "root",
+        "lv-root",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        1,
+    );
+    pv[1024 + 4..1024 + 20].copy_from_slice(b"corrupt-MDA-copy");
+
+    let mut disk = vec![0u8; (pv_offset + SYNTHETIC_PV_SIZE) as usize];
+    disk[pv_offset as usize..pv_offset as usize + pv.len()].copy_from_slice(&pv);
+    std::fs::write(&source_path, disk).unwrap();
+
+    let (candidate, partition) = synthetic_lvm_partition(1, "corrupt pv", pv_offset);
+    let mut probe = app_services::datasource_service::ImageFilesystemProbe {
+        candidates: vec![candidate],
+        partitions: vec![partition],
+        warnings: Vec::new(),
+    };
+
+    expand_lvm_pool_candidates(&mut probe, &source_path, &DataSourceKind::Raw);
+
+    assert!(
+        probe.warnings.iter().any(|warning| {
+            warning.contains("metadata area 0")
+                && warning.contains("PV offset 1048576")
+                && warning.contains("MDA header magic mismatch")
+        }),
+        "corrupt LVM metadata should include metadata-area diagnostics; warnings={:?}",
+        probe.warnings
+    );
+}
+
+fn synthetic_lvm_partition(
+    index: usize,
+    name: &str,
+    offset: u64,
+) -> (ImageFilesystemCandidate, PartitionRecord) {
+    (
+        ImageFilesystemCandidate {
+            partition_index: Some(index),
+            partition_name: Some(name.to_string()),
+            kind: ImageFilesystemKind::LvmPool,
+            offset,
+            source: ImageFilesystemSource::GptPartition,
+            lvm_identity: None,
+        },
+        PartitionRecord {
+            index,
+            name: name.to_string(),
+            kind_label: "LVM".to_string(),
+            type_guid: None,
+            offset,
+            length: SYNTHETIC_PV_SIZE,
+            status: app_services::datasource_service::PartitionStatus::Supported,
+            filesystem: Some(ImageFilesystemKind::LvmPool),
+            lvm_identity: None,
+        },
+    )
 }
 
 fn setup_case(conn: &Connection, case_id: &str) {
@@ -70,9 +541,9 @@ fn detect_expanded_linux_probe() -> app_services::datasource_service::ImageFiles
     probe
 }
 
-fn root_lv_candidate<'a>(
-    probe: &'a app_services::datasource_service::ImageFilesystemProbe,
-) -> &'a ImageFilesystemCandidate {
+fn root_lv_candidate(
+    probe: &app_services::datasource_service::ImageFilesystemProbe,
+) -> &ImageFilesystemCandidate {
     probe
         .candidates
         .iter()
@@ -203,19 +674,280 @@ fn count_entries_like(conn: &Connection, ds_id: &DataSourceId, like: &str) -> i6
     .unwrap()
 }
 
-fn find_file_id_like(conn: &Connection, ds_id: &DataSourceId, like: &str) -> Option<FileEntryId> {
+fn total_file_entries(conn: &Connection, ds_id: &DataSourceId) -> i64 {
     conn.query_row(
-        "SELECT id
+        "SELECT COUNT(*)
+         FROM file_entries
+         WHERE data_source_id = ?1",
+        rusqlite::params![ds_id.0],
+        |row| row.get(0),
+    )
+    .unwrap()
+}
+
+fn normalize_linux_path_suffix(path: &str) -> String {
+    path.trim_start_matches('/')
+        .replace('\\', "/")
+        .to_ascii_lowercase()
+}
+
+fn path_has_linux_suffix(path: &str, linux_path: &str) -> bool {
+    let normalized_path = path.replace('\\', "/").to_ascii_lowercase();
+    let suffix = normalize_linux_path_suffix(linux_path);
+    normalized_path == suffix || normalized_path.ends_with(&format!("/{suffix}"))
+}
+
+fn find_linux_file_entry(
+    conn: &Connection,
+    ds_id: &DataSourceId,
+    linux_path: &str,
+) -> Option<LinuxPathEntry> {
+    let suffix = normalize_linux_path_suffix(linux_path);
+    let slash_suffix = format!("%/{suffix}");
+    conn.query_row(
+        "SELECT id, path, COALESCE(size, 0)
          FROM file_entries
          WHERE data_source_id = ?1
            AND entry_type = 'file' COLLATE NOCASE
-           AND LOWER(REPLACE(path, '\\', '/')) LIKE ?2
+           AND (
+                LOWER(REPLACE(path, '\\', '/')) = ?2
+                OR LOWER(REPLACE(path, '\\', '/')) LIKE ?3
+           )
          ORDER BY LENGTH(path) ASC
          LIMIT 1",
-        rusqlite::params![ds_id.0, like],
-        |row| Ok(FileEntryId(row.get(0)?)),
+        rusqlite::params![&ds_id.0, suffix, slash_suffix],
+        |row| {
+            Ok(LinuxPathEntry {
+                file_id: FileEntryId(row.get(0)?),
+                path: row.get(1)?,
+                size: row.get(2)?,
+            })
+        },
     )
     .ok()
+}
+
+fn assert_high_value_linux_paths_enumerated(
+    conn: &Connection,
+    ds_id: &DataSourceId,
+) -> Vec<LinuxPathEntry> {
+    let mut entries = Vec::new();
+    for linux_path in HIGH_VALUE_LINUX_SYSTEM_INFO_PATHS {
+        let entry = find_linux_file_entry(conn, ds_id, linux_path).unwrap_or_else(|| {
+            panic!("root LV enumeration must include high-value Linux path {linux_path}")
+        });
+        eprintln!(
+            "  enumerated required path {}: id={} stored_path='{}' size={}",
+            linux_path, entry.file_id.0, entry.path, entry.size
+        );
+        assert!(
+            path_has_linux_suffix(&entry.path, linux_path),
+            "stored file entry path '{}' should resolve to Linux path {linux_path}",
+            entry.path
+        );
+        entries.push(entry);
+    }
+    entries
+}
+
+fn assert_liuyang_root_lv_tree_is_complete(
+    conn: &Connection,
+    ds_id: &DataSourceId,
+    stats: &app_services::file_service::EnumerationStats,
+) {
+    assert!(
+        stats.file_count >= MIN_LIUYANG_ROOT_LV_FILE_COUNT
+            && stats.dir_count >= MIN_LIUYANG_ROOT_LV_DIR_COUNT,
+        "root LV should enumerate the complete current sample tree, got files={} dirs={}",
+        stats.file_count,
+        stats.dir_count
+    );
+    assert!(
+        stats.warnings.is_empty(),
+        "complete root LV walk should not hide unreadable directories: {:?}",
+        stats.warnings
+    );
+
+    let total_entries = total_file_entries(conn, ds_id);
+    assert_eq!(
+        total_entries as u64,
+        stats.file_count + stats.dir_count,
+        "DB row count should match the enumerated root plus all child entries"
+    );
+
+    for segment in ["boot", "dev", "etc", "root", "usr", "var"] {
+        assert!(
+            count_entries_like(conn, ds_id, &format!("%{segment}%")) > 0,
+            "complete root LV import should expose Linux path segment {segment}"
+        );
+    }
+}
+
+fn assert_root_lv_direct_reads_system_info_file(fs: &dyn FileSystemReader, linux_path: &str) {
+    let fs_path = linux_path.trim_start_matches('/');
+    let range_bytes = fs
+        .read_file_range(fs_path, 0, 512)
+        .unwrap_or_else(|error| panic!("read_file_range({linux_path}) failed: {error}"));
+    eprintln!(
+        "  read_file_range {} returned {} bytes",
+        linux_path,
+        range_bytes.len()
+    );
+    assert!(
+        !range_bytes.is_empty(),
+        "read_file_range({linux_path}) should return non-empty bytes"
+    );
+
+    let mut reader = fs
+        .open_file(fs_path)
+        .unwrap_or_else(|error| panic!("open_file({linux_path}) failed: {error}"));
+    let mut buf = [0u8; 512];
+    let open_read = reader
+        .read(&mut buf)
+        .unwrap_or_else(|error| panic!("open_file({linux_path}) read failed: {error}"));
+    eprintln!("  open_file {} read {} bytes", linux_path, open_read);
+    assert!(
+        open_read > 0,
+        "open_file({linux_path}) should read non-empty bytes"
+    );
+}
+
+fn assert_root_lv_lists_system_info_paths(fs: &dyn FileSystemReader) {
+    let etc_children = fs
+        .list_children("etc")
+        .expect("root LV should enumerate /etc children");
+    let etc_child_names = etc_children
+        .iter()
+        .map(|child| child.name.as_str())
+        .collect::<Vec<_>>();
+    eprintln!(
+        "  /etc enumeration returned {} children; required sample names present? passwd={} os-release={} hostname={}",
+        etc_child_names.len(),
+        etc_child_names.contains(&"passwd"),
+        etc_child_names.contains(&"os-release"),
+        etc_child_names.contains(&"hostname")
+    );
+    for linux_path in HIGH_VALUE_LINUX_SYSTEM_INFO_PATHS {
+        let required_name = linux_path
+            .rsplit('/')
+            .next()
+            .expect("required Linux path should include a file name");
+        assert!(
+            etc_child_names.contains(&required_name),
+            "root LV /etc enumeration must include {linux_path}; /etc children={etc_child_names:?}"
+        );
+    }
+}
+
+fn assert_linux_paths_preview_readable(conn: &Connection, ds_id: &DataSourceId, paths: &[&str]) {
+    for linux_path in paths {
+        let entry = find_linux_file_entry(conn, ds_id, linux_path).unwrap_or_else(|| {
+            panic!("root LV enumeration should include preview target {linux_path}")
+        });
+        let bytes = file_service::read_file_header_by_id(conn, &entry.file_id, 512).unwrap_or_else(
+            |error| {
+                panic!(
+                    "app-service preview read for arbitrary root LV file {} ({}) failed: {}",
+                    linux_path, entry.path, error
+                )
+            },
+        );
+        eprintln!(
+            "  arbitrary preview read {} via stored entry {} returned {} bytes",
+            linux_path,
+            entry.file_id.0,
+            bytes.len()
+        );
+        assert!(
+            !bytes.is_empty(),
+            "app-service preview read for {linux_path} should return non-empty bytes"
+        );
+    }
+}
+
+fn assert_linux_artifact_candidates_include_system_info_paths(
+    candidates: &[app_services::analysis_service::EvidenceCandidate],
+) {
+    let candidate_paths = candidates
+        .iter()
+        .map(|candidate| candidate.path.as_str())
+        .collect::<Vec<_>>();
+    for linux_path in HIGH_VALUE_LINUX_SYSTEM_INFO_PATHS {
+        assert!(
+            candidates
+                .iter()
+                .any(|candidate| path_has_linux_suffix(&candidate.path, linux_path)),
+            "LinuxArtifacts candidates should include {linux_path}; candidates={candidate_paths:?}"
+        );
+    }
+}
+
+fn assert_linux_artifact_candidates_cover_critical_paths(
+    candidates: &[app_services::analysis_service::EvidenceCandidate],
+) {
+    let candidate_paths = candidates
+        .iter()
+        .map(|candidate| candidate.path.as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        candidates.len() >= MIN_LIUYANG_LINUX_ARTIFACT_CANDIDATES,
+        "real Linux root LV should expose many Linux artifact candidates, got {}: {candidate_paths:?}",
+        candidates.len()
+    );
+    for linux_path in CRITICAL_LINUX_ARTIFACT_CANDIDATE_PATHS {
+        assert!(
+            candidates
+                .iter()
+                .any(|candidate| path_has_linux_suffix(&candidate.path, linux_path)),
+            "LinuxArtifacts candidates should include {linux_path}; candidates={candidate_paths:?}"
+        );
+    }
+}
+
+fn assert_linux_artifact_extraction_has_real_families(conn: &Connection) {
+    for artifact_type in [
+        "LinuxJournal",
+        "LinuxWtmp",
+        "LinuxBashCommand",
+        "LinuxCronJob",
+        "LinuxSudoEvent",
+        "LinuxSystemConfig",
+    ] {
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM artifacts WHERE artifact_type = ?1",
+                rusqlite::params![artifact_type],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(
+            count > 0,
+            "real Linux extraction should persist at least one {artifact_type} artifact"
+        );
+    }
+}
+
+fn assert_linux_artifact_source_paths_include(conn: &Connection, paths: &[&str]) {
+    for linux_path in paths {
+        let suffix = normalize_linux_path_suffix(linux_path);
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*)
+                 FROM artifacts
+                 WHERE artifact_type LIKE 'Linux%'
+                   AND (
+                        LOWER(json_extract(attrs, '$.sourcePath')) = ?1
+                        OR LOWER(json_extract(attrs, '$.sourcePath')) LIKE ?2
+                   )",
+                rusqlite::params![suffix, format!("%/{suffix}")],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(
+            count > 0,
+            "real Linux extraction should persist artifact sourcePath ending with {linux_path}"
+        );
+    }
 }
 
 fn lvm_root_partition_record(conn: &Connection, ds_id: &DataSourceId) -> DataSourcePartitionRecord {
@@ -294,6 +1026,7 @@ fn linux_e01_enumerates_file_tree_and_reconstructs_paths() {
 
     let ds_id = DataSourceId("e01-linux-ds".to_string());
     create_linux_test_data_source(&conn, "linux-e01-test", &ds_id);
+    file_service::store_data_source_partitions(&conn, &ds_id, &probe.partitions).unwrap();
 
     let fs = open_root_lv_xfs();
     let root_children = fs
@@ -309,6 +1042,10 @@ fn linux_e01_enumerates_file_tree_and_reconstructs_paths() {
             && root_child_names.contains(&"usr"),
         "root LV should expose expected Linux root entries, got {root_child_names:?}"
     );
+    assert_root_lv_lists_system_info_paths(&fs);
+    for path in HIGH_VALUE_LINUX_SYSTEM_INFO_PATHS {
+        assert_root_lv_direct_reads_system_info_file(&fs, path);
+    }
 
     let readable = find_first_readable_file(&fs, "", 4)
         .expect("root LV should expose at least one readable file entry");
@@ -330,12 +1067,7 @@ fn linux_e01_enumerates_file_tree_and_reconstructs_paths() {
         "Enumerated {} files, {} dirs, total={}",
         stats.file_count, stats.dir_count, stats.total_size
     );
-    assert!(
-        stats.file_count >= 100 && stats.dir_count >= 200,
-        "root LV should enumerate a stable useful subset of the damaged sample, got files={} dirs={}",
-        stats.file_count,
-        stats.dir_count
-    );
+    assert_liuyang_root_lv_tree_is_complete(&conn, &ds_id, &stats);
 
     // Query the file tree to verify path reconstruction
     let tree = file_service::get_file_tree_real(&conn).unwrap();
@@ -347,14 +1079,8 @@ fn linux_e01_enumerates_file_tree_and_reconstructs_paths() {
         );
     }
 
-    // Verify at least some files have the expected data_source_id
-    let count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM file_entries WHERE data_source_id = ?1",
-            [&ds_id.0],
-            |row| row.get(0),
-        )
-        .unwrap();
+    // Verify files are tagged with the expected data_source_id.
+    let count = total_file_entries(&conn, &ds_id);
     assert!(
         count > 0,
         "file_entries should be tagged with the data source ID"
@@ -380,7 +1106,13 @@ fn linux_e01_enumerates_file_tree_and_reconstructs_paths() {
     for path in high_value_linux_paths {
         let found = count_entries_like(&conn, &ds_id, &format!("%{path}%"));
         eprintln!("  high-value path '{}' found {} entries", path, found);
+        assert!(
+            found > 0,
+            "root LV import should contain high-value Linux path '{path}'"
+        );
     }
+    assert_high_value_linux_paths_enumerated(&conn, &ds_id);
+    assert_linux_paths_preview_readable(&conn, &ds_id, ARBITRARY_PREVIEW_READ_PATHS);
 }
 
 /// Diagnostic test: read the XFS superblock directly and report version/features.
@@ -775,10 +1507,7 @@ fn linux_e01_analysis_extraction_produces_linux_artifacts() {
         "Root LV enumeration for extraction: files={} dirs={} warnings={:?}",
         stats.file_count, stats.dir_count, stats.warnings
     );
-    assert!(
-        stats.file_count >= 100 && stats.dir_count >= 200,
-        "root LV should enumerate a stable useful subset before extraction"
-    );
+    assert_liuyang_root_lv_tree_is_complete(&conn, &ds_id, &stats);
 
     let candidates = evidence_candidates_for_categories(&conn, &["LinuxArtifacts"]).unwrap();
     eprintln!(
@@ -795,6 +1524,7 @@ fn linux_e01_analysis_extraction_produces_linux_artifacts() {
         !candidates.is_empty(),
         "real root LV traversal should discover Linux artifact candidates without synthetic inserts"
     );
+    assert_linux_artifact_candidates_cover_critical_paths(&candidates);
 
     let run = run_analysis_extraction(
         &conn,
@@ -820,6 +1550,10 @@ fn linux_e01_analysis_extraction_produces_linux_artifacts() {
         run.scanned_count > 0,
         "expected real Linux artifact sources scanned"
     );
+    assert!(
+        run.artifact_count > 0,
+        "expected real Linux artifact extraction to persist artifacts"
+    );
 
     let summary = get_linux_artifact_summary(&conn, 0, 200).unwrap();
     eprintln!(
@@ -836,6 +1570,111 @@ fn linux_e01_analysis_extraction_produces_linux_artifacts() {
         summary.total_count >= run.artifact_count,
         "summary should include all persisted Linux artifacts"
     );
+    assert!(
+        summary.journal_count > 0
+            && summary.login_count > 0
+            && summary.bash_command_count > 0
+            && summary.cron_job_count > 0
+            && summary.sudo_event_count > 0,
+        "real sample should produce journal/login/bash/cron/sudo Linux artifacts"
+    );
+    assert_linux_artifact_extraction_has_real_families(&conn);
+    assert_linux_artifact_source_paths_include(
+        &conn,
+        &[
+            "/etc/passwd",
+            "/etc/os-release",
+            "/root/.bash_history",
+            "/var/log/wtmp",
+            "/var/log/messages",
+            "/var/log/secure",
+            "/var/spool/cron/root",
+        ],
+    );
+}
+
+/// Real-sample completeness regression for the root logical volume.
+///
+/// This intentionally asserts beyond "the root node exists": the root LV must
+/// enumerate key Linux system files, direct filesystem reads must return
+/// content for them, app-service preview reads must resolve the stored entries,
+/// and LinuxArtifacts candidate discovery must preserve these prefixed paths.
+#[test]
+#[ignore = "requires FORENSICS_LINUX_E01_FIXTURE real Linux E01 sample"]
+fn linux_e01_root_lv_system_info_paths_are_enumerated_readable_and_candidates() {
+    let ds_id = DataSourceId("e01-linux-system-info-ds".to_string());
+    let conn = setup_linux_fixture_case("linux-e01-system-info", &ds_id);
+
+    let fs = open_root_lv_xfs();
+    let root_children = fs
+        .list_children("")
+        .expect("root LV should enumerate the Linux root directory");
+    let root_child_names = root_children
+        .iter()
+        .map(|child| child.name.as_str())
+        .collect::<Vec<_>>();
+    eprintln!(
+        "Root LV direct enumeration: root_children={} names={root_child_names:?}",
+        root_child_names.len()
+    );
+    assert!(
+        root_child_names.contains(&"etc"),
+        "root LV root enumeration must contain /etc, got {root_child_names:?}"
+    );
+    assert_root_lv_lists_system_info_paths(&fs);
+    for linux_path in HIGH_VALUE_LINUX_SYSTEM_INFO_PATHS {
+        assert_root_lv_direct_reads_system_info_file(&fs, linux_path);
+    }
+
+    let stats = enumerate_root_lv_into_case(&conn, &ds_id);
+    eprintln!(
+        "Root LV DB enumeration: files={} dirs={} total={} warnings={:?}",
+        stats.file_count, stats.dir_count, stats.total_size, stats.warnings
+    );
+    assert_liuyang_root_lv_tree_is_complete(&conn, &ds_id, &stats);
+
+    let entries = assert_high_value_linux_paths_enumerated(&conn, &ds_id);
+    for (linux_path, entry) in HIGH_VALUE_LINUX_SYSTEM_INFO_PATHS
+        .iter()
+        .zip(entries.iter())
+    {
+        let preview_bytes = file_service::read_file_header_by_id(&conn, &entry.file_id, 512)
+            .unwrap_or_else(|error| {
+                panic!(
+                    "app-service preview read for {} ({}) failed: {}",
+                    linux_path, entry.path, error
+                )
+            });
+        eprintln!(
+            "  preview read {} via stored entry {} returned {} bytes",
+            linux_path,
+            entry.file_id.0,
+            preview_bytes.len()
+        );
+        assert!(
+            !preview_bytes.is_empty(),
+            "app-service preview read for {linux_path} should return non-empty bytes"
+        );
+    }
+
+    let candidates = evidence_candidates_for_categories(&conn, &["LinuxArtifacts"]).unwrap();
+    eprintln!(
+        "Linux artifact candidates after root LV system-info enumeration: {}",
+        candidates.len()
+    );
+    for candidate in &candidates {
+        eprintln!(
+            "  candidate path='{}' kind={} parser={} size={}",
+            candidate.path, candidate.evidence_kind, candidate.parser, candidate.size
+        );
+    }
+    assert!(
+        !candidates.is_empty(),
+        "LinuxArtifacts discovery should find real candidates from root LV traversal"
+    );
+    assert_linux_artifact_candidates_include_system_info_paths(&candidates);
+    assert_linux_artifact_candidates_cover_critical_paths(&candidates);
+    assert_linux_paths_preview_readable(&conn, &ds_id, ARBITRARY_PREVIEW_READ_PATHS);
 }
 
 #[test]
@@ -844,13 +1683,12 @@ fn linux_e01_linux_artifact_candidates_survive_lvm_root_prefixes() {
     let ds_id = DataSourceId("e01-linux-candidate-ds".to_string());
     let conn = setup_linux_fixture_case("linux-e01-candidates", &ds_id);
     let stats = enumerate_root_lv_into_case(&conn, &ds_id);
-
-    assert!(
-        stats.file_count >= 100 && stats.dir_count >= 200,
-        "root LV should enumerate a stable useful subset, got files={} dirs={}",
-        stats.file_count,
-        stats.dir_count
+    eprintln!(
+        "Root LV enumeration for candidate coverage: files={} dirs={} total={} warnings={:?}",
+        stats.file_count, stats.dir_count, stats.total_size, stats.warnings
     );
+
+    assert_liuyang_root_lv_tree_is_complete(&conn, &ds_id, &stats);
     for segment in ["boot", "dev", "etc", "usr", "var"] {
         assert!(
             count_entries_like(&conn, &ds_id, &format!("%{segment}%")) > 0,
@@ -878,6 +1716,8 @@ fn linux_e01_linux_artifact_candidates_survive_lvm_root_prefixes() {
         !paths.is_empty(),
         "real prefixed Linux paths should match LinuxArtifacts candidates: {paths:?}"
     );
+    assert_linux_artifact_candidates_include_system_info_paths(&real_candidates);
+    assert_linux_artifact_candidates_cover_critical_paths(&real_candidates);
 }
 
 #[test]
@@ -886,10 +1726,11 @@ fn linux_e01_reads_bytes_from_root_lv_file_entries() {
     let ds_id = DataSourceId("e01-linux-bytes-ds".to_string());
     let conn = setup_linux_fixture_case("linux-e01-byte-read", &ds_id);
     let stats = enumerate_root_lv_into_case(&conn, &ds_id);
-    assert!(
-        stats.file_count >= 100 && stats.dir_count >= 200,
-        "root LV should enumerate enough file entries for byte-read coverage"
+    eprintln!(
+        "Root LV enumeration for byte-read coverage: files={} dirs={} total={} warnings={:?}",
+        stats.file_count, stats.dir_count, stats.total_size, stats.warnings
     );
+    assert_liuyang_root_lv_tree_is_complete(&conn, &ds_id, &stats);
 
     let partition = lvm_root_partition_record(&conn, &ds_id);
     assert_eq!(partition.partition_index, 2);
@@ -901,21 +1742,30 @@ fn linux_e01_reads_bytes_from_root_lv_file_entries() {
         "preview/open path needs stored LVM PV offsets for root LV byte reads"
     );
 
-    let file_id = find_file_id_like(&conn, &ds_id, "%boot%")
-        .or_else(|| find_file_id_like(&conn, &ds_id, "%usr%"))
-        .or_else(|| find_file_id_like(&conn, &ds_id, "%bin%"))
-        .expect("root LV enumeration should expose at least one readable file candidate");
-    let bytes = file_service::read_file_header_by_id(&conn, &file_id, 512)
-        .expect("root LV file entry should be preview-readable through stored LVM metadata");
-    eprintln!(
-        "Read {} bytes from root LV file entry {}",
-        bytes.len(),
-        file_id.0
-    );
-    assert!(
-        !bytes.is_empty(),
-        "root LV file preview should return non-empty bytes"
-    );
+    let entries = assert_high_value_linux_paths_enumerated(&conn, &ds_id);
+    for (linux_path, entry) in HIGH_VALUE_LINUX_SYSTEM_INFO_PATHS
+        .iter()
+        .zip(entries.iter())
+    {
+        let bytes = file_service::read_file_header_by_id(&conn, &entry.file_id, 512)
+            .unwrap_or_else(|error| {
+                panic!(
+                    "root LV file entry {} for {} should be preview-readable through stored LVM metadata: {}",
+                    entry.file_id.0, linux_path, error
+                )
+            });
+        eprintln!(
+            "Read {} bytes from root LV file entry {} stored_path='{}'",
+            bytes.len(),
+            entry.file_id.0,
+            entry.path
+        );
+        assert!(
+            !bytes.is_empty(),
+            "root LV file preview for {linux_path} should return non-empty bytes"
+        );
+    }
+    assert_linux_paths_preview_readable(&conn, &ds_id, ARBITRARY_PREVIEW_READ_PATHS);
 }
 
 /// Verify LVM pool expansion discovers logical volumes on the real E01 sample.
@@ -924,460 +1774,16 @@ fn linux_e01_reads_bytes_from_root_lv_file_entries() {
 fn linux_e01_lvm_expansion_discovers_logical_volumes() {
     let mut reader = E01Reader::open(&fixture_path()).unwrap();
     let mut probe = detect_image_filesystem(&mut reader).unwrap();
-
-    eprintln!("=== Before LVM expansion ===");
-    for c in &probe.candidates {
-        eprintln!(
-            "  kind={:?} name={:?} offset={}",
-            c.kind, c.partition_name, c.offset
-        );
-    }
-
-    // Try direct LVM crate access first (bypass expand helper)
-    eprintln!("=== Direct LVM probe ===");
-    let mut e01 = E01Reader::open(&fixture_path()).unwrap();
-    let lvm_offset = LIUYANG_LVM_POOL_OFFSET; // Partition 1 offset
-    match fs_lvm::probe_lvm(&mut e01, lvm_offset) {
-        Ok(true) => eprintln!("  fs_lvm::probe_lvm: true"),
-        Ok(false) => eprintln!("  fs_lvm::probe_lvm: false — NOT an LVM PV!"),
-        Err(e) => eprintln!("  fs_lvm::probe_lvm error: {}", e),
-    }
-
-    // Dump LVM label sector for diagnosis
-    eprintln!("=== Raw LVM label sector at offset {} ===", lvm_offset);
-    let mut e01_diag = E01Reader::open(&fixture_path()).unwrap();
-    use std::io::{Read, Seek, SeekFrom};
-    e01_diag.seek(SeekFrom::Start(lvm_offset + 512)).unwrap();
-    let mut label_sec = [0u8; 512];
-    e01_diag.read_exact(&mut label_sec).unwrap();
-    eprintln!("  magic[0..8]: {:?}", std::str::from_utf8(&label_sec[0..8]));
-    eprintln!(
-        "  type[24..32]: {:?}",
-        std::str::from_utf8(&label_sec[24..32])
+    assert!(
+        probe.candidates.iter().any(|candidate| {
+            candidate.kind == ImageFilesystemKind::LvmPool
+                && candidate.offset == LIUYANG_LVM_POOL_OFFSET
+        }),
+        "initial probe should expose the physical LVM pool before expansion"
     );
-    let data_off = u32::from_le_bytes([label_sec[20], label_sec[21], label_sec[22], label_sec[23]]);
-    eprintln!("  data_offset: {}", data_off);
-    // Show PV header area
-    eprintln!(
-        "  PV header bytes at {}: {:02X?}",
-        data_off,
-        &label_sec[data_off as usize..(data_off as usize + 72).min(512)]
-    );
-    // Dump full sector from byte 32 onwards
-    eprintln!("  Full sector bytes 32..200:");
-    for chunk in label_sec[32..200].chunks(16) {
-        eprintln!("    {:02X?}", chunk);
-    }
-    // Descriptors at data_offset + 40
-    let desc_start = data_off as usize + 40;
-    eprintln!("  Descriptors at offset {}:", desc_start);
-    for i in 0..8 {
-        let off = desc_start + i * 16;
-        if off + 16 > 512 {
-            break;
-        }
-        let d_off = u64::from_le_bytes(label_sec[off..off + 8].try_into().unwrap());
-        let d_size = u64::from_le_bytes(label_sec[off + 8..off + 16].try_into().unwrap());
-        eprintln!(
-            "    desc[{}] at offset {}: offset={} size={}",
-            i, off, d_off, d_size
-        );
-        if d_off == 0 && d_size == 0 {
-            eprintln!("    → terminator");
-        }
-    }
-
-    // Try full discovery
-    eprintln!("=== Direct LVM discovery ===");
-    let e01_reader: Box<dyn EvidenceReader> = Box::new(E01Reader::open(&fixture_path()).unwrap());
-    match fs_lvm::LvmPool::discover(vec![e01_reader], vec![lvm_offset]) {
-        Ok(pool) => {
-            eprintln!("  VG name: {}", pool.volume_group().name);
-            let lvs = pool.list_volumes();
-            eprintln!("  LVs: {}", lvs.len());
-            for lv in &lvs {
-                eprintln!(
-                    "    LV: name='{}' uuid={} size={}",
-                    lv.name, lv.uuid, lv.size_bytes
-                );
-                // Show extent mapping for diagnosis
-                let vg = pool.volume_group();
-                if let Some(lv_meta) = vg.logical_volumes.iter().find(|l| l.name == lv.name) {
-                    for (si, seg) in lv_meta.segments.iter().enumerate() {
-                        eprintln!(
-                            "      seg[{}]: type={:?} start_ext={} count={} stripes={:?}",
-                            si, seg.seg_type, seg.start_extent, seg.extent_count, seg.stripes
-                        );
-                    }
-                    // Build extent map to see resolved mapping
-                }
-                // Dump raw root inode to diagnose why only 2 entries
-                if lv.name == "root" {
-                    let lv_idx = lvs.iter().position(|v| v.name == lv.name).unwrap();
-                    let mut tmp_lv = pool.open_volume(lv_idx).unwrap();
-                    use std::io::{Read, Seek};
-                    let mut sb = [0u8; 512];
-                    tmp_lv.read_exact(&mut sb).unwrap();
-                    let inode_size = u16::from_be_bytes([sb[0x68], sb[0x69]]);
-                    let block_size =
-                        u32::from_be_bytes([sb[0x04], sb[0x05], sb[0x06], sb[0x07]]) as u64;
-                    let root_ino = u64::from_be_bytes(sb[0x38..0x40].try_into().unwrap());
-                    let agblklog = sb[0x7C];
-                    let inopblog = sb[0x7B];
-                    let ag_blocks =
-                        u32::from_be_bytes([sb[0x54], sb[0x55], sb[0x56], sb[0x57]]) as u64;
-                    let shift = agblklog as u64 + inopblog as u64;
-                    let fs_block = (root_ino >> shift) * ag_blocks
-                        + ((root_ino & ((1 << shift) - 1)) >> inopblog);
-                    let ino_off = fs_block * block_size
-                        + (root_ino & ((1 << inopblog) - 1)) * inode_size as u64;
-                    tmp_lv.seek(SeekFrom::Start(ino_off)).unwrap();
-                    let mut ino_buf = vec![0u8; inode_size as usize];
-                    tmp_lv.read_exact(&mut ino_buf).unwrap();
-                    let ver = ino_buf[0x04];
-                    let fmt = ino_buf[0x05];
-                    let fk = ino_buf[0x52];
-                    let next = u32::from_be_bytes([
-                        ino_buf[0x4C],
-                        ino_buf[0x4D],
-                        ino_buf[0x4E],
-                        ino_buf[0x4F],
-                    ]);
-                    let core: usize = if ver >= 3 { 176 } else { 96 };
-                    let df = if fk == 0 {
-                        &ino_buf[core..]
-                    } else {
-                        &ino_buf[core..][..fk as usize]
-                    };
-                    eprintln!(
-                        "      root inode: ver={} fmt={} forkoff={} nextents={} df_len={}",
-                        ver,
-                        fmt,
-                        fk,
-                        next,
-                        df.len()
-                    );
-                    eprintln!(
-                        "      df[0..{}]: {:02X?}",
-                        df.len().min(60),
-                        &df[..df.len().min(60)]
-                    );
-                    eprintln!("      dir: count={} i8count={}", df[0], df[1]);
-                    // Dump forkoff byte and surrounding context
-                    eprintln!("      ino_buf[0x50..0x55]: {:02X?}", &ino_buf[0x50..0x55]);
-                    eprintln!(
-                        "      literal[0..40] (from byte 176): {:02X?}",
-                        &ino_buf[176..216]
-                    );
-                    // Check residual data in full literal area (recovery attempt)
-                    let df_full = &ino_buf[176..];
-                    let non_zero = df_full.iter().filter(|&&b| b != 0).count();
-                    eprintln!(
-                        "      literal area: {} bytes, {} non-zero",
-                        df_full.len(),
-                        non_zero
-                    );
-                    if non_zero > 0 {
-                        eprintln!(
-                            "      literal first 80 non-zero bytes: {:02X?}",
-                            &df_full[..80.min(df_full.len())]
-                        );
-                    }
-                    // Manually find entries using the full literal area
-                    eprintln!("      Full literal parse (no ftype, from byte 176):");
-                    let mut pos = 6usize; // skip count+i8count+parent4
-                    for i in 0..25 {
-                        if pos + 3 > df_full.len() {
-                            eprintln!("        BREAK: pos+3 > len");
-                            break;
-                        }
-                        let nl = df_full[pos] as usize;
-                        if nl == 0 {
-                            eprintln!("        BREAK: namelen=0 at pos {}", pos);
-                            break;
-                        }
-                        let name_end = pos + 3 + nl;
-                        if name_end + 4 > df_full.len() {
-                            eprintln!("        BREAK: name_end+4 > len at i={}", i);
-                            break;
-                        }
-                        let name = std::str::from_utf8(&df_full[pos + 3..name_end]).unwrap_or("?");
-                        let ino = u32::from_be_bytes([
-                            df_full[name_end],
-                            df_full[name_end + 1],
-                            df_full[name_end + 2],
-                            df_full[name_end + 3],
-                        ]);
-                        eprintln!("        [{}] '{}' ino={}", i, name, ino);
-                        pos = name_end + 4;
-                    }
-                    let cnt = df[0] as usize;
-                    // Check superblock features_incompat for ftype flag
-                    let sb_fincompat = u32::from_be_bytes([sb[0x80], sb[0x81], sb[0x82], sb[0x83]]);
-                    eprintln!(
-                        "      sb_features_incompat=0x{:08X} (FTYPE bit={})",
-                        sb_fincompat,
-                        sb_fincompat & 0x02 != 0
-                    );
-                    // Try manual parse WITHOUT ftype
-                    let mut pos = 6usize;
-                    eprintln!("      Manual parse (no ftype):");
-                    for i in 0..cnt.min(10) {
-                        if pos + 3 > df.len() {
-                            break;
-                        }
-                        let nl = df[pos] as usize;
-                        let name_end = pos + 3 + nl;
-                        if name_end + 4 > df.len() {
-                            break;
-                        }
-                        let name = std::str::from_utf8(&df[pos + 3..name_end]).unwrap_or("?");
-                        let ino = u32::from_be_bytes([
-                            df[name_end],
-                            df[name_end + 1],
-                            df[name_end + 2],
-                            df[name_end + 3],
-                        ]);
-                        eprintln!("        [{}] '{}' ino={}", i, name, ino);
-                        pos = name_end + 4;
-                    }
-                }
-
-                // Diagnose failed block-format directories
-                if lv.name == "root" {
-                    let lv_idx = lvs.iter().position(|v| v.name == lv.name).unwrap();
-                    let lv_reader = pool.open_volume(lv_idx).unwrap();
-                    let lv_box: Box<dyn EvidenceReader> = Box::new(lv_reader);
-                    if let Ok(xfs) = fs_xfs::XfsReader::open(lv_box, 0) {
-                        // Find a specific failed directory (e.g. "etc") and dump its raw data
-                        eprintln!("      === Diagnosing failed dir: etc ===");
-                        let mut raw_lv = pool.open_volume(lv_idx).unwrap();
-                        use std::io::{Read, Seek};
-                        let mut sb = [0u8; 512];
-                        raw_lv.read_exact(&mut sb).unwrap();
-                        // Verify LvReader at a known location: sb should show XFS magic
-                        eprintln!("      SB magic at LV offset 0: {:02X?}", &sb[0..4]);
-                        // Seek to offset 8GB and read 16 bytes
-                        raw_lv.seek(SeekFrom::Start(8_590_450_688)).unwrap();
-                        let mut test = [0u8; 16];
-                        raw_lv.read_exact(&mut test).unwrap();
-                        eprintln!(
-                            "      Data at LV offset 8.6GB (etc extent[0]): {:02X?}",
-                            test
-                        );
-                        let block_size =
-                            u32::from_be_bytes([sb[0x04], sb[0x05], sb[0x06], sb[0x07]]) as u64;
-                        let inode_size = u16::from_be_bytes([sb[0x68], sb[0x69]]) as u64;
-                        let agblklog = sb[0x7C] as u64;
-                        let inopblog = sb[0x7B] as u64;
-                        let ag_blocks =
-                            u32::from_be_bytes([sb[0x54], sb[0x55], sb[0x56], sb[0x57]]) as u64;
-                        let shift = agblklog + inopblog;
-                        // Read etc's inode: we need its inode number from the root dir entry.
-                        // From earlier manual parse: "etc" has ino from the full literal area.
-                        // Let me re-read root dir's full data fork and find etc's inode.
-                        let root_ino = u64::from_be_bytes(sb[0x38..0x40].try_into().unwrap());
-                        // Read root inode
-                        let root_fsblk = (root_ino >> shift) * ag_blocks
-                            + ((root_ino & ((1 << shift) - 1)) >> inopblog);
-                        let root_off = root_fsblk * block_size
-                            + (root_ino & ((1 << inopblog) - 1)) * inode_size;
-                        raw_lv.seek(SeekFrom::Start(root_off)).unwrap();
-                        let mut root_buf = vec![0u8; inode_size as usize];
-                        raw_lv.read_exact(&mut root_buf).unwrap();
-                        let root_ver = root_buf[0x04];
-                        let root_core: usize = if root_ver >= 3 { 176 } else { 96 };
-                        let root_lit = &root_buf[root_core..]; // full literal (LOCAL format fix)
-                                                               // Parse entries WITHOUT ftype (sb_features_incompat=0)
-                        let root_count = root_lit[0] as usize;
-                        let root_i8 = root_lit[1] as usize;
-                        eprintln!("      root dir: count={} i8count={}", root_count, root_i8);
-                        // Use ftype (V3 inode) — data clearly has ftype bytes
-                        let mut pos: usize = 6; // count+i8count+parent4 (i8count=0)
-                        let mut etc_ino: Option<u64> = None;
-                        for _i in 0..root_count {
-                            if pos + 3 > root_lit.len() {
-                                break;
-                            }
-                            let nl = root_lit[pos] as usize;
-                            let name_end = pos + 3 + nl;
-                            let tail = 5; // ftype(1) + inode4(4)
-                            if name_end + tail > root_lit.len() {
-                                break;
-                            }
-                            let name =
-                                std::str::from_utf8(&root_lit[pos + 3..name_end]).unwrap_or("?");
-                            let ino = u32::from_be_bytes([
-                                root_lit[name_end + 1],
-                                root_lit[name_end + 2],
-                                root_lit[name_end + 3],
-                                root_lit[name_end + 4],
-                            ]) as u64;
-                            if name == "etc" {
-                                etc_ino = Some(ino);
-                                break;
-                            }
-                            pos = name_end + tail;
-                        }
-                        if let Some(ino) = etc_ino {
-                            eprintln!("      etc inode={}", ino);
-                            let fsblk = (ino >> shift) * ag_blocks
-                                + ((ino & ((1 << shift) - 1)) >> inopblog);
-                            let etc_off =
-                                fsblk * block_size + (ino & ((1 << inopblog) - 1)) * inode_size;
-                            raw_lv.seek(SeekFrom::Start(etc_off)).unwrap();
-                            let mut etc_buf = vec![0u8; inode_size as usize];
-                            raw_lv.read_exact(&mut etc_buf).unwrap();
-                            let fmt = etc_buf[0x05];
-                            let fk = etc_buf[0x52];
-                            let nextents = u32::from_be_bytes([
-                                etc_buf[0x4C],
-                                etc_buf[0x4D],
-                                etc_buf[0x4E],
-                                etc_buf[0x4F],
-                            ]);
-                            eprintln!(
-                                "      etc inode: format={} forkoff={} nextents={}",
-                                fmt, fk, nextents
-                            );
-                            let etc_ver = etc_buf[0x04];
-                            let etc_core: usize = if etc_ver >= 3 { 176 } else { 96 };
-                            // Check residual data in full literal for recovery
-                            let etc_literal = &etc_buf[etc_core..];
-                            let non_zero = etc_literal.iter().filter(|&&b| b != 0).count();
-                            eprintln!(
-                                "      etc literal: {} bytes, {} non-zero",
-                                etc_literal.len(),
-                                non_zero
-                            );
-                            // Dump raw extent bytes for diagnosis
-                            let df = etc_literal;
-                            eprintln!(
-                                "      etc extent raw bytes (first 48): {:02X?}",
-                                &df[..48.min(df.len())]
-                            );
-                            // Read extent from data fork
-                            if fmt == 2 {
-                                // EXTENTS
-                                let df = &etc_buf[etc_core..]; // extent records in literal area
-                                for ei in 0..nextents as usize {
-                                    let rec_off = ei * 16;
-                                    if rec_off + 16 > df.len() {
-                                        break;
-                                    }
-                                    let l0 = u64::from_be_bytes(
-                                        df[rec_off..rec_off + 8].try_into().unwrap(),
-                                    );
-                                    let l1 = u64::from_be_bytes(
-                                        df[rec_off + 8..rec_off + 16].try_into().unwrap(),
-                                    );
-                                    let start_block = l1 >> 21;
-                                    let block_count = l1 & 0x1F_FFFF;
-                                    eprintln!(
-                                        "      extent[{}]: logical={} start_block={} count={}",
-                                        ei, l0, start_block, block_count
-                                    );
-                                    // Read first block data
-                                    raw_lv
-                                        .seek(SeekFrom::Start(start_block * block_size))
-                                        .unwrap();
-                                    let mut blk = vec![0u8; block_size as usize];
-                                    raw_lv.read_exact(&mut blk).unwrap();
-                                    let magic =
-                                        u32::from_be_bytes([blk[0], blk[1], blk[2], blk[3]]);
-                                    eprintln!(
-                                        "      block[{}] offset={} magic=0x{:08X} first16={:02X?}",
-                                        ei,
-                                        start_block * block_size,
-                                        magic,
-                                        &blk[..16]
-                                    );
-                                }
-                            }
-                        } else {
-                            eprintln!("      etc not found in root directory entries");
-                        }
-
-                        eprintln!("      === Root LV recursive walk ===");
-                        fn walk_tree(
-                            xfs: &dyn FileSystemReader,
-                            path: &str,
-                            depth: usize,
-                            total_files: &mut u64,
-                            total_dirs: &mut u64,
-                            failures: &mut u64,
-                        ) {
-                            match xfs.list_children(path) {
-                                Ok(children) => {
-                                    for c in &children {
-                                        if c.is_dir {
-                                            *total_dirs += 1;
-                                            if depth < 5 {
-                                                let sub = if path.is_empty() {
-                                                    c.name.clone()
-                                                } else {
-                                                    format!("{}/{}", path, c.name)
-                                                };
-                                                walk_tree(
-                                                    xfs,
-                                                    &sub,
-                                                    depth + 1,
-                                                    total_files,
-                                                    total_dirs,
-                                                    failures,
-                                                );
-                                            }
-                                        } else {
-                                            *total_files += 1;
-                                        }
-                                    }
-                                }
-                                Err(_e) => {
-                                    *failures += 1;
-                                    if depth <= 1 {
-                                        eprintln!("      FAIL {}: {}", path, _e);
-                                    }
-                                }
-                            }
-                        }
-
-                        let (mut files, mut dirs, mut fails) = (0u64, 1u64, 0u64); // root itself = 1 dir
-                        walk_tree(&xfs, "", 0, &mut files, &mut dirs, &mut fails);
-                        eprintln!(
-                            "      Root LV: {} files, {} dirs, {} failed dirs",
-                            files, dirs, fails
-                        );
-                        assert!(
-                            files + dirs > 0,
-                            "root LV should enumerate at least some entries"
-                        );
-                    }
-                }
-            }
-        }
-        Err(e) => eprintln!("  LVM discovery FAILED: {}", e),
-    }
 
     let source_kind = domain::DataSourceKind::E01;
     expand_lvm_pool_candidates(&mut probe, &fixture_path(), &source_kind);
-
-    eprintln!(
-        "=== After LVM expansion ({}) candidates ===",
-        probe.candidates.len()
-    );
-    for c in &probe.candidates {
-        eprintln!(
-            "  kind={:?} name={:?} offset={} source={:?}",
-            c.kind, c.partition_name, c.offset, c.source
-        );
-    }
-    eprintln!("=== Partitions ({}) ===", probe.partitions.len());
-    for p in &probe.partitions {
-        eprintln!(
-            "  [{}] name='{}' kind={} status={:?}",
-            p.index, p.name, p.kind_label, p.status
-        );
-    }
 
     assert!(
         probe
@@ -1442,6 +1848,7 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
         root_child_names.contains(&"boot") && root_child_names.contains(&"etc"),
         "root LV should expose expected Linux root entries, got {root_child_names:?}"
     );
+    assert_root_lv_lists_system_info_paths(&root_fs);
 
     assert_lvm_root_lv_visible_without_expanded_pool_root(&probe, root_lv);
 }
@@ -1508,8 +1915,11 @@ fn assert_lvm_root_lv_visible_without_expanded_pool_root(
         stats.file_count, stats.dir_count, stats.total_size, stats.warnings
     );
     assert!(
-        stats.file_count > 0 || stats.dir_count > 0,
-        "image import should enumerate at least one visible filesystem entry"
+        stats.file_count >= MIN_LIUYANG_ROOT_LV_FILE_COUNT
+            && stats.dir_count >= MIN_LIUYANG_ROOT_LV_DIR_COUNT,
+        "image import should enumerate the complete visible Linux root LV tree, got files={} dirs={}",
+        stats.file_count,
+        stats.dir_count
     );
 
     let tree = file_service::get_file_tree_real_with_visibility(&conn, false).unwrap();
@@ -1541,10 +1951,30 @@ fn assert_lvm_root_lv_visible_without_expanded_pool_root(
         root_lv_child_names.contains(&"boot") && root_lv_child_names.contains(&"etc"),
         "visible cl/root tree root should expose expected Linux root children, got {root_lv_child_names:?}"
     );
+    let root_lv_etc = root_lv_children
+        .children
+        .iter()
+        .find(|child| child.name == "etc")
+        .expect("visible cl/root tree should include /etc");
+    for required_name in ["passwd", "os-release", "hostname"] {
+        let child_rows: i64 = conn
+            .query_row(
+                "SELECT COUNT(*)
+                 FROM file_entries
+                 WHERE parent_id = ?1
+                   AND entry_type = 'file' COLLATE NOCASE
+                   AND name = ?2",
+                rusqlite::params![root_lv_etc.id, required_name],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(
+            child_rows > 0,
+            "stored cl/root /etc tree should expose file child {required_name}"
+        );
+    }
     assert!(
-        !visible_roots
-            .iter()
-            .any(|name| *name == expanded_pool_root_name.as_str()),
+        !visible_roots.contains(&expanded_pool_root_name.as_str()),
         "visible tree must not expose the Expanded physical LVM pool partition; roots={visible_roots:?}"
     );
 

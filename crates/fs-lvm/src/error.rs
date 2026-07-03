@@ -27,6 +27,10 @@ pub enum LvmError {
     #[error("metadata parse error at line {line}: {message}")]
     MetadataParseError { line: usize, message: String },
 
+    /// A committed metadata copy was readable but structurally invalid.
+    #[error("fatal metadata parse error at line {line}: {message}")]
+    FatalMetadataParseError { line: usize, message: String },
+
     /// Unsupported segment type (striped, raid, thin, etc.).
     #[error("unsupported segment type '{seg_type}' in logical volume '{lv_name}'")]
     UnsupportedSegment { lv_name: String, seg_type: String },

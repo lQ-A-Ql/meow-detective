@@ -606,9 +606,9 @@ where
 
 /// Expand LVM pool candidates into individual logical volume candidates.
 ///
-/// For each `LvmPool` candidate in the probe, opens the physical volume,
-/// discovers logical volumes, detects the filesystem on each, and replaces
-/// the pool candidate with per-LV candidates.
+/// Groups `LvmPool` candidates by VG metadata before discovery so an
+/// incomplete/high-seqno VG cannot prevent a separate complete VG from
+/// expanding.
 ///
 /// Call after `detect_image_filesystem` and before storing partition records.
 pub fn expand_lvm_pool_candidates(
@@ -631,9 +631,11 @@ pub fn expand_lvm_pool_candidates(
     let mut new_candidates: Vec<ImageFilesystemCandidate> = Vec::new();
     let mut remove_indices: Vec<usize> = Vec::new();
     let mut expanded_vgs = std::collections::HashSet::new();
+    let discovery_groups =
+        lvm_discovery_pv_groups(&lvm_indices, source_path, source_kind, &mut probe.warnings);
 
-    for (_, candidate) in &lvm_indices {
-        let pv_offsets = ordered_lvm_pv_offsets(candidate.offset, &lvm_indices);
+    for pv_offsets in discovery_groups {
+        let seed_offset = pv_offsets.first().copied().unwrap_or_default();
         let mut readers = Vec::with_capacity(pv_offsets.len());
         for pv_offset in &pv_offsets {
             match open_evidence_reader(source_path, source_kind) {
@@ -662,12 +664,12 @@ pub fn expand_lvm_pool_candidates(
             Ok(p) => p,
             Err(e) => {
                 probe.warnings.push(format!(
-                    "LVM expand: discovery failed for PV offset {}: {}",
-                    candidate.offset, e
+                    "LVM expand: discovery failed for PV offsets {:?}: {}",
+                    pv_offsets, e
                 ));
                 tracing::warn!(
-                    "LVM expand: discovery failed at offset {}: {}",
-                    candidate.offset,
+                    "LVM expand: discovery failed at offsets {:?}: {}",
+                    pv_offsets,
                     e
                 );
                 continue;
@@ -680,10 +682,17 @@ pub fn expand_lvm_pool_candidates(
             .map(|(_, offset)| *offset)
             .collect::<Vec<_>>();
         let expanded_offsets = if vg_pv_offsets.is_empty() {
-            vec![candidate.offset]
+            vec![seed_offset]
         } else {
             vg_pv_offsets
         };
+        let representative =
+            representative_lvm_candidate(&lvm_indices, &expanded_offsets).or_else(|| {
+                lvm_indices
+                    .iter()
+                    .find(|(_, candidate)| candidate.offset == seed_offset)
+                    .map(|(_, candidate)| candidate)
+            });
 
         let vg = pool.volume_group();
         let vg_key = if vg.id.is_empty() {
@@ -699,7 +708,7 @@ pub fn expand_lvm_pool_candidates(
         tracing::info!(
             "LVM: {} logical volume(s) discovered at offset {}",
             lv_list.len(),
-            candidate.offset,
+            expanded_offsets.first().copied().unwrap_or(seed_offset),
         );
 
         // Open each LV from the shared pool (no re-open needed)
@@ -723,7 +732,9 @@ pub fn expand_lvm_pool_candidates(
                     let lv_name = format!(
                         "{}/{}",
                         if vg.name.is_empty() {
-                            candidate.partition_name.as_deref().unwrap_or("LVM")
+                            representative
+                                .and_then(|candidate| candidate.partition_name.as_deref())
+                                .unwrap_or("LVM")
                         } else {
                             vg.name.as_str()
                         },
@@ -737,10 +748,11 @@ pub fn expand_lvm_pool_candidates(
                         pv_offsets: expanded_offsets.clone(),
                     };
                     new_candidates.push(ImageFilesystemCandidate {
-                        partition_index: candidate.partition_index,
+                        partition_index: representative
+                            .and_then(|candidate| candidate.partition_index),
                         partition_name: Some(lv_name),
                         kind: fs_kind,
-                        offset: candidate.offset, // PV partition offset for LVM re-open
+                        offset: expanded_offsets.first().copied().unwrap_or(seed_offset),
                         source: ImageFilesystemSource::LvmLogicalVolume,
                         lvm_identity: Some(lvm_identity),
                     });
@@ -807,17 +819,201 @@ pub fn expand_lvm_pool_candidates(
     probe.candidates.extend(new_candidates);
 }
 
-fn ordered_lvm_pv_offsets(
-    seed_offset: u64,
+#[derive(Clone)]
+struct LvmPvDiscoveryInfo {
+    candidate: ImageFilesystemCandidate,
+    label: fs_lvm::LvmLabel,
+    volume_group: Option<fs_lvm::VolumeGroup>,
+    metadata_warnings: Vec<String>,
+}
+
+struct LvmMetadataGroup {
+    volume_group: fs_lvm::VolumeGroup,
+}
+
+fn lvm_discovery_pv_groups(
     lvm_indices: &[(usize, ImageFilesystemCandidate)],
-) -> Vec<u64> {
-    let mut offsets = vec![seed_offset];
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+    warnings: &mut Vec<String>,
+) -> Vec<Vec<u64>> {
+    let mut pv_infos = Vec::new();
+    let mut fallback_offsets = Vec::new();
     for (_, candidate) in lvm_indices {
-        if candidate.offset != seed_offset && !offsets.contains(&candidate.offset) {
-            offsets.push(candidate.offset);
+        match inspect_lvm_pv_candidate(candidate, source_path, source_kind) {
+            Ok(info) => pv_infos.push(info),
+            Err(warning) => {
+                warnings.push(warning);
+                fallback_offsets.push(vec![candidate.offset]);
+            }
         }
     }
-    offsets
+
+    for info in &pv_infos {
+        warnings.extend(info.metadata_warnings.iter().cloned());
+    }
+
+    let mut metadata_groups = std::collections::BTreeMap::<String, LvmMetadataGroup>::new();
+    for info in &pv_infos {
+        let Some(volume_group) = info.volume_group.as_ref() else {
+            continue;
+        };
+        let key = lvm_volume_group_key(volume_group);
+        metadata_groups
+            .entry(key)
+            .and_modify(|group| {
+                if volume_group.seqno > group.volume_group.seqno {
+                    group.volume_group = volume_group.clone();
+                }
+            })
+            .or_insert_with(|| LvmMetadataGroup {
+                volume_group: volume_group.clone(),
+            });
+    }
+
+    let mut grouped_offsets = std::collections::HashSet::new();
+    let mut groups = Vec::new();
+    for group in metadata_groups.values() {
+        let mut offsets = Vec::new();
+        let mut missing_pv_uuids = Vec::new();
+        for pv_meta in &group.volume_group.physical_volumes {
+            let required_uuid = normalize_lvm_uuid_for_match(&pv_meta.uuid);
+            let matched = pv_infos
+                .iter()
+                .find(|info| normalize_lvm_uuid_for_match(&info.label.pv_uuid) == required_uuid);
+            match matched {
+                Some(info) => {
+                    if !offsets.contains(&info.candidate.offset) {
+                        offsets.push(info.candidate.offset);
+                    }
+                }
+                None => missing_pv_uuids.push(pv_meta.uuid.clone()),
+            }
+        }
+
+        if missing_pv_uuids.is_empty() && !offsets.is_empty() {
+            for offset in &offsets {
+                grouped_offsets.insert(*offset);
+            }
+            groups.push(offsets);
+        } else if !missing_pv_uuids.is_empty() {
+            warnings.push(format!(
+                "LVM expand: skipping incomplete VG '{}' missing PV UUID(s): {}",
+                lvm_volume_group_display_name(&group.volume_group),
+                missing_pv_uuids.join(", ")
+            ));
+        }
+    }
+
+    for info in pv_infos {
+        if info.volume_group.is_none() && grouped_offsets.insert(info.candidate.offset) {
+            groups.push(vec![info.candidate.offset]);
+        }
+    }
+    groups.extend(fallback_offsets);
+    groups
+}
+
+fn inspect_lvm_pv_candidate(
+    candidate: &ImageFilesystemCandidate,
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+) -> std::result::Result<LvmPvDiscoveryInfo, String> {
+    let mut reader = open_evidence_reader(source_path, source_kind).map_err(|e| {
+        format!(
+            "LVM expand: cannot open reader for PV offset {}: {}",
+            candidate.offset, e
+        )
+    })?;
+    let label = fs_lvm::label::parse_pv_label(&mut reader, candidate.offset).map_err(|e| {
+        format!(
+            "LVM expand: cannot parse PV label at offset {}: {}",
+            candidate.offset, e
+        )
+    })?;
+    let (volume_group, metadata_warnings) =
+        best_lvm_volume_group_from_label(&mut reader, candidate.offset, &label);
+    Ok(LvmPvDiscoveryInfo {
+        candidate: candidate.clone(),
+        label,
+        volume_group,
+        metadata_warnings,
+    })
+}
+
+fn best_lvm_volume_group_from_label<R>(
+    reader: &mut R,
+    pv_offset: u64,
+    label: &fs_lvm::LvmLabel,
+) -> (Option<fs_lvm::VolumeGroup>, Vec<String>)
+where
+    R: Read + Seek,
+{
+    let mut best = None;
+    let mut warnings = Vec::new();
+    for (index, metadata_area) in label.metadata_areas.iter().enumerate() {
+        match fs_lvm::metadata::parse_metadata(reader, metadata_area, pv_offset) {
+            Ok(volume_group) => {
+                if best
+                    .as_ref()
+                    .is_none_or(|current: &fs_lvm::VolumeGroup| volume_group.seqno > current.seqno)
+                {
+                    best = Some(volume_group);
+                }
+            }
+            Err(error) => {
+                warnings.push(format!(
+                    "LVM expand: metadata area {} at PV offset {} (mda offset {}, size {}) did not produce a usable VG: {}",
+                    index,
+                    pv_offset,
+                    metadata_area.offset,
+                    metadata_area.size,
+                    error
+                ));
+            }
+        }
+    }
+    (best, warnings)
+}
+
+fn lvm_volume_group_key(volume_group: &fs_lvm::VolumeGroup) -> String {
+    let normalized_id = normalize_lvm_uuid_for_match(&volume_group.id);
+    if normalized_id.is_empty() {
+        format!("name:{}", volume_group.name)
+    } else {
+        format!("id:{normalized_id}")
+    }
+}
+
+fn lvm_volume_group_display_name(volume_group: &fs_lvm::VolumeGroup) -> String {
+    if volume_group.name.is_empty() {
+        volume_group.id.clone()
+    } else {
+        volume_group.name.clone()
+    }
+}
+
+fn normalize_lvm_uuid_for_match(uuid: &str) -> String {
+    uuid.trim()
+        .chars()
+        .filter(|ch| *ch != '-')
+        .collect::<String>()
+        .to_ascii_lowercase()
+}
+
+fn representative_lvm_candidate<'a>(
+    lvm_indices: &'a [(usize, ImageFilesystemCandidate)],
+    pv_offsets: &[u64],
+) -> Option<&'a ImageFilesystemCandidate> {
+    for offset in pv_offsets {
+        if let Some((_, candidate)) = lvm_indices
+            .iter()
+            .find(|(_, candidate)| candidate.offset == *offset)
+        {
+            return Some(candidate);
+        }
+    }
+    None
 }
 
 fn open_evidence_reader(
