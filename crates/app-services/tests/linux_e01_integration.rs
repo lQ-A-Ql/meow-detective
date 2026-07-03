@@ -22,7 +22,6 @@ use app_services::{
 };
 use domain::{CaseId, DataSource, DataSourceId, DataSourceKind};
 use evidence_core::{EvidenceReader, FileSystemReader};
-use fs_lvm;
 use image_e01::E01Reader;
 use persistence_sqlite::repositories::{case_repo::CaseRepo, datasource_repo::DataSourceRepo};
 use rusqlite::Connection;
@@ -883,11 +882,10 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
                         use std::io::Seek;
                         lv_reader.seek(std::io::SeekFrom::Start(1024)).ok();
                         let mut ext4_magic = [0u8; 2];
-                        if lv_reader.read_exact(&mut ext4_magic).is_ok() {
-                            if u16::from_le_bytes(ext4_magic) == 0xEF53 {
+                        if lv_reader.read_exact(&mut ext4_magic).is_ok()
+                            && u16::from_le_bytes(ext4_magic) == 0xEF53 {
                                 eprintln!("      → ext4 superblock at offset 1024!");
                             }
-                        }
                         // Check for partition table (MBR magic)
                         if sector0[510] == 0x55 && sector0[511] == 0xAA {
                             eprintln!("      → MBR boot signature found — LV contains a partition table!");

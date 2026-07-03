@@ -224,6 +224,9 @@ fn fat_exfat_probe_metadata_is_consistent() {
             app_services::datasource_service::ImageFilesystemSource::DirectVolume => {
                 eprintln!("  → direct volume (no partition table)");
             }
+            _ => {
+                eprintln!("  → other source: {:?}", c.source);
+            }
         }
     }
 }

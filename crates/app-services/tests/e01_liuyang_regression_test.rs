@@ -1041,6 +1041,7 @@ fn assert_partition_display_names_are_honest(probe: &datasource_service::ImageFi
             datasource_service::ImageFilesystemKind::Ext4 => "Ext4",
             datasource_service::ImageFilesystemKind::Xfs => "XFS",
             datasource_service::ImageFilesystemKind::Btrfs => "Btrfs",
+            _ => "Other",
         };
         let root_name = match candidate.partition_index {
             Some(index) => datasource_service::partition_display_name(

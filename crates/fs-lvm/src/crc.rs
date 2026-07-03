@@ -7,7 +7,6 @@
 /// - PV label sector (bytes 20..512)
 /// - MDA header (bytes 4..512)
 /// - Metadata text blocks
-
 const CRC_POLY: u32 = 0xEDB8_8320;
 const CRC_INIT: u32 = 0xF597_A6CF;
 
@@ -60,7 +59,7 @@ mod tests {
     fn crc_known_vector() {
         // Test vector: the string "LABELONE" followed by zeroes
         // LVM label header bytes 0..31: "LABELONE" + 8B sector + 4B CRC + 4B offset + "LVM2 001"
-        let mut data = vec![0u8; 32];
+        let mut data = [0u8; 32];
         data[0..8].copy_from_slice(b"LABELONE");
         // sector_number = 1
         data[8..16].copy_from_slice(&1u64.to_le_bytes());

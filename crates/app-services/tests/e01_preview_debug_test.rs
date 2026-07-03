@@ -75,6 +75,7 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                                 datasource_service::ImageFilesystemKind::Ext4 => "Ext4",
                                 datasource_service::ImageFilesystemKind::Xfs => "XFS",
                                 datasource_service::ImageFilesystemKind::Btrfs => "Btrfs",
+                                datasource_service::ImageFilesystemKind::LvmPool => "LVM",
                             }
                             .to_string(),
                         ),

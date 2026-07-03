@@ -350,17 +350,17 @@ mod tests {
         assert_eq!(map[0].pv_index, 0);
         assert_eq!(map[0].physical_offset, 2048 * 512); // pv0 data start
         // LE 1 → PV 1
-        assert_eq!(map[1].logical_start, 1 * 8192 * 512);
+        assert_eq!(map[1].logical_start, 8192 * 512);
         assert_eq!(map[1].pv_index, 1);
         assert_eq!(map[1].physical_offset, 2048 * 512); // pv1 data start
         // LE 2 → PV 0
         assert_eq!(map[2].logical_start, 2 * 8192 * 512);
         assert_eq!(map[2].pv_index, 0);
-        assert_eq!(map[2].physical_offset, 2048 * 512 + 1 * 8192 * 512);
+        assert_eq!(map[2].physical_offset, 2048 * 512 + 8192 * 512);
         // LE 3 → PV 1
         assert_eq!(map[3].logical_start, 3 * 8192 * 512);
         assert_eq!(map[3].pv_index, 1);
-        assert_eq!(map[3].physical_offset, 2048 * 512 + 1 * 8192 * 512);
+        assert_eq!(map[3].physical_offset, 2048 * 512 + 8192 * 512);
     }
 
     #[test]

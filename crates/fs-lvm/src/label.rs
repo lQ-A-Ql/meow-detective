@@ -54,7 +54,6 @@ struct RawLabel {
     pv_uuid: String,
     pv_size: u64,
     raw_bytes: [u8; LABEL_SECTOR_SIZE],
-    data_offset: u32,
 }
 
 // --- Public API ---
@@ -109,7 +108,6 @@ pub fn parse_pv_label<R: Read + Seek>(reader: &mut R, pv_offset: u64) -> Result<
             sector[data_offset as usize + 39],
         ]),
         raw_bytes: sector,
-        data_offset,
     };
 
     let desc_start = data_offset as usize + 40; // after UUID(32) + size(8)

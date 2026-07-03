@@ -276,6 +276,7 @@ struct LvSectionRaw {
 
 #[derive(Debug)]
 struct SegmentRaw {
+    #[allow(dead_code)]
     name: String,
     params: Vec<(String, String)>,
 }
@@ -699,12 +700,12 @@ mod tests {
         let mut s = String::new();
         s.push_str("contents = \"Text Format Volume Group\"\n");
         s.push_str("version = 1\n");
-        s.push_str("\n");
+        s.push('\n');
         s.push_str("test_vg {\n");
         s.push_str("    id = \"vg-uuid-1234-5678-90ab-cdef\"\n");
         s.push_str("    seqno = 42\n");
         s.push_str("    extent_size = 8192\n");
-        s.push_str("\n");
+        s.push('\n');
         s.push_str("    physical_volumes {\n");
         s.push_str("        pv0 {\n");
         s.push_str("            id = \"pv-uuid-1234-5678-90ab-cdef\"\n");
@@ -713,7 +714,7 @@ mod tests {
         s.push_str("            pe_count = 2559\n");
         s.push_str("        }\n");
         s.push_str("    }\n");
-        s.push_str("\n");
+        s.push('\n');
         s.push_str("    logical_volumes {\n");
         s.push_str("        root {\n");
         s.push_str("            id = \"lv-root-uuid-1234-5678\"\n");
