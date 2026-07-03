@@ -119,55 +119,65 @@ impl LvmPool {
             });
         }
 
-        // Phase 1: Parse PV label from the first PV
-        let mut pv_reader = readers.into_iter();
-        let mut pv_offset_iter = pv_offsets.into_iter();
+        // Phase 1: Parse PV label from EACH PV, store reader+label+offset
+        let mut pv_entries: Vec<(Arc<std::sync::Mutex<Box<dyn EvidenceReader>>>, LvmLabel, u64)> =
+            Vec::with_capacity(readers.len());
+        for (reader, pv_off) in readers.into_iter().zip(pv_offsets.into_iter()) {
+            let cell = std::sync::Mutex::new(reader);
+            let pv_label = {
+                let mut r = cell.lock().unwrap();
+                label::parse_pv_label(&mut *r, pv_off)?
+            };
+            pv_entries.push((Arc::new(cell), pv_label, pv_off));
+        }
 
-        let first_reader = pv_reader.next().unwrap();
-        let first_offset = pv_offset_iter.next().unwrap();
-
-        let temp_reader = std::sync::Mutex::new(first_reader);
-
-        // Phase 1: Parse PV label
-        let pv_label = {
-            let mut r = temp_reader.lock().unwrap();
-            label::parse_pv_label(&mut *r, first_offset)?
+        // Phase 2: Parse VG metadata from the first PV
+        let (ref first_reader, ref first_label, first_offset) = pv_entries[0];
+        let vg = {
+            let mda = first_label.metadata_areas.first().ok_or_else(|| {
+                LvmError::MetadataParseError {
+                    line: 0,
+                    message: "no metadata area found on PV".to_string(),
+                }
+            })?;
+            let mut r = first_reader.lock().unwrap();
+            metadata::parse_metadata(&mut *r, mda, first_offset)?
         };
 
-        // Phase 2: Parse metadata (separate scope so borrow is released)
-        let vg =
-            {
-                let mda = pv_label.metadata_areas.first().ok_or_else(|| {
-                    LvmError::MetadataParseError {
-                        line: 0,
-                        message: "no metadata area found on PV".to_string(),
-                    }
-                })?;
-                let mut r = temp_reader.lock().unwrap();
-                metadata::parse_metadata(&mut *r, mda, first_offset)?
-            };
-
-        // Phase 3: Build PV data offset map
-        let first_data_area =
-            pv_label
-                .data_areas
-                .first()
-                .ok_or_else(|| LvmError::MetadataParseError {
-                    line: 0,
-                    message: "no data area found on PV".to_string(),
-                })?;
-
+        // Phase 3: Match PV UUIDs from metadata to reader entries,
+        // building absolute (reader-start) data area offsets for each PV.
         let mut pv_data_offsets: Vec<(String, u64)> = Vec::new();
         for pv_meta in &vg.physical_volumes {
-            // Physical offset = PV start in reader + data area start within PV
-            pv_data_offsets.push((pv_meta.name.clone(), first_offset + first_data_area.offset));
+            // Find matching reader by PV UUID
+            let matched = pv_entries.iter().find(|(_, lbl, _)| lbl.pv_uuid == pv_meta.uuid);
+            let data_offset = if let Some((_, lbl, pv_off)) = matched {
+                let da = lbl.data_areas.first().ok_or_else(|| {
+                    LvmError::MetadataParseError {
+                        line: 0,
+                        message: format!("PV '{}' has no data area", pv_meta.name),
+                    }
+                })?;
+                pv_off + da.offset
+            } else {
+                // PV not among provided readers — use first reader's offset
+                // (single-disk case where all PVs are on the same device)
+                let da = first_label.data_areas.first().ok_or_else(|| {
+                    LvmError::MetadataParseError {
+                        line: 0,
+                        message: "no data area found on primary PV".to_string(),
+                    }
+                })?;
+                first_offset + da.offset
+            };
+            pv_data_offsets.push((pv_meta.name.clone(), data_offset));
         }
 
         let logical_volumes = vg.logical_volumes.clone();
+        let device_readers: Vec<_> = pv_entries.into_iter().map(|(r, _, _)| r).collect();
 
         Ok(LvmPool {
             volume_group: vg,
-            device_readers: vec![Arc::new(temp_reader)],
+            device_readers,
             pv_data_offsets,
             logical_volumes,
         })

@@ -478,9 +478,10 @@ impl XfsReader {
 
     /// Read file data from a B+tree-mapped inode (di_format = 3).
     ///
-    /// The data fork contains a bmbt root block whose leaf records
-    /// describe extents.  This reader handles level-0 (leaf) root
-    /// blocks; deeper trees would require recursive btree walking.
+    /// The data fork contains a bmbt root node (`xfs_bmdr_block_t`,
+    /// 8-byte header). Deeper B+tree children use the on-disk `lblock`
+    /// format (24-byte header with left/right sibling pointers).
+    /// This implementation walks the tree recursively.
     fn read_btree_data(&self, inode: &[u8], file_size: u64) -> io::Result<Vec<u8>> {
         let df = Self::data_fork(inode)?;
         if df.len() < 8 {
@@ -495,40 +496,61 @@ impl XfsReader {
             )));
         }
 
-        let level = be_u16(df, 4);
-        let numrecs = be_u16(df, 6) as usize;
-
-        // Leaf-node header is 24 bytes; records follow.
-        const BMAP_LEAF_HDR: usize = 24;
-
-        if level != 0 {
-            // For internal nodes, we would recurse.  For the synthetic
-            // fixture a level-0 root is sufficient.
-            return Err(invalid_fs_data(format!(
-                "bmbt btree level {} not supported in this reader",
-                level
-            )));
-        }
-
         let mut data = Vec::new();
-        let rec_start = BMAP_LEAF_HDR;
-        // Each leaf record: key (u64) + extent (2 × u64) = 24 bytes.
-        const LEAF_REC_SIZE: usize = 24;
+        // Root node in the inode uses bmdr (8-byte header).
+        self.walk_btree_node(df, true, &mut data)?;
+        Ok(truncate_data_to_declared_size(data, file_size))
+    }
 
-        for i in 0..numrecs {
-            let off = rec_start + i * LEAF_REC_SIZE;
-            if off + LEAF_REC_SIZE > df.len() {
-                break;
+    /// Walk a BMBT node. `is_inode_root` distinguishes the compact bmdr
+    /// header (8 bytes, in the inode) from the on-disk lblock header
+    /// (24 bytes, with left/right sibling pointers).
+    fn walk_btree_node(
+        &self,
+        node: &[u8],
+        is_inode_root: bool,
+        data: &mut Vec<u8>,
+    ) -> io::Result<()> {
+        let hdr_size: usize = if is_inode_root { 8 } else { 24 };
+        if node.len() < hdr_size {
+            return Ok(());
+        }
+        let level = be_u16(node, 4);
+        let numrecs = be_u16(node, 6) as usize;
+
+        if level == 0 {
+            // Leaf node: extract extent records.
+            // Leaf record: key (u64) + packed extent (u64), 16 bytes.
+            // The extent is at bytes 8..24 of each 24-byte slot.
+            const LEAF_SLOT: usize = 24;
+            for i in 0..numrecs {
+                let off = hdr_size + i * LEAF_SLOT;
+                if off + LEAF_SLOT > node.len() {
+                    break;
+                }
+                let (_logical, start_block, block_count) =
+                    Self::decode_extent(&node[off + 8..off + 24]);
+                for blk in 0..block_count {
+                    let block_data = self.read_block(start_block + blk)?;
+                    data.extend_from_slice(&block_data);
+                }
             }
-            // Skip key (8 bytes), then extent (16 bytes) at off+8.
-            let (_logical, start_block, block_count) = Self::decode_extent(&df[off + 8..off + 24]);
-            for blk in 0..block_count {
-                let block_data = self.read_block(start_block + blk)?;
-                data.extend_from_slice(&block_data);
+        } else {
+            // Internal node: recurse into child blocks.
+            // Internal record: key (u64) + child_ptr (u64), 16 bytes.
+            const INTERNAL_SLOT: usize = 16;
+            for i in 0..numrecs {
+                let off = hdr_size + i * INTERNAL_SLOT;
+                if off + INTERNAL_SLOT > node.len() {
+                    break;
+                }
+                let child_ptr = be_u64(node, off + 8); // filesystem block number
+                let child_block = self.read_block(child_ptr)?;
+                // Child blocks always use the on-disk lblock format.
+                self.walk_btree_node(&child_block, false, data)?;
             }
         }
-
-        Ok(truncate_data_to_declared_size(data, file_size))
+        Ok(())
     }
 
     /// Read an inode's data bytes according to its `di_format`.
@@ -1000,9 +1022,9 @@ mod tests {
         df_hi[0..4].copy_from_slice(&BMAP_MAGIC.to_be_bytes()); // bb_magic
         df_hi[4..6].copy_from_slice(&0u16.to_be_bytes()); // bb_level = 0 (leaf)
         df_hi[6..8].copy_from_slice(&1u16.to_be_bytes()); // bb_numrecs = 1
-                                                          // Leaf records start at offset 24.
-                                                          // Record: key(8 bytes, u64) + extent(16 bytes: l0 + l1)
-        let rec_off: usize = 24;
+        // bmdr header is 8 bytes; leaf records follow immediately.
+        // Leaf record: key(8) + extent l0(8) + extent l1(8) = 24 bytes.
+        let rec_off: usize = 8;
         df_hi[rec_off..rec_off + 8].copy_from_slice(&0u64.to_be_bytes()); // key = file block 0
         df_hi[rec_off + 8..rec_off + 16].copy_from_slice(&0u64.to_be_bytes()); // extent l0 = 0
         let l1_val: u64 = (6u64 << 21) | 1; // start block 6, 1 block
