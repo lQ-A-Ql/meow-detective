@@ -6,12 +6,10 @@
 //! - File handle management for preview
 //! - File range reading for hex/text viewer
 
-use app_services::{file_service, text_service::TextService};
-use base64::Engine;
+use app_services::file_service::{self, MediaPreviewPlan};
 use chrono::Duration;
 use persistence_sqlite::repositories::audit_repo::AuditAction;
 use runtime_cache::models::{namespaces, CacheEntry};
-use std::io::{Read, Seek, SeekFrom};
 use tauri::State;
 use transport::{
     commands::{
@@ -38,10 +36,6 @@ type PreviewReadCounter =
 
 #[cfg(test)]
 static MEDIA_BYTES_HELPER_CALLS: PreviewReadCounter =
-    std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
-
-#[cfg(test)]
-static FILE_BYTES_SERVICE_READ_CALLS: PreviewReadCounter =
     std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
 
 #[cfg(test)]
@@ -300,36 +294,6 @@ fn read_file_range_for_state(
     .map_err(CommandError::from_typed_service_error)
 }
 
-/// Format raw bytes as a hex dump string (offset + hex bytes + ASCII).
-fn format_hex_dump(bytes: &[u8]) -> String {
-    let max_display = 16384usize.min(bytes.len());
-    let mut out = String::with_capacity(max_display * 5);
-    for (line_idx, chunk) in bytes[..max_display].chunks(16).enumerate() {
-        let offset = line_idx * 16;
-        use std::fmt::Write;
-        let _ = write!(out, "{offset:08X}  ");
-        for (i, b) in chunk.iter().enumerate() {
-            if i == 8 {
-                out.push(' ');
-            }
-            let _ = write!(out, "{b:02X} ");
-        }
-        out.push_str(" |");
-        for b in chunk {
-            out.push(if b.is_ascii_graphic() || *b == b' ' {
-                *b as char
-            } else {
-                '.'
-            });
-        }
-        out.push_str("|\n");
-    }
-    if bytes.len() > max_display {
-        out.push_str("... (truncated)\n");
-    }
-    out
-}
-
 /// Get text preview for a file.
 ///
 /// Returns text content with encoding detection.
@@ -452,35 +416,10 @@ fn image_preview_for_file(
     file_id: &str,
 ) -> Result<ImagePreviewDto, CommandError> {
     let case_id = current_case_id_for_preview(state)?;
-    let handle = with_preview_cache_context!(state, conn, case_id.as_str(), |context| {
-        file_service::open_file_handle_real(context, file_id)
+    with_preview_cache_context!(state, conn, case_id.as_str(), |context| {
+        file_service::image_preview_for_file(context, file_id)
     })
-    .map_err(CommandError::from_typed_service_error)?;
-
-    let mime = handle.mime.as_deref().unwrap_or("");
-    if !mime.starts_with("image/") {
-        return Err(CommandError::invalid_input("Not an image file"));
-    }
-
-    if handle.size > infrastructure::constants::MAX_INLINE_IMAGE_PREVIEW_BYTES {
-        return Err(CommandError::invalid_input(format!(
-            "Image preview is limited to {} MB",
-            infrastructure::constants::MAX_INLINE_IMAGE_PREVIEW_BYTES
-                / infrastructure::constants::BYTES_PER_MB
-        )));
-    }
-
-    let content_bytes =
-        read_inline_preview_bytes_for_file(state, conn, &case_id, file_id, handle.size)?;
-    let base64 = base64::engine::general_purpose::STANDARD.encode(&content_bytes);
-
-    Ok(ImagePreviewDto {
-        data_url: format!("data:{};base64,{}", mime, base64),
-        mime_type: mime.to_string(),
-        width: 0,  // Frontend will detect
-        height: 0, // Frontend will detect
-        size: handle.size,
-    })
+    .map_err(CommandError::from_typed_service_error)
 }
 
 fn media_data_url_for_file(
@@ -489,39 +428,30 @@ fn media_data_url_for_file(
     file_id: &str,
 ) -> Result<MediaUrlDto, CommandError> {
     let case_id = current_case_id_for_preview(state)?;
-    let handle = with_preview_cache_context!(state, conn, case_id.as_str(), |context| {
-        file_service::open_file_handle_real(context, file_id)
+    let plan = with_preview_cache_context!(state, conn, case_id.as_str(), |context| {
+        file_service::media_preview_plan_for_file(context, file_id)
     })
     .map_err(CommandError::from_typed_service_error)?;
-    let mime = handle
-        .mime
-        .clone()
-        .unwrap_or_else(|| "application/octet-stream".to_string());
-    if handle.size > infrastructure::constants::MAX_INLINE_MEDIA_PREVIEW_BYTES {
-        let scoped_handle = crate::media_protocol::create_scoped_media_handle(state, file_id)
-            .map_err(CommandError::security)?;
-        return Ok(MediaUrlDto {
-            mode: MediaPreviewModeDto::Protocol,
-            url: Some(crate::media_protocol::media_protocol_url(&scoped_handle)),
-            handle_id: Some(scoped_handle),
-            mime_type: mime,
-            size: handle.size,
-            can_read_ranges: true,
-        });
+
+    match plan {
+        MediaPreviewPlan::Inline(dto) => Ok(dto),
+        MediaPreviewPlan::Protocol {
+            mime_type,
+            size,
+            can_read_ranges,
+        } => {
+            let scoped_handle = crate::media_protocol::create_scoped_media_handle(state, file_id)
+                .map_err(CommandError::security)?;
+            Ok(MediaUrlDto {
+                mode: MediaPreviewModeDto::Protocol,
+                url: Some(crate::media_protocol::media_protocol_url(&scoped_handle)),
+                handle_id: Some(scoped_handle),
+                mime_type,
+                size,
+                can_read_ranges,
+            })
+        }
     }
-
-    let content_bytes =
-        read_inline_preview_bytes_for_file(state, conn, &case_id, file_id, handle.size)?;
-    let base64 = base64::engine::general_purpose::STANDARD.encode(&content_bytes);
-
-    Ok(MediaUrlDto {
-        mode: MediaPreviewModeDto::Inline,
-        url: Some(format!("data:{};base64,{}", mime, base64)),
-        handle_id: Some(handle.handle_id),
-        mime_type: mime,
-        size: handle.size,
-        can_read_ranges: true,
-    })
 }
 
 fn media_range_for_file(
@@ -532,39 +462,14 @@ fn media_range_for_file(
     let file_id = crate::media_protocol::resolve_scoped_media_handle(state, &request.handle_id)
         .map_err(CommandError::security)?;
     let case_id = current_case_id_for_preview(state)?;
-    let handle = with_preview_cache_context!(state, conn, case_id.as_str(), |context| {
-        file_service::open_file_handle_real(context, &file_id)
-    })
-    .map_err(CommandError::from_typed_service_error)?;
-    if request.offset >= handle.size {
-        return Ok(MediaRangeResponseDto {
-            offset: request.offset,
-            bytes_base64: String::new(),
-            bytes_read: 0,
-            eof: true,
-        });
-    }
-    let readable_len = request
-        .length
-        .min((handle.size - request.offset).min(u32::MAX as u64) as u32);
-    let bytes = read_media_bytes_for_file(
-        state,
-        conn,
-        &case_id,
-        &file_id,
-        request.offset,
-        readable_len,
-    )?;
-    let bytes_read = bytes.len();
-    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
-    let end_offset = request.offset.saturating_add(bytes_read as u64);
 
-    Ok(MediaRangeResponseDto {
-        offset: request.offset,
-        bytes_base64: encoded,
-        bytes_read: bytes_read as u32,
-        eof: end_offset >= handle.size,
+    #[cfg(test)]
+    increment_preview_read_counter(&MEDIA_BYTES_HELPER_CALLS, &case_id);
+
+    with_preview_cache_context!(state, conn, case_id.as_str(), |context| {
+        file_service::media_range_for_file(context, &file_id, request)
     })
+    .map_err(CommandError::from_typed_service_error)
 }
 
 fn text_preview_for_file(
@@ -573,112 +478,9 @@ fn text_preview_for_file(
     file_id: &str,
     max_bytes: Option<usize>,
 ) -> Result<TextPreviewDto, CommandError> {
-    let max = max_bytes
-        .unwrap_or(infrastructure::constants::DEFAULT_TEXT_PREVIEW_MAX_BYTES)
-        .min(transport::dto::MAX_VIEWER_RANGE_LENGTH as usize) as u32;
     let case_id = current_case_id_for_preview(state)?;
-    let content_bytes = read_preview_bytes_for_file(state, conn, &case_id, file_id, 0, max)?;
-
-    let preview =
-        TextService::extract_text_preview(&mut std::io::Cursor::new(&content_bytes), max as usize)
-            .map_err(CommandError::from_typed_service_error)?;
-
-    let is_binary = preview.is_binary;
-    let content = preview.content;
-    let hex_dump = if is_binary {
-        Some(format_hex_dump(&content_bytes))
-    } else {
-        None
-    };
-    Ok(TextPreviewDto {
-        hex_dump,
-        content,
-        encoding: preview.encoding,
-        is_truncated: preview.is_truncated,
-        line_count: preview.line_count,
-        is_binary,
-        language: preview.language,
-    })
-}
-
-fn read_media_bytes_for_file(
-    state: &AppState,
-    conn: &rusqlite::Connection,
-    case_id: &str,
-    file_id: &str,
-    offset: u64,
-    length: u32,
-) -> Result<Vec<u8>, CommandError> {
-    #[cfg(test)]
-    increment_preview_read_counter(&MEDIA_BYTES_HELPER_CALLS, case_id);
-
-    read_preview_bytes_for_file(state, conn, case_id, file_id, offset, length)
-}
-
-fn read_inline_preview_bytes_for_file(
-    state: &AppState,
-    conn: &rusqlite::Connection,
-    case_id: &str,
-    file_id: &str,
-    size: u64,
-) -> Result<Vec<u8>, CommandError> {
-    let mut bytes = Vec::with_capacity(size as usize);
-    let mut offset = 0u64;
-
-    while offset < size {
-        let length = (size - offset).min(transport::dto::MAX_VIEWER_RANGE_LENGTH as u64) as u32;
-        if length == 0 {
-            break;
-        }
-
-        let chunk = read_preview_bytes_for_file(state, conn, case_id, file_id, offset, length)?;
-        if chunk.is_empty() {
-            break;
-        }
-
-        let is_short_read = chunk.len() < length as usize;
-        offset = offset.saturating_add(chunk.len() as u64);
-        bytes.extend_from_slice(&chunk);
-
-        if is_short_read {
-            break;
-        }
-    }
-
-    Ok(bytes)
-}
-
-fn read_preview_bytes_for_file(
-    state: &AppState,
-    conn: &rusqlite::Connection,
-    case_id: &str,
-    file_id: &str,
-    offset: u64,
-    length: u32,
-) -> Result<Vec<u8>, CommandError> {
-    if let Ok(path) = with_preview_cache_context!(state, conn, case_id, |context| {
-        file_service::get_file_path_for_entry(context, file_id)
-    }) {
-        let mut file = std::fs::File::open(path).map_err(CommandError::from_typed_service_error)?;
-        file.seek(SeekFrom::Start(offset))
-            .map_err(CommandError::from_typed_service_error)?;
-        let mut bytes = Vec::with_capacity(length as usize);
-        file.take(length as u64)
-            .read_to_end(&mut bytes)
-            .map_err(CommandError::from_typed_service_error)?;
-        return Ok(bytes);
-    }
-
-    #[cfg(test)]
-    increment_preview_read_counter(&FILE_BYTES_SERVICE_READ_CALLS, case_id);
-
-    with_preview_cache_context!(state, conn, case_id, |context| {
-        file_service::read_file_bytes_for_case(
-            context,
-            &domain::FileEntryId(file_id.to_string()),
-            offset,
-            length,
-        )
+    with_preview_cache_context!(state, conn, case_id.as_str(), |context| {
+        file_service::text_preview_for_file(context, file_id, max_bytes)
     })
     .map_err(CommandError::from_typed_service_error)
 }
@@ -687,6 +489,7 @@ fn read_preview_bytes_for_file(
 mod tests {
     use super::*;
     use app_services::{case_service, file_service};
+    use base64::Engine;
     use evidence_core::LogicalFsReader;
     use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
     use tempfile::TempDir;
@@ -701,10 +504,6 @@ mod tests {
 
     fn media_bytes_helper_call_count(case_id: &str) -> usize {
         preview_counter_value(&MEDIA_BYTES_HELPER_CALLS, case_id)
-    }
-
-    fn file_bytes_service_read_call_count(case_id: &str) -> usize {
-        preview_counter_value(&FILE_BYTES_SERVICE_READ_CALLS, case_id)
     }
 
     fn test_state_with_case(case_id: &str) -> AppState {
@@ -957,15 +756,10 @@ mod tests {
             |conn, file_id, _| {
                 let case_id = "case-media-inline-logical";
                 let state = test_state_with_case(case_id);
-                let service_before = file_bytes_service_read_call_count(case_id);
                 let media = media_data_url_for_file(&state, conn, &file_id)
                     .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
 
                 assert_eq!(media.mode, MediaPreviewModeDto::Inline);
-                assert_eq!(
-                    file_bytes_service_read_call_count(case_id) - service_before,
-                    0
-                );
                 let (_, encoded) = media
                     .url
                     .as_deref()
@@ -988,15 +782,10 @@ mod tests {
     fn media_preview_raw_image_reads_via_bytes_only_service_path() {
         with_raw_exfat_case_file("media-raw-inline", "mp4", |conn, case_id, file_id| {
             let state = test_state_with_case(&case_id);
-            let service_before = file_bytes_service_read_call_count(&case_id);
             let media = media_data_url_for_file(&state, conn, &file_id)
                 .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
 
             assert_eq!(media.mode, MediaPreviewModeDto::Inline);
-            assert_eq!(
-                file_bytes_service_read_call_count(&case_id) - service_before,
-                1
-            );
             let (_, encoded) = media
                 .url
                 .as_deref()
@@ -1024,15 +813,10 @@ mod tests {
             |conn, file_id, _| {
                 let case_id = "case-image-inline-logical";
                 let state = test_state_with_case(case_id);
-                let service_before = file_bytes_service_read_call_count(case_id);
                 let image = image_preview_for_file(&state, conn, &file_id)
                     .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
 
                 assert_eq!(image.mime_type, "image/png");
-                assert_eq!(
-                    file_bytes_service_read_call_count(case_id) - service_before,
-                    0
-                );
                 let (_, encoded) = image.data_url.split_once(',').expect("data URL payload");
                 assert_eq!(
                     base64::engine::general_purpose::STANDARD
@@ -1189,7 +973,6 @@ mod tests {
                 let handle_id = crate::media_protocol::create_scoped_media_handle(&state, &file_id)
                     .map_err(persistence_sqlite::DbError::System)?;
                 let media_helper_before = media_bytes_helper_call_count(case_id);
-                let service_before = file_bytes_service_read_call_count(case_id);
                 let range = media_range_for_file(
                     &state,
                     conn,
@@ -1206,10 +989,6 @@ mod tests {
                 assert_eq!(
                     media_bytes_helper_call_count(case_id) - media_helper_before,
                     1
-                );
-                assert_eq!(
-                    file_bytes_service_read_call_count(case_id) - service_before,
-                    0
                 );
                 assert_eq!(
                     base64::engine::general_purpose::STANDARD
@@ -1232,7 +1011,6 @@ mod tests {
                 .map_err(persistence_sqlite::DbError::System)?;
 
             let media_helper_before = media_bytes_helper_call_count(&case_id);
-            let service_before = file_bytes_service_read_call_count(&case_id);
             let range = media_range_for_file(
                 &state,
                 conn,
@@ -1248,10 +1026,6 @@ mod tests {
             assert_eq!(range.bytes_read, 9);
             assert_eq!(
                 media_bytes_helper_call_count(&case_id) - media_helper_before,
-                1
-            );
-            assert_eq!(
-                file_bytes_service_read_call_count(&case_id) - service_before,
                 1
             );
             assert_eq!(
@@ -1271,15 +1045,10 @@ mod tests {
         with_raw_exfat_case_file("image-raw-inline", "png", |conn, case_id, file_id| {
             let state = test_state_with_case(&case_id);
 
-            let service_before = file_bytes_service_read_call_count(&case_id);
             let image = image_preview_for_file(&state, conn, &file_id)
                 .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
 
             assert_eq!(image.mime_type, "image/png");
-            assert_eq!(
-                file_bytes_service_read_call_count(&case_id) - service_before,
-                1
-            );
             let (_, encoded) = image.data_url.split_once(',').expect("data URL payload");
             let decoded = base64::engine::general_purpose::STANDARD
                 .decode(encoded.as_bytes())
@@ -1298,14 +1067,9 @@ mod tests {
         with_raw_exfat_case_file("text-raw-header", "bin", |conn, case_id, file_id| {
             let state = test_state_with_case(&case_id);
 
-            let service_before = file_bytes_service_read_call_count(&case_id);
             let preview = text_preview_for_file(&state, conn, &file_id, Some(16))
                 .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
 
-            assert_eq!(
-                file_bytes_service_read_call_count(&case_id) - service_before,
-                1
-            );
             assert_eq!(preview.content, "AAAAAAAAAAAAAAAA");
             assert_eq!(preview.encoding, "UTF-8");
             assert!(!preview.is_binary);

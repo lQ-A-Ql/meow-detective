@@ -144,6 +144,27 @@ impl PreviewReadContext for &rusqlite::Connection {
     }
 }
 
+impl<T> PreviewReadContext for &mut T
+where
+    T: PreviewReadContext + ?Sized,
+{
+    fn conn(&self) -> &rusqlite::Connection {
+        (**self).conn()
+    }
+
+    fn case_id(&self) -> &str {
+        (**self).case_id()
+    }
+
+    fn get_cached_preview_descriptor(&mut self, key: &str) -> Option<serde_json::Value> {
+        (**self).get_cached_preview_descriptor(key)
+    }
+
+    fn set_cached_preview_descriptor(&mut self, key: &str, value: &serde_json::Value) {
+        (**self).set_cached_preview_descriptor(key, value);
+    }
+}
+
 impl<'a, G, S> PreviewReadContext for (&'a rusqlite::Connection, &'a str, G, S)
 where
     G: FnMut(&str) -> Option<serde_json::Value>,

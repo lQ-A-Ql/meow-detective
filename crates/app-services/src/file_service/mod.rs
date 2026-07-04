@@ -11,6 +11,7 @@ mod file_rows;
 mod mapping;
 mod mft;
 mod partition_roots;
+mod preview;
 mod sort;
 mod tree_queries;
 mod viewer;
@@ -29,6 +30,10 @@ pub use mft::populate_file_graph_for_data_source;
 pub use partition_roots::{
     insert_partition_placeholder_root, remove_partition_placeholder_root,
     replace_placeholder_root_with_real, store_data_source_partitions,
+};
+pub use preview::{
+    image_preview_for_file, media_preview_plan_for_file, media_range_for_file,
+    read_preview_bytes_for_file, text_preview_for_file, MediaPreviewPlan,
 };
 pub use tree_queries::{
     get_file_children_lazy, get_file_children_lazy_with_visibility, get_file_tree_real,

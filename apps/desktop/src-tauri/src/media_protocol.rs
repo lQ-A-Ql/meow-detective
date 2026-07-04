@@ -4,7 +4,6 @@ use base64::Engine;
 use chrono::Duration;
 use runtime_cache::models::{namespaces, CacheEntry};
 use std::borrow::Cow;
-use std::io::{Read, Seek, SeekFrom};
 use tauri::http::{self, header, StatusCode};
 use tauri::{AppHandle, Manager, Wry};
 
@@ -347,43 +346,11 @@ fn read_media_protocol_bytes(
     offset: u64,
     length: u32,
 ) -> Result<Vec<u8>, (StatusCode, String)> {
-    if let Ok(path) = with_preview_cache_context!(state, conn, case_id, |context| {
-        file_service::get_file_path_for_entry(context, file_id)
-    }) {
-        let mut file = std::fs::File::open(path).map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "media backend unavailable".to_string(),
-            )
-        })?;
-        file.seek(SeekFrom::Start(offset)).map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "media backend unavailable".to_string(),
-            )
-        })?;
-        let mut bytes = Vec::with_capacity(length as usize);
-        file.take(length as u64)
-            .read_to_end(&mut bytes)
-            .map_err(|_| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "media backend unavailable".to_string(),
-                )
-            })?;
-        return Ok(bytes);
-    }
-
     #[cfg(test)]
     MEDIA_PROTOCOL_BYTES_SERVICE_READ_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
     with_preview_cache_context!(state, conn, case_id, |context| {
-        file_service::read_file_bytes_for_case(
-            context,
-            &domain::FileEntryId(file_id.to_string()),
-            offset,
-            length,
-        )
+        file_service::read_preview_bytes_for_file(context, file_id, offset, length)
     })
     .map_err(|_| {
         (

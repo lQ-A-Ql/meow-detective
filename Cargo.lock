@@ -85,6 +85,7 @@ dependencies = [
  "artifacts-linux",
  "artifacts-macos",
  "artifacts-windows",
+ "base64 0.22.1",
  "chrono",
  "containers-pst",
  "crossbeam-channel",
