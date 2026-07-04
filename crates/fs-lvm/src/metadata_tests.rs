@@ -1,4 +1,5 @@
 use super::*;
+use crate::metadata::SegmentArea;
 
 fn build_minimal_metadata_text() -> String {
     let mut s = String::new();
@@ -589,6 +590,50 @@ fn thin_cache_and_pool_segments_keep_distinct_unsupported_labels() {
     assert!(matches!(
         vg.logical_volumes[3].segments[0].seg_type,
         SegmentType::Unsupported { ref type_name } if type_name.contains("cache-pool")
+    ));
+}
+
+#[test]
+fn component_lv_areas_are_preserved_for_diagnostics() {
+    let text = base_metadata_with_lv(
+        "\
+         root_rimage_0 {
+             id = \"lv-rimage-0\"
+             status = [\"READ\", \"WRITE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 4 type = \"linear\" stripe_count = 1 stripes = [\"pv0\", 0] }
+         }
+         root_rmeta_0 {
+             id = \"lv-rmeta-0\"
+             status = [\"READ\", \"WRITE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 1 type = \"linear\" stripe_count = 1 stripes = [\"pv0\", 4] }
+         }
+         mirrored_root {
+             id = \"lv-mirrored-root\"
+             status = [\"READ\", \"WRITE\", \"VISIBLE\"]
+             segment_count = 1
+             segment1 {
+                 start_extent = 0
+                 extent_count = 4
+                 type = \"raid1\"
+                 stripe_count = 2
+                 areas = [\"lv\", \"root_rimage_0\", 0, \"lv\", \"root_rmeta_0\", 0]
+             }
+         }\n",
+    );
+
+    let vg = parse_metadata_text(&text).unwrap();
+    let mirrored = &vg.logical_volumes[2];
+
+    assert_eq!(mirrored.role, LvRole::Public);
+    assert!(mirrored.is_visible());
+    assert!(!mirrored.is_directly_mappable());
+    assert_eq!(mirrored.segments[0].areas.len(), 2);
+    assert!(matches!(
+        &mirrored.segments[0].areas[0],
+        SegmentArea::LogicalVolume { name, start_extent }
+            if name == "root_rimage_0" && *start_extent == 0
     ));
 }
 

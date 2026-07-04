@@ -27,6 +27,7 @@ pub struct EvidenceCategoryDef {
 enum EvidencePathPattern {
     Suffix(&'static str),
     Contains(&'static str),
+    ContainsAndSuffix(&'static str, &'static str),
 }
 
 const EVIDENCE_CATEGORY_DEFS: &[EvidenceCategoryDef] = &[
@@ -210,6 +211,11 @@ const EVIDENCE_CATEGORY_DEFS: &[EvidenceCategoryDef] = &[
             EvidencePathPattern::Suffix("/etc/fstab"),
             EvidencePathPattern::Suffix("/etc/resolv.conf"),
             EvidencePathPattern::Suffix("/etc/machine-id"),
+            EvidencePathPattern::Suffix("/etc/pve/storage.cfg"),
+            EvidencePathPattern::ContainsAndSuffix("/etc/pve/qemu-server/", ".conf"),
+            EvidencePathPattern::ContainsAndSuffix("/etc/pve/lxc/", ".conf"),
+            EvidencePathPattern::Suffix("/etc/pve/corosync.conf"),
+            EvidencePathPattern::Suffix("/etc/corosync/corosync.conf"),
             EvidencePathPattern::Suffix(".journal"),
             EvidencePathPattern::Suffix(".journal~"),
             EvidencePathPattern::Contains("/var/log/journal/"),
@@ -251,6 +257,11 @@ const EVIDENCE_CATEGORY_DEFS: &[EvidenceCategoryDef] = &[
             EvidencePathPattern::Contains("/var/log/kern.log."),
             EvidencePathPattern::Suffix("/var/log/cloud-init.log"),
             EvidencePathPattern::Contains("/var/log/cloud-init.log."),
+            EvidencePathPattern::Suffix("/var/log/pveproxy/access.log"),
+            EvidencePathPattern::Contains("/var/log/pveproxy/access.log."),
+            EvidencePathPattern::Suffix("/var/log/pvedaemon.log"),
+            EvidencePathPattern::Contains("/var/log/pvedaemon.log."),
+            EvidencePathPattern::Contains("/var/log/pve/tasks/"),
             EvidencePathPattern::Contains("/.ssh/authorized_keys"),
             EvidencePathPattern::Contains("/.ssh/known_hosts"),
             EvidencePathPattern::Contains("/etc/ssh/"),
@@ -809,6 +820,9 @@ fn evidence_path_matches(path: &str, patterns: &[EvidencePathPattern]) -> bool {
     patterns.iter().any(|pattern| match pattern {
         EvidencePathPattern::Suffix(suffix) => path.ends_with(suffix),
         EvidencePathPattern::Contains(needle) => path.contains(needle),
+        EvidencePathPattern::ContainsAndSuffix(needle, suffix) => {
+            path.contains(needle) && path.ends_with(suffix)
+        }
     })
 }
 

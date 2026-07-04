@@ -69,6 +69,8 @@ pub fn extract_linux_candidate(candidate: &EvidenceCandidate, bytes: &[u8]) -> E
         extract_plain_shell_history(candidate, input, &mut outcome);
     } else if is_system_config_path(effective_path) {
         extract_system_config(candidate, input, &mut outcome);
+    } else if is_pve_config_path(effective_path) {
+        extract_pve_config(candidate, input, &mut outcome);
     } else if is_apt_history_path(effective_path) {
         extract_apt_history(candidate, input, &mut outcome);
     } else if is_dpkg_log_path(effective_path) {
@@ -83,6 +85,8 @@ pub fn extract_linux_candidate(candidate: &EvidenceCandidate, bytes: &[u8]) -> E
         }
     } else if is_text_log_path(effective_path) {
         extract_text_log(candidate, input, "linux.text_log", "log", &mut outcome);
+    } else if is_pve_log_path(effective_path) {
+        extract_text_log(candidate, input, "linux.pve_log", "pve", &mut outcome);
     } else if is_ssh_text_path(effective_path) {
         extract_text_log(candidate, input, "linux.ssh_text", "ssh", &mut outcome);
     } else {
@@ -106,6 +110,7 @@ pub(super) fn linux_candidate_read_limit(normalized_path: &str) -> usize {
     if is_journal_path(effective_path) || is_wtmp_path(effective_path) {
         MAX_ANALYSIS_SOURCE_BYTES
     } else if is_text_log_path(effective_path)
+        || is_pve_log_path(effective_path)
         || is_auth_log_path(effective_path)
         || is_apt_history_path(effective_path)
         || is_dpkg_log_path(effective_path)
@@ -127,13 +132,17 @@ pub(super) fn linux_candidate_support(normalized_path: &str) -> LinuxCandidateSu
         || is_fish_history_path(effective_path)
         || is_plain_shell_history_path(effective_path)
         || is_system_config_path(effective_path)
+        || is_pve_config_path(effective_path)
         || is_apt_history_path(effective_path)
         || is_dpkg_log_path(effective_path)
         || is_cron_path(effective_path)
         || is_auth_log_path(effective_path)
     {
         LinuxCandidateSupport::Structured
-    } else if is_text_log_path(effective_path) || is_ssh_text_path(effective_path) {
+    } else if is_pve_log_path(effective_path)
+        || is_text_log_path(effective_path)
+        || is_ssh_text_path(effective_path)
+    {
         LinuxCandidateSupport::TextFallback
     } else {
         LinuxCandidateSupport::Unsupported
@@ -196,6 +205,14 @@ fn is_system_config_path(normalized: &str) -> bool {
         || normalized.ends_with("/etc/machine-id")
 }
 
+fn is_pve_config_path(normalized: &str) -> bool {
+    normalized.ends_with("/etc/pve/storage.cfg")
+        || (normalized.contains("/etc/pve/qemu-server/") && normalized.ends_with(".conf"))
+        || (normalized.contains("/etc/pve/lxc/") && normalized.ends_with(".conf"))
+        || normalized.ends_with("/etc/pve/corosync.conf")
+        || normalized.ends_with("/etc/corosync/corosync.conf")
+}
+
 fn is_apt_history_path(normalized: &str) -> bool {
     normalized.contains("/var/log/apt/history.log")
 }
@@ -232,6 +249,14 @@ fn is_text_log_path(normalized: &str) -> bool {
         || normalized.contains("/var/log/kern.log.")
         || normalized.ends_with("/var/log/cloud-init.log")
         || normalized.contains("/var/log/cloud-init.log.")
+}
+
+fn is_pve_log_path(normalized: &str) -> bool {
+    normalized.ends_with("/var/log/pveproxy/access.log")
+        || normalized.contains("/var/log/pveproxy/access.log.")
+        || normalized.ends_with("/var/log/pvedaemon.log")
+        || normalized.contains("/var/log/pvedaemon.log.")
+        || normalized.contains("/var/log/pve/tasks/")
 }
 
 fn is_ssh_text_path(normalized: &str) -> bool {
@@ -657,6 +682,115 @@ fn extract_system_config(
     }
 
     extract_key_value_or_lines(candidate, &text, "linux.system_config", outcome);
+}
+
+fn extract_pve_config(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    outcome: &mut ExtractionOutcome,
+) {
+    if std::str::from_utf8(bytes).is_err() {
+        outcome.warnings.push(format!(
+            "{} contains non-UTF-8 bytes; invalid sequences were replaced before PVE config extraction",
+            candidate.path
+        ));
+    }
+
+    let normalized = normalize_evidence_path(&candidate.path);
+    let config_type = pve_config_type(&normalized);
+    let text = String::from_utf8_lossy(bytes);
+    let mut emitted = 0usize;
+    for (line_number, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if emitted >= MAX_TEXT_LOG_EVENTS_PER_SOURCE {
+            outcome.warnings.push(format!(
+                "{} PVE config emitted first {} records only",
+                candidate.path, MAX_TEXT_LOG_EVENTS_PER_SOURCE
+            ));
+            break;
+        }
+
+        let mut attrs = base_attrs(candidate);
+        attrs.insert(
+            "configKind".to_string(),
+            Value::String("pveConfig".to_string()),
+        );
+        attrs.insert(
+            "pveConfigType".to_string(),
+            Value::String(config_type.to_string()),
+        );
+        attrs.insert("line".to_string(), Value::String(trimmed.to_string()));
+        attrs.insert(
+            "lineNumber".to_string(),
+            Value::Number((line_number as u64 + 1).into()),
+        );
+        if let Some((key, value)) = parse_pve_config_pair(trimmed) {
+            attrs.insert("key".to_string(), Value::String(key.to_string()));
+            attrs.insert("value".to_string(), Value::String(value.to_string()));
+        }
+
+        outcome.artifacts.push(make_artifact(
+            "LinuxSystemConfig",
+            format!("PVE config: {}", truncate(trimmed, 80)),
+            trimmed.to_string(),
+            candidate,
+            "linux.pve_config",
+            attrs,
+        ));
+        emitted += 1;
+    }
+
+    if emitted == 0 {
+        outcome.warnings.push(format!(
+            "{} PVE config contained no auditable non-comment records",
+            candidate.path
+        ));
+    }
+}
+
+fn pve_config_type(normalized: &str) -> &'static str {
+    if normalized.ends_with("/etc/pve/storage.cfg") {
+        "pveStorageConfig"
+    } else if normalized.contains("/etc/pve/qemu-server/") {
+        "pveQemuConfig"
+    } else if normalized.contains("/etc/pve/lxc/") {
+        "pveLxcConfig"
+    } else if normalized.ends_with("/etc/pve/corosync.conf")
+        || normalized.ends_with("/etc/corosync/corosync.conf")
+    {
+        "pveCorosyncConfig"
+    } else {
+        "pveConfig"
+    }
+}
+
+fn parse_pve_config_pair(line: &str) -> Option<(&str, &str)> {
+    if let Some((key, value)) = line.split_once(':') {
+        let key = key.trim();
+        let value = value.trim();
+        if !key.is_empty() && !value.is_empty() {
+            return Some((key, value));
+        }
+    }
+    if let Some((key, value)) = line.split_once('=') {
+        let key = key.trim();
+        let value = value.trim();
+        if !key.is_empty() && !value.is_empty() {
+            return Some((key, value));
+        }
+    }
+
+    let mut parts = line.splitn(2, char::is_whitespace);
+    let key = parts.next()?.trim();
+    let value = parts.next()?.trim();
+    if key.is_empty() || value.is_empty() || value == "{" || value == "}" {
+        None
+    } else {
+        Some((key, value))
+    }
 }
 
 fn extract_key_value_or_lines(

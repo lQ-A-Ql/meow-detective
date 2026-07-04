@@ -308,7 +308,14 @@ fn checked_mul(lhs: u64, rhs: u64, context: &str) -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::metadata::{LvMeta, PvMeta, SegmentMeta, SegmentType, VolumeGroup};
+    use crate::metadata::{LvMeta, PvMeta, SegmentArea, SegmentMeta, SegmentType, VolumeGroup};
+
+    fn pv_area(name: &str, start_extent: u64) -> SegmentArea {
+        SegmentArea::PhysicalVolume {
+            name: name.to_string(),
+            start_extent,
+        }
+    }
 
     fn make_test_vg() -> VolumeGroup {
         VolumeGroup {
@@ -339,6 +346,7 @@ mod tests {
                 extent_count: 10,
                 seg_type: SegmentType::Linear,
                 stripes: vec![("pv0".into(), 0)],
+                areas: vec![pv_area("pv0", 0)],
             }],
             size_bytes: 0,
         };
@@ -365,6 +373,7 @@ mod tests {
                 extent_count: 5,
                 seg_type: SegmentType::Linear,
                 stripes: vec![("pv0".into(), 1280)], // starts at PE 1280
+                areas: vec![pv_area("pv0", 1280)],
             }],
             size_bytes: 0,
         };
@@ -390,6 +399,7 @@ mod tests {
                     type_name: "thin-pool".into(),
                 },
                 stripes: vec![],
+                areas: vec![],
             }],
             size_bytes: 0,
         };
@@ -435,6 +445,7 @@ mod tests {
                     stripe_size: 8192,
                 },
                 stripes: vec![("pv0".into(), 0), ("pv1".into(), 0)],
+                areas: vec![pv_area("pv0", 0), pv_area("pv1", 0)],
             }],
             size_bytes: 0,
         };
@@ -496,6 +507,7 @@ mod tests {
                     stripe_size: 2,
                 },
                 stripes: vec![("pv0".into(), 0), ("pv1".into(), 10)],
+                areas: vec![pv_area("pv0", 0), pv_area("pv1", 10)],
             }],
             size_bytes: 0,
         };
@@ -531,12 +543,14 @@ mod tests {
                     extent_count: 5,
                     seg_type: SegmentType::Linear,
                     stripes: vec![("pv0".into(), 0)],
+                    areas: vec![pv_area("pv0", 0)],
                 },
                 SegmentMeta {
                     start_extent: 5,
                     extent_count: 3,
                     seg_type: SegmentType::Linear,
                     stripes: vec![("pv0".into(), 128)],
+                    areas: vec![pv_area("pv0", 128)],
                 },
             ],
             size_bytes: 0,
@@ -569,6 +583,7 @@ mod tests {
                     type_name: "gap in segment layout".into(),
                 },
                 stripes: Vec::new(),
+                areas: Vec::new(),
             }],
             size_bytes: 0,
         };
@@ -594,6 +609,7 @@ mod tests {
                     stripe_size: 8192,
                 },
                 stripes: vec![("pv0".into(), 0), ("pv0".into(), 100)],
+                areas: vec![pv_area("pv0", 0), pv_area("pv0", 100)],
             }],
             size_bytes: 0,
         };
@@ -638,6 +654,7 @@ mod tests {
                 extent_count: 10,
                 seg_type: SegmentType::Raid1 { mirror_count: 2 },
                 stripes: vec![("pv0".into(), 0), ("pv1".into(), 0)],
+                areas: vec![pv_area("pv0", 0), pv_area("pv1", 0)],
             }],
             size_bytes: 0,
         };

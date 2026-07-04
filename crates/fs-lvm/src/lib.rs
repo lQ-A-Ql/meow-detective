@@ -60,7 +60,7 @@ use crate::error::Result;
 pub use crate::error::LvmError;
 pub use crate::label::LvmLabel;
 pub use crate::lv_reader::LvReader;
-pub use crate::metadata::{LvMeta, PvMeta, SegmentMeta, SegmentType, VolumeGroup};
+pub use crate::metadata::{LvMeta, PvMeta, SegmentArea, SegmentMeta, SegmentType, VolumeGroup};
 pub use crate::segment::LvExtent;
 
 // Use internally (not re-exported)
@@ -511,7 +511,9 @@ fn lv_info_from_meta(lv: &LvMeta) -> LvInfo {
 
 fn unsupported_segment_label(segment: &crate::metadata::SegmentMeta) -> Option<String> {
     match &segment.seg_type {
-        crate::metadata::SegmentType::Unsupported { type_name } => Some(type_name.clone()),
+        crate::metadata::SegmentType::Unsupported { type_name } => {
+            Some(unsupported_label_with_area_hint(type_name, segment))
+        }
         crate::metadata::SegmentType::ThinVolume => Some("thin".to_string()),
         crate::metadata::SegmentType::ThinPool => Some("thin-pool".to_string()),
         crate::metadata::SegmentType::Snapshot => Some("snapshot".to_string()),
@@ -524,6 +526,28 @@ fn unsupported_segment_label(segment: &crate::metadata::SegmentMeta) -> Option<S
         crate::metadata::SegmentType::Raid6 { .. } => Some("raid6".to_string()),
         crate::metadata::SegmentType::Linear | crate::metadata::SegmentType::Striped { .. } => None,
     }
+}
+
+fn unsupported_label_with_area_hint(
+    type_name: &str,
+    segment: &crate::metadata::SegmentMeta,
+) -> String {
+    let component_lvs = segment
+        .areas
+        .iter()
+        .filter_map(|area| match area {
+            crate::metadata::SegmentArea::LogicalVolume { name, .. } => Some(name.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    if component_lvs.is_empty() {
+        return type_name.to_string();
+    }
+    format!(
+        "{} (component LV graph: {})",
+        type_name,
+        component_lvs.join(", ")
+    )
 }
 
 #[cfg(test)]

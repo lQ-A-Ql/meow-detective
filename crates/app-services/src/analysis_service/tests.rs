@@ -913,6 +913,16 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
     let authorized_keys = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey alice@example\n";
     let passwd = "root:x:0:0:root:/root:/bin/bash\nalice:x:1000:1000:Alice:/home/alice:/bin/bash\n";
     let os_release = "PRETTY_NAME=\"CentOS Stream 9\"\nID=centos\nVERSION_ID=\"9\"\n";
+    let pve_storage = "dir: local\n\tpath /var/lib/vz\n\tcontent iso,vztmpl,backup\n";
+    let pve_vm_config =
+        "name: prod-vm\nmemory: 4096\nnet0: virtio=AA:BB:CC:DD:EE:FF,bridge=vmbr0\n";
+    let pve_lxc_config = "hostname: ct101\nrootfs: local-lvm:vm-101-disk-0,size=8G\n";
+    let pve_corosync = "totem {\n  cluster_name: pve-cluster\n}\n";
+    let corosync = "nodelist {\n  node {\n    name: pve01\n  }\n}\n";
+    let pve_proxy_access =
+        "192.0.2.10 - root@pam [15/Jan/2024:10:30:00 +0000] \"GET /api2/json/version HTTP/1.1\" 200 123\n";
+    let pvedaemon = "Jan 15 10:32:00 pve01 pvedaemon[3210]: starting task UPID:pve01:00000C8A:00112233:65A52980:qmstart:100:root@pam:\n";
+    let pve_task = "UPID:pve01:00000C8A:00112233:65A52980:qmstart:100:root@pam: OK\n";
     let auth_rotated = gzip_bytes(
         b"Jan 15 10:31:00 ubuntu sudo: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/id\n",
     );
@@ -927,6 +937,17 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
     );
     contents.insert("passwd".to_string(), passwd.as_bytes().to_vec());
     contents.insert("os-release".to_string(), os_release.as_bytes().to_vec());
+    contents.insert("pve-storage".to_string(), pve_storage.as_bytes().to_vec());
+    contents.insert("pve-vm".to_string(), pve_vm_config.as_bytes().to_vec());
+    contents.insert("pve-lxc".to_string(), pve_lxc_config.as_bytes().to_vec());
+    contents.insert("pve-corosync".to_string(), pve_corosync.as_bytes().to_vec());
+    contents.insert("corosync".to_string(), corosync.as_bytes().to_vec());
+    contents.insert(
+        "pveproxy-access".to_string(),
+        pve_proxy_access.as_bytes().to_vec(),
+    );
+    contents.insert("pvedaemon".to_string(), pvedaemon.as_bytes().to_vec());
+    contents.insert("pve-task".to_string(), pve_task.as_bytes().to_vec());
     contents.insert("auth-rotated".to_string(), auth_rotated);
     FileRepo::new(&conn)
         .insert_batch(&[
@@ -967,6 +988,54 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
                 "[P2]/cl/root/etc/os-release",
                 os_release.len() as u64,
             ),
+            file_with_ds(
+                "pve-storage",
+                &ds_id,
+                "etc/pve/storage.cfg",
+                pve_storage.len() as u64,
+            ),
+            file_with_ds(
+                "pve-vm",
+                &ds_id,
+                "etc/pve/qemu-server/100.conf",
+                pve_vm_config.len() as u64,
+            ),
+            file_with_ds(
+                "pve-lxc",
+                &ds_id,
+                "etc/pve/lxc/101.conf",
+                pve_lxc_config.len() as u64,
+            ),
+            file_with_ds(
+                "pve-corosync",
+                &ds_id,
+                "etc/pve/corosync.conf",
+                pve_corosync.len() as u64,
+            ),
+            file_with_ds(
+                "corosync",
+                &ds_id,
+                "etc/corosync/corosync.conf",
+                corosync.len() as u64,
+            ),
+            file_with_ds(
+                "pveproxy-access",
+                &ds_id,
+                "var/log/pveproxy/access.log",
+                pve_proxy_access.len() as u64,
+            ),
+            file_with_ds(
+                "pvedaemon",
+                &ds_id,
+                "var/log/pvedaemon.log",
+                pvedaemon.len() as u64,
+            ),
+            file_with_ds(
+                "pve-task",
+                &ds_id,
+                "var/log/pve/tasks/active",
+                pve_task.len() as u64,
+            ),
             file_with_ds("auth-rotated", &ds_id, "var/log/auth.log.1.gz", 96),
         ])
         .unwrap();
@@ -980,7 +1049,7 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
     })
     .unwrap();
 
-    assert_eq!(run.scanned_count, 8);
+    assert_eq!(run.scanned_count, 16);
     let artifact_count: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'LinuxBashCommand'",
@@ -1056,6 +1125,45 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
         )
         .unwrap();
     assert_eq!(pretty_name, "CentOS Stream 9");
+    let pve_config_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM artifacts
+             WHERE artifact_type = 'LinuxSystemConfig'
+               AND json_extract(attrs, '$.configKind') = 'pveConfig'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(
+        pve_config_count > 0,
+        "expected PVE config artifacts from Proxmox paths"
+    );
+    let pve_vm_memory: String = conn
+        .query_row(
+            "SELECT json_extract(attrs, '$.value')
+             FROM artifacts
+             WHERE artifact_type = 'LinuxSystemConfig'
+               AND json_extract(attrs, '$.pveConfigType') = 'pveQemuConfig'
+               AND json_extract(attrs, '$.key') = 'memory'
+             LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(pve_vm_memory, "4096");
+    let pve_log_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM artifacts
+             WHERE artifact_type = 'LinuxJournal'
+               AND json_extract(attrs, '$.logKind') = 'pve'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(
+        pve_log_count > 0,
+        "expected PVE logs to use generic text fallback"
+    );
 
     let summary = get_linux_artifact_summary(&conn, 0, 200).unwrap();
     assert_eq!(summary.bash_command_count, artifact_count as u64);
@@ -1134,13 +1242,21 @@ fn discover_evidence_candidates_includes_linux_first_pass_paths() {
                 "etc/systemd/system/update-checker.service",
                 10,
             ),
+            file_with_ds("pve-storage", &ds_id, "etc/pve/storage.cfg", 10),
+            file_with_ds("pve-qemu", &ds_id, "etc/pve/qemu-server/100.conf", 10),
+            file_with_ds("pve-lxc", &ds_id, "etc/pve/lxc/101.conf", 10),
+            file_with_ds("pve-corosync", &ds_id, "etc/pve/corosync.conf", 10),
+            file_with_ds("corosync", &ds_id, "etc/corosync/corosync.conf", 10),
+            file_with_ds("pveproxy", &ds_id, "var/log/pveproxy/access.log", 10),
+            file_with_ds("pvedaemon", &ds_id, "var/log/pvedaemon.log", 10),
+            file_with_ds("pve-task", &ds_id, "var/log/pve/tasks/active", 10),
         ])
         .unwrap();
 
     let candidates = discover_evidence_candidates(&conn).unwrap();
     let linux = candidates.get("LinuxArtifacts").unwrap();
 
-    assert_eq!(linux.len(), 10);
+    assert_eq!(linux.len(), 18);
     assert!(linux
         .iter()
         .any(|item| item.path.ends_with("cl/root/etc/passwd")));
@@ -1158,6 +1274,30 @@ fn discover_evidence_candidates_includes_linux_first_pass_paths() {
     assert!(linux
         .iter()
         .any(|item| item.path.ends_with("update-checker.service")));
+    assert!(linux
+        .iter()
+        .any(|item| item.path.ends_with("etc/pve/storage.cfg")));
+    assert!(linux
+        .iter()
+        .any(|item| item.path.ends_with("etc/pve/qemu-server/100.conf")));
+    assert!(linux
+        .iter()
+        .any(|item| item.path.ends_with("etc/pve/lxc/101.conf")));
+    assert!(linux
+        .iter()
+        .any(|item| item.path.ends_with("etc/pve/corosync.conf")));
+    assert!(linux
+        .iter()
+        .any(|item| item.path.ends_with("etc/corosync/corosync.conf")));
+    assert!(linux
+        .iter()
+        .any(|item| item.path.ends_with("var/log/pveproxy/access.log")));
+    assert!(linux
+        .iter()
+        .any(|item| item.path.ends_with("var/log/pvedaemon.log")));
+    assert!(linux
+        .iter()
+        .any(|item| item.path.ends_with("var/log/pve/tasks/active")));
 }
 
 #[test]

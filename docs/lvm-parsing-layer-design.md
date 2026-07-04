@@ -1108,3 +1108,19 @@ fn build_lvm_fixture() -> Vec<u8>;
 | 9 | LvReader 构造器与 FS reader 一致 | `fn open(mut reader: Box<dyn EvidenceReader>, offset: u64) -> io::Result<Self>` 完全对齐 ext4/xfs/btrfs |
 | 10 | MBR 0x8E 状态提升 | 从 `Unsupported` 改为 `Supported`，表明 LVM reader 可处理 |
 | 11 | FakeReader 测试模式 | 与 ext4/xfs/btrfs 完全一致的 `Vec<u8>` + `Read + Seek + EvidenceReader` 合成夹具模式 |
+| 12 | 保留 `areas` / component LV 图元数据 | thin、mirror、raid、cache、snapshot 常通过组件 LV 表达。即使当前仍 fail-closed，也必须保留 `AREA_LV` 事实，避免后续诊断和实现只能看到扁平 `stripes` |
+
+## 14. PVE / Proxmox 真实样本边界
+
+PVE 支持必须拆成两个阶段，不允许用“看起来像 PV extent”的猜测读取 thin pool：
+
+| 阶段 | 范围 | 验收 |
+|------|------|------|
+| Host root LV | direct linear/striped LV -> XFS/EXT4/Btrfs -> `/etc/pve`、`/etc/corosync`、日志和系统配置 | 可以枚举宿主完整文件树，预览任意普通文件，提取 PVE/Linux 关键配置 |
+| Guest thin volumes | `pve/data` thin pool 的 metadata/data 映射，解析 thin volume 的 device id 和 block mapping | VM/CT 磁盘作为真实虚拟块设备暴露；未实现前必须输出明确 unsupported 诊断 |
+
+当前工程原则：
+
+- `fs-lvm` 负责保留 LVM 拓扑事实，包括 `AREA_PV`、`AREA_LV`、未分配区域和 unsupported reason。
+- `app-services` 只负责编排发现、导入和预览，不在应用层猜测 thin/raid/mirror 映射。
+- PVE artifact 覆盖优先处理宿主配置：`/etc/pve/storage.cfg`、`/etc/pve/qemu-server/*.conf`、`/etc/pve/lxc/*.conf`、`/etc/pve/corosync.conf`、`/etc/corosync/corosync.conf`、`/var/log/pveproxy/access.log`、`/var/log/pvedaemon.log`、`/var/log/pve/tasks/*`。
