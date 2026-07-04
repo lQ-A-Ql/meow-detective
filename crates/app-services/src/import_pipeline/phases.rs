@@ -186,13 +186,15 @@ fn enumerate_image_data_source_with_staging(
     if manifest.partitions.is_empty() {
         probe_and_seed_manifest(
             ctx,
-            ds,
-            &path,
-            &kind,
-            case_root,
-            &mut manifest,
-            &mut probe_candidates,
-            &lvm_extra_sources,
+            ProbeManifestRequest {
+                ds,
+                path: &path,
+                kind: &kind,
+                case_root,
+                manifest: &mut manifest,
+                probe_candidates: &mut probe_candidates,
+                lvm_extra_sources: &lvm_extra_sources,
+            },
         )?;
     }
 
@@ -263,16 +265,29 @@ fn enumerate_image_data_source_with_staging(
     Ok(final_stats)
 }
 
+struct ProbeManifestRequest<'a> {
+    ds: &'a domain::DataSource,
+    path: &'a std::path::Path,
+    kind: &'a domain::DataSourceKind,
+    case_root: &'a std::path::Path,
+    manifest: &'a mut staging::StagingManifest,
+    probe_candidates: &'a mut Vec<datasource_service::ImageFilesystemCandidate>,
+    lvm_extra_sources: &'a [datasource_service::LvmDiscoverySource],
+}
+
 fn probe_and_seed_manifest(
     ctx: &mut ImportJobContext<'_>,
-    ds: &domain::DataSource,
-    path: &std::path::Path,
-    kind: &domain::DataSourceKind,
-    case_root: &std::path::Path,
-    manifest: &mut staging::StagingManifest,
-    probe_candidates: &mut Vec<datasource_service::ImageFilesystemCandidate>,
-    lvm_extra_sources: &[datasource_service::LvmDiscoverySource],
+    request: ProbeManifestRequest<'_>,
 ) -> Result<(), CommandError> {
+    let ProbeManifestRequest {
+        ds,
+        path,
+        kind,
+        case_root,
+        manifest,
+        probe_candidates,
+        lvm_extra_sources,
+    } = request;
     let probe_started = Instant::now();
     let mut probe_reader: Box<dyn EvidenceReader> = if *kind == domain::DataSourceKind::E01 {
         Box::new(E01Reader::open(path).map_err(CommandError::from_service_error)?)

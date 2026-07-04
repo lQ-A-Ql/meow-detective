@@ -1192,6 +1192,8 @@ struct ParsedSegmentParts {
     dependencies: SegmentDependencies,
 }
 
+type StripeAreas = (Vec<(String, u64)>, Vec<SegmentArea>);
+
 impl SegmentParseError {
     fn fatal(message: String) -> Self {
         SegmentParseError::Fatal(LvmError::MetadataParseError { line: 0, message })
@@ -1739,7 +1741,7 @@ fn parse_linear_areas(
     context: &str,
     pv_names: &HashSet<&str>,
     lv_names: &HashSet<&str>,
-) -> Result<(Vec<(String, u64)>, Vec<SegmentArea>)> {
+) -> Result<StripeAreas> {
     let stripe_count = optional_u64(params, "stripe_count").unwrap_or(1);
     if stripe_count != 1 {
         return Err(LvmError::MetadataParseError {
