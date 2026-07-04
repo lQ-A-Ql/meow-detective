@@ -124,6 +124,12 @@ powershell -ExecutionPolicy Bypass -File scripts\run-webview2-media-smoke.ps1
 # Tauri command layer SQL boundary guard
 powershell -ExecutionPolicy Bypass -File scripts\check-command-sql-boundary.ps1
 
+# Stage 0 architecture boundary guard. This prevents private fixture case IDs
+# in frontend production code, requires media APIs to use COMMANDS.files, and
+# restricts direct invoke usage to the API client. Backend Tauri/AppHandle
+# findings are advisory by default and become fatal with -StrictBackend.
+powershell -ExecutionPolicy Bypass -File scripts\check-stage0-boundary-guard.ps1
+
 # Documentation drift guard. This checks README/AGENTS/documentation-index
 # factual counts, required engineering-doc entries, and Mermaid block count.
 powershell -ExecutionPolicy Bypass -File scripts\check-doc-drift.ps1

@@ -202,6 +202,28 @@ V2 长期执行总计划见：
   - 损坏恢复
   - 全部历史版本差异
 
+### 4.7 Linux 检材3 baseline
+
+Linux 检材3是当前 Stage 0 Linux 单盘链路的真实样本 baseline，样本不提交仓库，默认 CI 不运行。公开仓库只记录可复验口径与 opt-in 命令。
+
+- 样本：
+  - 本地私有 E01：`FORENSICS_LINUX_E01_FIXTURE` 指向检材3
+  - 参考路径：`D:\獬豸杯\检材3.E01`（仅作人工环境示例，不得硬编码到生产代码）
+- 目标：
+  - E01/RAW 读取与分区探测
+  - LVM direct linear/striped LV 展开
+  - XFS root LV 文件树枚举
+  - 通过 `FileEntryId` 预览 `/etc/passwd`、`/etc/os-release`、`/etc/fstab`、`/root/.bash_history`、`/var/log/wtmp`
+  - Linux artifacts 候选发现与提取（system config、journal、wtmp、bash history、cron、sudo/auth log）
+- 基准：
+  - `crates/app-services/tests/linux_e01_integration.rs` 中被 `#[ignore]` 标记的真实样本回归
+  - `docs/pve-cluster-parsing-design.md` 的 Stage 0 单盘验收口径
+- 当前不保证：
+  - PVE cluster 执行、多 E01 聚合或跨节点关联
+  - LVM thin-pool、cache、RAID、snapshot、VDO、writecache、partial/degraded VG 激活
+  - XFS/ext4/Btrfs 已删除文件恢复或 carving
+  - 原始 Linux 文件系统支持超出当前实现可枚举范围时的完整恢复
+
 ## 5. 浏览器与邮件链路
 
 当前这些链路已经纳入框架，但成熟度仍低于核心链路：

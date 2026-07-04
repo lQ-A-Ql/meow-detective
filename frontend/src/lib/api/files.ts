@@ -101,11 +101,11 @@ export async function getImagePreview(fileId: string): Promise<ImagePreviewRespo
  * Returns an opaque media handle and, for small media only, an inline data URL.
  */
 export async function getMediaUrl(fileId: string): Promise<MediaUrl> {
-  return apiClient.request<MediaUrl>('get_media_url', { fileId });
+  return apiClient.request<MediaUrl>(COMMANDS.files.GET_MEDIA_URL, { fileId });
 }
 
 export async function readMediaRange(request: MediaRangeRequest): Promise<MediaRangeResponse> {
-  return apiClient.request<MediaRangeResponse>('read_media_range', { request });
+  return apiClient.request<MediaRangeResponse>(COMMANDS.files.READ_MEDIA_RANGE, { request });
 }
 
 export async function extractFile(file: FileEntryRow) {

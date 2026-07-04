@@ -216,6 +216,7 @@ export function EntryDetailView({ entryId }: { entryId: string }) {
       </div>
 
       <CitationPicker
+        caseId={entry.caseId}
         open={citationPickerOpen}
         onOpenChange={setCitationPickerOpen}
         selectedNodeIds={citationNodeIds}

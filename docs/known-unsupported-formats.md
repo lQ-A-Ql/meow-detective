@@ -39,10 +39,14 @@ V2 长期计划与能力评级请同时参考：
 | Email | MSG (Outlook .msg) | 不支持 | OLE2 复合文档，超出当前范围，规划于 V4 或后续评估 |
 | Email | TNEF / winmail.dat | 不支持 | MS-OXTNEF 格式，规划于 V4 或后续评估 |
 | Email | 加密或密码保护 PST/OST | 不支持 | 不尝试破解密码；检测并记录 warning |
-| Linux 文件系统 | ext4 raw disk | 不支持 | 当前仅支持从已挂载或导入的 Linux 文件树提取制品。ext4 原始磁盘镜像解析规划于 V4 |
-| Linux 文件系统 | XFS raw disk | 不支持 | XFS 原始磁盘镜像解析规划于 V4 |
-| Linux 文件系统 | Btrfs raw disk | 不支持 | Btrfs 原始磁盘镜像解析规划于 V4 |
+| Linux Stage 0 | 检材3 baseline 作为公开支持证明 | 不承诺 | 检材3是私有 opt-in 真实样本 baseline，用于守住单盘 Linux 链路；不能替代 public-small/public-medium fixture 与 expected JSON |
+| Linux 文件系统 | ext4 raw disk 完整支持 | 不承诺 | reader 能力与探测链路需以公开 fixture / expected JSON 补齐；检材3 baseline 不覆盖 ext4 |
+| Linux 文件系统 | XFS raw disk 完整支持 | 部分支持 | Stage 0 baseline 仅覆盖单源单盘、LVM direct LV 上的 XFS root tree、预览与 Linux artifact extraction |
+| Linux 文件系统 | Btrfs raw disk 完整支持 | 不承诺 | reader 能力与探测链路需以公开 fixture / expected JSON 补齐；检材3 baseline 不覆盖 Btrfs |
 | Linux 文件系统 | 已删除文件恢复 (ext4/XFS/Btrfs) | 不承诺 | 文件雕刻与已删除恢复规划于 V4 |
+| Linux LVM/PVE | PVE cluster 执行 | 不支持 | Stage 0 只支持单源、单盘 Linux 服务器链路；cluster service 是非执行设计边界 |
+| Linux LVM/PVE | LVM thin/cache/RAID/snapshot/VDO/writecache | 不支持 | 当前 baseline 只覆盖 direct linear/striped LV；复杂映射需独立 metadata 解析与 fixture |
+| Linux LVM/PVE | partial/degraded VG 激活 | 不支持 | 缺失 PV 或不一致 metadata 必须 fail closed，不猜测块映射 |
 | macOS 文件系统 | APFS raw disk | 不支持 | 当前仅支持从已挂载或导入的 macOS 文件树提取制品。APFS 原始磁盘镜像解析规划于 V4 |
 | macOS 文件系统 | HFS+ raw disk | 不支持 | HFS+ 原始磁盘镜像解析规划于 V4 |
 | macOS 文件系统 | 已删除文件恢复 (APFS/HFS+) | 不承诺 | 文件雕刻与已删除恢复规划于 V4 |
@@ -76,7 +80,10 @@ V2 长期计划与能力评级请同时参考：
 
 以下能力即便在 V3 期间有实现增量，也不得在 README、PRD、用户文案中写成"完整支持"：
 
-- Linux 文件系统 (ext4/XFS/Btrfs) 原始磁盘镜像解析（V3 仅支持从文件树提取制品）
+- Linux 文件系统 (ext4/XFS/Btrfs) 原始磁盘镜像“完整支持”；检材3只证明单盘 LVM direct LV -> XFS 的 Stage 0 baseline
+- Linux 检材3私有 baseline 作为公开 GA 证明（必须补 public fixture + expected JSON 后才能升级公开承诺）
+- PVE cluster 执行、多源 E01 聚合、跨节点关联
+- LVM thin/cache/RAID/snapshot/VDO/writecache、partial/degraded VG 激活
 - macOS 文件系统 (APFS/HFS+) 原始磁盘镜像解析（V3 仅支持从文件树提取制品）
 - Linux/macOS 文件系统已删除文件恢复
 - PST 加密消息支持

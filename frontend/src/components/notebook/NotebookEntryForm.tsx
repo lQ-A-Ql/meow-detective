@@ -41,18 +41,19 @@ import {
 } from './helpers';
 
 export interface CitationPickerProps {
+  caseId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   selectedNodeIds: string[];
   onConfirm: (nodes: GraphNode[]) => void;
 }
 
-export function CitationPicker({ open, onOpenChange, selectedNodeIds, onConfirm }: CitationPickerProps) {
+export function CitationPicker({ caseId, open, onOpenChange, selectedNodeIds, onConfirm }: CitationPickerProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('');
   const [tempSelected, setTempSelected] = useState<Set<string>>(new Set(selectedNodeIds));
 
-  const { data: snapshot } = useGraphSnapshot('case-2026-fx-091');
+  const { data: snapshot } = useGraphSnapshot(caseId);
 
   const startIds = useMemo(() => {
     if (!snapshot) return [];

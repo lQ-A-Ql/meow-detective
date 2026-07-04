@@ -47,19 +47,27 @@ V2 长期执行与发布口径见：
 
 ## 4. Linux 制品解析器 (V3 计划) — Medium Fixtures: `testdata/fixtures/public-medium/linux/`
 
+当前 Stage 0 另有一个私有真实样本 baseline：检材3（通过 `FORENSICS_LINUX_E01_FIXTURE` opt-in）。它验证的是单盘 Linux 服务器链路：E01/RAW -> partition table -> LVM direct LV -> XFS -> 文件树预览 -> Linux artifact extraction。该 baseline 不等同于公开 fixture，也不升级下表的公开支持等级；公开升级仍要求 committed fixture 与 expected JSON。
+
 | 链路 | 平台 | 当前等级 | 已验证样本 | 对齐基准 | 字段承诺 | Medium Fixture | 备注 |
-|---|---|---|---|---|---|---|---|---|
-| systemd journal | Linux | Experimental | 规划中 | V3 新增，无现有测试 | 时间戳、消息、PID、UID、GID、可执行文件 | **planned** (2026-Q3) — VM snapshot, 1000+ entries, multi-boot, LZ4 compression | public-small fixture 规划中 (synthetic journal)。压缩变体 LZ4/XZ/ZSTD |
-| wtmp/utmp | Linux | Experimental | 规划中 | V3 新增，无现有测试 | 用户、终端、主机、登录/登出时间、PID | **planned** (2026-Q3) — wtmp 100+ records (3+ users), btmp 10+ failed | public-small fixture 规划中。btmp 错误登录记录同步支持 |
-| bash history | Linux | Experimental | 规划中 | V3 新增，无现有测试 | 命令行、可选时间戳 (HISTTIMEFORMAT) | **planned** (2026-Q3) — 500+ commands, 3 users, HISTTIMEFORMAT timestamps | public-small fixture 规划中。支持 `.bash_history` 与 `/root/.bash_history` |
-| apt/dpkg history | Linux | Experimental | 规划中 | V3 新增，无现有测试 | 包名、版本、操作 (install/upgrade/remove)、时间戳 | **planned** (2026-Q3) — dpkg.log 200+ events, 5+ apt transactions, rotated log | public-small fixture 规划中。apt history.log + dpkg.log |
-| cron | Linux | Experimental | 规划中 | V3 新增，无现有测试 | 调度表达式、用户、命令 | **planned** (2026-Q3) — 20+ job definitions, crontab + cron.d + cron.* directories | public-small fixture 规划中。覆盖 crontab、cron.d、cron.{hourly,daily,weekly,monthly} |
-| sudo logs | Linux | Experimental | 规划中 | V3 新增，无现有测试 | 用户、命令、时间戳、终端 | **planned** (2026-Q3) — auth.log 50+ sudo sessions, success+failure+session pairs | public-small fixture 规划中。解析 /var/log/auth.log sudo 条目 |
+|---|---|---|---|---|---|---|---|
+| systemd journal | Linux | Experimental | 检材3 opt-in 私有回归（非默认 CI） | `linux_e01_integration` ignored tests / `docs/pve-cluster-parsing-design.md` Stage 0 | 时间戳、消息、PID、UID、GID、可执行文件（bestEffort；压缩 journal 仍需公开 fixture） | **planned** (2026-Q3) — VM snapshot, 1000+ entries, multi-boot, LZ4 compression | public-small fixture 规划中 (synthetic journal)。压缩变体 LZ4/XZ/ZSTD 仍不宣称完整覆盖 |
+| wtmp/utmp | Linux | Experimental | 检材3 opt-in 私有回归（`/var/log/wtmp` 可预览/提取） | `linux_e01_integration` ignored tests | 用户、终端、主机、登录/登出时间、PID（bestEffort） | **planned** (2026-Q3) — wtmp 100+ records (3+ users), btmp 10+ failed | public-small fixture 规划中。btmp 错误登录记录需公开 expected JSON 后再升级 |
+| bash history | Linux | Experimental | 检材3 opt-in 私有回归（`/root/.bash_history` 可预览/提取） | `linux_e01_integration` ignored tests | 命令行、可选 epoch 时间戳（bestEffort；HISTTIMEFORMAT 变体未全覆盖） | **planned** (2026-Q3) — 500+ commands, 3 users, HISTTIMEFORMAT timestamps | public-small fixture 规划中。支持 `.bash_history` 与 `/root/.bash_history` |
+| apt/dpkg history | Linux | Experimental | synthetic 单元/集成测试；检材3候选发现按日志存在性决定 | `artifacts-linux` tests / `linux_macos_artifact_extraction` | 包名、版本、操作 (install/upgrade/remove/configure)、时间戳（bestEffort） | **planned** (2026-Q3) — dpkg.log 200+ events, 5+ apt transactions, rotated log | public-small fixture 规划中。apt history.log + dpkg.log；rotated/compressed logs 待补 |
+| cron | Linux | Experimental | 检材3 opt-in 私有回归（`/etc/crontab`、`/var/spool/cron/root` 候选） | `linux_e01_integration` ignored tests | 调度表达式、用户、命令（bestEffort） | **planned** (2026-Q3) — 20+ job definitions, crontab + cron.d + cron.* directories | public-small fixture 规划中。覆盖 crontab、cron.d、cron.{hourly,daily,weekly,monthly} |
+| sudo logs | Linux | Experimental | 检材3 opt-in 私有回归（auth/secure/messages 候选按发行版日志存在性决定） | `linux_e01_integration` ignored tests | 用户、命令、时间戳、终端、成功/失败（bestEffort） | **planned** (2026-Q3) — auth.log 50+ sudo sessions, success+failure+session pairs | public-small fixture 规划中。Ubuntu `/var/log/auth.log` 与 RHEL/CentOS `/var/log/secure` 需分别建 baseline |
+
+### 4a. Linux Stage 0 单盘镜像 baseline（检材3）
+
+| 链路 | 平台 | 当前等级 | 已验证样本 | 对齐基准 | 字段承诺 | 备注 |
+|---|---|---|---|---|---|---|
+| E01/RAW -> LVM direct LV -> XFS file tree | Linux | Beta for private baseline / Experimental for public release | 检材3 opt-in 私有真实样本 | `FORENSICS_LINUX_E01_FIXTURE` + `cargo test -p app-services --test linux_e01_integration -- --ignored` | 分区探测、LVM direct LV 展开、XFS root LV 枚举、`FileEntryId` 预览高价值路径 | 不承诺 PVE cluster、LVM thin/cache/RAID/snapshot/VDO/writecache、partial VG、deleted recovery。公开等级仍需可提交 fixture/expected JSON |
 
 ## 5. macOS 制品解析器 (V3 计划) — Medium Fixtures: `testdata/fixtures/public-medium/macos/`
 
 | 链路 | 平台 | 当前等级 | 已验证样本 | 对齐基准 | 字段承诺 | Medium Fixture | 备注 |
-|---|---|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|---|
 | plist | macOS | Experimental | 规划中 | V3 新增，无现有测试 | 键值对、类型信息 | **planned** (2026-Q3) — 12+ forensic plists (10 binary + 2 XML), bplist00 magic, nested dicts | public-small fixture 规划中 (synthetic binary + XML plist)。覆盖 5+ 关键取证 plist |
 | unified log | macOS | Experimental | 规划中 | V3 新增，无现有测试 | 时间戳、进程、消息、活动 ID、线程 ID | **planned** (2026-Q3) — tracev3, 1000+ entries, 2+ boot UUIDs, 5+ subsystems | public-small fixture 规划中。tracev3 格式，需处理日志碎片与轮转 |
 | Spotlight | macOS | Experimental | 规划中 | V3 新增，无现有测试 | 文件路径、显示名称、种类、内容类型、日期、作者 | **planned** (2026-Q3) — store.db, 500+ indexed files, 30+ content types, vol+user indexes | public-small fixture 规划中。解析 .store.db 与 .Spotlight-V100/ |

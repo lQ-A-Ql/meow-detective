@@ -35,8 +35,11 @@ use persistence_sqlite::repositories::{
     partition_repo::{DataSourcePartitionRecord, PartitionRepo},
 };
 use rusqlite::Connection;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use transport::dto::ViewerRangeRequestDto;
 
 const LIUYANG_LVM_POOL_OFFSET: u64 = 1_074_790_400;
 const LIUYANG_ROOT_LV_NAME: &str = "root";
@@ -59,6 +62,8 @@ const ARBITRARY_PREVIEW_READ_PATHS: &[&str] =
 const MIN_LIUYANG_ROOT_LV_FILE_COUNT: u64 = 50_000;
 const MIN_LIUYANG_ROOT_LV_DIR_COUNT: u64 = 7_000;
 const MIN_LIUYANG_LINUX_ARTIFACT_CANDIDATES: usize = 100;
+const MIN_LIUYANG_LARGE_PREVIEW_FILE_BYTES: u64 = 2 * 1024 * 1024;
+const LINUX_PREVIEW_RANGE_LEN: u32 = 4096;
 const SYNTHETIC_PV_SIZE: u64 = 2_097_152;
 const SYNTHETIC_DATA_AREA_START: u64 = 2560;
 const SYNTHETIC_LV_MARKER_OFFSET: usize = SYNTHETIC_DATA_AREA_START as usize;
@@ -903,12 +908,66 @@ fn enumerate_root_lv_into_case(
     .unwrap()
 }
 
+fn import_full_linux_image_into_case(
+    case_id: &str,
+    ds_id: &DataSourceId,
+) -> (
+    Connection,
+    app_services::file_service::EnumerationStats,
+    Vec<String>,
+) {
+    let conn = setup_linux_fixture_case(case_id, ds_id);
+    let mut progress_events = Vec::new();
+    let stats = enumerate_image_data_source(
+        &conn,
+        ds_id,
+        E01Reader::open(&fixture_path()).unwrap(),
+        |pct, detail| {
+            progress_events.push(format!("{pct}:{detail}"));
+            Ok(())
+        },
+        None,
+        None,
+    )
+    .unwrap();
+
+    (conn, stats, progress_events)
+}
+
 fn count_entries_like(conn: &Connection, ds_id: &DataSourceId, like: &str) -> i64 {
     conn.query_row(
         "SELECT COUNT(*)
          FROM file_entries
          WHERE data_source_id = ?1
            AND LOWER(REPLACE(path, '\\', '/')) LIKE ?2",
+        rusqlite::params![ds_id.0, like],
+        |row| row.get(0),
+    )
+    .unwrap()
+}
+
+fn count_root_entries_named(conn: &Connection, ds_id: &DataSourceId, name: &str) -> i64 {
+    conn.query_row(
+        "SELECT COUNT(*)
+         FROM file_entries
+         WHERE data_source_id = ?1
+           AND parent_id IS NULL
+           AND name = ?2
+           AND path NOT LIKE '__partition_placeholder__/%'",
+        rusqlite::params![ds_id.0, name],
+        |row| row.get(0),
+    )
+    .unwrap()
+}
+
+fn count_root_entries_named_like(conn: &Connection, ds_id: &DataSourceId, like: &str) -> i64 {
+    conn.query_row(
+        "SELECT COUNT(*)
+         FROM file_entries
+         WHERE data_source_id = ?1
+           AND parent_id IS NULL
+           AND name LIKE ?2
+           AND path NOT LIKE '__partition_placeholder__/%'",
         rusqlite::params![ds_id.0, like],
         |row| row.get(0),
     )
@@ -968,6 +1027,53 @@ fn find_linux_file_entry(
     .ok()
 }
 
+fn find_largest_linux_file_entry(
+    conn: &Connection,
+    ds_id: &DataSourceId,
+    min_size: u64,
+) -> LinuxPathEntry {
+    conn.query_row(
+        "SELECT id, path, COALESCE(size, 0)
+         FROM file_entries
+         WHERE data_source_id = ?1
+           AND entry_type = 'file' COLLATE NOCASE
+           AND COALESCE(size, 0) >= ?2
+           AND LOWER(REPLACE(path, '\\', '/')) LIKE '%/var/%'
+         ORDER BY COALESCE(size, 0) DESC, LENGTH(path) ASC
+         LIMIT 1",
+        rusqlite::params![&ds_id.0, min_size],
+        |row| {
+            Ok(LinuxPathEntry {
+                file_id: FileEntryId(row.get(0)?),
+                path: row.get(1)?,
+                size: row.get(2)?,
+            })
+        },
+    )
+    .or_else(|_| {
+        conn.query_row(
+            "SELECT id, path, COALESCE(size, 0)
+             FROM file_entries
+             WHERE data_source_id = ?1
+               AND entry_type = 'file' COLLATE NOCASE
+               AND COALESCE(size, 0) >= ?2
+             ORDER BY COALESCE(size, 0) DESC, LENGTH(path) ASC
+             LIMIT 1",
+            rusqlite::params![&ds_id.0, min_size],
+            |row| {
+                Ok(LinuxPathEntry {
+                    file_id: FileEntryId(row.get(0)?),
+                    path: row.get(1)?,
+                    size: row.get(2)?,
+                })
+            },
+        )
+    })
+    .unwrap_or_else(|error| {
+        panic!("root LV enumeration should include a large previewable Linux file: {error}")
+    })
+}
+
 fn assert_high_value_linux_paths_enumerated(
     conn: &Connection,
     ds_id: &DataSourceId,
@@ -989,6 +1095,73 @@ fn assert_high_value_linux_paths_enumerated(
         entries.push(entry);
     }
     entries
+}
+
+fn assert_preview_range(
+    conn: &Connection,
+    entry: &LinuxPathEntry,
+    offset: u64,
+    length: u32,
+) -> Vec<u8> {
+    let response = file_service::read_file_range_for_case(
+        conn,
+        &ViewerRangeRequestDto {
+            handle_id: format!("file:{}", entry.file_id.0),
+            offset,
+            length,
+        },
+    )
+    .unwrap_or_else(|error| {
+        panic!(
+            "preview range read failed for {} at offset {} length {}: {}",
+            entry.path, offset, length, error
+        )
+    });
+    let bytes = response
+        .raw_bytes
+        .expect("range preview response should carry raw bytes");
+    assert!(
+        !bytes.is_empty(),
+        "preview range for {} at offset {} should return bytes",
+        entry.path,
+        offset
+    );
+    bytes
+}
+
+fn read_with_counted_descriptor_cache(
+    conn: &Connection,
+    case_id: &str,
+    entry: &LinuxPathEntry,
+    offset: u64,
+    length: u32,
+    cache: &RefCell<HashMap<String, serde_json::Value>>,
+    cache_hits: &std::cell::Cell<usize>,
+    set_calls: &std::cell::Cell<usize>,
+) -> Vec<u8> {
+    let get_cache = |key: &str| {
+        let value = cache.borrow().get(key).cloned();
+        if value.is_some() {
+            cache_hits.set(cache_hits.get() + 1);
+        }
+        value
+    };
+    let set_cache = |key: &str, value: &serde_json::Value| {
+        set_calls.set(set_calls.get() + 1);
+        cache.borrow_mut().insert(key.to_string(), value.clone());
+    };
+    file_service::read_file_bytes_for_case(
+        (conn, case_id, get_cache, set_cache),
+        &entry.file_id,
+        offset,
+        length,
+    )
+    .unwrap_or_else(|error| {
+        panic!(
+            "descriptor-cache preview read failed for {} at offset {} length {}: {}",
+            entry.path, offset, length, error
+        )
+    })
 }
 
 fn assert_liuyang_root_lv_tree_is_complete(
@@ -1021,6 +1194,152 @@ fn assert_liuyang_root_lv_tree_is_complete(
             count_entries_like(conn, ds_id, &format!("%{segment}%")) > 0,
             "complete root LV import should expose Linux path segment {segment}"
         );
+    }
+}
+
+fn assert_full_image_partition_root_contract(
+    conn: &Connection,
+    ds_id: &DataSourceId,
+    stats: &app_services::file_service::EnumerationStats,
+    progress_events: &[String],
+) {
+    assert!(
+        stats.file_count >= MIN_LIUYANG_ROOT_LV_FILE_COUNT
+            && stats.dir_count >= MIN_LIUYANG_ROOT_LV_DIR_COUNT,
+        "full image import should enumerate the complete current sample tree, got files={} dirs={}",
+        stats.file_count,
+        stats.dir_count
+    );
+
+    let total_entries = total_file_entries(conn, ds_id);
+    assert_eq!(
+        total_entries as u64,
+        stats.file_count + stats.dir_count,
+        "DB row count should match all enumerated partition roots plus child entries"
+    );
+
+    for segment in ["boot", "dev", "etc", "root", "usr", "var"] {
+        assert!(
+            count_entries_like(conn, ds_id, &format!("%{segment}%")) > 0,
+            "full image import should expose Linux path segment {segment}"
+        );
+    }
+
+    let partitions = PartitionRepo::new(conn)
+        .find_by_data_source(&ds_id.0)
+        .unwrap();
+    let root_partition = partitions
+        .iter()
+        .find(|partition| {
+            partition.filesystem.as_deref() == Some("XFS")
+                && partition.lvm_lv_name.as_deref() == Some(LIUYANG_ROOT_LV_NAME)
+        })
+        .expect("full image import should persist the cl/root XFS logical-volume partition");
+    assert_eq!(root_partition.status, "supported");
+    assert_eq!(
+        root_partition.lvm_vg_name.as_deref(),
+        Some(LIUYANG_ROOT_LV_VG_NAME)
+    );
+    assert_eq!(
+        root_partition.lvm_pv_offsets_json.as_deref(),
+        Some("[1074790400]")
+    );
+    assert!(
+        root_partition
+            .lvm_pv_sources_json
+            .as_deref()
+            .is_some_and(|json| json.contains("sourcePath") && json.contains("pvUuid")),
+        "full image import should persist traceable LVM PV sources: {:?}",
+        root_partition.lvm_pv_sources_json
+    );
+
+    let root_name = format!(
+        "Partition {} (XFS) - cl/root",
+        root_partition.partition_index
+    );
+    assert_eq!(
+        count_root_entries_named(conn, ds_id, &root_name),
+        1,
+        "full image import should expose exactly one visible cl/root partition root"
+    );
+
+    let expanded_pool = partitions
+        .iter()
+        .find(|partition| {
+            partition.offset == LIUYANG_LVM_POOL_OFFSET && partition.status == "redirected"
+        })
+        .expect("full image import should retain redirected physical LVM pool metadata");
+    assert_eq!(expanded_pool.filesystem.as_deref(), Some("LVM"));
+    assert_eq!(
+        count_root_entries_named(conn, ds_id, &expanded_pool.name),
+        0,
+        "redirected physical LVM pool must not become a visible file-tree root"
+    );
+
+    let visible_tree = file_service::get_file_tree_real_with_visibility(conn, false).unwrap();
+    let root = visible_tree
+        .iter()
+        .find(|node| node.name == root_name)
+        .expect("visible tree should expose the root logical volume");
+    assert_eq!(root.node_type.as_deref(), Some("partition"));
+    assert_eq!(root.status.as_deref(), Some("ready"));
+    assert!(
+        !visible_tree
+            .iter()
+            .any(|node| node.name == expanded_pool.name),
+        "visible tree must hide redirected physical LVM pool; roots={:?}",
+        visible_tree
+            .iter()
+            .map(|node| node.name.as_str())
+            .collect::<Vec<_>>()
+    );
+
+    let root_children =
+        file_service::get_file_children_lazy_with_visibility(conn, &root.id, 0, 100, false)
+            .unwrap();
+    let child_names = root_children
+        .children
+        .iter()
+        .map(|child| child.name.as_str())
+        .collect::<Vec<_>>();
+    for required in ["boot", "dev", "etc", "usr", "var"] {
+        assert!(
+            child_names.contains(&required),
+            "full image root LV should expose /{required}; children={child_names:?}"
+        );
+    }
+    assert_eq!(
+        count_root_entries_named_like(conn, ds_id, "%cl/root%"),
+        1,
+        "full image import should expose exactly one visible cl/root-like root"
+    );
+
+    let warning_contract = stats
+        .warnings
+        .iter()
+        .chain(progress_events.iter())
+        .collect::<Vec<_>>();
+    assert!(
+        warning_contract
+            .iter()
+            .all(|warning| !warning.contains(&fixture_path().to_string_lossy().to_string())),
+        "full image import warnings/progress must not leak the evidence path: {warning_contract:?}"
+    );
+    assert!(
+        stats
+            .warnings
+            .iter()
+            .all(|warning| !warning.contains("Cannot open image-backed file")
+                && !warning.contains("path reconstruction")),
+        "full image import warning contract should not contain preview/path-resolution failures: {:?}",
+        stats.warnings
+    );
+    for warning in stats
+        .warnings
+        .iter()
+        .filter(|warning| is_lvm_expansion_diagnostic(warning))
+    {
+        assert_lvm_diagnostic_has_trace_fields(warning);
     }
 }
 
@@ -1201,6 +1520,209 @@ fn lvm_root_partition_record(conn: &Connection, ds_id: &DataSourceId) -> DataSou
                 && partition.lvm_lv_name.as_deref() == Some(LIUYANG_ROOT_LV_NAME)
         })
         .expect("stored partition metadata should include cl/root")
+}
+
+#[test]
+#[ignore = "requires FORENSICS_LINUX_E01_FIXTURE real Linux E01 sample"]
+fn linux_e01_full_image_import_has_expected_partition_roots_and_warning_contract() {
+    let case_id = "linux-e01-full-import-contract";
+    let ds_id = DataSourceId("e01-linux-full-import-contract-ds".to_string());
+    let (conn, stats, progress_events) = import_full_linux_image_into_case(case_id, &ds_id);
+    eprintln!(
+        "Full image import: files={} dirs={} total={} warnings={:?}",
+        stats.file_count, stats.dir_count, stats.total_size, stats.warnings
+    );
+    for event in &progress_events {
+        eprintln!("  progress {event}");
+    }
+
+    assert_full_image_partition_root_contract(&conn, &ds_id, &stats, &progress_events);
+    assert_high_value_linux_paths_enumerated(&conn, &ds_id);
+    assert_linux_paths_preview_readable(&conn, &ds_id, ARBITRARY_PREVIEW_READ_PATHS);
+}
+
+#[test]
+#[ignore = "requires FORENSICS_LINUX_E01_FIXTURE real Linux E01 sample"]
+fn linux_e01_preview_reads_large_file_head_middle_tail_ranges() {
+    let ds_id = DataSourceId("e01-linux-preview-ranges-ds".to_string());
+    let conn = setup_linux_fixture_case("linux-e01-preview-ranges", &ds_id);
+    let stats = enumerate_root_lv_into_case(&conn, &ds_id);
+    assert_liuyang_root_lv_tree_is_complete(&conn, &ds_id, &stats);
+
+    let entry = find_largest_linux_file_entry(&conn, &ds_id, MIN_LIUYANG_LARGE_PREVIEW_FILE_BYTES);
+    eprintln!(
+        "Large preview target: id={} path='{}' size={}",
+        entry.file_id.0, entry.path, entry.size
+    );
+    assert!(
+        entry.size >= MIN_LIUYANG_LARGE_PREVIEW_FILE_BYTES,
+        "large preview target should be at least {} bytes",
+        MIN_LIUYANG_LARGE_PREVIEW_FILE_BYTES
+    );
+
+    let middle_offset = (entry.size / 2).saturating_sub((LINUX_PREVIEW_RANGE_LEN / 2) as u64);
+    let tail_offset = entry.size.saturating_sub(LINUX_PREVIEW_RANGE_LEN as u64);
+
+    let head = assert_preview_range(&conn, &entry, 0, LINUX_PREVIEW_RANGE_LEN);
+    let middle = assert_preview_range(&conn, &entry, middle_offset, LINUX_PREVIEW_RANGE_LEN);
+    let tail = assert_preview_range(&conn, &entry, tail_offset, LINUX_PREVIEW_RANGE_LEN);
+
+    assert!(head.len() <= LINUX_PREVIEW_RANGE_LEN as usize);
+    assert!(middle.len() <= LINUX_PREVIEW_RANGE_LEN as usize);
+    assert!(tail.len() <= LINUX_PREVIEW_RANGE_LEN as usize);
+}
+
+#[test]
+#[ignore = "requires FORENSICS_LINUX_E01_FIXTURE real Linux E01 sample"]
+fn linux_e01_preview_descriptor_cache_reads_lvm_xfs_files() {
+    let case_id = "linux-e01-preview-descriptor-cache";
+    let ds_id = DataSourceId("e01-linux-preview-cache-ds".to_string());
+    let conn = setup_linux_fixture_case(case_id, &ds_id);
+    let stats = enumerate_root_lv_into_case(&conn, &ds_id);
+    assert_liuyang_root_lv_tree_is_complete(&conn, &ds_id, &stats);
+
+    let entry = find_linux_file_entry(&conn, &ds_id, "/etc/os-release")
+        .expect("root LV should include /etc/os-release for descriptor-cache preview");
+    let partition = lvm_root_partition_record(&conn, &ds_id);
+    assert_eq!(partition.filesystem.as_deref(), Some("XFS"));
+    assert_eq!(partition.lvm_lv_name.as_deref(), Some(LIUYANG_ROOT_LV_NAME));
+    assert!(
+        partition.lvm_pv_sources_json.is_some(),
+        "descriptor cache should be backed by persisted LVM PV source metadata"
+    );
+
+    let cache = RefCell::new(HashMap::<String, serde_json::Value>::new());
+    let cache_hits = std::cell::Cell::new(0usize);
+    let set_calls = std::cell::Cell::new(0usize);
+
+    let first = read_with_counted_descriptor_cache(
+        &conn,
+        case_id,
+        &entry,
+        0,
+        64,
+        &cache,
+        &cache_hits,
+        &set_calls,
+    );
+    assert!(!first.is_empty());
+    assert_eq!(set_calls.get(), 1);
+    assert_eq!(cache_hits.get(), 0);
+
+    let second = read_with_counted_descriptor_cache(
+        &conn,
+        case_id,
+        &entry,
+        8,
+        64,
+        &cache,
+        &cache_hits,
+        &set_calls,
+    );
+    assert!(!second.is_empty());
+    assert_eq!(
+        set_calls.get(),
+        1,
+        "second LVM/XFS preview range should reuse the cached descriptor"
+    );
+    assert_eq!(cache_hits.get(), 1);
+}
+
+#[test]
+#[ignore = "requires FORENSICS_LINUX_E01_FIXTURE real Linux E01 sample"]
+fn linux_e01_analysis_summary_reports_candidate_coverage_and_unsupported_sources() {
+    let case_id = "linux-e01-analysis-summary-coverage";
+    let ds_id = DataSourceId("e01-linux-summary-coverage-ds".to_string());
+    let conn = setup_linux_fixture_case(case_id, &ds_id);
+    let stats = enumerate_root_lv_into_case(&conn, &ds_id);
+    assert_liuyang_root_lv_tree_is_complete(&conn, &ds_id, &stats);
+
+    let candidates = evidence_candidates_for_categories(&conn, &["LinuxArtifacts"]).unwrap();
+    assert_linux_artifact_candidates_cover_critical_paths(&candidates);
+
+    let pre_summary = get_linux_artifact_summary(&conn, 0, 50).unwrap();
+    assert_eq!(pre_summary.total_count, 0);
+    assert_eq!(
+        pre_summary.status,
+        transport::dto::AnalysisParseStatusDto::CandidateFound
+    );
+    assert_eq!(pre_summary.coverage_ratio, 0.0);
+    assert!(
+        pre_summary
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Linux artifact candidate(s)")
+                && warning.contains("no structured artifacts")),
+        "pre-extraction summary should report candidate coverage: {:?}",
+        pre_summary.warnings
+    );
+    assert!(
+        pre_summary
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("do not yet have a structured first-pass parser")),
+        "pre-extraction summary should report unsupported candidate sources: {:?}",
+        pre_summary.warnings
+    );
+    assert!(
+        pre_summary
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("generic line-level extraction")),
+        "pre-extraction summary should report covered Linux text fallback sources: {:?}",
+        pre_summary.warnings
+    );
+
+    let run = run_analysis_extraction(&conn, case_id, &["LinuxArtifacts"], |file_id| {
+        file_service::read_file_header_by_id(
+            &conn,
+            file_id,
+            app_services::analysis_service::MAX_ANALYSIS_SOURCE_BYTES,
+        )
+        .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
+        .map_err(|error| error.to_string())
+    })
+    .expect("LinuxArtifacts extraction should run against real root LV candidates");
+    assert!(run.scanned_count > 0);
+    assert!(run.artifact_count > 0);
+
+    let summary = get_linux_artifact_summary(&conn, 0, 200).unwrap();
+    eprintln!(
+        "Linux summary coverage: total={} coverage={} truncated={} warnings={:?}",
+        summary.total_count, summary.coverage_ratio, summary.truncated, summary.warnings
+    );
+    assert!(summary.total_count > 0);
+    assert!(summary.coverage_ratio > 0.0);
+    assert!(
+        summary.coverage_ratio < 1.0,
+        "unsupported or empty candidate sources should keep coverage below complete; coverage={}",
+        summary.coverage_ratio
+    );
+    assert!(
+        summary
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Parsed ")
+                && warning.contains("Linux artifact candidate source(s)")),
+        "post-extraction summary should report parsed/candidate coverage: {:?}",
+        summary.warnings
+    );
+    assert!(
+        summary
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("do not yet have a structured first-pass parser")),
+        "post-extraction summary should retain unsupported-source contract: {:?}",
+        summary.warnings
+    );
+    assert!(
+        summary
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("generic line-level extraction")),
+        "post-extraction summary should retain text fallback coverage contract: {:?}",
+        summary.warnings
+    );
 }
 
 #[test]
