@@ -246,6 +246,15 @@ powershell -File scripts/check-stage5-regression-guard.ps1
 powershell -File scripts/check-frontend-lockfile-policy.ps1
 ```
 
+`check-stage5-regression-guard.ps1` 同时锁定以下边界：
+
+- MCP transport validation、MCP nested DTO snake_case 契约与 staging merge conflict visibility。
+- `import_pipeline` 生产代码保持 Tauri-free，只通过 `ImportEventSink` 与命令层桥接事件。
+- `analysis_service/extraction/mod.rs` 保持 facade，runner、registry preload、summary 不回流到模块根。
+- `file_service/preview.rs` 保持 Tauri-free DTO assembly，`file_commands.rs` 仅做 active case、cache、media protocol 适配并委托 app-services。
+- `datasource_service.rs` 保持 facade，attach/probe/LVM/fs magic/reader/types/partition index 不回流成上帝模块。
+- Linux Stage 0 检材3 baseline 继续使用 `FORENSICS_LINUX_E01_FIXTURE` opt-in，不进入默认 CI，不提交私有样本。
+
 ## 13. 变更追溯
 
 每轮有实质改动后，至少同步一项：
