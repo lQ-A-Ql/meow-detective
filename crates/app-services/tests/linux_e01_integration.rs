@@ -486,13 +486,13 @@ fn lvm_expansion_skips_incomplete_high_seqno_vg_but_expands_complete_vg() {
                 && warning.contains("VG name='high_incomplete_vg'")
                 && warning.contains("PV name='pv1'")
                 && warning.contains(missing_high_pv_uuid)
-                && warning.contains("source_path='<missing>'")
+                && warning.contains("source='<missing>'")
                 && warning.contains("offset=<missing>")
                 && warning.contains("observed PV source(s)")
-                && warning.contains("source_path='")
+                && warning.contains("source='path-sha256:")
                 && warning.contains("offset=")
                 && warning.contains("LV name='high_root'")),
-        "incomplete VG should be reported with VG/LV/PV/source_path/offset diagnostics; warnings={:?}",
+        "incomplete VG should be reported with VG/LV/PV/source/offset diagnostics; warnings={:?}",
         probe.warnings
     );
 }
@@ -529,13 +529,14 @@ fn lvm_expansion_reports_metadata_parse_diagnostics() {
         probe.warnings.iter().any(|warning| {
             warning.contains("metadata area 0")
                 && warning.contains("offset=1048576")
-                && warning.contains("source_path='")
+                && warning.contains("source='path-sha256:")
                 && warning.contains("pv_uuid='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'")
                 && warning.contains("MDA header magic mismatch")
         }),
         "corrupt LVM metadata should include metadata-area diagnostics; warnings={:?}",
         probe.warnings
     );
+    assert_lvm_warnings_do_not_leak_path(&probe.warnings, &source_path);
 }
 
 #[test]
@@ -586,7 +587,7 @@ fn lvm_expansion_skips_internal_and_thin_logical_volumes() {
                 && warning.contains("role='thin-data'")
                 && warning.contains("VG name='mixed_vg'")
                 && warning.contains("PV name='pv0'")
-                && warning.contains("source_path='")
+                && warning.contains("source='path-sha256:")
                 && warning.contains("offset=")),
         "internal thin data LV skip should be auditable; warnings={:?}",
         probe.warnings
@@ -599,11 +600,12 @@ fn lvm_expansion_skips_internal_and_thin_logical_volumes() {
                 && warning.contains("role='thin'")
                 && warning.contains("VG name='mixed_vg'")
                 && warning.contains("PV name='pv0'")
-                && warning.contains("source_path='")
+                && warning.contains("source='path-sha256:")
                 && warning.contains("offset=")),
         "visible thin LV skip should be auditable; warnings={:?}",
         probe.warnings
     );
+    assert_lvm_warnings_do_not_leak_path(&probe.warnings, &source_path);
 }
 
 #[test]
@@ -656,7 +658,7 @@ thin_root { id="lv-thin-root" status=["READ","WRITE","VISIBLE"] segment_count=1 
             .contains("produced no supported logical volume candidates")
             && warning.contains("VG name='test_vg'")
             && warning.contains("PV name='pv0'")
-            && warning.contains("source_path='")
+            && warning.contains("source='path-sha256:")
             && warning.contains("offset=")
             && warning.contains("LV name='thin_root'")),
         "unsupported-only VG should retain an actionable warning: {:?}",
@@ -754,13 +756,30 @@ fn is_lvm_expansion_diagnostic(warning: &str) -> bool {
 
 fn assert_lvm_diagnostic_has_trace_fields(warning: &str) {
     assert!(
-        warning.contains("source_path='"),
-        "LVM diagnostic should include source_path: {warning}"
+        warning.contains("source='"),
+        "LVM diagnostic should include desensitized source: {warning}"
     );
     assert!(
         warning.contains("offset="),
         "LVM diagnostic should include PV offset: {warning}"
     );
+}
+
+fn assert_lvm_warnings_do_not_leak_path(warnings: &[String], path: &std::path::Path) {
+    let rendered_path = path.to_string_lossy();
+    let rendered_parent = path.parent().map(|parent| parent.to_string_lossy());
+    for warning in warnings {
+        assert!(
+            !warning.contains(rendered_path.as_ref()),
+            "LVM warning leaked evidence path '{rendered_path}': {warning}"
+        );
+        if let Some(parent) = rendered_parent.as_ref() {
+            assert!(
+                !warning.contains(parent.as_ref()),
+                "LVM warning leaked evidence parent path '{parent}': {warning}"
+            );
+        }
+    }
 }
 
 fn root_lv_candidate(

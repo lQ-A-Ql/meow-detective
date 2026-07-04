@@ -283,19 +283,21 @@ pub async fn read_file_range(
 ) -> Result<ViewerRangeResponseDto, CommandError> {
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        if crate::commands::command_support::snapshot_active_case(&app_state)?.is_none() {
-            return Ok(file_service::read_file_range_real(&request));
-        }
-        let case_id = current_case_id_for_preview(&app_state)?;
-        let conn = crate::commands::command_support::get_case_connection(&app_state)?;
-        with_preview_cache_context!(&app_state, &conn, case_id.as_str(), |context| {
-            file_service::read_file_range_for_case(context, &request)
-        })
-        .map_err(CommandError::from_typed_service_error)
+    tauri::async_runtime::spawn_blocking(move || read_file_range_for_state(&app_state, &request))
+        .await
+        .map_err(CommandError::from_join_error)?
+}
+
+fn read_file_range_for_state(
+    app_state: &AppState,
+    request: &transport::dto::ViewerRangeRequestDto,
+) -> Result<ViewerRangeResponseDto, CommandError> {
+    let case_id = current_case_id_for_preview(app_state)?;
+    let conn = crate::commands::command_support::get_case_connection(app_state)?;
+    with_preview_cache_context!(app_state, &conn, case_id.as_str(), |context| {
+        file_service::read_file_range_for_case(context, request)
     })
-    .await
-    .map_err(CommandError::from_join_error)?
+    .map_err(CommandError::from_typed_service_error)
 }
 
 /// Format raw bytes as a hex dump string (offset + hex bytes + ASCII).
@@ -906,6 +908,22 @@ mod tests {
         }
 
         std::fs::write(path, data)
+    }
+
+    #[test]
+    fn read_file_range_requires_active_case_instead_of_empty_hex_fallback() {
+        let state = AppState::default();
+        let request = transport::dto::ViewerRangeRequestDto {
+            handle_id: "file:any".to_string(),
+            offset: 0,
+            length: 16,
+        };
+
+        let err = read_file_range_for_state(&state, &request)
+            .expect_err("active case should be required");
+
+        assert_eq!(err.code, "NO_ACTIVE_CASE");
+        assert!(err.message.contains("No active case"));
     }
 
     #[test]

@@ -66,14 +66,14 @@ pub fn expand_lvm_pool_candidates_with_sources(
                 Ok(reader) => readers.push(reader),
                 Err(e) => {
                     probe.warnings.push(format!(
-                        "LVM expand: cannot open reader for PV '{}' offset {}: {}",
-                        reader_path.display(),
+                        "LVM expand: cannot open reader for PV source='{}' offset {}: {}",
+                        lvm_source_fingerprint(&pv_source.source_path),
                         pv_source.offset,
                         e
                     ));
                     tracing::warn!(
-                        "LVM expand: cannot open reader for PV '{}' at offset {}: {}",
-                        reader_path.display(),
+                        "LVM expand: cannot open reader for PV source='{}' at offset {}: {}",
+                        lvm_source_fingerprint(&pv_source.source_path),
                         pv_source.offset,
                         e
                     );
@@ -467,8 +467,8 @@ fn inspect_extra_lvm_pv_sources(
             Ok(reader) => reader,
             Err(error) => {
                 warnings.push(format!(
-                    "LVM expand: cannot open extra PV source_path='{}': {}",
-                    source.source_path.display(),
+                    "LVM expand: cannot open extra PV source='{}': {}",
+                    lvm_source_fingerprint(&source.source_path.to_string_lossy()),
                     error
                 ));
                 continue;
@@ -478,8 +478,8 @@ fn inspect_extra_lvm_pv_sources(
             Ok(probe) => probe,
             Err(error) => {
                 warnings.push(format!(
-                    "LVM expand: cannot inspect extra PV source_path='{}': {}",
-                    source.source_path.display(),
+                    "LVM expand: cannot inspect extra PV source='{}': {}",
+                    lvm_source_fingerprint(&source.source_path.to_string_lossy()),
                     error
                 ));
                 continue;
@@ -511,16 +511,16 @@ fn inspect_lvm_pv_candidate(
 ) -> std::result::Result<LvmPvDiscoveryInfo, String> {
     let mut reader = open_evidence_reader(source_path, source_kind).map_err(|e| {
         format!(
-            "LVM expand: cannot open reader for PV source_path='{}' offset={}: {}",
-            source_path.display(),
+            "LVM expand: cannot open reader for PV source='{}' offset={}: {}",
+            lvm_source_fingerprint(&source_path.to_string_lossy()),
             candidate.offset,
             e
         )
     })?;
     let label = fs_lvm::label::parse_pv_label(&mut reader, candidate.offset).map_err(|e| {
         format!(
-            "LVM expand: cannot parse PV label for source_path='{}' offset={}: {}",
-            source_path.display(),
+            "LVM expand: cannot parse PV label for source='{}' offset={}: {}",
+            lvm_source_fingerprint(&source_path.to_string_lossy()),
             candidate.offset,
             e
         )
@@ -565,9 +565,9 @@ where
             }
             Err(error) => {
                 warnings.push(format!(
-                    "LVM expand: metadata area {} for PV source_path='{}' offset={} pv_uuid='{}' (mda offset {}, size {}) did not produce a usable VG: {}",
+                    "LVM expand: metadata area {} for PV source='{}' offset={} pv_uuid='{}' (mda offset {}, size {}) did not produce a usable VG: {}",
                     index,
-                    source_path.display(),
+                    lvm_source_fingerprint(&source_path.to_string_lossy()),
                     pv_offset,
                     label.pv_uuid,
                     metadata_area.offset,
@@ -632,10 +632,10 @@ fn format_lvm_pv_sources(sources: &[LvmPhysicalVolumeSource]) -> String {
 
 fn format_lvm_pv_source(source: &LvmPhysicalVolumeSource) -> String {
     format!(
-        "PV name='{}' uuid='{}' source_path='{}' source_kind='{}' offset={}",
+        "PV name='{}' uuid='{}' source='{}' source_kind='{}' offset={}",
         source.pv_name.as_deref().unwrap_or("<unknown>"),
         unknown_if_empty(&source.pv_uuid),
-        unknown_if_empty(&source.source_path),
+        lvm_source_fingerprint(&source.source_path),
         source
             .source_kind
             .as_ref()
@@ -654,7 +654,7 @@ fn format_lvm_missing_pvs(missing_pvs: &[(String, String)]) -> String {
         .iter()
         .map(|(pv_name, pv_uuid)| {
             format!(
-                "PV name='{}' uuid='{}' source_path='<missing>' offset=<missing>",
+                "PV name='{}' uuid='{}' source='<missing>' offset=<missing>",
                 unknown_if_empty(pv_name),
                 unknown_if_empty(pv_uuid)
             )
@@ -725,6 +725,20 @@ fn unknown_if_empty(value: &str) -> &str {
     } else {
         value
     }
+}
+
+fn lvm_source_fingerprint(source_path: &str) -> String {
+    if source_path.is_empty() {
+        return "<unknown>".to_string();
+    }
+
+    let digest = <sha2::Sha256 as sha2::Digest>::digest(source_path.as_bytes());
+    let short_hash = digest
+        .iter()
+        .take(8)
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    format!("path-sha256:{short_hash}")
 }
 
 pub(super) fn lvm_pv_source_key(source: &LvmPhysicalVolumeSource) -> (String, u64, String) {

@@ -1,11 +1,10 @@
 //! Public range-read and content-open API used by Tauri commands.
 
 use crate::file_service::viewer::{
-    descriptor_file_entry, descriptor_for_file_with_cache, empty_hex_response, read_bounded,
-    read_seekable_range, try_read_exfat_image_range_for_descriptor,
-    try_read_fat_image_range_for_descriptor, try_read_linux_image_range_for_descriptor,
-    try_read_ntfs_image_range_for_descriptor, PreviewDescriptor, PreviewReadContext,
-    RangeContentReader, FILE_HANDLE_PREFIX,
+    descriptor_file_entry, descriptor_for_file_with_cache, read_bounded, read_seekable_range,
+    try_read_exfat_image_range_for_descriptor, try_read_fat_image_range_for_descriptor,
+    try_read_linux_image_range_for_descriptor, try_read_ntfs_image_range_for_descriptor,
+    PreviewDescriptor, PreviewReadContext, RangeContentReader, FILE_HANDLE_PREFIX,
 };
 use crate::file_service::FileServiceError;
 use domain::{EntryType, FileEntry, FileEntryId};
@@ -40,10 +39,6 @@ where
         lines: Vec::new(),
         encoding: None,
     })
-}
-
-pub fn read_file_range_real(_request: &ViewerRangeRequestDto) -> ViewerRangeResponseDto {
-    empty_hex_response()
 }
 
 pub fn open_file_content_by_id<C>(

@@ -25,7 +25,7 @@ pub use handle::{get_file_path_for_entry, open_file_handle_real};
 pub use path::safe_relative_path;
 pub use range::{
     open_file_content_by_id, read_file_bytes_for_case, read_file_header_by_id,
-    read_file_range_for_case, read_file_range_real, FileHeaderReadCache,
+    read_file_range_for_case, FileHeaderReadCache,
 };
 
 // Re-exports used by tests and sibling modules.
@@ -51,7 +51,6 @@ use crate::file_service::FileServiceError;
 use persistence_sqlite::repositories::file_repo::FileRepo;
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Seek, SeekFrom};
-use transport::dto::ViewerRangeResponseDto;
 
 pub(crate) const FILE_HANDLE_PREFIX: &str = "file:";
 
@@ -246,15 +245,6 @@ pub(crate) fn read_bounded(
     let mut bytes = Vec::with_capacity(length);
     reader.take(length as u64).read_to_end(&mut bytes)?;
     Ok(bytes)
-}
-
-pub(crate) fn empty_hex_response() -> ViewerRangeResponseDto {
-    ViewerRangeResponseDto {
-        raw_bytes: None,
-        kind: "hex".into(),
-        lines: Vec::new(),
-        encoding: None,
-    }
 }
 
 pub fn mft_partition_index_from_entry_id(entry_id: &str) -> Option<usize> {
