@@ -19,6 +19,7 @@ pub struct DataSourcePartitionRecord {
     pub lvm_lv_uuid: Option<String>,
     pub lvm_lv_name: Option<String>,
     pub lvm_pv_offsets_json: Option<String>,
+    pub lvm_pv_sources_json: Option<String>,
 }
 
 pub struct PartitionRepo<'a> {
@@ -46,8 +47,8 @@ impl<'a> PartitionRepo<'a> {
                 "INSERT INTO data_source_partitions
                  (id, data_source_id, partition_index, name, kind_label, status, type_guid,
                   offset, length, filesystem, unlock_hint, lvm_vg_uuid, lvm_vg_name,
-                  lvm_lv_uuid, lvm_lv_name, lvm_pv_offsets_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                  lvm_lv_uuid, lvm_lv_name, lvm_pv_offsets_json, lvm_pv_sources_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
             )?;
             for record in records {
                 stmt.execute(params![
@@ -67,6 +68,7 @@ impl<'a> PartitionRepo<'a> {
                     record.lvm_lv_uuid,
                     record.lvm_lv_name,
                     record.lvm_pv_offsets_json,
+                    record.lvm_pv_sources_json,
                 ])?;
             }
         }
@@ -82,7 +84,7 @@ impl<'a> PartitionRepo<'a> {
         let mut stmt = self.conn.prepare(
             "SELECT id, data_source_id, partition_index, name, kind_label, status, type_guid,
                     offset, length, filesystem, unlock_hint, lvm_vg_uuid, lvm_vg_name,
-                    lvm_lv_uuid, lvm_lv_name, lvm_pv_offsets_json
+                    lvm_lv_uuid, lvm_lv_name, lvm_pv_offsets_json, lvm_pv_sources_json
              FROM data_source_partitions
              WHERE data_source_id = ?1
              ORDER BY partition_index ASC",
@@ -105,6 +107,7 @@ impl<'a> PartitionRepo<'a> {
                 lvm_lv_uuid: row.get(13)?,
                 lvm_lv_name: row.get(14)?,
                 lvm_pv_offsets_json: row.get(15)?,
+                lvm_pv_sources_json: row.get(16)?,
             })
         })?;
 
@@ -123,8 +126,8 @@ impl<'a> PartitionRepo<'a> {
                 "INSERT INTO data_source_partitions
                  (id, data_source_id, partition_index, name, kind_label, status, type_guid,
                   offset, length, filesystem, unlock_hint, lvm_vg_uuid, lvm_vg_name,
-                  lvm_lv_uuid, lvm_lv_name, lvm_pv_offsets_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                  lvm_lv_uuid, lvm_lv_name, lvm_pv_offsets_json, lvm_pv_sources_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
             )?;
             for record in records {
                 stmt.execute(params![
@@ -144,6 +147,7 @@ impl<'a> PartitionRepo<'a> {
                     record.lvm_lv_uuid,
                     record.lvm_lv_name,
                     record.lvm_pv_offsets_json,
+                    record.lvm_pv_sources_json,
                 ])?;
             }
         }
@@ -194,7 +198,8 @@ mod tests {
                 lvm_vg_name TEXT,
                 lvm_lv_uuid TEXT,
                 lvm_lv_name TEXT,
-                lvm_pv_offsets_json TEXT
+                lvm_pv_offsets_json TEXT,
+                lvm_pv_sources_json TEXT
             );",
         )
         .unwrap();
@@ -219,6 +224,7 @@ mod tests {
             lvm_lv_uuid: None,
             lvm_lv_name: None,
             lvm_pv_offsets_json: None,
+            lvm_pv_sources_json: None,
         }
     }
 
@@ -280,6 +286,10 @@ mod tests {
         record.lvm_lv_uuid = Some("lv-uuid".to_string());
         record.lvm_lv_name = Some("root".to_string());
         record.lvm_pv_offsets_json = Some("[1048576,2097152]".to_string());
+        record.lvm_pv_sources_json = Some(
+            r#"[{"sourcePath":"disk1.E01","offset":1048576,"pvUuid":"pv-uuid-1","pvName":"pv0"},{"sourcePath":"disk2.E01","offset":2097152,"pvUuid":"pv-uuid-2","pvName":"pv1"}]"#
+                .to_string(),
+        );
 
         repo.insert_batch(&[record]).unwrap();
 
@@ -292,6 +302,12 @@ mod tests {
         assert_eq!(
             found[0].lvm_pv_offsets_json.as_deref(),
             Some("[1048576,2097152]")
+        );
+        assert_eq!(
+            found[0].lvm_pv_sources_json.as_deref(),
+            Some(
+                r#"[{"sourcePath":"disk1.E01","offset":1048576,"pvUuid":"pv-uuid-1","pvName":"pv0"},{"sourcePath":"disk2.E01","offset":2097152,"pvUuid":"pv-uuid-2","pvName":"pv1"}]"#
+            )
         );
     }
 }

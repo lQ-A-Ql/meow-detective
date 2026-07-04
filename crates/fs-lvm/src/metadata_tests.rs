@@ -507,23 +507,190 @@ fn unsupported_non_linear_lvs_do_not_abort_vg_parse() {
     assert_eq!(vg.logical_volumes.len(), 4);
 
     let linear = &vg.logical_volumes[0];
+    assert_eq!(linear.role, LvRole::Public);
+    assert!(linear.is_visible());
+    assert!(linear.is_directly_mappable());
     assert!(matches!(linear.segments[0].seg_type, SegmentType::Linear));
 
     let raid5 = &vg.logical_volumes[1];
+    assert!(!raid5.is_directly_mappable());
     assert!(matches!(
         raid5.segments[0].seg_type,
         SegmentType::Unsupported { .. }
     ));
 
     let mirror = &vg.logical_volumes[2];
+    assert_eq!(mirror.role, LvRole::Public);
+    assert!(mirror.is_visible());
+    assert!(!mirror.is_directly_mappable());
     assert!(matches!(
         mirror.segments[0].seg_type,
         SegmentType::Unsupported { .. }
     ));
 
     let thin = &vg.logical_volumes[3];
+    assert_eq!(thin.role, LvRole::ThinVolume);
+    assert!(thin.is_visible());
+    assert!(!thin.is_directly_mappable());
     assert!(matches!(
         thin.segments[0].seg_type,
+        SegmentType::Unsupported { .. }
+    ));
+}
+
+#[test]
+fn thin_cache_and_pool_segments_keep_distinct_unsupported_labels() {
+    let text = base_metadata_with_lv(
+        "\
+         thin_root {
+             id = \"lv-thin-root\"
+             status = [\"READ\", \"WRITE\", \"VISIBLE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 2 type = \"thin\" thin_pool = \"pool\" transaction_id = 1 device_id = 2 }
+         }
+         thin_pool {
+             id = \"lv-thin-pool\"
+             status = [\"READ\", \"WRITE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 4 type = \"thin-pool\" metadata = \"pool_tmeta\" pool = \"pool_tdata\" transaction_id = 1 }
+         }
+         cached_root {
+             id = \"lv-cache-root\"
+             status = [\"READ\", \"WRITE\", \"VISIBLE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 2 type = \"cache\" cache_pool = \"cache_pool\" origin = \"origin\" }
+         }
+         cache_pool {
+             id = \"lv-cache-pool\"
+             status = [\"READ\", \"WRITE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 4 type = \"cache-pool\" metadata = \"cache_cmeta\" pool = \"cache_cdata\" }
+         }\n",
+    );
+
+    let vg = parse_metadata_text(&text).unwrap();
+
+    assert_eq!(vg.logical_volumes[0].role, LvRole::ThinVolume);
+    assert!(matches!(
+        vg.logical_volumes[0].segments[0].seg_type,
+        SegmentType::Unsupported { ref type_name } if type_name.contains("thin")
+    ));
+    assert_eq!(vg.logical_volumes[1].role, LvRole::ThinPool);
+    assert!(matches!(
+        vg.logical_volumes[1].segments[0].seg_type,
+        SegmentType::Unsupported { ref type_name } if type_name.contains("thin-pool")
+    ));
+    assert_eq!(vg.logical_volumes[2].role, LvRole::CacheVolume);
+    assert!(matches!(
+        vg.logical_volumes[2].segments[0].seg_type,
+        SegmentType::Unsupported { ref type_name } if type_name.contains("cache")
+    ));
+    assert_eq!(vg.logical_volumes[3].role, LvRole::CachePool);
+    assert!(matches!(
+        vg.logical_volumes[3].segments[0].seg_type,
+        SegmentType::Unsupported { ref type_name } if type_name.contains("cache-pool")
+    ));
+}
+
+#[test]
+fn metadata_text_classifies_hidden_and_internal_lvs() {
+    let text = base_metadata_with_lv(
+        "\
+         root {\n\
+             id = \"lv-root\"\n\
+             status = [\"READ\", \"WRITE\", \"VISIBLE\"]\n\
+             segment_count = 1\n\
+             segment1 { start_extent = 0 extent_count = 1 type = \"linear\" stripe_count = 1 stripes = [\"pv0\", 0] }\n\
+         }\n\
+         hidden_tmp {\n\
+             id = \"lv-hidden\"\n\
+             status = [\"READ\", \"WRITE\"]\n\
+             segment_count = 1\n\
+             segment1 { start_extent = 0 extent_count = 1 type = \"linear\" stripe_count = 1 stripes = [\"pv0\", 1] }\n\
+         }\n\
+         pool_tdata {\n\
+             id = \"lv-tdata\"\n\
+             status = [\"READ\", \"WRITE\"]\n\
+             segment_count = 1\n\
+             segment1 { start_extent = 0 extent_count = 1 type = \"linear\" stripe_count = 1 stripes = [\"pv0\", 2] }\n\
+         }\n\
+         pool_tmeta {\n\
+             id = \"lv-tmeta\"\n\
+             status = [\"READ\", \"WRITE\"]\n\
+             segment_count = 1\n\
+             segment1 { start_extent = 0 extent_count = 1 type = \"linear\" stripe_count = 1 stripes = [\"pv0\", 3] }\n\
+         }\n",
+    );
+
+    let vg = parse_metadata_text(&text).unwrap();
+    let root = &vg.logical_volumes[0];
+    let hidden = &vg.logical_volumes[1];
+    let tdata = &vg.logical_volumes[2];
+    let tmeta = &vg.logical_volumes[3];
+
+    assert_eq!(root.status, vec!["READ", "WRITE", "VISIBLE"]);
+    assert_eq!(root.role, LvRole::Public);
+    assert!(root.is_visible());
+    assert!(root.is_directly_mappable());
+
+    assert_eq!(hidden.role, LvRole::Internal);
+    assert!(!hidden.is_visible());
+    assert!(!hidden.is_directly_mappable());
+
+    assert_eq!(tdata.role, LvRole::ThinData);
+    assert_eq!(tmeta.role, LvRole::ThinMetadata);
+    assert!(!tdata.is_visible());
+    assert!(!tmeta.is_visible());
+    assert!(!tdata.is_directly_mappable());
+    assert!(!tmeta.is_directly_mappable());
+}
+
+#[test]
+fn metadata_text_keeps_mirror_lvs_visible_but_not_directly_mappable() {
+    let text = base_metadata_with_lv(
+        "\
+         mirror_root {\n\
+             id = \"lv-mirror-root\"\n\
+             status = [\"READ\", \"WRITE\", \"VISIBLE\"]\n\
+             segment_count = 1\n\
+             segment1 {\n\
+                 start_extent = 0\n\
+                 extent_count = 4\n\
+                 type = \"raid1\"\n\
+                 stripe_count = 2\n\
+                 stripes = [\"pv0\", 0, \"pv0\", 4]\n\
+             }\n\
+         }\n\
+         parity_root {\n\
+             id = \"lv-parity-root\"\n\
+             status = [\"READ\", \"WRITE\", \"VISIBLE\"]\n\
+             segment_count = 1\n\
+             segment1 {\n\
+                 start_extent = 0\n\
+                 extent_count = 4\n\
+                 type = \"raid5\"\n\
+                 stripe_count = 3\n\
+                 stripes = [\"pv0\", 8, \"pv0\", 12, \"pv0\", 16]\n\
+             }\n\
+         }\n",
+    );
+
+    let vg = parse_metadata_text(&text).unwrap();
+    let mirror = &vg.logical_volumes[0];
+    assert_eq!(mirror.role, LvRole::Public);
+    assert!(mirror.is_visible());
+    assert!(!mirror.is_directly_mappable());
+    assert!(matches!(
+        mirror.segments[0].seg_type,
+        SegmentType::Unsupported { .. }
+    ));
+
+    let parity = &vg.logical_volumes[1];
+    assert_eq!(parity.role, LvRole::Public);
+    assert!(parity.is_visible());
+    assert!(!parity.is_directly_mappable());
+    assert!(matches!(
+        parity.segments[0].seg_type,
         SegmentType::Unsupported { .. }
     ));
 }

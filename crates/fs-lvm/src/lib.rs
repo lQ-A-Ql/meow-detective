@@ -89,6 +89,11 @@ pub struct LvInfo {
     pub name: String,
     pub uuid: String,
     pub size_bytes: u64,
+    pub role: String,
+    pub status: Vec<String>,
+    pub visible: bool,
+    pub directly_mappable: bool,
+    pub unsupported_reason: Option<String>,
 }
 
 /// Shared device reader type used across multiple LV readers.
@@ -99,6 +104,15 @@ struct DiscoveredPv {
     reader: SharedReader,
     label: LvmLabel,
     pv_offset: u64,
+}
+
+#[derive(Debug, Clone)]
+struct ResolvedPvMapping {
+    name: String,
+    start_offset: u64,
+    data_offset: u64,
+    data_size: u64,
+    pv_size: u64,
 }
 
 fn lvm_uuid_matches(label_uuid: &str, metadata_uuid: &str) -> bool {
@@ -192,8 +206,7 @@ impl LvmPool {
         // Phase 3: Match PV UUIDs from metadata to reader entries,
         // building absolute (reader-start) data area offsets for each PV.
         let mut device_readers = Vec::with_capacity(vg.physical_volumes.len());
-        let mut pv_start_offsets = Vec::with_capacity(vg.physical_volumes.len());
-        let mut pv_data_offsets = Vec::with_capacity(vg.physical_volumes.len());
+        let mut pv_mappings = Vec::with_capacity(vg.physical_volumes.len());
         for pv_meta in &vg.physical_volumes {
             // Find matching reader by PV UUID
             let matched = pv_entries
@@ -203,28 +216,38 @@ impl LvmPool {
                     pv_name: pv_meta.name.clone(),
                     pv_uuid: pv_meta.uuid.clone(),
                 })?;
-            let pe_start_bytes =
-                pv_meta
-                    .pe_start
-                    .checked_mul(512)
-                    .ok_or_else(|| LvmError::MetadataParseError {
-                        line: 0,
-                        message: format!("PV '{}' pe_start overflows bytes", pv_meta.name),
-                    })?;
-            let data_offset = matched
-                .pv_offset
-                .checked_add(pe_start_bytes)
-                .ok_or_else(|| LvmError::MetadataParseError {
-                    line: 0,
-                    message: format!("PV '{}' data offset overflows bytes", pv_meta.name),
-                })?;
+            let mapping = resolve_pv_mapping(pv_meta, matched)?;
 
             device_readers.push(matched.reader.clone());
-            pv_start_offsets.push((pv_meta.name.clone(), matched.pv_offset));
-            pv_data_offsets.push((pv_meta.name.clone(), data_offset));
+            pv_mappings.push(mapping);
         }
 
         let logical_volumes = vg.logical_volumes.clone();
+        let pv_start_offsets: Vec<(String, u64)> = pv_mappings
+            .iter()
+            .map(|mapping| (mapping.name.clone(), mapping.start_offset))
+            .collect();
+        let pv_data_offsets: Vec<(String, u64)> = pv_mappings
+            .iter()
+            .map(|mapping| (mapping.name.clone(), mapping.data_offset))
+            .collect();
+        let pv_data_bounds = pv_mappings
+            .iter()
+            .map(|mapping| {
+                (
+                    mapping.name.clone(),
+                    mapping.data_offset,
+                    mapping.data_size,
+                    mapping.pv_size,
+                )
+            })
+            .collect::<Vec<_>>();
+        for lv in &logical_volumes {
+            if lv.is_directly_mappable() {
+                let extent_map = segment::build_extent_map(&vg, lv, &pv_data_offsets)?;
+                validate_extent_map(lv, &extent_map, &pv_data_bounds)?;
+            }
+        }
 
         Ok(LvmPool {
             volume_group: vg,
@@ -237,13 +260,17 @@ impl LvmPool {
 
     /// List all logical volumes discovered in this volume group.
     pub fn list_volumes(&self) -> Vec<LvInfo> {
+        self.logical_volumes.iter().map(lv_info_from_meta).collect()
+    }
+
+    /// List only logical volumes that should be exposed as ordinary block
+    /// devices to filesystem probes.
+    pub fn list_direct_volumes(&self) -> Vec<(usize, LvInfo)> {
         self.logical_volumes
             .iter()
-            .map(|lv| LvInfo {
-                name: lv.name.clone(),
-                uuid: lv.uuid.clone(),
-                size_bytes: lv.size_bytes,
-            })
+            .enumerate()
+            .filter(|(_, lv)| lv.is_directly_mappable())
+            .map(|(index, lv)| (index, lv_info_from_meta(lv)))
             .collect()
     }
 
@@ -280,12 +307,222 @@ impl LvmPool {
         &self.volume_group
     }
 
+    /// Return stable `(pv_name, pv_data_start_byte)` mappings in VG metadata PV order.
+    pub fn physical_volume_data_offsets(&self) -> &[(String, u64)] {
+        &self.pv_data_offsets
+    }
+
     /// Return stable `(pv_name, pv_start_byte)` mappings in VG metadata PV order.
     ///
     /// These are the offsets that callers must pass back into [`LvmPool::discover`].
     /// Segment mapping uses the separate internal data-area offsets.
     pub fn physical_volume_offsets(&self) -> &[(String, u64)] {
         &self.pv_start_offsets
+    }
+}
+
+fn resolve_pv_mapping(pv_meta: &PvMeta, matched: &DiscoveredPv) -> Result<ResolvedPvMapping> {
+    let pe_start_bytes =
+        pv_meta
+            .pe_start
+            .checked_mul(512)
+            .ok_or_else(|| LvmError::MetadataParseError {
+                line: 0,
+                message: format!("PV '{}' pe_start overflows bytes", pv_meta.name),
+            })?;
+    let label_data_area =
+        matched
+            .label
+            .data_areas
+            .first()
+            .ok_or_else(|| LvmError::MetadataParseError {
+                line: 0,
+                message: format!(
+                    "PV '{}' ({}) has no data area descriptor",
+                    pv_meta.name, pv_meta.uuid
+                ),
+            })?;
+    if label_data_area.offset != pe_start_bytes {
+        return Err(LvmError::MetadataParseError {
+            line: 0,
+            message: format!(
+                "PV '{}' ({}) data area mismatch: label offset {} but metadata pe_start {} sectors = {} bytes",
+                pv_meta.name, pv_meta.uuid, label_data_area.offset, pv_meta.pe_start, pe_start_bytes
+            ),
+        });
+    }
+    let data_offset = matched
+        .pv_offset
+        .checked_add(label_data_area.offset)
+        .ok_or_else(|| LvmError::MetadataParseError {
+            line: 0,
+            message: format!("PV '{}' data offset overflows bytes", pv_meta.name),
+        })?;
+    let data_size = if label_data_area.size == 0 {
+        matched
+            .label
+            .pv_size
+            .checked_sub(label_data_area.offset)
+            .ok_or_else(|| LvmError::MetadataParseError {
+                line: 0,
+                message: format!(
+                    "PV '{}' data area offset {} exceeds PV size {}",
+                    pv_meta.name, label_data_area.offset, matched.label.pv_size
+                ),
+            })?
+    } else {
+        label_data_area.size
+    };
+    if label_data_area.offset.saturating_add(data_size) > matched.label.pv_size {
+        return Err(LvmError::MetadataParseError {
+            line: 0,
+            message: format!(
+                "PV '{}' data area range offset={} size={} exceeds PV size {}",
+                pv_meta.name, label_data_area.offset, data_size, matched.label.pv_size
+            ),
+        });
+    }
+
+    Ok(ResolvedPvMapping {
+        name: pv_meta.name.clone(),
+        start_offset: matched.pv_offset,
+        data_offset,
+        data_size,
+        pv_size: matched.label.pv_size,
+    })
+}
+
+fn validate_extent_map(
+    lv: &LvMeta,
+    extent_map: &[LvExtent],
+    pv_bounds: &[(String, u64, u64, u64)],
+) -> Result<()> {
+    if lv.size_bytes == 0 {
+        return Ok(());
+    }
+    if extent_map.is_empty() {
+        return Err(LvmError::MetadataParseError {
+            line: 0,
+            message: format!("logical volume '{}' has no extent mappings", lv.name),
+        });
+    }
+
+    let mut expected = 0u64;
+    for extent in extent_map {
+        if extent.logical_start != expected {
+            return Err(LvmError::MetadataParseError {
+                line: 0,
+                message: format!(
+                    "logical volume '{}' extent map has gap/overlap: expected logical offset {} but found {}",
+                    lv.name, expected, extent.logical_start
+                ),
+            });
+        }
+        expected =
+            expected
+                .checked_add(extent.length)
+                .ok_or_else(|| LvmError::MetadataParseError {
+                    line: 0,
+                    message: format!("logical volume '{}' extent map overflows", lv.name),
+                })?;
+
+        let Some((pv_name, data_start, data_size, pv_size)) = pv_bounds.get(extent.pv_index) else {
+            return Err(LvmError::MetadataParseError {
+                line: 0,
+                message: format!(
+                    "logical volume '{}' extent references missing PV index {}",
+                    lv.name, extent.pv_index
+                ),
+            });
+        };
+        let data_end =
+            data_start
+                .checked_add(*data_size)
+                .ok_or_else(|| LvmError::MetadataParseError {
+                    line: 0,
+                    message: format!("PV '{}' data area end overflows", pv_name),
+                })?;
+        let extent_end = extent
+            .physical_offset
+            .checked_add(extent.length)
+            .ok_or_else(|| LvmError::MetadataParseError {
+                line: 0,
+                message: format!("logical volume '{}' physical extent overflows", lv.name),
+            })?;
+        if extent.physical_offset < *data_start || extent_end > data_end {
+            return Err(LvmError::MetadataParseError {
+                line: 0,
+                message: format!(
+                    "logical volume '{}' extent {}..{} falls outside PV '{}' data area {}..{} (pv size {})",
+                    lv.name, extent.physical_offset, extent_end, pv_name, data_start, data_end, pv_size
+                ),
+            });
+        }
+    }
+    if expected != lv.size_bytes {
+        return Err(LvmError::MetadataParseError {
+            line: 0,
+            message: format!(
+                "logical volume '{}' extent map covers {} bytes but LV size is {}",
+                lv.name, expected, lv.size_bytes
+            ),
+        });
+    }
+    Ok(())
+}
+
+fn lv_info_from_meta(lv: &LvMeta) -> LvInfo {
+    let visible = lv.is_visible();
+    let directly_mappable = lv.is_directly_mappable();
+    LvInfo {
+        name: lv.name.clone(),
+        uuid: lv.uuid.clone(),
+        size_bytes: lv.size_bytes,
+        role: lv.role.as_str().to_string(),
+        status: lv.status.clone(),
+        visible,
+        directly_mappable,
+        unsupported_reason: if directly_mappable {
+            None
+        } else {
+            let unsupported_segments = lv
+                .segments
+                .iter()
+                .filter_map(unsupported_segment_label)
+                .collect::<Vec<_>>();
+            if !visible {
+                Some("logical volume is hidden or internal".to_string())
+            } else if !unsupported_segments.is_empty() {
+                Some(format!(
+                    "logical volume uses unsupported segment(s): {}",
+                    unsupported_segments.join(", ")
+                ))
+            } else if matches!(lv.role, crate::metadata::LvRole::Snapshot) {
+                Some("snapshot logical volume requires origin/COW mapping".to_string())
+            } else {
+                Some(format!(
+                    "logical volume role '{}' is not directly mappable",
+                    lv.role.as_str()
+                ))
+            }
+        },
+    }
+}
+
+fn unsupported_segment_label(segment: &crate::metadata::SegmentMeta) -> Option<String> {
+    match &segment.seg_type {
+        crate::metadata::SegmentType::Unsupported { type_name } => Some(type_name.clone()),
+        crate::metadata::SegmentType::ThinVolume => Some("thin".to_string()),
+        crate::metadata::SegmentType::ThinPool => Some("thin-pool".to_string()),
+        crate::metadata::SegmentType::Snapshot => Some("snapshot".to_string()),
+        crate::metadata::SegmentType::CacheVolume => Some("cache".to_string()),
+        crate::metadata::SegmentType::CachePool => Some("cache-pool".to_string()),
+        crate::metadata::SegmentType::Raid0 { .. } => Some("raid0".to_string()),
+        crate::metadata::SegmentType::Raid1 { .. } => Some("raid1".to_string()),
+        crate::metadata::SegmentType::Raid10 { .. } => Some("raid10".to_string()),
+        crate::metadata::SegmentType::Raid5 { .. } => Some("raid5".to_string()),
+        crate::metadata::SegmentType::Raid6 { .. } => Some("raid6".to_string()),
+        crate::metadata::SegmentType::Linear | crate::metadata::SegmentType::Striped { .. } => None,
     }
 }
 
@@ -334,14 +571,14 @@ mod tests {
             r#"test_vg {{
     id = "vg-1234-5678-90ab-cdef"
     seqno = 1
-    extent_size = 8192
+    extent_size = 1
 
     physical_volumes {{
         pv0 {{
             id = "{}"
             device = "/dev/sda1"
             pe_start = 5
-            pe_count = 10
+            pe_count = 4096
         }}
     }}
 
@@ -474,6 +711,12 @@ mod tests {
         sec[16..20].copy_from_slice(&crc.to_le_bytes());
     }
 
+    fn refresh_label_crc(disk: &mut [u8]) {
+        let sec = &mut disk[512..1024];
+        let crc = crc::lvm_crc32(&sec[20..512]);
+        sec[16..20].copy_from_slice(&crc.to_le_bytes());
+    }
+
     fn write_synthetic_metadata(disk: &mut [u8], metadata_text: &str) {
         let text_bytes = metadata_text.as_bytes();
         let text_offset = 1536usize;
@@ -527,7 +770,7 @@ mod tests {
 
         let vg = pool.volume_group();
         assert_eq!(vg.name, "test_vg");
-        assert_eq!(vg.extent_size, 8192);
+        assert_eq!(vg.extent_size, 1);
         assert_eq!(vg.seqno, 1);
         assert_eq!(vg.physical_volumes.len(), 1);
         assert_eq!(vg.physical_volumes[0].name, "pv0");
@@ -535,7 +778,15 @@ mod tests {
         let vols = pool.list_volumes();
         assert_eq!(vols.len(), 1);
         assert_eq!(vols[0].name, "root");
-        assert_eq!(vols[0].size_bytes, 5 * 8192 * 512); // 5 extents
+        assert_eq!(vols[0].size_bytes, 5 * 512); // 5 extents
+        assert_eq!(vols[0].role, "public");
+        assert!(vols[0].visible);
+        assert!(vols[0].directly_mappable);
+        assert!(vols[0].unsupported_reason.is_none());
+        let direct = pool.list_direct_volumes();
+        assert_eq!(direct.len(), 1);
+        assert_eq!(direct[0].0, 0);
+        assert_eq!(direct[0].1.name, "root");
         assert_eq!(pool.physical_volume_offsets(), &[("pv0".to_string(), 0)]);
         assert_eq!(
             pool.pv_data_offsets,
@@ -544,19 +795,107 @@ mod tests {
     }
 
     #[test]
+    fn discover_uses_label_data_area_as_authoritative_offset() {
+        let mut disk = build_synthetic_lvm_disk();
+        disk[512 + 72..512 + 80].copy_from_slice(&(5u64 * 512).to_le_bytes());
+        refresh_label_crc(&mut disk);
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeDiskReader::new(disk));
+        let pool = LvmPool::discover(vec![reader], vec![0]).unwrap();
+
+        assert_eq!(
+            pool.physical_volume_data_offsets(),
+            &[("pv0".to_string(), 5 * 512)]
+        );
+    }
+
+    #[test]
+    fn discover_fails_when_label_data_area_disagrees_with_metadata_pe_start() {
+        let mut disk = build_synthetic_lvm_disk();
+        disk[512 + 72..512 + 80].copy_from_slice(&(6u64 * 512).to_le_bytes());
+        refresh_label_crc(&mut disk);
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeDiskReader::new(disk));
+        let err = match LvmPool::discover(vec![reader], vec![0]) {
+            Ok(_) => panic!("mismatched label data area should fail"),
+            Err(err) => err,
+        };
+
+        assert!(matches!(err, LvmError::MetadataParseError { .. }));
+        assert!(err.to_string().contains("data area mismatch"));
+    }
+
+    #[test]
+    fn discover_fails_when_first_extent_starts_outside_label_data_area() {
+        let mut disk = build_synthetic_lvm_disk();
+        disk[512 + 80..512 + 88].copy_from_slice(&512u64.to_le_bytes());
+        refresh_label_crc(&mut disk);
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeDiskReader::new(disk));
+        let err = match LvmPool::discover(vec![reader], vec![0]) {
+            Ok(_) => panic!("out-of-bounds first extent should fail"),
+            Err(err) => err,
+        };
+
+        assert!(matches!(err, LvmError::MetadataParseError { .. }));
+        assert!(err.to_string().contains("falls outside PV"));
+    }
+
+    #[test]
+    fn list_direct_volumes_filters_internal_and_unsupported_lvs() {
+        let mut disk = build_synthetic_lvm_disk();
+        let metadata_text = format!(
+            r#"test_vg {{
+id="vg-filtered-lvs"
+seqno=3
+extent_size=1
+physical_volumes {{ pv0 {{ id="{}" pe_start=5 pe_count=4096 }} }}
+logical_volumes {{
+root {{ id="lv-root" status=["READ","WRITE","VISIBLE"] segment_count=1 segment1 {{ start_extent=0 extent_count=1 type="striped" stripe_count=1 stripes=["pv0",0] }} }}
+pool_tdata {{ id="lv-tdata" status=["READ","WRITE"] segment_count=1 segment1 {{ start_extent=0 extent_count=1 type="striped" stripe_count=1 stripes=["pv0",1] }} }}
+thin_root {{ id="lv-thin-root" status=["READ","WRITE","VISIBLE"] segment_count=1 segment1 {{ start_extent=0 extent_count=1 type="thin" thin_pool="pool" transaction_id=1 device_id=2 }} }}
+}}
+}}
+"#,
+            "abcdef1234567890abcdef1234567890"
+        );
+        write_synthetic_metadata(&mut disk, &metadata_text);
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeDiskReader::new(disk));
+        let pool = LvmPool::discover(vec![reader], vec![0]).unwrap();
+        let all = pool.list_volumes();
+        assert_eq!(all.len(), 3);
+        assert_eq!(all[0].name, "root");
+        assert!(all[0].directly_mappable);
+        assert_eq!(all[1].name, "pool_tdata");
+        assert_eq!(all[1].role, "thin-data");
+        assert!(!all[1].visible);
+        assert!(!all[1].directly_mappable);
+        assert_eq!(all[2].name, "thin_root");
+        assert_eq!(all[2].role, "thin");
+        assert!(all[2].visible);
+        assert!(!all[2].directly_mappable);
+
+        let direct = pool.list_direct_volumes();
+        assert_eq!(direct.len(), 1);
+        assert_eq!(direct[0].0, 0);
+        assert_eq!(direct[0].1.name, "root");
+    }
+
+    #[test]
     fn discover_matches_label_uuid_to_dashed_metadata_uuid() {
         let mut disk = build_synthetic_lvm_disk();
         let metadata_text = r#"test_vg {
     id = "vg-dashed-pv-uuid"
     seqno = 2
-    extent_size = 8192
+    extent_size = 1
 
     physical_volumes {
         pv0 {
             id = "abcdef12-3456-7890-abcd-ef1234567890"
             device = "/dev/sda1"
             pe_start = 5
-            pe_count = 10
+            pe_count = 4096
         }
     }
 

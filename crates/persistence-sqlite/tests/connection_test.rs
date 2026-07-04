@@ -291,6 +291,7 @@ fn upgrades_legacy_schema_to_latest_with_partition_job_columns() {
         "lvm_lv_uuid",
         "lvm_lv_name",
         "lvm_pv_offsets_json",
+        "lvm_pv_sources_json",
     ] {
         let exists: bool = conn
             .query_row(

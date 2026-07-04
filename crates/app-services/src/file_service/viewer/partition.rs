@@ -207,6 +207,18 @@ pub(crate) fn preview_lvm_identity_from_datasource(
         lv_uuid: identity.lv_uuid.clone(),
         lv_name: identity.lv_name.clone(),
         pv_offsets: identity.pv_offsets.clone(),
+        pv_sources: identity
+            .pv_sources
+            .iter()
+            .map(
+                |source| crate::file_service::viewer::PreviewLvmPhysicalVolumeSource {
+                    source_path: source.source_path.clone(),
+                    offset: source.offset,
+                    pv_uuid: source.pv_uuid.clone(),
+                    pv_name: source.pv_name.clone(),
+                },
+            )
+            .collect(),
     }
 }
 
@@ -218,6 +230,16 @@ fn preview_lvm_identity_from_record(
     if pv_offsets.is_empty() {
         return None;
     }
+    let pv_sources = partition
+        .lvm_pv_sources_json
+        .as_deref()
+        .and_then(|json| {
+            serde_json::from_str::<
+                    Vec<crate::file_service::viewer::PreviewLvmPhysicalVolumeSource>,
+                >(json)
+                .ok()
+        })
+        .unwrap_or_default();
 
     let lv_uuid = partition.lvm_lv_uuid.clone().unwrap_or_default();
     let lv_name = partition.lvm_lv_name.clone().unwrap_or_default();
@@ -231,6 +253,7 @@ fn preview_lvm_identity_from_record(
         lv_uuid,
         lv_name,
         pv_offsets,
+        pv_sources,
     })
 }
 
@@ -256,6 +279,10 @@ mod tests {
             lvm_lv_uuid: Some("lv-uuid".to_string()),
             lvm_lv_name: Some("root".to_string()),
             lvm_pv_offsets_json: Some("[1048576,2097152]".to_string()),
+            lvm_pv_sources_json: Some(
+                r#"[{"sourcePath":"disk1.E01","offset":1048576},{"sourcePath":"disk2.E01","offset":2097152}]"#
+                    .to_string(),
+            ),
         }
     }
 
@@ -272,6 +299,11 @@ mod tests {
         assert_eq!(identity.lv_uuid, "lv-uuid");
         assert_eq!(identity.lv_name, "root");
         assert_eq!(identity.pv_offsets, vec![1_048_576, 2_097_152]);
+        assert_eq!(identity.pv_sources.len(), 2);
+        assert_eq!(identity.pv_sources[0].source_path, "disk1.E01");
+        assert_eq!(identity.pv_sources[1].source_path, "disk2.E01");
+        assert_eq!(identity.pv_sources[0].pv_uuid, "");
+        assert_eq!(identity.pv_sources[0].pv_name, None);
     }
 
     #[test]

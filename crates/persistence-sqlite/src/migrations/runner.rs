@@ -186,6 +186,7 @@ fn add_missing_lvm_partition_identity_columns(conn: &Connection) -> DbResult<()>
         "lvm_lv_uuid",
         "lvm_lv_name",
         "lvm_pv_offsets_json",
+        "lvm_pv_sources_json",
     ] {
         let exists: bool = conn.query_row(
             "SELECT COUNT(*) > 0 FROM pragma_table_info('data_source_partitions') WHERE name = ?1",

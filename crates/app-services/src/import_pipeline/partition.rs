@@ -5,6 +5,7 @@ use image_e01::E01Reader;
 
 use crate::datasource_service::{
     self, ImageFilesystemKind, ImageFilesystemSource, LvmLogicalVolumeIdentity,
+    LvmPhysicalVolumeSource,
 };
 use crate::file_service;
 use crate::parallel_enum;
@@ -529,17 +530,72 @@ fn open_lvm_physical_volume_readers(
     if identity.pv_offsets.is_empty() {
         return None;
     }
+    if identity.pv_offsets.len() > 1 && identity.pv_sources.len() != identity.pv_offsets.len() {
+        tracing::warn!(
+            pv_offsets = identity.pv_offsets.len(),
+            pv_sources = identity.pv_sources.len(),
+            vg = %identity.vg_name,
+            lv = %identity.lv_name,
+            "LVM identity is missing per-PV source paths; refusing multi-PV fallback"
+        );
+        return None;
+    }
 
     let mut readers = Vec::with_capacity(identity.pv_offsets.len());
-    for _ in &identity.pv_offsets {
-        let reader: Box<dyn EvidenceReader> = if *source_kind == domain::DataSourceKind::E01 {
-            Box::new(E01Reader::open(source_path).ok()?)
+    for (index, pv_offset) in identity.pv_offsets.iter().enumerate() {
+        let pv_source_path = identity
+            .pv_sources
+            .get(index)
+            .map(|source| std::path::Path::new(&source.source_path))
+            .unwrap_or(source_path);
+        let mut reader: Box<dyn EvidenceReader> = if *source_kind == domain::DataSourceKind::E01 {
+            Box::new(E01Reader::open(pv_source_path).ok()?)
         } else {
-            Box::new(evidence_core::RawImageReader::open(source_path).ok()?)
+            Box::new(evidence_core::RawImageReader::open(pv_source_path).ok()?)
         };
+        if let Some(source) = identity.pv_sources.get(index) {
+            validate_import_lvm_pv_source(reader.as_mut(), *pv_offset, source)?;
+        }
         readers.push(reader);
     }
     Some(readers)
+}
+
+fn validate_import_lvm_pv_source(
+    reader: &mut dyn EvidenceReader,
+    expected_offset: u64,
+    expected_source: &LvmPhysicalVolumeSource,
+) -> Option<()> {
+    if expected_source.pv_uuid.is_empty() {
+        return Some(());
+    }
+
+    let label = match fs_lvm::label::parse_pv_label(reader, expected_offset) {
+        Ok(label) => label,
+        Err(error) => {
+            tracing::warn!(
+                source = %expected_source.source_path,
+                offset = expected_offset,
+                error = %error,
+                "LVM import PV source label validation failed"
+            );
+            return None;
+        }
+    };
+    let actual_uuid = datasource_service::normalize_lvm_uuid_for_match(&label.pv_uuid);
+    let expected_uuid = datasource_service::normalize_lvm_uuid_for_match(&expected_source.pv_uuid);
+    if actual_uuid != expected_uuid {
+        tracing::warn!(
+            source = %expected_source.source_path,
+            offset = expected_offset,
+            expected = %expected_source.pv_uuid,
+            actual = %label.pv_uuid,
+            "LVM import PV source UUID mismatch"
+        );
+        return None;
+    }
+
+    Some(())
 }
 
 fn open_candidate_reader(

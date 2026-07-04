@@ -72,25 +72,9 @@ pub fn build_extent_map(
                 });
             }
             SegmentType::Raid1 { .. } | SegmentType::Raid10 { .. } => {
-                // RAID 1 (mirroring): read from the first mirror copy.
-                // RAID 10 (striped mirrors): read from first mirror in each stripe.
-                // For forensics, any complete copy suffices — we use the first PV.
-                validate_raid_mirror_stripes(segment, &lv.name)?;
-                // Use only the first copy: map as linear on the first PV in stripes
-                let (pv_name, stripe_pe_start) = &segment.stripes[0];
-                let pv_index = find_pv_index(pv_data_offsets, pv_name)?;
-                let pv_data_start = pv_data_offsets[pv_index].1;
-                let logical_start = checked_mul(base_le, extent_size_bytes, "RAID logical start")?;
-                let stripe_offset =
-                    checked_mul(*stripe_pe_start, extent_size_bytes, "RAID stripe offset")?;
-                let physical_offset =
-                    checked_add(pv_data_start, stripe_offset, "RAID physical offset")?;
-                let length = checked_mul(segment.extent_count, extent_size_bytes, "RAID length")?;
-                map.push(LvExtent {
-                    logical_start,
-                    physical_offset,
-                    length,
-                    pv_index,
+                return Err(LvmError::UnsupportedSegment {
+                    lv_name: lv.name.clone(),
+                    seg_type: "raid1/raid10 (requires LVM component LV graph mapping)".into(),
                 });
             }
             SegmentType::Raid5 { .. } | SegmentType::Raid6 { .. } => {
@@ -99,13 +83,17 @@ pub fn build_extent_map(
                     seg_type: "raid5/raid6 (parity RAID requires reconstruction logic)".into(),
                 });
             }
-            SegmentType::ThinPool
+            SegmentType::ThinVolume
+            | SegmentType::ThinPool
             | SegmentType::Snapshot
+            | SegmentType::CacheVolume
             | SegmentType::CachePool
             | SegmentType::Unsupported { .. } => {
                 let name = match &segment.seg_type {
+                    SegmentType::ThinVolume => "thin",
                     SegmentType::ThinPool => "thin-pool",
                     SegmentType::Snapshot => "snapshot",
+                    SegmentType::CacheVolume => "cache",
                     SegmentType::CachePool => "cache-pool",
                     SegmentType::Unsupported { type_name } => type_name.as_str(),
                     _ => unreachable!(),
@@ -301,16 +289,6 @@ fn validate_stripe_count(
     Ok(())
 }
 
-fn validate_raid_mirror_stripes(segment: &SegmentMeta, lv_name: &str) -> Result<()> {
-    if segment.stripes.is_empty() {
-        return Err(LvmError::MetadataParseError {
-            line: 0,
-            message: format!("RAID segment in LV '{}' has no stripes", lv_name),
-        });
-    }
-    Ok(())
-}
-
 fn checked_add(lhs: u64, rhs: u64, context: &str) -> Result<u64> {
     lhs.checked_add(rhs)
         .ok_or_else(|| LvmError::MetadataParseError {
@@ -354,6 +332,8 @@ mod tests {
         let lv = LvMeta {
             name: "root".into(),
             uuid: "lv-uuid".into(),
+            status: Vec::new(),
+            role: crate::metadata::LvRole::Public,
             segments: vec![SegmentMeta {
                 start_extent: 0,
                 extent_count: 10,
@@ -378,6 +358,8 @@ mod tests {
         let lv = LvMeta {
             name: "home".into(),
             uuid: "lv-uuid2".into(),
+            status: Vec::new(),
+            role: crate::metadata::LvRole::Public,
             segments: vec![SegmentMeta {
                 start_extent: 0,
                 extent_count: 5,
@@ -399,6 +381,8 @@ mod tests {
         let lv = LvMeta {
             name: "cache".into(),
             uuid: "lv-uuid3".into(),
+            status: Vec::new(),
+            role: crate::metadata::LvRole::Public,
             segments: vec![SegmentMeta {
                 start_extent: 0,
                 extent_count: 10,
@@ -441,6 +425,8 @@ mod tests {
         let lv = LvMeta {
             name: "striped_lv".into(),
             uuid: "lv-uuid".into(),
+            status: Vec::new(),
+            role: crate::metadata::LvRole::Public,
             segments: vec![SegmentMeta {
                 start_extent: 0,
                 extent_count: 4, // 4 LEs, 2 per PV
@@ -500,6 +486,8 @@ mod tests {
         let lv = LvMeta {
             name: "striped_lv".into(),
             uuid: "lv-uuid".into(),
+            status: Vec::new(),
+            role: crate::metadata::LvRole::Public,
             segments: vec![SegmentMeta {
                 start_extent: 0,
                 extent_count: 2,
@@ -535,6 +523,8 @@ mod tests {
         let lv = LvMeta {
             name: "multi_seg".into(),
             uuid: "lv-uuid".into(),
+            status: Vec::new(),
+            role: crate::metadata::LvRole::Public,
             segments: vec![
                 SegmentMeta {
                     start_extent: 0,
@@ -570,6 +560,8 @@ mod tests {
         let lv = LvMeta {
             name: "gapped".into(),
             uuid: "lv-uuid".into(),
+            status: Vec::new(),
+            role: crate::metadata::LvRole::Public,
             segments: vec![SegmentMeta {
                 start_extent: 0,
                 extent_count: 7,
@@ -592,6 +584,8 @@ mod tests {
         let lv = LvMeta {
             name: "raid0_lv".into(),
             uuid: "lv-uuid".into(),
+            status: Vec::new(),
+            role: crate::metadata::LvRole::Public,
             segments: vec![SegmentMeta {
                 start_extent: 0,
                 extent_count: 2,
@@ -612,7 +606,7 @@ mod tests {
     }
 
     #[test]
-    fn raid1_reads_first_mirror() {
+    fn raid1_fails_closed_until_component_lv_graph_is_supported() {
         let vg = VolumeGroup {
             name: "mirror_vg".into(),
             id: "vg-id".into(),
@@ -637,6 +631,8 @@ mod tests {
         let lv = LvMeta {
             name: "mirrored_lv".into(),
             uuid: "lv-uuid".into(),
+            status: Vec::new(),
+            role: crate::metadata::LvRole::Public,
             segments: vec![SegmentMeta {
                 start_extent: 0,
                 extent_count: 10,
@@ -647,11 +643,11 @@ mod tests {
         };
         let pv_offsets = vec![("pv0".into(), 2048 * 512), ("pv1".into(), 4096 * 512)];
 
-        let map = build_extent_map(&vg, &lv, &pv_offsets).unwrap();
-        // RAID1: should only map to the first mirror (pv0)
-        assert_eq!(map.len(), 1, "RAID1 maps to single mirror copy");
-        assert_eq!(map[0].pv_index, 0);
-        assert_eq!(map[0].physical_offset, 2048 * 512); // pv0 data start
-        assert_eq!(map[0].length, 10 * 4096 * 512);
+        let err = build_extent_map(&vg, &lv, &pv_offsets).unwrap_err();
+        assert!(matches!(
+            err,
+            LvmError::UnsupportedSegment { seg_type, .. }
+                if seg_type.contains("component LV graph")
+        ));
     }
 }

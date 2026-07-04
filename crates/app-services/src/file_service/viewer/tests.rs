@@ -1,5 +1,8 @@
 use super::*;
-use domain::{CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, FileEntryId};
+use domain::{
+    CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType, FileEntry,
+    FileEntryId,
+};
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use persistence_sqlite::runner;
 use rusqlite::params;
@@ -276,13 +279,13 @@ fn build_synthetic_lvm_disk() -> Vec<u8> {
         r#"test_vg {{
     id = "vg-1234"
     seqno = 1
-    extent_size = 8192
+    extent_size = 1
 
     physical_volumes {{
         pv0 {{
             id = "{}"
             device = "/dev/sda1"
-            pe_start = 0
+            pe_start = 5
             pe_count = 10
         }}
     }}
@@ -334,6 +337,19 @@ fn write_synthetic_lvm_metadata(disk: &mut [u8], metadata_text: &str) {
         let mda_crc = fs_lvm::crc::lvm_crc32(&mda[4..512]);
         mda[0..4].copy_from_slice(&mda_crc.to_le_bytes());
     }
+}
+
+fn refresh_synthetic_lvm_label_crc(disk: &mut [u8]) {
+    let sec = &mut disk[512..1024];
+    let crc = fs_lvm::crc::lvm_crc32(&sec[20..512]);
+    sec[16..20].copy_from_slice(&crc.to_le_bytes());
+}
+
+fn replace_synthetic_lvm_pv_uuid(disk: &mut [u8], pv_uuid: &str) {
+    let sec = &mut disk[512..1024];
+    sec[32..64].fill(b' ');
+    sec[32..64].copy_from_slice(format!("{:32}", pv_uuid).as_bytes());
+    refresh_synthetic_lvm_label_crc(disk);
 }
 
 static LVM_OPEN_READER_CALLS: AtomicUsize = AtomicUsize::new(0);
@@ -847,6 +863,20 @@ fn linux_lvm_candidate_reopens_one_reader_per_physical_volume() {
             lv_uuid: "lv-uuid".to_string(),
             lv_name: "root".to_string(),
             pv_offsets: vec![1_048_576, 2_097_152],
+            pv_sources: vec![
+                PreviewLvmPhysicalVolumeSource {
+                    source_path: source_path.display().to_string(),
+                    offset: 1_048_576,
+                    pv_uuid: String::new(),
+                    pv_name: Some("pv0".to_string()),
+                },
+                PreviewLvmPhysicalVolumeSource {
+                    source_path: source_path.display().to_string(),
+                    offset: 2_097_152,
+                    pv_uuid: String::new(),
+                    pv_name: Some("pv1".to_string()),
+                },
+            ],
         }),
     };
 
@@ -859,6 +889,35 @@ fn linux_lvm_candidate_reopens_one_reader_per_physical_volume() {
 
     assert!(result.is_err());
     assert_eq!(LVM_OPEN_READER_CALLS.load(Ordering::Relaxed), 2);
+}
+
+#[test]
+fn multi_pv_lvm_candidate_without_sources_fails_closed() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let source_path = dir.path().join("lvm.raw");
+    let candidate = PreviewPartitionCandidate {
+        partition_index: 4,
+        filesystem_kind: "XFS".to_string(),
+        offset: 1_048_576,
+        lvm_identity: Some(PreviewLvmIdentity {
+            vg_uuid: "vg-uuid".to_string(),
+            vg_name: "vg".to_string(),
+            lv_uuid: "lv-uuid".to_string(),
+            lv_name: "root".to_string(),
+            pv_offsets: vec![1_048_576, 2_097_152],
+            pv_sources: Vec::new(),
+        }),
+    };
+
+    LVM_OPEN_READER_CALLS.store(0, Ordering::Relaxed);
+    let result = image_open::open_candidate_block_reader(&source_path, &candidate, &mut |path| {
+        LVM_OPEN_READER_CALLS.fetch_add(1, Ordering::Relaxed);
+        Ok(Box::new(ZeroEvidenceReader::new(path.to_path_buf()))
+            as Box<dyn evidence_core::EvidenceReader>)
+    });
+
+    assert!(result.is_err());
+    assert_eq!(LVM_OPEN_READER_CALLS.load(Ordering::Relaxed), 0);
 }
 
 #[test]
@@ -876,6 +935,7 @@ fn lvm_request_cache_reuses_pool_for_same_volume_group() {
             lv_uuid: "lv-root-uuid".to_string(),
             lv_name: "root".to_string(),
             pv_offsets: vec![0],
+            pv_sources: Vec::new(),
         }),
     };
 
@@ -898,6 +958,184 @@ fn lvm_request_cache_reuses_pool_for_same_volume_group() {
         assert!(result.is_ok());
     }
 
+    assert_eq!(LVM_OPEN_READER_CALLS.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+fn linux_lvm_candidate_uses_pv_source_paths_when_present() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let source_path = dir.path().join("wrong-primary.raw");
+    let pv0_path = dir.path().join("pv0.raw");
+    let pv1_path = dir.path().join("pv1.raw");
+    let disk = build_synthetic_lvm_disk();
+    let candidate = PreviewPartitionCandidate {
+        partition_index: 4,
+        filesystem_kind: "XFS".to_string(),
+        offset: 0,
+        lvm_identity: Some(PreviewLvmIdentity {
+            vg_uuid: "vg-1234".to_string(),
+            vg_name: "test_vg".to_string(),
+            lv_uuid: "lv-root-uuid".to_string(),
+            lv_name: "root".to_string(),
+            pv_offsets: vec![0, 0],
+            pv_sources: vec![
+                PreviewLvmPhysicalVolumeSource {
+                    source_path: pv0_path.display().to_string(),
+                    offset: 0,
+                    pv_uuid: "abcdef1234567890abcdef1234567890".to_string(),
+                    pv_name: Some("pv0".to_string()),
+                },
+                PreviewLvmPhysicalVolumeSource {
+                    source_path: pv1_path.display().to_string(),
+                    offset: 0,
+                    pv_uuid: "abcdef1234567890abcdef1234567890".to_string(),
+                    pv_name: Some("pv0".to_string()),
+                },
+            ],
+        }),
+    };
+
+    let mut opened_paths = Vec::new();
+    let result = image_open::open_candidate_block_reader(&source_path, &candidate, &mut |path| {
+        opened_paths.push(path.to_path_buf());
+        Ok(
+            Box::new(VecEvidenceReader::new(path.to_path_buf(), disk.clone()))
+                as Box<dyn evidence_core::EvidenceReader>,
+        )
+    });
+
+    assert!(result.is_ok());
+    assert_eq!(opened_paths, vec![pv0_path, pv1_path]);
+}
+
+#[test]
+fn linux_lvm_candidate_rejects_pv_source_uuid_mismatch() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let source_path = dir.path().join("wrong-primary.raw");
+    let pv_path = dir.path().join("pv0.raw");
+    let mut disk = build_synthetic_lvm_disk();
+    replace_synthetic_lvm_pv_uuid(&mut disk, "ffffffffffffffffffffffffffffffff");
+    let candidate = PreviewPartitionCandidate {
+        partition_index: 4,
+        filesystem_kind: "XFS".to_string(),
+        offset: 0,
+        lvm_identity: Some(PreviewLvmIdentity {
+            vg_uuid: "vg-1234".to_string(),
+            vg_name: "test_vg".to_string(),
+            lv_uuid: "lv-root-uuid".to_string(),
+            lv_name: "root".to_string(),
+            pv_offsets: vec![0],
+            pv_sources: vec![PreviewLvmPhysicalVolumeSource {
+                source_path: pv_path.display().to_string(),
+                offset: 0,
+                pv_uuid: "abcdef1234567890abcdef1234567890".to_string(),
+                pv_name: Some("pv0".to_string()),
+            }],
+        }),
+    };
+
+    let result = image_open::open_candidate_block_reader(&source_path, &candidate, &mut |path| {
+        Ok(
+            Box::new(VecEvidenceReader::new(path.to_path_buf(), disk.clone()))
+                as Box<dyn evidence_core::EvidenceReader>,
+        )
+    });
+
+    let error = match result {
+        Ok(_) => panic!("PV UUID mismatch must fail closed"),
+        Err(error) => error,
+    };
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    assert!(error.to_string().contains("UUID mismatch"));
+}
+
+#[test]
+fn e01_ntfs_lvm_record_uses_logical_volume_reader() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let source_path = dir.path().join("lvm.raw");
+    let disk = build_synthetic_lvm_disk();
+    let entry = FileEntry {
+        id: FileEntryId("missing-file-id".to_string()),
+        parent_id: None,
+        data_source_id: DataSourceId("ds-e01-ntfs-lvm".to_string()),
+        path: "root/missing.bin".to_string(),
+        name: "missing.bin".to_string(),
+        entry_type: EntryType::File,
+        size: Some(0),
+        ext: None,
+        deleted: false,
+        hidden: false,
+        system: false,
+        encrypted: false,
+        created_at: None,
+        modified_at: None,
+        accessed_at: None,
+        changed_at: None,
+        hash_sha256: None,
+    };
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    conn.execute_batch(
+        "CREATE TABLE data_source_partitions (
+            id TEXT PRIMARY KEY,
+            data_source_id TEXT NOT NULL,
+            partition_index INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            kind_label TEXT NOT NULL,
+            status TEXT NOT NULL,
+            type_guid TEXT,
+            offset INTEGER NOT NULL,
+            length INTEGER NOT NULL,
+            filesystem TEXT,
+            unlock_hint TEXT,
+            lvm_vg_uuid TEXT,
+            lvm_vg_name TEXT,
+            lvm_lv_uuid TEXT,
+            lvm_lv_name TEXT,
+            lvm_pv_offsets_json TEXT,
+            lvm_pv_sources_json TEXT
+        );",
+    )
+    .unwrap();
+    persistence_sqlite::repositories::partition_repo::PartitionRepo::new(&conn)
+        .insert_batch(&[
+            persistence_sqlite::repositories::partition_repo::DataSourcePartitionRecord {
+                id: "partition-lvm-ntfs".to_string(),
+                data_source_id: entry.data_source_id.0.clone(),
+                partition_index: 4,
+                name: "vg/root".to_string(),
+                kind_label: "NTFS".to_string(),
+                status: "ready".to_string(),
+                type_guid: None,
+                offset: 123_456,
+                length: 0,
+                filesystem: Some("NTFS".to_string()),
+                unlock_hint: None,
+                lvm_vg_uuid: Some("vg-1234".to_string()),
+                lvm_vg_name: Some("test_vg".to_string()),
+                lvm_lv_uuid: Some("lv-root-uuid".to_string()),
+                lvm_lv_name: Some("root".to_string()),
+                lvm_pv_offsets_json: Some("[0]".to_string()),
+                lvm_pv_sources_json: None,
+            },
+        ])
+        .unwrap();
+
+    LVM_OPEN_READER_CALLS.store(0, Ordering::Relaxed);
+    let result = image_open::open_e01_file_with_reader_factory(
+        &conn,
+        source_path.to_str().unwrap(),
+        &entry,
+        Some(4),
+        |path| {
+            LVM_OPEN_READER_CALLS.fetch_add(1, Ordering::Relaxed);
+            Ok(
+                Box::new(VecEvidenceReader::new(path.to_path_buf(), disk.clone()))
+                    as Box<dyn evidence_core::EvidenceReader>,
+            )
+        },
+    );
+
+    assert!(result.is_err());
     assert_eq!(LVM_OPEN_READER_CALLS.load(Ordering::Relaxed), 1);
 }
 

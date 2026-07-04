@@ -187,6 +187,22 @@ fn two_pv_lvm_metadata_text(
     )
 }
 
+fn lvm_metadata_with_internal_and_thin_lvs(pv_uuid: &str) -> String {
+    format!(
+        r#"mixed_vg {{
+id="vg-mixed"
+seqno=7
+extent_size=2
+physical_volumes {{ pv0 {{ id="{pv_uuid}" pe_start=5 pe_count=128 }} }}
+logical_volumes {{
+root {{ id="lv-root" status=["READ","WRITE","VISIBLE"] segment_count=1 segment1 {{ start_extent=0 extent_count=16 type="striped" stripe_count=1 stripes=["pv0",0] }} }}
+pool_tdata {{ id="lv-pool-tdata" status=["READ","WRITE"] segment_count=1 segment1 {{ start_extent=0 extent_count=16 type="striped" stripe_count=1 stripes=["pv0",16] }} }}
+thin_root {{ id="lv-thin-root" status=["READ","WRITE","VISIBLE"] segment_count=1 segment1 {{ start_extent=0 extent_count=16 type="thin" thin_pool="pool" transaction_id=1 device_id=2 }} }}
+}}
+}}"#
+    )
+}
+
 fn write_synthetic_lvm_label(pv: &mut [u8], pv_uuid: &str) {
     let sec = &mut pv[512..1024];
     sec[0..8].copy_from_slice(b"LABELONE");
@@ -293,6 +309,12 @@ fn lvm_expansion_iterates_independent_volume_groups_by_remaining_pv_offsets() {
             identity.vg_name == "low_vg"
                 && identity.lv_name == "low_root"
                 && identity.pv_offsets == vec![low_offset]
+                && identity
+                    .pv_sources
+                    .iter()
+                    .any(|source| source.offset == low_offset
+                        && source.pv_uuid == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                        && source.pv_name.as_deref() == Some("pv0"))
         }),
         "iterative expansion must still discover the lower-seqno independent VG; identities={identities:?}"
     );
@@ -386,6 +408,12 @@ fn lvm_expansion_skips_incomplete_high_seqno_vg_but_expands_complete_vg() {
             identity.vg_name == "low_complete_vg"
                 && identity.lv_name == "low_root"
                 && identity.pv_offsets == vec![low_offset]
+                && identity
+                    .pv_sources
+                    .iter()
+                    .any(|source| source.offset == low_offset
+                        && source.pv_uuid == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                        && source.pv_name.as_deref() == Some("pv0"))
         }),
         "complete lower-seqno VG should expand despite incomplete higher-seqno VG; identities={identities:?}, warnings={:?}",
         probe.warnings
@@ -487,6 +515,119 @@ fn lvm_expansion_reports_metadata_parse_diagnostics() {
                 && warning.contains("MDA header magic mismatch")
         }),
         "corrupt LVM metadata should include metadata-area diagnostics; warnings={:?}",
+        probe.warnings
+    );
+}
+
+#[test]
+fn lvm_expansion_skips_internal_and_thin_logical_volumes() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let source_path = tmp.path().join("mixed-lvm.raw");
+    let pv_offset = 1_048_576u64;
+    let pv_uuid = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    let pv = build_synthetic_lvm_pv_with_metadata(
+        pv_uuid,
+        &lvm_metadata_with_internal_and_thin_lvs(pv_uuid),
+    );
+
+    let mut disk = vec![0u8; (pv_offset + SYNTHETIC_PV_SIZE) as usize];
+    disk[pv_offset as usize..pv_offset as usize + pv.len()].copy_from_slice(&pv);
+    std::fs::write(&source_path, disk).unwrap();
+
+    let (candidate, partition) = synthetic_lvm_partition(1, "mixed pv", pv_offset);
+    let mut probe = app_services::datasource_service::ImageFilesystemProbe {
+        candidates: vec![candidate],
+        partitions: vec![partition],
+        warnings: Vec::new(),
+    };
+
+    expand_lvm_pool_candidates(&mut probe, &source_path, &DataSourceKind::Raw);
+
+    let lv_candidates = probe
+        .candidates
+        .iter()
+        .filter(|candidate| matches!(candidate.source, ImageFilesystemSource::LvmLogicalVolume))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        lv_candidates.len(),
+        1,
+        "only the public directly mappable root LV should become a filesystem candidate"
+    );
+    let identity = lv_candidates[0]
+        .lvm_identity
+        .as_ref()
+        .expect("root LV candidate should carry identity");
+    assert_eq!(identity.vg_name, "mixed_vg");
+    assert_eq!(identity.lv_name, "root");
+    assert!(
+        probe
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("pool_tdata") && warning.contains("role='thin-data'")),
+        "internal thin data LV skip should be auditable; warnings={:?}",
+        probe.warnings
+    );
+    assert!(
+        probe
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("thin_root") && warning.contains("role='thin'")),
+        "visible thin LV skip should be auditable; warnings={:?}",
+        probe.warnings
+    );
+}
+
+#[test]
+fn lvm_expansion_redirects_pool_even_when_all_lvs_are_unsupported() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let source_path = tmp.path().join("unsupported-lv.raw");
+    let pv_offset = 1_048_576u64;
+    let metadata = r#"test_vg {
+id="vg-unsupported"
+seqno=1
+extent_size=8192
+physical_volumes { pv0 { id="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" pe_start=5 pe_count=32 } }
+logical_volumes {
+thin_root { id="lv-thin-root" status=["READ","WRITE","VISIBLE"] segment_count=1 segment1 { start_extent=0 extent_count=1 type="thin" thin_pool="pool" transaction_id=1 device_id=2 } }
+}
+}
+"#;
+    let pv = build_synthetic_lvm_pv_with_metadata("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", metadata);
+    let mut disk = vec![0u8; (pv_offset + SYNTHETIC_PV_SIZE) as usize];
+    disk[pv_offset as usize..pv_offset as usize + pv.len()].copy_from_slice(&pv);
+    std::fs::write(&source_path, disk).unwrap();
+
+    let (candidate, partition) = synthetic_lvm_partition(1, "lvm pv", pv_offset);
+    let mut probe = app_services::datasource_service::ImageFilesystemProbe {
+        candidates: vec![candidate],
+        partitions: vec![partition],
+        warnings: Vec::new(),
+    };
+
+    expand_lvm_pool_candidates(&mut probe, &source_path, &DataSourceKind::Raw);
+
+    assert!(
+        probe.candidates.iter().all(|candidate| {
+            candidate.offset != pv_offset || !matches!(candidate.kind, ImageFilesystemKind::LvmPool)
+        }),
+        "successfully parsed LVM pools with unsupported LVs should not remain expandable candidates"
+    );
+    assert!(
+        probe.partitions.iter().any(|partition| {
+            partition.offset == pv_offset
+                && matches!(
+                    partition.status,
+                    app_services::datasource_service::PartitionStatus::Expanded
+                )
+        }),
+        "successfully parsed LVM pool partition should be redirected even without supported LV candidates"
+    );
+    assert!(
+        probe
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("produced no supported logical volume candidates")),
+        "unsupported-only VG should retain an actionable warning: {:?}",
         probe.warnings
     );
 }
@@ -1853,6 +1994,13 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
     assert_eq!(identity.vg_name, LIUYANG_ROOT_LV_VG_NAME);
     assert_eq!(identity.lv_name, LIUYANG_ROOT_LV_NAME);
     assert_eq!(identity.pv_offsets, vec![LIUYANG_LVM_POOL_OFFSET]);
+    assert_eq!(identity.pv_sources.len(), 1);
+    assert_eq!(identity.pv_sources[0].offset, LIUYANG_LVM_POOL_OFFSET);
+    assert!(
+        !identity.pv_sources[0].pv_uuid.is_empty(),
+        "PV UUID must be persisted for source rebinding"
+    );
+    assert_eq!(identity.pv_sources[0].pv_name.as_deref(), Some("pv0"));
     assert!(!identity.vg_uuid.is_empty(), "VG UUID must be persisted");
     assert!(!identity.lv_uuid.is_empty(), "LV UUID must be persisted");
 

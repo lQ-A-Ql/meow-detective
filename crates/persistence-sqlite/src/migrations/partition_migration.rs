@@ -137,6 +137,9 @@ fn parse_and_migrate_partitions(
             lvm_pv_offsets_json: partition["lvm_pv_offsets_json"]
                 .as_str()
                 .map(|s| s.to_string()),
+            lvm_pv_sources_json: partition["lvm_pv_sources_json"]
+                .as_str()
+                .map(|s| s.to_string()),
         });
     }
 
@@ -212,7 +215,8 @@ mod tests {
                 lvm_vg_name TEXT,
                 lvm_lv_uuid TEXT,
                 lvm_lv_name TEXT,
-                lvm_pv_offsets_json TEXT
+                lvm_pv_offsets_json TEXT,
+                lvm_pv_sources_json TEXT
             );
             CREATE TABLE migration_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -285,7 +289,8 @@ mod tests {
                 lvm_vg_name TEXT,
                 lvm_lv_uuid TEXT,
                 lvm_lv_name TEXT,
-                lvm_pv_offsets_json TEXT
+                lvm_pv_offsets_json TEXT,
+                lvm_pv_sources_json TEXT
             );",
         )
         .unwrap();

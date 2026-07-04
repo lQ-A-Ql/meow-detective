@@ -303,7 +303,8 @@ mod tests {
                 lvm_vg_name TEXT,
                 lvm_lv_uuid TEXT,
                 lvm_lv_name TEXT,
-                lvm_pv_offsets_json TEXT
+                lvm_pv_offsets_json TEXT,
+                lvm_pv_sources_json TEXT
             );",
         )
         .unwrap();

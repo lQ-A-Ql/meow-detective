@@ -63,7 +63,7 @@ struct RawLabel {
 ///
 /// `pv_offset` is the byte offset of the PV start within the reader (typically
 /// the partition's LBA start × 512).
-pub fn parse_pv_label<R: Read + Seek>(reader: &mut R, pv_offset: u64) -> Result<LvmLabel> {
+pub fn parse_pv_label<R: Read + Seek + ?Sized>(reader: &mut R, pv_offset: u64) -> Result<LvmLabel> {
     let mut first_candidate_error = None;
 
     for sector_index in 0..LABEL_SCAN_SECTORS {

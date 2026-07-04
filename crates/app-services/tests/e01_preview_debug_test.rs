@@ -85,6 +85,7 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                         lvm_lv_uuid: None,
                         lvm_lv_name: None,
                         lvm_pv_offsets_json: None,
+                        lvm_pv_sources_json: None,
                     }
                 })
                 .collect();

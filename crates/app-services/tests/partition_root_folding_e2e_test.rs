@@ -59,7 +59,8 @@ fn seed_main_db(conn: &Connection) {
             lvm_vg_name TEXT,
             lvm_lv_uuid TEXT,
             lvm_lv_name TEXT,
-            lvm_pv_offsets_json TEXT
+            lvm_pv_offsets_json TEXT,
+            lvm_pv_sources_json TEXT
         );",
     )
     .unwrap();
@@ -85,6 +86,7 @@ fn seed_partitions_table(conn: &Connection) {
             lvm_lv_uuid: None,
             lvm_lv_name: None,
             lvm_pv_offsets_json: None,
+            lvm_pv_sources_json: None,
         },
         DataSourcePartitionRecord {
             id: "part-1".to_string(),
@@ -103,6 +105,7 @@ fn seed_partitions_table(conn: &Connection) {
             lvm_lv_uuid: None,
             lvm_lv_name: None,
             lvm_pv_offsets_json: None,
+            lvm_pv_sources_json: None,
         },
     ])
     .unwrap();

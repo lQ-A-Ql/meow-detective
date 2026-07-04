@@ -53,9 +53,81 @@ pub struct PvMeta {
 pub struct LvMeta {
     pub name: String,
     pub uuid: String,
+    pub status: Vec<String>,
+    pub role: LvRole,
     pub segments: Vec<SegmentMeta>,
     /// Total size in bytes, derived from segments.
     pub size_bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LvRole {
+    /// User-facing logical volume whose extents can be mapped directly.
+    Public,
+    /// Thin user volume. It is user-facing but requires thin-pool metadata mapping.
+    ThinVolume,
+    ThinPool,
+    ThinData,
+    ThinMetadata,
+    CacheVolume,
+    CachePool,
+    CacheData,
+    CacheMetadata,
+    RaidImage,
+    RaidMetadata,
+    MirrorImage,
+    MirrorLog,
+    Snapshot,
+    Internal,
+}
+
+impl LvRole {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            LvRole::Public => "public",
+            LvRole::ThinVolume => "thin",
+            LvRole::ThinPool => "thin-pool",
+            LvRole::ThinData => "thin-data",
+            LvRole::ThinMetadata => "thin-metadata",
+            LvRole::CacheVolume => "cache",
+            LvRole::CachePool => "cache-pool",
+            LvRole::CacheData => "cache-data",
+            LvRole::CacheMetadata => "cache-metadata",
+            LvRole::RaidImage => "raid-image",
+            LvRole::RaidMetadata => "raid-metadata",
+            LvRole::MirrorImage => "mirror-image",
+            LvRole::MirrorLog => "mirror-log",
+            LvRole::Snapshot => "snapshot",
+            LvRole::Internal => "internal",
+        }
+    }
+
+    pub fn is_internal(&self) -> bool {
+        !matches!(
+            self,
+            LvRole::Public | LvRole::ThinVolume | LvRole::CacheVolume | LvRole::Snapshot
+        )
+    }
+}
+
+impl LvMeta {
+    pub fn is_visible(&self) -> bool {
+        if self.role.is_internal() {
+            return false;
+        }
+        self.status.is_empty() || self.status.iter().any(|status| status == "VISIBLE")
+    }
+
+    pub fn is_directly_mappable(&self) -> bool {
+        self.is_visible()
+            && matches!(self.role, LvRole::Public)
+            && self.segments.iter().all(|segment| {
+                matches!(
+                    segment.seg_type,
+                    SegmentType::Linear | SegmentType::Striped { .. }
+                )
+            })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -96,11 +168,15 @@ pub enum SegmentType {
         stripe_count: u64,
         mirror_count: u64,
     },
-    /// Thin-provisioned logical volume (requires thin pool metadata)
+    /// Thin-provisioned user volume (requires thin pool metadata).
+    ThinVolume,
+    /// Thin pool backing device.
     ThinPool,
     /// Snapshot (CoW origin)
     Snapshot,
-    /// Cache pool (dm-cache)
+    /// Cache user volume.
+    CacheVolume,
+    /// Cache pool (dm-cache).
     CachePool,
     /// Unknown or unsupported segment type
     Unsupported {
@@ -752,6 +828,8 @@ fn parse_metadata_text(text: &str) -> Result<VolumeGroup> {
 fn parse_logical_volume(lv_raw: &LvSectionRaw, extent_size_bytes: u64) -> Result<LvMeta> {
     let context = format!("logical volume '{}'", lv_raw.name);
     let lv_uuid = required_string(&lv_raw.params, "id", &context)?;
+    let status = optional_list(&lv_raw.params, "status");
+    let role = infer_lv_role(lv_raw);
     let declared_segment_count = required_u64(&lv_raw.params, "segment_count", &context)?;
 
     let mut segs = Vec::with_capacity(lv_raw.segments.len());
@@ -794,9 +872,80 @@ fn parse_logical_volume(lv_raw: &LvSectionRaw, extent_size_bytes: u64) -> Result
     Ok(LvMeta {
         name: lv_raw.name.clone(),
         uuid: lv_uuid,
+        status,
+        role,
         segments: segs,
         size_bytes,
     })
+}
+
+fn optional_list(params: &[(String, String)], key: &str) -> Vec<String> {
+    params
+        .iter()
+        .find(|(k, _)| k == key)
+        .map(|(_, value)| parse_metadata_list_value(value))
+        .unwrap_or_default()
+}
+
+fn parse_metadata_list_value(value: &str) -> Vec<String> {
+    value
+        .trim()
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .split(',')
+        .map(|item| item.trim().trim_matches('"').to_ascii_uppercase())
+        .filter(|item| !item.is_empty())
+        .collect()
+}
+
+fn infer_lv_role(lv_raw: &LvSectionRaw) -> LvRole {
+    let name = lv_raw.name.as_str();
+    if name.starts_with('[') && name.ends_with(']') {
+        return LvRole::Internal;
+    }
+    if name.ends_with("_tdata") {
+        return LvRole::ThinData;
+    }
+    if name.ends_with("_tmeta") {
+        return LvRole::ThinMetadata;
+    }
+    if name.ends_with("_cdata") {
+        return LvRole::CacheData;
+    }
+    if name.ends_with("_cmeta") {
+        return LvRole::CacheMetadata;
+    }
+    if name.contains("_rimage_") {
+        return LvRole::RaidImage;
+    }
+    if name.contains("_rmeta_") {
+        return LvRole::RaidMetadata;
+    }
+    if name.contains("_mimage_") {
+        return LvRole::MirrorImage;
+    }
+    if name.ends_with("_mlog") {
+        return LvRole::MirrorLog;
+    }
+    for segment in &lv_raw.segments {
+        if let Some((_, segment_type)) = segment.params.iter().find(|(key, _)| key == "type") {
+            match segment_type.as_str() {
+                "thin" => return LvRole::ThinVolume,
+                "thin-pool" => return LvRole::ThinPool,
+                "cache" => return LvRole::CacheVolume,
+                "cache-pool" => return LvRole::CachePool,
+                "snapshot" => return LvRole::Snapshot,
+                _ => {}
+            }
+        }
+    }
+
+    let status = optional_list(&lv_raw.params, "status");
+    if !status.is_empty() && !status.iter().any(|item| item == "VISIBLE") {
+        return LvRole::Internal;
+    }
+
+    LvRole::Public
 }
 
 fn required_string(params: &[(String, String)], key: &str, context: &str) -> Result<String> {
@@ -819,6 +968,13 @@ fn required_u64(params: &[(String, String)], key: &str, context: &str) -> Result
             line: 0,
             message: format!("invalid integer field '{}' in {}", key, context),
         })
+}
+
+fn optional_u64(params: &[(String, String)], key: &str) -> Option<u64> {
+    params
+        .iter()
+        .find(|(k, _)| k == key)
+        .and_then(|(_, value)| value.parse::<u64>().ok())
 }
 
 fn logical_volume_size_bytes(segs: &[SegmentMeta], extent_size_bytes: u64) -> Result<u64> {
@@ -924,15 +1080,62 @@ fn parse_segment(
                 )
             }
         }
-        "raid0" => {
-            let reason = format!(
-                "{} uses unsupported LVM2 raid0 component LV mapping",
-                context
-            );
-            return Err(SegmentParseError::Unsupported {
-                segment: unsupported_segment(start_extent, extent_count, reason.clone()),
-                reason,
-            });
+        "raid0" => parse_raid_segment(
+            SegmentType::Raid0 {
+                stripe_count: required_u64(&seg.params, "stripe_count", &context)
+                    .map_err(SegmentParseError::Fatal)?,
+                stripe_size: required_stripe_size(&seg.params, &context)
+                    .map_err(SegmentParseError::Fatal)?,
+            },
+            &seg.params,
+            &context,
+            start_extent,
+            extent_count,
+        )?,
+        "raid1" | "mirror" => unsupported_raid_or_mirror_segment(
+            &seg.params,
+            &context,
+            start_extent,
+            extent_count,
+            "raid1/mirror requires LVM component LV mapping and sync-state validation",
+        )?,
+        "raid10" => unsupported_raid_or_mirror_segment(
+            &seg.params,
+            &context,
+            start_extent,
+            extent_count,
+            "raid10 requires LVM component LV mapping and stripe/mirror reconstruction",
+        )?,
+        "raid5" => parse_raid_segment(
+            SegmentType::Raid5 {
+                stripe_count: required_u64(&seg.params, "stripe_count", &context)
+                    .map_err(SegmentParseError::Fatal)?,
+            },
+            &seg.params,
+            &context,
+            start_extent,
+            extent_count,
+        )?,
+        "raid6" => parse_raid_segment(
+            SegmentType::Raid6 {
+                stripe_count: required_u64(&seg.params, "stripe_count", &context)
+                    .map_err(SegmentParseError::Fatal)?,
+            },
+            &seg.params,
+            &context,
+            start_extent,
+            extent_count,
+        )?,
+        "thin" | "thin-pool" | "snapshot" | "cache" | "cache-pool" => {
+            let seg_type = match type_name.as_str() {
+                "thin" => SegmentType::ThinVolume,
+                "thin-pool" => SegmentType::ThinPool,
+                "snapshot" => SegmentType::Snapshot,
+                "cache" => SegmentType::CacheVolume,
+                "cache-pool" => SegmentType::CachePool,
+                _ => unreachable!(),
+            };
+            (seg_type, Vec::new())
         }
         other => (
             SegmentType::Unsupported {
@@ -947,6 +1150,55 @@ fn parse_segment(
         extent_count,
         seg_type,
         stripes,
+    })
+}
+
+fn parse_raid_segment(
+    seg_type: SegmentType,
+    params: &[(String, String)],
+    context: &str,
+    start_extent: u64,
+    extent_count: u64,
+) -> std::result::Result<(SegmentType, Vec<(String, u64)>), SegmentParseError> {
+    let stripe_count = match &seg_type {
+        SegmentType::Raid0 { stripe_count, .. }
+        | SegmentType::Raid5 { stripe_count }
+        | SegmentType::Raid6 { stripe_count }
+        | SegmentType::Raid10 { stripe_count, .. } => *stripe_count,
+        SegmentType::Raid1 { mirror_count } => *mirror_count,
+        _ => {
+            return Err(SegmentParseError::Fatal(LvmError::MetadataParseError {
+                line: 0,
+                message: format!("{} is not a RAID segment", context),
+            }));
+        }
+    };
+
+    match parse_required_stripes(params, context, stripe_count) {
+        Ok(stripes) => Ok((seg_type, stripes)),
+        Err(err) => {
+            let reason = lvm_error_message(&err);
+            Err(SegmentParseError::Unsupported {
+                segment: unsupported_segment(start_extent, extent_count, reason.clone()),
+                reason,
+            })
+        }
+    }
+}
+
+fn unsupported_raid_or_mirror_segment(
+    params: &[(String, String)],
+    context: &str,
+    start_extent: u64,
+    extent_count: u64,
+    reason: &str,
+) -> std::result::Result<(SegmentType, Vec<(String, u64)>), SegmentParseError> {
+    if let Some(stripe_count) = optional_u64(params, "stripe_count") {
+        let _ = parse_required_stripes(params, context, stripe_count);
+    }
+    Err(SegmentParseError::Unsupported {
+        segment: unsupported_segment(start_extent, extent_count, reason.to_string()),
+        reason: reason.to_string(),
     })
 }
 
@@ -1007,14 +1259,17 @@ fn required_stripe_size(params: &[(String, String)], context: &str) -> Result<u6
 fn unsupported_segment_type_name(segment: &SegmentMeta) -> Option<&str> {
     match &segment.seg_type {
         SegmentType::Unsupported { type_name } => Some(type_name.as_str()),
+        SegmentType::ThinVolume => Some("thin"),
         SegmentType::ThinPool => Some("thin-pool"),
         SegmentType::Snapshot => Some("snapshot"),
+        SegmentType::CacheVolume => Some("cache"),
         SegmentType::CachePool => Some("cache-pool"),
         SegmentType::Raid1 { .. } => Some("raid1"),
+        SegmentType::Raid10 { .. } => Some("raid10"),
         SegmentType::Raid5 { .. } => Some("raid5"),
         SegmentType::Raid6 { .. } => Some("raid6"),
-        SegmentType::Raid10 { .. } => Some("raid10"),
-        SegmentType::Linear | SegmentType::Striped { .. } | SegmentType::Raid0 { .. } => None,
+        SegmentType::Raid0 { .. } => Some("raid0"),
+        SegmentType::Linear | SegmentType::Striped { .. } => None,
     }
 }
 

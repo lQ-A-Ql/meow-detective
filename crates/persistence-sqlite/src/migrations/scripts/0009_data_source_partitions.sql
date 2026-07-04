@@ -14,7 +14,8 @@ CREATE TABLE data_source_partitions (
     lvm_vg_name TEXT,
     lvm_lv_uuid TEXT,
     lvm_lv_name TEXT,
-    lvm_pv_offsets_json TEXT
+    lvm_pv_offsets_json TEXT,
+    lvm_pv_sources_json TEXT
 );
 
 CREATE INDEX idx_data_source_partitions_data_source

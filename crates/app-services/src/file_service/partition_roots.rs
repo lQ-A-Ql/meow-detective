@@ -232,6 +232,20 @@ pub fn store_data_source_partitions(
                         })
                         .ok()
                 }),
+                lvm_pv_sources_json: partition.lvm_identity.as_ref().and_then(|identity| {
+                    if identity.pv_sources.is_empty() {
+                        return None;
+                    }
+                    serde_json::to_string(&identity.pv_sources)
+                        .map_err(|error| {
+                            tracing::warn!(
+                                partition_index = partition.index,
+                                %error,
+                                "Failed to serialize LVM PV sources for partition metadata"
+                            );
+                        })
+                        .ok()
+                }),
             }
         })
         .collect::<Vec<_>>();
@@ -296,7 +310,8 @@ mod tests {
                 lvm_vg_name TEXT,
                 lvm_lv_uuid TEXT,
                 lvm_lv_name TEXT,
-                lvm_pv_offsets_json TEXT
+                lvm_pv_offsets_json TEXT,
+                lvm_pv_sources_json TEXT
             );",
         )
         .unwrap();
@@ -320,6 +335,20 @@ mod tests {
                     lv_uuid: "lv-uuid".to_string(),
                     lv_name: "root".to_string(),
                     pv_offsets: vec![1_048_576, 2_097_152],
+                    pv_sources: vec![
+                        crate::datasource_service::LvmPhysicalVolumeSource {
+                            source_path: "disk1.E01".to_string(),
+                            offset: 1_048_576,
+                            pv_uuid: "pv-uuid-1".to_string(),
+                            pv_name: Some("pv0".to_string()),
+                        },
+                        crate::datasource_service::LvmPhysicalVolumeSource {
+                            source_path: "disk2.E01".to_string(),
+                            offset: 2_097_152,
+                            pv_uuid: "pv-uuid-2".to_string(),
+                            pv_name: Some("pv1".to_string()),
+                        },
+                    ],
                 }),
             }],
         )
@@ -337,6 +366,12 @@ mod tests {
         assert_eq!(
             record.lvm_pv_offsets_json.as_deref(),
             Some("[1048576,2097152]")
+        );
+        assert_eq!(
+            record.lvm_pv_sources_json.as_deref(),
+            Some(
+                r#"[{"sourcePath":"disk1.E01","offset":1048576,"pvUuid":"pv-uuid-1","pvName":"pv0"},{"sourcePath":"disk2.E01","offset":2097152,"pvUuid":"pv-uuid-2","pvName":"pv1"}]"#
+            )
         );
     }
 }

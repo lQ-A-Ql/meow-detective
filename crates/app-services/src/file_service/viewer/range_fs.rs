@@ -440,18 +440,37 @@ pub(crate) fn try_read_fat_image_range_from_candidates<F>(
 where
     F: FnMut(&Path) -> std::io::Result<Box<dyn evidence_core::EvidenceReader>>,
 {
+    let mut lvm_cache = crate::file_service::viewer::image_open::LvmPoolRequestCache::new();
+
     for candidate in partition_candidates {
         if !is_fat_filesystem_kind(&candidate.filesystem_kind) {
             continue;
         }
 
-        let boxed_reader = open_reader(source_path)?;
-        let fs = match fs_fat::FatReader::open(boxed_reader, candidate.offset) {
+        let (boxed_reader, fs_offset) =
+            match crate::file_service::viewer::image_open::open_candidate_block_reader_with_lvm_cache(
+                source_path,
+                candidate,
+                &mut open_reader,
+                &mut lvm_cache,
+            ) {
+                Ok(reader) => reader,
+                Err(error) => {
+                    let reason = format!(
+                        "FAT partition {} @{} reader open failed: {}",
+                        candidate.partition_index, candidate.offset, error
+                    );
+                    tracing::warn!(%reason, "Descriptor FAT range reader open failed");
+                    reasons.push(reason);
+                    continue;
+                }
+            };
+        let fs = match fs_fat::FatReader::open(boxed_reader, fs_offset) {
             Ok(fs) => fs,
             Err(error) => {
                 let reason = format!(
                     "FAT partition {} @{} open failed: {}",
-                    candidate.partition_index, candidate.offset, error
+                    candidate.partition_index, fs_offset, error
                 );
                 tracing::warn!(%reason, "Descriptor FAT range open failed");
                 reasons.push(reason);
@@ -489,24 +508,43 @@ pub(crate) fn try_read_exfat_image_range_from_candidates<F>(
 where
     F: FnMut(&Path) -> std::io::Result<Box<dyn evidence_core::EvidenceReader>>,
 {
+    let mut lvm_cache = crate::file_service::viewer::image_open::LvmPoolRequestCache::new();
+
     for candidate in partition_candidates {
-        let mut boxed_reader = open_reader(source_path)?;
+        let (mut boxed_reader, fs_offset) =
+            match crate::file_service::viewer::image_open::open_candidate_block_reader_with_lvm_cache(
+                source_path,
+                candidate,
+                &mut open_reader,
+                &mut lvm_cache,
+            ) {
+                Ok(reader) => reader,
+                Err(error) => {
+                    let reason = format!(
+                        "exFAT partition {} @{} reader open failed: {}",
+                        candidate.partition_index, candidate.offset, error
+                    );
+                    tracing::warn!(%reason, "Descriptor exFAT range reader open failed");
+                    reasons.push(reason);
+                    continue;
+                }
+            };
         let looks_like_exfat = is_exfat_filesystem_kind(&candidate.filesystem_kind)
             || crate::file_service::viewer::looks_like_exfat_boot_sector(
                 boxed_reader.as_mut(),
-                candidate.offset,
+                fs_offset,
             )
             .unwrap_or(false);
         if !looks_like_exfat {
             continue;
         }
 
-        let fs = match fs_exfat::ExfatReader::open(boxed_reader, candidate.offset) {
+        let fs = match fs_exfat::ExfatReader::open(boxed_reader, fs_offset) {
             Ok(fs) => fs,
             Err(error) => {
                 let reason = format!(
                     "exFAT partition {} @{} open failed: {}",
-                    candidate.partition_index, candidate.offset, error
+                    candidate.partition_index, fs_offset, error
                 );
                 tracing::warn!(%reason, "Descriptor exFAT range open failed");
                 reasons.push(reason);
@@ -544,18 +582,37 @@ pub(crate) fn try_read_ntfs_image_range_from_candidates<F>(
 where
     F: FnMut(&Path) -> std::io::Result<Box<dyn evidence_core::EvidenceReader>>,
 {
+    let mut lvm_cache = crate::file_service::viewer::image_open::LvmPoolRequestCache::new();
+
     for candidate in partition_candidates {
         if candidate.filesystem_kind != "NTFS" {
             continue;
         }
 
-        let boxed_reader = open_reader(source_path)?;
-        let fs = match fs_ntfs::NtfsReader::open(boxed_reader, candidate.offset) {
+        let (boxed_reader, fs_offset) =
+            match crate::file_service::viewer::image_open::open_candidate_block_reader_with_lvm_cache(
+                source_path,
+                candidate,
+                &mut open_reader,
+                &mut lvm_cache,
+            ) {
+                Ok(reader) => reader,
+                Err(error) => {
+                    let reason = format!(
+                        "NTFS partition {} @{} reader open failed: {}",
+                        candidate.partition_index, candidate.offset, error
+                    );
+                    tracing::warn!(%reason, "Descriptor NTFS range reader open failed");
+                    reasons.push(reason);
+                    continue;
+                }
+            };
+        let fs = match fs_ntfs::NtfsReader::open(boxed_reader, fs_offset) {
             Ok(fs) => fs,
             Err(error) => {
                 let reason = format!(
                     "NTFS partition {} @{} open failed: {}",
-                    candidate.partition_index, candidate.offset, error
+                    candidate.partition_index, fs_offset, error
                 );
                 tracing::warn!(%reason, "Descriptor NTFS range open failed");
                 reasons.push(reason);

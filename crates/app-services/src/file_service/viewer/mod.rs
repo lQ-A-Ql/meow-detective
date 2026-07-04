@@ -108,6 +108,19 @@ pub struct PreviewLvmIdentity {
     pub lv_uuid: String,
     pub lv_name: String,
     pub pv_offsets: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pv_sources: Vec<PreviewLvmPhysicalVolumeSource>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewLvmPhysicalVolumeSource {
+    pub source_path: String,
+    pub offset: u64,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub pv_uuid: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pv_name: Option<String>,
 }
 
 pub trait PreviewReadContext {
