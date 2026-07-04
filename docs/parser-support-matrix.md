@@ -57,12 +57,15 @@ V2 长期执行与发布口径见：
 | apt/dpkg history | Linux | Experimental | synthetic 单元/集成测试；检材3候选发现按日志存在性决定 | `artifacts-linux` tests / `linux_macos_artifact_extraction` | 包名、版本、操作 (install/upgrade/remove/configure)、时间戳（bestEffort） | **planned** (2026-Q3) — dpkg.log 200+ events, 5+ apt transactions, rotated log | public-small fixture 规划中。apt history.log + dpkg.log；rotated/compressed logs 待补 |
 | cron | Linux | Experimental | 检材3 opt-in 私有回归（`/etc/crontab`、`/var/spool/cron/root` 候选） | `linux_e01_integration` ignored tests | 调度表达式、用户、命令（bestEffort） | **planned** (2026-Q3) — 20+ job definitions, crontab + cron.d + cron.* directories | public-small fixture 规划中。覆盖 crontab、cron.d、cron.{hourly,daily,weekly,monthly} |
 | sudo logs | Linux | Experimental | 检材3 opt-in 私有回归（auth/secure/messages 候选按发行版日志存在性决定） | `linux_e01_integration` ignored tests | 用户、命令、时间戳、终端、成功/失败（bestEffort） | **planned** (2026-Q3) — auth.log 50+ sudo sessions, success+failure+session pairs | public-small fixture 规划中。Ubuntu `/var/log/auth.log` 与 RHEL/CentOS `/var/log/secure` 需分别建 baseline |
+| Linux SSH text/config discovery | Linux | Experimental | 检材3 opt-in 私有回归按路径存在性发现 | `linux_e01_integration` ignored tests / LinuxArtifacts candidate discovery | sourcePath 与文本预览（bestEffort）；`authorized_keys`、`known_hosts`、`ssh_config`、`sshd_config`、config.d 文件仅作为文本候选 | **planned** (2026-Q3) — SSH auth log + config fixture | 当前不提供独立结构化 SSH session/config parser；SSH 登录仍依赖 journal/auth log/wtmp/sudo 等已建模来源 |
+| Linux sudoers policy | Linux | Unsupported | 无 committed fixture | 无 | 不承诺 policy AST、include 解析、effective rule 计算 | **planned** (post Stage 0) | 当前仅对 sudo/auth log 做事件解析；`/etc/sudoers`、`/etc/sudoers.d/*` 可作为文件树/文本预览对象 |
+| Linux profile.d shell semantics | Linux | Unsupported | 无 committed fixture | 无 | 不承诺 shell 语义解释、环境变量生效顺序或脚本执行图 | **planned** (post Stage 0) | `/etc/profile`、`/etc/profile.d/*` 可被枚举和预览，但不生成结构化 artifact |
 
 ### 4a. Linux Stage 0 单盘镜像 baseline（检材3）
 
 | 链路 | 平台 | 当前等级 | 已验证样本 | 对齐基准 | 字段承诺 | 备注 |
 |---|---|---|---|---|---|---|
-| E01/RAW -> LVM direct LV -> XFS file tree | Linux | Beta for private baseline / Experimental for public release | 检材3 opt-in 私有真实样本 | `FORENSICS_LINUX_E01_FIXTURE` + `cargo test -p app-services --test linux_e01_integration -- --ignored` | 分区探测、LVM direct LV 展开、XFS root LV 枚举、`FileEntryId` 预览高价值路径 | 不承诺 PVE cluster、LVM thin/cache/RAID/snapshot/VDO/writecache、partial VG、deleted recovery。公开等级仍需可提交 fixture/expected JSON |
+| E01/RAW -> LVM direct LV -> XFS file tree | Linux | Beta for private baseline / Experimental for public release | 检材3 opt-in 私有真实样本 | `FORENSICS_LINUX_E01_FIXTURE` + `cargo test -p app-services --test linux_e01_integration -- --ignored` | 分区探测、LVM direct LV 展开、XFS root LV 枚举、`FileEntryId` 预览高价值路径、Linux artifact candidate/extraction coverage | 私有 baseline 要求 LVM pool 以 `Expanded`/`redirected` 保留但不作为可见 root，root LV 可见并支持预览。PVE cluster 暂缓，仅保留非执行设计边界。不承诺 LVM thin/cache/RAID/snapshot/VDO/writecache、partial VG、partial/degraded VG、deleted recovery。公开等级仍需可提交 fixture/expected JSON |
 
 ## 5. macOS 制品解析器 (V3 计划) — Medium Fixtures: `testdata/fixtures/public-medium/macos/`
 

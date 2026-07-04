@@ -1,6 +1,6 @@
 {
   "lastVerifiedAt": "2026-06-13T00:00:00Z",
-  "documentedLimitCount": 42,
+  "documentedLimitCount": 46,
   "items": [
     {
       "category": "E01",
@@ -309,6 +309,50 @@
       "summary": "缺失 PV 或不一致 metadata 必须 fail closed，不猜测块映射",
       "affectedChains": [
         "LVM"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Linux artifacts",
+      "item": "systemd journal 压缩/轮转完整覆盖",
+      "status": "partial",
+      "summary": "当前解析器支持 uncompressed 与部分 LZ4/ZSTD 字段，但缺 public fixture 覆盖 multi-boot、rotated、XZ 与损坏 journal；字段只能 bestEffort",
+      "affectedChains": [
+        "LinuxArtifacts",
+        "systemd"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Linux artifacts",
+      "item": "SSH 结构化登录/配置解析",
+      "status": "unsupported",
+      "summary": "当前仅通过 auth/journal/wtmp/sudo 与文本候选覆盖 SSH 相关线索；`authorized_keys`、`known_hosts`、`sshd_config` 不生成独立结构化 SSH DTO",
+      "affectedChains": [
+        "LinuxArtifacts",
+        "SSH"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Linux artifacts",
+      "item": "sudoers policy 解析",
+      "status": "unsupported",
+      "summary": "当前解析 sudo/auth log 事件，不解析 `/etc/sudoers` 或 `/etc/sudoers.d/*` 的 include、alias、Defaults、effective rule",
+      "affectedChains": [
+        "LinuxArtifacts",
+        "sudoers"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Linux artifacts",
+      "item": "profile.d shell 语义解析",
+      "status": "unsupported",
+      "summary": "`/etc/profile` 与 `/etc/profile.d/*` 可枚举/预览，但不解释 shell 脚本、环境变量生效顺序或执行图",
+      "affectedChains": [
+        "LinuxArtifacts",
+        "profile.d"
       ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },

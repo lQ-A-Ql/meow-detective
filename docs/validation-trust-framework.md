@@ -218,6 +218,18 @@ Linux 检材3是当前 Stage 0 Linux 单盘链路的真实样本 baseline，样�
 - 基准：
   - `crates/app-services/tests/linux_e01_integration.rs` 中被 `#[ignore]` 标记的真实样本回归
   - `docs/pve-cluster-parsing-design.md` 的 Stage 0 单盘验收口径
+- 运行命令：
+  - 全量 opt-in：`$env:FORENSICS_LINUX_E01_FIXTURE='D:\獬豸杯\检材3.E01'; cargo test -p app-services --test linux_e01_integration -- --ignored --nocapture`
+  - LVM smoke：`$env:FORENSICS_LINUX_E01_FIXTURE='D:\獬豸杯\检材3.E01'; cargo test -p app-services --test linux_e01_integration linux_e01_lvm_expansion_discovers_logical_volumes -- --ignored --nocapture`
+  - 文件树/预览 smoke：`$env:FORENSICS_LINUX_E01_FIXTURE='D:\獬豸杯\检材3.E01'; cargo test -p app-services --test linux_e01_integration linux_e01_root_lv_system_info_paths_are_enumerated_readable_and_candidates -- --ignored --nocapture`
+- 验收指标：
+  - LVM pool 分区在 persisted partition metadata 中保留为 `Expanded` / `redirected`，但不得成为可展开可见 root。
+  - root LV 以 `Partition 2 (XFS) - cl/root` 进入可见 roots，并保留 PV source / LV identity，供预览链路复用。
+  - root LV 导入规模不得明显退化：文件数不低于 50,000，目录数不低于 7,000；当前 baseline 记录为 `files=51261`、`dirs=7149`。
+  - `/etc` 枚举不得明显退化：当前 baseline 记录为 201 children。
+  - `/etc/passwd`、`/etc/os-release`、`/etc/fstab`、`/root/.bash_history`、`/var/log/wtmp` 必须可通过 `FileEntryId` 预览读取。
+  - 大文件预览必须覆盖 head / middle / tail range，不允许只验证首段。
+  - Linux artifact extraction 必须来自真实枚举文件，不允许 synthetic insert；至少覆盖 `LinuxJournal`、`LinuxWtmp`、`LinuxBashCommand`、`LinuxCronJob`、`LinuxSudoEvent`、`LinuxSystemConfig`。
 - 当前不保证：
   - PVE cluster 执行、多 E01 聚合或跨节点关联
   - LVM thin-pool、cache、RAID、snapshot、VDO、writecache、partial/degraded VG 激活

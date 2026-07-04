@@ -73,6 +73,7 @@ V2 长期执行主计划见 `docs/v2-longterm-plan.md`。
 - 页面、业务组件、store 不直接 import `@/lib/api/*` 业务模块；业务 API 访问集中在 `features/<domain>/hooks.ts`
 - 公有 UI 放在公有组件目录
 - runtime 禁止 mock / fake / dummy 业务数据集；test double 仅允许出现在测试文件
+- runtime 禁止硬编码 demo case、真实样本路径或生产可点击的 demo-case 创建入口；演示数据只能存在于测试、fixture 或受控文档示例中
 - 本地排序只允许用于极小范围展示兜底，不得伪造后端业务结果
 
 ## 7. 测试策略
@@ -160,6 +161,8 @@ V2 长期执行主计划见 `docs/v2-longterm-plan.md`。
 |------|------|
 | 单向依赖 | domain ← transport ← app-services ← Tauri commands |
 | 禁止反向 | parser / repo / core crate 不得依赖 Tauri 或前端 |
+| Service Tauri-free | `app-services` 不得依赖 Tauri；事件、窗口、runtime cache、media protocol 等桌面适配停留在 command/state 层 |
+| Command thin wrapper | Tauri command 仅做请求校验、active case/cache/state 适配、service 调用、DTO/error 映射；不得承载业务编排、parser 逻辑或 raw SQL |
 | contracts-pst | 独立 crate，不耦合 artifacts-windows |
 | artifacts-{linux,macos} | 独立 crate，各自管理 parser 族 |
 
