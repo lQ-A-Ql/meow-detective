@@ -336,6 +336,24 @@ fn build_large_sparse_xfs_fixture(marker: &[u8]) -> (Vec<u8>, u64) {
     (img, LOGICAL_OFFSET)
 }
 
+fn build_small_sparse_xfs_fixture(marker: &[u8]) -> (Vec<u8>, u64) {
+    let mut img = build_xfs_fixture();
+    let block_size = 4096u64;
+    let logical_offset = 2 * block_size;
+    let logical_block = logical_offset / block_size;
+    let physical_block = 4u64;
+    let file_size = logical_offset + marker.len() as u64;
+
+    let fi = &mut img[8192 + 2 * 256..8192 + 3 * 256];
+    fi[di_off::SIZE..di_off::SIZE + 8].copy_from_slice(&file_size.to_be_bytes());
+    let df_file = &mut fi[INODE_CORE_SIZE..];
+    df_file[0..16].copy_from_slice(&encode_bmbt_extent(logical_block, physical_block, 1));
+
+    let data_offset = physical_block as usize * block_size as usize;
+    img[data_offset..data_offset + marker.len()].copy_from_slice(marker);
+    (img, logical_offset)
+}
+
 fn build_truncated_extent_xfs_fixture(marker: &[u8]) -> Vec<u8> {
     let mut img = build_xfs_fixture();
     let block_size = 4096usize;
@@ -348,6 +366,31 @@ fn build_truncated_extent_xfs_fixture(marker: &[u8]) -> Vec<u8> {
     let data_offset = 4 * block_size;
     img.truncate(data_offset + marker.len());
     img[data_offset..data_offset + marker.len()].copy_from_slice(marker);
+    img
+}
+
+fn build_xfs_fixture_with_btree_child_magic(child_magic: u32) -> Vec<u8> {
+    let mut img = build_xfs_fixture();
+    let block_size = 4096usize;
+
+    let fi = &mut img[8192 + 2 * 256..8192 + 3 * 256];
+    fi[di_off::FORMAT] = FORMAT_BTREE;
+    fi[di_off::SIZE..di_off::SIZE + 8].copy_from_slice(&1u64.to_be_bytes());
+    fi[di_off::NEXTENTS..di_off::NEXTENTS + 4].copy_from_slice(&1u32.to_be_bytes());
+    fi[di_off::FORKOFF] = 0;
+
+    let df = &mut fi[INODE_CORE_SIZE..];
+    df.fill(0);
+    df[0..2].copy_from_slice(&1u16.to_be_bytes());
+    df[2..4].copy_from_slice(&1u16.to_be_bytes());
+    df[4..12].copy_from_slice(&0u64.to_be_bytes());
+    let maxrecs = (df.len() - BMBT_SHORT_ROOT_HDR_SIZE) / 16;
+    let ptrs_start = BMBT_SHORT_ROOT_HDR_SIZE + maxrecs * 8;
+    df[ptrs_start..ptrs_start + 8].copy_from_slice(&7u64.to_be_bytes());
+
+    let block7 = 7 * block_size;
+    img[block7..block7 + block_size].fill(0);
+    img[block7..block7 + 4].copy_from_slice(&child_magic.to_be_bytes());
     img
 }
 
@@ -381,6 +424,13 @@ fn build_xfs_fixture_with_zeroed_block_dir_and_residual_shortform() -> Vec<u8> {
 
     let block7 = 7usize * block_size as usize;
     img[block7..block7 + block_size as usize].fill(0);
+    img
+}
+
+fn build_xfs_fixture_with_zeroed_block_dir_without_residual_shortform() -> Vec<u8> {
+    let mut img = build_xfs_fixture_with_zeroed_block_dir_and_residual_shortform();
+    let fi = &mut img[8192 + 2 * 256..8192 + 3 * 256];
+    fi[INODE_CORE_SIZE + 16..].fill(0);
     img
 }
 
@@ -529,9 +579,27 @@ fn test_fsblock_to_linear_block_uses_ag_geometry() {
     xfs.agblklog = 4;
     xfs._ag_blocks = 10;
     xfs._ag_count = 3;
+    xfs.dblocks = 30;
 
     assert_eq!(xfs.fsblock_to_linear_block(0x12).unwrap(), 12);
     assert!(xfs.fsblock_to_linear_block(0x1A).is_err());
+}
+
+#[test]
+fn test_add_fsblocks_within_ag_rejects_boundary_crossing() {
+    let img = build_xfs_fixture();
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let mut xfs = XfsReader::open(reader, 0).unwrap();
+    xfs.agblklog = 4;
+    xfs._ag_blocks = 10;
+    xfs._ag_count = 2;
+    xfs.dblocks = 20;
+
+    assert_eq!(xfs.add_fsblocks_within_ag(0x11, 8).unwrap(), 0x19);
+    let err = xfs.add_fsblocks_within_ag(0x11, 9).unwrap_err();
+
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert!(err.to_string().contains("crosses XFS AG boundary"));
 }
 
 #[test]
@@ -558,7 +626,7 @@ fn test_data_fork_forkoff_is_64bit_word_units() {
 }
 
 #[test]
-fn test_truncated_physical_read_returns_unexpected_eof() {
+fn test_range_extent_read_errors_on_truncated_allocated_extent() {
     let marker = b"TRUNCATED";
     let (mut img, offset) = build_large_sparse_xfs_fixture(marker);
     img.truncate(4 * 4096 + marker.len() - 1);
@@ -569,13 +637,34 @@ fn test_truncated_physical_read_returns_unexpected_eof() {
         .read_file_range("test.txt", offset, marker.len())
         .unwrap_err();
 
-    assert_eq!(err.kind(), io::ErrorKind::UnexpectedEof);
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert!(err
+        .to_string()
+        .contains("allocated XFS extent read truncated"));
 }
 
 #[test]
-fn test_full_extent_read_zero_fills_truncated_tail() {
+fn test_full_extent_read_errors_on_truncated_allocated_extent() {
     let marker = b"PARTIAL";
     let img = build_truncated_extent_xfs_fixture(marker);
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+
+    let err = match xfs.open_file("test.txt") {
+        Ok(_) => panic!("expected truncated allocated extent read to fail"),
+        Err(err) => err,
+    };
+
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert!(err
+        .to_string()
+        .contains("allocated XFS extent read truncated"));
+}
+
+#[test]
+fn test_full_extent_read_preserves_sparse_logical_hole() {
+    let marker = b"TAIL";
+    let (img, logical_offset) = build_small_sparse_xfs_fixture(marker);
     let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
     let xfs = XfsReader::open(reader, 0).unwrap();
 
@@ -583,9 +672,76 @@ fn test_full_extent_read_zero_fills_truncated_tail() {
     let mut data = Vec::new();
     file.read_to_end(&mut data).unwrap();
 
-    assert_eq!(&data[..marker.len()], marker);
-    assert_eq!(data.len(), 4096);
-    assert!(data[marker.len()..].iter().all(|byte| *byte == 0));
+    assert_eq!(data.len(), logical_offset as usize + marker.len());
+    assert!(data[..logical_offset as usize]
+        .iter()
+        .all(|byte| *byte == 0));
+    assert_eq!(&data[logical_offset as usize..], marker);
+}
+
+#[test]
+fn test_bmbt_child_zero_magic_returns_invalid_data() {
+    let img = build_xfs_fixture_with_btree_child_magic(0);
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+
+    let err = match xfs.open_file("test.txt") {
+        Ok(_) => panic!("expected bmbt child zero magic to fail"),
+        Err(err) => err,
+    };
+
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    let message = err.to_string();
+    assert!(message.contains("magic 0x00000000"));
+    assert!(message.contains("FSB 7"));
+}
+
+#[test]
+fn test_bmbt_child_unknown_magic_returns_invalid_data() {
+    let img = build_xfs_fixture_with_btree_child_magic(0x4241_4421);
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+
+    let err = match xfs.open_file("test.txt") {
+        Ok(_) => panic!("expected bmbt child unknown magic to fail"),
+        Err(err) => err,
+    };
+
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    let message = err.to_string();
+    assert!(message.contains("magic 0x42414421"));
+    assert!(message.contains("FSB 7"));
+}
+
+#[test]
+fn test_block_to_offset_overflow_returns_invalid_data() {
+    let img = build_xfs_fixture();
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let mut xfs = XfsReader::open(reader, 0).unwrap();
+    xfs.agblklog = 0;
+    xfs.block_size = 4096;
+
+    let err = xfs.fsblock_to_offset(u64::MAX).unwrap_err();
+
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert!(
+        err.to_string().contains("overflows")
+            || err.to_string().contains("outside XFS data blocks")
+    );
+}
+
+#[test]
+fn test_inode_offset_bad_geometry_returns_invalid_data() {
+    let img = build_xfs_fixture();
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let mut xfs = XfsReader::open(reader, 0).unwrap();
+    xfs.agblklog = 63;
+    xfs.inopblog = 1;
+
+    let err = xfs.read_inode(2).unwrap_err();
+
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert!(err.to_string().contains("inode geometry"));
 }
 
 // -----------------------------------------------------------------------
@@ -1488,7 +1644,22 @@ fn test_zeroed_block_dir_recovers_residual_shortform_entries() {
 }
 
 #[test]
-fn test_partial_bad_directory_block_keeps_later_valid_xdd3_block() {
+fn test_zeroed_block_dir_without_residual_shortform_returns_invalid_data() {
+    let img = build_xfs_fixture_with_zeroed_block_dir_without_residual_shortform();
+    let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+    let xfs = XfsReader::open(reader, 0).unwrap();
+
+    let err = xfs.list_children("test.txt").unwrap_err();
+
+    assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    assert!(
+        err.to_string().contains("zeroed block directory data")
+            || err.to_string().contains("recovery failed")
+    );
+}
+
+#[test]
+fn test_partial_directory_metadata_read_can_use_later_valid_block() {
     let img = build_xfs_fixture_with_bad_first_block_and_valid_later_xdd3_block();
     let block_size = 4096usize;
     let reader: Box<dyn EvidenceReader> = Box::new(PartialRangeReader::new(

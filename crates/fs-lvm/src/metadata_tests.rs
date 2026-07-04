@@ -189,7 +189,19 @@ fn metadata_text_lv_sizes() {
 #[test]
 fn raid0_lvs_and_raids_metadata_is_marked_unsupported() {
     let text = base_metadata_with_lv(
-        "        raid_lv {\n\
+        "        raid_lv_rimage_0 {\n\
+                 id = \"lv-raid0-image-0\"\n\
+                 status = [\"READ\", \"WRITE\"]\n\
+                 segment_count = 1\n\
+                 segment1 { start_extent = 0 extent_count = 1 type = \"linear\" stripe_count = 1 stripes = [\"pv0\", 0] }\n\
+                 }\n\
+                 raid_lv_rimage_1 {\n\
+                 id = \"lv-raid0-image-1\"\n\
+                 status = [\"READ\", \"WRITE\"]\n\
+                 segment_count = 1\n\
+                 segment1 { start_extent = 0 extent_count = 1 type = \"linear\" stripe_count = 1 stripes = [\"pv1\", 0] }\n\
+                 }\n\
+                 raid_lv {\n\
                  id = \"lv-raid0\"\n\
                  segment_count = 1\n\
                  segment1 {\n\
@@ -211,15 +223,135 @@ fn raid0_lvs_and_raids_metadata_is_marked_unsupported() {
 
     let vg = parse_metadata_text(&text).unwrap();
 
-    assert_eq!(vg.logical_volumes.len(), 2);
-    assert_eq!(vg.logical_volumes[0].size_bytes, 4 * vg.extent_size * 512);
+    assert_eq!(vg.logical_volumes.len(), 4);
+    assert_eq!(vg.logical_volumes[2].size_bytes, 4 * vg.extent_size * 512);
     assert!(matches!(
-        vg.logical_volumes[0].segments[0].seg_type,
+        vg.logical_volumes[2].segments[0].seg_type,
         SegmentType::Unsupported { .. }
     ));
     assert!(matches!(
-        vg.logical_volumes[1].segments[0].seg_type,
+        vg.logical_volumes[2].segments[0].areas[0],
+        SegmentArea::LogicalVolume {
+            ref name,
+            start_extent: 0
+        } if name == "raid_lv_rimage_0"
+    ));
+    assert!(matches!(
+        vg.logical_volumes[3].segments[0].seg_type,
         SegmentType::Linear
+    ));
+}
+
+#[test]
+fn raid0_prefers_component_lv_list_over_legacy_stripes() {
+    let text = base_metadata_with_lv(
+        "        raid_lv_rimage_0 {\n\
+                 id = \"lv-raid0-image-0\"\n\
+                 status = [\"READ\", \"WRITE\"]\n\
+                 segment_count = 1\n\
+                 segment1 { start_extent = 0 extent_count = 1 type = \"linear\" stripe_count = 1 stripes = [\"pv0\", 0] }\n\
+                 }\n\
+                 raid_lv_rimage_1 {\n\
+                 id = \"lv-raid0-image-1\"\n\
+                 status = [\"READ\", \"WRITE\"]\n\
+                 segment_count = 1\n\
+                 segment1 { start_extent = 0 extent_count = 1 type = \"linear\" stripe_count = 1 stripes = [\"pv1\", 0] }\n\
+                 }\n\
+                 raid_lv {\n\
+                 id = \"lv-raid0\"\n\
+                 status = [\"READ\", \"WRITE\", \"VISIBLE\"]\n\
+                 segment_count = 1\n\
+                 segment1 {\n\
+                 start_extent = 0\n\
+                 extent_count = 4\n\
+                 type = \"raid0\"\n\
+                 stripe_count = 2\n\
+                 stripe_size = 2\n\
+                 stripes = [\"pv0\", 0, \"pv1\", 0]\n\
+                 raid0_lvs = [\"raid_lv_rimage_0\", \"raid_lv_rimage_1\"]\n\
+                 }\n\
+                 }\n",
+    );
+
+    let vg = parse_metadata_text(&text).unwrap();
+    let raid = &vg.logical_volumes[2];
+
+    assert!(!raid.is_directly_mappable());
+    assert!(matches!(
+        raid.segments[0].seg_type,
+        SegmentType::Unsupported { .. }
+    ));
+    assert!(raid.segments[0].stripes.is_empty());
+    assert_eq!(raid.segments[0].areas.len(), 2);
+    assert!(matches!(
+        raid.segments[0].areas[0],
+        SegmentArea::LogicalVolume {
+            ref name,
+            start_extent: 0
+        } if name == "raid_lv_rimage_0"
+    ));
+}
+
+#[test]
+fn raid_data_metadata_pairs_are_preserved_for_diagnostics() {
+    let text = base_metadata_with_lv(
+        "\
+         root_rmeta_0 {
+             id = \"lv-rmeta-0\"
+             status = [\"READ\", \"WRITE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 1 type = \"linear\" stripe_count = 1 stripes = [\"pv0\", 0] }
+         }
+         root_rimage_0 {
+             id = \"lv-rimage-0\"
+             status = [\"READ\", \"WRITE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 4 type = \"linear\" stripe_count = 1 stripes = [\"pv0\", 1] }
+         }
+         root_rmeta_1 {
+             id = \"lv-rmeta-1\"
+             status = [\"READ\", \"WRITE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 1 type = \"linear\" stripe_count = 1 stripes = [\"pv1\", 0] }
+         }
+         root_rimage_1 {
+             id = \"lv-rimage-1\"
+             status = [\"READ\", \"WRITE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 4 type = \"linear\" stripe_count = 1 stripes = [\"pv1\", 1] }
+         }
+         mirrored_root {
+             id = \"lv-mirrored-root\"
+             status = [\"READ\", \"WRITE\", \"VISIBLE\"]
+             segment_count = 1
+             segment1 {
+                 start_extent = 0
+                 extent_count = 4
+                 type = \"raid1\"
+                 device_count = 2
+                 raids = [\"root_rmeta_0\", \"root_rimage_0\", \"root_rmeta_1\", \"root_rimage_1\"]
+             }
+         }\n",
+    );
+
+    let vg = parse_metadata_text(&text).unwrap();
+    let mirrored = &vg.logical_volumes[4];
+
+    assert!(!mirrored.is_directly_mappable());
+    assert_eq!(mirrored.segments[0].areas.len(), 4);
+    assert!(matches!(
+        mirrored.segments[0].areas[0],
+        SegmentArea::LogicalVolume {
+            ref name,
+            start_extent: 0
+        } if name == "root_rmeta_0"
+    ));
+    assert!(matches!(
+        mirrored.segments[0].areas[1],
+        SegmentArea::LogicalVolume {
+            ref name,
+            start_extent: 0
+        } if name == "root_rimage_0"
     ));
 }
 
@@ -283,6 +415,104 @@ fn valid_striped_keeps_declared_stripe_size() {
             stripe_count: 2,
             stripe_size: 2
         }
+    ));
+}
+
+#[test]
+fn two_tuple_pv_and_lv_areas_are_resolved_from_stripes() {
+    let text = base_metadata_with_lv(
+        "        component_lv {\n\
+                 id = \"lv-component\"\n\
+                 status = [\"READ\", \"WRITE\"]\n\
+                 segment_count = 1\n\
+                 segment1 { start_extent = 0 extent_count = 2 type = \"linear\" stripe_count = 1 stripes = [\"pv0\", 0] }\n\
+                 }\n\
+                 direct_root {\n\
+                 id = \"lv-direct\"\n\
+                 status = [\"READ\", \"WRITE\", \"VISIBLE\"]\n\
+                 segment_count = 1\n\
+                 segment1 { start_extent = 0 extent_count = 2 type = \"linear\" stripe_count = 1 stripes = [\"pv0\", 2] }\n\
+                 }\n\
+                 component_backed {\n\
+                 id = \"lv-component-backed\"\n\
+                 status = [\"READ\", \"WRITE\", \"VISIBLE\"]\n\
+                 segment_count = 1\n\
+                 segment1 { start_extent = 0 extent_count = 2 type = \"linear\" stripe_count = 1 stripes = [\"component_lv\", 0] }\n\
+                 }\n",
+    );
+
+    let vg = parse_metadata_text(&text).unwrap();
+    let component = &vg.logical_volumes[0];
+    let direct = &vg.logical_volumes[1];
+    let component_backed = &vg.logical_volumes[2];
+
+    assert!(matches!(
+        component.segments[0].areas[0],
+        SegmentArea::PhysicalVolume {
+            ref name,
+            start_extent: 0
+        } if name == "pv0"
+    ));
+    assert!(direct.is_directly_mappable());
+    assert!(matches!(direct.segments[0].seg_type, SegmentType::Linear));
+    assert_eq!(direct.segments[0].stripes, vec![("pv0".to_string(), 2)]);
+    assert!(component_backed.is_directly_mappable());
+    assert!(component_backed.segments[0].stripes.is_empty());
+    assert!(matches!(
+        component_backed.segments[0].seg_type,
+        SegmentType::Linear
+    ));
+    assert!(matches!(
+        component_backed.segments[0].areas[0],
+        SegmentArea::LogicalVolume {
+            ref name,
+            start_extent: 0
+        } if name == "component_lv"
+    ));
+}
+
+#[test]
+fn two_tuple_explicit_areas_are_component_lv_references() {
+    let text = base_metadata_with_lv(
+        "\
+         component_lv {
+             id = \"lv-component\"
+             status = [\"READ\", \"WRITE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 2 type = \"linear\" stripe_count = 1 stripes = [\"pv0\", 0] }
+         }
+         mirrored_root {
+             id = \"lv-mirrored-root\"
+             status = [\"READ\", \"WRITE\", \"VISIBLE\"]
+             segment_count = 1
+             segment1 {
+                 start_extent = 0
+                 extent_count = 2
+                 type = \"raid1\"
+                 stripe_count = 2
+                 areas = [\"component_lv\", 0, \"pv0\", 2]
+             }
+         }\n",
+    );
+
+    let vg = parse_metadata_text(&text).unwrap();
+    let mirrored = &vg.logical_volumes[1];
+
+    assert!(!mirrored.is_directly_mappable());
+    assert_eq!(mirrored.segments[0].areas.len(), 2);
+    assert!(matches!(
+        mirrored.segments[0].areas[0],
+        SegmentArea::LogicalVolume {
+            ref name,
+            start_extent: 0
+        } if name == "component_lv"
+    ));
+    assert!(matches!(
+        mirrored.segments[0].areas[1],
+        SegmentArea::PhysicalVolume {
+            ref name,
+            start_extent: 2
+        } if name == "pv0"
     ));
 }
 
@@ -543,6 +773,36 @@ fn unsupported_non_linear_lvs_do_not_abort_vg_parse() {
 fn thin_cache_and_pool_segments_keep_distinct_unsupported_labels() {
     let text = base_metadata_with_lv(
         "\
+         pool_tmeta {
+             id = \"lv-pool-tmeta\"
+             status = [\"READ\", \"WRITE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 1 type = \"linear\" stripe_count = 1 stripes = [\"pv0\", 0] }
+         }
+         pool_tdata {
+             id = \"lv-pool-tdata\"
+             status = [\"READ\", \"WRITE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 4 type = \"linear\" stripe_count = 1 stripes = [\"pv0\", 1] }
+         }
+         cache_cmeta {
+             id = \"lv-cache-cmeta\"
+             status = [\"READ\", \"WRITE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 1 type = \"linear\" stripe_count = 1 stripes = [\"pv1\", 0] }
+         }
+         cache_cdata {
+             id = \"lv-cache-cdata\"
+             status = [\"READ\", \"WRITE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 4 type = \"linear\" stripe_count = 1 stripes = [\"pv1\", 1] }
+         }
+         origin {
+             id = \"lv-origin\"
+             status = [\"READ\", \"WRITE\", \"VISIBLE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 2 type = \"linear\" stripe_count = 1 stripes = [\"pv0\", 20] }
+         }
          thin_root {
              id = \"lv-thin-root\"
              status = [\"READ\", \"WRITE\", \"VISIBLE\"]
@@ -553,7 +813,7 @@ fn thin_cache_and_pool_segments_keep_distinct_unsupported_labels() {
              id = \"lv-thin-pool\"
              status = [\"READ\", \"WRITE\"]
              segment_count = 1
-             segment1 { start_extent = 0 extent_count = 4 type = \"thin-pool\" metadata = \"pool_tmeta\" pool = \"pool_tdata\" transaction_id = 1 }
+             segment1 { start_extent = 0 extent_count = 4 type = \"thin-pool\" metadata = \"pool_tmeta\" pool = \"pool_tdata\" transaction_id = 1 chunk_size = 128 }
          }
          cached_root {
              id = \"lv-cache-root\"
@@ -565,31 +825,130 @@ fn thin_cache_and_pool_segments_keep_distinct_unsupported_labels() {
              id = \"lv-cache-pool\"
              status = [\"READ\", \"WRITE\"]
              segment_count = 1
-             segment1 { start_extent = 0 extent_count = 4 type = \"cache-pool\" metadata = \"cache_cmeta\" pool = \"cache_cdata\" }
+             segment1 { start_extent = 0 extent_count = 4 type = \"cache-pool\" metadata = \"cache_cmeta\" data = \"cache_cdata\" chunk_size = 64 }
          }\n",
     );
 
     let vg = parse_metadata_text(&text).unwrap();
 
-    assert_eq!(vg.logical_volumes[0].role, LvRole::ThinVolume);
+    assert_eq!(vg.logical_volumes[5].role, LvRole::ThinVolume);
     assert!(matches!(
-        vg.logical_volumes[0].segments[0].seg_type,
+        vg.logical_volumes[5].segments[0].seg_type,
         SegmentType::Unsupported { ref type_name } if type_name.contains("thin")
     ));
-    assert_eq!(vg.logical_volumes[1].role, LvRole::ThinPool);
+    assert_eq!(
+        vg.logical_volumes[5].segments[0]
+            .dependencies
+            .thin_pool
+            .as_deref(),
+        Some("pool")
+    );
+    assert_eq!(vg.logical_volumes[6].role, LvRole::ThinPool);
     assert!(matches!(
-        vg.logical_volumes[1].segments[0].seg_type,
+        vg.logical_volumes[6].segments[0].seg_type,
         SegmentType::Unsupported { ref type_name } if type_name.contains("thin-pool")
     ));
-    assert_eq!(vg.logical_volumes[2].role, LvRole::CacheVolume);
+    assert_eq!(
+        vg.logical_volumes[6].segments[0]
+            .dependencies
+            .metadata
+            .as_deref(),
+        Some("pool_tmeta")
+    );
+    assert_eq!(
+        vg.logical_volumes[6].segments[0]
+            .dependencies
+            .pool
+            .as_deref(),
+        Some("pool_tdata")
+    );
+    assert_eq!(
+        vg.logical_volumes[6].segments[0].dependencies.chunk_size,
+        Some(128)
+    );
+    assert_eq!(vg.logical_volumes[7].role, LvRole::CacheVolume);
     assert!(matches!(
-        vg.logical_volumes[2].segments[0].seg_type,
+        vg.logical_volumes[7].segments[0].seg_type,
         SegmentType::Unsupported { ref type_name } if type_name.contains("cache")
     ));
-    assert_eq!(vg.logical_volumes[3].role, LvRole::CachePool);
+    assert_eq!(
+        vg.logical_volumes[7].segments[0]
+            .dependencies
+            .cache_pool
+            .as_deref(),
+        Some("cache_pool")
+    );
+    assert_eq!(vg.logical_volumes[8].role, LvRole::CachePool);
     assert!(matches!(
-        vg.logical_volumes[3].segments[0].seg_type,
+        vg.logical_volumes[8].segments[0].seg_type,
         SegmentType::Unsupported { ref type_name } if type_name.contains("cache-pool")
+    ));
+    assert_eq!(
+        vg.logical_volumes[8].segments[0]
+            .dependencies
+            .data
+            .as_deref(),
+        Some("cache_cdata")
+    );
+}
+
+#[test]
+fn pve_like_thin_root_preserves_pool_metadata_dependencies() {
+    let text = base_metadata_with_lv(
+        "\
+         root_tmeta {
+             id = \"lv-root-tmeta\"
+             status = [\"READ\", \"WRITE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 1 type = \"linear\" stripe_count = 1 stripes = [\"pv0\", 0] }
+         }
+         root_tdata {
+             id = \"lv-root-tdata\"
+             status = [\"READ\", \"WRITE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 64 type = \"linear\" stripe_count = 1 stripes = [\"pv0\", 1] }
+         }
+         data {
+             id = \"lv-data-pool\"
+             status = [\"READ\", \"WRITE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 64 type = \"thin-pool\" metadata = \"root_tmeta\" pool = \"root_tdata\" transaction_id = 42 chunk_size = 128 }
+         }
+         vm_root {
+             id = \"lv-vm-root\"
+             status = [\"READ\", \"WRITE\", \"VISIBLE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 16 type = \"thin\" thin_pool = \"data\" transaction_id = 42 device_id = 7 }
+         }\n",
+    );
+
+    let vg = parse_metadata_text(&text).unwrap();
+    let pool = &vg.logical_volumes[2];
+    let root = &vg.logical_volumes[3];
+
+    assert_eq!(pool.role, LvRole::ThinPool);
+    assert_eq!(
+        pool.segments[0].dependencies.metadata.as_deref(),
+        Some("root_tmeta")
+    );
+    assert_eq!(
+        pool.segments[0].dependencies.pool.as_deref(),
+        Some("root_tdata")
+    );
+    assert_eq!(pool.segments[0].dependencies.chunk_size, Some(128));
+    assert_eq!(root.role, LvRole::ThinVolume);
+    assert!(!root.is_directly_mappable());
+    assert_eq!(
+        root.segments[0].dependencies.thin_pool.as_deref(),
+        Some("data")
+    );
+    assert_eq!(root.segments[0].dependencies.device_id, Some(7));
+    assert!(matches!(
+        root.segments[0].areas[0],
+        SegmentArea::LogicalVolume {
+            ref name,
+            start_extent: 0
+        } if name == "data"
     ));
 }
 

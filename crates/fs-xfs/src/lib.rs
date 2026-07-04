@@ -161,6 +161,7 @@ fn be_u64(buf: &[u8], off: usize) -> u64 {
 pub struct XfsReader {
     reader: RefCell<Box<dyn EvidenceReader>>,
     block_size: u64,
+    dblocks: u64,
     _ag_blocks: u64,
     _ag_count: u32,
     inode_size: u16,
@@ -242,6 +243,7 @@ impl XfsReader {
         Ok(Self {
             reader: RefCell::new(reader),
             block_size,
+            dblocks,
             _ag_blocks: ag_blocks,
             _ag_count: ag_count,
             inode_size,
@@ -262,9 +264,19 @@ impl XfsReader {
 
     /// Convert a linear filesystem-block number to a byte offset from the
     /// start of the evidence reader.
-    fn block_to_offset(&self, block: u64) -> u64 {
-        self.volume_offset
-            .saturating_add(block.saturating_mul(self.block_size))
+    fn block_to_offset(&self, block: u64) -> io::Result<u64> {
+        let byte_delta = block.checked_mul(self.block_size).ok_or_else(|| {
+            invalid_fs_data(format!(
+                "filesystem block {} byte offset overflows (block_size={})",
+                block, self.block_size
+            ))
+        })?;
+        self.volume_offset.checked_add(byte_delta).ok_or_else(|| {
+            invalid_fs_data(format!(
+                "filesystem block {} byte offset overflows (volume_offset={} block_size={})",
+                block, self.volume_offset, self.block_size
+            ))
+        })
     }
 
     /// Convert an encoded XFS filesystem block (FSB) to a linear block number.
@@ -275,6 +287,12 @@ impl XfsReader {
     /// block_size` calculation whenever `sb_agblocks` is not a power of two.
     fn fsblock_to_linear_block(&self, fsb: u64) -> io::Result<u64> {
         if self.agblklog == 0 {
+            if fsb >= self.dblocks {
+                return Err(invalid_fs_data(format!(
+                    "filesystem block {} outside XFS data blocks (dblocks={})",
+                    fsb, self.dblocks
+                )));
+            }
             return Ok(fsb);
         }
         if self.agblklog >= u64::BITS as u8 {
@@ -284,24 +302,102 @@ impl XfsReader {
             )));
         }
 
+        let (ag_num, ag_block) = self.fsblock_parts(fsb)?;
+
+        let linear = ag_num
+            .checked_mul(self._ag_blocks)
+            .and_then(|base| base.checked_add(ag_block))
+            .ok_or_else(|| invalid_fs_data(format!("filesystem block {} offset overflows", fsb)))?;
+        if linear >= self.dblocks {
+            return Err(invalid_fs_data(format!(
+                "filesystem block {} outside XFS data blocks (agno={} agbno={} linear={} dblocks={} agcount={} agblocks={})",
+                fsb, ag_num, ag_block, linear, self.dblocks, self._ag_count, self._ag_blocks
+            )));
+        }
+
+        Ok(linear)
+    }
+
+    pub(crate) fn fsblock_to_offset(&self, fsb: u64) -> io::Result<u64> {
+        self.block_to_offset(self.fsblock_to_linear_block(fsb)?)
+    }
+
+    pub(crate) fn add_fsblocks_within_ag(
+        &self,
+        start_fsb: u64,
+        relative_fsb: u64,
+    ) -> io::Result<u64> {
+        if self.agblklog == 0 {
+            let fsb = start_fsb.checked_add(relative_fsb).ok_or_else(|| {
+                invalid_fs_data(format!(
+                    "filesystem block addition overflows (start_fsb={} relative_fsb={})",
+                    start_fsb, relative_fsb
+                ))
+            })?;
+            if fsb >= self.dblocks {
+                return Err(invalid_fs_data(format!(
+                    "filesystem block {} outside XFS data blocks (dblocks={})",
+                    fsb, self.dblocks
+                )));
+            }
+            return Ok(fsb);
+        }
+
+        let (ag_num, ag_block) = self.fsblock_parts(start_fsb)?;
+        let new_ag_block = ag_block.checked_add(relative_fsb).ok_or_else(|| {
+            invalid_fs_data(format!(
+                "filesystem block addition overflows (start_fsb={} relative_fsb={})",
+                start_fsb, relative_fsb
+            ))
+        })?;
+        if new_ag_block >= self._ag_blocks {
+            return Err(invalid_fs_data(format!(
+                "filesystem block range crosses XFS AG boundary (start_fsb={} agno={} agbno={} relative_fsb={} agblocks={})",
+                start_fsb, ag_num, ag_block, relative_fsb, self._ag_blocks
+            )));
+        }
+        self.compose_fsblock(ag_num, new_ag_block)
+    }
+
+    fn fsblock_parts(&self, fsb: u64) -> io::Result<(u64, u64)> {
+        if self.agblklog >= u64::BITS as u8 {
+            return Err(invalid_fs_data(format!(
+                "invalid XFS sb_agblklog {}",
+                self.agblklog
+            )));
+        }
         let ag_num = fsb >> self.agblklog;
         let ag_block = fsb & ((1u64 << self.agblklog) - 1);
-
         if ag_num >= u64::from(self._ag_count) || ag_block >= self._ag_blocks {
             return Err(invalid_fs_data(format!(
                 "filesystem block {} outside XFS AG geometry (agno={} agbno={} agcount={} agblocks={})",
                 fsb, ag_num, ag_block, self._ag_count, self._ag_blocks
             )));
         }
-
-        ag_num
-            .checked_mul(self._ag_blocks)
-            .and_then(|base| base.checked_add(ag_block))
-            .ok_or_else(|| invalid_fs_data(format!("filesystem block {} offset overflows", fsb)))
+        Ok((ag_num, ag_block))
     }
 
-    pub(crate) fn fsblock_to_offset(&self, fsb: u64) -> io::Result<u64> {
-        Ok(self.block_to_offset(self.fsblock_to_linear_block(fsb)?))
+    fn compose_fsblock(&self, ag_num: u64, ag_block: u64) -> io::Result<u64> {
+        if self.agblklog >= u64::BITS as u8 {
+            return Err(invalid_fs_data(format!(
+                "invalid XFS sb_agblklog {}",
+                self.agblklog
+            )));
+        }
+        let linear = ag_num
+            .checked_mul(self._ag_blocks)
+            .and_then(|base| base.checked_add(ag_block))
+            .ok_or_else(|| invalid_fs_data("XFS AG block composition overflows"))?;
+        if linear >= self.dblocks {
+            return Err(invalid_fs_data(format!(
+                "filesystem block outside XFS data blocks (agno={} agbno={} linear={} dblocks={})",
+                ag_num, ag_block, linear, self.dblocks
+            )));
+        }
+        ag_num
+            .checked_shl(u32::from(self.agblklog))
+            .and_then(|encoded_ag| encoded_ag.checked_add(ag_block))
+            .ok_or_else(|| invalid_fs_data("XFS encoded filesystem block overflows"))
     }
 
     /// Read one full filesystem block.
@@ -311,24 +407,6 @@ impl XfsReader {
         let mut reader = self.reader.borrow_mut();
         reader.seek(SeekFrom::Start(offset))?;
         reader.read_exact(&mut buf)?;
-        Ok(buf)
-    }
-
-    fn read_block_lossy_zero_filled(&self, block: u64) -> io::Result<Vec<u8>> {
-        let offset = self.fsblock_to_offset(block)?;
-        let mut buf = vec![0u8; self.block_size as usize];
-        let mut reader = self.reader.borrow_mut();
-        reader.seek(SeekFrom::Start(offset))?;
-        let mut filled = 0usize;
-        while filled < buf.len() {
-            match reader.read(&mut buf[filled..]) {
-                Ok(0) => break,
-                Ok(n) => filled += n,
-                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-                Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => break,
-                Err(error) => return Err(error),
-            }
-        }
         Ok(buf)
     }
 
@@ -370,17 +448,34 @@ impl XfsReader {
         }
 
         if self.agblklog > 0 || self.inopblog > 0 {
-            let shift = self.agblklog + self.inopblog;
+            let shift = self.agblklog.checked_add(self.inopblog).ok_or_else(|| {
+                invalid_fs_data(format!(
+                    "invalid XFS inode geometry agblklog={} inopblog={}",
+                    self.agblklog, self.inopblog
+                ))
+            })?;
+            if shift >= u64::BITS as u8 || self.inopblog >= u64::BITS as u8 {
+                return Err(invalid_fs_data(format!(
+                    "invalid XFS inode geometry agblklog={} inopblog={}",
+                    self.agblklog, self.inopblog
+                )));
+            }
             let ino0 = ino;
             let ag_num = ino0 >> shift;
             let low_bits = ino0 & ((1u64 << shift) - 1);
             let blk_num = low_bits >> self.inopblog;
             let ino_in_blk = low_bits & ((1u64 << self.inopblog) - 1);
+            if ag_num >= u64::from(self._ag_count) || blk_num >= self._ag_blocks {
+                return Err(invalid_fs_data(format!(
+                    "inode {} outside XFS AG geometry (agno={} agbno={} agcount={} agblocks={})",
+                    ino, ag_num, blk_num, self._ag_count, self._ag_blocks
+                )));
+            }
             let fs_blockno = ag_num
                 .checked_mul(self._ag_blocks)
                 .and_then(|base| base.checked_add(blk_num))
                 .ok_or_else(|| invalid_fs_data(format!("inode {} offset overflows", ino)))?;
-            let block_offset = self.block_to_offset(fs_blockno);
+            let block_offset = self.block_to_offset(fs_blockno)?;
             let inode_delta = ino_in_blk
                 .checked_mul(self.inode_size as u64)
                 .ok_or_else(|| invalid_fs_data(format!("inode {} offset overflows", ino)))?;
@@ -393,7 +488,7 @@ impl XfsReader {
         let inode_delta = inode_index
             .checked_mul(self.inode_size as u64)
             .ok_or_else(|| invalid_fs_data(format!("inode {} offset overflows", ino)))?;
-        self.block_to_offset(self.inode_base_block)
+        self.block_to_offset(self.inode_base_block)?
             .checked_add(inode_delta)
             .ok_or_else(|| invalid_fs_data(format!("inode {} offset overflows", ino)))
     }
@@ -500,33 +595,8 @@ impl XfsReader {
 
     /// Read file data from an extent-mapped inode (di_format = 2).
     fn read_extent_data(&self, inode: &[u8], file_size: u64) -> io::Result<Vec<u8>> {
-        let df = Self::data_fork(inode)?;
-        // Cap at complete records fitting in data fork (forkoff may truncate)
-        let max_extents = Self::max_inline_extents(inode);
-        let nextents = Self::nextents(inode) as usize;
-        let count = nextents.min(max_extents);
-        let mut data = Vec::new();
-
-        for i in 0..count {
-            let off = i * BMBT_REC_SIZE;
-            if off + BMBT_REC_SIZE > df.len() {
-                break;
-            }
-            let extent = Self::decode_extent(&df[off..]);
-            if extent.unwritten {
-                append_zeroes(
-                    &mut data,
-                    extent.block_count.saturating_mul(self.block_size),
-                )?;
-            } else {
-                for blk in 0..extent.block_count {
-                    let block_data = self.read_block_lossy_zero_filled(extent.start_block + blk)?;
-                    data.extend_from_slice(&block_data);
-                }
-            }
-        }
-
-        Ok(truncate_data_to_declared_size(data, file_size))
+        let extents = Self::inline_extents(inode)?;
+        self.read_extents_data(&extents, file_size)
     }
 
     fn read_extent_data_range(
@@ -545,20 +615,36 @@ impl XfsReader {
         let mut data = Vec::with_capacity(capacity);
         let mut next_offset = offset;
 
-        let df = Self::data_fork(inode)?;
-        let max_extents = Self::max_inline_extents(inode);
-        let nextents = Self::nextents(inode) as usize;
-        for i in 0..nextents.min(max_extents) {
-            let off = i * BMBT_REC_SIZE;
-            if off + BMBT_REC_SIZE > df.len() {
-                break;
-            }
-            let extent = Self::decode_extent(&df[off..]);
-            self.read_extent_range(extent, offset, range_end, &mut next_offset, &mut data)?;
-        }
-
-        append_zeroes(&mut data, range_end.saturating_sub(next_offset))?;
+        let extents = Self::inline_extents(inode)?;
+        self.read_extents_data_range(&extents, offset, range_end, &mut next_offset, &mut data)?;
         Ok(data)
+    }
+
+    fn read_extents_data(&self, extents: &[XfsExtent], file_size: u64) -> io::Result<Vec<u8>> {
+        let capacity = usize::try_from(file_size)
+            .map_err(|_| fs_out_of_memory("xfs file exceeds addressable memory"))?;
+        let mut data = Vec::with_capacity(capacity);
+        let mut next_offset = 0;
+        self.read_extents_data_range(extents, 0, file_size, &mut next_offset, &mut data)?;
+        Ok(truncate_data_to_declared_size(data, file_size))
+    }
+
+    fn read_extents_data_range(
+        &self,
+        extents: &[XfsExtent],
+        range_start: u64,
+        range_end: u64,
+        next_offset: &mut u64,
+        data: &mut Vec<u8>,
+    ) -> io::Result<()> {
+        let mut extents = extents.to_vec();
+        extents.sort_by_key(|extent| extent.logical);
+        for extent in extents {
+            self.read_extent_range(extent, range_start, range_end, next_offset, data)?;
+        }
+        append_zeroes(data, range_end.saturating_sub(*next_offset))?;
+        *next_offset = range_end;
+        Ok(())
     }
 
     /// Read file data from a B+tree-mapped inode (di_format = 3).
@@ -568,21 +654,8 @@ impl XfsReader {
     /// format (24-byte header with left/right sibling pointers).
     /// This implementation walks the tree recursively.
     fn read_btree_data(&self, inode: &[u8], file_size: u64) -> io::Result<Vec<u8>> {
-        let mut data = Vec::new();
-        for extent in self.collect_btree_extents(inode)? {
-            if extent.unwritten {
-                append_zeroes(
-                    &mut data,
-                    extent.block_count.saturating_mul(self.block_size),
-                )?;
-                continue;
-            }
-            for blk in 0..extent.block_count {
-                let block_data = self.read_block(extent.start_block + blk)?;
-                data.extend_from_slice(&block_data);
-            }
-        }
-        Ok(truncate_data_to_declared_size(data, file_size))
+        let extents = self.collect_btree_extents(inode)?;
+        self.read_extents_data(&extents, file_size)
     }
 
     pub(crate) fn collect_btree_extents(&self, inode: &[u8]) -> io::Result<Vec<XfsExtent>> {
@@ -617,10 +690,8 @@ impl XfsReader {
             .map_err(|_| fs_out_of_memory("xfs btree range exceeds addressable memory"))?;
         let mut data = Vec::with_capacity(capacity);
         let mut next_offset = offset;
-        for extent in self.collect_btree_extents(inode)? {
-            self.read_extent_range(extent, offset, range_end, &mut next_offset, &mut data)?;
-        }
-        append_zeroes(&mut data, range_end.saturating_sub(next_offset))?;
+        let extents = self.collect_btree_extents(inode)?;
+        self.read_extents_data_range(&extents, offset, range_end, &mut next_offset, &mut data)?;
         Ok(data)
     }
 
@@ -654,7 +725,7 @@ impl XfsReader {
                 }
                 let child_ptr = be_u64(node, off);
                 let child_block = self.read_block(child_ptr)?;
-                self.walk_btree_child_extents(&child_block, extents)?;
+                self.walk_btree_child_extents(child_ptr, &child_block, extents)?;
             }
         }
         Ok(())
@@ -662,12 +733,11 @@ impl XfsReader {
 
     fn walk_btree_child_extents(
         &self,
+        fsb: u64,
         node: &[u8],
         extents: &mut Vec<XfsExtent>,
     ) -> io::Result<()> {
-        let Some((hdr_size, level, numrecs)) = Self::parse_btree_block_header(node) else {
-            return Ok(());
-        };
+        let (hdr_size, level, numrecs) = Self::parse_btree_block_header(node, fsb)?;
         if level == 0 {
             let recs_start = hdr_size;
             for i in 0..numrecs {
@@ -688,7 +758,7 @@ impl XfsReader {
                 }
                 let child_ptr = be_u64(node, off);
                 let child_block = self.read_block(child_ptr)?;
-                self.walk_btree_child_extents(&child_block, extents)?;
+                self.walk_btree_child_extents(child_ptr, &child_block, extents)?;
             }
         }
         Ok(())
@@ -712,16 +782,27 @@ impl XfsReader {
         }
     }
 
-    fn parse_btree_block_header(node: &[u8]) -> Option<(usize, u16, usize)> {
+    fn parse_btree_block_header(node: &[u8], fsb: u64) -> io::Result<(usize, u16, usize)> {
         if node.len() < 8 {
-            return None;
+            return Err(invalid_fs_data(format!(
+                "bmbt child block at FSB {} too short for magic ({} bytes)",
+                fsb,
+                node.len()
+            )));
         }
-        match be_u32(node, 0) {
+        let magic = be_u32(node, 0);
+        match magic {
             BMAP_MAGIC => {
                 if node.len() < BMBT_BLOCK_HDR_SIZE {
-                    return None;
+                    return Err(invalid_fs_data(format!(
+                        "bmbt child block at FSB {} with magic 0x{:08X} too short ({} < {})",
+                        fsb,
+                        magic,
+                        node.len(),
+                        BMBT_BLOCK_HDR_SIZE
+                    )));
                 }
-                Some((
+                Ok((
                     BMBT_BLOCK_HDR_SIZE,
                     be_u16(node, 4),
                     be_u16(node, 6) as usize,
@@ -729,15 +810,24 @@ impl XfsReader {
             }
             BMA3_MAGIC => {
                 if node.len() < BMBT_CRC_BLOCK_HDR_SIZE {
-                    return None;
+                    return Err(invalid_fs_data(format!(
+                        "bmbt child block at FSB {} with magic 0x{:08X} too short ({} < {})",
+                        fsb,
+                        magic,
+                        node.len(),
+                        BMBT_CRC_BLOCK_HDR_SIZE
+                    )));
                 }
-                Some((
+                Ok((
                     BMBT_CRC_BLOCK_HDR_SIZE,
                     be_u16(node, 4),
                     be_u16(node, 6) as usize,
                 ))
             }
-            _ => None,
+            _ => Err(invalid_fs_data(format!(
+                "invalid bmbt child block magic 0x{:08X} at FSB {}",
+                magic, fsb
+            ))),
         }
     }
 
@@ -772,7 +862,7 @@ impl XfsReader {
                 }
                 let child_ptr = be_u64(node, off + 8);
                 let child_block = self.read_block(child_ptr)?;
-                self.walk_btree_node_extents(&child_block, false, extents)?;
+                self.walk_btree_child_extents(child_ptr, &child_block, extents)?;
             }
         }
         Ok(())
@@ -786,10 +876,28 @@ impl XfsReader {
         next_offset: &mut u64,
         data: &mut Vec<u8>,
     ) -> io::Result<()> {
-        let extent_start = extent.logical.saturating_mul(self.block_size);
-        let extent_len = extent.block_count.saturating_mul(self.block_size);
-        let extent_end = extent_start.saturating_add(extent_len);
-        let overlap_start = extent_start.max(range_start);
+        let extent_start = extent.logical.checked_mul(self.block_size).ok_or_else(|| {
+            invalid_fs_data(format!(
+                "extent logical block {} byte offset overflows (block_size={})",
+                extent.logical, self.block_size
+            ))
+        })?;
+        let extent_len = extent
+            .block_count
+            .checked_mul(self.block_size)
+            .ok_or_else(|| {
+                invalid_fs_data(format!(
+                    "extent length {} blocks overflows (block_size={})",
+                    extent.block_count, self.block_size
+                ))
+            })?;
+        let extent_end = extent_start.checked_add(extent_len).ok_or_else(|| {
+            invalid_fs_data(format!(
+                "extent logical range overflows (logical={} blocks={})",
+                extent.logical, extent.block_count
+            ))
+        })?;
+        let overlap_start = extent_start.max(range_start).max(*next_offset);
         let overlap_end = extent_end.min(range_end);
         if overlap_start >= overlap_end {
             return Ok(());
@@ -804,8 +912,23 @@ impl XfsReader {
         } else {
             let physical_offset = self
                 .fsblock_to_offset(extent.start_block)?
-                .saturating_add(overlap_start.saturating_sub(extent_start));
-            let chunk = self.read_bytes_at(physical_offset, read_len)?;
+                .checked_add(overlap_start - extent_start)
+                .ok_or_else(|| {
+                    invalid_fs_data(format!(
+                        "extent physical offset overflows (start_fsb={} logical={})",
+                        extent.start_block, extent.logical
+                    ))
+                })?;
+            let chunk = self.read_bytes_at(physical_offset, read_len).map_err(|error| {
+                if error.kind() == io::ErrorKind::UnexpectedEof {
+                    invalid_fs_data(format!(
+                        "allocated XFS extent read truncated at physical offset {} length {} (start_fsb={} logical={}): {}",
+                        physical_offset, read_len, extent.start_block, extent.logical, error
+                    ))
+                } else {
+                    error
+                }
+            })?;
             data.extend_from_slice(&chunk);
         }
         *next_offset = overlap_end;

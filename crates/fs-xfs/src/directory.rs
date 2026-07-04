@@ -3,7 +3,7 @@ use crate::{
     FORMAT_EXTENTS, FORMAT_LOCAL,
 };
 use evidence_core::filesystem::{fs_out_of_memory, invalid_fs_data, path_components};
-use std::io::{self, Read, Seek};
+use std::io;
 
 pub(crate) const DIR2_SF_HDR_8: usize = 10;
 const DIR2_SF_HDR_4: usize = 6;
@@ -49,7 +49,6 @@ pub(crate) struct XfsResolvedDirectoryEntry {
 struct DirectoryReadOutcome {
     entries: Vec<XfsDirectoryEntry>,
     first_error: Option<io::Error>,
-    saw_partial_block: bool,
     saw_recoverable_block: bool,
 }
 
@@ -61,7 +60,7 @@ impl DirectoryReadOutcome {
     }
 
     fn should_try_residual_shortform(&self) -> bool {
-        self.saw_partial_block || self.saw_recoverable_block
+        self.saw_recoverable_block
     }
 
     fn into_result(self) -> io::Result<Vec<XfsDirectoryEntry>> {
@@ -116,43 +115,6 @@ impl XfsReader {
             .ok_or_else(|| fs_out_of_memory("xfs directory block exceeds addressable memory"))?;
         let offset = self.fsblock_to_offset(start_fsb)?;
         self.read_bytes_at(offset, byte_len)
-    }
-
-    fn read_directory_block_lossy(
-        &self,
-        start_fsb: u64,
-        fsblock_count: u64,
-    ) -> io::Result<(Vec<u8>, bool)> {
-        let byte_len = fsblock_count
-            .checked_mul(self.block_size)
-            .and_then(|len| usize::try_from(len).ok())
-            .ok_or_else(|| fs_out_of_memory("xfs directory block exceeds addressable memory"))?;
-        let offset = self.fsblock_to_offset(start_fsb)?;
-        self.read_bytes_at_lossy_zero_filled(offset, byte_len)
-    }
-
-    fn read_bytes_at_lossy_zero_filled(
-        &self,
-        offset: u64,
-        length: usize,
-    ) -> io::Result<(Vec<u8>, bool)> {
-        let mut buf = vec![0u8; length];
-        if length == 0 {
-            return Ok((buf, false));
-        }
-        let mut reader = self.reader.borrow_mut();
-        reader.seek(std::io::SeekFrom::Start(offset))?;
-        let mut filled = 0usize;
-        while filled < buf.len() {
-            match reader.read(&mut buf[filled..]) {
-                Ok(0) => break,
-                Ok(n) => filled += n,
-                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-                Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => break,
-                Err(error) => return Err(error),
-            }
-        }
-        Ok((buf, filled < length))
     }
 
     fn parse_shortform_dir(data_fork: &[u8], has_ftype: bool) -> io::Result<Vec<(String, u64)>> {
@@ -231,7 +193,7 @@ impl XfsReader {
         self.directory_entries_from_outcome_raw(inode, outcome)
     }
 
-    fn inline_extents(inode: &[u8]) -> io::Result<Vec<XfsExtent>> {
+    pub(crate) fn inline_extents(inode: &[u8]) -> io::Result<Vec<XfsExtent>> {
         let df = Self::data_fork(inode)?;
         let max_extents = Self::max_inline_extents(inode);
         let nextents = Self::nextents(inode) as usize;
@@ -286,12 +248,11 @@ impl XfsReader {
 
             let remaining = extent.block_count.saturating_sub(relative_fsb);
             let read_fsblocks = remaining.min(step);
-            match self.read_directory_block_lossy(extent.start_block + relative_fsb, read_fsblocks)
+            match self
+                .add_fsblocks_within_ag(extent.start_block, relative_fsb)
+                .and_then(|start_fsb| self.read_directory_block(start_fsb, read_fsblocks))
             {
-                Ok((block_data, is_partial)) => {
-                    if is_partial {
-                        outcome.saw_partial_block = true;
-                    }
+                Ok(block_data) => {
                     let mut parse = self.parse_block_dir_entries_lossy(&block_data);
                     outcome.saw_recoverable_block |= parse.saw_recoverable_block;
                     outcome.entries.append(&mut parse.entries);
@@ -311,6 +272,7 @@ impl XfsReader {
         mut outcome: DirectoryReadOutcome,
     ) -> io::Result<Vec<XfsDirectoryEntry>> {
         if outcome.should_try_residual_shortform() {
+            let had_entries_before_recovery = !outcome.entries.is_empty();
             let df = Self::data_fork(inode)?;
             let core = Self::inode_core_size(inode);
             let full_literal = inode.get(core..).unwrap_or_default();
@@ -326,6 +288,13 @@ impl XfsReader {
                         outcome.entries.push(entry);
                     }
                 }
+            }
+            if outcome.entries.is_empty() && !had_entries_before_recovery {
+                return Err(outcome.first_error.unwrap_or_else(|| {
+                    invalid_fs_data(
+                        "recoverable block directory data produced no entries and residual shortform recovery failed",
+                    )
+                }));
             }
         }
         outcome.into_result()
@@ -352,8 +321,8 @@ impl XfsReader {
 
                 let remaining = extent.block_count.saturating_sub(relative_fsb);
                 let read_fsblocks = remaining.min(step);
-                let block_data =
-                    self.read_directory_block(extent.start_block + relative_fsb, read_fsblocks)?;
+                let start_fsb = self.add_fsblocks_within_ag(extent.start_block, relative_fsb)?;
+                let block_data = self.read_directory_block(start_fsb, read_fsblocks)?;
                 saw_block = true;
                 if block_data.iter().any(|&byte| byte != 0) {
                     return Ok(false);
@@ -862,7 +831,7 @@ fn decode_dir_entry_tail_with_layout(
     data_end: usize,
     has_ftype: bool,
 ) -> Option<(Option<u8>, usize)> {
-    if entry_start % XFS_DIR2_DATA_ALIGN != 0 || name_end < entry_start {
+    if !entry_start.is_multiple_of(XFS_DIR2_DATA_ALIGN) || name_end < entry_start {
         return None;
     }
     let name_start = entry_start.checked_add(XFS_DIR2_DATA_ENTRY_FIXED_SIZE)?;
@@ -914,7 +883,7 @@ fn valid_unused_dir_record(
     record_len: usize,
     data_end: usize,
 ) -> bool {
-    if record_len < XFS_DIR2_DATA_ALIGN || record_len % XFS_DIR2_DATA_ALIGN != 0 {
+    if record_len < XFS_DIR2_DATA_ALIGN || !record_len.is_multiple_of(XFS_DIR2_DATA_ALIGN) {
         return false;
     }
     let Some(record_end) = entry_start.checked_add(record_len) else {

@@ -6,7 +6,7 @@
 /// For striped logical volumes (stripe_count > 1), extents are interleaved
 /// across multiple PVs according to the stripe width.
 use crate::error::{LvmError, Result};
-use crate::metadata::{LvMeta, SegmentMeta, SegmentType, VolumeGroup};
+use crate::metadata::{LvMeta, SegmentArea, SegmentMeta, SegmentType, VolumeGroup};
 
 /// A resolved extent mapping: a contiguous range of bytes on a single PV.
 #[derive(Debug, Clone)]
@@ -21,6 +21,12 @@ pub struct LvExtent {
     pub pv_index: usize,
 }
 
+struct MapContext<'a> {
+    vg: &'a VolumeGroup,
+    pv_data_offsets: &'a [(String, u64)],
+    extent_size_bytes: u64,
+}
+
 /// Build the complete extent map for a logical volume.
 ///
 /// `pv_data_offsets`: for each PV in `vg.physical_volumes`, the absolute
@@ -30,6 +36,7 @@ pub fn build_extent_map(
     lv: &LvMeta,
     pv_data_offsets: &[(String, u64)],
 ) -> Result<Vec<LvExtent>> {
+    let mut stack = vec![lv.name.clone()];
     let extent_size_bytes =
         vg.extent_size
             .checked_mul(512)
@@ -37,31 +44,33 @@ pub fn build_extent_map(
                 line: 0,
                 message: format!("extent size overflows bytes for VG '{}'", vg.name),
             })?;
+    let ctx = MapContext {
+        vg,
+        pv_data_offsets,
+        extent_size_bytes,
+    };
+    build_extent_map_inner(&ctx, lv, &mut stack)
+}
+
+fn build_extent_map_inner(
+    ctx: &MapContext<'_>,
+    lv: &LvMeta,
+    stack: &mut Vec<String>,
+) -> Result<Vec<LvExtent>> {
     let mut map = Vec::new();
 
     for segment in &lv.segments {
         let base_le = segment.start_extent;
         match &segment.seg_type {
             SegmentType::Linear => {
-                map.extend(build_linear(
-                    segment,
-                    base_le,
-                    extent_size_bytes,
-                    pv_data_offsets,
-                )?);
+                map.extend(build_linear(ctx, segment, base_le, stack)?);
             }
             SegmentType::Striped {
                 stripe_count,
                 stripe_size,
             } => {
-                let stripe_extents = build_striped(
-                    segment,
-                    base_le,
-                    extent_size_bytes,
-                    *stripe_count,
-                    *stripe_size,
-                    pv_data_offsets,
-                )?;
+                let stripe_extents =
+                    build_striped(ctx, segment, base_le, *stripe_count, *stripe_size, stack)?;
                 map.extend(stripe_extents);
             }
             SegmentType::Raid0 { .. } => {
@@ -100,7 +109,7 @@ pub fn build_extent_map(
                 };
                 return Err(LvmError::UnsupportedSegment {
                     lv_name: lv.name.clone(),
-                    seg_type: name.to_string(),
+                    seg_type: format!("{name} (dependency chain: {})", stack.join(" -> ")),
                 });
             }
         }
@@ -115,46 +124,35 @@ pub fn build_extent_map(
 /// A linear segment maps a contiguous range of logical extents to a single
 /// contiguous range of physical extents on one PV.
 fn build_linear(
+    ctx: &MapContext<'_>,
     segment: &SegmentMeta,
     base_le: u64,
-    extent_size_bytes: u64,
-    pv_data_offsets: &[(String, u64)],
+    stack: &mut Vec<String>,
 ) -> Result<Vec<LvExtent>> {
-    if segment.stripes.is_empty() {
+    if segment.areas.is_empty() {
         return Err(LvmError::MetadataParseError {
             line: 0,
-            message: "linear segment has no stripes".to_string(),
+            message: "linear segment has no data areas".to_string(),
         });
     }
-    if segment.stripes.len() != 1 {
+    if segment.areas.len() != 1 {
         return Err(LvmError::MetadataParseError {
             line: 0,
             message: format!(
-                "linear segment expected 1 stripe but found {}",
-                segment.stripes.len()
+                "linear segment expected 1 data area but found {}",
+                segment.areas.len()
             ),
         });
     }
 
-    let (pv_name, stripe_pe_start) = &segment.stripes[0];
-    let pv_index = find_pv_index(pv_data_offsets, pv_name)?;
-    let pv_data_start = pv_data_offsets[pv_index].1;
-
-    let logical_start = checked_mul(base_le, extent_size_bytes, "linear logical start")?;
-    let stripe_offset = checked_mul(*stripe_pe_start, extent_size_bytes, "linear stripe offset")?;
-    let physical_offset = checked_add(pv_data_start, stripe_offset, "linear physical offset")?;
+    let logical_start = checked_mul(base_le, ctx.extent_size_bytes, "linear logical start")?;
     let length = checked_mul(
         segment.extent_count,
-        extent_size_bytes,
+        ctx.extent_size_bytes,
         "linear segment length",
     )?;
 
-    Ok(vec![LvExtent {
-        logical_start,
-        physical_offset,
-        length,
-        pv_index,
-    }])
+    map_area_range(ctx, &segment.areas[0], logical_start, 0, length, stack)
 }
 
 /// Build extent mappings for a striped segment.
@@ -162,12 +160,12 @@ fn build_linear(
 /// Striped segments interleave extents across multiple PVs:
 ///   LE 0 → PV0, LE 1 → PV1, ..., LE N-1 → PV(N-1), LE N → PV0, ...
 fn build_striped(
+    ctx: &MapContext<'_>,
     segment: &SegmentMeta,
     base_le: u64,
-    extent_size_bytes: u64,
     stripe_count: u64,
     stripe_size_sectors: u64,
-    pv_data_offsets: &[(String, u64)],
+    stack: &mut Vec<String>,
 ) -> Result<Vec<LvExtent>> {
     validate_stripe_count(segment, stripe_count, "striped")?;
     let stripe_size_bytes =
@@ -179,20 +177,11 @@ fn build_striped(
         });
     }
 
-    // Build a lookup table: stripe_index → (pv_index, pv_data_start)
-    let stripe_pvs: Vec<(usize, u64)> = (0..stripe_count)
-        .map(|si| {
-            let pv_name = &segment.stripes[si as usize].0;
-            let pv_idx = find_pv_index(pv_data_offsets, pv_name)?;
-            Ok((pv_idx, pv_data_offsets[pv_idx].1))
-        })
-        .collect::<Result<Vec<_>>>()?;
-
     let mut map = Vec::new();
-    let logical_start = checked_mul(base_le, extent_size_bytes, "striped logical start")?;
+    let logical_start = checked_mul(base_le, ctx.extent_size_bytes, "striped logical start")?;
     let segment_len = checked_mul(
         segment.extent_count,
-        extent_size_bytes,
+        ctx.extent_size_bytes,
         "striped segment length",
     )?;
     let mut segment_offset = 0u64;
@@ -205,42 +194,183 @@ fn build_striped(
         let remaining_in_chunk = stripe_size_bytes - in_chunk_offset;
         let remaining_in_segment = segment_len - segment_offset;
         let length = remaining_in_chunk.min(remaining_in_segment);
-        let (pv_index, pv_data_start) = stripe_pvs[stripe_idx];
 
-        let stripe_pe_start = segment.stripes[stripe_idx].1;
-        let stripe_base_offset = checked_mul(
-            stripe_pe_start,
-            extent_size_bytes,
-            "striped base byte offset",
-        )?;
         let stripe_set_offset =
             checked_mul(stripe_set, stripe_size_bytes, "striped set byte offset")?;
-        let stripe_offset = checked_add(
-            checked_add(
-                stripe_base_offset,
-                stripe_set_offset,
-                "striped stripe-set offset",
-            )?,
+        let area_offset = checked_add(
+            stripe_set_offset,
             in_chunk_offset,
             "striped in-chunk offset",
         )?;
-        let physical_offset = checked_add(pv_data_start, stripe_offset, "striped physical offset")?;
-
-        map.push(LvExtent {
-            logical_start: checked_add(
-                logical_start,
-                segment_offset,
-                "striped logical chunk start",
-            )?,
-            physical_offset,
+        let outer_logical_start =
+            checked_add(logical_start, segment_offset, "striped logical chunk start")?;
+        map.extend(map_area_range(
+            ctx,
+            &segment.areas[stripe_idx],
+            outer_logical_start,
+            area_offset,
             length,
-            pv_index,
-        });
+            stack,
+        )?);
 
         segment_offset = checked_add(segment_offset, length, "striped segment cursor")?;
     }
 
     Ok(map)
+}
+
+fn map_area_range(
+    ctx: &MapContext<'_>,
+    area: &SegmentArea,
+    outer_logical_start: u64,
+    area_relative_offset: u64,
+    length: u64,
+    stack: &mut Vec<String>,
+) -> Result<Vec<LvExtent>> {
+    match area {
+        SegmentArea::PhysicalVolume { name, start_extent } => {
+            let pv_index = find_pv_index(ctx.pv_data_offsets, name)?;
+            let pv_data_start = ctx.pv_data_offsets[pv_index].1;
+            let area_start = checked_mul(*start_extent, ctx.extent_size_bytes, "PV area start")?;
+            let physical_offset = checked_add(
+                checked_add(pv_data_start, area_start, "PV area physical start")?,
+                area_relative_offset,
+                "PV area relative offset",
+            )?;
+            Ok(vec![LvExtent {
+                logical_start: outer_logical_start,
+                physical_offset,
+                length,
+                pv_index,
+            }])
+        }
+        SegmentArea::LogicalVolume { name, start_extent } => map_logical_volume_area(
+            ctx,
+            name,
+            *start_extent,
+            outer_logical_start,
+            area_relative_offset,
+            length,
+            stack,
+        ),
+        SegmentArea::Unassigned { .. } => Err(LvmError::UnsupportedSegment {
+            lv_name: stack
+                .last()
+                .cloned()
+                .unwrap_or_else(|| "<unknown>".to_string()),
+            seg_type: "unassigned segment area".to_string(),
+        }),
+    }
+}
+
+fn map_logical_volume_area(
+    ctx: &MapContext<'_>,
+    name: &str,
+    start_extent: u64,
+    outer_logical_start: u64,
+    area_relative_offset: u64,
+    length: u64,
+    stack: &mut Vec<String>,
+) -> Result<Vec<LvExtent>> {
+    if stack.iter().any(|entry| entry == name) {
+        let mut cycle = stack.join(" -> ");
+        cycle.push_str(" -> ");
+        cycle.push_str(name);
+        return Err(LvmError::MetadataParseError {
+            line: 0,
+            message: format!("cyclic LVM logical-volume area reference: {cycle}"),
+        });
+    }
+
+    let target = ctx
+        .vg
+        .logical_volumes
+        .iter()
+        .find(|lv| lv.name == name)
+        .ok_or_else(|| LvmError::MetadataParseError {
+            line: 0,
+            message: format!("unknown logical volume '{name}' referenced in segment mapping"),
+        })?;
+
+    stack.push(name.to_string());
+    let target_map = build_extent_map_inner(ctx, target, stack);
+    stack.pop();
+    let target_map = target_map?;
+
+    let source_start = checked_add(
+        checked_mul(
+            start_extent,
+            ctx.extent_size_bytes,
+            "logical-volume area start",
+        )?,
+        area_relative_offset,
+        "logical-volume area relative offset",
+    )?;
+    slice_extent_map(&target_map, source_start, length, outer_logical_start, name)
+}
+
+fn slice_extent_map(
+    extents: &[LvExtent],
+    source_start: u64,
+    length: u64,
+    outer_logical_start: u64,
+    source_lv_name: &str,
+) -> Result<Vec<LvExtent>> {
+    let source_end = checked_add(source_start, length, "logical-volume area end")?;
+    let mut cursor = source_start;
+    let mut sliced = Vec::new();
+
+    for extent in extents {
+        let extent_end = checked_add(extent.logical_start, extent.length, "source extent end")?;
+        if extent_end <= cursor || extent.logical_start >= source_end {
+            continue;
+        }
+        if extent.logical_start > cursor {
+            return Err(LvmError::MetadataParseError {
+                line: 0,
+                message: format!(
+                    "logical volume '{source_lv_name}' area has uncovered logical range at byte {cursor}"
+                ),
+            });
+        }
+
+        let overlap_start = cursor.max(extent.logical_start);
+        let overlap_end = source_end.min(extent_end);
+        if overlap_end <= overlap_start {
+            continue;
+        }
+        let offset_in_extent = overlap_start - extent.logical_start;
+        let offset_in_area = overlap_start - source_start;
+        sliced.push(LvExtent {
+            logical_start: checked_add(
+                outer_logical_start,
+                offset_in_area,
+                "sliced logical extent start",
+            )?,
+            physical_offset: checked_add(
+                extent.physical_offset,
+                offset_in_extent,
+                "sliced physical extent start",
+            )?,
+            length: overlap_end - overlap_start,
+            pv_index: extent.pv_index,
+        });
+        cursor = overlap_end;
+        if cursor == source_end {
+            break;
+        }
+    }
+
+    if cursor != source_end {
+        return Err(LvmError::MetadataParseError {
+            line: 0,
+            message: format!(
+                "logical volume '{source_lv_name}' area ended before requested byte {source_end}"
+            ),
+        });
+    }
+
+    Ok(sliced)
 }
 
 fn find_pv_index(pv_data_offsets: &[(String, u64)], pv_name: &str) -> Result<usize> {
@@ -269,20 +399,23 @@ fn validate_stripe_count(
             message: "raid0 segment requires at least 2 stripes".to_string(),
         });
     }
-    if segment.stripes.is_empty() {
+    let area_count = if segment.areas.is_empty() {
+        segment.stripes.len()
+    } else {
+        segment.areas.len()
+    };
+    if area_count == 0 {
         return Err(LvmError::MetadataParseError {
             line: 0,
-            message: format!("{} segment has no stripes", segment_kind),
+            message: format!("{} segment has no data areas", segment_kind),
         });
     }
-    if segment.stripes.len() != stripe_count as usize {
+    if area_count != stripe_count as usize {
         return Err(LvmError::MetadataParseError {
             line: 0,
             message: format!(
-                "{} segment stripe_count {} does not match {} stripe entries",
-                segment_kind,
-                stripe_count,
-                segment.stripes.len()
+                "{} segment stripe_count {} does not match {} data area entries",
+                segment_kind, stripe_count, area_count
             ),
         });
     }
@@ -308,7 +441,9 @@ fn checked_mul(lhs: u64, rhs: u64, context: &str) -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::metadata::{LvMeta, PvMeta, SegmentArea, SegmentMeta, SegmentType, VolumeGroup};
+    use crate::metadata::{
+        LvMeta, PvMeta, SegmentArea, SegmentDependencies, SegmentMeta, SegmentType, VolumeGroup,
+    };
 
     fn pv_area(name: &str, start_extent: u64) -> SegmentArea {
         SegmentArea::PhysicalVolume {
@@ -347,6 +482,7 @@ mod tests {
                 seg_type: SegmentType::Linear,
                 stripes: vec![("pv0".into(), 0)],
                 areas: vec![pv_area("pv0", 0)],
+                dependencies: SegmentDependencies::default(),
             }],
             size_bytes: 0,
         };
@@ -374,6 +510,7 @@ mod tests {
                 seg_type: SegmentType::Linear,
                 stripes: vec![("pv0".into(), 1280)], // starts at PE 1280
                 areas: vec![pv_area("pv0", 1280)],
+                dependencies: SegmentDependencies::default(),
             }],
             size_bytes: 0,
         };
@@ -400,6 +537,7 @@ mod tests {
                 },
                 stripes: vec![],
                 areas: vec![],
+                dependencies: SegmentDependencies::default(),
             }],
             size_bytes: 0,
         };
@@ -446,6 +584,7 @@ mod tests {
                 },
                 stripes: vec![("pv0".into(), 0), ("pv1".into(), 0)],
                 areas: vec![pv_area("pv0", 0), pv_area("pv1", 0)],
+                dependencies: SegmentDependencies::default(),
             }],
             size_bytes: 0,
         };
@@ -508,6 +647,7 @@ mod tests {
                 },
                 stripes: vec![("pv0".into(), 0), ("pv1".into(), 10)],
                 areas: vec![pv_area("pv0", 0), pv_area("pv1", 10)],
+                dependencies: SegmentDependencies::default(),
             }],
             size_bytes: 0,
         };
@@ -544,6 +684,7 @@ mod tests {
                     seg_type: SegmentType::Linear,
                     stripes: vec![("pv0".into(), 0)],
                     areas: vec![pv_area("pv0", 0)],
+                    dependencies: SegmentDependencies::default(),
                 },
                 SegmentMeta {
                     start_extent: 5,
@@ -551,6 +692,7 @@ mod tests {
                     seg_type: SegmentType::Linear,
                     stripes: vec![("pv0".into(), 128)],
                     areas: vec![pv_area("pv0", 128)],
+                    dependencies: SegmentDependencies::default(),
                 },
             ],
             size_bytes: 0,
@@ -584,6 +726,7 @@ mod tests {
                 },
                 stripes: Vec::new(),
                 areas: Vec::new(),
+                dependencies: SegmentDependencies::default(),
             }],
             size_bytes: 0,
         };
@@ -610,6 +753,7 @@ mod tests {
                 },
                 stripes: vec![("pv0".into(), 0), ("pv0".into(), 100)],
                 areas: vec![pv_area("pv0", 0), pv_area("pv0", 100)],
+                dependencies: SegmentDependencies::default(),
             }],
             size_bytes: 0,
         };
@@ -655,6 +799,7 @@ mod tests {
                 seg_type: SegmentType::Raid1 { mirror_count: 2 },
                 stripes: vec![("pv0".into(), 0), ("pv1".into(), 0)],
                 areas: vec![pv_area("pv0", 0), pv_area("pv1", 0)],
+                dependencies: SegmentDependencies::default(),
             }],
             size_bytes: 0,
         };

@@ -15,6 +15,7 @@
 /// Offset 40-135: 4 × raw_location_descriptors (24 bytes each)
 /// Offset 136-511: reserved (zero-filled)
 /// ```
+use std::collections::HashSet;
 use std::io::{Read, Seek, SeekFrom};
 
 use crate::crc;
@@ -118,13 +119,28 @@ impl LvMeta {
         self.status.is_empty() || self.status.iter().any(|status| status == "VISIBLE")
     }
 
+    pub fn is_public(&self) -> bool {
+        self.is_visible() && matches!(self.role, LvRole::Public)
+    }
+
     pub fn is_directly_mappable(&self) -> bool {
-        self.is_visible()
-            && matches!(self.role, LvRole::Public)
+        self.is_public()
             && self.segments.iter().all(|segment| {
                 matches!(
                     segment.seg_type,
                     SegmentType::Linear | SegmentType::Striped { .. }
+                ) && segment.has_only_data_areas()
+            })
+    }
+}
+
+impl SegmentMeta {
+    pub(crate) fn has_only_data_areas(&self) -> bool {
+        !self.areas.is_empty()
+            && self.areas.iter().all(|area| {
+                matches!(
+                    area,
+                    SegmentArea::PhysicalVolume { .. } | SegmentArea::LogicalVolume { .. }
                 )
             })
     }
@@ -142,6 +158,7 @@ pub struct SegmentMeta {
     /// topologies can be diagnosed without pretending they are direct PV maps.
     pub stripes: Vec<(String, u64)>,
     pub areas: Vec<SegmentArea>,
+    pub dependencies: SegmentDependencies,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -149,6 +166,78 @@ pub enum SegmentArea {
     PhysicalVolume { name: String, start_extent: u64 },
     LogicalVolume { name: String, start_extent: u64 },
     Unassigned { start_extent: u64 },
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SegmentDependencies {
+    pub raid_component_source: Option<RaidComponentSource>,
+    pub raid_components: Vec<RaidComponent>,
+    pub thin_pool: Option<String>,
+    pub metadata: Option<String>,
+    pub pool: Option<String>,
+    pub data: Option<String>,
+    pub origin: Option<String>,
+    pub external_origin: Option<String>,
+    pub cow_store: Option<String>,
+    pub merging_store: Option<String>,
+    pub cache_pool: Option<String>,
+    pub transaction_id: Option<u64>,
+    pub device_id: Option<u64>,
+    pub chunk_size: Option<u64>,
+    pub metadata_format: Option<u64>,
+    pub metadata_start: Option<u64>,
+    pub metadata_len: Option<u64>,
+    pub data_start: Option<u64>,
+    pub data_len: Option<u64>,
+    pub metadata_id: Option<String>,
+    pub data_id: Option<String>,
+}
+
+impl SegmentDependencies {
+    pub(crate) fn referenced_lvs(&self) -> Vec<&str> {
+        let mut refs = [
+            self.thin_pool.as_deref(),
+            self.metadata.as_deref(),
+            self.pool.as_deref(),
+            self.data.as_deref(),
+            self.origin.as_deref(),
+            self.external_origin.as_deref(),
+            self.cow_store.as_deref(),
+            self.merging_store.as_deref(),
+            self.cache_pool.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+        refs.extend(
+            self.raid_components
+                .iter()
+                .flat_map(RaidComponent::referenced_lvs),
+        );
+        refs
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RaidComponentSource {
+    Raid0Lvs,
+    Raids,
+    Stripes,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RaidComponent {
+    pub data_lv: String,
+    pub metadata_lv: Option<String>,
+}
+
+impl RaidComponent {
+    pub(crate) fn referenced_lvs(&self) -> impl Iterator<Item = &str> {
+        self.metadata_lv
+            .as_deref()
+            .into_iter()
+            .chain(std::iter::once(self.data_lv.as_str()))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -814,6 +903,16 @@ fn parse_metadata_text(text: &str) -> Result<VolumeGroup> {
         })
         .collect::<Result<Vec<_>>>()?;
 
+    let pv_names = physical_volumes
+        .iter()
+        .map(|pv| pv.name.as_str())
+        .collect::<HashSet<_>>();
+    let lv_names = section
+        .lv_sections
+        .iter()
+        .map(|lv| lv.name.as_str())
+        .collect::<HashSet<_>>();
+
     let extent_size_bytes =
         extent_size
             .checked_mul(512u64)
@@ -824,7 +923,7 @@ fn parse_metadata_text(text: &str) -> Result<VolumeGroup> {
     let logical_volumes: Vec<LvMeta> = section
         .lv_sections
         .iter()
-        .map(|lv_raw| parse_logical_volume(lv_raw, extent_size_bytes))
+        .map(|lv_raw| parse_logical_volume(lv_raw, extent_size_bytes, &pv_names, &lv_names))
         .collect::<Result<Vec<_>>>()?;
 
     Ok(VolumeGroup {
@@ -837,7 +936,12 @@ fn parse_metadata_text(text: &str) -> Result<VolumeGroup> {
     })
 }
 
-fn parse_logical_volume(lv_raw: &LvSectionRaw, extent_size_bytes: u64) -> Result<LvMeta> {
+fn parse_logical_volume(
+    lv_raw: &LvSectionRaw,
+    extent_size_bytes: u64,
+    pv_names: &HashSet<&str>,
+    lv_names: &HashSet<&str>,
+) -> Result<LvMeta> {
     let context = format!("logical volume '{}'", lv_raw.name);
     let lv_uuid = required_string(&lv_raw.params, "id", &context)?;
     let status = optional_list(&lv_raw.params, "status");
@@ -847,10 +951,10 @@ fn parse_logical_volume(lv_raw: &LvSectionRaw, extent_size_bytes: u64) -> Result
     let mut segs = Vec::with_capacity(lv_raw.segments.len());
     let mut unsupported_reason = None;
     for segment in &lv_raw.segments {
-        match parse_segment(segment, &context) {
+        match parse_segment(segment, &context, pv_names, lv_names) {
             Ok(segment_meta) => segs.push(segment_meta),
             Err(SegmentParseError::Unsupported { segment, reason }) => {
-                segs.push(segment);
+                segs.push(*segment);
                 if unsupported_reason.is_none() {
                     unsupported_reason = Some(reason);
                 }
@@ -871,6 +975,11 @@ fn parse_logical_volume(lv_raw: &LvSectionRaw, extent_size_bytes: u64) -> Result
             "{} uses unsupported segment type '{}'",
             context, type_name
         ));
+    } else if segs.iter().any(|segment| !segment.has_only_data_areas()) {
+        unsupported_reason = Some(format!(
+            "{} contains segment area(s) that are neither physical volumes nor logical-volume data areas",
+            context
+        ));
     } else if let Err(err) = validate_segment_layout(&segs, &context) {
         unsupported_reason = Some(err);
     }
@@ -881,10 +990,12 @@ fn parse_logical_volume(lv_raw: &LvSectionRaw, extent_size_bytes: u64) -> Result
             .iter()
             .flat_map(|segment| segment.areas.iter().cloned())
             .collect::<Vec<_>>();
-        segs = vec![unsupported_lv_segment_with_areas(
+        let dependencies = merge_segment_dependencies(&segs);
+        segs = vec![unsupported_lv_segment_with_areas_and_dependencies(
             size_extents,
             reason,
             areas,
+            dependencies,
         )];
     }
 
@@ -997,6 +1108,14 @@ fn optional_u64(params: &[(String, String)], key: &str) -> Option<u64> {
         .and_then(|(_, value)| value.parse::<u64>().ok())
 }
 
+fn optional_string(params: &[(String, String)], key: &str) -> Option<String> {
+    params
+        .iter()
+        .find(|(k, _)| k == key)
+        .map(|(_, value)| value.clone())
+        .filter(|value| !value.is_empty())
+}
+
 fn logical_volume_size_bytes(segs: &[SegmentMeta], extent_size_bytes: u64) -> Result<u64> {
     let mut max_end = 0u64;
     for segment in segs {
@@ -1019,7 +1138,7 @@ fn logical_volume_size_bytes(segs: &[SegmentMeta], extent_size_bytes: u64) -> Re
 
 enum SegmentParseError {
     Unsupported {
-        segment: SegmentMeta,
+        segment: Box<SegmentMeta>,
         reason: String,
     },
     Fatal(LvmError),
@@ -1029,15 +1148,31 @@ struct UnsupportedSegmentDetails {
     segment: SegmentMeta,
 }
 
+struct ParsedSegmentParts {
+    seg_type: SegmentType,
+    stripes: Vec<(String, u64)>,
+    areas: Vec<SegmentArea>,
+    dependencies: SegmentDependencies,
+}
+
 impl SegmentParseError {
     fn fatal(message: String) -> Self {
         SegmentParseError::Fatal(LvmError::MetadataParseError { line: 0, message })
+    }
+
+    fn unsupported(segment: SegmentMeta, reason: String) -> Self {
+        SegmentParseError::Unsupported {
+            segment: Box::new(segment),
+            reason,
+        }
     }
 }
 
 fn parse_segment(
     seg: &SegmentRaw,
     lv_context: &str,
+    pv_names: &HashSet<&str>,
+    lv_names: &HashSet<&str>,
 ) -> std::result::Result<SegmentMeta, SegmentParseError> {
     let context = format!("{} segment '{}'", lv_context, seg.name);
     let start_extent =
@@ -1053,7 +1188,12 @@ fn parse_segment(
     let type_name =
         required_string(&seg.params, "type", &context).map_err(SegmentParseError::Fatal)?;
 
-    let (seg_type, stripes, areas) = match type_name.as_str() {
+    let ParsedSegmentParts {
+        seg_type,
+        stripes,
+        areas,
+        dependencies,
+    } = match type_name.as_str() {
         "linear" => {
             let stripe_count = required_u64(&seg.params, "stripe_count", &context)
                 .map_err(SegmentParseError::Fatal)?;
@@ -1065,8 +1205,14 @@ fn parse_segment(
             }
             let stripes = parse_required_stripes(&seg.params, &context, stripe_count)
                 .map_err(SegmentParseError::Fatal)?;
-            let areas = areas_from_stripes(&stripes);
-            (SegmentType::Linear, stripes, areas)
+            let areas = resolve_stripe_areas(&stripes, pv_names, lv_names)
+                .map_err(SegmentParseError::Fatal)?;
+            ParsedSegmentParts {
+                seg_type: SegmentType::Linear,
+                stripes: stripes_from_pv_areas(&areas),
+                areas,
+                dependencies: SegmentDependencies::default(),
+            }
         }
         "striped" => {
             let stripe_count = required_u64(&seg.params, "stripe_count", &context)
@@ -1079,33 +1225,35 @@ fn parse_segment(
             }
             let stripes = parse_required_stripes(&seg.params, &context, stripe_count)
                 .map_err(SegmentParseError::Fatal)?;
+            let areas = resolve_stripe_areas(&stripes, pv_names, lv_names)
+                .map_err(SegmentParseError::Fatal)?;
             if stripe_count == 1 {
-                let areas = areas_from_stripes(&stripes);
-                (SegmentType::Linear, stripes, areas)
+                ParsedSegmentParts {
+                    seg_type: SegmentType::Linear,
+                    stripes: stripes_from_pv_areas(&areas),
+                    areas,
+                    dependencies: SegmentDependencies::default(),
+                }
             } else {
                 let stripe_size = match required_stripe_size(&seg.params, &context) {
                     Ok(stripe_size) => stripe_size,
                     Err(err) => {
                         let reason = lvm_error_message(&err);
-                        return Err(SegmentParseError::Unsupported {
-                            segment: unsupported_segment(
-                                start_extent,
-                                extent_count,
-                                reason.clone(),
-                            ),
+                        return Err(SegmentParseError::unsupported(
+                            unsupported_segment(start_extent, extent_count, reason.clone()),
                             reason,
-                        });
+                        ));
                     }
                 };
-                let areas = areas_from_stripes(&stripes);
-                (
-                    SegmentType::Striped {
+                ParsedSegmentParts {
+                    seg_type: SegmentType::Striped {
                         stripe_count,
                         stripe_size,
                     },
-                    stripes,
+                    stripes: stripes_from_pv_areas(&areas),
                     areas,
-                )
+                    dependencies: SegmentDependencies::default(),
+                }
             }
         }
         "raid0" => parse_raid_segment(
@@ -1119,6 +1267,8 @@ fn parse_segment(
             &context,
             start_extent,
             extent_count,
+            pv_names,
+            lv_names,
         )?,
         "raid1" | "mirror" => {
             let details = unsupported_raid_or_mirror_segment(
@@ -1127,12 +1277,15 @@ fn parse_segment(
                 start_extent,
                 extent_count,
                 "raid1/mirror requires LVM component LV mapping and sync-state validation",
+                pv_names,
+                lv_names,
             )?;
-            (
-                details.segment.seg_type,
-                details.segment.stripes,
-                details.segment.areas,
-            )
+            ParsedSegmentParts {
+                seg_type: details.segment.seg_type,
+                stripes: details.segment.stripes,
+                areas: details.segment.areas,
+                dependencies: details.segment.dependencies,
+            }
         }
         "raid10" => {
             let details = unsupported_raid_or_mirror_segment(
@@ -1141,12 +1294,15 @@ fn parse_segment(
                 start_extent,
                 extent_count,
                 "raid10 requires LVM component LV mapping and stripe/mirror reconstruction",
+                pv_names,
+                lv_names,
             )?;
-            (
-                details.segment.seg_type,
-                details.segment.stripes,
-                details.segment.areas,
-            )
+            ParsedSegmentParts {
+                seg_type: details.segment.seg_type,
+                stripes: details.segment.stripes,
+                areas: details.segment.areas,
+                dependencies: details.segment.dependencies,
+            }
         }
         "raid5" => parse_raid_segment(
             SegmentType::Raid5 {
@@ -1157,6 +1313,8 @@ fn parse_segment(
             &context,
             start_extent,
             extent_count,
+            pv_names,
+            lv_names,
         )?,
         "raid6" => parse_raid_segment(
             SegmentType::Raid6 {
@@ -1167,70 +1325,116 @@ fn parse_segment(
             &context,
             start_extent,
             extent_count,
+            pv_names,
+            lv_names,
         )?,
-        "thin" | "thin-pool" | "snapshot" | "cache" | "cache-pool" => {
-            let seg_type = match type_name.as_str() {
-                "thin" => SegmentType::ThinVolume,
-                "thin-pool" => SegmentType::ThinPool,
-                "snapshot" => SegmentType::Snapshot,
-                "cache" => SegmentType::CacheVolume,
-                "cache-pool" => SegmentType::CachePool,
-                _ => unreachable!(),
-            };
-            let areas = parse_optional_areas(&seg.params).unwrap_or_default();
-            (seg_type, Vec::new(), areas)
+        "thin" => {
+            parse_thin_segment(&seg.params, &context, lv_names).map_err(SegmentParseError::Fatal)?
         }
-        other => (
-            SegmentType::Unsupported {
+        "thin-pool" => parse_thin_pool_segment(&seg.params, &context, lv_names)
+            .map_err(SegmentParseError::Fatal)?,
+        "snapshot" => parse_snapshot_segment(&seg.params, &context, lv_names)
+            .map_err(SegmentParseError::Fatal)?,
+        "cache" => parse_cache_segment(&seg.params, &context, lv_names)
+            .map_err(SegmentParseError::Fatal)?,
+        "cache-pool" => parse_cache_pool_segment(&seg.params, &context, lv_names)
+            .map_err(SegmentParseError::Fatal)?,
+        other => ParsedSegmentParts {
+            seg_type: SegmentType::Unsupported {
                 type_name: other.to_string(),
             },
-            Vec::new(),
-            parse_optional_areas(&seg.params).unwrap_or_default(),
-        ),
+            stripes: Vec::new(),
+            areas: parse_optional_areas(&seg.params, pv_names, lv_names).unwrap_or_default(),
+            dependencies: SegmentDependencies::default(),
+        },
     };
 
-    Ok(SegmentMeta {
+    let segment = SegmentMeta {
         start_extent,
         extent_count,
         seg_type,
         stripes,
         areas,
-    })
+        dependencies,
+    };
+    if let Some(type_name) = unsupported_segment_type_name(&segment) {
+        let reason = type_name.to_string();
+        return Err(SegmentParseError::unsupported(segment, reason));
+    }
+    Ok(segment)
 }
 
 fn parse_raid_segment(
     seg_type: SegmentType,
     params: &[(String, String)],
-    context: &str,
+    _context: &str,
     start_extent: u64,
     extent_count: u64,
-) -> std::result::Result<(SegmentType, Vec<(String, u64)>, Vec<SegmentArea>), SegmentParseError> {
-    let stripe_count = match &seg_type {
-        SegmentType::Raid0 { stripe_count, .. }
-        | SegmentType::Raid5 { stripe_count }
-        | SegmentType::Raid6 { stripe_count }
-        | SegmentType::Raid10 { stripe_count, .. } => *stripe_count,
-        SegmentType::Raid1 { mirror_count } => *mirror_count,
-        _ => {
-            return Err(SegmentParseError::Fatal(LvmError::MetadataParseError {
-                line: 0,
-                message: format!("{} is not a RAID segment", context),
-            }));
-        }
-    };
+    _pv_names: &HashSet<&str>,
+    lv_names: &HashSet<&str>,
+) -> std::result::Result<ParsedSegmentParts, SegmentParseError> {
+    let component_source = raid_component_source(&seg_type)?;
+    let component_key = raid_component_key(component_source);
 
-    match parse_required_stripes(params, context, stripe_count) {
-        Ok(stripes) => {
-            let areas = areas_from_stripes(&stripes);
-            Ok((seg_type, stripes, areas))
-        }
-        Err(err) => {
-            let reason = lvm_error_message(&err);
-            Err(SegmentParseError::Unsupported {
-                segment: unsupported_segment(start_extent, extent_count, reason.clone()),
-                reason,
-            })
-        }
+    if let Ok((areas, components)) =
+        parse_raid_component_areas(params, component_key, component_source, lv_names)
+    {
+        let dependencies = SegmentDependencies {
+            raid_component_source: Some(component_source),
+            raid_components: components,
+            ..SegmentDependencies::default()
+        };
+        return Err(SegmentParseError::unsupported(
+            unsupported_segment_with_areas_and_dependencies(
+                start_extent,
+                extent_count,
+                format!(
+                    "{} requires RAID component LV graph reconstruction",
+                    raid_segment_label(&seg_type)
+                ),
+                areas,
+                dependencies,
+            ),
+            format!(
+                "{} uses LVM component LV list and is not directly mappable",
+                raid_segment_label(&seg_type)
+            ),
+        ));
+    }
+
+    let reason = match required_string(params, component_key, "raid component list") {
+        Err(err) => lvm_error_message(&err),
+        Ok(raw) => lvm_error_message(
+            &parse_raid_component_list(&raw, component_source, lv_names).unwrap_err(),
+        ),
+    };
+    Err(SegmentParseError::unsupported(
+        unsupported_segment(start_extent, extent_count, reason.clone()),
+        reason,
+    ))
+}
+
+fn raid_component_source(
+    seg_type: &SegmentType,
+) -> std::result::Result<RaidComponentSource, SegmentParseError> {
+    match seg_type {
+        SegmentType::Raid0 { .. } => Ok(RaidComponentSource::Raid0Lvs),
+        SegmentType::Raid1 { .. }
+        | SegmentType::Raid5 { .. }
+        | SegmentType::Raid6 { .. }
+        | SegmentType::Raid10 { .. } => Ok(RaidComponentSource::Raids),
+        _ => Err(SegmentParseError::Fatal(LvmError::MetadataParseError {
+            line: 0,
+            message: "segment is not a RAID segment".to_string(),
+        })),
+    }
+}
+
+fn raid_component_key(source: RaidComponentSource) -> &'static str {
+    match source {
+        RaidComponentSource::Raid0Lvs => "raid0_lvs",
+        RaidComponentSource::Raids => "raids",
+        RaidComponentSource::Stripes => "stripes",
     }
 }
 
@@ -1240,19 +1444,203 @@ fn unsupported_raid_or_mirror_segment(
     start_extent: u64,
     extent_count: u64,
     reason: &str,
+    pv_names: &HashSet<&str>,
+    lv_names: &HashSet<&str>,
 ) -> std::result::Result<UnsupportedSegmentDetails, SegmentParseError> {
     if let Some(stripe_count) = optional_u64(params, "stripe_count") {
         let _ = parse_required_stripes(params, context, stripe_count);
     }
-    let areas = parse_optional_areas(params).unwrap_or_default();
+    let mut dependencies = SegmentDependencies::default();
+    let mut areas = match parse_optional_areas(params, pv_names, lv_names) {
+        Ok(areas) if !areas.is_empty() => areas,
+        _ => Vec::new(),
+    };
+    if areas.is_empty() {
+        if let Ok((component_areas, components)) =
+            parse_raid_component_areas(params, "raids", RaidComponentSource::Raids, lv_names)
+        {
+            areas = component_areas;
+            dependencies.raid_component_source = Some(RaidComponentSource::Raids);
+            dependencies.raid_components = components;
+        }
+    }
     Ok(UnsupportedSegmentDetails {
-        segment: unsupported_segment_with_areas(
+        segment: unsupported_segment_with_areas_and_dependencies(
             start_extent,
             extent_count,
             reason.to_string(),
             areas,
+            dependencies,
         ),
     })
+}
+
+fn raid_segment_label(seg_type: &SegmentType) -> &'static str {
+    match seg_type {
+        SegmentType::Raid0 { .. } => "raid0",
+        SegmentType::Raid1 { .. } => "raid1",
+        SegmentType::Raid5 { .. } => "raid5",
+        SegmentType::Raid6 { .. } => "raid6",
+        SegmentType::Raid10 { .. } => "raid10",
+        _ => "raid",
+    }
+}
+
+fn parse_thin_segment(
+    params: &[(String, String)],
+    context: &str,
+    lv_names: &HashSet<&str>,
+) -> Result<ParsedSegmentParts> {
+    let mut dependencies = SegmentDependencies {
+        thin_pool: Some(required_lv_ref(params, "thin_pool", context, lv_names)?),
+        transaction_id: Some(required_u64(params, "transaction_id", context)?),
+        device_id: Some(required_u64(params, "device_id", context)?),
+        ..SegmentDependencies::default()
+    };
+    dependencies.origin = optional_lv_ref(params, "origin", lv_names)?;
+    dependencies.external_origin = optional_lv_ref(params, "external_origin", lv_names)?;
+    let areas = dependencies_to_areas(&dependencies);
+    Ok(ParsedSegmentParts {
+        seg_type: SegmentType::ThinVolume,
+        stripes: Vec::new(),
+        areas,
+        dependencies,
+    })
+}
+
+fn parse_thin_pool_segment(
+    params: &[(String, String)],
+    context: &str,
+    lv_names: &HashSet<&str>,
+) -> Result<ParsedSegmentParts> {
+    let dependencies = SegmentDependencies {
+        metadata: Some(required_lv_ref(params, "metadata", context, lv_names)?),
+        pool: Some(required_lv_ref(params, "pool", context, lv_names)?),
+        transaction_id: Some(required_u64(params, "transaction_id", context)?),
+        chunk_size: Some(required_u64(params, "chunk_size", context)?),
+        ..SegmentDependencies::default()
+    };
+    let areas = dependencies_to_areas(&dependencies);
+    Ok(ParsedSegmentParts {
+        seg_type: SegmentType::ThinPool,
+        stripes: Vec::new(),
+        areas,
+        dependencies,
+    })
+}
+
+fn parse_cache_segment(
+    params: &[(String, String)],
+    context: &str,
+    lv_names: &HashSet<&str>,
+) -> Result<ParsedSegmentParts> {
+    let dependencies = SegmentDependencies {
+        cache_pool: Some(required_lv_ref(params, "cache_pool", context, lv_names)?),
+        origin: Some(required_lv_ref(params, "origin", context, lv_names)?),
+        chunk_size: optional_u64(params, "chunk_size"),
+        metadata_format: optional_u64(params, "metadata_format"),
+        metadata_start: optional_u64(params, "metadata_start"),
+        metadata_len: optional_u64(params, "metadata_len"),
+        data_start: optional_u64(params, "data_start"),
+        data_len: optional_u64(params, "data_len"),
+        metadata_id: optional_string(params, "metadata_id"),
+        data_id: optional_string(params, "data_id"),
+        ..SegmentDependencies::default()
+    };
+    let areas = dependencies_to_areas(&dependencies);
+    Ok(ParsedSegmentParts {
+        seg_type: SegmentType::CacheVolume,
+        stripes: Vec::new(),
+        areas,
+        dependencies,
+    })
+}
+
+fn parse_cache_pool_segment(
+    params: &[(String, String)],
+    context: &str,
+    lv_names: &HashSet<&str>,
+) -> Result<ParsedSegmentParts> {
+    let data_key = if params.iter().any(|(key, _)| key == "data") {
+        "data"
+    } else {
+        "pool"
+    };
+    let dependencies = SegmentDependencies {
+        data: Some(required_lv_ref(params, data_key, context, lv_names)?),
+        metadata: Some(required_lv_ref(params, "metadata", context, lv_names)?),
+        chunk_size: optional_u64(params, "chunk_size"),
+        metadata_format: optional_u64(params, "metadata_format"),
+        ..SegmentDependencies::default()
+    };
+    let areas = dependencies_to_areas(&dependencies);
+    Ok(ParsedSegmentParts {
+        seg_type: SegmentType::CachePool,
+        stripes: Vec::new(),
+        areas,
+        dependencies,
+    })
+}
+
+fn parse_snapshot_segment(
+    params: &[(String, String)],
+    context: &str,
+    lv_names: &HashSet<&str>,
+) -> Result<ParsedSegmentParts> {
+    let mut dependencies = SegmentDependencies {
+        origin: Some(required_lv_ref(params, "origin", context, lv_names)?),
+        chunk_size: Some(required_u64(params, "chunk_size", context)?),
+        ..SegmentDependencies::default()
+    };
+    dependencies.cow_store = optional_lv_ref(params, "cow_store", lv_names)?;
+    dependencies.merging_store = optional_lv_ref(params, "merging_store", lv_names)?;
+    if dependencies.cow_store.is_none() && dependencies.merging_store.is_none() {
+        return Err(LvmError::MetadataParseError {
+            line: 0,
+            message: format!("snapshot segment missing cow_store or merging_store in {context}"),
+        });
+    }
+    let areas = dependencies_to_areas(&dependencies);
+    Ok(ParsedSegmentParts {
+        seg_type: SegmentType::Snapshot,
+        stripes: Vec::new(),
+        areas,
+        dependencies,
+    })
+}
+
+fn required_lv_ref(
+    params: &[(String, String)],
+    key: &str,
+    context: &str,
+    lv_names: &HashSet<&str>,
+) -> Result<String> {
+    let name = required_string(params, key, context)?;
+    let _known = lv_names.contains(name.as_str());
+    Ok(name)
+}
+
+fn optional_lv_ref(
+    params: &[(String, String)],
+    key: &str,
+    lv_names: &HashSet<&str>,
+) -> Result<Option<String>> {
+    let Some((_, name)) = params.iter().find(|(param_key, _)| param_key == key) else {
+        return Ok(None);
+    };
+    let _known = lv_names.contains(name.as_str());
+    Ok(Some(name.clone()))
+}
+
+fn dependencies_to_areas(dependencies: &SegmentDependencies) -> Vec<SegmentArea> {
+    dependencies
+        .referenced_lvs()
+        .into_iter()
+        .map(|name| SegmentArea::LogicalVolume {
+            name: name.to_string(),
+            start_extent: 0,
+        })
+        .collect()
 }
 
 fn unsupported_segment(start_extent: u64, extent_count: u64, reason: String) -> SegmentMeta {
@@ -1265,12 +1653,29 @@ fn unsupported_segment_with_areas(
     reason: String,
     areas: Vec<SegmentArea>,
 ) -> SegmentMeta {
+    unsupported_segment_with_areas_and_dependencies(
+        start_extent,
+        extent_count,
+        reason,
+        areas,
+        SegmentDependencies::default(),
+    )
+}
+
+fn unsupported_segment_with_areas_and_dependencies(
+    start_extent: u64,
+    extent_count: u64,
+    reason: String,
+    areas: Vec<SegmentArea>,
+    dependencies: SegmentDependencies,
+) -> SegmentMeta {
     SegmentMeta {
         start_extent,
         extent_count,
         seg_type: SegmentType::Unsupported { type_name: reason },
         stripes: Vec::new(),
         areas,
+        dependencies,
     }
 }
 
@@ -1336,10 +1741,11 @@ fn unsupported_segment_type_name(segment: &SegmentMeta) -> Option<&str> {
     }
 }
 
-fn unsupported_lv_segment_with_areas(
+fn unsupported_lv_segment_with_areas_and_dependencies(
     extent_count: u64,
     reason: String,
     areas: Vec<SegmentArea>,
+    dependencies: SegmentDependencies,
 ) -> SegmentMeta {
     SegmentMeta {
         start_extent: 0,
@@ -1347,24 +1753,144 @@ fn unsupported_lv_segment_with_areas(
         seg_type: SegmentType::Unsupported { type_name: reason },
         stripes: Vec::new(),
         areas,
+        dependencies,
     }
 }
 
-fn areas_from_stripes(stripes: &[(String, u64)]) -> Vec<SegmentArea> {
-    stripes
+fn merge_segment_dependencies(segs: &[SegmentMeta]) -> SegmentDependencies {
+    let mut merged = SegmentDependencies::default();
+    for segment in segs {
+        merge_optional_string(&mut merged.thin_pool, &segment.dependencies.thin_pool);
+        merge_optional_string(&mut merged.metadata, &segment.dependencies.metadata);
+        merge_optional_string(&mut merged.pool, &segment.dependencies.pool);
+        merge_optional_string(&mut merged.data, &segment.dependencies.data);
+        merge_optional_string(&mut merged.origin, &segment.dependencies.origin);
+        merge_optional_string(
+            &mut merged.external_origin,
+            &segment.dependencies.external_origin,
+        );
+        merge_optional_string(&mut merged.cow_store, &segment.dependencies.cow_store);
+        merge_optional_string(
+            &mut merged.merging_store,
+            &segment.dependencies.merging_store,
+        );
+        merge_optional_string(&mut merged.cache_pool, &segment.dependencies.cache_pool);
+        merge_optional_string(&mut merged.metadata_id, &segment.dependencies.metadata_id);
+        merge_optional_string(&mut merged.data_id, &segment.dependencies.data_id);
+        merged.transaction_id = merged
+            .transaction_id
+            .or(segment.dependencies.transaction_id);
+        merged.device_id = merged.device_id.or(segment.dependencies.device_id);
+        merged.chunk_size = merged.chunk_size.or(segment.dependencies.chunk_size);
+        merged.metadata_format = merged
+            .metadata_format
+            .or(segment.dependencies.metadata_format);
+        merged.metadata_start = merged
+            .metadata_start
+            .or(segment.dependencies.metadata_start);
+        merged.metadata_len = merged.metadata_len.or(segment.dependencies.metadata_len);
+        merged.data_start = merged.data_start.or(segment.dependencies.data_start);
+        merged.data_len = merged.data_len.or(segment.dependencies.data_len);
+        if merged.raid_component_source.is_none() {
+            merged.raid_component_source = segment.dependencies.raid_component_source;
+        }
+        if merged.raid_components.is_empty() {
+            merged.raid_components = segment.dependencies.raid_components.clone();
+        }
+    }
+    merged
+}
+
+fn merge_optional_string(target: &mut Option<String>, source: &Option<String>) {
+    if target.is_none() {
+        *target = source.clone();
+    }
+}
+
+fn resolve_stripe_areas(
+    stripes: &[(String, u64)],
+    pv_names: &HashSet<&str>,
+    lv_names: &HashSet<&str>,
+) -> Result<Vec<SegmentArea>> {
+    let mut areas = Vec::with_capacity(stripes.len());
+    for (name, start_extent) in stripes {
+        if pv_names.contains(name.as_str()) {
+            areas.push(SegmentArea::PhysicalVolume {
+                name: name.clone(),
+                start_extent: *start_extent,
+            });
+        } else if lv_names.contains(name.as_str()) {
+            areas.push(SegmentArea::LogicalVolume {
+                name: name.clone(),
+                start_extent: *start_extent,
+            });
+        } else {
+            return Err(LvmError::MetadataParseError {
+                line: 0,
+                message: format!("unknown LVM segment area '{}'", name),
+            });
+        }
+    }
+    Ok(areas)
+}
+
+fn stripes_from_pv_areas(areas: &[SegmentArea]) -> Vec<(String, u64)> {
+    areas
         .iter()
-        .map(|(name, start_extent)| SegmentArea::PhysicalVolume {
-            name: name.clone(),
-            start_extent: *start_extent,
+        .filter_map(|area| match area {
+            SegmentArea::PhysicalVolume { name, start_extent } => {
+                Some((name.clone(), *start_extent))
+            }
+            SegmentArea::LogicalVolume { .. } | SegmentArea::Unassigned { .. } => None,
         })
         .collect()
 }
 
-fn parse_optional_areas(params: &[(String, String)]) -> Result<Vec<SegmentArea>> {
+fn parse_optional_areas(
+    params: &[(String, String)],
+    pv_names: &HashSet<&str>,
+    lv_names: &HashSet<&str>,
+) -> Result<Vec<SegmentArea>> {
     let Some((_, raw)) = params.iter().find(|(key, _)| key == "areas") else {
         return Ok(Vec::new());
     };
-    parse_areas_list(raw)
+    parse_areas_list(raw, pv_names, lv_names)
+}
+
+fn parse_raid_component_areas(
+    params: &[(String, String)],
+    key: &str,
+    source: RaidComponentSource,
+    lv_names: &HashSet<&str>,
+) -> Result<(Vec<SegmentArea>, Vec<RaidComponent>)> {
+    let raw = required_string(params, key, "raid component list")?;
+    parse_raid_component_list(&raw, source, lv_names)
+}
+
+fn parse_raid_component_list(
+    raw: &str,
+    source: RaidComponentSource,
+    lv_names: &HashSet<&str>,
+) -> Result<(Vec<SegmentArea>, Vec<RaidComponent>)> {
+    let names = parse_component_names(raw, lv_names)?;
+    let components = match source {
+        RaidComponentSource::Raid0Lvs | RaidComponentSource::Stripes => names
+            .iter()
+            .map(|name| RaidComponent {
+                data_lv: name.clone(),
+                metadata_lv: None,
+            })
+            .collect(),
+        RaidComponentSource::Raids => parse_raid_data_meta_pairs(&names),
+    };
+    let areas = names
+        .into_iter()
+        .map(|name| SegmentArea::LogicalVolume {
+            name,
+            start_extent: 0,
+        })
+        .collect();
+    Ok((areas, components))
 }
 
 fn max_segment_end(segs: &[SegmentMeta]) -> Result<u64> {
@@ -1457,7 +1983,11 @@ fn parse_stripes_list(raw: &str, context: &str) -> Result<Vec<(String, u64)>> {
     Ok(result)
 }
 
-fn parse_areas_list(raw: &str) -> Result<Vec<SegmentArea>> {
+fn parse_areas_list(
+    raw: &str,
+    pv_names: &HashSet<&str>,
+    lv_names: &HashSet<&str>,
+) -> Result<Vec<SegmentArea>> {
     let clean = raw.trim_matches(|c| c == '[' || c == ']' || c == '"');
     if clean.is_empty() {
         return Ok(Vec::new());
@@ -1466,13 +1996,41 @@ fn parse_areas_list(raw: &str) -> Result<Vec<SegmentArea>> {
         .split(',')
         .map(|s| s.trim().trim_matches('"'))
         .collect();
-    if !parts.len().is_multiple_of(3) {
-        return Err(LvmError::MetadataParseError {
-            line: 0,
-            message: "areas list must contain triples of type, name, and extent".to_string(),
-        });
+
+    if parts.len().is_multiple_of(3) && looks_like_typed_areas_list(&parts) {
+        return parse_typed_areas_list(&parts);
+    }
+    if parts.len().is_multiple_of(2) {
+        return parse_untyped_areas_list(&parts, pv_names, lv_names);
     }
 
+    Err(LvmError::MetadataParseError {
+        line: 0,
+        message: "areas list must contain pairs of area name and extent or triples of type, name, and extent"
+            .to_string(),
+    })
+}
+
+fn looks_like_typed_areas_list(parts: &[&str]) -> bool {
+    parts.chunks_exact(3).all(|chunk| {
+        matches!(
+            chunk[0],
+            "pv" | "PV"
+                | "area_pv"
+                | "AREA_PV"
+                | "lv"
+                | "LV"
+                | "area_lv"
+                | "AREA_LV"
+                | "unassigned"
+                | "UNASSIGNED"
+                | "area_unassigned"
+                | "AREA_UNASSIGNED"
+        )
+    })
+}
+
+fn parse_typed_areas_list(parts: &[&str]) -> Result<Vec<SegmentArea>> {
     let mut result = Vec::new();
     let mut i = 0;
     while i + 2 < parts.len() {
@@ -1508,6 +2066,96 @@ fn parse_areas_list(raw: &str) -> Result<Vec<SegmentArea>> {
         i += 3;
     }
     Ok(result)
+}
+
+fn parse_untyped_areas_list(
+    parts: &[&str],
+    pv_names: &HashSet<&str>,
+    lv_names: &HashSet<&str>,
+) -> Result<Vec<SegmentArea>> {
+    let mut result = Vec::new();
+    let mut i = 0;
+    while i + 1 < parts.len() {
+        let name = parts[i];
+        if name.is_empty() {
+            return Err(LvmError::MetadataParseError {
+                line: 0,
+                message: "empty LV name in areas list".to_string(),
+            });
+        }
+        let start_extent =
+            parts[i + 1]
+                .parse::<u64>()
+                .map_err(|_| LvmError::MetadataParseError {
+                    line: 0,
+                    message: "invalid extent in areas list".to_string(),
+                })?;
+        if pv_names.contains(name) {
+            result.push(SegmentArea::PhysicalVolume {
+                name: name.to_string(),
+                start_extent,
+            });
+        } else if lv_names.contains(name) {
+            result.push(SegmentArea::LogicalVolume {
+                name: name.to_string(),
+                start_extent,
+            });
+        } else {
+            return Err(LvmError::MetadataParseError {
+                line: 0,
+                message: format!("unknown LVM segment area '{}'", name),
+            });
+        }
+        i += 2;
+    }
+    Ok(result)
+}
+
+fn parse_component_names(raw: &str, lv_names: &HashSet<&str>) -> Result<Vec<String>> {
+    let clean = raw.trim_matches(|c| c == '[' || c == ']' || c == '"');
+    if clean.is_empty() {
+        return Ok(Vec::new());
+    }
+    clean
+        .split(',')
+        .map(|item| item.trim().trim_matches('"'))
+        .map(|name| {
+            if name.is_empty() {
+                return Err(LvmError::MetadataParseError {
+                    line: 0,
+                    message: "empty component LV name in raid component list".to_string(),
+                });
+            }
+            if !lv_names.contains(name) {
+                return Err(LvmError::MetadataParseError {
+                    line: 0,
+                    message: format!("unknown raid component logical volume '{}'", name),
+                });
+            }
+            Ok(name.to_string())
+        })
+        .collect()
+}
+
+fn parse_raid_data_meta_pairs(names: &[String]) -> Vec<RaidComponent> {
+    let mut components = Vec::new();
+    let mut index = 0;
+    while index < names.len() {
+        if names[index].contains("_rmeta_") && index + 1 < names.len() {
+            components.push(RaidComponent {
+                data_lv: names[index + 1].clone(),
+                metadata_lv: Some(names[index].clone()),
+            });
+            index += 2;
+        } else {
+            components.push(RaidComponent {
+                data_lv: names[index].clone(),
+                metadata_lv: None,
+            });
+            index += 1;
+        }
+    }
+    components
 }
 
 #[cfg(test)]

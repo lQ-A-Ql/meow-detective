@@ -540,14 +540,25 @@ fn unsupported_label_with_area_hint(
             _ => None,
         })
         .collect::<Vec<_>>();
-    if component_lvs.is_empty() {
+    let dependency_lvs = component_graph_lvs(segment);
+    if component_lvs.is_empty() && dependency_lvs.is_empty() {
         return type_name.to_string();
     }
-    format!(
-        "{} (component LV graph: {})",
-        type_name,
-        component_lvs.join(", ")
-    )
+    let mut hints = Vec::new();
+    if !component_lvs.is_empty() {
+        hints.push(format!("areas={}", component_lvs.join(", ")));
+    }
+    if !dependency_lvs.is_empty() {
+        hints.push(format!("dependencies={}", dependency_lvs.join(", ")));
+    }
+    format!("{} (component LV graph: {})", type_name, hints.join("; "))
+}
+
+fn component_graph_lvs(segment: &crate::metadata::SegmentMeta) -> Vec<&str> {
+    let mut lvs = segment.dependencies.referenced_lvs();
+    lvs.sort_unstable();
+    lvs.dedup();
+    lvs
 }
 
 #[cfg(test)]
@@ -904,6 +915,112 @@ thin_root {{ id="lv-thin-root" status=["READ","WRITE","VISIBLE"] segment_count=1
         assert_eq!(direct.len(), 1);
         assert_eq!(direct[0].0, 0);
         assert_eq!(direct[0].1.name, "root");
+    }
+
+    #[test]
+    fn discover_resolves_component_lv_area_backed_by_physical_volume() {
+        let mut disk = build_synthetic_lvm_disk();
+        let metadata_text = format!(
+            r#"test_vg {{
+id="vg-component-area"
+seqno=4
+extent_size=1
+physical_volumes {{ pv0 {{ id="{}" pe_start=5 pe_count=4096 }} }}
+logical_volumes {{
+component_lv {{ id="lv-component" status=["READ","WRITE"] segment_count=1 segment1 {{ start_extent=0 extent_count=1 type="linear" stripe_count=1 stripes=["pv0",0] }} }}
+direct_root {{ id="lv-direct" status=["READ","WRITE","VISIBLE"] segment_count=1 segment1 {{ start_extent=0 extent_count=1 type="linear" stripe_count=1 stripes=["pv0",1] }} }}
+component_backed {{ id="lv-component-backed" status=["READ","WRITE","VISIBLE"] segment_count=1 segment1 {{ start_extent=0 extent_count=1 type="linear" stripe_count=1 stripes=["component_lv",0] }} }}
+}}
+}}
+"#,
+            "abcdef1234567890abcdef1234567890"
+        );
+        write_synthetic_metadata(&mut disk, &metadata_text);
+        let marker = b"COMPONENT-BACKED";
+        disk[SYNTHETIC_DATA_AREA_START as usize..SYNTHETIC_DATA_AREA_START as usize + marker.len()]
+            .copy_from_slice(marker);
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeDiskReader::new(disk));
+        let pool = LvmPool::discover(vec![reader], vec![0]).unwrap();
+        let all = pool.list_volumes();
+        assert_eq!(all.len(), 3);
+        assert_eq!(all[0].name, "component_lv");
+        assert!(!all[0].directly_mappable);
+        assert_eq!(all[1].name, "direct_root");
+        assert!(all[1].directly_mappable);
+        assert_eq!(all[2].name, "component_backed");
+        assert!(all[2].visible);
+        assert!(all[2].directly_mappable);
+        assert!(all[2].unsupported_reason.is_none());
+
+        let direct = pool.list_direct_volumes();
+        assert_eq!(direct.len(), 2);
+        assert_eq!(direct[0].0, 1);
+        assert_eq!(direct[0].1.name, "direct_root");
+        assert_eq!(direct[1].0, 2);
+        assert_eq!(direct[1].1.name, "component_backed");
+
+        let mut lv = pool.open_volume(2).unwrap();
+        let mut buf = vec![0u8; marker.len()];
+        lv.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf, marker);
+    }
+
+    #[test]
+    fn discover_fails_closed_on_cyclic_component_lv_area() {
+        let mut disk = build_synthetic_lvm_disk();
+        let metadata_text = format!(
+            r#"test_vg {{
+id="vg-cycle"
+seqno=5
+extent_size=1
+physical_volumes {{ pv0 {{ id="{}" pe_start=5 pe_count=4096 }} }}
+logical_volumes {{
+cycle_a {{ id="lv-cycle-a" status=["READ","WRITE","VISIBLE"] segment_count=1 segment1 {{ start_extent=0 extent_count=1 type="linear" stripe_count=1 stripes=["cycle_b",0] }} }}
+cycle_b {{ id="lv-cycle-b" status=["READ","WRITE","VISIBLE"] segment_count=1 segment1 {{ start_extent=0 extent_count=1 type="linear" stripe_count=1 stripes=["cycle_a",0] }} }}
+}}
+}}
+"#,
+            "abcdef1234567890abcdef1234567890"
+        );
+        write_synthetic_metadata(&mut disk, &metadata_text);
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeDiskReader::new(disk));
+        let err = match LvmPool::discover(vec![reader], vec![0]) {
+            Ok(_) => panic!("cyclic component LV graph should fail closed"),
+            Err(err) => err,
+        };
+
+        assert!(matches!(err, LvmError::MetadataParseError { .. }));
+        assert!(err.to_string().contains("cyclic LVM"));
+    }
+
+    #[test]
+    fn discover_fails_closed_when_component_lv_depends_on_thin_volume() {
+        let mut disk = build_synthetic_lvm_disk();
+        let metadata_text = format!(
+            r#"test_vg {{
+id="vg-thin-dependency"
+seqno=6
+extent_size=1
+physical_volumes {{ pv0 {{ id="{}" pe_start=5 pe_count=4096 }} }}
+logical_volumes {{
+thin_component {{ id="lv-thin-component" status=["READ","WRITE","VISIBLE"] segment_count=1 segment1 {{ start_extent=0 extent_count=1 type="thin" thin_pool="pool" transaction_id=1 device_id=7 }} }}
+component_backed {{ id="lv-component-backed" status=["READ","WRITE","VISIBLE"] segment_count=1 segment1 {{ start_extent=0 extent_count=1 type="linear" stripe_count=1 stripes=["thin_component",0] }} }}
+}}
+}}
+"#,
+            "abcdef1234567890abcdef1234567890"
+        );
+        write_synthetic_metadata(&mut disk, &metadata_text);
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeDiskReader::new(disk));
+        let err = match LvmPool::discover(vec![reader], vec![0]) {
+            Ok(_) => panic!("component graph through thin volume should fail closed"),
+            Err(err) => err,
+        };
+
+        assert!(err.to_string().contains("thin"), "unexpected error: {err}");
     }
 
     #[test]

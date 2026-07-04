@@ -5,9 +5,12 @@
 //! These tests are ignored by default because they require the environment
 //! variable `FORENSICS_LINUX_E01_FIXTURE` pointing to a Linux E01 file, e.g.:
 //!   D:\獬豸杯\检材3.E01
+//! PVE cluster coverage uses `FORENSICS_PVE_CLUSTER_ROOT`, e.g.:
+//!   E:\pangushi\服务器
 //!
 //! Run with:
 //!   $env:FORENSICS_LINUX_E01_FIXTURE='D:\獬豸杯\检材3.E01'
+//!   $env:FORENSICS_PVE_CLUSTER_ROOT='E:\pangushi\服务器'
 //!   cargo test -p app-services --test linux_e01_integration -- --ignored
 
 use app_services::{
@@ -33,7 +36,7 @@ use persistence_sqlite::repositories::{
 };
 use rusqlite::Connection;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const LIUYANG_LVM_POOL_OFFSET: u64 = 1_074_790_400;
 const LIUYANG_ROOT_LV_NAME: &str = "root";
@@ -74,6 +77,12 @@ fn fixture_path() -> PathBuf {
             // Default fallback — only works in the test author's environment.
             PathBuf::from(r"D:\獬豸杯\检材3.E01")
         })
+}
+
+fn pve_cluster_root() -> PathBuf {
+    std::env::var("FORENSICS_PVE_CLUSTER_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(r"E:\pangushi\服务器"))
 }
 
 fn build_synthetic_lvm_pv(
@@ -248,7 +257,7 @@ fn write_synthetic_lvm_metadata(pv: &mut [u8], metadata_text: &str) {
 }
 
 fn write_ext4_marker(pv: &mut [u8]) {
-    let marker_offset = SYNTHETIC_LV_MARKER_OFFSET + 1024;
+    let marker_offset = SYNTHETIC_LV_MARKER_OFFSET + 1024 + 0x38;
     pv[marker_offset..marker_offset + 2].copy_from_slice(&0xEF53u16.to_le_bytes());
 }
 
@@ -293,7 +302,7 @@ fn lvm_expansion_iterates_independent_volume_groups_by_remaining_pv_offsets() {
     let direct_pool = fs_lvm::LvmPool::discover(vec![direct_reader], vec![low_offset]).unwrap();
     let mut direct_lv = direct_pool.open_volume(0).unwrap();
     let mut direct_magic = [0u8; 2];
-    direct_lv.seek(SeekFrom::Start(1024)).unwrap();
+    direct_lv.seek(SeekFrom::Start(1024 + 0x38)).unwrap();
     direct_lv.read_exact(&mut direct_magic).unwrap();
     assert_eq!(u16::from_le_bytes(direct_magic), 0xEF53);
     expand_lvm_pool_candidates(&mut probe, &source_path, &source_kind);
@@ -473,9 +482,17 @@ fn lvm_expansion_skips_incomplete_high_seqno_vg_but_expands_complete_vg() {
         probe
             .warnings
             .iter()
-            .any(|warning| warning.contains("high_incomplete_vg")
-                && warning.contains(missing_high_pv_uuid)),
-        "incomplete VG should be reported with missing PV UUID; warnings={:?}",
+            .any(|warning| warning.contains("incomplete")
+                && warning.contains("VG name='high_incomplete_vg'")
+                && warning.contains("PV name='pv1'")
+                && warning.contains(missing_high_pv_uuid)
+                && warning.contains("source_path='<missing>'")
+                && warning.contains("offset=<missing>")
+                && warning.contains("observed PV source(s)")
+                && warning.contains("source_path='")
+                && warning.contains("offset=")
+                && warning.contains("LV name='high_root'")),
+        "incomplete VG should be reported with VG/LV/PV/source_path/offset diagnostics; warnings={:?}",
         probe.warnings
     );
 }
@@ -511,7 +528,9 @@ fn lvm_expansion_reports_metadata_parse_diagnostics() {
     assert!(
         probe.warnings.iter().any(|warning| {
             warning.contains("metadata area 0")
-                && warning.contains("PV offset 1048576")
+                && warning.contains("offset=1048576")
+                && warning.contains("source_path='")
+                && warning.contains("pv_uuid='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'")
                 && warning.contains("MDA header magic mismatch")
         }),
         "corrupt LVM metadata should include metadata-area diagnostics; warnings={:?}",
@@ -563,7 +582,12 @@ fn lvm_expansion_skips_internal_and_thin_logical_volumes() {
         probe
             .warnings
             .iter()
-            .any(|warning| warning.contains("pool_tdata") && warning.contains("role='thin-data'")),
+            .any(|warning| warning.contains("LV name='pool_tdata'")
+                && warning.contains("role='thin-data'")
+                && warning.contains("VG name='mixed_vg'")
+                && warning.contains("PV name='pv0'")
+                && warning.contains("source_path='")
+                && warning.contains("offset=")),
         "internal thin data LV skip should be auditable; warnings={:?}",
         probe.warnings
     );
@@ -571,7 +595,12 @@ fn lvm_expansion_skips_internal_and_thin_logical_volumes() {
         probe
             .warnings
             .iter()
-            .any(|warning| warning.contains("thin_root") && warning.contains("role='thin'")),
+            .any(|warning| warning.contains("LV name='thin_root'")
+                && warning.contains("role='thin'")
+                && warning.contains("VG name='mixed_vg'")
+                && warning.contains("PV name='pv0'")
+                && warning.contains("source_path='")
+                && warning.contains("offset=")),
         "visible thin LV skip should be auditable; warnings={:?}",
         probe.warnings
     );
@@ -623,10 +652,13 @@ thin_root { id="lv-thin-root" status=["READ","WRITE","VISIBLE"] segment_count=1 
         "successfully parsed LVM pool partition should be redirected even without supported LV candidates"
     );
     assert!(
-        probe
-            .warnings
-            .iter()
-            .any(|warning| warning.contains("produced no supported logical volume candidates")),
+        probe.warnings.iter().any(|warning| warning
+            .contains("produced no supported logical volume candidates")
+            && warning.contains("VG name='test_vg'")
+            && warning.contains("PV name='pv0'")
+            && warning.contains("source_path='")
+            && warning.contains("offset=")
+            && warning.contains("LV name='thin_root'")),
         "unsupported-only VG should retain an actionable warning: {:?}",
         probe.warnings
     );
@@ -680,6 +712,55 @@ fn detect_expanded_linux_probe() -> app_services::datasource_service::ImageFiles
     let source_kind = DataSourceKind::E01;
     expand_lvm_pool_candidates(&mut probe, &fixture, &source_kind);
     probe
+}
+
+fn pve_cluster_e01_files(root: &Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    if !root.exists() {
+        return files;
+    }
+
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("e01"))
+            {
+                files.push(path);
+            }
+        }
+    }
+    files.sort();
+    files
+}
+
+fn is_lvm_expansion_diagnostic(warning: &str) -> bool {
+    warning.contains("LVM expand:")
+        && (warning.contains("skipping")
+            || warning.contains("missing")
+            || warning.contains("unsupported")
+            || warning.contains("discovery failed")
+            || warning.contains("no supported filesystem")
+            || warning.contains("produced no supported logical volume candidates"))
+}
+
+fn assert_lvm_diagnostic_has_trace_fields(warning: &str) {
+    assert!(
+        warning.contains("source_path='"),
+        "LVM diagnostic should include source_path: {warning}"
+    );
+    assert!(
+        warning.contains("offset="),
+        "LVM diagnostic should include PV offset: {warning}"
+    );
 }
 
 fn root_lv_candidate(
@@ -2040,6 +2121,186 @@ fn linux_e01_lvm_expansion_discovers_logical_volumes() {
     assert_root_lv_lists_system_info_paths(&root_fs);
 
     assert_lvm_root_lv_visible_without_expanded_pool_root(&probe, root_lv);
+}
+
+#[test]
+#[ignore = "requires FORENSICS_LINUX_E01_FIXTURE real Liuyang Linux E01 sample"]
+fn liuyang_linux_e01_lvm_probe_keeps_expanded_pool_and_traceable_identity() {
+    let fixture = fixture_path();
+    let mut reader = E01Reader::open(&fixture).unwrap();
+    let mut probe = detect_image_filesystem(&mut reader).unwrap();
+    assert!(
+        probe.candidates.iter().any(|candidate| {
+            candidate.kind == ImageFilesystemKind::LvmPool
+                && candidate.offset == LIUYANG_LVM_POOL_OFFSET
+        }),
+        "Liuyang sample should expose the physical LVM pool before expansion"
+    );
+
+    expand_lvm_pool_candidates(&mut probe, &fixture, &DataSourceKind::E01);
+
+    assert!(
+        probe.partitions.iter().any(|partition| {
+            partition.offset == LIUYANG_LVM_POOL_OFFSET
+                && matches!(
+                    partition.status,
+                    app_services::datasource_service::PartitionStatus::Expanded
+                )
+        }),
+        "Liuyang LVM pool partition should stay Expanded after LV redirection"
+    );
+    assert!(
+        probe.candidates.iter().all(|candidate| {
+            candidate.offset != LIUYANG_LVM_POOL_OFFSET
+                || !matches!(candidate.kind, ImageFilesystemKind::LvmPool)
+        }),
+        "expanded Liuyang LVM pool should not remain as an expandable placeholder candidate"
+    );
+
+    let root_lv = root_lv_candidate(&probe);
+    let identity = root_lv
+        .lvm_identity
+        .as_ref()
+        .expect("Liuyang root LV should persist LVM identity");
+    assert_eq!(identity.vg_name, LIUYANG_ROOT_LV_VG_NAME);
+    assert_eq!(identity.lv_name, LIUYANG_ROOT_LV_NAME);
+    assert_eq!(identity.pv_offsets, vec![LIUYANG_LVM_POOL_OFFSET]);
+    assert_eq!(identity.pv_sources.len(), 1);
+    assert_eq!(
+        identity.pv_sources[0].source_path,
+        fixture.to_string_lossy()
+    );
+    assert_eq!(identity.pv_sources[0].offset, LIUYANG_LVM_POOL_OFFSET);
+    assert_eq!(identity.pv_sources[0].pv_name.as_deref(), Some("pv0"));
+    assert!(
+        !identity.pv_sources[0].pv_uuid.is_empty(),
+        "Liuyang root LV should persist PV UUID for source rebinding"
+    );
+
+    for warning in probe
+        .warnings
+        .iter()
+        .filter(|warning| is_lvm_expansion_diagnostic(warning))
+    {
+        assert_lvm_diagnostic_has_trace_fields(warning);
+    }
+}
+
+#[test]
+#[ignore = "requires FORENSICS_PVE_CLUSTER_ROOT real PVE cluster E01 sample directory"]
+fn pve_cluster_e01_lvm_probe_has_explicit_diagnostics() {
+    let root = pve_cluster_root();
+    let e01_files = pve_cluster_e01_files(&root);
+    assert!(
+        !e01_files.is_empty(),
+        "PVE cluster root {} should contain server disk E01 files",
+        root.display()
+    );
+
+    let mut saw_lvm_pool = false;
+    let mut saw_expanded_lvm = false;
+    let mut saw_lvm_diagnostic = false;
+
+    for e01_path in &e01_files {
+        eprintln!("=== PVE LVM probe: {} ===", e01_path.display());
+        let mut saw_file_lvm_diagnostic = false;
+        let Ok(mut reader) = E01Reader::open(e01_path) else {
+            eprintln!(
+                "  warning: PVE E01 {} could not open as standalone image; likely continuation/secondary extent",
+                e01_path.display()
+            );
+            continue;
+        };
+        let mut probe = detect_image_filesystem(&mut reader).unwrap_or_else(|error| {
+            panic!(
+                "PVE E01 {} filesystem probe should not panic/fail: {}",
+                e01_path.display(),
+                error
+            )
+        });
+        let initial_lvm_pool_offsets = probe
+            .candidates
+            .iter()
+            .filter(|candidate| candidate.kind == ImageFilesystemKind::LvmPool)
+            .map(|candidate| candidate.offset)
+            .collect::<Vec<_>>();
+        if !initial_lvm_pool_offsets.is_empty() {
+            saw_lvm_pool = true;
+        }
+
+        expand_lvm_pool_candidates(&mut probe, e01_path, &DataSourceKind::E01);
+        for warning in &probe.warnings {
+            eprintln!("  warning: {warning}");
+            if is_lvm_expansion_diagnostic(warning) {
+                assert_lvm_diagnostic_has_trace_fields(warning);
+                saw_file_lvm_diagnostic = true;
+                saw_lvm_diagnostic = true;
+            }
+        }
+
+        for offset in &initial_lvm_pool_offsets {
+            let expanded_pool = probe.partitions.iter().any(|partition| {
+                partition.offset == *offset
+                    && matches!(
+                        partition.status,
+                        app_services::datasource_service::PartitionStatus::Expanded
+                    )
+            });
+            let has_remaining_pool_candidate = probe.candidates.iter().any(|candidate| {
+                candidate.kind == ImageFilesystemKind::LvmPool && candidate.offset == *offset
+            });
+            assert!(
+                expanded_pool || has_remaining_pool_candidate || saw_file_lvm_diagnostic,
+                "PVE LVM pool at {} offset {} must be expanded, retained, or diagnosed explicitly",
+                e01_path.display(),
+                offset
+            );
+        }
+
+        for candidate in probe
+            .candidates
+            .iter()
+            .filter(|candidate| matches!(candidate.source, ImageFilesystemSource::LvmLogicalVolume))
+        {
+            saw_expanded_lvm = true;
+            let identity = candidate
+                .lvm_identity
+                .as_ref()
+                .expect("expanded PVE LV candidate must persist LVM identity");
+            assert!(
+                !identity.lv_name.is_empty(),
+                "expanded PVE LV candidate should persist LV name"
+            );
+            assert!(
+                !identity.pv_sources.is_empty(),
+                "expanded PVE LV candidate should persist PV source bindings"
+            );
+            assert_eq!(
+                identity.pv_offsets.len(),
+                identity.pv_sources.len(),
+                "expanded PVE LV candidate should keep PV offsets and sources aligned"
+            );
+            for source in &identity.pv_sources {
+                assert!(
+                    !source.source_path.is_empty(),
+                    "expanded PVE LV PV source should persist source path"
+                );
+                assert!(
+                    !source.pv_uuid.is_empty(),
+                    "expanded PVE LV PV source should persist PV UUID"
+                );
+            }
+        }
+    }
+
+    assert!(
+        saw_lvm_pool,
+        "PVE cluster sample should exercise at least one LVM pool"
+    );
+    assert!(
+        saw_expanded_lvm || saw_lvm_diagnostic,
+        "PVE LVM probe should either expose host LV candidates or emit explicit LVM diagnostics"
+    );
 }
 
 fn assert_lvm_root_lv_visible_without_expanded_pool_root(
