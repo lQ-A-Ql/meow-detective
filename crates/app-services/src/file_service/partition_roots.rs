@@ -45,6 +45,22 @@ pub fn insert_partition_placeholder_root(
     Ok(root_id)
 }
 
+pub fn remove_partition_placeholder_root(
+    conn: &Connection,
+    data_source_id: &DataSourceId,
+    partition_index: usize,
+) -> DbResult<usize> {
+    let pattern = format!("{PARTITION_PLACEHOLDER_PREFIX}{partition_index}/*");
+    let deleted = conn.execute(
+        "DELETE FROM file_entries
+         WHERE data_source_id = ?1
+           AND parent_id IS NULL
+           AND path GLOB ?2",
+        rusqlite::params![data_source_id.0, pattern],
+    )?;
+    Ok(deleted)
+}
+
 pub fn replace_placeholder_root_with_real(
     conn: &Connection,
     placeholder_id: &FileEntryId,

@@ -598,7 +598,9 @@ fn validate_preview_lvm_pv_source(
             std::io::ErrorKind::InvalidData,
             format!(
                 "LVM preview PV '{}' at offset {} label validation failed: {}",
-                expected_source.source_path, expected_offset, error
+                crate::datasource_service::lvm_source_fingerprint(&expected_source.source_path),
+                expected_offset,
+                error
             ),
         )
     })?;
@@ -609,7 +611,7 @@ fn validate_preview_lvm_pv_source(
             std::io::ErrorKind::InvalidData,
             format!(
                 "LVM preview PV '{}' at offset {} UUID mismatch: expected {}, found {}",
-                expected_source.source_path,
+                crate::datasource_service::lvm_source_fingerprint(&expected_source.source_path),
                 expected_offset,
                 expected_source.pv_uuid,
                 label.pv_uuid

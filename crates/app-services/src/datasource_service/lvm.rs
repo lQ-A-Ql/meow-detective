@@ -727,7 +727,7 @@ fn unknown_if_empty(value: &str) -> &str {
     }
 }
 
-fn lvm_source_fingerprint(source_path: &str) -> String {
+pub(crate) fn lvm_source_fingerprint(source_path: &str) -> String {
     if source_path.is_empty() {
         return "<unknown>".to_string();
     }

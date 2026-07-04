@@ -15,6 +15,7 @@
 //! in docs/pause-status-2026-06-11-file-tree-sorting.md.
 
 use app_services::{file_service, staging};
+use domain::{DataSourceId, EntryType, FileEntryId};
 use persistence_sqlite::repositories::partition_repo::{DataSourcePartitionRecord, PartitionRepo};
 use rusqlite::{params, Connection};
 use tempfile::TempDir;
@@ -377,4 +378,91 @@ fn repeated_merge_is_idempotent_and_stays_folded() {
     assert!(!root_names
         .iter()
         .any(|name| *name == "\\" || *name == "EFI"));
+}
+
+#[test]
+fn redirected_lvm_placeholder_root_can_be_removed_on_resume_repair() {
+    let main_conn = persistence_sqlite::connection::open_in_memory().unwrap();
+    seed_main_db(&main_conn);
+    let ds_id = DataSourceId(DS_ID.to_string());
+
+    PartitionRepo::new(&main_conn)
+        .insert_batch(&[
+            DataSourcePartitionRecord {
+                id: "part-lvm-pool".to_string(),
+                data_source_id: DS_ID.to_string(),
+                partition_index: 1,
+                name: "Linux LVM".to_string(),
+                kind_label: "LVM".to_string(),
+                status: "supported".to_string(),
+                type_guid: None,
+                offset: 1_048_576,
+                length: 1024,
+                filesystem: Some("LVM".to_string()),
+                unlock_hint: None,
+                lvm_vg_uuid: None,
+                lvm_vg_name: None,
+                lvm_lv_uuid: None,
+                lvm_lv_name: None,
+                lvm_pv_offsets_json: None,
+                lvm_pv_sources_json: None,
+            },
+            DataSourcePartitionRecord {
+                id: "part-root-lv".to_string(),
+                data_source_id: DS_ID.to_string(),
+                partition_index: 2,
+                name: "cl/root".to_string(),
+                kind_label: "XFS".to_string(),
+                status: "supported".to_string(),
+                type_guid: None,
+                offset: 1_048_576,
+                length: 1024,
+                filesystem: Some("XFS".to_string()),
+                unlock_hint: None,
+                lvm_vg_uuid: Some("vg".to_string()),
+                lvm_vg_name: Some("cl".to_string()),
+                lvm_lv_uuid: Some("lv".to_string()),
+                lvm_lv_name: Some("root".to_string()),
+                lvm_pv_offsets_json: Some("[1048576]".to_string()),
+                lvm_pv_sources_json: None,
+            },
+        ])
+        .unwrap();
+
+    file_service::insert_partition_placeholder_root(
+        &main_conn,
+        &ds_id,
+        1,
+        "Partition 1 (LVM)",
+        "queued",
+    )
+    .unwrap();
+    main_conn
+        .execute(
+            "INSERT INTO file_entries
+             (id, parent_id, data_source_id, path, name, entry_type, deleted, hidden, system)
+             VALUES ('root-lv', NULL, ?1, '', 'Partition 2 (XFS) - cl/root', 'directory', 0, 0, 0)",
+            params![DS_ID],
+        )
+        .unwrap();
+
+    let removed = file_service::remove_partition_placeholder_root(&main_conn, &ds_id, 1).unwrap();
+
+    assert_eq!(removed, 1);
+    let roots = persistence_sqlite::repositories::file_repo::FileRepo::new(&main_conn)
+        .find_roots(&ds_id)
+        .unwrap();
+    assert!(
+        roots
+            .iter()
+            .all(|entry| !entry.path.starts_with("__partition_placeholder__/1/")),
+        "redirected LVM placeholder should be removed from roots: {roots:?}"
+    );
+    assert!(
+        roots
+            .iter()
+            .any(|entry| entry.id == FileEntryId("root-lv".to_string())
+                && entry.entry_type == EntryType::Directory),
+        "real LV root must survive placeholder cleanup: {roots:?}"
+    );
 }

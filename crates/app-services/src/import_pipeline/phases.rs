@@ -444,6 +444,7 @@ fn probe_resume(
         kind,
         lvm_extra_sources,
     );
+    repair_resumed_partition_metadata(ctx, ds, &probe)?;
     emit_phase_profile(
         ctx.app(),
         ctx.job_id,
@@ -459,6 +460,24 @@ fn probe_resume(
         ctx.cancel_requested(),
     );
     *probe_candidates = probe.candidates;
+    Ok(())
+}
+
+fn repair_resumed_partition_metadata(
+    ctx: &mut ImportJobContext<'_>,
+    ds: &domain::DataSource,
+    probe: &datasource_service::ImageFilesystemProbe,
+) -> Result<(), CommandError> {
+    file_service::store_data_source_partitions(ctx.conn, &ds.id, &probe.partitions)
+        .map_err(CommandError::from_service_error)?;
+
+    for partition in &probe.partitions {
+        if partition.status == datasource_service::PartitionStatus::Expanded {
+            file_service::remove_partition_placeholder_root(ctx.conn, &ds.id, partition.index)
+                .map_err(CommandError::from_service_error)?;
+        }
+    }
+
     Ok(())
 }
 

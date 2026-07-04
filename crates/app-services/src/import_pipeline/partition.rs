@@ -581,7 +581,7 @@ fn validate_import_lvm_pv_source(
         Ok(label) => label,
         Err(error) => {
             tracing::warn!(
-                source = %expected_source.source_path,
+                source = %datasource_service::lvm_source_fingerprint(&expected_source.source_path),
                 offset = expected_offset,
                 error = %error,
                 "LVM import PV source label validation failed"
@@ -593,7 +593,7 @@ fn validate_import_lvm_pv_source(
     let expected_uuid = datasource_service::normalize_lvm_uuid_for_match(&expected_source.pv_uuid);
     if actual_uuid != expected_uuid {
         tracing::warn!(
-            source = %expected_source.source_path,
+            source = %datasource_service::lvm_source_fingerprint(&expected_source.source_path),
             offset = expected_offset,
             expected = %expected_source.pv_uuid,
             actual = %label.pv_uuid,

@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 mod lvm;
+pub(crate) use lvm::lvm_source_fingerprint;
 pub use lvm::{expand_lvm_pool_candidates, expand_lvm_pool_candidates_with_sources};
 
 const SECTOR_SIZE: u64 = 512;
