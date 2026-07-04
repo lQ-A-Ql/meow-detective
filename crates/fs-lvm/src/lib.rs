@@ -122,7 +122,11 @@ fn lvm_uuid_matches(label_uuid: &str, metadata_uuid: &str) -> bool {
 }
 
 fn normalize_lvm_uuid(uuid: &str) -> String {
-    uuid.trim().chars().filter(|ch| *ch != '-').collect()
+    uuid.trim()
+        .chars()
+        .filter(|ch| *ch != '-')
+        .collect::<String>()
+        .to_ascii_lowercase()
 }
 
 /// An opened LVM2 volume group with parsed metadata and ready-to-open logical
@@ -175,6 +179,7 @@ impl LvmPool {
         // the highest valid seqno. This mirrors LVM2's redundant metadata copy
         // selection while staying tolerant of stale or corrupt copies.
         let mut vg: Option<VolumeGroup> = None;
+        let mut first_fatal_metadata_error: Option<LvmError> = None;
         for entry in &pv_entries {
             if entry.label.metadata_areas.is_empty() {
                 continue;
@@ -189,6 +194,12 @@ impl LvmPool {
                 Err(LvmError::MetadataParseError { .. })
                 | Err(LvmError::MdaCrcMismatch { .. })
                 | Err(LvmError::MetadataCrcMismatch { .. }) => continue,
+                Err(err @ LvmError::FatalMetadataParseError { .. }) => {
+                    if first_fatal_metadata_error.is_none() {
+                        first_fatal_metadata_error = Some(err);
+                    }
+                    continue;
+                }
                 Err(err) => return Err(err),
             };
             if vg
@@ -198,10 +209,19 @@ impl LvmPool {
                 vg = Some(candidate);
             }
         }
-        let vg = vg.ok_or_else(|| LvmError::MetadataParseError {
-            line: 0,
-            message: "no valid metadata copy found on supplied physical volumes".to_string(),
-        })?;
+        let vg = match vg {
+            Some(vg) => vg,
+            None => {
+                if let Some(err) = first_fatal_metadata_error {
+                    return Err(err);
+                }
+                return Err(LvmError::MetadataParseError {
+                    line: 0,
+                    message: "no valid metadata copy found on supplied physical volumes"
+                        .to_string(),
+                });
+            }
+        };
 
         // Phase 3: Match PV UUIDs from metadata to reader entries,
         // building absolute (reader-start) data area offsets for each PV.
@@ -763,13 +783,17 @@ mod tests {
             mda[4..20].copy_from_slice(b" LVM2 x[5A%r0N*>");
             mda[20..24].copy_from_slice(&1u32.to_le_bytes());
             mda[24..32].copy_from_slice(&1024u64.to_le_bytes());
-            mda[32..40].copy_from_slice(&1536u64.to_le_bytes());
+            let mda_size = (text_bytes.len() as u64 + 1024).next_power_of_two();
+            mda[32..40].copy_from_slice(&mda_size.to_le_bytes());
 
             let rl_base: usize = 40;
             mda[rl_base..rl_base + 8].copy_from_slice(&512u64.to_le_bytes());
         }
 
         disk[text_offset..text_end].copy_from_slice(text_bytes);
+        if text_end < disk.len() {
+            disk[text_end..].fill(0);
+        }
 
         let text_size = text_bytes.len() as u64;
         let text_crc = crc::lvm_crc32(text_bytes);
@@ -781,6 +805,10 @@ mod tests {
             let mda_crc = crc::lvm_crc32(&mda[4..512]);
             mda[0..4].copy_from_slice(&mda_crc.to_le_bytes());
         }
+
+        disk[512 + 112..512 + 120]
+            .copy_from_slice(&((text_bytes.len() as u64 + 1024).next_power_of_two()).to_le_bytes());
+        refresh_label_crc(disk);
     }
 
     #[test]
@@ -827,6 +855,30 @@ mod tests {
             pool.pv_data_offsets,
             vec![("pv0".to_string(), SYNTHETIC_DATA_AREA_START)]
         );
+    }
+
+    #[test]
+    fn discover_matches_pv_uuid_case_insensitively() {
+        let mut disk = build_synthetic_lvm_disk();
+        let metadata_text = format!(
+            r#"test_vg {{
+id="vg-case-insensitive"
+seqno=2
+extent_size=1
+physical_volumes {{ pv0 {{ id="{}" pe_start=5 pe_count=10 }} }}
+logical_volumes {{
+root {{ id="lv-root" status=["READ","WRITE","VISIBLE"] segment_count=1 segment1 {{ start_extent=0 extent_count=5 type="linear" stripe_count=1 stripes=["pv0",0] }} }}
+}}
+}}
+"#,
+            "ABCDEF1234567890ABCDEF1234567890"
+        );
+        write_synthetic_metadata(&mut disk, &metadata_text);
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeDiskReader::new(disk));
+        let pool = LvmPool::discover(vec![reader], vec![0]).unwrap();
+
+        assert_eq!(pool.list_direct_volumes().len(), 1);
     }
 
     #[test]
@@ -915,6 +967,96 @@ thin_root {{ id="lv-thin-root" status=["READ","WRITE","VISIBLE"] segment_count=1
         assert_eq!(direct.len(), 1);
         assert_eq!(direct[0].0, 0);
         assert_eq!(direct[0].1.name, "root");
+    }
+
+    #[test]
+    fn unsupported_reason_preserves_advanced_segment_dependencies() {
+        let mut disk = build_synthetic_lvm_disk();
+        let metadata_text = format!(
+            r#"test_vg {{
+id="vg-advanced-diagnostics"
+seqno=7
+extent_size=1
+physical_volumes {{ pv0 {{ id="{}" pe_start=5 pe_count=4096 }} }}
+logical_volumes {{
+pool_tmeta {{ id="lv-pool-tmeta" status=["READ","WRITE"] segment_count=1 segment1 {{ start_extent=0 extent_count=1 type="linear" stripe_count=1 stripes=["pv0",0] }} }}
+pool_tdata {{ id="lv-pool-tdata" status=["READ","WRITE"] segment_count=1 segment1 {{ start_extent=0 extent_count=4 type="linear" stripe_count=1 stripes=["pv0",1] }} }}
+thin_pool {{ id="lv-thin-pool" status=["READ","WRITE"] segment_count=1 segment1 {{ start_extent=0 extent_count=4 type="thin-pool" metadata="pool_tmeta" pool="pool_tdata" transaction_id=1 chunk_size=128 }} }}
+thin_root {{ id="lv-thin-root" status=["READ","WRITE","VISIBLE"] segment_count=1 segment1 {{ start_extent=0 extent_count=2 type="thin" thin_pool="thin_pool" transaction_id=1 device_id=7 }} }}
+origin {{ id="lv-origin" status=["READ","WRITE","VISIBLE"] segment_count=1 segment1 {{ start_extent=0 extent_count=2 type="linear" stripe_count=1 stripes=["pv0",10] }} }}
+cache_cmeta {{ id="lv-cache-cmeta" status=["READ","WRITE"] segment_count=1 segment1 {{ start_extent=0 extent_count=1 type="linear" stripe_count=1 stripes=["pv0",12] }} }}
+cache_cdata {{ id="lv-cache-cdata" status=["READ","WRITE"] segment_count=1 segment1 {{ start_extent=0 extent_count=2 type="linear" stripe_count=1 stripes=["pv0",13] }} }}
+cache_pool {{ id="lv-cache-pool" status=["READ","WRITE"] segment_count=1 segment1 {{ start_extent=0 extent_count=2 type="cache-pool" metadata="cache_cmeta" data="cache_cdata" chunk_size=64 }} }}
+cached_root {{ id="lv-cached-root" status=["READ","WRITE","VISIBLE"] segment_count=1 segment1 {{ start_extent=0 extent_count=2 type="cache" cache_pool="cache_pool" origin="origin" }} }}
+snap_cow {{ id="lv-snap-cow" status=["READ","WRITE"] segment_count=1 segment1 {{ start_extent=0 extent_count=2 type="linear" stripe_count=1 stripes=["pv0",15] }} }}
+origin_snap {{ id="lv-origin-snap" status=["READ","WRITE","VISIBLE"] segment_count=1 segment1 {{ start_extent=0 extent_count=2 type="snapshot" origin="origin" cow_store="snap_cow" chunk_size=8 }} }}
+root_rmeta_0 {{ id="lv-root-rmeta-0" status=["READ","WRITE"] segment_count=1 segment1 {{ start_extent=0 extent_count=1 type="linear" stripe_count=1 stripes=["pv0",17] }} }}
+root_rimage_0 {{ id="lv-root-rimage-0" status=["READ","WRITE"] segment_count=1 segment1 {{ start_extent=0 extent_count=2 type="linear" stripe_count=1 stripes=["pv0",18] }} }}
+root_rmeta_1 {{ id="lv-root-rmeta-1" status=["READ","WRITE"] segment_count=1 segment1 {{ start_extent=0 extent_count=1 type="linear" stripe_count=1 stripes=["pv0",20] }} }}
+root_rimage_1 {{ id="lv-root-rimage-1" status=["READ","WRITE"] segment_count=1 segment1 {{ start_extent=0 extent_count=2 type="linear" stripe_count=1 stripes=["pv0",21] }} }}
+mirrored_root {{ id="lv-mirrored-root" status=["READ","WRITE","VISIBLE"] segment_count=1 segment1 {{ start_extent=0 extent_count=2 type="raid1" device_count=2 raids=["root_rmeta_0","root_rimage_0","root_rmeta_1","root_rimage_1"] }} }}
+}}
+}}
+"#,
+            "abcdef1234567890abcdef1234567890"
+        );
+        write_synthetic_metadata(&mut disk, &metadata_text);
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeDiskReader::new(disk));
+        let pool = LvmPool::discover(vec![reader], vec![0]).unwrap();
+        let volumes = pool.list_volumes();
+
+        let thin_root = volumes
+            .iter()
+            .find(|volume| volume.name == "thin_root")
+            .unwrap();
+        let thin_reason = thin_root.unsupported_reason.as_deref().unwrap();
+        assert!(thin_reason.contains("thin"));
+        assert!(thin_reason.contains("dependencies=thin_pool"));
+
+        let thin_pool = volumes
+            .iter()
+            .find(|volume| volume.name == "thin_pool")
+            .unwrap();
+        let thin_pool_reason = thin_pool.unsupported_reason.as_deref().unwrap();
+        assert_eq!(thin_pool_reason, "logical volume is hidden or internal");
+
+        let cached_root = volumes
+            .iter()
+            .find(|volume| volume.name == "cached_root")
+            .unwrap();
+        let cache_reason = cached_root.unsupported_reason.as_deref().unwrap();
+        assert!(cache_reason.contains("cache"));
+        assert!(cache_reason.contains("areas=origin, cache_pool"));
+        assert!(cache_reason.contains("dependencies=cache_pool, origin"));
+
+        let snapshot = volumes
+            .iter()
+            .find(|volume| volume.name == "origin_snap")
+            .unwrap();
+        let snapshot_reason = snapshot.unsupported_reason.as_deref().unwrap();
+        assert!(snapshot_reason.contains("snapshot"));
+        assert!(snapshot_reason.contains("areas=origin, snap_cow"));
+        assert!(snapshot_reason.contains("dependencies=origin, snap_cow"));
+
+        let raid = volumes
+            .iter()
+            .find(|volume| volume.name == "mirrored_root")
+            .unwrap();
+        let raid_reason = raid.unsupported_reason.as_deref().unwrap();
+        assert!(raid_reason.contains("raid1"));
+        assert!(
+            raid_reason.contains("areas=root_rmeta_0, root_rimage_0, root_rmeta_1, root_rimage_1")
+        );
+        assert!(raid_reason
+            .contains("dependencies=root_rimage_0, root_rimage_1, root_rmeta_0, root_rmeta_1"));
+
+        let direct_names = pool
+            .list_direct_volumes()
+            .into_iter()
+            .map(|(_, volume)| volume.name)
+            .collect::<Vec<_>>();
+        assert_eq!(direct_names, vec!["origin"]);
     }
 
     #[test]
@@ -1128,6 +1270,43 @@ component_backed {{ id="lv-component-backed" status=["READ","WRITE","VISIBLE"] s
                 pv_uuid
             } if pv_name == "pv1" && pv_uuid == PV1_UUID
         ));
+    }
+
+    #[test]
+    fn discover_uses_complete_lower_seqno_copy_when_higher_copy_is_incomplete() {
+        let complete_metadata = format!(
+            r#"test_vg {{
+id="vg-complete-lower"
+seqno=10
+extent_size=1
+physical_volumes {{
+pv0 {{ id="{}" pe_start=5 pe_count=16 }}
+pv1 {{ id="{}" pe_start=5 pe_count=16 }}
+}}
+logical_volumes {{
+root {{ id="lv-root" status=["READ","WRITE","VISIBLE"] segment_count=1 segment1 {{ start_extent=0 extent_count=1 type="linear" stripe_count=1 stripes=["pv0",0] }} }}
+}}
+}}
+"#,
+            PV0_UUID, PV1_UUID
+        );
+        let incomplete_metadata = complete_metadata.replace("seqno=10", "seqno=99").replace(
+            "pv0 { id=\"00000000000000000000000000000000\" pe_start=5 pe_count=16 }",
+            "pv0 { id=\"00000000000000000000000000000000\" pe_count=16 }",
+        );
+        let mut pv0 = vec![0u8; SYNTHETIC_PV_SIZE as usize];
+        let mut pv1 = vec![0u8; SYNTHETIC_PV_SIZE as usize];
+        write_synthetic_pv_label(&mut pv0, PV0_UUID);
+        write_synthetic_pv_label(&mut pv1, PV1_UUID);
+        write_synthetic_metadata(&mut pv0, &incomplete_metadata);
+        write_synthetic_metadata(&mut pv1, &complete_metadata);
+
+        let pv0_reader: Box<dyn EvidenceReader> = Box::new(FakeDiskReader::new(pv0));
+        let pv1_reader: Box<dyn EvidenceReader> = Box::new(FakeDiskReader::new(pv1));
+        let pool = LvmPool::discover(vec![pv0_reader, pv1_reader], vec![0, 0]).unwrap();
+
+        assert_eq!(pool.volume_group().seqno, 10);
+        assert_eq!(pool.list_direct_volumes().len(), 1);
     }
 
     // --- Test helpers ---

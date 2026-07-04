@@ -14,6 +14,7 @@ pub mod analysis_service;
 pub mod artifact_service;
 pub mod batch_service;
 pub mod case_service;
+pub mod cluster_service;
 pub mod connection;
 pub mod correlation;
 pub use correlation::get_correlation_snapshot;

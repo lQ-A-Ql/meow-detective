@@ -127,6 +127,58 @@ fn metadata_text_with_seqno(seqno: u64) -> String {
     build_minimal_metadata_text().replace("seqno = 42", &format!("seqno = {}", seqno))
 }
 
+fn write_metadata_copy(disk: &mut [u8], mda_offset: usize, mda_size: u64, text: &str) {
+    let text_bytes = text.as_bytes();
+    assert!(text_bytes.len() as u64 <= mda_size - 512);
+    disk[mda_offset + 512..mda_offset + 512 + text_bytes.len()].copy_from_slice(text_bytes);
+    write_mda_header(
+        disk,
+        mda_offset,
+        mda_size,
+        512,
+        text_bytes.len() as u64,
+        crc::lvm_crc32(text_bytes),
+    );
+}
+
+#[test]
+fn parse_metadata_uses_later_valid_raw_location_when_slot0_is_invalid() {
+    let mda_offset = 1024usize;
+    let mda_size = 4096u64;
+    let mut disk = vec![0u8; 8192];
+    let stale = metadata_text_with_seqno(10);
+    let current = metadata_text_with_seqno(42);
+    let stale_bytes = stale.as_bytes();
+    let current_bytes = current.as_bytes();
+
+    disk[mda_offset + 512..mda_offset + 512 + stale_bytes.len()].copy_from_slice(stale_bytes);
+    disk[mda_offset + 1536..mda_offset + 1536 + current_bytes.len()].copy_from_slice(current_bytes);
+    write_mda_header(
+        &mut disk,
+        mda_offset,
+        mda_size,
+        512,
+        stale_bytes.len() as u64,
+        0,
+    );
+    write_raw_location(
+        &mut disk,
+        mda_offset,
+        1,
+        1536,
+        current_bytes.len() as u64,
+        crc::lvm_crc32(current_bytes),
+    );
+    let region = super::super::label::DataRegion {
+        offset: mda_offset as u64,
+        size: mda_size,
+    };
+
+    let vg = parse_metadata(&mut std::io::Cursor::new(disk), &region, 0).unwrap();
+
+    assert_eq!(vg.seqno, 42);
+}
+
 #[test]
 fn parse_minimal_metadata() {
     let text = build_minimal_metadata_text();
@@ -184,6 +236,36 @@ fn metadata_text_lv_sizes() {
     assert_eq!(root.size_bytes, 1280 * extent_bytes);
     let home = &vg.logical_volumes[1];
     assert_eq!(home.size_bytes, 512 * extent_bytes);
+}
+
+#[test]
+fn linear_segment_accepts_areas_without_stripes() {
+    let text = base_metadata_with_lv(
+        "        root {\n\
+                 id = \"lv-root\"\n\
+                 status = [\"READ\", \"WRITE\", \"VISIBLE\"]\n\
+                 segment_count = 1\n\
+                 segment1 {\n\
+                 start_extent = 0\n\
+                 extent_count = 4\n\
+                 type = \"linear\"\n\
+                 areas = [\"pv\", \"pv0\", 7]\n\
+                 }\n\
+                 }\n",
+    );
+
+    let vg = parse_metadata_text(&text).unwrap();
+    let segment = &vg.logical_volumes[0].segments[0];
+
+    assert!(matches!(segment.seg_type, SegmentType::Linear));
+    assert_eq!(segment.stripes, vec![("pv0".to_string(), 7)]);
+    assert!(matches!(
+        segment.areas[0],
+        SegmentArea::PhysicalVolume {
+            ref name,
+            start_extent: 7
+        } if name == "pv0"
+    ));
 }
 
 #[test]
@@ -642,6 +724,56 @@ fn corrupt_first_mda_followed_by_valid_second_mda_is_accepted() {
 }
 
 #[test]
+fn complete_lower_seqno_copy_wins_over_incomplete_higher_seqno_copy() {
+    let complete_text = metadata_text_with_seqno(10);
+    let incomplete_text = metadata_text_with_seqno(99)
+        .replace("            pe_start = 2048\n", "")
+        .replace("            pe_count = 2559\n", "");
+    let mut disk = vec![0u8; 12_288];
+    let regions = [
+        super::super::label::DataRegion {
+            offset: 1024,
+            size: 2048,
+        },
+        super::super::label::DataRegion {
+            offset: 4096,
+            size: 2048,
+        },
+    ];
+
+    write_metadata_copy(&mut disk, 1024, 2048, &complete_text);
+    write_metadata_copy(&mut disk, 4096, 2048, &incomplete_text);
+
+    let mut reader = std::io::Cursor::new(disk);
+    let vg = parse_metadata_from_regions(&mut reader, &regions, 0).unwrap();
+
+    assert_eq!(vg.seqno, 10);
+    assert_eq!(vg.physical_volumes[0].pe_start, 2048);
+}
+
+#[test]
+fn incomplete_higher_seqno_copy_is_returned_when_no_complete_copy_exists() {
+    let incomplete_text = metadata_text_with_seqno(99)
+        .replace("            pe_start = 2048\n", "")
+        .replace("            pe_count = 2559\n", "");
+    let mut disk = vec![0u8; 4096];
+    let regions = [super::super::label::DataRegion {
+        offset: 1024,
+        size: 2048,
+    }];
+
+    write_metadata_copy(&mut disk, 1024, 2048, &incomplete_text);
+
+    let mut reader = std::io::Cursor::new(disk);
+    let err = parse_metadata_from_regions(&mut reader, &regions, 0).unwrap_err();
+
+    assert!(matches!(
+        err,
+        LvmError::FatalMetadataParseError { message, .. } if message.contains("pe_start")
+    ));
+}
+
+#[test]
 fn missing_required_fields_fail_closed() {
     let text = build_minimal_metadata_text().replace("            pe_start = 2048\n", "");
     let err = parse_metadata_text(&text).unwrap_err();
@@ -843,6 +975,13 @@ fn thin_cache_and_pool_segments_keep_distinct_unsupported_labels() {
             .as_deref(),
         Some("pool")
     );
+    assert!(matches!(
+        vg.logical_volumes[5].segments[0].areas[0],
+        SegmentArea::LogicalVolume {
+            ref name,
+            start_extent: 0
+        } if name == "pool"
+    ));
     assert_eq!(vg.logical_volumes[6].role, LvRole::ThinPool);
     assert!(matches!(
         vg.logical_volumes[6].segments[0].seg_type,
@@ -866,6 +1005,20 @@ fn thin_cache_and_pool_segments_keep_distinct_unsupported_labels() {
         vg.logical_volumes[6].segments[0].dependencies.chunk_size,
         Some(128)
     );
+    assert!(matches!(
+        vg.logical_volumes[6].segments[0].areas[0],
+        SegmentArea::LogicalVolume {
+            ref name,
+            start_extent: 0
+        } if name == "pool_tmeta"
+    ));
+    assert!(matches!(
+        vg.logical_volumes[6].segments[0].areas[1],
+        SegmentArea::LogicalVolume {
+            ref name,
+            start_extent: 0
+        } if name == "pool_tdata"
+    ));
     assert_eq!(vg.logical_volumes[7].role, LvRole::CacheVolume);
     assert!(matches!(
         vg.logical_volumes[7].segments[0].seg_type,
@@ -878,6 +1031,27 @@ fn thin_cache_and_pool_segments_keep_distinct_unsupported_labels() {
             .as_deref(),
         Some("cache_pool")
     );
+    assert_eq!(
+        vg.logical_volumes[7].segments[0]
+            .dependencies
+            .origin
+            .as_deref(),
+        Some("origin")
+    );
+    assert!(matches!(
+        vg.logical_volumes[7].segments[0].areas[0],
+        SegmentArea::LogicalVolume {
+            ref name,
+            start_extent: 0
+        } if name == "origin"
+    ));
+    assert!(matches!(
+        vg.logical_volumes[7].segments[0].areas[1],
+        SegmentArea::LogicalVolume {
+            ref name,
+            start_extent: 0
+        } if name == "cache_pool"
+    ));
     assert_eq!(vg.logical_volumes[8].role, LvRole::CachePool);
     assert!(matches!(
         vg.logical_volumes[8].segments[0].seg_type,
@@ -890,6 +1064,27 @@ fn thin_cache_and_pool_segments_keep_distinct_unsupported_labels() {
             .as_deref(),
         Some("cache_cdata")
     );
+    assert_eq!(
+        vg.logical_volumes[8].segments[0]
+            .dependencies
+            .metadata
+            .as_deref(),
+        Some("cache_cmeta")
+    );
+    assert!(matches!(
+        vg.logical_volumes[8].segments[0].areas[0],
+        SegmentArea::LogicalVolume {
+            ref name,
+            start_extent: 0
+        } if name == "cache_cmeta"
+    ));
+    assert!(matches!(
+        vg.logical_volumes[8].segments[0].areas[1],
+        SegmentArea::LogicalVolume {
+            ref name,
+            start_extent: 0
+        } if name == "cache_cdata"
+    ));
 }
 
 #[test]
@@ -949,6 +1144,72 @@ fn pve_like_thin_root_preserves_pool_metadata_dependencies() {
             ref name,
             start_extent: 0
         } if name == "data"
+    ));
+}
+
+#[test]
+fn snapshot_dependencies_are_preserved_for_diagnostics() {
+    let text = base_metadata_with_lv(
+        "\
+         origin {
+             id = \"lv-origin\"
+             status = [\"READ\", \"WRITE\", \"VISIBLE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 4 type = \"linear\" stripe_count = 1 stripes = [\"pv0\", 0] }
+         }
+         snap_cow {
+             id = \"lv-snap-cow\"
+             status = [\"READ\", \"WRITE\"]
+             segment_count = 1
+             segment1 { start_extent = 0 extent_count = 2 type = \"linear\" stripe_count = 1 stripes = [\"pv0\", 4] }
+         }
+         origin_snap {
+             id = \"lv-origin-snap\"
+             status = [\"READ\", \"WRITE\", \"VISIBLE\"]
+             segment_count = 1
+             segment1 {
+                 start_extent = 0
+                 extent_count = 4
+                 type = \"snapshot\"
+                 origin = \"origin\"
+                 cow_store = \"snap_cow\"
+                 chunk_size = 8
+             }
+         }\n",
+    );
+
+    let vg = parse_metadata_text(&text).unwrap();
+    let snapshot = &vg.logical_volumes[2];
+
+    assert_eq!(snapshot.role, LvRole::Snapshot);
+    assert!(snapshot.is_visible());
+    assert!(!snapshot.is_directly_mappable());
+    assert!(matches!(
+        snapshot.segments[0].seg_type,
+        SegmentType::Unsupported { ref type_name } if type_name.contains("snapshot")
+    ));
+    assert_eq!(
+        snapshot.segments[0].dependencies.origin.as_deref(),
+        Some("origin")
+    );
+    assert_eq!(
+        snapshot.segments[0].dependencies.cow_store.as_deref(),
+        Some("snap_cow")
+    );
+    assert_eq!(snapshot.segments[0].dependencies.chunk_size, Some(8));
+    assert!(matches!(
+        snapshot.segments[0].areas[0],
+        SegmentArea::LogicalVolume {
+            ref name,
+            start_extent: 0
+        } if name == "origin"
+    ));
+    assert!(matches!(
+        snapshot.segments[0].areas[1],
+        SegmentArea::LogicalVolume {
+            ref name,
+            start_extent: 0
+        } if name == "snap_cow"
     ));
 }
 

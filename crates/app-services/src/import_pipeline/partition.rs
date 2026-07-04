@@ -548,10 +548,17 @@ fn open_lvm_physical_volume_readers(
             .get(index)
             .map(|source| std::path::Path::new(&source.source_path))
             .unwrap_or(source_path);
-        let mut reader: Box<dyn EvidenceReader> = if *source_kind == domain::DataSourceKind::E01 {
-            Box::new(E01Reader::open(pv_source_path).ok()?)
-        } else {
-            Box::new(evidence_core::RawImageReader::open(pv_source_path).ok()?)
+        let pv_source_kind = identity
+            .pv_sources
+            .get(index)
+            .and_then(|source| source.source_kind.as_ref())
+            .unwrap_or(source_kind);
+        let mut reader: Box<dyn EvidenceReader> = match pv_source_kind {
+            domain::DataSourceKind::E01 => Box::new(E01Reader::open(pv_source_path).ok()?),
+            domain::DataSourceKind::Raw => {
+                Box::new(evidence_core::RawImageReader::open(pv_source_path).ok()?)
+            }
+            domain::DataSourceKind::LogicalDirectory => return None,
         };
         if let Some(source) = identity.pv_sources.get(index) {
             validate_import_lvm_pv_source(reader.as_mut(), *pv_offset, source)?;

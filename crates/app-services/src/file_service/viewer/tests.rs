@@ -866,12 +866,14 @@ fn linux_lvm_candidate_reopens_one_reader_per_physical_volume() {
             pv_sources: vec![
                 PreviewLvmPhysicalVolumeSource {
                     source_path: source_path.display().to_string(),
+                    source_kind: String::new(),
                     offset: 1_048_576,
                     pv_uuid: String::new(),
                     pv_name: Some("pv0".to_string()),
                 },
                 PreviewLvmPhysicalVolumeSource {
                     source_path: source_path.display().to_string(),
+                    source_kind: String::new(),
                     offset: 2_097_152,
                     pv_uuid: String::new(),
                     pv_name: Some("pv1".to_string()),
@@ -981,12 +983,14 @@ fn linux_lvm_candidate_uses_pv_source_paths_when_present() {
             pv_sources: vec![
                 PreviewLvmPhysicalVolumeSource {
                     source_path: pv0_path.display().to_string(),
+                    source_kind: String::new(),
                     offset: 0,
                     pv_uuid: "abcdef1234567890abcdef1234567890".to_string(),
                     pv_name: Some("pv0".to_string()),
                 },
                 PreviewLvmPhysicalVolumeSource {
                     source_path: pv1_path.display().to_string(),
+                    source_kind: String::new(),
                     offset: 0,
                     pv_uuid: "abcdef1234567890abcdef1234567890".to_string(),
                     pv_name: Some("pv0".to_string()),
@@ -1027,6 +1031,7 @@ fn linux_lvm_candidate_rejects_pv_source_uuid_mismatch() {
             pv_offsets: vec![0],
             pv_sources: vec![PreviewLvmPhysicalVolumeSource {
                 source_path: pv_path.display().to_string(),
+                source_kind: String::new(),
                 offset: 0,
                 pv_uuid: "abcdef1234567890abcdef1234567890".to_string(),
                 pv_name: Some("pv0".to_string()),

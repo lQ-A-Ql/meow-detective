@@ -338,12 +338,14 @@ mod tests {
                     pv_sources: vec![
                         crate::datasource_service::LvmPhysicalVolumeSource {
                             source_path: "disk1.E01".to_string(),
+                            source_kind: Some(domain::DataSourceKind::E01),
                             offset: 1_048_576,
                             pv_uuid: "pv-uuid-1".to_string(),
                             pv_name: Some("pv0".to_string()),
                         },
                         crate::datasource_service::LvmPhysicalVolumeSource {
                             source_path: "disk2.E01".to_string(),
+                            source_kind: Some(domain::DataSourceKind::E01),
                             offset: 2_097_152,
                             pv_uuid: "pv-uuid-2".to_string(),
                             pv_name: Some("pv1".to_string()),
@@ -370,7 +372,7 @@ mod tests {
         assert_eq!(
             record.lvm_pv_sources_json.as_deref(),
             Some(
-                r#"[{"sourcePath":"disk1.E01","offset":1048576,"pvUuid":"pv-uuid-1","pvName":"pv0"},{"sourcePath":"disk2.E01","offset":2097152,"pvUuid":"pv-uuid-2","pvName":"pv1"}]"#
+                r#"[{"sourcePath":"disk1.E01","sourceKind":"E01","offset":1048576,"pvUuid":"pv-uuid-1","pvName":"pv0"},{"sourcePath":"disk2.E01","sourceKind":"E01","offset":2097152,"pvUuid":"pv-uuid-2","pvName":"pv1"}]"#
             )
         );
     }

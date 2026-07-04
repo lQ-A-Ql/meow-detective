@@ -116,6 +116,8 @@ pub struct PreviewLvmIdentity {
 #[serde(rename_all = "camelCase")]
 pub struct PreviewLvmPhysicalVolumeSource {
     pub source_path: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub source_kind: String,
     pub offset: u64,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub pv_uuid: String,

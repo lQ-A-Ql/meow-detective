@@ -436,7 +436,11 @@ impl LvmPoolCacheKey {
                     (
                         source.source_path.clone(),
                         source.offset,
-                        normalize_lvm_uuid_for_match(&source.pv_uuid),
+                        format!(
+                            "{}|{}",
+                            preview_lvm_source_kind(source),
+                            normalize_lvm_uuid_for_match(&source.pv_uuid)
+                        ),
                     )
                 })
                 .collect(),
@@ -540,7 +544,11 @@ where
             .get(index)
             .map(|source| Path::new(&source.source_path))
             .unwrap_or(source_path);
-        let mut reader = open_reader(reader_path)?;
+        let mut reader = if let Some(source) = identity.pv_sources.get(index) {
+            open_lvm_pv_reader(reader_path, source, open_reader)?
+        } else {
+            open_reader(reader_path)?
+        };
         if let Some(source) = identity.pv_sources.get(index) {
             validate_preview_lvm_pv_source(reader.as_mut(), *pv_offset, source)?;
         }
@@ -553,6 +561,27 @@ where
             format!("LVM discovery failed for preview: {error}"),
         )
     })
+}
+
+fn open_lvm_pv_reader<F>(
+    reader_path: &Path,
+    source: &PreviewLvmPhysicalVolumeSource,
+    open_reader: &mut F,
+) -> std::io::Result<Box<dyn EvidenceReader>>
+where
+    F: FnMut(&Path) -> std::io::Result<Box<dyn EvidenceReader>>,
+{
+    match source.source_kind.to_ascii_lowercase().as_str() {
+        "e01" => image_e01::E01Reader::open(reader_path)
+            .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>),
+        "raw" => evidence_core::RawImageReader::open(reader_path)
+            .map(|reader| Box::new(reader) as Box<dyn EvidenceReader>),
+        _ => open_reader(reader_path),
+    }
+}
+
+fn preview_lvm_source_kind(source: &PreviewLvmPhysicalVolumeSource) -> &str {
+    source.source_kind.as_str()
 }
 
 fn validate_preview_lvm_pv_source(

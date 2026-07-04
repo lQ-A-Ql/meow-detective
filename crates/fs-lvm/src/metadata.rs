@@ -1,9 +1,9 @@
 /// LVM2 Metadata Area parser.
 ///
 /// The metadata area is a circular buffer containing ASCII text in LVM's
-/// custom key-value format. Each metadata area has a committed raw_locn slot 0;
-/// later slots are transient/precommit locations and are not used for ordinary
-/// discovery. Across metadata areas and PV copies, the highest valid seqno wins.
+/// custom key-value format. Each metadata area has redundant raw_locn slots.
+/// Discovery validates every usable slot and lets the highest valid seqno win
+/// across metadata areas and PV copies.
 ///
 /// MDA Header (512 bytes, located at mda_region.offset):
 /// ```text
@@ -26,6 +26,9 @@ const MDA_MAGIC: [u8; 16] = *b" LVM2 x[5A%r0N*>";
 const RAW_LOCN_IGNORED: u32 = 0x0000_0001;
 const MDA_HEADER_SIZE: u64 = 512;
 const MAX_METADATA_TEXT_SIZE: u64 = 16 * 1024 * 1024;
+const RAW_LOCATION_COUNT: usize = 4;
+const RAW_LOCATION_BASE: usize = 40;
+const RAW_LOCATION_SIZE: usize = 24;
 
 // --- Public types ---
 
@@ -289,8 +292,8 @@ pub enum SegmentType {
 
 /// Parse metadata from a metadata area region.
 ///
-/// Reads the MDA header, reads the committed raw_locn slot 0, and returns the
-/// parsed volume group.
+/// Reads the MDA header, validates usable raw_locn descriptors, and returns the
+/// highest valid parsed volume group from that metadata area.
 ///
 /// `pv_offset` is the byte offset of the PV start in the reader (needed
 /// because all LVM2 offsets are absolute from the PV start).
@@ -315,6 +318,7 @@ pub(crate) fn parse_metadata_from_regions<R: Read + Seek>(
     pv_offset: u64,
 ) -> Result<VolumeGroup> {
     let mut best_vg: Option<VolumeGroup> = None;
+    let mut first_fatal_error: Option<LvmError> = None;
 
     for mda_region in mda_regions {
         match parse_metadata_region(reader, mda_region, pv_offset) {
@@ -331,11 +335,24 @@ pub(crate) fn parse_metadata_from_regions<R: Read + Seek>(
                 // unreadable copy must not abort discovery when another works.
                 continue;
             }
-            Err(MetadataRegionError::Fatal(err)) => return Err(err),
+            Err(MetadataRegionError::Fatal(err)) => {
+                // A structurally incomplete committed copy is not a valid
+                // candidate. Keep scanning for an older complete copy; if none
+                // exists, return the first fatal parse error.
+                if first_fatal_error.is_none() {
+                    first_fatal_error = Some(err);
+                }
+            }
         };
     }
 
-    best_vg.ok_or_else(|| LvmError::MetadataParseError {
+    if let Some(vg) = best_vg {
+        return Ok(vg);
+    }
+    if let Some(err) = first_fatal_error {
+        return Err(err);
+    }
+    Err(LvmError::MetadataParseError {
         line: 0,
         message: "no valid metadata copy found".to_string(),
     })
@@ -402,29 +419,40 @@ fn parse_metadata_region<R: Read + Seek>(
         )));
     }
 
-    // Ordinary discovery uses the committed copy in raw_locn slot 0 only.
-    // Slot 1 may contain a higher-seqno precommit image and must not win.
-    let locn = RawLocation::from_bytes(&header, 40);
-    if locn.is_ignored()
-        || locn.is_empty()
-        || !locn.is_within(mda_size)
-        || locn.size > MAX_METADATA_TEXT_SIZE
-    {
-        return Ok(None);
+    let mut first_fatal_error = None;
+    for slot in 0..RAW_LOCATION_COUNT {
+        let locn = RawLocation::from_bytes(&header, RAW_LOCATION_BASE + slot * RAW_LOCATION_SIZE);
+        if locn.is_ignored()
+            || locn.is_empty()
+            || !locn.is_within(mda_size)
+            || locn.size > MAX_METADATA_TEXT_SIZE
+        {
+            continue;
+        }
+
+        let text_bytes = read_raw_location(reader, pv_offset, mda_base, mda_size, &locn)
+            .map_err(MetadataRegionError::Recoverable)?;
+
+        let computed_crc = crc::lvm_crc32(&text_bytes);
+        if computed_crc != locn.checksum {
+            continue;
+        }
+
+        let text = String::from_utf8_lossy(&text_bytes);
+        match parse_metadata_text(&text) {
+            Ok(vg) => return Ok(Some(vg)),
+            Err(err) => {
+                if first_fatal_error.is_none() {
+                    first_fatal_error = Some(err);
+                }
+            }
+        }
     }
 
-    let text_bytes = read_raw_location(reader, pv_offset, mda_base, mda_size, &locn)
-        .map_err(MetadataRegionError::Recoverable)?;
-
-    let computed_crc = crc::lvm_crc32(&text_bytes);
-    if computed_crc != locn.checksum {
-        return Ok(None);
+    if let Some(err) = first_fatal_error {
+        return Err(fatal_metadata_region_error(err));
     }
-
-    let text = String::from_utf8_lossy(&text_bytes);
-    parse_metadata_text(&text)
-        .map(Some)
-        .map_err(fatal_metadata_region_error)
+    Ok(None)
 }
 
 enum MetadataRegionError {
@@ -528,6 +556,15 @@ fn read_raw_location<R: Read + Seek>(
     let mut text_bytes = Vec::with_capacity(locn.size as usize);
 
     while remaining > 0 {
+        if raw_offset < MDA_HEADER_SIZE || raw_offset >= mda_size {
+            return Err(LvmError::MetadataParseError {
+                line: 0,
+                message: format!(
+                    "raw metadata location offset {} is outside payload range {}..{}",
+                    raw_offset, MDA_HEADER_SIZE, mda_size
+                ),
+            });
+        }
         let available =
             mda_size
                 .checked_sub(raw_offset)
@@ -1195,21 +1232,11 @@ fn parse_segment(
         dependencies,
     } = match type_name.as_str() {
         "linear" => {
-            let stripe_count = required_u64(&seg.params, "stripe_count", &context)
-                .map_err(SegmentParseError::Fatal)?;
-            if stripe_count != 1 {
-                return Err(SegmentParseError::fatal(format!(
-                    "linear stripe_count must be 1 in {}",
-                    context
-                )));
-            }
-            let stripes = parse_required_stripes(&seg.params, &context, stripe_count)
-                .map_err(SegmentParseError::Fatal)?;
-            let areas = resolve_stripe_areas(&stripes, pv_names, lv_names)
+            let (stripes, areas) = parse_linear_areas(&seg.params, &context, pv_names, lv_names)
                 .map_err(SegmentParseError::Fatal)?;
             ParsedSegmentParts {
                 seg_type: SegmentType::Linear,
-                stripes: stripes_from_pv_areas(&areas),
+                stripes,
                 areas,
                 dependencies: SegmentDependencies::default(),
             }
@@ -1705,6 +1732,41 @@ fn parse_required_stripes(
         });
     }
     Ok(stripes)
+}
+
+fn parse_linear_areas(
+    params: &[(String, String)],
+    context: &str,
+    pv_names: &HashSet<&str>,
+    lv_names: &HashSet<&str>,
+) -> Result<(Vec<(String, u64)>, Vec<SegmentArea>)> {
+    let stripe_count = optional_u64(params, "stripe_count").unwrap_or(1);
+    if stripe_count != 1 {
+        return Err(LvmError::MetadataParseError {
+            line: 0,
+            message: format!("linear stripe_count must be 1 in {}", context),
+        });
+    }
+
+    if params.iter().any(|(key, _)| key == "stripes") {
+        let stripes = parse_required_stripes(params, context, stripe_count)?;
+        let areas = resolve_stripe_areas(&stripes, pv_names, lv_names)?;
+        return Ok((stripes_from_pv_areas(&areas), areas));
+    }
+
+    let areas = parse_optional_areas(params, pv_names, lv_names)?;
+    if areas.len() != 1 {
+        return Err(LvmError::MetadataParseError {
+            line: 0,
+            message: format!(
+                "linear segment in {} expects exactly one stripes entry or one area, found {}",
+                context,
+                areas.len()
+            ),
+        });
+    }
+
+    Ok((stripes_from_pv_areas(&areas), areas))
 }
 
 fn required_stripe_size(params: &[(String, String)], context: &str) -> Result<u64> {

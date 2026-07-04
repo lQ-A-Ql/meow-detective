@@ -812,4 +812,67 @@ mod tests {
                 if seg_type.contains("component LV graph")
         ));
     }
+
+    #[test]
+    fn component_lv_chain_reports_unsupported_dependency_path() {
+        let component = LvMeta {
+            name: "cache_component".into(),
+            uuid: "component-uuid".into(),
+            status: Vec::new(),
+            role: crate::metadata::LvRole::CacheVolume,
+            segments: vec![SegmentMeta {
+                start_extent: 0,
+                extent_count: 1,
+                seg_type: SegmentType::CacheVolume,
+                stripes: Vec::new(),
+                areas: vec![
+                    SegmentArea::LogicalVolume {
+                        name: "cache_pool".into(),
+                        start_extent: 0,
+                    },
+                    SegmentArea::LogicalVolume {
+                        name: "origin".into(),
+                        start_extent: 0,
+                    },
+                ],
+                dependencies: SegmentDependencies {
+                    cache_pool: Some("cache_pool".into()),
+                    origin: Some("origin".into()),
+                    ..SegmentDependencies::default()
+                },
+            }],
+            size_bytes: 0,
+        };
+        let lv = LvMeta {
+            name: "component_backed".into(),
+            uuid: "lv-uuid".into(),
+            status: Vec::new(),
+            role: crate::metadata::LvRole::Public,
+            segments: vec![SegmentMeta {
+                start_extent: 0,
+                extent_count: 1,
+                seg_type: SegmentType::Linear,
+                stripes: Vec::new(),
+                areas: vec![SegmentArea::LogicalVolume {
+                    name: "cache_component".into(),
+                    start_extent: 0,
+                }],
+                dependencies: SegmentDependencies::default(),
+            }],
+            size_bytes: 0,
+        };
+        let mut vg = make_test_vg();
+        vg.logical_volumes = vec![component, lv.clone()];
+        let pv_offsets = vec![("pv0".into(), 2048 * 512)];
+
+        let err = build_extent_map(&vg, &lv, &pv_offsets).unwrap_err();
+
+        assert!(matches!(
+            err,
+            LvmError::UnsupportedSegment { lv_name, seg_type }
+                if lv_name == "cache_component"
+                    && seg_type.contains("cache")
+                    && seg_type.contains("component_backed -> cache_component")
+        ));
+    }
 }

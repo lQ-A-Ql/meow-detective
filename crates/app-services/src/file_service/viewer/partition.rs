@@ -213,6 +213,11 @@ pub(crate) fn preview_lvm_identity_from_datasource(
             .map(
                 |source| crate::file_service::viewer::PreviewLvmPhysicalVolumeSource {
                     source_path: source.source_path.clone(),
+                    source_kind: source
+                        .source_kind
+                        .as_ref()
+                        .map(std::string::ToString::to_string)
+                        .unwrap_or_default(),
                     offset: source.offset,
                     pv_uuid: source.pv_uuid.clone(),
                     pv_name: source.pv_name.clone(),
@@ -302,8 +307,25 @@ mod tests {
         assert_eq!(identity.pv_sources.len(), 2);
         assert_eq!(identity.pv_sources[0].source_path, "disk1.E01");
         assert_eq!(identity.pv_sources[1].source_path, "disk2.E01");
+        assert_eq!(identity.pv_sources[0].source_kind, "");
         assert_eq!(identity.pv_sources[0].pv_uuid, "");
         assert_eq!(identity.pv_sources[0].pv_name, None);
+    }
+
+    #[test]
+    fn preview_candidate_decodes_lvm_pv_source_kind_when_present() {
+        let mut record = partition_record();
+        record.lvm_pv_sources_json = Some(
+            r#"[{"sourcePath":"disk1.E01","sourceKind":"e01","offset":1048576},{"sourcePath":"disk2.E01","sourceKind":"raw","offset":2097152}]"#
+                .to_string(),
+        );
+
+        let candidate = preview_partition_candidate_from_record(&record);
+        let identity = candidate.lvm_identity.unwrap();
+
+        assert_eq!(identity.pv_sources.len(), 2);
+        assert_eq!(identity.pv_sources[0].source_kind, "e01");
+        assert_eq!(identity.pv_sources[1].source_kind, "raw");
     }
 
     #[test]
