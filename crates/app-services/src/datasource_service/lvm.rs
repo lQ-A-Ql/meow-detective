@@ -1,5 +1,7 @@
+use super::fs_magic::{kind_label, read_boot_filesystem};
+use super::probe::detect_image_filesystem;
+use super::reader::open_evidence_reader;
 use super::{
-    kind_label, normalize_lvm_uuid_for_match, open_evidence_reader, read_boot_filesystem,
     ImageFilesystemCandidate, ImageFilesystemKind, ImageFilesystemProbe, ImageFilesystemSource,
     LvmDiscoverySource, LvmLogicalVolumeIdentity, LvmPhysicalVolumeSource, PartitionRecord,
     PartitionStatus,
@@ -474,7 +476,7 @@ fn inspect_extra_lvm_pv_sources(
                 continue;
             }
         };
-        let mut extra_probe = match super::detect_image_filesystem(&mut reader) {
+        let mut extra_probe = match detect_image_filesystem(&mut reader) {
             Ok(probe) => probe,
             Err(error) => {
                 warnings.push(format!(
@@ -739,6 +741,14 @@ pub(crate) fn lvm_source_fingerprint(source_path: &str) -> String {
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>();
     format!("path-sha256:{short_hash}")
+}
+
+pub(crate) fn normalize_lvm_uuid_for_match(uuid: &str) -> String {
+    uuid.trim()
+        .chars()
+        .filter(|ch| *ch != '-')
+        .collect::<String>()
+        .to_ascii_lowercase()
 }
 
 pub(super) fn lvm_pv_source_key(source: &LvmPhysicalVolumeSource) -> (String, u64, String) {
