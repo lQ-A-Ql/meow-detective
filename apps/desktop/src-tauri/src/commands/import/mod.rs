@@ -2,5 +2,6 @@
 
 pub mod background_job;
 pub mod cancellation;
+pub mod events;
 pub mod pipeline;
 pub mod schedule;

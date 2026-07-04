@@ -3,9 +3,15 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, job_repo::JobRepo};
+use std::sync::Mutex;
 use tempfile::TempDir;
+use transport::dto::{
+    DataSourceSummaryDto, ImportPhaseProgressDto, IndexCacheStatusDto, JobCancellationDto,
+    PartialResultDto,
+};
 
 use crate::import_pipeline::{
+    emit::ImportEventSink,
     execute::{
         cache_statuses_from_profile, import_phase_progress_from_profile, job_cancellation_dto,
         partial_results_from_profile,
@@ -50,6 +56,71 @@ fn assert_cache_status(
     assert_eq!(status.indexed_count, indexed_count);
     assert_eq!(status.total_count, total_count);
     assert!(chrono::DateTime::parse_from_rfc3339(&status.updated_at).is_ok());
+}
+
+#[derive(Default)]
+struct RecordingImportEventSink {
+    events: Mutex<Vec<String>>,
+}
+
+impl RecordingImportEventSink {
+    fn record(&self, event: impl Into<String>) {
+        self.events.lock().unwrap().push(event.into());
+    }
+
+    fn events(&self) -> Vec<String> {
+        self.events.lock().unwrap().clone()
+    }
+}
+
+impl ImportEventSink for RecordingImportEventSink {
+    fn job_progress(&self, _job_id: &str, progress: u32, detail: &str) {
+        self.record(format!("job:{progress}:{detail}"));
+    }
+
+    fn partition_progress(
+        &self,
+        _job_id: &str,
+        _current_partition: &str,
+        _completed: u32,
+        _total: u32,
+        _partition_pct: u32,
+    ) {
+        self.record("partition");
+    }
+
+    fn timeline_updated(&self, event_count: u64) {
+        self.record(format!("timeline:{event_count}"));
+    }
+
+    fn search_index_progress(&self, progress: u32, detail: &str) {
+        self.record(format!("search:{progress}:{detail}"));
+    }
+
+    fn data_source_imported(
+        &self,
+        case_id: &str,
+        data_source: &DataSourceSummaryDto,
+        job_id: &str,
+    ) {
+        self.record(format!("data-source:{case_id}:{}:{job_id}", data_source.id));
+    }
+
+    fn import_phase_progress(&self, progress: &ImportPhaseProgressDto) {
+        self.record(format!("phase:{}:{}", progress.job_id, progress.percent));
+    }
+
+    fn import_partial_result(&self, result: &PartialResultDto) {
+        self.record(format!("partial:{}", result.scope_id));
+    }
+
+    fn cache_index_status(&self, status: &IndexCacheStatusDto) {
+        self.record(format!("cache:{}", status.cache_key));
+    }
+
+    fn job_cancellation(&self, cancellation: &JobCancellationDto) {
+        self.record(format!("cancel:{}", cancellation.job_id));
+    }
 }
 
 #[test]
@@ -568,7 +639,7 @@ fn cancellation_after_attach_marks_job_cancelling_without_failure() {
                 &evidence_dir.to_string_lossy(),
                 &job_id,
                 ImportJobOptions {
-                    app: None,
+                    event_sink: None,
                     cancel_token: &cancel,
                     max_import_workers: None,
                     max_analysis_workers: None,
@@ -624,7 +695,7 @@ fn logical_import_post_pipeline_indexes_marker_and_extracts_artifact() {
                 &evidence_dir.to_string_lossy(),
                 &job_id,
                 ImportJobOptions {
-                    app: None,
+                    event_sink: None,
                     cancel_token: &cancel,
                     max_import_workers: None,
                     max_analysis_workers: None,
@@ -670,6 +741,62 @@ fn logical_import_post_pipeline_indexes_marker_and_extracts_artifact() {
             Ok(())
         })
         .unwrap();
+}
+
+#[test]
+fn logical_import_reports_progress_through_tauri_free_sink() {
+    let tmp = TempDir::new().unwrap();
+    let evidence_dir = tmp.path().join("evidence-sink");
+    std::fs::create_dir_all(&evidence_dir).unwrap();
+    std::fs::write(evidence_dir.join("notes.txt"), "sink marker").unwrap();
+
+    let active =
+        case_service::create_case(&tmp.path().join("cases"), "sink-import", Some("tester"))
+            .unwrap();
+    let cancel = Arc::new(AtomicBool::new(false));
+    let event_sink = RecordingImportEventSink::default();
+
+    active
+        .with_conn(|conn| {
+            let job_id = JobRepo::new(conn).create(&active.meta.id.0, "Import sink")?;
+            execute_import_job(
+                conn,
+                &active.meta.id,
+                &active.case_root,
+                &evidence_dir.to_string_lossy(),
+                &job_id,
+                ImportJobOptions {
+                    event_sink: Some(&event_sink),
+                    cancel_token: &cancel,
+                    max_import_workers: None,
+                    max_analysis_workers: Some(1),
+                    analysis_mode: import_analysis::ImportAnalysisMode::MetadataOnly,
+                },
+            )
+            .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
+            Ok(())
+        })
+        .unwrap();
+
+    let events = event_sink.events();
+    assert!(
+        events
+            .iter()
+            .any(|event| event.contains("Attaching data source")),
+        "sink should receive job progress events: {events:?}"
+    );
+    assert!(
+        events.iter().any(|event| event.starts_with("phase:")),
+        "sink should receive typed phase progress events: {events:?}"
+    );
+    assert!(
+        events.iter().any(|event| event.starts_with("timeline:")),
+        "sink should receive finalize timeline events: {events:?}"
+    );
+    assert!(
+        events.iter().any(|event| event.starts_with("data-source:")),
+        "sink should receive imported data-source events: {events:?}"
+    );
 }
 
 #[test]
@@ -789,7 +916,7 @@ fn e01_full_import() {
                 e01_path.to_str().unwrap(),
                 &job_id,
                 ImportJobOptions {
-                    app: None,
+                    event_sink: None,
                     cancel_token: &cancel,
                     max_import_workers: None,
                     max_analysis_workers: None,

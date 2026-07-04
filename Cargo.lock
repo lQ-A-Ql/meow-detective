@@ -115,7 +115,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "tauri",
  "tempfile",
  "testing",
  "thiserror 2.0.18",

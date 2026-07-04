@@ -2,7 +2,6 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use persistence_sqlite::repositories::job_repo::JobRepo;
-use tauri::AppHandle;
 use transport::{
     dto::{
         CancellationStateDto, ImportPhaseDto, ImportPhaseMetricsDto, ImportPhaseProgressDto,
@@ -14,6 +13,7 @@ use transport::{
 
 use crate::{
     import_pipeline::{
+        emit::ImportEventSink,
         options::{ImportJobOptions, JobOutcomeCounts},
         phases,
         types::ImportJobContext,
@@ -85,14 +85,14 @@ pub fn execute_import_job_with_counts(
             "Cancellation acknowledged after attach",
         );
         emit_import_cancellation_state(
-            options.app,
+            options.event_sink,
             job_id,
             CancellationStateDto::Acknowledged,
             false,
             "Cancellation acknowledged after attach",
         );
         emit_import_profile_progress(
-            options.app,
+            options.event_sink,
             job_id,
             case_id,
             Some(&ds.id),
@@ -115,18 +115,16 @@ pub fn execute_import_job_with_counts(
 // ---------------------------------------------------------------------------
 
 pub(crate) fn emit_import_cancellation_state(
-    app: Option<&AppHandle>,
+    event_sink: Option<&dyn ImportEventSink>,
     job_id: &domain::JobId,
     state: CancellationStateDto,
     safe_to_close: bool,
     detail: &str,
 ) {
-    if let Some(app) = app {
-        crate::import_pipeline::emit::emit_job_cancellation(
-            app,
-            &job_cancellation_dto(&job_id.0, state, safe_to_close, detail),
-        );
-    }
+    crate::import_pipeline::emit::emit_job_cancellation(
+        event_sink,
+        &job_cancellation_dto(&job_id.0, state, safe_to_close, detail),
+    );
 }
 
 pub(crate) fn job_cancellation_dto(
@@ -168,7 +166,7 @@ pub(crate) fn is_import_cancelled_message(message: &str) -> bool {
 // ---------------------------------------------------------------------------
 
 pub(crate) fn emit_phase_profile(
-    app: Option<&AppHandle>,
+    event_sink: Option<&dyn ImportEventSink>,
     job_id: &domain::JobId,
     case_id: &domain::CaseId,
     data_source_id: Option<&domain::DataSourceId>,
@@ -177,7 +175,7 @@ pub(crate) fn emit_phase_profile(
     cancel_requested: bool,
 ) {
     emit_import_profile_progress(
-        app,
+        event_sink,
         job_id,
         case_id,
         data_source_id,
@@ -188,7 +186,7 @@ pub(crate) fn emit_phase_profile(
 }
 
 pub(crate) fn emit_import_profile_progress(
-    app: Option<&AppHandle>,
+    event_sink: Option<&dyn ImportEventSink>,
     job_id: &domain::JobId,
     case_id: &domain::CaseId,
     data_source_id: Option<&domain::DataSourceId>,
@@ -199,24 +197,27 @@ pub(crate) fn emit_import_profile_progress(
     tracing::info!("Import profile for {}: {}", job_id.0, detail);
     #[cfg(test)]
     eprintln!("[import-profile] {}% {}", progress.min(99), detail);
-    if let Some(app) = app {
-        let phase_progress = import_phase_progress_from_profile(
-            job_id,
-            case_id,
-            data_source_id,
-            progress,
-            detail,
-            cancel_requested,
-        );
-        crate::import_pipeline::emit::emit_import_phase_progress(app, &phase_progress);
-        for result in &phase_progress.partial_results {
-            crate::import_pipeline::emit::emit_import_partial_result(app, result);
-        }
-        for status in cache_statuses_from_profile(data_source_id, detail) {
-            crate::import_pipeline::emit::emit_cache_index_status(app, &status);
-        }
-        crate::import_pipeline::emit::emit_job_progress(app, &job_id.0, progress.min(99), detail);
+    let phase_progress = import_phase_progress_from_profile(
+        job_id,
+        case_id,
+        data_source_id,
+        progress,
+        detail,
+        cancel_requested,
+    );
+    crate::import_pipeline::emit::emit_import_phase_progress(event_sink, &phase_progress);
+    for result in &phase_progress.partial_results {
+        crate::import_pipeline::emit::emit_import_partial_result(event_sink, result);
     }
+    for status in cache_statuses_from_profile(data_source_id, detail) {
+        crate::import_pipeline::emit::emit_cache_index_status(event_sink, &status);
+    }
+    crate::import_pipeline::emit::emit_job_progress(
+        event_sink,
+        &job_id.0,
+        progress.min(99),
+        detail,
+    );
 }
 
 pub(crate) fn import_phase_progress_from_profile(

@@ -114,7 +114,7 @@ mod benchmark_tests {
                     &evidence_dir.to_string_lossy(),
                     &job_id,
                     ImportJobOptions {
-                        app: None,
+                        event_sink: None,
                         cancel_token: &cancel,
                         max_import_workers: None,
                         max_analysis_workers: Some(1),

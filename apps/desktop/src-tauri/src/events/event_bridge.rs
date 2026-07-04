@@ -151,12 +151,14 @@ pub fn emit_job_cancellation(app: &AppHandle, cancellation: &JobCancellationDto)
 
 pub fn emit_data_source_imported(
     app: &AppHandle,
+    case_id: &str,
     data_source: &DataSourceSummaryDto,
     job_id: &str,
 ) {
     let envelope = envelope(
         EventTopic::DataSourceImported,
         serde_json::json!({
+            "caseId": case_id,
             "dataSourceId": data_source.id,
             "name": data_source.name,
             "kind": data_source.kind,

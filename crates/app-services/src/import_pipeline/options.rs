@@ -1,9 +1,8 @@
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use tauri::AppHandle;
-
 use crate::import_analysis;
+use crate::import_pipeline::emit::ImportEventSink;
 
 /// Aggregated outcome counts for an import job.
 #[derive(Debug, Clone, Default)]
@@ -16,7 +15,7 @@ pub struct JobOutcomeCounts {
 /// Options controlling import job execution.
 #[derive(Clone, Copy)]
 pub struct ImportJobOptions<'a> {
-    pub app: Option<&'a AppHandle>,
+    pub event_sink: Option<&'a dyn ImportEventSink>,
     pub cancel_token: &'a Arc<AtomicBool>,
     pub max_import_workers: Option<usize>,
     pub max_analysis_workers: Option<usize>,

@@ -11,7 +11,6 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-tauri.workspace = true
 crossbeam-channel.workspace = true
 num_cpus.workspace = true
 rayon.workspace = true

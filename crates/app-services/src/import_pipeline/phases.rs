@@ -61,7 +61,7 @@ pub(crate) fn run_attach_phase(
     .map_err(CommandError::from_service_error)?;
 
     emit_phase_profile(
-        ctx.app(),
+        ctx.event_sink(),
         ctx.job_id,
         ctx.case_id,
         Some(&ds.id),
@@ -101,7 +101,7 @@ pub(crate) fn run_enumeration_phase(
 
     ctx.counts.add_warnings(stats.warnings.len());
     emit_phase_profile(
-        ctx.app(),
+        ctx.event_sink(),
         ctx.job_id,
         ctx.case_id,
         Some(&ds.id),
@@ -124,14 +124,14 @@ pub(crate) fn run_enumeration_phase(
             "Cancellation acknowledged before post-import analysis",
         );
         emit_import_cancellation_state(
-            ctx.app(),
+            ctx.event_sink(),
             ctx.job_id,
             transport::dto::CancellationStateDto::Acknowledged,
             false,
             "Cancellation acknowledged before post-import analysis",
         );
         emit_import_profile_progress(
-            ctx.app(),
+            ctx.event_sink(),
             ctx.job_id,
             ctx.case_id,
             Some(&ds.id),
@@ -210,14 +210,12 @@ fn enumerate_image_data_source_with_staging(
     // Update partition statuses from staging DBs (for resume).
     refresh_partition_statuses_from_staging(case_root, &ds.id.0, &mut manifest)?;
 
-    if let Some(app) = ctx.app() {
-        crate::import_pipeline::emit::emit_job_progress(
-            app,
-            &ctx.job_id.0,
-            30,
-            "Building filesystem readers...",
-        );
-    }
+    crate::import_pipeline::emit::emit_job_progress(
+        ctx.event_sink(),
+        &ctx.job_id.0,
+        30,
+        "Building filesystem readers...",
+    );
 
     // For resume: probe once to get candidates if we don't have them.
     if probe_candidates.is_empty() {
@@ -252,7 +250,7 @@ fn enumerate_image_data_source_with_staging(
             )
             .map_err(CommandError::from_service_error)?;
         emit_import_cancellation_state(
-            ctx.app(),
+            ctx.event_sink(),
             ctx.job_id,
             transport::dto::CancellationStateDto::Acknowledged,
             false,
@@ -306,7 +304,7 @@ fn probe_and_seed_manifest(
     );
 
     emit_phase_profile(
-        ctx.app(),
+        ctx.event_sink(),
         ctx.job_id,
         ctx.case_id,
         Some(&ds.id),
@@ -446,7 +444,7 @@ fn probe_resume(
     );
     repair_resumed_partition_metadata(ctx, ds, &probe)?;
     emit_phase_profile(
-        ctx.app(),
+        ctx.event_sink(),
         ctx.job_id,
         ctx.case_id,
         Some(&ds.id),
@@ -512,7 +510,7 @@ fn build_pending_partition_work(
     }
 
     emit_phase_profile(
-        ctx.app(),
+        ctx.event_sink(),
         ctx.job_id,
         ctx.case_id,
         Some(&ds.id),
@@ -585,7 +583,7 @@ fn enumerate_pending_partitions(
 ) -> Result<(), CommandError> {
     let max_workers = crate::parallel_enum::resolve_worker_count(ctx.options.max_import_workers);
     let ds_id_clone = ds.id.clone();
-    let app_ref = ctx.options.app;
+    let event_sink = ctx.event_sink();
     let job_ref = ctx.job_id;
     let case_root_clone = case_root.to_path_buf();
     let total_partitions = manifest.partitions.len() as u32;
@@ -598,23 +596,21 @@ fn enumerate_pending_partitions(
         max_workers,
         Arc::clone(ctx.options.cancel_token),
         &|partition_idx, pct, detail| {
-            if let Some(a) = app_ref {
-                let overall = 25 + (pct * 35 / 100);
-                crate::import_pipeline::emit::emit_job_progress(
-                    a,
-                    &job_ref.0,
-                    overall.min(60),
-                    detail,
-                );
-                crate::import_pipeline::emit::emit_partition_progress(
-                    a,
-                    &job_ref.0,
-                    &format!("Partition {}", partition_idx),
-                    partition_idx as u32,
-                    total_partitions,
-                    pct,
-                );
-            }
+            let overall = 25 + (pct * 35 / 100);
+            crate::import_pipeline::emit::emit_job_progress(
+                event_sink,
+                &job_ref.0,
+                overall.min(60),
+                detail,
+            );
+            crate::import_pipeline::emit::emit_partition_progress(
+                event_sink,
+                &job_ref.0,
+                &format!("Partition {}", partition_idx),
+                partition_idx as u32,
+                total_partitions,
+                pct,
+            );
         },
     )
     .map_err(CommandError::from_service_error)?;
@@ -630,7 +626,7 @@ fn enumerate_pending_partitions(
             "Cancellation acknowledged; draining enumeration workers",
         );
         emit_import_cancellation_state(
-            ctx.app(),
+            ctx.event_sink(),
             ctx.job_id,
             transport::dto::CancellationStateDto::Draining,
             false,
@@ -639,7 +635,7 @@ fn enumerate_pending_partitions(
     }
 
     emit_phase_profile(
-        ctx.app(),
+        ctx.event_sink(),
         ctx.job_id,
         ctx.case_id,
         Some(&ds.id),
@@ -717,14 +713,12 @@ fn merge_enumeration_results(
     case_root: &std::path::Path,
     manifest: &staging::StagingManifest,
 ) -> Result<file_service::EnumerationStats, CommandError> {
-    if let Some(a) = ctx.app() {
-        crate::import_pipeline::emit::emit_job_progress(
-            a,
-            &ctx.job_id.0,
-            62,
-            "Merging partitions...",
-        );
-    }
+    crate::import_pipeline::emit::emit_job_progress(
+        ctx.event_sink(),
+        &ctx.job_id.0,
+        62,
+        "Merging partitions...",
+    );
 
     // Note: manifest is mutated only to record the phase; the caller already
     // owns the mutable manifest, but this helper just needs read access for the
@@ -742,22 +736,20 @@ fn merge_enumeration_results(
         &ds.id.0,
         manifest,
         Some(&|completed, total| {
-            if let Some(a) = ctx.app() {
-                let pct = 62 + (completed as u32 * 8 / total as u32);
-                crate::import_pipeline::emit::emit_job_progress(
-                    a,
-                    &ctx.job_id.0,
-                    pct.min(70),
-                    &format!("Merged {}/{} partitions", completed, total),
-                );
-            }
+            let pct = 62 + (completed as u32 * 8 / total as u32);
+            crate::import_pipeline::emit::emit_job_progress(
+                ctx.event_sink(),
+                &ctx.job_id.0,
+                pct.min(70),
+                &format!("Merged {}/{} partitions", completed, total),
+            );
         }),
     )
     .map_err(CommandError::from_service_error)?;
     let enum_merge_elapsed = enum_merge_started.elapsed();
 
     emit_phase_profile(
-        ctx.app(),
+        ctx.event_sink(),
         ctx.job_id,
         ctx.case_id,
         Some(&ds.id),
@@ -837,7 +829,7 @@ pub(crate) fn run_post_import_phase(
     let post_import_started = Instant::now();
     let progress_adapter = |pct: u32, detail: &str| {
         emit_import_profile_progress(
-            ctx.app(),
+            ctx.event_sink(),
             ctx.job_id,
             ctx.case_id,
             Some(&ds.id),
@@ -887,7 +879,7 @@ pub(crate) fn run_post_import_phase(
                 "Cancellation acknowledged during post-import analysis drain",
             );
             emit_import_cancellation_state(
-                ctx.app(),
+                ctx.event_sink(),
                 ctx.job_id,
                 transport::dto::CancellationStateDto::Draining,
                 false,
@@ -903,7 +895,7 @@ pub(crate) fn run_post_import_phase(
     let post_import_results = post_import_counts_from_message(&pipeline_msg);
 
     emit_phase_profile(
-        ctx.app(),
+        ctx.event_sink(),
         ctx.job_id,
         ctx.case_id,
         Some(&ds.id),
@@ -953,43 +945,39 @@ pub(crate) fn run_finalize_phase(
     pipeline_msg: &str,
     import_started: Instant,
 ) -> Result<String, CommandError> {
-    if let Some(app) = ctx.app() {
-        crate::import_pipeline::emit::emit_timeline_updated(
-            app,
-            stats.file_count + stats.dir_count,
-        );
-        crate::import_pipeline::emit::emit_search_index_progress(
-            app,
-            100,
-            "Post-import indexing completed",
-        );
-    }
+    crate::import_pipeline::emit::emit_timeline_updated(
+        ctx.event_sink(),
+        stats.file_count + stats.dir_count,
+    );
+    crate::import_pipeline::emit::emit_search_index_progress(
+        ctx.event_sink(),
+        100,
+        "Post-import indexing completed",
+    );
 
     ctx.report_job_progress(95, "Finalizing...")?;
 
-    if let Some(app) = ctx.app() {
-        match file_service::get_data_sources_real(ctx.conn, ctx.case_id)
-            .map_err(CommandError::from_service_error)?
-            .into_iter()
-            .find(|source| source.id == ds.id.0)
-        {
-            Some(summary) => {
-                crate::import_pipeline::emit::emit_data_source_imported(
-                    app,
-                    &ctx.case_id.0,
-                    &summary,
-                    &ctx.job_id.0,
-                );
-            }
-            None => tracing::warn!(
-                "Imported data source {} was not found in summary list for event emission",
-                ds.id.0
-            ),
+    match file_service::get_data_sources_real(ctx.conn, ctx.case_id)
+        .map_err(CommandError::from_service_error)?
+        .into_iter()
+        .find(|source| source.id == ds.id.0)
+    {
+        Some(summary) => {
+            crate::import_pipeline::emit::emit_data_source_imported(
+                ctx.event_sink(),
+                &ctx.case_id.0,
+                &summary,
+                &ctx.job_id.0,
+            );
         }
+        None => tracing::warn!(
+            "Imported data source {} was not found in summary list for event emission",
+            ds.id.0
+        ),
     }
 
     emit_phase_profile(
-        ctx.app(),
+        ctx.event_sink(),
         ctx.job_id,
         ctx.case_id,
         Some(&ds.id),

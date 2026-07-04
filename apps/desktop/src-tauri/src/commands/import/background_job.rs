@@ -12,6 +12,7 @@ use crate::events::event_bridge;
 
 use super::{
     cancellation::{is_import_cancelled_message, job_cancellation_dto},
+    events::TauriImportEventSink,
     pipeline::{execute_import_job, ImportJobOptions},
 };
 
@@ -57,8 +58,11 @@ pub(crate) fn run_background_import_job(
         return Ok(());
     }
 
+    let event_sink = app.map(TauriImportEventSink::new);
     let options = ImportJobOptions {
-        app,
+        event_sink: event_sink
+            .as_ref()
+            .map(|sink| sink as &dyn app_services::import_pipeline::ImportEventSink),
         cancel_token: &cancel_token,
         max_import_workers: job.max_import_workers,
         max_analysis_workers: job.max_analysis_workers,

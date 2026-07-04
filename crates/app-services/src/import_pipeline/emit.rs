@@ -1,163 +1,159 @@
-use tauri::{AppHandle, Emitter};
 use transport::dto::{
     DataSourceSummaryDto, ImportPhaseProgressDto, IndexCacheStatusDto, JobCancellationDto,
     PartialResultDto,
 };
-use transport::events::{
-    EventEnvelope, EventTopic, TOPIC_CACHE_INDEX_STATUS, TOPIC_DATA_SOURCE_IMPORTED,
-    TOPIC_IMPORT_PARTIAL_RESULT, TOPIC_IMPORT_PHASE_PROGRESS, TOPIC_JOB_CANCELLATION,
-    TOPIC_JOB_PROGRESS, TOPIC_PARTITION_PROGRESS, TOPIC_SEARCH_INDEX_PROGRESS,
-    TOPIC_TIMELINE_UPDATED,
-};
 
-fn envelope<T: serde::Serialize>(topic: EventTopic, payload: T) -> EventEnvelope<T> {
-    EventEnvelope {
-        event_id: uuid::Uuid::new_v4().to_string(),
-        topic,
-        ts: chrono::Utc::now(),
-        payload,
-    }
-}
+/// UI/event bridge used by the import pipeline.
+///
+/// Implementations must be best-effort: event delivery failures should be
+/// logged by the adapter and must not interrupt forensic import work.
+pub trait ImportEventSink: Sync {
+    fn job_progress(&self, job_id: &str, progress: u32, detail: &str);
 
-fn emit_event<T: serde::Serialize + Clone>(
-    app: &AppHandle,
-    topic: &str,
-    event: &EventEnvelope<T>,
-) -> tauri::Result<()> {
-    app.emit_to("main", topic, event)
-}
-
-pub(crate) fn emit_job_progress(app: &AppHandle, job_id: &str, progress: u32, detail: &str) {
-    let envelope = envelope(
-        EventTopic::JobProgress,
-        serde_json::json!({
-            "jobId": job_id,
-            "progress": progress,
-            "detail": detail,
-        }),
+    fn partition_progress(
+        &self,
+        job_id: &str,
+        current_partition: &str,
+        completed: u32,
+        total: u32,
+        partition_pct: u32,
     );
-    if let Err(e) = emit_event(app, TOPIC_JOB_PROGRESS, &envelope) {
-        tracing::warn!("Failed to emit job progress event for {}: {}", job_id, e);
+
+    fn timeline_updated(&self, event_count: u64);
+
+    fn search_index_progress(&self, progress: u32, detail: &str);
+
+    fn data_source_imported(&self, case_id: &str, data_source: &DataSourceSummaryDto, job_id: &str);
+
+    fn import_phase_progress(&self, progress: &ImportPhaseProgressDto);
+
+    fn import_partial_result(&self, result: &PartialResultDto);
+
+    fn cache_index_status(&self, status: &IndexCacheStatusDto);
+
+    fn job_cancellation(&self, cancellation: &JobCancellationDto);
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct NoopImportEventSink;
+
+impl ImportEventSink for NoopImportEventSink {
+    fn job_progress(&self, _job_id: &str, _progress: u32, _detail: &str) {}
+
+    fn partition_progress(
+        &self,
+        _job_id: &str,
+        _current_partition: &str,
+        _completed: u32,
+        _total: u32,
+        _partition_pct: u32,
+    ) {
+    }
+
+    fn timeline_updated(&self, _event_count: u64) {}
+
+    fn search_index_progress(&self, _progress: u32, _detail: &str) {}
+
+    fn data_source_imported(
+        &self,
+        _case_id: &str,
+        _data_source: &DataSourceSummaryDto,
+        _job_id: &str,
+    ) {
+    }
+
+    fn import_phase_progress(&self, _progress: &ImportPhaseProgressDto) {}
+
+    fn import_partial_result(&self, _result: &PartialResultDto) {}
+
+    fn cache_index_status(&self, _status: &IndexCacheStatusDto) {}
+
+    fn job_cancellation(&self, _cancellation: &JobCancellationDto) {}
+}
+
+pub(crate) fn emit_job_progress(
+    sink: Option<&dyn ImportEventSink>,
+    job_id: &str,
+    progress: u32,
+    detail: &str,
+) {
+    if let Some(sink) = sink {
+        sink.job_progress(job_id, progress, detail);
     }
 }
 
 pub(crate) fn emit_partition_progress(
-    app: &AppHandle,
+    sink: Option<&dyn ImportEventSink>,
     job_id: &str,
     current_partition: &str,
     completed: u32,
     total: u32,
     partition_pct: u32,
 ) {
-    let envelope = envelope(
-        EventTopic::PartitionProgress,
-        serde_json::json!({
-            "jobId": job_id,
-            "currentPartition": current_partition,
-            "completedPartitions": completed,
-            "totalPartitions": total,
-            "partitionProgress": partition_pct,
-        }),
-    );
-    if let Err(e) = emit_event(app, TOPIC_PARTITION_PROGRESS, &envelope) {
-        tracing::warn!(
-            "Failed to emit partition progress event for job {}: {}",
-            job_id,
-            e
-        );
+    if let Some(sink) = sink {
+        sink.partition_progress(job_id, current_partition, completed, total, partition_pct);
     }
 }
 
-pub(crate) fn emit_timeline_updated(app: &AppHandle, event_count: u64) {
-    let envelope = envelope(
-        EventTopic::TimelineUpdated,
-        serde_json::json!({
-            "eventCount": event_count,
-        }),
-    );
-    if let Err(e) = emit_event(app, TOPIC_TIMELINE_UPDATED, &envelope) {
-        tracing::warn!("Failed to emit timeline updated event: {}", e);
+pub(crate) fn emit_timeline_updated(sink: Option<&dyn ImportEventSink>, event_count: u64) {
+    if let Some(sink) = sink {
+        sink.timeline_updated(event_count);
     }
 }
 
-pub(crate) fn emit_search_index_progress(app: &AppHandle, progress: u32, detail: &str) {
-    let envelope = envelope(
-        EventTopic::SearchIndexProgress,
-        serde_json::json!({
-            "progress": progress,
-            "detail": detail,
-        }),
-    );
-    if let Err(e) = emit_event(app, TOPIC_SEARCH_INDEX_PROGRESS, &envelope) {
-        tracing::warn!("Failed to emit search index progress event: {}", e);
+pub(crate) fn emit_search_index_progress(
+    sink: Option<&dyn ImportEventSink>,
+    progress: u32,
+    detail: &str,
+) {
+    if let Some(sink) = sink {
+        sink.search_index_progress(progress, detail);
     }
 }
 
 pub(crate) fn emit_data_source_imported(
-    app: &AppHandle,
+    sink: Option<&dyn ImportEventSink>,
     case_id: &str,
     data_source: &DataSourceSummaryDto,
     job_id: &str,
 ) {
-    let envelope = envelope(
-        EventTopic::DataSourceImported,
-        serde_json::json!({
-            "caseId": case_id,
-            "dataSourceId": data_source.id,
-            "name": data_source.name,
-            "kind": data_source.kind,
-            "jobId": job_id,
-        }),
-    );
-    if let Err(e) = emit_event(app, TOPIC_DATA_SOURCE_IMPORTED, &envelope) {
-        tracing::warn!(
-            "Failed to emit data source imported event for {}: {}",
-            data_source.id,
-            e
-        );
+    if let Some(sink) = sink {
+        sink.data_source_imported(case_id, data_source, job_id);
     }
 }
 
-pub(crate) fn emit_import_phase_progress(app: &AppHandle, progress: &ImportPhaseProgressDto) {
-    let envelope = envelope(EventTopic::ImportPhaseProgress, progress.clone());
-    if let Err(e) = emit_event(app, TOPIC_IMPORT_PHASE_PROGRESS, &envelope) {
-        tracing::warn!(
-            "Failed to emit import phase progress event for job {}: {}",
-            progress.job_id,
-            e
-        );
+pub(crate) fn emit_import_phase_progress(
+    sink: Option<&dyn ImportEventSink>,
+    progress: &ImportPhaseProgressDto,
+) {
+    if let Some(sink) = sink {
+        sink.import_phase_progress(progress);
     }
 }
 
-pub(crate) fn emit_import_partial_result(app: &AppHandle, result: &PartialResultDto) {
-    let envelope = envelope(EventTopic::ImportPartialResult, result.clone());
-    if let Err(e) = emit_event(app, TOPIC_IMPORT_PARTIAL_RESULT, &envelope) {
-        tracing::warn!(
-            "Failed to emit import partial result event for {}: {}",
-            result.scope_id,
-            e
-        );
+pub(crate) fn emit_import_partial_result(
+    sink: Option<&dyn ImportEventSink>,
+    result: &PartialResultDto,
+) {
+    if let Some(sink) = sink {
+        sink.import_partial_result(result);
     }
 }
 
-pub(crate) fn emit_cache_index_status(app: &AppHandle, status: &IndexCacheStatusDto) {
-    let envelope = envelope(EventTopic::CacheIndexStatus, status.clone());
-    if let Err(e) = emit_event(app, TOPIC_CACHE_INDEX_STATUS, &envelope) {
-        tracing::warn!(
-            "Failed to emit cache index status event for {}: {}",
-            status.cache_key,
-            e
-        );
+pub(crate) fn emit_cache_index_status(
+    sink: Option<&dyn ImportEventSink>,
+    status: &IndexCacheStatusDto,
+) {
+    if let Some(sink) = sink {
+        sink.cache_index_status(status);
     }
 }
 
-pub(crate) fn emit_job_cancellation(app: &AppHandle, cancellation: &JobCancellationDto) {
-    let envelope = envelope(EventTopic::JobCancellation, cancellation.clone());
-    if let Err(e) = emit_event(app, TOPIC_JOB_CANCELLATION, &envelope) {
-        tracing::warn!(
-            "Failed to emit job cancellation event for {}: {}",
-            cancellation.job_id,
-            e
-        );
+pub(crate) fn emit_job_cancellation(
+    sink: Option<&dyn ImportEventSink>,
+    cancellation: &JobCancellationDto,
+) {
+    if let Some(sink) = sink {
+        sink.job_cancellation(cancellation);
     }
 }

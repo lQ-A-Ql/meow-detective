@@ -8,6 +8,7 @@ use crate::datasource_service::{
     LvmPhysicalVolumeSource,
 };
 use crate::file_service;
+use crate::import_pipeline::emit::ImportEventSink;
 use crate::parallel_enum;
 
 /// Format a filesystem candidate into a stable root name.
@@ -111,7 +112,7 @@ pub fn enumerate_image_data_source<R>(
     data_source_id: &domain::DataSourceId,
     mut reader: R,
     mut progress: impl FnMut(u32, &str) -> Result<(), String>,
-    app: Option<&tauri::AppHandle>,
+    event_sink: Option<&dyn ImportEventSink>,
     job_id: Option<&domain::JobId>,
 ) -> persistence_sqlite::DbResult<file_service::EnumerationStats>
 where
@@ -182,7 +183,7 @@ where
         };
         progress(stage_progress, &progress_detail)
             .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-        if let (Some(app), Some(jid)) = (app, job_id) {
+        if let Some(jid) = job_id {
             let job_repo = persistence_sqlite::repositories::job_repo::JobRepo::new(conn);
             if let Err(e) = job_repo.update_partition_progress(
                 jid,
@@ -194,7 +195,7 @@ where
                 tracing::debug!("Failed to update partition progress: {}", e);
             }
             crate::import_pipeline::emit::emit_partition_progress(
-                app,
+                event_sink,
                 &jid.0,
                 &root_name,
                 index as u32,
@@ -245,7 +246,7 @@ where
         );
         progress(stage_progress, &progress_detail)
             .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-        if let (Some(app), Some(jid)) = (app, job_id) {
+        if let Some(jid) = job_id {
             let job_repo = persistence_sqlite::repositories::job_repo::JobRepo::new(conn);
             if let Err(e) = job_repo.update_partition_progress(
                 jid,
@@ -257,7 +258,7 @@ where
                 tracing::debug!("Failed to update partition progress: {}", e);
             }
             crate::import_pipeline::emit::emit_partition_progress(
-                app,
+                event_sink,
                 &jid.0,
                 &root_name,
                 index as u32,
@@ -267,14 +268,14 @@ where
         }
         // Create progress callback for partition-level progress updates
         let emit_progress = |pct: u32| {
-            if let (Some(a), Some(j)) = (app, job_id) {
+            if let Some(j) = job_id {
                 let job_repo = persistence_sqlite::repositories::job_repo::JobRepo::new(conn);
                 let overall =
                     25 + ((index as u32 * 35) + (pct * 35 / 100)) / total_candidates.max(1) as u32;
                 let _ =
                     job_repo.update_progress(j, overall.min(65), &format!("{root_name} {pct}%"));
                 crate::import_pipeline::emit::emit_partition_progress(
-                    a,
+                    event_sink,
                     &j.0,
                     &root_name,
                     index as u32,
@@ -283,7 +284,7 @@ where
                 );
             }
         };
-        let progress_cb: Option<&dyn Fn(u32)> = if app.is_some() && job_id.is_some() {
+        let progress_cb: Option<&dyn Fn(u32)> = if job_id.is_some() {
             Some(&emit_progress)
         } else {
             None
@@ -391,7 +392,7 @@ where
                 )?
             }
             ImageFilesystemKind::BitLocker => {
-                if let (Some(app), Some(jid)) = (app, job_id) {
+                if let Some(jid) = job_id {
                     let job_repo = persistence_sqlite::repositories::job_repo::JobRepo::new(conn);
                     if let Err(e) = job_repo.update_partition_progress(
                         jid,
@@ -403,7 +404,7 @@ where
                         tracing::debug!("Failed to update BitLocker partition progress: {}", e);
                     }
                     crate::import_pipeline::emit::emit_partition_progress(
-                        app,
+                        event_sink,
                         &jid.0,
                         &root_name,
                         (index as u32) + 1,
@@ -428,7 +429,7 @@ where
         total.dir_count += stats.dir_count;
         total.total_size += stats.total_size;
         total.warnings.extend(stats.warnings);
-        if let (Some(app), Some(jid)) = (app, job_id) {
+        if let Some(jid) = job_id {
             let job_repo = persistence_sqlite::repositories::job_repo::JobRepo::new(conn);
             if let Err(e) = job_repo.update_partition_progress(
                 jid,
@@ -440,7 +441,7 @@ where
                 tracing::debug!("Failed to update partition progress: {}", e);
             }
             crate::import_pipeline::emit::emit_partition_progress(
-                app,
+                event_sink,
                 &jid.0,
                 &root_name,
                 (index as u32) + 1,

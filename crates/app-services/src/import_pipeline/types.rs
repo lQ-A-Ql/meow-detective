@@ -39,13 +39,13 @@ impl<'a> ImportJobContext<'a> {
         self.options.cancel_token.load(Ordering::Relaxed)
     }
 
-    /// Convenience accessor for the optional Tauri app handle.
-    pub fn app(&self) -> Option<&tauri::AppHandle> {
-        self.options.app
+    /// Convenience accessor for the optional UI/event sink.
+    pub fn event_sink(&self) -> Option<&dyn crate::import_pipeline::emit::ImportEventSink> {
+        self.options.event_sink
     }
 
-    /// Persist job progress to the repository and emit it to the frontend if an
-    /// app handle is available.
+    /// Persist job progress to the repository and emit it through the optional
+    /// event sink.
     pub fn report_job_progress(
         &self,
         progress: u32,
@@ -54,9 +54,12 @@ impl<'a> ImportJobContext<'a> {
         self.job_repo
             .update_progress(self.job_id, progress, detail)
             .map_err(transport::CommandError::from_service_error)?;
-        if let Some(app) = self.app() {
-            crate::import_pipeline::emit::emit_job_progress(app, &self.job_id.0, progress, detail);
-        }
+        crate::import_pipeline::emit::emit_job_progress(
+            self.event_sink(),
+            &self.job_id.0,
+            progress,
+            detail,
+        );
         Ok(())
     }
 }
