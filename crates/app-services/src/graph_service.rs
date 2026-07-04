@@ -4,7 +4,7 @@ use rusqlite::Connection;
 use thiserror::Error;
 use transport::dto::{
     GraphEdgeDto, GraphEdgeTypeDto, GraphNodeDto, GraphNodeTypeDto, GraphProvenanceEntryDto,
-    GraphQueryDto, GraphQueryResultDto, GraphSnapshotDto,
+    GraphQueryDto, GraphQueryResultDto, GraphSnapshotDto, ListGraphNodesRequest,
 };
 
 #[derive(Debug, Error)]
@@ -112,6 +112,21 @@ pub fn query_graph(
         node_count,
         edge_count,
     })
+}
+
+/// List graph nodes for the active case without requiring a traversal seed.
+pub fn list_graph_nodes(
+    conn: &Connection,
+    case_id: &str,
+    request: ListGraphNodesRequest,
+) -> Result<Vec<GraphNodeDto>, GraphServiceError> {
+    let limit = request.limit.clamp(1, 500);
+    let repo = GraphRepo::new(conn);
+    let nodes = repo
+        .list_nodes_for_case(case_id, limit, request.offset)
+        .map_err(|e| GraphServiceError::Other(format!("graph node list query: {e}")))?;
+
+    Ok(nodes.into_iter().map(node_to_dto).collect())
 }
 
 /// Query the neighborhood of a single node up to the given BFS depth.
@@ -584,6 +599,32 @@ mod tests {
         .unwrap();
 
         assert_eq!(result_strict.edge_count, 0);
+    }
+
+    #[test]
+    fn list_graph_nodes_returns_case_nodes() {
+        let conn = setup_case_db();
+        let repo = GraphRepo::new(&conn);
+
+        repo.insert_nodes_batch(&[
+            make_node("n1", "case-1", NodeType::File, "a.exe"),
+            make_node("n2", "case-1", NodeType::Artifact, "LNK-1"),
+        ])
+        .unwrap();
+
+        let nodes = list_graph_nodes(
+            &conn,
+            "case-1",
+            ListGraphNodesRequest {
+                limit: 10,
+                offset: 0,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(nodes.len(), 2);
+        assert!(nodes.iter().any(|node| node.id == "n1"));
+        assert!(nodes.iter().any(|node| node.id == "n2"));
     }
 
     #[test]

@@ -1,4 +1,4 @@
-import { RefreshCw, Shield } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { AnalysisEmptyState, AnalysisErrorBanner, AnalysisLoadingPanel } from '@/components/analysis/AnalysisPanels';
 import { CorrelationWorkspace } from '@/components/analysis/CorrelationWorkspace';
 import {
@@ -14,7 +14,7 @@ import {
   SupportMatrixPanel,
   VerificationDashboard,
 } from '@/components/analysis/V2GovernancePanels';
-import { useCurrentCase, useCreateAnalysisDemoCase } from '@/features/case/hooks';
+import { useCurrentCase } from '@/features/case/hooks';
 import { useCorrelationSnapshot, useV2GovernanceSnapshot } from '@/features/analysis/hooks';
 import { Button } from '@/app/components/ui/button';
 import { isApiErrorDto } from '@/lib/api/client';
@@ -31,20 +31,15 @@ function errorMessage(error: unknown) {
 
 export function V2Workbench() {
   const currentCase = useCurrentCase();
-  const demoCase = useCreateAnalysisDemoCase();
   const snapshot = useV2GovernanceSnapshot();
   const correlation = useCorrelationSnapshot();
 
   const hasCase = Boolean(currentCase.data);
-  const loading = currentCase.isLoading || demoCase.isPending;
-  const error = currentCase.error ?? snapshot.error ?? correlation.error ?? demoCase.error;
+  const loading = currentCase.isLoading;
+  const error = currentCase.error ?? snapshot.error ?? correlation.error;
 
   async function refresh() {
     await Promise.all([snapshot.refetch(), correlation.refetch()]);
-  }
-
-  async function loadDemoCase() {
-    await demoCase.mutateAsync();
   }
 
   return (
@@ -60,15 +55,6 @@ export function V2Workbench() {
           <div className="flex items-center gap-2">
             <Button
               type="button"
-              onClick={loadDemoCase}
-              disabled={loading}
-              className="h-8 rounded border border-[#111] bg-[#111] px-3 text-[12px] text-white hover:bg-[#333]"
-            >
-              {demoCase.isPending ? <RefreshCw size={14} className="animate-spin" /> : <Shield size={14} />}
-              加载演示案件
-            </Button>
-            <Button
-              type="button"
               variant="outline"
               onClick={refresh}
               disabled={!hasCase || loading}
@@ -82,7 +68,7 @@ export function V2Workbench() {
       </div>
 
       {!hasCase && currentCase.isSuccess ? (
-        <AnalysisEmptyState demoPending={demoCase.isPending} onLoadDemoCase={loadDemoCase} />
+        <AnalysisEmptyState />
       ) : loading ? (
         <AnalysisLoadingPanel text="正在加载 V2 治理快照..." />
       ) : (

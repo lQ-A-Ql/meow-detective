@@ -7,7 +7,6 @@ import { useAnalysisStore } from '@/stores/analysis-store';
 
 const mocks = vi.hoisted(() => ({
   currentCase: vi.fn(),
-  demoCase: vi.fn(),
   systemInfo: vi.fn(),
   evidenceSummary: vi.fn(),
   evidenceScan: vi.fn(),
@@ -23,7 +22,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/features/case/hooks', () => ({
   useCurrentCase: mocks.currentCase,
-  useCreateAnalysisDemoCase: mocks.demoCase,
   useDataSources: () => ({ data: undefined, error: null, isLoading: false, refetch: vi.fn() }),
 }));
 
@@ -73,11 +71,6 @@ describe('DataAnalysis page', () => {
     mocks.currentCase.mockReturnValue(queryState({
       data: { id: 'case-1', name: 'Case 1' },
     }));
-    mocks.demoCase.mockReturnValue({
-      error: null,
-      isPending: false,
-      mutateAsync: vi.fn().mockResolvedValue({ id: 'demo-case', name: 'Analysis Demo' }),
-    });
     mocks.systemInfo.mockReturnValue(queryState({
       data: {
         computerName: 'BETA-LAB',
@@ -482,23 +475,8 @@ describe('DataAnalysis page', () => {
     renderPage();
 
     expect(screen.getByText('请先创建或打开案件')).toBeDefined();
-    expect(screen.getAllByRole('button', { name: /加载演示案件/ }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: /加载演示案件/ })).toBeNull();
     expect(screen.queryByText('正在分析数据源...')).toBeNull();
-  });
-
-  it('loads the demo case from the empty state', async () => {
-    const mutateAsync = vi.fn().mockResolvedValue({ id: 'demo-case', name: 'Analysis Demo' });
-    mocks.currentCase.mockReturnValue(queryState({ data: null }));
-    mocks.demoCase.mockReturnValue({
-      error: null,
-      isPending: false,
-      mutateAsync,
-    });
-
-    renderPage();
-    fireEvent.click(screen.getAllByRole('button', { name: /加载演示案件/ })[0]);
-
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
   });
 
   it('only mounts the active tab content on initial render', () => {

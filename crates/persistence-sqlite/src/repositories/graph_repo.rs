@@ -122,6 +122,29 @@ impl<'a> GraphRepo<'a> {
         }
     }
 
+    /// List graph nodes for a case, newest first. This supports UI citation pickers
+    /// without requiring a known seed node.
+    pub fn list_nodes_for_case(
+        &self,
+        case_id: &str,
+        limit: u32,
+        offset: u32,
+    ) -> DbResult<Vec<GraphNode>> {
+        let sql = format!(
+            "SELECT {NODE_COLUMNS} FROM graph_nodes
+             WHERE case_id = ?1
+             ORDER BY created_at DESC, id ASC
+             LIMIT ?2 OFFSET ?3"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(params![case_id, limit, offset], row_to_node)?;
+        let mut nodes = Vec::new();
+        for row in rows {
+            nodes.push(row?);
+        }
+        Ok(nodes)
+    }
+
     /// Retrieve neighbors of a node, optionally filtered by edge types and direction.
     /// Returns edges paired with the neighbor node at the other end.
     pub fn get_neighbors(
@@ -609,6 +632,24 @@ mod tests {
         assert_eq!(fetched.node_type, NodeType::File);
         assert_eq!(fetched.label, "cmd.exe");
         assert_eq!(fetched.tags, vec!["test"]);
+    }
+
+    #[test]
+    fn list_nodes_for_case_paginates_newest_first() {
+        let (_conn, repo) = setup();
+        let mut older = make_node("n1", NodeType::File, "older.exe");
+        older.created_at = "2026-06-14T00:00:00Z".to_string();
+        let mut newer = make_node("n2", NodeType::Artifact, "newer");
+        newer.created_at = "2026-06-15T00:00:00Z".to_string();
+        repo.insert_nodes_batch(&[older, newer]).unwrap();
+
+        let first_page = repo.list_nodes_for_case("case-1", 1, 0).unwrap();
+        assert_eq!(first_page.len(), 1);
+        assert_eq!(first_page[0].id, "n2");
+
+        let second_page = repo.list_nodes_for_case("case-1", 1, 1).unwrap();
+        assert_eq!(second_page.len(), 1);
+        assert_eq!(second_page[0].id, "n1");
     }
 
     #[test]

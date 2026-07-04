@@ -65,7 +65,7 @@ describe('rule-packs hooks', () => {
     await result.current.mutateAsync('/path/to/pack.json');
 
     expect(mocks.loadRulePack).toHaveBeenCalledWith('/path/to/pack.json');
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['rule-packs'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['rule-packs', 'loaded'] });
   });
 
   it('validates a rule pack by id and invalidates queries', async () => {
@@ -83,7 +83,7 @@ describe('rule-packs hooks', () => {
     await result.current.mutateAsync('rp-1');
 
     expect(mocks.validateRulePack).toHaveBeenCalledWith('rp-1');
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['rule-packs'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['rule-packs', 'loaded'] });
   });
 
   it('exposes error state when load fails', async () => {

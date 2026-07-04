@@ -3,7 +3,6 @@ import { apiClient } from './client';
 import { COMMANDS } from './commands';
 import {
   closeCase,
-  createAnalysisDemoCase,
   createCase,
   deleteCase,
   deleteDataSource,
@@ -76,12 +75,6 @@ describe('case API', () => {
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.case.CREATE_CASE, {
       request: { caseRoot: '/cases/test', name: 'My Case', examiner: null },
     });
-  });
-
-  it('createAnalysisDemoCase calls the correct command', async () => {
-    requestMock.mockResolvedValueOnce({ id: 'demo' } as never);
-    await createAnalysisDemoCase();
-    expect(requestMock).toHaveBeenCalledWith(COMMANDS.case.CREATE_ANALYSIS_DEMO_CASE);
   });
 
   it('openCase sends caseRoot in request', async () => {

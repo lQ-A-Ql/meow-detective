@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Database, Download, FileClock, FileText, Globe, Mail, Monitor, Server, Shield } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useCreateAnalysisDemoCase, useCurrentCase, useDataSources } from '@/features/case/hooks';
+import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import {
   useAnalysisClassifications,
   useAnalysisSystemInfo,
@@ -93,7 +93,6 @@ export function DataAnalysis() {
   const { t } = useTranslation();
   const currentCase = useCurrentCase();
   const { data: dataSources } = useDataSources();
-  const demoCase = useCreateAnalysisDemoCase();
   const systemInfo = useAnalysisSystemInfo();
   const evidenceSummary = useEvidenceClassificationSummary();
   const evidenceScan = useRunEvidenceClassification();
@@ -124,7 +123,7 @@ export function DataAnalysis() {
   );
 
   const hasCase = Boolean(currentCase.data);
-  const loading = currentCase.isLoading || demoCase.isPending;
+  const loading = currentCase.isLoading;
   const error = currentCase.error
     ?? systemInfo.error
     ?? evidenceSummary.error
@@ -136,8 +135,7 @@ export function DataAnalysis() {
     ?? classifications.error
     ?? summaryMutation.error
     ?? evidenceScan.error
-    ?? extractionRun.error
-    ?? demoCase.error;
+    ?? extractionRun.error;
 
   async function refresh() {
     await Promise.all([
@@ -219,10 +217,6 @@ export function DataAnalysis() {
     URL.revokeObjectURL(url);
   }
 
-  async function loadDemoCase() {
-    await demoCase.mutateAsync();
-  }
-
   const extractionProgressCards = EXTRACTION_CATEGORIES.map((category) => (
     <AnalysisExtractionProgress
       key={category}
@@ -235,10 +229,8 @@ export function DataAnalysis() {
       <AnalysisHeader
         loading={loading}
         hasCase={hasCase}
-        demoPending={demoCase.isPending}
         extractionPending={extractionRun.isPending || extractionRunning}
         extractionRun={extractionRun.data}
-        onLoadDemoCase={loadDemoCase}
         onRefresh={refresh}
         onRunExtraction={runExtraction}
         dataSources={dataSources}
@@ -274,10 +266,7 @@ export function DataAnalysis() {
       ) : null}
 
       {!hasCase && currentCase.isSuccess ? (
-        <AnalysisEmptyState
-          demoPending={demoCase.isPending}
-          onLoadDemoCase={loadDemoCase}
-        />
+        <AnalysisEmptyState />
       ) : (
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AnalysisTabKey)} className="min-h-0 flex-1 gap-0">
           <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-none border-b border-forensics-border bg-forensics-panel p-0">

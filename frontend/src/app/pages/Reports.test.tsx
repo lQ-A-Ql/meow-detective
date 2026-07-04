@@ -1,11 +1,12 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Reports } from './Reports';
 
 const mocks = vi.hoisted(() => ({
   templates: vi.fn(),
   history: vi.fn(),
+  exportReport: vi.fn(),
   dataSources: vi.fn(),
   importSignals: vi.fn(),
 }));
@@ -13,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/features/reports/hooks', () => ({
   useReportTemplates: mocks.templates,
   useReportHistory: mocks.history,
+  useExportReport: mocks.exportReport,
 }));
 
 vi.mock('@/features/case/hooks', () => ({
@@ -55,6 +57,14 @@ function renderReports() {
 }
 
 describe('Reports hash caveat visibility', () => {
+  beforeEach(() => {
+    mocks.exportReport.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      error: null,
+    });
+  });
+
   it('shows pending hash caveat without displaying raw source paths', () => {
     mocks.templates.mockReturnValue(queryState([{ id: 'summary', name: 'Summary', description: 'Case summary' }]));
     mocks.history.mockReturnValue(queryState([]));

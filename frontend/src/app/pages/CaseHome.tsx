@@ -16,7 +16,7 @@ import {
 } from '@/features/case/hooks';
 import { useImportDataSource } from '@/features/files/hooks';
 import { useJobsSnapshot, useWarnings } from '@/features/jobs/hooks';
-import { getAppSettings } from '@/lib/api/settings';
+import { useAppSettings } from '@/features/settings/hooks';
 import { readLocalSettings } from '@/lib/settings';
 import { CaseMetricsStrip, RecentTasksPanel, DataSourcesPanel, RecentObjectsPanel } from './CaseOverview';
 import { CaseWelcomeForms } from './CaseActions';
@@ -31,6 +31,7 @@ export function CaseHome() {
   const { data: recentObjects } = useRecentObjects();
   const { data: jobs } = useJobsSnapshot();
   const { data: warnings } = useWarnings();
+  const { data: appSettings } = useAppSettings();
   const importMutation = useImportDataSource();
   const createCaseMutation = useCreateCase();
   const openCaseMutation = useOpenCase();
@@ -54,20 +55,10 @@ export function CaseHome() {
   const sortedRecentCases = useMemo(() => recentCases ?? [], [recentCases]);
 
   useEffect(() => {
-    let cancelled = false;
-    getAppSettings()
-      .then((settings) => {
-        if (!cancelled && !hasEditedCaseRoot.current) {
-          setCaseRoot(settings.caseRoot);
-        }
-      })
-      .catch(() => {
-        // Keep local fallback if persisted settings are temporarily unavailable.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (appSettings && !hasEditedCaseRoot.current) {
+      setCaseRoot(appSettings.caseRoot);
+    }
+  }, [appSettings]);
 
   if (!currentCase) {
     return (

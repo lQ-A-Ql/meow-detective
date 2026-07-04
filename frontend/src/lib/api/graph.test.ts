@@ -4,6 +4,7 @@ import { COMMANDS } from './commands';
 import {
   getNodeNeighborhood,
   getGraphSnapshot,
+  listGraphNodes,
   getProvenanceChain,
   queryGraph,
 } from './graph';
@@ -33,6 +34,14 @@ describe('graph API', () => {
     requestMock.mockResolvedValueOnce({ nodes: [], edges: [] } as never);
     await queryGraph(query as never);
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.graph.QUERY_GRAPH, { query });
+  });
+
+  it('listGraphNodes sends pagination request', async () => {
+    requestMock.mockResolvedValueOnce([] as never);
+    await listGraphNodes(25, 10);
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.graph.LIST_GRAPH_NODES, {
+      request: { limit: 25, offset: 10 },
+    });
   });
 
   it('getNodeNeighborhood sends nodeId and depth', async () => {

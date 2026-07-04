@@ -146,8 +146,9 @@ describe('AnalysisPanels sub-components', () => {
 
   describe('AnalysisEmptyState', () => {
     it('renders empty state message', () => {
-      render(createElement(AnalysisEmptyState, { demoPending: false, onLoadDemoCase: () => {} }));
+      render(createElement(AnalysisEmptyState));
       expect(screen.getByText('请先创建或打开案件')).toBeDefined();
+      expect(screen.queryByRole('button', { name: /加载演示案件/ })).toBeNull();
     });
   });
 
@@ -172,15 +173,13 @@ describe('AnalysisPanels sub-components', () => {
         createElement(AnalysisHeader, {
           loading: false,
           hasCase: false,
-          demoPending: false,
           extractionPending: false,
-          onLoadDemoCase: () => {},
           onRefresh: () => {},
           onRunExtraction: () => {},
         }),
       );
       expect(screen.getByText('数据源分析')).toBeDefined();
-      expect(screen.getByRole('button', { name: /加载演示案件/ })).toBeDefined();
+      expect(screen.queryByRole('button', { name: /加载演示案件/ })).toBeNull();
       expect(screen.getByRole('button', { name: /刷新/ })).toBeDefined();
       expect(screen.getByRole('button', { name: /运行提取/ })).toBeDefined();
     });
@@ -190,9 +189,7 @@ describe('AnalysisPanels sub-components', () => {
         createElement(AnalysisHeader, {
           loading: false,
           hasCase: true,
-          demoPending: false,
           extractionPending: false,
-          onLoadDemoCase: () => {},
           onRefresh: () => {},
           onRunExtraction: () => {},
           dataSources: [
@@ -209,9 +206,7 @@ describe('AnalysisPanels sub-components', () => {
         createElement(AnalysisHeader, {
           loading: false,
           hasCase: true,
-          demoPending: false,
           extractionPending: false,
-          onLoadDemoCase: () => {},
           onRefresh: () => {},
           onRunExtraction: () => {},
           dataSources: [

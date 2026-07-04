@@ -12,7 +12,6 @@ vi.mock('@/lib/api/case', () => ({
   getCurrentCase: mocks.getCurrentCase,
   deleteCase: mocks.deleteCase,
   createCase: vi.fn(),
-  createAnalysisDemoCase: vi.fn(),
   openCase: vi.fn(),
   closeCase: vi.fn(),
   renameDataSource: vi.fn(),

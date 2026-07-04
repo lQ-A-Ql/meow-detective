@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
-  Package,
   Download,
+  Package,
   Star,
   RefreshCw,
   AlertCircle,
@@ -9,7 +9,7 @@ import {
   XCircle,
   ExternalLink,
 } from 'lucide-react';
-import { listLoadedRulePacks, loadRulePack } from '@/lib/api/rule-packs';
+import { useLoadRulePack, useLoadedRulePacks } from '@/features/rule-packs/hooks';
 import { RulePackSummary, ApiErrorDto } from '@/types/models';
 
 // ---------------------------------------------------------------------------
@@ -75,6 +75,8 @@ export type ImportResult =
  * backend, installing packs, and rating them.
  */
 export function useMarketplace() {
+  const loadedRulePacks = useLoadedRulePacks();
+  const loadRulePackMutation = useLoadRulePack();
   const [state, setState] = useState<MarketplaceState>({
     packs: [],
     loading: true,
@@ -83,25 +85,14 @@ export function useMarketplace() {
     importResult: null,
   });
 
-  /** Fetch the list of available rule packs from the backend. */
-  const fetchPacks = useCallback(async () => {
-    setState((prev) => ({ ...prev, loading: true, error: null }));
-    try {
-      const summaries = await listLoadedRulePacks();
-      const packs = summaries.map(mapSummaryToMeta);
-      setState((prev) => ({
-        ...prev,
-        packs,
-        loading: false,
-      }));
-    } catch (err) {
-      setState((prev) => ({
-        ...prev,
-        loading: false,
-        error: formatApiError(err, 'Failed to fetch packs'),
-      }));
-    }
-  }, []);
+  useEffect(() => {
+    setState((prev) => ({
+      ...prev,
+      packs: loadedRulePacks.data?.map(mapSummaryToMeta) ?? [],
+      loading: loadedRulePacks.isLoading,
+      error: loadedRulePacks.error ? formatApiError(loadedRulePacks.error, 'Failed to fetch packs') : null,
+    }));
+  }, [loadedRulePacks.data, loadedRulePacks.error, loadedRulePacks.isLoading]);
 
   /** Download and install a rule pack by id. */
   const downloadPack = useCallback(async (packId: string) => {
@@ -115,14 +106,12 @@ export function useMarketplace() {
     }));
 
     try {
-      await loadRulePack(pack.downloadUrl);
+      await loadRulePackMutation.mutateAsync(pack.downloadUrl);
       setState((prev) => ({
         ...prev,
         downloadingId: null,
         importResult: { status: 'ok', message: `Installed ${pack.name} v${pack.version}` },
       }));
-      // Refresh so installed status reflects the latest backend state.
-      fetchPacks();
     } catch (err) {
       setState((prev) => ({
         ...prev,
@@ -133,7 +122,7 @@ export function useMarketplace() {
         },
       }));
     }
-  }, [state.packs, fetchPacks]);
+  }, [loadRulePackMutation, state.packs]);
 
   /** Rate a rule pack (local-only until a rating API exists). */
   const ratePack = useCallback(async (packId: string, rating: number) => {
@@ -153,12 +142,8 @@ export function useMarketplace() {
 
   /** Refresh the pack list (e.g. after an install). */
   const refresh = useCallback(() => {
-    fetchPacks();
-  }, [fetchPacks]);
-
-  useEffect(() => {
-    fetchPacks();
-  }, [fetchPacks]);
+    loadedRulePacks.refetch();
+  }, [loadedRulePacks]);
 
   return { state, downloadPack, ratePack, refresh };
 }

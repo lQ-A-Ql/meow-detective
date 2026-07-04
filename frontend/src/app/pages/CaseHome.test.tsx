@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
   renameDataSource: vi.fn(),
   removeCaseFromList: vi.fn(),
   importDataSource: vi.fn(),
-  getAppSettings: vi.fn(),
+  appSettings: vi.fn(),
 }));
 
 vi.mock('@/features/case/hooks', () => ({
@@ -53,8 +53,8 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock('@/lib/api/settings', () => ({
-  getAppSettings: mocks.getAppSettings,
+vi.mock('@/features/settings/hooks', () => ({
+  useAppSettings: mocks.appSettings,
 }));
 
 vi.mock('@/lib/settings', () => ({
@@ -133,13 +133,17 @@ describe('CaseHome page', () => {
     mocks.renameDataSource.mockReturnValue(mockMutationState());
     mocks.removeCaseFromList.mockReturnValue(mockMutationState());
     mocks.importDataSource.mockReturnValue(mockMutationState());
-    mocks.getAppSettings.mockResolvedValue({
-      caseRoot: 'D:\\ForensicsCases',
-      imageSearchPaths: [],
-      devEventTrace: false,
-      maxImportWorkers: undefined,
-      maxAnalysisWorkers: undefined,
-      importAnalysisMode: 'metadataOnly',
+    mocks.appSettings.mockReturnValue({
+      data: {
+        caseRoot: 'D:\\ForensicsCases',
+        imageSearchPaths: [],
+        devEventTrace: false,
+        maxImportWorkers: undefined,
+        maxAnalysisWorkers: undefined,
+        importAnalysisMode: 'metadataOnly',
+      },
+      error: null,
+      isLoading: false,
     });
   });
 

@@ -67,7 +67,7 @@ export function V3Dashboard() {
       </div>
 
       {!hasCase && currentCase.isSuccess ? (
-        <AnalysisEmptyState demoPending={false} onLoadDemoCase={() => {}} />
+        <AnalysisEmptyState />
       ) : loading ? (
         <AnalysisLoadingPanel text="正在加载取证总览快照..." />
       ) : (

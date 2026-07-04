@@ -3,8 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Settings } from './Settings';
 
 const mocks = vi.hoisted(() => ({
-  getAppSettings: vi.fn(),
+  appSettings: vi.fn(),
   saveAppSettings: vi.fn(),
+  saveSettingsMutation: {
+    isPending: false,
+    mutateAsync: vi.fn(),
+  },
   mcpState: {
     servers: [],
     selectedServerId: null,
@@ -20,9 +24,9 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('@/lib/api/settings', () => ({
-  getAppSettings: mocks.getAppSettings,
-  saveAppSettings: mocks.saveAppSettings,
+vi.mock('@/features/settings/hooks', () => ({
+  useAppSettings: mocks.appSettings,
+  useSaveAppSettings: mocks.saveAppSettings,
 }));
 
 vi.mock('@/stores/mcp-store', () => ({
@@ -59,19 +63,25 @@ describe('Settings page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('localStorage', createLocalStorageMock());
-    mocks.getAppSettings.mockResolvedValue({
-      caseRoot: 'D:\\Cases',
-      imageSearchPaths: ['D:\\Images', 'E:\\Evidence'],
-      devEventTrace: true,
-      maxImportWorkers: 1,
-      maxAnalysisWorkers: 4,
-      importAnalysisMode: 'budgetedContent',
-      hexChunkBytes: 32768,
-      maxViewerRangeLength: 1048576,
-      maxInlineImagePreviewBytes: 5242880,
-      maxInlineMediaPreviewBytes: 20971520,
+    mocks.appSettings.mockReturnValue({
+      data: {
+        caseRoot: 'D:\\Cases',
+        imageSearchPaths: ['D:\\Images', 'E:\\Evidence'],
+        devEventTrace: true,
+        maxImportWorkers: 1,
+        maxAnalysisWorkers: 4,
+        importAnalysisMode: 'budgetedContent',
+        hexChunkBytes: 32768,
+        maxViewerRangeLength: 1048576,
+        maxInlineImagePreviewBytes: 5242880,
+        maxInlineMediaPreviewBytes: 20971520,
+      },
+      error: null,
+      isLoading: false,
     });
-    mocks.saveAppSettings.mockImplementation(async (settings) => settings);
+    mocks.saveSettingsMutation.isPending = false;
+    mocks.saveSettingsMutation.mutateAsync.mockImplementation(async (settings) => settings);
+    mocks.saveAppSettings.mockReturnValue(mocks.saveSettingsMutation);
   });
 
   it('renders without crashing', async () => {
@@ -105,7 +115,7 @@ describe('Settings page', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存设置' }));
 
     await waitFor(() => {
-      expect(mocks.saveAppSettings).toHaveBeenCalledWith({
+      expect(mocks.saveSettingsMutation.mutateAsync).toHaveBeenCalledWith({
         caseRoot: 'C:\\ForensicsWorkbench\\cases',
         imageSearchPaths: ['D:\\Images', 'F:\\MoreImages'],
         devEventTrace: false,
@@ -126,7 +136,11 @@ describe('Settings page', () => {
   });
 
   it('keeps local fallback when backend settings cannot be loaded', async () => {
-    mocks.getAppSettings.mockRejectedValue(new Error('mock mode'));
+    mocks.appSettings.mockReturnValue({
+      data: undefined,
+      error: new Error('settings unavailable'),
+      isLoading: false,
+    });
 
     render(<Settings />);
 
@@ -146,6 +160,6 @@ describe('Settings page', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存设置' }));
 
     expect(await screen.findByText('镜像搜索路径包含非法字符。')).toBeTruthy();
-    expect(mocks.saveAppSettings).not.toHaveBeenCalled();
+    expect(mocks.saveSettingsMutation.mutateAsync).not.toHaveBeenCalled();
   });
 });

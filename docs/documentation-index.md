@@ -57,13 +57,13 @@
 
 | 事实 | 当前值 | 事实源 |
 |---|---:|---|
-| Rust workspace crate | 36 | `crates/` (Stage 1: `catalog` crate removed) |
-| Tauri commands | 96 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
-| app-services source modules | 24 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
+| Rust workspace crate | 37 | `crates/` |
+| Tauri commands | 98 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
+| app-services source modules | 25 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
 | SQLite repositories | 15 | `crates/persistence-sqlite/src/repositories/*_repo.rs` (新增: graph_repo, notebook_repo, batch_repo) |
-| SQLite migration scripts | 33 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0031 + staging_001) |
+| SQLite migration scripts | 34 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0033 + staging_001) |
 | frontend pages | 17 | `frontend/src/app/pages/*.tsx`，排除测试 (新增: V3Dashboard, V3ScoreCards) |
-| frontend test files | 79 | `frontend/src/**/*.test.ts(x)` (Stage 3: CaseActions, GqlAutocomplete, GqlResultView added) |
+| frontend test files | 83 | `frontend/src/**/*.test.ts(x)` |
 | Mermaid 图块 | 15 | `docs/model-architecture-algorithm-diagrams.md` |
 | V3 参考文档 | 9 | `docs/v3-plan.md` 及 8 篇 V3 参考文档 (已实现) |
 | V3 新增 crate | 3 | `crates/containers-pst/`, `crates/artifacts-linux/`, `crates/artifacts-macos/` (已创建) |
@@ -76,9 +76,9 @@
 | 路径模式 | 数量 | 说明 |
 |---|---:|---|
 | `frontend/src/app/pages/*.tsx` | 17 | 页面入口文件，不含 `*.test.tsx` |
-| `frontend/src/**/*.test.ts(x)` | 75 | Vitest 测试文件总数 |
-| `apps/desktop/src-tauri/src/commands/**/*.rs` | 96 | Tauri command 定义数 |
-| `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 33 | SQLite migration 脚本 (0001-0031 + staging_001) |
+| `frontend/src/**/*.test.ts(x)` | 83 | Vitest 测试文件总数 |
+| `apps/desktop/src-tauri/src/commands/**/*.rs` | 98 | Tauri command 定义数 |
+| `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 34 | SQLite migration 脚本 (0001-0033 + staging_001) |
 | `docs/model-architecture-algorithm-diagrams.md` 中 Mermaid | 15 | Mermaid 图块总数 |
 | `docs/v3-*.md` | 1 | V3 阶段文档入口（主计划） |
 | `docs/` 中 V3 参考文档 | 9 | 证据图、笔记本、规则包、PST决策、批处理、Linux/macOS覆盖、PST支持、演练 |

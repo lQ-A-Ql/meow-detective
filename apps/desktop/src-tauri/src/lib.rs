@@ -34,7 +34,8 @@ use commands::{
         open_file_handle_request, read_file_range, read_media_range,
     },
     graph_commands::{
-        get_graph_snapshot, get_node_neighborhood, get_provenance_chain, query_graph,
+        get_graph_snapshot, get_node_neighborhood, get_provenance_chain, list_graph_nodes,
+        query_graph,
     },
     import::pipeline::{cancel_import, import_data_source},
     job_commands::{get_jobs_snapshot, get_trace_items, get_warnings},
@@ -140,6 +141,7 @@ pub fn run() {
             generate_analysis_summary,
             get_graph_snapshot,
             query_graph,
+            list_graph_nodes,
             get_node_neighborhood,
             get_provenance_chain,
             get_warnings,

@@ -12,7 +12,6 @@ export const COMMANDS = {
     GET_RECENT_CASES: 'get_recent_cases',
     GET_DATA_SOURCES: 'get_data_sources',
     CREATE_CASE: 'create_case',
-    CREATE_ANALYSIS_DEMO_CASE: 'create_analysis_demo_case',
     OPEN_CASE: 'open_case',
     CLOSE_CASE: 'close_case',
     RENAME_DATA_SOURCE: 'rename_data_source',
@@ -68,6 +67,7 @@ export const COMMANDS = {
   graph: {
     GET_GRAPH_SNAPSHOT: 'get_graph_snapshot',
     QUERY_GRAPH: 'query_graph',
+    LIST_GRAPH_NODES: 'list_graph_nodes',
     GET_NODE_NEIGHBORHOOD: 'get_node_neighborhood',
     GET_PROVENANCE_CHAIN: 'get_provenance_chain',
   },

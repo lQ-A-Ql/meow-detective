@@ -1,6 +1,6 @@
 {
   "lastVerifiedAt": "2026-06-13T00:00:00Z",
-  "documentedLimitCount": 38,
+  "documentedLimitCount": 42,
   "items": [
     {
       "category": "E01",
@@ -227,37 +227,44 @@
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
-      "category": "Linux 文件系统",
-      "item": "ext4 raw disk",
-      "status": "unsupported",
-      "summary": "当前仅支持从已挂载或导入的 Linux 文件树提取制品。ext4 原始磁盘镜像解析规划于 V4",
+      "category": "Linux Stage 0",
+      "item": "检材3 baseline 作为公开支持证明",
+      "status": "notGuaranteed",
+      "summary": "检材3是私有 opt-in 真实样本 baseline，用于守住单盘 Linux 链路；不能替代 public-small/public-medium fixture 与 expected JSON",
       "affectedChains": [
-        "ext4",
+        "Linux",
         "XFS",
-        "Btrfs"
+        "LVM"
       ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
       "category": "Linux 文件系统",
-      "item": "XFS raw disk",
-      "status": "unsupported",
-      "summary": "XFS 原始磁盘镜像解析规划于 V4",
+      "item": "ext4 raw disk 完整支持",
+      "status": "notGuaranteed",
+      "summary": "reader 能力与探测链路需以公开 fixture / expected JSON 补齐；检材3 baseline 不覆盖 ext4",
       "affectedChains": [
-        "ext4",
-        "XFS",
-        "Btrfs"
+        "ext4"
       ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
       "category": "Linux 文件系统",
-      "item": "Btrfs raw disk",
-      "status": "unsupported",
-      "summary": "Btrfs 原始磁盘镜像解析规划于 V4",
+      "item": "XFS raw disk 完整支持",
+      "status": "partial",
+      "summary": "Stage 0 baseline 仅覆盖单源单盘、LVM direct LV 上的 XFS root tree、预览与 Linux artifact extraction",
       "affectedChains": [
-        "ext4",
         "XFS",
+        "LVM"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Linux 文件系统",
+      "item": "Btrfs raw disk 完整支持",
+      "status": "notGuaranteed",
+      "summary": "reader 能力与探测链路需以公开 fixture / expected JSON 补齐；检材3 baseline 不覆盖 Btrfs",
+      "affectedChains": [
         "Btrfs"
       ],
       "sourceDoc": "docs/known-unsupported-formats.md"
@@ -271,6 +278,37 @@
         "ext4",
         "XFS",
         "Btrfs"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Linux LVM/PVE",
+      "item": "PVE cluster 执行",
+      "status": "unsupported",
+      "summary": "Stage 0 只支持单源、单盘 Linux 服务器链路；cluster service 是非执行设计边界",
+      "affectedChains": [
+        "LVM",
+        "PVE"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Linux LVM/PVE",
+      "item": "LVM thin/cache/RAID/snapshot/VDO/writecache",
+      "status": "unsupported",
+      "summary": "当前 baseline 只覆盖 direct linear/striped LV；复杂映射需独立 metadata 解析与 fixture",
+      "affectedChains": [
+        "LVM"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Linux LVM/PVE",
+      "item": "partial/degraded VG 激活",
+      "status": "unsupported",
+      "summary": "缺失 PV 或不一致 metadata 必须 fail closed，不猜测块映射",
+      "affectedChains": [
+        "LVM"
       ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },

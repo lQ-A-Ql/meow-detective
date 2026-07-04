@@ -21,7 +21,7 @@ V2 长期执行主计划见 `docs/v2-longterm-plan.md`。
 4. 同步 `frontend/src/types/models.ts`
 5. 同步 `frontend/src/lib/api/*`
 6. 同步 hooks、页面、公有组件
-7. 同步 mock 数据
+7. 同步 fixture / test double，禁止新增 runtime mock
 8. 执行 Rust / frontend 测试
 9. 更新文档与开发记录
 
@@ -70,9 +70,10 @@ V2 长期执行主计划见 `docs/v2-longterm-plan.md`。
 
 - 页面不直接 `invoke`
 - 统一通过 `apiClient.request(...)`
+- 页面、业务组件、store 不直接 import `@/lib/api/*` 业务模块；业务 API 访问集中在 `features/<domain>/hooks.ts`
 - 公有 UI 放在公有组件目录
-- mock 与真实契约保持同 shape
-- 本地排序只允许用于 mock 或极小范围展示兜底
+- runtime 禁止 mock / fake / dummy 业务数据集；test double 仅允许出现在测试文件
+- 本地排序只允许用于极小范围展示兜底，不得伪造后端业务结果
 
 ## 7. 测试策略
 
@@ -243,6 +244,7 @@ powershell -File scripts/check-command-sql-boundary.ps1
 powershell -File scripts/check-media-protocol-guard.ps1
 powershell -File scripts/check-release-guard.ps1
 powershell -File scripts/check-stage5-regression-guard.ps1
+powershell -File scripts/check-frontend-runtime-guard.ps1
 powershell -File scripts/check-frontend-lockfile-policy.ps1
 ```
 
@@ -254,6 +256,16 @@ powershell -File scripts/check-frontend-lockfile-policy.ps1
 - `file_service/preview.rs` 保持 Tauri-free DTO assembly，`file_commands.rs` 仅做 active case、cache、media protocol 适配并委托 app-services。
 - `datasource_service.rs` 保持 facade，attach/probe/LVM/fs magic/reader/types/partition index 不回流成上帝模块。
 - Linux Stage 0 检材3 baseline 继续使用 `FORENSICS_LINUX_E01_FIXTURE` opt-in，不进入默认 CI，不提交私有样本。
+
+`check-frontend-runtime-guard.ps1` 锁定以下前端运行时边界：
+
+- `frontend/src/lib/api/client.ts` 是唯一 Tauri `invoke` 入口，页面、hooks、组件不得直接调用 `@tauri-apps/api/core`。
+- 非测试 runtime 文件不得包含 `vi.mock` / `jest.mock` / `mockResolvedValue` 等测试 mock wiring。
+- 非测试 runtime 文件不得定义 mock/fake/dummy 业务数据集、mock/demo runtime mode 或生产 demo-case 创建入口。
+- 页面、业务组件、store 不得直接 import `@/lib/api/*` 业务模块；必须通过 feature hooks。`apiClient` 错误类型和 MCP store 适配例外。
+- Graph citation/search 代码不得把 `nodeCountByType` 的类型统计 key 当作 node id 调用 neighborhood 查询。
+- `setTimeout` 只允许用于 UI debounce/copy/menu 交互，不允许伪造业务加载延迟。
+- `Math.random` 只允许用于图布局扰动、skeleton 宽度和本地 saved query ID fallback，不允许生成业务/取证数据。
 
 ## 13. 变更追溯
 

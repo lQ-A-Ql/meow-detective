@@ -11,11 +11,7 @@ vi.mock('@/features/notebook/hooks', () => ({
 }));
 
 vi.mock('@/features/graph/hooks', () => ({
-  useGraphSnapshot: vi.fn(() => ({ data: undefined })),
-}));
-
-vi.mock('@/lib/api/graph', () => ({
-  getNodeNeighborhood: vi.fn(() => Promise.resolve({ nodes: [], edges: [] })),
+  useGraphCitationNodes: vi.fn(() => ({ data: [], isLoading: false })),
 }));
 
 import { EntryEditor, EntryTreeItem } from './NotebookEntryForm';

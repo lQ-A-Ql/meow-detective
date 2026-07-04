@@ -5,27 +5,26 @@ export function useLoadedRulePacks() {
   return useQuery({
     queryKey: ['rule-packs', 'loaded'],
     queryFn: listLoadedRulePacks,
+    retry: false,
   });
 }
 
 export function useLoadRulePack() {
-  const queryClient = useQueryClient();
-
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (path: string) => loadRulePack(path),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['rule-packs'] });
+      qc.invalidateQueries({ queryKey: ['rule-packs', 'loaded'] });
     },
   });
 }
 
 export function useValidateRulePack() {
-  const queryClient = useQueryClient();
-
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (packId: string) => validateRulePack(packId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['rule-packs'] });
+      qc.invalidateQueries({ queryKey: ['rule-packs', 'loaded'] });
     },
   });
 }

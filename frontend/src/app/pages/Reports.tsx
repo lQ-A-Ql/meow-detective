@@ -1,6 +1,5 @@
 import { CheckCircle2, CircleDashed, Download, FileText } from 'lucide-react';
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useDataSources } from '@/features/case/hooks';
 import {
   deriveEvidenceHashStatus,
@@ -8,8 +7,7 @@ import {
   getEvidenceHashStatusLabel,
   useImportEventState,
 } from '@/features/jobs/import-event-state';
-import { useReportHistory, useReportTemplates } from '@/features/reports/hooks';
-import { exportHtmlReport, exportCsvReport, exportJsonReport } from '@/lib/api/reports';
+import { useExportReport, useReportHistory, useReportTemplates, type ReportExportFormat } from '@/features/reports/hooks';
 import { toast } from 'sonner';
 import type { ExportScope } from '@/types/models';
 
@@ -25,14 +23,10 @@ export function Reports() {
     fullTimeline: true,
     rawFileExtraction: false,
   });
-  const qc = useQueryClient();
-  const exportMutation = useMutation({
-    mutationFn: () => {
-      if (selectedFormat === 'csv') return exportCsvReport(exportScope);
-      if (selectedFormat === 'json') return exportJsonReport(exportScope);
-      return exportHtmlReport(exportScope);
-    },
-    onSuccess: (r) => { toast.success('报告生成成功', { description: r }); qc.invalidateQueries({ queryKey: ['reports'] }); },
+  const exportMutation = useExportReport();
+  const selectedExportFormat = selectedFormat as ReportExportFormat;
+  const runExport = () => exportMutation.mutate({ format: selectedExportFormat, scope: exportScope }, {
+    onSuccess: (r) => { toast.success('报告生成成功', { description: r }); },
     onError: (e: Error) => { toast.error('报告生成失败', { description: e.message }); },
   });
   const runningCount = history?.filter((item) => item.status === 'running').length ?? 0;
@@ -109,7 +103,7 @@ export function Reports() {
           ) : null}
 
           <div className="mt-4">
-            <button onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending} className="bg-[#111] text-white font-semibold text-[11px] px-6 py-2 uppercase tracking-wider hover:bg-[#333] flex items-center gap-2 transition-colors disabled:opacity-50">
+            <button onClick={runExport} disabled={exportMutation.isPending} className="bg-[#111] text-white font-semibold text-[11px] px-6 py-2 uppercase tracking-wider hover:bg-[#333] flex items-center gap-2 transition-colors disabled:opacity-50">
               <Download size={14} /> {exportMutation.isPending ? "生成中..." : "生成报告"}
             </button>
           </div>

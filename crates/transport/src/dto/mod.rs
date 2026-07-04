@@ -81,7 +81,7 @@ pub use files::{
 pub use graph::{
     GetNodeNeighborhoodRequest, GetProvenanceChainRequest, GraphEdgeDto, GraphEdgeTypeDto,
     GraphNodeDto, GraphNodeTypeDto, GraphProvenanceEntryDto, GraphQueryDto, GraphQueryResultDto,
-    GraphSnapshotDto,
+    GraphSnapshotDto, ListGraphNodesRequest,
 };
 pub use import::{
     CancelJobRequestDto, CancelReasonDto, CancellationStateDto, ImportPhaseDto,

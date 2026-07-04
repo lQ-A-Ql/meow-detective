@@ -23,9 +23,7 @@ import {
 import { Checkbox } from '@/app/components/ui/checkbox';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import { useCreateNotebookEntry } from '@/features/notebook/hooks';
-import { useGraphSnapshot } from '@/features/graph/hooks';
-import { getNodeNeighborhood } from '@/lib/api/graph';
-import { useQuery } from '@tanstack/react-query';
+import { useGraphCitationNodes, useGraphNodes } from '@/features/graph/hooks';
 import type {
   NotebookEntryListItem,
   NotebookEntryType,
@@ -53,34 +51,12 @@ export function CitationPicker({ caseId, open, onOpenChange, selectedNodeIds, on
   const [typeFilter, setTypeFilter] = useState<string>('');
   const [tempSelected, setTempSelected] = useState<Set<string>>(new Set(selectedNodeIds));
 
-  const { data: snapshot } = useGraphSnapshot(caseId);
+  const seedNodeIds = useMemo(() => selectedNodeIds.filter(Boolean), [selectedNodeIds]);
+  const graphNodes = useGraphNodes(caseId, 100, 0);
+  const { data: neighborhood, isLoading } = useGraphCitationNodes(caseId, seedNodeIds);
 
-  const startIds = useMemo(() => {
-    if (!snapshot) return [];
-    return Object.keys(snapshot.nodeCountByType);
-  }, [snapshot]);
-
-  const { data: neighborhood, isLoading } = useQuery({
-    queryKey: ['graph', 'citation-search', startIds, typeFilter],
-    queryFn: async () => {
-      const results: GraphNode[] = [];
-      const seen = new Set<string>();
-      for (const nodeId of startIds) {
-        const result = await getNodeNeighborhood(nodeId, 1);
-        for (const node of result.nodes) {
-          if (!seen.has(node.id)) {
-            seen.add(node.id);
-            results.push(node);
-          }
-        }
-      }
-      return results;
-    },
-    enabled: startIds.length > 0,
-    retry: false,
-  });
-
-  const allNodes = neighborhood ?? [];
+  const allNodes = seedNodeIds.length > 0 ? (neighborhood ?? []) : (graphNodes.data ?? []);
+  const loadingNodes = seedNodeIds.length > 0 ? isLoading : graphNodes.isLoading;
 
   const filteredNodes = useMemo(() => {
     return allNodes.filter((node) => {
@@ -165,7 +141,7 @@ export function CitationPicker({ caseId, open, onOpenChange, selectedNodeIds, on
 
         {/* Node list */}
         <ScrollArea className="flex-1 min-h-[240px] max-h-[400px] border border-[#e0e0e0] rounded">
-          {isLoading ? (
+          {loadingNodes ? (
             <div className="flex h-32 items-center justify-center">
               <Loader2 size={20} className="animate-spin text-[#ccc]" />
             </div>

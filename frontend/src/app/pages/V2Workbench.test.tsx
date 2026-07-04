@@ -4,14 +4,12 @@ import { V2Workbench } from './V2Workbench';
 
 const mocks = vi.hoisted(() => ({
   useCurrentCase: vi.fn(),
-  useCreateAnalysisDemoCase: vi.fn(),
   useV2GovernanceSnapshot: vi.fn(),
   useCorrelationSnapshot: vi.fn(),
 }));
 
 vi.mock('@/features/case/hooks', () => ({
   useCurrentCase: mocks.useCurrentCase,
-  useCreateAnalysisDemoCase: mocks.useCreateAnalysisDemoCase,
 }));
 
 vi.mock('@/features/analysis/hooks', () => ({
@@ -33,14 +31,6 @@ vi.mock('react-router', () => ({
   useNavigate: () => vi.fn(),
 }));
 
-function mutationState() {
-  return {
-    mutateAsync: vi.fn(),
-    isPending: false,
-    error: null,
-  };
-}
-
 function queryState(data: unknown) {
   return {
     data,
@@ -55,7 +45,6 @@ function queryState(data: unknown) {
 describe('V2Workbench', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.useCreateAnalysisDemoCase.mockReturnValue(mutationState());
     mocks.useCurrentCase.mockReturnValue(queryState({ id: 'case-1' }));
     mocks.useV2GovernanceSnapshot.mockReturnValue(queryState({
       generatedAt: '2026-06-12T00:00:00Z',

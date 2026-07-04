@@ -1,4 +1,4 @@
-import { Clock, Database, Monitor, Network, RefreshCw, Shield } from 'lucide-react';
+import { Clock, Monitor, Network, RefreshCw, Shield } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import type {
   AnalysisExtractionRun,
@@ -125,10 +125,8 @@ export function SystemInfoPanel({ systemInfo }: { systemInfo?: AnalysisSystemInf
 export function AnalysisHeader({
   loading,
   hasCase,
-  demoPending,
   extractionPending,
   extractionRun,
-  onLoadDemoCase,
   onRefresh,
   onRunExtraction,
   dataSources,
@@ -137,10 +135,8 @@ export function AnalysisHeader({
 }: {
   loading: boolean;
   hasCase: boolean;
-  demoPending: boolean;
   extractionPending: boolean;
   extractionRun?: AnalysisExtractionRun;
-  onLoadDemoCase: () => void;
   onRefresh: () => void;
   onRunExtraction: () => void;
   dataSources?: import('@/types/models').DataSourceSummary[];
@@ -174,15 +170,6 @@ export function AnalysisHeader({
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
-            onClick={onLoadDemoCase}
-            disabled={loading}
-            className="h-8 rounded border border-[#111] bg-[#111] px-3 text-[12px] text-white hover:bg-[#333]"
-          >
-            {demoPending ? <RefreshCw size={14} className="animate-spin" /> : <Database size={14} />}
-            加载演示案件
-          </Button>
-          <Button
-            type="button"
             variant="outline"
             onClick={onRefresh}
             disabled={!hasCase || loading}
@@ -213,13 +200,7 @@ export function AnalysisHeader({
   );
 }
 
-export function AnalysisEmptyState({
-  demoPending,
-  onLoadDemoCase,
-}: {
-  demoPending: boolean;
-  onLoadDemoCase: () => void;
-}) {
+export function AnalysisEmptyState() {
   return (
     <div className="flex flex-1 items-center justify-center p-8">
       <div className="max-w-md text-center">
@@ -228,15 +209,6 @@ export function AnalysisEmptyState({
         <div className="mt-2 text-[12px] leading-6 text-[#666]">
           数据源分析依赖当前案件中的文件目录和数据源记录。未选择案件时不会发起分析请求。
         </div>
-        <Button
-          type="button"
-          onClick={onLoadDemoCase}
-          disabled={demoPending}
-          className="mt-5 h-8 rounded bg-[#111] px-5 text-[12px] text-white hover:bg-[#333]"
-        >
-          {demoPending ? <RefreshCw size={14} className="animate-spin" /> : <Database size={14} />}
-          加载演示案件
-        </Button>
       </div>
     </div>
   );

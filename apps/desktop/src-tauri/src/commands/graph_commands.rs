@@ -1,8 +1,9 @@
 use tauri::State;
 use transport::{
     dto::{
-        GetNodeNeighborhoodRequest, GetProvenanceChainRequest, GraphProvenanceEntryDto,
-        GraphQueryDto, GraphQueryResultDto, GraphSnapshotDto,
+        GetNodeNeighborhoodRequest, GetProvenanceChainRequest, GraphNodeDto,
+        GraphProvenanceEntryDto, GraphQueryDto, GraphQueryResultDto, GraphSnapshotDto,
+        ListGraphNodesRequest,
     },
     CommandError,
 };
@@ -35,6 +36,22 @@ pub async fn query_graph(
         require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
         app_services::graph_service::query_graph(&conn, query)
+            .map_err(CommandError::from_typed_service_error)
+    })
+    .await
+    .map_err(CommandError::from_join_error)?
+}
+
+#[tauri::command]
+pub async fn list_graph_nodes(
+    state: State<'_, AppState>,
+    request: ListGraphNodesRequest,
+) -> Result<Vec<GraphNodeDto>, CommandError> {
+    let app_state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let snapshot = require_active_case(&app_state)?;
+        let conn = get_case_connection(&app_state)?;
+        app_services::graph_service::list_graph_nodes(&conn, &snapshot.case_id, request)
             .map_err(CommandError::from_typed_service_error)
     })
     .await

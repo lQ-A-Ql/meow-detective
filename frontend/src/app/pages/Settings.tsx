@@ -8,7 +8,7 @@ import {
   validatePathList,
   writeLocalSettings,
 } from '@/lib/settings';
-import { getAppSettings, saveAppSettings } from '@/lib/api/settings';
+import { useAppSettings, useSaveAppSettings } from '@/features/settings/hooks';
 import { useMcpStore } from '@/stores/mcp-store';
 import { StoragePathsSection } from './settings/StoragePathsSection';
 import { ImportPerformanceSection } from './settings/ImportPerformanceSection';
@@ -21,7 +21,8 @@ export function Settings() {
   const { t } = useTranslation();
   const [settings, setSettings] = useState(() => readLocalSettings());
   const [settingsMessage, setSettingsMessage] = useState('');
-  const [savingSettings, setSavingSettings] = useState(false);
+  const appSettings = useAppSettings();
+  const saveAppSettings = useSaveAppSettings();
   const { loadConfig } = useMcpStore();
 
   useEffect(() => {
@@ -29,35 +30,26 @@ export function Settings() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    getAppSettings()
-      .then((remote) => {
-        if (cancelled) {
-          return;
-        }
-        setSettings((current) => ({
-          ...current,
-          caseRoot: remote.caseRoot,
-          imageSearchPaths: formatPathList(remote.imageSearchPaths),
-          devEventTrace: remote.devEventTrace,
-          maxImportWorkers: remote.maxImportWorkers?.toString() ?? '',
-          maxAnalysisWorkers: remote.maxAnalysisWorkers?.toString() ?? '',
-          importAnalysisMode: remote.importAnalysisMode ?? 'metadataOnly',
-          hexChunkBytes: remote.hexChunkBytes?.toString() ?? defaultSettings.hexChunkBytes,
-          maxViewerRangeLength: remote.maxViewerRangeLength?.toString() ?? defaultSettings.maxViewerRangeLength,
-          maxInlineImagePreviewBytes:
-            remote.maxInlineImagePreviewBytes?.toString() ?? defaultSettings.maxInlineImagePreviewBytes,
-          maxInlineMediaPreviewBytes:
-            remote.maxInlineMediaPreviewBytes?.toString() ?? defaultSettings.maxInlineMediaPreviewBytes,
-        }));
-      })
-      .catch(() => {
-        // Keep local settings as the fallback when the desktop settings command is unavailable.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    const remote = appSettings.data;
+    if (!remote) {
+      return;
+    }
+    setSettings((current) => ({
+      ...current,
+      caseRoot: remote.caseRoot,
+      imageSearchPaths: formatPathList(remote.imageSearchPaths),
+      devEventTrace: remote.devEventTrace,
+      maxImportWorkers: remote.maxImportWorkers?.toString() ?? '',
+      maxAnalysisWorkers: remote.maxAnalysisWorkers?.toString() ?? '',
+      importAnalysisMode: remote.importAnalysisMode ?? 'metadataOnly',
+      hexChunkBytes: remote.hexChunkBytes?.toString() ?? defaultSettings.hexChunkBytes,
+      maxViewerRangeLength: remote.maxViewerRangeLength?.toString() ?? defaultSettings.maxViewerRangeLength,
+      maxInlineImagePreviewBytes:
+        remote.maxInlineImagePreviewBytes?.toString() ?? defaultSettings.maxInlineImagePreviewBytes,
+      maxInlineMediaPreviewBytes:
+        remote.maxInlineMediaPreviewBytes?.toString() ?? defaultSettings.maxInlineMediaPreviewBytes,
+    }));
+  }, [appSettings.data]);
 
   async function saveSettings() {
     if (!settings.caseRoot.trim()) {
@@ -87,10 +79,9 @@ export function Settings() {
       setSettingsMessage(t('settings.validation.previewPositive'));
       return;
     }
-    setSavingSettings(true);
     setSettingsMessage('');
     try {
-      const saved = await saveAppSettings({
+      const saved = await saveAppSettings.mutateAsync({
         caseRoot: settings.caseRoot,
         imageSearchPaths: parsePathList(settings.imageSearchPaths),
         devEventTrace: settings.devEventTrace,
@@ -121,8 +112,6 @@ export function Settings() {
     } catch (error) {
       const message = error instanceof Error ? error.message : t('settings.saveFailed');
       setSettingsMessage(message);
-    } finally {
-      setSavingSettings(false);
     }
   }
 
@@ -154,7 +143,7 @@ export function Settings() {
         />
         <UiDebugSection
           devEventTrace={settings.devEventTrace}
-          savingSettings={savingSettings}
+          savingSettings={saveAppSettings.isPending}
           settingsMessage={settingsMessage}
           setSettings={setSettings}
           onSave={saveSettings}

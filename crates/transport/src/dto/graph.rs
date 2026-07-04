@@ -110,6 +110,18 @@ pub struct GraphQueryResultDto {
     pub edge_count: u32,
 }
 
+/// Request DTO for listing graph nodes without requiring a traversal seed.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ListGraphNodesRequest {
+    /// Maximum number of nodes to return.
+    #[serde(default = "default_limit")]
+    pub limit: u32,
+    /// Zero-based row offset.
+    #[serde(default)]
+    pub offset: u32,
+}
+
 /// Aggregate statistics snapshot of the entire investigative graph.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -326,6 +338,24 @@ mod tests {
         assert_eq!(json["edges"][0]["id"], "edge-1");
         assert!(json.get("node_count").is_none());
         assert!(json.get("edge_count").is_none());
+    }
+
+    #[test]
+    fn list_graph_nodes_request_defaults_and_camel_case() {
+        let request: ListGraphNodesRequest = serde_json::from_value(serde_json::json!({}))
+            .expect("default request should deserialize");
+
+        assert_eq!(request.limit, 100);
+        assert_eq!(request.offset, 0);
+
+        let json = serde_json::to_value(ListGraphNodesRequest {
+            limit: 25,
+            offset: 10,
+        })
+        .unwrap();
+
+        assert_eq!(json["limit"], 25);
+        assert_eq!(json["offset"], 10);
     }
 
     #[test]

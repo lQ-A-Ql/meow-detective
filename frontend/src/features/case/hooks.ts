@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   closeCase,
-  createAnalysisDemoCase,
   createCase,
   deleteCase,
   deleteDataSource,
@@ -43,21 +42,6 @@ export function useCreateCase() {
       createCase(params.caseRoot, params.name, params.examiner),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['case'] });
-    },
-  });
-}
-
-export function useCreateAnalysisDemoCase() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: createAnalysisDemoCase,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['case'] });
-      qc.invalidateQueries({ queryKey: ['files'] });
-      qc.invalidateQueries({ queryKey: ['analysis'] });
-      qc.invalidateQueries({ queryKey: ['timeline'] });
-      qc.invalidateQueries({ queryKey: ['artifacts'] });
-      qc.invalidateQueries({ queryKey: ['search'] });
     },
   });
 }

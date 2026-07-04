@@ -1,4 +1,10 @@
-import { GraphProvenanceEntry, GraphQuery, GraphQueryResult, GraphSnapshot } from '@/types/models';
+import {
+  GraphNode,
+  GraphProvenanceEntry,
+  GraphQuery,
+  GraphQueryResult,
+  GraphSnapshot,
+} from '@/types/models';
 import { COMMANDS } from './commands';
 import { apiClient } from './client';
 
@@ -8,6 +14,10 @@ export async function getGraphSnapshot(): Promise<GraphSnapshot> {
 
 export async function queryGraph(query: GraphQuery): Promise<GraphQueryResult> {
   return apiClient.request(COMMANDS.graph.QUERY_GRAPH, { query });
+}
+
+export async function listGraphNodes(limit = 100, offset = 0): Promise<GraphNode[]> {
+  return apiClient.request(COMMANDS.graph.LIST_GRAPH_NODES, { request: { limit, offset } });
 }
 
 export async function getNodeNeighborhood(nodeId: string, depth?: number): Promise<GraphQueryResult> {

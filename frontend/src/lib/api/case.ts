@@ -32,10 +32,6 @@ export async function createCase(caseRoot: string, name: string, examiner?: stri
   return apiClient.request(COMMANDS.case.CREATE_CASE, { request: { caseRoot, name, examiner: examiner ?? null } });
 }
 
-export async function createAnalysisDemoCase(): Promise<CaseSummary> {
-  return apiClient.request(COMMANDS.case.CREATE_ANALYSIS_DEMO_CASE);
-}
-
 export async function openCase(caseRoot: string): Promise<CaseSummary> {
   return apiClient.request(COMMANDS.case.OPEN_CASE, { request: { caseRoot } });
 }
