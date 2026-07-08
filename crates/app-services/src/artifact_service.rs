@@ -5,10 +5,14 @@ use thiserror::Error;
 use transport::dto::{ArtifactRowDto, FamilyCountDto};
 
 use crate::file_service::FileServiceError;
+use crate::source_db::{self, encode_source_scoped_id};
 use artifacts_core::{ArtifactContext, ExtractorRegistry, VecSink};
-use domain::{EdgeType, FileEntryId, GraphEdge, GraphNode, NodeType};
-use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, graph_repo::GraphRepo};
+use domain::{DataSourceId, EdgeType, FileEntryId, GraphEdge, GraphNode, NodeType};
+use persistence_sqlite::repositories::{
+    artifact_repo::ArtifactRepo, datasource_repo::DataSourceRepo, graph_repo::GraphRepo,
+};
 use rusqlite::Connection;
+use std::{collections::BTreeMap, path::Path};
 
 #[derive(Debug, Error)]
 pub enum ArtifactServiceError {
@@ -406,6 +410,21 @@ pub fn get_artifact_families_from_db(
     repo.families().map_err(ArtifactServiceError::from)
 }
 
+pub fn get_artifact_families_for_case(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+) -> Result<Vec<String>, ArtifactServiceError> {
+    let mut families = BTreeMap::<String, ()>::new();
+    for (source_id, source_conn) in open_ready_source_connections(case_conn, case_root, case_id)? {
+        let _ = source_id;
+        for family in get_artifact_families_from_db(&source_conn)? {
+            families.insert(family, ());
+        }
+    }
+    Ok(families.into_keys().collect())
+}
+
 pub fn get_artifact_rows_from_db(
     conn: &Connection,
     family: Option<&str>,
@@ -413,6 +432,30 @@ pub fn get_artifact_rows_from_db(
     let repo = ArtifactRepo::new(conn);
     let artifacts = repo.list_by_family(family)?;
     Ok(artifacts.iter().map(artifact_to_dto).collect())
+}
+
+pub fn get_artifact_rows_for_case(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+    family: Option<&str>,
+) -> Result<Vec<ArtifactRowDto>, ArtifactServiceError> {
+    let mut rows = Vec::new();
+    for (source_id, source_conn) in open_ready_source_connections(case_conn, case_root, case_id)? {
+        let repo = ArtifactRepo::new(&source_conn);
+        rows.extend(
+            repo.list_by_family(family)?
+                .iter()
+                .map(|artifact| artifact_to_source_dto(artifact, &source_id)),
+        );
+    }
+    rows.sort_by(|a, b| {
+        b.created_at
+            .cmp(&a.created_at)
+            .then_with(|| a.id.cmp(&b.id))
+    });
+    rows.truncate(1000);
+    Ok(rows)
 }
 
 pub fn get_artifact_row_by_id(
@@ -424,11 +467,52 @@ pub fn get_artifact_row_by_id(
     Ok(artifact.as_ref().map(artifact_to_dto))
 }
 
+pub fn get_artifact_row_by_id_for_case(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+    artifact_id: &str,
+) -> Result<Option<ArtifactRowDto>, ArtifactServiceError> {
+    if let Ok((source_id, local_id)) = source_db::parse_source_scoped_id("Artifact id", artifact_id)
+    {
+        let source_conn = source_db::open_registered_source_db(case_conn, case_root, &source_id)?;
+        return Ok(ArtifactRepo::new(&source_conn)
+            .find_by_id(&local_id)?
+            .as_ref()
+            .map(|artifact| artifact_to_source_dto(artifact, &source_id)));
+    }
+
+    for (source_id, source_conn) in open_ready_source_connections(case_conn, case_root, case_id)? {
+        if let Some(artifact) = ArtifactRepo::new(&source_conn).find_by_id(artifact_id)? {
+            return Ok(Some(artifact_to_source_dto(&artifact, &source_id)));
+        }
+    }
+    Ok(None)
+}
+
 pub fn get_artifact_family_counts(
     conn: &Connection,
 ) -> Result<Vec<FamilyCountDto>, ArtifactServiceError> {
     let repo = ArtifactRepo::new(conn);
     let counts = repo.count_by_family()?;
+    Ok(counts
+        .into_iter()
+        .map(|(family, count)| FamilyCountDto { family, count })
+        .collect())
+}
+
+pub fn get_artifact_family_counts_for_case(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+) -> Result<Vec<FamilyCountDto>, ArtifactServiceError> {
+    let mut counts = BTreeMap::<String, u64>::new();
+    for (source_id, source_conn) in open_ready_source_connections(case_conn, case_root, case_id)? {
+        let _ = source_id;
+        for (family, count) in ArtifactRepo::new(&source_conn).count_by_family()? {
+            *counts.entry(family).or_default() += count;
+        }
+    }
     Ok(counts
         .into_iter()
         .map(|(family, count)| FamilyCountDto { family, count })
@@ -449,6 +533,37 @@ fn artifact_to_dto(a: &domain::Artifact) -> ArtifactRowDto {
         created_at: a.created_at.to_rfc3339(),
         attrs: a.attrs.clone(),
     }
+}
+
+fn artifact_to_source_dto(a: &domain::Artifact, data_source_id: &DataSourceId) -> ArtifactRowDto {
+    let mut dto = artifact_to_dto(a);
+    dto.id = encode_source_scoped_id(data_source_id, &a.id.0);
+    dto.source_object_id = a
+        .source_object_id
+        .as_ref()
+        .map(|id| encode_source_scoped_id(data_source_id, &id.0));
+    dto
+}
+
+fn open_ready_source_connections(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+) -> Result<Vec<(DataSourceId, Connection)>, ArtifactServiceError> {
+    let sources = DataSourceRepo::new(case_conn).find_by_case(case_id)?;
+    let mut conns = Vec::with_capacity(sources.len());
+    for source in sources {
+        let storage = DataSourceRepo::new(case_conn).find_storage(&source.id)?;
+        if storage
+            .as_ref()
+            .is_some_and(|value| value.import_state == "failed")
+        {
+            continue;
+        }
+        let conn = source_db::open_registered_source_db(case_conn, case_root, &source.id)?;
+        conns.push((source.id, conn));
+    }
+    Ok(conns)
 }
 
 #[cfg(test)]
@@ -652,6 +767,38 @@ mod tests {
 
         let pf = counts.iter().find(|c| c.family == "Prefetch").unwrap();
         assert_eq!(pf.count, 2);
+    }
+
+    #[test]
+    fn get_artifact_rows_for_case_reads_source_databases_and_wraps_ids() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let case_conn = in_memory_case_db();
+        let ds_id = DataSourceId("ds-1".to_string());
+        let source_conn = crate::source_db::open_source_db(tmp.path(), &ds_id).unwrap();
+        let artifacts = vec![make_artifact("LinuxBashCommand", "bash-history")];
+        store_artifacts(&source_conn, &artifacts, "case-1", "ds-1").unwrap();
+
+        let rows = get_artifact_rows_for_case(
+            &case_conn,
+            tmp.path(),
+            &domain::CaseId("case-1".to_string()),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].id.starts_with("ds:ds-1:"));
+        assert_eq!(rows[0].source_object_id.as_deref(), Some("ds:ds-1:src-1"));
+        assert_eq!(rows[0].artifact_type, "LinuxBashCommand");
+
+        let counts = get_artifact_family_counts_for_case(
+            &case_conn,
+            tmp.path(),
+            &domain::CaseId("case-1".to_string()),
+        )
+        .unwrap();
+        assert_eq!(counts[0].family, "LinuxBashCommand");
+        assert_eq!(counts[0].count, 1);
     }
 
     #[test]

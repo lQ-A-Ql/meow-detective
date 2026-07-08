@@ -19,6 +19,7 @@ import {
   Info,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { Button } from '@/app/components/ui/button';
 
 interface ContextMenuItem {
   label: string;
@@ -179,7 +180,10 @@ export function TreeContextMenu({
       {items.map((item, index) => (
         <div key={index}>
           {item.divider && <div className="border-t border-[#eee] my-1" />}
-          <button
+          <Button
+            type="button"
+            variant="forensicsGhost"
+            size="menuItem"
             onClick={() => {
               if (!item.disabled) {
                 item.action();
@@ -187,18 +191,14 @@ export function TreeContextMenu({
               }
             }}
             disabled={item.disabled}
-            className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left
-              ${item.disabled
-                ? 'text-[#ccc] cursor-not-allowed'
-                : 'text-[#333] hover:bg-[#f0f0f0] cursor-pointer'
-              }`}
+            className={item.disabled ? 'text-[#ccc]' : 'text-[#333] hover:bg-[#f0f0f0]'}
           >
             <item.icon size={14} className={item.disabled ? 'text-[#ccc]' : 'text-[#666]'} />
             <span className="flex-1">{item.label}</span>
             {item.shortcut && (
               <span className="text-[10px] text-[#999]">{item.shortcut}</span>
             )}
-          </button>
+          </Button>
         </div>
       ))}
     </div>

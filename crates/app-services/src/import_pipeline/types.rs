@@ -22,6 +22,7 @@ use crate::import_precheck;
 /// parameters.
 pub(crate) struct ImportJobContext<'a> {
     pub conn: &'a rusqlite::Connection,
+    pub source_conn: Option<&'a rusqlite::Connection>,
     pub case_id: &'a domain::CaseId,
     pub case_root: &'a std::path::Path,
     pub source_path: &'a str,

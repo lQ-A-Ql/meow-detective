@@ -20,6 +20,8 @@ import { useCurrentCase } from '@/features/case/hooks';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnalysisExtractionPageRequest, AnalysisExtractionRequest } from '@/types/models';
 
+type OptionalAnalysisPageRequest = Partial<AnalysisExtractionPageRequest>;
+
 const ANALYSIS_QUERY_OPTIONS = {
   staleTime: Infinity,
   gcTime: 30 * 60 * 1000,
@@ -28,110 +30,115 @@ const ANALYSIS_QUERY_OPTIONS = {
   refetchOnReconnect: false,
 } as const;
 
-export function useAnalysisSystemInfo() {
+export function useAnalysisSystemInfo(dataSourceId?: string) {
   const currentCase = useCurrentCase();
   return useQuery({
-    queryKey: ['analysis', 'system-info', currentCase.data?.id ?? null],
-    queryFn: getSystemInfo,
-    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+    queryKey: ['analysis', 'system-info', currentCase.data?.id ?? null, dataSourceId ?? null],
+    queryFn: () => getSystemInfo(dataSourceId ?? ''),
+    enabled: currentCase.isSuccess && Boolean(currentCase.data) && Boolean(dataSourceId),
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
 }
 
-export function useAnalysisClassifications(sampleSize = 1000) {
+export function useAnalysisClassifications(dataSourceId?: string, sampleSize = 1000) {
   const currentCase = useCurrentCase();
   return useQuery({
-    queryKey: ['analysis', 'classifications', currentCase.data?.id ?? null, sampleSize],
-    queryFn: () => classifyFiles(sampleSize),
-    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+    queryKey: ['analysis', 'classifications', currentCase.data?.id ?? null, dataSourceId ?? null, sampleSize],
+    queryFn: () => classifyFiles(dataSourceId ?? '', sampleSize),
+    enabled: currentCase.isSuccess && Boolean(currentCase.data) && Boolean(dataSourceId),
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
 }
 
-export function useEvidenceClassificationSummary() {
+export function useEvidenceClassificationSummary(dataSourceId?: string) {
   const currentCase = useCurrentCase();
   return useQuery({
-    queryKey: ['analysis', 'evidence-classification', currentCase.data?.id ?? null],
-    queryFn: getEvidenceClassificationSummary,
-    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+    queryKey: ['analysis', 'evidence-classification', currentCase.data?.id ?? null, dataSourceId ?? null],
+    queryFn: () => getEvidenceClassificationSummary(dataSourceId ?? ''),
+    enabled: currentCase.isSuccess && Boolean(currentCase.data) && Boolean(dataSourceId),
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
 }
 
-export function useRegistryExtractionSummary(request: AnalysisExtractionPageRequest = {}) {
+export function useRegistryExtractionSummary(request: OptionalAnalysisPageRequest = {}) {
   const currentCase = useCurrentCase();
+  const dataSourceId = request.dataSourceId;
   const offset = request.offset ?? 0;
   const limit = request.limit ?? 200;
   return useQuery({
-    queryKey: ['analysis', 'registry-extraction', currentCase.data?.id ?? null, offset, limit],
-    queryFn: () => getRegistryExtractionSummary({ offset, limit }),
-    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+    queryKey: ['analysis', 'registry-extraction', currentCase.data?.id ?? null, dataSourceId ?? null, offset, limit],
+    queryFn: () => getRegistryExtractionSummary({ dataSourceId: dataSourceId ?? '', offset, limit }),
+    enabled: currentCase.isSuccess && Boolean(currentCase.data) && Boolean(dataSourceId),
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
 }
 
-export function useRegistryStructuredSummary() {
+export function useRegistryStructuredSummary(dataSourceId?: string) {
   const currentCase = useCurrentCase();
   return useQuery({
-    queryKey: ['analysis', 'registry-structured', currentCase.data?.id ?? null],
-    queryFn: getRegistryStructuredSummary,
-    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+    queryKey: ['analysis', 'registry-structured', currentCase.data?.id ?? null, dataSourceId ?? null],
+    queryFn: () => getRegistryStructuredSummary(dataSourceId ?? ''),
+    enabled: currentCase.isSuccess && Boolean(currentCase.data) && Boolean(dataSourceId),
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
 }
 
-export function useBrowserHistorySummary(request: AnalysisExtractionPageRequest = {}) {
+export function useBrowserHistorySummary(request: OptionalAnalysisPageRequest = {}) {
   const currentCase = useCurrentCase();
+  const dataSourceId = request.dataSourceId;
   const offset = request.offset ?? 0;
   const limit = request.limit ?? 200;
   return useQuery({
-    queryKey: ['analysis', 'browser-history', currentCase.data?.id ?? null, offset, limit],
-    queryFn: () => getBrowserHistorySummary({ offset, limit }),
-    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+    queryKey: ['analysis', 'browser-history', currentCase.data?.id ?? null, dataSourceId ?? null, offset, limit],
+    queryFn: () => getBrowserHistorySummary({ dataSourceId: dataSourceId ?? '', offset, limit }),
+    enabled: currentCase.isSuccess && Boolean(currentCase.data) && Boolean(dataSourceId),
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
 }
 
-export function useEmailExtractionSummary(request: AnalysisExtractionPageRequest = {}) {
+export function useEmailExtractionSummary(request: OptionalAnalysisPageRequest = {}) {
   const currentCase = useCurrentCase();
+  const dataSourceId = request.dataSourceId;
   const offset = request.offset ?? 0;
   const limit = request.limit ?? 200;
   return useQuery({
-    queryKey: ['analysis', 'email-extraction', currentCase.data?.id ?? null, offset, limit],
-    queryFn: () => getEmailExtractionSummary({ offset, limit }),
-    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+    queryKey: ['analysis', 'email-extraction', currentCase.data?.id ?? null, dataSourceId ?? null, offset, limit],
+    queryFn: () => getEmailExtractionSummary({ dataSourceId: dataSourceId ?? '', offset, limit }),
+    enabled: currentCase.isSuccess && Boolean(currentCase.data) && Boolean(dataSourceId),
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
 }
 
-export function useEvtxEventSummary(request: AnalysisExtractionPageRequest = {}) {
+export function useEvtxEventSummary(request: OptionalAnalysisPageRequest = {}) {
   const currentCase = useCurrentCase();
+  const dataSourceId = request.dataSourceId;
   const offset = request.offset ?? 0;
   const limit = request.limit ?? 200;
   return useQuery({
-    queryKey: ['analysis', 'evtx-events', currentCase.data?.id ?? null, offset, limit],
-    queryFn: () => getEvtxEventSummary({ offset, limit }),
-    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+    queryKey: ['analysis', 'evtx-events', currentCase.data?.id ?? null, dataSourceId ?? null, offset, limit],
+    queryFn: () => getEvtxEventSummary({ dataSourceId: dataSourceId ?? '', offset, limit }),
+    enabled: currentCase.isSuccess && Boolean(currentCase.data) && Boolean(dataSourceId),
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
 }
 
-export function useLinuxArtifactSummary(request: AnalysisExtractionPageRequest = {}) {
+export function useLinuxArtifactSummary(request: OptionalAnalysisPageRequest = {}) {
   const currentCase = useCurrentCase();
+  const dataSourceId = request.dataSourceId;
   const offset = request.offset ?? 0;
   const limit = request.limit ?? 200;
   return useQuery({
-    queryKey: ['analysis', 'linux-artifacts', currentCase.data?.id ?? null, offset, limit],
-    queryFn: () => getLinuxArtifactSummary({ offset, limit }),
-    enabled: currentCase.isSuccess && Boolean(currentCase.data),
+    queryKey: ['analysis', 'linux-artifacts', currentCase.data?.id ?? null, dataSourceId ?? null, offset, limit],
+    queryFn: () => getLinuxArtifactSummary({ dataSourceId: dataSourceId ?? '', offset, limit }),
+    enabled: currentCase.isSuccess && Boolean(currentCase.data) && Boolean(dataSourceId),
     retry: false,
     ...ANALYSIS_QUERY_OPTIONS,
   });
@@ -174,10 +181,11 @@ export function useRunEvidenceClassification() {
   const qc = useQueryClient();
   const currentCase = useCurrentCase();
   return useMutation({
-    mutationFn: (categories?: string[]) => runEvidenceClassification(categories ?? []),
-    onSuccess: () => {
+    mutationFn: (request: { dataSourceId: string; categories?: string[] }) =>
+      runEvidenceClassification(request.dataSourceId, request.categories ?? []),
+    onSuccess: (_data, variables) => {
       qc.invalidateQueries({
-        queryKey: ['analysis', 'evidence-classification', currentCase.data?.id ?? null],
+        queryKey: ['analysis', 'evidence-classification', currentCase.data?.id ?? null, variables.dataSourceId],
       });
       qc.invalidateQueries({ queryKey: ['artifacts'] });
     },
@@ -188,15 +196,16 @@ export function useRunAnalysisExtraction() {
   const qc = useQueryClient();
   const currentCase = useCurrentCase();
   return useMutation({
-    mutationFn: (request?: AnalysisExtractionRequest) => runAnalysisExtraction(request ?? { categories: [] }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['analysis', 'evidence-classification', currentCase.data?.id ?? null] });
-      qc.invalidateQueries({ queryKey: ['analysis', 'system-info', currentCase.data?.id ?? null] });
-      qc.invalidateQueries({ queryKey: ['analysis', 'registry-extraction', currentCase.data?.id ?? null] });
-      qc.invalidateQueries({ queryKey: ['analysis', 'registry-structured', currentCase.data?.id ?? null] });
-      qc.invalidateQueries({ queryKey: ['analysis', 'browser-history', currentCase.data?.id ?? null] });
-      qc.invalidateQueries({ queryKey: ['analysis', 'email-extraction', currentCase.data?.id ?? null] });
-      qc.invalidateQueries({ queryKey: ['analysis', 'evtx-events', currentCase.data?.id ?? null] });
+    mutationFn: (request: AnalysisExtractionRequest) => runAnalysisExtraction(request),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ['analysis', 'evidence-classification', currentCase.data?.id ?? null, variables.dataSourceId] });
+      qc.invalidateQueries({ queryKey: ['analysis', 'system-info', currentCase.data?.id ?? null, variables.dataSourceId] });
+      qc.invalidateQueries({ queryKey: ['analysis', 'registry-extraction', currentCase.data?.id ?? null, variables.dataSourceId] });
+      qc.invalidateQueries({ queryKey: ['analysis', 'registry-structured', currentCase.data?.id ?? null, variables.dataSourceId] });
+      qc.invalidateQueries({ queryKey: ['analysis', 'browser-history', currentCase.data?.id ?? null, variables.dataSourceId] });
+      qc.invalidateQueries({ queryKey: ['analysis', 'email-extraction', currentCase.data?.id ?? null, variables.dataSourceId] });
+      qc.invalidateQueries({ queryKey: ['analysis', 'evtx-events', currentCase.data?.id ?? null, variables.dataSourceId] });
+      qc.invalidateQueries({ queryKey: ['analysis', 'linux-artifacts', currentCase.data?.id ?? null, variables.dataSourceId] });
       qc.invalidateQueries({ queryKey: ['artifacts'] });
       qc.invalidateQueries({ queryKey: ['timeline'] });
       qc.invalidateQueries({ queryKey: ['graph', 'snapshot', currentCase.data?.id ?? null] });
@@ -204,8 +213,8 @@ export function useRunAnalysisExtraction() {
   });
 }
 
-export function useGenerateAnalysisSummary() {
+export function useGenerateAnalysisSummary(dataSourceId?: string) {
   return useMutation({
-    mutationFn: generateAnalysisSummary,
+    mutationFn: () => generateAnalysisSummary(dataSourceId ?? ''),
   });
 }

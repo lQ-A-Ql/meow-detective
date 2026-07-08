@@ -1,6 +1,6 @@
 import { RefreshCw } from 'lucide-react';
-import { AnalysisEmptyState, AnalysisErrorBanner, AnalysisLoadingPanel } from '@/components/analysis/AnalysisPanels';
-import { CorrelationWorkspace } from '@/components/analysis/CorrelationWorkspace';
+import { AnalysisEmptyState, AnalysisErrorBanner, AnalysisLoadingPanel } from '@/features/analysis/components/AnalysisPanels';
+import { CorrelationWorkspace } from '@/features/analysis/components/CorrelationWorkspace';
 import {
   BenchmarkPanel,
   ErrorTaxonomyPanel,
@@ -13,20 +13,14 @@ import {
   SecurityAuditPanel,
   SupportMatrixPanel,
   VerificationDashboard,
-} from '@/components/analysis/V2GovernancePanels';
+} from '@/features/analysis/components/V2GovernancePanels';
 import { useCurrentCase } from '@/features/case/hooks';
 import { useCorrelationSnapshot, useV2GovernanceSnapshot } from '@/features/analysis/hooks';
 import { Button } from '@/app/components/ui/button';
-import { isApiErrorDto } from '@/lib/api/client';
+import { errorMessage as formatErrorMessage } from '@/lib/errors';
 
 function errorMessage(error: unknown) {
-  if (isApiErrorDto(error)) {
-    return error.message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return String(error);
+  return formatErrorMessage(error);
 }
 
 export function V2Workbench() {

@@ -10,6 +10,7 @@
 
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Play, Pause, Volume2, VolumeX, Music, SkipBack, SkipForward } from 'lucide-react';
+import { Button } from '@/app/components/ui/button';
 
 interface AudioViewerProps {
   /** 音频 URL */
@@ -207,38 +208,50 @@ export function AudioViewer({ src, mimeType, fileName }: AudioViewerProps) {
       {/* 控制按钮 */}
       <div className="flex items-center justify-center gap-6">
         {/* 快退 */}
-        <button
+        <Button
+          type="button"
+          variant="mediaControl"
+          size="mediaIcon"
           onClick={() => skip(-10)}
-          className="text-[#999] hover:text-white transition-colors"
+          aria-label="快退 10 秒"
         >
           <SkipBack size={20} />
-        </button>
+        </Button>
 
         {/* 播放/暂停 */}
-        <button
+        <Button
+          type="button"
+          variant="mediaPrimaryControl"
+          size="mediaPrimary"
           onClick={togglePlay}
-          className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center hover:bg-gray-200 transition-colors"
+          aria-label={isPlaying ? '暂停' : '播放'}
         >
           {isPlaying ? <Pause size={24} /> : <Play size={24} className="ml-1" />}
-        </button>
+        </Button>
 
         {/* 快进 */}
-        <button
+        <Button
+          type="button"
+          variant="mediaControl"
+          size="mediaIcon"
           onClick={() => skip(10)}
-          className="text-[#999] hover:text-white transition-colors"
+          aria-label="快进 10 秒"
         >
           <SkipForward size={20} />
-        </button>
+        </Button>
       </div>
 
       {/* 音量控制 */}
       <div className="flex items-center justify-center gap-3 mt-6">
-        <button
+        <Button
+          type="button"
+          variant="mediaControl"
+          size="iconSm"
           onClick={toggleMute}
-          className="text-[#999] hover:text-white transition-colors"
+          aria-label={isMuted ? '取消静音' : '静音'}
         >
           {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-        </button>
+        </Button>
         <input
           type="range"
           min={0}

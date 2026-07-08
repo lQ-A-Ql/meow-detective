@@ -1,6 +1,8 @@
 import { Filter, ChevronRight, Save, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
+import { Button } from '@/app/components/ui/button';
+import { Input } from '@/app/components/ui/input';
 import { PageSubbar } from '@/components/layout/PageSubbar';
 import { DenseDataTable } from '@/components/tables/DenseDataTable';
 import { InspectorPane, InspectorSection, InspectorValue } from '@/components/layout/InspectorPane';
@@ -11,7 +13,7 @@ import {
   upsertSavedSearchQuery,
   writeSavedSearchQueries,
 } from '@/lib/saved-queries';
-import { useSelectionStore } from '@/stores/selection-store';
+import { useOpenSearchHitInFiles, useSearchSelection } from '@/features/search/use-search-page-model';
 import { SearchHit } from '@/types/models';
 
 const defaultQuery = 'content:password AND path:doc';
@@ -26,9 +28,8 @@ export function Search() {
   const [savedName, setSavedName] = useState('');
   const [savedQueries, setSavedQueries] = useState(() => readSavedSearchQueries());
   const { data } = useSearchResults(activeQuery);
-  const selectedSearchHitId = useSelectionStore((state) => state.selectedSearchHitId);
-  const setSelectedSearchHitId = useSelectionStore((state) => state.setSelectedSearchHitId);
-  const navigate = useNavigate();
+  const { selectedSearchHitId, setSelectedSearchHitId } = useSearchSelection();
+  const openSearchHitInFiles = useOpenSearchHitInFiles();
   const selectedHit = data?.items.find((item) => item.fileId === selectedSearchHitId) ?? data?.items[0];
   const highScoreHits = data?.items.filter((item) => item.score >= 0.8).length ?? 0;
 
@@ -64,46 +65,56 @@ export function Search() {
           <div className="flex items-center gap-3">
             <div className="flex items-center bg-white border border-forensics-border-strong px-3 py-1.5 flex-1 focus-within:border-forensics-text transition-colors">
               <span className="text-forensics-muted-light font-mono text-[11px] mr-2 shrink-0">QUERY</span>
-              <input
+              <Input
                 type="text"
-                className="bg-transparent border-none outline-none text-forensics-text font-mono text-[13px] w-full placeholder-forensics-500"
+                variant="search"
+                inputSize="compact"
+                className="w-full font-mono text-[13px] text-forensics-text placeholder-forensics-500"
                 value={queryInput}
                 onChange={(e) => setQueryInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') setActiveQuery(queryInput); }}
               />
-              <button
+              <Button
+                type="button"
+                variant="forensicsPrimary"
+                size="compact"
                 onClick={() => setActiveQuery(queryInput)}
-                className="bg-forensics-text text-white font-semibold text-[11px] px-3 py-0.5 ml-2 uppercase tracking-wider shrink-0 hover:bg-forensics-text-secondary"
+                className="ml-2 shrink-0 font-semibold uppercase tracking-wider"
               >
                 执行
-              </button>
+              </Button>
             </div>
             <div className="relative">
-              <button
+              <Button
                 type="button"
+                variant="forensicsOutline"
+                size="xs"
                 onClick={() => setSavedOpen((open) => !open)}
-                className="flex items-center gap-2 border border-forensics-border bg-white px-3 py-1.5 text-[11px] text-forensics-muted cursor-pointer hover:text-forensics-text"
               >
                 <Filter size={12} />
                 <span>已保存查询</span>
-              </button>
+              </Button>
               {savedOpen ? (
                 <div className="absolute right-0 top-8 z-20 w-80 border border-forensics-border-strong bg-white shadow-lg">
                   <div className="border-b border-forensics-border p-2">
-                    <input
+                    <Input
                       value={savedName}
                       onChange={(event) => setSavedName(event.target.value)}
                       placeholder="查询名称"
-                      className="mb-2 w-full border border-forensics-border-strong px-2 py-1 text-[11px] font-mono"
+                      variant="mono"
+                      inputSize="compact"
+                      className="mb-2"
                     />
-                    <button
+                    <Button
                       type="button"
+                      variant="forensicsPrimary"
+                      size="xs"
                       onClick={saveCurrentQuery}
-                      className="flex w-full items-center justify-center gap-1 border border-forensics-text bg-forensics-text px-2 py-1 text-[11px] text-white hover:bg-forensics-text-secondary"
+                      className="w-full"
                     >
                       <Save size={12} />
                       保存当前查询
-                    </button>
+                    </Button>
                   </div>
                   <div className="max-h-64 overflow-auto">
                     {savedQueries.length ? (
@@ -112,10 +123,12 @@ export function Search() {
                           key={item.id}
                           className="flex items-start gap-2 border-b border-forensics-border-light p-2 last:border-b-0"
                         >
-                          <button
+                          <Button
                             type="button"
+                            variant="forensicsGhost"
+                            size="inline"
                             onClick={() => runSavedQuery(item.query)}
-                            className="min-w-0 flex-1 text-left hover:text-forensics-text"
+                            className="min-w-0 flex-1 flex-col items-start gap-0 justify-start text-left"
                           >
                             <div className="truncate text-[12px] font-medium text-forensics-text">
                               {item.name}
@@ -123,17 +136,18 @@ export function Search() {
                             <div className="mt-0.5 line-clamp-2 font-mono text-[10px] text-forensics-muted">
                               {item.query}
                             </div>
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="button"
+                            variant="forensicsDangerGhost"
+                            size="iconSm"
                             onClick={() =>
                               persistSavedQueries(removeSavedSearchQuery(savedQueries, item.id))
                             }
-                            className="p-1 text-forensics-muted-light hover:text-red-600"
                             title="删除保存的查询"
                           >
                             <Trash2 size={12} />
-                          </button>
+                          </Button>
                         </div>
                       ))
                     ) : (
@@ -233,17 +247,19 @@ export function Search() {
             </InspectorSection>
 
             <InspectorSection title="关联动作">
-              <button
+              <Button
+                type="button"
+                variant="forensicsSurface"
+                size="xs"
                 onClick={() => {
                   if (selectedHit) {
-                    useSelectionStore.getState().setSelectedFileId(selectedHit.fileId);
-                    navigate("/files");
+                    openSearchHitInFiles(selectedHit.fileId);
                   }
                 }}
-                className="w-full border border-forensics-border-strong bg-white text-forensics-text hover:bg-forensics-hover py-1.5 text-center font-sans text-[11px] transition-colors rounded-[2px] cursor-pointer shadow-sm flex items-center justify-center gap-1.5"
+                className="w-full shadow-sm"
               >
                 在文件浏览中打开 <ChevronRight size={12} />
-              </button>
+              </Button>
             </InspectorSection>
           </div>
         </InspectorPane>

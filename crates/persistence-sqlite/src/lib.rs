@@ -4,5 +4,8 @@ pub mod repositories;
 pub mod sql_builder;
 pub mod util;
 
-pub use connection::{open_existing, open_in_memory, open_or_create, DbError, DbResult};
+pub use connection::{
+    open_existing, open_existing_source, open_in_memory, open_or_create, open_or_create_source,
+    DbError, DbResult,
+};
 pub use migrations::runner;

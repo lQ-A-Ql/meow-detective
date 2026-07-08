@@ -1,11 +1,15 @@
 use chrono::Utc;
-use domain::{CaseId, CaseMeta};
+use domain::{CaseId, CaseMeta, DataSourceId};
 use persistence_sqlite::{
     open_existing, open_or_create,
     repositories::{
+        artifact_repo::ArtifactRepo,
         audit_repo::{AuditAction, AuditRepo},
-        case_repo::CaseRepo,
+        case_repo::{CaseMetrics, CaseRepo},
+        datasource_repo::DataSourceRepo,
+        file_repo::FileRepo,
         job_repo::JobRepo,
+        timeline_repo::TimelineRepo,
     },
     runner,
 };
@@ -181,6 +185,8 @@ pub fn open_case(root: &Path) -> Result<ActiveCase> {
         .find_by_id(&case_from_json.id)?
         .ok_or_else(|| CaseServiceError::InvalidCaseDir("Case not in database".to_string()))?;
 
+    reject_legacy_single_db_case(&conn)?;
+
     // 记录审计日志
     let audit = AuditRepo::new(&conn);
     let _ = audit.log_simple(
@@ -190,6 +196,26 @@ pub fn open_case(root: &Path) -> Result<ActiveCase> {
     );
 
     Ok(ActiveCase::new(stored, root.to_path_buf(), conn))
+}
+
+fn reject_legacy_single_db_case(conn: &Connection) -> Result<()> {
+    let app_file_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
+        .map_err(persistence_sqlite::DbError::from)?;
+    let app_artifact_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM artifacts", [], |row| row.get(0))
+        .map_err(persistence_sqlite::DbError::from)?;
+    let app_timeline_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row.get(0))
+        .map_err(persistence_sqlite::DbError::from)?;
+
+    if app_file_count > 0 || app_artifact_count > 0 || app_timeline_count > 0 {
+        return Err(CaseServiceError::InvalidCaseDir(
+            "This case uses the legacy single-database storage model; re-import is required for the current development version".to_string(),
+        ));
+    }
+
+    Ok(())
 }
 
 /// Delete a forensic case directory and all its contents.
@@ -264,11 +290,106 @@ pub fn delete_data_source(conn: &Connection, data_source_id: &str) -> Result<()>
         Some(data_source_id),
     );
 
-    let ds_repo = persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn);
+    let ds_id = DataSourceId(data_source_id.to_string());
+    let ds_repo = DataSourceRepo::new(conn);
     ds_repo
-        .delete_cascade(&domain::DataSourceId(data_source_id.to_string()))
+        .delete_cascade(&ds_id)
         .map_err(CaseServiceError::Db)?;
     Ok(())
+}
+
+pub fn delete_data_source_in(
+    conn: &Connection,
+    case_root: &Path,
+    data_source_id: &str,
+) -> Result<()> {
+    let audit = AuditRepo::new(conn);
+    let _ = audit.log_simple(None, &AuditAction::DataSourceDelete, Some(data_source_id));
+
+    let ds_id = DataSourceId(data_source_id.to_string());
+    let ds_repo = DataSourceRepo::new(conn);
+    let storage = ds_repo
+        .find_storage(&ds_id)
+        .map_err(CaseServiceError::Db)?
+        .ok_or_else(|| {
+            CaseServiceError::InvalidCaseDir(format!(
+                "Data source '{}' is not registered",
+                data_source_id
+            ))
+        })?;
+
+    let source_dir = storage
+        .source_db_rel_path
+        .as_deref()
+        .and_then(|rel| Path::new(rel).parent())
+        .map(|rel| crate::source_db::safe_case_relative_path(case_root, &rel.to_string_lossy()))
+        .transpose()
+        .map_err(CaseServiceError::Db)?
+        .unwrap_or_else(|| crate::source_db::source_dir(case_root, &ds_id));
+
+    if source_dir.exists() {
+        fs::remove_dir_all(&source_dir)?;
+    }
+    if let Some(staging_rel_path) = storage.staging_rel_path {
+        let staging_path = crate::source_db::safe_case_relative_path(case_root, &staging_rel_path)
+            .map_err(CaseServiceError::Db)?;
+        if staging_path.exists() {
+            fs::remove_dir_all(staging_path)?;
+        }
+    }
+
+    ds_repo
+        .delete_cascade(&ds_id)
+        .map_err(CaseServiceError::Db)?;
+    Ok(())
+}
+
+pub fn get_case_metrics_for_case(
+    conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+) -> Result<CaseMetrics> {
+    let sources = DataSourceRepo::new(conn).find_by_case(case_id)?;
+    let mut metrics = CaseMetrics {
+        data_source_count: sources.len() as u64,
+        indexed_file_count: 0,
+        timeline_event_count: 0,
+        artifact_count: 0,
+    };
+
+    for source in sources {
+        let storage = DataSourceRepo::new(conn).find_storage(&source.id)?;
+        if storage
+            .as_ref()
+            .is_some_and(|value| value.import_state == "failed")
+        {
+            continue;
+        }
+
+        let source_conn =
+            match crate::source_db::open_registered_source_db(conn, case_root, &source.id) {
+                Ok(source_conn) => source_conn,
+                Err(error) => {
+                    tracing::warn!(
+                        data_source_id = %source.id.0,
+                        error = %error,
+                        "Skipping source database while building case metrics"
+                    );
+                    continue;
+                }
+            };
+        metrics.indexed_file_count = metrics
+            .indexed_file_count
+            .saturating_add(FileRepo::new(&source_conn).count_all()?);
+        metrics.timeline_event_count = metrics
+            .timeline_event_count
+            .saturating_add(TimelineRepo::new(&source_conn).count()?);
+        metrics.artifact_count = metrics
+            .artifact_count
+            .saturating_add(ArtifactRepo::new(&source_conn).count()?);
+    }
+
+    Ok(metrics)
 }
 
 /// Result of draining running jobs during case close.
@@ -421,5 +542,39 @@ mod tests {
             .unwrap();
         let snapshot = jobs.iter().find(|j| j.id.0 == job_id.0).unwrap();
         assert_eq!(snapshot.status, "completed");
+    }
+
+    #[test]
+    fn open_case_rejects_legacy_single_database_payloads() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let active = create_case(tmp.path(), "legacy_case", Some("tester")).unwrap();
+        let case_root = active.case_root.clone();
+
+        active
+            .with_conn(|conn| {
+                conn.execute(
+                    "INSERT INTO data_sources
+                     (id, case_id, name, kind, source_path, storage_model)
+                     VALUES ('legacy-ds', ?1, 'Legacy source', 'logical_directory', 'D:/legacy', 'source_db')",
+                    [&active.meta.id.0],
+                )?;
+                conn.execute(
+                    "INSERT INTO file_entries
+                     (id, parent_id, data_source_id, path, name, entry_type, size, deleted, hidden, system)
+                     VALUES ('legacy-file', NULL, 'legacy-ds', '/', '/', 'directory', NULL, 0, 0, 0)",
+                    [],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+        drop(active);
+
+        let error = match open_case(&case_root) {
+            Ok(_) => panic!("legacy app.db payload should be rejected"),
+            Err(error) => error,
+        };
+
+        assert!(error.to_string().contains("legacy single-database"));
+        assert!(error.to_string().contains("re-import is required"));
     }
 }

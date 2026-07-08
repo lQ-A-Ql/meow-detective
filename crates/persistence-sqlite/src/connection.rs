@@ -39,6 +39,18 @@ pub fn open_or_create(path: &Path) -> DbResult<Connection> {
     Ok(conn)
 }
 
+pub fn open_or_create_source(path: &Path) -> DbResult<Connection> {
+    let conn = open_or_create(path)?;
+    crate::migrations::runner::run_source_all(&conn)?;
+    Ok(conn)
+}
+
+pub fn open_existing_source(path: &Path) -> DbResult<Connection> {
+    let conn = open_existing(path)?;
+    crate::migrations::runner::run_source_all(&conn)?;
+    Ok(conn)
+}
+
 /// Open an existing database file. Returns an error if the file does not exist.
 pub fn open_existing(path: &Path) -> DbResult<Connection> {
     if !path.exists() {
@@ -159,6 +171,31 @@ mod tests {
             )
             .unwrap();
         assert_eq!(val, "v");
+    }
+
+    #[test]
+    fn open_or_create_source_runs_source_schema() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let path = tmp.path().join("sources").join("ds-1").join("source.db");
+        let conn = open_or_create_source(&path).unwrap();
+
+        for table in [
+            "source_meta",
+            "data_sources",
+            "data_source_partitions",
+            "file_entries",
+            "artifacts",
+            "timeline_events",
+        ] {
+            let found: String = conn
+                .query_row(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name = ?1",
+                    [table],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(found, table);
+        }
     }
 
     #[test]

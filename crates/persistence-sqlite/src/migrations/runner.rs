@@ -107,6 +107,22 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0033_lvm_partition_identity",
         include_str!("scripts/0033_lvm_partition_identity.sql"),
     ),
+    (
+        "0034_data_source_storage",
+        include_str!("scripts/0034_data_source_storage.sql"),
+    ),
+];
+
+const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
+    ("source_001", include_str!("scripts/source_001.sql")),
+    (
+        "source_002_data_source_metadata",
+        include_str!("scripts/source_002_data_source_metadata.sql"),
+    ),
+    (
+        "source_003_correlation_cache",
+        include_str!("scripts/source_003_correlation_cache.sql"),
+    ),
 ];
 
 pub fn latest_version() -> &'static str {
@@ -116,11 +132,26 @@ pub fn latest_version() -> &'static str {
         .expect("migration registry must not be empty")
 }
 
+pub fn latest_source_version() -> &'static str {
+    SOURCE_MIGRATIONS
+        .last()
+        .map(|(name, _)| *name)
+        .expect("source migration registry must not be empty")
+}
+
 pub fn migration_count() -> usize {
     MIGRATIONS.len()
 }
 
 pub fn run_all(conn: &Connection) -> DbResult<u32> {
+    run_migrations(conn, MIGRATIONS)
+}
+
+pub fn run_source_all(conn: &Connection) -> DbResult<u32> {
+    run_migrations(conn, SOURCE_MIGRATIONS)
+}
+
+fn run_migrations(conn: &Connection, migrations: &[(&str, &str)]) -> DbResult<u32> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS schema_migrations (
             id INTEGER PRIMARY KEY,
@@ -130,7 +161,7 @@ pub fn run_all(conn: &Connection) -> DbResult<u32> {
     )?;
 
     let mut count = 0u32;
-    for (name, sql) in MIGRATIONS {
+    for (name, sql) in migrations {
         let already_applied: bool = match conn.query_row(
             "SELECT COUNT(*) > 0 FROM schema_migrations WHERE name = ?1",
             [name],

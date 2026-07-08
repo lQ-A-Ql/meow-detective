@@ -5,8 +5,11 @@ use domain::{
     EntryType, FileEntry, FileEntryId, TimelineEvent, TimelineEventId,
 };
 use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo, case_repo::CaseRepo, datasource_repo::DataSourceRepo,
-    file_repo::FileRepo, timeline_repo::TimelineRepo,
+    artifact_repo::ArtifactRepo,
+    case_repo::CaseRepo,
+    datasource_repo::{DataSourceRepo, DataSourceStorage},
+    file_repo::FileRepo,
+    timeline_repo::TimelineRepo,
 };
 use rusqlite::Connection;
 use std::collections::{BTreeMap, BTreeSet};
@@ -38,6 +41,23 @@ fn setup_case_db() -> Connection {
                 provenance: DataSourceProvenance::unknown(),
             },
         )
+        .unwrap();
+    conn
+}
+
+fn setup_case_db_without_source() -> Connection {
+    let conn = Connection::open_in_memory().unwrap();
+    persistence_sqlite::runner::run_all(&conn).unwrap();
+    CaseRepo::new(&conn)
+        .create(&domain::CaseMeta {
+            id: CaseId("case-1".to_string()),
+            name: "Case".to_string(),
+            number: None,
+            examiner: None,
+            notes: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        })
         .unwrap();
     conn
 }
@@ -92,6 +112,122 @@ fn insert_artifact(
             "ds-1",
         )
         .unwrap();
+}
+
+fn register_source(case_conn: &Connection, case_id: &CaseId, source_id: &str) {
+    let ds_id = DataSourceId(source_id.to_string());
+    DataSourceRepo::new(case_conn)
+        .insert_with_storage(
+            case_id,
+            &DataSource {
+                id: ds_id.clone(),
+                name: source_id.to_string(),
+                kind: DataSourceKind::Raw,
+                source_path: format!("C:/evidence/{source_id}.raw").into(),
+                imported_at: Utc::now(),
+                provenance: DataSourceProvenance::unknown(),
+            },
+            &DataSourceStorage::source_db(&ds_id.0, Some("unknown"), None),
+        )
+        .unwrap();
+}
+
+fn insert_source_correlation_fixture(case_root: &std::path::Path, source_id: &str, title: &str) {
+    let ds_id = DataSourceId(source_id.to_string());
+    let source_conn = crate::source_db::open_source_db(case_root, &ds_id).unwrap();
+    FileRepo::new(&source_conn)
+        .insert_batch(&[FileEntry {
+            id: FileEntryId("file-1".to_string()),
+            parent_id: None,
+            data_source_id: ds_id.clone(),
+            path: format!("C:/{title}/cmd.exe"),
+            name: "cmd.exe".to_string(),
+            entry_type: EntryType::File,
+            size: Some(1024),
+            ext: Some("exe".to_string()),
+            deleted: false,
+            hidden: false,
+            system: false,
+            encrypted: false,
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        }])
+        .unwrap();
+    ArtifactRepo::new(&source_conn)
+        .insert_batch(
+            &[Artifact {
+                id: ArtifactId("artifact-1".to_string()),
+                family: "Prefetch".to_string(),
+                title: format!("{title} prefetch"),
+                summary: "fixture".to_string(),
+                source_object_id: Some(FileEntryId("file-1".to_string())),
+                extractor_id: Some("prefetch".to_string()),
+                extractor_version: Some("1.0.0".to_string()),
+                confidence: Some(0.91),
+                source_attribution: Some("fixture".to_string()),
+                created_at: Utc::now(),
+                attrs: BTreeMap::new(),
+            }],
+            "case-1",
+            source_id,
+        )
+        .unwrap();
+    TimelineRepo::new(&source_conn)
+        .insert_batch_with_case(
+            &[TimelineEvent {
+                id: TimelineEventId("timeline-1".to_string()),
+                source_object_id: "file-1".to_string(),
+                event_type: "FILE_MODIFIED".to_string(),
+                timestamp: Utc::now(),
+                title: format!("{title} modified"),
+                description: "fixture".to_string(),
+                parser_id: Some("timeline.macb".to_string()),
+                parser_version: Some("1.0.0".to_string()),
+                confidence: Some(0.82),
+                source_attribution: Some("modified_at".to_string()),
+                attrs: BTreeMap::new(),
+            }],
+            "case-1",
+        )
+        .unwrap();
+}
+
+#[test]
+fn case_correlation_scopes_duplicate_local_ids_by_data_source() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let case_conn = setup_case_db_without_source();
+    let case_id = CaseId("case-1".to_string());
+    register_source(&case_conn, &case_id, "ds-a");
+    register_source(&case_conn, &case_id, "ds-b");
+    insert_source_correlation_fixture(tmp.path(), "ds-a", "alpha");
+    insert_source_correlation_fixture(tmp.path(), "ds-b", "beta");
+
+    let snapshot = get_correlation_snapshot_for_case(&case_conn, tmp.path(), &case_id).unwrap();
+
+    assert_eq!(snapshot.lead_count, 2);
+    assert!(snapshot
+        .leads
+        .iter()
+        .any(|lead| lead.primary_file_id == "ds:ds-a:file-1"));
+    assert!(snapshot
+        .leads
+        .iter()
+        .any(|lead| lead.primary_file_id == "ds:ds-b:file-1"));
+    assert!(snapshot
+        .nodes
+        .iter()
+        .any(|node| node.id == "file:ds:ds-a:file-1"));
+    assert!(snapshot
+        .nodes
+        .iter()
+        .any(|node| node.id == "file:ds:ds-b:file-1"));
+    assert!(snapshot
+        .edges
+        .iter()
+        .all(|edge| edge.id.starts_with("ds:ds-a:") || edge.id.starts_with("ds:ds-b:")));
 }
 
 #[test]

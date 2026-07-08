@@ -20,7 +20,7 @@ pub(crate) struct BackgroundImportJob {
     pub(crate) db_path: PathBuf,
     pub(crate) case_id: domain::CaseId,
     pub(crate) case_root: PathBuf,
-    pub(crate) source_path: String,
+    pub(crate) import_config: app_services::import_precheck::ImportSourceConfig,
     pub(crate) job_id: domain::JobId,
     pub(crate) max_import_workers: Option<usize>,
     pub(crate) max_analysis_workers: Option<usize>,
@@ -72,7 +72,7 @@ pub(crate) fn run_background_import_job(
         &conn,
         &job.case_id,
         &job.case_root,
-        &job.source_path,
+        job.import_config,
         &job.job_id,
         options,
     ) {

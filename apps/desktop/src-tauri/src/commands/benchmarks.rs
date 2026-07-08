@@ -11,8 +11,10 @@
 mod benchmark_tests {
     use app_services::{case_service, search_service, timeline_service};
     use chrono::Utc;
+    use domain::DataSourceId;
     use persistence_sqlite::repositories::{
-        artifact_repo::ArtifactRepo, file_repo::FileRepo, job_repo::JobRepo,
+        artifact_repo::ArtifactRepo, datasource_repo::DataSourceRepo, file_repo::FileRepo,
+        job_repo::JobRepo,
     };
     use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
@@ -107,11 +109,16 @@ mod benchmark_tests {
                 let job_id = JobRepo::new(conn)
                     .create(&active.meta.id.0, "Benchmark import")
                     .unwrap();
+                let import_config =
+                    app_services::import_precheck::prepare_import_source_config_from_path(
+                        &evidence_dir.to_string_lossy(),
+                    )
+                    .unwrap();
                 execute_import_job(
                     conn,
                     &active.meta.id,
                     &active.case_root,
-                    &evidence_dir.to_string_lossy(),
+                    import_config,
                     &job_id,
                     ImportJobOptions {
                         event_sink: None,
@@ -156,42 +163,48 @@ mod benchmark_tests {
         app_services::import_analysis::current_rss_mb()
     }
 
+    fn first_data_source_id(conn: &rusqlite::Connection, case_id: &domain::CaseId) -> DataSourceId {
+        DataSourceRepo::new(conn)
+            .find_by_case(case_id)
+            .unwrap()
+            .into_iter()
+            .next()
+            .expect("benchmark import should register a data source")
+            .id
+    }
+
     #[test]
     fn bench_all_scenarios() {
         let warmup_runs = 2u32;
         let measure_runs_count = 5u32;
         let (active, _tmp) = setup_case();
+        let data_source_id = active
+            .with_conn(|conn| Ok(first_data_source_id(conn, &active.meta.id)))
+            .unwrap();
+        let source_conn =
+            app_services::source_db::open_source_db(&active.case_root, &data_source_id)
+                .expect("benchmark source DB should exist");
+        let source_index_dir =
+            app_services::source_db::source_index_dir(&active.case_root, &data_source_id);
 
         // Verify setup: file entries and artifacts exist
-        active
-            .with_conn(|conn| {
-                let fc: i64 = conn
-                    .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
-                    .unwrap();
-                assert!(fc >= 2, "Expected file entries, got {fc}");
+        let fc = FileRepo::new(&source_conn).count_all().unwrap();
+        assert!(fc >= 2, "Expected file entries, got {fc}");
 
-                let ac: i64 = conn
-                    .query_row("SELECT COUNT(*) FROM artifacts", [], |row| row.get(0))
-                    .unwrap();
-                assert!(ac >= 1, "Expected at least 1 artifact, got {ac}");
-
-                Ok(())
-            })
-            .unwrap();
+        let ac = ArtifactRepo::new(&source_conn).count().unwrap();
+        assert!(ac >= 1, "Expected at least 1 artifact, got {ac}");
 
         let marker = "fw_bench_search_a1b2c3";
         let mut results: Vec<serde_json::Value> = Vec::new();
 
         // ── search_query ──────────────────────────────────────────
         {
-            let index_dir = active.case_root.join("indexes").join("tantivy");
             for _ in 0..warmup_runs {
-                let _ = search_service::search_files_real(&index_dir, marker, 0, 10);
+                let _ = search_service::search_files_real(&source_index_dir, marker, 0, 10);
             }
 
-            let index_dir2 = active.case_root.join("indexes").join("tantivy");
             let timings = measure_runs(measure_runs_count, || {
-                let _ = search_service::search_files_real(&index_dir2, marker, 0, 10);
+                let _ = search_service::search_files_real(&source_index_dir, marker, 0, 10);
             });
 
             results.push(serde_json::json!({
@@ -205,22 +218,13 @@ mod benchmark_tests {
 
         // ── file_tree_expand ──────────────────────────────────────
         {
-            active
-                .with_conn(|conn| {
-                    for _ in 0..warmup_runs {
-                        let _ = app_services::file_service::get_file_tree_real(conn);
-                    }
-                    Ok(())
-                })
-                .unwrap();
+            for _ in 0..warmup_runs {
+                let _ = app_services::file_service::get_file_tree_real(&source_conn);
+            }
 
-            let timings = active
-                .with_conn(|conn| {
-                    Ok(measure_runs(measure_runs_count, || {
-                        let _ = app_services::file_service::get_file_tree_real(conn);
-                    }))
-                })
-                .unwrap();
+            let timings = measure_runs(measure_runs_count, || {
+                let _ = app_services::file_service::get_file_tree_real(&source_conn);
+            });
 
             results.push(serde_json::json!({
                 "scenario": "file_tree_expand",
@@ -233,22 +237,13 @@ mod benchmark_tests {
 
         // ── file_paginate ─────────────────────────────────────────
         {
-            active
-                .with_conn(|conn| {
-                    for _ in 0..warmup_runs {
-                        let _ = FileRepo::new(conn).find_root_entries_page(0, 10);
-                    }
-                    Ok(())
-                })
-                .unwrap();
+            for _ in 0..warmup_runs {
+                let _ = FileRepo::new(&source_conn).find_root_entries_page(0, 10);
+            }
 
-            let timings = active
-                .with_conn(|conn| {
-                    Ok(measure_runs(measure_runs_count, || {
-                        let _ = FileRepo::new(conn).find_root_entries_page(0, 10);
-                    }))
-                })
-                .unwrap();
+            let timings = measure_runs(measure_runs_count, || {
+                let _ = FileRepo::new(&source_conn).find_root_entries_page(0, 10);
+            });
 
             results.push(serde_json::json!({
                 "scenario": "file_paginate",
@@ -262,29 +257,15 @@ mod benchmark_tests {
         // ── timeline_filter ───────────────────────────────────────
         {
             // Ensure timeline is projected (lazy on metadata-only import)
-            active
-                .with_conn(|conn| {
-                    let _ = timeline_service::ensure_macb_timeline_projected(conn);
-                    Ok(())
-                })
-                .unwrap();
+            let _ = timeline_service::ensure_macb_timeline_projected(&source_conn);
 
-            active
-                .with_conn(|conn| {
-                    for _ in 0..warmup_runs {
-                        let _ = timeline_service::query_timeline(conn, 0, 20);
-                    }
-                    Ok(())
-                })
-                .unwrap();
+            for _ in 0..warmup_runs {
+                let _ = timeline_service::query_timeline(&source_conn, 0, 20);
+            }
 
-            let timings = active
-                .with_conn(|conn| {
-                    Ok(measure_runs(measure_runs_count, || {
-                        let _ = timeline_service::query_timeline(conn, 0, 20);
-                    }))
-                })
-                .unwrap();
+            let timings = measure_runs(measure_runs_count, || {
+                let _ = timeline_service::query_timeline(&source_conn, 0, 20);
+            });
 
             results.push(serde_json::json!({
                 "scenario": "timeline_filter",
@@ -297,24 +278,14 @@ mod benchmark_tests {
 
         // ── artifact_extract ──────────────────────────────────────
         {
-            active
-                .with_conn(|conn| {
-                    let repo = ArtifactRepo::new(conn);
-                    for _ in 0..warmup_runs {
-                        let _ = repo.list_by_family(None);
-                    }
-                    Ok(())
-                })
-                .unwrap();
+            let repo = ArtifactRepo::new(&source_conn);
+            for _ in 0..warmup_runs {
+                let _ = repo.list_by_family(None);
+            }
 
-            let timings = active
-                .with_conn(|conn| {
-                    let repo = ArtifactRepo::new(conn);
-                    Ok(measure_runs(measure_runs_count, || {
-                        let _ = repo.list_by_family(None);
-                    }))
-                })
-                .unwrap();
+            let timings = measure_runs(measure_runs_count, || {
+                let _ = repo.list_by_family(None);
+            });
 
             results.push(serde_json::json!({
                 "scenario": "artifact_extract",

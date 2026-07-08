@@ -7,6 +7,39 @@ use rusqlite::{params, Connection};
 
 type ProgressCallback<'a> = &'a dyn Fn(u32, &str);
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DataSourceStorage {
+    pub storage_model: String,
+    pub source_db_rel_path: Option<String>,
+    pub index_rel_path: Option<String>,
+    pub staging_rel_path: Option<String>,
+    pub platform: String,
+    pub profile: Option<String>,
+    pub import_state: String,
+    pub schema_version: Option<String>,
+    pub last_error: Option<String>,
+}
+
+impl DataSourceStorage {
+    pub fn source_db(
+        data_source_id: &str,
+        platform: Option<&str>,
+        profile: Option<String>,
+    ) -> Self {
+        Self {
+            storage_model: "source_db".to_string(),
+            source_db_rel_path: Some(format!("sources/{data_source_id}/source.db")),
+            index_rel_path: Some(format!("sources/{data_source_id}/index")),
+            staging_rel_path: Some(format!("staging/{data_source_id}")),
+            platform: platform.unwrap_or("unknown").to_string(),
+            profile,
+            import_state: "pending".to_string(),
+            schema_version: Some(crate::migrations::runner::latest_source_version().to_string()),
+            last_error: None,
+        }
+    }
+}
+
 pub struct DataSourceRepo<'a> {
     conn: &'a Connection,
 }
@@ -17,18 +50,67 @@ impl<'a> DataSourceRepo<'a> {
     }
 
     pub fn insert(&self, case_id: &CaseId, ds: &DataSource) -> DbResult<()> {
+        let storage = DataSourceStorage::source_db(&ds.id.0, None, None);
+        self.insert_with_storage(case_id, ds, &storage)
+    }
+
+    pub fn insert_with_storage(
+        &self,
+        case_id: &CaseId,
+        ds: &DataSource,
+        storage: &DataSourceStorage,
+    ) -> DbResult<()> {
         self.conn.execute(
             "INSERT INTO data_sources (
                 id, case_id, name, kind, source_path, source_hash_sha256, hash_status,
                 canonical_source_path, evidence_size, reader_kind, provenance_status,
-                provenance_warnings
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                provenance_warnings, storage_model, source_db_rel_path, index_rel_path,
+                staging_rel_path, platform, profile, import_state, schema_version, last_error
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
             params![
                 ds.id.0,
                 case_id.0,
                 ds.name,
                 kind_to_str(&ds.kind),
                 ds.source_path.display().to_string(),
+                ds.provenance.source_hash_sha256.as_deref(),
+                hash_status_to_str(&ds.provenance.hash_status),
+                ds.provenance
+                    .canonical_source_path
+                    .as_ref()
+                    .map(|path| path.display().to_string()),
+                ds.provenance.evidence_size.map(|size| size as i64),
+                ds.provenance.reader_kind.as_deref(),
+                provenance_status_to_str(&ds.provenance.provenance_status),
+                serde_json::to_string(&ds.provenance.warnings).unwrap_or_else(|_| "[]".to_string()),
+                storage.storage_model,
+                storage.source_db_rel_path,
+                storage.index_rel_path,
+                storage.staging_rel_path,
+                storage.platform,
+                storage.profile,
+                storage.import_state,
+                storage.schema_version,
+                storage.last_error,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn upsert_source_local_metadata(&self, case_id: &CaseId, ds: &DataSource) -> DbResult<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO data_sources (
+                id, case_id, name, kind, source_path, imported_at, source_hash_sha256,
+                hash_status, canonical_source_path, evidence_size, reader_kind,
+                provenance_status, provenance_warnings
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            params![
+                ds.id.0,
+                case_id.0,
+                ds.name,
+                kind_to_str(&ds.kind),
+                ds.source_path.display().to_string(),
+                ds.imported_at.to_rfc3339(),
                 ds.provenance.source_hash_sha256.as_deref(),
                 hash_status_to_str(&ds.provenance.hash_status),
                 ds.provenance
@@ -90,6 +172,51 @@ impl<'a> DataSourceRepo<'a> {
         Ok(())
     }
 
+    pub fn find_storage(
+        &self,
+        data_source_id: &DataSourceId,
+    ) -> DbResult<Option<DataSourceStorage>> {
+        let result = self.conn.query_row(
+            "SELECT storage_model, source_db_rel_path, index_rel_path, staging_rel_path,
+                    platform, profile, import_state, schema_version, last_error
+             FROM data_sources WHERE id = ?1",
+            params![data_source_id.0],
+            |row| {
+                Ok(DataSourceStorage {
+                    storage_model: row.get(0)?,
+                    source_db_rel_path: row.get(1)?,
+                    index_rel_path: row.get(2)?,
+                    staging_rel_path: row.get(3)?,
+                    platform: row.get(4)?,
+                    profile: row.get(5)?,
+                    import_state: row.get(6)?,
+                    schema_version: row.get(7)?,
+                    last_error: row.get(8)?,
+                })
+            },
+        );
+        match result {
+            Ok(storage) => Ok(Some(storage)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub fn update_import_state(
+        &self,
+        data_source_id: &DataSourceId,
+        import_state: &str,
+        last_error: Option<&str>,
+    ) -> DbResult<()> {
+        self.conn.execute(
+            "UPDATE data_sources
+             SET import_state = ?1, last_error = ?2
+             WHERE id = ?3",
+            params![import_state, last_error, data_source_id.0],
+        )?;
+        Ok(())
+    }
+
     pub fn delete_cascade(&self, data_source_id: &DataSourceId) -> DbResult<()> {
         self.delete_cascade_with_progress(data_source_id, None::<ProgressCallback<'_>>)
     }
@@ -102,49 +229,8 @@ impl<'a> DataSourceRepo<'a> {
     ) -> DbResult<()> {
         let tx = self.conn.unchecked_transaction()?;
 
-        // Step 1: Delete artifacts (10%)
         if let Some(cb) = progress {
-            cb(0, "Deleting artifacts...");
-        }
-        tx.execute(
-            "DELETE FROM artifacts WHERE source_object_id IN (
-                SELECT id FROM file_entries WHERE data_source_id = ?1
-            )",
-            params![data_source_id.0],
-        )?;
-
-        // Step 2: Delete timeline events (30%)
-        if let Some(cb) = progress {
-            cb(10, "Deleting timeline events...");
-        }
-        tx.execute(
-            "DELETE FROM timeline_events WHERE source_object_id IN (
-                SELECT id FROM file_entries WHERE data_source_id = ?1
-            )",
-            params![data_source_id.0],
-        )?;
-
-        // Step 3: Delete file entries (70%)
-        if let Some(cb) = progress {
-            cb(30, "Deleting file entries...");
-        }
-        tx.execute(
-            "DELETE FROM file_entries WHERE data_source_id = ?1",
-            params![data_source_id.0],
-        )?;
-
-        // Step 4: Delete partitions (90%)
-        if let Some(cb) = progress {
-            cb(70, "Deleting partitions...");
-        }
-        tx.execute(
-            "DELETE FROM data_source_partitions WHERE data_source_id = ?1",
-            params![data_source_id.0],
-        )?;
-
-        // Step 5: Delete data source (100%)
-        if let Some(cb) = progress {
-            cb(90, "Deleting data source...");
+            cb(0, "Deleting data source registration...");
         }
         tx.execute(
             "DELETE FROM data_sources WHERE id = ?1",
@@ -248,7 +334,16 @@ mod tests {
                 evidence_size INTEGER,
                 reader_kind TEXT,
                 provenance_status TEXT DEFAULT 'unknown',
-                provenance_warnings TEXT DEFAULT '[]'
+                provenance_warnings TEXT DEFAULT '[]',
+                storage_model TEXT NOT NULL DEFAULT 'source_db',
+                source_db_rel_path TEXT,
+                index_rel_path TEXT,
+                staging_rel_path TEXT,
+                platform TEXT NOT NULL DEFAULT 'unknown',
+                profile TEXT,
+                import_state TEXT NOT NULL DEFAULT 'pending',
+                schema_version TEXT,
+                last_error TEXT
             );
             CREATE TABLE file_entries (
                 id TEXT PRIMARY KEY NOT NULL,

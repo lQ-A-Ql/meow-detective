@@ -1,16 +1,17 @@
 import { ChevronRight, HardDrive } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { Input } from '@/app/components/ui/input';
 import { PageSubbar } from '@/components/layout/PageSubbar';
-import { FileVisibilityToggle } from '@/components/files/FileVisibilityToggle';
-import { FileTreePanel } from './FileTreePanel';
-import { FileListPanel } from './FileListPanel';
-import { FilePreviewPanel } from './FilePreviewPanel';
-import { FileBrowserInspector } from './FileBrowserInspector';
-import { useFileBrowser } from './use-file-browser';
+import { FileVisibilityToggle } from '@/features/files/components/FileVisibilityToggle';
+import { FileTreePanel } from '@/features/files/components/FileTreePanel';
+import { FileListPanel } from '@/features/files/components/FileListPanel';
+import { FilePreviewPanel } from '@/features/files/components/FilePreviewPanel';
+import { FileBrowserInspector } from '@/features/files/components/FileBrowserInspector';
+import { useFileBrowserModel } from '@/features/files/use-file-browser-model';
 
 export function FileBrowser() {
   const { t } = useTranslation();
-  const fb = useFileBrowser();
+  const fb = useFileBrowserModel();
 
   if (!fb.currentCase) {
     return (
@@ -71,9 +72,11 @@ export function FileBrowser() {
           <div className="h-4 border-l border-forensics-border" />
           <div className="text-forensics-muted flex items-center gap-2">
             {t('fileBrowser.filter.label')}
-            <input
+            <Input
               type="text"
-              className="bg-forensics-surface border border-forensics-border-strong px-2 py-0.5 text-forensics-text font-mono text-[11px] rounded-[2px] outline-none w-40 focus:border-forensics-muted"
+              variant="mono"
+              inputSize="inline"
+              className="w-40 bg-forensics-surface focus-visible:border-forensics-muted"
               defaultValue={t('fileBrowser.filter.placeholder')}
             />
           </div>

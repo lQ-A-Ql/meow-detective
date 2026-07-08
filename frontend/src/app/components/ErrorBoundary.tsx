@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { withTranslation, type WithTranslation } from 'react-i18next';
+import { Button } from '@/app/components/ui/button';
 
 interface Props extends WithTranslation {
   children: ReactNode;
@@ -49,20 +50,22 @@ class ErrorBoundaryBase extends Component<Props, State> {
               {this.state.error?.message ?? t('errorBoundary.unknownError')}
             </div>
             <div className="flex gap-3 justify-center">
-              <button
+              <Button
                 type="button"
+                variant="forensicsSurface"
+                size="sm"
                 onClick={this.handleReload}
-                className="border border-forensics-border-strong bg-forensics-surface text-forensics-text hover:bg-forensics-hover px-4 py-2 text-[12px] rounded-[2px] cursor-pointer font-medium"
               >
                 {t('errorBoundary.reload')}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="forensicsLink"
+                size="sm"
                 onClick={this.handleReset}
-                className="border border-transparent text-forensics-muted hover:text-forensics-text px-4 py-2 text-[12px] cursor-pointer underline hover:no-underline"
               >
                 {t('errorBoundary.recover')}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

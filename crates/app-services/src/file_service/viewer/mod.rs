@@ -38,6 +38,7 @@ pub(crate) use partition::{e01_partition_candidates, raw_partition_candidates};
 pub(crate) use path::{
     descriptor_file_entry, descriptor_image_path_candidates, entry_image_path_candidates,
 };
+pub(crate) use range::file_id_from_handle;
 #[cfg(test)]
 pub(crate) use range::read_file_bytes_for_descriptor;
 pub(crate) use range_fs::{

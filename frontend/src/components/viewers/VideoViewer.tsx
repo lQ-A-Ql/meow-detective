@@ -20,6 +20,7 @@ import {
   SkipBack,
   SkipForward,
 } from 'lucide-react';
+import { Button } from '@/app/components/ui/button';
 
 interface VideoViewerProps {
   /** 视频 URL */
@@ -202,19 +203,19 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
       {/* 控制栏 */}
       <div className="flex flex-wrap items-center gap-3 px-4 py-2 bg-[#1a1a1a] text-white text-[12px] shrink-0">
         {/* 播放/暂停 */}
-        <button onClick={togglePlay} className="hover:text-gray-300 p-1">
+        <Button type="button" variant="mediaControl" size="mediaIcon" onClick={togglePlay} aria-label={isPlaying ? '暂停' : '播放'}>
           {isPlaying ? <Pause size={18} /> : <Play size={18} />}
-        </button>
+        </Button>
 
         {/* 快退 */}
-        <button onClick={() => skip(-10)} className="hover:text-gray-300 p-1">
+        <Button type="button" variant="mediaControl" size="mediaIcon" onClick={() => skip(-10)} aria-label="快退 10 秒">
           <SkipBack size={16} />
-        </button>
+        </Button>
 
         {/* 快进 */}
-        <button onClick={() => skip(10)} className="hover:text-gray-300 p-1">
+        <Button type="button" variant="mediaControl" size="mediaIcon" onClick={() => skip(10)} aria-label="快进 10 秒">
           <SkipForward size={16} />
-        </button>
+        </Button>
 
         {/* 进度条 */}
         <input
@@ -239,9 +240,9 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
         </span>
 
         {/* 音量 */}
-        <button onClick={toggleMute} className="hover:text-gray-300 p-1">
+        <Button type="button" variant="mediaControl" size="mediaIcon" onClick={toggleMute} aria-label={isMuted ? '取消静音' : '静音'}>
           {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-        </button>
+        </Button>
         <input
           type="range"
           min={0}
@@ -260,9 +261,9 @@ export function VideoViewer({ src, mimeType, fileName }: VideoViewerProps) {
         />
 
         {/* 全屏 */}
-        <button onClick={toggleFullscreen} className="hover:text-gray-300 p-1">
+        <Button type="button" variant="mediaControl" size="mediaIcon" onClick={toggleFullscreen} aria-label={isFullscreen ? '退出全屏' : '全屏'}>
           {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
-        </button>
+        </Button>
       </div>
 
       {/* 状态栏 */}

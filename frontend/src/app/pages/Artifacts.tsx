@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router';
+import { Button } from '@/app/components/ui/button';
 import { PageSubbar } from '@/components/layout/PageSubbar';
 import { DenseDataTable } from '@/components/tables/DenseDataTable';
 import {
@@ -13,25 +13,19 @@ import {
   useArtifactFamilyCounts,
   useArtifactRows,
 } from '@/features/artifacts/hooks';
-import { useSelectionStore } from '@/stores/selection-store';
+import { ArtifactField } from '@/features/artifacts/components/ArtifactField';
+import { useArtifactsSelectionModel } from '@/features/artifacts/use-artifacts-page-model';
 import { ArtifactRow } from '@/types/models';
 
 export function Artifacts() {
-  const navigate = useNavigate();
-  const selectedArtifactFamily = useSelectionStore(
-    (state) => state.selectedArtifactFamily,
-  );
-  const setSelectedArtifactFamily = useSelectionStore(
-    (state) => state.setSelectedArtifactFamily,
-  );
-  const selectedArtifactId = useSelectionStore((state) => state.selectedArtifactId);
-  const setSelectedArtifactId = useSelectionStore(
-    (state) => state.setSelectedArtifactId,
-  );
-  const setSelectedFileId = useSelectionStore((state) => state.setSelectedFileId);
-  const setSelectedTimelineId = useSelectionStore(
-    (state) => state.setSelectedTimelineId,
-  );
+  const {
+    openArtifactSource,
+    openArtifactTimeline,
+    selectedArtifactFamily,
+    selectedArtifactId,
+    setSelectedArtifactFamily,
+    setSelectedArtifactId,
+  } = useArtifactsSelectionModel();
 
   const { data: families } = useArtifactFamilies();
   const { data: familyCounts } = useArtifactFamilyCounts();
@@ -79,17 +73,16 @@ export function Artifacts() {
               familyCounts?.find((item) => item.family === family)?.count ??
               tableRows.length;
             return (
-              <button
+              <Button
+                type="button"
                 key={family}
+                variant={isSelected ? 'forensicsSurface' : 'forensicsGhost'}
+                size="xs"
                 onClick={() => setSelectedArtifactFamily(family)}
-                className={`shrink-0 whitespace-nowrap px-3 py-1.5 font-mono text-[11px] transition-colors ${
-                  isSelected
-                    ? 'rounded-[2px] border border-[#ccc] bg-white font-medium text-[#111]'
-                    : 'text-[#666] hover:text-[#111]'
-                }`}
+                className="shrink-0 whitespace-nowrap font-mono"
               >
                 {family} <span className="text-[#999]">{count}</span>
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -174,53 +167,31 @@ export function Artifacts() {
 
             <InspectorSection title="关联动作">
               <div className="space-y-2">
-                <button
+                <Button
                   type="button"
-                  onClick={() => {
-                    const sourceObjectId = selectedArtifact?.sourceObjectId;
-                    if (sourceObjectId) {
-                      setSelectedFileId(sourceObjectId);
-                      navigate('/files');
-                    }
-                  }}
+                  variant="forensicsSurface"
+                  size="xs"
+                  onClick={() => openArtifactSource(selectedArtifact)}
                   disabled={!selectedArtifact?.sourceObjectId}
-                  className="w-full cursor-pointer rounded-[2px] border border-[#ccc] bg-white py-1.5 text-center text-[11px] font-medium text-[#111] hover:bg-[#f0f0f0] disabled:opacity-50"
+                  className="w-full font-medium"
                 >
                   在文件浏览中定位目标
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  onClick={() => {
-                    if (selectedArtifact) {
-                      setSelectedTimelineId(`artifact:${selectedArtifact.id}`);
-                      navigate('/timeline');
-                    }
-                  }}
+                  variant="forensicsLink"
+                  size="xs"
+                  onClick={() => openArtifactTimeline(selectedArtifact)}
                   disabled={!selectedArtifact}
-                  className="w-full cursor-pointer border border-transparent py-1.5 text-center text-[11px] text-[#666] underline hover:text-[#111] hover:no-underline disabled:opacity-50"
+                  className="w-full"
                 >
                   查看关联时间线事件
-                </button>
+                </Button>
               </div>
             </InspectorSection>
           </div>
         </InspectorPane>
       </div>
-    </div>
-  );
-}
-
-function ArtifactField({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="flex flex-col gap-0.5 border border-[#e0e0e0] bg-white p-2">
-      <span className="text-[#888]">{label}</span>
-      <span className="text-[#333]">{value}</span>
     </div>
   );
 }

@@ -1,4 +1,3 @@
-import { save } from '@tauri-apps/plugin-dialog';
 import {
   FileChildrenPage,
   FileEntryRow,
@@ -108,11 +107,7 @@ export async function readMediaRange(request: MediaRangeRequest): Promise<MediaR
   return apiClient.request<MediaRangeResponse>(COMMANDS.files.READ_MEDIA_RANGE, { request });
 }
 
-export async function extractFile(file: FileEntryRow) {
-  const destinationPath = await save({ defaultPath: file.name || file.id });
-  if (!destinationPath) {
-    return 'Export cancelled';
-  }
+export async function extractFileToPath(file: FileEntryRow, destinationPath: string) {
   return apiClient.request(COMMANDS.files.EXTRACT_FILE, {
     request: { fileId: file.id, destinationPath, overwrite: false },
   });

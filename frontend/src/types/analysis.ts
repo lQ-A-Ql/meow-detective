@@ -121,10 +121,12 @@ export interface EvidenceSource {
 }
 
 export interface AnalysisExtractionRequest {
+  dataSourceId: string;
   categories: string[];
 }
 
 export interface AnalysisExtractionPageRequest {
+  dataSourceId: string;
   offset?: number;
   limit?: number;
 }

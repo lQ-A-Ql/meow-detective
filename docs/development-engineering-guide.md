@@ -75,6 +75,7 @@ V2 长期执行主计划见 `docs/v2-longterm-plan.md`。
 - runtime 禁止 mock / fake / dummy 业务数据集；test double 仅允许出现在测试文件
 - runtime 禁止硬编码 demo case、真实样本路径或生产可点击的 demo-case 创建入口；演示数据只能存在于测试、fixture 或受控文档示例中
 - 本地排序只允许用于极小范围展示兜底，不得伪造后端业务结果
+- Frontend MVP boundary 以 `docs/frontend-mvp-boundary.md` 为准：Page 只做 route shell，Feature 负责请求与状态编排，Component 只做 UI，API 只封装 Tauri command，Platform 只封装 Tauri/browser adapter，Store 只保存 UI 状态和选中 ID。
 
 ## 7. 测试策略
 

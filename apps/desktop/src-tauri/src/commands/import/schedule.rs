@@ -35,7 +35,7 @@ pub async fn import_data_source(
         let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
         let _job_id_str = schedule_import_for_active_case(
             active,
-            &source_path,
+            import_config,
             Some(&app_clone),
             &app_state.task_manager,
             settings.max_import_workers,
@@ -90,7 +90,7 @@ fn load_import_settings(path: &std::path::Path) -> AppSettingsDto {
 /// Schedule an import job for the active case.
 pub fn schedule_import_for_active_case(
     active: &active_case::ActiveCase,
-    source_path: &str,
+    import_config: import_precheck::ImportSourceConfig,
     app: Option<&AppHandle>,
     task_manager: &crate::state::TaskManager,
     max_import_workers: Option<usize>,
@@ -100,8 +100,6 @@ pub fn schedule_import_for_active_case(
     let case_id = active.meta.id.clone();
     let case_root = active.case_root.clone();
     let db_path = active.db_path();
-    let import_config = import_precheck::prepare_import_source_config_from_path(source_path)
-        .map_err(import_config_error_to_command_error)?;
     let source_name = import_config.source_name.clone();
 
     let conn = app_services::connection::open_case_db(&db_path)
@@ -118,7 +116,6 @@ pub fn schedule_import_for_active_case(
         .update_progress(&job_id, 1, &format!("Queued import for {source_name}"))
         .map_err(CommandError::from_typed_service_error)?;
 
-    let source_path = source_path.to_string();
     let app_handle = app.cloned();
     let cancel_token = Arc::new(AtomicBool::new(false));
     let cancel_token_clone = cancel_token.clone();
@@ -128,7 +125,7 @@ pub fn schedule_import_for_active_case(
         db_path,
         case_id,
         case_root,
-        source_path,
+        import_config,
         job_id,
         max_import_workers,
         max_analysis_workers,

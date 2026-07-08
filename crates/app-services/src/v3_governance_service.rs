@@ -12,6 +12,7 @@
 //! - All queries are read-only and operate against the active case database.
 
 use rusqlite::Connection;
+use std::path::Path;
 use thiserror::Error;
 
 use transport::dto::{
@@ -66,11 +67,55 @@ pub fn get_v3_governance_snapshot(
     })
 }
 
+pub fn get_v3_governance_snapshot_for_case(
+    conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+) -> Result<V3GovernanceSnapshotDto, V3GovernanceError> {
+    let v2 =
+        crate::v2_governance_service::get_v2_governance_snapshot_for_case(conn, case_root, case_id)
+            .map_err(|e| V3GovernanceError::Other(e.to_string()))?;
+
+    let graph_statistics = build_graph_stats_for_case(conn, case_root, case_id)?;
+    let platform_coverage =
+        build_platform_coverage_for_case(conn, case_root, &domain::CaseId(case_id.to_string()))?;
+    let rule_pack_coverage = build_rule_pack_status();
+    let batch_status = build_batch_status(conn, case_id)?;
+    let notebook_stats = build_notebook_stats(conn, case_id)?;
+
+    Ok(V3GovernanceSnapshotDto {
+        v2,
+        graph_statistics,
+        platform_coverage,
+        rule_pack_coverage,
+        batch_status,
+        notebook_stats,
+    })
+}
+
 // ── Graph Statistics ───────────────────────────────────────────────────────
 
 fn build_graph_stats(conn: &Connection, case_id: &str) -> Result<GraphStatsDto, V3GovernanceError> {
     let graph_snapshot = crate::graph_service::get_graph_snapshot(conn, case_id)
         .map_err(|e| V3GovernanceError::Other(e.to_string()))?;
+    Ok(GraphStatsDto {
+        node_count_by_type: graph_snapshot.node_count_by_type,
+        edge_count_by_type: graph_snapshot.edge_count_by_type,
+        total_nodes: graph_snapshot.total_nodes,
+        total_edges: graph_snapshot.total_edges,
+        density: graph_snapshot.density,
+        largest_component_size: graph_snapshot.largest_component_size,
+    })
+}
+
+fn build_graph_stats_for_case(
+    conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+) -> Result<GraphStatsDto, V3GovernanceError> {
+    let graph_snapshot =
+        crate::graph_service::get_graph_snapshot_for_case(conn, case_root, case_id)
+            .map_err(|e| V3GovernanceError::Other(e.to_string()))?;
     Ok(GraphStatsDto {
         node_count_by_type: graph_snapshot.node_count_by_type,
         edge_count_by_type: graph_snapshot.edge_count_by_type,
@@ -201,6 +246,43 @@ fn build_platform_coverage(conn: &Connection) -> Result<PlatformCoverageDto, V3G
             "macos" => macos_families.push(family.clone()),
             "cross-platform" => cross_platform_families.push(family.clone()),
             _ => windows_families.push(family.clone()),
+        }
+    }
+
+    Ok(PlatformCoverageDto {
+        windows_artifact_families: windows_families.len() as u32,
+        linux_artifact_families: linux_families.len() as u32,
+        macos_artifact_families: macos_families.len() as u32,
+        cross_platform_artifact_families: cross_platform_families.len() as u32,
+        total_families: family_counts.len() as u32,
+        windows_families,
+        linux_families,
+        macos_families,
+        cross_platform_families,
+    })
+}
+
+fn build_platform_coverage_for_case(
+    conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+) -> Result<PlatformCoverageDto, V3GovernanceError> {
+    let family_counts =
+        crate::artifact_service::get_artifact_family_counts_for_case(conn, case_root, case_id)
+            .map_err(|e| V3GovernanceError::Other(e.to_string()))?;
+
+    let mut windows_families: Vec<String> = Vec::new();
+    let mut linux_families: Vec<String> = Vec::new();
+    let mut macos_families: Vec<String> = Vec::new();
+    let mut cross_platform_families: Vec<String> = Vec::new();
+
+    for family_count in &family_counts {
+        match get_platform(&family_count.family) {
+            "windows" => windows_families.push(family_count.family.clone()),
+            "linux" => linux_families.push(family_count.family.clone()),
+            "macos" => macos_families.push(family_count.family.clone()),
+            "cross-platform" => cross_platform_families.push(family_count.family.clone()),
+            _ => windows_families.push(family_count.family.clone()),
         }
     }
 

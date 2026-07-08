@@ -1,6 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { Search, Activity, Settings, AlertTriangle } from 'lucide-react';
+import { Button } from '@/app/components/ui/button';
+import { Input } from '@/app/components/ui/input';
 import { HorizontalScroll } from '@/components/layout/HorizontalScroll';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import { isDevOrAuditMode } from '@/lib/env';
@@ -137,7 +139,7 @@ export function TopBar() {
           ) : null}
           <div className="flex items-center gap-2 border border-forensics-border bg-forensics-surface px-2 py-1 rounded-sm">
             <Search size={12} className="text-forensics-muted-light" />
-            <input
+            <Input
               value={globalSearchQuery}
               onChange={(event) => setGlobalSearchQuery(event.target.value)}
               onKeyDown={(event) => {
@@ -145,13 +147,18 @@ export function TopBar() {
                   navigate(`/search?q=${encodeURIComponent(globalSearchQuery.trim())}`);
                 }
               }}
-              className="w-40 xl:w-56 bg-transparent border-none outline-none text-forensics-text placeholder-forensics-500 text-xs font-mono"
+              variant="search"
+              inputSize="inline"
+              className="w-40 xl:w-56 text-xs font-mono"
               placeholder={t('topBar.search.placeholder')}
             />
           </div>
-          <button
+          <Button
+            type="button"
+            variant="forensicsGhost"
+            size="compact"
             onClick={toggleDrawer}
-            className="flex items-center gap-1.5 border border-transparent px-2 py-1 hover:border-forensics-border hover:bg-forensics-surface text-forensics-text-tertiary hover:text-forensics-text"
+            className="border border-transparent text-forensics-text-tertiary hover:border-forensics-border hover:bg-forensics-surface hover:text-forensics-text"
           >
             <Activity size={12} />
             <span>{t('topBar.jobs.running', { count: runningCount })}</span>
@@ -160,7 +167,7 @@ export function TopBar() {
                 <AlertTriangle size={11} /> {warningCount}
               </span>
             ) : null}
-          </button>
+          </Button>
           <div className="h-4 border-l border-forensics-border" />
           <Settings size={14} className="cursor-pointer hover:text-forensics-text" onClick={() => navigate('/settings')} />
         </div>

@@ -43,6 +43,7 @@ pub use report::{
 };
 pub mod rule_pack;
 pub mod search_service;
+pub mod source_db;
 pub mod staging;
 pub mod step_recorder;
 pub mod step_replay;

@@ -30,55 +30,58 @@ describe('analysis API', () => {
     requestMock.mockReset();
   });
 
-  it('getSystemInfo calls the correct command with no payload', async () => {
+  it('getSystemInfo sends dataSourceId', async () => {
     requestMock.mockResolvedValueOnce({} as never);
-    await getSystemInfo();
-    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.GET_SYSTEM_INFO);
+    await getSystemInfo('ds-1');
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.GET_SYSTEM_INFO, {
+      request: { dataSourceId: 'ds-1' },
+    });
   });
 
   it('classifyFiles sends sampleSize in request payload', async () => {
     requestMock.mockResolvedValueOnce([] as never);
-    await classifyFiles(500);
+    await classifyFiles('ds-1', 500);
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.CLASSIFY_FILES, {
-      request: { sampleSize: 500 },
+      request: { dataSourceId: 'ds-1', sampleSize: 500 },
     });
   });
 
   it('classifyFiles defaults sampleSize to 1000', async () => {
     requestMock.mockResolvedValueOnce([] as never);
-    await classifyFiles();
+    await classifyFiles('ds-1');
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.CLASSIFY_FILES, {
-      request: { sampleSize: 1000 },
+      request: { dataSourceId: 'ds-1', sampleSize: 1000 },
     });
   });
 
   it('getEvidenceClassificationSummary calls the correct command', async () => {
     requestMock.mockResolvedValueOnce({} as never);
-    await getEvidenceClassificationSummary();
+    await getEvidenceClassificationSummary('ds-1');
     expect(requestMock).toHaveBeenCalledWith(
       COMMANDS.analysis.GET_EVIDENCE_CLASSIFICATION_SUMMARY,
+      { request: { dataSourceId: 'ds-1' } },
     );
   });
 
   it('runEvidenceClassification sends categories in request', async () => {
     requestMock.mockResolvedValueOnce({} as never);
-    await runEvidenceClassification(['browser', 'registry']);
+    await runEvidenceClassification('ds-1', ['browser', 'registry']);
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.RUN_EVIDENCE_CLASSIFICATION, {
-      request: { categories: ['browser', 'registry'] },
+      request: { dataSourceId: 'ds-1', categories: ['browser', 'registry'] },
     });
   });
 
   it('runEvidenceClassification defaults categories to empty array', async () => {
     requestMock.mockResolvedValueOnce({} as never);
-    await runEvidenceClassification();
+    await runEvidenceClassification('ds-1');
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.RUN_EVIDENCE_CLASSIFICATION, {
-      request: { categories: [] },
+      request: { dataSourceId: 'ds-1', categories: [] },
     });
   });
 
   it('runAnalysisExtraction sends the request payload', async () => {
     requestMock.mockResolvedValueOnce({} as never);
-    const req = { categories: ['registry'] };
+    const req = { dataSourceId: 'ds-1', categories: ['registry'] };
     await runAnalysisExtraction(req);
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.RUN_ANALYSIS_EXTRACTION, {
       request: req,
@@ -87,36 +90,37 @@ describe('analysis API', () => {
 
   it('getRegistryExtractionSummary sends page request', async () => {
     requestMock.mockResolvedValueOnce({} as never);
-    await getRegistryExtractionSummary({ offset: 10, limit: 20 });
+    await getRegistryExtractionSummary({ dataSourceId: 'ds-1', offset: 10, limit: 20 });
     expect(requestMock).toHaveBeenCalledWith(
       COMMANDS.analysis.GET_REGISTRY_EXTRACTION_SUMMARY,
-      { request: { offset: 10, limit: 20 } },
+      { request: { dataSourceId: 'ds-1', offset: 10, limit: 20 } },
     );
   });
 
   it('getRegistryStructuredSummary calls the correct command', async () => {
     requestMock.mockResolvedValueOnce({} as never);
-    await getRegistryStructuredSummary();
+    await getRegistryStructuredSummary('ds-1');
     expect(requestMock).toHaveBeenCalledWith(
       COMMANDS.analysis.GET_REGISTRY_STRUCTURED_SUMMARY,
+      { request: { dataSourceId: 'ds-1' } },
     );
   });
 
   it('getBrowserHistorySummary sends page request', async () => {
     requestMock.mockResolvedValueOnce({} as never);
-    await getBrowserHistorySummary({ offset: 5 });
+    await getBrowserHistorySummary({ dataSourceId: 'ds-1', offset: 5 });
     expect(requestMock).toHaveBeenCalledWith(
       COMMANDS.analysis.GET_BROWSER_HISTORY_SUMMARY,
-      { request: { offset: 5 } },
+      { request: { dataSourceId: 'ds-1', offset: 5 } },
     );
   });
 
   it('getEmailExtractionSummary sends page request', async () => {
     requestMock.mockResolvedValueOnce({} as never);
-    await getEmailExtractionSummary({ offset: 3 });
+    await getEmailExtractionSummary({ dataSourceId: 'ds-1', offset: 3 });
     expect(requestMock).toHaveBeenCalledWith(
       COMMANDS.analysis.GET_EMAIL_EXTRACTION_SUMMARY,
-      { request: { offset: 3 } },
+      { request: { dataSourceId: 'ds-1', offset: 3 } },
     );
   });
 
@@ -140,8 +144,10 @@ describe('analysis API', () => {
 
   it('generateAnalysisSummary calls the correct command', async () => {
     requestMock.mockResolvedValueOnce('summary text' as never);
-    const result = await generateAnalysisSummary();
-    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.GENERATE_ANALYSIS_SUMMARY);
+    const result = await generateAnalysisSummary('ds-1');
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.GENERATE_ANALYSIS_SUMMARY, {
+      request: { dataSourceId: 'ds-1' },
+    });
     expect(result).toBe('summary text');
   });
 });

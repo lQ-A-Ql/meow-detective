@@ -1,7 +1,7 @@
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
-use persistence_sqlite::repositories::job_repo::JobRepo;
+use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, job_repo::JobRepo};
 use transport::{
     dto::{
         CancellationStateDto, ImportPhaseDto, ImportPhaseMetricsDto, ImportPhaseProgressDto,
@@ -11,38 +11,25 @@ use transport::{
     CommandError,
 };
 
-use crate::{
-    import_pipeline::{
-        emit::ImportEventSink,
-        options::{ImportJobOptions, JobOutcomeCounts},
-        phases,
-        types::ImportJobContext,
-    },
-    import_precheck,
+use crate::import_pipeline::{
+    emit::ImportEventSink,
+    options::{ImportJobOptions, JobOutcomeCounts},
+    phases,
+    types::ImportJobContext,
 };
-
-/// Convert a precheck config error into a command error.
-fn import_config_error_to_command_error(
-    error: import_precheck::ImportSourceConfigError,
-) -> CommandError {
-    if error.is_invalid_input() {
-        CommandError::invalid_input(error.to_string())
-    } else {
-        CommandError::from_service_error(error)
-    }
-}
+use crate::import_precheck;
 
 /// Execute the import job (main logic).
 pub fn execute_import_job(
     conn: &rusqlite::Connection,
     case_id: &domain::CaseId,
     case_root: &std::path::Path,
-    source_path: &str,
+    import_config: import_precheck::ImportSourceConfig,
     job_id: &domain::JobId,
     options: ImportJobOptions<'_>,
 ) -> Result<String, CommandError> {
     let (message, _counts) =
-        execute_import_job_with_counts(conn, case_id, case_root, source_path, job_id, options)?;
+        execute_import_job_with_counts(conn, case_id, case_root, import_config, job_id, options)?;
     Ok(message)
 }
 
@@ -51,21 +38,22 @@ pub fn execute_import_job_with_counts(
     conn: &rusqlite::Connection,
     case_id: &domain::CaseId,
     case_root: &std::path::Path,
-    source_path: &str,
+    import_config: import_precheck::ImportSourceConfig,
     job_id: &domain::JobId,
     options: ImportJobOptions<'_>,
 ) -> Result<(String, JobOutcomeCounts), CommandError> {
-    let import_config = import_precheck::prepare_import_source_config_from_path(source_path)
-        .map_err(import_config_error_to_command_error)?;
     let job_repo = JobRepo::new(conn);
     let mut counts = JobOutcomeCounts::default();
     let import_started = Instant::now();
+    let source_conn: Option<rusqlite::Connection> = None;
+    let source_path_display = import_config.source_path_display.clone();
 
     let mut ctx = ImportJobContext {
         conn,
+        source_conn: source_conn.as_ref(),
         case_id,
         case_root,
-        source_path,
+        source_path: &source_path_display,
         job_id,
         options,
         import_config,
@@ -75,39 +63,71 @@ pub fn execute_import_job_with_counts(
     };
 
     let ds = phases::run_attach_phase(&mut ctx)?;
+    let source_conn = crate::source_db::open_source_db(case_root, &ds.id)
+        .map_err(CommandError::from_service_error)?;
+    DataSourceRepo::new(&source_conn)
+        .upsert_source_local_metadata(case_id, &ds)
+        .map_err(CommandError::from_service_error)?;
+    DataSourceRepo::new(conn)
+        .update_import_state(&ds.id, "importing", None)
+        .map_err(CommandError::from_service_error)?;
+    ctx.source_conn = Some(&source_conn);
     ctx.ds = Some(&ds);
 
-    // Preserve the original cancellation behaviour right after attach.
-    if options.cancel_token.load(Ordering::Relaxed) {
-        mark_import_cancelling(
-            &ctx.job_repo,
-            job_id,
-            "Cancellation acknowledged after attach",
-        );
-        emit_import_cancellation_state(
-            options.event_sink,
-            job_id,
-            CancellationStateDto::Acknowledged,
-            false,
-            "Cancellation acknowledged after attach",
-        );
-        emit_import_profile_progress(
-            options.event_sink,
-            job_id,
-            case_id,
-            Some(&ds.id),
-            12,
-            "Cancellation acknowledged: phase=attach",
-            true,
-        );
-        return Err(CommandError::internal("Import cancelled by user"));
+    let result = (|| {
+        // Preserve the original cancellation behaviour right after attach.
+        if options.cancel_token.load(Ordering::Relaxed) {
+            mark_import_cancelling(
+                &ctx.job_repo,
+                job_id,
+                "Cancellation acknowledged after attach",
+            );
+            emit_import_cancellation_state(
+                options.event_sink,
+                job_id,
+                CancellationStateDto::Acknowledged,
+                false,
+                "Cancellation acknowledged after attach",
+            );
+            emit_import_profile_progress(
+                options.event_sink,
+                job_id,
+                case_id,
+                Some(&ds.id),
+                12,
+                "Cancellation acknowledged: phase=attach",
+                true,
+            );
+            return Err(CommandError::internal("Import cancelled by user"));
+        }
+
+        let stats = phases::run_enumeration_phase(&mut ctx, &ds)?;
+        let pipeline_msg = phases::run_post_import_phase(&mut ctx, &ds)?;
+        phases::run_finalize_phase(&mut ctx, &ds, &stats, &pipeline_msg, import_started)
+    })();
+
+    match result {
+        Ok(msg) => {
+            DataSourceRepo::new(conn)
+                .update_import_state(&ds.id, "ready", None)
+                .map_err(CommandError::from_service_error)?;
+            Ok((msg, counts))
+        }
+        Err(error) => {
+            if let Err(update_error) = DataSourceRepo::new(conn).update_import_state(
+                &ds.id,
+                "failed",
+                Some(&error.message),
+            ) {
+                tracing::warn!(
+                    data_source_id = %ds.id.0,
+                    error = %update_error,
+                    "Failed to persist data source import failure state"
+                );
+            }
+            Err(error)
+        }
     }
-
-    let stats = phases::run_enumeration_phase(&mut ctx, &ds)?;
-    let pipeline_msg = phases::run_post_import_phase(&mut ctx, &ds)?;
-    let msg = phases::run_finalize_phase(&mut ctx, &ds, &stats, &pipeline_msg, import_started)?;
-
-    Ok((msg, counts))
 }
 
 // ---------------------------------------------------------------------------

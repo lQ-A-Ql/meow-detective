@@ -33,19 +33,19 @@ vi.mock('@/stores/mcp-store', () => ({
   useMcpStore: () => mocks.mcpState,
 }));
 
-vi.mock('@/components/mcp/McpServerItem', () => ({
+vi.mock('@/features/mcp/components/McpServerItem', () => ({
   McpServerItem: () => <div data-testid="mcp-server-item" />,
 }));
 
-vi.mock('@/components/mcp/McpServerDialog', () => ({
+vi.mock('@/features/mcp/components/McpServerDialog', () => ({
   McpServerDialog: () => <div data-testid="mcp-server-dialog" />,
 }));
 
-vi.mock('@/components/mcp/McpResourceList', () => ({
+vi.mock('@/features/mcp/components/McpResourceList', () => ({
   McpResourceList: () => <div data-testid="mcp-resource-list" />,
 }));
 
-vi.mock('@/components/mcp/McpToolList', () => ({
+vi.mock('@/features/mcp/components/McpToolList', () => ({
   McpToolList: () => <div data-testid="mcp-tool-list" />,
 }));
 
@@ -97,7 +97,7 @@ describe('Settings page', () => {
     expect((screen.getByLabelText('镜像搜索路径') as HTMLInputElement).value).toBe(
       'D:\\Images; E:\\Evidence',
     );
-    expect((screen.getByLabelText('事件调试日志') as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByLabelText('事件调试日志').getAttribute('data-state')).toBe('checked');
     expect(mocks.mcpState.loadConfig).toHaveBeenCalledTimes(1);
   });
 

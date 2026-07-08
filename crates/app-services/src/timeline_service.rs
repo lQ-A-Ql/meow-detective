@@ -10,10 +10,14 @@ use transport::{
 };
 
 use crate::performance::{measure_rows, metric, report, PerfSample};
+use crate::source_db::{self, encode_source_scoped_id};
 use domain::{EdgeType, FileEntry, GraphEdge, GraphNode, NodeType};
-use persistence_sqlite::repositories::{graph_repo::GraphRepo, timeline_repo::TimelineRepo};
+use persistence_sqlite::repositories::{
+    datasource_repo::DataSourceRepo, graph_repo::GraphRepo, timeline_repo::TimelineRepo,
+};
 use rayon::prelude::*;
 use rusqlite::{params, Connection, OptionalExtension};
+use std::path::Path;
 use std::time::Instant;
 
 const MACB_PROJECTION_KEY: &str = "macb";
@@ -162,6 +166,40 @@ pub fn query_timeline(
     Ok(PageResponse { total, items })
 }
 
+pub fn query_timeline_for_case(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+    offset: u64,
+    limit: u32,
+) -> Result<PageResponse<TimelineEventDto>, TimelineServiceError> {
+    query_timeline_filtered_for_case(
+        case_conn, case_root, case_id, offset, limit, None, None, None,
+    )
+}
+
+pub fn query_timeline_for_case_instrumented(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+    offset: u64,
+    limit: u32,
+) -> Result<InstrumentedPage<TimelineEventDto>, TimelineServiceError> {
+    let (page, sample) = measure_rows(0, || {
+        query_timeline_for_case(case_conn, case_root, case_id, offset, limit)
+    });
+    let page = page?;
+    let sample = PerfSample {
+        rows: page.items.len() as u64,
+        ..sample
+    };
+    let performance_report = timeline_query_report("timeline.query", sample, page.total);
+    Ok(InstrumentedPage {
+        page,
+        performance_report,
+    })
+}
+
 pub fn query_timeline_instrumented(
     conn: &Connection,
     offset: u64,
@@ -212,6 +250,49 @@ pub fn query_timeline_filtered(
     Ok(PageResponse { total, items })
 }
 
+pub fn query_timeline_filtered_for_case(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+    offset: u64,
+    limit: u32,
+    time_start: Option<&str>,
+    time_end: Option<&str>,
+    event_type: Option<&str>,
+) -> Result<PageResponse<TimelineEventDto>, TimelineServiceError> {
+    let mut total = 0u64;
+    let mut events = Vec::new();
+    let per_source_limit = offset.saturating_add(limit as u64).min(u32::MAX as u64) as u32;
+
+    for (data_source_id, source_conn) in
+        open_ready_source_connections(case_conn, case_root, case_id)?
+    {
+        ensure_macb_timeline_projected(&source_conn)?;
+        let repo = TimelineRepo::new(&source_conn);
+        total = total.saturating_add(repo.count_filtered(time_start, time_end, event_type)?);
+        for event in repo.query_filtered(0, per_source_limit, time_start, time_end, event_type)? {
+            events.push((data_source_id.clone(), event));
+        }
+    }
+
+    events.sort_by(|(left_source, left), (right_source, right)| {
+        right
+            .timestamp
+            .cmp(&left.timestamp)
+            .then_with(|| left_source.0.cmp(&right_source.0))
+            .then_with(|| left.id.0.cmp(&right.id.0))
+    });
+
+    let items = events
+        .into_iter()
+        .skip(offset as usize)
+        .take(limit as usize)
+        .map(|(data_source_id, event)| timeline_event_to_source_dto(event, &data_source_id))
+        .collect();
+
+    Ok(PageResponse { total, items })
+}
+
 pub fn query_timeline_filtered_instrumented(
     conn: &Connection,
     offset: u64,
@@ -222,6 +303,33 @@ pub fn query_timeline_filtered_instrumented(
 ) -> Result<InstrumentedPage<TimelineEventDto>, TimelineServiceError> {
     let (page, sample) = measure_rows(0, || {
         query_timeline_filtered(conn, offset, limit, time_start, time_end, event_type)
+    });
+    let page = page?;
+    let sample = PerfSample {
+        rows: page.items.len() as u64,
+        ..sample
+    };
+    let performance_report = timeline_query_report("timeline.query", sample, page.total);
+    Ok(InstrumentedPage {
+        page,
+        performance_report,
+    })
+}
+
+pub fn query_timeline_filtered_for_case_instrumented(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+    offset: u64,
+    limit: u32,
+    time_start: Option<&str>,
+    time_end: Option<&str>,
+    event_type: Option<&str>,
+) -> Result<InstrumentedPage<TimelineEventDto>, TimelineServiceError> {
+    let (page, sample) = measure_rows(0, || {
+        query_timeline_filtered_for_case(
+            case_conn, case_root, case_id, offset, limit, time_start, time_end, event_type,
+        )
     });
     let page = page?;
     let sample = PerfSample {
@@ -380,6 +488,34 @@ pub fn get_timeline_event_by_id(
     }))
 }
 
+pub fn get_timeline_event_by_id_for_case(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+    event_id: &str,
+) -> Result<Option<TimelineEventDto>, TimelineServiceError> {
+    if let Ok((data_source_id, local_id)) =
+        source_db::parse_source_scoped_id("Timeline event id", event_id)
+    {
+        let source_conn =
+            source_db::open_registered_source_db(case_conn, case_root, &data_source_id)?;
+        ensure_macb_timeline_projected(&source_conn)?;
+        return Ok(TimelineRepo::new(&source_conn)
+            .find_by_id(&local_id)?
+            .map(|event| timeline_event_to_source_dto(event, &data_source_id)));
+    }
+
+    for (data_source_id, source_conn) in
+        open_ready_source_connections(case_conn, case_root, case_id)?
+    {
+        ensure_macb_timeline_projected(&source_conn)?;
+        if let Some(event) = TimelineRepo::new(&source_conn).find_by_id(event_id)? {
+            return Ok(Some(timeline_event_to_source_dto(event, &data_source_id)));
+        }
+    }
+    Ok(None)
+}
+
 fn timeline_query_report(prefix: &str, sample: PerfSample, total: u64) -> PerformanceReportDto {
     let mut metrics = vec![
         metric(
@@ -407,6 +543,50 @@ fn timeline_query_report(prefix: &str, sample: PerfSample, total: u64) -> Perfor
         ),
         metrics,
     )
+}
+
+fn timeline_event_to_source_dto(
+    ev: domain::TimelineEvent,
+    data_source_id: &domain::DataSourceId,
+) -> TimelineEventDto {
+    TimelineEventDto {
+        id: encode_source_scoped_id(data_source_id, &ev.id.0),
+        source_object_id: if ev.source_object_id.is_empty() {
+            ev.source_object_id
+        } else {
+            encode_source_scoped_id(data_source_id, &ev.source_object_id)
+        },
+        event_type: ev.event_type,
+        ts: ev.timestamp.to_rfc3339(),
+        title: ev.title,
+        description: ev.description,
+        parser_id: ev.parser_id,
+        parser_version: ev.parser_version,
+        confidence: ev.confidence,
+        source_attribution: ev.source_attribution,
+        attrs: ev.attrs,
+    }
+}
+
+fn open_ready_source_connections(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+) -> Result<Vec<(domain::DataSourceId, Connection)>, TimelineServiceError> {
+    let sources = DataSourceRepo::new(case_conn).find_by_case(case_id)?;
+    let mut conns = Vec::with_capacity(sources.len());
+    for source in sources {
+        let storage = DataSourceRepo::new(case_conn).find_storage(&source.id)?;
+        if storage
+            .as_ref()
+            .is_some_and(|value| value.import_state == "failed")
+        {
+            continue;
+        }
+        let conn = source_db::open_registered_source_db(case_conn, case_root, &source.id)?;
+        conns.push((source.id, conn));
+    }
+    Ok(conns)
 }
 
 fn ensure_projection_meta_table(conn: &Connection) -> Result<(), TimelineServiceError> {
@@ -675,6 +855,35 @@ mod tests {
         conn
     }
 
+    fn in_memory_case_db_with_source() -> rusqlite::Connection {
+        let conn = persistence_sqlite::connection::open_in_memory().unwrap();
+        persistence_sqlite::runner::run_all(&conn).unwrap();
+        let case = domain::CaseMeta {
+            id: domain::CaseId("case-1".to_string()),
+            name: "case".to_string(),
+            number: None,
+            examiner: None,
+            notes: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        persistence_sqlite::repositories::case_repo::CaseRepo::new(&conn)
+            .create(&case)
+            .unwrap();
+        let ds = domain::DataSource {
+            id: DataSourceId("ds-1".to_string()),
+            name: "source".to_string(),
+            kind: domain::DataSourceKind::LogicalDirectory,
+            source_path: std::path::PathBuf::from("D:/source"),
+            imported_at: Utc::now(),
+            provenance: domain::DataSourceProvenance::unknown(),
+        };
+        persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&conn)
+            .insert(&domain::CaseId("case-1".to_string()), &ds)
+            .unwrap();
+        conn
+    }
+
     fn make_file(name: &str, path: &str, created: bool, modified: bool) -> FileEntry {
         FileEntry {
             id: FileEntryId(uuid::Uuid::new_v4().to_string()),
@@ -740,6 +949,53 @@ mod tests {
         let page = query_timeline(&conn, 0, 100).unwrap();
         assert_eq!(page.items.len(), 3);
         assert_eq!(page.total, 3);
+    }
+
+    #[test]
+    fn query_timeline_for_case_reads_source_databases_and_wraps_ids() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let case_conn = in_memory_case_db_with_source();
+        let ds_id = DataSourceId("ds-1".to_string());
+        let source_conn = crate::source_db::open_source_db(tmp.path(), &ds_id).unwrap();
+        let event = domain::TimelineEvent {
+            id: domain::TimelineEventId("event-1".to_string()),
+            source_object_id: "file-1".to_string(),
+            event_type: "FILE_CREATED".to_string(),
+            timestamp: Utc.with_ymd_and_hms(2026, 1, 1, 12, 0, 0).unwrap(),
+            title: "created".to_string(),
+            description: "created file".to_string(),
+            parser_id: Some("test.parser".to_string()),
+            parser_version: None,
+            confidence: Some(1.0),
+            source_attribution: None,
+            attrs: Default::default(),
+        };
+        TimelineRepo::new(&source_conn)
+            .insert_batch_with_case(&[event], "case-1")
+            .unwrap();
+
+        let page = query_timeline_for_case(
+            &case_conn,
+            tmp.path(),
+            &domain::CaseId("case-1".to_string()),
+            0,
+            10,
+        )
+        .unwrap();
+
+        assert_eq!(page.total, 1);
+        assert_eq!(page.items[0].id, "ds:ds-1:event-1");
+        assert_eq!(page.items[0].source_object_id, "ds:ds-1:file-1");
+
+        let event = get_timeline_event_by_id_for_case(
+            &case_conn,
+            tmp.path(),
+            &domain::CaseId("case-1".to_string()),
+            "ds:ds-1:event-1",
+        )
+        .unwrap()
+        .expect("timeline event");
+        assert_eq!(event.event_type, "FILE_CREATED");
     }
 
     fn metric_value(report: &PerformanceReportDto, key: &str) -> Option<f64> {

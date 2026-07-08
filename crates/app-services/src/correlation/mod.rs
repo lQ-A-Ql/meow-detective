@@ -40,7 +40,8 @@ impl transport::ServiceErrorCategory for CorrelationError {
 }
 
 pub use self::graph::{
-    get_correlation_snapshot, get_correlation_snapshot_incremental, invalidate_correlation_cache,
+    get_correlation_snapshot, get_correlation_snapshot_for_case,
+    get_correlation_snapshot_incremental, invalidate_correlation_cache,
 };
 
 pub(crate) const MAX_CORRELATION_ARTIFACTS: usize = 250;

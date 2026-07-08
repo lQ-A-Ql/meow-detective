@@ -1,6 +1,7 @@
 use domain::DataSourceHashStatus;
 use persistence_sqlite::repositories::{audit_repo::AuditRepo, datasource_repo::DataSourceRepo};
 use rusqlite::Connection;
+use std::path::Path;
 use transport::dto::{
     CorrelationCoverageStatusDto, GovernanceRuntimeSignalsDto, SecurityAuditEntryDto,
     VerificationGuaranteeLevelDto,
@@ -24,6 +25,28 @@ pub(crate) struct CorrelationRuntimeSnapshot {
 pub(crate) fn build_runtime_signals(
     conn: &Connection,
     case_id: &str,
+) -> Result<GovernanceRuntimeSignalsDto, GovernanceError> {
+    let correlation = correlation_runtime_snapshot(conn)?;
+    build_runtime_signals_with_correlation(conn, case_id, correlation)
+}
+
+pub(crate) fn build_runtime_signals_for_case(
+    conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+) -> Result<GovernanceRuntimeSignalsDto, GovernanceError> {
+    let correlation = correlation_runtime_snapshot_for_case(
+        conn,
+        case_root,
+        &domain::CaseId(case_id.to_string()),
+    )?;
+    build_runtime_signals_with_correlation(conn, case_id, correlation)
+}
+
+fn build_runtime_signals_with_correlation(
+    conn: &Connection,
+    case_id: &str,
+    correlation: CorrelationRuntimeSnapshot,
 ) -> Result<GovernanceRuntimeSignalsDto, GovernanceError> {
     let data_sources =
         DataSourceRepo::new(conn).find_by_case(&domain::CaseId(case_id.to_string()))?;
@@ -51,7 +74,6 @@ pub(crate) fn build_runtime_signals(
     let running_job_count = jobs.iter().filter(|job| job.status == "running").count() as u32;
     let partial_job_count = jobs.iter().filter(|job| job.partial).count() as u32;
     let failed_job_count = jobs.iter().filter(|job| job.status == "failed").count() as u32;
-    let correlation = correlation_runtime_snapshot(conn)?;
 
     Ok(GovernanceRuntimeSignalsDto {
         data_source_count: data_sources.len() as u32,
@@ -79,6 +101,72 @@ pub(crate) fn correlation_runtime_snapshot(
 ) -> Result<CorrelationRuntimeSnapshot, GovernanceError> {
     let snapshot = crate::correlation::get_correlation_snapshot(conn)
         .map_err(|e| GovernanceError::Internal(e.to_string()))?;
+    let high_confidence_lead_count = snapshot
+        .leads
+        .iter()
+        .filter(|lead| {
+            matches!(
+                lead.confidence,
+                transport::dto::CorrelationConfidenceDto::Direct
+                    | transport::dto::CorrelationConfidenceDto::Strong
+            )
+        })
+        .count() as u32;
+    let review_lead_count = snapshot
+        .leads
+        .iter()
+        .filter(|lead| {
+            !lead.caveats.is_empty()
+                || matches!(
+                    lead.confidence,
+                    transport::dto::CorrelationConfidenceDto::Weak
+                        | transport::dto::CorrelationConfidenceDto::Heuristic
+                )
+                || lead.provenance.iter().any(|item| {
+                    matches!(
+                        item.guarantee_level,
+                        VerificationGuaranteeLevelDto::Experimental
+                            | VerificationGuaranteeLevelDto::NotGuaranteed
+                    )
+                })
+        })
+        .count() as u32;
+    let family_coverage = snapshot.family_coverage.clone();
+    let covered_family_count = family_coverage
+        .iter()
+        .filter(|item| item.status == CorrelationCoverageStatusDto::Covered)
+        .count() as u32;
+    let high_confidence_family_count = family_coverage
+        .iter()
+        .filter(|item| item.high_confidence_lead_count > 0)
+        .count() as u32;
+
+    Ok(CorrelationRuntimeSnapshot {
+        snapshot_available: true,
+        lead_count: snapshot.lead_count,
+        high_confidence_lead_count,
+        review_lead_count,
+        cluster_count: snapshot.cluster_count,
+        rule_family_count: family_coverage.len() as u32,
+        covered_family_count,
+        high_confidence_family_count,
+        family_coverage,
+    })
+}
+
+pub(crate) fn correlation_runtime_snapshot_for_case(
+    conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+) -> Result<CorrelationRuntimeSnapshot, GovernanceError> {
+    let snapshot = crate::correlation::get_correlation_snapshot_for_case(conn, case_root, case_id)
+        .map_err(|e| GovernanceError::Internal(e.to_string()))?;
+    correlation_runtime_from_snapshot(snapshot)
+}
+
+fn correlation_runtime_from_snapshot(
+    snapshot: transport::dto::CorrelationSnapshotDto,
+) -> Result<CorrelationRuntimeSnapshot, GovernanceError> {
     let high_confidence_lead_count = snapshot
         .leads
         .iter()

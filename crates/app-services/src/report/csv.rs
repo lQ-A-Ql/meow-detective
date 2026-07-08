@@ -1,6 +1,7 @@
 use super::{
-    correlation_confidence_str, current_analysis, current_correlation, current_governance, html,
-    persist_report_record, prepare_report_output, write_report_atomically, ReportError,
+    correlation_confidence_str, current_analysis, current_analysis_for_case, current_correlation,
+    current_correlation_for_case, current_governance, html, persist_report_record,
+    prepare_report_output, write_report_atomically, ReportError,
 };
 use reports::CsvExporter;
 use rusqlite::Connection;
@@ -105,6 +106,105 @@ pub fn generate_csv_artifacts(
     Ok(file_name)
 }
 
+pub fn generate_csv_artifacts_for_case(
+    conn: &Connection,
+    case: &domain::CaseMeta,
+    case_root: &Path,
+    output_dir: &Path,
+    scope: &ExportScopeDto,
+) -> Result<String, ReportError> {
+    let artifacts =
+        crate::artifact_service::get_artifact_rows_for_case(conn, case_root, &case.id, None)
+            .map_err(|e| ReportError::Other(e.to_string()))?;
+    let mut rows_data: Vec<Vec<String>> = artifacts
+        .into_iter()
+        .map(|artifact| {
+            vec![
+                artifact.artifact_type,
+                artifact.title,
+                artifact.summary,
+                artifact.extractor_id.unwrap_or_default(),
+                artifact.extractor_version.unwrap_or_default(),
+                artifact
+                    .confidence
+                    .map(|value| value.to_string())
+                    .unwrap_or_default(),
+                artifact.source_attribution.unwrap_or_default(),
+            ]
+        })
+        .collect();
+    let analysis = current_analysis_for_case(conn, case_root, &case.id)?;
+    let governance = current_governance(conn, &case.id.0)?;
+    let correlation = current_correlation_for_case(conn, case_root, &case.id)?;
+    rows_data.extend(
+        html::report_analysis_rows(conn, &case.id.0, &analysis, scope)
+            .into_iter()
+            .map(|row| {
+                vec![
+                    "analysis".to_string(),
+                    "provenance".to_string(),
+                    row,
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                ]
+            }),
+    );
+    rows_data.extend(
+        html::report_governance_rows(&governance, scope)
+            .into_iter()
+            .map(|row| {
+                vec![
+                    "governance".to_string(),
+                    "snapshot".to_string(),
+                    row,
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                ]
+            }),
+    );
+    rows_data.extend(
+        html::report_correlation_rows(&correlation, scope)
+            .into_iter()
+            .map(|row| {
+                vec![
+                    "correlation".to_string(),
+                    "lead".to_string(),
+                    row,
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                ]
+            }),
+    );
+
+    let file_name = format!("artifacts-{}.csv", Uuid::new_v4());
+    let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
+    write_report_atomically(&path, scope.overwrite, |file| {
+        CsvExporter::export_artifacts(
+            file,
+            &[
+                "type",
+                "title",
+                "summary",
+                "extractorId",
+                "extractorVersion",
+                "confidence",
+                "sourceAttribution",
+            ],
+            &rows_data,
+        )
+        .map_err(|e| ReportError::Other(e.to_string()))
+    })?;
+
+    persist_report_record(conn, &case.id.0, "report-files", &file_name, "completed")?;
+    Ok(file_name)
+}
+
 pub fn generate_csv_correlation(
     conn: &Connection,
     case_id: &str,
@@ -112,6 +212,70 @@ pub fn generate_csv_correlation(
     scope: &ExportScopeDto,
 ) -> Result<String, ReportError> {
     let correlation = current_correlation(conn)?;
+
+    let rows: Vec<Vec<String>> = correlation
+        .snapshot
+        .leads
+        .iter()
+        .map(|lead| {
+            let families = lead.families.join("; ");
+            let provenance_sources = lead
+                .provenance
+                .iter()
+                .map(|item| {
+                    format!(
+                        "{}:{}:{}",
+                        item.source_kind, item.source_record_id, item.source_label
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("; ");
+            let caveats = lead.caveats.join("; ");
+
+            vec![
+                lead.id.clone(),
+                lead.title.clone(),
+                correlation_confidence_str(&lead.confidence).to_string(),
+                families,
+                lead.primary_file_id.clone(),
+                lead.supporting_node_ids.len().to_string(),
+                lead.match_signals.len().to_string(),
+                provenance_sources,
+                caveats,
+            ]
+        })
+        .collect();
+
+    let file_name = format!("correlation-{}.csv", Uuid::new_v4());
+    let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
+    write_report_atomically(&path, scope.overwrite, |file| {
+        CsvExporter::export_correlation_leads(file, &rows)
+            .map_err(|e| ReportError::Other(e.to_string()))
+    })?;
+
+    persist_report_record(conn, case_id, "report-correlation", &file_name, "completed")?;
+    Ok(file_name)
+}
+
+pub fn generate_csv_correlation_for_case(
+    conn: &Connection,
+    case: &domain::CaseMeta,
+    case_root: &Path,
+    output_dir: &Path,
+    scope: &ExportScopeDto,
+) -> Result<String, ReportError> {
+    let correlation = current_correlation_for_case(conn, case_root, &case.id)?;
+    write_correlation_csv(conn, &case.id.0, output_dir, scope, &correlation)
+}
+
+fn write_correlation_csv(
+    conn: &Connection,
+    case_id: &str,
+    output_dir: &Path,
+    scope: &ExportScopeDto,
+    correlation: &super::ReportCorrelation,
+) -> Result<String, ReportError> {
+    let _ = scope;
 
     let rows: Vec<Vec<String>> = correlation
         .snapshot

@@ -3,9 +3,10 @@ use domain::{
     CaseId, DataSource, DataSourceHashStatus, DataSourceId, DataSourceKind, DataSourceProvenance,
     DataSourceProvenanceStatus,
 };
-use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
+use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use std::io::Read;
 use std::path::Path;
+use transport::commands::ImportTargetPlatformDto;
 
 pub fn attach_data_source(
     conn: &rusqlite::Connection,
@@ -13,6 +14,18 @@ pub fn attach_data_source(
     name: &str,
     source_path: &Path,
     kind: DataSourceKind,
+) -> Result<DataSource> {
+    attach_data_source_with_storage(conn, case_id, name, source_path, kind, None, None)
+}
+
+pub fn attach_data_source_with_storage(
+    conn: &rusqlite::Connection,
+    case_id: &CaseId,
+    name: &str,
+    source_path: &Path,
+    kind: DataSourceKind,
+    platform: Option<ImportTargetPlatformDto>,
+    profile: Option<String>,
 ) -> Result<DataSource> {
     let id = DataSourceId(uuid::Uuid::new_v4().to_string());
     let provenance = build_attach_provenance(source_path, &kind);
@@ -25,7 +38,9 @@ pub fn attach_data_source(
         provenance,
     };
 
-    DataSourceRepo::new(conn).insert(case_id, &ds)?;
+    let storage =
+        DataSourceStorage::source_db(&ds.id.0, platform.map(platform_label).as_deref(), profile);
+    DataSourceRepo::new(conn).insert_with_storage(case_id, &ds, &storage)?;
     Ok(ds)
 }
 
@@ -94,6 +109,15 @@ fn build_attach_provenance(source_path: &Path, kind: &DataSourceKind) -> DataSou
         reader_kind: Some(kind.to_string()),
         provenance_status,
         warnings,
+    }
+}
+
+fn platform_label(platform: ImportTargetPlatformDto) -> &'static str {
+    match platform {
+        ImportTargetPlatformDto::Windows => "windows",
+        ImportTargetPlatformDto::Linux => "linux",
+        ImportTargetPlatformDto::Macos => "macos",
+        ImportTargetPlatformDto::Unknown => "unknown",
     }
 }
 

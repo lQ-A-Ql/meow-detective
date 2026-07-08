@@ -13,13 +13,17 @@ mod mft;
 mod partition_roots;
 mod preview;
 mod sort;
+mod source_routing;
 mod tree_queries;
 mod viewer;
 mod visibility;
 
 pub use error::FileServiceError;
 
-pub use data_sources::{get_data_sources_real, get_recent_objects_real, rename_data_source_real};
+pub use data_sources::{
+    get_data_sources_real, get_recent_objects_for_case, get_recent_objects_real,
+    rename_data_source_real,
+};
 pub use enumeration::{
     enumerate_filesystem, enumerate_filesystem_with_root_name,
     enumerate_filesystem_with_root_name_and_cancel, EnumerationStats,
@@ -34,6 +38,13 @@ pub use partition_roots::{
 pub use preview::{
     image_preview_for_file, media_preview_plan_for_file, media_range_for_file,
     read_preview_bytes_for_file, text_preview_for_file, MediaPreviewPlan,
+};
+pub use source_routing::{
+    extract_file_to_destination_for_case, get_data_sources_for_case, get_file_children_for_case,
+    get_file_jump_context_for_case, get_file_rows_for_case, get_file_tree_for_case,
+    image_preview_for_source_case, media_preview_plan_for_source_case, media_range_for_source_case,
+    open_file_handle_for_case, read_file_range_for_source_case, read_preview_bytes_for_source_case,
+    text_preview_for_source_case,
 };
 pub use tree_queries::{
     get_file_children_lazy, get_file_children_lazy_with_visibility, get_file_tree_real,

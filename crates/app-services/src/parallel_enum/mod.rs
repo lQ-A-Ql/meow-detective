@@ -276,8 +276,8 @@ mod tests {
 
     #[test]
     fn test_resolve_worker_count() {
-        assert_eq!(resolve_worker_count(None), default_worker_count());
-        assert_eq!(resolve_worker_count(Some(0)), default_worker_count());
+        assert_eq!(resolve_worker_count(None), 1);
+        assert_eq!(resolve_worker_count(Some(0)), 1);
         assert_eq!(resolve_worker_count(Some(2)), 2.min(default_worker_count()));
         assert_eq!(resolve_worker_count(Some(999)), default_worker_count());
     }

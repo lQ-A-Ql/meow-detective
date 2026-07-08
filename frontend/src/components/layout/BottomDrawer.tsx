@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Terminal, AlertCircle, ChevronUp, ChevronDown, Clock3 } from 'lucide-react';
+import { Button } from '@/app/components/ui/button';
 import { useResizableHeight } from '@/hooks/use-resizable-height';
 import {
   deriveEvidenceHashStatus,
@@ -89,14 +90,16 @@ export function BottomDrawer() {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-4">
-          <button
+          <Button
             type="button"
+            variant="forensicsSurface"
+            size="compact"
             onClick={toggleDrawer}
-            className="flex items-center gap-1 rounded border border-forensics-border bg-forensics-surface px-2 py-0.5 text-[11px] text-forensics-text hover:bg-forensics-hover"
+            className="gap-1"
           >
             <span>{drawerOpen ? t('bottomDrawer.toggle.collapse') : t('bottomDrawer.toggle.expand')}</span>
             {drawerOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-          </button>
+          </Button>
           <div className="hidden xl:flex border-l border-forensics-border pl-4">
             {t('bottomDrawer.status.recent')} <span className="text-forensics-text">{runningJobs[0]?.scope || warningJobs[0]?.scope || cancellingJobs[0]?.scope || failedJobs[0]?.scope || completedJobs[0]?.scope || t('bottomDrawer.status.idle')}</span>
           </div>

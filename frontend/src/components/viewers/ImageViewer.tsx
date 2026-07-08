@@ -18,6 +18,7 @@ import {
   Download,
   Image,
 } from 'lucide-react';
+import { Button } from '@/app/components/ui/button';
 
 interface ImageViewerProps {
   /** 图片 URL (data: URL 或 blob: URL) */
@@ -156,52 +157,67 @@ export function ImageViewer({ src, mimeType, fileName }: ImageViewerProps) {
         <Image size={12} className="text-[#666]" />
 
         {/* 缩放控制 */}
-        <button
+        <Button
+          type="button"
+          variant="viewerControl"
+          size="iconSm"
           onClick={() => setScale((s) => Math.min(10, s * 1.2))}
-          className="p-1 hover:bg-[#e0e0e0] rounded"
           title="放大"
+          aria-label="放大"
         >
           <ZoomIn size={14} />
-        </button>
+        </Button>
         <span className="min-w-[3.5rem] text-center font-mono text-[#666]">
           {Math.round(scale * 100)}%
         </span>
-        <button
+        <Button
+          type="button"
+          variant="viewerControl"
+          size="iconSm"
           onClick={() => setScale((s) => Math.max(0.1, s * 0.8))}
-          className="p-1 hover:bg-[#e0e0e0] rounded"
           title="缩小"
+          aria-label="缩小"
         >
           <ZoomOut size={14} />
-        </button>
+        </Button>
 
         <div className="w-px h-4 bg-[#ddd]" />
 
         {/* 旋转 */}
-        <button
+        <Button
+          type="button"
+          variant="viewerControl"
+          size="iconSm"
           onClick={() => setRotation((r) => (r + 90) % 360)}
-          className="p-1 hover:bg-[#e0e0e0] rounded"
           title="旋转"
+          aria-label="旋转"
         >
           <RotateCw size={14} />
-        </button>
+        </Button>
 
         {/* 适应窗口 */}
-        <button
+        <Button
+          type="button"
+          variant="viewerControl"
+          size="iconSm"
           onClick={fitToWindow}
-          className="p-1 hover:bg-[#e0e0e0] rounded"
           title="适应窗口"
+          aria-label="适应窗口"
         >
           <Maximize size={14} />
-        </button>
+        </Button>
 
         {/* 重置 */}
-        <button
+        <Button
+          type="button"
+          variant="viewerControl"
+          size="xs"
           onClick={resetView}
-          className="px-2 py-0.5 hover:bg-[#e0e0e0] rounded text-[10px]"
+          className="h-6 text-[10px]"
           title="重置视图"
         >
           重置
-        </button>
+        </Button>
 
         <div className="flex-1" />
 

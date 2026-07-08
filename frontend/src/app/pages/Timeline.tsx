@@ -1,6 +1,14 @@
 import { Clock, ZoomIn, ZoomOut, ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { Button } from '@/app/components/ui/button';
+import { Input } from '@/app/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/app/components/ui/select';
 import { PageSubbar } from '@/components/layout/PageSubbar';
 import { DenseDataTable } from '@/components/tables/DenseDataTable';
 import {
@@ -9,7 +17,7 @@ import {
   InspectorValue,
 } from '@/components/layout/InspectorPane';
 import { useTimelineEventById, useTimelineEvents } from '@/features/timeline/hooks';
-import { useSelectionStore } from '@/stores/selection-store';
+import { useTimelineSelectionModel } from '@/features/timeline/use-timeline-page-model';
 import { TimelineEvent } from '@/types/models';
 
 function buildTimelineBars(
@@ -60,7 +68,6 @@ const BUCKET_STEP = 20;
 const DEFAULT_BUCKET_COUNT = 60;
 
 export function Timeline() {
-  const navigate = useNavigate();
   const [draftTimeStart, setDraftTimeStart] = useState('');
   const [draftTimeEnd, setDraftTimeEnd] = useState('');
   const [timeStart, setTimeStart] = useState('');
@@ -78,14 +85,12 @@ export function Timeline() {
     eventType: eventType || undefined,
   });
   const events = timelineData?.items ?? [];
-  const selectedTimelineId = useSelectionStore((state) => state.selectedTimelineId);
-  const setSelectedTimelineId = useSelectionStore((state) => state.setSelectedTimelineId);
-  const setSelectedFileId = useSelectionStore((state) => state.setSelectedFileId);
-  const setSelectedArtifactId = useSelectionStore((state) => state.setSelectedArtifactId);
-  const eventLookupId =
-    selectedTimelineId && !selectedTimelineId.startsWith('artifact:')
-      ? selectedTimelineId
-      : undefined;
+  const {
+    eventLookupId,
+    jumpToSource,
+    selectedTimelineId,
+    setSelectedTimelineId,
+  } = useTimelineSelectionModel();
   const selectedTimelineEvent = useTimelineEventById(eventLookupId);
 
   const selectedEvent =
@@ -137,18 +142,6 @@ export function Timeline() {
     return { start: formatTs(min.toISOString()), end: formatTs(max.toISOString()) };
   }, [events]);
 
-  function jumpToSource() {
-    if (!selectedEvent) return;
-    const sourceId = selectedEvent.sourceObjectId;
-    if (sourceId.startsWith('artifact:')) {
-      setSelectedArtifactId(sourceId.replace(/^artifact:/, ''));
-      navigate('/artifacts');
-      return;
-    }
-    setSelectedFileId(sourceId);
-    navigate('/files');
-  }
-
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col bg-white">
       <PageSubbar title="时间线控制带" meta={`事件 ${events.length} 条 / 数据源 ${sourceCount} 个`}>
@@ -170,54 +163,61 @@ export function Timeline() {
             <div className="h-4 border-l border-forensics-border" />
             <label className="flex items-center gap-1.5 text-[11px] text-forensics-muted-light">
               起始
-              <input
+              <Input
                 type="datetime-local"
                 value={draftTimeStart}
                 onChange={(event) => setDraftTimeStart(event.target.value)}
-                className={`border bg-white px-1.5 py-0.5 font-mono text-forensics-text ${
-                  isValidDateInput(draftTimeStart) ? 'border-forensics-border-strong' : 'border-red-500'
-                }`}
+                variant="mono"
+                inputSize="inline"
+                className={isValidDateInput(draftTimeStart) ? '' : 'border-red-500'}
               />
             </label>
             <label className="flex items-center gap-1.5 text-[11px] text-forensics-muted-light">
               结束
-              <input
+              <Input
                 type="datetime-local"
                 value={draftTimeEnd}
                 onChange={(event) => setDraftTimeEnd(event.target.value)}
-                className={`border bg-white px-1.5 py-0.5 font-mono text-forensics-text ${
-                  isValidDateInput(draftTimeEnd) ? 'border-forensics-border-strong' : 'border-red-500'
-                }`}
+                variant="mono"
+                inputSize="inline"
+                className={isValidDateInput(draftTimeEnd) ? '' : 'border-red-500'}
               />
             </label>
             {!draftDatesValid ? (
               <span className="text-[11px] text-red-600">日期无效</span>
             ) : null}
-            <button
+            <Button
               type="button"
+              variant="forensicsOutline"
+              size="compact"
               onClick={applyDateRange}
               disabled={!draftDatesValid}
-              className="border border-forensics-border-strong bg-white px-2 py-0.5 text-[11px] text-forensics-muted hover:bg-forensics-hover hover:text-forensics-text disabled:cursor-not-allowed disabled:opacity-50"
             >
               应用
-            </button>
+            </Button>
             <label className="flex items-center gap-1.5 text-[11px] text-forensics-muted-light">
               类型
-              <select
+              <Select
                 value={eventType}
-                onChange={(event) => setEventType(event.target.value)}
-                className="border border-forensics-border-strong bg-white px-1.5 py-0.5 text-forensics-text"
+                onValueChange={(value) => setEventType(value === '__all__' ? '' : value)}
               >
-                <option value="">全部</option>
+                <SelectTrigger variant="forensics" size="xs" className="w-28">
+                  <SelectValue placeholder="全部" />
+                </SelectTrigger>
+                <SelectContent>
+                <SelectItem value="__all__">全部</SelectItem>
                 {eventTypes.map((type) => (
-                  <option key={type} value={type}>
+                  <SelectItem key={type} value={type}>
                     {type}
-                  </option>
+                  </SelectItem>
                 ))}
-              </select>
+                </SelectContent>
+              </Select>
             </label>
-            <button
+            <Button
               type="button"
+              variant="forensicsOutline"
+              size="compact"
               onClick={() => {
                 setDraftTimeStart('');
                 setDraftTimeEnd('');
@@ -225,30 +225,31 @@ export function Timeline() {
                 setTimeEnd('');
                 setEventType('');
               }}
-              className="border border-forensics-border-strong bg-white px-2 py-0.5 text-[11px] text-forensics-muted hover:bg-forensics-hover hover:text-forensics-text"
             >
               清除
-            </button>
+            </Button>
           </div>
           <div className="flex items-center gap-2">
-            <button
+            <Button
               type="button"
+              variant="forensicsGhost"
+              size="iconSm"
               onClick={zoomOut}
               disabled={bucketCount <= MIN_BUCKET_COUNT}
               aria-label="缩小"
-              className="rounded p-1 text-forensics-muted hover:bg-forensics-hover hover:text-forensics-text disabled:cursor-not-allowed disabled:opacity-40"
             >
               <ZoomOut size={14} />
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="forensicsGhost"
+              size="iconSm"
               onClick={zoomIn}
               disabled={bucketCount >= MAX_BUCKET_COUNT}
               aria-label="放大"
-              className="rounded p-1 text-forensics-muted hover:bg-forensics-hover hover:text-forensics-text disabled:cursor-not-allowed disabled:opacity-40"
             >
               <ZoomIn size={14} />
-            </button>
+            </Button>
           </div>
         </div>
       </PageSubbar>
@@ -343,15 +344,17 @@ export function Timeline() {
             </InspectorSection>
 
             <InspectorSection title="关联动作">
-              <button
+              <Button
                 type="button"
-                onClick={jumpToSource}
+                variant="forensicsSurface"
+                size="xs"
+                onClick={() => jumpToSource(selectedEvent)}
                 disabled={!selectedEvent}
-                className="flex w-full cursor-pointer items-center justify-between border border-forensics-border-strong bg-white p-2 font-mono text-[11px] text-forensics-text-tertiary transition-colors hover:bg-forensics-hover disabled:opacity-50"
+                className="w-full justify-between font-mono text-forensics-text-tertiary"
               >
                 <span className="font-medium">跳转到来源对象</span>
                 <ChevronRight size={12} className="text-forensics-muted-light" />
-              </button>
+              </Button>
             </InspectorSection>
           </div>
         </InspectorPane>

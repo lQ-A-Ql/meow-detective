@@ -5,7 +5,7 @@ use transport::{
     CommandError,
 };
 
-use super::command_support::{get_case_connection, snapshot_active_case};
+use super::command_support::{get_case_connection, require_active_case, snapshot_active_case};
 use crate::state::AppState;
 
 /// Get list of artifact families in the current case.
@@ -18,9 +18,14 @@ pub async fn get_artifact_families(
         if snapshot_active_case(&app_state)?.is_none() {
             return Ok(vec![]);
         }
+        let active = require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
-        app_services::artifact_service::get_artifact_families_from_db(&conn)
-            .map_err(CommandError::from_typed_service_error)
+        app_services::artifact_service::get_artifact_families_for_case(
+            &conn,
+            &active.case_root,
+            &active.meta.id,
+        )
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -46,9 +51,15 @@ pub async fn get_artifact_rows_request(
         if snapshot_active_case(&app_state)?.is_none() {
             return Ok(vec![]);
         }
+        let active = require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
-        app_services::artifact_service::get_artifact_rows_from_db(&conn, request.family.as_deref())
-            .map_err(CommandError::from_typed_service_error)
+        app_services::artifact_service::get_artifact_rows_for_case(
+            &conn,
+            &active.case_root,
+            &active.meta.id,
+            request.family.as_deref(),
+        )
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -64,9 +75,14 @@ pub async fn get_artifact_family_counts(
         if snapshot_active_case(&app_state)?.is_none() {
             return Ok(vec![]);
         }
+        let active = require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
-        app_services::artifact_service::get_artifact_family_counts(&conn)
-            .map_err(CommandError::from_typed_service_error)
+        app_services::artifact_service::get_artifact_family_counts_for_case(
+            &conn,
+            &active.case_root,
+            &active.meta.id,
+        )
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -84,10 +100,16 @@ pub async fn get_artifact_by_id(
         if snapshot_active_case(&app_state)?.is_none() {
             return Err(CommandError::no_active_case());
         }
+        let active = require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
-        app_services::artifact_service::get_artifact_row_by_id(&conn, &request.artifact_id)
-            .map_err(CommandError::from_typed_service_error)?
-            .ok_or_else(|| CommandError::not_found("Artifact"))
+        app_services::artifact_service::get_artifact_row_by_id_for_case(
+            &conn,
+            &active.case_root,
+            &active.meta.id,
+            &request.artifact_id,
+        )
+        .map_err(CommandError::from_typed_service_error)?
+        .ok_or_else(|| CommandError::not_found("Artifact"))
     })
     .await
     .map_err(CommandError::from_join_error)?

@@ -9,6 +9,8 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Search, X } from 'lucide-react';
+import { Button } from '@/app/components/ui/button';
+import { Input } from '@/app/components/ui/input';
 
 interface TreeSearchProps {
   /** 过滤回调 */
@@ -47,22 +49,27 @@ export function TreeSearch({
           size={12}
           className="absolute left-2 top-1/2 -translate-y-1/2 text-[#999]"
         />
-        <input
+        <Input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={placeholder}
-          className="w-full pl-7 pr-6 py-1 text-[11px] border border-[#ddd] rounded bg-white 
-                     focus:outline-none focus:border-[#999] placeholder:text-[#bbb] font-mono"
+          variant="mono"
+          inputSize="compact"
+          className="pl-7 pr-6"
         />
         {query && (
-          <button
+          <Button
+            type="button"
+            variant="viewerControl"
+            size="iconXs"
             onClick={handleClear}
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 hover:bg-[#f0f0f0] rounded"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[#999]"
             title="清除"
+            aria-label="清除"
           >
             <X size={10} className="text-[#999]" />
-          </button>
+          </Button>
         )}
       </div>
     </div>

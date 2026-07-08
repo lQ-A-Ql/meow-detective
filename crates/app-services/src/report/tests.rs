@@ -250,8 +250,7 @@ fn html_report_escapes_analysis_provenance() {
     );
 
     let file_name =
-        generate_html_report_for_case(&conn, &case, tmp.path(), &ExportScopeDto::default())
-            .unwrap();
+        generate_html_report(&conn, &case, tmp.path(), &ExportScopeDto::default()).unwrap();
     let html = std::fs::read_to_string(tmp.path().join(file_name)).unwrap();
 
     assert!(html.contains("Analysis Provenance"));

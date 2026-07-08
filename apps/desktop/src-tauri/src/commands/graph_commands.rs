@@ -19,8 +19,12 @@ pub async fn get_graph_snapshot(
     tauri::async_runtime::spawn_blocking(move || {
         let snapshot = require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
-        app_services::graph_service::get_graph_snapshot(&conn, &snapshot.case_id)
-            .map_err(CommandError::from_typed_service_error)
+        app_services::graph_service::get_graph_snapshot_for_case(
+            &conn,
+            &snapshot.case_root,
+            &snapshot.case_id,
+        )
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -33,10 +37,15 @@ pub async fn query_graph(
 ) -> Result<GraphQueryResultDto, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        require_active_case(&app_state)?;
+        let snapshot = require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
-        app_services::graph_service::query_graph(&conn, query)
-            .map_err(CommandError::from_typed_service_error)
+        app_services::graph_service::query_graph_for_case(
+            &conn,
+            &snapshot.case_root,
+            &snapshot.case_id,
+            query,
+        )
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -51,8 +60,13 @@ pub async fn list_graph_nodes(
     tauri::async_runtime::spawn_blocking(move || {
         let snapshot = require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
-        app_services::graph_service::list_graph_nodes(&conn, &snapshot.case_id, request)
-            .map_err(CommandError::from_typed_service_error)
+        app_services::graph_service::list_graph_nodes_for_case(
+            &conn,
+            &snapshot.case_root,
+            &snapshot.case_id,
+            request,
+        )
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -65,10 +79,16 @@ pub async fn get_node_neighborhood(
 ) -> Result<GraphQueryResultDto, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        require_active_case(&app_state)?;
+        let snapshot = require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
-        app_services::graph_service::get_node_neighborhood(&conn, &request.node_id, request.depth)
-            .map_err(CommandError::from_typed_service_error)
+        app_services::graph_service::get_node_neighborhood_for_case(
+            &conn,
+            &snapshot.case_root,
+            &snapshot.case_id,
+            &request.node_id,
+            request.depth,
+        )
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -81,10 +101,15 @@ pub async fn get_provenance_chain(
 ) -> Result<Vec<GraphProvenanceEntryDto>, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        require_active_case(&app_state)?;
+        let snapshot = require_active_case(&app_state)?;
         let conn = get_case_connection(&app_state)?;
-        app_services::graph_service::get_provenance_chain(&conn, &request.edge_id)
-            .map_err(CommandError::from_typed_service_error)
+        app_services::graph_service::get_provenance_chain_for_case(
+            &conn,
+            &snapshot.case_root,
+            &snapshot.case_id,
+            &request.edge_id,
+        )
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?

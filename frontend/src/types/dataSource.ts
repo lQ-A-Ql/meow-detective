@@ -5,6 +5,15 @@ export interface DataSourceSummary {
   sourcePath: string;
   importedAt: string;
   fileCount?: number;
+  storageModel?: string;
+  sourceDbRelPath?: string;
+  indexRelPath?: string;
+  stagingRelPath?: string;
+  platform?: 'windows' | 'linux' | 'macos' | 'unknown' | string;
+  profile?: string;
+  importState?: 'pending' | 'importing' | 'ready' | 'failed' | string;
+  schemaVersion?: string;
+  lastError?: string;
   sourceHash?: string;
   hashStatus?: string;
   canonicalPath?: string;

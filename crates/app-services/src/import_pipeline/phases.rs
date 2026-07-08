@@ -51,12 +51,14 @@ pub(crate) fn run_attach_phase(
     ctx.report_job_progress(10, &format!("Attaching data source {source_name}"))?;
 
     let telemetry = PhaseTelemetry::new();
-    let ds = datasource_service::attach_data_source(
+    let ds = datasource_service::attach_data_source_with_storage(
         ctx.conn,
         ctx.case_id,
         &source_name,
         &path,
         kind.clone(),
+        ctx.import_config.platform,
+        ctx.import_config.profile.clone(),
     )
     .map_err(CommandError::from_service_error)?;
 
@@ -93,7 +95,10 @@ pub(crate) fn run_enumeration_phase(
         }
     };
 
-    if let Err(e) = file_service::populate_file_graph_for_data_source(ctx.conn, &ds.id) {
+    let source_conn = ctx
+        .source_conn
+        .ok_or_else(|| CommandError::internal("source DB connection is not initialized"))?;
+    if let Err(e) = file_service::populate_file_graph_for_data_source(source_conn, &ds.id) {
         let warning = format!("Graph population warning: {}", e);
         tracing::warn!(%warning, "Failed to populate file graph after enumeration");
         stats.warnings.push(warning);
@@ -151,8 +156,11 @@ fn enumerate_logical_directory(
 ) -> Result<file_service::EnumerationStats, persistence_sqlite::DbError> {
     let path = &ctx.import_config.source_path;
     let fs = LogicalFsReader::open(path, &ds.name)?;
+    let source_conn = ctx.source_conn.ok_or_else(|| {
+        persistence_sqlite::DbError::System("source DB connection is not initialized".to_string())
+    })?;
     file_service::enumerate_filesystem_with_root_name_and_cancel(
-        ctx.conn,
+        source_conn,
         &ds.id,
         &fs,
         None,
@@ -320,7 +328,11 @@ fn probe_and_seed_manifest(
     );
 
     // Store partition records in main DB.
-    file_service::store_data_source_partitions(ctx.conn, &ds.id, &probe.partitions)
+    let source_conn = ctx
+        .source_conn
+        .ok_or_else(|| CommandError::internal("source DB connection is not initialized"))?;
+
+    file_service::store_data_source_partitions(source_conn, &ds.id, &probe.partitions)
         .map_err(CommandError::from_service_error)?;
 
     let candidate_index_map =
@@ -352,7 +364,7 @@ fn probe_and_seed_manifest(
             .cloned()
             .unwrap_or_else(|| format_partition_record_root_name(partition));
         file_service::insert_partition_placeholder_root(
-            ctx.conn,
+            source_conn,
             &ds.id,
             partition.index,
             &root_name,
@@ -466,12 +478,16 @@ fn repair_resumed_partition_metadata(
     ds: &domain::DataSource,
     probe: &datasource_service::ImageFilesystemProbe,
 ) -> Result<(), CommandError> {
-    file_service::store_data_source_partitions(ctx.conn, &ds.id, &probe.partitions)
+    let source_conn = ctx
+        .source_conn
+        .ok_or_else(|| CommandError::internal("source DB connection is not initialized"))?;
+
+    file_service::store_data_source_partitions(source_conn, &ds.id, &probe.partitions)
         .map_err(CommandError::from_service_error)?;
 
     for partition in &probe.partitions {
         if partition.status == datasource_service::PartitionStatus::Expanded {
-            file_service::remove_partition_placeholder_root(ctx.conn, &ds.id, partition.index)
+            file_service::remove_partition_placeholder_root(source_conn, &ds.id, partition.index)
                 .map_err(CommandError::from_service_error)?;
         }
     }
@@ -730,8 +746,11 @@ fn merge_enumeration_results(
         .map_err(CommandError::from_service_error)?;
 
     let enum_merge_started = Instant::now();
+    let source_conn = ctx
+        .source_conn
+        .ok_or_else(|| CommandError::internal("source DB connection is not initialized"))?;
     let merged = staging::merge_all_staging_to_main(
-        ctx.conn,
+        source_conn,
         case_root,
         &ds.id.0,
         manifest,
@@ -812,8 +831,8 @@ pub(crate) fn run_post_import_phase(
 ) -> Result<String, CommandError> {
     ctx.report_job_progress(70, "Running post-import pipeline...")?;
 
-    let post_import_db_path = ctx.case_root.join("app.db");
-    let index_dir = ctx.case_root.join("indexes").join("tantivy");
+    let post_import_db_path = crate::source_db::source_db_path(ctx.case_root, &ds.id);
+    let index_dir = crate::source_db::source_index_dir(ctx.case_root, &ds.id);
     let image_backed_source = ctx.import_config.is_image_backed();
     let analysis_mode = if image_backed_source {
         ctx.options.analysis_mode
@@ -957,7 +976,7 @@ pub(crate) fn run_finalize_phase(
 
     ctx.report_job_progress(95, "Finalizing...")?;
 
-    match file_service::get_data_sources_real(ctx.conn, ctx.case_id)
+    match file_service::get_data_sources_for_case(ctx.conn, ctx.case_root, ctx.case_id)
         .map_err(CommandError::from_service_error)?
         .into_iter()
         .find(|source| source.id == ds.id.0)
@@ -1001,6 +1020,16 @@ pub(crate) fn run_finalize_phase(
     }
 
     let import_duration_ms = import_started.elapsed().as_millis() as u32;
+    if let Some(source_conn) = ctx.source_conn {
+        if let Err(error) = crate::source_db::checkpoint_source_db(source_conn) {
+            tracing::warn!(
+                data_source_id = %ds.id.0,
+                error = %error,
+                "Failed to checkpoint source DB after import"
+            );
+        }
+    }
+
     let params_json = serde_json::json!({
         "sourcePath": ctx.source_path,
         "sourceName": source_name,

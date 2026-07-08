@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isApiErrorDto } from '@/lib/api/client';
+import { isApiErrorDto } from '@/lib/errors';
 
 describe('isApiErrorDto', () => {
   it('returns true for valid ApiErrorDto', () => {

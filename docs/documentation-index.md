@@ -37,6 +37,7 @@
 | MCP 使用说明 | `docs/mcp-user-guide.md` | 面向使用者的 MCP 配置与权限说明 |
 | 外部实现对比（性能） | `docs/trace-ui-comparative-analysis.md` | 对比 `trace-ui` 与本项目在滚动、缓存、会话、数据访问层的实现差异与可借鉴点 |
 | 大文件浏览优化设计 | `docs/large-file-browsing-optimization-design.md` | 本项目 100MB+ 文件浏览与预览性能优化的目标架构、阶段方案、测试矩阵与验收标准 |
+| Frontend MVP boundary | `docs/frontend-mvp-boundary.md` | Page / Feature / Component / API / Platform / Store 边界、无 runtime mock、公共组件归属与守卫规则 |
 | CI | `ci.md` | CI 流程与检查步骤 |
 | 测试策略 | `test-plan.md` | 测试分层、fixture、回归与发布 gate |
 | V3 主计划 **(V3)** | `docs/v3-plan.md` | V3 五支柱：证据图、跨平台覆盖、可复现调查、规则包、离线批处理 |

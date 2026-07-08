@@ -1,7 +1,7 @@
 use super::{
-    current_analysis, current_correlation, current_governance, persist_report_record,
-    prepare_report_output, write_report_atomically, RawExportBundle, ReportCorrelation,
-    ReportError, ReportGovernance,
+    current_analysis, current_analysis_for_case, current_correlation, current_correlation_for_case,
+    current_governance, persist_report_record, prepare_report_output, write_report_atomically,
+    RawExportBundle, ReportCorrelation, ReportError, ReportGovernance,
 };
 use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
 use reports::JsonExporter;
@@ -113,6 +113,109 @@ pub fn generate_json_export(
     })?;
 
     persist_report_record(conn, case_id, "report-summary", &file_name, "completed")?;
+    Ok(file_name)
+}
+
+pub fn generate_json_export_for_case(
+    conn: &Connection,
+    case: &domain::CaseMeta,
+    case_root: &Path,
+    output_dir: &Path,
+    scope: &ExportScopeDto,
+) -> Result<String, ReportError> {
+    let events = if scope.full_timeline {
+        crate::timeline_service::query_timeline_for_case(conn, case_root, &case.id, 0, 500)
+            .map_err(|e| ReportError::Other(e.to_string()))?
+            .items
+    } else {
+        Vec::new()
+    };
+    let artifacts =
+        crate::artifact_service::get_artifact_rows_for_case(conn, case_root, &case.id, None)
+            .map_err(|e| ReportError::Other(e.to_string()))?;
+    let analysis = current_analysis_for_case(conn, case_root, &case.id)?;
+    let governance = current_governance(conn, &case.id.0)?;
+    let correlation = current_correlation_for_case(conn, case_root, &case.id)?;
+    let summary = crate::analysis_service::generate_analysis_summary(
+        &analysis.system_info,
+        &analysis.classifications,
+    );
+    let system_info = if scope.registry {
+        Some(&analysis.system_info)
+    } else {
+        None
+    };
+    let classifications = if scope.file_system_metadata {
+        analysis.classifications.as_slice()
+    } else {
+        &[]
+    };
+    let mut json_val = serde_json::json!({
+        "timeline_events": events.iter().map(|e| serde_json::json!({
+            "id": e.id,
+            "sourceObjectId": e.source_object_id,
+            "type": e.event_type,
+            "ts": e.ts,
+            "title": e.title,
+            "description": e.description,
+            "parserId": e.parser_id,
+            "parserVersion": e.parser_version,
+            "confidence": e.confidence,
+            "sourceAttribution": e.source_attribution,
+        })).collect::<Vec<_>>(),
+        "artifacts": artifacts.iter().map(|artifact| serde_json::json!({
+            "id": artifact.id,
+            "artifactType": artifact.artifact_type,
+            "title": artifact.title,
+            "summary": artifact.summary,
+            "sourceObjectId": artifact.source_object_id,
+            "extractorId": artifact.extractor_id,
+            "extractorVersion": artifact.extractor_version,
+            "confidence": artifact.confidence,
+            "sourceAttribution": artifact.source_attribution,
+            "createdAt": artifact.created_at,
+        })).collect::<Vec<_>>(),
+        "scope": scope,
+        "warnings": serde_json::Value::Array(Vec::new()),
+        "analysis": {
+            "systemInfo": system_info,
+            "classifications": classifications,
+            "summary": summary,
+        },
+        "governance": governance_json_section(&governance),
+        "correlation": correlation_json_section(&correlation),
+    });
+
+    let file_name = format!("export-{}.json", Uuid::new_v4());
+    let path = prepare_report_output(output_dir, &file_name, scope.overwrite)?;
+    let raw_bundle = if scope.raw_file_extraction {
+        Some(export_raw_file_bundle_for_case(
+            conn,
+            case_root,
+            output_dir,
+            &case.id.0,
+            &file_name,
+            scope.overwrite,
+        )?)
+    } else {
+        None
+    };
+    let warnings = super::report_warnings(conn, &case.id.0, scope, raw_bundle.as_ref());
+    write_report_atomically(&path, scope.overwrite, |file| {
+        if let Some(bundle) = &raw_bundle {
+            json_val["rawExport"] = serde_json::json!({
+                "bundleDirectory": bundle.bundle_dir_name,
+                "manifestFile": bundle.manifest_file_name,
+                "hashesFile": bundle.hashes_file_name,
+                "exportedCount": bundle.exported_count,
+            });
+        }
+        json_val["warnings"] =
+            serde_json::to_value(&warnings).map_err(|e| ReportError::Other(e.to_string()))?;
+        JsonExporter::export(file, &json_val).map_err(|e| ReportError::Other(e.to_string()))
+    })?;
+
+    persist_report_record(conn, &case.id.0, "report-summary", &file_name, "completed")?;
     Ok(file_name)
 }
 
@@ -285,6 +388,105 @@ fn export_raw_file_bundle(
     })
 }
 
+fn export_raw_file_bundle_for_case(
+    conn: &Connection,
+    case_root: &Path,
+    output_dir: &Path,
+    case_id: &str,
+    report_file_name: &str,
+    overwrite: bool,
+) -> Result<RawExportBundle, ReportError> {
+    let bundle_dir_name = bundle_dir_name_from_report(report_file_name);
+    let bundle_dir = output_dir.join(&bundle_dir_name);
+    prepare_bundle_directory(&bundle_dir, overwrite)?;
+
+    let entries = collect_exportable_file_entries_for_case(conn, case_root, case_id)?;
+    let export_root = bundle_dir.join("files");
+    fs::create_dir_all(&export_root)?;
+
+    let mut manifest_entries = Vec::new();
+    let mut hash_lines = Vec::new();
+
+    for entry in entries {
+        let global_file_id =
+            crate::source_db::GlobalFileId::new(entry.data_source_id.clone(), entry.id.clone())
+                .encode();
+        let safe_name = sanitize_bundle_component(&entry.name);
+        let export_rel = PathBuf::from(entry.data_source_id.0.clone()).join(format!(
+            "{}-{}",
+            sanitize_bundle_component(&global_file_id.0),
+            safe_name
+        ));
+        let export_path = export_root.join(&export_rel);
+        if let Some(parent) = export_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let extracted = match crate::file_service::extract_file_to_destination_for_case(
+            conn,
+            case_root,
+            &global_file_id.0,
+            &export_path,
+            false,
+        ) {
+            Ok(bytes) => bytes,
+            Err(_) => continue,
+        };
+
+        let mut output = OpenOptions::new().read(true).open(&export_path)?;
+        let mut hasher = sha2::Sha256::new();
+        let mut buffer = [0u8; 64 * 1024];
+        loop {
+            let read = output.read(&mut buffer).map_err(ReportError::Io)?;
+            if read == 0 {
+                break;
+            }
+            hasher.update(&buffer[..read]);
+        }
+
+        let sha256 = format!("{:x}", hasher.finalize());
+        hash_lines.push(format!(
+            "{}  {}",
+            sha256,
+            normalize_manifest_path(&PathBuf::from("files").join(&export_rel))
+        ));
+        manifest_entries.push(RawExportManifestEntry {
+            file_id: global_file_id.0,
+            data_source_id: entry.data_source_id.0.clone(),
+            relative_source_path: entry.path.clone(),
+            exported_relative_path: normalize_manifest_path(
+                &PathBuf::from("files").join(&export_rel),
+            ),
+            size: entry.size.or(Some(extracted)),
+            sha256: Some(sha256),
+            deleted: entry.deleted,
+            hidden: entry.hidden,
+            system: entry.system,
+        });
+    }
+
+    let manifest = RawExportManifest {
+        case_id: case_id.to_string(),
+        generated_from_report: report_file_name.to_string(),
+        exported_count: manifest_entries.len(),
+        files: manifest_entries,
+    };
+    let manifest_file_name = "manifest.json".to_string();
+    let hashes_file_name = "SHA256SUMS.txt".to_string();
+    fs::write(
+        bundle_dir.join(&manifest_file_name),
+        serde_json::to_vec_pretty(&manifest).map_err(|e| ReportError::Other(e.to_string()))?,
+    )?;
+    fs::write(bundle_dir.join(&hashes_file_name), hash_lines.join("\n"))?;
+
+    Ok(RawExportBundle {
+        bundle_dir_name,
+        manifest_file_name,
+        hashes_file_name,
+        exported_count: manifest.exported_count,
+    })
+}
+
 fn collect_exportable_file_entries(
     conn: &Connection,
 ) -> Result<Vec<domain::FileEntry>, ReportError> {
@@ -326,6 +528,27 @@ fn collect_exportable_file_entries(
     for row in rows {
         entries.push(row?);
     }
+    Ok(entries)
+}
+
+fn collect_exportable_file_entries_for_case(
+    conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+) -> Result<Vec<domain::FileEntry>, ReportError> {
+    let mut entries = Vec::new();
+    for (_source_id, source_conn) in
+        super::open_ready_source_connections(conn, case_root, &domain::CaseId(case_id.to_string()))?
+    {
+        entries.extend(collect_exportable_file_entries(&source_conn)?);
+    }
+    entries.sort_by(|a, b| {
+        a.data_source_id
+            .0
+            .cmp(&b.data_source_id.0)
+            .then_with(|| a.path.cmp(&b.path))
+            .then_with(|| a.id.0.cmp(&b.id.0))
+    });
     Ok(entries)
 }
 

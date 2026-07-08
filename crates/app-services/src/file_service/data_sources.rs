@@ -1,4 +1,5 @@
 use crate::file_service::FileServiceError;
+use crate::source_db::{self, GlobalFileId};
 use domain::{
     DataSourceHashStatus, DataSourceId, DataSourceProvenanceStatus, EntryType, FileEntry,
 };
@@ -6,6 +7,7 @@ use persistence_sqlite::repositories::{
     datasource_repo::DataSourceRepo, file_repo::FileRepo, partition_repo::PartitionRepo,
 };
 use rusqlite::Connection;
+use std::path::Path;
 use transport::dto::{DataSourcePartitionDto, DataSourceSummaryDto, RecentObjectDto};
 
 pub fn get_data_sources_real(
@@ -47,6 +49,15 @@ pub fn get_data_sources_real(
                 source_path: source.source_path.display().to_string(),
                 imported_at: source.imported_at.to_rfc3339(),
                 file_count: file_repo.count_by_data_source(&source.id).ok(),
+                storage_model: None,
+                source_db_rel_path: None,
+                index_rel_path: None,
+                staging_rel_path: None,
+                platform: None,
+                profile: None,
+                import_state: None,
+                schema_version: None,
+                last_error: None,
                 source_hash: source.provenance.source_hash_sha256,
                 hash_status: Some(data_source_hash_status_label(
                     &source.provenance.hash_status,
@@ -67,7 +78,7 @@ pub fn get_data_sources_real(
         .collect())
 }
 
-fn data_source_hash_status_label(status: &DataSourceHashStatus) -> String {
+pub(crate) fn data_source_hash_status_label(status: &DataSourceHashStatus) -> String {
     match status {
         DataSourceHashStatus::Unknown => "unknown",
         DataSourceHashStatus::Pending => "pending",
@@ -78,7 +89,7 @@ fn data_source_hash_status_label(status: &DataSourceHashStatus) -> String {
     .to_string()
 }
 
-fn data_source_provenance_status_label(status: &DataSourceProvenanceStatus) -> String {
+pub(crate) fn data_source_provenance_status_label(status: &DataSourceProvenanceStatus) -> String {
     match status {
         DataSourceProvenanceStatus::Unknown => "unknown",
         DataSourceProvenanceStatus::Recorded => "recorded",
@@ -143,5 +154,41 @@ pub fn get_recent_objects_real(
         }
     }
 
+    Ok(recent)
+}
+
+pub fn get_recent_objects_for_case(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+) -> Result<Vec<RecentObjectDto>, FileServiceError> {
+    let sources = DataSourceRepo::new(case_conn).find_by_case(case_id)?;
+    let mut recent = Vec::new();
+
+    for source in sources {
+        let storage = DataSourceRepo::new(case_conn).find_storage(&source.id)?;
+        if storage
+            .as_ref()
+            .is_some_and(|value| value.import_state == "failed")
+        {
+            continue;
+        }
+        let source_conn =
+            match source_db::open_registered_source_db(case_conn, case_root, &source.id) {
+                Ok(conn) => conn,
+                Err(_) => continue,
+            };
+        let mut source_recent = get_recent_objects_real(&source_conn)?;
+        for item in &mut source_recent {
+            item.id = GlobalFileId::new(source.id.clone(), domain::FileEntryId(item.id.clone()))
+                .encode()
+                .0;
+            item.detail = format!("{} · {}", source.name, item.detail);
+        }
+        recent.extend(source_recent);
+    }
+
+    recent.sort_by(|a, b| b.time.cmp(&a.time).then_with(|| a.id.cmp(&b.id)));
+    recent.truncate(8);
     Ok(recent)
 }

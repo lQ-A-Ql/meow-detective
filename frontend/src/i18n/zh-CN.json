@@ -275,6 +275,10 @@
     }
   },
   "analysis": {
+    "platformViews": {
+      "windows": "Windows 取证",
+      "linux": "Linux 取证"
+    },
     "tabs": {
       "system": "系统信息",
       "evidence": "证据分类",
@@ -282,7 +286,6 @@
       "browser": "浏览器记录",
       "email": "邮件信息",
       "eventlogs": "事件日志",
-      "linux": "Linux 痕迹",
       "files": "文件分类",
       "report": "报告"
     },

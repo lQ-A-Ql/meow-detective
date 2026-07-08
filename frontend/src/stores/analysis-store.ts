@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type {
   AnalysisExtractionProgressInfo,
   AnalysisExtractionProgressState,
-} from '@/components/analysis/AnalysisPanels';
+} from '@/features/analysis/components/AnalysisPanels';
 
 export type AnalysisTabKey =
   | 'system'
@@ -11,9 +11,19 @@ export type AnalysisTabKey =
   | 'browser'
   | 'email'
   | 'eventlogs'
-  | 'linux'
   | 'files'
   | 'report';
+
+export type AnalysisPlatformView = 'windows' | 'linux';
+
+export type LinuxAnalysisTabKey =
+  | 'overview'
+  | 'journal'
+  | 'login'
+  | 'commands'
+  | 'packages'
+  | 'cron'
+  | 'sudo';
 
 export type ExtractionCategory = 'Registry' | 'BrowserHistory' | 'Email' | 'EventLogs' | 'LinuxArtifacts';
 
@@ -49,7 +59,9 @@ type AnalysisState = {
   extractionProgress: Record<ExtractionCategory, Omit<AnalysisExtractionProgressInfo, 'label'>>;
   extractionRunning: boolean;
   progressExpanded: boolean;
+  activePlatformView: AnalysisPlatformView;
   activeTab: AnalysisTabKey;
+  activeLinuxTab: LinuxAnalysisTabKey;
   selectedDataSourceId?: string;
 
   setExtractionProgress: (
@@ -62,7 +74,9 @@ type AnalysisState = {
   resetExtractionProgress: () => void;
   setExtractionRunning: (running: boolean) => void;
   setProgressExpanded: (expanded: boolean) => void;
+  setActivePlatformView: (view: AnalysisPlatformView) => void;
   setActiveTab: (tab: AnalysisTabKey) => void;
+  setActiveLinuxTab: (tab: LinuxAnalysisTabKey) => void;
   setSelectedDataSourceId: (id?: string) => void;
   reset: () => void;
 };
@@ -74,14 +88,18 @@ const initialState: Omit<
   | 'resetExtractionProgress'
   | 'setExtractionRunning'
   | 'setProgressExpanded'
+  | 'setActivePlatformView'
   | 'setActiveTab'
+  | 'setActiveLinuxTab'
   | 'setSelectedDataSourceId'
   | 'reset'
 > = {
   extractionProgress: createDefaultProgress(),
   extractionRunning: false,
   progressExpanded: true,
+  activePlatformView: 'windows',
   activeTab: 'system',
+  activeLinuxTab: 'overview',
   selectedDataSourceId: undefined,
 };
 
@@ -105,7 +123,11 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
 
   setProgressExpanded: (expanded) => set({ progressExpanded: expanded }),
 
+  setActivePlatformView: (view) => set({ activePlatformView: view }),
+
   setActiveTab: (tab) => set({ activeTab: tab }),
+
+  setActiveLinuxTab: (tab) => set({ activeLinuxTab: tab }),
 
   setSelectedDataSourceId: (id) => set({ selectedDataSourceId: id }),
 

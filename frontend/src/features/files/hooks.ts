@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  extractFile,
+  extractFileToPath,
   getFileChildren,
   getFileChildrenPage,
   getFileJumpContext,
@@ -31,6 +31,7 @@ import { invalidateImportProjectionQueries } from '@/features/cache-invalidation
 import { parseOffsetInput } from '@/lib/hex-offset-parser';
 import { mergeLoadedRanges } from '@/lib/hex-range-merger';
 import { getPreviewSettings } from '@/lib/settings';
+import { saveDialog } from '@/lib/platform/dialog';
 
 function getHexWindowSize(fileSize: number, maxViewerRangeLength: number, hexChunkBytes: number) {
   return fileSize <= maxViewerRangeLength ? fileSize : hexChunkBytes;
@@ -425,6 +426,12 @@ export function useMediaUrl(fileId?: string, enabled = true) {
 
 export function useExtractFile() {
   return useMutation({
-    mutationFn: (file: FileEntryRow) => extractFile(file),
+    mutationFn: async (file: FileEntryRow) => {
+      const destinationPath = await saveDialog({ defaultPath: file.name || file.id });
+      if (!destinationPath) {
+        return 'Export cancelled';
+      }
+      return extractFileToPath(file, destinationPath);
+    },
   });
 }

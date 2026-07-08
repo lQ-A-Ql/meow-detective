@@ -342,6 +342,18 @@ describe('analysis hooks', () => {
       data: null,
     });
 
+    const { result } = renderHook(() => useAnalysisSystemInfo('ds-1'), { wrapper: createWrapper() });
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(mocks.getSystemInfo).not.toHaveBeenCalled();
+  });
+
+  it('does not call source-bound analysis APIs without a selected data source', async () => {
+    mocks.useCurrentCase.mockReturnValue({
+      isSuccess: true,
+      data: { id: 'case-1' },
+    });
+
     const { result } = renderHook(() => useAnalysisSystemInfo(), { wrapper: createWrapper() });
 
     expect(result.current.fetchStatus).toBe('idle');
@@ -354,10 +366,10 @@ describe('analysis hooks', () => {
       data: { id: 'case-1' },
     });
 
-    const { result } = renderHook(() => useAnalysisSystemInfo(), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useAnalysisSystemInfo('ds-1'), { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mocks.getSystemInfo).toHaveBeenCalledTimes(1);
+    expect(mocks.getSystemInfo).toHaveBeenCalledWith('ds-1');
   });
 
   it('passes sample size to classification API', async () => {
@@ -366,21 +378,21 @@ describe('analysis hooks', () => {
       data: { id: 'case-1' },
     });
 
-    const { result } = renderHook(() => useAnalysisClassifications(250), {
+    const { result } = renderHook(() => useAnalysisClassifications('ds-1', 250), {
       wrapper: createWrapper(),
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mocks.classifyFiles).toHaveBeenCalledWith(250);
+    expect(mocks.classifyFiles).toHaveBeenCalledWith('ds-1', 250);
   });
 
   it('exposes summary download mutation', async () => {
-    const { result } = renderHook(() => useGenerateAnalysisSummary(), {
+    const { result } = renderHook(() => useGenerateAnalysisSummary('ds-1'), {
       wrapper: createWrapper(),
     });
 
     await result.current.mutateAsync();
-    expect(mocks.generateAnalysisSummary).toHaveBeenCalledTimes(1);
+    expect(mocks.generateAnalysisSummary).toHaveBeenCalledWith('ds-1');
   });
 
   it('loads registry, browser and email extraction summaries with paging defaults', async () => {
@@ -390,17 +402,17 @@ describe('analysis hooks', () => {
     });
 
     const wrapper = createWrapper();
-    const registry = renderHook(() => useRegistryExtractionSummary(), { wrapper });
-    const browser = renderHook(() => useBrowserHistorySummary({ limit: 50 }), { wrapper });
-    const email = renderHook(() => useEmailExtractionSummary({ offset: 10, limit: 25 }), { wrapper });
+    const registry = renderHook(() => useRegistryExtractionSummary({ dataSourceId: 'ds-1' }), { wrapper });
+    const browser = renderHook(() => useBrowserHistorySummary({ dataSourceId: 'ds-1', limit: 50 }), { wrapper });
+    const email = renderHook(() => useEmailExtractionSummary({ dataSourceId: 'ds-1', offset: 10, limit: 25 }), { wrapper });
 
     await waitFor(() => expect(registry.result.current.isSuccess).toBe(true));
     await waitFor(() => expect(browser.result.current.isSuccess).toBe(true));
     await waitFor(() => expect(email.result.current.isSuccess).toBe(true));
 
-    expect(mocks.getRegistryExtractionSummary).toHaveBeenCalledWith({ offset: 0, limit: 200 });
-    expect(mocks.getBrowserHistorySummary).toHaveBeenCalledWith({ offset: 0, limit: 50 });
-    expect(mocks.getEmailExtractionSummary).toHaveBeenCalledWith({ offset: 10, limit: 25 });
+    expect(mocks.getRegistryExtractionSummary).toHaveBeenCalledWith({ dataSourceId: 'ds-1', offset: 0, limit: 200 });
+    expect(mocks.getBrowserHistorySummary).toHaveBeenCalledWith({ dataSourceId: 'ds-1', offset: 0, limit: 50 });
+    expect(mocks.getEmailExtractionSummary).toHaveBeenCalledWith({ dataSourceId: 'ds-1', offset: 10, limit: 25 });
   });
 
   it('runs analysis extraction mutation with selected categories', async () => {
@@ -413,9 +425,13 @@ describe('analysis hooks', () => {
       wrapper: createWrapper(),
     });
 
-    await result.current.mutateAsync({ categories: ['Registry', 'BrowserHistory', 'Email'] });
+    await result.current.mutateAsync({
+      dataSourceId: 'ds-1',
+      categories: ['Registry', 'BrowserHistory', 'Email'],
+    });
 
     expect(mocks.runAnalysisExtraction).toHaveBeenCalledWith({
+      dataSourceId: 'ds-1',
       categories: ['Registry', 'BrowserHistory', 'Email'],
     });
   });

@@ -1,6 +1,11 @@
-use domain::{EdgeType, GraphEdge, GraphNode, NodeType};
-use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, graph_repo::GraphRepo};
+use crate::source_db::{self, encode_source_scoped_id};
+use domain::{DataSourceId, EdgeType, GraphEdge, GraphNode, NodeType};
+use persistence_sqlite::repositories::{
+    artifact_repo::ArtifactRepo, datasource_repo::DataSourceRepo, graph_repo::GraphRepo,
+};
 use rusqlite::Connection;
+use std::collections::HashMap;
+use std::path::Path;
 use thiserror::Error;
 use transport::dto::{
     GraphEdgeDto, GraphEdgeTypeDto, GraphNodeDto, GraphNodeTypeDto, GraphProvenanceEntryDto,
@@ -40,6 +45,41 @@ impl transport::ServiceErrorCategory for GraphServiceError {
 
 // ── Public API ──
 
+pub fn get_graph_snapshot_for_case(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+) -> Result<GraphSnapshotDto, GraphServiceError> {
+    let mut merged = GraphSnapshotDto {
+        node_count_by_type: HashMap::new(),
+        edge_count_by_type: HashMap::new(),
+        total_nodes: 0,
+        total_edges: 0,
+        density: 0.0,
+        largest_component_size: 0,
+    };
+
+    for (_source_id, source_conn) in
+        open_ready_source_connections(case_conn, case_root, &domain::CaseId(case_id.to_string()))?
+    {
+        let snapshot = get_graph_snapshot(&source_conn, case_id)?;
+        merge_counts(&mut merged.node_count_by_type, snapshot.node_count_by_type);
+        merge_counts(&mut merged.edge_count_by_type, snapshot.edge_count_by_type);
+        merged.total_nodes += snapshot.total_nodes;
+        merged.total_edges += snapshot.total_edges;
+        merged.largest_component_size = merged
+            .largest_component_size
+            .max(snapshot.largest_component_size);
+    }
+
+    if merged.total_nodes > 1 {
+        merged.density = (2 * merged.total_edges) as f64
+            / (merged.total_nodes * (merged.total_nodes - 1)) as f64;
+    }
+
+    Ok(merged)
+}
+
 /// Gather aggregate statistics for the investigative graph in the given case.
 pub fn get_graph_snapshot(
     conn: &Connection,
@@ -78,6 +118,39 @@ pub fn get_graph_snapshot(
     })
 }
 
+pub fn query_graph_for_case(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+    query: GraphQueryDto,
+) -> Result<GraphQueryResultDto, GraphServiceError> {
+    let mut result = GraphQueryResultDto {
+        nodes: Vec::new(),
+        edges: Vec::new(),
+        node_count: 0,
+        edge_count: 0,
+    };
+
+    if let Some((source_id, local_ids)) = scoped_start_ids(&query.start_ids)? {
+        let mut local_query = query;
+        local_query.start_ids = local_ids;
+        let source_conn = source_db::open_registered_source_db(case_conn, case_root, &source_id)?;
+        return Ok(scope_graph_result(
+            query_graph(&source_conn, local_query)?,
+            &source_id,
+        ));
+    }
+
+    for (source_id, source_conn) in
+        open_ready_source_connections(case_conn, case_root, &domain::CaseId(case_id.to_string()))?
+    {
+        let source_result = query_graph(&source_conn, query.clone())?;
+        append_graph_result(&mut result, scope_graph_result(source_result, &source_id));
+    }
+
+    Ok(result)
+}
+
 /// Execute a graph traversal query and return the matching subgraph.
 pub fn query_graph(
     conn: &Connection,
@@ -114,6 +187,40 @@ pub fn query_graph(
     })
 }
 
+pub fn list_graph_nodes_for_case(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+    request: ListGraphNodesRequest,
+) -> Result<Vec<GraphNodeDto>, GraphServiceError> {
+    let limit = request.limit.clamp(1, 500);
+    let mut nodes = Vec::new();
+
+    for (source_id, source_conn) in
+        open_ready_source_connections(case_conn, case_root, &domain::CaseId(case_id.to_string()))?
+    {
+        if nodes.len() >= limit as usize {
+            break;
+        }
+        let remaining = limit.saturating_sub(nodes.len() as u32);
+        let source_nodes = list_graph_nodes(
+            &source_conn,
+            case_id,
+            ListGraphNodesRequest {
+                limit: remaining,
+                offset: request.offset,
+            },
+        )?;
+        nodes.extend(
+            source_nodes
+                .into_iter()
+                .map(|node| scope_graph_node(node, &source_id)),
+        );
+    }
+
+    Ok(nodes)
+}
+
 /// List graph nodes for the active case without requiring a traversal seed.
 pub fn list_graph_nodes(
     conn: &Connection,
@@ -127,6 +234,38 @@ pub fn list_graph_nodes(
         .map_err(|e| GraphServiceError::Other(format!("graph node list query: {e}")))?;
 
     Ok(nodes.into_iter().map(node_to_dto).collect())
+}
+
+pub fn get_node_neighborhood_for_case(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+    node_id: &str,
+    depth: u32,
+) -> Result<GraphQueryResultDto, GraphServiceError> {
+    if let Ok((source_id, local_id)) = source_db::parse_source_scoped_id("Graph node id", node_id) {
+        let source_conn = source_db::open_registered_source_db(case_conn, case_root, &source_id)?;
+        return Ok(scope_graph_result(
+            get_node_neighborhood(&source_conn, &local_id, depth)?,
+            &source_id,
+        ));
+    }
+
+    for (source_id, source_conn) in
+        open_ready_source_connections(case_conn, case_root, &domain::CaseId(case_id.to_string()))?
+    {
+        let source_result = get_node_neighborhood(&source_conn, node_id, depth)?;
+        if source_result.node_count > 0 || source_result.edge_count > 0 {
+            return Ok(scope_graph_result(source_result, &source_id));
+        }
+    }
+
+    Ok(GraphQueryResultDto {
+        nodes: Vec::new(),
+        edges: Vec::new(),
+        node_count: 0,
+        edge_count: 0,
+    })
 }
 
 /// Query the neighborhood of a single node up to the given BFS depth.
@@ -207,6 +346,35 @@ pub fn get_node_neighborhood(
         node_count,
         edge_count,
     })
+}
+
+pub fn get_provenance_chain_for_case(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+    edge_id: &str,
+) -> Result<Vec<GraphProvenanceEntryDto>, GraphServiceError> {
+    if let Ok((source_id, local_id)) = source_db::parse_source_scoped_id("Graph edge id", edge_id) {
+        let source_conn = source_db::open_registered_source_db(case_conn, case_root, &source_id)?;
+        return scope_provenance_entries(
+            get_provenance_chain(&source_conn, &local_id)?,
+            &source_id,
+        );
+    }
+
+    for (source_id, source_conn) in
+        open_ready_source_connections(case_conn, case_root, &domain::CaseId(case_id.to_string()))?
+    {
+        match get_provenance_chain(&source_conn, edge_id) {
+            Ok(entries) => return scope_provenance_entries(entries, &source_id),
+            Err(GraphServiceError::NotFound(_)) => continue,
+            Err(err) => return Err(err),
+        }
+    }
+
+    Err(GraphServiceError::NotFound(format!(
+        "edge not found: {edge_id}"
+    )))
 }
 
 /// Retrieve the provenance chain for a graph edge.
@@ -356,6 +524,115 @@ fn edge_to_dto(edge: GraphEdge) -> GraphEdgeDto {
         provenance: edge.provenance,
         created_at: edge.created_at,
     }
+}
+
+fn scope_graph_node(mut node: GraphNodeDto, data_source_id: &DataSourceId) -> GraphNodeDto {
+    node.id = encode_source_scoped_id(data_source_id, &node.id);
+    node
+}
+
+fn scope_graph_edge(mut edge: GraphEdgeDto, data_source_id: &DataSourceId) -> GraphEdgeDto {
+    edge.id = encode_source_scoped_id(data_source_id, &edge.id);
+    edge.source_id = encode_source_scoped_id(data_source_id, &edge.source_id);
+    edge.target_id = encode_source_scoped_id(data_source_id, &edge.target_id);
+    edge
+}
+
+fn scope_graph_result(
+    mut result: GraphQueryResultDto,
+    data_source_id: &DataSourceId,
+) -> GraphQueryResultDto {
+    result.nodes = result
+        .nodes
+        .into_iter()
+        .map(|node| scope_graph_node(node, data_source_id))
+        .collect();
+    result.edges = result
+        .edges
+        .into_iter()
+        .map(|edge| scope_graph_edge(edge, data_source_id))
+        .collect();
+    result.node_count = result.nodes.len() as u32;
+    result.edge_count = result.edges.len() as u32;
+    result
+}
+
+fn scope_provenance_entries(
+    mut entries: Vec<GraphProvenanceEntryDto>,
+    data_source_id: &DataSourceId,
+) -> Result<Vec<GraphProvenanceEntryDto>, GraphServiceError> {
+    for entry in &mut entries {
+        entry.edge_id = encode_source_scoped_id(data_source_id, &entry.edge_id);
+    }
+    Ok(entries)
+}
+
+fn append_graph_result(target: &mut GraphQueryResultDto, source: GraphQueryResultDto) {
+    target.nodes.extend(source.nodes);
+    target.edges.extend(source.edges);
+    target.node_count = target.nodes.len() as u32;
+    target.edge_count = target.edges.len() as u32;
+}
+
+fn merge_counts(target: &mut HashMap<String, u64>, source: HashMap<String, u64>) {
+    for (key, count) in source {
+        *target.entry(key).or_insert(0) += count;
+    }
+}
+
+fn scoped_start_ids(
+    ids: &[String],
+) -> Result<Option<(DataSourceId, Vec<String>)>, GraphServiceError> {
+    let mut scoped_source: Option<DataSourceId> = None;
+    let mut local_ids = Vec::with_capacity(ids.len());
+
+    for id in ids {
+        match source_db::parse_source_scoped_id("Graph start id", id) {
+            Ok((source_id, local_id)) => {
+                if let Some(existing) = &scoped_source {
+                    if existing != &source_id {
+                        return Err(GraphServiceError::InvalidInput(
+                            "graph query startIds cannot mix data sources".to_string(),
+                        ));
+                    }
+                } else {
+                    scoped_source = Some(source_id);
+                }
+                local_ids.push(local_id);
+            }
+            Err(_) => {
+                if scoped_source.is_some() {
+                    return Err(GraphServiceError::InvalidInput(
+                        "graph query startIds cannot mix scoped and unscoped ids".to_string(),
+                    ));
+                }
+                return Ok(None);
+            }
+        }
+    }
+
+    Ok(scoped_source.map(|source_id| (source_id, local_ids)))
+}
+
+fn open_ready_source_connections(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+) -> Result<Vec<(DataSourceId, Connection)>, GraphServiceError> {
+    let sources = DataSourceRepo::new(case_conn).find_by_case(case_id)?;
+    let mut conns = Vec::with_capacity(sources.len());
+    for source in sources {
+        let storage = DataSourceRepo::new(case_conn).find_storage(&source.id)?;
+        if storage
+            .as_ref()
+            .is_some_and(|value| value.import_state == "failed")
+        {
+            continue;
+        }
+        let conn = source_db::open_registered_source_db(case_conn, case_root, &source.id)?;
+        conns.push((source.id, conn));
+    }
+    Ok(conns)
 }
 
 fn parse_edge_type(s: &str) -> EdgeType {

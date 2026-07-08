@@ -4,9 +4,11 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DataAnalysis } from './DataAnalysis';
 import { useAnalysisStore } from '@/stores/analysis-store';
+import type { DataSourceSummary } from '@/types/models';
 
 const mocks = vi.hoisted(() => ({
   currentCase: vi.fn(),
+  dataSources: vi.fn(),
   systemInfo: vi.fn(),
   evidenceSummary: vi.fn(),
   evidenceScan: vi.fn(),
@@ -22,7 +24,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/features/case/hooks', () => ({
   useCurrentCase: mocks.currentCase,
-  useDataSources: () => ({ data: undefined, error: null, isLoading: false, refetch: vi.fn() }),
+  useDataSources: mocks.dataSources,
 }));
 
 vi.mock('@/features/analysis/hooks', () => ({
@@ -64,12 +66,53 @@ function queryState(overrides: Record<string, unknown> = {}) {
   };
 }
 
+const windowsDataSource: DataSourceSummary = {
+  id: 'ds-win',
+  name: 'Windows Evidence',
+  kind: 'e01',
+  sourcePath: 'E:\\cases\\windows.E01',
+  importedAt: '2026-06-01T10:00:00Z',
+  partitions: [
+    {
+      index: 0,
+      name: 'C:',
+      kindLabel: 'Basic data partition',
+      status: 'supported',
+      offset: 0,
+      length: 1024,
+      filesystem: 'NTFS',
+    },
+  ],
+};
+
+const linuxDataSource: DataSourceSummary = {
+  id: 'ds-linux',
+  name: 'Linux Server',
+  kind: 'e01',
+  sourcePath: 'E:\\cases\\linux.E01',
+  importedAt: '2026-06-02T10:00:00Z',
+  partitions: [
+    {
+      index: 1,
+      name: 'root',
+      kindLabel: 'Linux LVM root',
+      status: 'supported',
+      offset: 0,
+      length: 2048,
+      filesystem: 'XFS',
+    },
+  ],
+};
+
 describe('DataAnalysis page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useAnalysisStore.getState().reset();
     mocks.currentCase.mockReturnValue(queryState({
       data: { id: 'case-1', name: 'Case 1' },
+    }));
+    mocks.dataSources.mockReturnValue(queryState({
+      data: [windowsDataSource],
     }));
     mocks.systemInfo.mockReturnValue(queryState({
       data: {
@@ -488,8 +531,8 @@ describe('DataAnalysis page', () => {
     const activePanels = panels.filter((panel) => panel.getAttribute('data-state') === 'active');
     const inactivePanels = panels.filter((panel) => panel.getAttribute('data-state') === 'inactive');
 
-    expect(activePanels).toHaveLength(1);
-    expect(activePanels[0].textContent).toContain('BETA-LAB');
+    expect(activePanels.length).toBeGreaterThanOrEqual(2);
+    expect(activePanels.some((panel) => panel.textContent?.includes('BETA-LAB'))).toBe(true);
     expect(inactivePanels.length).toBeGreaterThan(0);
     expect(inactivePanels.every((panel) => panel.textContent === '')).toBe(true);
   });
@@ -497,12 +540,15 @@ describe('DataAnalysis page', () => {
   it('renders accessible tabs and parsed registry facts with provenance', () => {
     renderPage();
 
+    expect(screen.getByRole('tab', { name: /Windows 取证/ })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /Linux 取证/ })).toBeDefined();
     expect(screen.getByRole('tab', { name: /系统信息/ })).toBeDefined();
     expect(screen.getByRole('tab', { name: /证据分类/ })).toBeDefined();
     expect(screen.getByRole('tab', { name: /注册表/ })).toBeDefined();
     expect(screen.getByRole('tab', { name: /浏览器记录/ })).toBeDefined();
     expect(screen.getByRole('tab', { name: /邮件信息/ })).toBeDefined();
     expect(screen.getByRole('tab', { name: /事件日志/ })).toBeDefined();
+    expect(screen.queryByRole('tab', { name: /^Linux 痕迹$/ })).toBeNull();
     expect(screen.getByRole('tab', { name: /文件分类/ })).toBeDefined();
     expect(screen.getByRole('tab', { name: /报告/ })).toBeDefined();
     expect(screen.getAllByText('已解析').length).toBeGreaterThan(0);
@@ -520,6 +566,27 @@ describe('DataAnalysis page', () => {
     expect(screen.getAllByText(/evtx\.boot_shutdown/).length).toBeGreaterThan(0);
     expect(screen.queryByText('FORENSICS-PC')).toBeNull();
     expect(screen.queryByText('Windows 10')).toBeNull();
+  });
+
+  it('renders Linux artifacts as a separate platform view instead of a Windows tab', async () => {
+    renderPage();
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: /Linux 取证/ }));
+
+    await waitFor(() => expect(screen.getByText('Linux 痕迹分析')).toBeDefined());
+    expect(screen.queryByRole('tab', { name: /系统信息/ })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /注册表/ })).toBeNull();
+    expect(screen.getByRole('tab', { name: '概览' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: '系统日志' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: '登录会话' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: 'Shell 命令' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: '软件包' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: '计划任务' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: 'sudo' })).toBeDefined();
+    expect(screen.getByText('尚未从当前数据源发现或提取 Linux 痕迹。')).toBeDefined();
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Shell 命令' }));
+    await waitFor(() => expect(screen.getByText('暂无 Shell 命令')).toBeDefined());
   });
 
   it('renders evidence semantic classification and can start targeted scan', async () => {
@@ -540,10 +607,13 @@ describe('DataAnalysis page', () => {
     expect(screen.getAllByText('已发现候选').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: /开始证据分类/ }));
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith([]));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({
+      dataSourceId: 'ds-win',
+      categories: [],
+    }));
   });
 
-  it('runs Registry, BrowserHistory, Email, EventLogs and LinuxArtifacts extraction sequentially from the header toolbar', async () => {
+  it('runs only Windows extraction categories from the Windows view', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({
       status: 'parsed',
       scannedCount: 8,
@@ -561,12 +631,40 @@ describe('DataAnalysis page', () => {
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: /运行提取/ }));
 
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(5));
-    expect(mutateAsync).toHaveBeenNthCalledWith(1, { categories: ['Registry'] });
-    expect(mutateAsync).toHaveBeenNthCalledWith(2, { categories: ['BrowserHistory'] });
-    expect(mutateAsync).toHaveBeenNthCalledWith(3, { categories: ['Email'] });
-    expect(mutateAsync).toHaveBeenNthCalledWith(4, { categories: ['EventLogs'] });
-    expect(mutateAsync).toHaveBeenNthCalledWith(5, { categories: ['LinuxArtifacts'] });
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(4));
+    expect(mutateAsync).toHaveBeenNthCalledWith(1, { dataSourceId: 'ds-win', categories: ['Registry'] });
+    expect(mutateAsync).toHaveBeenNthCalledWith(2, { dataSourceId: 'ds-win', categories: ['BrowserHistory'] });
+    expect(mutateAsync).toHaveBeenNthCalledWith(3, { dataSourceId: 'ds-win', categories: ['Email'] });
+    expect(mutateAsync).toHaveBeenNthCalledWith(4, { dataSourceId: 'ds-win', categories: ['EventLogs'] });
+    expect(mutateAsync).not.toHaveBeenCalledWith({ dataSourceId: 'ds-win', categories: ['LinuxArtifacts'] });
+  });
+
+  it('runs only Linux extraction categories from the Linux view', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({
+      status: 'parsed',
+      scannedCount: 8,
+      artifactCount: 7,
+      timelineEventCount: 3,
+      warnings: [],
+    });
+    mocks.extractionRun.mockReturnValue({
+      data: undefined,
+      error: null,
+      isPending: false,
+      mutateAsync,
+    });
+
+    mocks.dataSources.mockReturnValue(queryState({
+      data: [windowsDataSource, linuxDataSource],
+    }));
+
+    renderPage();
+    fireEvent.click(screen.getByLabelText('Linux Server'));
+    await waitFor(() => expect(screen.getByText('Linux 痕迹分析')).toBeDefined());
+    fireEvent.click(screen.getByRole('button', { name: /运行提取/ }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    expect(mutateAsync).toHaveBeenCalledWith({ dataSourceId: 'ds-linux', categories: ['LinuxArtifacts'] });
   });
 
   it('shows extraction progress overview on the first screen and updates it after running extraction', async () => {
@@ -591,16 +689,40 @@ describe('DataAnalysis page', () => {
     expect(within(overview).getByText('浏览器记录提取')).toBeDefined();
     expect(within(overview).getByText('邮件信息提取')).toBeDefined();
     expect(within(overview).getByText('事件日志提取')).toBeDefined();
-    expect(within(overview).getByText('Linux 痕迹提取')).toBeDefined();
-    expect(within(overview).getAllByText('等待').length).toBe(5);
+    expect(within(overview).queryByText('Linux 痕迹提取')).toBeNull();
+    expect(within(overview).getAllByText('等待').length).toBe(4);
 
     fireEvent.click(screen.getByRole('button', { name: /运行提取/ }));
 
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(5));
-    await waitFor(() => expect(within(overview).getAllByText('已完成').length).toBe(5));
-    expect(within(overview).getAllByText('scanned=8').length).toBe(5);
-    expect(within(overview).getAllByText('artifacts=7').length).toBe(5);
-    expect(within(overview).getAllByText('timeline=3').length).toBe(5);
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(within(overview).getAllByText('已完成').length).toBe(4));
+    expect(within(overview).getAllByText('scanned=8').length).toBe(4);
+    expect(within(overview).getAllByText('artifacts=7').length).toBe(4);
+    expect(within(overview).getAllByText('timeline=3').length).toBe(4);
+  });
+
+  it('shows only Linux extraction progress in the Linux view', () => {
+    renderPage();
+    fireEvent.mouseDown(screen.getByRole('tab', { name: /Linux 取证/ }));
+
+    const overview = screen.getByTestId('analysis-progress-overview');
+    expect(within(overview).getByText('Linux 痕迹提取')).toBeDefined();
+    expect(within(overview).queryByText('注册表提取')).toBeNull();
+    expect(within(overview).queryByText('浏览器记录提取')).toBeNull();
+    expect(within(overview).queryByText('邮件信息提取')).toBeNull();
+    expect(within(overview).queryByText('事件日志提取')).toBeNull();
+  });
+
+  it('switches to the matching platform view when selecting a data source', async () => {
+    mocks.dataSources.mockReturnValue(queryState({
+      data: [windowsDataSource, linuxDataSource],
+    }));
+
+    renderPage();
+    fireEvent.click(screen.getByLabelText('Linux Server'));
+
+    await waitFor(() => expect(screen.getByText('Linux 痕迹分析')).toBeDefined());
+    expect(screen.queryByRole('tab', { name: /系统信息/ })).toBeNull();
   });
 
   it('toggles the extraction progress drawer manually', () => {

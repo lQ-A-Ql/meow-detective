@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { ApiErrorDto } from '@/types/models';
+import { isApiErrorDto } from '@/lib/errors';
 
 function toApiError(error: unknown, fallbackCode: string): ApiErrorDto {
   if (isApiErrorDto(error)) {
@@ -31,18 +32,6 @@ function toApiError(error: unknown, fallbackCode: string): ApiErrorDto {
     details: error,
     recoverable: true,
   };
-}
-
-export function isApiErrorDto(value: unknown): value is ApiErrorDto {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const candidate = value as Partial<ApiErrorDto>;
-  return typeof candidate.code === 'string'
-    && typeof candidate.message === 'string'
-    && (candidate.category === undefined || typeof candidate.category === 'string')
-    && (candidate.recoverable === undefined || typeof candidate.recoverable === 'boolean');
 }
 
 async function invokeTauriCommand<T>(

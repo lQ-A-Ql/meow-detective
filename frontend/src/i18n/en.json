@@ -275,6 +275,10 @@
     }
   },
   "analysis": {
+    "platformViews": {
+      "windows": "Windows Forensics",
+      "linux": "Linux Forensics"
+    },
     "tabs": {
       "system": "System Info",
       "evidence": "Evidence",
@@ -282,7 +286,6 @@
       "browser": "Browser",
       "email": "Email",
       "eventlogs": "Event Logs",
-      "linux": "Linux Artifacts",
       "files": "Files",
       "report": "Report"
     },

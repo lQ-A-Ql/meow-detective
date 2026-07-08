@@ -7,6 +7,7 @@ pub use error::GovernanceError;
 
 use chrono::Utc;
 use rusqlite::Connection;
+use std::path::Path;
 use transport::dto::{
     BenchmarkRequirementStatusDto, BenchmarkSummaryDto, SecurityAuditSummaryDto,
     V2GovernanceSnapshotDto,
@@ -23,6 +24,24 @@ pub fn get_v2_governance_snapshot(
     case_id: &str,
 ) -> Result<V2GovernanceSnapshotDto, GovernanceError> {
     let runtime_signals = build_runtime_signals(conn, case_id)?;
+    build_v2_governance_snapshot_with_runtime(conn, case_id, runtime_signals)
+}
+
+pub fn get_v2_governance_snapshot_for_case(
+    conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+) -> Result<V2GovernanceSnapshotDto, GovernanceError> {
+    let runtime_signals =
+        crate::governance::runtime::build_runtime_signals_for_case(conn, case_root, case_id)?;
+    build_v2_governance_snapshot_with_runtime(conn, case_id, runtime_signals)
+}
+
+fn build_v2_governance_snapshot_with_runtime(
+    conn: &Connection,
+    case_id: &str,
+    runtime_signals: transport::dto::GovernanceRuntimeSignalsDto,
+) -> Result<V2GovernanceSnapshotDto, GovernanceError> {
     let audit_snapshot = security_audit_snapshot(conn, case_id)?;
     let chain_catalog = governance_chain_catalog();
     let verification_chains = verification_chains(chain_catalog);

@@ -4,9 +4,10 @@ use reports::HtmlCorrelationLeadSection;
 use rusqlite::Connection;
 use transport::commands::ExportScopeDto;
 use transport::dto::{
-    AnalysisFileClassificationDto, AnalysisSystemInfoDto, BenchmarkRequirementStatusDto,
-    CorrelationCoverageStatusDto, CorrelationLeadDto, KnownLimitationStatusDto,
-    ReleaseGateStatusDto, SupportMaturityDto, VerificationGuaranteeLevelDto, VerificationResultDto,
+    AnalysisFileClassificationDto, AnalysisSystemInfoDto, ArtifactRowDto,
+    BenchmarkRequirementStatusDto, CorrelationCoverageStatusDto, CorrelationLeadDto,
+    KnownLimitationStatusDto, ReleaseGateStatusDto, SupportMaturityDto, TimelineEventDto,
+    VerificationGuaranteeLevelDto, VerificationResultDto,
 };
 
 // ---------------------------------------------------------------------------
@@ -351,11 +352,37 @@ pub(crate) fn format_artifact_report_row(artifact: &domain::Artifact) -> String 
     )
 }
 
+pub(crate) fn format_artifact_dto_report_row(artifact: &ArtifactRowDto) -> String {
+    format!(
+        "artifact type={} title={} summary={} extractor={} extractorVersion={} confidence={} sourceAttribution={}",
+        artifact.artifact_type,
+        artifact.title,
+        artifact.summary,
+        optional_str(&artifact.extractor_id),
+        optional_str(&artifact.extractor_version),
+        optional_f32(artifact.confidence),
+        optional_str(&artifact.source_attribution)
+    )
+}
+
 pub(crate) fn format_timeline_report_row(event: &TimelineEvent) -> String {
     format!(
         "timeline eventType={} timestamp={} title={} parser={} parserVersion={} confidence={} sourceAttribution={}",
         event.event_type,
         event.timestamp.to_rfc3339(),
+        event.title,
+        optional_str(&event.parser_id),
+        optional_str(&event.parser_version),
+        optional_f32(event.confidence),
+        optional_str(&event.source_attribution)
+    )
+}
+
+pub(crate) fn format_timeline_dto_report_row(event: &TimelineEventDto) -> String {
+    format!(
+        "timeline eventType={} timestamp={} title={} parser={} parserVersion={} confidence={} sourceAttribution={}",
+        event.event_type,
+        event.ts,
         event.title,
         optional_str(&event.parser_id),
         optional_str(&event.parser_version),

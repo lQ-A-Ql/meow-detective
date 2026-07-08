@@ -12,6 +12,8 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, FileText, Search } from 'lucide-react';
+import { Button } from '@/app/components/ui/button';
+import { Input } from '@/app/components/ui/input';
 
 interface TextViewerProps {
   /** 文本内容 */
@@ -175,38 +177,45 @@ export function TextViewer({
         {/* 内联搜索 */}
         <div className="ml-auto flex items-center gap-1">
           <Search size={11} className="text-forensics-muted-light" />
-          <input
+          <Input
             type="text"
             value={localSearch}
             onChange={(e) => setLocalSearch(e.target.value)}
             placeholder={t('textViewer.searchPlaceholder')}
-            className="w-32 px-1.5 py-0.5 text-[11px] border border-forensics-border-strong rounded bg-forensics-surface
-                       focus:outline-none focus:border-forensics-muted placeholder:text-forensics-400"
+            variant="forensics"
+            inputSize="inline"
+            className="w-32 border-forensics-border-strong bg-forensics-surface placeholder:text-forensics-400 focus-visible:border-forensics-muted"
           />
         </div>
 
         {/* 分页控制 */}
         {totalPages > 1 && (
           <div className="flex items-center gap-1 ml-2">
-            <button
+            <Button
+              type="button"
+              variant="viewerControl"
+              size="iconXs"
               onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
               disabled={currentPage === 0}
-              className="p-0.5 hover:bg-forensics-hover rounded disabled:opacity-30"
+              aria-label="上一页"
             >
               <ChevronLeft size={12} />
-            </button>
+            </Button>
             <span className="text-forensics-muted w-16 text-center">
               {currentPage + 1}/{totalPages}
             </span>
-            <button
+            <Button
+              type="button"
+              variant="viewerControl"
+              size="iconXs"
               onClick={() =>
                 setCurrentPage((p) => Math.min(totalPages - 1, p + 1))
               }
               disabled={currentPage === totalPages - 1}
-              className="p-0.5 hover:bg-forensics-hover rounded disabled:opacity-30"
+              aria-label="下一页"
             >
               <ChevronRight size={12} />
-            </button>
+            </Button>
           </div>
         )}
       </div>

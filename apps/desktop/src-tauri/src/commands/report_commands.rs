@@ -47,6 +47,7 @@ pub async fn export_html_report(
         app_services::report::generate_html_report_for_case(
             &conn,
             &active.meta,
+            &active.case_root,
             &output_dir,
             &scope,
         )
@@ -68,8 +69,14 @@ pub async fn export_csv_report(
         let active = require_active_case(&app_state)?;
         let output_dir = active.case_root.join("reports");
         let conn = get_case_connection(&app_state)?;
-        app_services::report::generate_csv_artifacts(&conn, &active.case_id, &output_dir, &scope)
-            .map_err(CommandError::from_typed_service_error)
+        app_services::report::generate_csv_artifacts_for_case(
+            &conn,
+            &active.meta,
+            &active.case_root,
+            &output_dir,
+            &scope,
+        )
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -87,8 +94,14 @@ pub async fn export_csv_correlation_report(
         let active = require_active_case(&app_state)?;
         let output_dir = active.case_root.join("reports");
         let conn = get_case_connection(&app_state)?;
-        app_services::report::generate_csv_correlation(&conn, &active.case_id, &output_dir, &scope)
-            .map_err(CommandError::from_typed_service_error)
+        app_services::report::generate_csv_correlation_for_case(
+            &conn,
+            &active.meta,
+            &active.case_root,
+            &output_dir,
+            &scope,
+        )
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -106,8 +119,14 @@ pub async fn export_json_report(
         let active = require_active_case(&app_state)?;
         let output_dir = active.case_root.join("reports");
         let conn = get_case_connection(&app_state)?;
-        app_services::report::generate_json_export(&conn, &active.case_id, &output_dir, &scope)
-            .map_err(CommandError::from_typed_service_error)
+        app_services::report::generate_json_export_for_case(
+            &conn,
+            &active.meta,
+            &active.case_root,
+            &output_dir,
+            &scope,
+        )
+        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?

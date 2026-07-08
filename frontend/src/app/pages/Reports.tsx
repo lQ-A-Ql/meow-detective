@@ -1,5 +1,14 @@
 import { CheckCircle2, CircleDashed, Download, FileText } from 'lucide-react';
 import { useState } from 'react';
+import { Button } from '@/app/components/ui/button';
+import { Checkbox } from '@/app/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/app/components/ui/select';
 import { useDataSources } from '@/features/case/hooks';
 import {
   deriveEvidenceHashStatus,
@@ -63,28 +72,33 @@ export function Reports() {
           <div>
             <div className="text-[#888] text-[10px] uppercase tracking-wider mb-3">导出范围</div>
             <div className="space-y-2 font-mono text-[11px] text-[#333]">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={exportScope.fileSystemMetadata} onChange={(e) => setExportScope((s) => ({ ...s, fileSystemMetadata: e.target.checked }))} className="accent-[#111]" /> 包含文件系统元数据
+              <label className="flex cursor-pointer items-center gap-2">
+                <Checkbox variant="forensics" checked={exportScope.fileSystemMetadata} onCheckedChange={(checked) => setExportScope((s) => ({ ...s, fileSystemMetadata: checked === true }))} /> 包含文件系统元数据
               </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={exportScope.registry} onChange={(e) => setExportScope((s) => ({ ...s, registry: e.target.checked }))} className="accent-[#111]" /> 包含注册表项
+              <label className="flex cursor-pointer items-center gap-2">
+                <Checkbox variant="forensics" checked={exportScope.registry} onCheckedChange={(checked) => setExportScope((s) => ({ ...s, registry: checked === true }))} /> 包含注册表项
               </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={exportScope.fullTimeline} onChange={(e) => setExportScope((s) => ({ ...s, fullTimeline: e.target.checked }))} className="accent-[#111]" /> 包含完整时间线
+              <label className="flex cursor-pointer items-center gap-2">
+                <Checkbox variant="forensics" checked={exportScope.fullTimeline} onCheckedChange={(checked) => setExportScope((s) => ({ ...s, fullTimeline: checked === true }))} /> 包含完整时间线
               </label>
-              <label className="flex items-center gap-2 cursor-pointer text-[#888]">
-                <input type="checkbox" checked={exportScope.rawFileExtraction} onChange={(e) => setExportScope((s) => ({ ...s, rawFileExtraction: e.target.checked }))} className="accent-[#111]" /> 包含原始文件提取（会增加文件大小）
+              <label className="flex cursor-pointer items-center gap-2 text-[#888]">
+                <Checkbox variant="forensics" checked={exportScope.rawFileExtraction} onCheckedChange={(checked) => setExportScope((s) => ({ ...s, rawFileExtraction: checked === true }))} /> 包含原始文件提取（会增加文件大小）
               </label>
             </div>
           </div>
 
           <div>
             <div className="text-[#888] text-[10px] uppercase tracking-wider mb-3">格式</div>
-            <select value={selectedFormat} onChange={(e) => setSelectedFormat(e.target.value)} className="bg-white border border-[#ccc] text-[#111] font-mono text-[11px] p-2 outline-none w-64 focus:border-[#111]">
-              <option value="html">HTML</option>
-              <option value="csv">CSV</option>
-              <option value="json">JSON</option>
-            </select>
+            <Select value={selectedFormat} onValueChange={setSelectedFormat}>
+              <SelectTrigger variant="mono" size="sm" className="w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="html">HTML</SelectItem>
+                <SelectItem value="csv">CSV</SelectItem>
+                <SelectItem value="json">JSON</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="border border-[#e0e0e0] bg-[#fafafa] p-3 text-[11px] text-[#555] space-y-1">
@@ -103,9 +117,16 @@ export function Reports() {
           ) : null}
 
           <div className="mt-4">
-            <button onClick={runExport} disabled={exportMutation.isPending} className="bg-[#111] text-white font-semibold text-[11px] px-6 py-2 uppercase tracking-wider hover:bg-[#333] flex items-center gap-2 transition-colors disabled:opacity-50">
+            <Button
+              type="button"
+              variant="forensicsPrimary"
+              size="sm"
+              onClick={runExport}
+              disabled={exportMutation.isPending}
+              className="px-6 font-semibold uppercase tracking-wider"
+            >
               <Download size={14} /> {exportMutation.isPending ? "生成中..." : "生成报告"}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -137,7 +158,14 @@ export function Reports() {
                     <div className="font-mono text-[10px] text-[#888]">导出队列处理中，正在写入时间线与附件章节。</div>
                   </div>
                 ) : (
-                  <button className="text-[10px] text-[#333] border border-[#ccc] px-2 py-1 hover:bg-[#f0f0f0] transition-colors w-full uppercase tracking-wider font-medium">下载</button>
+                  <Button
+                    type="button"
+                    variant="forensicsOutline"
+                    size="compact"
+                    className="w-full text-[10px] font-medium uppercase tracking-wider"
+                  >
+                    下载
+                  </Button>
                 )}
               </div>
             ))}

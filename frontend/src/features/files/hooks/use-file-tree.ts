@@ -3,7 +3,11 @@ import { useFileChildrenPage, useFileTree as useFileTreeQuery } from '@/features
 import { useFileTreeKeyboard } from '@/hooks/use-file-tree-keyboard';
 import { useResizablePanel } from '@/hooks/use-resizable-panel';
 import { formatPartitionRootDisplayName } from '@/lib/partition-display';
-import { mergeTreeNodePages, sameTreeNodeList } from '@/app/pages/file-tree-utils';
+import {
+  mergeTreeNodePages,
+  rebaseTreeNodeDepths,
+  sameTreeNodeList,
+} from '@/features/files/file-tree-utils';
 import type {
   DataSourcePartition,
   DataSourceSummary,
@@ -34,6 +38,29 @@ function rootsForDataSource(
   return roots
     .filter((node) => node.dataSourceId === dataSourceId)
     .map((node) => ({ ...node, depth: 1 }));
+}
+
+function normalizeChildrenForParent(
+  children: FileTreeNode[],
+  parent: FileTreeNode | undefined,
+) {
+  return rebaseTreeNodeDepths(children, parent?.depth ?? -1);
+}
+
+function findTreeNode(
+  nodeId: string | undefined,
+  roots: FileTreeNode[],
+  childrenById: Record<string, FileTreeNode[]>,
+) {
+  if (!nodeId) return undefined;
+  const stack = [...roots];
+  while (stack.length > 0) {
+    const node = stack.shift();
+    if (!node) continue;
+    if (node.id === nodeId) return node;
+    stack.unshift(...(childrenById[node.id] ?? []));
+  }
+  return undefined;
 }
 
 interface UseFileTreeOptions {
@@ -101,11 +128,15 @@ export function useFileTree({
       const next = { ...current };
       for (const ds of dataSources) {
         const dsId = dataSourceNodeId(ds.id);
-        next[dsId] = rootsForDataSource(rootTree, ds.id, dataSources);
+        const parent = wrappedRootTree.find((node) => node.id === dsId);
+        next[dsId] = normalizeChildrenForParent(
+          rootsForDataSource(rootTree, ds.id, dataSources),
+          parent,
+        );
       }
       return next;
     });
-  }, [dataSources, rootTree]);
+  }, [dataSources, rootTree, wrappedRootTree]);
 
   const rootNodes = wrappedRootTree.length > 0 ? wrappedRootTree : (rootTree ?? []);
 
@@ -156,12 +187,14 @@ export function useFileTree({
   useEffect(() => {
     if (!activeDirectoryId || activeDirectoryIsDataSource || !activeChildren) return;
     const pageOffset = activeChildrenOffset;
+    const activeParent = findTreeNode(activeDirectoryId, rootNodes, treeChildren);
+    const normalizedChildren = normalizeChildrenForParent(activeChildren, activeParent);
     setTreeChildren((current) => {
       const keys = Object.keys(current);
       const previousChildren = current[activeDirectoryId] ?? [];
       const nextChildren = pageOffset > 0
-        ? mergeTreeNodePages(previousChildren, activeChildren)
-        : activeChildren;
+        ? mergeTreeNodePages(previousChildren, normalizedChildren)
+        : normalizedChildren;
       if (sameTreeNodeList(previousChildren, nextChildren)) return current;
       if (!current[activeDirectoryId] && keys.length >= MAX_TREE_CACHE_SIZE) {
         const { [keys[0]]: _, ...rest } = current;
@@ -169,7 +202,14 @@ export function useFileTree({
       }
       return { ...current, [activeDirectoryId]: nextChildren };
     });
-  }, [activeChildren, activeChildrenOffset, activeDirectoryId, activeDirectoryIsDataSource]);
+  }, [
+    activeChildren,
+    activeChildrenOffset,
+    activeDirectoryId,
+    activeDirectoryIsDataSource,
+    rootNodes,
+    treeChildren,
+  ]);
 
   useEffect(() => {
     if (!selectedDirectoryId && rootNodes[0]?.id) {

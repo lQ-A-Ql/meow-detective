@@ -1,5 +1,6 @@
 import { memo, useCallback } from 'react';
 import { AlertCircle, Copy, RefreshCw } from 'lucide-react';
+import { Button } from '@/app/components/ui/button';
 import type { ApiErrorDto } from '@/types/models';
 
 interface ViewerErrorProps {
@@ -44,23 +45,27 @@ export const ViewerError = memo(function ViewerError({ error, onRetry }: ViewerE
         )}
 
         <div className="flex items-center justify-center gap-2">
-          <button
+          <Button
+            type="button"
+            variant="forensicsOutline"
+            size="xs"
             onClick={handleCopy}
-            className="inline-flex items-center gap-1.5 rounded border border-[#ddd] px-3 py-1.5 text-[12px] text-[#555] hover:bg-[#f5f5f5]"
             aria-label="复制错误详情"
           >
             <Copy size={14} />
             复制详情
-          </button>
+          </Button>
           {error.recoverable && onRetry && (
-            <button
+            <Button
+              type="button"
+              variant="forensicsPrimary"
+              size="xs"
               onClick={onRetry}
-              className="inline-flex items-center gap-1.5 rounded border border-[#3498db] bg-[#3498db] px-3 py-1.5 text-[12px] text-white hover:bg-[#2980b9]"
               aria-label="重试预览"
             >
               <RefreshCw size={14} />
               重试
-            </button>
+            </Button>
           )}
         </div>
       </div>

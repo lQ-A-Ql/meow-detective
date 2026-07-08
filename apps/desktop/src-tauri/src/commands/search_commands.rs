@@ -43,14 +43,14 @@ pub async fn search_files_request(
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         // Short lock: extract index_dir and case info, then release
-        let (index_dir, db_path, case_id) = {
+        let (case_root, db_path, case_id) = {
             let guard = app_state
                 .active_case
                 .lock()
                 .map_err(|e| CommandError::from_lock_error("Case", e))?;
             match guard.as_ref() {
                 Some(active) => (
-                    active.case_root.join("indexes").join("tantivy"),
+                    active.case_root.clone(),
                     Some(active.db_path()),
                     Some(active.meta.id.0.clone()),
                 ),
@@ -64,16 +64,20 @@ pub async fn search_files_request(
             }
         };
         // Guard is now dropped — search with released lock
-        if !index_dir.exists() {
+        let start = std::time::Instant::now();
+        let Some(case_id_string) = case_id.clone() else {
             return Ok(SearchResultPageDto {
                 total: 0,
                 took_ms: 0,
                 items: vec![],
             });
-        }
-        let start = std::time::Instant::now();
-        let result = app_services::search_service::search_files_real_instrumented(
-            &index_dir,
+        };
+        let conn = app_services::connection::open_case_db(&case_root.join("app.db"))
+            .map_err(CommandError::from_typed_service_error)?;
+        let result = app_services::search_service::search_files_for_case_instrumented(
+            &conn,
+            &case_root,
+            &domain::CaseId(case_id_string.clone()),
             &request.query,
             request.offset,
             request.limit,

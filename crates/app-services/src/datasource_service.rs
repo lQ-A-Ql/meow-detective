@@ -6,7 +6,10 @@ mod probe;
 mod reader;
 mod types;
 
-pub use attach::{attach_data_source, classify_data_source_path, lvm_discovery_sources_for_case};
+pub use attach::{
+    attach_data_source, attach_data_source_with_storage, classify_data_source_path,
+    lvm_discovery_sources_for_case,
+};
 pub use lvm::{expand_lvm_pool_candidates, expand_lvm_pool_candidates_with_sources};
 pub(crate) use lvm::{lvm_source_fingerprint, normalize_lvm_uuid_for_match};
 pub use partition_index::{assign_effective_partition_indices, effective_partition_index};

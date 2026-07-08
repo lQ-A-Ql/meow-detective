@@ -1,18 +1,51 @@
 import * as React from "react";
+import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "./utils";
 
-function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {
+const textareaVariants = cva(
+  [
+    "border-input placeholder:text-muted-foreground flex field-sizing-content w-full rounded-md border bg-input-background",
+    "transition-[color,box-shadow] outline-none disabled:cursor-not-allowed disabled:opacity-50",
+    "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+    "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30",
+  ].join(" "),
+  {
+    variants: {
+      variant: {
+        default: "resize-none",
+        forensics:
+          "resize-y rounded-[2px] border-forensics-border-strong bg-white text-forensics-text focus-visible:border-forensics-text focus-visible:ring-0",
+        mono:
+          "resize-y rounded-[2px] border-forensics-border-strong bg-white font-mono text-forensics-text focus-visible:border-forensics-text focus-visible:ring-0",
+      },
+      textareaSize: {
+        default: "min-h-16 px-3 py-2 text-base md:text-sm",
+        compact: "min-h-14 px-2 py-1.5 text-[12px]",
+        inline: "min-h-8 px-2 py-1 text-[11px]",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      textareaSize: "default",
+    },
+  },
+);
+
+function Textarea({
+  className,
+  variant,
+  textareaSize,
+  unstyled = false,
+  ...props
+}: React.ComponentProps<"textarea"> & VariantProps<typeof textareaVariants> & { unstyled?: boolean }) {
   return (
     <textarea
       data-slot="textarea"
-      className={cn(
-        "resize-none border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 flex field-sizing-content min-h-16 w-full rounded-md border bg-input-background px-3 py-2 text-base transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
-        className,
-      )}
+      className={unstyled ? className : cn(textareaVariants({ variant, textareaSize, className }))}
       {...props}
     />
   );
 }
 
-export { Textarea };
+export { Textarea, textareaVariants };

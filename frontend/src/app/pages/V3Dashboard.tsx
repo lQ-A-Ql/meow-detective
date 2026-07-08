@@ -1,20 +1,20 @@
 import { RefreshCw } from 'lucide-react';
-import { AnalysisEmptyState, AnalysisErrorBanner, AnalysisLoadingPanel } from '@/components/analysis/AnalysisPanels';
+import { AnalysisEmptyState, AnalysisErrorBanner, AnalysisLoadingPanel } from '@/features/analysis/components/AnalysisPanels';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import { useGraphSnapshot } from '@/features/graph/hooks';
 import { useTimelineEvents } from '@/features/timeline/hooks';
 import { useArtifactFamilyCounts } from '@/features/artifacts/hooks';
 import { useCorrelationSnapshot, useV3GovernanceSnapshot } from '@/features/analysis/hooks';
 import { Button } from '@/app/components/ui/button';
-import { errorMessage } from './V3ScoreCards';
-import { GraphStatsSection } from '@/components/dashboard/GraphStatsSection';
-import { DataSourceCoverageSection } from '@/components/dashboard/DataSourceCoverageSection';
-import { TimelineOverviewSection } from '@/components/dashboard/TimelineOverviewSection';
-import { ArtifactStatsSection } from '@/components/dashboard/ArtifactStatsSection';
-import { CorrelationStatsSection } from '@/components/dashboard/CorrelationStatsSection';
-import { PlatformCoverageSection } from '@/components/dashboard/PlatformCoverageSection';
-import { RulePackStatusSection } from '@/components/dashboard/RulePackStatusSection';
-import { BatchStatusSection } from '@/components/dashboard/BatchStatusSection';
+import { errorMessage } from '@/features/dashboard/components/V3ScoreCards';
+import { GraphStatsSection } from '@/features/dashboard/components/GraphStatsSection';
+import { DataSourceCoverageSection } from '@/features/dashboard/components/DataSourceCoverageSection';
+import { TimelineOverviewSection } from '@/features/dashboard/components/TimelineOverviewSection';
+import { ArtifactStatsSection } from '@/features/dashboard/components/ArtifactStatsSection';
+import { CorrelationStatsSection } from '@/features/dashboard/components/CorrelationStatsSection';
+import { PlatformCoverageSection } from '@/features/dashboard/components/PlatformCoverageSection';
+import { RulePackStatusSection } from '@/features/dashboard/components/RulePackStatusSection';
+import { BatchStatusSection } from '@/features/dashboard/components/BatchStatusSection';
 
 export function V3Dashboard() {
   const currentCase = useCurrentCase();

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Upload } from 'lucide-react';
+import { Button } from '@/app/components/ui/button';
 import {
   useCreateCase,
   useCurrentCase,
@@ -18,9 +19,9 @@ import { useImportDataSource } from '@/features/files/hooks';
 import { useJobsSnapshot, useWarnings } from '@/features/jobs/hooks';
 import { useAppSettings } from '@/features/settings/hooks';
 import { readLocalSettings } from '@/lib/settings';
-import { CaseMetricsStrip, RecentTasksPanel, DataSourcesPanel, RecentObjectsPanel } from './CaseOverview';
-import { CaseWelcomeForms } from './CaseActions';
-import { ImportDataSourceDialog } from '@/components/import/ImportDataSourceDialog';
+import { CaseMetricsStrip, RecentTasksPanel, DataSourcesPanel, RecentObjectsPanel } from '@/features/case/components/CaseOverview';
+import { CaseWelcomeForms } from '@/features/case/components/CaseActions';
+import { ImportDataSourceDialog } from '@/features/import/components/ImportDataSourceDialog';
 
 export function CaseHome() {
   const { t } = useTranslation();
@@ -117,12 +118,14 @@ export function CaseHome() {
               <div className="text-[#888] text-[10px] uppercase tracking-wider mb-1">检验人</div>
               <div className="text-[#111] text-[13px]">{currentCase.examiner ?? '-'}</div>
             </div>
-            <button
+            <Button
+              type="button"
+              variant="forensicsOutline"
+              size="xs"
               onClick={() => setImportDialogOpen(true)}
-              className="flex items-center gap-1.5 border border-[#111] px-3 py-1.5 text-[12px] hover:bg-[#111] hover:text-white transition-colors"
             >
               <Upload size={12} /> {t('importDataSource.openButton')}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

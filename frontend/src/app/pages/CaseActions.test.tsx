@@ -1,14 +1,15 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { CaseWelcomeForms, ImportSection } from './CaseActions';
-import type { CaseWelcomeFormsProps, ImportSectionProps } from './CaseActions';
-import { open } from '@tauri-apps/plugin-dialog';
+import { CaseWelcomeForms, ImportSection } from '@/features/case/components/CaseActions';
+import type { CaseWelcomeFormsProps, ImportSectionProps } from '@/features/case/components/CaseActions';
+import { openDialog } from '@/lib/platform/dialog';
 
-vi.mock('@tauri-apps/plugin-dialog', () => ({
-  open: vi.fn(),
+vi.mock('@/lib/platform/dialog', () => ({
+  openDialog: vi.fn(),
+  singleDialogPath: (path: string | string[] | null) => (Array.isArray(path) ? path[0] ?? null : path),
 }));
 
-const mockedOpen = open as unknown as ReturnType<typeof vi.fn>;
+const mockedOpen = openDialog as unknown as ReturnType<typeof vi.fn>;
 
 function baseWelcomeProps(overrides: Partial<CaseWelcomeFormsProps> = {}): CaseWelcomeFormsProps {
   return {

@@ -20,7 +20,24 @@ use crate::import_pipeline::{
     partition::{format_partition_record_root_name, format_partition_root_name},
     ImportJobOptions,
 };
-use crate::{case_service, import_analysis, search_service, staging};
+use crate::{case_service, import_analysis, import_precheck, search_service, staging};
+
+fn import_config_for_path(path: &std::path::Path) -> import_precheck::ImportSourceConfig {
+    import_precheck::prepare_import_source_config_from_path(&path.to_string_lossy())
+        .expect("test import source should be valid")
+}
+
+fn single_imported_data_source_id(
+    conn: &rusqlite::Connection,
+    case_id: &domain::CaseId,
+) -> persistence_sqlite::DbResult<domain::DataSourceId> {
+    conn.query_row(
+        "SELECT id FROM data_sources WHERE case_id = ?1 ORDER BY imported_at DESC LIMIT 1",
+        [&case_id.0],
+        |row| row.get::<_, String>(0).map(domain::DataSourceId),
+    )
+    .map_err(Into::into)
+}
 
 fn filetime(dt: DateTime<Utc>) -> u64 {
     ((dt.timestamp() + 11_644_473_600) as u64 * 10_000_000)
@@ -636,7 +653,7 @@ fn cancellation_after_attach_marks_job_cancelling_without_failure() {
                 conn,
                 &active.meta.id,
                 &active.case_root,
-                &evidence_dir.to_string_lossy(),
+                import_config_for_path(&evidence_dir),
                 &job_id,
                 ImportJobOptions {
                     event_sink: None,
@@ -692,7 +709,7 @@ fn logical_import_post_pipeline_indexes_marker_and_extracts_artifact() {
                 conn,
                 &active.meta.id,
                 &active.case_root,
-                &evidence_dir.to_string_lossy(),
+                import_config_for_path(&evidence_dir),
                 &job_id,
                 ImportJobOptions {
                     event_sink: None,
@@ -712,31 +729,64 @@ fn logical_import_post_pipeline_indexes_marker_and_extracts_artifact() {
                 |row| row.get(0),
             )?;
             assert_eq!(data_sources, 1);
+            let data_source_id = single_imported_data_source_id(conn, &active.meta.id)?;
+            let source_conn =
+                crate::source_db::open_source_db(&active.case_root, &data_source_id)
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             let file_entries: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM file_entries",
+                [],
+                |row| row.get(0),
+            )?;
+            assert_eq!(file_entries, 0, "app.db must not own source file entries");
+            let source_file_entries: i64 = source_conn.query_row(
                 "SELECT COUNT(*) FROM file_entries WHERE entry_type = 'file'",
                 [],
                 |row| row.get(0),
             )?;
-            assert_eq!(file_entries, 2);
+            assert_eq!(source_file_entries, 2);
 
             let timeline_events: i64 = conn.query_row(
                 "SELECT COUNT(*) FROM timeline_events",
                 [],
                 |row| row.get(0),
             )?;
-            assert!(timeline_events > 0);
+            assert_eq!(timeline_events, 0, "app.db must not own source timeline events");
+            let app_graph_nodes: i64 =
+                conn.query_row("SELECT COUNT(*) FROM graph_nodes", [], |row| row.get(0))?;
+            assert_eq!(app_graph_nodes, 0, "app.db must not own source-local graph");
+            let source_timeline_events: i64 = source_conn.query_row(
+                "SELECT COUNT(*) FROM timeline_events",
+                [],
+                |row| row.get(0),
+            )?;
+            assert!(source_timeline_events > 0);
+            let source_graph_nodes: i64 =
+                source_conn.query_row("SELECT COUNT(*) FROM graph_nodes", [], |row| row.get(0))?;
+            assert!(source_graph_nodes > 0, "source.db should own source-local graph");
 
-            let index_dir = active.case_root.join("indexes").join("tantivy");
+            let index_dir = crate::source_db::source_index_dir(&active.case_root, &data_source_id);
             let results = search_service::search_files_real(&index_dir, marker, 0, 10)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert_eq!(results.total, 1);
             assert!(results.items[0].path.ends_with("notes.txt"));
 
-            let artifact_repo = ArtifactRepo::new(conn);
+            let artifact_repo = ArtifactRepo::new(&source_conn);
             assert!(artifact_repo.count()? > 0);
             let families = artifact_repo.families()?;
             assert!(families.iter().any(|family| family == "Prefetch"));
+
+            let metrics = case_service::get_case_metrics_for_case(
+                conn,
+                &active.case_root,
+                &active.meta.id,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+            assert_eq!(metrics.data_source_count, 1);
+            assert!(metrics.indexed_file_count > 0);
+            assert!(metrics.timeline_event_count > 0);
+            assert!(metrics.artifact_count > 0);
 
             Ok(())
         })
@@ -763,7 +813,7 @@ fn logical_import_reports_progress_through_tauri_free_sink() {
                 conn,
                 &active.meta.id,
                 &active.case_root,
-                &evidence_dir.to_string_lossy(),
+                import_config_for_path(&evidence_dir),
                 &job_id,
                 ImportJobOptions {
                     event_sink: Some(&event_sink),
@@ -913,7 +963,7 @@ fn e01_full_import() {
                 conn,
                 &active.meta.id,
                 &active.case_root,
-                e01_path.to_str().unwrap(),
+                import_config_for_path(&e01_path),
                 &job_id,
                 ImportJobOptions {
                     event_sink: None,
@@ -938,18 +988,23 @@ fn e01_full_import() {
                 }
             }
 
+            let data_source_id = single_imported_data_source_id(conn, &active.meta.id)?;
+            let source_conn =
+                crate::source_db::open_source_db(&active.case_root, &data_source_id)
+                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+
             eprintln!("\n[2/5] Verifying file entries...");
             let file_count: i64 =
-                conn.query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))?;
+                source_conn.query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))?;
             eprintln!("  File entries: {}", file_count);
             assert!(file_count > 0, "Expected file entries, got 0");
-            let root_system32: i64 = conn.query_row(
+            let root_system32: i64 = source_conn.query_row(
                 "SELECT COUNT(*) FROM file_entries
                  WHERE parent_id = 'mft:3:5' AND name = 'System32' COLLATE NOCASE",
                 [],
                 |row| row.get(0),
             )?;
-            let root_windows: i64 = conn.query_row(
+            let root_windows: i64 = source_conn.query_row(
                 "SELECT COUNT(*) FROM file_entries
                  WHERE parent_id = 'mft:3:5'
                    AND entry_type = 'directory' COLLATE NOCASE
@@ -957,7 +1012,7 @@ fn e01_full_import() {
                 [],
                 |row| row.get(0),
             )?;
-            let system_hives: i64 = conn.query_row(
+            let system_hives: i64 = source_conn.query_row(
                 "SELECT COUNT(*) FROM file_entries
                  WHERE LOWER(REPLACE(path, '\\', '/')) IN (
                    'windows/system32/config/system',
@@ -985,14 +1040,17 @@ fn e01_full_import() {
             );
 
             eprintln!("\n[3/5] Verifying timeline lazy projection...");
-            let tl_count_before: i64 =
-                conn.query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row.get(0))?;
+            let tl_count_before: i64 = source_conn.query_row(
+                "SELECT COUNT(*) FROM timeline_events",
+                [],
+                |row| row.get(0),
+            )?;
             eprintln!("  Timeline events before page query: {}", tl_count_before);
             assert_eq!(
                 tl_count_before, 0,
                 "metadata-only import should defer MACB timeline projection"
             );
-            let timeline_page = crate::timeline_service::query_timeline(conn, 0, 10)
+            let timeline_page = crate::timeline_service::query_timeline(&source_conn, 0, 10)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             let tl_count = timeline_page.total as i64;
             eprintln!("  Timeline events after lazy query: {}", tl_count);

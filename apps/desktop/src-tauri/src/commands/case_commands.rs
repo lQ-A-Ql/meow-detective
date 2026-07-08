@@ -267,13 +267,17 @@ pub async fn get_case_metrics(state: State<'_, AppState>) -> Result<CaseMetricsD
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         // Short lock: extract db_path, then release
-        let db_path = {
+        let (db_path, case_root, case_id) = {
             let guard = app_state
                 .active_case
                 .lock()
                 .map_err(|e| CommandError::from_lock_error("Case", e))?;
             match guard.as_ref() {
-                Some(active) => active.db_path(),
+                Some(active) => (
+                    active.db_path(),
+                    active.case_root.clone(),
+                    active.meta.id.clone(),
+                ),
                 None => {
                     return Ok(CaseMetricsDto {
                         data_source_count: 0,
@@ -287,9 +291,7 @@ pub async fn get_case_metrics(state: State<'_, AppState>) -> Result<CaseMetricsD
         // Guard is now dropped; query with a fresh connection.
         let conn = app_services::connection::open_case_db(&db_path)
             .map_err(CommandError::from_typed_service_error)?;
-        let repo = persistence_sqlite::repositories::case_repo::CaseRepo::new(&conn);
-        let metrics = repo
-            .get_metrics()
+        let metrics = case_service::get_case_metrics_for_case(&conn, &case_root, &case_id)
             .map_err(CommandError::from_typed_service_error)?;
         Ok(CaseMetricsDto {
             data_source_count: metrics.data_source_count,
@@ -308,19 +310,23 @@ pub async fn get_recent_objects(
 ) -> Result<Vec<RecentObjectDto>, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let db_path = {
+        let (db_path, case_root, case_id) = {
             let guard = app_state
                 .active_case
                 .lock()
                 .map_err(|e| CommandError::from_lock_error("Case", e))?;
             match guard.as_ref() {
-                Some(active) => active.db_path(),
+                Some(active) => (
+                    active.db_path(),
+                    active.case_root.clone(),
+                    active.meta.id.clone(),
+                ),
                 None => return Ok(vec![]),
             }
         };
         let conn = app_services::connection::open_case_db(&db_path)
             .map_err(CommandError::from_typed_service_error)?;
-        app_services::file_service::get_recent_objects_real(&conn)
+        app_services::file_service::get_recent_objects_for_case(&conn, &case_root, &case_id)
             .map_err(CommandError::from_typed_service_error)
     })
     .await
@@ -333,19 +339,23 @@ pub async fn get_data_sources(
 ) -> Result<Vec<DataSourceSummaryDto>, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let (db_path, case_id) = {
+        let (db_path, case_root, case_id) = {
             let guard = app_state
                 .active_case
                 .lock()
                 .map_err(|e| CommandError::from_lock_error("Case", e))?;
             match guard.as_ref() {
-                Some(active) => (active.db_path(), active.meta.id.clone()),
+                Some(active) => (
+                    active.db_path(),
+                    active.case_root.clone(),
+                    active.meta.id.clone(),
+                ),
                 None => return Ok(vec![]),
             }
         };
         let conn = app_services::connection::open_case_db(&db_path)
             .map_err(CommandError::from_typed_service_error)?;
-        app_services::file_service::get_data_sources_real(&conn, &case_id)
+        app_services::file_service::get_data_sources_for_case(&conn, &case_root, &case_id)
             .map_err(CommandError::from_typed_service_error)
     })
     .await
@@ -481,18 +491,22 @@ pub async fn delete_data_source(
     let ds_id = request.data_source_id.clone();
     tauri::async_runtime::spawn_blocking(move || {
         // Short lock: extract db_path, then release
-        let db_path = {
+        let (db_path, case_root) = {
             let guard = app_state
                 .active_case
                 .lock()
                 .map_err(|e| CommandError::from_lock_error("Case", e))?;
             let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
-            active.db_path()
+            (active.db_path(), active.case_root.clone())
         };
+        app_state.task_manager.cancel_all();
+        let _ = app_state
+            .task_manager
+            .wait_all(std::time::Duration::from_secs(5));
         // Guard is now dropped; query with released lock.
         let conn = app_services::connection::open_case_db(&db_path)
             .map_err(CommandError::from_typed_service_error)?;
-        case_service::delete_data_source(&conn, &ds_id)
+        case_service::delete_data_source_in(&conn, &case_root, &ds_id)
             .map_err(CommandError::from_typed_service_error)?;
         Ok("Data source deleted".to_string())
     })
@@ -565,14 +579,20 @@ fn read_recent_cases() -> Result<Vec<RecentCaseDto>, CommandError> {
         return Ok(vec![]);
     }
 
-    let content = std::fs::read_to_string(&path).map_err(|e| {
-        tracing::error!("Failed to read recent cases file: {}", e);
-        CommandError::internal("Failed to read recent cases")
-    })?;
-    let parsed: Vec<RecentCaseDto> = serde_json::from_str(&content).map_err(|e| {
-        tracing::error!("Failed to parse recent cases JSON: {}", e);
-        CommandError::internal("Failed to read recent cases")
-    })?;
+    let content = match std::fs::read_to_string(&path) {
+        Ok(content) => content,
+        Err(e) => {
+            tracing::warn!("Failed to read recent cases file: {}", e);
+            return Ok(vec![]);
+        }
+    };
+    let parsed: Vec<RecentCaseDto> = match serde_json::from_str(&content) {
+        Ok(parsed) => parsed,
+        Err(e) => {
+            tracing::warn!("Failed to parse recent cases JSON: {}", e);
+            return Ok(vec![]);
+        }
+    };
     Ok(parsed
         .into_iter()
         .filter(|item| valid_recent_case_root(&item.case_root))
@@ -593,7 +613,13 @@ mod tests {
     use super::*;
     use crate::commands::command_support::{get_case_connection, require_active_case};
     use app_services::{analysis_service, file_service};
+    use std::sync::{Mutex, OnceLock};
     use uuid::Uuid;
+
+    fn recent_cases_test_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
 
     #[test]
     fn active_case_pool_is_guarded_by_active_case_lifecycle() {
@@ -718,10 +744,14 @@ mod tests {
 
     #[test]
     fn remember_recent_case_uses_actual_case_directory() {
+        let _lock = recent_cases_test_lock().lock().unwrap();
         let parent = std::env::temp_dir().join(format!(
             "forensics-workbench-recent-case-test-{}",
             Uuid::new_v4()
         ));
+        let previous = std::env::var_os("FORENSICS_RECENT_CASES_DIR");
+        std::env::set_var("FORENSICS_RECENT_CASES_DIR", parent.join("recent-state"));
+
         let active = case_service::create_case(&parent, "recent-case", Some("tester"))
             .expect("create recent case fixture");
         let dto = meta_to_dto(&active.meta);
@@ -737,15 +767,16 @@ mod tests {
         let mut remaining = recent;
         remaining.retain(|item| item.case_root != actual_case_root.display().to_string());
         save_recent_cases(&remaining).expect("restore recent cases");
+        match previous {
+            Some(value) => std::env::set_var("FORENSICS_RECENT_CASES_DIR", value),
+            None => std::env::remove_var("FORENSICS_RECENT_CASES_DIR"),
+        }
         std::fs::remove_dir_all(parent).ok();
     }
 
     #[test]
     fn recent_cases_file_is_restricted_and_round_trips() {
-        use std::sync::Mutex;
-
-        static LOCK: Mutex<()> = Mutex::new(());
-        let _lock = LOCK.lock().unwrap();
+        let _lock = recent_cases_test_lock().lock().unwrap();
 
         let dir = std::env::temp_dir().join(format!(
             "forensics-recent-cases-security-test-{}",

@@ -42,6 +42,24 @@ pub struct DataSourceSummaryDto {
     pub imported_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file_count: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub storage_model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_db_rel_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub index_rel_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub staging_rel_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub platform: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub import_state: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schema_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
     #[serde(rename = "sourceHash", skip_serializing_if = "Option::is_none")]
     pub source_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -98,6 +116,15 @@ mod tests {
             source_path: "D:/evidence/disk.raw".to_string(),
             imported_at: "2026-06-04T00:00:00Z".to_string(),
             file_count: Some(42),
+            storage_model: Some("source_db".to_string()),
+            source_db_rel_path: Some("sources/ds-1/source.db".to_string()),
+            index_rel_path: Some("sources/ds-1/index".to_string()),
+            staging_rel_path: Some("staging/ds-1".to_string()),
+            platform: Some("windows".to_string()),
+            profile: Some("triage".to_string()),
+            import_state: Some("ready".to_string()),
+            schema_version: Some("source_002_data_source_metadata".to_string()),
+            last_error: None,
             source_hash: Some("a".repeat(64)),
             hash_status: Some("hashed".to_string()),
             canonical_path: Some("D:/canonical/disk.raw".to_string()),
@@ -123,6 +150,14 @@ mod tests {
         assert_eq!(value["sourcePath"], "D:/evidence/disk.raw");
         assert_eq!(value["importedAt"], "2026-06-04T00:00:00Z");
         assert_eq!(value["fileCount"], 42);
+        assert_eq!(value["storageModel"], "source_db");
+        assert_eq!(value["sourceDbRelPath"], "sources/ds-1/source.db");
+        assert_eq!(value["indexRelPath"], "sources/ds-1/index");
+        assert_eq!(value["stagingRelPath"], "staging/ds-1");
+        assert_eq!(value["platform"], "windows");
+        assert_eq!(value["profile"], "triage");
+        assert_eq!(value["importState"], "ready");
+        assert_eq!(value["schemaVersion"], "source_002_data_source_metadata");
         assert_eq!(value["sourceHash"], "a".repeat(64));
         assert_eq!(value["hashStatus"], "hashed");
         assert_eq!(value["canonicalPath"], "D:/canonical/disk.raw");
@@ -146,6 +181,15 @@ mod tests {
             source_path: "D:/legacy.raw".to_string(),
             imported_at: "2026-06-04T00:00:00Z".to_string(),
             file_count: None,
+            storage_model: None,
+            source_db_rel_path: None,
+            index_rel_path: None,
+            staging_rel_path: None,
+            platform: None,
+            profile: None,
+            import_state: None,
+            schema_version: None,
+            last_error: None,
             source_hash: None,
             hash_status: None,
             canonical_path: None,
@@ -159,6 +203,15 @@ mod tests {
         let value = serde_json::to_value(dto).unwrap();
 
         assert!(value.get("fileCount").is_none());
+        assert!(value.get("storageModel").is_none());
+        assert!(value.get("sourceDbRelPath").is_none());
+        assert!(value.get("indexRelPath").is_none());
+        assert!(value.get("stagingRelPath").is_none());
+        assert!(value.get("platform").is_none());
+        assert!(value.get("profile").is_none());
+        assert!(value.get("importState").is_none());
+        assert!(value.get("schemaVersion").is_none());
+        assert!(value.get("lastError").is_none());
         assert!(value.get("sourceHash").is_none());
         assert!(value.get("hashStatus").is_none());
         assert!(value.get("canonicalPath").is_none());

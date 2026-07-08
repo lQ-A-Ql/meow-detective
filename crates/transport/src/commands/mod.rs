@@ -120,7 +120,7 @@ pub struct AppSettingsDto {
     pub case_root: String,
     pub image_search_paths: Vec<String>,
     pub dev_event_trace: bool,
-    /// Maximum parallel workers for import. None = use all available cores.
+    /// Maximum parallel workers for import. None = conservative single-worker I/O.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_import_workers: Option<usize>,
     /// Maximum parallel workers for post-import analysis. None = use all available cores.
@@ -149,7 +149,7 @@ impl Default for AppSettingsDto {
             case_root: default_case_root(),
             image_search_paths: Vec::new(),
             dev_event_trace: false,
-            max_import_workers: None,
+            max_import_workers: Some(1),
             max_analysis_workers: None,
             import_analysis_mode: default_import_analysis_mode(),
             hex_chunk_bytes: default_hex_chunk_bytes(),
@@ -400,27 +400,61 @@ impl GetArtifactByIdRequest {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClassifyFilesRequest {
+    pub data_source_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sample_size: Option<u32>,
+}
+
+impl ClassifyFilesRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        validate_required_data_source_id(&self.data_source_id)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RunEvidenceClassificationRequest {
+    pub data_source_id: String,
     #[serde(default)]
     pub categories: Vec<String>,
+}
+
+impl RunEvidenceClassificationRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        validate_required_data_source_id(&self.data_source_id)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RunAnalysisExtractionRequest {
+    pub data_source_id: String,
     #[serde(default)]
     pub categories: Vec<String>,
+}
+
+impl RunAnalysisExtractionRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        validate_required_data_source_id(&self.data_source_id)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetAnalysisSourceRequest {
+    pub data_source_id: String,
+}
+
+impl GetAnalysisSourceRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        validate_required_data_source_id(&self.data_source_id)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetAnalysisExtractionRequest {
+    pub data_source_id: String,
     #[serde(default)]
     pub offset: u64,
     #[serde(default = "default_analysis_extraction_limit")]
@@ -430,6 +464,7 @@ pub struct GetAnalysisExtractionRequest {
 impl Default for GetAnalysisExtractionRequest {
     fn default() -> Self {
         Self {
+            data_source_id: String::new(),
             offset: 0,
             limit: default_analysis_extraction_limit(),
         }
@@ -438,12 +473,20 @@ impl Default for GetAnalysisExtractionRequest {
 
 impl GetAnalysisExtractionRequest {
     pub fn validate(&mut self) -> Result<(), String> {
+        validate_required_data_source_id(&self.data_source_id)?;
         if self.limit == 0 {
             self.limit = default_analysis_extraction_limit();
         }
         self.limit = self.limit.min(MAX_PAGE_LIMIT);
         Ok(())
     }
+}
+
+fn validate_required_data_source_id(data_source_id: &str) -> Result<(), String> {
+    if data_source_id.trim().is_empty() {
+        return Err("dataSourceId is required".to_string());
+    }
+    Ok(())
 }
 
 fn default_analysis_extraction_limit() -> u32 {
@@ -669,7 +712,9 @@ mod tests {
 
     #[test]
     fn classify_files_request_deserializes_sample_size() {
-        let request: ClassifyFilesRequest = serde_json::from_str(r#"{"sampleSize":1000}"#).unwrap();
+        let request: ClassifyFilesRequest =
+            serde_json::from_str(r#"{"dataSourceId":"ds-1","sampleSize":1000}"#).unwrap();
+        assert_eq!(request.data_source_id, "ds-1");
         assert_eq!(request.sample_size, Some(1000));
     }
 

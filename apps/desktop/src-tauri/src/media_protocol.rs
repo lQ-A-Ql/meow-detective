@@ -2,7 +2,6 @@ use crate::state::AppState;
 use app_services::file_service;
 use base64::Engine;
 use chrono::Duration;
-use runtime_cache::models::{namespaces, CacheEntry};
 use std::borrow::Cow;
 use tauri::http::{self, header, StatusCode};
 use tauri::{AppHandle, Manager, Wry};
@@ -10,51 +9,10 @@ use tauri::{AppHandle, Manager, Wry};
 pub const EVIDENCE_MEDIA_SCHEME: &str = "evidence-media";
 pub const MAX_MEDIA_PROTOCOL_READ_BYTES: u64 = transport::dto::MAX_VIEWER_RANGE_LENGTH as u64;
 const MEDIA_HANDLE_TTL_MINUTES: i64 = 30;
-const PREVIEW_DESCRIPTOR_CACHE_TTL_MINUTES: i64 = 30;
 
 #[cfg(test)]
 static MEDIA_PROTOCOL_BYTES_SERVICE_READ_CALLS: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
-
-macro_rules! with_preview_cache_context {
-    ($state:expr, $conn:expr, $case_id:expr, |$context:ident| $body:expr) => {{
-        let mut get_cached_preview_descriptor = |key: &str| -> Option<serde_json::Value> {
-            let cache = $state.runtime_cache.lock().ok()?;
-            let entry = cache.cache().get(key).ok().flatten()?;
-            if entry.namespace != namespaces::PREVIEW_DESCRIPTORS
-                || entry.case_id.as_deref() != Some($case_id)
-            {
-                return None;
-            }
-            Some(entry.value_json)
-        };
-        let mut set_cached_preview_descriptor = |key: &str, value: &serde_json::Value| {
-            let Ok(cache) = $state.runtime_cache.lock() else {
-                return;
-            };
-            let now = chrono::Utc::now();
-            let entry = CacheEntry {
-                cache_key: key.to_string(),
-                namespace: namespaces::PREVIEW_DESCRIPTORS.to_string(),
-                case_id: Some($case_id.to_string()),
-                value_json: value.clone(),
-                created_at: now,
-                expires_at: Some(now + Duration::minutes(PREVIEW_DESCRIPTOR_CACHE_TTL_MINUTES)),
-                last_accessed_at: now,
-            };
-            if let Err(error) = cache.cache().set(&entry) {
-                tracing::warn!(cache_key = %key, error = %error, "Failed to cache preview descriptor");
-            }
-        };
-        let $context = (
-            $conn,
-            $case_id,
-            &mut get_cached_preview_descriptor,
-            &mut set_cached_preview_descriptor,
-        );
-        $body
-    }};
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedRange {
@@ -261,7 +219,7 @@ fn handle_media_protocol_request_inner(
         .map(str::to_string);
 
     let app_state = app_state.inner().clone();
-    let (case_id, db_path) = {
+    let (case_id, case_root, db_path) = {
         let guard = app_state.active_case.lock().map_err(|_| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -274,7 +232,11 @@ fn handle_media_protocol_request_inner(
                 "media handle unavailable".to_string(),
             )
         })?;
-        (active.meta.id.0.clone(), active.db_path())
+        (
+            active.meta.id.0.clone(),
+            active.case_root.clone(),
+            active.db_path(),
+        )
     };
     let conn = persistence_sqlite::open_or_create(&db_path).map_err(|_| {
         (
@@ -283,10 +245,8 @@ fn handle_media_protocol_request_inner(
         )
     })?;
 
-    let handle = with_preview_cache_context!(&app_state, &conn, case_id.as_str(), |context| {
-        file_service::open_file_handle_real(context, &file_id)
-    })
-    .map_err(|_| (StatusCode::NOT_FOUND, "media file unavailable".to_string()))?;
+    let handle = file_service::open_file_handle_for_case(&conn, &case_root, &case_id, &file_id)
+        .map_err(|_| (StatusCode::NOT_FOUND, "media file unavailable".to_string()))?;
     let range = parse_media_range_header(
         range_header.as_deref(),
         handle.size,
@@ -297,6 +257,7 @@ fn handle_media_protocol_request_inner(
     let bytes = read_media_protocol_bytes(
         &app_state,
         &conn,
+        &case_root,
         &case_id,
         &file_id,
         range.start,
@@ -341,6 +302,7 @@ fn handle_media_protocol_request_inner(
 fn read_media_protocol_bytes(
     state: &AppState,
     conn: &rusqlite::Connection,
+    case_root: &std::path::Path,
     case_id: &str,
     file_id: &str,
     offset: u64,
@@ -349,9 +311,11 @@ fn read_media_protocol_bytes(
     #[cfg(test)]
     MEDIA_PROTOCOL_BYTES_SERVICE_READ_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-    with_preview_cache_context!(state, conn, case_id, |context| {
-        file_service::read_preview_bytes_for_file(context, file_id, offset, length)
-    })
+    let _ = state;
+    let _ = case_id;
+    file_service::read_preview_bytes_for_source_case(
+        conn, case_root, case_id, file_id, offset, length,
+    )
     .map_err(|_| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -371,7 +335,10 @@ fn text_response(status: StatusCode, message: &str) -> http::Response<Cow<'stati
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
+    use persistence_sqlite::repositories::{
+        datasource_repo::{DataSourceRepo, DataSourceStorage},
+        file_repo::FileRepo,
+    };
 
     fn reset_media_protocol_bytes_service_read_call_count() {
         MEDIA_PROTOCOL_BYTES_SERVICE_READ_CALLS.store(0, std::sync::atomic::Ordering::Relaxed);
@@ -385,6 +352,7 @@ mod tests {
         test: impl FnOnce(
             &AppState,
             &rusqlite::Connection,
+            &std::path::Path,
             String,
             String,
         ) -> Result<(), persistence_sqlite::DbError>,
@@ -405,7 +373,7 @@ mod tests {
         let case_id = domain::CaseId("case-protocol-raw".to_string());
         let ds_id = domain::DataSourceId("ds-protocol-raw-exfat".to_string());
         DataSourceRepo::new(&conn)
-            .insert(
+            .insert_with_storage(
                 &case_id,
                 &domain::DataSource {
                     id: ds_id.clone(),
@@ -415,15 +383,30 @@ mod tests {
                     imported_at: chrono::Utc::now(),
                     provenance: domain::DataSourceProvenance::unknown(),
                 },
+                &DataSourceStorage::source_db(&ds_id.0, Some("unknown"), None),
             )
             .unwrap();
 
+        let source_conn = app_services::source_db::open_source_db(tmp.path(), &ds_id).unwrap();
+        DataSourceRepo::new(&source_conn)
+            .upsert_source_local_metadata(
+                &case_id,
+                &domain::DataSource {
+                    id: ds_id.clone(),
+                    name: "raw exfat evidence".to_string(),
+                    kind: domain::DataSourceKind::Raw,
+                    source_path: tmp.path().join("exfat.raw"),
+                    imported_at: chrono::Utc::now(),
+                    provenance: domain::DataSourceProvenance::unknown(),
+                },
+            )
+            .unwrap();
         let file_id = domain::FileEntryId("file-protocol-raw-exfat".to_string());
-        FileRepo::new(&conn)
+        FileRepo::new(&source_conn)
             .insert_batch(&[domain::FileEntry {
                 id: file_id.clone(),
                 parent_id: None,
-                data_source_id: ds_id,
+                data_source_id: ds_id.clone(),
                 path: "LARGE.BIN".to_string(),
                 name: "LARGE.BIN".to_string(),
                 entry_type: domain::EntryType::File,
@@ -442,7 +425,10 @@ mod tests {
             .unwrap();
 
         let state = AppState::default();
-        test(&state, &conn, case_id.0, file_id.0).unwrap();
+        let global_file_id = app_services::source_db::GlobalFileId::new(ds_id, file_id)
+            .encode()
+            .0;
+        test(&state, &conn, tmp.path(), case_id.0, global_file_id).unwrap();
     }
 
     fn write_exfat_raw_fixture(path: &std::path::Path) -> std::io::Result<()> {
@@ -525,10 +511,11 @@ mod tests {
 
     #[test]
     fn protocol_mid_raw_image_range_reads_via_bytes_only_service_path() {
-        with_raw_exfat_case_file(|state, conn, case_id, file_id| {
+        with_raw_exfat_case_file(|state, conn, case_root, case_id, file_id| {
             reset_media_protocol_bytes_service_read_call_count();
-            let bytes = read_media_protocol_bytes(state, conn, &case_id, &file_id, 512 + 7, 9)
-                .map_err(|(_, message)| persistence_sqlite::DbError::System(message))?;
+            let bytes =
+                read_media_protocol_bytes(state, conn, case_root, &case_id, &file_id, 512 + 7, 9)
+                    .map_err(|(_, message)| persistence_sqlite::DbError::System(message))?;
 
             assert_eq!(bytes, vec![b'B'; 9]);
             assert_eq!(media_protocol_bytes_service_read_call_count(), 1);

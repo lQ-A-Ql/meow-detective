@@ -1,5 +1,5 @@
-use domain::{EntryType, FileEntryId};
-use persistence_sqlite::repositories::file_repo::FileRepo;
+use domain::{DataSourceId, EntryType, FileEntryId};
+use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
 use rusqlite::Connection;
 use search::{extract_text, SearchIndex, SearchResult};
 use std::path::Path;
@@ -8,6 +8,7 @@ use transport::dto::{
 };
 
 use crate::performance::{measure_rows, metric, report, PerfSample};
+use crate::source_db::{encode_source_scoped_id, source_index_dir};
 
 /// Typed error for search service operations.
 #[derive(Debug, thiserror::Error)]
@@ -211,6 +212,92 @@ pub fn search_files_real_instrumented(
     })
 }
 
+pub fn search_files_for_case(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+    query: &str,
+    offset: u64,
+    limit: u32,
+) -> Result<SearchResultPageDto, SearchError> {
+    let start = std::time::Instant::now();
+    let mut total = 0u64;
+    let mut hits = Vec::new();
+    let search_limit = offset.saturating_add(limit as u64).min(1000);
+
+    for source in DataSourceRepo::new(case_conn).find_by_case(case_id)? {
+        let storage = DataSourceRepo::new(case_conn).find_storage(&source.id)?;
+        if storage
+            .as_ref()
+            .is_some_and(|value| value.import_state == "failed")
+        {
+            continue;
+        }
+        let index_dir = storage
+            .as_ref()
+            .and_then(|value| value.index_rel_path.as_deref())
+            .map(|rel| case_root.join(rel))
+            .unwrap_or_else(|| source_index_dir(case_root, &source.id));
+        if !index_dir.exists() {
+            continue;
+        }
+        let page = search_files_real(&index_dir, query, 0, search_limit as u32)?;
+        total = total.saturating_add(page.total);
+        hits.extend(
+            page.items
+                .into_iter()
+                .map(|hit| source_scoped_search_hit(hit, &source.id)),
+        );
+    }
+
+    hits.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.file_id.cmp(&b.file_id))
+    });
+
+    Ok(SearchResultPageDto {
+        total,
+        took_ms: start.elapsed().as_millis() as u64,
+        items: hits
+            .into_iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .collect(),
+    })
+}
+
+pub fn search_files_for_case_instrumented(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+    query: &str,
+    offset: u64,
+    limit: u32,
+) -> Result<InstrumentedSearchResult, SearchError> {
+    let (page, sample) = measure_rows(0, || {
+        search_files_for_case(case_conn, case_root, case_id, query, offset, limit)
+    });
+    let page = page?;
+    let sample = PerfSample {
+        elapsed_ms: page.took_ms.max(sample.elapsed_ms),
+        rows: page.items.len() as u64,
+    };
+    let performance_report = search_query_report(sample, page.total);
+    Ok(InstrumentedSearchResult {
+        page,
+        performance_report,
+    })
+}
+
+fn source_scoped_search_hit(mut hit: SearchHitDto, data_source_id: &DataSourceId) -> SearchHitDto {
+    if !hit.file_id.starts_with("ds:") {
+        hit.file_id = encode_source_scoped_id(data_source_id, &hit.file_id);
+    }
+    hit
+}
+
 fn search_query_report(sample: PerfSample, total: u64) -> PerformanceReportDto {
     let mut metrics = vec![
         metric("search.query.elapsedMs", sample.elapsed_ms as f64, "ms"),
@@ -263,7 +350,8 @@ fn search_index_report(sample: PerfSample, stats: &IndexStats) -> PerformanceRep
 mod tests {
     use super::*;
     use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
-    use persistence_sqlite::repositories::file_repo::FileRepo;
+    use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
+    use search::ExtractedText;
     use std::io::Cursor;
     use tempfile::TempDir;
 
@@ -327,6 +415,35 @@ mod tests {
         (conn, ids)
     }
 
+    fn setup_case_db_with_source(tmp: &TempDir) -> rusqlite::Connection {
+        let conn = persistence_sqlite::connection::open_in_memory().unwrap();
+        persistence_sqlite::runner::run_all(&conn).unwrap();
+        let case = domain::CaseMeta {
+            id: domain::CaseId("case-1".to_string()),
+            name: "case".to_string(),
+            number: None,
+            examiner: None,
+            notes: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+        persistence_sqlite::repositories::case_repo::CaseRepo::new(&conn)
+            .create(&case)
+            .unwrap();
+        let ds = domain::DataSource {
+            id: DataSourceId("ds-1".to_string()),
+            name: "source".to_string(),
+            kind: domain::DataSourceKind::LogicalDirectory,
+            source_path: tmp.path().join("source"),
+            imported_at: chrono::Utc::now(),
+            provenance: domain::DataSourceProvenance::unknown(),
+        };
+        DataSourceRepo::new(&conn)
+            .insert(&domain::CaseId("case-1".to_string()), &ds)
+            .unwrap();
+        conn
+    }
+
     fn metric_value(report: &PerformanceReportDto, key: &str) -> Option<f64> {
         report
             .metrics
@@ -382,5 +499,40 @@ mod tests {
             .summary
             .summary
             .starts_with("Search query returned 2 rows"));
+    }
+
+    #[test]
+    fn search_files_for_case_reads_source_indexes_and_wraps_file_ids() {
+        let tmp = TempDir::new().unwrap();
+        let case_conn = setup_case_db_with_source(&tmp);
+        let index_dir =
+            crate::source_db::source_index_dir(tmp.path(), &DataSourceId("ds-1".to_string()));
+        let index = SearchIndex::create(&index_dir).unwrap();
+        index
+            .index_documents(
+                &[ExtractedText {
+                    file_id: "file-1".to_string(),
+                    content: "needle source scoped content".to_string(),
+                    encoding: "utf-8".to_string(),
+                    extractable: true,
+                    byte_count: 28,
+                }],
+                &[("file-1".to_string(), "/evidence/file-1.txt".to_string())],
+            )
+            .unwrap();
+
+        let page = search_files_for_case(
+            &case_conn,
+            tmp.path(),
+            &domain::CaseId("case-1".to_string()),
+            "needle",
+            0,
+            10,
+        )
+        .unwrap();
+
+        assert_eq!(page.total, 1);
+        assert_eq!(page.items[0].file_id, "ds:ds-1:file-1");
+        assert_eq!(page.items[0].path, "/evidence/file-1.txt");
     }
 }
