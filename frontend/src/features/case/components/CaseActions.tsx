@@ -3,6 +3,7 @@ import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import type { JobSnapshot, RecentCase } from '@/types/models';
 import { openDialog, singleDialogPath } from '@/lib/platform/dialog';
+import { BRAND_DISPLAY_NAME } from '@/lib/branding';
 
 // ── Welcome screen: create + open case forms ──
 
@@ -42,7 +43,7 @@ export function CaseWelcomeForms({
   return (
     <div className="flex-1 flex flex-col w-full h-full bg-white overflow-auto">
       <div className="border-b border-forensics-border bg-forensics-panel p-8">
-        <div className="font-display text-3xl text-forensics-text tracking-tight mb-3">Forensics Workbench</div>
+        <div className="font-display text-3xl text-forensics-text tracking-tight mb-3">{BRAND_DISPLAY_NAME}</div>
         <div className="max-w-3xl text-[14px] text-forensics-muted leading-7">
           当前没有活动案件。先创建或打开案件目录，接着导入逻辑目录、RAW/DD/IMG 或 E01 镜像，即可进入真实文件浏览链路。
         </div>

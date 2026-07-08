@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use tracing::{debug, info, warn};
 
+const APP_CODE_NAME: &str = "Meow_Detective";
+
 /// A parsed update manifest returned by the remote update server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateManifest {
@@ -63,7 +65,7 @@ pub async fn check_for_update(
     debug!(current_version, update_endpoint, "checking for update");
 
     let client = reqwest::Client::builder()
-        .user_agent(format!("forensics-workbench/{}", current_version))
+        .user_agent(format!("{APP_CODE_NAME}/{}", current_version))
         .build()
         .map_err(|e| UpdateError::TlsError(e.to_string()))?;
 
@@ -116,7 +118,7 @@ pub async fn download_update(
     info!(url, "downloading update");
 
     let client = reqwest::Client::builder()
-        .user_agent(format!("forensics-workbench/{}", current_version))
+        .user_agent(format!("{APP_CODE_NAME}/{}", current_version))
         .build()
         .map_err(|e| UpdateError::TlsError(e.to_string()))?;
 
@@ -311,7 +313,7 @@ mod tests {
             "version": "2.0.0",
             "notes": "Release notes for v2.0.0",
             "published_at": "2025-06-20T00:00:00Z",
-            "download_url": "https://releases.example.com/forensics-workbench-2.0.0.msi",
+            "download_url": "https://releases.example.com/meow-detective-2.0.0.msi",
             "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
             "size_bytes": 15_000_000
         });
@@ -324,7 +326,7 @@ mod tests {
         );
         assert_eq!(
             manifest.download_url.as_deref(),
-            Some("https://releases.example.com/forensics-workbench-2.0.0.msi")
+            Some("https://releases.example.com/meow-detective-2.0.0.msi")
         );
         assert_eq!(
             manifest.sha256.as_deref(),

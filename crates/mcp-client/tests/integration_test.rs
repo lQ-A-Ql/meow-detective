@@ -271,7 +271,7 @@ fn test_json_rpc_request_format() {
             "protocolVersion": "2024-11-05",
             "capabilities": {},
             "clientInfo": {
-                "name": "forensics-workbench",
+                "name": "Meow_Detective",
                 "version": "0.1.0"
             }
         })),
@@ -280,7 +280,7 @@ fn test_json_rpc_request_format() {
     let json = serde_json::to_string(&request).unwrap();
     assert!(json.contains("\"jsonrpc\":\"2.0\""));
     assert!(json.contains("\"method\":\"initialize\""));
-    assert!(json.contains("forensics-workbench"));
+    assert!(json.contains("Meow_Detective"));
 }
 
 #[test]

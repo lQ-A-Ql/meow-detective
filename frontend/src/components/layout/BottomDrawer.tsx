@@ -1,7 +1,9 @@
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { Terminal, AlertCircle, ChevronUp, ChevronDown, Clock3 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { useResizableHeight } from '@/hooks/use-resizable-height';
+import { errorMessage, isApiErrorDto } from '@/lib/errors';
 import {
   deriveEvidenceHashStatus,
   getCacheStateLabel,
@@ -16,14 +18,35 @@ import {
 import { useDataSources } from '@/features/case/hooks';
 import { useJobsSnapshot, useTraceItems, useWarnings } from '@/features/jobs/hooks';
 import { useUiStore } from '@/stores/ui-store';
-import type { JobSnapshot } from '@/types/models';
+import type { ApiErrorDto, ImportPhaseProgress, JobSnapshot, WarningItem } from '@/types/models';
+
+type DrawerIssueSeverity = 'error' | 'warning';
+
+interface DrawerIssueMeta {
+  label: string;
+  value: string;
+}
+
+interface DrawerIssue {
+  id: string;
+  severity: DrawerIssueSeverity;
+  title: string;
+  detail: string;
+  meta: DrawerIssueMeta[];
+  details?: string;
+  suggestion?: string;
+}
 
 export function BottomDrawer() {
   const { t } = useTranslation();
-  const { data: jobs } = useJobsSnapshot();
-  const { data: warnings } = useWarnings();
-  const { data: dataSources } = useDataSources();
-  const { data: trace } = useTraceItems();
+  const jobsQuery = useJobsSnapshot();
+  const warningsQuery = useWarnings();
+  const dataSourcesQuery = useDataSources();
+  const traceQuery = useTraceItems();
+  const jobs = jobsQuery.data;
+  const warnings = warningsQuery.data;
+  const dataSources = dataSourcesQuery.data;
+  const trace = traceQuery.data;
   const drawerOpen = useUiStore((state) => state.drawerOpen);
   const toggleDrawer = useUiStore((state) => state.toggleDrawer);
   const importSignals = useImportEventState();
@@ -38,9 +61,28 @@ export function BottomDrawer() {
   const cancellingJobs = jobs?.filter((job) => job.status === 'cancelling') ?? [];
   const cancelledJobs = jobs?.filter((job) => job.status === 'cancelled') ?? [];
   const partialJobs = jobs?.filter((job) => job.partial) ?? [];
-  const jobWarningCount = jobs?.reduce((sum, job) => sum + job.warningCount, 0) ?? 0;
   const jobSkippedCount = jobs?.reduce((sum, job) => sum + job.skippedCount, 0) ?? 0;
   const runningCount = runningJobs.length;
+  const queryIssues = [
+    buildQueryIssue('jobs', t('bottomDrawer.issues.sources.jobs'), jobsQuery.error, t),
+    buildQueryIssue('warnings', t('bottomDrawer.issues.sources.warnings'), warningsQuery.error, t),
+    buildQueryIssue('dataSources', t('bottomDrawer.issues.sources.dataSources'), dataSourcesQuery.error, t),
+    buildQueryIssue('trace', t('bottomDrawer.issues.sources.trace'), traceQuery.error, t),
+  ].filter((issue): issue is DrawerIssue => Boolean(issue));
+  const failedJobIssues = failedJobs.map((job) => buildFailedJobIssue(job, t));
+  const jobWarningIssues = buildJobWarningIssues(jobs ?? [], t);
+  const importPhaseIssue = buildImportPhaseIssue(importSignals.latestPhase, t);
+  const errorIssues = [
+    ...queryIssues,
+    ...failedJobIssues,
+    ...(importPhaseIssue ? [importPhaseIssue] : []),
+  ];
+  const warningIssues = [
+    ...buildWarningIssues(warnings ?? []),
+    ...jobWarningIssues,
+  ];
+  const issueCount = errorIssues.length;
+  const warningSignalCount = warningIssues.length;
   const evidenceHashStatus = deriveEvidenceHashStatus(importSignals.partialResults, dataSources ?? []);
   const typedHeadline = importSignals.latestCancellation
     ? `${importSignals.latestCancellation.safeToClose ? t('bottomDrawer.labels.safeToClose') : getCacheStateLabel(importSignals.latestCancellation.state)} · ${importSignals.latestCancellation.detail}`
@@ -79,7 +121,10 @@ export function BottomDrawer() {
               <span className="text-forensics-text">{runningCount}</span> {t('bottomDrawer.jobs.running')}
             </span>
             <span>
-              <span className="text-forensics-text">{(warnings?.length ?? 0) + jobWarningCount}</span> {t('bottomDrawer.jobs.warnings')}
+              <span className={issueCount > 0 ? 'text-red-600' : 'text-forensics-text'}>{issueCount}</span> {t('bottomDrawer.issues.errors')}
+            </span>
+            <span>
+              <span className="text-forensics-text">{warningSignalCount}</span> {t('bottomDrawer.jobs.warnings')}
             </span>
             <span>
               <span className="text-forensics-text">{jobSkippedCount}</span> {t('bottomDrawer.jobs.skipped')}
@@ -332,21 +377,23 @@ export function BottomDrawer() {
           </div>
           <div className="overflow-auto border-r border-forensics-border p-3">
             <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-forensics-text-tertiary">
-              <span>{t('bottomDrawer.warnings.title')}</span>
-              <span className="font-mono text-forensics-muted-light">{warnings?.length ?? 0} {t('bottomDrawer.jobs.warnings')}</span>
+              <span>{t('bottomDrawer.issues.title')}</span>
+              <span className="font-mono text-forensics-muted-light">
+                {issueCount} {t('bottomDrawer.issues.errors')} / {warningSignalCount} {t('bottomDrawer.jobs.warnings')}
+              </span>
             </div>
             <div className="space-y-2">
-              {warnings?.map((warning) => (
-                <div key={warning.id} className="border border-forensics-warning-border bg-forensics-surface p-3 text-[11px]">
-                  <div className="flex items-start gap-2 text-forensics-text">
-                    <AlertCircle size={12} className="mt-0.5 text-forensics-warning shrink-0" />
-                    <div>
-                      <div className="font-medium break-words">{warning.title}</div>
-                      <div className="mt-1 text-forensics-muted line-clamp-2">{warning.detail}</div>
-                    </div>
-                  </div>
-                </div>
+              {errorIssues.map((issue) => (
+                <DrawerIssueCard key={issue.id} issue={issue} />
               ))}
+              {warningIssues.map((issue) => (
+                <DrawerIssueCard key={issue.id} issue={issue} />
+              ))}
+              {errorIssues.length === 0 && warningIssues.length === 0 ? (
+                <div className="border border-forensics-border-light bg-forensics-surface p-3 text-[11px] text-forensics-muted">
+                  {t('bottomDrawer.issues.empty')}
+                </div>
+              ) : null}
             </div>
           </div>
           <div className="overflow-auto p-3">
@@ -387,6 +434,180 @@ function cacheKeyLabel(cacheKey: string, t: (key: string) => string) {
   }
 
   return cacheKey;
+}
+
+function buildQueryIssue(source: string, title: string, error: unknown, t: TFunction): DrawerIssue | undefined {
+  if (!error) {
+    return undefined;
+  }
+
+  const apiError = isApiErrorDto(error) ? error : undefined;
+
+  return {
+    id: `query-${source}`,
+    severity: 'error',
+    title,
+    detail: errorMessage(error),
+    meta: buildApiErrorMeta(apiError, source, t),
+    details: formatErrorDetails(apiError?.details),
+    suggestion: apiError?.suggestion,
+  };
+}
+
+function buildApiErrorMeta(apiError: ApiErrorDto | undefined, source: string, t: TFunction): DrawerIssueMeta[] {
+  const meta: DrawerIssueMeta[] = [
+    { label: t('bottomDrawer.issues.meta.source'), value: source },
+  ];
+
+  if (!apiError) {
+    return meta;
+  }
+
+  meta.push({ label: t('bottomDrawer.issues.meta.code'), value: apiError.code });
+
+  if (apiError.category) {
+    meta.push({ label: t('bottomDrawer.issues.meta.category'), value: apiError.category });
+  }
+
+  if (apiError.recoverable !== undefined) {
+    meta.push({
+      label: t('bottomDrawer.issues.meta.recoverable'),
+      value: apiError.recoverable
+        ? t('bottomDrawer.issues.recoverable.yes')
+        : t('bottomDrawer.issues.recoverable.no'),
+    });
+  }
+
+  return meta;
+}
+
+function buildFailedJobIssue(job: JobSnapshot, t: TFunction): DrawerIssue {
+  return {
+    id: `job-${job.id}`,
+    severity: 'error',
+    title: job.name,
+    detail: job.detail || t('bottomDrawer.jobs.failedFallback'),
+    meta: [
+      { label: t('bottomDrawer.issues.meta.jobId'), value: job.id },
+      { label: t('bottomDrawer.issues.meta.status'), value: job.status },
+      { label: t('bottomDrawer.issues.meta.progress'), value: `${job.progress}%` },
+      ...(job.scope ? [{ label: t('bottomDrawer.issues.meta.scope'), value: job.scope }] : []),
+      { label: t('bottomDrawer.labels.failed'), value: job.failedCount.toString() },
+      { label: t('bottomDrawer.labels.warnings'), value: job.warningCount.toString() },
+      { label: t('bottomDrawer.labels.skipped'), value: job.skippedCount.toString() },
+      ...(job.currentPartition ? [{ label: t('bottomDrawer.partitionProgress.title'), value: job.currentPartition }] : []),
+    ],
+  };
+}
+
+function buildImportPhaseIssue(phase: ImportPhaseProgress | undefined, t: TFunction): DrawerIssue | undefined {
+  const failedCount = phase?.metrics.failed ?? 0;
+
+  if (!phase || (phase.state !== 'failed' && failedCount === 0)) {
+    return undefined;
+  }
+
+  return {
+    id: `import-phase-${phase.jobId}-${phase.phase}`,
+    severity: 'error',
+    title: t('bottomDrawer.issues.importPhaseTitle'),
+    detail: phase.detail || t('bottomDrawer.jobs.failedFallback'),
+    meta: [
+      { label: t('bottomDrawer.issues.meta.jobId'), value: phase.jobId },
+      { label: t('bottomDrawer.issues.meta.phase'), value: getImportPhaseLabel(phase.phase) },
+      { label: t('bottomDrawer.issues.meta.status'), value: getImportPhaseStateLabel(phase.state) },
+      { label: t('bottomDrawer.issues.meta.progress'), value: `${phase.percent}%` },
+      { label: t('bottomDrawer.labels.failed'), value: failedCount.toString() },
+      { label: t('bottomDrawer.importSignals.processed'), value: phase.metrics.rowsProcessed.toString() },
+    ],
+  };
+}
+
+function buildWarningIssues(warnings: WarningItem[]): DrawerIssue[] {
+  return warnings.map((warning) => ({
+    id: `warning-${warning.id}`,
+    severity: 'warning',
+    title: warning.title,
+    detail: warning.detail,
+    meta: [],
+  }));
+}
+
+function buildJobWarningIssues(jobs: JobSnapshot[], t: TFunction): DrawerIssue[] {
+  return jobs
+    .filter((job) => job.status !== 'failed')
+    .filter((job) => job.status === 'warning' || job.partial || job.warningCount > 0 || job.skippedCount > 0)
+    .map((job) => ({
+      id: `job-warning-${job.id}`,
+      severity: 'warning',
+      title: job.name,
+      detail: job.detail || job.scope || t('bottomDrawer.issues.jobWarningFallback'),
+      meta: [
+        { label: t('bottomDrawer.issues.meta.jobId'), value: job.id },
+        { label: t('bottomDrawer.issues.meta.status'), value: job.status },
+        { label: t('bottomDrawer.issues.meta.progress'), value: `${job.progress}%` },
+        ...(job.scope ? [{ label: t('bottomDrawer.issues.meta.scope'), value: job.scope }] : []),
+        { label: t('bottomDrawer.labels.warnings'), value: job.warningCount.toString() },
+        { label: t('bottomDrawer.labels.skipped'), value: job.skippedCount.toString() },
+        { label: t('bottomDrawer.labels.failed'), value: job.failedCount.toString() },
+      ],
+    }));
+}
+
+function formatErrorDetails(details: unknown) {
+  if (details === undefined || details === null) {
+    return undefined;
+  }
+
+  if (typeof details === 'string') {
+    return details;
+  }
+
+  try {
+    return JSON.stringify(details, null, 2);
+  } catch {
+    return String(details);
+  }
+}
+
+function DrawerIssueCard({ issue }: { issue: DrawerIssue }) {
+  const { t } = useTranslation();
+  const isError = issue.severity === 'error';
+
+  return (
+    <div className={`border p-3 text-[11px] ${isError ? 'border-red-200 bg-red-50 text-red-700' : 'border-forensics-warning-border bg-forensics-surface text-forensics-text'}`}>
+      <div className="flex items-start gap-2">
+        <AlertCircle size={12} className={`mt-0.5 shrink-0 ${isError ? 'text-red-600' : 'text-forensics-warning'}`} />
+        <div className="min-w-0 flex-1">
+          <div className="font-medium break-words">{issue.title}</div>
+          <div className={`mt-1 whitespace-pre-wrap break-words ${isError ? 'text-red-700/90' : 'text-forensics-muted'}`}>
+            {issue.detail}
+          </div>
+        </div>
+      </div>
+      {issue.meta.length > 0 ? (
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
+          {issue.meta.map((item) => (
+            <div key={`${item.label}-${item.value}`} className={`border px-1.5 py-1 ${isError ? 'border-red-200 bg-white/60' : 'border-forensics-border-light bg-forensics-panel'}`}>
+              <span className={isError ? 'text-red-500/80' : 'text-forensics-muted-light'}>{item.label}: </span>
+              <span className="font-mono break-all">{item.value}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {issue.suggestion ? (
+        <div className={`mt-2 border px-2 py-1.5 ${isError ? 'border-red-200 bg-white/60' : 'border-forensics-border-light bg-forensics-panel'}`}>
+          <span className="font-semibold">{t('bottomDrawer.issues.suggestion')}: </span>
+          <span className="break-words">{issue.suggestion}</span>
+        </div>
+      ) : null}
+      {issue.details ? (
+        <pre className={`mt-2 max-h-28 overflow-auto whitespace-pre-wrap break-words border px-2 py-1.5 font-mono text-[10px] ${isError ? 'border-red-200 bg-white/70 text-red-800' : 'border-forensics-border-light bg-forensics-panel text-forensics-text-tertiary'}`}>
+          {issue.details}
+        </pre>
+      ) : null}
+    </div>
+  );
 }
 
 function DrawerChip({ label, detail, tone }: { label: string; detail?: string; tone: string }) {

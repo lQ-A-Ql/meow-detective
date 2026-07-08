@@ -11,6 +11,8 @@ use tracing::info;
 
 use super::task_manager::TaskManager;
 
+const APP_CODE_NAME: &str = "Meow_Detective";
+
 pub type SharedMcpClient = Arc<AsyncMutex<McpClient>>;
 
 /// Application state shared across Tauri commands.
@@ -36,7 +38,7 @@ impl Default for AppState {
     fn default() -> Self {
         let config_dir = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("forensics");
+            .join(APP_CODE_NAME);
         let mcp_config_path = config_dir.join("mcp-config.json");
         let app_settings_path = config_dir.join("app-settings.json");
         let runtime_cache = RuntimeCache::open_in_memory().expect("runtime cache must initialize");

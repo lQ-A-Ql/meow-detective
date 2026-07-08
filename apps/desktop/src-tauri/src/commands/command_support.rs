@@ -85,7 +85,7 @@ mod tests {
     #[test]
     fn active_case_snapshot_and_pool_connection_stay_in_sync() {
         let root = std::env::temp_dir().join(format!(
-            "forensics-workbench-command-support-test-{}",
+            "Meow_Detective-command-support-test-{}",
             Uuid::new_v4()
         ));
         let active =

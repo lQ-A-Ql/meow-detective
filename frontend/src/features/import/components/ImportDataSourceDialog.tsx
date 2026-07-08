@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Monitor, Server, FolderOpen, Loader2 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
@@ -42,13 +42,19 @@ export function ImportDataSourceDialog({
   const [error, setError] = useState('');
   const { pickDirectoryPath, pickSourcePath } = useImportDataSourceDialogModel();
 
-  function reset() {
+  const reset = useCallback(() => {
     setStep('platform');
     setPlatform('windows');
     setName('');
     setPath('');
     setError('');
-  }
+  }, []);
+
+  useEffect(() => {
+    if (!open) {
+      reset();
+    }
+  }, [open, reset]);
 
   function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen) reset();

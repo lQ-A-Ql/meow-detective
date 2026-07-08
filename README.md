@@ -1,4 +1,4 @@
-# Forensics Workbench
+# Meow~Detective
 
 A Tauri 2 desktop application for disk image forensic analysis on Windows. 37 Rust crates, 17 frontend pages, 98 Tauri commands, 2,061 Rust tests. MIT licensed.
 

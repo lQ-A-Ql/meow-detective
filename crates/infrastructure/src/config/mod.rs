@@ -2,27 +2,28 @@
 
 use std::path::PathBuf;
 
+const APP_CODE_NAME: &str = "Meow_Detective";
+
 /// Returns the canonical root directory for storing forensic cases.
 ///
-/// On Windows: `%APPDATA%/ForensicsWorkbench/cases/`
-/// On other platforms: `$HOME/.forensics-workbench/cases/`
+/// On Windows: `%APPDATA%/Meow_Detective/cases/`
+/// On other platforms: `$HOME/.Meow_Detective/cases/`
 ///
 /// This is the only directory from which `delete_case` is permitted to
 /// remove subdirectories, preventing arbitrary directory deletion.
 pub fn safe_cases_root() -> PathBuf {
     #[cfg(target_os = "windows")]
     {
-        let appdata =
-            std::env::var("APPDATA").unwrap_or_else(|_| r"C:\ForensicsWorkbench".to_string());
-        PathBuf::from(appdata)
-            .join("ForensicsWorkbench")
-            .join("cases")
+        let appdata = std::env::var("APPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from(r"C:\"));
+        appdata.join(APP_CODE_NAME).join("cases")
     }
     #[cfg(not(target_os = "windows"))]
     {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
         PathBuf::from(home)
-            .join(".forensics-workbench")
+            .join(format!(".{APP_CODE_NAME}"))
             .join("cases")
     }
 }

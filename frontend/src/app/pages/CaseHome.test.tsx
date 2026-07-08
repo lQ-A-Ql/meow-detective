@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CaseHome } from './CaseHome';
@@ -59,7 +59,7 @@ vi.mock('@/features/settings/hooks', () => ({
 
 vi.mock('@/lib/settings', () => ({
   readLocalSettings: vi.fn(() => ({
-    caseRoot: 'C:\\ForensicsWorkbench\\cases',
+    caseRoot: 'C:\\Meow_Detective\\cases',
     imageSearchPaths: 'E:\\cases\\; D:\\images\\',
     devEventTrace: false,
     maxImportWorkers: '',
@@ -150,7 +150,7 @@ describe('CaseHome page', () => {
   it('renders welcome screen when no case is open', async () => {
     await renderPageAsync();
 
-    expect(screen.getByText('Forensics Workbench')).toBeDefined();
+    expect(screen.getByText('Meow~Detective')).toBeDefined();
     expect(screen.getByText(/当前没有活动案件/)).toBeDefined();
   });
 
@@ -264,6 +264,45 @@ describe('CaseHome page', () => {
     await renderPageAsync();
 
     expect(screen.getByText('已有数据源')).toBeDefined();
+  });
+
+  it('closes the import dialog after the import command is accepted', async () => {
+    const mutate = vi.fn((_request, options) => {
+      options?.onSuccess?.('job-import-1');
+    });
+    mocks.currentCase.mockReturnValue(mockQueryState({
+      data: {
+        id: 'case-001',
+        name: 'Test Case',
+        number: '2026-001',
+        examiner: 'Test Examiner',
+        createdAt: '2026-05-14T08:30:00Z',
+        updatedAt: '2026-05-16T11:20:00Z',
+      },
+    }));
+    mocks.caseMetrics.mockReturnValue(mockQueryState({
+      data: { dataSourceCount: 0, indexedFileCount: 0, timelineEventCount: 0, artifactCount: 0 },
+    }));
+    mocks.dataSources.mockReturnValue(mockQueryState({ data: [] }));
+    mocks.importDataSource.mockReturnValue(mockMutationState({ mutate }));
+
+    await renderPageAsync();
+
+    fireEvent.click(screen.getByRole('button', { name: '导入数据源' }));
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }));
+    const [, pathInput] = screen.getAllByRole('textbox') as HTMLInputElement[];
+    fireEvent.change(pathInput, { target: { value: 'D:/evidence/disk.E01' } });
+    fireEvent.click(screen.getByRole('button', { name: '导入' }));
+
+    expect(mutate).toHaveBeenCalledWith(
+      {
+        sourcePath: 'D:/evidence/disk.E01',
+        platform: 'windows',
+        profile: undefined,
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+    await waitFor(() => expect(screen.queryByText('步骤 2/2：填写数据源信息')).toBeNull());
   });
 
   it('formats partition names with the shared partition display formatter', async () => {

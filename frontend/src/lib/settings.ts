@@ -1,3 +1,5 @@
+import { BRAND_CODE_NAME } from '@/lib/branding';
+
 export type ImportAnalysisMode = 'metadataOnly' | 'budgetedContent' | 'fullContent';
 
 export interface LocalSettings {
@@ -13,10 +15,10 @@ export interface LocalSettings {
   maxInlineMediaPreviewBytes: string;
 }
 
-const STORAGE_KEY = 'forensics.localSettings';
+const STORAGE_KEY = `${BRAND_CODE_NAME}.localSettings`;
 
 export const defaultSettings: LocalSettings = {
-  caseRoot: 'C:\\ForensicsWorkbench\\cases',
+  caseRoot: `C:\\${BRAND_CODE_NAME}\\cases`,
   imageSearchPaths: 'E:\\cases\\; D:\\images\\',
   devEventTrace: false,
   maxImportWorkers: '',

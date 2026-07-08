@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-Forensics Workbench is a Windows-first, single-user desktop digital forensics application. The shipped app is a Tauri 2 desktop shell with a Rust backend, a React/TypeScript frontend, and SQLite-backed case storage. The first-version product scope is local/offline disk-media investigation: cases, evidence import, file browsing, search, timeline analysis, Windows artifacts, and report export.
+Meow~Detective (`Meow_Detective` in source-level identifiers and storage names) is a Windows-first, single-user desktop digital forensics application. The shipped app is a Tauri 2 desktop shell with a Rust backend, a React/TypeScript frontend, and SQLite-backed case storage. The first-version product scope is local/offline disk-media investigation: cases, evidence import, file browsing, search, timeline analysis, Windows artifacts, and report export.
 
 The intended architecture is backend-led: Rust owns case lifecycle, data source import, evidence readers, search/timeline/artifact/report logic, and persistence. React primarily consumes Tauri commands, DTO snapshots, and events.
 

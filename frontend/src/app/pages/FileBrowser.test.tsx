@@ -671,6 +671,95 @@ describe('FileBrowser media preview', () => {
     expect(screen.queryByText('分区1（NTFS）')).toBeNull();
   });
 
+  it('formats partition roots with their own data source metadata when sources share partition indexes', async () => {
+    Object.assign(mocks.selectionState, {
+      selectedDirectoryId: undefined,
+      selectedFileId: undefined,
+    });
+    mocks.fileTree.mockReturnValue(
+      queryState([
+        {
+          id: 'root-ds-win-p1',
+          name: 'Partition 1 (NTFS)',
+          depth: 0,
+          hasChildren: true,
+          dataSourceId: 'ds-win',
+          expanded: false,
+          hidden: false,
+          system: false,
+          deleted: false,
+        },
+        {
+          id: 'root-ds-linux-p1',
+          name: 'Partition 1 (XFS)',
+          depth: 0,
+          hasChildren: true,
+          dataSourceId: 'ds-linux',
+          expanded: false,
+          hidden: false,
+          system: false,
+          deleted: false,
+        },
+      ]),
+    );
+    mocks.dataSources.mockReturnValue(
+      queryState([
+        {
+          id: 'ds-win',
+          name: 'Windows Source',
+          kind: 'e01',
+          sourcePath: 'D:/evidence/windows.E01',
+          importedAt: '2026-06-01T10:00:00Z',
+          platform: 'windows',
+          partitions: [
+            {
+              index: 1,
+              name: 'Basic data partition',
+              kindLabel: 'Basic data',
+              status: 'supported',
+              offset: 0,
+              length: 1024,
+              filesystem: 'NTFS',
+            },
+          ],
+        },
+        {
+          id: 'ds-linux',
+          name: 'Linux Source',
+          kind: 'e01',
+          sourcePath: 'D:/evidence/linux.E01',
+          importedAt: '2026-06-02T10:00:00Z',
+          platform: 'linux',
+          partitions: [
+            {
+              index: 1,
+              name: 'Linux root LV',
+              kindLabel: 'Linux LVM',
+              status: 'supported',
+              offset: 2048,
+              length: 4096,
+              filesystem: 'XFS',
+            },
+          ],
+        },
+      ]),
+    );
+
+    renderPage();
+
+    const windowsTreeNode = await screen.findByRole('button', { name: /Windows Source/ });
+    const linuxTreeNode = screen.getByRole('button', { name: /Linux Source/ });
+
+    await waitFor(() => expect(screen.getByText('分区1（NTFS）')).toBeDefined());
+    expect(screen.queryByText('分区1（XFS）')).toBeNull();
+
+    fireEvent.click(windowsTreeNode);
+    fireEvent.click(linuxTreeNode);
+
+    await waitFor(() => expect(screen.getByText('分区1（XFS）')).toBeDefined());
+    expect(screen.queryByText('分区1（NTFS）')).toBeNull();
+  });
+
   it('uses jump context to reveal off-page selected files and enable hidden visibility when needed', async () => {
     Object.assign(mocks.selectionState, {
       selectedDirectoryId: 'root',

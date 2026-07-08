@@ -153,7 +153,7 @@ pub fn create_analysis_demo_case(
     state: State<AppState>,
     app: AppHandle,
 ) -> Result<CaseSummaryDto, CommandError> {
-    let case_root = std::env::temp_dir().join("forensics-workbench-analysis-demo");
+    let case_root = std::env::temp_dir().join("Meow_Detective-analysis-demo");
     if case_root.exists() {
         std::fs::remove_dir_all(&case_root).map_err(|e| {
             CommandError::internal(format!("Failed to reset analysis demo case: {e}"))
@@ -514,7 +514,8 @@ pub async fn delete_data_source(
     .map_err(CommandError::from_join_error)?
 }
 
-const RECENT_CASES_FILE: &str = "forensics-recent-cases.json";
+const APP_CODE_NAME: &str = "Meow_Detective";
+const RECENT_CASES_FILE: &str = "Meow_Detective-recent-cases.json";
 const MAX_RECENT_CASES: usize = 8;
 
 fn recent_cases_path() -> Result<PathBuf, CommandError> {
@@ -524,7 +525,7 @@ fn recent_cases_path() -> Result<PathBuf, CommandError> {
         .or_else(|| std::env::var_os("APPDATA").map(PathBuf::from))
         .or_else(|| std::env::var_os("LOCALAPPDATA").map(PathBuf::from))
         .ok_or_else(|| CommandError::internal("Cannot resolve APPDATA for recent cases"))?;
-    Ok(base.join("ForensicsWorkbench").join(RECENT_CASES_FILE))
+    Ok(base.join(APP_CODE_NAME).join(RECENT_CASES_FILE))
 }
 
 fn save_recent_cases(recent: &[RecentCaseDto]) -> Result<(), CommandError> {
@@ -624,7 +625,7 @@ mod tests {
     #[test]
     fn active_case_pool_is_guarded_by_active_case_lifecycle() {
         let root = std::env::temp_dir().join(format!(
-            "forensics-workbench-pool-lifecycle-test-{}",
+            "Meow_Detective-pool-lifecycle-test-{}",
             Uuid::new_v4()
         ));
         let active = case_service::create_case(&root, "Pool Lifecycle", Some("Codex Test"))
@@ -657,7 +658,7 @@ mod tests {
     #[test]
     fn command_support_helpers_follow_active_case_lifecycle() {
         let root = std::env::temp_dir().join(format!(
-            "forensics-workbench-command-helper-lifecycle-test-{}",
+            "Meow_Detective-command-helper-lifecycle-test-{}",
             Uuid::new_v4()
         ));
         let active = case_service::create_case(&root, "Lifecycle", Some("Codex Test"))
@@ -685,7 +686,7 @@ mod tests {
     #[test]
     fn analysis_demo_seed_supports_real_analysis_flow() {
         let root = std::env::temp_dir().join(format!(
-            "forensics-workbench-analysis-demo-test-{}",
+            "Meow_Detective-analysis-demo-test-{}",
             Uuid::new_v4()
         ));
         let active = case_service::create_case(&root, "Analysis Demo", Some("Codex Demo"))
@@ -746,7 +747,7 @@ mod tests {
     fn remember_recent_case_uses_actual_case_directory() {
         let _lock = recent_cases_test_lock().lock().unwrap();
         let parent = std::env::temp_dir().join(format!(
-            "forensics-workbench-recent-case-test-{}",
+            "Meow_Detective-recent-case-test-{}",
             Uuid::new_v4()
         ));
         let previous = std::env::var_os("FORENSICS_RECENT_CASES_DIR");
@@ -779,7 +780,7 @@ mod tests {
         let _lock = recent_cases_test_lock().lock().unwrap();
 
         let dir = std::env::temp_dir().join(format!(
-            "forensics-recent-cases-security-test-{}",
+            "Meow_Detective-recent-cases-security-test-{}",
             Uuid::new_v4()
         ));
         let previous = std::env::var_os("FORENSICS_RECENT_CASES_DIR");

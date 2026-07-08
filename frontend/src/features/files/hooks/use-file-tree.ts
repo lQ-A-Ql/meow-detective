@@ -267,12 +267,15 @@ export function useFileTree({
   }, [activeDirectoryId, rootNodes, treeChildren]);
 
   const displayNodeName = useCallback(
-    (nodeName: string, depth = 0) => {
+    (nodeName: string, depth = 0, dataSourceId?: string) => {
       if (depth === 0) return nodeName;
-      if (depth === 1) return formatPartitionRootDisplayName(nodeName, partitions);
+      if (depth === 1) {
+        const sourcePartitions = dataSources?.find((source) => source.id === dataSourceId)?.partitions;
+        return formatPartitionRootDisplayName(nodeName, sourcePartitions ?? partitions);
+      }
       return nodeName;
     },
-    [partitions]
+    [dataSources, partitions]
   );
 
   const treeNodes = useMemo(

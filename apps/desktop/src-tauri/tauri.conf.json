@@ -1,15 +1,15 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Forensics Workbench",
+  "productName": "Meow~Detective",
   "version": "0.1.0",
-  "identifier": "com.lqaq.forensics",
+  "identifier": "com.lqaq.meow-detective",
   "build": {
     "frontendDist": "../../../frontend/dist"
   },
   "app": {
     "windows": [
       {
-        "title": "Forensics Workbench",
+        "title": "Meow~Detective",
         "width": 1440,
         "height": 960
       }

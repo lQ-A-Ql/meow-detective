@@ -196,6 +196,49 @@ describe('BottomDrawer jobs panel', () => {
     expect(failedChip).toBeDefined();
   });
 
+  it('surfaces failed jobs and query errors with detailed issue metadata', () => {
+    mocks.jobs.mockReturnValue({
+      data: [
+        {
+          id: 'job-failed',
+          name: 'Linux artifact extraction',
+          scope: 'Data source ds-linux',
+          progress: 73,
+          status: 'failed',
+          detail: 'XFS directory read failed',
+          warningCount: 2,
+          skippedCount: 1,
+          failedCount: 4,
+          partial: false,
+          currentPartition: 'P3 root LV',
+        },
+      ],
+    });
+    mocks.warnings.mockReturnValue({
+      data: [],
+      error: {
+        code: 'COMMAND_GET_WARNINGS_FAILED',
+        message: 'SQLite warning query failed',
+        category: 'io',
+        recoverable: true,
+        suggestion: '重新打开案件后重试。',
+        details: { table: 'job_warnings', reason: 'database is locked' },
+      },
+    });
+
+    render(<BottomDrawer />);
+
+    expect(screen.getByText('ISSUES')).toBeDefined();
+    expect(screen.getByText('告警加载失败')).toBeDefined();
+    expect(screen.getByText('SQLite warning query failed')).toBeDefined();
+    expect(screen.getByText(/COMMAND_GET_WARNINGS_FAILED/)).toBeDefined();
+    expect(screen.getByText(/database is locked/)).toBeDefined();
+    expect(screen.getAllByText('Linux artifact extraction').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('XFS directory read failed').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Data source ds-linux/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/P3 root LV/)).toBeDefined();
+  });
+
   it('surfaces evidence hash caveats in the compact import signal panel', () => {
     mocks.importSignals.mockReturnValue({
       latestPhase: undefined,
@@ -287,7 +330,8 @@ describe('BottomDrawer job status buckets', () => {
 
     render(<BottomDrawer />);
 
-    expect(screen.getByText('Completed with a caveat')).toBeDefined();
+    expect(screen.getAllByText('Registry extraction').length).toBeGreaterThan(1);
+    expect(screen.getAllByText('Completed with a caveat').length).toBeGreaterThan(1);
     expect(screen.getByText('Draining workers')).toBeDefined();
     expect(screen.getByText('Cancelled by user')).toBeDefined();
   });

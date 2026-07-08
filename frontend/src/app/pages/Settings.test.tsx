@@ -107,7 +107,7 @@ describe('Settings page', () => {
     render(<Settings />);
 
     const caseRoot = await screen.findByLabelText('案件默认存储路径');
-    fireEvent.change(caseRoot, { target: { value: 'C:\\ForensicsWorkbench\\cases' } });
+    fireEvent.change(caseRoot, { target: { value: 'C:\\Meow_Detective\\cases' } });
     fireEvent.change(screen.getByLabelText('镜像搜索路径'), {
       target: { value: 'D:\\Images; F:\\MoreImages' },
     });
@@ -116,7 +116,7 @@ describe('Settings page', () => {
 
     await waitFor(() => {
       expect(mocks.saveSettingsMutation.mutateAsync).toHaveBeenCalledWith({
-        caseRoot: 'C:\\ForensicsWorkbench\\cases',
+        caseRoot: 'C:\\Meow_Detective\\cases',
         imageSearchPaths: ['D:\\Images', 'F:\\MoreImages'],
         devEventTrace: false,
         maxImportWorkers: 1,
@@ -130,8 +130,8 @@ describe('Settings page', () => {
     });
     expect(await screen.findByText('设置已保存。')).toBeTruthy();
     expect(storage.setItem).toHaveBeenCalledWith(
-      'forensics.localSettings',
-      expect.stringContaining('"caseRoot":"C:\\\\ForensicsWorkbench\\\\cases"'),
+      'Meow_Detective.localSettings',
+      expect.stringContaining('"caseRoot":"C:\\\\Meow_Detective\\\\cases"'),
     );
   });
 
@@ -144,7 +144,7 @@ describe('Settings page', () => {
 
     render(<Settings />);
 
-    expect(await screen.findByDisplayValue('C:\\ForensicsWorkbench\\cases')).toBeTruthy();
+    expect(await screen.findByDisplayValue('C:\\Meow_Detective\\cases')).toBeTruthy();
     expect((screen.getByLabelText('镜像搜索路径') as HTMLInputElement).value).toBe(
       'E:\\cases\\; D:\\images\\',
     );

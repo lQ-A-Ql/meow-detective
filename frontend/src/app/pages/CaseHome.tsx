@@ -133,7 +133,12 @@ export function CaseHome() {
       <ImportDataSourceDialog
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
-        onImport={(request) => importMutation.mutate(request)}
+        onImport={(request) =>
+          importMutation.mutate(request, {
+            onSuccess: () => {
+              setImportDialogOpen(false);
+            },
+          })}
         importPending={importMutation.isPending}
       />
 

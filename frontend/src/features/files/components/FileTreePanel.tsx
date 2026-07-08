@@ -14,7 +14,7 @@ export interface FileTreePanelProps {
   canLoadMoreTreeChildren: boolean;
   loadMoreActiveTreeChildren: () => void;
   toggleDirectory: (node: FileTreeNode) => void;
-  displayNodeName: (name: string, depth: number) => string;
+  displayNodeName: (name: string, depth: number, dataSourceId?: string) => string;
   filterQuery: string;
   setFilterQuery: (query: string) => void;
   treeWidth: number;
@@ -129,7 +129,7 @@ export function FileTreePanel({
                 system={node.system}
                 size={12}
               />
-              <span className="min-w-0 flex-1 truncate">{displayNodeName(node.name, node.depth)}</span>
+              <span className="min-w-0 flex-1 truncate">{displayNodeName(node.name, node.depth, node.dataSourceId)}</span>
               {node.status && node.status !== 'ready' ? (
                 <span className="ml-auto shrink-0 text-[10px] uppercase tracking-wider text-[#888]">
                   {node.status}

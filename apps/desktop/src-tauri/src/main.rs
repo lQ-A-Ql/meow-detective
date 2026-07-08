@@ -8,6 +8,6 @@ fn main() {
         .with_thread_ids(true)
         .init();
 
-    tracing::info!("Forensics Workbench starting");
+    tracing::info!("Meow~Detective starting");
     forensics_desktop_lib::run();
 }

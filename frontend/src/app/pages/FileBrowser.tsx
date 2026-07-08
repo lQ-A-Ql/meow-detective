@@ -44,7 +44,7 @@ export function FileBrowser() {
               <>
                 <span className="text-forensics-text font-semibold truncate max-w-[200px]">
                   {fb.activeRootNode
-                    ? fb.displayNodeName(fb.activeRootNode.name, fb.activeRootNode.depth)
+                    ? fb.displayNodeName(fb.activeRootNode.name, fb.activeRootNode.depth, fb.activeRootNode.dataSourceId)
                     : '/'}
                 </span>
                 {fb.currentDirectory &&
@@ -52,7 +52,7 @@ export function FileBrowser() {
                   <>
                     <ChevronRight size={12} className="text-forensics-500" />
                     <span className="text-forensics-text font-semibold truncate max-w-[200px]">
-                      {fb.displayNodeName(fb.currentDirectory.name, fb.currentDirectory.depth)}
+                      {fb.displayNodeName(fb.currentDirectory.name, fb.currentDirectory.depth, fb.currentDirectory.dataSourceId)}
                     </span>
                   </>
                 ) : null}

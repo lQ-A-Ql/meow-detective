@@ -163,7 +163,7 @@ impl McpTransportTrait for StdioTransport {
                 }),
             },
             client_info: ClientInfo {
-                name: "forensics-workbench".to_string(),
+                name: "Meow_Detective".to_string(),
                 version: "0.1.0".to_string(),
             },
         };

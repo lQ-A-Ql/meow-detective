@@ -196,6 +196,35 @@
     "warnings": {
       "title": "WARNINGS"
     },
+    "issues": {
+      "title": "ISSUES",
+      "errors": "错误",
+      "empty": "暂无错误或告警",
+      "importPhaseTitle": "导入阶段错误",
+      "jobWarningFallback": "任务存在告警或部分完成状态",
+      "suggestion": "建议",
+      "sources": {
+        "jobs": "任务状态加载失败",
+        "warnings": "告警加载失败",
+        "dataSources": "数据源状态加载失败",
+        "trace": "事件流加载失败"
+      },
+      "meta": {
+        "source": "来源",
+        "code": "错误码",
+        "category": "分类",
+        "recoverable": "可恢复",
+        "jobId": "任务 ID",
+        "status": "状态",
+        "progress": "进度",
+        "scope": "范围",
+        "phase": "阶段"
+      },
+      "recoverable": {
+        "yes": "是",
+        "no": "否"
+      }
+    },
     "trace": {
       "title": "TRACE",
       "recentStream": "最近事件流"

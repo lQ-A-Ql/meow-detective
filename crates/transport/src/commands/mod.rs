@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 const MAX_PAGE_LIMIT: u32 = 500;
 const DEFAULT_PAGE_LIMIT: u32 = 100;
+const APP_CODE_NAME: &str = "Meow_Detective";
 
 pub use crate::dto::{
     ArtifactRowDto, CaseMetricsDto, CaseSummaryDto, CorrelationSnapshotDto, DataSourceSummaryDto,
@@ -664,14 +665,14 @@ fn default_case_root() -> String {
     #[cfg(target_os = "windows")]
     {
         std::env::var("APPDATA")
-            .map(|root| format!("{root}\\ForensicsWorkbench\\cases"))
-            .unwrap_or_else(|_| "C:\\ForensicsWorkbench\\cases".to_string())
+            .map(|root| format!("{root}\\{APP_CODE_NAME}\\cases"))
+            .unwrap_or_else(|_| format!("C:\\{APP_CODE_NAME}\\cases"))
     }
     #[cfg(not(target_os = "windows"))]
     {
         std::env::var("HOME")
-            .map(|root| format!("{root}/.forensics-workbench/cases"))
-            .unwrap_or_else(|_| "/tmp/.forensics-workbench/cases".to_string())
+            .map(|root| format!("{root}/.{APP_CODE_NAME}/cases"))
+            .unwrap_or_else(|_| format!("/tmp/.{APP_CODE_NAME}/cases"))
     }
 }
 

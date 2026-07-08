@@ -196,6 +196,35 @@
     "warnings": {
       "title": "WARNINGS"
     },
+    "issues": {
+      "title": "ISSUES",
+      "errors": "Errors",
+      "empty": "No errors or warnings",
+      "importPhaseTitle": "Import phase error",
+      "jobWarningFallback": "Job has warnings or completed partially",
+      "suggestion": "Suggestion",
+      "sources": {
+        "jobs": "Failed to load job status",
+        "warnings": "Failed to load warnings",
+        "dataSources": "Failed to load data source status",
+        "trace": "Failed to load event stream"
+      },
+      "meta": {
+        "source": "Source",
+        "code": "Code",
+        "category": "Category",
+        "recoverable": "Recoverable",
+        "jobId": "Job ID",
+        "status": "Status",
+        "progress": "Progress",
+        "scope": "Scope",
+        "phase": "Phase"
+      },
+      "recoverable": {
+        "yes": "Yes",
+        "no": "No"
+      }
+    },
     "trace": {
       "title": "TRACE",
       "recentStream": "Recent event stream"

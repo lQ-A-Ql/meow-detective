@@ -5,7 +5,7 @@ export interface SavedSearchQuery {
   createdAt: string;
 }
 
-const STORAGE_KEY = 'forensics.savedSearchQueries';
+const STORAGE_KEY = 'Meow_Detective.savedSearchQueries';
 
 export function readSavedSearchQueries(): SavedSearchQuery[] {
   try {
