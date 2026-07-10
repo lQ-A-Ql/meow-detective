@@ -79,8 +79,8 @@ function TableRowMemoBase<T>({
       data-state={selected ? 'selected' : undefined}
       className={`h-[31px] cursor-pointer border-b ${
         selected
-          ? 'bg-[#e8e8e8] text-[#111]'
-          : 'text-[#333] hover:bg-[#f9f9f9]'
+          ? 'bg-forensics-sakura-150 text-[#111]'
+          : 'text-[#333] hover:bg-forensics-hover'
       }`}
       onClick={() => onRowClick?.(row)}
     >
@@ -89,7 +89,7 @@ function TableRowMemoBase<T>({
           key={column.key}
           className={`h-[31px] px-2 py-1.5 align-middle ${
             index < columns.length - 1
-              ? 'border-r border-[#f0f0f0]'
+              ? 'border-r border-forensics-border-light'
               : ''
           } ${column.className ?? ''}`}
         >
@@ -182,13 +182,13 @@ export function DenseDataTable<T>({
       onScroll={handleScroll}
     >
       <Table className="text-[11px]">
-        <TableHeader className="sticky top-0 z-10 bg-[#fafafa]">
-          <TableRow className="border-b border-[#e0e0e0] hover:bg-[#fafafa]">
+        <TableHeader className="sticky top-0 z-10 bg-forensics-panel">
+          <TableRow className="border-b border-forensics-border hover:bg-forensics-panel">
             {columns.map((column) => (
               <TableHead
                 key={column.key}
-                className={`group h-7 border-r border-[#e0e0e0] px-2 text-[11px] font-medium tracking-wider text-[#555] last:border-r-0 ${
-                  column.sortable ? 'cursor-pointer select-none hover:bg-[#f0f0f0]' : ''
+                className={`group h-7 border-r border-forensics-border px-2 text-[11px] font-medium tracking-wider text-[#555] last:border-r-0 ${
+                  column.sortable ? 'cursor-pointer select-none hover:bg-forensics-hover' : ''
                 } ${column.className ?? ''}`}
                 onClick={() => column.sortable && handleSort(column.sortKey ?? column.key)}
               >

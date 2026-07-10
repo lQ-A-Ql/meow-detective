@@ -1,5 +1,6 @@
 import { Clock, Monitor, Network, RefreshCw, Shield } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
+import { BrandEmptyState } from '@/components/brand';
 import type {
   AnalysisExtractionRun,
   AnalysisSystemInfo,
@@ -203,13 +204,12 @@ export function AnalysisHeader({
 export function AnalysisEmptyState() {
   return (
     <div className="flex flex-1 items-center justify-center p-8">
-      <div className="max-w-md text-center">
-        <Monitor size={40} className="mx-auto mb-4 text-[#bbb]" />
-        <div className="text-[15px] font-semibold text-[#111]">请先创建或打开案件</div>
-        <div className="mt-2 text-[12px] leading-6 text-[#666]">
-          数据源分析依赖当前案件中的文件目录和数据源记录。未选择案件时不会发起分析请求。
-        </div>
-      </div>
+      <BrandEmptyState
+        variant="investigate"
+        title="请先创建或打开案件"
+        description="数据源分析依赖当前案件中的文件目录和数据源记录。未选择案件时不会发起分析请求。"
+        className="max-w-md"
+      />
     </div>
   );
 }

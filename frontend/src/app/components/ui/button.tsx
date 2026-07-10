@@ -22,9 +22,9 @@ const buttonVariants = cva(
         forensicsPrimary:
           "rounded-[2px] bg-forensics-text text-white hover:bg-forensics-text-secondary",
         forensicsOutline:
-          "rounded-[2px] border border-forensics-border-strong bg-white text-forensics-muted hover:bg-forensics-hover hover:text-forensics-text",
+          "rounded-[2px] border border-forensics-border-strong bg-white text-forensics-text hover:border-forensics-sakura-500 hover:bg-forensics-hover hover:text-forensics-text",
         forensicsSurface:
-          "rounded-[2px] border border-forensics-border-strong bg-forensics-surface text-forensics-text hover:bg-forensics-hover",
+          "rounded-[2px] border border-forensics-border-strong bg-forensics-surface text-forensics-text shadow-[0_8px_24px_rgba(240,138,170,0.08)] hover:border-forensics-sakura-500 hover:bg-forensics-hover",
         forensicsGhost:
           "rounded-[2px] text-forensics-muted hover:bg-forensics-hover hover:text-forensics-text",
         forensicsDangerGhost:
@@ -38,9 +38,9 @@ const buttonVariants = cva(
         mediaPrimaryControl:
           "rounded-full bg-white text-black hover:bg-gray-200",
         treeControl:
-          "rounded-none text-left text-[#555] hover:bg-[#eaeaea] data-[active=true]:bg-[#e0e8f0] data-[active=true]:font-medium data-[active=true]:text-[#111]",
+          "rounded-none text-left text-[#555] hover:bg-forensics-hover data-[active=true]:bg-forensics-sakura-250 data-[active=true]:font-medium data-[active=true]:text-[#111]",
         canvasControl:
-          "pointer-events-auto rounded border border-forensics-border bg-white text-forensics-muted shadow-sm hover:bg-forensics-hover hover:text-forensics-text",
+          "pointer-events-auto rounded border border-forensics-border bg-white text-forensics-muted shadow-sm hover:border-forensics-sakura-500 hover:bg-forensics-hover hover:text-forensics-text",
         autocompleteOption:
           "rounded-none text-left font-mono hover:bg-forensics-highlight",
       },

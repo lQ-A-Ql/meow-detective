@@ -26,7 +26,7 @@ export function MetricCard({
   return (
     <div
       className={cn(
-        'rounded border border-[#e0e0e0] bg-white',
+        'rounded border border-forensics-border bg-white shadow-[0_10px_28px_rgba(217,145,170,0.03)]',
         size === 'sm' && 'px-2 py-1.5',
         size === 'md' && 'p-3',
         size === 'lg' && 'p-4',
@@ -35,7 +35,7 @@ export function MetricCard({
       )}
     >
       <div className={cn('flex items-center justify-between gap-2', align === 'center' && 'justify-center')}>
-        <div className="text-[10px] uppercase tracking-wider text-[#888]">{label}</div>
+        <div className="text-[10px] uppercase tracking-wider text-forensics-muted-light">{label}</div>
         {Icon ? <Icon size={16} className="text-[#aaa]" /> : null}
       </div>
       <div

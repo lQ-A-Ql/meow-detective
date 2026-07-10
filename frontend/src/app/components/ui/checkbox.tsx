@@ -20,7 +20,7 @@ const checkboxVariants = cva(
       variant: {
         default: "",
         forensics:
-          "border-forensics-border-strong data-[state=checked]:border-forensics-text data-[state=checked]:bg-forensics-text",
+          "border-forensics-border-strong bg-white data-[state=checked]:border-forensics-sakura-500 data-[state=checked]:bg-forensics-sakura-500 focus-visible:border-forensics-sakura-500 focus-visible:ring-forensics-sakura-400/20",
       },
       checkboxSize: {
         default: "size-4",

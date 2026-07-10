@@ -17,13 +17,13 @@ const inputVariants = cva(
       variant: {
         default: "",
         forensics:
-          "rounded-[2px] border-forensics-border-strong bg-white text-forensics-text focus-visible:border-forensics-text focus-visible:ring-0",
-        mono: "rounded-[2px] border-forensics-border-strong bg-white font-mono text-forensics-text focus-visible:border-forensics-text focus-visible:ring-0",
-        path: "rounded-[2px] border-forensics-border-strong bg-white font-mono text-forensics-text focus-visible:border-forensics-text focus-visible:ring-0",
+          "rounded-[2px] border-forensics-border-strong bg-white text-forensics-text focus-visible:border-forensics-sakura-500 focus-visible:ring-2 focus-visible:ring-forensics-sakura-400/20",
+        mono: "rounded-[2px] border-forensics-border-strong bg-white font-mono text-forensics-text focus-visible:border-forensics-sakura-500 focus-visible:ring-2 focus-visible:ring-forensics-sakura-400/20",
+        path: "rounded-[2px] border-forensics-border-strong bg-white font-mono text-forensics-text focus-visible:border-forensics-sakura-500 focus-visible:ring-2 focus-visible:ring-forensics-sakura-400/20",
         search:
           "border-0 bg-transparent px-0 shadow-none focus-visible:border-transparent focus-visible:ring-0",
         numeric:
-          "rounded-[2px] border-forensics-border-strong bg-white font-mono text-right text-forensics-text focus-visible:border-forensics-text focus-visible:ring-0",
+          "rounded-[2px] border-forensics-border-strong bg-white font-mono text-right text-forensics-text focus-visible:border-forensics-sakura-500 focus-visible:ring-2 focus-visible:ring-forensics-sakura-400/20",
       },
       inputSize: {
         default: "h-9 px-3 py-1 text-base md:text-sm",

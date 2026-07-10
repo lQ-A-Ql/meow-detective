@@ -448,6 +448,7 @@ describe('DataAnalysis page', () => {
         aptEventCount: 0,
         cronJobCount: 0,
         sudoEventCount: 0,
+        systemConfigCount: 0,
         totalCount: 0,
         truncated: false,
         coverageRatio: 0,
@@ -457,6 +458,7 @@ describe('DataAnalysis page', () => {
         aptEvents: [],
         cronJobs: [],
         sudoEvents: [],
+        systemConfigs: [],
         warnings: [],
         generatedAt: '2026-06-01T10:14:00Z',
       },
@@ -701,12 +703,18 @@ describe('DataAnalysis page', () => {
     expect(within(overview).getAllByText('timeline=3').length).toBe(4);
   });
 
-  it('shows only Linux extraction progress in the Linux view', () => {
+  it('shows per-section Linux extraction progress in the Linux view', () => {
     renderPage();
     fireEvent.mouseDown(screen.getByRole('tab', { name: /Linux 取证/ }));
 
     const overview = screen.getByTestId('analysis-progress-overview');
-    expect(within(overview).getByText('Linux 痕迹提取')).toBeDefined();
+    expect(within(overview).getByText('Linux 日志提取')).toBeDefined();
+    expect(within(overview).getByText('Linux 登录记录提取')).toBeDefined();
+    expect(within(overview).getByText('Linux 命令历史提取')).toBeDefined();
+    expect(within(overview).getByText('Linux 软件包提取')).toBeDefined();
+    expect(within(overview).getByText('Linux 计划任务提取')).toBeDefined();
+    expect(within(overview).getByText('Linux sudo/auth 提取')).toBeDefined();
+    expect(within(overview).getByText('Linux 系统配置提取')).toBeDefined();
     expect(within(overview).queryByText('注册表提取')).toBeNull();
     expect(within(overview).queryByText('浏览器记录提取')).toBeNull();
     expect(within(overview).queryByText('邮件信息提取')).toBeNull();

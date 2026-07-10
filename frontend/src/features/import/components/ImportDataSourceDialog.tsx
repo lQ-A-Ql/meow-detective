@@ -16,6 +16,7 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from '@/app/components/ui/toggle-group';
+import { BrandArt } from '@/components/brand';
 import type { ImportDataSourceRequest } from '@/types/models';
 import { useImportDataSourceDialogModel } from '@/features/import/use-import-data-source-dialog-model';
 
@@ -117,23 +118,43 @@ export function ImportDataSourceDialog({
               type="single"
               value={platform}
               onValueChange={(v) => v && setPlatform(v as Platform)}
-              className="w-full"
+              className="w-full gap-2"
             >
               <ToggleGroupItem
                 value="windows"
                 aria-label="Windows"
-                className="flex-1 gap-2 h-16"
+                className="relative h-16 flex-1 justify-start overflow-hidden rounded border border-[#f1dbe4] bg-[linear-gradient(135deg,#fff_0%,#fffdfd_58%,#fff4f7_100%)] px-3 text-left shadow-sm transition-all hover:border-[#e8c4d1] hover:bg-[#fffafb] hover:shadow-[0_8px_26px_rgba(217,145,170,0.08)] data-[state=on]:border-[#e2adc0] data-[state=on]:bg-[linear-gradient(135deg,#fff_0%,#fff6f8_100%)] data-[state=on]:shadow-[0_10px_30px_rgba(217,145,170,0.12)]"
               >
-                <Monitor size={20} />
-                <span className="text-sm font-medium">Windows</span>
+                <div className="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-[#fff0f4]/70 blur-2xl" />
+                <div className="relative z-10 flex flex-col items-start gap-0.5">
+                  <span className="flex items-center gap-2 text-sm font-semibold text-[#261219]">
+                    <Monitor size={20} />
+                    Windows
+                  </span>
+                  <span className="text-[10px] font-medium text-[#8a5f6c]">NTFS / Registry / EVTX</span>
+                </div>
+                <BrandArt
+                  variant="windows"
+                  className="pointer-events-none absolute -bottom-5 -right-4 h-24 w-24 opacity-80 drop-shadow-[0_10px_16px_rgba(120,50,70,0.12)]"
+                />
               </ToggleGroupItem>
               <ToggleGroupItem
                 value="linux"
                 aria-label="Linux"
-                className="flex-1 gap-2 h-16"
+                className="relative h-16 flex-1 justify-start overflow-hidden rounded border border-[#f1dbe4] bg-[linear-gradient(135deg,#fff_0%,#fffdfd_58%,#fff4f7_100%)] px-3 text-left shadow-sm transition-all hover:border-[#e8c4d1] hover:bg-[#fffafb] hover:shadow-[0_8px_26px_rgba(217,145,170,0.08)] data-[state=on]:border-[#e2adc0] data-[state=on]:bg-[linear-gradient(135deg,#fff_0%,#fff6f8_100%)] data-[state=on]:shadow-[0_10px_30px_rgba(217,145,170,0.12)]"
               >
-                <Server size={20} />
-                <span className="text-sm font-medium">Linux</span>
+                <div className="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-[#fff0f4]/70 blur-2xl" />
+                <div className="relative z-10 flex flex-col items-start gap-0.5">
+                  <span className="flex items-center gap-2 text-sm font-semibold text-[#261219]">
+                    <Server size={20} />
+                    Linux
+                  </span>
+                  <span className="text-[10px] font-medium text-[#8a5f6c]">XFS / LVM / systemd</span>
+                </div>
+                <BrandArt
+                  variant="linux"
+                  className="pointer-events-none absolute -bottom-5 -right-4 h-24 w-24 opacity-80 drop-shadow-[0_10px_16px_rgba(120,50,70,0.12)]"
+                />
               </ToggleGroupItem>
             </ToggleGroup>
             <div className="flex justify-end">

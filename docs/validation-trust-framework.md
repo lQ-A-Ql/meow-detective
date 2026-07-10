@@ -214,7 +214,8 @@ Linux 检材3是当前 Stage 0 Linux 单盘链路的真实样本 baseline，样�
   - LVM direct linear/striped LV 展开
   - XFS root LV 文件树枚举
   - 通过 `FileEntryId` 预览 `/etc/passwd`、`/etc/os-release`、`/etc/fstab`、`/root/.bash_history`、`/var/log/wtmp`
-  - Linux artifacts 候选发现与提取（system config、journal、wtmp、bash history、cron、sudo/auth log）
+  - Linux artifacts 候选发现与提取（system config、journal、wtmp、shell history、package logs、cron、sudo/auth log）
+  - Linux extraction run 返回 7 个独立板块进度：`LinuxJournal`、`LinuxLogin`、`LinuxCommands`、`LinuxPackages`、`LinuxCron`、`LinuxSudo`、`LinuxSystemConfig`
 - 基准：
   - `crates/app-services/tests/linux_e01_integration.rs` 中被 `#[ignore]` 标记的真实样本回归
   - `docs/pve-cluster-parsing-design.md` 的 Stage 0 单盘验收口径
@@ -230,6 +231,7 @@ Linux 检材3是当前 Stage 0 Linux 单盘链路的真实样本 baseline，样�
   - `/etc/passwd`、`/etc/os-release`、`/etc/fstab`、`/root/.bash_history`、`/var/log/wtmp` 必须可通过 `FileEntryId` 预览读取。
   - 大文件预览必须覆盖 head / middle / tail range，不允许只验证首段。
   - Linux artifact extraction 必须来自真实枚举文件，不允许 synthetic insert；至少覆盖 `LinuxJournal`、`LinuxWtmp`、`LinuxBashCommand`、`LinuxCronJob`、`LinuxSudoEvent`、`LinuxSystemConfig`。
+  - Linux extraction section progress 必须包含全部 7 个板块；journal、login、commands、cron、sudo、system config 在检材3上必须有真实扫描与 artifact 产出；packages 若样本存在 yum/dnf/rpm/apt/dpkg 日志则必须产出 `LinuxAptEvent` 包事件。
 - 当前不保证：
   - PVE cluster 执行、多 E01 聚合或跨节点关联
   - LVM thin-pool、cache、RAID、snapshot、VDO、writecache、partial/degraded VG 激活

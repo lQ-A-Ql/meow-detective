@@ -14,11 +14,11 @@ export function SectionHeader({
   className?: string;
 }) {
   return (
-    <div className={cn('flex items-center gap-3 border-b border-[#eee] pb-2', className)}>
+    <div className={cn('flex items-center gap-3 border-b border-forensics-border-light pb-2', className)}>
       {Icon ? <Icon size={18} className="text-[#555]" /> : null}
       <div>
         <div className="font-serif text-[15px] text-[#111]">{title}</div>
-        {subtitle ? <div className="text-[11px] text-[#888]">{subtitle}</div> : null}
+        {subtitle ? <div className="text-[11px] text-forensics-muted-light">{subtitle}</div> : null}
       </div>
     </div>
   );
@@ -26,7 +26,7 @@ export function SectionHeader({
 
 export function PanelFrame({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <section className={cn('rounded border border-[#e0e0e0] bg-white p-4', className)}>
+    <section className={cn('rounded border border-forensics-border bg-white p-4 shadow-[0_12px_34px_rgba(217,145,170,0.03)]', className)}>
       {children}
     </section>
   );
@@ -34,7 +34,7 @@ export function PanelFrame({ children, className }: { children: ReactNode; class
 
 export function EmptyState({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn('rounded border border-dashed border-[#ccc] bg-[#fafafa] p-6 text-center text-[12px] text-[#999]', className)}>
+    <div className={cn('rounded border border-dashed border-forensics-border-strong bg-forensics-panel p-6 text-center text-[12px] text-forensics-muted-light', className)}>
       {children}
     </div>
   );

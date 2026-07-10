@@ -48,9 +48,9 @@ V2 长期计划与能力评级请同时参考：
 | Linux LVM/PVE | LVM thin/cache/RAID/snapshot/VDO/writecache | 不支持 | 当前 baseline 只覆盖 direct linear/striped LV；复杂映射需独立 metadata 解析与 fixture |
 | Linux LVM/PVE | partial/degraded VG 激活 | 不支持 | 缺失 PV 或不一致 metadata 必须 fail closed，不猜测块映射 |
 | Linux artifacts | systemd journal 压缩/轮转完整覆盖 | 部分支持 | 当前解析器支持 uncompressed 与部分 LZ4/ZSTD 字段，但缺 public fixture 覆盖 multi-boot、rotated、XZ 与损坏 journal；字段只能 bestEffort |
-| Linux artifacts | SSH 结构化登录/配置解析 | 不支持 | 当前仅通过 auth/journal/wtmp/sudo 与文本候选覆盖 SSH 相关线索；`authorized_keys`、`known_hosts`、`sshd_config` 不生成独立结构化 SSH DTO |
-| Linux artifacts | sudoers policy 解析 | 不支持 | 当前解析 sudo/auth log 事件，不解析 `/etc/sudoers` 或 `/etc/sudoers.d/*` 的 include、alias、Defaults、effective rule |
-| Linux artifacts | profile.d shell 语义解析 | 不支持 | `/etc/profile` 与 `/etc/profile.d/*` 可枚举/预览，但不解释 shell 脚本、环境变量生效顺序或执行图 |
+| Linux artifacts | SSH 结构化登录/配置语义解析 | 部分支持 | 当前通过 auth/journal/wtmp/sudo 与 `LinuxSystemConfig` 文本记录覆盖 SSH 相关线索；`authorized_keys`、`known_hosts`、`sshd_config` 不生成独立 SSH DTO，也不解析密钥信任图 |
+| Linux artifacts | sudoers policy 语义解析 | 部分支持 | `/etc/sudoers` 与 `/etc/sudoers.d/*` 会生成 `LinuxSystemConfig` 文本记录；不解析 include、alias、Defaults、effective rule |
+| Linux artifacts | systemd/init/profile.d shell 语义解析 | 部分支持 | systemd unit、init.d、rc.local、profile.d 会生成 `LinuxSystemConfig` 文本记录；不解释 shell 脚本、环境变量生效顺序、systemd 依赖图或执行图 |
 | macOS 文件系统 | APFS raw disk | 不支持 | 当前仅支持从已挂载或导入的 macOS 文件树提取制品。APFS 原始磁盘镜像解析规划于 V4 |
 | macOS 文件系统 | HFS+ raw disk | 不支持 | HFS+ 原始磁盘镜像解析规划于 V4 |
 | macOS 文件系统 | 已删除文件恢复 (APFS/HFS+) | 不承诺 | 文件雕刻与已删除恢复规划于 V4 |
@@ -89,9 +89,9 @@ V2 长期计划与能力评级请同时参考：
 - PVE cluster 执行、多源 E01 聚合、跨节点关联
 - LVM thin/cache/RAID/snapshot/VDO/writecache、partial/degraded VG 激活
 - systemd journal 压缩/轮转/损坏样本完整覆盖（当前为 bestEffort）
-- SSH 结构化登录/配置 parser（当前只通过日志、wtmp 与文本候选侧面覆盖）
-- sudoers policy effective rule 解析
-- profile.d shell 语义解析
+- SSH 结构化登录/配置 parser（当前只通过日志、wtmp、sudo 与 `LinuxSystemConfig` 文本记录侧面覆盖）
+- sudoers policy effective rule 解析（当前仅保留文本记录）
+- systemd/init/profile.d shell 语义解析（当前仅保留文本记录）
 - macOS 文件系统 (APFS/HFS+) 原始磁盘镜像解析（V3 仅支持从文件树提取制品）
 - Linux/macOS 文件系统已删除文件恢复
 - PST 加密消息支持

@@ -3,42 +3,53 @@
 :root {
   --font-size: 16px;
   --background: #ffffff;
-  --foreground: oklch(0.145 0 0);
+  --foreground: #111111;
   --card: #ffffff;
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
+  --card-foreground: #111111;
+  --popover: #ffffff;
+  --popover-foreground: #111111;
   --primary: #030213;
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.95 0.0058 264.53);
+  --primary-foreground: #ffffff;
+  --secondary: #f5f5f5;
   --secondary-foreground: #030213;
-  --muted: #ececf0;
-  --muted-foreground: #717182;
-  --accent: #e9ebef;
+  --muted: #f5f5f5;
+  --muted-foreground: #555555;
+  --accent: #fff3f6;
   --accent-foreground: #030213;
   --destructive: #d4183d;
   --destructive-foreground: #ffffff;
-  --border: rgba(0, 0, 0, 0.1);
+  --border: #e0e0e0;
   --input: transparent;
-  --input-background: #f3f3f5;
+  --input-background: #ffffff;
   --switch-background: #cbced4;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: oklch(0.708 0 0);
+  --ring: #f08aaa;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar: #ffffff;
+  --sidebar-foreground: #111111;
   --sidebar-primary: #030213;
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #fff3f6;
+  --sidebar-accent-foreground: #111111;
+  --sidebar-border: #e0e0e0;
+  --sidebar-ring: #f08aaa;
+
+  /* Sakura brand palette */
+  --forensics-sakura-50: #ffffff;
+  --forensics-sakura-100: #fffdfd;
+  --forensics-sakura-150: #fffafb;
+  --forensics-sakura-200: #fff6f8;
+  --forensics-sakura-250: #fff0f4;
+  --forensics-sakura-300: #f7dde7;
+  --forensics-sakura-400: #eab8c9;
+  --forensics-sakura-500: #d991aa;
+  --forensics-sakura-600: #8a5f6c;
 
   /* Forensics grayscale palette */
   --forensics-50: #f8f8f8;
@@ -62,12 +73,12 @@
   --forensics-panel: #fafafa;
   --forensics-panel-strong: #f5f5f5;
   --forensics-surface: #ffffff;
-  --forensics-input-bg: #f8f8f8;
-  --forensics-highlight: #f6f8fa;
-  --forensics-hover: #f0f0f0;
+  --forensics-input-bg: #ffffff;
+  --forensics-highlight: #fffafb;
+  --forensics-hover: #fff3f6;
   --forensics-border: #e0e0e0;
   --forensics-border-light: #ececec;
-  --forensics-border-strong: #cccccc;
+  --forensics-border-strong: #d9d9d9;
   --forensics-text: #111111;
   --forensics-text-secondary: #333333;
   --forensics-text-tertiary: #555555;
@@ -164,6 +175,17 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
+  /* Sakura brand utilities */
+  --color-forensics-sakura-50: var(--forensics-sakura-50);
+  --color-forensics-sakura-100: var(--forensics-sakura-100);
+  --color-forensics-sakura-150: var(--forensics-sakura-150);
+  --color-forensics-sakura-200: var(--forensics-sakura-200);
+  --color-forensics-sakura-250: var(--forensics-sakura-250);
+  --color-forensics-sakura-300: var(--forensics-sakura-300);
+  --color-forensics-sakura-400: var(--forensics-sakura-400);
+  --color-forensics-sakura-500: var(--forensics-sakura-500);
+  --color-forensics-sakura-600: var(--forensics-sakura-600);
+
   /* Forensics grayscale utilities */
   --color-forensics-50: var(--forensics-50);
   --color-forensics-100: var(--forensics-100);
@@ -249,6 +271,7 @@
 
   body {
     @apply bg-background text-foreground;
+    background: var(--background);
     margin: 0;
     min-height: 100vh;
     font-family: var(--font-sans);
@@ -309,4 +332,3 @@
     line-height: 1.5;
   }
 }
-

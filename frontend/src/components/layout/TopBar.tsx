@@ -72,7 +72,11 @@ export function TopBar() {
                 to={link.to}
                 onClick={() => setCurrentPage(link.page)}
                 className={({ isActive }) =>
-                  `whitespace-nowrap hover:text-forensics-text ${isActive ? 'text-forensics-text font-semibold' : 'text-forensics-muted'}`
+                  `whitespace-nowrap underline-offset-4 transition-colors hover:text-forensics-text hover:decoration-forensics-sakura-400 ${
+                    isActive
+                      ? 'font-semibold text-forensics-text underline decoration-forensics-sakura-500 decoration-2'
+                      : 'text-forensics-muted'
+                  }`
                 }
               >
                 {t(`topBar.links.${link.page}.label`)}
