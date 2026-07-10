@@ -61,6 +61,7 @@
     },
     "fields": {
       "name": "Data Source Name",
+      "mode": "Import Mode",
       "path": "Data Source Path"
     },
     "placeholders": {
@@ -72,8 +73,17 @@
       "back": "Back",
       "file": "File",
       "directory": "Directory",
+      "clusterDirectory": "Cluster Folder",
       "import": "Import",
       "importing": "Importing..."
+    },
+    "modes": {
+      "single": "Single Image",
+      "linuxCluster": "Linux Cluster"
+    },
+    "hints": {
+      "single": "Import one image or logical directory.",
+      "linuxCluster": "Select a folder containing all E01/RAW images for the cluster. The backend registers one Linux cluster and imports members serially."
     },
     "errors": {
       "pathRequired": "Select a data source path"

@@ -233,7 +233,7 @@ Linux 检材3是当前 Stage 0 Linux 单盘链路的真实样本 baseline，样�
   - Linux artifact extraction 必须来自真实枚举文件，不允许 synthetic insert；至少覆盖 `LinuxJournal`、`LinuxWtmp`、`LinuxBashCommand`、`LinuxCronJob`、`LinuxSudoEvent`、`LinuxSystemConfig`。
   - Linux extraction section progress 必须包含全部 7 个板块；journal、login、commands、cron、sudo、system config 在检材3上必须有真实扫描与 artifact 产出；packages 若样本存在 yum/dnf/rpm/apt/dpkg 日志则必须产出 `LinuxAptEvent` 包事件。
 - 当前不保证：
-  - PVE cluster 执行、多 E01 聚合或跨节点关联
+  - PVE cluster 语义解析、多 E01 聚合分析或跨节点关联
   - LVM thin-pool、cache、RAID、snapshot、VDO、writecache、partial/degraded VG 激活
   - XFS/ext4/Btrfs 已删除文件恢复或 carving
   - 原始 Linux 文件系统支持超出当前实现可枚举范围时的完整恢复

@@ -105,6 +105,25 @@ describe('files API', () => {
     expect(result).toBe('job-2');
   });
 
+  it('importDataSource sends linux cluster source kind when requested', async () => {
+    requestMock.mockResolvedValueOnce('job-cluster' as never);
+    const result = await importDataSource({
+      sourcePath: '/evidence/pve-cluster',
+      sourceKind: 'linuxCluster',
+      platform: 'linux',
+      profile: 'pve',
+    });
+    expect(requestMock).toHaveBeenCalledWith(COMMANDS.files.IMPORT_DATA_SOURCE, {
+      request: {
+        sourcePath: '/evidence/pve-cluster',
+        sourceKind: 'linuxCluster',
+        platform: 'linux',
+        profile: 'pve',
+      },
+    });
+    expect(result).toBe('job-cluster');
+  });
+
   it('getFileChildrenPage sends paging parameters', async () => {
     requestMock.mockResolvedValueOnce({ children: [], total: 0 } as never);
     await getFileChildrenPage('parent-2', 5, 50, false);

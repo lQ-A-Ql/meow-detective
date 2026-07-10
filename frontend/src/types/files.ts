@@ -60,9 +60,11 @@ export interface FileJumpContext {
 }
 
 export type ImportTargetPlatform = 'windows' | 'linux' | 'macos' | 'unknown';
+export type ImportSourceKind = 'auto' | 'linuxCluster';
 
 export interface ImportDataSourceRequest {
   sourcePath: string;
+  sourceKind?: ImportSourceKind;
   platform?: ImportTargetPlatform;
   profile?: string;
 }

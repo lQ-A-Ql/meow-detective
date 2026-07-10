@@ -16,6 +16,7 @@ use std::time::Instant;
 
 use evidence_core::{EvidenceReader, LogicalFsReader, RawImageReader};
 use image_e01::E01Reader;
+use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use transport::CommandError;
 
 use crate::{datasource_service, file_service, import_analysis, staging, step_recorder};
@@ -61,6 +62,17 @@ pub(crate) fn run_attach_phase(
         ctx.import_config.profile.clone(),
     )
     .map_err(CommandError::from_service_error)?;
+
+    if let Some(cluster) = &ctx.import_config.cluster {
+        DataSourceRepo::new(ctx.conn)
+            .update_cluster_membership(
+                &ds.id,
+                &cluster.cluster_id,
+                cluster.member_index,
+                cluster.member_count,
+            )
+            .map_err(CommandError::from_service_error)?;
+    }
 
     emit_phase_profile(
         ctx.event_sink(),

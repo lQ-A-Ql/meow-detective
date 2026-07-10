@@ -61,6 +61,7 @@
     },
     "fields": {
       "name": "数据源名称",
+      "mode": "导入模式",
       "path": "数据源路径"
     },
     "placeholders": {
@@ -72,8 +73,17 @@
       "back": "上一步",
       "file": "文件",
       "directory": "目录",
+      "clusterDirectory": "集群目录",
       "import": "导入",
       "importing": "导入中..."
+    },
+    "modes": {
+      "single": "单源镜像",
+      "linuxCluster": "Linux 集群"
+    },
+    "hints": {
+      "single": "按单个镜像或逻辑目录导入。",
+      "linuxCluster": "选择包含集群全部 E01/RAW 镜像的文件夹，后端会作为一个 Linux 集群整体登记并串行导入成员。"
     },
     "errors": {
       "pathRequired": "请选择数据源路径"

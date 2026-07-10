@@ -97,6 +97,7 @@ fn import_fixture_serially(
     let before = data_source_ids(case_conn, case_id);
     let request = ImportDataSourceRequest {
         source_path: source_path.to_string(),
+        source_kind: Default::default(),
         platform: Some(platform),
         profile: Some(profile.to_string()),
     };

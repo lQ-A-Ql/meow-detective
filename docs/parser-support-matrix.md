@@ -65,7 +65,7 @@ V2 长期执行与发布口径见：
 
 | 链路 | 平台 | 当前等级 | 已验证样本 | 对齐基准 | 字段承诺 | 备注 |
 |---|---|---|---|---|---|---|
-| E01/RAW -> LVM direct LV -> XFS file tree | Linux | Beta for private baseline / Experimental for public release | 检材3 opt-in 私有真实样本 | `FORENSICS_LINUX_E01_FIXTURE` + `cargo test -p app-services --test linux_e01_integration -- --ignored` | 分区探测、LVM direct LV 展开、XFS root LV 枚举、`FileEntryId` 预览高价值路径、Linux artifact candidate/extraction coverage、7 个 Linux extraction section progress | 私有 baseline 要求 LVM pool 以 `Expanded`/`redirected` 保留但不作为可见 root，root LV 可见并支持预览。PVE cluster 暂缓，仅保留非执行设计边界。不承诺 LVM thin/cache/RAID/snapshot/VDO/writecache、partial VG、partial/degraded VG、deleted recovery。公开等级仍需可提交 fixture/expected JSON |
+| E01/RAW -> LVM direct LV -> XFS file tree | Linux | Beta for private baseline / Experimental for public release | 检材3 opt-in 私有真实样本 | `FORENSICS_LINUX_E01_FIXTURE` + `cargo test -p app-services --test linux_e01_integration -- --ignored` | 分区探测、LVM direct LV 展开、XFS root LV 枚举、`FileEntryId` 预览高价值路径、Linux artifact candidate/extraction coverage、7 个 Linux extraction section progress | 私有 baseline 要求 LVM pool 以 `Expanded`/`redirected` 保留但不作为可见 root，root LV 可见并支持预览。Linux cluster 当前仅支持导入建模与成员镜像串行导入；PVE 语义解析仍为非执行边界。不承诺 LVM thin/cache/RAID/snapshot/VDO/writecache、partial VG、partial/degraded VG、deleted recovery。公开等级仍需可提交 fixture/expected JSON |
 
 ## 5. macOS 制品解析器 (V3 计划) — Medium Fixtures: `testdata/fixtures/public-medium/macos/`
 

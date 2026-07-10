@@ -89,6 +89,25 @@ describe('ImportDataSourceDialog', () => {
     });
   });
 
+  it('calls onImport with linuxCluster source kind when cluster mode is selected', () => {
+    render(createElement(ImportDataSourceDialog, baseProps));
+
+    fireEvent.click(screen.getByLabelText('Linux'));
+    advanceToForm();
+    fireEvent.click(screen.getByLabelText('Linux 集群'));
+    const [nameInput, pathInput] = screen.getAllByRole('textbox') as HTMLInputElement[];
+    fireEvent.change(nameInput, { target: { value: '  pve-cluster  ' } });
+    fireEvent.change(pathInput, { target: { value: '  D:/pve/images  ' } });
+    clickImport();
+
+    expect(baseProps.onImport).toHaveBeenCalledWith({
+      sourcePath: 'D:/pve/images',
+      sourceKind: 'linuxCluster',
+      platform: 'linux',
+      profile: 'pve-cluster',
+    });
+  });
+
   it('omits profile when the optional profile field is blank', () => {
     render(createElement(ImportDataSourceDialog, baseProps));
 
@@ -146,5 +165,14 @@ describe('ImportDataSourceDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: '目录' }));
 
     expect(mocks.openDialog).toHaveBeenCalledWith(expect.objectContaining({ directory: true }));
+  });
+
+  it('shows linux cluster folder picker for linux imports', () => {
+    render(createElement(ImportDataSourceDialog, baseProps));
+
+    fireEvent.click(screen.getByLabelText('Linux'));
+    advanceToForm();
+
+    expect(screen.getByRole('button', { name: '集群目录' })).toBeDefined();
   });
 });

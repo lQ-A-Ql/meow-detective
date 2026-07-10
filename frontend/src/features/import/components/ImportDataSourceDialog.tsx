@@ -21,6 +21,7 @@ import type { ImportDataSourceRequest } from '@/types/models';
 import { useImportDataSourceDialogModel } from '@/features/import/use-import-data-source-dialog-model';
 
 type Platform = 'windows' | 'linux';
+type SourceKind = 'auto' | 'linuxCluster';
 
 export interface ImportDataSourceDialogProps {
   open: boolean;
@@ -38,6 +39,7 @@ export function ImportDataSourceDialog({
   const { t } = useTranslation();
   const [step, setStep] = useState<'platform' | 'form'>('platform');
   const [platform, setPlatform] = useState<Platform>('windows');
+  const [sourceKind, setSourceKind] = useState<SourceKind>('auto');
   const [name, setName] = useState('');
   const [path, setPath] = useState('');
   const [error, setError] = useState('');
@@ -46,6 +48,7 @@ export function ImportDataSourceDialog({
   const reset = useCallback(() => {
     setStep('platform');
     setPlatform('windows');
+    setSourceKind('auto');
     setName('');
     setPath('');
     setError('');
@@ -64,6 +67,9 @@ export function ImportDataSourceDialog({
 
   function goNext() {
     if (step === 'platform') {
+      if (platform !== 'linux') {
+        setSourceKind('auto');
+      }
       setStep('form');
       setError('');
     }
@@ -86,6 +92,14 @@ export function ImportDataSourceDialog({
     if (selectedPath) setPath(selectedPath);
   }
 
+  async function pickLinuxClusterDirectory() {
+    const selectedPath = await pickDirectoryPath();
+    if (selectedPath) {
+      setSourceKind('linuxCluster');
+      setPath(selectedPath);
+    }
+  }
+
   function handleImport() {
     const trimmedPath = path.trim();
     if (!trimmedPath) {
@@ -93,11 +107,15 @@ export function ImportDataSourceDialog({
       return;
     }
     setError('');
-    onImport({
+    const request: ImportDataSourceRequest = {
       sourcePath: trimmedPath,
       platform,
       profile: name.trim() || undefined,
-    });
+    };
+    if (sourceKind === 'linuxCluster') {
+      request.sourceKind = sourceKind;
+    }
+    onImport(request);
   }
 
   return (
@@ -117,7 +135,14 @@ export function ImportDataSourceDialog({
             <ToggleGroup
               type="single"
               value={platform}
-              onValueChange={(v) => v && setPlatform(v as Platform)}
+              onValueChange={(v) => {
+                if (!v) return;
+                const nextPlatform = v as Platform;
+                setPlatform(nextPlatform);
+                if (nextPlatform !== 'linux') {
+                  setSourceKind('auto');
+                }
+              }}
               className="w-full gap-2"
             >
               <ToggleGroupItem
@@ -175,6 +200,30 @@ export function ImportDataSourceDialog({
               />
             </div>
 
+            {platform === 'linux' ? (
+              <div className="space-y-2">
+                <Label>{t('importDataSource.fields.mode')}</Label>
+                <ToggleGroup
+                  type="single"
+                  value={sourceKind}
+                  onValueChange={(v) => v && setSourceKind(v as SourceKind)}
+                  className="grid grid-cols-2 gap-2"
+                >
+                  <ToggleGroupItem value="auto" aria-label={t('importDataSource.modes.single')}>
+                    {t('importDataSource.modes.single')}
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="linuxCluster" aria-label={t('importDataSource.modes.linuxCluster')}>
+                    {t('importDataSource.modes.linuxCluster')}
+                  </ToggleGroupItem>
+                </ToggleGroup>
+                <p className="text-[11px] text-[#8a5f6c]">
+                  {sourceKind === 'linuxCluster'
+                    ? t('importDataSource.hints.linuxCluster')
+                    : t('importDataSource.hints.single')}
+                </p>
+              </div>
+            ) : null}
+
             <div className="space-y-2">
               <Label htmlFor="ds-path">{t('importDataSource.fields.path')}</Label>
               <div className="flex gap-2">
@@ -193,6 +242,12 @@ export function ImportDataSourceDialog({
                   <FolderOpen size={12} />
                   {t('importDataSource.buttons.directory')}
                 </Button>
+                {platform === 'linux' ? (
+                  <Button variant="outline" size="sm" onClick={pickLinuxClusterDirectory} className="shrink-0 gap-1">
+                    <FolderOpen size={12} />
+                    {t('importDataSource.buttons.clusterDirectory')}
+                  </Button>
+                ) : null}
               </div>
               {error ? (
                 <p className="text-[11px] text-red-600">{error}</p>

@@ -6,7 +6,7 @@
 
 - **Runtime**: Tauri 2 desktop shell. No HTTP server. All frontend↔backend communication goes through Tauri commands and events.
 - **Primary platform**: `x86_64-pc-windows-msvc` (Windows-primary, desktop-first, single-user).
-- **Storage**: SQLite case databases with WAL, migrations, and repository layer (15 repos, 34 migration scripts).
+- **Storage**: SQLite case databases with WAL, migrations, and repository layer (16 repos, 39 migration scripts).
 - **Evidence access**: Read-only. Original evidence sources are never modified.
 - **Current status**:
   - V2: ~90% complete, Grade B (81/100), all 7 real E01 regression tests passing.
@@ -275,8 +275,8 @@ Backend → Frontend via Tauri `emit`. Topics are string constants in `crates/tr
 |-------|----------|-------|
 | 37 crates | `Cargo.toml` workspace members + `apps/desktop/src-tauri` | Includes 36 library crates and the Tauri shell |
 | 98 Tauri commands | `apps/desktop/src-tauri/src/commands/**/*.rs` | Registered in `src/lib.rs` |
-| 15 SQLite repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` | Includes staging_repo, correlation_repo, entity_repo added in 2026-06 |
-| 34 migration scripts | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | `0001`–`0033` plus `staging_001.sql` |
+| 16 SQLite repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` | Includes staging_repo, correlation_repo, entity_repo, datasource_cluster_repo |
+| 39 migration scripts | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | `0001`–`0035`, `source_001`–`source_003`, plus `staging_001.sql` |
 | 17 frontend pages | `frontend/src/app/pages/*.tsx` (excluding `*.test.tsx`) | Includes V2 Workbench, V3 Dashboard, V3ScoreCards, CaseHome, FileBrowser, etc. |
 | 83 frontend test files | `frontend/src/**/*.test.{ts,tsx}` | |
 | ~2,061 Rust tests | `cargo test --workspace` (calibrated 2026-06) | |

@@ -44,7 +44,7 @@ V2 长期计划与能力评级请同时参考：
 | Linux 文件系统 | XFS raw disk 完整支持 | 部分支持 | Stage 0 baseline 仅覆盖单源单盘、LVM direct LV 上的 XFS root tree、预览与 Linux artifact extraction |
 | Linux 文件系统 | Btrfs raw disk 完整支持 | 不承诺 | reader 能力与探测链路需以公开 fixture / expected JSON 补齐；检材3 baseline 不覆盖 Btrfs |
 | Linux 文件系统 | 已删除文件恢复 (ext4/XFS/Btrfs) | 不承诺 | 文件雕刻与已删除恢复规划于 V4 |
-| Linux LVM/PVE | PVE cluster 执行 | 不支持 | Stage 0 只支持单源、单盘 Linux 服务器链路；cluster service 是非执行设计边界 |
+| Linux LVM/PVE | PVE cluster 语义解析执行 | 不支持 | 当前仅支持 Linux 集群导入建模与成员镜像串行导入；PVE thin-pool、VM disk reconstruction、跨节点关联仍不支持 |
 | Linux LVM/PVE | LVM thin/cache/RAID/snapshot/VDO/writecache | 不支持 | 当前 baseline 只覆盖 direct linear/striped LV；复杂映射需独立 metadata 解析与 fixture |
 | Linux LVM/PVE | partial/degraded VG 激活 | 不支持 | 缺失 PV 或不一致 metadata 必须 fail closed，不猜测块映射 |
 | Linux artifacts | systemd journal 压缩/轮转完整覆盖 | 部分支持 | 当前解析器支持 uncompressed 与部分 LZ4/ZSTD 字段，但缺 public fixture 覆盖 multi-boot、rotated、XZ 与损坏 journal；字段只能 bestEffort |
@@ -86,7 +86,7 @@ V2 长期计划与能力评级请同时参考：
 
 - Linux 文件系统 (ext4/XFS/Btrfs) 原始磁盘镜像“完整支持”；检材3只证明单盘 LVM direct LV -> XFS 的 Stage 0 baseline
 - Linux 检材3私有 baseline 作为公开 GA 证明（必须补 public fixture + expected JSON 后才能升级公开承诺）
-- PVE cluster 执行、多源 E01 聚合、跨节点关联
+- PVE cluster 语义解析、多源 E01 聚合分析、跨节点关联
 - LVM thin/cache/RAID/snapshot/VDO/writecache、partial/degraded VG 激活
 - systemd journal 压缩/轮转/损坏样本完整覆盖（当前为 bestEffort）
 - SSH 结构化登录/配置 parser（当前只通过日志、wtmp、sudo 与 `LinuxSystemConfig` 文本记录侧面覆盖）

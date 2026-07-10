@@ -217,6 +217,29 @@ impl<'a> DataSourceRepo<'a> {
         Ok(())
     }
 
+    pub fn update_cluster_membership(
+        &self,
+        data_source_id: &DataSourceId,
+        cluster_id: &str,
+        member_index: u32,
+        member_count: u32,
+    ) -> DbResult<()> {
+        self.conn.execute(
+            "UPDATE data_sources
+             SET cluster_id = ?1,
+                 cluster_member_index = ?2,
+                 cluster_member_count = ?3
+             WHERE id = ?4",
+            params![
+                cluster_id,
+                i64::from(member_index),
+                i64::from(member_count),
+                data_source_id.0,
+            ],
+        )?;
+        Ok(())
+    }
+
     pub fn delete_cascade(&self, data_source_id: &DataSourceId) -> DbResult<()> {
         self.delete_cascade_with_progress(data_source_id, None::<ProgressCallback<'_>>)
     }

@@ -3,6 +3,7 @@ pub mod audit_repo;
 pub mod batch_repo;
 pub mod case_repo;
 pub mod correlation_repo;
+pub mod datasource_cluster_repo;
 pub mod datasource_repo;
 pub mod entity_repo;
 pub mod file_repo;

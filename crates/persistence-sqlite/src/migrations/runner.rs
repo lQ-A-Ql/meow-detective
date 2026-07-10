@@ -111,6 +111,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0034_data_source_storage",
         include_str!("scripts/0034_data_source_storage.sql"),
     ),
+    (
+        "0035_data_source_clusters",
+        include_str!("scripts/0035_data_source_clusters.sql"),
+    ),
 ];
 
 const SOURCE_MIGRATIONS: &[(&str, &str)] = &[

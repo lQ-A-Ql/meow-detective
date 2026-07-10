@@ -9,7 +9,7 @@ use crate::{
 use domain::DataSourceKind;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
-use transport::commands::{ImportDataSourceRequest, ImportTargetPlatformDto};
+use transport::commands::{ImportDataSourceRequest, ImportSourceKindDto, ImportTargetPlatformDto};
 
 /// Bounded import configuration prepared before the Tauri job orchestration starts.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,6 +21,14 @@ pub struct ImportSourceConfig {
     pub platform: Option<ImportTargetPlatformDto>,
     pub profile: Option<String>,
     pub mode: ImportSourceMode,
+    pub cluster: Option<ImportClusterMemberConfig>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportClusterMemberConfig {
+    pub cluster_id: String,
+    pub member_index: u32,
+    pub member_count: u32,
 }
 
 /// Import source mode derived from source classification.
@@ -83,6 +91,11 @@ pub fn prepare_import_source_config(
     request
         .validate()
         .map_err(ImportSourceConfigError::InvalidRequest)?;
+    if request.source_kind != ImportSourceKindDto::Auto {
+        return Err(ImportSourceConfigError::InvalidRequest(
+            "non-auto sourceKind must be handled by the import scheduler".to_string(),
+        ));
+    }
     let mut config = prepare_import_source_config_from_path(&request.source_path)?;
     config.platform = request.platform;
     config.profile = request.profile.clone();
@@ -106,6 +119,7 @@ pub fn prepare_import_source_config_from_path(
         platform: None,
         profile: None,
         mode,
+        cluster: None,
     })
 }
 
@@ -339,6 +353,7 @@ mod tests {
         std::fs::create_dir(&evidence_dir).unwrap();
         let request = ImportDataSourceRequest {
             source_path: evidence_dir.display().to_string(),
+            source_kind: Default::default(),
             platform: None,
             profile: None,
         };
@@ -360,6 +375,7 @@ mod tests {
         std::fs::create_dir(&evidence_dir).unwrap();
         let request = ImportDataSourceRequest {
             source_path: evidence_dir.display().to_string(),
+            source_kind: Default::default(),
             platform: Some(ImportTargetPlatformDto::Linux),
             profile: Some("ubuntu-server".to_string()),
         };
@@ -378,6 +394,7 @@ mod tests {
         std::fs::write(&source, b"not an e01 image").unwrap();
         let request = ImportDataSourceRequest {
             source_path: source.display().to_string(),
+            source_kind: Default::default(),
             platform: None,
             profile: None,
         };
@@ -404,6 +421,7 @@ mod tests {
         std::fs::write(&source, b"short").unwrap();
         let request = ImportDataSourceRequest {
             source_path: source.display().to_string(),
+            source_kind: Default::default(),
             platform: None,
             profile: None,
         };
@@ -428,6 +446,7 @@ mod tests {
         std::fs::write(&source, b"EVF\x09\x0d\x0a\xff\x00payload").unwrap();
         let request = ImportDataSourceRequest {
             source_path: source.display().to_string(),
+            source_kind: Default::default(),
             platform: None,
             profile: None,
         };
@@ -444,6 +463,7 @@ mod tests {
         let tmp = tempfile::TempDir::new().unwrap();
         let request = ImportDataSourceRequest {
             source_path: tmp.path().join("missing.raw").display().to_string(),
+            source_kind: Default::default(),
             platform: None,
             profile: None,
         };
@@ -465,6 +485,7 @@ mod tests {
     fn import_source_config_preserves_request_validation_semantics() {
         let request = ImportDataSourceRequest {
             source_path: "CON".to_string(),
+            source_kind: Default::default(),
             platform: None,
             profile: None,
         };
@@ -474,5 +495,21 @@ mod tests {
         assert!(matches!(error, ImportSourceConfigError::InvalidRequest(_)));
         assert!(error.is_invalid_input());
         assert_eq!(error.to_string(), "CON is a reserved Windows device name");
+    }
+
+    #[test]
+    fn import_source_config_rejects_non_auto_source_kind() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let request = ImportDataSourceRequest {
+            source_path: tmp.path().display().to_string(),
+            source_kind: ImportSourceKindDto::LinuxCluster,
+            platform: Some(ImportTargetPlatformDto::Linux),
+            profile: None,
+        };
+
+        let error = prepare_import_source_config(&request).unwrap_err();
+
+        assert!(matches!(error, ImportSourceConfigError::InvalidRequest(_)));
+        assert!(error.to_string().contains("import scheduler"));
     }
 }
