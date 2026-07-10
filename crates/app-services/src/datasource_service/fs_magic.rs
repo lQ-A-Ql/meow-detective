@@ -36,7 +36,7 @@ pub(crate) fn read_boot_filesystem<R>(
     offset: u64,
 ) -> Result<Option<ImageFilesystemKind>>
 where
-    R: Read + Seek,
+    R: Read + Seek + ?Sized,
 {
     let sector = read_sector(reader, offset)?;
     // LVM PV labels are authoritative when present. Probe them before
@@ -81,7 +81,7 @@ where
 
 pub(crate) fn read_sector<R>(reader: &mut R, offset: u64) -> Result<[u8; 512]>
 where
-    R: Read + Seek,
+    R: Read + Seek + ?Sized,
 {
     let mut sector = [0u8; 512];
     reader.seek(SeekFrom::Start(offset))?;

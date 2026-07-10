@@ -1,6 +1,4 @@
-use super::fs_magic::{
-    detect_boot_filesystem, kind_label, read_boot_filesystem, read_sector, SECTOR_SIZE,
-};
+use super::fs_magic::{kind_label, read_boot_filesystem, read_sector, SECTOR_SIZE};
 use super::{
     DataSourceError, ImageFilesystemCandidate, ImageFilesystemKind, ImageFilesystemProbe,
     ImageFilesystemSource, PartitionRecord, PartitionStatus, Result,
@@ -51,11 +49,10 @@ where
     R: Read + Seek,
 {
     let mut warnings = Vec::new();
-    let sector0 = read_sector(reader, 0)?;
     let mut candidates = Vec::new();
     let mut partitions = Vec::new();
 
-    if let Some(kind) = detect_boot_filesystem(&sector0) {
+    if let Some(kind) = read_boot_filesystem(reader, 0)? {
         candidates.push(ImageFilesystemCandidate {
             partition_index: Some(1),
             partition_name: Some("Volume".to_string()),

@@ -7,6 +7,7 @@ use super::{
     PartitionStatus,
 };
 use domain::DataSourceKind;
+use std::collections::BTreeSet;
 use std::io::{Read, Seek};
 use std::path::Path;
 
@@ -172,8 +173,13 @@ pub fn expand_lvm_pool_candidates_with_sources(
             lv_list.len(),
             expanded_offsets.first().copied().unwrap_or(seed_offset),
         );
-        for lv_info in &lv_list {
-            if !lv_info.directly_mappable {
+        let readable_volumes = pool.list_readable_volumes();
+        let readable_indices = readable_volumes
+            .iter()
+            .map(|(index, _)| *index)
+            .collect::<BTreeSet<_>>();
+        for (lv_idx, lv_info) in lv_list.iter().enumerate() {
+            if !readable_indices.contains(&lv_idx) {
                 let reason = lv_info
                     .unsupported_reason
                     .as_deref()
@@ -193,8 +199,8 @@ pub fn expand_lvm_pool_candidates_with_sources(
         }
 
         let candidates_before = new_candidates.len();
-        for (lv_idx, lv_info) in pool.list_direct_volumes() {
-            let mut lv_reader = match pool.open_volume(lv_idx) {
+        for (lv_idx, lv_info) in readable_volumes {
+            let mut lv_reader = match pool.open_volume_reader(lv_idx) {
                 Ok(r) => r,
                 Err(e) => {
                     probe.warnings.push(format!(
@@ -207,7 +213,7 @@ pub fn expand_lvm_pool_candidates_with_sources(
                 }
             };
 
-            match read_boot_filesystem(&mut lv_reader, 0) {
+            match read_boot_filesystem(&mut *lv_reader, 0) {
                 Ok(Some(fs_kind)) if !matches!(fs_kind, ImageFilesystemKind::LvmPool) => {
                     let lv_name = format!(
                         "{}/{}",

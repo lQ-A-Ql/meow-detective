@@ -170,6 +170,23 @@ mod tests {
     }
 
     #[test]
+    fn detect_image_filesystem_detects_raw_lvm_pv_at_offset_zero() {
+        let (pv0, _pv1) = build_synthetic_multi_pv_lvm_disks();
+        let mut reader = std::io::Cursor::new(pv0);
+
+        let probe = detect_image_filesystem(&mut reader).unwrap();
+
+        assert_eq!(probe.candidates.len(), 1);
+        assert_eq!(probe.candidates[0].kind, ImageFilesystemKind::LvmPool);
+        assert_eq!(probe.candidates[0].offset, 0);
+        assert_eq!(
+            probe.partitions[0].status,
+            PartitionStatus::Supported,
+            "raw whole-disk LVM PVs must be retained for later LV expansion"
+        );
+    }
+
+    #[test]
     fn expand_lvm_pool_candidates_with_sources_groups_extra_pvs() {
         let tmp = TempDir::new().unwrap();
         let primary_path = tmp.path().join("pv0.raw");

@@ -343,7 +343,7 @@ fn raw_candidate_reader(
             };
             let lv_reader =
                 open_lvm_logical_volume_reader(source_path, &preview_identity, &mut open_reader)?;
-            Ok((Box::new(lv_reader), 0))
+            Ok((lv_reader, 0))
         }
         None => Ok((boxed_reader, candidate.offset)),
     }
@@ -397,7 +397,7 @@ impl LvmPoolRequestCache {
         source_path: &Path,
         identity: &PreviewLvmIdentity,
         open_reader: &mut F,
-    ) -> std::io::Result<fs_lvm::LvReader>
+    ) -> std::io::Result<Box<dyn EvidenceReader>>
     where
         F: FnMut(&Path) -> std::io::Result<Box<dyn EvidenceReader>>,
     {
@@ -459,7 +459,7 @@ where
     match &candidate.lvm_identity {
         Some(identity) => {
             let lv_reader = open_lvm_logical_volume_reader(source_path, identity, open_reader)?;
-            Ok((Box::new(lv_reader) as Box<dyn EvidenceReader>, 0))
+            Ok((lv_reader, 0))
         }
         None => open_reader(source_path).map(|reader| (reader, candidate.offset)),
     }
@@ -477,7 +477,7 @@ where
     match &candidate.lvm_identity {
         Some(identity) => {
             let lv_reader = lvm_cache.open_volume(source_path, identity, open_reader)?;
-            Ok((Box::new(lv_reader) as Box<dyn EvidenceReader>, 0))
+            Ok((lv_reader, 0))
         }
         None => open_reader(source_path).map(|reader| (reader, candidate.offset)),
     }
@@ -487,7 +487,7 @@ pub(crate) fn open_lvm_logical_volume_reader<F>(
     source_path: &Path,
     identity: &PreviewLvmIdentity,
     open_reader: &mut F,
-) -> std::io::Result<fs_lvm::LvReader>
+) -> std::io::Result<Box<dyn EvidenceReader>>
 where
     F: FnMut(&Path) -> std::io::Result<Box<dyn EvidenceReader>>,
 {
@@ -625,7 +625,7 @@ fn validate_preview_lvm_pv_source(
 fn open_lvm_volume_from_pool(
     pool: &fs_lvm::LvmPool,
     identity: &PreviewLvmIdentity,
-) -> std::io::Result<fs_lvm::LvReader> {
+) -> std::io::Result<Box<dyn EvidenceReader>> {
     let lv_index = find_lvm_preview_volume_index(pool, identity).ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::NotFound,
@@ -636,7 +636,7 @@ fn open_lvm_volume_from_pool(
         )
     })?;
 
-    pool.open_volume(lv_index).map_err(|error| {
+    pool.open_volume_reader(lv_index).map_err(|error| {
         std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             format!("LVM logical volume open failed for preview: {error}"),

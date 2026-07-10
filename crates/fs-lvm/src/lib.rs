@@ -48,7 +48,10 @@ pub mod error;
 pub mod label;
 pub mod lv_reader;
 pub mod metadata;
+mod pool_thin;
 pub mod segment;
+pub mod thin;
+pub mod thin_reader;
 
 use std::sync::Arc;
 
@@ -62,6 +65,7 @@ pub use crate::label::LvmLabel;
 pub use crate::lv_reader::LvReader;
 pub use crate::metadata::{LvMeta, PvMeta, SegmentArea, SegmentMeta, SegmentType, VolumeGroup};
 pub use crate::segment::LvExtent;
+pub use crate::thin_reader::ThinLvReader;
 
 // Use internally (not re-exported)
 use crate::metadata::VolumeGroup as VgMeta;
@@ -72,10 +76,10 @@ use crate::metadata::VolumeGroup as VgMeta;
 ///
 /// Reads sector 1 (offset + 512), checks for `"LABELONE"` and `"LVM2 001"`
 /// magic bytes, and verifies the label CRC-32.
-pub fn probe_lvm(
-    reader: &mut (impl std::io::Read + std::io::Seek),
-    pv_offset: u64,
-) -> Result<bool> {
+pub fn probe_lvm<R>(reader: &mut R, pv_offset: u64) -> Result<bool>
+where
+    R: std::io::Read + std::io::Seek + ?Sized,
+{
     match label::parse_pv_label(reader, pv_offset) {
         Ok(_) => Ok(true),
         Err(LvmError::NotLvm) => Ok(false),
@@ -304,6 +308,10 @@ impl LvmPool {
     /// `Ext4Reader::open()`, `XfsReader::open()`, etc. with offset `0`
     /// since a logical volume presents as a clean block device.
     pub fn open_volume(&self, index: usize) -> Result<LvReader> {
+        self.open_mapped_volume(index)
+    }
+
+    fn open_mapped_volume(&self, index: usize) -> Result<LvReader> {
         if index >= self.logical_volumes.len() {
             return Err(crate::error::LvmError::LvIndexOutOfRange {
                 index,
@@ -1057,6 +1065,46 @@ mirrored_root {{ id="lv-mirrored-root" status=["READ","WRITE","VISIBLE"] segment
             .map(|(_, volume)| volume.name)
             .collect::<Vec<_>>();
         assert_eq!(direct_names, vec!["origin"]);
+    }
+
+    #[test]
+    fn list_readable_volumes_includes_supported_thin_lvs_without_changing_direct_list() {
+        let mut disk = build_synthetic_lvm_disk();
+        let metadata_text = format!(
+            r#"test_vg {{
+id="vg-readable-thin"
+seqno=8
+extent_size=1
+physical_volumes {{ pv0 {{ id="{}" pe_start=5 pe_count=4096 }} }}
+logical_volumes {{
+pool_tmeta {{ id="lv-pool-tmeta" status=["READ","WRITE"] segment_count=1 segment1 {{ start_extent=0 extent_count=1 type="linear" stripe_count=1 stripes=["pv0",0] }} }}
+pool_tdata {{ id="lv-pool-tdata" status=["READ","WRITE"] segment_count=1 segment1 {{ start_extent=0 extent_count=4 type="linear" stripe_count=1 stripes=["pv0",1] }} }}
+thin_pool {{ id="lv-thin-pool" status=["READ","WRITE"] segment_count=1 segment1 {{ start_extent=0 extent_count=4 type="thin-pool" metadata="pool_tmeta" pool="pool_tdata" transaction_id=1 chunk_size=128 }} }}
+thin_root {{ id="lv-thin-root" status=["READ","WRITE","VISIBLE"] segment_count=1 segment1 {{ start_extent=0 extent_count=2 type="thin" thin_pool="thin_pool" transaction_id=1 device_id=7 }} }}
+origin {{ id="lv-origin" status=["READ","WRITE","VISIBLE"] segment_count=1 segment1 {{ start_extent=0 extent_count=2 type="linear" stripe_count=1 stripes=["pv0",10] }} }}
+}}
+}}
+"#,
+            "abcdef1234567890abcdef1234567890"
+        );
+        write_synthetic_metadata(&mut disk, &metadata_text);
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeDiskReader::new(disk));
+        let pool = LvmPool::discover(vec![reader], vec![0]).unwrap();
+
+        let direct_names = pool
+            .list_direct_volumes()
+            .into_iter()
+            .map(|(_, volume)| volume.name)
+            .collect::<Vec<_>>();
+        assert_eq!(direct_names, vec!["origin"]);
+
+        let readable_names = pool
+            .list_readable_volumes()
+            .into_iter()
+            .map(|(_, volume)| volume.name)
+            .collect::<Vec<_>>();
+        assert_eq!(readable_names, vec!["thin_root", "origin"]);
     }
 
     #[test]

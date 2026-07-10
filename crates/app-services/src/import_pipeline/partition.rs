@@ -622,8 +622,8 @@ fn open_candidate_reader(
             .map_err(|e| e.to_string())?;
         let lv_idx = find_lvm_volume_index(&pool, identity)
             .ok_or_else(|| "LVM logical volume identity not found in pool".to_string())?;
-        let lv_reader = pool.open_volume(lv_idx).map_err(|e| e.to_string())?;
-        return Ok((Box::new(lv_reader), 0));
+        let lv_reader = pool.open_volume_reader(lv_idx).map_err(|e| e.to_string())?;
+        return Ok((lv_reader, 0));
     }
 
     let reader: Box<dyn EvidenceReader> = if *source_kind == domain::DataSourceKind::E01 {
