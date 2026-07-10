@@ -1,6 +1,6 @@
 pub use crate::dto::analysis_base::{
-    AnalysisExtractionRunDto, AnalysisFieldProvenanceDto, AnalysisParseStatusDto,
-    AnalysisProvenanceDto,
+    AnalysisExtractionRunDto, AnalysisExtractionSectionRunDto, AnalysisFieldProvenanceDto,
+    AnalysisParseStatusDto, AnalysisProvenanceDto,
 };
 pub use crate::dto::analysis_browser::{
     BrowserCookieDto, BrowserDownloadDto, BrowserHistorySummaryDto, BrowserPasswordDto,
@@ -18,7 +18,9 @@ pub use crate::dto::analysis_evtx::{
 };
 pub use crate::dto::analysis_linux::{
     LinuxAptEventDto, LinuxArtifactSummaryDto, LinuxBashCommandDto, LinuxCronJobDto,
-    LinuxJournalEntryDto, LinuxLoginRecordDto, LinuxSudoEventDto,
+    LinuxJournalEntryDto, LinuxLoginRecordDto, LinuxMysqlConfigDto, LinuxMysqlFindingDto,
+    LinuxMysqlLogEntryDto, LinuxSudoEventDto, LinuxSystemConfigDto, LinuxWebAccessLogDto,
+    LinuxWebErrorLogDto, LinuxWebFindingDto, LinuxWebSiteDto,
 };
 pub use crate::dto::analysis_registry::{
     AmcacheApplicationDto, AmcacheApplicationFileDto, AppCompatLayerDto, CachedCredentialDto,

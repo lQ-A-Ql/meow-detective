@@ -39,7 +39,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use transport::dto::ViewerRangeRequestDto;
+use transport::dto::{AnalysisExtractionRunDto, AnalysisParseStatusDto, ViewerRangeRequestDto};
 
 const LIUYANG_LVM_POOL_OFFSET: u64 = 1_074_790_400;
 const LIUYANG_ROOT_LV_NAME: &str = "root";
@@ -64,6 +64,16 @@ const MIN_LIUYANG_ROOT_LV_DIR_COUNT: u64 = 7_000;
 const MIN_LIUYANG_LINUX_ARTIFACT_CANDIDATES: usize = 100;
 const MIN_LIUYANG_LARGE_PREVIEW_FILE_BYTES: u64 = 2 * 1024 * 1024;
 const LINUX_PREVIEW_RANGE_LEN: u32 = 4096;
+const LINUX_ANALYSIS_SECTION_KEYS: &[&str] = &[
+    "LinuxJournal",
+    "LinuxLogin",
+    "LinuxCommands",
+    "LinuxPackages",
+    "LinuxCron",
+    "LinuxSudo",
+    "LinuxSystemConfig",
+    "LinuxWebServices",
+];
 const SYNTHETIC_PV_SIZE: u64 = 2_097_152;
 const SYNTHETIC_DATA_AREA_START: u64 = 2560;
 const SYNTHETIC_LV_MARKER_OFFSET: usize = SYNTHETIC_DATA_AREA_START as usize;
@@ -1487,6 +1497,57 @@ fn assert_linux_artifact_extraction_has_real_families(conn: &Connection) {
     }
 }
 
+fn assert_linux_extraction_sections_cover_real_sample(run: &AnalysisExtractionRunDto) {
+    for key in LINUX_ANALYSIS_SECTION_KEYS {
+        let section = run
+            .sections
+            .iter()
+            .find(|section| section.key == *key)
+            .unwrap_or_else(|| panic!("Linux extraction run should include section {key}"));
+        assert_ne!(
+            section.status,
+            AnalysisParseStatusDto::Failed,
+            "Linux extraction section {key} should not fail: {:?}",
+            section.warnings
+        );
+    }
+
+    for key in [
+        "LinuxJournal",
+        "LinuxLogin",
+        "LinuxCommands",
+        "LinuxCron",
+        "LinuxSudo",
+        "LinuxSystemConfig",
+    ] {
+        let section = run
+            .sections
+            .iter()
+            .find(|section| section.key == key)
+            .unwrap();
+        assert!(
+            section.scanned_count > 0,
+            "real sample should scan Linux section {key}"
+        );
+        assert!(
+            section.artifact_count > 0,
+            "real sample should persist artifacts for Linux section {key}"
+        );
+    }
+
+    let packages = run
+        .sections
+        .iter()
+        .find(|section| section.key == "LinuxPackages")
+        .unwrap();
+    if packages.scanned_count > 0 {
+        assert!(
+            packages.artifact_count > 0,
+            "package section scanned package logs but produced no package artifacts"
+        );
+    }
+}
+
 fn assert_linux_artifact_source_paths_include(conn: &Connection, paths: &[&str]) {
     for linux_path in paths {
         let suffix = normalize_linux_path_suffix(linux_path);
@@ -2350,6 +2411,17 @@ fn linux_e01_analysis_extraction_produces_linux_artifacts() {
         "Linux artifact extraction: scanned={} artifacts={} timeline_events={} warnings={:?}",
         run.scanned_count, run.artifact_count, run.timeline_event_count, run.warnings
     );
+    for section in &run.sections {
+        eprintln!(
+            "  section key={} status={:?} scanned={} artifacts={} timeline={} warnings={}",
+            section.key,
+            section.status,
+            section.scanned_count,
+            section.artifact_count,
+            section.timeline_event_count,
+            section.warnings.len()
+        );
+    }
     assert!(
         run.scanned_count > 0,
         "expected real Linux artifact sources scanned"
@@ -2358,10 +2430,11 @@ fn linux_e01_analysis_extraction_produces_linux_artifacts() {
         run.artifact_count > 0,
         "expected real Linux artifact extraction to persist artifacts"
     );
+    assert_linux_extraction_sections_cover_real_sample(&run);
 
     let summary = get_linux_artifact_summary(&conn, 0, 200).unwrap();
     eprintln!(
-        "Linux artifact summary: total={} journal={} login={} bash={} apt={} cron={} sudo={}",
+        "Linux artifact summary: total={} journal={} login={} bash={} package={} cron={} sudo={} config={} web={}",
         summary.total_count,
         summary.journal_count,
         summary.login_count,
@@ -2369,6 +2442,11 @@ fn linux_e01_analysis_extraction_produces_linux_artifacts() {
         summary.apt_event_count,
         summary.cron_job_count,
         summary.sudo_event_count,
+        summary.system_config_count,
+        summary.web_site_count
+            + summary.web_access_log_count
+            + summary.web_error_log_count
+            + summary.web_finding_count,
     );
     assert!(
         summary.total_count >= run.artifact_count,
@@ -2381,6 +2459,10 @@ fn linux_e01_analysis_extraction_produces_linux_artifacts() {
             && summary.cron_job_count > 0
             && summary.sudo_event_count > 0,
         "real sample should produce journal/login/bash/cron/sudo Linux artifacts"
+    );
+    assert!(
+        summary.system_config_count > 0,
+        "real sample should expose Linux system config artifacts in summary"
     );
     assert_linux_artifact_extraction_has_real_families(&conn);
     assert_linux_artifact_source_paths_include(

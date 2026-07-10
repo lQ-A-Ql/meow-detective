@@ -6,7 +6,15 @@ import type {
   LinuxCronJob,
   LinuxJournalEntry,
   LinuxLoginRecord,
+  LinuxMysqlConfig,
+  LinuxMysqlFinding,
+  LinuxMysqlLogEntry,
   LinuxSudoEvent,
+  LinuxSystemConfig,
+  LinuxWebAccessLog,
+  LinuxWebErrorLog,
+  LinuxWebFinding,
+  LinuxWebSite,
 } from '@/types/models';
 import { DenseColumn, DenseDataTable } from '@/components/tables/DenseDataTable';
 import {
@@ -25,7 +33,10 @@ export type LinuxArtifactTabKey =
   | 'commands'
   | 'packages'
   | 'cron'
-  | 'sudo';
+  | 'sudo'
+  | 'systemConfig'
+  | 'webServices'
+  | 'mysqlServices';
 
 const TABS: LinuxArtifactTabKey[] = [
   'overview',
@@ -35,15 +46,20 @@ const TABS: LinuxArtifactTabKey[] = [
   'packages',
   'cron',
   'sudo',
+  'systemConfig',
+  'webServices',
+  'mysqlServices',
 ];
 
 export function LinuxArtifactsPanel({
   summary,
   progress,
+  progressByTab,
   activeTab = 'overview',
 }: {
   summary?: LinuxArtifactSummary;
   progress?: AnalysisExtractionProgressInfo;
+  progressByTab?: Partial<Record<LinuxArtifactTabKey, AnalysisExtractionProgressInfo>>;
   activeTab?: LinuxArtifactTabKey;
 }) {
   const { t } = useTranslation();
@@ -56,6 +72,14 @@ export function LinuxArtifactsPanel({
     aptEventCount: 0,
     cronJobCount: 0,
     sudoEventCount: 0,
+    systemConfigCount: 0,
+    webSiteCount: 0,
+    webAccessLogCount: 0,
+    webErrorLogCount: 0,
+    webFindingCount: 0,
+    mysqlConfigCount: 0,
+    mysqlLogCount: 0,
+    mysqlFindingCount: 0,
     totalCount: 0,
     truncated: false,
     coverageRatio: 0,
@@ -65,6 +89,14 @@ export function LinuxArtifactsPanel({
     aptEvents: [],
     cronJobs: [],
     sudoEvents: [],
+    systemConfigs: [],
+    webSites: [],
+    webAccessLogs: [],
+    webErrorLogs: [],
+    webFindings: [],
+    mysqlConfigs: [],
+    mysqlLogs: [],
+    mysqlFindings: [],
     warnings: [t('linuxArtifacts.fallbackWarning')],
     generatedAt: '',
   };
@@ -137,6 +169,79 @@ export function LinuxArtifactsPanel({
     { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
   ];
 
+  const systemConfigColumns: DenseColumn<LinuxSystemConfig>[] = [
+    { key: 'configKind', title: t('linuxArtifacts.columns.configKind'), className: 'w-[130px]', render: (row) => row.configKind || '-' },
+    { key: 'key', title: t('linuxArtifacts.columns.key'), className: 'w-[140px]', render: (row) => row.key ?? row.username ?? '-' },
+    { key: 'value', title: t('linuxArtifacts.columns.value'), className: 'min-w-[220px]', render: (row) => row.value ?? row.line ?? '-' },
+    { key: 'uid', title: t('linuxArtifacts.columns.uid'), className: 'w-[70px]', render: (row) => row.uid?.toString() ?? '-' },
+    { key: 'gid', title: t('linuxArtifacts.columns.gid'), className: 'w-[70px]', render: (row) => row.gid?.toString() ?? '-' },
+    { key: 'home', title: t('linuxArtifacts.columns.home'), className: 'w-[160px]', render: (row) => row.home ?? '-' },
+    { key: 'shell', title: t('linuxArtifacts.columns.shell'), className: 'w-[140px]', render: (row) => row.shell ?? '-' },
+    { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
+  ];
+
+  const webSiteColumns: DenseColumn<LinuxWebSite>[] = [
+    { key: 'serverKind', title: t('linuxArtifacts.columns.serverKind'), className: 'w-[90px]', render: (row) => row.serverKind },
+    { key: 'siteName', title: t('linuxArtifacts.columns.siteName'), className: 'min-w-[160px]', render: (row) => row.siteName },
+    { key: 'hostnames', title: t('linuxArtifacts.columns.hostnames'), className: 'min-w-[180px]', render: (row) => row.hostnames.join(', ') || '-' },
+    { key: 'listen', title: t('linuxArtifacts.columns.listen'), className: 'w-[140px]', render: (row) => row.listen.join(', ') || '-' },
+    { key: 'documentRoots', title: t('linuxArtifacts.columns.documentRoots'), className: 'min-w-[220px]', render: (row) => row.documentRoots.join(', ') || '-' },
+    { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
+  ];
+
+  const webAccessColumns: DenseColumn<LinuxWebAccessLog>[] = [
+    { key: 'timestamp', title: t('linuxArtifacts.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp ?? '-' },
+    { key: 'clientIp', title: t('linuxArtifacts.columns.clientIp'), className: 'w-[130px]', render: (row) => row.clientIp },
+    { key: 'method', title: t('linuxArtifacts.columns.method'), className: 'w-[70px]', render: (row) => row.method },
+    { key: 'status', title: t('linuxArtifacts.columns.statusCode'), className: 'w-[80px]', render: (row) => row.status.toString() },
+    { key: 'uri', title: t('linuxArtifacts.columns.uri'), className: 'min-w-[260px]', render: (row) => <span className="font-mono">{row.uri}</span> },
+    { key: 'userAgent', title: t('linuxArtifacts.columns.userAgent'), className: 'min-w-[200px]', render: (row) => row.userAgent ?? '-' },
+    { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
+  ];
+
+  const webErrorColumns: DenseColumn<LinuxWebErrorLog>[] = [
+    { key: 'timestamp', title: t('linuxArtifacts.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp ?? '-' },
+    { key: 'severity', title: t('linuxArtifacts.columns.severity'), className: 'w-[110px]', render: (row) => row.severity ?? '-' },
+    { key: 'message', title: t('linuxArtifacts.columns.message'), className: 'min-w-[320px]', render: (row) => row.message },
+    { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
+  ];
+
+  const webFindingColumns: DenseColumn<LinuxWebFinding>[] = [
+    { key: 'severity', title: t('linuxArtifacts.columns.severity'), className: 'w-[90px]', render: (row) => row.severity },
+    { key: 'findingKind', title: t('linuxArtifacts.columns.findingKind'), className: 'w-[150px]', render: (row) => row.findingKind },
+    { key: 'confidence', title: t('linuxArtifacts.columns.confidence'), className: 'w-[90px]', render: (row) => `${Math.round(row.confidence * 100)}%` },
+    { key: 'clientIp', title: t('linuxArtifacts.columns.clientIp'), className: 'w-[130px]', render: (row) => row.clientIp ?? '-' },
+    { key: 'uri', title: t('linuxArtifacts.columns.uri'), className: 'min-w-[220px]', render: (row) => row.uri ?? '-' },
+    { key: 'evidence', title: t('linuxArtifacts.columns.evidence'), className: 'min-w-[260px]', render: (row) => row.evidence },
+    { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
+  ];
+
+  const mysqlFindingColumns: DenseColumn<LinuxMysqlFinding>[] = [
+    { key: 'severity', title: t('linuxArtifacts.columns.severity'), className: 'w-[90px]', render: (row) => row.severity },
+    { key: 'findingKind', title: t('linuxArtifacts.columns.findingKind'), className: 'w-[170px]', render: (row) => row.findingKind },
+    { key: 'confidence', title: t('linuxArtifacts.columns.confidence'), className: 'w-[90px]', render: (row) => `${Math.round(row.confidence * 100)}%` },
+    { key: 'evidence', title: t('linuxArtifacts.columns.evidence'), className: 'min-w-[300px]', render: (row) => row.evidence },
+    { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
+    { key: 'lineNumber', title: t('linuxArtifacts.columns.lineNumber'), className: 'w-[80px]', render: (row) => row.lineNumber.toString() },
+  ];
+
+  const mysqlConfigColumns: DenseColumn<LinuxMysqlConfig>[] = [
+    { key: 'section', title: t('linuxArtifacts.columns.section'), className: 'w-[120px]', render: (row) => row.section ?? '-' },
+    { key: 'key', title: t('linuxArtifacts.columns.key'), className: 'w-[180px]', render: (row) => <span className="font-mono">{row.key}</span> },
+    { key: 'value', title: t('linuxArtifacts.columns.value'), className: 'min-w-[240px]', render: (row) => <span className="font-mono">{row.value}</span> },
+    { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
+    { key: 'lineNumber', title: t('linuxArtifacts.columns.lineNumber'), className: 'w-[80px]', render: (row) => row.lineNumber.toString() },
+  ];
+
+  const mysqlLogColumns: DenseColumn<LinuxMysqlLogEntry>[] = [
+    { key: 'timestamp', title: t('linuxArtifacts.columns.timestamp'), className: 'w-[180px]', render: (row) => row.timestamp ?? '-' },
+    { key: 'severity', title: t('linuxArtifacts.columns.severity'), className: 'w-[110px]', render: (row) => row.severity ?? '-' },
+    { key: 'threadId', title: t('linuxArtifacts.columns.threadId'), className: 'w-[90px]', render: (row) => row.threadId ?? '-' },
+    { key: 'message', title: t('linuxArtifacts.columns.message'), className: 'min-w-[320px]', render: (row) => row.message },
+    { key: 'sourcePath', title: t('linuxArtifacts.columns.sourcePath'), className: 'min-w-[180px]', render: (row) => row.sourcePath },
+    { key: 'lineNumber', title: t('linuxArtifacts.columns.lineNumber'), className: 'w-[80px]', render: (row) => row.lineNumber.toString() },
+  ];
+
   const overviewContent = (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
       <StatCard label={t('linuxArtifacts.stats.journal')} value={info.journalCount.toString()} />
@@ -145,6 +250,9 @@ export function LinuxArtifactsPanel({
       <StatCard label={t('linuxArtifacts.stats.packages')} value={info.aptEventCount.toString()} />
       <StatCard label={t('linuxArtifacts.stats.cron')} value={info.cronJobCount.toString()} />
       <StatCard label={t('linuxArtifacts.stats.sudo')} value={info.sudoEventCount.toString()} />
+      <StatCard label={t('linuxArtifacts.stats.systemConfig')} value={info.systemConfigCount.toString()} />
+      <StatCard label={t('linuxArtifacts.stats.webServices')} value={(info.webSiteCount + info.webAccessLogCount + info.webErrorLogCount + info.webFindingCount).toString()} />
+      <StatCard label={t('linuxArtifacts.stats.mysqlServices')} value={(info.mysqlConfigCount + info.mysqlLogCount + info.mysqlFindingCount).toString()} />
     </div>
   );
 
@@ -221,7 +329,91 @@ export function LinuxArtifactsPanel({
         />
       </DenseTableFrame>
     ),
+    systemConfig: (
+      <DenseTableFrame>
+        <DenseDataTable
+          rows={info.systemConfigs}
+          columns={systemConfigColumns}
+          getRowKey={(row) => row.artifactId}
+          emptyTitle={t('linuxArtifacts.empty.systemConfig.title')}
+          emptyDescription={t('linuxArtifacts.empty.systemConfig.description')}
+        />
+      </DenseTableFrame>
+    ),
+    webServices: (
+      <div className="space-y-3">
+        <DenseTableFrame>
+          <DenseDataTable
+            rows={info.webFindings}
+            columns={webFindingColumns}
+            getRowKey={(row) => row.artifactId}
+            emptyTitle={t('linuxArtifacts.empty.webFindings.title')}
+            emptyDescription={t('linuxArtifacts.empty.webFindings.description')}
+          />
+        </DenseTableFrame>
+        <DenseTableFrame>
+          <DenseDataTable
+            rows={info.webSites}
+            columns={webSiteColumns}
+            getRowKey={(row) => row.artifactId}
+            emptyTitle={t('linuxArtifacts.empty.webSites.title')}
+            emptyDescription={t('linuxArtifacts.empty.webSites.description')}
+          />
+        </DenseTableFrame>
+        <DenseTableFrame>
+          <DenseDataTable
+            rows={info.webAccessLogs}
+            columns={webAccessColumns}
+            getRowKey={(row) => row.artifactId}
+            emptyTitle={t('linuxArtifacts.empty.webAccess.title')}
+            emptyDescription={t('linuxArtifacts.empty.webAccess.description')}
+          />
+        </DenseTableFrame>
+        <DenseTableFrame>
+          <DenseDataTable
+            rows={info.webErrorLogs}
+            columns={webErrorColumns}
+            getRowKey={(row) => row.artifactId}
+            emptyTitle={t('linuxArtifacts.empty.webError.title')}
+            emptyDescription={t('linuxArtifacts.empty.webError.description')}
+          />
+        </DenseTableFrame>
+      </div>
+    ),
+
+    mysqlServices: (
+      <div className="space-y-3">
+        <DenseTableFrame>
+          <DenseDataTable
+            rows={info.mysqlFindings}
+            columns={mysqlFindingColumns}
+            getRowKey={(row) => row.artifactId}
+            emptyTitle={t('linuxArtifacts.empty.mysqlFindings.title')}
+            emptyDescription={t('linuxArtifacts.empty.mysqlFindings.description')}
+          />
+        </DenseTableFrame>
+        <DenseTableFrame>
+          <DenseDataTable
+            rows={info.mysqlConfigs}
+            columns={mysqlConfigColumns}
+            getRowKey={(row) => row.artifactId}
+            emptyTitle={t('linuxArtifacts.empty.mysqlConfigs.title')}
+            emptyDescription={t('linuxArtifacts.empty.mysqlConfigs.description')}
+          />
+        </DenseTableFrame>
+        <DenseTableFrame>
+          <DenseDataTable
+            rows={info.mysqlLogs}
+            columns={mysqlLogColumns}
+            getRowKey={(row) => row.artifactId}
+            emptyTitle={t('linuxArtifacts.empty.mysqlLogs.title')}
+            emptyDescription={t('linuxArtifacts.empty.mysqlLogs.description')}
+          />
+        </DenseTableFrame>
+      </div>
+    ),
   };
+  const tabProgress = progressByTab?.[activeTab] ?? progress;
 
   return (
     <ExtractionTableSection
@@ -234,11 +426,14 @@ export function LinuxArtifactsPanel({
         [t('linuxArtifacts.stats.journal'), info.journalCount.toString()],
         [t('linuxArtifacts.stats.login'), info.loginCount.toString()],
         [t('linuxArtifacts.stats.commands'), info.bashCommandCount.toString()],
+        [t('linuxArtifacts.stats.systemConfig'), info.systemConfigCount.toString()],
+        [t('linuxArtifacts.stats.webServices'), (info.webSiteCount + info.webAccessLogCount + info.webErrorLogCount + info.webFindingCount).toString()],
+        [t('linuxArtifacts.stats.mysqlServices'), (info.mysqlConfigCount + info.mysqlLogCount + info.mysqlFindingCount).toString()],
         [t('linuxArtifacts.stats.coverage'), `${Math.round(info.coverageRatio * 100)}%`],
         [t('linuxArtifacts.stats.truncated'), info.truncated ? t('linuxArtifacts.values.yes') : t('linuxArtifacts.values.no')],
       ]}
     >
-      <AnalysisExtractionProgress progress={progress} />
+      <AnalysisExtractionProgress progress={tabProgress} />
 
       <div className="min-h-0">{tabContent[activeTab]}</div>
     </ExtractionTableSection>

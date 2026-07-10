@@ -155,15 +155,42 @@
   },
   "topBar": {
     "links": {
-      "home": { "label": "案件概览", "context": "案件状态、指标与近期对象" },
-      "files": { "label": "文件浏览", "context": "目录树、文件表与取证查看器" },
-      "analysis": { "label": "数据源分析", "context": "系统信息、文件分类与分析报告" },
-      "v2": { "label": "V2 治理", "context": "可信验证、Benchmark、安全治理与发布评分" },
-      "v3": { "label": "取证总览", "context": "图统计、数据源覆盖、痕迹关联与规则包状态" },
-      "search": { "label": "全局搜索", "context": "关键字、结构化查询与命中详情" },
-      "timeline": { "label": "时间线", "context": "事件聚合、筛选与时序检视" },
-      "artifacts": { "label": "痕迹分析", "context": "Windows 痕迹家族与解析字段" },
-      "reports": { "label": "报告导出", "context": "模板、导出任务与报告产物" }
+      "home": {
+        "label": "案件概览",
+        "context": "案件状态、指标与近期对象"
+      },
+      "files": {
+        "label": "文件浏览",
+        "context": "目录树、文件表与取证查看器"
+      },
+      "analysis": {
+        "label": "数据源分析",
+        "context": "系统信息、文件分类与分析报告"
+      },
+      "v2": {
+        "label": "V2 治理",
+        "context": "可信验证、Benchmark、安全治理与发布评分"
+      },
+      "v3": {
+        "label": "取证总览",
+        "context": "图统计、数据源覆盖、痕迹关联与规则包状态"
+      },
+      "search": {
+        "label": "全局搜索",
+        "context": "关键字、结构化查询与命中详情"
+      },
+      "timeline": {
+        "label": "时间线",
+        "context": "事件聚合、筛选与时序检视"
+      },
+      "artifacts": {
+        "label": "痕迹分析",
+        "context": "Windows 痕迹家族与解析字段"
+      },
+      "reports": {
+        "label": "报告导出",
+        "context": "模板、导出任务与报告产物"
+      }
     },
     "currentPage": "当前页",
     "case": {
@@ -323,7 +350,16 @@
       "BrowserHistory": "浏览器记录提取",
       "Email": "邮件信息提取",
       "EventLogs": "事件日志提取",
-      "LinuxArtifacts": "Linux 痕迹提取"
+      "LinuxArtifacts": "Linux 痕迹提取",
+      "LinuxJournal": "Linux 日志提取",
+      "LinuxLogin": "Linux 登录记录提取",
+      "LinuxCommands": "Linux 命令历史提取",
+      "LinuxPackages": "Linux 软件包提取",
+      "LinuxCron": "Linux 计划任务提取",
+      "LinuxSudo": "Linux sudo/auth 提取",
+      "LinuxSystemConfig": "Linux 系统配置提取",
+      "LinuxWebServices": "Linux Web 服务提取",
+      "LinuxMysqlServices": "Linux MySQL 服务提取"
     },
     "progressDrawer": {
       "title": "提取进度",
@@ -428,8 +464,11 @@
       "packages": "软件包事件",
       "cron": "计划任务",
       "sudo": "sudo 事件",
+      "systemConfig": "系统配置",
+      "webServices": "Web 服务",
       "coverage": "覆盖率",
-      "truncated": "截断"
+      "truncated": "截断",
+      "mysqlServices": "MySQL 服务"
     },
     "tabs": {
       "overview": "概览",
@@ -438,7 +477,10 @@
       "commands": "Shell 命令",
       "packages": "软件包",
       "cron": "计划任务",
-      "sudo": "sudo"
+      "sudo": "sudo",
+      "systemConfig": "系统配置",
+      "webServices": "Web 服务",
+      "mysqlServices": "MySQL 服务"
     },
     "columns": {
       "timestamp": "时间",
@@ -463,7 +505,35 @@
       "schedule": "计划",
       "sourceFile": "配置文件",
       "workingDirectory": "工作目录",
-      "success": "成功"
+      "success": "成功",
+      "configKind": "配置类型",
+      "key": "键/账户",
+      "value": "值/内容",
+      "uid": "UID",
+      "gid": "GID",
+      "home": "主目录",
+      "shell": "Shell",
+      "serverKind": "服务类型",
+      "siteName": "站点",
+      "hostnames": "域名",
+      "listen": "监听",
+      "documentRoots": "站点根目录",
+      "accessLogs": "访问日志",
+      "errorLogs": "错误日志",
+      "clientIp": "客户端 IP",
+      "method": "方法",
+      "uri": "URI",
+      "protocol": "协议",
+      "status": "状态码",
+      "responseBytes": "响应字节",
+      "referer": "Referer",
+      "userAgent": "User-Agent",
+      "severity": "严重性",
+      "findingKind": "发现类型",
+      "confidence": "置信度",
+      "evidence": "证据片段",
+      "section": "配置段",
+      "threadId": "线程 ID"
     },
     "values": {
       "yes": "是",
@@ -498,6 +568,38 @@
       "sudo": {
         "title": "暂无 sudo/提权事件",
         "description": "候选路径：/var/log/auth.log、/var/log/secure。"
+      },
+      "systemConfig": {
+        "title": "暂无系统配置记录",
+        "description": "候选路径：/etc/passwd、/etc/os-release、systemd、SSH、sudoers、profile.d。"
+      },
+      "webSites": {
+        "title": "暂无 Web 站点配置",
+        "description": "候选路径：/etc/nginx、/etc/apache2、/etc/httpd。"
+      },
+      "webAccess": {
+        "title": "暂无 Web 访问日志",
+        "description": "候选路径：/var/log/nginx/access.log、/var/log/apache2/access.log、/var/log/httpd/access_log。"
+      },
+      "webError": {
+        "title": "暂无 Web 错误日志",
+        "description": "候选路径：/var/log/nginx/error.log、/var/log/apache2/error.log、/var/log/httpd/error_log。"
+      },
+      "webFindings": {
+        "title": "暂无 Web 攻击线索",
+        "description": "检测 SQLi、LFI、路径穿越、扫描器、爆破和 WebShell 候选。"
+      },
+      "mysqlFindings": {
+        "title": "暂无 MySQL 风险发现",
+        "description": "检测 MySQL/MariaDB 暴露监听、local_infile、secure_file_priv、崩溃恢复和认证失败等证据。"
+      },
+      "mysqlConfigs": {
+        "title": "暂无 MySQL 配置",
+        "description": "候选路径：/etc/my.cnf、/etc/mysql/my.cnf、/etc/mysql/*.d/*.cnf。"
+      },
+      "mysqlLogs": {
+        "title": "暂无 MySQL 日志",
+        "description": "候选路径：/var/log/mysql/error.log、/var/log/mariadb/mariadb.log、/var/log/mysqld.log。"
       }
     }
   },

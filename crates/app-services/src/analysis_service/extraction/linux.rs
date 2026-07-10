@@ -9,6 +9,8 @@ use std::collections::BTreeMap;
 use std::io::Read;
 
 const MAX_TEXT_LOG_EVENTS_PER_SOURCE: usize = 10_000;
+const MAX_WEB_ERROR_LOG_EVENTS_PER_SOURCE: usize = 2_000;
+const MAX_MYSQL_LOG_EVENTS_PER_SOURCE: usize = 2_000;
 const MAX_LINUX_TEXT_SOURCE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_LINUX_SMALL_SOURCE_BYTES: usize = 4 * 1024 * 1024;
 
@@ -57,6 +59,20 @@ pub fn extract_linux_candidate(candidate: &EvidenceCandidate, bytes: &[u8]) -> E
 
     if is_journal_path(effective_path) {
         extract_journal(candidate, input, &mut outcome);
+    } else if is_nginx_config_path(effective_path) {
+        extract_nginx_config(candidate, input, &mut outcome);
+    } else if is_apache_config_path(effective_path) {
+        extract_apache_config(candidate, input, &mut outcome);
+    } else if is_web_access_log_path(effective_path) {
+        extract_web_access_log(candidate, input, &mut outcome);
+    } else if is_web_error_log_path(effective_path) {
+        extract_web_error_log(candidate, input, &mut outcome);
+    } else if is_web_root_script_path(effective_path) {
+        extract_web_root_script(candidate, input, &mut outcome);
+    } else if is_mysql_config_path(effective_path) {
+        extract_mysql_config(candidate, input, &mut outcome);
+    } else if is_mysql_log_path(effective_path) {
+        extract_mysql_log(candidate, input, &mut outcome);
     } else if is_wtmp_path(effective_path) {
         extract_wtmp(candidate, input, &mut outcome);
     } else if is_bash_history_path(effective_path) {
@@ -71,10 +87,46 @@ pub fn extract_linux_candidate(candidate: &EvidenceCandidate, bytes: &[u8]) -> E
         extract_system_config(candidate, input, &mut outcome);
     } else if is_pve_config_path(effective_path) {
         extract_pve_config(candidate, input, &mut outcome);
+    } else if is_sudoers_path(effective_path) {
+        extract_text_config(candidate, input, "linux.sudoers", "sudoers", &mut outcome);
+    } else if is_ssh_text_path(effective_path) {
+        extract_text_config(
+            candidate,
+            input,
+            "linux.ssh_config",
+            "sshConfig",
+            &mut outcome,
+        );
+    } else if is_systemd_unit_path(effective_path) {
+        extract_text_config(
+            candidate,
+            input,
+            "linux.systemd_unit",
+            "systemdUnit",
+            &mut outcome,
+        );
+    } else if is_init_script_path(effective_path) {
+        extract_text_config(
+            candidate,
+            input,
+            "linux.init_script",
+            "initScript",
+            &mut outcome,
+        );
+    } else if is_profile_script_path(effective_path) {
+        extract_text_config(
+            candidate,
+            input,
+            "linux.profile_script",
+            "profileScript",
+            &mut outcome,
+        );
     } else if is_apt_history_path(effective_path) {
         extract_apt_history(candidate, input, &mut outcome);
     } else if is_dpkg_log_path(effective_path) {
         extract_dpkg_log(candidate, input, &mut outcome);
+    } else if is_rpm_package_log_path(effective_path) {
+        extract_rpm_package_log(candidate, input, &mut outcome);
     } else if is_cron_path(effective_path) {
         extract_crontab(candidate, input, &mut outcome);
     } else if is_auth_log_path(effective_path) {
@@ -87,8 +139,6 @@ pub fn extract_linux_candidate(candidate: &EvidenceCandidate, bytes: &[u8]) -> E
         extract_text_log(candidate, input, "linux.text_log", "log", &mut outcome);
     } else if is_pve_log_path(effective_path) {
         extract_text_log(candidate, input, "linux.pve_log", "pve", &mut outcome);
-    } else if is_ssh_text_path(effective_path) {
-        extract_text_log(candidate, input, "linux.ssh_text", "ssh", &mut outcome);
     } else {
         let source_path = if candidate.path.is_empty() {
             "<unknown>"
@@ -109,11 +159,14 @@ pub(super) fn linux_candidate_read_limit(normalized_path: &str) -> usize {
         .unwrap_or(normalized_path);
     if is_journal_path(effective_path) || is_wtmp_path(effective_path) {
         MAX_ANALYSIS_SOURCE_BYTES
+    } else if is_web_access_log_path(effective_path) || is_web_error_log_path(effective_path) {
+        MAX_LINUX_TEXT_SOURCE_BYTES
     } else if is_text_log_path(effective_path)
         || is_pve_log_path(effective_path)
         || is_auth_log_path(effective_path)
         || is_apt_history_path(effective_path)
         || is_dpkg_log_path(effective_path)
+        || is_rpm_package_log_path(effective_path)
     {
         MAX_LINUX_TEXT_SOURCE_BYTES
     } else {
@@ -131,18 +184,23 @@ pub(super) fn linux_candidate_support(normalized_path: &str) -> LinuxCandidateSu
         || is_zsh_history_path(effective_path)
         || is_fish_history_path(effective_path)
         || is_plain_shell_history_path(effective_path)
+        || is_web_services_path(effective_path)
+        || is_mysql_services_path(effective_path)
         || is_system_config_path(effective_path)
         || is_pve_config_path(effective_path)
         || is_apt_history_path(effective_path)
         || is_dpkg_log_path(effective_path)
+        || is_rpm_package_log_path(effective_path)
         || is_cron_path(effective_path)
         || is_auth_log_path(effective_path)
+        || is_sudoers_path(effective_path)
+        || is_ssh_text_path(effective_path)
+        || is_systemd_unit_path(effective_path)
+        || is_init_script_path(effective_path)
+        || is_profile_script_path(effective_path)
     {
         LinuxCandidateSupport::Structured
-    } else if is_pve_log_path(effective_path)
-        || is_text_log_path(effective_path)
-        || is_ssh_text_path(effective_path)
-    {
+    } else if is_pve_log_path(effective_path) || is_text_log_path(effective_path) {
         LinuxCandidateSupport::TextFallback
     } else {
         LinuxCandidateSupport::Unsupported
@@ -170,30 +228,36 @@ fn is_journal_path(normalized: &str) -> bool {
         || normalized.contains("/run/log/journal/")
 }
 
-fn is_wtmp_path(normalized: &str) -> bool {
+pub(super) fn is_wtmp_path(normalized: &str) -> bool {
     normalized.ends_with("/var/log/wtmp")
         || normalized.contains("/var/log/wtmp.")
         || normalized.ends_with("/var/log/btmp")
         || normalized.contains("/var/log/btmp.")
 }
 
-fn is_bash_history_path(normalized: &str) -> bool {
+pub(super) fn is_login_binary_candidate_path(normalized: &str) -> bool {
+    is_wtmp_path(normalized)
+        || normalized.ends_with("/var/log/lastlog")
+        || normalized.ends_with("/var/log/faillog")
+}
+
+pub(super) fn is_bash_history_path(normalized: &str) -> bool {
     normalized.ends_with(".bash_history")
 }
 
-fn is_zsh_history_path(normalized: &str) -> bool {
+pub(super) fn is_zsh_history_path(normalized: &str) -> bool {
     normalized.ends_with(".zsh_history")
 }
 
-fn is_fish_history_path(normalized: &str) -> bool {
+pub(super) fn is_fish_history_path(normalized: &str) -> bool {
     normalized.ends_with(".fish_history") || normalized.contains("/.local/share/fish/fish_history")
 }
 
-fn is_plain_shell_history_path(normalized: &str) -> bool {
+pub(super) fn is_plain_shell_history_path(normalized: &str) -> bool {
     normalized.ends_with(".python_history")
 }
 
-fn is_system_config_path(normalized: &str) -> bool {
+pub(super) fn is_system_config_path(normalized: &str) -> bool {
     normalized.ends_with("/etc/os-release")
         || normalized.ends_with("/usr/lib/os-release")
         || normalized.ends_with("/etc/passwd")
@@ -205,7 +269,7 @@ fn is_system_config_path(normalized: &str) -> bool {
         || normalized.ends_with("/etc/machine-id")
 }
 
-fn is_pve_config_path(normalized: &str) -> bool {
+pub(super) fn is_pve_config_path(normalized: &str) -> bool {
     normalized.ends_with("/etc/pve/storage.cfg")
         || (normalized.contains("/etc/pve/qemu-server/") && normalized.ends_with(".conf"))
         || (normalized.contains("/etc/pve/lxc/") && normalized.ends_with(".conf"))
@@ -213,15 +277,24 @@ fn is_pve_config_path(normalized: &str) -> bool {
         || normalized.ends_with("/etc/corosync/corosync.conf")
 }
 
-fn is_apt_history_path(normalized: &str) -> bool {
+pub(super) fn is_apt_history_path(normalized: &str) -> bool {
     normalized.contains("/var/log/apt/history.log")
 }
 
-fn is_dpkg_log_path(normalized: &str) -> bool {
+pub(super) fn is_dpkg_log_path(normalized: &str) -> bool {
     normalized.contains("/var/log/dpkg.log")
 }
 
-fn is_cron_path(normalized: &str) -> bool {
+pub(super) fn is_rpm_package_log_path(normalized: &str) -> bool {
+    normalized.ends_with("/var/log/yum.log")
+        || normalized.contains("/var/log/yum.log.")
+        || normalized.ends_with("/var/log/dnf.log")
+        || normalized.contains("/var/log/dnf.log.")
+        || normalized.ends_with("/var/log/dnf.rpm.log")
+        || normalized.contains("/var/log/dnf.rpm.log.")
+}
+
+pub(super) fn is_cron_path(normalized: &str) -> bool {
     normalized.ends_with("/etc/crontab")
         || normalized.contains("/etc/cron.d/")
         || normalized.contains("/etc/cron.daily/")
@@ -231,11 +304,15 @@ fn is_cron_path(normalized: &str) -> bool {
         || normalized.contains("/var/spool/cron/")
 }
 
-fn is_auth_log_path(normalized: &str) -> bool {
+pub(super) fn is_auth_log_path(normalized: &str) -> bool {
     normalized.ends_with("/var/log/auth.log")
         || normalized.contains("/var/log/auth.log.")
         || normalized.ends_with("/var/log/secure")
         || normalized.contains("/var/log/secure.")
+}
+
+pub(super) fn is_sudoers_path(normalized: &str) -> bool {
+    normalized.ends_with("/etc/sudoers") || normalized.contains("/etc/sudoers.d/")
 }
 
 fn is_text_log_path(normalized: &str) -> bool {
@@ -259,13 +336,534 @@ fn is_pve_log_path(normalized: &str) -> bool {
         || normalized.contains("/var/log/pve/tasks/")
 }
 
-fn is_ssh_text_path(normalized: &str) -> bool {
+pub(super) fn is_ssh_text_path(normalized: &str) -> bool {
     normalized.contains("/.ssh/authorized_keys")
         || normalized.contains("/.ssh/known_hosts")
         || normalized.ends_with("/etc/ssh/ssh_config")
         || normalized.ends_with("/etc/ssh/sshd_config")
         || normalized.contains("/etc/ssh/ssh_config.d/")
         || normalized.contains("/etc/ssh/sshd_config.d/")
+}
+
+pub(super) fn is_ssh_candidate_path(normalized: &str) -> bool {
+    is_ssh_text_path(normalized) || normalized.contains("/etc/ssh/")
+}
+
+pub(super) fn is_systemd_unit_path(normalized: &str) -> bool {
+    normalized.contains("/etc/systemd/system/")
+        || normalized.contains("/lib/systemd/system/")
+        || normalized.contains("/usr/lib/systemd/system/")
+}
+
+pub(super) fn is_init_script_path(normalized: &str) -> bool {
+    normalized.contains("/etc/init.d/") || normalized.ends_with("/etc/rc.local")
+}
+
+pub(super) fn is_profile_script_path(normalized: &str) -> bool {
+    normalized.contains("/etc/profile.d/")
+}
+
+pub(super) fn is_web_services_path(normalized: &str) -> bool {
+    is_nginx_config_path(normalized)
+        || is_apache_config_path(normalized)
+        || is_web_access_log_path(normalized)
+        || is_web_error_log_path(normalized)
+        || is_web_root_script_path(normalized)
+}
+
+pub(super) fn is_mysql_services_path(normalized: &str) -> bool {
+    is_mysql_config_path(normalized) || is_mysql_log_path(normalized)
+}
+
+pub(super) fn is_mysql_config_path(normalized: &str) -> bool {
+    normalized.ends_with("/etc/my.cnf")
+        || normalized.ends_with("/etc/mysql/my.cnf")
+        || (normalized.contains("/etc/mysql/mysql.conf.d/") && normalized.ends_with(".cnf"))
+        || (normalized.contains("/etc/mysql/mariadb.conf.d/") && normalized.ends_with(".cnf"))
+        || (normalized.contains("/etc/mysql/conf.d/") && normalized.ends_with(".cnf"))
+        || (normalized.contains("/etc/my.cnf.d/") && normalized.ends_with(".cnf"))
+}
+
+pub(super) fn is_mysql_log_path(normalized: &str) -> bool {
+    normalized.ends_with("/var/log/mysql/error.log")
+        || normalized.contains("/var/log/mysql/error.log.")
+        || normalized.ends_with("/var/log/mysql/mysql.log")
+        || normalized.contains("/var/log/mysql/mysql.log.")
+        || normalized.ends_with("/var/log/mysql/mysql-slow.log")
+        || normalized.contains("/var/log/mysql/mysql-slow.log.")
+        || normalized.ends_with("/var/log/mysql/slow.log")
+        || normalized.contains("/var/log/mysql/slow.log.")
+        || normalized.ends_with("/var/log/mariadb/mariadb.log")
+        || normalized.contains("/var/log/mariadb/mariadb.log.")
+        || normalized.ends_with("/var/log/mysqld.log")
+        || normalized.contains("/var/log/mysqld.log.")
+}
+
+pub(super) fn is_nginx_config_path(normalized: &str) -> bool {
+    normalized.ends_with("/etc/nginx/nginx.conf")
+        || (normalized.contains("/etc/nginx/conf.d/") && normalized.ends_with(".conf"))
+        || normalized.contains("/etc/nginx/sites-enabled/")
+}
+
+pub(super) fn is_apache_config_path(normalized: &str) -> bool {
+    normalized.ends_with("/etc/apache2/apache2.conf")
+        || normalized.contains("/etc/apache2/sites-enabled/")
+        || normalized.ends_with("/etc/httpd/conf/httpd.conf")
+        || (normalized.contains("/etc/httpd/conf.d/") && normalized.ends_with(".conf"))
+}
+
+pub(super) fn is_web_access_log_path(normalized: &str) -> bool {
+    normalized.ends_with("/var/log/nginx/access.log")
+        || normalized.contains("/var/log/nginx/access.log.")
+        || normalized.ends_with("/var/log/apache2/access.log")
+        || normalized.contains("/var/log/apache2/access.log.")
+        || normalized.ends_with("/var/log/httpd/access_log")
+        || normalized.contains("/var/log/httpd/access_log.")
+}
+
+pub(super) fn is_web_error_log_path(normalized: &str) -> bool {
+    normalized.ends_with("/var/log/nginx/error.log")
+        || normalized.contains("/var/log/nginx/error.log.")
+        || normalized.ends_with("/var/log/apache2/error.log")
+        || normalized.contains("/var/log/apache2/error.log.")
+        || normalized.ends_with("/var/log/httpd/error_log")
+        || normalized.contains("/var/log/httpd/error_log.")
+}
+
+pub(super) fn is_web_root_script_path(normalized: &str) -> bool {
+    (normalized.contains("/var/www/") || normalized.contains("/usr/share/nginx/html/"))
+        && [".php", ".phtml", ".jsp", ".jspx", ".asp", ".aspx"]
+            .iter()
+            .any(|suffix| normalized.ends_with(suffix))
+}
+
+fn extract_nginx_config(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    outcome: &mut ExtractionOutcome,
+) {
+    let text = String::from_utf8_lossy(bytes);
+    match artifacts_linux::parse_nginx_config(&text) {
+        Ok(sites) => emit_web_sites(candidate, sites, "linux.nginx_config", outcome),
+        Err(err) => outcome.warnings.push(format!(
+            "{} nginx config parse failed: {}",
+            candidate.path, err
+        )),
+    }
+}
+
+fn extract_apache_config(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    outcome: &mut ExtractionOutcome,
+) {
+    let text = String::from_utf8_lossy(bytes);
+    match artifacts_linux::parse_apache_config(&text) {
+        Ok(sites) => emit_web_sites(candidate, sites, "linux.apache_config", outcome),
+        Err(err) => outcome.warnings.push(format!(
+            "{} apache config parse failed: {}",
+            candidate.path, err
+        )),
+    }
+}
+
+fn emit_web_sites(
+    candidate: &EvidenceCandidate,
+    sites: Vec<artifacts_linux::WebSite>,
+    parser: &str,
+    outcome: &mut ExtractionOutcome,
+) {
+    if sites.is_empty() {
+        outcome.warnings.push(format!(
+            "{} contains no auditable nginx/apache site records",
+            candidate.path
+        ));
+    }
+    for site in sites {
+        let mut attrs = base_attrs(candidate);
+        attrs.insert(
+            "serverKind".to_string(),
+            Value::String(site.server_kind.clone()),
+        );
+        attrs.insert(
+            "siteName".to_string(),
+            Value::String(site.site_name.clone()),
+        );
+        attrs.insert(
+            "lineNumber".to_string(),
+            Value::Number(site.line_number.into()),
+        );
+        insert_string_array(&mut attrs, "hostnames", &site.hostnames);
+        insert_string_array(&mut attrs, "listen", &site.listen);
+        insert_string_array(&mut attrs, "documentRoots", &site.document_roots);
+        insert_string_array(&mut attrs, "accessLogs", &site.access_logs);
+        insert_string_array(&mut attrs, "errorLogs", &site.error_logs);
+
+        let display_name = site
+            .hostnames
+            .first()
+            .cloned()
+            .unwrap_or_else(|| site.site_name.clone());
+        outcome.artifacts.push(make_artifact(
+            "LinuxWebSite",
+            format!("{} site: {}", site.server_kind, display_name),
+            format!(
+                "listen={}, roots={}",
+                site.listen.join(","),
+                site.document_roots.join(",")
+            ),
+            candidate,
+            parser,
+            attrs,
+        ));
+    }
+}
+
+fn extract_web_access_log(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    outcome: &mut ExtractionOutcome,
+) {
+    let text = String::from_utf8_lossy(bytes);
+    match artifacts_linux::parse_web_access_log(&text) {
+        Ok(entries) => {
+            if entries.len() > MAX_TEXT_LOG_EVENTS_PER_SOURCE {
+                outcome.warnings.push(format!(
+                    "{} web access log emitted first {} records only",
+                    candidate.path, MAX_TEXT_LOG_EVENTS_PER_SOURCE
+                ));
+            }
+            let findings = artifacts_linux::detect_web_findings(&entries);
+            for entry in entries.into_iter().take(MAX_TEXT_LOG_EVENTS_PER_SOURCE) {
+                emit_web_access_log_entry(candidate, entry, outcome);
+            }
+            for finding in findings {
+                emit_web_finding(candidate, finding, "linux.web_access_log", outcome);
+            }
+        }
+        Err(err) => outcome.warnings.push(format!(
+            "{} web access log parse failed: {}",
+            candidate.path, err
+        )),
+    }
+}
+
+fn emit_web_access_log_entry(
+    candidate: &EvidenceCandidate,
+    entry: artifacts_linux::WebAccessLogEntry,
+    outcome: &mut ExtractionOutcome,
+) {
+    let mut attrs = base_attrs(candidate);
+    attrs.insert(
+        "clientIp".to_string(),
+        Value::String(entry.client_ip.clone()),
+    );
+    attrs.insert("method".to_string(), Value::String(entry.method.clone()));
+    attrs.insert("uri".to_string(), Value::String(entry.uri.clone()));
+    attrs.insert(
+        "protocol".to_string(),
+        Value::String(entry.protocol.clone()),
+    );
+    attrs.insert("status".to_string(), Value::Number(entry.status.into()));
+    attrs.insert(
+        "lineNumber".to_string(),
+        Value::Number(entry.line_number.into()),
+    );
+    if let Some(response_bytes) = entry.response_bytes {
+        attrs.insert(
+            "responseBytes".to_string(),
+            Value::Number(response_bytes.into()),
+        );
+    }
+    insert_opt(&mut attrs, "referer", entry.referer.clone());
+    insert_opt(&mut attrs, "userAgent", entry.user_agent.clone());
+    if let Some(ts) = entry.timestamp {
+        attrs.insert("timestamp".to_string(), Value::String(ts.to_rfc3339()));
+    }
+
+    outcome.artifacts.push(make_artifact(
+        "LinuxWebAccessLog",
+        format!("Web access {} {} {}", entry.method, entry.status, entry.uri),
+        format!("{} {} {}", entry.client_ip, entry.method, entry.uri),
+        candidate,
+        "linux.web_access_log",
+        attrs,
+    ));
+}
+
+fn extract_web_error_log(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    outcome: &mut ExtractionOutcome,
+) {
+    let text = String::from_utf8_lossy(bytes);
+    match artifacts_linux::parse_web_error_log(&text) {
+        Ok(entries) => {
+            if entries.len() > MAX_WEB_ERROR_LOG_EVENTS_PER_SOURCE {
+                outcome.warnings.push(format!(
+                    "{} web error log emitted first {} records only",
+                    candidate.path, MAX_WEB_ERROR_LOG_EVENTS_PER_SOURCE
+                ));
+            }
+            for entry in entries
+                .into_iter()
+                .take(MAX_WEB_ERROR_LOG_EVENTS_PER_SOURCE)
+            {
+                let mut attrs = base_attrs(candidate);
+                attrs.insert("message".to_string(), Value::String(entry.message.clone()));
+                attrs.insert(
+                    "lineNumber".to_string(),
+                    Value::Number(entry.line_number.into()),
+                );
+                insert_opt(&mut attrs, "timestamp", entry.timestamp.clone());
+                insert_opt(&mut attrs, "severity", entry.severity.clone());
+                outcome.artifacts.push(make_artifact(
+                    "LinuxWebErrorLog",
+                    format!("Web error: {}", truncate(&entry.message, 80)),
+                    entry.message,
+                    candidate,
+                    "linux.web_error_log",
+                    attrs,
+                ));
+            }
+        }
+        Err(err) => outcome.warnings.push(format!(
+            "{} web error log parse failed: {}",
+            candidate.path, err
+        )),
+    }
+}
+
+fn extract_web_root_script(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    outcome: &mut ExtractionOutcome,
+) {
+    let text = String::from_utf8_lossy(bytes);
+    for finding in artifacts_linux::detect_web_shell(&text, 1) {
+        emit_web_finding(candidate, finding, "linux.web_root_script", outcome);
+    }
+}
+
+fn extract_mysql_config(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    outcome: &mut ExtractionOutcome,
+) {
+    let text = String::from_utf8_lossy(bytes);
+    match artifacts_linux::parse_mysql_config(&text) {
+        Ok(entries) => {
+            let findings = artifacts_linux::detect_mysql_config_findings(&entries);
+            if entries.is_empty() {
+                outcome.warnings.push(format!(
+                    "{} contains no auditable MySQL/MariaDB config entries",
+                    candidate.path
+                ));
+            }
+            for entry in entries {
+                emit_mysql_config_entry(candidate, entry, outcome);
+            }
+            for finding in findings {
+                emit_mysql_finding(candidate, finding, "linux.mysql_config", outcome);
+            }
+        }
+        Err(err) => outcome.warnings.push(format!(
+            "{} MySQL config parse failed: {}",
+            candidate.path, err
+        )),
+    }
+}
+
+fn emit_mysql_config_entry(
+    candidate: &EvidenceCandidate,
+    entry: artifacts_linux::MysqlConfigEntry,
+    outcome: &mut ExtractionOutcome,
+) {
+    let mut attrs = base_attrs(candidate);
+    insert_opt(&mut attrs, "section", entry.section.clone());
+    attrs.insert("key".to_string(), Value::String(entry.key.clone()));
+    attrs.insert("value".to_string(), Value::String(entry.value.clone()));
+    attrs.insert(
+        "lineNumber".to_string(),
+        Value::Number(entry.line_number.into()),
+    );
+    outcome.artifacts.push(make_artifact(
+        "LinuxMysqlConfig",
+        format!("MySQL config {}", entry.key),
+        format!("{}={}", entry.key, entry.value),
+        candidate,
+        "linux.mysql_config",
+        attrs,
+    ));
+}
+
+fn extract_mysql_log(candidate: &EvidenceCandidate, bytes: &[u8], outcome: &mut ExtractionOutcome) {
+    let text = String::from_utf8_lossy(bytes);
+    match artifacts_linux::parse_mysql_log(&text) {
+        Ok(entries) => {
+            if entries.len() > MAX_MYSQL_LOG_EVENTS_PER_SOURCE {
+                outcome.warnings.push(format!(
+                    "{} MySQL log emitted first {} records only",
+                    candidate.path, MAX_MYSQL_LOG_EVENTS_PER_SOURCE
+                ));
+            }
+            let findings = artifacts_linux::detect_mysql_log_findings(&entries);
+            for entry in entries.into_iter().take(MAX_MYSQL_LOG_EVENTS_PER_SOURCE) {
+                emit_mysql_log_entry(candidate, entry, outcome);
+            }
+            for finding in findings {
+                emit_mysql_finding(candidate, finding, "linux.mysql_log", outcome);
+            }
+        }
+        Err(err) => outcome.warnings.push(format!(
+            "{} MySQL log parse failed: {}",
+            candidate.path, err
+        )),
+    }
+}
+
+fn emit_mysql_log_entry(
+    candidate: &EvidenceCandidate,
+    entry: artifacts_linux::MysqlLogEntry,
+    outcome: &mut ExtractionOutcome,
+) {
+    let mut attrs = base_attrs(candidate);
+    attrs.insert("message".to_string(), Value::String(entry.message.clone()));
+    attrs.insert(
+        "lineNumber".to_string(),
+        Value::Number(entry.line_number.into()),
+    );
+    insert_opt(&mut attrs, "severity", entry.severity.clone());
+    insert_opt(&mut attrs, "threadId", entry.thread_id.clone());
+    if let Some(ts) = entry.timestamp {
+        attrs.insert("timestamp".to_string(), Value::String(ts.to_rfc3339()));
+    }
+    outcome.artifacts.push(make_artifact(
+        "LinuxMysqlLogEntry",
+        format!("MySQL log: {}", truncate(&entry.message, 80)),
+        entry.message.clone(),
+        candidate,
+        "linux.mysql_log",
+        attrs.clone(),
+    ));
+    if let Some(ts) = entry.timestamp {
+        outcome.timeline_events.push(make_timeline_event(
+            &candidate.file_id,
+            "linux.mysql_log",
+            ts,
+            "MySQL service log".to_string(),
+            entry.message,
+            attrs,
+            "linux.mysql_log",
+        ));
+    }
+}
+
+fn emit_mysql_finding(
+    candidate: &EvidenceCandidate,
+    finding: artifacts_linux::MysqlFinding,
+    parser: &str,
+    outcome: &mut ExtractionOutcome,
+) {
+    let mut attrs = base_attrs(candidate);
+    attrs.insert(
+        "findingKind".to_string(),
+        Value::String(finding.finding_kind.clone()),
+    );
+    attrs.insert(
+        "severity".to_string(),
+        Value::String(finding.severity.clone()),
+    );
+    attrs.insert(
+        "confidence".to_string(),
+        Value::Number(
+            serde_json::Number::from_f64(finding.confidence as f64)
+                .unwrap_or_else(|| serde_json::Number::from(0)),
+        ),
+    );
+    attrs.insert(
+        "evidence".to_string(),
+        Value::String(finding.evidence.clone()),
+    );
+    attrs.insert(
+        "lineNumber".to_string(),
+        Value::Number(finding.line_number.into()),
+    );
+
+    outcome.artifacts.push(make_artifact(
+        "LinuxMysqlFinding",
+        format!(
+            "MySQL finding {}: {}",
+            finding.severity,
+            truncate(&finding.finding_kind, 80)
+        ),
+        finding.evidence,
+        candidate,
+        parser,
+        attrs,
+    ));
+}
+
+fn emit_web_finding(
+    candidate: &EvidenceCandidate,
+    finding: artifacts_linux::WebFinding,
+    parser: &str,
+    outcome: &mut ExtractionOutcome,
+) {
+    let mut attrs = base_attrs(candidate);
+    attrs.insert(
+        "findingKind".to_string(),
+        Value::String(finding.finding_kind.clone()),
+    );
+    attrs.insert(
+        "severity".to_string(),
+        Value::String(finding.severity.clone()),
+    );
+    attrs.insert(
+        "confidence".to_string(),
+        Value::Number(
+            serde_json::Number::from_f64(finding.confidence as f64)
+                .unwrap_or_else(|| serde_json::Number::from(0)),
+        ),
+    );
+    attrs.insert(
+        "evidence".to_string(),
+        Value::String(finding.evidence.clone()),
+    );
+    attrs.insert(
+        "lineNumber".to_string(),
+        Value::Number(finding.line_number.into()),
+    );
+    insert_opt(&mut attrs, "clientIp", finding.client_ip.clone());
+    insert_opt(&mut attrs, "uri", finding.uri.clone());
+    if let Some(ts) = finding.timestamp {
+        attrs.insert("timestamp".to_string(), Value::String(ts.to_rfc3339()));
+    }
+
+    outcome.artifacts.push(make_artifact(
+        "LinuxWebFinding",
+        format!(
+            "Web finding {}: {}",
+            finding.severity,
+            truncate(&finding.finding_kind, 80)
+        ),
+        finding.evidence.clone(),
+        candidate,
+        parser,
+        attrs.clone(),
+    ));
+
+    if let Some(ts) = finding.timestamp {
+        outcome.timeline_events.push(make_timeline_event(
+            &candidate.file_id,
+            parser,
+            ts,
+            format!("Web finding: {}", finding.finding_kind),
+            finding.evidence,
+            attrs,
+            parser,
+        ));
+    }
 }
 
 fn extract_journal(candidate: &EvidenceCandidate, bytes: &[u8], outcome: &mut ExtractionOutcome) {
@@ -799,6 +1397,55 @@ fn extract_key_value_or_lines(
     parser: &str,
     outcome: &mut ExtractionOutcome,
 ) {
+    extract_key_value_or_lines_with_kind(
+        candidate,
+        text,
+        parser,
+        "textConfig",
+        "Linux config",
+        outcome,
+    );
+}
+
+fn extract_text_config(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    parser: &str,
+    config_kind: &str,
+    outcome: &mut ExtractionOutcome,
+) {
+    if std::str::from_utf8(bytes).is_err() {
+        outcome.warnings.push(format!(
+            "{} contains non-UTF-8 bytes; invalid sequences were replaced before Linux config extraction",
+            candidate.path
+        ));
+    }
+
+    let text = String::from_utf8_lossy(bytes);
+    let emitted = extract_key_value_or_lines_with_kind(
+        candidate,
+        &text,
+        parser,
+        config_kind,
+        "Linux config",
+        outcome,
+    );
+    if emitted == 0 {
+        outcome.warnings.push(format!(
+            "{} contained no auditable non-comment Linux config records",
+            candidate.path
+        ));
+    }
+}
+
+fn extract_key_value_or_lines_with_kind(
+    candidate: &EvidenceCandidate,
+    text: &str,
+    parser: &str,
+    config_kind: &str,
+    title_prefix: &str,
+    outcome: &mut ExtractionOutcome,
+) -> usize {
     let mut emitted = 0usize;
     for (line_number, line) in text.lines().enumerate() {
         let trimmed = line.trim();
@@ -816,21 +1463,21 @@ fn extract_key_value_or_lines(
         let mut attrs = base_attrs(candidate);
         attrs.insert(
             "configKind".to_string(),
-            Value::String("textConfig".to_string()),
+            Value::String(config_kind.to_string()),
         );
         attrs.insert("line".to_string(), Value::String(trimmed.to_string()));
         attrs.insert(
             "lineNumber".to_string(),
             Value::Number((line_number as u64 + 1).into()),
         );
-        if let Some((key, value)) = trimmed.split_once('=') {
-            attrs.insert("key".to_string(), Value::String(key.trim().to_string()));
-            attrs.insert("value".to_string(), Value::String(value.trim().to_string()));
+        if let Some((key, value)) = parse_config_pair(trimmed) {
+            attrs.insert("key".to_string(), Value::String(key.to_string()));
+            attrs.insert("value".to_string(), Value::String(value.to_string()));
         }
 
         outcome.artifacts.push(make_artifact(
             "LinuxSystemConfig",
-            format!("Linux config: {}", truncate(trimmed, 80)),
+            format!("{title_prefix}: {}", truncate(trimmed, 80)),
             trimmed.to_string(),
             candidate,
             parser,
@@ -838,6 +1485,25 @@ fn extract_key_value_or_lines(
         ));
         emitted += 1;
     }
+    emitted
+}
+
+fn parse_config_pair(line: &str) -> Option<(&str, &str)> {
+    if let Some((key, value)) = line.split_once('=') {
+        let key = key.trim();
+        let value = value.trim();
+        if !key.is_empty() && !value.is_empty() {
+            return Some((key, value));
+        }
+    }
+    if let Some((key, value)) = line.split_once(':') {
+        let key = key.trim();
+        let value = value.trim();
+        if !key.is_empty() && !value.is_empty() {
+            return Some((key, value));
+        }
+    }
+    None
 }
 
 fn is_interactive_shell(shell: &str) -> bool {
@@ -949,6 +1615,25 @@ fn extract_dpkg_log(candidate: &EvidenceCandidate, bytes: &[u8], outcome: &mut E
         Err(err) => outcome
             .warnings
             .push(format!("{} dpkg log parse failed: {}", candidate.path, err)),
+    }
+}
+
+fn extract_rpm_package_log(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    outcome: &mut ExtractionOutcome,
+) {
+    let text = String::from_utf8_lossy(bytes);
+    match artifacts_linux::parse_rpm_package_log(&text) {
+        Ok(events) => {
+            for event in events {
+                push_apt_event(candidate, event, outcome);
+            }
+        }
+        Err(err) => outcome.warnings.push(format!(
+            "{} rpm package log parse failed: {}",
+            candidate.path, err
+        )),
     }
 }
 
@@ -1282,6 +1967,15 @@ fn insert_opt(attrs: &mut BTreeMap<String, Value>, key: &str, value: Option<Stri
         if !v.is_empty() {
             attrs.insert(key.to_string(), Value::String(v));
         }
+    }
+}
+
+fn insert_string_array(attrs: &mut BTreeMap<String, Value>, key: &str, values: &[String]) {
+    if !values.is_empty() {
+        attrs.insert(
+            key.to_string(),
+            Value::Array(values.iter().cloned().map(Value::String).collect()),
+        );
     }
 }
 

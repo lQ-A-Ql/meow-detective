@@ -103,7 +103,7 @@ fn linux_parsed_source_ids(
     let mut stmt = conn.prepare(
         "SELECT source_object_id, COUNT(*)
          FROM artifacts
-         WHERE artifact_type IN ('LinuxJournal', 'LinuxWtmp', 'LinuxBashCommand', 'LinuxAptEvent', 'LinuxCronJob', 'LinuxSudoEvent', 'LinuxSystemConfig')
+         WHERE artifact_type IN ('LinuxJournal', 'LinuxWtmp', 'LinuxBashCommand', 'LinuxAptEvent', 'LinuxCronJob', 'LinuxSudoEvent', 'LinuxSystemConfig', 'LinuxWebSite', 'LinuxWebAccessLog', 'LinuxWebErrorLog', 'LinuxWebFinding', 'LinuxMysqlConfig', 'LinuxMysqlLogEntry', 'LinuxMysqlFinding')
            AND source_object_id IS NOT NULL
          GROUP BY source_object_id",
     )?;

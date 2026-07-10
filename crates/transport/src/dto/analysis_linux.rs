@@ -12,6 +12,14 @@ pub struct LinuxArtifactSummaryDto {
     pub apt_event_count: u64,
     pub cron_job_count: u64,
     pub sudo_event_count: u64,
+    pub system_config_count: u64,
+    pub web_site_count: u64,
+    pub web_access_log_count: u64,
+    pub web_error_log_count: u64,
+    pub web_finding_count: u64,
+    pub mysql_config_count: u64,
+    pub mysql_log_count: u64,
+    pub mysql_finding_count: u64,
     pub total_count: u64,
     pub truncated: bool,
     pub coverage_ratio: f32,
@@ -21,6 +29,14 @@ pub struct LinuxArtifactSummaryDto {
     pub apt_events: Vec<LinuxAptEventDto>,
     pub cron_jobs: Vec<LinuxCronJobDto>,
     pub sudo_events: Vec<LinuxSudoEventDto>,
+    pub system_configs: Vec<LinuxSystemConfigDto>,
+    pub web_sites: Vec<LinuxWebSiteDto>,
+    pub web_access_logs: Vec<LinuxWebAccessLogDto>,
+    pub web_error_logs: Vec<LinuxWebErrorLogDto>,
+    pub web_findings: Vec<LinuxWebFindingDto>,
+    pub mysql_configs: Vec<LinuxMysqlConfigDto>,
+    pub mysql_logs: Vec<LinuxMysqlLogEntryDto>,
+    pub mysql_findings: Vec<LinuxMysqlFindingDto>,
     pub generated_at: String,
     pub warnings: Vec<String>,
 }
@@ -123,6 +139,144 @@ pub struct LinuxSudoEventDto {
     pub timestamp: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinuxSystemConfigDto {
+    pub artifact_id: String,
+    pub file_id: String,
+    pub source_path: String,
+    pub config_kind: String,
+    pub line: String,
+    pub line_number: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uid: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gid: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub home: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shell: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinuxWebSiteDto {
+    pub artifact_id: String,
+    pub file_id: String,
+    pub source_path: String,
+    pub server_kind: String,
+    pub site_name: String,
+    pub hostnames: Vec<String>,
+    pub listen: Vec<String>,
+    pub document_roots: Vec<String>,
+    pub access_logs: Vec<String>,
+    pub error_logs: Vec<String>,
+    pub line_number: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinuxWebAccessLogDto {
+    pub artifact_id: String,
+    pub file_id: String,
+    pub source_path: String,
+    pub client_ip: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<String>,
+    pub method: String,
+    pub uri: String,
+    pub protocol: String,
+    pub status: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub referer: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_agent: Option<String>,
+    pub line_number: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinuxWebErrorLogDto {
+    pub artifact_id: String,
+    pub file_id: String,
+    pub source_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub severity: Option<String>,
+    pub message: String,
+    pub line_number: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinuxWebFindingDto {
+    pub artifact_id: String,
+    pub file_id: String,
+    pub source_path: String,
+    pub finding_kind: String,
+    pub severity: String,
+    pub confidence: f32,
+    pub evidence: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_ip: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<String>,
+    pub line_number: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinuxMysqlConfigDto {
+    pub artifact_id: String,
+    pub file_id: String,
+    pub source_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub section: Option<String>,
+    pub key: String,
+    pub value: String,
+    pub line_number: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinuxMysqlLogEntryDto {
+    pub artifact_id: String,
+    pub file_id: String,
+    pub source_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub severity: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
+    pub message: String,
+    pub line_number: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinuxMysqlFindingDto {
+    pub artifact_id: String,
+    pub file_id: String,
+    pub source_path: String,
+    pub finding_kind: String,
+    pub severity: String,
+    pub confidence: f32,
+    pub evidence: String,
+    pub line_number: u64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,7 +291,15 @@ mod tests {
             apt_event_count: 4,
             cron_job_count: 5,
             sudo_event_count: 6,
-            total_count: 21,
+            system_config_count: 7,
+            web_site_count: 8,
+            web_access_log_count: 9,
+            web_error_log_count: 10,
+            web_finding_count: 11,
+            mysql_config_count: 12,
+            mysql_log_count: 13,
+            mysql_finding_count: 14,
+            total_count: 105,
             truncated: true,
             coverage_ratio: 0.75,
             journal_entries: vec![LinuxJournalEntryDto {
@@ -158,6 +320,100 @@ mod tests {
             apt_events: Vec::new(),
             cron_jobs: Vec::new(),
             sudo_events: Vec::new(),
+            system_configs: vec![LinuxSystemConfigDto {
+                artifact_id: "artifact-config".to_string(),
+                file_id: "file-config".to_string(),
+                source_path: "/etc/passwd".to_string(),
+                config_kind: "passwdAccount".to_string(),
+                line: String::new(),
+                line_number: 0,
+                key: None,
+                value: None,
+                username: Some("root".to_string()),
+                uid: Some(0),
+                gid: Some(0),
+                home: Some("/root".to_string()),
+                shell: Some("/bin/bash".to_string()),
+            }],
+            web_sites: vec![LinuxWebSiteDto {
+                artifact_id: "artifact-web-site".to_string(),
+                file_id: "file-nginx".to_string(),
+                source_path: "/etc/nginx/nginx.conf".to_string(),
+                server_kind: "nginx".to_string(),
+                site_name: "nginx server line 1".to_string(),
+                hostnames: vec!["example.com".to_string()],
+                listen: vec!["80".to_string()],
+                document_roots: vec!["/var/www/html".to_string()],
+                access_logs: vec!["/var/log/nginx/access.log".to_string()],
+                error_logs: vec!["/var/log/nginx/error.log".to_string()],
+                line_number: 1,
+            }],
+            web_access_logs: vec![LinuxWebAccessLogDto {
+                artifact_id: "artifact-web-access".to_string(),
+                file_id: "file-access".to_string(),
+                source_path: "/var/log/nginx/access.log".to_string(),
+                client_ip: "192.0.2.10".to_string(),
+                timestamp: Some("2026-01-01T00:00:00Z".to_string()),
+                method: "GET".to_string(),
+                uri: "/".to_string(),
+                protocol: "HTTP/1.1".to_string(),
+                status: 200,
+                response_bytes: Some(42),
+                referer: None,
+                user_agent: Some("curl".to_string()),
+                line_number: 1,
+            }],
+            web_error_logs: vec![LinuxWebErrorLogDto {
+                artifact_id: "artifact-web-error".to_string(),
+                file_id: "file-error".to_string(),
+                source_path: "/var/log/nginx/error.log".to_string(),
+                timestamp: Some("2026/01/01 00:00:00".to_string()),
+                severity: Some("error".to_string()),
+                message: "connect failed".to_string(),
+                line_number: 1,
+            }],
+            web_findings: vec![LinuxWebFindingDto {
+                artifact_id: "artifact-web-finding".to_string(),
+                file_id: "file-access".to_string(),
+                source_path: "/var/log/nginx/access.log".to_string(),
+                finding_kind: "sqlInjection".to_string(),
+                severity: "high".to_string(),
+                confidence: 0.9,
+                evidence: "GET /?id=1 UNION SELECT".to_string(),
+                client_ip: Some("192.0.2.10".to_string()),
+                uri: Some("/?id=1".to_string()),
+                timestamp: Some("2026-01-01T00:00:00Z".to_string()),
+                line_number: 1,
+            }],
+            mysql_configs: vec![LinuxMysqlConfigDto {
+                artifact_id: "artifact-mysql-config".to_string(),
+                file_id: "file-mycnf".to_string(),
+                source_path: "/etc/mysql/my.cnf".to_string(),
+                section: Some("mysqld".to_string()),
+                key: "bind-address".to_string(),
+                value: "0.0.0.0".to_string(),
+                line_number: 2,
+            }],
+            mysql_logs: vec![LinuxMysqlLogEntryDto {
+                artifact_id: "artifact-mysql-log".to_string(),
+                file_id: "file-mysql-log".to_string(),
+                source_path: "/var/log/mysql/error.log".to_string(),
+                timestamp: Some("2026-01-01T00:00:00Z".to_string()),
+                severity: Some("warning".to_string()),
+                thread_id: Some("8".to_string()),
+                message: "Access denied for user".to_string(),
+                line_number: 1,
+            }],
+            mysql_findings: vec![LinuxMysqlFindingDto {
+                artifact_id: "artifact-mysql-finding".to_string(),
+                file_id: "file-mycnf".to_string(),
+                source_path: "/etc/mysql/my.cnf".to_string(),
+                finding_kind: "bindAddressAny".to_string(),
+                severity: "medium".to_string(),
+                confidence: 0.86,
+                evidence: "bind-address=0.0.0.0".to_string(),
+                line_number: 2,
+            }],
             generated_at: "2026-01-01T00:00:00Z".to_string(),
             warnings: Vec::new(),
         };
@@ -167,11 +423,27 @@ mod tests {
         assert_eq!(value["journalCount"], 1);
         assert_eq!(value["bashCommandCount"], 3);
         assert_eq!(value["sudoEventCount"], 6);
-        assert_eq!(value["totalCount"], 21);
+        assert_eq!(value["systemConfigCount"], 7);
+        assert_eq!(value["webSiteCount"], 8);
+        assert_eq!(value["webAccessLogCount"], 9);
+        assert_eq!(value["webErrorLogCount"], 10);
+        assert_eq!(value["webFindingCount"], 11);
+        assert_eq!(value["mysqlConfigCount"], 12);
+        assert_eq!(value["mysqlLogCount"], 13);
+        assert_eq!(value["mysqlFindingCount"], 14);
+        assert_eq!(value["totalCount"], 105);
         assert_eq!(value["truncated"], true);
         assert!((value["coverageRatio"].as_f64().unwrap() - 0.75).abs() < 0.000_001);
         assert_eq!(value["journalEntries"][0]["artifactId"], "artifact-1");
         assert_eq!(value["journalEntries"][0]["pid"], 42);
+        assert_eq!(value["systemConfigs"][0]["configKind"], "passwdAccount");
+        assert_eq!(value["systemConfigs"][0]["username"], "root");
+        assert_eq!(value["webSites"][0]["serverKind"], "nginx");
+        assert_eq!(value["webAccessLogs"][0]["clientIp"], "192.0.2.10");
+        assert_eq!(value["webFindings"][0]["findingKind"], "sqlInjection");
+        assert_eq!(value["mysqlConfigs"][0]["key"], "bind-address");
+        assert_eq!(value["mysqlLogs"][0]["threadId"], "8");
+        assert_eq!(value["mysqlFindings"][0]["findingKind"], "bindAddressAny");
         assert!(value["journalEntries"][0].get("executable").is_none());
         assert!(value.get("coverage_ratio").is_none());
         assert!(value.get("journal_count").is_none());

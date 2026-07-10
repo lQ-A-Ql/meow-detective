@@ -136,6 +136,17 @@ export interface AnalysisExtractionRun {
   scannedCount: number;
   artifactCount: number;
   timelineEventCount: number;
+  sections: AnalysisExtractionSectionRun[];
   generatedAt: string;
+  warnings: string[];
+}
+
+export interface AnalysisExtractionSectionRun {
+  key: string;
+  label: string;
+  status: AnalysisParseStatus;
+  scannedCount: number;
+  artifactCount: number;
+  timelineEventCount: number;
   warnings: string[];
 }

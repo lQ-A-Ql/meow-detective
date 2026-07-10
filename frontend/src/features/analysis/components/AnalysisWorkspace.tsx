@@ -89,6 +89,9 @@ const LINUX_TAB_ICONS: Record<LinuxAnalysisTabKey, ComponentType<{ size?: number
   packages: Database,
   cron: FileClock,
   sudo: Shield,
+  systemConfig: Database,
+  webServices: Globe,
+  mysqlServices: Database,
 };
 
 const WINDOWS_EXTRACTION_CATEGORIES: ExtractionCategory[] = [
@@ -100,9 +103,26 @@ const WINDOWS_EXTRACTION_CATEGORIES: ExtractionCategory[] = [
 
 const LINUX_EXTRACTION_CATEGORIES: ExtractionCategory[] = ['LinuxArtifacts'];
 
+const LINUX_PROGRESS_CATEGORIES: ExtractionCategory[] = [
+  'LinuxJournal',
+  'LinuxLogin',
+  'LinuxCommands',
+  'LinuxPackages',
+  'LinuxCron',
+  'LinuxSudo',
+  'LinuxSystemConfig',
+  'LinuxWebServices',
+  'LinuxMysqlServices',
+];
+
 const EXTRACTION_CATEGORIES_BY_VIEW: Record<AnalysisPlatformView, ExtractionCategory[]> = {
   windows: WINDOWS_EXTRACTION_CATEGORIES,
   linux: LINUX_EXTRACTION_CATEGORIES,
+};
+
+const PROGRESS_CATEGORIES_BY_VIEW: Record<AnalysisPlatformView, ExtractionCategory[]> = {
+  windows: WINDOWS_EXTRACTION_CATEGORIES,
+  linux: LINUX_PROGRESS_CATEGORIES,
 };
 
 export function AnalysisWorkspace() {
@@ -144,6 +164,7 @@ export function AnalysisWorkspace() {
   );
 
   const extractionCategories = EXTRACTION_CATEGORIES_BY_VIEW[activePlatformView];
+  const progressCategories = PROGRESS_CATEGORIES_BY_VIEW[activePlatformView];
 
   const labeledExtractionProgress = useMemo(
     () => labeledProgress(extractionProgress, t),
@@ -217,6 +238,15 @@ export function AnalysisWorkspace() {
       Email: emailSummary.refetch,
       EventLogs: eventLogSummary.refetch,
       LinuxArtifacts: linuxSummary.refetch,
+      LinuxJournal: linuxSummary.refetch,
+      LinuxLogin: linuxSummary.refetch,
+      LinuxCommands: linuxSummary.refetch,
+      LinuxPackages: linuxSummary.refetch,
+      LinuxCron: linuxSummary.refetch,
+      LinuxSudo: linuxSummary.refetch,
+      LinuxSystemConfig: linuxSummary.refetch,
+      LinuxWebServices: linuxSummary.refetch,
+      LinuxMysqlServices: linuxSummary.refetch,
     };
 
     const refetchRegistryStructured = async () => {
@@ -225,6 +255,14 @@ export function AnalysisWorkspace() {
 
     try {
       for (const category of extractionCategories) {
+        const pendingCategories = category === 'LinuxArtifacts' ? LINUX_PROGRESS_CATEGORIES : [category];
+        for (const progressCategory of pendingCategories) {
+          updateExtractionProgress(progressCategory, {
+            status: 'running',
+            warnings: [],
+            error: undefined,
+          });
+        }
         updateExtractionProgress(category, {
           status: 'running',
           warnings: [],
@@ -243,6 +281,19 @@ export function AnalysisWorkspace() {
             timelineEventCount: run.timelineEventCount,
             warnings: run.warnings,
           });
+          for (const section of run.sections ?? []) {
+            if (!LINUX_PROGRESS_CATEGORIES.includes(section.key as ExtractionCategory)) {
+              continue;
+            }
+            updateExtractionProgress(section.key as ExtractionCategory, {
+              status: statusFromRun(section.status),
+              scannedCount: section.scannedCount,
+              artifactCount: section.artifactCount,
+              timelineEventCount: section.timelineEventCount,
+              warnings: section.warnings,
+              error: undefined,
+            });
+          }
           await refetchByCategory[category]();
           if (category === 'Registry') {
             await refetchRegistryStructured();
@@ -252,6 +303,14 @@ export function AnalysisWorkspace() {
             status: 'failed',
             error: errorMessage(err),
           });
+          if (category === 'LinuxArtifacts') {
+            for (const progressCategory of LINUX_PROGRESS_CATEGORIES) {
+              updateExtractionProgress(progressCategory, {
+                status: 'failed',
+                error: errorMessage(err),
+              });
+            }
+          }
         }
       }
 
@@ -290,7 +349,7 @@ export function AnalysisWorkspace() {
     URL.revokeObjectURL(url);
   }
 
-  const extractionProgressCards = extractionCategories.map((category) => (
+  const extractionProgressCards = progressCategories.map((category) => (
     <AnalysisExtractionProgress
       key={category}
       progress={labeledExtractionProgress[category]}
@@ -508,6 +567,18 @@ export function AnalysisWorkspace() {
                   <LinuxArtifactsPanel
                     summary={linuxSummary.data}
                     progress={labeledExtractionProgress.LinuxArtifacts}
+                    progressByTab={{
+                      overview: labeledExtractionProgress.LinuxArtifacts,
+                      journal: labeledExtractionProgress.LinuxJournal,
+                      login: labeledExtractionProgress.LinuxLogin,
+                      commands: labeledExtractionProgress.LinuxCommands,
+                      packages: labeledExtractionProgress.LinuxPackages,
+                      cron: labeledExtractionProgress.LinuxCron,
+                      sudo: labeledExtractionProgress.LinuxSudo,
+                      systemConfig: labeledExtractionProgress.LinuxSystemConfig,
+                      webServices: labeledExtractionProgress.LinuxWebServices,
+                      mysqlServices: labeledExtractionProgress.LinuxMysqlServices,
+                    }}
                     activeTab={activeLinuxTab}
                   />
                 )}

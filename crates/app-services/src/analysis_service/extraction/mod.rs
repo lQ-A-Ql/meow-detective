@@ -4,6 +4,7 @@ pub(crate) mod browser;
 pub(crate) mod email;
 pub(crate) mod evtx;
 pub(crate) mod linux;
+mod linux_sections;
 pub(crate) mod macos;
 mod observability;
 pub(crate) mod registry;

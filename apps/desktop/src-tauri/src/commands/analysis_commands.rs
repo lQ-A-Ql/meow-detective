@@ -77,7 +77,7 @@ fn ensure_categories_match_source_platform(
 
     let has_linux_category = categories
         .iter()
-        .any(|category| *category == "LinuxArtifacts");
+        .any(|category| is_linux_analysis_category(category));
     let has_windows_category = categories.iter().any(|category| {
         matches!(
             *category,
@@ -97,6 +97,22 @@ fn ensure_categories_match_source_platform(
     }
 
     Ok(())
+}
+
+fn is_linux_analysis_category(category: &str) -> bool {
+    matches!(
+        category,
+        "LinuxArtifacts"
+            | "LinuxJournal"
+            | "LinuxLogin"
+            | "LinuxCommands"
+            | "LinuxPackages"
+            | "LinuxCron"
+            | "LinuxSudo"
+            | "LinuxSystemConfig"
+            | "LinuxWebServices"
+            | "LinuxMysqlServices"
+    )
 }
 
 fn limited_header_cursor<E>(
@@ -239,7 +255,7 @@ pub async fn run_evidence_classification(
     .map_err(CommandError::from_join_error)?
 }
 
-/// Run v1 structured extraction for Registry, browser history, and email evidence.
+/// Run structured extraction for platform-specific analysis categories.
 #[tauri::command]
 pub async fn run_analysis_extraction(
     state: State<'_, AppState>,

@@ -155,15 +155,42 @@
   },
   "topBar": {
     "links": {
-      "home": { "label": "Case Overview", "context": "Case status, metrics and recent objects" },
-      "files": { "label": "File Browser", "context": "Directory tree, file table and forensics viewer" },
-      "analysis": { "label": "Data Source Analysis", "context": "System info, file classification and analysis reports" },
-      "v2": { "label": "V2 Governance", "context": "Trusted verification, benchmark, security governance and release scorecard" },
-      "v3": { "label": "Forensics Overview", "context": "Graph stats, data source coverage, artifact correlation and rule pack status" },
-      "search": { "label": "Global Search", "context": "Keywords, structured queries and hit details" },
-      "timeline": { "label": "Timeline", "context": "Event aggregation, filtering and chronological review" },
-      "artifacts": { "label": "Artifact Analysis", "context": "Windows artifact families and parsed fields" },
-      "reports": { "label": "Reports", "context": "Templates, export jobs and report artifacts" }
+      "home": {
+        "label": "Case Overview",
+        "context": "Case status, metrics and recent objects"
+      },
+      "files": {
+        "label": "File Browser",
+        "context": "Directory tree, file table and forensics viewer"
+      },
+      "analysis": {
+        "label": "Data Source Analysis",
+        "context": "System info, file classification and analysis reports"
+      },
+      "v2": {
+        "label": "V2 Governance",
+        "context": "Trusted verification, benchmark, security governance and release scorecard"
+      },
+      "v3": {
+        "label": "Forensics Overview",
+        "context": "Graph stats, data source coverage, artifact correlation and rule pack status"
+      },
+      "search": {
+        "label": "Global Search",
+        "context": "Keywords, structured queries and hit details"
+      },
+      "timeline": {
+        "label": "Timeline",
+        "context": "Event aggregation, filtering and chronological review"
+      },
+      "artifacts": {
+        "label": "Artifact Analysis",
+        "context": "Windows artifact families and parsed fields"
+      },
+      "reports": {
+        "label": "Reports",
+        "context": "Templates, export jobs and report artifacts"
+      }
     },
     "currentPage": "Current Page",
     "case": {
@@ -323,7 +350,16 @@
       "BrowserHistory": "Browser History Extraction",
       "Email": "Email Extraction",
       "EventLogs": "Event Log Extraction",
-      "LinuxArtifacts": "Linux Artifact Extraction"
+      "LinuxArtifacts": "Linux Artifact Extraction",
+      "LinuxJournal": "Linux Journal Extraction",
+      "LinuxLogin": "Linux Login Extraction",
+      "LinuxCommands": "Linux Command History Extraction",
+      "LinuxPackages": "Linux Package Extraction",
+      "LinuxCron": "Linux Cron Extraction",
+      "LinuxSudo": "Linux sudo/auth Extraction",
+      "LinuxSystemConfig": "Linux System Config Extraction",
+      "LinuxWebServices": "Linux Web Services Extraction",
+      "LinuxMysqlServices": "Linux MySQL Services Extraction"
     },
     "progressDrawer": {
       "title": "Extraction Progress",
@@ -428,8 +464,11 @@
       "packages": "Package Events",
       "cron": "Cron Jobs",
       "sudo": "Sudo Events",
+      "systemConfig": "System Config",
+      "webServices": "Web Services",
       "coverage": "Coverage",
-      "truncated": "Truncated"
+      "truncated": "Truncated",
+      "mysqlServices": "MySQL Services"
     },
     "tabs": {
       "overview": "Overview",
@@ -438,7 +477,10 @@
       "commands": "Shell Commands",
       "packages": "Packages",
       "cron": "Cron",
-      "sudo": "Sudo"
+      "sudo": "Sudo",
+      "systemConfig": "System Config",
+      "webServices": "Web Services",
+      "mysqlServices": "MySQL Services"
     },
     "columns": {
       "timestamp": "Time",
@@ -463,7 +505,35 @@
       "schedule": "Schedule",
       "sourceFile": "Config File",
       "workingDirectory": "Working Directory",
-      "success": "Success"
+      "success": "Success",
+      "configKind": "Config Type",
+      "key": "Key/Account",
+      "value": "Value/Content",
+      "uid": "UID",
+      "gid": "GID",
+      "home": "Home",
+      "shell": "Shell",
+      "serverKind": "Server Kind",
+      "siteName": "Site",
+      "hostnames": "Hostnames",
+      "listen": "Listen",
+      "documentRoots": "Document Roots",
+      "accessLogs": "Access Logs",
+      "errorLogs": "Error Logs",
+      "clientIp": "Client IP",
+      "method": "Method",
+      "uri": "URI",
+      "protocol": "Protocol",
+      "status": "Status",
+      "responseBytes": "Bytes",
+      "referer": "Referer",
+      "userAgent": "User-Agent",
+      "severity": "Severity",
+      "findingKind": "Finding Kind",
+      "confidence": "Confidence",
+      "evidence": "Evidence",
+      "section": "Section",
+      "threadId": "Thread ID"
     },
     "values": {
       "yes": "Yes",
@@ -498,6 +568,38 @@
       "sudo": {
         "title": "No sudo/auth events",
         "description": "Candidate paths: /var/log/auth.log, /var/log/secure."
+      },
+      "systemConfig": {
+        "title": "No system config records",
+        "description": "Candidate paths: /etc/passwd, /etc/os-release, systemd, SSH, sudoers, profile.d."
+      },
+      "webSites": {
+        "title": "No web site configs",
+        "description": "Candidate paths: /etc/nginx, /etc/apache2, /etc/httpd."
+      },
+      "webAccess": {
+        "title": "No web access logs",
+        "description": "Candidate paths: /var/log/nginx/access.log, /var/log/apache2/access.log, /var/log/httpd/access_log."
+      },
+      "webError": {
+        "title": "No web error logs",
+        "description": "Candidate paths: /var/log/nginx/error.log, /var/log/apache2/error.log, /var/log/httpd/error_log."
+      },
+      "webFindings": {
+        "title": "No web attack findings",
+        "description": "Detects SQLi, LFI, traversal, scanners, brute force, and WebShell candidates."
+      },
+      "mysqlFindings": {
+        "title": "No MySQL findings",
+        "description": "Detects MySQL/MariaDB exposed listeners, local_infile, secure_file_priv, crash recovery, and authentication failures."
+      },
+      "mysqlConfigs": {
+        "title": "No MySQL configs",
+        "description": "Candidate paths: /etc/my.cnf, /etc/mysql/my.cnf, and /etc/mysql/*.d/*.cnf."
+      },
+      "mysqlLogs": {
+        "title": "No MySQL logs",
+        "description": "Candidate paths: /var/log/mysql/error.log, /var/log/mariadb/mariadb.log, and /var/log/mysqld.log."
       }
     }
   },

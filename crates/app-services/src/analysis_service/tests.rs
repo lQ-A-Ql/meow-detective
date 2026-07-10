@@ -923,6 +923,10 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
         "192.0.2.10 - root@pam [15/Jan/2024:10:30:00 +0000] \"GET /api2/json/version HTTP/1.1\" 200 123\n";
     let pvedaemon = "Jan 15 10:32:00 pve01 pvedaemon[3210]: starting task UPID:pve01:00000C8A:00112233:65A52980:qmstart:100:root@pam:\n";
     let pve_task = "UPID:pve01:00000C8A:00112233:65A52980:qmstart:100:root@pam: OK\n";
+    let yum_log = "Jan 15 10:33:00 Installed: curl-7.61.1-33.el8.x86_64\n";
+    let nginx_config = "server {\n  listen 80;\n  server_name example.com;\n  root /var/www/html;\n  access_log /var/log/nginx/access.log;\n  error_log /var/log/nginx/error.log;\n}\n";
+    let nginx_access = "192.0.2.10 - - [15/Jan/2024:10:30:45 +0000] \"GET /products?id=1%20UNION%20SELECT%20password HTTP/1.1\" 200 4532 \"-\" \"sqlmap/1.7\"\n";
+    let web_shell = "<?php echo shell_exec($_GET['cmd']);\n";
     let auth_rotated = gzip_bytes(
         b"Jan 15 10:31:00 ubuntu sudo: alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/id\n",
     );
@@ -948,6 +952,10 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
     );
     contents.insert("pvedaemon".to_string(), pvedaemon.as_bytes().to_vec());
     contents.insert("pve-task".to_string(), pve_task.as_bytes().to_vec());
+    contents.insert("yum-log".to_string(), yum_log.as_bytes().to_vec());
+    contents.insert("nginx-config".to_string(), nginx_config.as_bytes().to_vec());
+    contents.insert("nginx-access".to_string(), nginx_access.as_bytes().to_vec());
+    contents.insert("web-shell".to_string(), web_shell.as_bytes().to_vec());
     contents.insert("auth-rotated".to_string(), auth_rotated);
     FileRepo::new(&conn)
         .insert_batch(&[
@@ -1036,6 +1044,25 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
                 "var/log/pve/tasks/active",
                 pve_task.len() as u64,
             ),
+            file_with_ds("yum-log", &ds_id, "var/log/yum.log", yum_log.len() as u64),
+            file_with_ds(
+                "nginx-config",
+                &ds_id,
+                "etc/nginx/nginx.conf",
+                nginx_config.len() as u64,
+            ),
+            file_with_ds(
+                "nginx-access",
+                &ds_id,
+                "var/log/nginx/access.log",
+                nginx_access.len() as u64,
+            ),
+            file_with_ds(
+                "web-shell",
+                &ds_id,
+                "var/www/html/shell.php",
+                web_shell.len() as u64,
+            ),
             file_with_ds("auth-rotated", &ds_id, "var/log/auth.log.1.gz", 96),
         ])
         .unwrap();
@@ -1049,7 +1076,49 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
     })
     .unwrap();
 
-    assert_eq!(run.scanned_count, 16);
+    assert_eq!(run.scanned_count, 20);
+    let command_section = run
+        .sections
+        .iter()
+        .find(|section| section.key == "LinuxCommands")
+        .expect("LinuxCommands section should be reported");
+    assert_eq!(command_section.status, AnalysisParseStatusDto::Parsed);
+    assert_eq!(command_section.scanned_count, 3);
+    assert_eq!(command_section.artifact_count, 4);
+    let system_config_section = run
+        .sections
+        .iter()
+        .find(|section| section.key == "LinuxSystemConfig")
+        .expect("LinuxSystemConfig section should be reported");
+    assert_eq!(system_config_section.status, AnalysisParseStatusDto::Parsed);
+    assert_eq!(system_config_section.scanned_count, 8);
+    assert!(system_config_section.artifact_count > 0);
+    let login_section = run
+        .sections
+        .iter()
+        .find(|section| section.key == "LinuxLogin")
+        .expect("LinuxLogin section should be reported");
+    assert_eq!(login_section.status, AnalysisParseStatusDto::NotFound);
+    assert_eq!(login_section.scanned_count, 0);
+    let packages_section = run
+        .sections
+        .iter()
+        .find(|section| section.key == "LinuxPackages")
+        .expect("LinuxPackages section should be reported");
+    assert_eq!(packages_section.status, AnalysisParseStatusDto::Parsed);
+    assert_eq!(packages_section.scanned_count, 1);
+    assert_eq!(packages_section.artifact_count, 1);
+    let web_section = run
+        .sections
+        .iter()
+        .find(|section| section.key == "LinuxWebServices")
+        .expect("LinuxWebServices section should be reported");
+    assert_eq!(web_section.status, AnalysisParseStatusDto::Parsed);
+    assert_eq!(web_section.scanned_count, 3);
+    assert!(
+        web_section.artifact_count >= 5,
+        "expected site, access log and findings from web inputs"
+    );
     let artifact_count: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'LinuxBashCommand'",
@@ -1073,18 +1142,65 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
         )
         .unwrap();
     assert!(journal_count > 0, "expected generic LinuxJournal text logs");
-    let ssh_message: String = conn
+    let web_site_count: i64 = conn
         .query_row(
-            "SELECT json_extract(attrs, '$.message')
+            "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'LinuxWebSite'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let web_access_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'LinuxWebAccessLog'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let web_finding_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'LinuxWebFinding'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(web_site_count, 1);
+    assert_eq!(web_access_count, 1);
+    assert!(
+        web_finding_count >= 3,
+        "expected SQLi, scanner and web shell findings"
+    );
+    let package_action: String = conn
+        .query_row(
+            "SELECT json_extract(attrs, '$.action')
              FROM artifacts
-             WHERE artifact_type = 'LinuxJournal'
+             WHERE artifact_type = 'LinuxAptEvent'
+               AND json_extract(attrs, '$.sourcePath') = 'var/log/yum.log'
+             LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(package_action, "install");
+    let package_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM artifacts WHERE artifact_type = 'LinuxAptEvent'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(package_count, 1);
+    let ssh_line: String = conn
+        .query_row(
+            "SELECT json_extract(attrs, '$.line')
+             FROM artifacts
+             WHERE artifact_type = 'LinuxSystemConfig'
                AND json_extract(attrs, '$.sourcePath') = 'home/alice/.ssh/authorized_keys'
              LIMIT 1",
             [],
             |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(ssh_message, authorized_keys.trim());
+    assert_eq!(ssh_line, authorized_keys.trim());
     assert!(
         sudo_count > 0,
         "expected sudo artifact from gz rotated auth log"
@@ -1171,9 +1287,25 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
         summary.total_count,
         artifact_count as u64
             + journal_count as u64
+            + package_count as u64
             + sudo_count as u64
             + system_config_count as u64
+            + web_site_count as u64
+            + web_access_count as u64
+            + web_finding_count as u64
     );
+    assert_eq!(summary.web_site_count, web_site_count as u64);
+    assert_eq!(summary.web_access_log_count, web_access_count as u64);
+    assert_eq!(summary.web_finding_count, web_finding_count as u64);
+    assert_eq!(summary.web_sites[0].server_kind, "nginx");
+    assert!(summary.web_sites[0]
+        .document_roots
+        .contains(&"/var/www/html".to_string()));
+    assert_eq!(summary.web_access_logs[0].client_ip, "192.0.2.10");
+    assert!(summary
+        .web_findings
+        .iter()
+        .any(|finding| finding.finding_kind == "webShellCandidate"));
     assert_eq!(summary.status, AnalysisParseStatusDto::Parsed);
     assert!(!summary.truncated);
     assert!((summary.coverage_ratio - 1.0).abs() < f32::EPSILON);
@@ -1334,10 +1466,10 @@ fn linux_summary_reports_candidates_without_artifacts_and_truncation() {
         .warnings
         .iter()
         .any(|warning| warning.contains("16777216 bytes (per-source cap)")));
-    assert!(summary
-        .warnings
-        .iter()
-        .any(|warning| warning.contains("do not yet have a structured")));
+    assert!(summary.warnings.iter().all(|warning| {
+        !warning.contains("do not yet have a structured parser")
+            && !warning.contains("do not yet have a structured fallback")
+    }));
 }
 
 #[test]

@@ -23,9 +23,26 @@ export type LinuxAnalysisTabKey =
   | 'commands'
   | 'packages'
   | 'cron'
-  | 'sudo';
+  | 'sudo'
+  | 'systemConfig'
+  | 'webServices'
+  | 'mysqlServices';
 
-export type ExtractionCategory = 'Registry' | 'BrowserHistory' | 'Email' | 'EventLogs' | 'LinuxArtifacts';
+export type ExtractionCategory =
+  | 'Registry'
+  | 'BrowserHistory'
+  | 'Email'
+  | 'EventLogs'
+  | 'LinuxArtifacts'
+  | 'LinuxJournal'
+  | 'LinuxLogin'
+  | 'LinuxCommands'
+  | 'LinuxPackages'
+  | 'LinuxCron'
+  | 'LinuxSudo'
+  | 'LinuxSystemConfig'
+  | 'LinuxWebServices'
+  | 'LinuxMysqlServices';
 
 const EXTRACTION_CATEGORIES: ExtractionCategory[] = [
   'Registry',
@@ -33,6 +50,15 @@ const EXTRACTION_CATEGORIES: ExtractionCategory[] = [
   'Email',
   'EventLogs',
   'LinuxArtifacts',
+  'LinuxJournal',
+  'LinuxLogin',
+  'LinuxCommands',
+  'LinuxPackages',
+  'LinuxCron',
+  'LinuxSudo',
+  'LinuxSystemConfig',
+  'LinuxWebServices',
+  'LinuxMysqlServices',
 ];
 
 function emptyProgress(): Omit<AnalysisExtractionProgressInfo, 'label'> {
@@ -52,6 +78,15 @@ function createDefaultProgress(): Record<ExtractionCategory, Omit<AnalysisExtrac
     Email: emptyProgress(),
     EventLogs: emptyProgress(),
     LinuxArtifacts: emptyProgress(),
+    LinuxJournal: emptyProgress(),
+    LinuxLogin: emptyProgress(),
+    LinuxCommands: emptyProgress(),
+    LinuxPackages: emptyProgress(),
+    LinuxCron: emptyProgress(),
+    LinuxSudo: emptyProgress(),
+    LinuxSystemConfig: emptyProgress(),
+    LinuxWebServices: emptyProgress(),
+    LinuxMysqlServices: emptyProgress(),
   };
 }
 

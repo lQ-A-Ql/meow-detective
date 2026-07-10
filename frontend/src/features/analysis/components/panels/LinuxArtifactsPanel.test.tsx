@@ -4,6 +4,46 @@ import { describe, expect, it } from 'vitest';
 import { LinuxArtifactsPanel } from './LinuxArtifactsPanel';
 import type { LinuxArtifactSummary } from '@/types/models';
 
+function baseSummary(overrides: Partial<LinuxArtifactSummary> = {}): LinuxArtifactSummary {
+  return {
+    status: 'parsed',
+    journalCount: 0,
+    loginCount: 0,
+    bashCommandCount: 0,
+    aptEventCount: 0,
+    cronJobCount: 0,
+    sudoEventCount: 0,
+    systemConfigCount: 0,
+    webSiteCount: 0,
+    webAccessLogCount: 0,
+    webErrorLogCount: 0,
+    webFindingCount: 0,
+    mysqlConfigCount: 0,
+    mysqlLogCount: 0,
+    mysqlFindingCount: 0,
+    totalCount: 0,
+    truncated: false,
+    coverageRatio: 1,
+    journalEntries: [],
+    loginRecords: [],
+    bashCommands: [],
+    aptEvents: [],
+    cronJobs: [],
+    sudoEvents: [],
+    systemConfigs: [],
+    webSites: [],
+    webAccessLogs: [],
+    webErrorLogs: [],
+    webFindings: [],
+    mysqlConfigs: [],
+    mysqlLogs: [],
+    mysqlFindings: [],
+    warnings: [],
+    generatedAt: '2026-07-02T10:00:00Z',
+    ...overrides,
+  };
+}
+
 describe('LinuxArtifactsPanel', () => {
   it('renders header with section title', () => {
     render(createElement(LinuxArtifactsPanel, {}));
@@ -26,44 +66,24 @@ describe('LinuxArtifactsPanel', () => {
   });
 
   it('renders overview stat cards when summary is provided', () => {
-    const summary: LinuxArtifactSummary = {
-      status: 'parsed',
+    const summary = baseSummary({
       journalCount: 3,
       loginCount: 2,
       bashCommandCount: 5,
       aptEventCount: 1,
       cronJobCount: 4,
       sudoEventCount: 6,
-      totalCount: 21,
-      truncated: false,
-      coverageRatio: 1,
-      journalEntries: [],
-      loginRecords: [],
-      bashCommands: [],
-      aptEvents: [],
-      cronJobs: [],
-      sudoEvents: [],
-      warnings: [],
-      generatedAt: '2026-07-02T10:00:00Z',
-    };
+      systemConfigCount: 7,
+      totalCount: 28,
+    });
     render(createElement(LinuxArtifactsPanel, { summary }));
-    expect(screen.getByText('21')).toBeDefined();
+    expect(screen.getByText('28')).toBeDefined();
   });
 
   it('renders bash commands with monospace command text', () => {
-    const summary: LinuxArtifactSummary = {
-      status: 'parsed',
-      journalCount: 0,
-      loginCount: 0,
+    const summary = baseSummary({
       bashCommandCount: 1,
-      aptEventCount: 0,
-      cronJobCount: 0,
-      sudoEventCount: 0,
       totalCount: 1,
-      truncated: false,
-      coverageRatio: 1,
-      journalEntries: [],
-      loginRecords: [],
       bashCommands: [
         {
           artifactId: 'bash-1',
@@ -74,33 +94,17 @@ describe('LinuxArtifactsPanel', () => {
           timestamp: '2026-07-02T10:00:00Z',
         },
       ],
-      aptEvents: [],
-      cronJobs: [],
-      sudoEvents: [],
-      warnings: [],
-      generatedAt: '2026-07-02T10:00:00Z',
-    };
+    });
     render(createElement(LinuxArtifactsPanel, { summary, activeTab: 'commands' }));
     expect(screen.getByText('ls -la /home')).toBeDefined();
   });
 
   it('renders sudo events with success/failure indicators', () => {
-    const summary: LinuxArtifactSummary = {
-      status: 'parsed',
-      journalCount: 0,
-      loginCount: 0,
-      bashCommandCount: 0,
-      aptEventCount: 0,
-      cronJobCount: 0,
+    const summary = baseSummary({
       sudoEventCount: 2,
       totalCount: 2,
       truncated: true,
       coverageRatio: 0.5,
-      journalEntries: [],
-      loginRecords: [],
-      bashCommands: [],
-      aptEvents: [],
-      cronJobs: [],
       sudoEvents: [
         {
           artifactId: 'sudo-1',
@@ -122,11 +126,141 @@ describe('LinuxArtifactsPanel', () => {
           timestamp: '2026-07-02T10:01:00Z',
         },
       ],
-      warnings: [],
-      generatedAt: '2026-07-02T10:00:00Z',
-    };
+    });
     render(createElement(LinuxArtifactsPanel, { summary, activeTab: 'sudo' }));
     expect(screen.getByText('apt update')).toBeDefined();
     expect(screen.getByText('rm -rf /')).toBeDefined();
+  });
+
+  it('renders Linux system config records', () => {
+    const summary = baseSummary({
+      systemConfigCount: 1,
+      totalCount: 1,
+      systemConfigs: [
+        {
+          artifactId: 'config-1',
+          fileId: 'file-1',
+          sourcePath: '/etc/passwd',
+          configKind: 'passwdAccount',
+          line: '',
+          lineNumber: 0,
+          username: 'root',
+          uid: 0,
+          gid: 0,
+          home: '/root',
+          shell: '/bin/bash',
+        },
+      ],
+    });
+    render(createElement(LinuxArtifactsPanel, { summary, activeTab: 'systemConfig' }));
+    expect(screen.getByText('root')).toBeDefined();
+    expect(screen.getByText('/bin/bash')).toBeDefined();
+  });
+
+  it('renders Linux MySQL service configs, logs, and findings', () => {
+    const summary = baseSummary({
+      mysqlConfigCount: 1,
+      mysqlLogCount: 1,
+      mysqlFindingCount: 1,
+      totalCount: 3,
+      mysqlConfigs: [
+        {
+          artifactId: 'mysql-config-1',
+          fileId: 'file-mycnf',
+          sourcePath: '/etc/mysql/my.cnf',
+          section: 'mysqld',
+          key: 'bind-address',
+          value: '0.0.0.0',
+          lineNumber: 2,
+        },
+      ],
+      mysqlLogs: [
+        {
+          artifactId: 'mysql-log-1',
+          fileId: 'file-mysql-log',
+          sourcePath: '/var/log/mysql/error.log',
+          timestamp: '2026-07-02T10:00:00Z',
+          severity: 'warning',
+          threadId: '8',
+          message: "Access denied for user 'root'@'192.0.2.10'",
+          lineNumber: 1,
+        },
+      ],
+      mysqlFindings: [
+        {
+          artifactId: 'mysql-finding-1',
+          fileId: 'file-mycnf',
+          sourcePath: '/etc/mysql/my.cnf',
+          findingKind: 'bindAddressAny',
+          severity: 'medium',
+          confidence: 0.86,
+          evidence: 'bind-address=0.0.0.0',
+          lineNumber: 2,
+        },
+      ],
+    });
+    render(createElement(LinuxArtifactsPanel, { summary, activeTab: 'mysqlServices' }));
+    expect(screen.getByText('bindAddressAny')).toBeDefined();
+    expect(screen.getByText('bind-address')).toBeDefined();
+    expect(screen.getByText("Access denied for user 'root'@'192.0.2.10'")).toBeDefined();
+  });
+
+  it('renders Linux web service findings and site records', () => {
+    const summary = baseSummary({
+      webSiteCount: 1,
+      webAccessLogCount: 1,
+      webFindingCount: 1,
+      totalCount: 3,
+      webSites: [
+        {
+          artifactId: 'site-1',
+          fileId: 'file-nginx',
+          sourcePath: '/etc/nginx/nginx.conf',
+          serverKind: 'nginx',
+          siteName: 'nginx server line 2',
+          hostnames: ['example.test'],
+          listen: ['80'],
+          documentRoots: ['/var/www/html'],
+          accessLogs: ['/var/log/nginx/access.log'],
+          errorLogs: ['/var/log/nginx/error.log'],
+          lineNumber: 2,
+        },
+      ],
+      webAccessLogs: [
+        {
+          artifactId: 'access-1',
+          fileId: 'file-access',
+          sourcePath: '/var/log/nginx/access.log',
+          clientIp: '192.0.2.10',
+          method: 'GET',
+          uri: '/products?id=1 UNION SELECT password',
+          protocol: 'HTTP/1.1',
+          status: 200,
+          responseBytes: 4532,
+          userAgent: 'sqlmap/1.7',
+          lineNumber: 1,
+        },
+      ],
+      webFindings: [
+        {
+          artifactId: 'finding-1',
+          fileId: 'file-access',
+          sourcePath: '/var/log/nginx/access.log',
+          findingKind: 'sqlInjection',
+          severity: 'high',
+          confidence: 0.9,
+          evidence: '/products?id=1 UNION SELECT password',
+          clientIp: '192.0.2.10',
+          uri: '/products?id=1 UNION SELECT password',
+          lineNumber: 1,
+        },
+      ],
+    });
+
+    render(createElement(LinuxArtifactsPanel, { summary, activeTab: 'webServices' }));
+
+    expect(screen.getByText('sqlInjection')).toBeDefined();
+    expect(screen.getByText('example.test')).toBeDefined();
+    expect(screen.getByText('sqlmap/1.7')).toBeDefined();
   });
 });

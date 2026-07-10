@@ -1,8 +1,9 @@
 //! APT package management log parser.
 //!
-//! Parses two log formats:
+//! Parses package-manager log formats:
 //! - `/var/log/apt/history.log` — high-level APT transactions (install/upgrade/remove).
 //! - `/var/log/dpkg.log` — low-level dpkg operations (install/configure/remove/purge).
+//! - `/var/log/yum.log` and `/var/log/dnf*.log` — RHEL/CentOS/Fedora package events.
 //!
 //! APT history.log format:
 //! ```text
@@ -140,12 +141,90 @@ pub fn parse_dpkg_log(content: &str) -> Result<Vec<AptEvent>, crate::LinuxArtifa
     Ok(events)
 }
 
+/// Parse RHEL/CentOS/Fedora yum/dnf package logs.
+///
+/// The returned DTO family is still named `AptEvent` for historical frontend
+/// compatibility; semantically these are generic Linux package-manager events.
+pub fn parse_rpm_package_log(content: &str) -> Result<Vec<AptEvent>, crate::LinuxArtifactError> {
+    let mut events = Vec::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let Some((action, package_token)) = parse_rpm_action_line(trimmed) else {
+            continue;
+        };
+        let (package, version) = parse_rpm_nevra(package_token);
+        events.push(AptEvent {
+            action,
+            package,
+            version,
+            timestamp: parse_rpm_timestamp(trimmed),
+        });
+    }
+
+    Ok(events)
+}
+
 fn parse_apt_date(s: &str) -> Option<DateTime<Utc>> {
     // Format: "2024-01-15  10:30:00" (note: double space between date and time)
     let normalized = s.replace("  ", " ");
     NaiveDateTime::parse_from_str(&normalized, "%Y-%m-%d %H:%M:%S")
         .ok()
         .map(|ndt| Utc.from_utc_datetime(&ndt))
+}
+
+fn parse_rpm_action_line(line: &str) -> Option<(String, &str)> {
+    for raw_action in [
+        "Installed:",
+        "Updated:",
+        "Upgraded:",
+        "Erased:",
+        "Removed:",
+        "Downgraded:",
+        "Reinstalled:",
+    ] {
+        if let Some((_, rest)) = line.split_once(raw_action) {
+            let package = rest.split_whitespace().next()?;
+            let action = match raw_action
+                .trim_end_matches(':')
+                .to_ascii_lowercase()
+                .as_str()
+            {
+                "installed" => "install".to_string(),
+                "updated" | "upgraded" => "upgrade".to_string(),
+                "erased" | "removed" => "remove".to_string(),
+                "downgraded" => "downgrade".to_string(),
+                "reinstalled" => "reinstall".to_string(),
+                value => value.to_string(),
+            };
+            return Some((action, package));
+        }
+    }
+    None
+}
+
+fn parse_rpm_timestamp(line: &str) -> Option<DateTime<Utc>> {
+    let first = line.split_whitespace().next()?;
+    DateTime::parse_from_str(first, "%Y-%m-%dT%H:%M:%S%z")
+        .map(|dt| dt.with_timezone(&Utc))
+        .ok()
+}
+
+fn parse_rpm_nevra(token: &str) -> (String, String) {
+    let cleaned = token.trim().trim_matches(',');
+    let parts = cleaned.split('-').collect::<Vec<_>>();
+    if parts.len() >= 3 {
+        let package = parts[..parts.len() - 2].join("-");
+        let version = parts[parts.len() - 2..].join("-");
+        if !package.is_empty() {
+            return (package, version);
+        }
+    }
+    (cleaned.to_string(), "unknown".to_string())
 }
 
 fn parse_package_entry(entry: &str) -> (String, String) {
@@ -231,6 +310,27 @@ End-Date: 2024-06-02  09:15:03";
 
         assert_eq!(events[1].action, "configure");
         assert_eq!(events[4].action, "remove");
+    }
+
+    #[test]
+    fn parse_rpm_package_logs() {
+        let input = "\
+Jan 15 10:30:00 Installed: curl-7.61.1-33.el8.x86_64
+2024-01-15T10:31:00+0000 INFO --- Updated: python3-libdnf-0.63.0-20.el8.x86_64
+2024-01-15T10:32:00+0000 INFO --- Erased: oldpkg-1.0-1.el8.x86_64
+";
+
+        let events = parse_rpm_package_log(input).expect("should parse rpm package logs");
+
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0].action, "install");
+        assert_eq!(events[0].package, "curl");
+        assert_eq!(events[0].version, "7.61.1-33.el8.x86_64");
+        assert!(events[0].timestamp.is_none());
+        assert_eq!(events[1].action, "upgrade");
+        assert_eq!(events[1].package, "python3-libdnf");
+        assert!(events[1].timestamp.is_some());
+        assert_eq!(events[2].action, "remove");
     }
 
     #[test]

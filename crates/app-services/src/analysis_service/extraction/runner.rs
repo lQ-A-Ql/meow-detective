@@ -5,6 +5,7 @@ use super::browser::extract_browser_candidate;
 use super::email::extract_email_candidate;
 use super::evtx::extract_evtx_candidate;
 use super::linux::{extract_linux_candidate, linux_candidate_read_limit};
+use super::linux_sections::{linux_artifact_section, LinuxArtifactSection};
 use super::macos::extract_macos_candidate;
 use super::registry::extract_registry_candidate;
 use super::registry_preload::preload_registry_context;
@@ -18,8 +19,66 @@ use chrono::Utc;
 use domain::FileEntryId;
 use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
 use rusqlite::Connection;
+use std::collections::BTreeMap;
 use std::io::Read;
-use transport::dto::{AnalysisExtractionRunDto, AnalysisParseStatusDto};
+use transport::dto::{
+    AnalysisExtractionRunDto, AnalysisExtractionSectionRunDto, AnalysisParseStatusDto,
+};
+
+#[derive(Debug, Clone)]
+struct SectionProgress {
+    key: String,
+    label: String,
+    scanned_count: u64,
+    artifact_count: u64,
+    timeline_event_count: u64,
+    warnings: Vec<String>,
+}
+
+impl SectionProgress {
+    fn new(key: impl Into<String>, label: impl Into<String>) -> Self {
+        Self {
+            key: key.into(),
+            label: label.into(),
+            scanned_count: 0,
+            artifact_count: 0,
+            timeline_event_count: 0,
+            warnings: Vec::new(),
+        }
+    }
+
+    fn record_scan(&mut self, outcome: &ExtractionOutcome) {
+        self.scanned_count += 1;
+        self.artifact_count += outcome.artifacts.len() as u64;
+        self.timeline_event_count += outcome.timeline_events.len() as u64;
+        self.warnings.extend(outcome.warnings.iter().cloned());
+    }
+
+    fn record_warning(&mut self, warning: String) {
+        self.warnings.push(warning);
+    }
+
+    fn into_dto(self) -> AnalysisExtractionSectionRunDto {
+        let status = if self.scanned_count == 0 && self.warnings.is_empty() {
+            AnalysisParseStatusDto::NotFound
+        } else if self.scanned_count == 0 {
+            AnalysisParseStatusDto::Failed
+        } else if self.warnings.is_empty() {
+            AnalysisParseStatusDto::Parsed
+        } else {
+            AnalysisParseStatusDto::Partial
+        };
+        AnalysisExtractionSectionRunDto {
+            key: self.key,
+            label: self.label,
+            status,
+            scanned_count: self.scanned_count,
+            artifact_count: self.artifact_count,
+            timeline_event_count: self.timeline_event_count,
+            warnings: self.warnings,
+        }
+    }
+}
 
 pub fn run_analysis_extraction<E: std::fmt::Display>(
     conn: &Connection,
@@ -40,11 +99,13 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
     } else {
         categories.to_vec()
     };
-    let candidates = evidence_candidates_for_categories(conn, &selected)?;
+    let discovery_categories = discovery_categories_for_selection(&selected);
+    let candidates = evidence_candidates_for_categories(conn, &discovery_categories)?;
     let mut artifacts = Vec::new();
     let mut events = Vec::new();
     let mut warnings = Vec::new();
     let mut scanned_count = 0u64;
+    let mut section_progress = initial_section_progress(&selected);
 
     let preload = preload_registry_context(conn, &candidates, &mut file_reader, |candidate| {
         already_has_v1_artifacts(conn, candidate)
@@ -55,14 +116,23 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
         if !is_supported_analysis_category(&candidate.category) {
             continue;
         }
+        if !candidate_matches_selection(&candidate, &selected) {
+            continue;
+        }
         if already_has_v1_artifacts(conn, &candidate)? {
             continue;
         }
 
+        let section = section_for_candidate(&candidate);
         let outcome = match candidate.category.as_str() {
             "Registry" => {
                 let Some(bytes) = preload.registry_bytes(&candidate) else {
-                    warnings.push(format!("{} registry bytes not preloaded", candidate.path));
+                    let warning = format!("{} registry bytes not preloaded", candidate.path);
+                    section_progress
+                        .entry(section.key.to_string())
+                        .or_insert_with(|| SectionProgress::new(section.key, section.label))
+                        .record_warning(warning.clone());
+                    warnings.push(warning);
                     continue;
                 };
                 let boot_key = preload.boot_key(&candidate);
@@ -74,7 +144,12 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
                 let mut reader = match file_reader(&candidate.file_id) {
                     Ok(reader) => reader,
                     Err(err) => {
-                        warnings.push(format!("{} read failed: {}", candidate.path, err));
+                        let warning = format!("{} read failed: {}", candidate.path, err);
+                        section_progress
+                            .entry(section.key.to_string())
+                            .or_insert_with(|| SectionProgress::new(section.key, section.label))
+                            .record_warning(warning.clone());
+                        warnings.push(warning);
                         continue;
                     }
                 };
@@ -86,7 +161,12 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
                     .take(read_limit as u64)
                     .read_to_end(&mut bytes)
                 {
-                    warnings.push(format!("{} read failed: {}", candidate.path, err));
+                    let warning = format!("{} read failed: {}", candidate.path, err);
+                    section_progress
+                        .entry(section.key.to_string())
+                        .or_insert_with(|| SectionProgress::new(section.key, section.label))
+                        .record_warning(warning.clone());
+                    warnings.push(warning);
                     continue;
                 }
                 scanned_count += 1;
@@ -101,6 +181,10 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
             }
             _ => ExtractionOutcome::default(),
         };
+        section_progress
+            .entry(section.key.to_string())
+            .or_insert_with(|| SectionProgress::new(section.key, section.label))
+            .record_scan(&outcome);
         warnings.extend(outcome.warnings);
         artifacts.extend(outcome.artifacts);
         events.extend(outcome.timeline_events);
@@ -129,6 +213,10 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
         scanned_count,
         artifact_count,
         timeline_event_count: events.len() as u64,
+        sections: section_progress
+            .into_values()
+            .map(SectionProgress::into_dto)
+            .collect(),
         generated_at,
         warnings,
     })
@@ -139,6 +227,117 @@ fn is_supported_analysis_category(category: &str) -> bool {
         category,
         "Registry" | "BrowserHistory" | "Email" | "EventLogs" | "LinuxArtifacts" | "MacArtifacts"
     )
+}
+
+fn discovery_categories_for_selection<'a>(selected: &[&'a str]) -> Vec<&'a str> {
+    let mut categories = Vec::new();
+    for category in selected {
+        let discovery_category = if LinuxArtifactSection::from_key(category).is_some() {
+            "LinuxArtifacts"
+        } else {
+            category
+        };
+        if !categories.contains(&discovery_category) {
+            categories.push(discovery_category);
+        }
+    }
+    categories
+}
+
+fn candidate_matches_selection(
+    candidate: &crate::analysis_service::candidates::EvidenceCandidate,
+    selected: &[&str],
+) -> bool {
+    if candidate.category != "LinuxArtifacts" {
+        return selected
+            .iter()
+            .any(|category| *category == candidate.category);
+    }
+    selected
+        .iter()
+        .any(|category| *category == "LinuxArtifacts")
+        || selected.iter().any(|category| {
+            LinuxArtifactSection::from_key(category).is_some_and(|section| {
+                let normalized = normalize_evidence_path(&candidate.path);
+                linux_artifact_section(&normalized) == section
+            })
+        })
+}
+
+fn initial_section_progress(selected: &[&str]) -> BTreeMap<String, SectionProgress> {
+    let mut sections = BTreeMap::new();
+    for category in selected {
+        if *category == "LinuxArtifacts" {
+            for section in LinuxArtifactSection::ALL {
+                sections.insert(
+                    section.key().to_string(),
+                    SectionProgress::new(section.key(), section.label()),
+                );
+            }
+        } else if let Some(section) = LinuxArtifactSection::from_key(category) {
+            sections.insert(
+                section.key().to_string(),
+                SectionProgress::new(section.key(), section.label()),
+            );
+        } else if is_supported_analysis_category(category) {
+            let section = generic_section_for_category(category);
+            sections.insert(
+                section.key.to_string(),
+                SectionProgress::new(section.key, section.label),
+            );
+        }
+    }
+    sections
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ExtractionSection {
+    key: &'static str,
+    label: &'static str,
+}
+
+fn section_for_candidate(
+    candidate: &crate::analysis_service::candidates::EvidenceCandidate,
+) -> ExtractionSection {
+    if candidate.category == "LinuxArtifacts" {
+        let normalized = normalize_evidence_path(&candidate.path);
+        let section = linux_artifact_section(&normalized);
+        ExtractionSection {
+            key: section.key(),
+            label: section.label(),
+        }
+    } else {
+        generic_section_for_category(&candidate.category)
+    }
+}
+
+fn generic_section_for_category(category: &str) -> ExtractionSection {
+    match category {
+        "Registry" => ExtractionSection {
+            key: "Registry",
+            label: "Windows Registry",
+        },
+        "BrowserHistory" => ExtractionSection {
+            key: "BrowserHistory",
+            label: "Browser History",
+        },
+        "Email" => ExtractionSection {
+            key: "Email",
+            label: "Email",
+        },
+        "EventLogs" => ExtractionSection {
+            key: "EventLogs",
+            label: "Windows Event Logs",
+        },
+        "MacArtifacts" => ExtractionSection {
+            key: "MacArtifacts",
+            label: "macOS Artifacts",
+        },
+        _ => ExtractionSection {
+            key: "Unknown",
+            label: "Unknown",
+        },
+    }
 }
 
 fn analysis_candidate_read_limit(category: &str, normalized_path: &str) -> usize {
