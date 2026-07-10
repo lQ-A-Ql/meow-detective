@@ -152,9 +152,9 @@ fn metadata_error(message: String) -> LvmError {
 fn lock_data_reader(
     reader: &SharedReader,
 ) -> std::io::Result<MutexGuard<'_, Box<dyn EvidenceReader>>> {
-    reader.lock().map_err(|_| {
-        std::io::Error::new(std::io::ErrorKind::Other, "thin data reader lock poisoned")
-    })
+    reader
+        .lock()
+        .map_err(|_| std::io::Error::other("thin data reader lock poisoned"))
 }
 
 fn checked_relative_seek(base: u64, offset: i64, context: &str) -> std::io::Result<u64> {

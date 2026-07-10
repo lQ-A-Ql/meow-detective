@@ -41,7 +41,7 @@ impl LvmPool {
         let lv = self
             .logical_volumes
             .get(index)
-            .ok_or_else(|| LvmError::LvIndexOutOfRange {
+            .ok_or(LvmError::LvIndexOutOfRange {
                 index,
                 count: self.logical_volumes.len(),
             })?;

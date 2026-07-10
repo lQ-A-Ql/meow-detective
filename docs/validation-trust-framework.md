@@ -238,6 +238,19 @@ Linux 检材3是当前 Stage 0 Linux 单盘链路的真实样本 baseline，样�
   - XFS/ext4/Btrfs 已删除文件恢复或 carving
   - 原始 Linux 文件系统支持超出当前实现可枚举范围时的完整恢复
 
+### 4.8 PVE 宿主 EXT4 baseline
+
+PVE 私有集群样本通过 `FORENSICS_PVE_CLUSTER_ROOT` opt-in，默认 CI 不运行。当前只把每个节点宿主 OS 作为独立成员验证，不把 Ceph OSD 或 VM 磁盘伪装成普通文件系统。
+
+- 样本目录参考：`E:\pangushi\服务器`（仅本地人工示例，不得硬编码到生产代码）。
+- 宿主链路：E01 `disk01` -> GPT -> LVM `pve/root` -> 64-bit EXT4（64-byte group descriptor）。
+- 真实样本测试：
+  - `pve_cluster_host_root_filesystems_enumerate_and_preview`：三个宿主 root LV 均可枚举并直接读取关键文件。
+  - `pve_cluster_representative_host_imports_tree_and_previews_by_file_id`：代表成员走生产导入链路并按 `FileEntryId` 重新预览。
+- 2026-07-10 代表基线：`files=56471`、`dirs=5931`、`totalBytes=5250350224`；测试体耗时约 `4.59s`（本机 debug build，不作为跨机器性能 SLA）。
+- 必须可读：`/etc/passwd`、`/etc/os-release`、`/etc/hostname`、`/var/lib/pve-cluster/config.db`。
+- 当前不保证：Ceph BlueStore RADOS object/PG 解析、VM disk reconstruction、跨节点语义关联、EXT4 deleted recovery 与全部 incompat feature 组合。
+
 ## 5. 浏览器与邮件链路
 
 当前这些链路已经纳入框架，但成熟度仍低于核心链路：

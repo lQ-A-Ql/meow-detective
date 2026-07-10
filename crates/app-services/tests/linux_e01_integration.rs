@@ -760,6 +760,72 @@ fn pve_cluster_e01_files(root: &Path) -> Vec<PathBuf> {
     files
 }
 
+fn pve_host_disk_e01_files(root: &Path) -> Vec<PathBuf> {
+    pve_cluster_e01_files(root)
+        .into_iter()
+        .filter(|path| {
+            path.file_stem()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.ends_with("-disk01"))
+        })
+        .collect()
+}
+
+fn open_pve_host_filesystem(
+    image_path: &Path,
+    candidate: &ImageFilesystemCandidate,
+) -> Box<dyn FileSystemReader> {
+    let identity = candidate
+        .lvm_identity
+        .as_ref()
+        .expect("PVE host filesystem candidate should retain LVM identity");
+    let readers = if identity.pv_sources.is_empty() {
+        vec![Box::new(E01Reader::open(image_path).unwrap()) as Box<dyn EvidenceReader>]
+    } else {
+        identity
+            .pv_sources
+            .iter()
+            .map(|source| {
+                assert_eq!(
+                    source.source_kind,
+                    Some(DataSourceKind::E01),
+                    "PVE real-sample PV source should remain an E01 source"
+                );
+                Box::new(E01Reader::open(Path::new(&source.source_path)).unwrap())
+                    as Box<dyn EvidenceReader>
+            })
+            .collect()
+    };
+    let pool = fs_lvm::LvmPool::discover(readers, identity.pv_offsets.clone())
+        .expect("PVE host LVM pool should reopen from persisted identity");
+    let volume_index = pool
+        .list_volumes()
+        .iter()
+        .position(|volume| {
+            (!identity.lv_uuid.is_empty() && volume.uuid == identity.lv_uuid)
+                || volume.name == identity.lv_name
+        })
+        .expect("PVE host root LV should be present when reopening its pool");
+    let volume_reader = pool
+        .open_volume_reader(volume_index)
+        .expect("PVE host root LV should open as a read-only block device");
+
+    match candidate.kind {
+        ImageFilesystemKind::Ext4 => Box::new(
+            fs_ext4::Ext4Reader::open(volume_reader, 0)
+                .expect("PVE host root LV should open as EXT4"),
+        ),
+        ImageFilesystemKind::Xfs => Box::new(
+            fs_xfs::XfsReader::open(volume_reader, 0).expect("PVE host root LV should open as XFS"),
+        ),
+        ImageFilesystemKind::Btrfs => Box::new(
+            fs_btrfs::BtrfsReader::open(volume_reader, 0)
+                .expect("PVE host root LV should open as Btrfs"),
+        ),
+        other => panic!("unsupported PVE host root filesystem candidate: {other:?}"),
+    }
+}
+
 fn is_lvm_expansion_diagnostic(warning: &str) -> bool {
     warning.contains("LVM expand:")
         && (warning.contains("skipping")
@@ -2966,6 +3032,213 @@ fn pve_cluster_e01_lvm_probe_has_explicit_diagnostics() {
         saw_expanded_lvm || saw_lvm_diagnostic,
         "PVE LVM probe should either expose host LV candidates or emit explicit LVM diagnostics"
     );
+}
+
+#[test]
+#[ignore = "requires FORENSICS_PVE_CLUSTER_ROOT real PVE cluster E01 sample directory"]
+fn pve_cluster_host_root_filesystems_enumerate_and_preview() {
+    let root = pve_cluster_root();
+    let host_images = pve_host_disk_e01_files(&root);
+    assert!(
+        !host_images.is_empty(),
+        "PVE cluster root {} should contain host disk01 E01 images",
+        root.display()
+    );
+
+    for image_path in host_images {
+        let mut reader = E01Reader::open(&image_path).unwrap_or_else(|error| {
+            panic!(
+                "PVE host image {} should open: {error}",
+                image_path.display()
+            )
+        });
+        let mut probe = detect_image_filesystem(&mut reader).unwrap_or_else(|error| {
+            panic!(
+                "PVE host image {} should probe successfully: {error}",
+                image_path.display()
+            )
+        });
+        expand_lvm_pool_candidates(&mut probe, &image_path, &DataSourceKind::E01);
+
+        let root_candidate = probe
+            .candidates
+            .iter()
+            .find(|candidate| {
+                matches!(
+                    candidate.kind,
+                    ImageFilesystemKind::Ext4
+                        | ImageFilesystemKind::Xfs
+                        | ImageFilesystemKind::Btrfs
+                ) && matches!(candidate.source, ImageFilesystemSource::LvmLogicalVolume)
+                    && candidate
+                        .lvm_identity
+                        .as_ref()
+                        .is_some_and(|identity| identity.lv_name == "root")
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "PVE host image {} should expose a supported pve/root filesystem candidate; candidates={:?}; warnings={:?}",
+                    image_path.display(),
+                    probe.candidates,
+                    probe.warnings
+                )
+            });
+        eprintln!(
+            "PVE host root candidate: image={} kind={:?} identity={:?}",
+            image_path.display(),
+            root_candidate.kind,
+            root_candidate.lvm_identity
+        );
+
+        let fs = open_pve_host_filesystem(&image_path, root_candidate);
+        let root_children = fs.list_children("").unwrap_or_else(|error| {
+            panic!(
+                "PVE host root filesystem {} should enumerate: {error}",
+                image_path.display()
+            )
+        });
+        let root_names = root_children
+            .iter()
+            .map(|entry| entry.name.as_str())
+            .collect::<Vec<_>>();
+        for expected in ["etc", "usr", "var"] {
+            assert!(
+                root_children
+                    .iter()
+                    .any(|entry| entry.is_dir && entry.name == expected),
+                "PVE host root {} should contain /{expected}; root entries={root_names:?}",
+                image_path.display()
+            );
+        }
+
+        for path in [
+            "etc/passwd",
+            "etc/os-release",
+            "etc/hostname",
+            "var/lib/pve-cluster/config.db",
+        ] {
+            let bytes: std::io::Result<Vec<u8>> = fs.read_file_range(path, 0, 512).or_else(|_| {
+                let mut file = fs.open_file(path)?;
+                let mut bytes = vec![0u8; 512];
+                let read = file.read(&mut bytes)?;
+                bytes.truncate(read);
+                Ok(bytes)
+            });
+            let bytes = bytes.unwrap_or_else(|error| {
+                panic!(
+                    "PVE host file {}:{} should be preview-readable: {error}",
+                    image_path.display(),
+                    path
+                )
+            });
+            assert!(
+                !bytes.is_empty(),
+                "PVE host file {}:{} should return preview bytes",
+                image_path.display(),
+                path
+            );
+        }
+    }
+}
+
+#[test]
+#[ignore = "requires FORENSICS_PVE_CLUSTER_ROOT real PVE cluster E01 sample directory"]
+fn pve_cluster_representative_host_imports_tree_and_previews_by_file_id() {
+    let root = pve_cluster_root();
+    let image_path = pve_host_disk_e01_files(&root)
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| {
+            panic!(
+                "PVE cluster root {} should contain a representative host disk01 E01",
+                root.display()
+            )
+        });
+    let case_id = "pve-host-ext4-import-test";
+    let ds_id = DataSourceId("pve-host-ext4-source".to_string());
+    let conn = persistence_sqlite::open_in_memory().unwrap();
+    persistence_sqlite::runner::run_all(&conn).unwrap();
+    setup_case(&conn, case_id);
+    DataSourceRepo::new(&conn)
+        .insert(
+            &CaseId(case_id.to_string()),
+            &DataSource {
+                id: ds_id.clone(),
+                name: "PVE host disk01".to_string(),
+                kind: DataSourceKind::E01,
+                source_path: image_path.clone(),
+                imported_at: chrono::Utc::now(),
+                provenance: domain::DataSourceProvenance::unknown(),
+            },
+        )
+        .unwrap();
+
+    let stats = enumerate_image_data_source(
+        &conn,
+        &ds_id,
+        E01Reader::open(&image_path).unwrap(),
+        |pct, detail| {
+            eprintln!("PVE host import {pct}%: {detail}");
+            Ok(())
+        },
+        None,
+        None,
+    )
+    .unwrap_or_else(|error| {
+        panic!(
+            "PVE host image {} should import through the production pipeline: {error}",
+            image_path.display()
+        )
+    });
+    eprintln!(
+        "PVE host import summary: files={} dirs={} total_bytes={} warnings={}",
+        stats.file_count,
+        stats.dir_count,
+        stats.total_size,
+        stats.warnings.len()
+    );
+    assert!(
+        stats.file_count >= 50_000
+            && stats.dir_count >= 5_000
+            && stats.total_size >= 4 * 1024 * 1024 * 1024,
+        "PVE host import should preserve the full tree and inode sizes, got files={} dirs={} total_bytes={} warnings={:?}",
+        stats.file_count,
+        stats.dir_count,
+        stats.total_size,
+        stats.warnings
+    );
+
+    for path in [
+        "/etc/passwd",
+        "/etc/os-release",
+        "/etc/hostname",
+        "/var/lib/pve-cluster/config.db",
+    ] {
+        let entry = find_linux_file_entry(&conn, &ds_id, path).unwrap_or_else(|| {
+            panic!(
+                "PVE host production import should persist {} from {}",
+                path,
+                image_path.display()
+            )
+        });
+        assert!(
+            entry.size > 0,
+            "PVE host imported file {} should persist its EXT4 inode size",
+            path
+        );
+        let bytes = file_service::read_file_header_by_id(&conn, &entry.file_id, 512)
+            .unwrap_or_else(|error| {
+                panic!(
+                    "PVE host imported file {} should preview by FileEntryId {}: {error}",
+                    path, entry.file_id.0
+                )
+            });
+        assert!(
+            !bytes.is_empty(),
+            "PVE host imported file {} should return preview bytes",
+            path
+        );
+    }
 }
 
 fn assert_lvm_root_lv_visible_without_expanded_pool_root(

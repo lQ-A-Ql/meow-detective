@@ -40,12 +40,12 @@ V2 长期计划与能力评级请同时参考：
 | Email | TNEF / winmail.dat | 不支持 | MS-OXTNEF 格式，规划于 V4 或后续评估 |
 | Email | 加密或密码保护 PST/OST | 不支持 | 不尝试破解密码；检测并记录 warning |
 | Linux Stage 0 | 检材3 baseline 作为公开支持证明 | 不承诺 | 检材3是私有 opt-in 真实样本 baseline，用于守住单盘 Linux 链路；不能替代 public-small/public-medium fixture 与 expected JSON |
-| Linux 文件系统 | ext4 raw disk 完整支持 | 不承诺 | reader 能力与探测链路需以公开 fixture / expected JSON 补齐；检材3 baseline 不覆盖 ext4 |
+| Linux 文件系统 | ext4 raw disk 完整支持 | 部分支持 | PVE 私有样本已验证 E01 -> LVM direct root LV -> 64-bit EXT4（64-byte group descriptor）-> 完整文件树、inode size 与 `FileEntryId` 预览；仍缺公开 fixture / expected JSON、metadata checksum 与全部 feature 组合覆盖 |
 | Linux 文件系统 | XFS raw disk 完整支持 | 部分支持 | Stage 0 baseline 仅覆盖单源单盘、LVM direct LV 上的 XFS root tree、预览与 Linux artifact extraction |
 | Linux 文件系统 | Btrfs raw disk 完整支持 | 不承诺 | reader 能力与探测链路需以公开 fixture / expected JSON 补齐；检材3 baseline 不覆盖 Btrfs |
 | Linux 文件系统 | 已删除文件恢复 (ext4/XFS/Btrfs) | 不承诺 | 文件雕刻与已删除恢复规划于 V4 |
-| Linux LVM/PVE | PVE cluster 语义解析执行 | 不支持 | 当前仅支持 Linux 集群导入建模与成员镜像串行导入；PVE thin-pool、VM disk reconstruction、跨节点关联仍不支持 |
-| Linux LVM/PVE | LVM thin/cache/RAID/snapshot/VDO/writecache | 不支持 | 当前 baseline 只覆盖 direct linear/striped LV；复杂映射需独立 metadata 解析与 fixture |
+| Linux LVM/PVE | PVE cluster 语义解析执行 | 部分支持 | 集群建模、成员串行导入和各节点宿主 `pve/root` EXT4 文件树已验证；Ceph BlueStore 对象树、VM disk reconstruction 与跨节点关联仍不支持 |
+| Linux LVM/PVE | LVM thin/cache/RAID/snapshot/VDO/writecache | 部分支持 | direct linear/striped 与基础 dm-thin 只读映射已实现；thin metadata checksum/repair、cache、RAID、snapshot、VDO、writecache 仍不支持且必须 fail closed |
 | Linux LVM/PVE | partial/degraded VG 激活 | 不支持 | 缺失 PV 或不一致 metadata 必须 fail closed，不猜测块映射 |
 | Linux artifacts | systemd journal 压缩/轮转完整覆盖 | 部分支持 | 当前解析器支持 uncompressed 与部分 LZ4/ZSTD 字段，但缺 public fixture 覆盖 multi-boot、rotated、XZ 与损坏 journal；字段只能 bestEffort |
 | Linux artifacts | SSH 结构化登录/配置语义解析 | 部分支持 | 当前通过 auth/journal/wtmp/sudo 与 `LinuxSystemConfig` 文本记录覆盖 SSH 相关线索；`authorized_keys`、`known_hosts`、`sshd_config` 不生成独立 SSH DTO，也不解析密钥信任图 |
@@ -84,10 +84,10 @@ V2 长期计划与能力评级请同时参考：
 
 以下能力即便在 V3 期间有实现增量，也不得在 README、PRD、用户文案中写成"完整支持"：
 
-- Linux 文件系统 (ext4/XFS/Btrfs) 原始磁盘镜像“完整支持”；检材3只证明单盘 LVM direct LV -> XFS 的 Stage 0 baseline
+- Linux 文件系统 (ext4/XFS/Btrfs) 原始磁盘镜像“完整支持”；检材3只证明 LVM direct LV -> XFS，PVE 私有样本只证明 LVM direct LV -> 64-bit EXT4
 - Linux 检材3私有 baseline 作为公开 GA 证明（必须补 public fixture + expected JSON 后才能升级公开承诺）
 - PVE cluster 语义解析、多源 E01 聚合分析、跨节点关联
-- LVM thin/cache/RAID/snapshot/VDO/writecache、partial/degraded VG 激活
+- LVM thin 的全部变体与 cache/RAID/snapshot/VDO/writecache、partial/degraded VG 激活；当前仅实现受限的只读 dm-thin 映射
 - systemd journal 压缩/轮转/损坏样本完整覆盖（当前为 bestEffort）
 - SSH 结构化登录/配置 parser（当前只通过日志、wtmp、sudo 与 `LinuxSystemConfig` 文本记录侧面覆盖）
 - sudoers policy effective rule 解析（当前仅保留文本记录）

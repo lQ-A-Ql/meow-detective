@@ -6,13 +6,17 @@
 //!
 //! Supported features:
 //! - 32-bit and 64-bit block numbers (ee_start_hi/ee_start_lo)
+//! - 32-byte legacy and 64-byte 64-bit EXT4 group descriptors
 //! - Depth-0 and depth-1 extent trees
 //! - Fast symlinks (inline target in i_block, <60 bytes)
 //! - Standard ext4 directory entries (ext4_dir_entry_2)
+//! - Bounded metadata-block caching for inode-rich E01 enumeration
 //! - Journal replay and deleted-inode recovery (`journal` module)
 
+mod block_cache;
 pub mod journal;
 
+use block_cache::BlockCache;
 use evidence_core::filesystem::{
     child_nodes_with_parent_path, file_not_found, fs_node_without_timestamps, fs_out_of_memory,
     invalid_fs_data, is_special_directory_name, path_components, path_is_directory, path_not_found,
@@ -21,10 +25,15 @@ use evidence_core::filesystem::{
 use evidence_core::EvidenceReader;
 use std::cell::RefCell;
 use std::io::{self, Read, Seek, SeekFrom};
+use std::sync::Arc;
 
 const EXT4_SUPERBLOCK_OFFSET: u64 = 1024;
 const EXT4_MAGIC: u16 = 0xEF53;
 const EXT4_EXTENT_MAGIC: u16 = 0xF30A;
+const EXT4_FEATURE_INCOMPAT_64BIT: u32 = 0x0080;
+const EXT4_MIN_GROUP_DESCRIPTOR_SIZE: u16 = 32;
+const EXT4_64BIT_GROUP_DESCRIPTOR_SIZE: u16 = 64;
+const EXT4_METADATA_CACHE_BYTES: usize = 16 * 1024 * 1024;
 const S_IFDIR: u16 = 0x4000;
 const S_IFLNK: u16 = 0xA000;
 const I_BLOCK_SIZE: usize = 60;
@@ -35,13 +44,19 @@ pub struct Ext4Reader {
     inode_size: u16,
     inodes_per_group: u32,
     bg_desc_table_block: u64,
+    group_descriptor_size: u16,
+    has_64bit: bool,
     num_block_groups: u32,
     volume_offset: u64,
+    metadata_block_cache: RefCell<BlockCache>,
 }
 
 impl Ext4Reader {
     pub fn open(mut reader: Box<dyn EvidenceReader>, offset: u64) -> io::Result<Self> {
-        reader.seek(SeekFrom::Start(offset + EXT4_SUPERBLOCK_OFFSET))?;
+        let superblock_offset = offset
+            .checked_add(EXT4_SUPERBLOCK_OFFSET)
+            .ok_or_else(|| invalid_fs_data("ext4 superblock offset overflows"))?;
+        reader.seek(SeekFrom::Start(superblock_offset))?;
         let mut sb = [0u8; 1024];
         reader.read_exact(&mut sb)?;
 
@@ -58,8 +73,21 @@ impl Ext4Reader {
                 .try_into()
                 .map_err(|_| invalid_fs_data("disk parse error"))?,
         );
-        let block_size = 1u64 << (10 + s_log_block_size);
+        if s_log_block_size > 6 {
+            return Err(invalid_fs_data(format!(
+                "unsupported ext4 log block size {}",
+                s_log_block_size
+            )));
+        }
+        let block_size = 1024u64
+            .checked_shl(s_log_block_size)
+            .ok_or_else(|| invalid_fs_data("ext4 block size overflows"))?;
 
+        let s_inodes_count = u32::from_le_bytes(
+            sb[0x00..0x04]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        );
         let s_blocks_count_lo = u32::from_le_bytes(
             sb[0x04..0x08]
                 .try_into()
@@ -81,36 +109,102 @@ impl Ext4Reader {
                 .map_err(|_| invalid_fs_data("disk parse error"))?,
         );
         let s_inode_size = u16::from_le_bytes([sb[0x58], sb[0x59]]);
+        let inode_size = if s_inode_size == 0 { 128 } else { s_inode_size };
+        let s_feature_incompat = u32::from_le_bytes(
+            sb[0x60..0x64]
+                .try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        );
+        let has_64bit = s_feature_incompat & EXT4_FEATURE_INCOMPAT_64BIT != 0;
+        let s_blocks_count_hi = if has_64bit {
+            u32::from_le_bytes(
+                sb[0x150..0x154]
+                    .try_into()
+                    .map_err(|_| invalid_fs_data("disk parse error"))?,
+            )
+        } else {
+            0
+        };
+        let blocks_count = s_blocks_count_lo as u64 | ((s_blocks_count_hi as u64) << u32::BITS);
+        let raw_group_descriptor_size = u16::from_le_bytes([sb[0xFE], sb[0xFF]]);
+        let group_descriptor_size = if has_64bit {
+            raw_group_descriptor_size
+        } else {
+            EXT4_MIN_GROUP_DESCRIPTOR_SIZE
+        };
 
-        if s_blocks_per_group == 0 || s_inodes_per_group == 0 {
+        if blocks_count == 0 || s_blocks_per_group == 0 || s_inodes_per_group == 0 {
             return Err(invalid_fs_data("invalid ext4 geometry"));
         }
+        if inode_size < 128 || !inode_size.is_power_of_two() || inode_size as u64 > block_size {
+            return Err(invalid_fs_data(format!(
+                "invalid ext4 inode size {} for block size {}",
+                inode_size, block_size
+            )));
+        }
+        if has_64bit && group_descriptor_size < EXT4_64BIT_GROUP_DESCRIPTOR_SIZE {
+            return Err(invalid_fs_data(format!(
+                "64-bit ext4 group descriptor size {} is smaller than {} bytes",
+                group_descriptor_size, EXT4_64BIT_GROUP_DESCRIPTOR_SIZE
+            )));
+        }
+        if group_descriptor_size < EXT4_MIN_GROUP_DESCRIPTOR_SIZE
+            || group_descriptor_size as u64 > block_size
+            || !block_size.is_multiple_of(group_descriptor_size as u64)
+        {
+            return Err(invalid_fs_data(format!(
+                "invalid ext4 group descriptor size {} for block size {}",
+                group_descriptor_size, block_size
+            )));
+        }
 
-        let num_block_groups = s_blocks_count_lo.div_ceil(s_blocks_per_group);
+        let block_group_count = blocks_count
+            .saturating_sub(s_first_data_block as u64)
+            .div_ceil(s_blocks_per_group as u64);
+        let inode_group_count = (s_inodes_count as u64).div_ceil(s_inodes_per_group as u64);
+        let num_block_groups = u32::try_from(block_group_count.max(inode_group_count))
+            .map_err(|_| invalid_fs_data("ext4 block group count exceeds u32"))?;
         let bg_desc_table_block = (s_first_data_block as u64).saturating_add(1);
 
         Ok(Self {
             reader: RefCell::new(reader),
             block_size,
-            inode_size: if s_inode_size == 0 { 128 } else { s_inode_size },
+            inode_size,
             inodes_per_group: s_inodes_per_group,
             bg_desc_table_block,
+            group_descriptor_size,
+            has_64bit,
             num_block_groups,
             volume_offset: offset,
+            metadata_block_cache: RefCell::new(BlockCache::with_byte_budget(
+                block_size,
+                EXT4_METADATA_CACHE_BYTES,
+            )),
         })
     }
 
-    fn block_to_offset(&self, block: u64) -> u64 {
-        self.volume_offset + block * self.block_size
+    fn block_to_offset(&self, block: u64) -> io::Result<u64> {
+        block
+            .checked_mul(self.block_size)
+            .and_then(|offset| self.volume_offset.checked_add(offset))
+            .ok_or_else(|| invalid_fs_data(format!("ext4 block {} offset overflows", block)))
     }
 
     fn read_block(&self, block: u64) -> io::Result<Vec<u8>> {
-        let offset = self.block_to_offset(block);
+        let offset = self.block_to_offset(block)?;
         let mut buf = vec![0u8; self.block_size as usize];
         let mut reader = self.reader.borrow_mut();
         reader.seek(SeekFrom::Start(offset))?;
         reader.read_exact(&mut buf)?;
         Ok(buf)
+    }
+
+    fn read_metadata_block(&self, block: u64) -> io::Result<Arc<[u8]>> {
+        if let Some(cached) = self.metadata_block_cache.borrow().get(block) {
+            return Ok(cached);
+        }
+        let data = self.read_block(block)?;
+        Ok(self.metadata_block_cache.borrow_mut().insert(block, data))
     }
 
     fn read_bytes_at(&self, offset: u64, length: usize) -> io::Result<Vec<u8>> {
@@ -124,17 +218,26 @@ impl Ext4Reader {
         Ok(buf)
     }
 
-    fn read_bg_descriptor(&self, bg: u32) -> io::Result<[u8; 32]> {
-        const DESC_SIZE: u64 = 32;
-        let desc_per_block = self.block_size / DESC_SIZE;
-        let desc_block = self.bg_desc_table_block + (bg as u64 / desc_per_block);
-        let desc_offset_in_block = (bg as u64 % desc_per_block) * DESC_SIZE;
-        let block_data = self.read_block(desc_block)?;
+    fn read_bg_descriptor(&self, bg: u32) -> io::Result<Vec<u8>> {
+        let descriptor_size = self.group_descriptor_size as u64;
+        let desc_per_block = self.block_size / descriptor_size;
+        let desc_block = self
+            .bg_desc_table_block
+            .checked_add(bg as u64 / desc_per_block)
+            .ok_or_else(|| invalid_fs_data("ext4 descriptor table block overflows"))?;
+        let desc_offset_in_block = (bg as u64 % desc_per_block) * descriptor_size;
+        let block_data = self.read_metadata_block(desc_block)?;
         let start = desc_offset_in_block as usize;
-        let end = (start + 32).min(block_data.len());
-        let mut desc = [0u8; 32];
-        desc[..end - start].copy_from_slice(&block_data[start..end]);
-        Ok(desc)
+        let end = start
+            .checked_add(self.group_descriptor_size as usize)
+            .ok_or_else(|| invalid_fs_data("ext4 group descriptor offset overflows"))?;
+        if end > block_data.len() {
+            return Err(invalid_fs_data(format!(
+                "ext4 group descriptor {} exceeds descriptor table block",
+                bg
+            )));
+        }
+        Ok(block_data[start..end].to_vec())
     }
 
     fn read_inode(&self, inode_num: u32) -> io::Result<Vec<u8>> {
@@ -150,17 +253,37 @@ impl Ext4Reader {
             )));
         }
         let desc = self.read_bg_descriptor(bg)?;
-        let inode_table_block = u32::from_le_bytes(
-            desc[0x08..0x0C]
-                .try_into()
-                .map_err(|_| invalid_fs_data("disk parse error"))?,
-        ) as u64;
+        let inode_table_block = inode_table_block_from_descriptor(&desc, self.has_64bit)?;
         let inode_byte_offset = local_index as u64 * self.inode_size as u64;
-        let block_abs_offset = self.block_to_offset(inode_table_block) + inode_byte_offset;
-        let mut inode = vec![0u8; self.inode_size as usize];
-        let mut reader = self.reader.borrow_mut();
-        reader.seek(SeekFrom::Start(block_abs_offset))?;
-        reader.read_exact(&mut inode)?;
+        let inode_block = inode_table_block
+            .checked_add(inode_byte_offset / self.block_size)
+            .ok_or_else(|| invalid_fs_data(format!("inode {} block overflows", inode_num)))?;
+        let offset_in_block = (inode_byte_offset % self.block_size) as usize;
+        let inode_size = self.inode_size as usize;
+        let first_block = self.read_metadata_block(inode_block)?;
+        let first_len = inode_size.min(first_block.len().saturating_sub(offset_in_block));
+        if first_len == 0 {
+            return Err(invalid_fs_data(format!(
+                "inode {} offset exceeds inode-table block",
+                inode_num
+            )));
+        }
+        let mut inode = Vec::with_capacity(inode_size);
+        inode.extend_from_slice(&first_block[offset_in_block..offset_in_block + first_len]);
+        if inode.len() < inode_size {
+            let second_block_number = inode_block.checked_add(1).ok_or_else(|| {
+                invalid_fs_data(format!("inode {} continuation block overflows", inode_num))
+            })?;
+            let second_block = self.read_metadata_block(second_block_number)?;
+            let remaining = inode_size - inode.len();
+            if remaining > second_block.len() {
+                return Err(invalid_fs_data(format!(
+                    "inode {} spans beyond the next inode-table block",
+                    inode_num
+                )));
+            }
+            inode.extend_from_slice(&second_block[..remaining]);
+        }
         Ok(inode)
     }
 
@@ -309,8 +432,10 @@ impl Ext4Reader {
             append_zeroes(data, read_len as u64)?;
         } else {
             let start_block = ((extent.ee_start_hi as u64) << 32) | extent.ee_start_lo as u64;
-            let physical_offset =
-                self.block_to_offset(start_block) + overlap_start.saturating_sub(extent_start);
+            let physical_offset = self
+                .block_to_offset(start_block)?
+                .checked_add(overlap_start.saturating_sub(extent_start))
+                .ok_or_else(|| invalid_fs_data("ext4 extent byte offset overflows"))?;
             let chunk = self.read_bytes_at(physical_offset, read_len)?;
             data.extend_from_slice(&chunk);
         }
@@ -500,15 +625,21 @@ impl FileSystemReader for Ext4Reader {
         }
         let entries = self.read_directory_entries(inode_num)?;
         let mut nodes = Vec::new();
-        for (name, _child_inode, file_type) in entries {
+        for (name, child_inode, file_type) in entries {
             if is_special_directory_name(&name) {
                 continue;
             }
-            nodes.push(fs_node_without_timestamps(
-                name,
-                Self::is_dir_type(file_type),
-                0,
-            ));
+            let fallback_is_dir = Self::is_dir_type(file_type);
+            let node = self
+                .read_inode(child_inode)
+                .and_then(|inode| {
+                    let mode = Self::inode_mode(&inode);
+                    let is_dir = mode & 0xF000 == S_IFDIR;
+                    let size = if is_dir { 0 } else { Self::inode_size(&inode)? };
+                    Ok(fs_node_without_timestamps(name.clone(), is_dir, size))
+                })
+                .unwrap_or_else(|_| fs_node_without_timestamps(name, fallback_is_dir, 0));
+            nodes.push(node);
         }
         Ok(child_nodes_with_parent_path(nodes, path))
     }
@@ -560,6 +691,32 @@ impl FileSystemReader for Ext4Reader {
     fn data_source_name(&self) -> &str {
         "ext4"
     }
+}
+
+fn inode_table_block_from_descriptor(descriptor: &[u8], has_64bit: bool) -> io::Result<u64> {
+    let low = descriptor
+        .get(0x08..0x0C)
+        .ok_or_else(|| invalid_fs_data("ext4 group descriptor is missing inode table block"))?;
+    let low = u32::from_le_bytes(
+        low.try_into()
+            .map_err(|_| invalid_fs_data("disk parse error"))?,
+    ) as u64;
+    let high = if has_64bit {
+        let high = descriptor.get(0x28..0x2C).ok_or_else(|| {
+            invalid_fs_data("64-bit ext4 group descriptor is missing inode table high bits")
+        })?;
+        u32::from_le_bytes(
+            high.try_into()
+                .map_err(|_| invalid_fs_data("disk parse error"))?,
+        ) as u64
+    } else {
+        0
+    };
+    let block = low | (high << u32::BITS);
+    if block == 0 {
+        return Err(invalid_fs_data("ext4 inode table block is zero"));
+    }
+    Ok(block)
 }
 
 fn append_zeroes(data: &mut Vec<u8>, count: u64) -> io::Result<()> {
@@ -928,6 +1085,33 @@ mod tests {
         assert_eq!(ext4.block_size, 4096);
     }
 
+    #[test]
+    fn test_64bit_group_descriptors_use_declared_entry_width() {
+        let mut img = build_ext4_fixture();
+        let sb = &mut img[1024..2048];
+        sb[0x20..0x24].copy_from_slice(&5u32.to_le_bytes());
+        sb[0x60..0x64].copy_from_slice(&EXT4_FEATURE_INCOMPAT_64BIT.to_le_bytes());
+        sb[0xFE..0x100].copy_from_slice(&64u16.to_le_bytes());
+
+        let second_descriptor = 4096 + 64;
+        img[second_descriptor + 0x08..second_descriptor + 0x0C]
+            .copy_from_slice(&7u32.to_le_bytes());
+        img[second_descriptor + 0x28..second_descriptor + 0x2C]
+            .copy_from_slice(&1u32.to_le_bytes());
+
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(img));
+        let ext4 = Ext4Reader::open(reader, 0).unwrap();
+        assert_eq!(ext4.group_descriptor_size, 64);
+        assert_eq!(ext4.num_block_groups, 2);
+
+        let descriptor = ext4.read_bg_descriptor(1).unwrap();
+        assert_eq!(descriptor.len(), 64);
+        assert_eq!(
+            inode_table_block_from_descriptor(&descriptor, true).unwrap(),
+            (1u64 << 32) | 7
+        );
+    }
+
     // -----------------------------------------------------------------------
     // test_root_is_directory
     // -----------------------------------------------------------------------
@@ -981,10 +1165,16 @@ mod tests {
         let txt = children.iter().find(|n| n.name == "test.txt").unwrap();
         assert!(!txt.is_dir);
         assert_eq!(txt.path, "test.txt");
+        assert_eq!(txt.size, 11);
 
         let sub = children.iter().find(|n| n.name == "subdir").unwrap();
         assert!(sub.is_dir);
         assert_eq!(sub.path, "subdir");
+        assert_eq!(sub.size, 0);
+
+        let nested = ext4.list_children("subdir").unwrap();
+        let hello = nested.iter().find(|node| node.name == "hello.dat").unwrap();
+        assert_eq!(hello.size, 13);
     }
 
     // -----------------------------------------------------------------------
@@ -1005,6 +1195,21 @@ mod tests {
                 assert!(err.to_string().contains("magic"));
             }
         }
+    }
+
+    #[test]
+    fn test_invalid_block_and_inode_geometry_is_rejected() {
+        let mut oversized_block = build_ext4_fixture();
+        oversized_block[1024 + 0x18..1024 + 0x1C].copy_from_slice(&7u32.to_le_bytes());
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(oversized_block));
+        let error = Ext4Reader::open(reader, 0).err().unwrap();
+        assert!(error.to_string().contains("log block size"));
+
+        let mut undersized_inode = build_ext4_fixture();
+        undersized_inode[1024 + 0x58..1024 + 0x5A].copy_from_slice(&64u16.to_le_bytes());
+        let reader: Box<dyn EvidenceReader> = Box::new(FakeReader::new(undersized_inode));
+        let error = Ext4Reader::open(reader, 0).err().unwrap();
+        assert!(error.to_string().contains("inode size"));
     }
 
     // -----------------------------------------------------------------------

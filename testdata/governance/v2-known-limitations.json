@@ -241,8 +241,8 @@
     {
       "category": "Linux 文件系统",
       "item": "ext4 raw disk 完整支持",
-      "status": "notGuaranteed",
-      "summary": "reader 能力与探测链路需以公开 fixture / expected JSON 补齐；检材3 baseline 不覆盖 ext4",
+      "status": "partial",
+      "summary": "PVE 私有样本已验证 E01 -> LVM direct root LV -> 64-bit EXT4（64-byte group descriptor）-> 完整文件树、inode size 与 `FileEntryId` 预览；仍缺公开 fixture / expected JSON、metadata checksum 与全部 feature 组合覆盖",
       "affectedChains": [
         "ext4"
       ],
@@ -283,9 +283,9 @@
     },
     {
       "category": "Linux LVM/PVE",
-      "item": "PVE cluster 执行",
-      "status": "unsupported",
-      "summary": "Stage 0 只支持单源、单盘 Linux 服务器链路；cluster service 是非执行设计边界",
+      "item": "PVE cluster 语义解析执行",
+      "status": "partial",
+      "summary": "集群建模、成员串行导入和各节点宿主 `pve/root` EXT4 文件树已验证；Ceph BlueStore 对象树、VM disk reconstruction 与跨节点关联仍不支持",
       "affectedChains": [
         "LVM",
         "PVE"
@@ -295,8 +295,8 @@
     {
       "category": "Linux LVM/PVE",
       "item": "LVM thin/cache/RAID/snapshot/VDO/writecache",
-      "status": "unsupported",
-      "summary": "当前 baseline 只覆盖 direct linear/striped LV；复杂映射需独立 metadata 解析与 fixture",
+      "status": "partial",
+      "summary": "direct linear/striped 与基础 dm-thin 只读映射已实现；thin metadata checksum/repair、cache、RAID、snapshot、VDO、writecache 仍不支持且必须 fail closed",
       "affectedChains": [
         "LVM"
       ],
@@ -325,9 +325,9 @@
     },
     {
       "category": "Linux artifacts",
-      "item": "SSH 结构化登录/配置解析",
-      "status": "unsupported",
-      "summary": "当前仅通过 auth/journal/wtmp/sudo 与文本候选覆盖 SSH 相关线索；`authorized_keys`、`known_hosts`、`sshd_config` 不生成独立结构化 SSH DTO",
+      "item": "SSH 结构化登录/配置语义解析",
+      "status": "partial",
+      "summary": "当前通过 auth/journal/wtmp/sudo 与 `LinuxSystemConfig` 文本记录覆盖 SSH 相关线索；`authorized_keys`、`known_hosts`、`sshd_config` 不生成独立 SSH DTO，也不解析密钥信任图",
       "affectedChains": [
         "LinuxArtifacts",
         "SSH"
@@ -336,9 +336,9 @@
     },
     {
       "category": "Linux artifacts",
-      "item": "sudoers policy 解析",
-      "status": "unsupported",
-      "summary": "当前解析 sudo/auth log 事件，不解析 `/etc/sudoers` 或 `/etc/sudoers.d/*` 的 include、alias、Defaults、effective rule",
+      "item": "sudoers policy 语义解析",
+      "status": "partial",
+      "summary": "`/etc/sudoers` 与 `/etc/sudoers.d/*` 会生成 `LinuxSystemConfig` 文本记录；不解析 include、alias、Defaults、effective rule",
       "affectedChains": [
         "LinuxArtifacts",
         "sudoers"
@@ -347,9 +347,9 @@
     },
     {
       "category": "Linux artifacts",
-      "item": "profile.d shell 语义解析",
-      "status": "unsupported",
-      "summary": "`/etc/profile` 与 `/etc/profile.d/*` 可枚举/预览，但不解释 shell 脚本、环境变量生效顺序或执行图",
+      "item": "systemd/init/profile.d shell 语义解析",
+      "status": "partial",
+      "summary": "systemd unit、init.d、rc.local、profile.d 会生成 `LinuxSystemConfig` 文本记录；不解释 shell 脚本、环境变量生效顺序、systemd 依赖图或执行图",
       "affectedChains": [
         "LinuxArtifacts",
         "profile.d"

@@ -109,6 +109,8 @@ Expected result:
 
 Goal: parse each node host OS independently.
 
+Status (2026-07-10): host filesystem baseline complete for the private PVE sample.
+
 Tasks:
 - run the existing single-disk pipeline per source;
 - extract `/etc/pve`, `/etc/corosync`, `/var/log/pve*`, systemd, auth, shell,
@@ -119,10 +121,15 @@ Tasks:
 Expected result:
 - investigators can compare host-level config and logs across nodes even before
   VM disk reconstruction is supported.
+- all three `disk01` images expose `pve/root` as 64-bit EXT4; a representative
+  member imports 56,471 files and 5,931 directories and supports `FileEntryId`
+  preview of `/var/lib/pve-cluster/config.db`.
 
 ### Stage 3 - LVM Thin Metadata Research Spike
 
 Goal: implement safe read-only thin-pool metadata interpretation.
+
+Status (2026-07-10): initial read-only mapping implemented; hardening remains.
 
 Tasks:
 - parse thin metadata superblock, devices, mappings, and transaction ids;
@@ -157,8 +164,10 @@ Expected result:
 | File preview | Required | Required |
 | Linux artifacts | Required | Required |
 | Multiple E01 sources | Import modeling only | Required |
-| PVE `/etc/pve` extraction | As ordinary Linux artifacts | Cross-node correlation |
-| LVM thin pool | Unsupported diagnostic | Required after Stage 3 |
+| PVE host filesystem | LVM `pve/root` -> 64-bit EXT4 verified | Cross-node correlation |
+| PVE config database | `/var/lib/pve-cluster/config.db` import and preview verified | Structured config correlation |
+| LVM thin pool | Initial read-only dm-thin mapping; no repair/checksum claim | Hardening required after Stage 3 |
+| Ceph BlueStore OSD | Marker confirmed; no object-tree parser | RADOS/PG/object reconstruction required |
 | LVM RAID/cache/snapshot | Unsupported diagnostic | Future optional |
 | Partial/degraded VG | Unsupported diagnostic | Future optional |
 

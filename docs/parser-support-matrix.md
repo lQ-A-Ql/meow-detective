@@ -47,7 +47,7 @@ V2 长期执行与发布口径见：
 
 ## 4. Linux 制品解析器 (V3 计划) — Medium Fixtures: `testdata/fixtures/public-medium/linux/`
 
-当前 Stage 0 另有一个私有真实样本 baseline：检材3（通过 `FORENSICS_LINUX_E01_FIXTURE` opt-in）。它验证的是单盘 Linux 服务器链路：E01/RAW -> partition table -> LVM direct LV -> XFS -> 文件树预览 -> Linux artifact extraction。该 baseline 不等同于公开 fixture，也不升级下表的公开支持等级；公开升级仍要求 committed fixture 与 expected JSON。
+当前 Stage 0 另有两个私有真实样本 baseline：检材3（通过 `FORENSICS_LINUX_E01_FIXTURE` opt-in）验证 E01/RAW -> LVM direct LV -> XFS；PVE 集群目录（通过 `FORENSICS_PVE_CLUSTER_ROOT` opt-in）验证各节点 `disk01` -> GPT -> LVM `pve/root` -> 64-bit EXT4 -> 文件树与预览。两者均不等同于公开 fixture，也不升级公开支持等级。
 
 | 链路 | 平台 | 当前等级 | 已验证样本 | 对齐基准 | 字段承诺 | Medium Fixture | 备注 |
 |---|---|---|---|---|---|---|---|
@@ -66,6 +66,7 @@ V2 长期执行与发布口径见：
 | 链路 | 平台 | 当前等级 | 已验证样本 | 对齐基准 | 字段承诺 | 备注 |
 |---|---|---|---|---|---|---|
 | E01/RAW -> LVM direct LV -> XFS file tree | Linux | Beta for private baseline / Experimental for public release | 检材3 opt-in 私有真实样本 | `FORENSICS_LINUX_E01_FIXTURE` + `cargo test -p app-services --test linux_e01_integration -- --ignored` | 分区探测、LVM direct LV 展开、XFS root LV 枚举、`FileEntryId` 预览高价值路径、Linux artifact candidate/extraction coverage、7 个 Linux extraction section progress | 私有 baseline 要求 LVM pool 以 `Expanded`/`redirected` 保留但不作为可见 root，root LV 可见并支持预览。Linux cluster 当前仅支持导入建模与成员镜像串行导入；PVE 语义解析仍为非执行边界。不承诺 LVM thin/cache/RAID/snapshot/VDO/writecache、partial VG、partial/degraded VG、deleted recovery。公开等级仍需可提交 fixture/expected JSON |
+| PVE E01 -> LVM direct root LV -> 64-bit EXT4 | Linux/PVE | Beta for private baseline / Experimental for public release | `E:\pangushi\服务器` opt-in 私有集群样本 | `FORENSICS_PVE_CLUSTER_ROOT` + `pve_cluster_host_root_filesystems_enumerate_and_preview` / `pve_cluster_representative_host_imports_tree_and_previews_by_file_id` | 三个宿主 `pve/root` 可枚举；代表样本完整导入保留 inode size；`/etc/passwd`、`/etc/os-release`、`/etc/hostname`、`/var/lib/pve-cluster/config.db` 可按 `FileEntryId` 预览 | 只证明宿主 OS 文件系统。`disk02` 为 Ceph BlueStore OSD，不是 POSIX 文件系统；当前不承诺 RADOS object/PG/VM disk reconstruction 或跨节点语义关联 |
 
 ## 5. macOS 制品解析器 (V3 计划) — Medium Fixtures: `testdata/fixtures/public-medium/macos/`
 

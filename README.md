@@ -1,6 +1,6 @@
 # Meow~Detective
 
-A Tauri 2 desktop application for disk image forensic analysis on Windows. 37 Rust crates, 17 frontend pages, 98 Tauri commands, 2,061 Rust tests. MIT licensed.
+A Tauri 2 desktop application for disk image forensic analysis on Windows. 37 Rust crates, 10 frontend pages, 98 Tauri commands, 2,061 Rust tests. MIT licensed.
 
 **V5 Quality Audit (2026-06):** Architecture compliance 97%, runtime safety 96%, forensic completeness 96%. E01 preview pipeline hardened with partition-indexed path reconstruction, MFT inode-based file resolution, and per-partition chunk-table caching.
 
@@ -9,7 +9,7 @@ A Tauri 2 desktop application for disk image forensic analysis on Windows. 37 Ru
 ```text
 React UI (frontend/) -> Tauri commands / events
 Tauri Command Layer (apps/desktop/src-tauri/) -> 98 commands
-Application Services (crates/app-services/) -> 25 source modules
+Application Services (crates/app-services/) -> 26 source modules
 Core crates -> domain / evidence / persistence / search / timeline / artifacts / reports / MCP / graph
 ```
 
@@ -41,7 +41,7 @@ cd apps/desktop/src-tauri && cargo tauri build
 
 ```bash
 cargo test --workspace
-cd frontend && pnpm test            # Frontend (83 test files)
+cd frontend && pnpm test            # Frontend (84 test files)
 cd frontend && pnpm test:coverage
 ```
 
@@ -62,9 +62,9 @@ cd frontend && pnpm test
 |---|---|
 | `frontend/` | React 18 + TypeScript + Vite + Tailwind 4 |
 | `apps/desktop/src-tauri/` | Tauri 2 shell (98 commands) |
-| `crates/app-services/` | Application orchestration (25 source modules) |
+| `crates/app-services/` | Application orchestration (26 source modules) |
 | `crates/transport/` | Shared DTOs, commands, events, errors |
-| `crates/persistence-sqlite/` | SQLite repos (15) and migration scripts (34) |
+| `crates/persistence-sqlite/` | SQLite repos (16) and migration scripts (39) |
 | `crates/evidence-core/` | Disk image probing and volume detection |
 | `crates/fs-ntfs/`, `fs-fat/`, `fs-exfat/` | Filesystem parsers (NTFS/FAT/ExFAT/ext4/XFS/Btrfs/APFS/HFS+) |
 | `crates/image-e01/`, `image-raw/` | Image readers (E01/RAW) |
