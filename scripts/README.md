@@ -134,6 +134,11 @@ powershell -ExecutionPolicy Bypass -File scripts\check-stage0-boundary-guard.ps1
 # factual counts, required engineering-doc entries, and Mermaid block count.
 powershell -ExecutionPolicy Bypass -File scripts\check-doc-drift.ps1
 
+# Documentation archive guard. This validates strict UTF-8 decoding, the
+# type/month archive taxonomy, manifest counts, routing targets, and prevents
+# historical audit/remediation files from returning to the docs root.
+powershell -ExecutionPolicy Bypass -File scripts\check-doc-archive.ps1
+
 # Optional full Mermaid render validation. Requires Chrome/Edge or an available
 # Puppeteer browser; renders all diagrams to temporary SVG files.
 powershell -ExecutionPolicy Bypass -File scripts\check-doc-drift.ps1 -RenderMermaid

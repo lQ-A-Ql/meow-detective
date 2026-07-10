@@ -12,7 +12,7 @@
 //!
 //! The assertion that the first tree level contains exactly the partition roots
 //! (and never a raw filesystem root) is the regression guard for the bug recorded
-//! in docs/pause-status-2026-06-11-file-tree-sorting.md.
+//! in docs/archive/status/2026-06/pause-status-2026-06-11-file-tree-sorting.md.
 
 use app_services::{file_service, staging};
 use domain::{DataSourceId, EntryType, FileEntryId};

@@ -27,7 +27,7 @@
 V2 鐨勭洰鏍囦笉鏄户缁爢鍔熻兘鐐癸紝鑰屾槸鎶婂綋鍓嶅凡缁忔垚褰㈢殑 Windows 鍙栬瘉閾捐矾鍋氭垚涓€濂楀彲楠岃瘉銆佸彲瑙ｉ噴銆佸彲鍥炲綊銆佸彲鍙戝竷鐨勪骇鍝佸寲鑳藉姏锛屽苟鍦ㄦ鍩虹涓婅ˉ榻愯法宸ヤ欢鍏宠仈鍒嗘瀽銆佽妯″寲绋冲畾鎬у拰瀹夊叏娌荤悊闂幆銆?
 鏈鍒掍互浠ヤ笅鐜扮姸涓哄熀绾匡細
 
-- V1 鐨勪富閾捐矾宸插叿澶囨浠躲€佸鍏ャ€佹枃浠舵祻瑙堛€佹悳绱€佹椂闂寸嚎銆乄indows artifact銆佹姤鍛娿€丮CP 鐨勫熀鏈兘鍔?- `docs/stage-5-risk-register-remediation-status.md` 涓殑娈嬩綑椋庨櫓浠嶇劧瀛樺湪锛屽挨鍏舵槸澶ф牱鏈獙璇併€佺湡瀹?E01銆乄ebView2 濯掍綋 seek銆丷egistry 骞胯鐩栧拰渚濊禆娌荤悊
+- V1 鐨勪富閾捐矾宸插叿澶囨浠躲€佸鍏ャ€佹枃浠舵祻瑙堛€佹悳绱€佹椂闂寸嚎銆乄indows artifact銆佹姤鍛娿€丮CP 鐨勫熀鏈兘鍔?- `docs/archive/status/2026-06/stage-5-risk-register-remediation-status.md` 涓殑娈嬩綑椋庨櫓浠嶇劧瀛樺湪锛屽挨鍏舵槸澶ф牱鏈獙璇併€佺湡瀹?E01銆乄ebView2 濯掍綋 seek銆丷egistry 骞胯鐩栧拰渚濊禆娌荤悊
 - `docs/parser-support-matrix.md` 涓?`docs/known-unsupported-formats.md` 宸茬粡鏄庣‘褰撳墠鑳藉姏杈圭晫锛屼絾灏氭湭褰㈡垚鍙戝竷绾у彲淇¤鏄?- `docs/mcp-security-model.md` 涓?`docs/export-and-media-safety.md` 宸茬粡寤虹珛鍩虹瀹夊叏杈圭晫锛屼絾瀹¤璁板綍銆佽瘎鍒嗗崱鍜屽彂甯冮棬绂佷粛闇€瑕佺郴缁熷寲
 
 V2 缁х画閬靛畧杩欎簺纭害鏉燂細

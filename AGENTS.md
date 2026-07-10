@@ -80,8 +80,9 @@ pnpm --dir frontend build
 git diff --check
 cargo deny check advisories bans licenses sources
 
-# Repository guard scripts (PowerShell) — 12 check-* scripts total
+# Default repository guard scripts (PowerShell) — 13 checks
 powershell -ExecutionPolicy Bypass -File scripts/check-doc-drift.ps1
+powershell -ExecutionPolicy Bypass -File scripts/check-doc-archive.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-command-sql-boundary.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-media-protocol-guard.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-release-guard.ps1
@@ -179,6 +180,7 @@ PowerShell scripts in `scripts/` encode architectural and security boundaries:
 | `check-deny-exceptions.ps1` | Cargo deny exception validity |
 | `check-evtx-dependency-decision.ps1` | EVTX vendored dependency constraints |
 | `check-doc-drift.ps1` | Documentation consistency; add `-RenderMermaid` to render diagrams |
+| `check-doc-archive.ps1` | UTF-8 documentation, archive taxonomy, manifest counts, and routing targets |
 | `check-benchmark-regression.ps1` | Benchmark threshold regression |
 | `run-benchmark.ps1` | Benchmark harness |
 | `run-liuyang-artifact-test.ps1` | Real E01 sample pipeline |
@@ -387,7 +389,9 @@ lookup/
 - `docs/development-engineering-guide.md` — 开发流程与工程约定
 - `docs/engineering-audit-plan.md` — 可执行的全量审计清单
 - `docs/design-constraints.md` — 架构、证据、安全、前端与发布约束
-- `docs/documentation-index.md` — 权威文档入口、事实快照、旧文档去重规则
+- `docs/documentation-index.md` — 权威文档入口、事实快照、历史归档规则
+- `docs/progress-ledger.md` — 当前里程碑、真实样本基线与下一开发边界
+- `docs/archive/README.md` — 按类型/月份组织的历史文档入口与归档规则
 - `docs/model-architecture-algorithm-diagrams.md` — Mermaid 图谱合集
 - `docs/v2-longterm-plan.md` — V2 阶段边界、测试矩阵、评分机制
 - `docs/validation-trust-framework.md` — public fixture、expected JSON、真实样本回归

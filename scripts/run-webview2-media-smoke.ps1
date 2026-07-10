@@ -163,7 +163,7 @@ Files > 20 MiB should use evidence-media://handle/ protocol URL (mode=protocol).
 6. Play and seek forward/backward in WebView2 media control
 7. Confirm no host fixture path exposed in UI/debug text
 8. If playback fails, verify extract file fallback works
-Record results in docs/开发记录.md
+Record results in docs/progress-ledger.md
 "@
 
 Set-Content -LiteralPath $notesPath -Value $notes -Encoding UTF8

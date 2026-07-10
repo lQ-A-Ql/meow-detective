@@ -19,7 +19,9 @@
 | 开发工程规范 | `docs/development-engineering-guide.md` | 日常开发、契约、测试与发布约定 |
 | 设计与约束 | `docs/design-constraints.md` | 架构、证据、安全、前端、发布硬约束 |
 | 模型 / 架构 / 流程图 | `docs/model-architecture-algorithm-diagrams.md` | Mermaid 图谱合集 |
-| 文档索引与事实校准 | `docs/documentation-index.md` | 权威入口、旧文档去重、事实快照 |
+| 文档索引与事实校准 | `docs/documentation-index.md` | 权威入口、历史归档路由、事实快照 |
+| 当前进度台账 | `docs/progress-ledger.md` | 已验证里程碑、真实样本基线与下一开发边界 |
+| 历史文档归档 | `docs/archive/README.md` | 按类型和月份浏览历史审计、方案、日志、状态与原型 |
 | V2 长期执行计划 **(V2)** | `docs/v2-longterm-plan.md` | V2 阶段边界、测试矩阵、验收标准、评分机制 |
 | 可验证性体系 **(V2)** | `docs/validation-trust-framework.md` | public fixture、expected JSON、真实样本回归说明 |
 | Fixture 手册 **(V2)** | `docs/fixture-handbook.md` | fixture 分层、目录规范、元数据要求 |
@@ -165,24 +167,18 @@
 - MCP 关键动作需要审计留痕
 - 导出与文件提取默认 `overwrite=false`
 
-## 5. 旧文档去重规则
+## 5. 历史文档归档规则
 
-以下文档保留，但默认视为历史快照或过程文档，不代表当前实现状态：
-
-- `docs/full-project-audit-*.md`
-- `docs/full-security-audit-*.md`
-- `docs/architecture-algorithm-audit-*.md`
-- `docs/remediation-plan-*.md`
-- `docs/preview-*.md`
-- `docs/frontend-optimization-*.md`
-- `docs/*development-log*.md`
+历史审计、已完成或被替代的方案、开发流水、状态快照和旧原型统一存放在 `docs/archive/`，不再堆放于 `docs/` 根目录。归档先按类型分类，再按文档日期月份归入 `YYYY-MM`；缺少明确日期时采用首次 Git 提交日期。
 
 使用规则：
 
-- 历史审计报告只说明“当时发现过什么”，不说明“现在仍然如此”
-- remediation plan 只说明“曾计划如何修复”，不自动等于“已经完成”
-- 若需要查看当前长期执行修复路线与 V2 方向，优先参考 `docs/v2-longterm-plan.md`
-- 开发记录只说明“执行过哪些步骤”，不替代当前权威设计
+- 历史审计报告只说明“当时发现过什么”，不说明“现在仍然如此”。
+- remediation plan 只说明“曾计划如何修复”，不自动等于“已经完成”。
+- 开发记录只说明“执行过哪些步骤”，不替代当前权威设计和支持矩阵。
+- 当前里程碑写入 `docs/progress-ledger.md`；真实样本结果继续写入 `docs/real-sample-regression/`。
+- 旧链接通过 `docs/archive/path-map.md` 定位，不在旧路径恢复重复副本。
+- 归档清单与分类统计以 `docs/archive/manifest.json` 为机器可读事实源。
 
 ## 6. Mermaid 渲染与防漂移
 
@@ -190,6 +186,12 @@
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\check-doc-drift.ps1
+```
+
+归档结构、清单数量和 UTF-8 编码校验：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\check-doc-archive.ps1
 ```
 
 可选 Mermaid 渲染校验：
@@ -205,11 +207,20 @@ powershell -ExecutionPolicy Bypass -File scripts\check-doc-drift.ps1 -RenderMerm
 - Mermaid 图块数量是否漂移
 - 可选地将全部 Mermaid 图渲染为 SVG
 
+归档守卫会检查：
+
+- `docs/archive/<type>/<YYYY-MM>/` 分类与清单数量一致
+- `docs/progress-ledger.md`、归档入口和路径映射存在
+- `docs/` 下文档均可按严格 UTF-8 解码
+- 历史审计、复审和整改计划不会重新堆回 `docs/` 根目录
+
 ## 7. 文档维护要求
 
 以下变更必须同步更新本文档：
 
 - crate / command / migration / test 数量变化
 - 新增权威工程文档
+- 完成可交付里程碑或改变下一开发边界
+- 新增、移动或重新分类历史文档
 - 文件浏览根模型、排序、状态字段、MCP 安全边界发生变化
 - 可验证性、支持矩阵、错误分类、导出与媒体安全要求发生变化

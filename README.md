@@ -89,6 +89,8 @@ cd frontend && pnpm test
 - `docs/design-constraints.md`
 - `docs/model-architecture-algorithm-diagrams.md`
 - `docs/documentation-index.md`
+- `docs/progress-ledger.md`
+- `docs/archive/README.md`
 - `docs/v2-longterm-plan.md`
 - `docs/validation-trust-framework.md`
 - `docs/fixture-handbook.md`
