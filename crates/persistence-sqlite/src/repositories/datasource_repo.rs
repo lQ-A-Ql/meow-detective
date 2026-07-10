@@ -224,7 +224,7 @@ impl<'a> DataSourceRepo<'a> {
         member_index: u32,
         member_count: u32,
     ) -> DbResult<()> {
-        self.conn.execute(
+        let affected = self.conn.execute(
             "UPDATE data_sources
              SET cluster_id = ?1,
                  cluster_member_index = ?2,
@@ -237,6 +237,12 @@ impl<'a> DataSourceRepo<'a> {
                 data_source_id.0,
             ],
         )?;
+        if affected != 1 {
+            return Err(crate::connection::DbError::System(format!(
+                "data source not found: {}",
+                data_source_id.0
+            )));
+        }
         Ok(())
     }
 
@@ -366,7 +372,10 @@ mod tests {
                 profile TEXT,
                 import_state TEXT NOT NULL DEFAULT 'pending',
                 schema_version TEXT,
-                last_error TEXT
+                last_error TEXT,
+                cluster_id TEXT,
+                cluster_member_index INTEGER,
+                cluster_member_count INTEGER
             );
             CREATE TABLE file_entries (
                 id TEXT PRIMARY KEY NOT NULL,
@@ -518,6 +527,31 @@ mod tests {
 
         let results = repo.find_by_case(&CaseId("case-1".to_string())).unwrap();
         assert_eq!(results[0].name, "New Name");
+    }
+
+    #[test]
+    fn update_cluster_membership_requires_existing_data_source() {
+        let conn = setup_db();
+        let repo = DataSourceRepo::new(&conn);
+        let ds = make_ds("ds-1", "Disk Image");
+        repo.insert(&CaseId("case-1".to_string()), &ds).unwrap();
+
+        repo.update_cluster_membership(&DataSourceId("ds-1".to_string()), "cluster-1", 1, 3)
+            .unwrap();
+
+        let stored: (String, i64, i64) = conn
+            .query_row(
+                "SELECT cluster_id, cluster_member_index, cluster_member_count
+                 FROM data_sources WHERE id = 'ds-1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(stored, ("cluster-1".to_string(), 1, 3));
+
+        let error =
+            repo.update_cluster_membership(&DataSourceId("missing".to_string()), "cluster-1", 0, 3);
+        assert!(error.is_err());
     }
 
     #[test]

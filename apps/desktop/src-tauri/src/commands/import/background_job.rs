@@ -164,19 +164,39 @@ pub(crate) fn run_background_linux_cluster_import_job(
     }
 
     let _import_slot = acquire_import_slot(&job_repo, &job.job_id, app, &cancel_token)?;
-    cluster_service::register_linux_cluster_import(&conn, &job.case_id, &job.plan)
-        .map_err(CommandError::from_typed_service_error)?;
-    cluster_service::write_linux_cluster_manifest(&job.case_root, &job.plan)
-        .map_err(CommandError::from_typed_service_error)?;
-    cluster_service::update_linux_cluster_import_state(
+    if let Err(error) =
+        cluster_service::register_linux_cluster_import(&conn, &job.case_id, &job.plan)
+    {
+        let command_error = CommandError::from_typed_service_error(error);
+        return fail_linux_cluster_job(&job_repo, &job.job_id, app, None, command_error);
+    }
+    if let Err(error) = cluster_service::write_linux_cluster_manifest(&job.case_root, &job.plan) {
+        let command_error = CommandError::from_typed_service_error(error);
+        return fail_linux_cluster_job(
+            &job_repo,
+            &job.job_id,
+            app,
+            Some((&conn, &job.plan.cluster_id, 0, 1)),
+            command_error,
+        );
+    }
+    if let Err(error) = cluster_service::update_linux_cluster_import_state(
         &conn,
         &job.plan.cluster_id,
         "importing",
         0,
         0,
         None,
-    )
-    .map_err(CommandError::from_typed_service_error)?;
+    ) {
+        let command_error = CommandError::from_typed_service_error(error);
+        return fail_linux_cluster_job(
+            &job_repo,
+            &job.job_id,
+            app,
+            Some((&conn, &job.plan.cluster_id, 0, 1)),
+            command_error,
+        );
+    }
 
     let event_sink = app.map(TauriImportEventSink::new);
     let mut ready_count = 0u32;
@@ -273,6 +293,15 @@ pub(crate) fn run_background_linux_cluster_import_job(
                     }
                     if let Some(app) = app {
                         event_bridge::emit_job_cancelled(app, &job.job_id.0, &error.message);
+                        event_bridge::emit_job_cancellation(
+                            app,
+                            &job_cancellation_dto(
+                                &job.job_id.0,
+                                CancellationStateDto::Cancelled,
+                                true,
+                                &error.message,
+                            ),
+                        );
                     }
                     return Ok(());
                 }
@@ -315,6 +344,43 @@ pub(crate) fn run_background_linux_cluster_import_job(
         "Linux cluster import completed"
     );
     Ok(())
+}
+
+fn fail_linux_cluster_job(
+    job_repo: &JobRepo<'_>,
+    job_id: &domain::JobId,
+    app: Option<&AppHandle>,
+    cluster_state: Option<(&rusqlite::Connection, &str, u32, u32)>,
+    error: CommandError,
+) -> Result<(), CommandError> {
+    let detail = error.message.clone();
+    if let Some((conn, cluster_id, ready_count, failed_count)) = cluster_state {
+        if let Err(update_error) = cluster_service::update_linux_cluster_import_state(
+            conn,
+            cluster_id,
+            "failed",
+            ready_count,
+            failed_count,
+            Some(&detail),
+        ) {
+            tracing::error!(
+                cluster_id,
+                error = %update_error,
+                "Failed to mark Linux cluster import as failed"
+            );
+        }
+    }
+    if let Err(update_error) = job_repo.fail(job_id, &detail) {
+        tracing::error!(
+            job_id = %job_id.0,
+            error = %update_error,
+            "Failed to mark Linux cluster job as failed"
+        );
+    }
+    if let Some(app) = app {
+        event_bridge::emit_job_failed(app, &job_id.0, &detail);
+    }
+    Err(error)
 }
 
 fn acquire_import_slot(

@@ -136,22 +136,22 @@ pub fn plan_linux_cluster_import(
     profile: Option<String>,
 ) -> Result<LinuxClusterImportPlan> {
     let root_path = root_path.into();
+    let profile = normalize_cluster_profile(profile);
     let metadata =
         std::fs::metadata(&root_path).map_err(|_| ClusterServiceError::InvalidClusterRoot)?;
     if !metadata.is_dir() {
         return Err(ClusterServiceError::InvalidClusterRoot);
     }
 
-    let mut candidate_paths = std::fs::read_dir(&root_path)?
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|path| path.is_file())
-        .filter(|path| is_cluster_image_candidate(path))
-        .collect::<Vec<_>>();
-    candidate_paths.sort_by(|left, right| {
-        left.file_name()
-            .unwrap_or_default()
-            .cmp(right.file_name().unwrap_or_default())
-    });
+    let mut candidate_paths = Vec::new();
+    for entry in std::fs::read_dir(&root_path)? {
+        let path = entry?.path();
+        if path.is_file() && is_cluster_image_candidate(&path) {
+            candidate_paths.push(path);
+        }
+    }
+    candidate_paths
+        .sort_by(|left, right| normalized_file_name(left).cmp(&normalized_file_name(right)));
 
     let mut members = Vec::new();
     for path in candidate_paths {
@@ -175,9 +175,7 @@ pub fn plan_linux_cluster_import(
 
     let cluster_id = uuid::Uuid::new_v4().to_string();
     let cluster_name = profile
-        .as_ref()
-        .filter(|value| !value.trim().is_empty())
-        .cloned()
+        .clone()
         .unwrap_or_else(|| derive_source_name(&root_path));
     let manifest_rel_path = format!("clusters/{cluster_id}/cluster-manifest.json");
 
@@ -248,8 +246,23 @@ pub fn write_linux_cluster_manifest(
     if let Some(parent) = manifest_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::write(&manifest_path, serde_json::to_vec_pretty(&manifest)?)?;
+    let temp_path = manifest_path.with_extension("json.tmp");
+    let payload = serde_json::to_vec_pretty(&manifest)?;
+    if let Err(error) = std::fs::write(&temp_path, payload) {
+        let _ = std::fs::remove_file(&temp_path);
+        return Err(error.into());
+    }
+    if let Err(error) = std::fs::rename(&temp_path, &manifest_path) {
+        let _ = std::fs::remove_file(&temp_path);
+        return Err(error.into());
+    }
     Ok(manifest_path)
+}
+
+fn normalize_cluster_profile(profile: Option<String>) -> Option<String> {
+    profile
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 fn is_cluster_image_candidate(path: &Path) -> bool {
@@ -280,6 +293,12 @@ fn derive_source_name(path: &Path) -> String {
     path.file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_else(|| "linux-cluster".to_string())
+}
+
+fn normalized_file_name(path: &Path) -> String {
+    path.file_name()
+        .map(|name| name.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default()
 }
 
 /// Reserved entry point for future PVE / multi-source cluster parsing.
@@ -410,5 +429,35 @@ mod tests {
             Some(plan.cluster_id.as_str())
         );
         assert_eq!(configs[0].cluster.as_ref().unwrap().member_count, 2);
+    }
+
+    #[test]
+    fn linux_cluster_import_plan_normalizes_profile_name() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        std::fs::write(tmp.path().join("a.raw"), b"raw").unwrap();
+        std::fs::write(tmp.path().join("b.raw"), b"raw").unwrap();
+
+        let plan =
+            plan_linux_cluster_import(tmp.path(), Some("  pve-audit  ".to_string())).expect("plan");
+
+        assert_eq!(plan.cluster_name, "pve-audit");
+        assert_eq!(plan.profile.as_deref(), Some("pve-audit"));
+    }
+
+    #[test]
+    fn linux_cluster_manifest_write_is_atomic_and_readable() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        std::fs::write(tmp.path().join("a.raw"), b"raw").unwrap();
+        std::fs::write(tmp.path().join("b.raw"), b"raw").unwrap();
+        let plan = plan_linux_cluster_import(tmp.path(), None).expect("plan");
+        let case_root = tempfile::TempDir::new().unwrap();
+
+        let manifest_path = write_linux_cluster_manifest(case_root.path(), &plan).expect("write");
+
+        assert!(manifest_path.exists());
+        assert!(!manifest_path.with_extension("json.tmp").exists());
+        let manifest = std::fs::read_to_string(manifest_path).expect("manifest");
+        assert!(manifest.contains(&plan.cluster_id));
+        assert!(manifest.contains("\"memberCount\": 2"));
     }
 }

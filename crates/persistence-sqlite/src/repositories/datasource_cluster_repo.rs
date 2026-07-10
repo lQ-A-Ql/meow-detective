@@ -59,7 +59,7 @@ impl<'a> DataSourceClusterRepo<'a> {
         failed_count: u32,
         last_error: Option<&str>,
     ) -> DbResult<()> {
-        self.conn.execute(
+        let affected = self.conn.execute(
             "UPDATE data_source_clusters
              SET import_state = ?1,
                  ready_count = ?2,
@@ -75,6 +75,11 @@ impl<'a> DataSourceClusterRepo<'a> {
                 cluster_id
             ],
         )?;
+        if affected != 1 {
+            return Err(crate::connection::DbError::System(format!(
+                "data source cluster not found: {cluster_id}"
+            )));
+        }
         Ok(())
     }
 
@@ -152,5 +157,40 @@ mod tests {
         assert_eq!(stored.import_state, "ready");
         assert_eq!(stored.ready_count, 2);
         assert_eq!(stored.member_count, 2);
+    }
+
+    #[test]
+    fn cluster_state_update_requires_existing_cluster() {
+        let conn = setup_db();
+        let repo = DataSourceClusterRepo::new(&conn);
+
+        let error = repo.update_state("missing-cluster", "failed", 0, 1, Some("failed"));
+
+        assert!(error.is_err());
+    }
+
+    #[test]
+    fn cluster_state_rejects_invalid_state() {
+        let conn = setup_db();
+        let repo = DataSourceClusterRepo::new(&conn);
+        let record = DataSourceClusterRecord {
+            id: "cluster-1".to_string(),
+            case_id: CaseId("case-1".to_string()),
+            name: "pve".to_string(),
+            root_path: "D:/cluster".to_string(),
+            platform: "linux".to_string(),
+            profile: Some("pve".to_string()),
+            manifest_rel_path: "clusters/cluster-1/cluster-manifest.json".to_string(),
+            import_state: "pending".to_string(),
+            member_count: 2,
+            ready_count: 0,
+            failed_count: 0,
+            last_error: None,
+        };
+        repo.insert_pending(&record).unwrap();
+
+        let error = repo.update_state("cluster-1", "unknown", 0, 0, None);
+
+        assert!(error.is_err());
     }
 }
