@@ -122,9 +122,10 @@ V2 长期执行主计划见 `docs/v2-longterm-plan.md`。
 
 | 约束 | 阈值 | 说明 |
 |------|------|------|
-| 单文件上限 | 1500 行 | 超过必须拆分（V3 已将 correlation_service 2315→4 文件，report_service 2131→5 文件） |
-| 函数上限 | 200 行 | 超过建议提取辅助函数或子模块 |
-| 测试文件 | 不限 | 测试文件可豁免大小限制 |
+| 普通生产文件 | 目标 500 行，新增硬上限 800 行 | 既有超限由 migration baseline 锁定，只能递减；新增 501–800 行文件必须登记正式临时例外 |
+| `mod.rs` / `lib.rs` | 200 行 | 只承载模块声明、公共 API 与 re-export |
+| 生产函数 | 目标 100 行，新增硬上限 150 行 | 所有既有 >100 行债务（含 >150）按 path/name/signature hash/occurrence 精确锁定且只能递减；任何非 baseline 新函数 >100 均失败 |
+| 物理 Cargo 测试目标 | 不限 | 仅 crate/app 顶层 `tests/`、`benches/`、`examples/` 豁免；`src` 内测试命名文件仍按生产文件计入 |
 
 ### 8.3 错误处理
 
@@ -169,9 +170,19 @@ V2 长期执行主计划见 `docs/v2-longterm-plan.md`。
 
 ### 9.2 模块拆分模式
 
-- service 超过 1500 行 → 拆分为 `{service}/{mod, sub_a, sub_b, tests}.rs`
-- 保持 `mod.rs` 为公开 API 入口 + 共享常量和辅助函数
-- `tests.rs` 包含 `#[cfg(test)] mod tests { ... }`
+- 功能族使用目录组织，一个生产文件只实现一个稳定能力。
+- `mod.rs` 仅保留模块声明、公开 API 与 re-export，不承载实现仓库或测试正文。
+- Rust 测试正文放入所属 crate/app 的物理 `tests/` 目录；集成入口使用 `tests/integration.rs`，私有单元测试正文放入 `tests/unit/`。`src` 只允许精确的 `#[cfg(test)]`、`#[path = "..."]`、`mod tests;` 三行 bridge。
+- bridge 相对当前 source 文件解析，目标必须真实存在且 canonical path 位于所属 crate/app 的 `tests/unit/` 目录；模块名只能是非 `pub` 的 `tests`。禁止 bridge 指向会被 Cargo 独立编译的顶层 `tests/*.rs`。
+- `crates/evtx-patched` 是 vendored workspace member，module/function/test-layout 三个 Stage 0 守卫均明确排除。
+- 三个守卫统一通过 `cargo metadata --no-deps` 发现全部 workspace member；共享的路径、CSV、测试文件和 reparse-point 策略位于 `scripts/lib/RustGuard.Common.ps1`，不得按 `crates/*` 硬编码成员范围。
+- Cargo production target 不以 `.rs` 扩展名为前提，但必须位于所属 package 的 `src/` 内；唯一例外是 package 根目录的精确 `build.rs`。所有 `src/**/*.rs` 均扫描，不按 `tests.rs`、`*_tests.rs`、`test_helpers.rs` 或 `src/tests/**` 名称豁免；生产 `#[path] mod` 与 `include!` token 注入禁止，缺失、跨 package、越界或 reparse target fail closed。
+- `cargo metadata` 默认 30 秒超时并异步读取 stdout/stderr；Windows 超时路径通过精确 PID `taskkill`、kill-on-close Job Object、PID/父子关系/创建时间快照三层机制终止完整进程树，禁止按名称全局终止 cargo/rustc。Windows 文件 identity 大小写不敏感去重，Linux 保持大小写敏感。出现 package-cache/build-directory lock 时必须先核对持锁进程，再重跑，不得无限等待。
+- `check-rust-function-size.ps1` 使用编译型词法扫描器忽略注释、字符串、字符字面量与 raw string 中的大括号；函数重命名、签名替换或路径移动不能复用旧 baseline。
+- 函数跨度从关联 attribute/visibility/modifier 起算；仅排除可证明蕴含 `test=true` 的 cfg item，歧义 cfg 保留扫描；const-generic 大括号表达式先按配对整体跳过，避免 `<` 比较污染泛型深度。
+- module/function/test-layout baseline 必须相对已提交 reference revision 校验，只允许降低债务或删除；CI 使用 PR base SHA/previous push SHA。首次 bootstrap 需要 baseline 实际哈希、仓库内审计清单、PR 外受保护 repository variable 三方一致，不能由同一 PR 同时修改 baseline 与 manifest 自我授权。
+- migration baseline 的最终零债务形态是精确 CSV header-only；空文件无效。
+- test-layout 只自动解析同文件显式 `use ... as ...` 别名链；跨文件 wildcard/re-export 与未知 proc macro 必须先单独裁定并扩展 guard，不得用于在 `src` 隐藏测试正文。
 
 ### 9.3 前端组件约束
 
@@ -245,6 +256,13 @@ cargo deny check
 git diff --check
 powershell -File scripts/check-doc-drift.ps1
 powershell -File scripts/check-command-sql-boundary.ps1
+powershell -File scripts/check-module-size.ps1 -SelfTest
+powershell -File scripts/check-module-size.ps1
+powershell -File scripts/check-rust-function-size.ps1 -SelfTest
+powershell -File scripts/check-rust-function-size.ps1
+powershell -File scripts/check-rust-test-layout.ps1 -SelfTest
+powershell -File scripts/check-rust-test-layout.ps1
+powershell -File scripts/check-stage0-boundary-guard.ps1
 powershell -File scripts/check-media-protocol-guard.ps1
 powershell -File scripts/check-release-guard.ps1
 powershell -File scripts/check-stage5-regression-guard.ps1

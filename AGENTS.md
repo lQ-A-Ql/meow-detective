@@ -80,10 +80,17 @@ pnpm --dir frontend build
 git diff --check
 cargo deny check advisories bans licenses sources
 
-# Default repository guard scripts (PowerShell) — 13 checks
+# Default repository guard scripts (PowerShell) — 17 checks
 powershell -ExecutionPolicy Bypass -File scripts/check-doc-drift.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-doc-archive.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-command-sql-boundary.ps1
+powershell -ExecutionPolicy Bypass -File scripts/check-module-size.ps1 -SelfTest
+powershell -ExecutionPolicy Bypass -File scripts/check-module-size.ps1
+powershell -ExecutionPolicy Bypass -File scripts/check-rust-function-size.ps1 -SelfTest
+powershell -ExecutionPolicy Bypass -File scripts/check-rust-function-size.ps1
+powershell -ExecutionPolicy Bypass -File scripts/check-rust-test-layout.ps1 -SelfTest
+powershell -ExecutionPolicy Bypass -File scripts/check-rust-test-layout.ps1
+powershell -ExecutionPolicy Bypass -File scripts/check-stage0-boundary-guard.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-media-protocol-guard.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-release-guard.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-stage5-regression-guard.ps1
@@ -108,10 +115,17 @@ powershell -ExecutionPolicy Bypass -File scripts/check-import-optimization-guard
   - New crates must define typed errors with `thiserror` (e.g. `LinuxArtifactError`, `PstError`). Do **not** return `Result<T, String>` in new code.
   - Cross-crate error DTO: `transport::errors::ApiErrorDto` with `code`, `message`, `category`, `details`, `recoverable`.
 - **Formatting / lint**: `cargo fmt --all -- --check` must be zero diff; `cargo clippy --workspace --all-targets -- -D warnings` must produce no errors.
-- **File size limits** (V3 audit):
-  - Production source files ≤ 1500 lines;超过必须拆分 (e.g. `correlation_service.rs` was split into `correlation/{mod,rules,graph,tests}.rs`).
-  - Functions ≤ 200 lines recommended.
-  - Test files are exempt.
+- **File size limits** (Stage 0 backend refactor):
+  - Production Rust files target <= 500 lines; new non-baselined files above the target fail `check-module-size.ps1`, with 800 as the hard ceiling for new normal modules.
+  - `mod.rs` / `lib.rs` files target <= 200 lines and should remain API / re-export surfaces.
+  - Existing file-size violations are locked by `scripts/baselines/rust-module-size-baseline.csv` and may not grow.
+  - New normal modules from 501 through 800 lines require a valid temporary `path/owner/reason/expires` entry in `scripts/baselines/rust-module-size-exceptions.csv`; migration baseline rows are not formal exceptions.
+  - Production functions target <= 100 lines. All existing >100-line debt, including existing >150-line functions, is identity-locked by `scripts/baselines/rust-function-size-baseline.csv` and may only shrink. Any non-baselined function >100 fails; 150 is the new-code hard ceiling.
+  - Module/function/test-layout baseline edits are transition-checked against their `RUST_*_BASELINE_REFERENCE` CI base SHA or `-ReferenceRevision`; rows may only decrease or be deleted. Initial baselines require the actual hash, revision/hash-pinned manifest, and PR-external protected `RUST_*_BOOTSTRAP_SHA256` repository variable to agree.
+  - All three guards discover workspace members through `cargo metadata`; shared ordinal path/CSV/test-boundary policy lives in `scripts/lib/RustGuard.Common.ps1`. Zero-debt baselines are header-only, never empty files.
+  - Every production Cargo target must remain inside its owning package `src/`; the exact package-root `build.rs` is the only exception. Target source is scanned regardless of extension, and every `src/**/*.rs` file is scanned regardless of test-like names or directories. Production `#[path] mod` and token-injecting `include!` are prohibited.
+  - Only physical top-level Cargo `tests/`, `benches/`, and `examples/` trees are exempt from module/function limits. Files such as `src/tests.rs`, `src/*_tests.rs`, and `src/tests/**` remain migration debt and are not exempt.
+  - Cargo metadata has a bounded asynchronous timeout; on Windows, exact-PID taskkill, a kill-on-close Job Object, and a bounded PID/parent/creation-time snapshot terminate the process tree without process-name kills. Windows physical file identities deduplicate case-insensitively; Linux remains case-sensitive. Unknown proc macros and cross-file wildcard test aliases require explicit guard review before use.
 - **Dead code**: Do not use `#[allow(dead_code)]` in production code. Remove unused code. Parser format constants are exempt.
 - **Unsafe**: Every `unsafe` block must have a `// SAFETY:` comment. Prefer RAII guards for FFI resources.
 - **DTO contract**:
@@ -144,7 +158,7 @@ powershell -ExecutionPolicy Bypass -File scripts/check-import-optimization-guard
 cargo test --workspace
 ```
 
-- Tests live in `src/` as `#[cfg(test)]` modules, in `tests/` integration directories, and in dedicated `tests.rs` submodules for large services.
+- New Rust tests should live in physical `tests/` directories. Existing tests embedded under `src` are baseline-locked by `scripts/check-rust-test-layout.ps1`; after migration, `src` may only keep the exact non-public `#[cfg(test)]` + `#[path = "..."]` + `mod tests;` bridge whose source-relative target exists and canonically remains inside the owning crate/app `tests/unit/` directory. Top-level `tests/*.rs` files are integration entries and must not be used as bridges.
 - Test categories:
   - DTO / serde round-trip tests (every DTO at least one).
   - Service unit tests (every public function at least one).
@@ -173,6 +187,10 @@ PowerShell scripts in `scripts/` encode architectural and security boundaries:
 | Script | Guards |
 |--------|--------|
 | `check-command-sql-boundary.ps1` | No raw SQL in Tauri command handlers |
+| `check-module-size.ps1` | Backend Rust module-size debt may not add or grow beyond baseline |
+| `check-rust-function-size.ps1` | Comment/string-aware Rust function debt guard; exact identity, reference-revision transition, target 100 and new-code hard ceiling 150 |
+| `check-rust-test-layout.ps1` | Rust tests embedded under `src` may not add or grow beyond baseline |
+| `check-stage0-boundary-guard.ps1` | Stage 0 frontend/runtime and backend dependency boundaries |
 | `check-media-protocol-guard.ps1` | Media preview stays on `evidence-media:` protocol |
 | `check-release-guard.ps1` | No debug strings in release paths |
 | `check-stage5-regression-guard.ps1` | MCP transport validation, nested DTO contracts, staging merge conflicts |
@@ -445,7 +463,7 @@ Governance fact sources (embedded at compile time, drive `/v2` governance snapsh
 
 13. **MBR partitions**: Use `parse_mbr_full()` (not `parse_partition_table()`) for MBR-aware code; effective indices are computed from candidate offset order because MBR lacks GPT `partition_index`.
 
-14. **Module split pattern**: Services over ~1500 lines should split into `{service}/{mod.rs, sub_a.rs, sub_b.rs, tests.rs}`. `mod.rs` is the public API entry plus shared constants/helpers; `tests.rs` contains `#[cfg(test)] mod tests { ... }`.
+14. **Module split pattern**: Organize a capability family as a directory of single-purpose production files. `mod.rs` is limited to declarations, public API, and re-exports. Test bodies belong in the owning crate/app `tests/` directory, never in `src/tests.rs` or inline `#[cfg(test)]` modules.
 
 15. **Correlation depends on `sourceObjectId`**: The primary Artifact↔Timeline correlation bridge uses shared `sourceObjectId`. Every new artifact extractor must set this field or cross-artifact leads will silently miss connections.
 

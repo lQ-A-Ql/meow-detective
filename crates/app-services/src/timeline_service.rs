@@ -20,6 +20,8 @@ use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
 use std::time::Instant;
 
+mod query;
+pub use query::TimelineQuery;
 const MACB_PROJECTION_KEY: &str = "macb";
 
 #[derive(Debug, Error)]
@@ -174,7 +176,10 @@ pub fn query_timeline_for_case(
     limit: u32,
 ) -> Result<PageResponse<TimelineEventDto>, TimelineServiceError> {
     query_timeline_filtered_for_case(
-        case_conn, case_root, case_id, offset, limit, None, None, None,
+        case_conn,
+        case_root,
+        case_id,
+        TimelineQuery::unfiltered(offset, limit),
     )
 }
 
@@ -254,12 +259,13 @@ pub fn query_timeline_filtered_for_case(
     case_conn: &Connection,
     case_root: &Path,
     case_id: &domain::CaseId,
-    offset: u64,
-    limit: u32,
-    time_start: Option<&str>,
-    time_end: Option<&str>,
-    event_type: Option<&str>,
+    query: TimelineQuery<'_>,
 ) -> Result<PageResponse<TimelineEventDto>, TimelineServiceError> {
+    let offset = query.offset;
+    let limit = query.limit;
+    let time_start = query.time_start;
+    let time_end = query.time_end;
+    let event_type = query.event_type;
     let mut total = 0u64;
     let mut events = Vec::new();
     let per_source_limit = offset.saturating_add(limit as u64).min(u32::MAX as u64) as u32;
@@ -320,16 +326,10 @@ pub fn query_timeline_filtered_for_case_instrumented(
     case_conn: &Connection,
     case_root: &Path,
     case_id: &domain::CaseId,
-    offset: u64,
-    limit: u32,
-    time_start: Option<&str>,
-    time_end: Option<&str>,
-    event_type: Option<&str>,
+    query: TimelineQuery<'_>,
 ) -> Result<InstrumentedPage<TimelineEventDto>, TimelineServiceError> {
     let (page, sample) = measure_rows(0, || {
-        query_timeline_filtered_for_case(
-            case_conn, case_root, case_id, offset, limit, time_start, time_end, event_type,
-        )
+        query_timeline_filtered_for_case(case_conn, case_root, case_id, query)
     });
     let page = page?;
     let sample = PerfSample {

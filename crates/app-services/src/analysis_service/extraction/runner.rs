@@ -253,9 +253,7 @@ fn candidate_matches_selection(
             .iter()
             .any(|category| *category == candidate.category);
     }
-    selected
-        .iter()
-        .any(|category| *category == "LinuxArtifacts")
+    selected.contains(&"LinuxArtifacts")
         || selected.iter().any(|category| {
             LinuxArtifactSection::from_key(category).is_some_and(|section| {
                 let normalized = normalize_evidence_path(&candidate.path);

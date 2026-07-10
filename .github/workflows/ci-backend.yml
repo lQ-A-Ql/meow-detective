@@ -19,12 +19,31 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy, llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
       - name: Format
         run: cargo fmt --all -- --check
+      - name: Stage 0 backend structure guards
+        shell: powershell
+        env:
+          RUST_MODULE_SIZE_BASELINE_REFERENCE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          RUST_FUNCTION_SIZE_BASELINE_REFERENCE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          RUST_TEST_LAYOUT_BASELINE_REFERENCE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          RUST_MODULE_SIZE_BOOTSTRAP_SHA256: ${{ vars.RUST_MODULE_SIZE_BOOTSTRAP_SHA256 }}
+          RUST_FUNCTION_SIZE_BOOTSTRAP_SHA256: ${{ vars.RUST_FUNCTION_SIZE_BOOTSTRAP_SHA256 }}
+          RUST_TEST_LAYOUT_BOOTSTRAP_SHA256: ${{ vars.RUST_TEST_LAYOUT_BOOTSTRAP_SHA256 }}
+        run: |
+          ./scripts/check-module-size.ps1 -SelfTest
+          ./scripts/check-module-size.ps1
+          ./scripts/check-rust-function-size.ps1 -SelfTest
+          ./scripts/check-rust-function-size.ps1
+          ./scripts/check-rust-test-layout.ps1 -SelfTest
+          ./scripts/check-rust-test-layout.ps1
+          ./scripts/check-stage0-boundary-guard.ps1
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
@@ -52,6 +71,9 @@ jobs:
       - name: Documentation drift guard
         shell: pwsh
         run: ./scripts/check-doc-drift.ps1
+      - name: Documentation archive guard
+        shell: pwsh
+        run: ./scripts/check-doc-archive.ps1
       - name: Dependency exception guard
         shell: pwsh
         run: ./scripts/check-deny-exceptions.ps1

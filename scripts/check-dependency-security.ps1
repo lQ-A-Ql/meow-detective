@@ -21,6 +21,37 @@ if (-not $cargoDeny) {
   Write-Error "cargo-deny is not installed. Install with: cargo install cargo-deny"
   exit 1
 }
+$cargoCommand = Get-Command cargo -ErrorAction SilentlyContinue
+if (-not $cargoCommand) {
+  Write-Error "cargo is not installed or not available on PATH"
+  exit 1
+}
+
+function Invoke-CargoDenyCheck {
+  param(
+    [Parameter(Mandatory = $true)]
+    [ValidateSet('advisories', 'bans', 'licenses', 'sources')]
+    [string]$Check,
+    [Parameter(Mandatory = $true)]
+    [string]$CargoPath
+  )
+
+  $previousPreference = $ErrorActionPreference
+  $output = @()
+  $exitCode = -1
+  try {
+    $ErrorActionPreference = 'Continue'
+    $output = @(& $CargoPath deny check $Check 2>&1 | ForEach-Object { $_.ToString() })
+    $exitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previousPreference
+  }
+
+  return [pscustomobject]@{
+    ExitCode = $exitCode
+    Output = ($output -join "`n").Trim()
+  }
+}
 
 Push-Location $projectRoot
 try {
@@ -45,9 +76,9 @@ try {
   if ($all -or $AdvisoriesOnly) {
     $advisoryResult = [ordered]@{ status = "ok"; diagnostics = @(); error = $null }
     try {
-      $output = & cargo deny check advisories 2>&1
-      $exitCode = $LASTEXITCODE
-      $outputText = ($output | Out-String).Trim()
+      $invocation = Invoke-CargoDenyCheck -Check advisories -CargoPath $cargoCommand.Source
+      $exitCode = $invocation.ExitCode
+      $outputText = $invocation.Output
 
       $advisoryResult.status = if ($exitCode -eq 0) { "ok" } else { "violations-found" }
       $advisoryResult.diagnostics = $outputText -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
@@ -69,9 +100,9 @@ try {
   if ($all -or $BansOnly) {
     $banResult = [ordered]@{ status = "ok"; diagnostics = @(); error = $null }
     try {
-      $output = & cargo deny check bans 2>&1
-      $exitCode = $LASTEXITCODE
-      $outputText = ($output | Out-String).Trim()
+      $invocation = Invoke-CargoDenyCheck -Check bans -CargoPath $cargoCommand.Source
+      $exitCode = $invocation.ExitCode
+      $outputText = $invocation.Output
 
       $banResult.status = if ($exitCode -eq 0) { "ok" } else { "violations-found" }
       $banResult.diagnostics = $outputText -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
@@ -93,9 +124,9 @@ try {
   if ($all -or $LicensesOnly) {
     $licenseResult = [ordered]@{ status = "ok"; diagnostics = @(); error = $null }
     try {
-      $output = & cargo deny check licenses 2>&1
-      $exitCode = $LASTEXITCODE
-      $outputText = ($output | Out-String).Trim()
+      $invocation = Invoke-CargoDenyCheck -Check licenses -CargoPath $cargoCommand.Source
+      $exitCode = $invocation.ExitCode
+      $outputText = $invocation.Output
 
       $licenseResult.status = if ($exitCode -eq 0) { "ok" } else { "violations-found" }
       $licenseResult.diagnostics = $outputText -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
@@ -117,9 +148,9 @@ try {
   if ($all -or $SourcesOnly) {
     $sourceResult = [ordered]@{ status = "ok"; diagnostics = @(); error = $null }
     try {
-      $output = & cargo deny check sources 2>&1
-      $exitCode = $LASTEXITCODE
-      $outputText = ($output | Out-String).Trim()
+      $invocation = Invoke-CargoDenyCheck -Check sources -CargoPath $cargoCommand.Source
+      $exitCode = $invocation.ExitCode
+      $outputText = $invocation.Output
 
       $sourceResult.status = if ($exitCode -eq 0) { "ok" } else { "violations-found" }
       $sourceResult.diagnostics = $outputText -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }

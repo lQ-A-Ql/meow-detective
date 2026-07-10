@@ -38,8 +38,7 @@ pub fn attach_data_source_with_storage(
         provenance,
     };
 
-    let storage =
-        DataSourceStorage::source_db(&ds.id.0, platform.map(platform_label).as_deref(), profile);
+    let storage = DataSourceStorage::source_db(&ds.id.0, platform.map(platform_label), profile);
     DataSourceRepo::new(conn).insert_with_storage(case_id, &ds, &storage)?;
     Ok(ds)
 }

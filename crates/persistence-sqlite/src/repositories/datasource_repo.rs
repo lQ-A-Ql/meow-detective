@@ -1,11 +1,10 @@
 use crate::connection::DbResult;
+use crate::repositories::audit_repo::{AuditAction, AuditRepo};
 use domain::{
     CaseId, DataSource, DataSourceHashStatus, DataSourceId, DataSourceKind, DataSourceProvenance,
     DataSourceProvenanceStatus,
 };
-use rusqlite::{params, Connection};
-
-type ProgressCallback<'a> = &'a dyn Fn(u32, &str);
+use rusqlite::{params, Connection, OptionalExtension};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DataSourceStorage {
@@ -202,6 +201,14 @@ impl<'a> DataSourceRepo<'a> {
         }
     }
 
+    pub fn source_path(&self, data_source_id: &DataSourceId) -> DbResult<String> {
+        Ok(self.conn.query_row(
+            "SELECT source_path FROM data_sources WHERE id = ?1",
+            params![data_source_id.0],
+            |row| row.get(0),
+        )?)
+    }
+
     pub fn update_import_state(
         &self,
         data_source_id: &DataSourceId,
@@ -246,32 +253,38 @@ impl<'a> DataSourceRepo<'a> {
         Ok(())
     }
 
-    pub fn delete_cascade(&self, data_source_id: &DataSourceId) -> DbResult<()> {
-        self.delete_cascade_with_progress(data_source_id, None::<ProgressCallback<'_>>)
-    }
-
-    /// Delete data source with cascade and progress callback.
-    pub fn delete_cascade_with_progress(
+    pub fn delete_cascade_with_audit(
         &self,
         data_source_id: &DataSourceId,
-        progress: Option<ProgressCallback<'_>>,
+        details: &str,
     ) -> DbResult<()> {
         let tx = self.conn.unchecked_transaction()?;
-
-        if let Some(cb) = progress {
-            cb(0, "Deleting data source registration...");
-        }
-        tx.execute(
-            "DELETE FROM data_sources WHERE id = ?1",
-            params![data_source_id.0],
+        let case_id = delete_registered_data_source(&tx, data_source_id)?;
+        AuditRepo::new(&tx).log(
+            Some(&case_id),
+            "system",
+            &AuditAction::DataSourceDelete,
+            Some(&data_source_id.0),
+            details,
         )?;
-
         tx.commit()?;
-        if let Some(cb) = progress {
-            cb(100, "Deletion complete");
-        }
         Ok(())
     }
+}
+
+fn delete_registered_data_source(
+    conn: &Connection,
+    data_source_id: &DataSourceId,
+) -> DbResult<String> {
+    conn.query_row(
+        "DELETE FROM data_sources WHERE id = ?1 RETURNING case_id",
+        params![data_source_id.0],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()?
+    .ok_or_else(|| {
+        crate::connection::DbError::System(format!("data source not found: {}", data_source_id.0))
+    })
 }
 
 fn kind_to_str(kind: &DataSourceKind) -> &'static str {
@@ -459,7 +472,6 @@ mod tests {
         let repo = DataSourceRepo::new(&conn);
         let ds = make_ds("ds-1", "Disk Image");
         repo.insert(&CaseId("case-1".to_string()), &ds).unwrap();
-
         let results = repo.find_by_case(&CaseId("case-1".to_string())).unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].name, "Disk Image");
@@ -483,9 +495,7 @@ mod tests {
                 "hash verified".to_string(),
             ],
         };
-
         repo.insert(&CaseId("case-1".to_string()), &ds).unwrap();
-
         let results = repo.find_by_case(&CaseId("case-1".to_string())).unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].provenance, ds.provenance);
@@ -506,11 +516,9 @@ mod tests {
             [],
         )
         .unwrap();
-
         let results = DataSourceRepo::new(&conn)
             .find_by_case(&CaseId("case-1".to_string()))
             .unwrap();
-
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].provenance, DataSourceProvenance::unknown());
     }
@@ -521,10 +529,8 @@ mod tests {
         let repo = DataSourceRepo::new(&conn);
         let ds = make_ds("ds-1", "Old Name");
         repo.insert(&CaseId("case-1".to_string()), &ds).unwrap();
-
         repo.rename(&DataSourceId("ds-1".to_string()), "New Name")
             .unwrap();
-
         let results = repo.find_by_case(&CaseId("case-1".to_string())).unwrap();
         assert_eq!(results[0].name, "New Name");
     }
@@ -535,7 +541,6 @@ mod tests {
         let repo = DataSourceRepo::new(&conn);
         let ds = make_ds("ds-1", "Disk Image");
         repo.insert(&CaseId("case-1".to_string()), &ds).unwrap();
-
         repo.update_cluster_membership(&DataSourceId("ds-1".to_string()), "cluster-1", 1, 3)
             .unwrap();
 
@@ -552,19 +557,5 @@ mod tests {
         let error =
             repo.update_cluster_membership(&DataSourceId("missing".to_string()), "cluster-1", 0, 3);
         assert!(error.is_err());
-    }
-
-    #[test]
-    fn delete_cascade_removes_the_record() {
-        let conn = setup_db();
-        let repo = DataSourceRepo::new(&conn);
-        let ds = make_ds("ds-1", "Disk Image");
-        repo.insert(&CaseId("case-1".to_string()), &ds).unwrap();
-
-        repo.delete_cascade(&DataSourceId("ds-1".to_string()))
-            .unwrap();
-
-        let results = repo.find_by_case(&CaseId("case-1".to_string())).unwrap();
-        assert!(results.is_empty());
     }
 }

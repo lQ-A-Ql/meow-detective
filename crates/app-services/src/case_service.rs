@@ -1,5 +1,5 @@
 use chrono::Utc;
-use domain::{CaseId, CaseMeta, DataSourceId};
+use domain::{CaseId, CaseMeta};
 use persistence_sqlite::{
     open_existing, open_or_create,
     repositories::{
@@ -23,6 +23,9 @@ use uuid::Uuid;
 
 use crate::active_case::ActiveCase;
 
+mod data_source_deletion;
+pub use data_source_deletion::{delete_data_source, delete_data_source_in};
+
 #[derive(Debug, Error)]
 pub enum CaseServiceError {
     #[error("IO error: {0}")]
@@ -37,18 +40,133 @@ pub enum CaseServiceError {
     NotFound(PathBuf),
     #[error("Invalid case directory: {0}")]
     InvalidCaseDir(String),
+    #[error("Data source '{data_source_id}' deletion requires recovery from case tombstone '{tombstone}': {reason}")]
+    DataSourceDeleteRecoveryPending {
+        data_source_id: String,
+        tombstone: String,
+        reason: String,
+    },
+    #[error("Data source '{data_source_id}' registration was deleted, but case tombstone cleanup is pending at '{tombstone}': {source}")]
+    DataSourceDeleteCleanupPending {
+        data_source_id: String,
+        tombstone: String,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("Data source '{data_source_id}' deletion failed and rollback step '{step}' also failed at case tombstone '{tombstone}'; original error: {original}; rollback error: {rollback}")]
+    DataSourceDeleteRollbackFailed {
+        data_source_id: String,
+        tombstone: String,
+        step: &'static str,
+        #[source]
+        original: Box<CaseServiceError>,
+        rollback: std::io::Error,
+    },
 }
 
 impl transport::ServiceErrorCategory for CaseServiceError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
-            Self::Io(_) => transport::ErrorCategory::Io,
+            Self::Io(_)
+            | Self::DataSourceDeleteRecoveryPending { .. }
+            | Self::DataSourceDeleteCleanupPending { .. }
+            | Self::DataSourceDeleteRollbackFailed { .. } => transport::ErrorCategory::Io,
             Self::Db(_) => transport::ErrorCategory::Io,
             Self::Json(_) => transport::ErrorCategory::Parser,
             Self::AlreadyExists(_) | Self::InvalidCaseDir(_) => {
                 transport::ErrorCategory::Validation
             }
             Self::NotFound(_) => transport::ErrorCategory::Validation,
+        }
+    }
+
+    fn code(&self) -> Option<&'static str> {
+        match self {
+            Self::DataSourceDeleteRecoveryPending { .. } => {
+                Some("DATA_SOURCE_DELETE_RECOVERY_PENDING")
+            }
+            Self::DataSourceDeleteCleanupPending { .. } => {
+                Some("DATA_SOURCE_DELETE_CLEANUP_PENDING")
+            }
+            Self::DataSourceDeleteRollbackFailed { .. } => {
+                Some("DATA_SOURCE_DELETE_ROLLBACK_FAILED")
+            }
+            _ => None,
+        }
+    }
+
+    fn user_message(&self) -> Option<&'static str> {
+        match self {
+            Self::DataSourceDeleteRecoveryPending { .. } => {
+                Some("Data source deletion is waiting for managed-storage recovery.")
+            }
+            Self::DataSourceDeleteCleanupPending { .. } => Some(
+                "The data source registration was deleted, but managed-storage cleanup is pending.",
+            ),
+            Self::DataSourceDeleteRollbackFailed { .. } => {
+                Some("Data source deletion failed and rollback requires recovery.")
+            }
+            _ => None,
+        }
+    }
+
+    fn recoverable(&self) -> Option<bool> {
+        match self {
+            Self::DataSourceDeleteRecoveryPending { .. }
+            | Self::DataSourceDeleteCleanupPending { .. }
+            | Self::DataSourceDeleteRollbackFailed { .. } => Some(true),
+            _ => None,
+        }
+    }
+
+    fn safe_details(&self) -> Option<serde_json::Value> {
+        match self {
+            Self::DataSourceDeleteRecoveryPending {
+                data_source_id,
+                tombstone,
+                ..
+            } => Some(serde_json::json!({
+                "dataSourceId": data_source_id,
+                "tombstone": tombstone,
+                "registrationDeleted": false,
+                "state": "recoveryPending"
+            })),
+            Self::DataSourceDeleteCleanupPending {
+                data_source_id,
+                tombstone,
+                ..
+            } => Some(serde_json::json!({
+                "dataSourceId": data_source_id,
+                "tombstone": tombstone,
+                "registrationDeleted": true,
+                "state": "cleanupPending"
+            })),
+            Self::DataSourceDeleteRollbackFailed {
+                data_source_id,
+                tombstone,
+                step,
+                ..
+            } => Some(serde_json::json!({
+                "dataSourceId": data_source_id,
+                "tombstone": tombstone,
+                "registrationDeleted": false,
+                "state": "rollbackFailed",
+                "rollbackStep": step
+            })),
+            _ => None,
+        }
+    }
+
+    fn suggestion(&self) -> Option<&'static str> {
+        match self {
+            Self::DataSourceDeleteRecoveryPending { .. }
+            | Self::DataSourceDeleteRollbackFailed { .. } => Some(
+                "Preserve the tombstone, review backend logs and recovery state, then retry the deletion after recovery.",
+            ),
+            Self::DataSourceDeleteCleanupPending { .. } => Some(
+                "Retry managed-storage cleanup; the data source registration has already been removed.",
+            ),
+            _ => None,
         }
     }
 }
@@ -88,9 +206,7 @@ fn validate_case_name(name: &str) -> Result<()> {
                 .to_string(),
         ));
     }
-    // Check for Windows reserved names
     let upper = name.to_uppercase();
-    // split() always returns at least one element, so unwrap_or("") is safe but kept for clarity
     let name_part = upper.split(' ').next().unwrap_or("");
     if RESERVED_NAMES.contains(&name_part) {
         return Err(CaseServiceError::InvalidCaseDir(format!(
@@ -115,15 +231,12 @@ pub fn create_case(root: &Path, name: &str, examiner: Option<&str>) -> Result<Ac
     if case_root.exists() {
         return Err(CaseServiceError::AlreadyExists(case_root));
     }
-
     for dir in DIRS {
         fs::create_dir_all(case_root.join(dir))?;
     }
-
     let db_path = case_root.join("app.db");
     let conn = open_or_create(&db_path)?;
     runner::run_all(&conn)?;
-
     let now = Utc::now();
     let case = CaseMeta {
         id: CaseId(Uuid::new_v4().to_string()),
@@ -134,10 +247,7 @@ pub fn create_case(root: &Path, name: &str, examiner: Option<&str>) -> Result<Ac
         created_at: now,
         updated_at: now,
     };
-
     CaseRepo::new(&conn).create(&case)?;
-
-    // 记录审计日志
     let audit = AuditRepo::new(&conn);
     let _ = audit.log(
         Some(&case.id.0),
@@ -146,7 +256,6 @@ pub fn create_case(root: &Path, name: &str, examiner: Option<&str>) -> Result<Ac
         Some(&case.id.0),
         &serde_json::json!({"name": name, "examiner": examiner}).to_string(),
     );
-
     let case_json = serde_json::to_string_pretty(&case)?;
     fs::write(case_root.join("case.json"), case_json)?;
 
@@ -165,36 +274,28 @@ pub fn open_case(root: &Path) -> Result<ActiveCase> {
     if !root.exists() {
         return Err(CaseServiceError::NotFound(root.to_path_buf()));
     }
-
     let case_json_path = root.join("case.json");
     if !case_json_path.exists() {
         return Err(CaseServiceError::InvalidCaseDir(
             "case.json not found".to_string(),
         ));
     }
-
     let case_json = fs::read_to_string(&case_json_path)?;
     let case_from_json: CaseMeta = serde_json::from_str(&case_json)
         .map_err(|e| CaseServiceError::InvalidCaseDir(format!("Invalid case.json: {}", e)))?;
-
     let db_path = root.join("app.db");
     let conn = open_existing(&db_path)?;
     runner::run_all(&conn)?;
-
     let stored = CaseRepo::new(&conn)
         .find_by_id(&case_from_json.id)?
         .ok_or_else(|| CaseServiceError::InvalidCaseDir("Case not in database".to_string()))?;
-
     reject_legacy_single_db_case(&conn)?;
-
-    // 记录审计日志
     let audit = AuditRepo::new(&conn);
     let _ = audit.log_simple(
         Some(&stored.id.0),
         &AuditAction::CaseOpen,
         Some(&stored.id.0),
     );
-
     Ok(ActiveCase::new(stored, root.to_path_buf(), conn))
 }
 
@@ -208,13 +309,11 @@ fn reject_legacy_single_db_case(conn: &Connection) -> Result<()> {
     let app_timeline_count: i64 = conn
         .query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row.get(0))
         .map_err(persistence_sqlite::DbError::from)?;
-
     if app_file_count > 0 || app_artifact_count > 0 || app_timeline_count > 0 {
         return Err(CaseServiceError::InvalidCaseDir(
             "This case uses the legacy single-database storage model; re-import is required for the current development version".to_string(),
         ));
     }
-
     Ok(())
 }
 
@@ -235,14 +334,12 @@ pub fn delete_case_in(root: &Path) -> Result<()> {
     if !root.exists() {
         return Err(CaseServiceError::NotFound(root.to_path_buf()));
     }
-
     let case_json_path = root.join("case.json");
     if !case_json_path.exists() {
         return Err(CaseServiceError::InvalidCaseDir(
             "case.json not found — not a valid case directory".to_string(),
         ));
     }
-
     let active = open_case(root)?;
     let delete_details = serde_json::json!({
         "case_id": active.meta.id.0,
@@ -259,93 +356,25 @@ pub fn delete_case_in(root: &Path) -> Result<()> {
         )
     });
     drop(active);
+    remove_dir_all_with_retry(root, 5)?;
+    Ok(())
+}
 
-    // Retry removal on Windows where SQLite WAL/SHM files may still be held
-    let mut last_err = None;
-    for attempt in 0..5 {
-        match fs::remove_dir_all(root) {
+fn remove_dir_all_with_retry(path: &Path, attempts: usize) -> std::io::Result<()> {
+    let mut last_error = None;
+    for attempt in 0..attempts {
+        if !path.try_exists()? {
+            return Ok(());
+        }
+        match fs::remove_dir_all(path) {
             Ok(()) => return Ok(()),
-            Err(e) => {
-                last_err = Some(e);
-                if attempt < 4 {
-                    std::thread::sleep(std::time::Duration::from_millis(
-                        200 * (attempt as u64 + 1),
-                    ));
-                }
-            }
+            Err(error) => last_error = Some(error),
+        }
+        if attempt + 1 < attempts {
+            std::thread::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1)));
         }
     }
-    // After 5 attempts, last_err is guaranteed to be Some
-    Err(CaseServiceError::Io(
-        last_err.expect("last_err must be Some after retry loop"),
-    ))
-}
-
-pub fn delete_data_source(conn: &Connection, data_source_id: &str) -> Result<()> {
-    // Record audit log before deletion
-    let audit = persistence_sqlite::repositories::audit_repo::AuditRepo::new(conn);
-    let _ = audit.log_simple(
-        None,
-        &persistence_sqlite::repositories::audit_repo::AuditAction::DataSourceDelete,
-        Some(data_source_id),
-    );
-
-    let ds_id = DataSourceId(data_source_id.to_string());
-    let ds_repo = DataSourceRepo::new(conn);
-    ds_repo
-        .delete_cascade(&ds_id)
-        .map_err(CaseServiceError::Db)?;
-    Ok(())
-}
-
-pub fn delete_data_source_in(
-    conn: &Connection,
-    case_root: &Path,
-    data_source_id: &str,
-) -> Result<()> {
-    let audit = AuditRepo::new(conn);
-    let _ = audit.log_simple(None, &AuditAction::DataSourceDelete, Some(data_source_id));
-
-    let ds_id = DataSourceId(data_source_id.to_string());
-    let ds_repo = DataSourceRepo::new(conn);
-    let storage = ds_repo
-        .find_storage(&ds_id)
-        .map_err(CaseServiceError::Db)?
-        .ok_or_else(|| {
-            CaseServiceError::InvalidCaseDir(format!(
-                "Data source '{}' is not registered",
-                data_source_id
-            ))
-        })?;
-
-    let source_dir = storage
-        .source_db_rel_path
-        .as_deref()
-        .and_then(|rel| Path::new(rel).parent())
-        .map(|rel| crate::source_db::safe_case_relative_path(case_root, &rel.to_string_lossy()))
-        .transpose()
-        .map_err(CaseServiceError::Db)?
-        .unwrap_or_else(|| crate::source_db::source_dir(case_root, &ds_id));
-
-    if source_dir.exists() {
-        let source_dir = crate::source_db::safe_existing_case_path(case_root, &source_dir)
-            .map_err(CaseServiceError::Db)?;
-        fs::remove_dir_all(&source_dir)?;
-    }
-    if let Some(staging_rel_path) = storage.staging_rel_path {
-        let staging_path = crate::source_db::safe_case_relative_path(case_root, &staging_rel_path)
-            .map_err(CaseServiceError::Db)?;
-        if staging_path.exists() {
-            let staging_path = crate::source_db::safe_existing_case_path(case_root, &staging_path)
-                .map_err(CaseServiceError::Db)?;
-            fs::remove_dir_all(staging_path)?;
-        }
-    }
-
-    ds_repo
-        .delete_cascade(&ds_id)
-        .map_err(CaseServiceError::Db)?;
-    Ok(())
+    Err(last_error.unwrap_or_else(|| std::io::Error::other("directory cleanup was not attempted")))
 }
 
 pub fn get_case_metrics_for_case(
@@ -360,7 +389,6 @@ pub fn get_case_metrics_for_case(
         timeline_event_count: 0,
         artifact_count: 0,
     };
-
     for source in sources {
         let storage = DataSourceRepo::new(conn).find_storage(&source.id)?;
         if storage
@@ -369,7 +397,6 @@ pub fn get_case_metrics_for_case(
         {
             continue;
         }
-
         let source_conn =
             match crate::source_db::open_registered_source_db(conn, case_root, &source.id) {
                 Ok(source_conn) => source_conn,
@@ -392,7 +419,6 @@ pub fn get_case_metrics_for_case(
             .artifact_count
             .saturating_add(ArtifactRepo::new(&source_conn).count()?);
     }
-
     Ok(metrics)
 }
 
@@ -411,14 +437,14 @@ pub struct DrainResult {
 ///
 /// After the caller has cancelled all background tasks via `TaskManager` and
 /// waited for them to stop, this function checks the database for any jobs
-/// still left in `running` or `cancelling` state.  Those jobs are marked as
+/// still left in `running` or `cancelling` state. Those jobs are marked as
 /// `failed` with reason `interrupted_during_close`.
 ///
 /// The `timeout_ms` parameter documents the drain window that was used by the
 /// caller; it is recorded in the job detail for diagnostics.
 ///
-/// The database connection is NOT closed by this function — the caller is
-/// responsible for releasing the connection pool afterwards.
+/// The database connection is not closed by this function. The caller owns
+/// releasing the connection pool afterwards.
 pub fn close_case_drain(conn: &Connection, _case_id: &str, timeout_ms: u64) -> Result<DrainResult> {
     let repo = JobRepo::new(conn);
     let interrupted = repo.find_interrupted()?;
@@ -428,7 +454,6 @@ pub fn close_case_drain(conn: &Connection, _case_id: &str, timeout_ms: u64) -> R
 
     for job_id in &interrupted {
         let detail = format!("interrupted_during_close (drain timeout {}ms)", timeout_ms);
-        // Best-effort: if the fail update itself fails, we still record the warning.
         match repo.fail(job_id, &detail) {
             Ok(()) => {
                 warnings.push(format!(
@@ -451,134 +476,4 @@ pub fn close_case_drain(conn: &Connection, _case_id: &str, timeout_ms: u64) -> R
         pending_jobs,
         warnings,
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use persistence_sqlite::repositories::job_repo::JobRepo;
-
-    fn setup_db() -> (rusqlite::Connection, String) {
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
-        persistence_sqlite::runner::run_all(&conn).unwrap();
-        let case_id = "test-case-1";
-        conn.execute(
-            "INSERT INTO cases (id, name, number, examiner) VALUES (?1, 'Test', '1', 'qa')",
-            rusqlite::params![case_id],
-        )
-        .unwrap();
-        (conn, case_id.to_string())
-    }
-
-    #[test]
-    fn no_running_jobs_drains_immediately() {
-        let (conn, case_id) = setup_db();
-        // No jobs at all — drain should report fully_drained
-        let result = close_case_drain(&conn, &case_id, 5000).unwrap();
-        assert!(result.fully_drained);
-        assert!(result.pending_jobs.is_empty());
-        assert!(result.warnings.is_empty());
-    }
-
-    #[test]
-    fn drain_timeout_marks_jobs_interrupted() {
-        let (conn, case_id) = setup_db();
-        let repo = JobRepo::new(&conn);
-
-        // Create a running job (simulates a job that didn't stop in time)
-        let running_id = repo.create(&case_id, "import").unwrap();
-
-        // Create a cancelling job (simulates a job mid-cancellation)
-        let cancelling_id = repo.create(&case_id, "import").unwrap();
-        repo.mark_cancelling(&cancelling_id, "Cancel requested")
-            .unwrap();
-
-        // Create a completed job (should be untouched)
-        let completed_id = repo.create(&case_id, "index").unwrap();
-        repo.complete(&completed_id, "done").unwrap();
-
-        let result = close_case_drain(&conn, &case_id, 5000).unwrap();
-
-        // Both running + cancelling should be drained
-        assert!(!result.fully_drained);
-        assert_eq!(result.pending_jobs.len(), 2);
-        assert!(result.pending_jobs.contains(&running_id.0));
-        assert!(result.pending_jobs.contains(&cancelling_id.0));
-        assert_eq!(result.warnings.len(), 2);
-
-        // Verify DB state: running + cancelling jobs are now 'failed'
-        let jobs = persistence_sqlite::repositories::job_repo::JobRepo::new(&conn)
-            .list_recent(10)
-            .unwrap();
-
-        let running_snapshot = jobs.iter().find(|j| j.id.0 == running_id.0).unwrap();
-        assert_eq!(running_snapshot.status, "failed");
-        assert!(running_snapshot.detail.contains("interrupted_during_close"));
-
-        let cancelling_snapshot = jobs.iter().find(|j| j.id.0 == cancelling_id.0).unwrap();
-        assert_eq!(cancelling_snapshot.status, "failed");
-        assert!(cancelling_snapshot
-            .detail
-            .contains("interrupted_during_close"));
-
-        // Completed job unchanged
-        let completed_snapshot = jobs.iter().find(|j| j.id.0 == completed_id.0).unwrap();
-        assert_eq!(completed_snapshot.status, "completed");
-    }
-
-    #[test]
-    fn drain_completes_when_jobs_finish_quickly() {
-        let (conn, case_id) = setup_db();
-        let repo = JobRepo::new(&conn);
-
-        // Create a job and then complete it (simulates a job that finished before drain)
-        let job_id = repo.create(&case_id, "quick-task").unwrap();
-        repo.complete(&job_id, "finished quickly").unwrap();
-
-        let result = close_case_drain(&conn, &case_id, 5000).unwrap();
-        assert!(result.fully_drained);
-        assert!(result.pending_jobs.is_empty());
-        assert!(result.warnings.is_empty());
-
-        // Job should still be 'completed', not 'failed'
-        let jobs = persistence_sqlite::repositories::job_repo::JobRepo::new(&conn)
-            .list_recent(10)
-            .unwrap();
-        let snapshot = jobs.iter().find(|j| j.id.0 == job_id.0).unwrap();
-        assert_eq!(snapshot.status, "completed");
-    }
-
-    #[test]
-    fn open_case_rejects_legacy_single_database_payloads() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let active = create_case(tmp.path(), "legacy_case", Some("tester")).unwrap();
-        let case_root = active.case_root.clone();
-
-        active
-            .with_conn(|conn| {
-                conn.execute(
-                    "INSERT INTO data_sources
-                     (id, case_id, name, kind, source_path, storage_model)
-                     VALUES ('legacy-ds', ?1, 'Legacy source', 'logical_directory', 'D:/legacy', 'source_db')",
-                    [&active.meta.id.0],
-                )?;
-                conn.execute(
-                    "INSERT INTO file_entries
-                     (id, parent_id, data_source_id, path, name, entry_type, size, deleted, hidden, system)
-                     VALUES ('legacy-file', NULL, 'legacy-ds', '/', '/', 'directory', NULL, 0, 0, 0)",
-                    [],
-                )?;
-                Ok(())
-            })
-            .unwrap();
-        drop(active);
-
-        let error = match open_case(&case_root) {
-            Ok(_) => panic!("legacy app.db payload should be rejected"),
-            Err(error) => error,
-        };
-
-        assert!(error.to_string().contains("legacy single-database"));
-        assert!(error.to_string().contains("re-import is required"));
-    }
 }

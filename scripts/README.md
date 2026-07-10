@@ -130,6 +130,71 @@ powershell -ExecutionPolicy Bypass -File scripts\check-command-sql-boundary.ps1
 # findings are advisory by default and become fatal with -StrictBackend.
 powershell -ExecutionPolicy Bypass -File scripts\check-stage0-boundary-guard.ps1
 
+# Backend Rust module-size guard. This discovers every workspace member through
+# cargo metadata, locks pre-existing production file-size debt against
+# scripts/baselines/rust-module-size-baseline.csv, and fails on new or increased
+# violations. Shared path/CSV/workspace policy lives in
+# scripts/lib/RustGuard.Common.ps1.
+# Cargo targets are scanned regardless of extension, but every production
+# target must remain inside its owning package `src/`; only the exact root
+# `build.rs` may sit outside it. Every `src/**/*.rs` file is scanned regardless
+# of test-like names. Production `#[path] mod` and token-injecting `include!`
+# are prohibited. Metadata has a 30-second default timeout
+# (`RUST_GUARD_METADATA_TIMEOUT_MS`) with asynchronous output capture and
+# exact-PID taskkill, kill-on-close Job Object, and bounded PID/parent/start-time
+# Windows process-tree cleanup. Windows physical paths deduplicate
+# case-insensitively; Linux paths remain case-sensitive.
+powershell -ExecutionPolicy Bypass -File scripts\check-module-size.ps1 -SelfTest
+powershell -ExecutionPolicy Bypass -File scripts\check-module-size.ps1
+
+# New normal modules at 501-800 lines require a temporary, reviewed row in
+# scripts/baselines/rust-module-size-exceptions.csv. Every row requires
+# path/owner/reason/expires; stale, duplicate, expired, invalid, vendored, or
+# migration-baseline-overlapping rows fail validation.
+# Baseline edits are compared with RUST_MODULE_SIZE_BASELINE_REFERENCE in CI
+# (or -ReferenceRevision locally) and may only reduce or delete existing debt.
+# The first bootstrap additionally requires these protected repository values,
+# supplied outside the pull request:
+# RUST_MODULE_SIZE_BOOTSTRAP_SHA256=9b93323b627d11a62721b2c89bb3e366a3bc31f3cb12bf80b49e67b92698a8ec
+# RUST_FUNCTION_SIZE_BOOTSTRAP_SHA256=78bc20765640ede2314f4d815acf03f29d461d21ad2ad9cca55db0e69c39770f
+# RUST_TEST_LAYOUT_BOOTSTRAP_SHA256=9d5a89a0a26aaddc6ff822294cc262d4a1dec431ffa5b2b4d02194f552efba05
+
+# Backend Rust function-size guard. A compiled comment/string-aware lexer scans
+# the same non-vendored production roots, conservatively excludes items whose
+# cfg expression provably implies test=true, and
+# identifies functions by path/name/normalized-signature-hash/occurrence. The
+# existing >100-line migration debt (including >150) may only shrink. Every
+# non-baselined function >100 fails; 150 is the new-code hard ceiling. The
+# in-memory synthetic fixture covers lexical and transition edge cases without
+# leaving generated files in the repository. Function spans include attached
+# attributes/modifiers; cfg exclusion is implication-based and conservative;
+# const-generic brace expressions are balanced before angle-depth tracking.
+powershell -ExecutionPolicy Bypass -File scripts\check-rust-function-size.ps1 -SelfTest
+powershell -ExecutionPolicy Bypass -File scripts\check-rust-function-size.ps1
+
+# Baseline edits compare against RUST_FUNCTION_SIZE_BASELINE_REFERENCE in CI,
+# or -ReferenceRevision locally. Existing rows may only decrease or be deleted;
+# added/changed identities, moved paths, and increased allowances fail. The
+# one-time bootstrap manifest and protected RUST_FUNCTION_SIZE_BOOTSTRAP_SHA256
+# variable must both pin the reference commit's initial baseline SHA-256.
+powershell -ExecutionPolicy Bypass -File scripts\check-rust-function-size.ps1 -ReferenceRevision origin/master
+
+# Backend Rust test-layout guard. This locks tests embedded under src against
+# scripts/baselines/rust-test-layout-baseline.csv and permits only external
+# #[cfg(test)] + #[path = ".../tests/unit/..."] + mod tests; bridges after migration.
+# The bridge module must be exactly non-public `tests`; its source-relative
+# target must exist and canonically remain in the owning crate/app tests/unit
+# folder without any reparse-point component, never a top-level integration
+# test file. Known test attribute/macro aliases are counted. Baseline edits use
+# RUST_TEST_LAYOUT_BASELINE_REFERENCE and may only reduce or delete debt.
+# Explicit same-file `use ... as ...` alias chains are resolved to a fixed
+# point. Cross-file wildcard/re-export graphs and unknown proc macros are not
+# inferred and require a reviewed guard extension before use in `src` tests.
+# Initial authorization also requires protected
+# RUST_TEST_LAYOUT_BOOTSTRAP_SHA256 outside the pull request.
+powershell -ExecutionPolicy Bypass -File scripts\check-rust-test-layout.ps1 -SelfTest
+powershell -ExecutionPolicy Bypass -File scripts\check-rust-test-layout.ps1
+
 # Documentation drift guard. This checks README/AGENTS/documentation-index
 # factual counts, required engineering-doc entries, and Mermaid block count.
 powershell -ExecutionPolicy Bypass -File scripts\check-doc-drift.ps1

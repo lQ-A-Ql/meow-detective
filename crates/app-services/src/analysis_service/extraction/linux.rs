@@ -159,9 +159,9 @@ pub(super) fn linux_candidate_read_limit(normalized_path: &str) -> usize {
         .unwrap_or(normalized_path);
     if is_journal_path(effective_path) || is_wtmp_path(effective_path) {
         MAX_ANALYSIS_SOURCE_BYTES
-    } else if is_web_access_log_path(effective_path) || is_web_error_log_path(effective_path) {
-        MAX_LINUX_TEXT_SOURCE_BYTES
-    } else if is_text_log_path(effective_path)
+    } else if is_web_access_log_path(effective_path)
+        || is_web_error_log_path(effective_path)
+        || is_text_log_path(effective_path)
         || is_pve_log_path(effective_path)
         || is_auth_log_path(effective_path)
         || is_apt_history_path(effective_path)

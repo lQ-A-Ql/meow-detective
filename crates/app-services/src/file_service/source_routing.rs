@@ -50,15 +50,14 @@ fn open_source_for_file_id(
         .open_for_global_file_id(case_conn, &FileEntryId(file_id.to_string()))?)
 }
 
-fn scoped_context<'a>(
-    source_conn: &'a Connection,
-    case_id: &'a str,
-) -> (
+type SourceScopedContext<'a> = (
     &'a Connection,
     &'a str,
-    impl FnMut(&str) -> Option<serde_json::Value> + 'a,
-    impl FnMut(&str, &serde_json::Value) + 'a,
-) {
+    fn(&str) -> Option<serde_json::Value>,
+    fn(&str, &serde_json::Value),
+);
+
+fn scoped_context<'a>(source_conn: &'a Connection, case_id: &'a str) -> SourceScopedContext<'a> {
     (source_conn, case_id, |_| None, |_, _| {})
 }
 

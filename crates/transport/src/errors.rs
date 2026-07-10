@@ -68,6 +68,26 @@ impl ErrorCategory {
 /// typically map to `ErrorCategory::Internal`.
 pub trait ServiceErrorCategory {
     fn category(&self) -> ErrorCategory;
+
+    fn code(&self) -> Option<&'static str> {
+        None
+    }
+
+    fn user_message(&self) -> Option<&'static str> {
+        None
+    }
+
+    fn recoverable(&self) -> Option<bool> {
+        None
+    }
+
+    fn safe_details(&self) -> Option<Value> {
+        None
+    }
+
+    fn suggestion(&self) -> Option<&'static str> {
+        None
+    }
 }
 
 impl ServiceErrorCategory for std::io::Error {
@@ -88,6 +108,8 @@ pub struct CommandError {
     pub code: String,
     pub message: String,
     pub category: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<Box<Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recoverable: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -111,6 +133,7 @@ impl CommandError {
             code: code.into(),
             message: message.into(),
             category: category.as_str().to_string(),
+            details: None,
             recoverable: Some(recoverable),
             suggestion: None,
         }
@@ -193,27 +216,45 @@ impl CommandError {
         let msg = e.to_string();
         tracing::error!("Service error: {}", msg);
         let normalized = msg.to_ascii_lowercase();
-
-        if let Some(suggestion) = Self::forensics_suggestion(&normalized, &msg) {
-            return suggestion;
+        let category = e.category();
+        let mut command_error =
+            if let Some(suggestion) = Self::forensics_suggestion(&normalized, &msg) {
+                suggestion
+            } else {
+                match category {
+                    ErrorCategory::Timeout => Self::timeout("The operation timed out"),
+                    ErrorCategory::Unsupported => {
+                        Self::unsupported("The requested operation is not supported")
+                    }
+                    ErrorCategory::Security => {
+                        Self::security("The operation was blocked by the current security policy")
+                    }
+                    ErrorCategory::Parser => Self::parser("The input could not be parsed reliably"),
+                    ErrorCategory::External => {
+                        Self::external("The external dependency returned an error")
+                    }
+                    ErrorCategory::Io => Self::io("A file system operation failed"),
+                    ErrorCategory::Validation => Self::invalid_input(msg),
+                    ErrorCategory::Internal => {
+                        Self::internal("An operation failed. Check logs for details.")
+                    }
+                }
+            };
+        command_error.category = category.as_str().to_string();
+        if let Some(code) = e.code() {
+            command_error.code = code.to_string();
         }
-
-        match e.category() {
-            ErrorCategory::Timeout => Self::timeout("The operation timed out"),
-            ErrorCategory::Unsupported => {
-                Self::unsupported("The requested operation is not supported")
-            }
-            ErrorCategory::Security => {
-                Self::security("The operation was blocked by the current security policy")
-            }
-            ErrorCategory::Parser => Self::parser("The input could not be parsed reliably"),
-            ErrorCategory::External => Self::external("The external dependency returned an error"),
-            ErrorCategory::Io => Self::io("A file system operation failed"),
-            ErrorCategory::Validation => Self::invalid_input(msg),
-            ErrorCategory::Internal => {
-                Self::internal("An operation failed. Check logs for details.")
-            }
+        if let Some(message) = e.user_message() {
+            command_error.message = message.to_string();
         }
+        if let Some(recoverable) = e.recoverable() {
+            command_error.recoverable = Some(recoverable);
+        }
+        command_error.details = e.safe_details().map(Box::new);
+        if let Some(suggestion) = e.suggestion() {
+            command_error.suggestion = Some(suggestion.to_string());
+        }
+        command_error
     }
 
     /// Forensics-specific actionable suggestions keyed on message content.

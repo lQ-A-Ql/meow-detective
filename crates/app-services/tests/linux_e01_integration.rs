@@ -1206,26 +1206,33 @@ fn assert_preview_range(
     bytes
 }
 
+struct DescriptorCacheProbe<'a> {
+    cache: &'a RefCell<HashMap<String, serde_json::Value>>,
+    cache_hits: &'a std::cell::Cell<usize>,
+    set_calls: &'a std::cell::Cell<usize>,
+}
+
 fn read_with_counted_descriptor_cache(
     conn: &Connection,
     case_id: &str,
     entry: &LinuxPathEntry,
     offset: u64,
     length: u32,
-    cache: &RefCell<HashMap<String, serde_json::Value>>,
-    cache_hits: &std::cell::Cell<usize>,
-    set_calls: &std::cell::Cell<usize>,
+    probe: &DescriptorCacheProbe<'_>,
 ) -> Vec<u8> {
     let get_cache = |key: &str| {
-        let value = cache.borrow().get(key).cloned();
+        let value = probe.cache.borrow().get(key).cloned();
         if value.is_some() {
-            cache_hits.set(cache_hits.get() + 1);
+            probe.cache_hits.set(probe.cache_hits.get() + 1);
         }
         value
     };
     let set_cache = |key: &str, value: &serde_json::Value| {
-        set_calls.set(set_calls.get() + 1);
-        cache.borrow_mut().insert(key.to_string(), value.clone());
+        probe.set_calls.set(probe.set_calls.get() + 1);
+        probe
+            .cache
+            .borrow_mut()
+            .insert(key.to_string(), value.clone());
     };
     file_service::read_file_bytes_for_case(
         (conn, case_id, get_cache, set_cache),
@@ -1722,31 +1729,18 @@ fn linux_e01_preview_descriptor_cache_reads_lvm_xfs_files() {
     let cache = RefCell::new(HashMap::<String, serde_json::Value>::new());
     let cache_hits = std::cell::Cell::new(0usize);
     let set_calls = std::cell::Cell::new(0usize);
+    let probe = DescriptorCacheProbe {
+        cache: &cache,
+        cache_hits: &cache_hits,
+        set_calls: &set_calls,
+    };
 
-    let first = read_with_counted_descriptor_cache(
-        &conn,
-        case_id,
-        &entry,
-        0,
-        64,
-        &cache,
-        &cache_hits,
-        &set_calls,
-    );
+    let first = read_with_counted_descriptor_cache(&conn, case_id, &entry, 0, 64, &probe);
     assert!(!first.is_empty());
     assert_eq!(set_calls.get(), 1);
     assert_eq!(cache_hits.get(), 0);
 
-    let second = read_with_counted_descriptor_cache(
-        &conn,
-        case_id,
-        &entry,
-        8,
-        64,
-        &cache,
-        &cache_hits,
-        &set_calls,
-    );
+    let second = read_with_counted_descriptor_cache(&conn, case_id, &entry, 8, 64, &probe);
     assert!(!second.is_empty());
     assert_eq!(
         set_calls.get(),

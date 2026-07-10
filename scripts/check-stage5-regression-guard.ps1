@@ -249,11 +249,11 @@ Assert-NotMatchesCaseSensitive `
   -Message "file_service/preview.rs must stay Tauri-free; media protocol adaptation belongs in commands"
 
 foreach ($pattern in @(
-    'file_service::read_file_range_for_case',
-    'file_service::image_preview_for_file',
-    'file_service::media_preview_plan_for_file',
-    'file_service::media_range_for_file',
-    'file_service::text_preview_for_file'
+    'file_service::read_file_range_for_source_case',
+    'file_service::image_preview_for_source_case',
+    'file_service::media_preview_plan_for_source_case',
+    'file_service::media_range_for_source_case',
+    'file_service::text_preview_for_source_case'
   )) {
   Assert-Matches `
     -Content $fileCommands `
@@ -323,7 +323,7 @@ foreach ($pattern in @(
     'FORENSICS_LINUX_E01_FIXTURE',
     'committed fixture',
     'expected JSON',
-    'PVE cluster',
+    'FORENSICS_PVE_CLUSTER_ROOT',
     'LVM thin/cache/RAID/snapshot/VDO/writecache',
     'partial VG',
     'deleted recovery'

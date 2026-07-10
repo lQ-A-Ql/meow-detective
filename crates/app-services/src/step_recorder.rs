@@ -106,28 +106,32 @@ pub fn record_step(
     )
 }
 
+pub struct CaseStepInput<'a> {
+    pub case_id: &'a str,
+    pub step_kind: &'a str,
+    pub params_json: &'a str,
+    pub duration_ms: u32,
+    pub success: bool,
+    pub error_code: Option<&'a str>,
+}
+
 pub fn record_step_for_case(
     conn: &Connection,
     case_root: &Path,
-    case_id: &str,
-    step_kind: &str,
-    params_json: &str,
-    duration_ms: u32,
-    success: bool,
-    error_code: Option<&str>,
+    input: CaseStepInput<'_>,
 ) -> Result<InvestigationStepDto, NotebookError> {
     let timestamp = chrono::Utc::now().to_rfc3339();
-    let case_state_hash = compute_case_state_hash_for_case(conn, case_root, case_id);
+    let case_state_hash = compute_case_state_hash_for_case(conn, case_root, input.case_id);
 
     crate::notebook_service::record_step(
         conn,
-        case_id,
-        step_kind,
-        params_json,
+        input.case_id,
+        input.step_kind,
+        input.params_json,
         &timestamp,
-        duration_ms,
-        success,
-        error_code,
+        input.duration_ms,
+        input.success,
+        input.error_code,
         Some(&case_state_hash),
     )
 }
