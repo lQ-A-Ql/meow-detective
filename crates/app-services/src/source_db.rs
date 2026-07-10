@@ -57,10 +57,22 @@ pub fn parse_source_scoped_id(label: &str, value: &str) -> DbResult<(DataSourceI
             value
         )));
     }
+    if !is_safe_data_source_id(data_source_id) {
+        return Err(DbError::System(format!(
+            "{label} '{}' contains an invalid source id",
+            value
+        )));
+    }
     Ok((
         DataSourceId(data_source_id.to_string()),
         local_id.to_string(),
     ))
+}
+
+fn is_safe_data_source_id(value: &str) -> bool {
+    value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
 }
 
 pub fn source_dir(case_root: &Path, data_source_id: &DataSourceId) -> PathBuf {
@@ -93,6 +105,23 @@ pub fn open_registered_source_db(
             data_source_id.0, storage.storage_model
         )));
     }
+    let expected_schema_version =
+        persistence_sqlite::migrations::runner::latest_source_version().to_string();
+    match storage.schema_version.as_deref() {
+        Some(actual) if actual == expected_schema_version => {}
+        Some(actual) => {
+            return Err(DbError::System(format!(
+                "Data source '{}' source DB schema version '{}' is unsupported; expected '{}'; re-import is required",
+                data_source_id.0, actual, expected_schema_version
+            )));
+        }
+        None => {
+            return Err(DbError::System(format!(
+                "Data source '{}' is missing source DB schema version; re-import is required",
+                data_source_id.0
+            )));
+        }
+    }
     let rel_path = storage.source_db_rel_path.ok_or_else(|| {
         DbError::System(format!(
             "Data source '{}' is missing source DB path; re-import is required",
@@ -107,6 +136,7 @@ pub fn open_registered_source_db(
             db_path.display()
         )));
     }
+    let db_path = safe_existing_case_path(case_root, &db_path)?;
     persistence_sqlite::open_existing_source(&db_path)
 }
 
@@ -131,6 +161,19 @@ pub fn safe_case_relative_path(case_root: &Path, rel_path: &str) -> DbResult<Pat
         )));
     }
     Ok(case_root.join(rel))
+}
+
+pub fn safe_existing_case_path(case_root: &Path, path: &Path) -> DbResult<PathBuf> {
+    let canonical_root = std::fs::canonicalize(case_root)?;
+    let canonical_path = std::fs::canonicalize(path)?;
+    if !canonical_path.starts_with(&canonical_root) {
+        return Err(DbError::System(format!(
+            "Case-managed path '{}' escapes the case directory '{}'",
+            path.display(),
+            case_root.display()
+        )));
+    }
+    Ok(canonical_path)
 }
 
 #[derive(Debug, Clone)]
@@ -235,6 +278,18 @@ mod tests {
     }
 
     #[test]
+    fn global_file_id_rejects_unsafe_source_ids() {
+        for value in [
+            "ds:../outside:mft:0:42",
+            "ds:bad/source:mft:0:42",
+            "ds:bad source:mft:0:42",
+        ] {
+            let err = GlobalFileId::parse(&FileEntryId(value.to_string())).unwrap_err();
+            assert!(err.to_string().contains("invalid source id"));
+        }
+    }
+
+    #[test]
     fn safe_case_relative_path_rejects_escape_paths() {
         let case_root = Path::new("D:/cases/case-1");
 
@@ -247,6 +302,20 @@ mod tests {
             safe_case_relative_path(case_root, "sources/ds-1/source.db").unwrap(),
             case_root.join("sources/ds-1/source.db")
         );
+    }
+
+    #[test]
+    fn safe_existing_case_path_rejects_canonical_escape() {
+        let case_root = tempfile::TempDir::new().unwrap();
+        let outside = tempfile::NamedTempFile::new().unwrap();
+        let inside = case_root.path().join("source.db");
+        std::fs::write(&inside, b"sqlite").unwrap();
+
+        let allowed = safe_existing_case_path(case_root.path(), &inside).unwrap();
+        assert!(allowed.starts_with(case_root.path().canonicalize().unwrap()));
+
+        let err = safe_existing_case_path(case_root.path(), outside.path()).unwrap_err();
+        assert!(err.to_string().contains("escapes the case directory"));
     }
 
     #[test]
@@ -300,5 +369,57 @@ mod tests {
         let err = open_registered_source_db(&case_conn, tmp.path(), &ds.id).unwrap_err();
 
         assert!(err.to_string().contains("source DB is missing"));
+    }
+
+    #[test]
+    fn open_registered_source_db_rejects_schema_version_mismatch() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let case_conn = persistence_sqlite::connection::open_in_memory().unwrap();
+        case_conn
+            .execute_batch(
+                "CREATE TABLE data_sources (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    case_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    source_path TEXT NOT NULL,
+                    imported_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    source_hash_sha256 TEXT,
+                    hash_status TEXT DEFAULT 'unknown',
+                    canonical_source_path TEXT,
+                    evidence_size INTEGER,
+                    reader_kind TEXT,
+                    provenance_status TEXT DEFAULT 'unknown',
+                    provenance_warnings TEXT DEFAULT '[]',
+                    storage_model TEXT NOT NULL DEFAULT 'source_db',
+                    source_db_rel_path TEXT,
+                    index_rel_path TEXT,
+                    staging_rel_path TEXT,
+                    platform TEXT NOT NULL DEFAULT 'unknown',
+                    profile TEXT,
+                    import_state TEXT NOT NULL DEFAULT 'pending',
+                    schema_version TEXT,
+                    last_error TEXT
+                );",
+            )
+            .unwrap();
+        let ds = domain::DataSource {
+            id: DataSourceId("ds-old-schema".to_string()),
+            name: "Old schema".to_string(),
+            kind: domain::DataSourceKind::Raw,
+            source_path: std::path::PathBuf::from("D:/old.raw"),
+            imported_at: chrono::Utc::now(),
+            provenance: domain::DataSourceProvenance::unknown(),
+        };
+        let mut storage = DataSourceStorage::source_db(&ds.id.0, Some("linux"), None);
+        storage.schema_version = Some("source_000_legacy".to_string());
+        DataSourceRepo::new(&case_conn)
+            .insert_with_storage(&domain::CaseId("case-1".to_string()), &ds, &storage)
+            .unwrap();
+
+        let err = open_registered_source_db(&case_conn, tmp.path(), &ds.id).unwrap_err();
+
+        assert!(err.to_string().contains("schema version"));
+        assert!(err.to_string().contains("re-import is required"));
     }
 }

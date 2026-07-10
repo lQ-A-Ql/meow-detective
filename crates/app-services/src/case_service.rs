@@ -328,12 +328,16 @@ pub fn delete_data_source_in(
         .unwrap_or_else(|| crate::source_db::source_dir(case_root, &ds_id));
 
     if source_dir.exists() {
+        let source_dir = crate::source_db::safe_existing_case_path(case_root, &source_dir)
+            .map_err(CaseServiceError::Db)?;
         fs::remove_dir_all(&source_dir)?;
     }
     if let Some(staging_rel_path) = storage.staging_rel_path {
         let staging_path = crate::source_db::safe_case_relative_path(case_root, &staging_rel_path)
             .map_err(CaseServiceError::Db)?;
         if staging_path.exists() {
+            let staging_path = crate::source_db::safe_existing_case_path(case_root, &staging_path)
+                .map_err(CaseServiceError::Db)?;
             fs::remove_dir_all(staging_path)?;
         }
     }

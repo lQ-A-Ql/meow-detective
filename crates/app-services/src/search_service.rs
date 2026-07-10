@@ -8,7 +8,9 @@ use transport::dto::{
 };
 
 use crate::performance::{measure_rows, metric, report, PerfSample};
-use crate::source_db::{encode_source_scoped_id, source_index_dir};
+use crate::source_db::{
+    encode_source_scoped_id, safe_case_relative_path, safe_existing_case_path, source_index_dir,
+};
 
 /// Typed error for search service operations.
 #[derive(Debug, thiserror::Error)]
@@ -236,11 +238,13 @@ pub fn search_files_for_case(
         let index_dir = storage
             .as_ref()
             .and_then(|value| value.index_rel_path.as_deref())
-            .map(|rel| case_root.join(rel))
+            .map(|rel| safe_case_relative_path(case_root, rel))
+            .transpose()?
             .unwrap_or_else(|| source_index_dir(case_root, &source.id));
         if !index_dir.exists() {
             continue;
         }
+        let index_dir = safe_existing_case_path(case_root, &index_dir)?;
         let page = search_files_real(&index_dir, query, 0, search_limit as u32)?;
         total = total.saturating_add(page.total);
         hits.extend(

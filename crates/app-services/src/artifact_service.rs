@@ -24,6 +24,8 @@ pub enum ArtifactServiceError {
     Extractor(String),
     #[error("not found: {0}")]
     NotFound(String),
+    #[error("invalid input: {0}")]
+    InvalidInput(String),
     #[error("other error: {0}")]
     Other(String),
 }
@@ -33,7 +35,7 @@ impl transport::ServiceErrorCategory for ArtifactServiceError {
         match self {
             Self::Db(_) | Self::Io(_) => transport::ErrorCategory::Io,
             Self::Extractor(_) => transport::ErrorCategory::Parser,
-            Self::NotFound(_) => transport::ErrorCategory::Validation,
+            Self::NotFound(_) | Self::InvalidInput(_) => transport::ErrorCategory::Validation,
             Self::Other(_) => transport::ErrorCategory::Internal,
         }
     }
@@ -48,6 +50,10 @@ impl ArtifactServiceError {
         Self::NotFound(message.into())
     }
 
+    pub fn invalid_input(message: impl Into<String>) -> Self {
+        Self::InvalidInput(message.into())
+    }
+
     pub fn other(message: impl Into<String>) -> Self {
         Self::Other(message.into())
     }
@@ -59,8 +65,8 @@ impl From<FileServiceError> for ArtifactServiceError {
             FileServiceError::Db(e) => Self::Db(e),
             FileServiceError::Io(e) => Self::Io(e),
             FileServiceError::NotFound(msg) => Self::NotFound(msg),
-            FileServiceError::InvalidInput(msg)
-            | FileServiceError::PathTraversal(msg)
+            FileServiceError::InvalidInput(msg) => Self::InvalidInput(msg),
+            FileServiceError::PathTraversal(msg)
             | FileServiceError::Security(msg)
             | FileServiceError::Other(msg) => Self::Other(msg),
         }
@@ -75,8 +81,10 @@ impl From<crate::analysis_service::AnalysisServiceError> for ArtifactServiceErro
             crate::analysis_service::AnalysisServiceError::Read(msg)
             | crate::analysis_service::AnalysisServiceError::Extraction(msg)
             | crate::analysis_service::AnalysisServiceError::NotFound(_, msg)
-            | crate::analysis_service::AnalysisServiceError::InvalidInput(msg)
             | crate::analysis_service::AnalysisServiceError::Other(msg) => Self::Other(msg),
+            crate::analysis_service::AnalysisServiceError::InvalidInput(msg) => {
+                Self::InvalidInput(msg)
+            }
         }
     }
 }
@@ -470,24 +478,20 @@ pub fn get_artifact_row_by_id(
 pub fn get_artifact_row_by_id_for_case(
     case_conn: &Connection,
     case_root: &Path,
-    case_id: &domain::CaseId,
+    _case_id: &domain::CaseId,
     artifact_id: &str,
 ) -> Result<Option<ArtifactRowDto>, ArtifactServiceError> {
-    if let Ok((source_id, local_id)) = source_db::parse_source_scoped_id("Artifact id", artifact_id)
-    {
-        let source_conn = source_db::open_registered_source_db(case_conn, case_root, &source_id)?;
-        return Ok(ArtifactRepo::new(&source_conn)
-            .find_by_id(&local_id)?
-            .as_ref()
-            .map(|artifact| artifact_to_source_dto(artifact, &source_id)));
-    }
-
-    for (source_id, source_conn) in open_ready_source_connections(case_conn, case_root, case_id)? {
-        if let Some(artifact) = ArtifactRepo::new(&source_conn).find_by_id(artifact_id)? {
-            return Ok(Some(artifact_to_source_dto(&artifact, &source_id)));
-        }
-    }
-    Ok(None)
+    let (source_id, local_id) = source_db::parse_source_scoped_id("Artifact id", artifact_id)
+        .map_err(|err| {
+            ArtifactServiceError::invalid_input(format!(
+                "{err}; source database artifacts require ds:<dataSourceId>:<localId>"
+            ))
+        })?;
+    let source_conn = source_db::open_registered_source_db(case_conn, case_root, &source_id)?;
+    Ok(ArtifactRepo::new(&source_conn)
+        .find_by_id(&local_id)?
+        .as_ref()
+        .map(|artifact| artifact_to_source_dto(artifact, &source_id)))
 }
 
 pub fn get_artifact_family_counts(
@@ -799,6 +803,23 @@ mod tests {
         .unwrap();
         assert_eq!(counts[0].family, "LinuxBashCommand");
         assert_eq!(counts[0].count, 1);
+    }
+
+    #[test]
+    fn get_artifact_row_by_id_for_case_rejects_unscoped_ids() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let case_conn = in_memory_case_db();
+
+        let err = get_artifact_row_by_id_for_case(
+            &case_conn,
+            tmp.path(),
+            &domain::CaseId("case-1".to_string()),
+            "artifact-1",
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ArtifactServiceError::InvalidInput(_)));
+        assert!(err.to_string().contains("ds:<dataSourceId>:<localId>"));
     }
 
     #[test]

@@ -239,33 +239,21 @@ pub fn list_graph_nodes(
 pub fn get_node_neighborhood_for_case(
     case_conn: &Connection,
     case_root: &Path,
-    case_id: &str,
+    _case_id: &str,
     node_id: &str,
     depth: u32,
 ) -> Result<GraphQueryResultDto, GraphServiceError> {
-    if let Ok((source_id, local_id)) = source_db::parse_source_scoped_id("Graph node id", node_id) {
-        let source_conn = source_db::open_registered_source_db(case_conn, case_root, &source_id)?;
-        return Ok(scope_graph_result(
-            get_node_neighborhood(&source_conn, &local_id, depth)?,
-            &source_id,
-        ));
-    }
-
-    for (source_id, source_conn) in
-        open_ready_source_connections(case_conn, case_root, &domain::CaseId(case_id.to_string()))?
-    {
-        let source_result = get_node_neighborhood(&source_conn, node_id, depth)?;
-        if source_result.node_count > 0 || source_result.edge_count > 0 {
-            return Ok(scope_graph_result(source_result, &source_id));
-        }
-    }
-
-    Ok(GraphQueryResultDto {
-        nodes: Vec::new(),
-        edges: Vec::new(),
-        node_count: 0,
-        edge_count: 0,
-    })
+    let (source_id, local_id) = source_db::parse_source_scoped_id("Graph node id", node_id)
+        .map_err(|err| {
+            GraphServiceError::InvalidInput(format!(
+                "{err}; source database graph nodes require ds:<dataSourceId>:<localId>"
+            ))
+        })?;
+    let source_conn = source_db::open_registered_source_db(case_conn, case_root, &source_id)?;
+    Ok(scope_graph_result(
+        get_node_neighborhood(&source_conn, &local_id, depth)?,
+        &source_id,
+    ))
 }
 
 /// Query the neighborhood of a single node up to the given BFS depth.
@@ -351,30 +339,17 @@ pub fn get_node_neighborhood(
 pub fn get_provenance_chain_for_case(
     case_conn: &Connection,
     case_root: &Path,
-    case_id: &str,
+    _case_id: &str,
     edge_id: &str,
 ) -> Result<Vec<GraphProvenanceEntryDto>, GraphServiceError> {
-    if let Ok((source_id, local_id)) = source_db::parse_source_scoped_id("Graph edge id", edge_id) {
-        let source_conn = source_db::open_registered_source_db(case_conn, case_root, &source_id)?;
-        return scope_provenance_entries(
-            get_provenance_chain(&source_conn, &local_id)?,
-            &source_id,
-        );
-    }
-
-    for (source_id, source_conn) in
-        open_ready_source_connections(case_conn, case_root, &domain::CaseId(case_id.to_string()))?
-    {
-        match get_provenance_chain(&source_conn, edge_id) {
-            Ok(entries) => return scope_provenance_entries(entries, &source_id),
-            Err(GraphServiceError::NotFound(_)) => continue,
-            Err(err) => return Err(err),
-        }
-    }
-
-    Err(GraphServiceError::NotFound(format!(
-        "edge not found: {edge_id}"
-    )))
+    let (source_id, local_id) = source_db::parse_source_scoped_id("Graph edge id", edge_id)
+        .map_err(|err| {
+            GraphServiceError::InvalidInput(format!(
+                "{err}; source database graph edges require ds:<dataSourceId>:<localId>"
+            ))
+        })?;
+    let source_conn = source_db::open_registered_source_db(case_conn, case_root, &source_id)?;
+    scope_provenance_entries(get_provenance_chain(&source_conn, &local_id)?, &source_id)
 }
 
 /// Retrieve the provenance chain for a graph edge.
@@ -601,12 +576,9 @@ fn scoped_start_ids(
                 local_ids.push(local_id);
             }
             Err(_) => {
-                if scoped_source.is_some() {
-                    return Err(GraphServiceError::InvalidInput(
-                        "graph query startIds cannot mix scoped and unscoped ids".to_string(),
-                    ));
-                }
-                return Ok(None);
+                return Err(GraphServiceError::InvalidInput(
+                    "graph query startIds must use ds:<dataSourceId>:<localId>".to_string(),
+                ));
             }
         }
     }
@@ -928,6 +900,36 @@ mod tests {
         assert_eq!(result.node_count, 3);
         // n4 should NOT be included at depth 1
         assert!(!result.nodes.iter().any(|n| n.id == "n4"));
+    }
+
+    #[test]
+    fn case_graph_single_node_lookup_rejects_unscoped_ids() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let conn = setup_case_db();
+
+        let err = get_node_neighborhood_for_case(&conn, tmp.path(), "case-1", "n1", 1).unwrap_err();
+
+        assert!(matches!(err, GraphServiceError::InvalidInput(_)));
+        assert!(err.to_string().contains("ds:<dataSourceId>:<localId>"));
+    }
+
+    #[test]
+    fn case_graph_provenance_lookup_rejects_unscoped_ids() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let conn = setup_case_db();
+
+        let err = get_provenance_chain_for_case(&conn, tmp.path(), "case-1", "e1").unwrap_err();
+
+        assert!(matches!(err, GraphServiceError::InvalidInput(_)));
+        assert!(err.to_string().contains("ds:<dataSourceId>:<localId>"));
+    }
+
+    #[test]
+    fn case_graph_query_start_ids_reject_unscoped_ids() {
+        let err = scoped_start_ids(&["n1".to_string()]).unwrap_err();
+
+        assert!(matches!(err, GraphServiceError::InvalidInput(_)));
+        assert!(err.to_string().contains("ds:<dataSourceId>:<localId>"));
     }
 
     #[test]

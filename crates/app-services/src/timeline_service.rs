@@ -491,29 +491,20 @@ pub fn get_timeline_event_by_id(
 pub fn get_timeline_event_by_id_for_case(
     case_conn: &Connection,
     case_root: &Path,
-    case_id: &domain::CaseId,
+    _case_id: &domain::CaseId,
     event_id: &str,
 ) -> Result<Option<TimelineEventDto>, TimelineServiceError> {
-    if let Ok((data_source_id, local_id)) =
-        source_db::parse_source_scoped_id("Timeline event id", event_id)
-    {
-        let source_conn =
-            source_db::open_registered_source_db(case_conn, case_root, &data_source_id)?;
-        ensure_macb_timeline_projected(&source_conn)?;
-        return Ok(TimelineRepo::new(&source_conn)
-            .find_by_id(&local_id)?
-            .map(|event| timeline_event_to_source_dto(event, &data_source_id)));
-    }
-
-    for (data_source_id, source_conn) in
-        open_ready_source_connections(case_conn, case_root, case_id)?
-    {
-        ensure_macb_timeline_projected(&source_conn)?;
-        if let Some(event) = TimelineRepo::new(&source_conn).find_by_id(event_id)? {
-            return Ok(Some(timeline_event_to_source_dto(event, &data_source_id)));
-        }
-    }
-    Ok(None)
+    let (data_source_id, local_id) =
+        source_db::parse_source_scoped_id("Timeline event id", event_id).map_err(|err| {
+            TimelineServiceError::InvalidInput(format!(
+                "{err}; source database timeline events require ds:<dataSourceId>:<localId>"
+            ))
+        })?;
+    let source_conn = source_db::open_registered_source_db(case_conn, case_root, &data_source_id)?;
+    ensure_macb_timeline_projected(&source_conn)?;
+    Ok(TimelineRepo::new(&source_conn)
+        .find_by_id(&local_id)?
+        .map(|event| timeline_event_to_source_dto(event, &data_source_id)))
 }
 
 fn timeline_query_report(prefix: &str, sample: PerfSample, total: u64) -> PerformanceReportDto {
@@ -996,6 +987,23 @@ mod tests {
         .unwrap()
         .expect("timeline event");
         assert_eq!(event.event_type, "FILE_CREATED");
+    }
+
+    #[test]
+    fn get_timeline_event_by_id_for_case_rejects_unscoped_ids() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let case_conn = in_memory_case_db_with_source();
+
+        let err = get_timeline_event_by_id_for_case(
+            &case_conn,
+            tmp.path(),
+            &domain::CaseId("case-1".to_string()),
+            "event-1",
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, TimelineServiceError::InvalidInput(_)));
+        assert!(err.to_string().contains("ds:<dataSourceId>:<localId>"));
     }
 
     fn metric_value(report: &PerformanceReportDto, key: &str) -> Option<f64> {

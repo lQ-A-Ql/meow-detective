@@ -4,7 +4,8 @@ use app_services::import_analysis;
 use persistence_sqlite::repositories::job_repo::JobRepo;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, TryLockError};
+use std::time::Duration;
 use tauri::AppHandle;
 use transport::{dto::CancellationStateDto, CommandError};
 
@@ -15,6 +16,8 @@ use super::{
     events::TauriImportEventSink,
     pipeline::{execute_import_job, ImportJobOptions},
 };
+
+static IMPORT_JOB_GATE: OnceLock<Mutex<()>> = OnceLock::new();
 
 pub(crate) struct BackgroundImportJob {
     pub(crate) db_path: PathBuf,
@@ -57,6 +60,8 @@ pub(crate) fn run_background_import_job(
         }
         return Ok(());
     }
+
+    let _import_slot = acquire_import_slot(&job_repo, &job.job_id, app, &cancel_token)?;
 
     let event_sink = app.map(TauriImportEventSink::new);
     let options = ImportJobOptions {
@@ -111,6 +116,67 @@ pub(crate) fn run_background_import_job(
                     event_bridge::emit_job_failed(app, &job.job_id.0, &error.message);
                 }
                 Err(error)
+            }
+        }
+    }
+}
+
+fn acquire_import_slot(
+    job_repo: &JobRepo<'_>,
+    job_id: &domain::JobId,
+    app: Option<&AppHandle>,
+    cancel_token: &Arc<AtomicBool>,
+) -> Result<MutexGuard<'static, ()>, CommandError> {
+    let gate = IMPORT_JOB_GATE.get_or_init(|| Mutex::new(()));
+    let mut emitted_waiting = false;
+    loop {
+        if cancel_token.load(Ordering::Relaxed) {
+            let msg = "Import cancelled while waiting for import slot";
+            if let Err(e) = job_repo.cancel(job_id, msg) {
+                tracing::error!("Failed to mark job {} as cancelled: {}", job_id.0, e);
+            }
+            if let Some(app) = app {
+                event_bridge::emit_job_cancelled(app, &job_id.0, msg);
+                event_bridge::emit_job_cancellation(
+                    app,
+                    &job_cancellation_dto(&job_id.0, CancellationStateDto::Cancelled, true, msg),
+                );
+            }
+            return Err(CommandError::internal(msg));
+        }
+
+        match gate.try_lock() {
+            Ok(guard) => {
+                if emitted_waiting {
+                    job_repo
+                        .update_progress(job_id, 5, "Import slot acquired")
+                        .map_err(CommandError::from_typed_service_error)?;
+                    if let Some(app) = app {
+                        event_bridge::emit_job_progress(app, &job_id.0, 5, "Import slot acquired");
+                    }
+                }
+                return Ok(guard);
+            }
+            Err(TryLockError::WouldBlock) => {
+                if !emitted_waiting {
+                    job_repo
+                        .update_progress(job_id, 2, "Waiting for import slot")
+                        .map_err(CommandError::from_typed_service_error)?;
+                    if let Some(app) = app {
+                        event_bridge::emit_job_progress(
+                            app,
+                            &job_id.0,
+                            2,
+                            "Waiting for import slot",
+                        );
+                    }
+                    emitted_waiting = true;
+                }
+                std::thread::sleep(Duration::from_millis(250));
+            }
+            Err(TryLockError::Poisoned(poisoned)) => {
+                tracing::warn!("Import job gate was poisoned; continuing with recovered guard");
+                return Ok(poisoned.into_inner());
             }
         }
     }

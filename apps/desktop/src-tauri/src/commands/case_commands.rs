@@ -499,10 +499,13 @@ pub async fn delete_data_source(
             let active = guard.as_ref().ok_or_else(CommandError::no_active_case)?;
             (active.db_path(), active.case_root.clone())
         };
-        app_state.task_manager.cancel_all();
-        let _ = app_state
-            .task_manager
-            .wait_all(std::time::Duration::from_secs(5));
+        app_state.task_manager.cleanup_finished();
+        let running_tasks = app_state.task_manager.task_count();
+        if running_tasks > 0 {
+            return Err(CommandError::conflict(format!(
+                "Cannot delete data source while {running_tasks} background task(s) are running. Cancel or wait for imports to finish first."
+            )));
+        }
         // Guard is now dropped; query with released lock.
         let conn = app_services::connection::open_case_db(&db_path)
             .map_err(CommandError::from_typed_service_error)?;
