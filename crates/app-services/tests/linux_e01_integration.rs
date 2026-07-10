@@ -17,6 +17,7 @@ use app_services::{
     analysis_service::{
         evidence_candidates_for_categories, get_linux_artifact_summary, run_analysis_extraction,
     },
+    cluster_service::plan_linux_cluster_import,
     datasource_service::{
         detect_image_filesystem, expand_lvm_pool_candidates, ImageFilesystemCandidate,
         ImageFilesystemKind, ImageFilesystemSource, PartitionRecord,
@@ -2807,6 +2808,47 @@ fn liuyang_linux_e01_lvm_probe_keeps_expanded_pool_and_traceable_identity() {
     {
         assert_lvm_diagnostic_has_trace_fields(warning);
     }
+}
+
+#[test]
+#[ignore = "requires FORENSICS_PVE_CLUSTER_ROOT real PVE cluster E01 sample directory"]
+fn pve_cluster_import_plan_discovers_nested_server_images() {
+    let root = pve_cluster_root();
+    let expected_e01_files = pve_cluster_e01_files(&root);
+    assert!(
+        !expected_e01_files.is_empty(),
+        "PVE cluster root {} should contain server disk E01 files",
+        root.display()
+    );
+
+    let plan = plan_linux_cluster_import(&root, Some("pve-cluster".to_string()))
+        .expect("PVE cluster import planner should discover nested server images");
+
+    eprintln!(
+        "PVE cluster import plan discovered {} member(s)",
+        plan.members.len()
+    );
+    for member in &plan.members {
+        eprintln!(
+            "  member {} kind={:?} path={}",
+            member.member_index,
+            member.source_kind,
+            member.source_path.display()
+        );
+    }
+    assert_eq!(plan.members.len(), expected_e01_files.len());
+    assert!(
+        plan.members
+            .iter()
+            .all(|member| member.source_kind == DataSourceKind::E01),
+        "PVE sample members should be first E01 segments only"
+    );
+    assert!(
+        plan.members
+            .iter()
+            .all(|member| !member.source_path.to_string_lossy().ends_with(".E02")),
+        "PVE sample planner must not register continuation segments"
+    );
 }
 
 #[test]

@@ -143,15 +143,11 @@ pub fn plan_linux_cluster_import(
         return Err(ClusterServiceError::InvalidClusterRoot);
     }
 
-    let mut candidate_paths = Vec::new();
-    for entry in std::fs::read_dir(&root_path)? {
-        let path = entry?.path();
-        if path.is_file() && is_cluster_image_candidate(&path) {
-            candidate_paths.push(path);
-        }
-    }
-    candidate_paths
-        .sort_by(|left, right| normalized_file_name(left).cmp(&normalized_file_name(right)));
+    let mut candidate_paths = collect_cluster_image_candidates(&root_path)?;
+    candidate_paths.sort_by(|left, right| {
+        normalized_candidate_sort_key(&root_path, left)
+            .cmp(&normalized_candidate_sort_key(&root_path, right))
+    });
 
     let mut members = Vec::new();
     for path in candidate_paths {
@@ -277,6 +273,29 @@ fn is_cluster_image_candidate(path: &Path) -> bool {
     matches!(extension.as_str(), "e01" | "ewf" | "raw" | "dd" | "img")
 }
 
+fn collect_cluster_image_candidates(root_path: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut candidates = Vec::new();
+    collect_cluster_image_candidates_inner(root_path, &mut candidates)?;
+    Ok(candidates)
+}
+
+fn collect_cluster_image_candidates_inner(
+    directory: &Path,
+    candidates: &mut Vec<PathBuf>,
+) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(directory)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let path = entry.path();
+        if file_type.is_dir() {
+            collect_cluster_image_candidates_inner(&path, candidates)?;
+        } else if file_type.is_file() && is_cluster_image_candidate(&path) {
+            candidates.push(path);
+        }
+    }
+    Ok(())
+}
+
 fn is_secondary_e01_segment(path: &Path) -> bool {
     let extension = path
         .extension()
@@ -295,10 +314,13 @@ fn derive_source_name(path: &Path) -> String {
         .unwrap_or_else(|| "linux-cluster".to_string())
 }
 
-fn normalized_file_name(path: &Path) -> String {
-    path.file_name()
-        .map(|name| name.to_string_lossy().to_ascii_lowercase())
-        .unwrap_or_default()
+fn normalized_candidate_sort_key(root_path: &Path, path: &Path) -> String {
+    path.strip_prefix(root_path)
+        .unwrap_or(path)
+        .components()
+        .map(|component| component.as_os_str().to_string_lossy().to_ascii_lowercase())
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 /// Reserved entry point for future PVE / multi-source cluster parsing.
@@ -398,6 +420,45 @@ mod tests {
         assert_eq!(plan.members[0].member_index, 0);
         assert_eq!(plan.members[1].source_name, "node-b.raw");
         assert!(plan.manifest_rel_path.starts_with("clusters/"));
+    }
+
+    #[test]
+    fn linux_cluster_import_plan_discovers_nested_node_images() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let server01 = tmp.path().join("server01");
+        let server02 = tmp.path().join("server02");
+        std::fs::create_dir_all(&server01).unwrap();
+        std::fs::create_dir_all(&server02).unwrap();
+        std::fs::write(server01.join("server01-disk01.E01"), b"e01").unwrap();
+        std::fs::write(server01.join("server01-disk02.E01"), b"e01").unwrap();
+        std::fs::write(server01.join("server01-disk02.E02"), b"segment").unwrap();
+        std::fs::write(server02.join("server02-disk01.raw"), b"raw").unwrap();
+
+        let plan = plan_linux_cluster_import(tmp.path(), Some("pve-cluster".to_string())).unwrap();
+
+        let member_paths = plan
+            .members
+            .iter()
+            .map(|member| {
+                member
+                    .source_path
+                    .strip_prefix(tmp.path())
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            member_paths,
+            vec![
+                "server01/server01-disk01.E01",
+                "server01/server01-disk02.E01",
+                "server02/server02-disk01.raw"
+            ]
+        );
+        assert_eq!(plan.members[0].member_index, 0);
+        assert_eq!(plan.members[1].member_index, 1);
+        assert_eq!(plan.members[2].member_index, 2);
     }
 
     #[test]

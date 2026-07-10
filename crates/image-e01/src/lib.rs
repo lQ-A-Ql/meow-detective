@@ -138,21 +138,23 @@ impl E01Reader {
             let section_size = u64::from_le_bytes(desc[24..32].try_into().unwrap_or([0; 8]));
 
             let data_start = next_off.saturating_add(SECTION_DESCRIPTOR_SIZE);
-            let size_from_section = section_size.saturating_sub(SECTION_DESCRIPTOR_SIZE);
-            let size_from_next = if next > data_start && next <= file_len {
-                next - data_start
+            let read_size = if should_read_section_content(&stype) {
+                let size_from_section = section_size.saturating_sub(SECTION_DESCRIPTOR_SIZE);
+                let size_from_next = if next > data_start && next <= file_len {
+                    next - data_start
+                } else {
+                    0
+                };
+                if size_from_section > 0 && size_from_next > 0 {
+                    size_from_section.min(size_from_next)
+                } else {
+                    size_from_section.max(size_from_next)
+                }
+                .min(10_000_000)
+                .min(file_len.saturating_sub(data_start))
             } else {
                 0
             };
-            let read_size = if stype == "done" {
-                0
-            } else if size_from_section > 0 && size_from_next > 0 {
-                size_from_section.min(size_from_next)
-            } else {
-                size_from_section.max(size_from_next)
-            }
-            .min(10_000_000)
-            .min(file_len.saturating_sub(data_start));
             let mut content = vec![0u8; read_size as usize];
             if read_size > 0 {
                 file.seek(SeekFrom::Start(data_start))?;
@@ -490,12 +492,16 @@ fn build_chunk_table(
     chunk_table
 }
 
+fn should_read_section_content(stype: &str) -> bool {
+    stype == "volume" || stype.starts_with("disk") || stype == "table" || stype == "table2"
+}
+
 fn find_geometry(sections: &[(String, Vec<u8>)], file_len: u64) -> io::Result<(u64, u32)> {
     for (stype, content) in sections {
         if (stype == "volume" || stype.starts_with("disk")) && content.len() >= 24 {
             let sc = u64::from_le_bytes(content[16..24].try_into().unwrap_or([0; 8]));
-            let cks = u32::from_le_bytes(content[8..12].try_into().unwrap_or([0; 4]));
-            if sc > 0 && sc * 512 < file_len * 10 {
+            let cks = chunk_sectors_from_geometry_section(stype, content);
+            if sc > 0 && geometry_section_has_valid_sector_size(stype, content) {
                 return Ok((sc, cks.max(1)));
             }
         }
@@ -512,6 +518,41 @@ fn find_geometry(sections: &[(String, Vec<u8>)], file_len: u64) -> io::Result<(u
         io::ErrorKind::InvalidData,
         "no geometry found",
     ))
+}
+
+fn chunk_sectors_from_geometry_section(stype: &str, content: &[u8]) -> u32 {
+    let primary = if stype == "volume" && content.len() >= 16 {
+        // Older EWF volume sections store sectors-per-chunk at offset 12.
+        u32::from_le_bytes(content[12..16].try_into().unwrap_or([0; 4]))
+    } else if content.len() >= 12 {
+        // Disk sections store sectors-per-chunk at offset 8.
+        u32::from_le_bytes(content[8..12].try_into().unwrap_or([0; 4]))
+    } else {
+        0
+    };
+    if primary > 0 {
+        return primary;
+    }
+    if content.len() >= 12 {
+        u32::from_le_bytes(content[8..12].try_into().unwrap_or([0; 4]))
+    } else {
+        64
+    }
+}
+
+fn valid_bytes_per_sector(value: u32) -> bool {
+    matches!(value, 0 | 512 | 1024 | 2048 | 4096)
+}
+
+fn geometry_section_has_valid_sector_size(stype: &str, content: &[u8]) -> bool {
+    if stype == "volume" {
+        return true;
+    }
+    if !stype.starts_with("disk") || content.len() < 16 {
+        return true;
+    }
+    let bytes_per_sector = u32::from_le_bytes(content[12..16].try_into().unwrap_or([0; 4]));
+    valid_bytes_per_sector(bytes_per_sector)
 }
 
 /// Build the path for segment N of an E01 image.
@@ -589,6 +630,29 @@ mod tests {
     #[test]
     fn test_v1_table_header_size() {
         assert_eq!(V1_TABLE_HEADER_SIZE, 24);
+    }
+
+    #[test]
+    fn large_compressed_disk_geometry_is_not_rejected_by_segment_size_ratio() {
+        let mut disk = vec![0u8; 32];
+        disk[8..12].copy_from_slice(&64u32.to_le_bytes());
+        disk[12..16].copy_from_slice(&512u32.to_le_bytes());
+        disk[16..24].copy_from_slice(&268_435_456u64.to_le_bytes());
+        let sections = vec![("disk".to_string(), disk)];
+
+        let (sectors, chunk_sectors) = find_geometry(&sections, 2_823_000_000).unwrap();
+
+        assert_eq!(sectors, 268_435_456);
+        assert_eq!(chunk_sectors, 64);
+    }
+
+    #[test]
+    fn sectors_sections_are_not_loaded_into_memory_during_section_walk() {
+        assert!(!should_read_section_content("sectors"));
+        assert!(should_read_section_content("disk"));
+        assert!(should_read_section_content("volume"));
+        assert!(should_read_section_content("table"));
+        assert!(should_read_section_content("table2"));
     }
 
     #[test]
