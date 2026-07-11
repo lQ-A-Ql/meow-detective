@@ -1,5 +1,5 @@
-use domain::{DataSourceId, EntryType, FileEntryId};
-use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
+use domain::{EntryType, FileEntryId};
+use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 use search::{extract_text, SearchIndex, SearchResult};
 use std::path::Path;
@@ -8,30 +8,9 @@ use transport::dto::{
 };
 
 use crate::performance::{measure_rows, metric, report, PerfSample};
-use crate::source_db::{
-    encode_source_scoped_id, safe_case_relative_path, safe_existing_case_path, source_index_dir,
-};
-
-/// Typed error for search service operations.
-#[derive(Debug, thiserror::Error)]
-pub enum SearchError {
-    #[error("database error: {0}")]
-    Db(#[from] persistence_sqlite::DbError),
-    #[error("search index error: {0}")]
-    Index(String),
-    #[error("{0}")]
-    Other(String),
-}
-
-impl transport::ServiceErrorCategory for SearchError {
-    fn category(&self) -> transport::ErrorCategory {
-        match self {
-            Self::Db(_) => transport::ErrorCategory::Io,
-            Self::Index(_) => transport::ErrorCategory::Parser,
-            Self::Other(_) => transport::ErrorCategory::Internal,
-        }
-    }
-}
+mod case_search;
+mod error;
+pub use error::SearchError;
 
 #[derive(Debug, Clone)]
 pub struct IndexStats {
@@ -144,15 +123,10 @@ pub fn search_files_real(
 ) -> Result<SearchResultPageDto, SearchError> {
     let index = SearchIndex::open(index_dir).map_err(|e| SearchError::Index(e.to_string()))?;
     let start = std::time::Instant::now();
-    // Request more results than needed to support offset
-    let search_limit = (offset + limit as u64).min(1000) as usize;
     let SearchResult { hits, total_count } = index
-        .search(query, search_limit)
+        .search_page(query, offset as usize, limit as usize)
         .map_err(|e| SearchError::Index(e.to_string()))?;
     let took_ms = start.elapsed().as_millis() as u64;
-
-    // Apply offset
-    let hits: Vec<_> = hits.into_iter().skip(offset as usize).collect();
 
     let items: Vec<SearchHitDto> = hits
         .into_iter()
@@ -222,54 +196,7 @@ pub fn search_files_for_case(
     offset: u64,
     limit: u32,
 ) -> Result<SearchResultPageDto, SearchError> {
-    let start = std::time::Instant::now();
-    let mut total = 0u64;
-    let mut hits = Vec::new();
-    let search_limit = offset.saturating_add(limit as u64).min(1000);
-
-    for source in DataSourceRepo::new(case_conn).find_by_case(case_id)? {
-        let storage = DataSourceRepo::new(case_conn).find_storage(&source.id)?;
-        if storage
-            .as_ref()
-            .is_some_and(|value| value.import_state == "failed")
-        {
-            continue;
-        }
-        let index_dir = storage
-            .as_ref()
-            .and_then(|value| value.index_rel_path.as_deref())
-            .map(|rel| safe_case_relative_path(case_root, rel))
-            .transpose()?
-            .unwrap_or_else(|| source_index_dir(case_root, &source.id));
-        if !index_dir.exists() {
-            continue;
-        }
-        let index_dir = safe_existing_case_path(case_root, &index_dir)?;
-        let page = search_files_real(&index_dir, query, 0, search_limit as u32)?;
-        total = total.saturating_add(page.total);
-        hits.extend(
-            page.items
-                .into_iter()
-                .map(|hit| source_scoped_search_hit(hit, &source.id)),
-        );
-    }
-
-    hits.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| a.file_id.cmp(&b.file_id))
-    });
-
-    Ok(SearchResultPageDto {
-        total,
-        took_ms: start.elapsed().as_millis() as u64,
-        items: hits
-            .into_iter()
-            .skip(offset as usize)
-            .take(limit as usize)
-            .collect(),
-    })
+    case_search::search_files_for_case(case_conn, case_root, case_id, query, offset, limit)
 }
 
 pub fn search_files_for_case_instrumented(
@@ -293,13 +220,6 @@ pub fn search_files_for_case_instrumented(
         page,
         performance_report,
     })
-}
-
-fn source_scoped_search_hit(mut hit: SearchHitDto, data_source_id: &DataSourceId) -> SearchHitDto {
-    if !hit.file_id.starts_with("ds:") {
-        hit.file_id = encode_source_scoped_id(data_source_id, &hit.file_id);
-    }
-    hit
 }
 
 fn search_query_report(sample: PerfSample, total: u64) -> PerformanceReportDto {
@@ -358,7 +278,6 @@ mod tests {
     use search::ExtractedText;
     use std::io::Cursor;
     use tempfile::TempDir;
-
     fn setup_file_db() -> (rusqlite::Connection, Vec<FileEntryId>) {
         let conn = persistence_sqlite::connection::open_in_memory().unwrap();
         conn.execute_batch(include_str!(
@@ -445,6 +364,8 @@ mod tests {
         DataSourceRepo::new(&conn)
             .insert(&domain::CaseId("case-1".to_string()), &ds)
             .unwrap();
+        conn.execute_batch("UPDATE data_sources SET import_state='ready',platform='linux'")
+            .unwrap();
         conn
     }
 
@@ -464,7 +385,6 @@ mod tests {
             Some(Box::new(Cursor::new(format!("alpha beta {}", id.0))))
         })
         .unwrap();
-
         assert_eq!(result.stats.indexed_count, 2);
         assert_eq!(
             metric_value(&result.performance_report, "search.index.rows"),

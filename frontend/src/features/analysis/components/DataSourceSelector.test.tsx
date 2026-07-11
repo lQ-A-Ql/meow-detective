@@ -10,6 +10,7 @@ const dsWindows: DataSourceSummary = {
   kind: 'logical_directory',
   sourcePath: 'C:\\Cases\\win10',
   importedAt: '2026-06-01T10:00:00Z',
+  platform: 'windows',
   partitions: [
     {
       index: 0,
@@ -29,6 +30,7 @@ const dsE01: DataSourceSummary = {
   kind: 'e01',
   sourcePath: 'E:\\cases\\evidence.E01',
   importedAt: '2026-06-02T10:00:00Z',
+  platform: 'linux',
   partitions: [
     {
       index: 1,
@@ -48,6 +50,7 @@ const dsRaw: DataSourceSummary = {
   kind: 'raw',
   sourcePath: '/mnt/images/ubuntu.raw',
   importedAt: '2026-06-03T10:00:00Z',
+  platform: 'linux',
   partitions: [
     {
       index: 0,
@@ -62,7 +65,7 @@ const dsRaw: DataSourceSummary = {
 };
 
 describe('DataSourceSelector', () => {
-  it('renders a button for each data source plus the "all" toggle', () => {
+  it('renders one platform-labeled control for each data source', () => {
     const onSelect = vi.fn();
     render(
       createElement(DataSourceSelector, {
@@ -70,7 +73,7 @@ describe('DataSourceSelector', () => {
         onSelect,
       }),
     );
-    expect(screen.getByText('全部数据源')).toBeDefined();
+    expect(screen.queryByText('全部数据源')).toBeNull();
     expect(screen.getByText('Win10-C盘')).toBeDefined();
     expect(screen.getByText('Evidence-001')).toBeDefined();
   });
@@ -100,19 +103,6 @@ describe('DataSourceSelector', () => {
     expect(onSelect).toHaveBeenCalledWith('ds-1');
   });
 
-  it('calls onSelect with undefined when "全部数据源" is selected', () => {
-    const onSelect = vi.fn();
-    render(
-      createElement(DataSourceSelector, {
-        dataSources: [dsWindows],
-        selectedId: 'ds-1',
-        onSelect,
-      }),
-    );
-    fireEvent.click(screen.getByLabelText('全部数据源'));
-    expect(onSelect).toHaveBeenCalledWith(undefined);
-  });
-
   it('renders null when dataSources is empty', () => {
     const { container } = render(
       createElement(DataSourceSelector, {
@@ -133,5 +123,19 @@ describe('DataSourceSelector', () => {
     );
     const selected = screen.getByLabelText('Win10-C盘');
     expect(selected.getAttribute('data-state')).toBe('on');
+  });
+
+  it('disables source switching while analysis is running', () => {
+    render(
+      createElement(DataSourceSelector, {
+        dataSources: [dsWindows, dsE01],
+        selectedId: 'ds-1',
+        onSelect: vi.fn(),
+        disabled: true,
+      }),
+    );
+
+    expect((screen.getByLabelText('Win10-C盘') as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText('Evidence-001') as HTMLInputElement).disabled).toBe(true);
   });
 });

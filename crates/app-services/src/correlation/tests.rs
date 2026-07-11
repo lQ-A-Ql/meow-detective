@@ -127,8 +127,11 @@ fn register_source(case_conn: &Connection, case_id: &CaseId, source_id: &str) {
                 imported_at: Utc::now(),
                 provenance: DataSourceProvenance::unknown(),
             },
-            &DataSourceStorage::source_db(&ds_id.0, Some("unknown"), None),
+            &DataSourceStorage::source_db(&ds_id.0, Some("linux"), None),
         )
+        .unwrap();
+    case_conn
+        .execute_batch("UPDATE data_sources SET import_state='ready'")
         .unwrap();
 }
 
@@ -707,10 +710,8 @@ fn cached_snapshot_matches_recomputed() {
     );
     insert_artifact(&conn, "artifact-lnk", "LNK", Some("file-lnk"), attrs);
 
-    // First call: compute and cache
     let first = get_correlation_snapshot(&conn).unwrap();
 
-    // Second call: should come from cache and match
     let second = get_correlation_snapshot(&conn).unwrap();
 
     assert_eq!(first.nodes.len(), second.nodes.len());
@@ -722,7 +723,6 @@ fn cached_snapshot_matches_recomputed() {
     assert_eq!(first.cluster_count, second.cluster_count);
     assert_eq!(first.lead_count, second.lead_count);
 
-    // Node IDs should match
     let first_ids: BTreeSet<_> = first.nodes.iter().map(|n| n.id.clone()).collect();
     let second_ids: BTreeSet<_> = second.nodes.iter().map(|n| n.id.clone()).collect();
     assert_eq!(first_ids, second_ids);

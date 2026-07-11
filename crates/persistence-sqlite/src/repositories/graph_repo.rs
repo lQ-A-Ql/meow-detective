@@ -21,6 +21,22 @@ pub struct GraphSnapshot {
     pub total_edges: u64,
 }
 
+/// Stable continuation key for graph nodes ordered by creation time and id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GraphNodePageCursor {
+    created_at: String,
+    id: String,
+}
+
+impl From<&GraphNode> for GraphNodePageCursor {
+    fn from(node: &GraphNode) -> Self {
+        Self {
+            created_at: node.created_at.clone(),
+            id: node.id.clone(),
+        }
+    }
+}
+
 const INSERT_NODES_SQL: &str =
     "INSERT OR REPLACE INTO graph_nodes (id, case_id, node_type, label, summary, tags, created_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)";
@@ -32,6 +48,7 @@ const INSERT_EDGES_SQL: &str =
 const NODE_COLUMNS: &str = "id, case_id, node_type, label, summary, tags, created_at";
 const EDGE_COLUMNS: &str =
     "id, case_id, source_id, target_id, edge_type, confidence, provenance, created_at";
+const GRAPH_NODE_PAGE_BATCH_SIZE: u32 = 256;
 
 pub struct GraphRepo<'a> {
     conn: &'a Connection,
@@ -130,19 +147,57 @@ impl<'a> GraphRepo<'a> {
         limit: u32,
         offset: u32,
     ) -> DbResult<Vec<GraphNode>> {
-        let sql = format!(
-            "SELECT {NODE_COLUMNS} FROM graph_nodes
-             WHERE case_id = ?1
-             ORDER BY created_at DESC, id ASC
-             LIMIT ?2 OFFSET ?3"
-        );
-        let mut stmt = self.conn.prepare(&sql)?;
-        let rows = stmt.query_map(params![case_id, limit, offset], row_to_node)?;
-        let mut nodes = Vec::new();
-        for row in rows {
-            nodes.push(row?);
+        if limit == 0 {
+            return Ok(Vec::new());
         }
-        Ok(nodes)
+
+        let mut cursor = None;
+        let mut remaining = offset;
+        while remaining > 0 {
+            let batch_size = remaining.min(GRAPH_NODE_PAGE_BATCH_SIZE);
+            let batch = self.list_nodes_for_case_after(case_id, batch_size, cursor.as_ref())?;
+            if batch.len() < batch_size as usize {
+                return Ok(Vec::new());
+            }
+            cursor = batch.last().map(GraphNodePageCursor::from);
+            remaining -= batch_size;
+        }
+
+        self.list_nodes_for_case_after(case_id, limit, cursor.as_ref())
+    }
+
+    /// Continue listing graph nodes after a stable `(created_at, id)` key.
+    pub fn list_nodes_for_case_after(
+        &self,
+        case_id: &str,
+        limit: u32,
+        after: Option<&GraphNodePageCursor>,
+    ) -> DbResult<Vec<GraphNode>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let (sql, values) = match after {
+            Some(cursor) => (
+                list_nodes_after_sql(),
+                vec![
+                    rusqlite::types::Value::Text(case_id.to_string()),
+                    rusqlite::types::Value::Text(cursor.created_at.clone()),
+                    rusqlite::types::Value::Text(cursor.id.clone()),
+                    rusqlite::types::Value::Integer(i64::from(limit)),
+                ],
+            ),
+            None => (
+                list_nodes_first_sql(),
+                vec![
+                    rusqlite::types::Value::Text(case_id.to_string()),
+                    rusqlite::types::Value::Integer(i64::from(limit)),
+                ],
+            ),
+        };
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(rusqlite::params_from_iter(values), row_to_node)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
     /// Retrieve neighbors of a node, optionally filtered by edge types and direction.
@@ -444,6 +499,25 @@ impl<'a> GraphRepo<'a> {
 
 // ── Serialization helpers ──
 
+fn list_nodes_first_sql() -> String {
+    format!(
+        "SELECT {NODE_COLUMNS} FROM graph_nodes
+         WHERE case_id = ?1
+         ORDER BY created_at DESC, id ASC
+         LIMIT ?2"
+    )
+}
+
+fn list_nodes_after_sql() -> String {
+    format!(
+        "SELECT {NODE_COLUMNS} FROM graph_nodes
+         WHERE case_id = ?1
+           AND (created_at < ?2 OR (created_at = ?2 AND id > ?3))
+         ORDER BY created_at DESC, id ASC
+         LIMIT ?4"
+    )
+}
+
 fn node_type_str(nt: &NodeType) -> &'static str {
     match nt {
         NodeType::File => "file",
@@ -572,268 +646,5 @@ fn row_to_edge_node_pair(row: &rusqlite::Row) -> rusqlite::Result<(GraphEdge, Gr
 // ── Tests ──
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{connection::open_in_memory, runner};
-
-    fn setup() -> (&'static Connection, GraphRepo<'static>) {
-        // open_in_memory returns a Connection we need to own, but GraphRepo borrows it.
-        // We use a leaked Box to get a 'static reference for testing convenience.
-        let conn = Box::new(open_in_memory().unwrap());
-        let conn_ref: &'static Connection = Box::leak(conn);
-        runner::run_all(conn_ref).unwrap();
-        // Insert a dummy case for foreign key
-        conn_ref
-            .execute(
-                "INSERT INTO cases (id, name, created_at, updated_at) VALUES ('case-1', 'Test', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
-                [],
-            )
-            .unwrap();
-        let repo = GraphRepo::new(conn_ref);
-        (conn_ref, repo)
-    }
-
-    fn make_node(id: &str, node_type: NodeType, label: &str) -> GraphNode {
-        GraphNode {
-            id: id.to_string(),
-            case_id: "case-1".to_string(),
-            node_type,
-            label: label.to_string(),
-            summary: format!("Summary for {}", id),
-            tags: vec!["test".to_string()],
-            created_at: "2026-06-14T00:00:00Z".to_string(),
-        }
-    }
-
-    fn make_edge(id: &str, source: &str, target: &str, edge_type: EdgeType) -> GraphEdge {
-        GraphEdge {
-            id: id.to_string(),
-            case_id: "case-1".to_string(),
-            source_id: source.to_string(),
-            target_id: target.to_string(),
-            edge_type,
-            confidence: Some(0.95),
-            provenance: None,
-            created_at: "2026-06-14T00:00:00Z".to_string(),
-        }
-    }
-
-    #[test]
-    fn insert_and_get_node() {
-        let (_conn, repo) = setup();
-        let node = make_node("n1", NodeType::File, "cmd.exe");
-        let count = repo
-            .insert_nodes_batch(std::slice::from_ref(&node))
-            .unwrap();
-        assert_eq!(count, 1);
-
-        let fetched = repo.get_node("n1").unwrap().expect("node should exist");
-        assert_eq!(fetched.id, "n1");
-        assert_eq!(fetched.node_type, NodeType::File);
-        assert_eq!(fetched.label, "cmd.exe");
-        assert_eq!(fetched.tags, vec!["test"]);
-    }
-
-    #[test]
-    fn list_nodes_for_case_paginates_newest_first() {
-        let (_conn, repo) = setup();
-        let mut older = make_node("n1", NodeType::File, "older.exe");
-        older.created_at = "2026-06-14T00:00:00Z".to_string();
-        let mut newer = make_node("n2", NodeType::Artifact, "newer");
-        newer.created_at = "2026-06-15T00:00:00Z".to_string();
-        repo.insert_nodes_batch(&[older, newer]).unwrap();
-
-        let first_page = repo.list_nodes_for_case("case-1", 1, 0).unwrap();
-        assert_eq!(first_page.len(), 1);
-        assert_eq!(first_page[0].id, "n2");
-
-        let second_page = repo.list_nodes_for_case("case-1", 1, 1).unwrap();
-        assert_eq!(second_page.len(), 1);
-        assert_eq!(second_page[0].id, "n1");
-    }
-
-    #[test]
-    fn insert_and_get_edge() {
-        let (_conn, repo) = setup();
-        let n1 = make_node("n1", NodeType::File, "a.exe");
-        let n2 = make_node("n2", NodeType::Artifact, "LNK");
-        repo.insert_nodes_batch(&[n1, n2]).unwrap();
-
-        let edge = make_edge("e1", "n1", "n2", EdgeType::References);
-        let count = repo
-            .insert_edges_batch(std::slice::from_ref(&edge))
-            .unwrap();
-        assert_eq!(count, 1);
-
-        // Verify edge exists via neighbor query
-        let neighbors = repo.get_neighbors("n1", &[], Direction::Outgoing).unwrap();
-        assert_eq!(neighbors.len(), 1);
-        assert_eq!(neighbors[0].0.id, "e1");
-        assert_eq!(neighbors[0].1.id, "n2");
-    }
-
-    #[test]
-    fn neighbors_incoming() {
-        let (_conn, repo) = setup();
-        let n1 = make_node("n1", NodeType::File, "a.exe");
-        let n2 = make_node("n2", NodeType::File, "b.exe");
-        repo.insert_nodes_batch(&[n1, n2]).unwrap();
-        repo.insert_edges_batch(&[make_edge("e1", "n1", "n2", EdgeType::References)])
-            .unwrap();
-
-        let neighbors = repo.get_neighbors("n2", &[], Direction::Incoming).unwrap();
-        assert_eq!(neighbors.len(), 1);
-        assert_eq!(neighbors[0].0.id, "e1");
-        assert_eq!(neighbors[0].1.id, "n1");
-    }
-
-    #[test]
-    fn neighbors_both() {
-        let (_conn, repo) = setup();
-        let n1 = make_node("n1", NodeType::File, "a.exe");
-        let n2 = make_node("n2", NodeType::File, "b.exe");
-        let n3 = make_node("n3", NodeType::File, "c.exe");
-        repo.insert_nodes_batch(&[n1, n2, n3]).unwrap();
-        repo.insert_edges_batch(&[
-            make_edge("e1", "n1", "n2", EdgeType::References),
-            make_edge("e2", "n3", "n1", EdgeType::Contains),
-        ])
-        .unwrap();
-
-        let neighbors = repo.get_neighbors("n1", &[], Direction::Both).unwrap();
-        // n1 -> n2 (outgoing) and n3 -> n1 (incoming)
-        assert_eq!(neighbors.len(), 2);
-    }
-
-    #[test]
-    fn neighbors_filtered_by_edge_type() {
-        let (_conn, repo) = setup();
-        let n1 = make_node("n1", NodeType::File, "a.exe");
-        let n2 = make_node("n2", NodeType::File, "b.exe");
-        let n3 = make_node("n3", NodeType::File, "c.exe");
-        repo.insert_nodes_batch(&[n1, n2, n3]).unwrap();
-        repo.insert_edges_batch(&[
-            make_edge("e1", "n1", "n2", EdgeType::References),
-            make_edge("e2", "n1", "n3", EdgeType::Contains),
-        ])
-        .unwrap();
-
-        let refs = repo
-            .get_neighbors("n1", &[EdgeType::References], Direction::Outgoing)
-            .unwrap();
-        assert_eq!(refs.len(), 1);
-        assert_eq!(refs[0].1.id, "n2");
-    }
-
-    #[test]
-    fn traverse_bfs_simple_path() {
-        let (_conn, repo) = setup();
-        // Create a path: n1 -> n2 -> n3 -> n4
-        let nodes: Vec<GraphNode> = (1..=4)
-            .map(|i| make_node(&format!("n{}", i), NodeType::File, &format!("node{}", i)))
-            .collect();
-        repo.insert_nodes_batch(&nodes).unwrap();
-        repo.insert_edges_batch(&[
-            make_edge("e1", "n1", "n2", EdgeType::References),
-            make_edge("e2", "n2", "n3", EdgeType::References),
-            make_edge("e3", "n3", "n4", EdgeType::References),
-        ])
-        .unwrap();
-
-        let (result_nodes, result_edges) = repo.traverse(&["n1".to_string()], &[], 3, 100).unwrap();
-        assert_eq!(result_nodes.len(), 4);
-        assert_eq!(result_edges.len(), 3);
-    }
-
-    #[test]
-    fn traverse_respects_max_depth() {
-        let (_conn, repo) = setup();
-        let nodes: Vec<GraphNode> = (1..=5)
-            .map(|i| make_node(&format!("n{}", i), NodeType::File, &format!("node{}", i)))
-            .collect();
-        repo.insert_nodes_batch(&nodes).unwrap();
-        repo.insert_edges_batch(&[
-            make_edge("e1", "n1", "n2", EdgeType::References),
-            make_edge("e2", "n2", "n3", EdgeType::References),
-            make_edge("e3", "n3", "n4", EdgeType::References),
-            make_edge("e4", "n4", "n5", EdgeType::References),
-        ])
-        .unwrap();
-
-        let (result_nodes, _) = repo.traverse(&["n1".to_string()], &[], 1, 100).unwrap();
-        // depth 1: n1 + n2 = 2 nodes
-        assert_eq!(result_nodes.len(), 2);
-    }
-
-    #[test]
-    fn traverse_respects_limit() {
-        let (_conn, repo) = setup();
-        let nodes: Vec<GraphNode> = (1..=5)
-            .map(|i| make_node(&format!("n{}", i), NodeType::File, &format!("node{}", i)))
-            .collect();
-        repo.insert_nodes_batch(&nodes).unwrap();
-        repo.insert_edges_batch(&[
-            make_edge("e1", "n1", "n2", EdgeType::References),
-            make_edge("e2", "n2", "n3", EdgeType::References),
-        ])
-        .unwrap();
-
-        let (result_nodes, _) = repo.traverse(&["n1".to_string()], &[], 5, 2).unwrap();
-        assert_eq!(result_nodes.len(), 2);
-    }
-
-    #[test]
-    fn snapshot_counts_by_type() {
-        let (_conn, repo) = setup();
-        let nodes = vec![
-            make_node("n1", NodeType::File, "a.exe"),
-            make_node("n2", NodeType::File, "b.dll"),
-            make_node("n3", NodeType::Artifact, "LNK-1"),
-        ];
-        repo.insert_nodes_batch(&nodes).unwrap();
-        repo.insert_edges_batch(&[
-            make_edge("e1", "n1", "n2", EdgeType::References),
-            make_edge("e2", "n1", "n3", EdgeType::References),
-        ])
-        .unwrap();
-
-        let snapshot = repo.get_snapshot("case-1").unwrap();
-        assert_eq!(snapshot.total_nodes, 3);
-        assert_eq!(snapshot.total_edges, 2);
-        assert_eq!(snapshot.node_count_by_type.get("file"), Some(&2));
-        assert_eq!(snapshot.node_count_by_type.get("artifact"), Some(&1));
-        assert_eq!(snapshot.edge_count_by_type.get("references"), Some(&2));
-    }
-
-    #[test]
-    fn delete_case_graph_removes_all() {
-        let (_conn, repo) = setup();
-        let nodes = vec![
-            make_node("n1", NodeType::File, "a.exe"),
-            make_node("n2", NodeType::File, "b.dll"),
-        ];
-        repo.insert_nodes_batch(&nodes).unwrap();
-        repo.insert_edges_batch(&[make_edge("e1", "n1", "n2", EdgeType::References)])
-            .unwrap();
-
-        repo.delete_case_graph("case-1").unwrap();
-
-        let snapshot = repo.get_snapshot("case-1").unwrap();
-        assert_eq!(snapshot.total_nodes, 0);
-        assert_eq!(snapshot.total_edges, 0);
-    }
-
-    #[test]
-    fn get_node_nonexistent_returns_none() {
-        let (_conn, repo) = setup();
-        let result = repo.get_node("no-such-node").unwrap();
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn empty_batch_returns_zero() {
-        let (_conn, repo) = setup();
-        assert_eq!(repo.insert_nodes_batch(&[]).unwrap(), 0);
-        assert_eq!(repo.insert_edges_batch(&[]).unwrap(), 0);
-    }
-}
+#[path = "../../tests/unit/graph_repo.rs"]
+mod tests;

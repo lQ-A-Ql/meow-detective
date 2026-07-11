@@ -9,7 +9,7 @@ export interface DataSourceSummary {
   sourceDbRelPath?: string;
   indexRelPath?: string;
   stagingRelPath?: string;
-  platform?: 'windows' | 'linux' | 'unknown' | string;
+  platform: 'windows' | 'linux';
   profile?: string;
   importState?: 'pending' | 'importing' | 'ready' | 'failed' | string;
   schemaVersion?: string;

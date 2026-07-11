@@ -95,7 +95,6 @@ mod benchmark_tests {
             prefetch_fixture("NOTEPAD.EXE", 1, Utc::now()),
         )
         .unwrap();
-
         let active = case_service::create_case(
             &tmp.path().join("cases"),
             "bench-case",
@@ -112,6 +111,7 @@ mod benchmark_tests {
                 let import_config =
                     app_services::import_precheck::prepare_import_source_config_from_path(
                         &evidence_dir.to_string_lossy(),
+                        domain::DataSourcePlatform::Windows,
                     )
                     .unwrap();
                 execute_import_job(

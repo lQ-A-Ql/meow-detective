@@ -11,31 +11,22 @@
 //!   batch job breakdown, and notebook statistics.
 //! - All queries are read-only and operate against the active case database.
 
+mod artifact_family_platform;
+mod error;
+mod platform_coverage;
+
 use rusqlite::Connection;
 use std::path::Path;
-use thiserror::Error;
 
 use transport::dto::{
-    BatchStatusDto, GraphStatsDto, NotebookStatsDto, PlatformCoverageDto, RulePackInfoDto,
-    RulePackStatusDto, V3GovernanceSnapshotDto,
+    BatchStatusDto, GraphStatsDto, NotebookStatsDto, RulePackInfoDto, RulePackStatusDto,
+    V3GovernanceSnapshotDto,
 };
 
-#[derive(Debug, Error)]
-pub enum V3GovernanceError {
-    #[error("database error: {0}")]
-    Db(#[from] rusqlite::Error),
-    #[error("{0}")]
-    Other(String),
-}
-
-impl transport::ServiceErrorCategory for V3GovernanceError {
-    fn category(&self) -> transport::ErrorCategory {
-        match self {
-            Self::Db(_) => transport::ErrorCategory::Io,
-            Self::Other(_) => transport::ErrorCategory::Internal,
-        }
-    }
-}
+pub use error::V3GovernanceError;
+use platform_coverage::{
+    apply_platform_integrity_gate, build_platform_coverage, build_platform_coverage_for_case,
+};
 
 // ── Public API ─────────────────────────────────────────────────────────────
 
@@ -48,8 +39,7 @@ pub fn get_v3_governance_snapshot(
     conn: &Connection,
     case_id: &str,
 ) -> Result<V3GovernanceSnapshotDto, V3GovernanceError> {
-    let v2 = crate::v2_governance_service::get_v2_governance_snapshot(conn, case_id)
-        .map_err(|e| V3GovernanceError::Other(e.to_string()))?;
+    let v2 = crate::v2_governance_service::get_v2_governance_snapshot(conn, case_id)?;
 
     let graph_statistics = build_graph_stats(conn, case_id)?;
     let platform_coverage = build_platform_coverage(conn)?;
@@ -72,13 +62,15 @@ pub fn get_v3_governance_snapshot_for_case(
     case_root: &Path,
     case_id: &str,
 ) -> Result<V3GovernanceSnapshotDto, V3GovernanceError> {
-    let v2 =
-        crate::v2_governance_service::get_v2_governance_snapshot_for_case(conn, case_root, case_id)
-            .map_err(|e| V3GovernanceError::Other(e.to_string()))?;
+    let mut v2 = crate::v2_governance_service::get_v2_governance_snapshot_for_case(
+        conn, case_root, case_id,
+    )?;
 
     let graph_statistics = build_graph_stats_for_case(conn, case_root, case_id)?;
-    let platform_coverage =
+    let platform_assessment =
         build_platform_coverage_for_case(conn, case_root, &domain::CaseId(case_id.to_string()))?;
+    apply_platform_integrity_gate(&mut v2, &platform_assessment);
+    let platform_coverage = platform_assessment.coverage;
     let rule_pack_coverage = build_rule_pack_status();
     let batch_status = build_batch_status(conn, case_id)?;
     let notebook_stats = build_notebook_stats(conn, case_id)?;
@@ -96,8 +88,7 @@ pub fn get_v3_governance_snapshot_for_case(
 // ── Graph Statistics ───────────────────────────────────────────────────────
 
 fn build_graph_stats(conn: &Connection, case_id: &str) -> Result<GraphStatsDto, V3GovernanceError> {
-    let graph_snapshot = crate::graph_service::get_graph_snapshot(conn, case_id)
-        .map_err(|e| V3GovernanceError::Other(e.to_string()))?;
+    let graph_snapshot = crate::graph_service::get_graph_snapshot(conn, case_id)?;
     Ok(GraphStatsDto {
         node_count_by_type: graph_snapshot.node_count_by_type,
         edge_count_by_type: graph_snapshot.edge_count_by_type,
@@ -114,8 +105,7 @@ fn build_graph_stats_for_case(
     case_id: &str,
 ) -> Result<GraphStatsDto, V3GovernanceError> {
     let graph_snapshot =
-        crate::graph_service::get_graph_snapshot_for_case(conn, case_root, case_id)
-            .map_err(|e| V3GovernanceError::Other(e.to_string()))?;
+        crate::graph_service::get_graph_snapshot_for_case(conn, case_root, case_id)?;
     Ok(GraphStatsDto {
         node_count_by_type: graph_snapshot.node_count_by_type,
         edge_count_by_type: graph_snapshot.edge_count_by_type,
@@ -123,156 +113,6 @@ fn build_graph_stats_for_case(
         total_edges: graph_snapshot.total_edges,
         density: graph_snapshot.density,
         largest_component_size: graph_snapshot.largest_component_size,
-    })
-}
-
-// ── Platform Coverage ──────────────────────────────────────────────────────
-
-/// Map artifact family names to target platforms.
-///
-/// Unknown families default to Windows since this is a Windows-first product.
-fn get_platform(family: &str) -> &'static str {
-    // Windows artifact families (Windows-only forensics artifacts)
-    let windows_families: &[&str] = &[
-        "LNK",
-        "Prefetch",
-        "JumpList",
-        "RegistryValue",
-        "Registry",
-        "RecycleBin",
-        "EVTX",
-        "SRU",
-        "Thumbcache",
-        "ShellBag",
-        "AmCache",
-        "USBDevice",
-        "EventLog",
-        "AppCompatCache",
-        "MUICache",
-        "UserAssist",
-        "BAM",
-        "ShimCache",
-        "NetworkList",
-        "ScheduledTask",
-        "Service",
-        "Startup",
-        "MRU",
-        "RunMRU",
-        "LastVisitedMRU",
-        "OfficeMRU",
-        "TypedPaths",
-        "RecentDocs",
-        "ComDlg32",
-        "WordWheelQuery",
-        "BagMRU",
-        "MFT",
-        "UsnJrnl",
-        "LogonSession",
-        "RDPClient",
-        "PowerShellHistory",
-        "CmdHistory",
-    ];
-    // Cross-platform artifact families (browsers, email)
-    let cross_platform_families: &[&str] = &[
-        "BrowserDownload",
-        "BrowserHistory",
-        "BrowserVisit",
-        "BrowserCookie",
-        "BrowserSessionTab",
-        "EmailMessage",
-    ];
-    let linux_families: &[&str] = &[
-        "BashHistory",
-        "AuthLog",
-        "Syslog",
-        "Journald",
-        "CronLog",
-        "PacmanLog",
-        "AptHistory",
-        "DpkgLog",
-    ];
-    if windows_families
-        .iter()
-        .any(|f| f.eq_ignore_ascii_case(family))
-    {
-        "windows"
-    } else if cross_platform_families
-        .iter()
-        .any(|f| f.eq_ignore_ascii_case(family))
-    {
-        "cross-platform"
-    } else if linux_families
-        .iter()
-        .any(|f| f.eq_ignore_ascii_case(family))
-    {
-        "linux"
-    } else {
-        // Default to Windows for unknown families (Windows-first product)
-        "windows"
-    }
-}
-
-fn build_platform_coverage(conn: &Connection) -> Result<PlatformCoverageDto, V3GovernanceError> {
-    use persistence_sqlite::repositories::artifact_repo::ArtifactRepo;
-
-    let family_counts = ArtifactRepo::new(conn)
-        .count_by_family()
-        .map_err(|e| V3GovernanceError::Other(e.to_string()))?;
-
-    let mut windows_families: Vec<String> = Vec::new();
-    let mut linux_families: Vec<String> = Vec::new();
-    let mut cross_platform_families: Vec<String> = Vec::new();
-
-    for (family, _count) in &family_counts {
-        match get_platform(family) {
-            "windows" => windows_families.push(family.clone()),
-            "linux" => linux_families.push(family.clone()),
-            "cross-platform" => cross_platform_families.push(family.clone()),
-            _ => windows_families.push(family.clone()),
-        }
-    }
-
-    Ok(PlatformCoverageDto {
-        windows_artifact_families: windows_families.len() as u32,
-        linux_artifact_families: linux_families.len() as u32,
-        cross_platform_artifact_families: cross_platform_families.len() as u32,
-        total_families: family_counts.len() as u32,
-        windows_families,
-        linux_families,
-        cross_platform_families,
-    })
-}
-
-fn build_platform_coverage_for_case(
-    conn: &Connection,
-    case_root: &Path,
-    case_id: &domain::CaseId,
-) -> Result<PlatformCoverageDto, V3GovernanceError> {
-    let family_counts =
-        crate::artifact_service::get_artifact_family_counts_for_case(conn, case_root, case_id)
-            .map_err(|e| V3GovernanceError::Other(e.to_string()))?;
-
-    let mut windows_families: Vec<String> = Vec::new();
-    let mut linux_families: Vec<String> = Vec::new();
-    let mut cross_platform_families: Vec<String> = Vec::new();
-
-    for family_count in &family_counts {
-        match get_platform(&family_count.family) {
-            "windows" => windows_families.push(family_count.family.clone()),
-            "linux" => linux_families.push(family_count.family.clone()),
-            "cross-platform" => cross_platform_families.push(family_count.family.clone()),
-            _ => windows_families.push(family_count.family.clone()),
-        }
-    }
-
-    Ok(PlatformCoverageDto {
-        windows_artifact_families: windows_families.len() as u32,
-        linux_artifact_families: linux_families.len() as u32,
-        cross_platform_artifact_families: cross_platform_families.len() as u32,
-        total_families: family_counts.len() as u32,
-        windows_families,
-        linux_families,
-        cross_platform_families,
     })
 }
 
@@ -565,25 +405,6 @@ mod tests {
         assert!(!snapshot.v2.fact_sources.is_empty());
         assert!(!snapshot.v2.error_taxonomy_entries.is_empty());
         assert_eq!(snapshot.v2.release_gates.len(), 7);
-    }
-
-    #[test]
-    fn get_platform_maps_known_families() {
-        assert_eq!(get_platform("LNK"), "windows");
-        assert_eq!(get_platform("Prefetch"), "windows");
-        assert_eq!(get_platform("JumpList"), "windows");
-        assert_eq!(get_platform("RegistryValue"), "windows");
-        assert_eq!(get_platform("RecycleBin"), "windows");
-        assert_eq!(get_platform("BrowserHistory"), "cross-platform");
-        assert_eq!(get_platform("BrowserCookie"), "cross-platform");
-        assert_eq!(get_platform("EmailMessage"), "cross-platform");
-        assert_eq!(get_platform("BashHistory"), "linux");
-    }
-
-    #[test]
-    fn get_platform_defaults_to_windows_for_unknown() {
-        assert_eq!(get_platform("UnknownFamily"), "windows");
-        assert_eq!(get_platform("CustomArtifact"), "windows");
     }
 
     #[test]

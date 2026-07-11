@@ -12,8 +12,7 @@ pub fn preview_descriptor_for_case(
     file_id: &FileEntryId,
 ) -> Result<PreviewDescriptor, FileServiceError> {
     #[cfg(test)]
-    crate::file_service::viewer::PREVIEW_DESCRIPTOR_FOR_CASE_CALLS
-        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    crate::file_service::viewer::record_descriptor_build(case_id, file_id);
 
     let repo = FileRepo::new(conn);
     let entry = repo

@@ -130,6 +130,17 @@ powershell -ExecutionPolicy Bypass -File scripts\check-command-sql-boundary.ps1
 # findings are advisory by default and become fatal with -StrictBackend.
 powershell -ExecutionPolicy Bypass -File scripts\check-stage0-boundary-guard.ps1
 
+# Stage 2 platform boundary guard. This keeps transport platform DTOs out of
+# app-services, requires symmetric Windows/Linux analyzers, prevents platform
+# business logic from returning to analysis commands, locks ready-source
+# aggregation and platform-scoped frontend views, and caps analysis facades.
+powershell -ExecutionPolicy Bypass -File scripts\check-stage2-platform-boundary.ps1
+
+# Stage 2 private real-sample gate. With no fixture arguments it reports an
+# explicit skip; -RequireFixtures converts missing samples into a failure. When
+# fixtures are present, both serial import orders are exercised by default.
+powershell -ExecutionPolicy Bypass -File scripts\check-stage2-real-sample-isolation.ps1
+
 # Backend Rust module-size guard. This discovers every workspace member through
 # cargo metadata, locks pre-existing production file-size debt against
 # scripts/baselines/rust-module-size-baseline.csv, and fails on new or increased

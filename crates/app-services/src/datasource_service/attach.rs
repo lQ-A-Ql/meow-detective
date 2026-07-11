@@ -1,12 +1,11 @@
-use super::{DataSourceError, LvmDiscoverySource, Result};
+use super::{DataSourceError, Result};
 use domain::{
-    CaseId, DataSource, DataSourceHashStatus, DataSourceId, DataSourceKind, DataSourceProvenance,
-    DataSourceProvenanceStatus,
+    CaseId, DataSource, DataSourceHashStatus, DataSourceId, DataSourceKind, DataSourcePlatform,
+    DataSourceProvenance, DataSourceProvenanceStatus,
 };
 use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use std::io::Read;
 use std::path::Path;
-use transport::commands::ImportTargetPlatformDto;
 
 pub fn attach_data_source(
     conn: &rusqlite::Connection,
@@ -14,8 +13,9 @@ pub fn attach_data_source(
     name: &str,
     source_path: &Path,
     kind: DataSourceKind,
+    platform: DataSourcePlatform,
 ) -> Result<DataSource> {
-    attach_data_source_with_storage(conn, case_id, name, source_path, kind, None, None)
+    attach_data_source_with_storage(conn, case_id, name, source_path, kind, platform, None)
 }
 
 pub fn attach_data_source_with_storage(
@@ -24,10 +24,13 @@ pub fn attach_data_source_with_storage(
     name: &str,
     source_path: &Path,
     kind: DataSourceKind,
-    platform: Option<ImportTargetPlatformDto>,
+    platform: DataSourcePlatform,
     profile: Option<String>,
 ) -> Result<DataSource> {
-    let platform = platform.map(platform_label).transpose()?;
+    if platform == DataSourcePlatform::Unknown {
+        return Err(DataSourceError::UnsupportedPlatform(platform.to_string()));
+    }
+    let platform = Some(platform.as_storage_str());
     let id = DataSourceId(uuid::Uuid::new_v4().to_string());
     let provenance = build_attach_provenance(source_path, &kind);
     let ds = DataSource {
@@ -42,22 +45,6 @@ pub fn attach_data_source_with_storage(
     let storage = DataSourceStorage::source_db(&ds.id.0, platform, profile);
     DataSourceRepo::new(conn).insert_with_storage(case_id, &ds, &storage)?;
     Ok(ds)
-}
-
-pub fn lvm_discovery_sources_for_case(
-    conn: &rusqlite::Connection,
-    case_id: &CaseId,
-    current_data_source_id: Option<&DataSourceId>,
-) -> Result<Vec<LvmDiscoverySource>> {
-    let sources = DataSourceRepo::new(conn).find_by_case(case_id)?;
-    Ok(sources
-        .into_iter()
-        .filter(|source| {
-            current_data_source_id.is_none_or(|current_id| source.id != *current_id)
-                && matches!(source.kind, DataSourceKind::E01 | DataSourceKind::Raw)
-        })
-        .map(|source| LvmDiscoverySource::new(source.source_path, source.kind))
-        .collect())
 }
 
 fn build_attach_provenance(source_path: &Path, kind: &DataSourceKind) -> DataSourceProvenance {
@@ -109,17 +96,6 @@ fn build_attach_provenance(source_path: &Path, kind: &DataSourceKind) -> DataSou
         reader_kind: Some(kind.to_string()),
         provenance_status,
         warnings,
-    }
-}
-
-fn platform_label(platform: ImportTargetPlatformDto) -> Result<&'static str> {
-    match platform {
-        ImportTargetPlatformDto::Windows => Ok("windows"),
-        ImportTargetPlatformDto::Linux => Ok("linux"),
-        ImportTargetPlatformDto::Unknown => Ok("unknown"),
-        ImportTargetPlatformDto::Unsupported => Err(DataSourceError::Unsupported(
-            "macOS is not supported by this build".to_string(),
-        )),
     }
 }
 

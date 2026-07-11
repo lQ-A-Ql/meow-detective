@@ -17,10 +17,9 @@ import {
   ToggleGroupItem,
 } from '@/app/components/ui/toggle-group';
 import { BrandArt } from '@/components/brand';
-import type { ImportDataSourceRequest } from '@/types/models';
+import type { ImportDataSourceRequest, ImportTargetPlatform } from '@/types/models';
 import { useImportDataSourceDialogModel } from '@/features/import/use-import-data-source-dialog-model';
 
-type Platform = 'windows' | 'linux';
 type SourceKind = 'auto' | 'linuxCluster';
 
 export interface ImportDataSourceDialogProps {
@@ -38,7 +37,7 @@ export function ImportDataSourceDialog({
 }: ImportDataSourceDialogProps) {
   const { t } = useTranslation();
   const [step, setStep] = useState<'platform' | 'form'>('platform');
-  const [platform, setPlatform] = useState<Platform>('windows');
+  const [platform, setPlatform] = useState<ImportTargetPlatform>('windows');
   const [sourceKind, setSourceKind] = useState<SourceKind>('auto');
   const [name, setName] = useState('');
   const [path, setPath] = useState('');
@@ -137,7 +136,7 @@ export function ImportDataSourceDialog({
               value={platform}
               onValueChange={(v) => {
                 if (!v) return;
-                const nextPlatform = v as Platform;
+                const nextPlatform = v as ImportTargetPlatform;
                 setPlatform(nextPlatform);
                 if (nextPlatform !== 'linux') {
                   setSourceKind('auto');

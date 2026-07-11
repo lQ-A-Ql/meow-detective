@@ -1,10 +1,13 @@
 use crate::file_service::FileServiceError;
 use crate::source_db::{self, GlobalFileId};
 use domain::{
-    DataSourceHashStatus, DataSourceId, DataSourceProvenanceStatus, EntryType, FileEntry,
+    DataSourceHashStatus, DataSourceId, DataSourcePlatform, DataSourceProvenanceStatus, EntryType,
+    FileEntry,
 };
 use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo, file_repo::FileRepo, partition_repo::PartitionRepo,
+    datasource_repo::{DataSourceRepo, DataSourceStorage},
+    file_repo::FileRepo,
+    partition_repo::PartitionRepo,
 };
 use rusqlite::Connection;
 use std::path::Path;
@@ -19,9 +22,16 @@ pub fn get_data_sources_real(
     let partition_repo = PartitionRepo::new(conn);
     let sources = ds_repo.find_by_case(case_id)?;
 
-    Ok(sources
+    sources
         .into_iter()
         .map(|source| {
+            let storage = ds_repo.find_storage(&source.id)?.ok_or_else(|| {
+                FileServiceError::other(format!(
+                    "data source {} is missing storage metadata",
+                    source.id.0
+                ))
+            })?;
+            let platform = required_data_source_platform(&storage)?;
             let partitions = partition_repo
                 .find_by_data_source(&source.id.0)
                 .map(|items| {
@@ -42,22 +52,22 @@ pub fn get_data_sources_real(
                 })
                 .unwrap_or_default();
 
-            DataSourceSummaryDto {
+            Ok(DataSourceSummaryDto {
                 id: source.id.0.clone(),
                 name: source.name,
                 kind: source.kind.to_string(),
                 source_path: source.source_path.display().to_string(),
                 imported_at: source.imported_at.to_rfc3339(),
                 file_count: file_repo.count_by_data_source(&source.id).ok(),
-                storage_model: None,
-                source_db_rel_path: None,
-                index_rel_path: None,
-                staging_rel_path: None,
-                platform: None,
-                profile: None,
-                import_state: None,
-                schema_version: None,
-                last_error: None,
+                storage_model: Some(storage.storage_model),
+                source_db_rel_path: storage.source_db_rel_path,
+                index_rel_path: storage.index_rel_path,
+                staging_rel_path: storage.staging_rel_path,
+                platform,
+                profile: storage.profile,
+                import_state: Some(storage.import_state),
+                schema_version: storage.schema_version,
+                last_error: storage.last_error,
                 source_hash: source.provenance.source_hash_sha256,
                 hash_status: Some(data_source_hash_status_label(
                     &source.provenance.hash_status,
@@ -73,9 +83,17 @@ pub fn get_data_sources_real(
                 )),
                 warnings: source.provenance.warnings,
                 partitions,
-            }
+            })
         })
-        .collect())
+        .collect()
+}
+
+pub(crate) fn required_data_source_platform(
+    storage: &DataSourceStorage,
+) -> Result<String, FileServiceError> {
+    DataSourcePlatform::parse_explicit(&storage.platform)
+        .map(|platform| platform.as_storage_str().to_string())
+        .map_err(|error| FileServiceError::other(error.to_string()))
 }
 
 pub(crate) fn data_source_hash_status_label(status: &DataSourceHashStatus) -> String {
@@ -162,23 +180,12 @@ pub fn get_recent_objects_for_case(
     case_root: &Path,
     case_id: &domain::CaseId,
 ) -> Result<Vec<RecentObjectDto>, FileServiceError> {
-    let sources = DataSourceRepo::new(case_conn).find_by_case(case_id)?;
     let mut recent = Vec::new();
 
-    for source in sources {
-        let storage = DataSourceRepo::new(case_conn).find_storage(&source.id)?;
-        if storage
-            .as_ref()
-            .is_some_and(|value| value.import_state == "failed")
-        {
-            continue;
-        }
+    for (source, _) in source_db::ready_data_sources(case_conn, case_id)? {
         let source_conn =
-            match source_db::open_registered_source_db(case_conn, case_root, &source.id) {
-                Ok(conn) => conn,
-                Err(_) => continue,
-            };
-        let mut source_recent = get_recent_objects_real(&source_conn)?;
+            source_db::open_ready_source_by_id(case_conn, case_root, case_id, &source.id)?;
+        let mut source_recent = get_recent_objects_real(&source_conn.connection)?;
         for item in &mut source_recent {
             item.id = GlobalFileId::new(source.id.clone(), domain::FileEntryId(item.id.clone()))
                 .encode()

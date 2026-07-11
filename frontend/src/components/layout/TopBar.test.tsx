@@ -124,6 +124,7 @@ describe('TopBar', () => {
         kind: 'raw',
         sourcePath: 'D:/private/sample.raw',
         importedAt: '2026-06-05T10:00:00Z',
+        platform: 'windows',
         hashStatus: 'unavailable',
         partitions: [],
       },

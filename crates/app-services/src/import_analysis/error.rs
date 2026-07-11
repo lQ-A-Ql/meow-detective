@@ -3,6 +3,10 @@ use thiserror::Error;
 /// Typed error for the import analysis pipeline.
 #[derive(Debug, Error)]
 pub enum ImportAnalysisError {
+    /// The post-import pipeline only supports explicitly classified sources.
+    #[error("unsupported data source platform `{0}` for post-import analysis")]
+    UnsupportedPlatform(String),
+
     /// Direct SQLite error from query/prepare/execute operations.
     #[error("database error: {0}")]
     Db(#[from] rusqlite::Error),
@@ -28,6 +32,7 @@ pub enum ImportAnalysisError {
 impl transport::ServiceErrorCategory for ImportAnalysisError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
+            Self::UnsupportedPlatform(_) => transport::ErrorCategory::Unsupported,
             Self::Db(_) | Self::Persistence(_) | Self::Io(_) => transport::ErrorCategory::Io,
             Self::Staging(_) => transport::ErrorCategory::Validation,
             Self::Other(_) => transport::ErrorCategory::Internal,

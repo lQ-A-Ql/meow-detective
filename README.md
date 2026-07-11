@@ -41,7 +41,7 @@ cd apps/desktop/src-tauri && cargo tauri build
 
 ```bash
 cargo test --workspace
-cd frontend && pnpm test            # Frontend (85 test files)
+cd frontend && pnpm test            # Frontend (86 test files)
 cd frontend && pnpm test:coverage
 ```
 
@@ -64,7 +64,7 @@ cd frontend && pnpm test
 | `apps/desktop/src-tauri/` | Tauri 2 shell (98 commands) |
 | `crates/app-services/` | Application orchestration (26 source modules) |
 | `crates/transport/` | Shared DTOs, commands, events, errors |
-| `crates/persistence-sqlite/` | SQLite repos (16) and migration scripts (39) |
+| `crates/persistence-sqlite/` | SQLite repos (16) and migration scripts (41) |
 | `crates/evidence-core/` | Disk image probing and volume detection |
 | `crates/fs-ntfs/`, `fs-fat/`, `fs-exfat/`, `fs-ext4/`, `fs-xfs/`, `fs-btrfs/` | Filesystem parsers (NTFS/FAT/ExFAT/ext4/XFS/Btrfs) |
 | `crates/image-e01/`, `image-raw/` | Image readers (E01/RAW) |

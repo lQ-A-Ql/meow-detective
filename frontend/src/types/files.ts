@@ -59,12 +59,12 @@ export interface FileJumpContext {
   requiresShowHidden: boolean;
 }
 
-export type ImportTargetPlatform = 'windows' | 'linux' | 'unknown';
+export type ImportTargetPlatform = 'windows' | 'linux';
 export type ImportSourceKind = 'auto' | 'linuxCluster';
 
 export interface ImportDataSourceRequest {
   sourcePath: string;
   sourceKind?: ImportSourceKind;
-  platform?: ImportTargetPlatform;
+  platform: ImportTargetPlatform;
   profile?: string;
 }

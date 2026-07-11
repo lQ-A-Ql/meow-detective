@@ -51,6 +51,7 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                 "test-e01",
                 e01_path,
                 domain::DataSourceKind::E01,
+                domain::DataSourcePlatform::Windows,
             )
             .map_err(|e| persistence_sqlite::DbError::System(format!("attach: {e}")))?;
 

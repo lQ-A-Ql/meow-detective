@@ -86,6 +86,7 @@ describe('V3Dashboard', () => {
         kind: 'e01',
         sourcePath: 'E:/cases/sample.e01',
         importedAt: '2026-06-12T00:00:00Z',
+        platform: 'windows',
         fileCount: 1234,
         readerKind: 'ewf',
         partitions: [
@@ -98,6 +99,7 @@ describe('V3Dashboard', () => {
         kind: 'raw',
         sourcePath: 'E:/cases/disk.raw',
         importedAt: '2026-06-12T00:00:00Z',
+        platform: 'windows',
         fileCount: 567,
         readerKind: 'raw',
         partitions: [

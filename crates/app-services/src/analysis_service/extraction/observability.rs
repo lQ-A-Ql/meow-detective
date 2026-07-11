@@ -3,8 +3,9 @@ use crate::analysis_service::candidates::{
 };
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::extraction::linux::{
-    linux_candidate_read_limit, linux_candidate_support, LinuxCandidateSupport,
+    linux_candidate_read_limit, linux_candidate_support,
 };
+use crate::analysis_service::extraction::linux_sections::LinuxCandidateSupport;
 use rusqlite::Connection;
 use std::collections::HashMap;
 use transport::dto::AnalysisParseStatusDto;

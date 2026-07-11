@@ -12,9 +12,7 @@ use transport::{
 use crate::performance::{measure_rows, metric, report, PerfSample};
 use crate::source_db::{self, encode_source_scoped_id};
 use domain::{EdgeType, FileEntry, GraphEdge, GraphNode, NodeType};
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo, graph_repo::GraphRepo, timeline_repo::TimelineRepo,
-};
+use persistence_sqlite::repositories::{graph_repo::GraphRepo, timeline_repo::TimelineRepo};
 use rayon::prelude::*;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
@@ -32,6 +30,8 @@ pub enum TimelineServiceError {
     NotFound(String),
     #[error("invalid input: {0}")]
     InvalidInput(String),
+    #[error("unsupported: {0}")]
+    Unsupported(String),
     #[error("{0}")]
     Other(String),
 }
@@ -41,6 +41,7 @@ impl transport::ServiceErrorCategory for TimelineServiceError {
         match self {
             Self::Db(_) => transport::ErrorCategory::Io,
             Self::NotFound(_) | Self::InvalidInput(_) => transport::ErrorCategory::Validation,
+            Self::Unsupported(_) => transport::ErrorCategory::Unsupported,
             Self::Other(_) => transport::ErrorCategory::Internal,
         }
     }
@@ -49,6 +50,23 @@ impl transport::ServiceErrorCategory for TimelineServiceError {
 impl From<rusqlite::Error> for TimelineServiceError {
     fn from(e: rusqlite::Error) -> Self {
         Self::Db(persistence_sqlite::DbError::from(e))
+    }
+}
+
+impl From<crate::source_db::ReadySourceError> for TimelineServiceError {
+    fn from(error: crate::source_db::ReadySourceError) -> Self {
+        match error {
+            crate::source_db::ReadySourceError::Db(error) => Self::Db(error),
+            crate::source_db::ReadySourceError::NotFound { .. } => {
+                Self::NotFound(error.to_string())
+            }
+            crate::source_db::ReadySourceError::NotReady { .. } => {
+                Self::InvalidInput(error.to_string())
+            }
+            crate::source_db::ReadySourceError::UnsupportedPlatform { .. } => {
+                Self::Unsupported(error.to_string())
+            }
+        }
     }
 }
 
@@ -271,7 +289,7 @@ pub fn query_timeline_filtered_for_case(
     let per_source_limit = offset.saturating_add(limit as u64).min(u32::MAX as u64) as u32;
 
     for (data_source_id, source_conn) in
-        open_ready_source_connections(case_conn, case_root, case_id)?
+        source_db::open_ready_source_connections(case_conn, case_root, case_id)?
     {
         ensure_macb_timeline_projected(&source_conn)?;
         let repo = TimelineRepo::new(&source_conn);
@@ -491,7 +509,7 @@ pub fn get_timeline_event_by_id(
 pub fn get_timeline_event_by_id_for_case(
     case_conn: &Connection,
     case_root: &Path,
-    _case_id: &domain::CaseId,
+    case_id: &domain::CaseId,
     event_id: &str,
 ) -> Result<Option<TimelineEventDto>, TimelineServiceError> {
     let (data_source_id, local_id) =
@@ -500,9 +518,10 @@ pub fn get_timeline_event_by_id_for_case(
                 "{err}; source database timeline events require ds:<dataSourceId>:<localId>"
             ))
         })?;
-    let source_conn = source_db::open_registered_source_db(case_conn, case_root, &data_source_id)?;
-    ensure_macb_timeline_projected(&source_conn)?;
-    Ok(TimelineRepo::new(&source_conn)
+    let source =
+        source_db::open_ready_source_by_id(case_conn, case_root, case_id, &data_source_id)?;
+    ensure_macb_timeline_projected(&source.connection)?;
+    Ok(TimelineRepo::new(&source.connection)
         .find_by_id(&local_id)?
         .map(|event| timeline_event_to_source_dto(event, &data_source_id)))
 }
@@ -557,27 +576,6 @@ fn timeline_event_to_source_dto(
         source_attribution: ev.source_attribution,
         attrs: ev.attrs,
     }
-}
-
-fn open_ready_source_connections(
-    case_conn: &Connection,
-    case_root: &Path,
-    case_id: &domain::CaseId,
-) -> Result<Vec<(domain::DataSourceId, Connection)>, TimelineServiceError> {
-    let sources = DataSourceRepo::new(case_conn).find_by_case(case_id)?;
-    let mut conns = Vec::with_capacity(sources.len());
-    for source in sources {
-        let storage = DataSourceRepo::new(case_conn).find_storage(&source.id)?;
-        if storage
-            .as_ref()
-            .is_some_and(|value| value.import_state == "failed")
-        {
-            continue;
-        }
-        let conn = source_db::open_registered_source_db(case_conn, case_root, &source.id)?;
-        conns.push((source.id, conn));
-    }
-    Ok(conns)
 }
 
 fn ensure_projection_meta_table(conn: &Connection) -> Result<(), TimelineServiceError> {
@@ -829,7 +827,6 @@ mod tests {
     use super::*;
     use chrono::{TimeZone, Utc};
     use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
-
     const TIMELINE_SCHEMA: &str =
         include_str!("../../persistence-sqlite/src/migrations/scripts/0005_timeline_events.sql");
 
@@ -871,6 +868,8 @@ mod tests {
         };
         persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&conn)
             .insert(&domain::CaseId("case-1".to_string()), &ds)
+            .unwrap();
+        conn.execute_batch("UPDATE data_sources SET import_state='ready',platform='linux'")
             .unwrap();
         conn
     }
@@ -915,7 +914,6 @@ mod tests {
         ];
 
         let count = project_and_store_macb(&conn, &files).unwrap();
-        // a.txt: created + modified + accessed = 3 events
         // b.txt: created + accessed = 2 events
         assert_eq!(count, 5);
 

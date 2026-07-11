@@ -115,6 +115,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0035_data_source_clusters",
         include_str!("scripts/0035_data_source_clusters.sql"),
     ),
+    (
+        "0036_graph_node_order_index",
+        include_str!("scripts/0036_graph_node_order_index.sql"),
+    ),
 ];
 
 const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
@@ -126,6 +130,10 @@ const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
     (
         "source_003_correlation_cache",
         include_str!("scripts/source_003_correlation_cache.sql"),
+    ),
+    (
+        "source_004_graph_node_order_index",
+        include_str!("scripts/source_004_graph_node_order_index.sql"),
     ),
 ];
 

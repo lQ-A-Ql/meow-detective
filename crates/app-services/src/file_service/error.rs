@@ -16,6 +16,8 @@ pub enum FileServiceError {
     Security(String),
     #[error("path traversal: {0}")]
     PathTraversal(String),
+    #[error("unsupported: {0}")]
+    Unsupported(String),
     #[error("other error: {0}")]
     Other(String),
 }
@@ -55,12 +57,30 @@ impl From<String> for FileServiceError {
     }
 }
 
+impl From<crate::source_db::ReadySourceError> for FileServiceError {
+    fn from(error: crate::source_db::ReadySourceError) -> Self {
+        match error {
+            crate::source_db::ReadySourceError::Db(error) => Self::Db(error),
+            crate::source_db::ReadySourceError::NotFound { .. } => {
+                Self::NotFound(error.to_string())
+            }
+            crate::source_db::ReadySourceError::NotReady { .. } => {
+                Self::InvalidInput(error.to_string())
+            }
+            crate::source_db::ReadySourceError::UnsupportedPlatform { .. } => {
+                Self::Unsupported(error.to_string())
+            }
+        }
+    }
+}
+
 impl transport::ServiceErrorCategory for FileServiceError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
             Self::Db(_) | Self::Io(_) => transport::ErrorCategory::Io,
             Self::NotFound(_) => transport::ErrorCategory::Validation,
             Self::InvalidInput(_) | Self::PathTraversal(_) => transport::ErrorCategory::Validation,
+            Self::Unsupported(_) => transport::ErrorCategory::Unsupported,
             Self::Security(_) => transport::ErrorCategory::Security,
             Self::Other(_) => transport::ErrorCategory::Internal,
         }

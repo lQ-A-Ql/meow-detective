@@ -50,15 +50,13 @@ pub use tree_queries::{
     get_file_children_lazy, get_file_children_lazy_with_visibility, get_file_tree_real,
     get_file_tree_real_with_visibility,
 };
+#[cfg(test)]
+pub(crate) use viewer::descriptor_build_count;
 pub use viewer::{
     clear_e01_reader_cache, clear_e01_reader_cache_for_case, get_file_path_for_entry,
     open_file_content_by_id, open_file_handle_real, read_file_bytes_for_case,
     read_file_header_by_id, read_file_range_for_case, safe_relative_path, skip_reader_bytes,
     FileHeaderReadCache,
-};
-#[cfg(test)]
-pub(crate) use viewer::{
-    preview_descriptor_for_case_call_count, reset_preview_descriptor_for_case_call_count,
 };
 
 pub use mft::{

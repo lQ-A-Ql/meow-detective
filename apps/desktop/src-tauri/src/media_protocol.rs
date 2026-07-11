@@ -245,6 +245,7 @@ fn handle_media_protocol_request_inner(
         )
     })?;
 
+    let case_id = domain::CaseId(case_id);
     let handle = file_service::open_file_handle_for_case(&conn, &case_root, &case_id, &file_id)
         .map_err(|_| (StatusCode::NOT_FOUND, "media file unavailable".to_string()))?;
     let range = parse_media_range_header(
@@ -303,7 +304,7 @@ fn read_media_protocol_bytes(
     state: &AppState,
     conn: &rusqlite::Connection,
     case_root: &std::path::Path,
-    case_id: &str,
+    case_id: &domain::CaseId,
     file_id: &str,
     offset: u64,
     length: u32,
@@ -312,7 +313,6 @@ fn read_media_protocol_bytes(
     MEDIA_PROTOCOL_BYTES_SERVICE_READ_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
     let _ = state;
-    let _ = case_id;
     file_service::read_preview_bytes_for_source_case(
         conn, case_root, case_id, file_id, offset, length,
     )
@@ -340,20 +340,12 @@ mod tests {
         file_repo::FileRepo,
     };
 
-    fn reset_media_protocol_bytes_service_read_call_count() {
-        MEDIA_PROTOCOL_BYTES_SERVICE_READ_CALLS.store(0, std::sync::atomic::Ordering::Relaxed);
-    }
-
-    fn media_protocol_bytes_service_read_call_count() -> usize {
-        MEDIA_PROTOCOL_BYTES_SERVICE_READ_CALLS.load(std::sync::atomic::Ordering::Relaxed)
-    }
-
     fn with_raw_exfat_case_file(
         test: impl FnOnce(
             &AppState,
             &rusqlite::Connection,
             &std::path::Path,
-            String,
+            domain::CaseId,
             String,
         ) -> Result<(), persistence_sqlite::DbError>,
     ) {
@@ -372,6 +364,8 @@ mod tests {
 
         let case_id = domain::CaseId("case-protocol-raw".to_string());
         let ds_id = domain::DataSourceId("ds-protocol-raw-exfat".to_string());
+        let mut storage = DataSourceStorage::source_db(&ds_id.0, Some("windows"), None);
+        storage.import_state = "ready".to_string();
         DataSourceRepo::new(&conn)
             .insert_with_storage(
                 &case_id,
@@ -383,7 +377,7 @@ mod tests {
                     imported_at: chrono::Utc::now(),
                     provenance: domain::DataSourceProvenance::unknown(),
                 },
-                &DataSourceStorage::source_db(&ds_id.0, Some("unknown"), None),
+                &storage,
             )
             .unwrap();
 
@@ -428,7 +422,7 @@ mod tests {
         let global_file_id = app_services::source_db::GlobalFileId::new(ds_id, file_id)
             .encode()
             .0;
-        test(&state, &conn, tmp.path(), case_id.0, global_file_id).unwrap();
+        test(&state, &conn, tmp.path(), case_id, global_file_id).unwrap();
     }
 
     fn write_exfat_raw_fixture(path: &std::path::Path) -> std::io::Result<()> {
@@ -512,13 +506,16 @@ mod tests {
     #[test]
     fn protocol_mid_raw_image_range_reads_via_bytes_only_service_path() {
         with_raw_exfat_case_file(|state, conn, case_root, case_id, file_id| {
-            reset_media_protocol_bytes_service_read_call_count();
+            MEDIA_PROTOCOL_BYTES_SERVICE_READ_CALLS.store(0, std::sync::atomic::Ordering::Relaxed);
             let bytes =
                 read_media_protocol_bytes(state, conn, case_root, &case_id, &file_id, 512 + 7, 9)
                     .map_err(|(_, message)| persistence_sqlite::DbError::System(message))?;
 
             assert_eq!(bytes, vec![b'B'; 9]);
-            assert_eq!(media_protocol_bytes_service_read_call_count(), 1);
+            assert_eq!(
+                MEDIA_PROTOCOL_BYTES_SERVICE_READ_CALLS.load(std::sync::atomic::Ordering::Relaxed),
+                1
+            );
 
             Ok(())
         });

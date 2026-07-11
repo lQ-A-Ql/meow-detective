@@ -50,8 +50,7 @@ pub struct DataSourceSummaryDto {
     pub index_rel_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub staging_rel_path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub platform: Option<String>,
+    pub platform: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -120,7 +119,7 @@ mod tests {
             source_db_rel_path: Some("sources/ds-1/source.db".to_string()),
             index_rel_path: Some("sources/ds-1/index".to_string()),
             staging_rel_path: Some("staging/ds-1".to_string()),
-            platform: Some("windows".to_string()),
+            platform: "windows".to_string(),
             profile: Some("triage".to_string()),
             import_state: Some("ready".to_string()),
             schema_version: Some("source_002_data_source_metadata".to_string()),
@@ -185,7 +184,7 @@ mod tests {
             source_db_rel_path: None,
             index_rel_path: None,
             staging_rel_path: None,
-            platform: None,
+            platform: "linux".to_string(),
             profile: None,
             import_state: None,
             schema_version: None,
@@ -207,7 +206,7 @@ mod tests {
         assert!(value.get("sourceDbRelPath").is_none());
         assert!(value.get("indexRelPath").is_none());
         assert!(value.get("stagingRelPath").is_none());
-        assert!(value.get("platform").is_none());
+        assert_eq!(value["platform"], "linux");
         assert!(value.get("profile").is_none());
         assert!(value.get("importState").is_none());
         assert!(value.get("schemaVersion").is_none());

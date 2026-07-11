@@ -1,4 +1,5 @@
 import { Clock, Monitor, Network, RefreshCw, Shield } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
 import { BrandEmptyState } from '@/components/brand';
 import type {
@@ -8,6 +9,8 @@ import type {
 import { DataSourceSelector } from '@/features/analysis/components/DataSourceSelector';
 import {
   EmptyLine,
+  AnalysisExtractionProgress,
+  type AnalysisExtractionProgressInfo,
   FieldProvenancePanel,
   formatProvenanceSummary,
   InfoCard,
@@ -16,6 +19,45 @@ import {
   StatusPill,
   WarningList,
 } from './helpers';
+
+export function AnalysisProgressOverview({
+  progress,
+  expanded,
+  onExpandedChange,
+}: {
+  progress: AnalysisExtractionProgressInfo[];
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div
+      data-testid="analysis-progress-overview"
+      className="shrink-0 border-b border-forensics-border bg-forensics-panel"
+    >
+      <div className="flex items-center justify-between border-b border-forensics-border px-6 py-2">
+        <span className="text-xs font-medium text-forensics-text-secondary">
+          {t('analysis.progressDrawer.title')}
+        </span>
+        <Button
+          type="button"
+          variant="forensicsSurface"
+          size="compact"
+          onClick={() => onExpandedChange(!expanded)}
+        >
+          {expanded ? t('analysis.progressDrawer.collapse') : t('analysis.progressDrawer.expand')}
+        </Button>
+      </div>
+      {expanded ? (
+        <div className="grid grid-cols-1 gap-3 px-6 py-4 lg:grid-cols-3">
+          {progress.map((item, index) => (
+            <AnalysisExtractionProgress key={`${item.label}-${index}`} progress={item} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export function SystemInfoPanel({ systemInfo }: { systemInfo?: AnalysisSystemInfo }) {
   const info = systemInfo ?? {
@@ -127,6 +169,7 @@ export function AnalysisHeader({
   loading,
   hasCase,
   extractionPending,
+  dataSourceSwitchDisabled = extractionPending,
   extractionRun,
   onRefresh,
   onRunExtraction,
@@ -137,12 +180,13 @@ export function AnalysisHeader({
   loading: boolean;
   hasCase: boolean;
   extractionPending: boolean;
+  dataSourceSwitchDisabled?: boolean;
   extractionRun?: AnalysisExtractionRun;
   onRefresh: () => void;
   onRunExtraction: () => void;
   dataSources?: import('@/types/models').DataSourceSummary[];
   selectedDataSourceId?: string;
-  onSelectDataSource?: (id?: string) => void;
+  onSelectDataSource?: (id: string) => void;
 }) {
   return (
     <div className="shrink-0 border-b border-[#e0e0e0] bg-[#fafafa] p-6">
@@ -158,6 +202,7 @@ export function AnalysisHeader({
                 dataSources={dataSources}
                 selectedId={selectedDataSourceId}
                 onSelect={onSelectDataSource}
+                disabled={dataSourceSwitchDisabled}
                 className="mt-3"
               />
               <div className="mt-2 max-w-md text-[11px] leading-5 text-[#999]">

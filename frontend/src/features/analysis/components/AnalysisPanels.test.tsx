@@ -193,7 +193,7 @@ describe('AnalysisPanels sub-components', () => {
           onRefresh: () => {},
           onRunExtraction: () => {},
           dataSources: [
-            { id: 'ds-1', name: 'Win10-C盘', kind: 'logical_directory', sourcePath: 'C:\\Cases\\win10', importedAt: '2026-06-01T10:00:00Z' },
+            { id: 'ds-1', name: 'Win10-C盘', kind: 'logical_directory', sourcePath: 'C:\\Cases\\win10', importedAt: '2026-06-01T10:00:00Z', platform: 'windows' },
           ],
           onSelectDataSource: () => {},
         }),
@@ -212,7 +212,7 @@ describe('AnalysisPanels sub-components', () => {
           onRefresh: () => {},
           onRunExtraction: () => {},
           dataSources: [
-            { id: 'ds-1', name: 'Win10-C盘', kind: 'logical_directory', sourcePath: 'C:\\Cases\\win10', importedAt: '2026-06-01T10:00:00Z' },
+            { id: 'ds-1', name: 'Win10-C盘', kind: 'logical_directory', sourcePath: 'C:\\Cases\\win10', importedAt: '2026-06-01T10:00:00Z', platform: 'windows' },
           ],
           selectedDataSourceId: 'ds-1',
           onSelectDataSource: () => {},

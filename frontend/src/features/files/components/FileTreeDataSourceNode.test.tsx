@@ -22,6 +22,7 @@ const dsLogical: DataSourceSummary = {
   kind: 'logical_directory',
   sourcePath: 'C:\\Cases\\win10',
   importedAt: '2026-06-01T10:00:00Z',
+  platform: 'windows',
 };
 
 describe('FileTreeDataSourceNode', () => {

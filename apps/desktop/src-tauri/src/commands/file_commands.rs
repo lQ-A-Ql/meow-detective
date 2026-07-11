@@ -44,12 +44,6 @@ fn increment_preview_read_counter(counter: &PreviewReadCounter, case_id: &str) {
     *counts.entry(case_id.to_string()).or_insert(0) += 1;
 }
 
-fn current_case_id_for_preview(state: &AppState) -> Result<String, CommandError> {
-    crate::commands::command_support::snapshot_active_case(state)?
-        .map(|active| active.case_id)
-        .ok_or_else(CommandError::no_active_case)
-}
-
 /// Get children of a file tree node (lazy loading).
 #[tauri::command]
 pub async fn get_file_children(
@@ -92,6 +86,7 @@ pub async fn get_file_children_request(
         file_service::get_file_children_for_case(
             &conn,
             &active.case_root,
+            &active.meta.id,
             &request.parent_id,
             request.offset,
             request.limit,
@@ -166,7 +161,7 @@ pub async fn get_file_rows_request(
         }
         let conn = crate::commands::command_support::get_case_connection(&app_state)?;
         let active = crate::commands::command_support::require_active_case(&app_state)?;
-        file_service::get_file_rows_for_case(&conn, &active.case_root, &request)
+        file_service::get_file_rows_for_case(&conn, &active.case_root, &active.meta.id, &request)
             .map_err(CommandError::from_typed_service_error)
     })
     .await
@@ -184,15 +179,19 @@ pub async fn get_file_jump_context(
     tauri::async_runtime::spawn_blocking(move || {
         let conn = crate::commands::command_support::get_case_connection(&app_state)?;
         let active = crate::commands::command_support::require_active_case(&app_state)?;
-        file_service::get_file_jump_context_for_case(&conn, &active.case_root, &request).map_err(
-            |err| {
-                if err.to_string().contains("not found") {
-                    CommandError::not_found("File")
-                } else {
-                    CommandError::from_typed_service_error(err)
-                }
-            },
+        file_service::get_file_jump_context_for_case(
+            &conn,
+            &active.case_root,
+            &active.meta.id,
+            &request,
         )
+        .map_err(|err| {
+            if err.to_string().contains("not found") {
+                CommandError::not_found("File")
+            } else {
+                CommandError::from_typed_service_error(err)
+            }
+        })
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -206,16 +205,10 @@ pub async fn open_file_handle(
 ) -> Result<ViewerHandleDto, CommandError> {
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let case_id = current_case_id_for_preview(&app_state)?;
         let conn = crate::commands::command_support::get_case_connection(&app_state)?;
         let active = crate::commands::command_support::require_active_case(&app_state)?;
-        file_service::open_file_handle_for_case(
-            &conn,
-            &active.case_root,
-            case_id.as_str(),
-            &file_id,
-        )
-        .map_err(CommandError::from_typed_service_error)
+        file_service::open_file_handle_for_case(&conn, &active.case_root, &active.meta.id, &file_id)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
@@ -230,13 +223,12 @@ pub async fn open_file_handle_request(
     request.validate().map_err(CommandError::invalid_input)?;
     let app_state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let case_id = current_case_id_for_preview(&app_state)?;
         let conn = crate::commands::command_support::get_case_connection(&app_state)?;
         let active = crate::commands::command_support::require_active_case(&app_state)?;
         file_service::open_file_handle_for_case(
             &conn,
             &active.case_root,
-            case_id.as_str(),
+            &active.meta.id,
             &request.file_id,
         )
         .map_err(CommandError::from_typed_service_error)
@@ -262,13 +254,12 @@ fn read_file_range_for_state(
     app_state: &AppState,
     request: &transport::dto::ViewerRangeRequestDto,
 ) -> Result<ViewerRangeResponseDto, CommandError> {
-    let case_id = current_case_id_for_preview(app_state)?;
     let conn = crate::commands::command_support::get_case_connection(app_state)?;
     let active = crate::commands::command_support::require_active_case(app_state)?;
     file_service::read_file_range_for_source_case(
         &conn,
         &active.case_root,
-        case_id.as_str(),
+        &active.meta.id,
         request,
     )
     .map_err(CommandError::from_typed_service_error)
@@ -367,6 +358,7 @@ pub async fn extract_file(
             file_service::extract_file_to_destination_for_case(
                 &conn,
                 &active.case_root,
+                &active.meta.id,
                 &file_id,
                 &dest,
                 overwrite,
@@ -402,9 +394,8 @@ fn image_preview_for_file(
     conn: &rusqlite::Connection,
     file_id: &str,
 ) -> Result<ImagePreviewDto, CommandError> {
-    let case_id = current_case_id_for_preview(state)?;
     let active = crate::commands::command_support::require_active_case(state)?;
-    file_service::image_preview_for_source_case(conn, &active.case_root, case_id.as_str(), file_id)
+    file_service::image_preview_for_source_case(conn, &active.case_root, &active.meta.id, file_id)
         .map_err(CommandError::from_typed_service_error)
 }
 
@@ -413,12 +404,11 @@ fn media_data_url_for_file(
     conn: &rusqlite::Connection,
     file_id: &str,
 ) -> Result<MediaUrlDto, CommandError> {
-    let case_id = current_case_id_for_preview(state)?;
     let active = crate::commands::command_support::require_active_case(state)?;
     let plan = file_service::media_preview_plan_for_source_case(
         conn,
         &active.case_root,
-        case_id.as_str(),
+        &active.meta.id,
         file_id,
     )
     .map_err(CommandError::from_typed_service_error)?;
@@ -451,16 +441,19 @@ fn media_range_for_file(
 ) -> Result<MediaRangeResponseDto, CommandError> {
     let file_id = crate::media_protocol::resolve_scoped_media_handle(state, &request.handle_id)
         .map_err(CommandError::security)?;
-    let case_id = current_case_id_for_preview(state)?;
-
     #[cfg(test)]
-    increment_preview_read_counter(&MEDIA_BYTES_HELPER_CALLS, &case_id);
+    {
+        let case_id = crate::commands::command_support::snapshot_active_case(state)?
+            .map(|active| active.case_id)
+            .ok_or_else(CommandError::no_active_case)?;
+        increment_preview_read_counter(&MEDIA_BYTES_HELPER_CALLS, &case_id);
+    }
 
     let active = crate::commands::command_support::require_active_case(state)?;
     file_service::media_range_for_source_case(
         conn,
         &active.case_root,
-        case_id.as_str(),
+        &active.meta.id,
         &file_id,
         request,
     )
@@ -473,12 +466,11 @@ fn text_preview_for_file(
     file_id: &str,
     max_bytes: Option<usize>,
 ) -> Result<TextPreviewDto, CommandError> {
-    let case_id = current_case_id_for_preview(state)?;
     let active = crate::commands::command_support::require_active_case(state)?;
     file_service::text_preview_for_source_case(
         conn,
         &active.case_root,
-        case_id.as_str(),
+        &active.meta.id,
         file_id,
         max_bytes,
     )
@@ -536,6 +528,7 @@ mod tests {
         test: impl FnOnce(
             &rusqlite::Connection,
             String,
+            String,
             std::path::PathBuf,
             std::path::PathBuf,
         ) -> Result<(), persistence_sqlite::DbError>,
@@ -562,11 +555,9 @@ mod tests {
                     imported_at: chrono::Utc::now(),
                     provenance: domain::DataSourceProvenance::unknown(),
                 };
-                DataSourceRepo::new(conn).insert_with_storage(
-                    &case_id,
-                    &ds,
-                    &DataSourceStorage::source_db(&ds_id.0, Some("unknown"), None),
-                )?;
+                let mut storage = DataSourceStorage::source_db(&ds_id.0, Some("windows"), None);
+                storage.import_state = "ready".to_string();
+                DataSourceRepo::new(conn).insert_with_storage(&case_id, &ds, &storage)?;
 
                 let source_conn = app_services::source_db::open_source_db(&case_root, &ds_id)?;
                 DataSourceRepo::new(&source_conn).upsert_source_local_metadata(&case_id, &ds)?;
@@ -589,7 +580,13 @@ mod tests {
                 .encode()
                 .0;
 
-                test(conn, file_id, evidence_dir.clone(), case_root.clone())?;
+                test(
+                    conn,
+                    case_id.0.clone(),
+                    file_id,
+                    evidence_dir.clone(),
+                    case_root.clone(),
+                )?;
                 Ok(())
             })
             .unwrap();
@@ -626,11 +623,9 @@ mod tests {
                     imported_at: chrono::Utc::now(),
                     provenance: domain::DataSourceProvenance::unknown(),
                 };
-                DataSourceRepo::new(conn).insert_with_storage(
-                    &case_id,
-                    &ds,
-                    &DataSourceStorage::source_db(&ds_id.0, Some("unknown"), None),
-                )?;
+                let mut storage = DataSourceStorage::source_db(&ds_id.0, Some("windows"), None);
+                storage.import_state = "ready".to_string();
+                DataSourceRepo::new(conn).insert_with_storage(&case_id, &ds, &storage)?;
                 let source_conn = app_services::source_db::open_source_db(&case_root, &ds_id)?;
                 DataSourceRepo::new(&source_conn).upsert_source_local_metadata(&case_id, &ds)?;
 
@@ -757,8 +752,8 @@ mod tests {
             "media",
             "clip.mp4",
             b"tiny media bytes",
-            |conn, file_id, evidence_dir, case_root| {
-                let state = test_state_with_case("case-media-inline", case_root);
+            |conn, case_id, file_id, evidence_dir, case_root| {
+                let state = test_state_with_case(&case_id, case_root);
                 let media = media_data_url_for_file(&state, conn, &file_id)
                     .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
                 let url = media.url.expect("small media should return inline URL");
@@ -779,9 +774,8 @@ mod tests {
             "media-inline-logical",
             "clip.mp4",
             b"tiny media bytes",
-            |conn, file_id, _, case_root| {
-                let case_id = "case-media-inline-logical";
-                let state = test_state_with_case(case_id, case_root);
+            |conn, case_id, file_id, _, case_root| {
+                let state = test_state_with_case(&case_id, case_root);
                 let media = media_data_url_for_file(&state, conn, &file_id)
                     .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
 
@@ -840,9 +834,8 @@ mod tests {
             "image-inline-logical",
             "tiny.png",
             b"tiny image bytes",
-            |conn, file_id, _, case_root| {
-                let case_id = "case-image-inline-logical";
-                let state = test_state_with_case(case_id, case_root);
+            |conn, case_id, file_id, _, case_root| {
+                let state = test_state_with_case(&case_id, case_root);
                 let image = image_preview_for_file(&state, conn, &file_id)
                     .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
 
@@ -883,11 +876,9 @@ mod tests {
                     imported_at: chrono::Utc::now(),
                     provenance: domain::DataSourceProvenance::unknown(),
                 };
-                DataSourceRepo::new(conn).insert_with_storage(
-                    &case_id,
-                    &ds,
-                    &DataSourceStorage::source_db(&ds_id.0, Some("unknown"), None),
-                )?;
+                let mut storage = DataSourceStorage::source_db(&ds_id.0, Some("windows"), None);
+                storage.import_state = "ready".to_string();
+                DataSourceRepo::new(conn).insert_with_storage(&case_id, &ds, &storage)?;
                 let source_conn =
                     app_services::source_db::open_source_db(&active.case_root, &ds_id)?;
                 DataSourceRepo::new(&source_conn).upsert_source_local_metadata(&case_id, &ds)?;
@@ -910,10 +901,10 @@ mod tests {
                 .encode()
                 .0;
                 let destination = tmp.path().join("exports").join("note-copy.txt");
-
                 let written = file_service::extract_file_to_destination_for_case(
                     conn,
                     &active.case_root,
+                    &active.meta.id,
                     &file_id,
                     &destination,
                     false,
@@ -936,8 +927,8 @@ mod tests {
             "large-media",
             "large.mp4",
             &oversized,
-            |conn, file_id, _, case_root| {
-                let state = test_state_with_case("case-media-large", case_root);
+            |conn, case_id, file_id, _, case_root| {
+                let state = test_state_with_case(&case_id, case_root);
                 let media = media_data_url_for_file(&state, conn, &file_id)
                     .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
                 assert_eq!(media.mode, MediaPreviewModeDto::Protocol);
@@ -982,8 +973,8 @@ mod tests {
             "media-eof",
             "clip.mp4",
             b"0123456789",
-            |conn, file_id, _, case_root| {
-                let state = test_state_with_case("case-media-eof", case_root);
+            |conn, case_id, file_id, _, case_root| {
+                let state = test_state_with_case(&case_id, case_root);
                 let handle_id = crate::media_protocol::create_scoped_media_handle(&state, &file_id)
                     .map_err(persistence_sqlite::DbError::System)?;
                 let range = media_range_for_file(
@@ -1014,12 +1005,11 @@ mod tests {
             "media-mid-range",
             "clip.mp4",
             &content,
-            |conn, file_id, _, case_root| {
-                let case_id = "case-media-mid-range";
-                let state = test_state_with_case(case_id, case_root);
+            |conn, case_id, file_id, _, case_root| {
+                let state = test_state_with_case(&case_id, case_root);
                 let handle_id = crate::media_protocol::create_scoped_media_handle(&state, &file_id)
                     .map_err(persistence_sqlite::DbError::System)?;
-                let media_helper_before = media_bytes_helper_call_count(case_id);
+                let media_helper_before = media_bytes_helper_call_count(&case_id);
                 let range = media_range_for_file(
                     &state,
                     conn,
@@ -1034,7 +1024,7 @@ mod tests {
                 assert_eq!(range.offset, 17);
                 assert_eq!(range.bytes_read, 12);
                 assert_eq!(
-                    media_bytes_helper_call_count(case_id) - media_helper_before,
+                    media_bytes_helper_call_count(&case_id) - media_helper_before,
                     1
                 );
                 assert_eq!(
@@ -1144,8 +1134,8 @@ mod tests {
             "media-invalid-handle",
             "clip.mp4",
             b"0123456789",
-            |conn, _, _, case_root| {
-                let state = test_state_with_case("case-media-invalid", case_root);
+            |conn, case_id, _, _, case_root| {
+                let state = test_state_with_case(&case_id, case_root);
                 let err = media_range_for_file(
                     &state,
                     conn,
@@ -1171,8 +1161,8 @@ mod tests {
             "media-clamp",
             "large.mp4",
             &content,
-            |conn, file_id, _, case_root| {
-                let state = test_state_with_case("case-media-clamp", case_root);
+            |conn, case_id, file_id, _, case_root| {
+                let state = test_state_with_case(&case_id, case_root);
                 let handle_id = crate::media_protocol::create_scoped_media_handle(&state, &file_id)
                     .map_err(persistence_sqlite::DbError::System)?;
                 let mut request = MediaRangeRequestDto {
@@ -1202,8 +1192,8 @@ mod tests {
             "media-no-leak",
             "clip.mp4",
             b"0123456789",
-            |conn, file_id, evidence_dir, case_root| {
-                let state = test_state_with_case("case-media-no-leak", case_root);
+            |conn, case_id, file_id, evidence_dir, case_root| {
+                let state = test_state_with_case(&case_id, case_root);
                 let handle_id = crate::media_protocol::create_scoped_media_handle(&state, &file_id)
                     .map_err(persistence_sqlite::DbError::System)?;
                 let range = media_range_for_file(

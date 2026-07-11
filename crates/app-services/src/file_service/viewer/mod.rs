@@ -1,15 +1,4 @@
-//! Viewer / preview subsystem: file handles, descriptor cache, and range reads.
-//!
-//! This module was split from a single 3000+ line file into focused submodules:
-//!
-//! - `descriptor`: preview descriptor construction and caching
-//! - `e01_cache`: per-case LRU cache of parsed E01 readers
-//! - `handle`: file handle opening and logical-directory path resolution
-//! - `image_open`: opening full file content from image-backed sources
-//! - `partition`: partition candidate discovery for E01/RAW images
-//! - `path`: safe path validation and image path candidate helpers
-//! - `range`: public range-read and content-open API
-//! - `range_fs`: filesystem-specific fast paths for range reads
+//! Viewer subsystem for handles, caches, partition discovery, image-backed opening, and range reads.
 
 mod descriptor;
 mod e01_cache;
@@ -199,17 +188,28 @@ thread_local! {
 }
 
 #[cfg(test)]
-pub(crate) static PREVIEW_DESCRIPTOR_FOR_CASE_CALLS: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
+static DESCRIPTOR_BUILDS: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<(String, String), usize>>,
+> = std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashMap::new()));
 
 #[cfg(test)]
-pub(crate) fn reset_preview_descriptor_for_case_call_count() {
-    PREVIEW_DESCRIPTOR_FOR_CASE_CALLS.store(0, std::sync::atomic::Ordering::Relaxed);
+pub(crate) fn record_descriptor_build(case_id: &str, file_id: &domain::FileEntryId) {
+    let mut builds = DESCRIPTOR_BUILDS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    *builds
+        .entry((case_id.to_string(), file_id.0.clone()))
+        .or_default() += 1;
 }
 
 #[cfg(test)]
-pub(crate) fn preview_descriptor_for_case_call_count() -> usize {
-    PREVIEW_DESCRIPTOR_FOR_CASE_CALLS.load(std::sync::atomic::Ordering::Relaxed)
+pub(crate) fn descriptor_build_count(case_id: &str, file_id: &str) -> usize {
+    DESCRIPTOR_BUILDS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .get(&(case_id.to_string(), file_id.to_string()))
+        .copied()
+        .unwrap_or_default()
 }
 
 /// Skip `remaining` bytes on a sequential reader.

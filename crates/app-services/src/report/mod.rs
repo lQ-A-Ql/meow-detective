@@ -1,7 +1,12 @@
+mod analysis_json;
+mod analysis_rows;
 pub mod csv;
 pub mod error;
 pub mod html;
 pub mod json;
+mod json_records;
+mod source_analysis;
+mod source_identity;
 
 #[cfg(test)]
 mod tests;
@@ -12,6 +17,7 @@ pub use csv::{
 };
 pub use error::ReportError;
 pub use json::{generate_json_export, generate_json_export_for_case};
+pub(crate) use source_analysis::{current_analysis_for_case, ReportAnalysis, ReportSourceAnalysis};
 
 use domain::CaseMeta;
 use persistence_sqlite::repositories::{
@@ -26,15 +32,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use transport::commands::ExportScopeDto;
 use transport::dto::{
-    AnalysisFileClassificationDto, AnalysisSystemInfoDto, CorrelationSnapshotDto,
-    ReportHistoryItemDto, ReportTemplateDto, V2GovernanceSnapshotDto,
+    CorrelationSnapshotDto, ReportHistoryItemDto, ReportTemplateDto, V2GovernanceSnapshotDto,
 };
 use uuid::Uuid;
-
-pub(crate) struct ReportAnalysis {
-    pub(crate) system_info: AnalysisSystemInfoDto,
-    pub(crate) classifications: Vec<AnalysisFileClassificationDto>,
-}
 
 pub(crate) struct ReportCorrelation {
     pub(crate) snapshot: CorrelationSnapshotDto,
@@ -108,7 +108,7 @@ fn generate_html_report_with_analysis(
         Vec::new()
     };
     let analysis = analysis_loader()?;
-    let analysis_rows = html::report_analysis_rows(conn, &case.id.0, &analysis, scope);
+    let analysis_rows = analysis_rows::report_analysis_rows(conn, &case.id.0, &analysis, scope);
     let governance = current_governance(conn, &case.id.0)?;
     let governance_rows = html::report_governance_rows(&governance, scope);
     let correlation = current_correlation(conn)?;
@@ -160,8 +160,8 @@ fn generate_html_report_for_case_with_analysis(
         Vec::new()
     };
     let analysis = analysis_loader()?;
-    let analysis_rows = html::report_analysis_rows(conn, &case.id.0, &analysis, scope);
-    let governance = current_governance(conn, &case.id.0)?;
+    let analysis_rows = analysis_rows::report_analysis_rows(conn, &case.id.0, &analysis, scope);
+    let governance = current_governance_for_case(conn, case_root, &case.id.0)?;
     let governance_rows = html::report_governance_rows(&governance, scope);
     let correlation = current_correlation_for_case(conn, case_root, &case.id)?;
     let correlation_rows = html::report_correlation_rows(&correlation, scope);
@@ -240,58 +240,8 @@ pub(crate) fn current_analysis(conn: &Connection) -> Result<ReportAnalysis, Repo
         },
     );
 
-    Ok(ReportAnalysis {
-        system_info,
-        classifications,
-    })
-}
-
-pub(crate) fn current_analysis_for_case(
-    case_conn: &Connection,
-    case_root: &Path,
-    case_id: &domain::CaseId,
-) -> Result<ReportAnalysis, ReportError> {
-    let mut system_info = None;
-    let mut classifications = Vec::new();
-
-    for (source_id, source_conn) in open_ready_source_connections(case_conn, case_root, case_id)? {
-        let header_cache = crate::file_service::FileHeaderReadCache::new(case_id.0.clone());
-        if system_info.is_none() {
-            system_info = Some(crate::analysis_service::extract_system_info_for_case(
-                &source_conn,
-                |file_id, max_bytes| {
-                    header_cache.read_file_header_by_id(&source_conn, file_id, max_bytes)
-                },
-            ));
-        }
-
-        let files = crate::analysis_service::collect_file_entries(&source_conn)
-            .map_err(|e| ReportError::Other(e.to_string()))?;
-        let mut source_classifications = crate::analysis_service::classify_files_by_magic(
-            &files,
-            crate::analysis_service::DEFAULT_SAMPLE_SIZE,
-            |file_id| {
-                header_cache.read_file_header_by_id(
-                    &source_conn,
-                    file_id,
-                    crate::analysis_service::MAGIC_HEADER_LIMIT,
-                )
-            },
-        );
-        for item in &mut source_classifications {
-            item.category = format!("{} ({})", item.category, source_id.0);
-        }
-        classifications.extend(source_classifications);
-    }
-
-    let fallback_system_info = || {
-        crate::analysis_service::extract_system_info_for_case(case_conn, |_file_id, _max_bytes| {
-            Ok::<Vec<u8>, crate::file_service::FileServiceError>(Vec::new())
-        })
-    };
-
-    Ok(ReportAnalysis {
-        system_info: system_info.unwrap_or_else(fallback_system_info),
+    Ok(ReportAnalysis::Single {
+        system_info: Box::new(system_info),
         classifications,
     })
 }
@@ -302,11 +252,23 @@ fn file_count_for_case(
     case_root: &Path,
 ) -> Result<u64, ReportError> {
     let mut total = 0u64;
-    for (_source_id, source_conn) in open_ready_source_connections(case_conn, case_root, &case.id)?
-    {
-        total = total.saturating_add(FileRepo::new(&source_conn).count_all()?);
+    for source in source_analysis::open_ready_source_connections(case_conn, case_root, &case.id)? {
+        total = total.saturating_add(FileRepo::new(&source.connection).count_all()?);
     }
     Ok(total)
+}
+
+pub(crate) fn open_ready_source_connections(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+) -> Result<Vec<(domain::DataSourceId, Connection)>, ReportError> {
+    Ok(
+        source_analysis::open_ready_source_connections(case_conn, case_root, case_id)?
+            .into_iter()
+            .map(|source| (source.data_source_id, source.connection))
+            .collect(),
+    )
 }
 
 fn artifact_report_rows_for_case(
@@ -314,13 +276,10 @@ fn artifact_report_rows_for_case(
     case: &CaseMeta,
     case_root: &Path,
 ) -> Result<Vec<String>, ReportError> {
-    Ok(
-        crate::artifact_service::get_artifact_rows_for_case(case_conn, case_root, &case.id, None)
-            .map_err(|e| ReportError::Other(e.to_string()))?
-            .iter()
-            .map(html::format_artifact_dto_report_row)
-            .collect(),
-    )
+    crate::artifact_service::get_artifact_rows_for_case(case_conn, case_root, &case.id, None)?
+        .iter()
+        .map(html::format_artifact_dto_report_row)
+        .collect()
 }
 
 fn timeline_report_rows_for_case(
@@ -328,14 +287,11 @@ fn timeline_report_rows_for_case(
     case: &CaseMeta,
     case_root: &Path,
 ) -> Result<Vec<String>, ReportError> {
-    Ok(
-        crate::timeline_service::query_timeline_for_case(case_conn, case_root, &case.id, 0, 500)
-            .map_err(|e| ReportError::Other(e.to_string()))?
-            .items
-            .iter()
-            .map(html::format_timeline_dto_report_row)
-            .collect(),
-    )
+    crate::timeline_service::query_timeline_for_case(case_conn, case_root, &case.id, 0, 500)?
+        .items
+        .iter()
+        .map(html::format_timeline_dto_report_row)
+        .collect()
 }
 
 fn timeline_count_for_case(
@@ -344,37 +300,14 @@ fn timeline_count_for_case(
     case_root: &Path,
 ) -> Result<u64, ReportError> {
     Ok(
-        crate::timeline_service::query_timeline_for_case(case_conn, case_root, &case.id, 0, 1)
-            .map_err(|e| ReportError::Other(e.to_string()))?
+        crate::timeline_service::query_timeline_for_case(case_conn, case_root, &case.id, 0, 1)?
             .total,
     )
 }
 
-fn open_ready_source_connections(
-    case_conn: &Connection,
-    case_root: &Path,
-    case_id: &domain::CaseId,
-) -> Result<Vec<(domain::DataSourceId, Connection)>, ReportError> {
-    let sources = DataSourceRepo::new(case_conn).find_by_case(case_id)?;
-    let mut conns = Vec::with_capacity(sources.len());
-    for source in sources {
-        let storage = DataSourceRepo::new(case_conn).find_storage(&source.id)?;
-        if storage
-            .as_ref()
-            .is_some_and(|value| value.import_state == "failed")
-        {
-            continue;
-        }
-        let conn = crate::source_db::open_registered_source_db(case_conn, case_root, &source.id)?;
-        conns.push((source.id, conn));
-    }
-    Ok(conns)
-}
-
 pub(crate) fn current_correlation(conn: &Connection) -> Result<ReportCorrelation, ReportError> {
     Ok(ReportCorrelation {
-        snapshot: crate::correlation::get_correlation_snapshot(conn)
-            .map_err(|e| ReportError::Other(e.to_string()))?,
+        snapshot: crate::correlation::get_correlation_snapshot(conn)?,
     })
 }
 
@@ -386,8 +319,7 @@ pub(crate) fn current_correlation_for_case(
     Ok(ReportCorrelation {
         snapshot: crate::correlation::get_correlation_snapshot_for_case(
             case_conn, case_root, case_id,
-        )
-        .map_err(|e| ReportError::Other(e.to_string()))?,
+        )?,
     })
 }
 
@@ -396,8 +328,19 @@ pub(crate) fn current_governance(
     case_id: &str,
 ) -> Result<ReportGovernance, ReportError> {
     Ok(ReportGovernance {
-        snapshot: crate::v2_governance_service::get_v2_governance_snapshot(conn, case_id)
-            .map_err(|e| ReportError::Other(e.to_string()))?,
+        snapshot: crate::v2_governance_service::get_v2_governance_snapshot(conn, case_id)?,
+    })
+}
+
+pub(crate) fn current_governance_for_case(
+    conn: &Connection,
+    case_root: &Path,
+    case_id: &str,
+) -> Result<ReportGovernance, ReportError> {
+    Ok(ReportGovernance {
+        snapshot: crate::v2_governance_service::get_v2_governance_snapshot_for_case(
+            conn, case_root, case_id,
+        )?,
     })
 }
 

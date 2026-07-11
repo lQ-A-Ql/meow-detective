@@ -71,6 +71,21 @@ pub enum CaseServiceError {
     },
 }
 
+impl From<crate::source_db::ReadySourceError> for CaseServiceError {
+    fn from(error: crate::source_db::ReadySourceError) -> Self {
+        match error {
+            crate::source_db::ReadySourceError::Db(error) => Self::Db(error),
+            crate::source_db::ReadySourceError::UnsupportedPlatform { .. } => {
+                Self::UnsupportedPlatform(error.to_string())
+            }
+            crate::source_db::ReadySourceError::NotFound { .. }
+            | crate::source_db::ReadySourceError::NotReady { .. } => {
+                Self::InvalidCaseDir(error.to_string())
+            }
+        }
+    }
+}
+
 impl transport::ServiceErrorCategory for CaseServiceError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
@@ -342,26 +357,9 @@ pub fn get_case_metrics_for_case(
         timeline_event_count: 0,
         artifact_count: 0,
     };
-    for source in sources {
-        let storage = DataSourceRepo::new(conn).find_storage(&source.id)?;
-        if storage
-            .as_ref()
-            .is_some_and(|value| value.import_state == "failed")
-        {
-            continue;
-        }
-        let source_conn =
-            match crate::source_db::open_registered_source_db(conn, case_root, &source.id) {
-                Ok(source_conn) => source_conn,
-                Err(error) => {
-                    tracing::warn!(
-                        data_source_id = %source.id.0,
-                        error = %error,
-                        "Skipping source database while building case metrics"
-                    );
-                    continue;
-                }
-            };
+    for (_, source_conn) in
+        crate::source_db::open_ready_source_connections(conn, case_root, case_id)?
+    {
         metrics.indexed_file_count = metrics
             .indexed_file_count
             .saturating_add(FileRepo::new(&source_conn).count_all()?);

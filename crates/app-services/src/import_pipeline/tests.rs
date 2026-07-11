@@ -1,15 +1,3 @@
-use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
-
-use chrono::{DateTime, Utc};
-use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, job_repo::JobRepo};
-use std::sync::Mutex;
-use tempfile::TempDir;
-use transport::dto::{
-    DataSourceSummaryDto, ImportPhaseProgressDto, IndexCacheStatusDto, JobCancellationDto,
-    PartialResultDto,
-};
-
 use crate::import_pipeline::{
     emit::ImportEventSink,
     execute::{
@@ -21,10 +9,21 @@ use crate::import_pipeline::{
     ImportJobOptions,
 };
 use crate::{case_service, import_analysis, import_precheck, search_service, staging};
-
+use chrono::{DateTime, Utc};
+use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, job_repo::JobRepo};
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
+use tempfile::TempDir;
+use transport::dto::{
+    DataSourceSummaryDto, ImportPhaseProgressDto, IndexCacheStatusDto, JobCancellationDto,
+    PartialResultDto,
+};
 fn import_config_for_path(path: &std::path::Path) -> import_precheck::ImportSourceConfig {
-    import_precheck::prepare_import_source_config_from_path(&path.to_string_lossy())
-        .expect("test import source should be valid")
+    import_precheck::prepare_import_source_config_from_path(
+        &path.to_string_lossy(),
+        domain::DataSourcePlatform::Windows,
+    )
+    .expect("test import source should be valid")
 }
 
 fn single_imported_data_source_id(
@@ -887,6 +886,7 @@ fn image_backed_metadata_only_post_import_defers_timeline_until_query() {
                     db_path: active.case_root.join("app.db"),
                     case_id: active.meta.id.0.clone(),
                     data_source_id: data_source_id.clone(),
+                    platform: domain::DataSourcePlatform::Windows,
                     index_dir: index_dir.clone(),
                     max_analysis_workers: Some(1),
                     cancel_token: Arc::clone(&cancel),
@@ -941,12 +941,10 @@ fn e01_full_import() {
         "FORENSICS_E01_FIXTURE does not exist: {}",
         e01_path.display()
     );
-
     let tmp = tempfile::TempDir::new().unwrap();
     let active =
         case_service::create_case(&tmp.path().join("cases"), "regression", Some("tester")).unwrap();
     let cancel = Arc::new(AtomicBool::new(false));
-
     eprintln!("=== E01 Full Import Regression Test ===");
     eprintln!("Source: {}", e01_path.display());
     eprintln!("Case ID: {}", active.meta.id.0);
@@ -1092,9 +1090,11 @@ fn e01_full_import() {
             }
 
             eprintln!("\n[5/7] Verifying evidence semantic classification...");
-            let evidence_summary =
-                crate::analysis_service::get_evidence_classification_summary(conn)
-                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let evidence_summary = crate::analysis_service::get_evidence_classification_summary(
+                conn,
+                domain::DataSourcePlatform::Windows,
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             eprintln!(
                 "  Evidence summary: status={:?}, categories={}, candidates={}, artifacts={}, totalSizeMb={}",
                 evidence_summary.status,

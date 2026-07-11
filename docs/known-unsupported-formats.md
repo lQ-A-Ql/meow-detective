@@ -45,6 +45,7 @@ V2 长期计划与能力评级请同时参考：
 | Linux 文件系统 | Btrfs raw disk 完整支持 | 不承诺 | reader 能力与探测链路需以公开 fixture / expected JSON 补齐；检材3 baseline 不覆盖 Btrfs |
 | Linux 文件系统 | 已删除文件恢复 (ext4/XFS/Btrfs) | 不承诺 | 文件雕刻与已删除恢复规划于 V4 |
 | Linux LVM/PVE | PVE cluster 语义解析执行 | 部分支持 | 集群建模、成员串行导入和各节点宿主 `pve/root` EXT4 文件树已验证；Ceph BlueStore 对象树、VM disk reconstruction 与跨节点关联仍不支持 |
+| Linux LVM/PVE | 非集群导入跨镜像 multi-PV VG 聚合 | 不支持 | 普通导入与恢复导入仅允许当前数据源参与 LVM 展开，不扫描案件内其他 E01/RAW；缺失 PV 时保留明确诊断并 fail closed。显式多源组合 API 仅供未来经原子成员注册的集群编排使用 |
 | Linux LVM/PVE | LVM thin/cache/RAID/snapshot/VDO/writecache | 部分支持 | direct linear/striped 与基础 dm-thin 只读映射已实现；thin metadata checksum/repair、cache、RAID、snapshot、VDO、writecache 仍不支持且必须 fail closed |
 | Linux LVM/PVE | partial/degraded VG 激活 | 不支持 | 缺失 PV 或不一致 metadata 必须 fail closed，不猜测块映射 |
 | Linux artifacts | systemd journal 压缩/轮转完整覆盖 | 部分支持 | 当前解析器支持 uncompressed 与部分 LZ4/ZSTD 字段，但缺 public fixture 覆盖 multi-boot、rotated、XZ 与损坏 journal；字段只能 bestEffort |
@@ -87,6 +88,7 @@ V2 长期计划与能力评级请同时参考：
 - Linux 文件系统 (ext4/XFS/Btrfs) 原始磁盘镜像“完整支持”；检材3只证明 LVM direct LV -> XFS，PVE 私有样本只证明 LVM direct LV -> 64-bit EXT4
 - Linux 检材3私有 baseline 作为公开 GA 证明（必须补 public fixture + expected JSON 后才能升级公开承诺）
 - PVE cluster 语义解析、多源 E01 聚合分析、跨节点关联
+- 普通数据源导入自动借用案件内其他镜像补齐 multi-PV VG；必须先有原子集群成员注册与一致性校验
 - LVM thin 的全部变体与 cache/RAID/snapshot/VDO/writecache、partial/degraded VG 激活；当前仅实现受限的只读 dm-thin 映射
 - systemd journal 压缩/轮转/损坏样本完整覆盖（当前为 bestEffort）
 - SSH 结构化登录/配置 parser（当前只通过日志、wtmp、sudo 与 `LinuxSystemConfig` 文本记录侧面覆盖）

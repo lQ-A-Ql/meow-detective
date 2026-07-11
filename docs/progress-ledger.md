@@ -6,6 +6,7 @@
 
 | 日期 | 类型 | 范围 | 状态 | 结果 | 下一边界 |
 |---|---|---|---|---|---|
+| 2026-07-11 | Backend/Stage 2 | Windows/Linux 平台域与多源读写隔离 | Completed | 双顺序真实 E01 回归通过；ready-source、报告归属、Graph 分页、前端切源均加固 | Stage 3 transport/command 拆分 |
 | 2026-07-10 | Backend/Stage 0 | 模块、函数、测试物理边界基线 | Completed | 三项结构守卫、单调 baseline、进程树/路径 identity 加固、数据源删除两阶段恢复与真实样本冻结完成 | Stage 1 移除 macOS 生产支持 |
 | 2026-07-10 | Linux/PVE | 集群成员导入建模 | Completed | 文件夹发现 6 个 E01 成员，成员保持独立数据源与独立数据库 | 集群级语义关联 |
 | 2026-07-10 | Linux/LVM | direct LV 与 dm-thin 只读映射 | Partial | direct root LV 与基础 thin metadata/block mapping 已实现并 fail closed | metadata checksum、更多 thin 变体 |
@@ -27,7 +28,7 @@
 
 | 样本 | 测试面 | 当前结果 | 记录 |
 |---|---|---|---|
-| `D:\獬豸杯\检材2.E01` + `D:\獬豸杯\检材3.E01` | Windows/Linux 串行双源导入、独立 source DB、文件树、预览、ID 隔离 | 通过，测试体 55.12s | `docs/real-sample-regression/2026-07-10-backend-refactor-stage0.md` |
+| `D:\獬豸杯\检材2.E01` + `D:\獬豸杯\检材3.E01` | Windows/Linux 双顺序串行导入、独立 source DB、分区、文件树、预览、分析 ID 隔离 | 通过，Windows -> Linux 96.92s；Linux -> Windows 94.63s | `docs/real-sample-regression/2026-07-11-backend-refactor-stage2.md` |
 | `D:\獬豸杯\检材3.E01` | LVM direct LV -> XFS -> 文件树/预览/Linux artifacts | 通过私有 Stage 0 baseline | `docs/real-sample-regression/2026-07-05-linux-stage0-jiancai3.md` |
 | `E:\pangushi\服务器` | 6 成员发现、PVE root EXT4、LVM/Ceph 边界 | 宿主文件系统通过；BlueStore 待实现 | `docs/real-sample-regression/2026-07-10-pve-host-ext4.md` |
 

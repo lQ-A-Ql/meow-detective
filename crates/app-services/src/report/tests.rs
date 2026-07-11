@@ -1,4 +1,4 @@
-use super::html::analysis_rows;
+use super::analysis_rows::system_info_rows;
 use super::json::sanitize_bundle_component;
 use super::*;
 use domain::{
@@ -16,7 +16,7 @@ use transport::commands::ExportScopeDto;
 
 use transport::dto::{
     AnalysisBootRecordDto, AnalysisFieldProvenanceDto, AnalysisParseStatusDto,
-    AnalysisProvenanceDto,
+    AnalysisProvenanceDto, AnalysisSystemInfoDto,
 };
 
 fn setup_report_case() -> (rusqlite::Connection, TempDir, CaseMeta, DataSourceId) {
@@ -731,7 +731,7 @@ fn analysis_rows_include_field_and_boot_provenance() {
         }],
     };
 
-    let rows = analysis_rows(&system_info, &[]);
+    let rows = system_info_rows(&system_info);
     let joined = rows.join("\n");
 
     assert!(joined.contains("system_info.computerName=BETA-LAB"));

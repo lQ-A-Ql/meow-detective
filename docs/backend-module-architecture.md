@@ -55,6 +55,57 @@ Tauri command layer. Windows and Linux use the same architectural layer and
 ownership rules, but a platform module is created only for a real capability;
 do not manufacture unsupported stubs merely to make directory trees symmetric.
 
+`domain::DataSourcePlatform` is the application platform type. Transport
+platform DTOs are converted at the desktop command boundary and must not enter
+`app-services`. Persisted strings are parsed through the domain type before
+platform dispatch; retired or unknown external values fail closed.
+
+Analysis orchestration uses symmetric platform analyzers:
+
+```text
+analysis_service/
+  capability.rs
+  platforms/
+    windows.rs
+    linux.rs
+  candidates/
+    common.rs
+    windows.rs
+    linux.rs
+    summary.rs
+  extraction/
+    linux/
+      journal.rs
+      login.rs
+      shell_history.rs
+      packages.rs
+      cron.rs
+      sudo.rs
+      system_config.rs
+      pve.rs
+      web.rs
+      mysql.rs
+      text_log.rs
+```
+
+Capability keys, platform ownership, section labels, candidate category, and
+read policy are centralized in `analysis_service/capability.rs`. Empty category
+selection means all capabilities for the persisted source platform, never all
+platforms. A cross-platform category request is rejected before evidence I/O.
+
+Ordinary data-source imports are also source-isolated during LVM probing. They
+must never enumerate other case data sources as supplementary PV providers.
+Cross-image multi-PV aggregation remains unavailable until cluster members can
+be registered and validated atomically; an incomplete VG fails closed instead
+of borrowing blocks from an unrelated `source.db` registration.
+
+Case-wide file-tree, recent-object, search, metrics, step-recording, artifact,
+timeline, graph, and correlation reads use the shared ready-source router. Only
+the exact `ready` import state is readable; `pending`, `importing`, and `failed`
+sources are excluded so partial imports cannot leak into analysis or reports.
+Case-aware reports must also use the source-aware governance snapshot, keeping
+governance runtime signals aligned with the source-database correlation section.
+
 ## One Capability Per File
 
 Production Rust files should be owned by one capability:
@@ -179,6 +230,8 @@ powershell -ExecutionPolicy Bypass -File scripts\check-rust-function-size.ps1
 powershell -ExecutionPolicy Bypass -File scripts\check-rust-test-layout.ps1 -SelfTest
 powershell -ExecutionPolicy Bypass -File scripts\check-rust-test-layout.ps1
 powershell -ExecutionPolicy Bypass -File scripts\check-stage0-boundary-guard.ps1
+powershell -ExecutionPolicy Bypass -File scripts\check-stage2-platform-boundary.ps1
+powershell -ExecutionPolicy Bypass -File scripts\check-stage2-real-sample-isolation.ps1
 ```
 
 The guards are PowerShell 5.1 compatible, read files as strict UTF-8, and report

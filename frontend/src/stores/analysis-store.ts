@@ -3,63 +3,19 @@ import type {
   AnalysisExtractionProgressInfo,
   AnalysisExtractionProgressState,
 } from '@/features/analysis/components/AnalysisPanels';
-
-export type AnalysisTabKey =
-  | 'system'
-  | 'evidence'
-  | 'registry'
-  | 'browser'
-  | 'email'
-  | 'eventlogs'
-  | 'files'
-  | 'report';
-
-export type AnalysisPlatformView = 'windows' | 'linux';
-
-export type LinuxAnalysisTabKey =
-  | 'overview'
-  | 'journal'
-  | 'login'
-  | 'commands'
-  | 'packages'
-  | 'cron'
-  | 'sudo'
-  | 'systemConfig'
-  | 'webServices'
-  | 'mysqlServices';
-
-export type ExtractionCategory =
-  | 'Registry'
-  | 'BrowserHistory'
-  | 'Email'
-  | 'EventLogs'
-  | 'LinuxArtifacts'
-  | 'LinuxJournal'
-  | 'LinuxLogin'
-  | 'LinuxCommands'
-  | 'LinuxPackages'
-  | 'LinuxCron'
-  | 'LinuxSudo'
-  | 'LinuxSystemConfig'
-  | 'LinuxWebServices'
-  | 'LinuxMysqlServices';
-
-const EXTRACTION_CATEGORIES: ExtractionCategory[] = [
-  'Registry',
-  'BrowserHistory',
-  'Email',
-  'EventLogs',
-  'LinuxArtifacts',
-  'LinuxJournal',
-  'LinuxLogin',
-  'LinuxCommands',
-  'LinuxPackages',
-  'LinuxCron',
-  'LinuxSudo',
-  'LinuxSystemConfig',
-  'LinuxWebServices',
-  'LinuxMysqlServices',
-];
+import type {
+  AnalysisTabKey,
+  ExtractionCategory,
+  LinuxAnalysisTabKey,
+} from '@/features/analysis/types';
+import { ANALYSIS_EXTRACTION_CATEGORIES } from '@/features/analysis/types';
+export { isExtractionCategory } from '@/features/analysis/types';
+export type {
+  AnalysisPlatformView,
+  AnalysisTabKey,
+  ExtractionCategory,
+  LinuxAnalysisTabKey,
+} from '@/features/analysis/types';
 
 function emptyProgress(): Omit<AnalysisExtractionProgressInfo, 'label'> {
   return {
@@ -94,7 +50,6 @@ type AnalysisState = {
   extractionProgress: Record<ExtractionCategory, Omit<AnalysisExtractionProgressInfo, 'label'>>;
   extractionRunning: boolean;
   progressExpanded: boolean;
-  activePlatformView: AnalysisPlatformView;
   activeTab: AnalysisTabKey;
   activeLinuxTab: LinuxAnalysisTabKey;
   selectedDataSourceId?: string;
@@ -109,7 +64,6 @@ type AnalysisState = {
   resetExtractionProgress: () => void;
   setExtractionRunning: (running: boolean) => void;
   setProgressExpanded: (expanded: boolean) => void;
-  setActivePlatformView: (view: AnalysisPlatformView) => void;
   setActiveTab: (tab: AnalysisTabKey) => void;
   setActiveLinuxTab: (tab: LinuxAnalysisTabKey) => void;
   setSelectedDataSourceId: (id?: string) => void;
@@ -123,7 +77,6 @@ const initialState: Omit<
   | 'resetExtractionProgress'
   | 'setExtractionRunning'
   | 'setProgressExpanded'
-  | 'setActivePlatformView'
   | 'setActiveTab'
   | 'setActiveLinuxTab'
   | 'setSelectedDataSourceId'
@@ -132,7 +85,6 @@ const initialState: Omit<
   extractionProgress: createDefaultProgress(),
   extractionRunning: false,
   progressExpanded: true,
-  activePlatformView: 'windows',
   activeTab: 'system',
   activeLinuxTab: 'overview',
   selectedDataSourceId: undefined,
@@ -158,8 +110,6 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
 
   setProgressExpanded: (expanded) => set({ progressExpanded: expanded }),
 
-  setActivePlatformView: (view) => set({ activePlatformView: view }),
-
   setActiveTab: (tab) => set({ activeTab: tab }),
 
   setActiveLinuxTab: (tab) => set({ activeLinuxTab: tab }),
@@ -184,7 +134,7 @@ export function labeledProgress(
   t: (key: string) => string,
 ): Record<ExtractionCategory, AnalysisExtractionProgressInfo> {
   const result = {} as Record<ExtractionCategory, AnalysisExtractionProgressInfo>;
-  for (const category of EXTRACTION_CATEGORIES) {
+  for (const category of ANALYSIS_EXTRACTION_CATEGORIES) {
     result[category] = {
       ...progress[category],
       label: t(`analysis.extraction.${category}`),

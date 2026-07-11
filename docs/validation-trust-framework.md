@@ -238,7 +238,18 @@ Linux 检材3是当前 Stage 0 Linux 单盘链路的真实样本 baseline，样�
   - XFS/ext4/Btrfs 已删除文件恢复或 carving
   - 原始 Linux 文件系统支持超出当前实现可枚举范围时的完整恢复
 
-### 4.8 PVE 宿主 EXT4 baseline
+### 4.8 Windows/Linux 双源隔离 baseline
+
+Stage 2 使用两个不入库的私有 E01 样本验证独立 `source.db` 与平台隔离。测试源码只读取环境变量，不硬编码机器路径；默认 CI 允许明确跳过，发布/阶段验收必须使用 `-RequireFixtures` 将缺样本视为失败。
+
+- Windows 样本：`FORENSICS_STAGE2_WINDOWS_E01`（本机参考为 `D:\獬豸杯\检材2.E01`）。
+- Linux 样本：`FORENSICS_STAGE2_LINUX_E01`（本机参考为 `D:\獬豸杯\检材3.E01`）。
+- 统一入口：`scripts/check-stage2-real-sample-isolation.ps1`。
+- 默认执行 Windows -> Linux 与 Linux -> Windows 两种串行顺序；可用 `-Order windows-first` 或 `-Order linux-first` 做单向诊断。
+- 阶段验收命令：`powershell -ExecutionPolicy Bypass -File scripts/check-stage2-real-sample-isolation.ps1 -WindowsFixturePath 'D:\獬豸杯\检材2.E01' -LinuxFixturePath 'D:\獬豸杯\检材3.E01' -RequireFixtures`。
+- 验收必须同时证明：`app.db` 不承载文件树、两个 source DB 均为 `ready`、分区平台不串染、文件树 ID 全局化、两源均可预览、artifact/timeline/correlation ID 保持数据源作用域。
+
+### 4.9 PVE 宿主 EXT4 baseline
 
 PVE 私有集群样本通过 `FORENSICS_PVE_CLUSTER_ROOT` opt-in，默认 CI 不运行。当前只把每个节点宿主 OS 作为独立成员验证，不把 Ceph OSD 或 VM 磁盘伪装成普通文件系统。
 

@@ -188,9 +188,6 @@ fn enumerate_image_data_source_with_staging(
     let path = ctx.import_config.source_path.clone();
     let kind = ctx.import_config.kind.clone();
     let case_root = ctx.case_root;
-    let lvm_extra_sources =
-        datasource_service::lvm_discovery_sources_for_case(ctx.conn, ctx.case_id, Some(&ds.id))
-            .map_err(CommandError::from_service_error)?;
 
     // Load or create manifest for staging-based import.
     let mut manifest = staging::StagingManifest::load(case_root, &ds.id.0).unwrap_or_else(|| {
@@ -213,7 +210,6 @@ fn enumerate_image_data_source_with_staging(
                 case_root,
                 manifest: &mut manifest,
                 probe_candidates: &mut probe_candidates,
-                lvm_extra_sources: &lvm_extra_sources,
             },
         )?;
     }
@@ -239,14 +235,7 @@ fn enumerate_image_data_source_with_staging(
 
     // For resume: probe once to get candidates if we don't have them.
     if probe_candidates.is_empty() {
-        probe_resume(
-            ctx,
-            ds,
-            &path,
-            &kind,
-            &mut probe_candidates,
-            &lvm_extra_sources,
-        )?;
+        probe_resume(ctx, ds, &path, &kind, &mut probe_candidates)?;
     }
 
     // Build work items for pending partitions — reuse probe results, no re-probe.
@@ -290,7 +279,6 @@ struct ProbeManifestRequest<'a> {
     case_root: &'a std::path::Path,
     manifest: &'a mut staging::StagingManifest,
     probe_candidates: &'a mut Vec<datasource_service::ImageFilesystemCandidate>,
-    lvm_extra_sources: &'a [datasource_service::LvmDiscoverySource],
 }
 
 fn probe_and_seed_manifest(
@@ -304,7 +292,6 @@ fn probe_and_seed_manifest(
         case_root,
         manifest,
         probe_candidates,
-        lvm_extra_sources,
     } = request;
     let probe_started = Instant::now();
     let mut probe_reader: Box<dyn EvidenceReader> = if *kind == domain::DataSourceKind::E01 {
@@ -315,13 +302,7 @@ fn probe_and_seed_manifest(
     let mut probe = datasource_service::detect_image_filesystem(&mut probe_reader)
         .map_err(CommandError::from_service_error)?;
 
-    // Expand LVM pools into per-LV candidates
-    datasource_service::expand_lvm_pool_candidates_with_sources(
-        &mut probe,
-        path,
-        kind,
-        lvm_extra_sources,
-    );
+    expand_source_local_lvm_candidates(&mut probe, path, kind);
 
     emit_phase_profile(
         ctx.event_sink(),
@@ -450,7 +431,6 @@ fn probe_resume(
     path: &std::path::Path,
     kind: &domain::DataSourceKind,
     probe_candidates: &mut Vec<datasource_service::ImageFilesystemCandidate>,
-    lvm_extra_sources: &[datasource_service::LvmDiscoverySource],
 ) -> Result<(), CommandError> {
     let probe_started = Instant::now();
     let mut probe_reader: Box<dyn EvidenceReader> = if *kind == domain::DataSourceKind::E01 {
@@ -460,12 +440,7 @@ fn probe_resume(
     };
     let mut probe = datasource_service::detect_image_filesystem(&mut probe_reader)
         .map_err(CommandError::from_service_error)?;
-    datasource_service::expand_lvm_pool_candidates_with_sources(
-        &mut probe,
-        path,
-        kind,
-        lvm_extra_sources,
-    );
+    expand_source_local_lvm_candidates(&mut probe, path, kind);
     repair_resumed_partition_metadata(ctx, ds, &probe)?;
     emit_phase_profile(
         ctx.event_sink(),
@@ -483,6 +458,14 @@ fn probe_resume(
     );
     *probe_candidates = probe.candidates;
     Ok(())
+}
+
+fn expand_source_local_lvm_candidates(
+    probe: &mut datasource_service::ImageFilesystemProbe,
+    source_path: &std::path::Path,
+    source_kind: &domain::DataSourceKind,
+) {
+    datasource_service::expand_lvm_pool_candidates(probe, source_path, source_kind);
 }
 
 fn repair_resumed_partition_metadata(
@@ -856,7 +839,6 @@ pub(crate) fn run_post_import_phase(
             mode => mode,
         }
     };
-
     let post_import_started = Instant::now();
     let progress_adapter = |pct: u32, detail: &str| {
         emit_import_profile_progress(
@@ -876,6 +858,7 @@ pub(crate) fn run_post_import_phase(
             db_path: post_import_db_path,
             case_id: ctx.case_id.0.clone(),
             data_source_id: ds.id.clone(),
+            platform: ctx.import_config.platform,
             index_dir,
             max_analysis_workers: ctx.options.max_analysis_workers,
             cancel_token: Arc::clone(ctx.options.cancel_token),

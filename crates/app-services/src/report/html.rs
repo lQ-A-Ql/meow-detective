@@ -1,135 +1,12 @@
-use super::{correlation_confidence_str, ReportAnalysis, ReportCorrelation, ReportGovernance};
+use super::{correlation_confidence_str, ReportCorrelation, ReportError, ReportGovernance};
 use domain::TimelineEvent;
 use reports::HtmlCorrelationLeadSection;
-use rusqlite::Connection;
 use transport::commands::ExportScopeDto;
 use transport::dto::{
-    AnalysisFileClassificationDto, AnalysisSystemInfoDto, ArtifactRowDto,
-    BenchmarkRequirementStatusDto, CorrelationCoverageStatusDto, CorrelationLeadDto,
-    KnownLimitationStatusDto, ReleaseGateStatusDto, SupportMaturityDto, TimelineEventDto,
-    VerificationGuaranteeLevelDto, VerificationResultDto,
+    ArtifactRowDto, BenchmarkRequirementStatusDto, CorrelationCoverageStatusDto,
+    CorrelationLeadDto, KnownLimitationStatusDto, ReleaseGateStatusDto, SupportMaturityDto,
+    TimelineEventDto, VerificationGuaranteeLevelDto, VerificationResultDto,
 };
-
-// ---------------------------------------------------------------------------
-// Analysis rows
-// ---------------------------------------------------------------------------
-
-pub(crate) fn report_analysis_rows(
-    conn: &Connection,
-    case_id: &str,
-    analysis: &ReportAnalysis,
-    scope: &ExportScopeDto,
-) -> Vec<String> {
-    let mut rows = scoped_analysis_rows(analysis, scope);
-    rows.extend(super::evidence_hash_warnings(conn, case_id));
-    rows
-}
-
-fn scoped_analysis_rows(analysis: &ReportAnalysis, scope: &ExportScopeDto) -> Vec<String> {
-    let mut rows = Vec::new();
-    rows.extend(super::report_scope_warnings(scope, None));
-    if scope.registry {
-        rows.extend(analysis_rows(&analysis.system_info, &[]));
-    }
-    if scope.file_system_metadata {
-        for item in &analysis.classifications {
-            rows.push(format!(
-                "classification category={} files={} totalSize={} status={} warnings={}",
-                item.category,
-                item.file_count,
-                item.total_size,
-                status_str(&item.status),
-                item.warnings.join(" | ")
-            ));
-        }
-    }
-    rows
-}
-
-pub(crate) fn analysis_rows(
-    system_info: &AnalysisSystemInfoDto,
-    classifications: &[AnalysisFileClassificationDto],
-) -> Vec<String> {
-    let mut rows = Vec::new();
-    rows.push(format!(
-        "system_info status={} warnings={}",
-        status_str(&system_info.status),
-        system_info.warnings.join(" | ")
-    ));
-    push_optional_analysis_value(
-        &mut rows,
-        "system_info.computerName",
-        &system_info.computer_name,
-    );
-    push_optional_analysis_value(&mut rows, "system_info.osVersion", &system_info.os_version);
-    push_optional_analysis_value(
-        &mut rows,
-        "system_info.buildNumber",
-        &system_info.build_number,
-    );
-    push_optional_analysis_value(
-        &mut rows,
-        "system_info.installDate",
-        &system_info.install_date,
-    );
-    push_optional_analysis_value(
-        &mut rows,
-        "system_info.registeredOwner",
-        &system_info.registered_owner,
-    );
-    push_optional_analysis_value(
-        &mut rows,
-        "system_info.organization",
-        &system_info.organization,
-    );
-    push_optional_analysis_value(&mut rows, "system_info.productId", &system_info.product_id);
-    push_optional_analysis_value(&mut rows, "system_info.timezone", &system_info.timezone);
-    rows.extend(
-        system_info
-            .provenance
-            .iter()
-            .map(|item| format_provenance("system_info", item)),
-    );
-    rows.extend(system_info.field_provenance.iter().map(|item| {
-        format!(
-            "system_info field={} parser={} hive={} key={} valueName={}",
-            item.field, item.parser, item.hive_path, item.key_path, item.value_name
-        )
-    }));
-    rows.extend(system_info.boot_history.iter().map(|boot| {
-        format!(
-            "boot_candidate timestamp={} type={} eventId={} recordId={} source={} note={} provenance={}",
-            boot.timestamp,
-            boot.boot_type,
-            boot.event_id
-                .map(|value| value.to_string())
-                .unwrap_or_else(|| "-".to_string()),
-            boot.record_id
-                .map(|value| value.to_string())
-                .unwrap_or_else(|| "-".to_string()),
-            boot.source,
-            boot.note.as_deref().unwrap_or("-"),
-            format_provenance("boot_candidate", &boot.provenance),
-        )
-    }));
-
-    for classification in classifications {
-        rows.push(format!(
-            "classification category={} status={} warnings={}",
-            classification.category,
-            status_str(&classification.status),
-            classification.warnings.join(" | ")
-        ));
-        rows.extend(
-            classification
-                .provenance
-                .iter()
-                .map(|item| format_provenance(&classification.category, item)),
-        );
-    }
-
-    rows
-}
 
 // ---------------------------------------------------------------------------
 // Governance rows
@@ -341,7 +218,13 @@ pub(crate) fn report_correlation_lead_sections(
 
 pub(crate) fn format_artifact_report_row(artifact: &domain::Artifact) -> String {
     format!(
-        "artifact type={} title={} summary={} extractor={} extractorVersion={} confidence={} sourceAttribution={}",
+        "artifact id={} sourceObjectId={} type={} title={} summary={} extractor={} extractorVersion={} confidence={} sourceAttribution={}",
+        artifact.id.0,
+        artifact
+            .source_object_id
+            .as_ref()
+            .map(|id| id.0.as_str())
+            .unwrap_or("unknown"),
         artifact.family,
         artifact.title,
         artifact.summary,
@@ -352,22 +235,30 @@ pub(crate) fn format_artifact_report_row(artifact: &domain::Artifact) -> String 
     )
 }
 
-pub(crate) fn format_artifact_dto_report_row(artifact: &ArtifactRowDto) -> String {
-    format!(
-        "artifact type={} title={} summary={} extractor={} extractorVersion={} confidence={} sourceAttribution={}",
+pub(crate) fn format_artifact_dto_report_row(
+    artifact: &ArtifactRowDto,
+) -> Result<String, ReportError> {
+    let data_source_id = super::source_identity::artifact_data_source_id(artifact)?;
+    Ok(format!(
+        "artifact id={} dataSourceId={} sourceObjectId={} type={} title={} summary={} extractor={} extractorVersion={} confidence={} sourceAttribution={}",
+        artifact.id,
+        data_source_id.0,
+        optional_str(&artifact.source_object_id),
         artifact.artifact_type,
         artifact.title,
         artifact.summary,
         optional_str(&artifact.extractor_id),
         optional_str(&artifact.extractor_version),
         optional_f32(artifact.confidence),
-        optional_str(&artifact.source_attribution)
-    )
+        optional_str(&artifact.source_attribution),
+    ))
 }
 
 pub(crate) fn format_timeline_report_row(event: &TimelineEvent) -> String {
     format!(
-        "timeline eventType={} timestamp={} title={} parser={} parserVersion={} confidence={} sourceAttribution={}",
+        "timeline id={} sourceObjectId={} eventType={} timestamp={} title={} parser={} parserVersion={} confidence={} sourceAttribution={}",
+        event.id.0,
+        event.source_object_id,
         event.event_type,
         event.timestamp.to_rfc3339(),
         event.title,
@@ -378,17 +269,23 @@ pub(crate) fn format_timeline_report_row(event: &TimelineEvent) -> String {
     )
 }
 
-pub(crate) fn format_timeline_dto_report_row(event: &TimelineEventDto) -> String {
-    format!(
-        "timeline eventType={} timestamp={} title={} parser={} parserVersion={} confidence={} sourceAttribution={}",
+pub(crate) fn format_timeline_dto_report_row(
+    event: &TimelineEventDto,
+) -> Result<String, ReportError> {
+    let data_source_id = super::source_identity::timeline_data_source_id(event)?;
+    Ok(format!(
+        "timeline id={} dataSourceId={} sourceObjectId={} eventType={} timestamp={} title={} parser={} parserVersion={} confidence={} sourceAttribution={}",
+        event.id,
+        data_source_id.0,
+        event.source_object_id,
         event.event_type,
         event.ts,
         event.title,
         optional_str(&event.parser_id),
         optional_str(&event.parser_version),
         optional_f32(event.confidence),
-        optional_str(&event.source_attribution)
-    )
+        optional_str(&event.source_attribution),
+    ))
 }
 
 fn format_correlation_lead_row(lead: &CorrelationLeadDto) -> String {
@@ -419,18 +316,6 @@ fn format_correlation_lead_row(lead: &CorrelationLeadDto) -> String {
 // ---------------------------------------------------------------------------
 // String conversion helpers
 // ---------------------------------------------------------------------------
-
-fn status_str(status: &transport::dto::AnalysisParseStatusDto) -> &'static str {
-    match status {
-        transport::dto::AnalysisParseStatusDto::Parsed => "parsed",
-        transport::dto::AnalysisParseStatusDto::Partial => "partial",
-        transport::dto::AnalysisParseStatusDto::NotParsed => "notParsed",
-        transport::dto::AnalysisParseStatusDto::Unavailable => "unavailable",
-        transport::dto::AnalysisParseStatusDto::CandidateFound => "candidateFound",
-        transport::dto::AnalysisParseStatusDto::NotFound => "notFound",
-        transport::dto::AnalysisParseStatusDto::Failed => "failed",
-    }
-}
 
 fn release_gate_status_str(value: &ReleaseGateStatusDto) -> &'static str {
     match value {
@@ -499,23 +384,4 @@ fn optional_f32(value: Option<f32>) -> String {
     value
         .map(|confidence| confidence.to_string())
         .unwrap_or_else(|| "unknown".to_string())
-}
-
-fn push_optional_analysis_value(rows: &mut Vec<String>, field: &str, value: &Option<String>) {
-    if let Some(value) = value {
-        rows.push(format!("{field}={value}"));
-    }
-}
-
-fn format_provenance(scope: &str, item: &transport::dto::AnalysisProvenanceDto) -> String {
-    format!(
-        "{} parser={} status={} dataSource={} artifact={} parsedAt={} warnings={}",
-        scope,
-        item.parser,
-        status_str(&item.status),
-        item.data_source_id,
-        item.artifact_path,
-        item.parsed_at,
-        item.warnings.join(" | ")
-    )
 }

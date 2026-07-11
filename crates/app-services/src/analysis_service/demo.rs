@@ -5,10 +5,13 @@
 use std::path::{Path, PathBuf};
 
 use domain::{
-    DataSource, DataSourceId, DataSourceKind, DataSourceProvenance, EntryType, FileEntry,
-    FileEntryId,
+    DataSource, DataSourceId, DataSourceKind, DataSourcePlatform, DataSourceProvenance, EntryType,
+    FileEntry, FileEntryId,
 };
-use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, file_repo::FileRepo};
+use persistence_sqlite::repositories::{
+    datasource_repo::{DataSourceRepo, DataSourceStorage},
+    file_repo::FileRepo,
+};
 use uuid::Uuid;
 
 use crate::active_case::ActiveCase;
@@ -75,13 +78,31 @@ pub fn seed_analysis_demo_data(active: &ActiveCase) -> Result<(), AnalysisServic
     };
     let mut entries = Vec::new();
     collect_demo_entries(&evidence_root, &evidence_root, &ds_id, None, &mut entries)?;
-    active
-        .with_conn(|conn| {
-            DataSourceRepo::new(conn).insert(&active.meta.id, &data_source)?;
-            FileRepo::new(conn).insert_batch(&entries)?;
-            Ok(())
-        })
-        .map_err(|e| AnalysisServiceError::Other(e.to_string()))?;
+    persist_demo_source(active, &data_source, &entries)?;
+    Ok(())
+}
+
+fn persist_demo_source(
+    active: &ActiveCase,
+    data_source: &DataSource,
+    entries: &[FileEntry],
+) -> Result<(), AnalysisServiceError> {
+    let mut storage = DataSourceStorage::source_db(
+        &data_source.id.0,
+        Some(DataSourcePlatform::Windows.as_storage_str()),
+        Some("analysis-demo".to_string()),
+    );
+    storage.import_state = "ready".to_string();
+
+    let source_conn = crate::source_db::open_source_db(&active.case_root, &data_source.id)?;
+    DataSourceRepo::new(&source_conn).upsert_source_local_metadata(&active.meta.id, data_source)?;
+    FileRepo::new(&source_conn).insert_batch(entries)?;
+    crate::source_db::checkpoint_source_db(&source_conn)?;
+    drop(source_conn);
+
+    active.with_conn(|case_conn| {
+        DataSourceRepo::new(case_conn).insert_with_storage(&active.meta.id, data_source, &storage)
+    })?;
     Ok(())
 }
 

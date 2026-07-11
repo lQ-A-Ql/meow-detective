@@ -79,16 +79,22 @@ describe('files API', () => {
     });
   });
 
-  it('importDataSource sends sourcePath in request', async () => {
+  it('importDataSource sends the required Windows platform in the request', async () => {
     requestMock.mockResolvedValueOnce('job-1' as never);
-    const result = await importDataSource('/evidence/disk.E01');
+    const result = await importDataSource({
+      sourcePath: '/evidence/disk.E01',
+      platform: 'windows',
+    });
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.files.IMPORT_DATA_SOURCE, {
-      request: { sourcePath: '/evidence/disk.E01' },
+      request: {
+        sourcePath: '/evidence/disk.E01',
+        platform: 'windows',
+      },
     });
     expect(result).toBe('job-1');
   });
 
-  it('importDataSource sends optional platform and profile in request', async () => {
+  it('importDataSource sends the required Linux platform and optional profile', async () => {
     requestMock.mockResolvedValueOnce('job-2' as never);
     const result = await importDataSource({
       sourcePath: '/evidence/linux.raw',

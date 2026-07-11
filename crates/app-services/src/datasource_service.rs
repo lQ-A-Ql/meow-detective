@@ -6,10 +6,7 @@ mod probe;
 mod reader;
 mod types;
 
-pub use attach::{
-    attach_data_source, attach_data_source_with_storage, classify_data_source_path,
-    lvm_discovery_sources_for_case,
-};
+pub use attach::{attach_data_source, attach_data_source_with_storage, classify_data_source_path};
 pub use lvm::{expand_lvm_pool_candidates, expand_lvm_pool_candidates_with_sources};
 pub(crate) use lvm::{lvm_source_fingerprint, normalize_lvm_uuid_for_match};
 pub use partition_index::{assign_effective_partition_indices, effective_partition_index};
@@ -30,13 +27,11 @@ mod tests {
     };
     use persistence_sqlite::repositories::{case_repo::CaseRepo, datasource_repo::DataSourceRepo};
     use tempfile::TempDir;
-
     const SYNTHETIC_PV_SIZE: u64 = 2_097_152;
     const SYNTHETIC_PV_OFFSET: u64 = 1_048_576;
     const SYNTHETIC_DATA_AREA_START: u64 = 2560;
     const SYNTHETIC_PV0_UUID: &str = "00000000000000000000000000000000";
     const SYNTHETIC_PV1_UUID: &str = "11111111111111111111111111111111";
-
     fn setup_case() -> (rusqlite::Connection, CaseId) {
         let conn = persistence_sqlite::connection::open_in_memory().unwrap();
         persistence_sqlite::runner::run_all(&conn).unwrap();
@@ -52,24 +47,27 @@ mod tests {
         CaseRepo::new(&conn).create(&case).unwrap();
         (conn, case.id)
     }
-
     #[test]
     fn attach_data_source_records_file_provenance() {
         let tmp = TempDir::new().unwrap();
         let source_path = tmp.path().join("sample.raw");
         std::fs::write(&source_path, b"sample evidence").unwrap();
         let (conn, case_id) = setup_case();
-
-        let attached =
-            attach_data_source(&conn, &case_id, "sample", &source_path, DataSourceKind::Raw)
-                .unwrap();
+        let attached = attach_data_source(
+            &conn,
+            &case_id,
+            "sample",
+            &source_path,
+            DataSourceKind::Raw,
+            domain::DataSourcePlatform::Windows,
+        )
+        .unwrap();
         let stored = DataSourceRepo::new(&conn)
             .find_by_case(&case_id)
             .unwrap()
             .into_iter()
             .find(|source| source.id == attached.id)
             .unwrap();
-
         assert_eq!(stored.provenance.source_hash_sha256, None);
         assert_eq!(stored.provenance.hash_status, DataSourceHashStatus::Pending);
         assert_eq!(stored.provenance.evidence_size, Some(15));
@@ -84,20 +82,19 @@ mod tests {
         );
         assert!(stored.provenance.warnings.is_empty());
     }
-
     #[test]
     fn attach_data_source_records_directory_provenance_without_size() {
         let tmp = TempDir::new().unwrap();
         let source_path = tmp.path().join("logical-evidence");
         std::fs::create_dir(&source_path).unwrap();
         let (conn, case_id) = setup_case();
-
         let attached = attach_data_source(
             &conn,
             &case_id,
             "logical",
             &source_path,
             DataSourceKind::LogicalDirectory,
+            domain::DataSourcePlatform::Windows,
         )
         .unwrap();
         let stored = DataSourceRepo::new(&conn)

@@ -3,9 +3,7 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum ImportSourceConfigError {
-    #[error("{0}")]
-    InvalidRequest(String),
-    #[error("unsupported data source platform; only Windows and Linux are supported")]
+    #[error("data source platform must be windows or linux")]
     UnsupportedPlatform,
     #[error("sourcePath must exist and be accessible before import")]
     MissingOrInaccessibleSource,
@@ -18,9 +16,9 @@ pub enum ImportSourceConfigError {
 impl transport::ServiceErrorCategory for ImportSourceConfigError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
-            Self::InvalidRequest(_)
-            | Self::MissingOrInaccessibleSource
-            | Self::UnsupportedSourceType => transport::ErrorCategory::Validation,
+            Self::MissingOrInaccessibleSource | Self::UnsupportedSourceType => {
+                transport::ErrorCategory::Validation
+            }
             Self::UnsupportedPlatform => transport::ErrorCategory::Unsupported,
             Self::Classification(error) => error.category(),
         }
@@ -31,9 +29,7 @@ impl ImportSourceConfigError {
     pub fn is_invalid_input(&self) -> bool {
         matches!(
             self,
-            Self::InvalidRequest(_)
-                | Self::MissingOrInaccessibleSource
-                | Self::UnsupportedSourceType
+            Self::MissingOrInaccessibleSource | Self::UnsupportedSourceType
         )
     }
 }

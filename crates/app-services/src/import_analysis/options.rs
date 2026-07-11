@@ -1,6 +1,6 @@
 use super::budget::ContentBudget;
 use super::tier::TierStateMachine;
-use domain::DataSourceId;
+use domain::{DataSourceId, DataSourcePlatform};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -37,6 +37,7 @@ pub struct ImportAnalysisOptions {
     pub db_path: PathBuf,
     pub case_id: String,
     pub data_source_id: DataSourceId,
+    pub platform: DataSourcePlatform,
     pub index_dir: PathBuf,
     pub max_analysis_workers: Option<usize>,
     pub cancel_token: Arc<AtomicBool>,
@@ -95,6 +96,7 @@ pub struct PostImportPipelineOptions {
     pub db_path: PathBuf,
     pub case_id: String,
     pub data_source_id: DataSourceId,
+    pub platform: DataSourcePlatform,
     pub index_dir: PathBuf,
     pub max_analysis_workers: Option<usize>,
     pub cancel_token: Arc<AtomicBool>,

@@ -1795,15 +1795,21 @@ fn linux_e01_analysis_summary_reports_candidate_coverage_and_unsupported_sources
         pre_summary.warnings
     );
 
-    let run = run_analysis_extraction(&conn, case_id, &["LinuxArtifacts"], |file_id| {
-        file_service::read_file_header_by_id(
-            &conn,
-            file_id,
-            app_services::analysis_service::MAX_ANALYSIS_SOURCE_BYTES,
-        )
-        .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
-        .map_err(|error| error.to_string())
-    })
+    let run = run_analysis_extraction(
+        &conn,
+        case_id,
+        domain::DataSourcePlatform::Linux,
+        &["LinuxArtifacts"],
+        |file_id| {
+            file_service::read_file_header_by_id(
+                &conn,
+                file_id,
+                app_services::analysis_service::MAX_ANALYSIS_SOURCE_BYTES,
+            )
+            .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
+            .map_err(|error| error.to_string())
+        },
+    )
     .expect("LinuxArtifacts extraction should run against real root LV candidates");
     assert!(run.scanned_count > 0);
     assert!(run.artifact_count > 0);
@@ -2455,6 +2461,7 @@ fn linux_e01_analysis_extraction_produces_linux_artifacts() {
     let run = run_analysis_extraction(
         &conn,
         "linux-e01-analysis",
+        domain::DataSourcePlatform::Linux,
         &["LinuxArtifacts"],
         |file_id| {
             file_service::read_file_header_by_id(

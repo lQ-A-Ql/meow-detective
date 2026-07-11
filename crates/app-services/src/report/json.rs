@@ -33,52 +33,13 @@ pub fn generate_json_export(
     let analysis = current_analysis(conn)?;
     let governance = current_governance(conn, case_id)?;
     let correlation = current_correlation(conn)?;
-    let summary = crate::analysis_service::generate_analysis_summary(
-        &analysis.system_info,
-        &analysis.classifications,
-    );
-    let system_info = if scope.registry {
-        Some(&analysis.system_info)
-    } else {
-        None
-    };
-    let classifications = if scope.file_system_metadata {
-        analysis.classifications.as_slice()
-    } else {
-        &[]
-    };
+    let analysis_section = super::analysis_json::analysis_json_section(&analysis, scope);
     let json_val = serde_json::json!({
-        "timeline_events": events.iter().map(|e| serde_json::json!({
-            "id": e.id.0,
-            "sourceObjectId": e.source_object_id,
-            "type": e.event_type,
-            "ts": e.timestamp.to_rfc3339(),
-            "title": e.title,
-            "description": e.description,
-            "parserId": e.parser_id,
-            "parserVersion": e.parser_version,
-            "confidence": e.confidence,
-            "sourceAttribution": e.source_attribution,
-        })).collect::<Vec<_>>(),
-        "artifacts": artifacts.iter().map(|artifact| serde_json::json!({
-            "id": artifact.id.0,
-            "artifactType": artifact.family,
-            "title": artifact.title,
-            "summary": artifact.summary,
-            "sourceObjectId": artifact.source_object_id.as_ref().map(|id| id.0.as_str()),
-            "extractorId": artifact.extractor_id,
-            "extractorVersion": artifact.extractor_version,
-            "confidence": artifact.confidence,
-            "sourceAttribution": artifact.source_attribution,
-            "createdAt": artifact.created_at.to_rfc3339(),
-        })).collect::<Vec<_>>(),
+        "timeline_events": events.iter().map(super::json_records::legacy_timeline_event).collect::<Vec<_>>(),
+        "artifacts": artifacts.iter().map(super::json_records::legacy_artifact).collect::<Vec<_>>(),
         "scope": scope,
         "warnings": serde_json::Value::Array(Vec::new()),
-        "analysis": {
-            "systemInfo": system_info,
-            "classifications": classifications,
-            "summary": summary,
-        },
+        "analysis": analysis_section,
         "governance": governance_json_section(&governance),
         "correlation": correlation_json_section(&correlation),
     });
@@ -124,64 +85,30 @@ pub fn generate_json_export_for_case(
     scope: &ExportScopeDto,
 ) -> Result<String, ReportError> {
     let events = if scope.full_timeline {
-        crate::timeline_service::query_timeline_for_case(conn, case_root, &case.id, 0, 500)
-            .map_err(|e| ReportError::Other(e.to_string()))?
-            .items
+        crate::timeline_service::query_timeline_for_case(conn, case_root, &case.id, 0, 500)?.items
     } else {
         Vec::new()
     };
     let artifacts =
-        crate::artifact_service::get_artifact_rows_for_case(conn, case_root, &case.id, None)
-            .map_err(|e| ReportError::Other(e.to_string()))?;
+        crate::artifact_service::get_artifact_rows_for_case(conn, case_root, &case.id, None)?;
     let analysis = current_analysis_for_case(conn, case_root, &case.id)?;
-    let governance = current_governance(conn, &case.id.0)?;
+    let governance = super::current_governance_for_case(conn, case_root, &case.id.0)?;
     let correlation = current_correlation_for_case(conn, case_root, &case.id)?;
-    let summary = crate::analysis_service::generate_analysis_summary(
-        &analysis.system_info,
-        &analysis.classifications,
-    );
-    let system_info = if scope.registry {
-        Some(&analysis.system_info)
-    } else {
-        None
-    };
-    let classifications = if scope.file_system_metadata {
-        analysis.classifications.as_slice()
-    } else {
-        &[]
-    };
+    let analysis_section = super::analysis_json::analysis_json_section(&analysis, scope);
+    let timeline_events = events
+        .iter()
+        .map(super::json_records::source_timeline_event)
+        .collect::<Result<Vec<_>, _>>()?;
+    let artifact_rows = artifacts
+        .iter()
+        .map(super::json_records::source_artifact)
+        .collect::<Result<Vec<_>, _>>()?;
     let mut json_val = serde_json::json!({
-        "timeline_events": events.iter().map(|e| serde_json::json!({
-            "id": e.id,
-            "sourceObjectId": e.source_object_id,
-            "type": e.event_type,
-            "ts": e.ts,
-            "title": e.title,
-            "description": e.description,
-            "parserId": e.parser_id,
-            "parserVersion": e.parser_version,
-            "confidence": e.confidence,
-            "sourceAttribution": e.source_attribution,
-        })).collect::<Vec<_>>(),
-        "artifacts": artifacts.iter().map(|artifact| serde_json::json!({
-            "id": artifact.id,
-            "artifactType": artifact.artifact_type,
-            "title": artifact.title,
-            "summary": artifact.summary,
-            "sourceObjectId": artifact.source_object_id,
-            "extractorId": artifact.extractor_id,
-            "extractorVersion": artifact.extractor_version,
-            "confidence": artifact.confidence,
-            "sourceAttribution": artifact.source_attribution,
-            "createdAt": artifact.created_at,
-        })).collect::<Vec<_>>(),
+        "timeline_events": timeline_events,
+        "artifacts": artifact_rows,
         "scope": scope,
         "warnings": serde_json::Value::Array(Vec::new()),
-        "analysis": {
-            "systemInfo": system_info,
-            "classifications": classifications,
-            "summary": summary,
-        },
+        "analysis": analysis_section,
         "governance": governance_json_section(&governance),
         "correlation": correlation_json_section(&correlation),
     });
@@ -425,6 +352,7 @@ fn export_raw_file_bundle_for_case(
         let extracted = match crate::file_service::extract_file_to_destination_for_case(
             conn,
             case_root,
+            &domain::CaseId(case_id.to_string()),
             &global_file_id.0,
             &export_path,
             false,

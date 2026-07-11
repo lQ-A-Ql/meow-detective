@@ -280,6 +280,80 @@ fn case_platform_validation_rejects_retired_macos_without_blocking_deletion() {
 }
 
 #[test]
+fn case_platform_validation_rejects_unknown_and_blank_platforms() {
+    for (case_name, platform, expected) in [
+        ("unknown-platform", "unknown", "unknown"),
+        ("blank-platform", "   ", "missing platform metadata"),
+    ] {
+        let tmp = TempDir::new().unwrap();
+        let active = case_service::create_case(tmp.path(), case_name, None).expect("create case");
+        let case_root = active.case_root.clone();
+        let source = test_data_source(
+            &format!("ds-{case_name}"),
+            case_name,
+            tmp.path().join(format!("{case_name}.e01")),
+        );
+        active
+            .with_conn(|conn| {
+                seed_isolated_source(conn, &case_root, &active.meta.id, &source, platform)?;
+                Ok(())
+            })
+            .expect("seed unsupported platform");
+        drop(active);
+
+        let error = match case_service::open_case(&case_root) {
+            Ok(_) => panic!("case with platform {platform:?} unexpectedly opened"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            error,
+            case_service::CaseServiceError::UnsupportedPlatform(ref value)
+                if value == expected
+        ));
+    }
+}
+
+#[test]
+fn open_case_rejects_stale_schema_without_running_migrations() {
+    let tmp = TempDir::new().unwrap();
+    let active = case_service::create_case(tmp.path(), "stale-schema", None).expect("create case");
+    let case_root = active.case_root.clone();
+    active
+        .with_conn(|conn| {
+            conn.execute(
+                "DELETE FROM schema_migrations WHERE name = ?1",
+                [persistence_sqlite::runner::latest_version()],
+            )?;
+            Ok(())
+        })
+        .expect("mark schema stale");
+    drop(active);
+
+    let error = match case_service::open_case(&case_root) {
+        Ok(_) => panic!("stale schema unexpectedly opened"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        error,
+        case_service::CaseServiceError::InvalidCaseDir(ref message)
+            if message.contains("schema is incompatible") && message.contains("re-import")
+    ));
+
+    let conn = rusqlite::Connection::open(case_root.join("app.db")).expect("reopen case database");
+    let latest_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM schema_migrations WHERE name = ?1",
+            [persistence_sqlite::runner::latest_version()],
+            |row| row.get(0),
+        )
+        .expect("check latest migration marker");
+    assert_eq!(
+        latest_count, 0,
+        "case open must not migrate incompatible cases"
+    );
+}
+
+#[test]
 fn create_duplicate_name_fails() {
     let tmp = TempDir::new().unwrap();
     case_service::create_case(tmp.path(), "dup", None).unwrap();
@@ -916,8 +990,8 @@ fn open_case_rejects_legacy_single_database_payloads() {
         .with_conn(|conn| {
             conn.execute(
                 "INSERT INTO data_sources
-                 (id, case_id, name, kind, source_path, storage_model)
-                 VALUES ('legacy-ds', ?1, 'Legacy source', 'logical_directory', 'D:/legacy', 'source_db')",
+                 (id, case_id, name, kind, source_path, storage_model, platform)
+                 VALUES ('legacy-ds', ?1, 'Legacy source', 'logical_directory', 'D:/legacy', 'source_db', 'windows')",
                 [&active.meta.id.0],
             )?;
             conn.execute(

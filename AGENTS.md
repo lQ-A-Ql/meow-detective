@@ -6,7 +6,7 @@
 
 - **Runtime**: Tauri 2 desktop shell. No HTTP server. All frontend↔backend communication goes through Tauri commands and events.
 - **Primary platform**: `x86_64-pc-windows-msvc` (Windows-primary, desktop-first, single-user).
-- **Storage**: SQLite case databases with WAL, migrations, and repository layer (16 repos, 39 migration scripts).
+- **Storage**: SQLite case databases with WAL, migrations, and repository layer (16 repos, 41 migration scripts).
 - **Evidence access**: Read-only. Original evidence sources are never modified.
 - **Current status**:
   - V2: ~90% complete, Grade B (81/100), all 7 real E01 regression tests passing.
@@ -92,6 +92,8 @@ powershell -ExecutionPolicy Bypass -File scripts/check-rust-function-size.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-rust-test-layout.ps1 -SelfTest
 powershell -ExecutionPolicy Bypass -File scripts/check-rust-test-layout.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-stage0-boundary-guard.ps1
+powershell -ExecutionPolicy Bypass -File scripts/check-stage2-platform-boundary.ps1
+powershell -ExecutionPolicy Bypass -File scripts/check-stage2-real-sample-isolation.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-media-protocol-guard.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-release-guard.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-stage5-regression-guard.ps1
@@ -192,6 +194,8 @@ PowerShell scripts in `scripts/` encode architectural and security boundaries:
 | `check-rust-function-size.ps1` | Comment/string-aware Rust function debt guard; exact identity, reference-revision transition, target 100 and new-code hard ceiling 150 |
 | `check-rust-test-layout.ps1` | Rust tests embedded under `src` may not add or grow beyond baseline |
 | `check-stage0-boundary-guard.ps1` | Stage 0 frontend/runtime and backend dependency boundaries |
+| `check-stage2-platform-boundary.ps1` | Domain platform ownership, symmetric analyzers, thin analysis command, and facade limits |
+| `check-stage2-real-sample-isolation.ps1` | Opt-in Windows/Linux dual-E01 isolation in both serial import orders; `-RequireFixtures` makes missing private samples fatal |
 | `check-media-protocol-guard.ps1` | Media preview stays on `evidence-media:` protocol |
 | `check-release-guard.ps1` | No debug strings in release paths |
 | `check-stage5-regression-guard.ps1` | MCP transport validation, nested DTO contracts, staging merge conflicts |
@@ -297,9 +301,9 @@ Backend → Frontend via Tauri `emit`. Topics are string constants in `crates/tr
 | 34 crates | `crates/*` workspace members | The Tauri shell is a separate workspace package |
 | 98 Tauri commands | `apps/desktop/src-tauri/src/commands/**/*.rs` | Registered in `src/lib.rs` |
 | 16 SQLite repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` | Includes staging_repo, correlation_repo, entity_repo, datasource_cluster_repo |
-| 39 migration scripts | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | `0001`–`0035`, `source_001`–`source_003`, plus `staging_001.sql` |
+| 41 migration scripts | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | `0001`–`0036`, `source_001`–`source_004`, plus `staging_001.sql` |
 | 10 frontend pages | `frontend/src/app/pages/*.tsx` (excluding `*.test.tsx`) | Includes V2 Workbench, V3 Dashboard, CaseHome, FileBrowser, etc. |
-| 85 frontend test files | `frontend/src/**/*.test.{ts,tsx}` | |
+| 86 frontend test files | `frontend/src/**/*.test.{ts,tsx}` | |
 | ~2,061 Rust tests | `cargo test --workspace` (calibrated 2026-06) | |
 | 19 event topics | `crates/transport/src/events/mod.rs` | File extract progress added in 2026-06 |
 | 33 DTO domain files | `crates/transport/src/dto/*.rs` | Includes analysis_browser.rs added in 2026-06 |

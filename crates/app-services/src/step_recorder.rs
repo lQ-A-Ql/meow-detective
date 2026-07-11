@@ -5,7 +5,6 @@
 //! replays can detect state drift.
 
 use crate::notebook_service::NotebookError;
-use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 use std::path::Path;
@@ -150,21 +149,14 @@ fn aggregate_source_counts(
     case_root: &Path,
     case_id: &str,
 ) -> Result<SourceCounts, persistence_sqlite::DbError> {
-    let sources = DataSourceRepo::new(conn).find_by_case(&domain::CaseId(case_id.to_string()))?;
     let mut counts = SourceCounts::default();
-    for source in sources {
-        let storage = DataSourceRepo::new(conn).find_storage(&source.id)?;
-        if storage
-            .as_ref()
-            .is_some_and(|value| value.import_state == "failed")
-        {
-            continue;
-        }
-        let Ok(source_conn) =
-            crate::source_db::open_registered_source_db(conn, case_root, &source.id)
-        else {
-            continue;
-        };
+    for (_, source_conn) in crate::source_db::open_ready_source_connections(
+        conn,
+        case_root,
+        &domain::CaseId(case_id.to_string()),
+    )
+    .map_err(crate::source_db::ReadySourceError::into_db_error)?
+    {
         counts.file_count += count_table_rows_no_params(
             &source_conn,
             "SELECT COUNT(*) FROM file_entries WHERE entry_type = 'file'",

@@ -5,10 +5,10 @@ use transport::dto::{ArtifactRowDto, FamilyCountDto};
 
 use crate::source_db::{self, encode_source_scoped_id};
 use artifacts_core::{ArtifactContext, ExtractorRegistry, VecSink};
-use domain::{DataSourceId, EdgeType, FileEntryId, GraphEdge, GraphNode, NodeType};
-use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo, datasource_repo::DataSourceRepo, graph_repo::GraphRepo,
+use domain::{
+    DataSourceId, DataSourcePlatform, EdgeType, FileEntryId, GraphEdge, GraphNode, NodeType,
 };
+use persistence_sqlite::repositories::{artifact_repo::ArtifactRepo, graph_repo::GraphRepo};
 use rusqlite::Connection;
 use std::{collections::BTreeMap, path::Path};
 
@@ -31,6 +31,14 @@ pub struct EvidenceScanStats {
     pub skipped_count: u32,
     pub failed_count: u32,
     pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SourceArtifactFamilyCount {
+    pub data_source_id: DataSourceId,
+    pub platform: DataSourcePlatform,
+    pub family: String,
+    pub count: u64,
 }
 
 pub fn create_registry() -> ExtractorRegistry {
@@ -350,7 +358,9 @@ pub fn get_artifact_families_for_case(
     case_id: &domain::CaseId,
 ) -> Result<Vec<String>, ArtifactServiceError> {
     let mut families = BTreeMap::<String, ()>::new();
-    for (source_id, source_conn) in open_ready_source_connections(case_conn, case_root, case_id)? {
+    for (source_id, source_conn) in
+        source_db::open_ready_source_connections(case_conn, case_root, case_id)?
+    {
         let _ = source_id;
         for family in get_artifact_families_from_db(&source_conn)? {
             families.insert(family, ());
@@ -375,7 +385,9 @@ pub fn get_artifact_rows_for_case(
     family: Option<&str>,
 ) -> Result<Vec<ArtifactRowDto>, ArtifactServiceError> {
     let mut rows = Vec::new();
-    for (source_id, source_conn) in open_ready_source_connections(case_conn, case_root, case_id)? {
+    for (source_id, source_conn) in
+        source_db::open_ready_source_connections(case_conn, case_root, case_id)?
+    {
         let repo = ArtifactRepo::new(&source_conn);
         rows.extend(
             repo.list_by_family(family)?
@@ -404,7 +416,7 @@ pub fn get_artifact_row_by_id(
 pub fn get_artifact_row_by_id_for_case(
     case_conn: &Connection,
     case_root: &Path,
-    _case_id: &domain::CaseId,
+    case_id: &domain::CaseId,
     artifact_id: &str,
 ) -> Result<Option<ArtifactRowDto>, ArtifactServiceError> {
     let (source_id, local_id) = source_db::parse_source_scoped_id("Artifact id", artifact_id)
@@ -413,8 +425,8 @@ pub fn get_artifact_row_by_id_for_case(
                 "{err}; source database artifacts require ds:<dataSourceId>:<localId>"
             ))
         })?;
-    let source_conn = source_db::open_registered_source_db(case_conn, case_root, &source_id)?;
-    Ok(ArtifactRepo::new(&source_conn)
+    let source = source_db::open_ready_source_by_id(case_conn, case_root, case_id, &source_id)?;
+    Ok(ArtifactRepo::new(&source.connection)
         .find_by_id(&local_id)?
         .as_ref()
         .map(|artifact| artifact_to_source_dto(artifact, &source_id)))
@@ -437,16 +449,42 @@ pub fn get_artifact_family_counts_for_case(
     case_id: &domain::CaseId,
 ) -> Result<Vec<FamilyCountDto>, ArtifactServiceError> {
     let mut counts = BTreeMap::<String, u64>::new();
-    for (source_id, source_conn) in open_ready_source_connections(case_conn, case_root, case_id)? {
-        let _ = source_id;
-        for (family, count) in ArtifactRepo::new(&source_conn).count_by_family()? {
-            *counts.entry(family).or_default() += count;
-        }
+    for source_count in
+        get_source_attributed_artifact_family_counts_for_case(case_conn, case_root, case_id)?
+    {
+        *counts.entry(source_count.family).or_default() += source_count.count;
     }
     Ok(counts
         .into_iter()
         .map(|(family, count)| FamilyCountDto { family, count })
         .collect())
+}
+
+pub(crate) fn get_source_attributed_artifact_family_counts_for_case(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+) -> Result<Vec<SourceArtifactFamilyCount>, ArtifactServiceError> {
+    let ready_sources = source_db::ready_data_sources(case_conn, case_id)?;
+    let mut counts = Vec::new();
+    for (source, storage) in ready_sources {
+        let platform = DataSourcePlatform::parse_explicit(&storage.platform)
+            .map_err(|error| ArtifactServiceError::Unsupported(error.to_string()))?;
+        let source_conn =
+            source_db::open_ready_source_by_id(case_conn, case_root, case_id, &source.id)?;
+        counts.extend(
+            ArtifactRepo::new(&source_conn.connection)
+                .count_by_family()?
+                .into_iter()
+                .map(|(family, count)| SourceArtifactFamilyCount {
+                    data_source_id: source.id.clone(),
+                    platform,
+                    family,
+                    count,
+                }),
+        );
+    }
+    Ok(counts)
 }
 
 fn artifact_to_dto(a: &domain::Artifact) -> ArtifactRowDto {
@@ -475,27 +513,6 @@ fn artifact_to_source_dto(a: &domain::Artifact, data_source_id: &DataSourceId) -
     dto
 }
 
-fn open_ready_source_connections(
-    case_conn: &Connection,
-    case_root: &Path,
-    case_id: &domain::CaseId,
-) -> Result<Vec<(DataSourceId, Connection)>, ArtifactServiceError> {
-    let sources = DataSourceRepo::new(case_conn).find_by_case(case_id)?;
-    let mut conns = Vec::with_capacity(sources.len());
-    for source in sources {
-        let storage = DataSourceRepo::new(case_conn).find_storage(&source.id)?;
-        if storage
-            .as_ref()
-            .is_some_and(|value| value.import_state == "failed")
-        {
-            continue;
-        }
-        let conn = source_db::open_registered_source_db(case_conn, case_root, &source.id)?;
-        conns.push((source.id, conn));
-    }
-    Ok(conns)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -503,7 +520,6 @@ mod tests {
     use domain::{Artifact, ArtifactId, DataSourceId, EntryType, FileEntry, FileEntryId};
     use std::collections::BTreeMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
-
     const ARTIFACTS_SCHEMA: &str =
         include_str!("../../persistence-sqlite/src/migrations/scripts/0004_artifacts.sql");
 
@@ -545,6 +561,8 @@ mod tests {
         };
         persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&conn)
             .insert(&domain::CaseId("case-1".to_string()), &ds)
+            .unwrap();
+        conn.execute_batch("UPDATE data_sources SET import_state='ready',platform='linux'")
             .unwrap();
         conn
     }
@@ -606,7 +624,6 @@ mod tests {
         let mut sink = artifacts_core::VecSink::new();
         let data = b"hello world";
         let reader = Box::new(std::io::Cursor::new(data.to_vec()));
-
         let stats = run_extractors_on_file(
             &registry,
             &file_id,

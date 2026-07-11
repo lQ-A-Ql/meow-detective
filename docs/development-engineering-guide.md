@@ -265,6 +265,8 @@ powershell -File scripts/check-rust-function-size.ps1
 powershell -File scripts/check-rust-test-layout.ps1 -SelfTest
 powershell -File scripts/check-rust-test-layout.ps1
 powershell -File scripts/check-stage0-boundary-guard.ps1
+powershell -File scripts/check-stage2-platform-boundary.ps1
+powershell -File scripts/check-stage2-real-sample-isolation.ps1
 powershell -File scripts/check-media-protocol-guard.ps1
 powershell -File scripts/check-release-guard.ps1
 powershell -File scripts/check-stage5-regression-guard.ps1

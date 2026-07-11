@@ -1,10 +1,8 @@
-//! Post-import analysis worker pool.
-//!
-//! Workers read file rows from the main DB, write artifacts/timeline/index docs
-//! to per-worker temp DBs, then the caller merges those temp DBs with one writer.
+//! Bounded post-import analysis with per-worker staging and a single merge writer.
 
 mod budget;
 pub mod error;
+mod extractor_policy;
 mod finalize;
 mod options;
 pub mod priority_queue;
@@ -14,12 +12,11 @@ pub mod tier;
 mod worker_pool;
 mod worker_runtime;
 
-pub use error::ImportAnalysisError;
-
 pub use budget::{
     content_budget_for_mode, default_memory_hard_limit_mb, default_memory_soft_limit_mb,
     ContentBudget,
 };
+pub use error::ImportAnalysisError;
 pub use options::{
     AnalysisProgressCallback, ImportAnalysisMode, ImportAnalysisOptions, ImportAnalysisStats,
     JobOutcomeCounts, PostImportPipelineError, PostImportPipelineOptions,
@@ -35,14 +32,14 @@ mod tests {
     use super::tier::TierStateMachine;
     use super::*;
     use super::{
+        extractor_policy::registry_supports_file,
         finalize::{prepare_analysis_staging_startup, AnalysisStartupAction},
         progress::set_test_rss_override_mb,
         task_feed::{
             analysis_task_queue_bound, count_analysis_file_tasks, fetch_analysis_file_page,
         },
         worker_runtime::{
-            reserve_content_budget, should_extract_artifact, should_index_file, test_hooks,
-            SharedAnalysisState,
+            reserve_content_budget, should_index_file, test_hooks, SharedAnalysisState,
         },
     };
     use crate::{artifact_service, staging};
@@ -58,9 +55,7 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
     use tempfile::TempDir;
-
     static TEST_HOOK_LOCK: Mutex<()> = Mutex::new(());
-
     fn setup_case_db(tmp: &TempDir) -> (PathBuf, DataSourceId) {
         let db_path = tmp.path().join("app.db");
         let conn = persistence_sqlite::open_or_create(&db_path).unwrap();
@@ -79,7 +74,6 @@ mod tests {
         .unwrap();
         (db_path, DataSourceId("ds-1".to_string()))
     }
-
     fn insert_file_with_type(
         conn: &Connection,
         id: &str,
@@ -230,6 +224,7 @@ mod tests {
             db_path,
             case_id: "case-1".to_string(),
             data_source_id: ds_id,
+            platform: domain::DataSourcePlatform::Windows,
             index_dir: tmp.path().join("indexes").join("tantivy"),
             max_analysis_workers: Some(1),
             cancel_token: Arc::new(AtomicBool::new(false)),
@@ -255,6 +250,7 @@ mod tests {
             db_path,
             case_id: "case-1".to_string(),
             data_source_id: ds_id,
+            platform: domain::DataSourcePlatform::Windows,
             index_dir: tmp.path().join("indexes").join("tantivy"),
             max_analysis_workers: Some(1),
             cancel_token: Arc::new(AtomicBool::new(false)),
@@ -274,6 +270,7 @@ mod tests {
             db_path: tmp.path().join("app.db"),
             case_id: "case-1".to_string(),
             data_source_id: DataSourceId("ds-1".to_string()),
+            platform: domain::DataSourcePlatform::Windows,
             index_dir: tmp.path().join("indexes").join("tantivy"),
             max_analysis_workers: Some(1),
             cancel_token: Arc::new(AtomicBool::new(false)),
@@ -764,7 +761,7 @@ mod tests {
         options.enable_content_extraction = true;
         options.enable_text_indexing = true;
 
-        crate::file_service::reset_preview_descriptor_for_case_call_count();
+        let builds_before = crate::file_service::descriptor_build_count("case-1", "file-cache-pf");
         test_hooks::reset();
         test_hooks::track_file_id("file-cache-pf");
         let stats = run_import_analysis_staging(options, None).unwrap();
@@ -773,7 +770,7 @@ mod tests {
         assert_eq!(test_hooks::artifact_bytes_reads(), 1);
         assert_eq!(test_hooks::text_index_bytes_reads(), 1);
         assert_eq!(
-            crate::file_service::preview_descriptor_for_case_call_count(),
+            crate::file_service::descriptor_build_count("case-1", "file-cache-pf") - builds_before,
             1,
             "the worker should reuse one preview descriptor across artifact and text reads"
         );
@@ -898,9 +895,9 @@ mod tests {
             ..small_prefetch.clone()
         };
 
-        assert!(should_extract_artifact(&registry, &small_prefetch));
-        assert!(!should_extract_artifact(&registry, &large_prefetch));
-        assert!(!should_extract_artifact(&registry, &non_candidate));
+        assert!(registry_supports_file(&registry, &small_prefetch));
+        assert!(!registry_supports_file(&registry, &large_prefetch));
+        assert!(!registry_supports_file(&registry, &non_candidate));
     }
 
     #[test]

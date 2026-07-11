@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   readFileRange: vi.fn(),
   getTextPreview: vi.fn(),
   getImagePreview: vi.fn(),
+  importDataSource: vi.fn(),
 }));
 
 vi.mock('@/lib/api/files', () => ({
@@ -23,7 +24,7 @@ vi.mock('@/lib/api/files', () => ({
   getFileJumpContext: vi.fn(),
   getFileChildren: vi.fn(),
   getFileChildrenPage: vi.fn(),
-  importDataSource: vi.fn(),
+  importDataSource: mocks.importDataSource,
   openFileHandle: mocks.openFileHandle,
   readFileRange: mocks.readFileRange,
   extractFile: vi.fn(),
@@ -41,6 +42,7 @@ vi.mock('@/features/cache-invalidation', () => ({
 
 import {
   useFileHandle,
+  useImportDataSource,
   useFileTree,
   useFileViewer,
   useImagePreview,
@@ -97,6 +99,25 @@ describe('files hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       // staleTime Infinity means the data never becomes stale
       expect(result.current.isStale).toBe(false);
+    });
+  });
+
+  describe('useImportDataSource', () => {
+    it('passes the typed request object unchanged to the real API boundary', async () => {
+      mocks.importDataSource.mockResolvedValue('job-import-1');
+      const request = {
+        sourcePath: 'D:/evidence/linux.E01',
+        platform: 'linux' as const,
+      };
+      const { result } = renderHook(() => useImportDataSource(), {
+        wrapper: createWrapper(),
+      });
+
+      await act(async () => {
+        await result.current.mutateAsync(request);
+      });
+
+      expect(mocks.importDataSource).toHaveBeenCalledWith(request);
     });
   });
 

@@ -1,7 +1,15 @@
-use domain::{DataSourceId, FileEntryId};
-use persistence_sqlite::{repositories::datasource_repo::DataSourceRepo, DbError, DbResult};
+use domain::{DataSource, DataSourceId, FileEntryId};
+use persistence_sqlite::{
+    repositories::datasource_repo::{DataSourceRepo, DataSourceStorage},
+    DbError, DbResult,
+};
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
+
+mod ready;
+pub use ready::{
+    open_ready_source_by_id, resolve_ready_source_platform, ReadySourceConnection, ReadySourceError,
+};
 
 const SOURCES_DIR_NAME: &str = "sources";
 const SOURCE_DB_FILE_NAME: &str = "source.db";
@@ -140,6 +148,42 @@ pub fn open_registered_source_db(
     persistence_sqlite::open_existing_source(&db_path)
 }
 
+/// Open only fully imported source databases for case-wide aggregation.
+pub fn open_ready_source_connections(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &domain::CaseId,
+) -> Result<Vec<(DataSourceId, Connection)>, ReadySourceError> {
+    let sources = ready_data_sources(case_conn, case_id)?;
+    let mut connections = Vec::with_capacity(sources.len());
+    for (source, _) in sources {
+        let ready = open_ready_source_by_id(case_conn, case_root, case_id, &source.id)?;
+        connections.push((ready.data_source_id, ready.connection));
+    }
+    Ok(connections)
+}
+
+pub(crate) fn ready_data_sources(
+    case_conn: &Connection,
+    case_id: &domain::CaseId,
+) -> Result<Vec<(DataSource, DataSourceStorage)>, ReadySourceError> {
+    let repo = DataSourceRepo::new(case_conn);
+    let mut ready = Vec::new();
+    for source in repo.find_by_case(case_id)? {
+        let storage = repo
+            .find_storage(&source.id)?
+            .ok_or_else(|| ReadySourceError::NotFound {
+                case_id: case_id.0.clone(),
+                data_source_id: source.id.0.clone(),
+            })?;
+        if storage.import_state.trim().eq_ignore_ascii_case("ready") {
+            ready::validate_ready_storage(&source.id, &storage)?;
+            ready.push((source, storage));
+        }
+    }
+    Ok(ready)
+}
+
 pub fn checkpoint_source_db(conn: &Connection) -> DbResult<()> {
     conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
     Ok(())
@@ -213,21 +257,26 @@ impl SourceConnectionManager {
         }
     }
 
-    pub fn open_registered(
+    pub fn open_ready(
         &self,
         case_conn: &Connection,
+        case_id: &domain::CaseId,
         data_source_id: &DataSourceId,
-    ) -> DbResult<Connection> {
-        open_registered_source_db(case_conn, &self.locator.case_root, data_source_id)
+    ) -> Result<Connection, ReadySourceError> {
+        Ok(
+            open_ready_source_by_id(case_conn, &self.locator.case_root, case_id, data_source_id)?
+                .connection,
+        )
     }
 
-    pub fn open_for_global_file_id(
+    pub fn open_ready_for_global_file_id(
         &self,
         case_conn: &Connection,
+        case_id: &domain::CaseId,
         file_id: &FileEntryId,
-    ) -> DbResult<(GlobalFileId, Connection)> {
+    ) -> Result<(GlobalFileId, Connection), ReadySourceError> {
         let global_id = GlobalFileId::parse(file_id)?;
-        let conn = self.open_registered(case_conn, &global_id.data_source_id)?;
+        let conn = self.open_ready(case_conn, case_id, &global_id.data_source_id)?;
         Ok((global_id, conn))
     }
 }

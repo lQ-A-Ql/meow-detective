@@ -132,7 +132,7 @@ export function useFileChildrenPage(parentId?: string, offset = 0, limit = 500, 
 export function useImportDataSource() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (request: string | ImportDataSourceRequest) => importDataSource(request),
+    mutationFn: (request: ImportDataSourceRequest) => importDataSource(request),
     onMutate: () => {
       expectJobsSnapshotActivity(qc.getQueryData(['jobs', 'snapshot']));
       qc.invalidateQueries({ queryKey: ['jobs', 'snapshot'] });

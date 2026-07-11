@@ -1,7 +1,8 @@
 use super::budget::ContentBudget;
 use super::error::ImportAnalysisError;
+use super::extractor_policy::PlatformExtractorPolicy;
 use super::options::{ImportAnalysisOptions, ImportAnalysisStats};
-use crate::{artifact_service, file_service, staging};
+use crate::{file_service, staging};
 use artifacts_core::VecSink;
 use crossbeam_channel::Receiver;
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
@@ -98,13 +99,13 @@ pub(super) fn run_analysis_worker(
     task_rx: Receiver<FileTask>,
     shared: Arc<SharedAnalysisState>,
 ) -> Result<WorkerStats, ImportAnalysisError> {
+    let extractor_policy = PlatformExtractorPolicy::for_platform(options.platform)?;
     let main_conn = persistence_sqlite::open_or_create(&options.db_path)?;
     let staging_conn =
         staging::open_analysis_staging(&options.case_root, &options.data_source_id.0, worker_id)?;
     staging::set_worker_meta(&staging_conn, "status", "running")?;
 
     let mut stats = WorkerStats::default();
-    let registry = artifact_service::create_registry();
     let header_cache = file_service::FileHeaderReadCache::new(options.case_id.clone());
     let mut artifacts = Vec::with_capacity(WORKER_INSERT_BATCH);
     let mut timeline_events = Vec::with_capacity(WORKER_INSERT_BATCH);
@@ -127,14 +128,13 @@ pub(super) fn run_analysis_worker(
 
         if options.analysis_mode.allows_content()
             && options.enable_content_extraction
-            && should_extract_artifact(&registry, &file)
+            && extractor_policy.should_extract(&file)
             && reserve_content_budget(&options.content_budget, &file, &shared)
         {
             match read_artifact_bytes(&header_cache, &main_conn, &file.id) {
                 Ok(bytes) => {
                     let mut sink = VecSink::new();
-                    match artifact_service::run_extractors_on_file(
-                        &registry,
+                    match extractor_policy.run_extractors(
                         &file.id,
                         &file.path,
                         Box::new(Cursor::new(bytes)),
@@ -470,17 +470,6 @@ pub(super) fn should_index_file(file: &FileEntry) -> bool {
         normalized_ext(file).to_ascii_lowercase().as_str(),
         "txt" | "log" | "csv" | "json" | "xml" | "html" | "htm" | "md"
     )
-}
-
-pub(crate) fn should_extract_artifact(
-    registry: &artifacts_core::ExtractorRegistry,
-    file: &FileEntry,
-) -> bool {
-    if registry.find_for_path(&file.path).is_empty() {
-        return false;
-    }
-    file.size
-        .is_some_and(|size| size <= infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES)
 }
 
 pub(super) fn reserve_content_budget(

@@ -151,3 +151,29 @@ fn search_no_results() {
     assert_eq!(result.hits.len(), 0);
     assert_eq!(result.total_count, 0);
 }
+
+#[test]
+fn search_respects_limit() {
+    let dir = tempfile::tempdir().expect("create search fixture");
+    let index_path = dir.path().join("test_index");
+    let index = search::SearchIndex::create(&index_path).expect("create search index");
+    let texts = (0..20)
+        .map(|index| search::ExtractedText {
+            file_id: format!("f{index}"),
+            content: format!("document number {index} with test content"),
+            encoding: "utf-8".to_string(),
+            extractable: true,
+            byte_count: 50,
+        })
+        .collect::<Vec<_>>();
+    let paths = (0..20)
+        .map(|index| (format!("f{index}"), format!("/docs/doc{index}.txt")))
+        .collect::<Vec<_>>();
+
+    index
+        .index_documents(&texts, &paths)
+        .expect("index fixture");
+    let result = index.search("test", 5).expect("search fixture");
+
+    assert!(result.hits.len() <= 5);
+}

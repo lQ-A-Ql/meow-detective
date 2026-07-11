@@ -57,8 +57,7 @@ pub struct ImportDataSourceRequest {
     pub source_path: String,
     #[serde(default, skip_serializing_if = "is_default_import_source_kind")]
     pub source_kind: ImportSourceKindDto,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub platform: Option<ImportTargetPlatformDto>,
+    pub platform: ImportTargetPlatformDto,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile: Option<String>,
 }
@@ -75,7 +74,7 @@ impl ImportDataSourceRequest {
             }
         }
         if self.source_kind == ImportSourceKindDto::LinuxCluster
-            && self.platform != Some(ImportTargetPlatformDto::Linux)
+            && self.platform != ImportTargetPlatformDto::Linux
         {
             return Err("linuxCluster imports must use platform linux".to_string());
         }
@@ -725,19 +724,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn classify_files_request_deserializes_sample_size() {
-        let request: ClassifyFilesRequest =
-            serde_json::from_str(r#"{"dataSourceId":"ds-1","sampleSize":1000}"#).unwrap();
-        assert_eq!(request.data_source_id, "ds-1");
-        assert_eq!(request.sample_size, Some(1000));
-    }
-
-    #[test]
     fn import_source_rejects_reserved_device_names() {
         let request = ImportDataSourceRequest {
             source_path: "CON".to_string(),
             source_kind: Default::default(),
-            platform: None,
+            platform: ImportTargetPlatformDto::Windows,
             profile: None,
         };
 
@@ -760,7 +751,7 @@ mod tests {
         let request = ImportDataSourceRequest {
             source_path: r"\\.\PhysicalDrive0".to_string(),
             source_kind: Default::default(),
-            platform: None,
+            platform: ImportTargetPlatformDto::Windows,
             profile: None,
         };
 
@@ -772,7 +763,7 @@ mod tests {
         let request = ImportDataSourceRequest {
             source_path: r"\\?\C:\evidence.E01".to_string(),
             source_kind: Default::default(),
-            platform: None,
+            platform: ImportTargetPlatformDto::Windows,
             profile: None,
         };
 
@@ -780,12 +771,12 @@ mod tests {
     }
 
     #[test]
-    fn import_source_accepts_optional_platform_profile_contract() {
+    fn import_source_accepts_required_platform_and_optional_profile_contract() {
         let request: ImportDataSourceRequest =
             serde_json::from_str(r#"{"sourcePath":"C:/evidence/linux.raw","platform":"linux","profile":"ubuntu-server"}"#)
                 .unwrap();
 
-        assert_eq!(request.platform, Some(ImportTargetPlatformDto::Linux));
+        assert_eq!(request.platform, ImportTargetPlatformDto::Linux);
         assert_eq!(request.profile.as_deref(), Some("ubuntu-server"));
         assert!(request.validate().is_ok());
 
@@ -805,7 +796,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(request.source_kind, ImportSourceKindDto::LinuxCluster);
-        assert_eq!(request.platform, Some(ImportTargetPlatformDto::Linux));
+        assert_eq!(request.platform, ImportTargetPlatformDto::Linux);
         assert!(request.validate().is_ok());
 
         let value = serde_json::to_value(request).unwrap();
@@ -814,9 +805,10 @@ mod tests {
 
     #[test]
     fn import_source_rejects_linux_cluster_without_linux_platform() {
-        let request: ImportDataSourceRequest =
-            serde_json::from_str(r#"{"sourcePath":"D:/cluster","sourceKind":"linuxCluster"}"#)
-                .unwrap();
+        let request: ImportDataSourceRequest = serde_json::from_str(
+            r#"{"sourcePath":"D:/cluster","sourceKind":"linuxCluster","platform":"windows"}"#,
+        )
+        .unwrap();
 
         assert_eq!(
             request.validate().unwrap_err(),

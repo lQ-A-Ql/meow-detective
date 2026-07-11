@@ -3,6 +3,10 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::path::PathBuf;
 
+mod platform;
+
+pub use platform::{DataSourcePlatform, DataSourcePlatformParseError};
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct DataSourceId(pub String);
 

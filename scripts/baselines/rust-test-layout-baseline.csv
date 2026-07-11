@@ -1,6 +1,5 @@
 path,inlineTestModules,inlineTestModuleLines,testAttributes,modTestsBlocks,testOnlyCfgItems,srcTestFileLines
 apps/desktop/src-tauri/src/cache_invalidation.rs,1,11,1,1,0,0
-apps/desktop/src-tauri/src/commands/analysis_commands.rs,1,53,2,1,0,0
 apps/desktop/src-tauri/src/commands/batch_commands.rs,1,119,6,1,0,0
 apps/desktop/src-tauri/src/commands/benchmarks.rs,1,348,1,0,0,0
 apps/desktop/src-tauri/src/commands/case_commands.rs,1,203,5,1,0,0
@@ -15,10 +14,8 @@ apps/desktop/src-tauri/src/media_protocol.rs,1,407,25,1,2,0
 apps/desktop/src-tauri/src/platform_security.rs,1,28,1,1,0,0
 apps/desktop/src-tauri/src/state/app_state.rs,1,41,1,1,0,0
 apps/desktop/src-tauri/src/state/task_manager.rs,1,101,4,1,0,0
-crates/app-services/src/analysis_service/candidates.rs,1,52,2,1,0,0
 crates/app-services/src/analysis_service/extraction/email/mod.rs,0,0,0,0,1,0
 crates/app-services/src/analysis_service/extraction/email/tests.rs,0,0,8,0,0,955
-crates/app-services/src/analysis_service/extraction/linux_sections.rs,1,36,1,1,0,0
 crates/app-services/src/analysis_service/extraction/registry/mod.rs,1,129,3,1,0,0
 crates/app-services/src/analysis_service/mod.rs,0,0,0,0,2,0
 crates/app-services/src/analysis_service/tests.rs,0,0,21,0,0,1527
@@ -45,7 +42,6 @@ crates/app-services/src/file_service/viewer/range.rs,0,0,0,0,2,0
 crates/app-services/src/file_service/viewer/tests.rs,0,0,24,0,0,1493
 crates/app-services/src/governance/mod.rs,0,0,0,0,1,0
 crates/app-services/src/governance/tests.rs,0,0,1,0,0,237
-crates/app-services/src/graph_service.rs,1,306,11,1,0,0
 crates/app-services/src/hash_service.rs,1,43,5,1,0,0
 crates/app-services/src/import_analysis/mod.rs,1,1035,21,1,0,0
 crates/app-services/src/import_analysis/priority_queue.rs,1,99,6,1,0,0
@@ -200,7 +196,6 @@ crates/persistence-sqlite/src/repositories/datasource_cluster_repo.rs,1,80,3,1,0
 crates/persistence-sqlite/src/repositories/datasource_repo.rs,1,212,5,1,0,0
 crates/persistence-sqlite/src/repositories/entity_repo.rs,1,351,9,1,0,0
 crates/persistence-sqlite/src/repositories/file_repo.rs,1,109,2,1,0,0
-crates/persistence-sqlite/src/repositories/graph_repo.rs,1,266,13,1,0,0
 crates/persistence-sqlite/src/repositories/job_repo.rs,1,147,7,1,0,0
 crates/persistence-sqlite/src/repositories/notebook_repo.rs,1,359,10,1,0,0
 crates/persistence-sqlite/src/repositories/partition_repo.rs,1,136,4,1,0,0

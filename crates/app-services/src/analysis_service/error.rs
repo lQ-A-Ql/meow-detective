@@ -26,6 +26,39 @@ impl From<rusqlite::Error> for AnalysisServiceError {
     }
 }
 
+impl From<crate::source_db::ReadySourceError> for AnalysisServiceError {
+    fn from(error: crate::source_db::ReadySourceError) -> Self {
+        match error {
+            crate::source_db::ReadySourceError::Db(error) => Self::Db(error),
+            crate::source_db::ReadySourceError::NotFound { data_source_id, .. } => {
+                Self::NotFound("Data source", data_source_id)
+            }
+            crate::source_db::ReadySourceError::NotReady { .. } => {
+                Self::InvalidInput(error.to_string())
+            }
+            crate::source_db::ReadySourceError::UnsupportedPlatform { .. } => {
+                Self::Unsupported(error.to_string())
+            }
+        }
+    }
+}
+
+impl AnalysisServiceError {
+    pub(crate) fn unsupported_platform(reason: impl Into<String>) -> Self {
+        Self::Unsupported(format!("data source platform: {}", reason.into()))
+    }
+
+    pub(crate) fn platform_mismatch(
+        capability: &str,
+        source_platform: domain::DataSourcePlatform,
+        capability_platform: domain::DataSourcePlatform,
+    ) -> Self {
+        Self::Unsupported(format!(
+            "analysis capability `{capability}` belongs to {capability_platform}, not {source_platform}"
+        ))
+    }
+}
+
 impl transport::ServiceErrorCategory for AnalysisServiceError {
     fn category(&self) -> transport::ErrorCategory {
         match self {

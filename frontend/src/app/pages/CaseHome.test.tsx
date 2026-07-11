@@ -327,6 +327,7 @@ describe('CaseHome page', () => {
           kind: 'e01',
           sourcePath: 'D:/evidence/disk.E01',
           importedAt: '2026-05-14T08:30:00Z',
+          platform: 'windows',
           fileCount: 0,
           partitions: [
             {

@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import type {
   CancelJobRequest,
   EventTopic,
+  ImportDataSourceRequest,
   ImportPhaseProgress,
+  ImportTargetPlatform,
   IndexCacheStatus,
   JobCancellation,
   PartialResult,
@@ -11,6 +13,18 @@ import type {
 } from './models';
 
 describe('import progress contract models', () => {
+  it('requires an explicit supported platform for data-source imports', () => {
+    expectTypeOf<ImportTargetPlatform>().toEqualTypeOf<'windows' | 'linux'>();
+    expectTypeOf<ImportDataSourceRequest['platform']>().toEqualTypeOf<'windows' | 'linux'>();
+
+    const request = {
+      sourcePath: 'D:/evidence/windows.E01',
+      platform: 'windows',
+    } satisfies ImportDataSourceRequest;
+
+    expect(request.platform).toBe('windows');
+  });
+
   it('accepts detailed design import progress payloads', () => {
     const partial = {
       kind: 'timelineBuckets',

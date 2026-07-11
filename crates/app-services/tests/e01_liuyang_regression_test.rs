@@ -331,8 +331,11 @@ fn liuyang_e01_prints_parsed_system_info_and_evidence_summary() {
                 matching_entry.map(|entry| entry.path.as_str())
             );
 
-            let summary = analysis_service::get_evidence_classification_summary(conn)
-                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let summary = analysis_service::get_evidence_classification_summary(
+                conn,
+                domain::DataSourcePlatform::Windows,
+            )
+            .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(
                 summary.totals.candidate_file_count > 0,
                 "evidence summary should find Windows evidence candidates"
@@ -2383,6 +2386,7 @@ fn liuyang_e01_email_extraction_regression() {
             let run = analysis_service::run_analysis_extraction(
                 conn,
                 &case_id.0,
+                domain::DataSourcePlatform::Windows,
                 &["Email"],
                 |file_id| {
                     let path = entry_map

@@ -1,12 +1,15 @@
 //! Import command scheduling and request preparation.
 
 use app_services::{active_case, cluster_service, import_analysis, import_precheck};
+use domain::DataSourcePlatform;
 use persistence_sqlite::repositories::job_repo::JobRepo;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 use transport::{
-    commands::{AppSettingsDto, ImportDataSourceRequest, ImportSourceKindDto},
+    commands::{
+        AppSettingsDto, ImportDataSourceRequest, ImportSourceKindDto, ImportTargetPlatformDto,
+    },
     CommandError,
 };
 
@@ -29,9 +32,7 @@ pub async fn import_data_source(
     let app_clone = app.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        import_precheck::ensure_supported_import_platform(request.platform)
-            .map_err(CommandError::from_typed_service_error)?;
-        request.validate().map_err(CommandError::invalid_input)?;
+        let platform = validate_import_request(&request)?;
         let settings = load_import_settings(&app_state.app_settings_path);
         let guard = app_state
             .active_case
@@ -57,7 +58,7 @@ pub async fn import_data_source(
                 )?
             }
             ImportSourceKindDto::Auto => {
-                let import_config = prepare_import_config(&request)?;
+                let import_config = prepare_import_config(&request, platform)?;
                 schedule_import_for_active_case(
                     active,
                     import_config,
@@ -240,9 +241,34 @@ fn import_analysis_mode_from_settings(value: &str) -> import_analysis::ImportAna
 
 fn prepare_import_config(
     request: &ImportDataSourceRequest,
+    platform: DataSourcePlatform,
 ) -> Result<import_precheck::ImportSourceConfig, CommandError> {
-    import_precheck::prepare_import_source_config(request)
-        .map_err(import_config_error_to_command_error)
+    import_precheck::prepare_import_source_config(
+        &request.source_path,
+        platform,
+        request.profile.clone(),
+    )
+    .map_err(import_config_error_to_command_error)
+}
+
+fn import_platform_from_dto(
+    platform: ImportTargetPlatformDto,
+) -> Result<DataSourcePlatform, CommandError> {
+    match platform {
+        ImportTargetPlatformDto::Windows => Ok(DataSourcePlatform::Windows),
+        ImportTargetPlatformDto::Linux => Ok(DataSourcePlatform::Linux),
+        ImportTargetPlatformDto::Unsupported => Err(CommandError::unsupported(
+            "unsupported data source platform; only Windows and Linux are supported",
+        )),
+    }
+}
+
+fn validate_import_request(
+    request: &ImportDataSourceRequest,
+) -> Result<DataSourcePlatform, CommandError> {
+    let platform = import_platform_from_dto(request.platform)?;
+    request.validate().map_err(CommandError::invalid_input)?;
+    Ok(platform)
 }
 
 pub(crate) fn import_config_error_to_command_error(
@@ -254,3 +280,7 @@ pub(crate) fn import_config_error_to_command_error(
         CommandError::from_typed_service_error(error)
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/commands/import/schedule_test.rs"]
+mod tests;

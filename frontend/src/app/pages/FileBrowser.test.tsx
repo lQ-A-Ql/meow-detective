@@ -574,6 +574,7 @@ describe('FileBrowser media preview', () => {
           kind: 'e01',
           sourcePath: 'E:/demo.E01',
           importedAt: '2026-06-01T10:00:00Z',
+          platform: 'windows',
           partitions: [
             {
               index: 1,
@@ -637,6 +638,7 @@ describe('FileBrowser media preview', () => {
           kind: 'e01',
           sourcePath: 'E:/windows.E01',
           importedAt: '2026-06-01T10:00:00Z',
+          platform: 'windows',
           partitions: [{ index: 1, name: 'Windows', kindLabel: 'NTFS', status: 'supported', offset: 0, length: 1024, filesystem: 'NTFS' }],
         },
         {
@@ -645,6 +647,7 @@ describe('FileBrowser media preview', () => {
           kind: 'raw',
           sourcePath: 'E:/linux.raw',
           importedAt: '2026-06-02T10:00:00Z',
+          platform: 'linux',
           partitions: [{ index: 2, name: 'Linux', kindLabel: 'FAT', status: 'supported', offset: 1024, length: 2048, filesystem: 'FAT' }],
         },
       ]),

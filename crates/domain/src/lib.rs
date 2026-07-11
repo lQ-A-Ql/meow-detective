@@ -15,8 +15,8 @@ pub mod timestamp;
 pub use artifact::{Artifact, ArtifactFamily, ArtifactId};
 pub use case::{CaseId, CaseMeta, CaseSession};
 pub use datasource::{
-    DataSource, DataSourceHashStatus, DataSourceId, DataSourceKind, DataSourceProvenance,
-    DataSourceProvenanceStatus,
+    DataSource, DataSourceHashStatus, DataSourceId, DataSourceKind, DataSourcePlatform,
+    DataSourcePlatformParseError, DataSourceProvenance, DataSourceProvenanceStatus,
 };
 pub use error::{ForensicsError, ForensicsResult};
 pub use file_entry::{EntryType, FileEntry, FileEntryId};

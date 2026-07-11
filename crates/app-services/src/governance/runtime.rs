@@ -159,8 +159,7 @@ pub(crate) fn correlation_runtime_snapshot_for_case(
     case_root: &Path,
     case_id: &domain::CaseId,
 ) -> Result<CorrelationRuntimeSnapshot, GovernanceError> {
-    let snapshot = crate::correlation::get_correlation_snapshot_for_case(conn, case_root, case_id)
-        .map_err(|e| GovernanceError::Internal(e.to_string()))?;
+    let snapshot = crate::correlation::get_correlation_snapshot_for_case(conn, case_root, case_id)?;
     correlation_runtime_from_snapshot(snapshot)
 }
 

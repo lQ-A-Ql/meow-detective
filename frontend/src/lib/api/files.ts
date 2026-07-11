@@ -46,9 +46,8 @@ export async function getFileRowsPage(
   });
 }
 
-export async function importDataSource(request: string | ImportDataSourceRequest): Promise<string> {
-  const payload = typeof request === 'string' ? { sourcePath: request } : request;
-  return apiClient.request(COMMANDS.files.IMPORT_DATA_SOURCE, { request: payload });
+export async function importDataSource(request: ImportDataSourceRequest): Promise<string> {
+  return apiClient.request(COMMANDS.files.IMPORT_DATA_SOURCE, { request });
 }
 
 export async function getFileChildren(parentId: string, showHidden = false): Promise<FileTreeNode[]> {

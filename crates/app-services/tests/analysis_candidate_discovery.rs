@@ -1,0 +1,80 @@
+use app_services::analysis_service::discover_evidence_candidates;
+use rusqlite::{params, Connection};
+
+fn candidate_db() -> Connection {
+    let connection = Connection::open_in_memory().expect("open in-memory candidate database");
+    connection
+        .execute_batch(
+            "CREATE TABLE file_entries (
+                id TEXT PRIMARY KEY,
+                data_source_id TEXT NOT NULL,
+                path TEXT NOT NULL,
+                size INTEGER,
+                entry_type TEXT NOT NULL
+            );",
+        )
+        .expect("create candidate schema");
+    connection
+}
+
+fn insert_file(connection: &Connection, id: &str, path: &str) {
+    connection
+        .execute(
+            "INSERT INTO file_entries (id, data_source_id, path, size, entry_type)
+             VALUES (?1, 'source-1', ?2, 1, 'file')",
+            params![id, path],
+        )
+        .expect("insert candidate file");
+}
+
+#[test]
+fn email_candidates_keep_extension_specific_kind_and_parser() {
+    let connection = candidate_db();
+    let expected = [
+        ("eml", "mail.eml", "email_eml_emlx", "email.eml_emlx"),
+        ("emlx", "mail.emlx", "email_eml_emlx", "email.eml_emlx"),
+        ("mbox", "inbox.mbox", "email_mbox", "email.mbox"),
+        ("pst", "archive.pst", "email_pst", "email.pst"),
+        ("ost", "cache.ost", "email_ost", "email.ost"),
+    ];
+    for &(id, path, _, _) in &expected {
+        insert_file(&connection, id, path);
+    }
+    insert_file(&connection, "other", "unknown.bin");
+
+    let discovered = discover_evidence_candidates(&connection).expect("discover email evidence");
+    let email = discovered.get("Email").expect("email category");
+    assert_eq!(email.len(), expected.len());
+    for &(id, _, evidence_kind, parser) in &expected {
+        let candidate = email
+            .iter()
+            .find(|candidate| candidate.file_id.0 == id)
+            .expect("extension-specific email candidate");
+        assert_eq!(candidate.evidence_kind.as_str(), evidence_kind);
+        assert_eq!(candidate.parser.as_str(), parser);
+    }
+}
+
+#[test]
+fn linux_candidate_discovery_strips_partition_and_lvm_root_prefixes() {
+    let connection = candidate_db();
+    let paths = [
+        "Partition 2 (XFS) - cl/root/etc/passwd",
+        "[P2]/cl/root/var/log/auth.log.1.gz",
+        "cl/root/home/alice/.bash_history",
+        "cl/root/root/.bash_history",
+    ];
+    for (index, path) in paths.iter().enumerate() {
+        insert_file(&connection, &format!("linux-{index}"), path);
+    }
+
+    let discovered =
+        discover_evidence_candidates(&connection).expect("discover normalized Linux evidence");
+    let linux = discovered
+        .get("LinuxArtifacts")
+        .expect("Linux artifact category");
+    assert_eq!(linux.len(), paths.len());
+    assert!(paths.iter().all(|path| linux
+        .iter()
+        .any(|candidate| candidate.path.as_str() == *path)));
+}

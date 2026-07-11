@@ -2,6 +2,7 @@ use super::budget::{
     content_budget_for_mode, default_memory_hard_limit_mb, default_memory_soft_limit_mb,
 };
 use super::error::ImportAnalysisError;
+use super::extractor_policy::validate_analysis_platform;
 use super::finalize::{
     collect_done_worker_stats, discover_analysis_worker_ids, merge_finished_analysis_staging,
     prepare_analysis_staging_startup, AnalysisStartupAction,
@@ -27,9 +28,8 @@ pub fn run_post_import_pipeline_with_counts(
     options: PostImportPipelineOptions,
     progress_cb: Option<AnalysisProgressCallback<'_>>,
 ) -> Result<(String, JobOutcomeCounts), PostImportPipelineError> {
-    let mut counts = JobOutcomeCounts::default();
-    // Clone before options is partially moved constructing ImportAnalysisOptions.
-    let tier_state = Arc::clone(&options.tier_state);
+    let mut counts = initial_counts_for_platform(options.platform)?;
+    let tier_state = Arc::clone(&options.tier_state); // Preserve before partially moving options.
 
     if !options.enable_timeline_projection
         && !options.enable_content_extraction
@@ -81,6 +81,7 @@ pub fn run_post_import_pipeline_with_counts(
                 db_path: options.db_path,
                 case_id: options.case_id,
                 data_source_id: options.data_source_id,
+                platform: options.platform,
                 index_dir: options.index_dir,
                 max_analysis_workers: options.max_analysis_workers,
                 cancel_token: options.cancel_token,
@@ -153,7 +154,7 @@ pub fn run_import_analysis_staging(
     options: ImportAnalysisOptions,
     progress_cb: Option<AnalysisProgressCallback<'_>>,
 ) -> Result<ImportAnalysisStats, ImportAnalysisError> {
-    let analysis_started = Instant::now();
+    let analysis_started = validated_analysis_start(options.platform)?;
     let worker_count = resolve_analysis_worker_count(options.max_analysis_workers).max(1);
     let worker_ids: Vec<usize> = (0..worker_count).collect();
     let memory_soft_limit_mb = if options.memory_soft_limit_mb == 0 {
@@ -450,4 +451,26 @@ pub fn run_import_analysis_staging(
         advance_tier(&mut ts);
     }
     Ok(result)
+}
+
+fn initial_counts_for_platform(
+    platform: domain::DataSourcePlatform,
+) -> Result<JobOutcomeCounts, PostImportPipelineError> {
+    validate_analysis_platform(platform)
+        .map(|()| JobOutcomeCounts::default())
+        .map_err(|error| {
+            let mut counts = JobOutcomeCounts::default();
+            counts.add_failed(1);
+            PostImportPipelineError {
+                message: error.to_string(),
+                counts,
+            }
+        })
+}
+
+fn validated_analysis_start(
+    platform: domain::DataSourcePlatform,
+) -> Result<Instant, ImportAnalysisError> {
+    validate_analysis_platform(platform)?;
+    Ok(Instant::now())
 }

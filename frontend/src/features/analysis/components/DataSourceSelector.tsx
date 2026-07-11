@@ -6,7 +6,8 @@ import { dataSourcePlatformLabel, sourceKindIconLarge } from '@/lib/data-source-
 export interface DataSourceSelectorProps {
   dataSources: DataSourceSummary[];
   selectedId?: string;
-  onSelect: (id?: string) => void;
+  onSelect: (id: string) => void;
+  disabled?: boolean;
   className?: string;
 }
 
@@ -14,6 +15,7 @@ export function DataSourceSelector({
   dataSources,
   selectedId,
   onSelect,
+  disabled = false,
   className,
 }: DataSourceSelectorProps) {
   if (dataSources.length === 0) {
@@ -24,16 +26,14 @@ export function DataSourceSelector({
     <ToggleGroup
       type="single"
       value={selectedId ?? ''}
-      onValueChange={(value) => onSelect(value || undefined)}
+      disabled={disabled}
+      onValueChange={(value) => {
+        if (!disabled && value) {
+          onSelect(value);
+        }
+      }}
       className={cn('flex-wrap', className)}
     >
-      <ToggleGroupItem
-        value=""
-        aria-label="全部数据源"
-        className="h-7 px-2.5 text-[11px]"
-      >
-        全部数据源
-      </ToggleGroupItem>
       {dataSources.map((ds) => {
         const Icon = sourceKindIconLarge(ds.kind);
         return (

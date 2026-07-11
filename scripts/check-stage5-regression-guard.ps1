@@ -272,7 +272,7 @@ foreach ($pattern in @(
     'mod\s+probe;',
     'mod\s+reader;',
     'mod\s+types;',
-    'pub\s+use\s+attach::\{[^}]*attach_data_source[^}]*classify_data_source_path[^}]*lvm_discovery_sources_for_case',
+    'pub\s+use\s+attach::\{[^}]*attach_data_source[^}]*classify_data_source_path',
     'pub\s+use\s+lvm::\{[^}]*expand_lvm_pool_candidates[^}]*expand_lvm_pool_candidates_with_sources',
     'pub\s+use\s+probe::\{[^}]*detect_image_filesystem[^}]*partition_display_name[^}]*volume_display_name',
     'pub\s+use\s+types::\{[\s\S]{0,400}PartitionStatus[\s\S]{0,120}Result'
@@ -287,6 +287,11 @@ Assert-NotMatches `
   -Content $datasourceFacade `
   -Pattern 'pub\s+fn\s+(detect_image_filesystem|attach_data_source|classify_data_source_path|expand_lvm_pool_candidates|read_boot_filesystem|open_evidence_reader)\b' `
   -Message "datasource_service.rs must remain a facade; production bodies belong in split modules"
+
+Assert-NotMatches `
+  -Content $datasourceFacade `
+  -Pattern '\blvm_discovery_sources_for_case\b' `
+  -Message "ordinary data-source imports must not regain case-wide LVM supplementary-PV discovery"
 
 # The private Linux single-disk baseline must stay opt-in, documented, and tied
 # to FORENSICS_LINUX_E01_FIXTURE. This guards the Linux LVM/XFS acceptance

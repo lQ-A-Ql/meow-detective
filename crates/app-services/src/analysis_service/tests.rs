@@ -1,5 +1,6 @@
 use super::*;
 use chrono::{DateTime, Utc};
+use domain::DataSourcePlatform::{Linux as L, Windows as W};
 use domain::{
     CaseId, CaseMeta, DataSource, DataSourceId, DataSourceKind, EntryType, FileEntry, FileEntryId,
 };
@@ -59,7 +60,6 @@ fn setup_case_db() -> (Connection, TempDir, DataSourceId) {
         updated_at: chrono::Utc::now(),
     };
     CaseRepo::new(&conn).create(&case).unwrap();
-
     let tmp = TempDir::new().unwrap();
     let ds_id = DataSourceId("ds-analysis".to_string());
     let source = DataSource {
@@ -621,7 +621,7 @@ fn run_analysis_extraction_can_use_bounded_bytes_reader_without_full_open() {
     let _full_reader_path = move || full_reader_probe.open_full_reader();
     let reader_probe = probe.clone();
 
-    let run = run_analysis_extraction(&conn, "case-analysis", &["Email"], |file_id| {
+    let run = run_analysis_extraction(&conn, "case-analysis", W, &["Email"], |file_id| {
         assert_eq!(file_id.0, "email");
         let bytes = reader_probe.read_header(MAX_ANALYSIS_SOURCE_BYTES);
         Ok::<Box<dyn Read>, String>(Box::new(std::io::Cursor::new(bytes)))
@@ -652,7 +652,7 @@ fn linux_analysis_extraction_uses_smaller_text_log_read_cap() {
     source_bytes.resize(64 * 1024 * 1024, b'x');
     let bytes_read = Rc::new(Cell::new(0usize));
     let bytes_read_probe = Rc::clone(&bytes_read);
-    let run = run_analysis_extraction(&conn, "case-analysis", &["LinuxArtifacts"], |file_id| {
+    let run = run_analysis_extraction(&conn, "case-analysis", L, &["LinuxArtifacts"], |file_id| {
         assert_eq!(file_id.0, "auth");
         Ok::<Box<dyn Read>, String>(Box::new(CountingRead::new(
             source_bytes.clone(),
@@ -731,7 +731,7 @@ fn run_analysis_extraction_extracts_registry_browser_email_and_persists() {
     contents.insert("firefox-places".to_string(), firefox_places);
     contents.insert("email".to_string(), email);
 
-    let run = run_analysis_extraction(&conn, "case-analysis", &[], |file_id| {
+    let run = run_analysis_extraction(&conn, "case-analysis", W, &[], |file_id| {
         contents
             .get(&file_id.0)
             .cloned()
@@ -837,7 +837,7 @@ fn run_analysis_extraction_extracts_registry_browser_email_and_persists() {
         .body_preview
         .contains("first line of the message body"));
 
-    let second_run = run_analysis_extraction(&conn, "case-analysis", &[], |file_id| {
+    let second_run = run_analysis_extraction(&conn, "case-analysis", W, &[], |file_id| {
         contents
             .get(&file_id.0)
             .cloned()
@@ -872,7 +872,7 @@ fn run_analysis_extraction_extracts_eventlogs_and_persists() {
         )])
         .unwrap();
 
-    let run = run_analysis_extraction(&conn, "case-analysis", &["EventLogs"], |file_id| {
+    let run = run_analysis_extraction(&conn, "case-analysis", W, &["EventLogs"], |file_id| {
         contents
             .get(&file_id.0)
             .cloned()
@@ -1067,7 +1067,7 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
         ])
         .unwrap();
 
-    let run = run_analysis_extraction(&conn, "case-analysis", &["LinuxArtifacts"], |file_id| {
+    let run = run_analysis_extraction(&conn, "case-analysis", L, &["LinuxArtifacts"], |file_id| {
         contents
             .get(&file_id.0)
             .cloned()
@@ -1484,7 +1484,7 @@ fn evidence_summary_reports_candidate_found_without_parser_run() {
         )])
         .unwrap();
 
-    let summary = get_evidence_classification_summary(&conn).unwrap();
+    let summary = get_evidence_classification_summary(&conn, W).unwrap();
     let system = summary
         .categories
         .iter()
@@ -1515,7 +1515,7 @@ fn evidence_summary_reports_parsed_when_artifacts_exist() {
         )
         .unwrap();
 
-    let summary = get_evidence_classification_summary(&conn).unwrap();
+    let summary = get_evidence_classification_summary(&conn, W).unwrap();
     let program = summary
         .categories
         .iter()

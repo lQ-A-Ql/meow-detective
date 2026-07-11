@@ -76,6 +76,7 @@ describe('Reports hash caveat visibility', () => {
         kind: 'raw',
         sourcePath: 'D:/private/evidence.raw',
         importedAt: '2026-06-05T10:00:00Z',
+        platform: 'windows',
         hashStatus: 'pending',
         partitions: [],
       },

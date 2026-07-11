@@ -11,8 +11,11 @@ const mocks = vi.hoisted(() => ({
   runEvidenceClassification: vi.fn(),
   runAnalysisExtraction: vi.fn(),
   getRegistryExtractionSummary: vi.fn(),
+  getRegistryStructuredSummary: vi.fn(),
   getBrowserHistorySummary: vi.fn(),
   getEmailExtractionSummary: vi.fn(),
+  getEvtxEventSummary: vi.fn(),
+  getLinuxArtifactSummary: vi.fn(),
   getV2GovernanceSnapshot: vi.fn(),
   getCorrelationSnapshot: vi.fn(),
   generateAnalysisSummary: vi.fn(),
@@ -29,8 +32,11 @@ vi.mock('@/lib/api/analysis', () => ({
   runEvidenceClassification: mocks.runEvidenceClassification,
   runAnalysisExtraction: mocks.runAnalysisExtraction,
   getRegistryExtractionSummary: mocks.getRegistryExtractionSummary,
+  getRegistryStructuredSummary: mocks.getRegistryStructuredSummary,
   getBrowserHistorySummary: mocks.getBrowserHistorySummary,
   getEmailExtractionSummary: mocks.getEmailExtractionSummary,
+  getEvtxEventSummary: mocks.getEvtxEventSummary,
+  getLinuxArtifactSummary: mocks.getLinuxArtifactSummary,
   getV2GovernanceSnapshot: mocks.getV2GovernanceSnapshot,
   getCorrelationSnapshot: mocks.getCorrelationSnapshot,
   generateAnalysisSummary: mocks.generateAnalysisSummary,
@@ -42,8 +48,12 @@ import {
   useBrowserHistorySummary,
   useCorrelationSnapshot,
   useEmailExtractionSummary,
+  useEvtxEventSummary,
+  useEvidenceClassificationSummary,
   useGenerateAnalysisSummary,
+  useLinuxArtifactSummary,
   useRegistryExtractionSummary,
+  useRegistryStructuredSummary,
   useRunAnalysisExtraction,
   useV2GovernanceSnapshot,
 } from './hooks';
@@ -56,6 +66,9 @@ function createWrapper() {
     return createElement(QueryClientProvider, { client: queryClient }, children);
   };
 }
+
+const windowsSource = { id: 'ds-windows', platform: 'windows' } as const;
+const linuxSource = { id: 'ds-linux', platform: 'linux' } as const;
 
 describe('analysis hooks', () => {
   beforeEach(() => {
@@ -107,6 +120,11 @@ describe('analysis hooks', () => {
       generatedAt: '2026-06-01T10:10:00Z',
       warnings: [],
     });
+    mocks.getRegistryStructuredSummary.mockResolvedValue({
+      status: 'notFound',
+      sections: [],
+      warnings: [],
+    });
     mocks.getBrowserHistorySummary.mockResolvedValue({
       status: 'parsed',
       visitTotal: 1,
@@ -121,6 +139,18 @@ describe('analysis hooks', () => {
       total: 1,
       messages: [],
       generatedAt: '2026-06-01T10:14:00Z',
+      warnings: [],
+    });
+    mocks.getEvtxEventSummary.mockResolvedValue({
+      status: 'notFound',
+      total: 0,
+      events: [],
+      warnings: [],
+    });
+    mocks.getLinuxArtifactSummary.mockResolvedValue({
+      status: 'notFound',
+      total: 0,
+      artifacts: [],
       warnings: [],
     });
     mocks.getV2GovernanceSnapshot.mockResolvedValue({
@@ -342,7 +372,7 @@ describe('analysis hooks', () => {
       data: null,
     });
 
-    const { result } = renderHook(() => useAnalysisSystemInfo('ds-1'), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useAnalysisSystemInfo(windowsSource), { wrapper: createWrapper() });
 
     expect(result.current.fetchStatus).toBe('idle');
     expect(mocks.getSystemInfo).not.toHaveBeenCalled();
@@ -366,10 +396,10 @@ describe('analysis hooks', () => {
       data: { id: 'case-1' },
     });
 
-    const { result } = renderHook(() => useAnalysisSystemInfo('ds-1'), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useAnalysisSystemInfo(windowsSource), { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mocks.getSystemInfo).toHaveBeenCalledWith('ds-1');
+    expect(mocks.getSystemInfo).toHaveBeenCalledWith('ds-windows');
   });
 
   it('passes sample size to classification API', async () => {
@@ -378,12 +408,12 @@ describe('analysis hooks', () => {
       data: { id: 'case-1' },
     });
 
-    const { result } = renderHook(() => useAnalysisClassifications('ds-1', 250), {
+    const { result } = renderHook(() => useAnalysisClassifications(windowsSource, 250), {
       wrapper: createWrapper(),
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mocks.classifyFiles).toHaveBeenCalledWith('ds-1', 250);
+    expect(mocks.classifyFiles).toHaveBeenCalledWith('ds-windows', 250);
   });
 
   it('exposes summary download mutation', async () => {
@@ -402,17 +432,79 @@ describe('analysis hooks', () => {
     });
 
     const wrapper = createWrapper();
-    const registry = renderHook(() => useRegistryExtractionSummary({ dataSourceId: 'ds-1' }), { wrapper });
-    const browser = renderHook(() => useBrowserHistorySummary({ dataSourceId: 'ds-1', limit: 50 }), { wrapper });
-    const email = renderHook(() => useEmailExtractionSummary({ dataSourceId: 'ds-1', offset: 10, limit: 25 }), { wrapper });
+    const registry = renderHook(() => useRegistryExtractionSummary({ source: windowsSource }), { wrapper });
+    const browser = renderHook(() => useBrowserHistorySummary({ source: windowsSource, limit: 50 }), { wrapper });
+    const email = renderHook(() => useEmailExtractionSummary({ source: windowsSource, offset: 10, limit: 25 }), { wrapper });
 
     await waitFor(() => expect(registry.result.current.isSuccess).toBe(true));
     await waitFor(() => expect(browser.result.current.isSuccess).toBe(true));
     await waitFor(() => expect(email.result.current.isSuccess).toBe(true));
 
-    expect(mocks.getRegistryExtractionSummary).toHaveBeenCalledWith({ dataSourceId: 'ds-1', offset: 0, limit: 200 });
-    expect(mocks.getBrowserHistorySummary).toHaveBeenCalledWith({ dataSourceId: 'ds-1', offset: 0, limit: 50 });
-    expect(mocks.getEmailExtractionSummary).toHaveBeenCalledWith({ dataSourceId: 'ds-1', offset: 10, limit: 25 });
+    expect(mocks.getRegistryExtractionSummary).toHaveBeenCalledWith({ dataSourceId: 'ds-windows', offset: 0, limit: 200 });
+    expect(mocks.getBrowserHistorySummary).toHaveBeenCalledWith({ dataSourceId: 'ds-windows', offset: 0, limit: 50 });
+    expect(mocks.getEmailExtractionSummary).toHaveBeenCalledWith({ dataSourceId: 'ds-windows', offset: 10, limit: 25 });
+  });
+
+  it('keeps every Windows query idle for a persisted Linux data source', () => {
+    mocks.useCurrentCase.mockReturnValue({
+      isSuccess: true,
+      data: { id: 'case-1' },
+    });
+
+    const { result } = renderHook(() => ({
+      system: useAnalysisSystemInfo(linuxSource),
+      evidence: useEvidenceClassificationSummary(linuxSource),
+      registry: useRegistryExtractionSummary({ source: linuxSource }),
+      registryStructured: useRegistryStructuredSummary(linuxSource),
+      browser: useBrowserHistorySummary({ source: linuxSource }),
+      email: useEmailExtractionSummary({ source: linuxSource }),
+      eventLogs: useEvtxEventSummary({ source: linuxSource }),
+      classifications: useAnalysisClassifications(linuxSource),
+    }), { wrapper: createWrapper() });
+
+    expect(Object.values(result.current).every((query) => query.fetchStatus === 'idle')).toBe(true);
+    expect(mocks.getSystemInfo).not.toHaveBeenCalled();
+    expect(mocks.getEvidenceClassificationSummary).not.toHaveBeenCalled();
+    expect(mocks.getRegistryExtractionSummary).not.toHaveBeenCalled();
+    expect(mocks.getRegistryStructuredSummary).not.toHaveBeenCalled();
+    expect(mocks.getBrowserHistorySummary).not.toHaveBeenCalled();
+    expect(mocks.getEmailExtractionSummary).not.toHaveBeenCalled();
+    expect(mocks.getEvtxEventSummary).not.toHaveBeenCalled();
+    expect(mocks.classifyFiles).not.toHaveBeenCalled();
+  });
+
+  it('keeps the Linux query idle for a persisted Windows data source', () => {
+    mocks.useCurrentCase.mockReturnValue({
+      isSuccess: true,
+      data: { id: 'case-1' },
+    });
+
+    const { result } = renderHook(
+      () => useLinuxArtifactSummary({ source: windowsSource }),
+      { wrapper: createWrapper() },
+    );
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(mocks.getLinuxArtifactSummary).not.toHaveBeenCalled();
+  });
+
+  it('loads the Linux summary only for a persisted Linux data source', async () => {
+    mocks.useCurrentCase.mockReturnValue({
+      isSuccess: true,
+      data: { id: 'case-1' },
+    });
+
+    const { result } = renderHook(
+      () => useLinuxArtifactSummary({ source: linuxSource }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mocks.getLinuxArtifactSummary).toHaveBeenCalledWith({
+      dataSourceId: 'ds-linux',
+      offset: 0,
+      limit: 200,
+    });
   });
 
   it('runs analysis extraction mutation with selected categories', async () => {

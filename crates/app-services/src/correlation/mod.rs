@@ -1,4 +1,5 @@
 pub mod coverage;
+mod error;
 pub mod graph;
 pub mod rules;
 #[cfg(test)]
@@ -7,37 +8,9 @@ mod tests;
 use chrono::Utc;
 use serde_json::Value;
 use std::collections::BTreeMap;
-use thiserror::Error;
 use transport::dto::{CorrelationConfidenceDto, CorrelationEdgeKindDto, CorrelationNodeDto};
 
-#[derive(Debug, Error)]
-pub enum CorrelationError {
-    #[error("database error: {0}")]
-    Db(#[from] persistence_sqlite::DbError),
-    #[error("serialization error: {0}")]
-    Json(#[from] serde_json::Error),
-    #[error("invalid input: {0}")]
-    InvalidInput(String),
-    #[error("{0}")]
-    Other(String),
-}
-
-impl From<rusqlite::Error> for CorrelationError {
-    fn from(e: rusqlite::Error) -> Self {
-        Self::Db(persistence_sqlite::DbError::from(e))
-    }
-}
-
-impl transport::ServiceErrorCategory for CorrelationError {
-    fn category(&self) -> transport::ErrorCategory {
-        match self {
-            Self::Db(_) => transport::ErrorCategory::Io,
-            Self::Json(_) => transport::ErrorCategory::Parser,
-            Self::InvalidInput(_) => transport::ErrorCategory::Validation,
-            Self::Other(_) => transport::ErrorCategory::Internal,
-        }
-    }
-}
+pub use error::CorrelationError;
 
 pub use self::graph::{
     get_correlation_snapshot, get_correlation_snapshot_for_case,

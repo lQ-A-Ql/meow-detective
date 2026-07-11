@@ -256,6 +256,35 @@ fn search_no_results() {
 }
 
 #[test]
+fn search_supports_offsets_beyond_the_legacy_thousand_result_cap() {
+    let tmp = tempfile::TempDir::new().expect("create search fixture");
+    let index_dir = tmp.path().join("index");
+    let index = search::SearchIndex::create(&index_dir).expect("create index");
+    let texts = (0..1_010)
+        .map(|index| search::ExtractedText {
+            file_id: format!("file-{index:04}"),
+            content: "shared deep pagination token".to_string(),
+            encoding: "utf-8".to_string(),
+            extractable: true,
+            byte_count: 28,
+        })
+        .collect::<Vec<_>>();
+    let paths = texts
+        .iter()
+        .map(|text| (text.file_id.clone(), format!("/{}.txt", text.file_id)))
+        .collect::<Vec<_>>();
+    index
+        .index_documents(&texts, &paths)
+        .expect("index pagination fixture");
+
+    let results = search_service::search_files_real(&index_dir, "shared", 1_000, 10)
+        .expect("deep search page must remain reachable");
+
+    assert_eq!(results.total, 1_010);
+    assert_eq!(results.items.len(), 10);
+}
+
+#[test]
 fn reindex_keeps_existing_documents_for_unmodified_files() {
     let (tmp, active) = setup_test_case();
     let evidence_dir = tmp.path().join("evidence");

@@ -1,11 +1,10 @@
-use domain::DataSourceKind;
+use domain::{DataSourceKind, DataSourcePlatform};
 use persistence_sqlite::repositories::datasource_cluster_repo::{
     DataSourceClusterRecord, DataSourceClusterRepo,
 };
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
-use transport::commands::ImportTargetPlatformDto;
 
 use crate::datasource_service;
 use crate::import_precheck::{ImportClusterMemberConfig, ImportSourceConfig, ImportSourceMode};
@@ -110,7 +109,7 @@ impl LinuxClusterImportPlan {
                 source_path_display: member.source_path.display().to_string(),
                 source_name: member.source_name.clone(),
                 kind: member.source_kind.clone(),
-                platform: Some(ImportTargetPlatformDto::Linux),
+                platform: DataSourcePlatform::Linux,
                 profile: self.profile.clone(),
                 mode: match member.source_kind {
                     DataSourceKind::E01 => ImportSourceMode::Image {
@@ -195,7 +194,7 @@ pub fn register_linux_cluster_import(
         case_id: case_id.clone(),
         name: plan.cluster_name.clone(),
         root_path: plan.root_path.display().to_string(),
-        platform: "linux".to_string(),
+        platform: DataSourcePlatform::Linux.as_storage_str().to_string(),
         profile: plan.profile.clone(),
         manifest_rel_path: plan.manifest_rel_path.clone(),
         import_state: "pending".to_string(),
@@ -481,7 +480,7 @@ mod tests {
         let configs = plan.member_import_configs();
 
         assert_eq!(configs.len(), 2);
-        assert_eq!(configs[0].platform, Some(ImportTargetPlatformDto::Linux));
+        assert_eq!(configs[0].platform, DataSourcePlatform::Linux);
         assert_eq!(
             configs[0]
                 .cluster

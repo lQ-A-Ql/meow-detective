@@ -1,6 +1,6 @@
 {
   "lastVerifiedAt": "2026-07-11T00:00:00Z",
-  "documentedLimitCount": 46,
+  "documentedLimitCount": 47,
   "items": [
     {
       "category": "E01",
@@ -289,6 +289,17 @@
       "affectedChains": [
         "LVM",
         "PVE"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "Linux LVM/PVE",
+      "item": "非集群导入跨镜像 multi-PV VG 聚合",
+      "status": "unsupported",
+      "summary": "普通导入与恢复导入仅允许当前数据源参与 LVM 展开，不扫描案件内其他 E01/RAW；缺失 PV 时保留明确诊断并 fail closed。显式多源组合 API 仅供未来经原子成员注册的集群编排使用",
+      "affectedChains": [
+        "LVM",
+        "MultiSourceImport"
       ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },

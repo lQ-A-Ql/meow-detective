@@ -17,7 +17,7 @@ use super::{
 use chrono::Utc;
 use domain::{EdgeType, FileEntry, FileEntryId, GraphEdge};
 use persistence_sqlite::repositories::{
-    correlation_repo, datasource_repo::DataSourceRepo, file_repo::FileRepo, graph_repo::GraphRepo,
+    correlation_repo, file_repo::FileRepo, graph_repo::GraphRepo,
 };
 use rusqlite::Connection;
 use std::cmp::Reverse;
@@ -72,7 +72,9 @@ pub fn get_correlation_snapshot_for_case(
     case_id: &domain::CaseId,
 ) -> Result<CorrelationSnapshotDto, CorrelationError> {
     let mut merged = empty_snapshot();
-    for (source_id, source_conn) in open_ready_source_connections(case_conn, case_root, case_id)? {
+    for (source_id, source_conn) in
+        crate::source_db::open_ready_source_connections(case_conn, case_root, case_id)?
+    {
         let snapshot = get_correlation_snapshot(&source_conn)?;
         merge_source_snapshot(&mut merged, snapshot, &source_id);
     }
@@ -1474,28 +1476,6 @@ fn build_correlation_provenance(lead: &CorrelationLeadDto) -> String {
         "families": lead.families,
     })
     .to_string()
-}
-
-fn open_ready_source_connections(
-    case_conn: &Connection,
-    case_root: &Path,
-    case_id: &domain::CaseId,
-) -> Result<Vec<(domain::DataSourceId, Connection)>, CorrelationError> {
-    let repo = DataSourceRepo::new(case_conn);
-    let sources = repo.find_by_case(case_id)?;
-    let mut conns = Vec::with_capacity(sources.len());
-    for source in sources {
-        let storage = repo.find_storage(&source.id)?;
-        if storage
-            .as_ref()
-            .is_some_and(|value| value.import_state == "failed")
-        {
-            continue;
-        }
-        let conn = crate::source_db::open_registered_source_db(case_conn, case_root, &source.id)?;
-        conns.push((source.id, conn));
-    }
-    Ok(conns)
 }
 
 fn empty_snapshot() -> CorrelationSnapshotDto {

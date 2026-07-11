@@ -56,6 +56,7 @@ impl From<FileServiceError> for ArtifactServiceError {
             FileServiceError::Io(error) => Self::Io(error),
             FileServiceError::NotFound(message) => Self::NotFound(message),
             FileServiceError::InvalidInput(message) => Self::InvalidInput(message),
+            FileServiceError::Unsupported(message) => Self::Unsupported(message),
             FileServiceError::PathTraversal(message)
             | FileServiceError::Security(message)
             | FileServiceError::Other(message) => Self::Other(message),
@@ -74,6 +75,23 @@ impl From<AnalysisServiceError> for ArtifactServiceError {
             | AnalysisServiceError::Other(message) => Self::Other(message),
             AnalysisServiceError::InvalidInput(message) => Self::InvalidInput(message),
             AnalysisServiceError::Unsupported(message) => Self::Unsupported(message),
+        }
+    }
+}
+
+impl From<crate::source_db::ReadySourceError> for ArtifactServiceError {
+    fn from(error: crate::source_db::ReadySourceError) -> Self {
+        match error {
+            crate::source_db::ReadySourceError::Db(error) => Self::Db(error),
+            crate::source_db::ReadySourceError::NotFound { .. } => {
+                Self::NotFound(error.to_string())
+            }
+            crate::source_db::ReadySourceError::NotReady { .. } => {
+                Self::InvalidInput(error.to_string())
+            }
+            crate::source_db::ReadySourceError::UnsupportedPlatform { .. } => {
+                Self::Unsupported(error.to_string())
+            }
         }
     }
 }

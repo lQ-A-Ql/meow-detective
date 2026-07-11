@@ -164,11 +164,17 @@ fn removed_mac_artifact_candidate_request_is_typed_unsupported() {
 #[test]
 fn removed_mac_artifact_extraction_request_is_typed_unsupported() {
     let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
-    let error = run_analysis_extraction(&conn, "case-linux", &["MacArtifacts"], |_| {
-        Ok::<Box<dyn std::io::Read>, std::io::Error>(Box::new(std::io::Cursor::new(
-            Vec::<u8>::new(),
-        )))
-    })
+    let error = run_analysis_extraction(
+        &conn,
+        "case-linux",
+        domain::DataSourcePlatform::Linux,
+        &["MacArtifacts"],
+        |_| {
+            Ok::<Box<dyn std::io::Read>, std::io::Error>(Box::new(std::io::Cursor::new(
+                Vec::<u8>::new(),
+            )))
+        },
+    )
     .expect_err("removed macOS capability must fail before evidence access");
 
     assert!(matches!(

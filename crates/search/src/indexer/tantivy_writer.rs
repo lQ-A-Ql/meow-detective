@@ -129,7 +129,12 @@ impl SearchIndex {
         Ok(count)
     }
 
-    pub fn search(&self, query_str: &str, limit: usize) -> Result<SearchResult> {
+    pub fn search_page(
+        &self,
+        query_str: &str,
+        offset: usize,
+        limit: usize,
+    ) -> Result<SearchResult> {
         let reader = self
             .index
             .reader_builder()
@@ -161,10 +166,10 @@ impl SearchIndex {
             })
             .map_err(|e| IndexError::Query(e.to_string()))?;
 
-        let (top_docs, total_count) = searcher.search(
-            &query,
-            &(TopDocs::with_limit(limit).order_by_score(), Count),
-        )?;
+        let top_docs = TopDocs::with_limit(limit)
+            .and_offset(offset)
+            .order_by_score();
+        let (top_docs, total_count) = searcher.search(&query, &(top_docs, Count))?;
 
         let mut hits = Vec::new();
         for (score, doc_addr) in top_docs {
@@ -198,6 +203,10 @@ impl SearchIndex {
             hits,
             total_count: total_count as u64,
         })
+    }
+
+    pub fn search(&self, query_str: &str, limit: usize) -> Result<SearchResult> {
+        self.search_page(query_str, 0, limit)
     }
 
     /// Index files in batches of [`CHUNK_COMMIT_INTERVAL`], committing after
@@ -417,30 +426,6 @@ mod tests {
         let result = index.search("nonexistent", 10).unwrap();
         assert_eq!(result.total_count, 0);
         assert!(result.hits.is_empty());
-    }
-
-    #[test]
-    fn search_respects_limit() {
-        let dir = tempdir().unwrap();
-        let index_path = dir.path().join("test_index");
-        let index = SearchIndex::create(&index_path).unwrap();
-
-        let texts: Vec<ExtractedText> = (0..20)
-            .map(|i| ExtractedText {
-                file_id: format!("f{i}"),
-                content: format!("document number {i} with test content"),
-                encoding: "utf-8".to_string(),
-                extractable: true,
-                byte_count: 50,
-            })
-            .collect();
-        let paths: Vec<(String, String)> = (0..20)
-            .map(|i| (format!("f{i}"), format!("/docs/doc{i}.txt")))
-            .collect();
-
-        index.index_documents(&texts, &paths).unwrap();
-        let result = index.search("test", 5).unwrap();
-        assert!(result.hits.len() <= 5);
     }
 
     #[test]

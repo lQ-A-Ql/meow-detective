@@ -6,9 +6,8 @@ use crate::{
     datasource_service,
     import_state::{ImportPlan, ImportStrategy},
 };
-use domain::DataSourceKind;
+use domain::{DataSourceKind, DataSourcePlatform};
 use std::path::{Path, PathBuf};
-use transport::commands::{ImportDataSourceRequest, ImportSourceKindDto, ImportTargetPlatformDto};
 
 mod error;
 pub use error::ImportSourceConfigError;
@@ -20,7 +19,7 @@ pub struct ImportSourceConfig {
     pub source_path_display: String,
     pub source_name: String,
     pub kind: DataSourceKind,
-    pub platform: Option<ImportTargetPlatformDto>,
+    pub platform: DataSourcePlatform,
     pub profile: Option<String>,
     pub mode: ImportSourceMode,
     pub cluster: Option<ImportClusterMemberConfig>,
@@ -54,36 +53,20 @@ impl ImportSourceConfig {
 }
 
 pub fn prepare_import_source_config(
-    request: &ImportDataSourceRequest,
+    source_path: &str,
+    platform: DataSourcePlatform,
+    profile: Option<String>,
 ) -> Result<ImportSourceConfig, ImportSourceConfigError> {
-    ensure_supported_import_platform(request.platform)?;
-    request
-        .validate()
-        .map_err(ImportSourceConfigError::InvalidRequest)?;
-    if request.source_kind != ImportSourceKindDto::Auto {
-        return Err(ImportSourceConfigError::InvalidRequest(
-            "non-auto sourceKind must be handled by the import scheduler".to_string(),
-        ));
-    }
-    let mut config = prepare_import_source_config_from_path(&request.source_path)?;
-    config.platform = request.platform;
-    config.profile = request.profile.clone();
+    let mut config = prepare_import_source_config_from_path(source_path, platform)?;
+    config.profile = profile;
     Ok(config)
-}
-
-/// Rejects retired transport platform values before any source-path access.
-pub fn ensure_supported_import_platform(
-    platform: Option<ImportTargetPlatformDto>,
-) -> Result<(), ImportSourceConfigError> {
-    if platform == Some(ImportTargetPlatformDto::Unsupported) {
-        return Err(ImportSourceConfigError::UnsupportedPlatform);
-    }
-    Ok(())
 }
 
 pub fn prepare_import_source_config_from_path(
     source_path: &str,
+    platform: DataSourcePlatform,
 ) -> Result<ImportSourceConfig, ImportSourceConfigError> {
+    ensure_supported_import_platform(platform)?;
     let path = PathBuf::from(source_path);
     validate_import_source_for_filesystem(&path)?;
     let kind = datasource_service::classify_data_source_path(&path)?;
@@ -95,11 +78,20 @@ pub fn prepare_import_source_config_from_path(
         source_path_display: source_path.to_string(),
         source_name,
         kind,
-        platform: None,
+        platform,
         profile: None,
         mode,
         cluster: None,
     })
+}
+
+fn ensure_supported_import_platform(
+    platform: DataSourcePlatform,
+) -> Result<(), ImportSourceConfigError> {
+    if platform == DataSourcePlatform::Unknown {
+        return Err(ImportSourceConfigError::UnsupportedPlatform);
+    }
+    Ok(())
 }
 
 fn validate_import_source_for_filesystem(path: &Path) -> Result<(), ImportSourceConfigError> {
@@ -330,14 +322,12 @@ mod tests {
         let tmp = tempfile::TempDir::new().unwrap();
         let evidence_dir = tmp.path().join("logical-evidence");
         std::fs::create_dir(&evidence_dir).unwrap();
-        let request = ImportDataSourceRequest {
-            source_path: evidence_dir.display().to_string(),
-            source_kind: Default::default(),
-            platform: None,
-            profile: None,
-        };
-
-        let config = prepare_import_source_config(&request).unwrap();
+        let config = prepare_import_source_config(
+            &evidence_dir.display().to_string(),
+            DataSourcePlatform::Windows,
+            None,
+        )
+        .unwrap();
 
         assert_eq!(config.source_path, evidence_dir);
         assert_eq!(config.source_name, "logical-evidence");
@@ -348,20 +338,18 @@ mod tests {
     }
 
     #[test]
-    fn import_source_config_preserves_optional_platform_profile_contract() {
+    fn import_source_config_preserves_required_platform_and_optional_profile() {
         let tmp = tempfile::TempDir::new().unwrap();
         let evidence_dir = tmp.path().join("linux-logical");
         std::fs::create_dir(&evidence_dir).unwrap();
-        let request = ImportDataSourceRequest {
-            source_path: evidence_dir.display().to_string(),
-            source_kind: Default::default(),
-            platform: Some(ImportTargetPlatformDto::Linux),
-            profile: Some("ubuntu-server".to_string()),
-        };
+        let config = prepare_import_source_config(
+            &evidence_dir.display().to_string(),
+            DataSourcePlatform::Linux,
+            Some("ubuntu-server".to_string()),
+        )
+        .unwrap();
 
-        let config = prepare_import_source_config(&request).unwrap();
-
-        assert_eq!(config.platform, Some(ImportTargetPlatformDto::Linux));
+        assert_eq!(config.platform, DataSourcePlatform::Linux);
         assert_eq!(config.profile.as_deref(), Some("ubuntu-server"));
         assert_eq!(config.source_path, evidence_dir);
     }
@@ -371,14 +359,12 @@ mod tests {
         let tmp = tempfile::TempDir::new().unwrap();
         let source = tmp.path().join("disk.raw");
         std::fs::write(&source, b"not an e01 image").unwrap();
-        let request = ImportDataSourceRequest {
-            source_path: source.display().to_string(),
-            source_kind: Default::default(),
-            platform: None,
-            profile: None,
-        };
-
-        let config = prepare_import_source_config(&request).unwrap();
+        let config = prepare_import_source_config(
+            &source.display().to_string(),
+            DataSourcePlatform::Windows,
+            None,
+        )
+        .unwrap();
 
         assert_eq!(config.source_path, source);
         assert_eq!(config.source_name, "disk.raw");
@@ -398,14 +384,12 @@ mod tests {
         let tmp = tempfile::TempDir::new().unwrap();
         let source = tmp.path().join("capture.E01");
         std::fs::write(&source, b"short").unwrap();
-        let request = ImportDataSourceRequest {
-            source_path: source.display().to_string(),
-            source_kind: Default::default(),
-            platform: None,
-            profile: None,
-        };
-
-        let config = prepare_import_source_config(&request).unwrap();
+        let config = prepare_import_source_config(
+            &source.display().to_string(),
+            DataSourcePlatform::Windows,
+            None,
+        )
+        .unwrap();
 
         assert_eq!(config.source_name, "capture.E01");
         assert_eq!(config.kind, DataSourceKind::E01);
@@ -423,14 +407,12 @@ mod tests {
         let tmp = tempfile::TempDir::new().unwrap();
         let source = tmp.path().join("capture.bin");
         std::fs::write(&source, b"EVF\x09\x0d\x0a\xff\x00payload").unwrap();
-        let request = ImportDataSourceRequest {
-            source_path: source.display().to_string(),
-            source_kind: Default::default(),
-            platform: None,
-            profile: None,
-        };
-
-        let config = prepare_import_source_config(&request).unwrap();
+        let config = prepare_import_source_config(
+            &source.display().to_string(),
+            DataSourcePlatform::Windows,
+            None,
+        )
+        .unwrap();
 
         assert_eq!(config.source_name, "capture.bin");
         assert_eq!(config.kind, DataSourceKind::E01);
@@ -440,14 +422,9 @@ mod tests {
     #[test]
     fn import_source_config_rejects_missing_source() {
         let tmp = tempfile::TempDir::new().unwrap();
-        let request = ImportDataSourceRequest {
-            source_path: tmp.path().join("missing.raw").display().to_string(),
-            source_kind: Default::default(),
-            platform: None,
-            profile: None,
-        };
-
-        let error = prepare_import_source_config(&request).unwrap_err();
+        let source = tmp.path().join("missing.raw").display().to_string();
+        let error =
+            prepare_import_source_config(&source, DataSourcePlatform::Windows, None).unwrap_err();
 
         assert!(matches!(
             error,
@@ -458,37 +435,5 @@ mod tests {
             error.to_string(),
             "sourcePath must exist and be accessible before import"
         );
-    }
-
-    #[test]
-    fn import_source_config_preserves_request_validation_semantics() {
-        let request = ImportDataSourceRequest {
-            source_path: "CON".to_string(),
-            source_kind: Default::default(),
-            platform: None,
-            profile: None,
-        };
-
-        let error = prepare_import_source_config(&request).unwrap_err();
-
-        assert!(matches!(error, ImportSourceConfigError::InvalidRequest(_)));
-        assert!(error.is_invalid_input());
-        assert_eq!(error.to_string(), "CON is a reserved Windows device name");
-    }
-
-    #[test]
-    fn import_source_config_rejects_non_auto_source_kind() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let request = ImportDataSourceRequest {
-            source_path: tmp.path().display().to_string(),
-            source_kind: ImportSourceKindDto::LinuxCluster,
-            platform: Some(ImportTargetPlatformDto::Linux),
-            profile: None,
-        };
-
-        let error = prepare_import_source_config(&request).unwrap_err();
-
-        assert!(matches!(error, ImportSourceConfigError::InvalidRequest(_)));
-        assert!(error.to_string().contains("import scheduler"));
     }
 }

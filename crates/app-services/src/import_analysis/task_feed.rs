@@ -1,8 +1,8 @@
 use super::error::ImportAnalysisError;
+use super::extractor_policy::PlatformExtractorPolicy;
 use super::options::ImportAnalysisOptions;
 use super::priority_queue::{PriorityTaskQueue, TaskPriority};
-use super::worker_runtime::{should_extract_artifact, FileTask, SharedAnalysisState};
-use crate::artifact_service;
+use super::worker_runtime::{FileTask, SharedAnalysisState};
 use crossbeam_channel::Sender;
 use domain::{DataSourceId, EntryType, FileEntryId};
 use rusqlite::{params, Connection};
@@ -72,8 +72,8 @@ pub(super) fn enqueue_analysis_tasks_prioritized(
     task_tx: &Sender<FileTask>,
     shared: Arc<SharedAnalysisState>,
 ) -> Result<(), ImportAnalysisError> {
+    let extractor_policy = PlatformExtractorPolicy::for_platform(options.platform)?;
     let conn = persistence_sqlite::open_or_create(&options.db_path)?;
-    let registry = artifact_service::create_registry();
     let mut offset = 0u64;
 
     loop {
@@ -92,7 +92,7 @@ pub(super) fn enqueue_analysis_tasks_prioritized(
                 break;
             }
             let entry = file.to_file_entry();
-            let priority = if should_extract_artifact(&registry, &entry) {
+            let priority = if extractor_policy.should_extract(&entry) {
                 // Artifact-candidate files get Normal priority so they are
                 // processed before plain file enumeration tasks.
                 TaskPriority::Normal

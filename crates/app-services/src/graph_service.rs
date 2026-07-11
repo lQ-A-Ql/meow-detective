@@ -1,10 +1,12 @@
 use crate::source_db::{self, encode_source_scoped_id};
 use domain::{DataSourceId, EdgeType, GraphEdge, GraphNode, NodeType};
 use persistence_sqlite::repositories::{
-    artifact_repo::ArtifactRepo, datasource_repo::DataSourceRepo, graph_repo::GraphRepo,
+    artifact_repo::ArtifactRepo,
+    graph_repo::{GraphNodePageCursor, GraphRepo},
 };
 use rusqlite::Connection;
-use std::collections::HashMap;
+use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap, VecDeque};
 use std::path::Path;
 use thiserror::Error;
 use transport::dto::{
@@ -22,6 +24,8 @@ pub enum GraphServiceError {
     NotFound(String),
     #[error("invalid input: {0}")]
     InvalidInput(String),
+    #[error("unsupported: {0}")]
+    Unsupported(String),
     #[error("{0}")]
     Other(String),
 }
@@ -32,12 +36,30 @@ impl From<rusqlite::Error> for GraphServiceError {
     }
 }
 
+impl From<crate::source_db::ReadySourceError> for GraphServiceError {
+    fn from(error: crate::source_db::ReadySourceError) -> Self {
+        match error {
+            crate::source_db::ReadySourceError::Db(error) => Self::Db(error),
+            crate::source_db::ReadySourceError::NotFound { .. } => {
+                Self::NotFound(error.to_string())
+            }
+            crate::source_db::ReadySourceError::NotReady { .. } => {
+                Self::InvalidInput(error.to_string())
+            }
+            crate::source_db::ReadySourceError::UnsupportedPlatform { .. } => {
+                Self::Unsupported(error.to_string())
+            }
+        }
+    }
+}
+
 impl transport::ServiceErrorCategory for GraphServiceError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
             Self::Db(_) => transport::ErrorCategory::Io,
             Self::Json(_) => transport::ErrorCategory::Parser,
             Self::NotFound(_) | Self::InvalidInput(_) => transport::ErrorCategory::Validation,
+            Self::Unsupported(_) => transport::ErrorCategory::Unsupported,
             Self::Other(_) => transport::ErrorCategory::Internal,
         }
     }
@@ -59,9 +81,11 @@ pub fn get_graph_snapshot_for_case(
         largest_component_size: 0,
     };
 
-    for (_source_id, source_conn) in
-        open_ready_source_connections(case_conn, case_root, &domain::CaseId(case_id.to_string()))?
-    {
+    for (_source_id, source_conn) in source_db::open_ready_source_connections(
+        case_conn,
+        case_root,
+        &domain::CaseId(case_id.to_string()),
+    )? {
         let snapshot = get_graph_snapshot(&source_conn, case_id)?;
         merge_counts(&mut merged.node_count_by_type, snapshot.node_count_by_type);
         merge_counts(&mut merged.edge_count_by_type, snapshot.edge_count_by_type);
@@ -134,16 +158,23 @@ pub fn query_graph_for_case(
     if let Some((source_id, local_ids)) = scoped_start_ids(&query.start_ids)? {
         let mut local_query = query;
         local_query.start_ids = local_ids;
-        let source_conn = source_db::open_registered_source_db(case_conn, case_root, &source_id)?;
+        let source = source_db::open_ready_source_by_id(
+            case_conn,
+            case_root,
+            &domain::CaseId(case_id.to_string()),
+            &source_id,
+        )?;
         return Ok(scope_graph_result(
-            query_graph(&source_conn, local_query)?,
+            query_graph(&source.connection, local_query)?,
             &source_id,
         ));
     }
 
-    for (source_id, source_conn) in
-        open_ready_source_connections(case_conn, case_root, &domain::CaseId(case_id.to_string()))?
-    {
+    for (source_id, source_conn) in source_db::open_ready_source_connections(
+        case_conn,
+        case_root,
+        &domain::CaseId(case_id.to_string()),
+    )? {
         let source_result = query_graph(&source_conn, query.clone())?;
         append_graph_result(&mut result, scope_graph_result(source_result, &source_id));
     }
@@ -193,32 +224,12 @@ pub fn list_graph_nodes_for_case(
     case_id: &str,
     request: ListGraphNodesRequest,
 ) -> Result<Vec<GraphNodeDto>, GraphServiceError> {
-    let limit = request.limit.clamp(1, 500);
-    let mut nodes = Vec::new();
-
-    for (source_id, source_conn) in
-        open_ready_source_connections(case_conn, case_root, &domain::CaseId(case_id.to_string()))?
-    {
-        if nodes.len() >= limit as usize {
-            break;
-        }
-        let remaining = limit.saturating_sub(nodes.len() as u32);
-        let source_nodes = list_graph_nodes(
-            &source_conn,
-            case_id,
-            ListGraphNodesRequest {
-                limit: remaining,
-                offset: request.offset,
-            },
-        )?;
-        nodes.extend(
-            source_nodes
-                .into_iter()
-                .map(|node| scope_graph_node(node, &source_id)),
-        );
-    }
-
-    Ok(nodes)
+    let sources = source_db::open_ready_source_connections(
+        case_conn,
+        case_root,
+        &domain::CaseId(case_id.to_string()),
+    )?;
+    merge_graph_node_page(sources, case_id, request)
 }
 
 /// List graph nodes for the active case without requiring a traversal seed.
@@ -236,10 +247,132 @@ pub fn list_graph_nodes(
     Ok(nodes.into_iter().map(node_to_dto).collect())
 }
 
+// Bound per-source buffering while preserving the repository's stable sort order.
+const GRAPH_NODE_MERGE_BATCH_SIZE: u32 = 128;
+
+struct GraphNodeSourceCursor {
+    data_source_id: DataSourceId,
+    connection: Connection,
+    after: Option<GraphNodePageCursor>,
+    buffered: VecDeque<GraphNodeDto>,
+    exhausted: bool,
+}
+
+impl GraphNodeSourceCursor {
+    fn new(data_source_id: DataSourceId, connection: Connection) -> Self {
+        Self {
+            data_source_id,
+            connection,
+            after: None,
+            buffered: VecDeque::new(),
+            exhausted: false,
+        }
+    }
+
+    fn next_node(
+        &mut self,
+        case_id: &str,
+        batch_size: u32,
+    ) -> Result<Option<GraphNodeDto>, GraphServiceError> {
+        if self.buffered.is_empty() && !self.exhausted {
+            let nodes = GraphRepo::new(&self.connection)
+                .list_nodes_for_case_after(case_id, batch_size, self.after.as_ref())
+                .map_err(|err| {
+                    GraphServiceError::Other(format!("graph node keyset query: {err}"))
+                })?;
+            let fetched = nodes.len();
+            self.after = nodes.last().map(GraphNodePageCursor::from);
+            self.exhausted = fetched < batch_size as usize;
+            self.buffered = nodes.into_iter().map(node_to_dto).collect();
+        }
+
+        Ok(self
+            .buffered
+            .pop_front()
+            .map(|node| scope_graph_node(node, &self.data_source_id)))
+    }
+}
+
+struct GraphNodeMergeEntry {
+    cursor_index: usize,
+    node: GraphNodeDto,
+}
+
+impl PartialEq for GraphNodeMergeEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.cursor_index == other.cursor_index
+            && self.node.created_at == other.node.created_at
+            && self.node.id == other.node.id
+    }
+}
+
+impl Eq for GraphNodeMergeEntry {}
+
+impl PartialOrd for GraphNodeMergeEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for GraphNodeMergeEntry {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.node
+            .created_at
+            .cmp(&other.node.created_at)
+            .then_with(|| other.node.id.cmp(&self.node.id))
+            .then_with(|| other.cursor_index.cmp(&self.cursor_index))
+    }
+}
+
+fn merge_graph_node_page(
+    sources: Vec<(DataSourceId, Connection)>,
+    case_id: &str,
+    request: ListGraphNodesRequest,
+) -> Result<Vec<GraphNodeDto>, GraphServiceError> {
+    // Resolve the legacy global offset once; source refills advance by keyset instead of
+    // repeatedly rescanning their prefixes with SQL OFFSET.
+    let limit = request.limit.clamp(1, 500);
+    let page_end = u64::from(request.offset)
+        .checked_add(u64::from(limit))
+        .ok_or_else(|| GraphServiceError::InvalidInput("graph page range overflow".to_string()))?;
+    let batch_size = u32::try_from(page_end.min(u64::from(GRAPH_NODE_MERGE_BATCH_SIZE)))
+        .map_err(|_| GraphServiceError::InvalidInput("graph merge batch overflow".to_string()))?;
+    let mut cursors = sources
+        .into_iter()
+        .map(|(source_id, connection)| GraphNodeSourceCursor::new(source_id, connection))
+        .collect::<Vec<_>>();
+    let mut heap = BinaryHeap::with_capacity(cursors.len());
+
+    for (cursor_index, cursor) in cursors.iter_mut().enumerate() {
+        if let Some(node) = cursor.next_node(case_id, batch_size)? {
+            heap.push(GraphNodeMergeEntry { cursor_index, node });
+        }
+    }
+
+    let mut position = 0_u64;
+    let mut page = Vec::with_capacity(limit as usize);
+    while position < page_end {
+        let Some(GraphNodeMergeEntry { cursor_index, node }) = heap.pop() else {
+            break;
+        };
+        if position >= u64::from(request.offset) {
+            page.push(node);
+        }
+        position += 1;
+        if position < page_end {
+            if let Some(node) = cursors[cursor_index].next_node(case_id, batch_size)? {
+                heap.push(GraphNodeMergeEntry { cursor_index, node });
+            }
+        }
+    }
+
+    Ok(page)
+}
+
 pub fn get_node_neighborhood_for_case(
     case_conn: &Connection,
     case_root: &Path,
-    _case_id: &str,
+    case_id: &str,
     node_id: &str,
     depth: u32,
 ) -> Result<GraphQueryResultDto, GraphServiceError> {
@@ -249,9 +382,14 @@ pub fn get_node_neighborhood_for_case(
                 "{err}; source database graph nodes require ds:<dataSourceId>:<localId>"
             ))
         })?;
-    let source_conn = source_db::open_registered_source_db(case_conn, case_root, &source_id)?;
+    let source = source_db::open_ready_source_by_id(
+        case_conn,
+        case_root,
+        &domain::CaseId(case_id.to_string()),
+        &source_id,
+    )?;
     Ok(scope_graph_result(
-        get_node_neighborhood(&source_conn, &local_id, depth)?,
+        get_node_neighborhood(&source.connection, &local_id, depth)?,
         &source_id,
     ))
 }
@@ -339,7 +477,7 @@ pub fn get_node_neighborhood(
 pub fn get_provenance_chain_for_case(
     case_conn: &Connection,
     case_root: &Path,
-    _case_id: &str,
+    case_id: &str,
     edge_id: &str,
 ) -> Result<Vec<GraphProvenanceEntryDto>, GraphServiceError> {
     let (source_id, local_id) = source_db::parse_source_scoped_id("Graph edge id", edge_id)
@@ -348,8 +486,16 @@ pub fn get_provenance_chain_for_case(
                 "{err}; source database graph edges require ds:<dataSourceId>:<localId>"
             ))
         })?;
-    let source_conn = source_db::open_registered_source_db(case_conn, case_root, &source_id)?;
-    scope_provenance_entries(get_provenance_chain(&source_conn, &local_id)?, &source_id)
+    let source = source_db::open_ready_source_by_id(
+        case_conn,
+        case_root,
+        &domain::CaseId(case_id.to_string()),
+        &source_id,
+    )?;
+    scope_provenance_entries(
+        get_provenance_chain(&source.connection, &local_id)?,
+        &source_id,
+    )
 }
 
 /// Retrieve the provenance chain for a graph edge.
@@ -586,27 +732,6 @@ fn scoped_start_ids(
     Ok(scoped_source.map(|source_id| (source_id, local_ids)))
 }
 
-fn open_ready_source_connections(
-    case_conn: &Connection,
-    case_root: &Path,
-    case_id: &domain::CaseId,
-) -> Result<Vec<(DataSourceId, Connection)>, GraphServiceError> {
-    let sources = DataSourceRepo::new(case_conn).find_by_case(case_id)?;
-    let mut conns = Vec::with_capacity(sources.len());
-    for source in sources {
-        let storage = DataSourceRepo::new(case_conn).find_storage(&source.id)?;
-        if storage
-            .as_ref()
-            .is_some_and(|value| value.import_state == "failed")
-        {
-            continue;
-        }
-        let conn = source_db::open_registered_source_db(case_conn, case_root, &source.id)?;
-        conns.push((source.id, conn));
-    }
-    Ok(conns)
-}
-
 fn parse_edge_type(s: &str) -> EdgeType {
     match s {
         "contains" => EdgeType::Contains,
@@ -676,308 +801,5 @@ fn enrich_parser_versions(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use domain::{CaseId, CaseMeta, EdgeType, GraphEdge, GraphNode, NodeType};
-    use persistence_sqlite::repositories::{case_repo::CaseRepo, graph_repo::GraphRepo};
-    use rusqlite::Connection;
-
-    fn setup_case_db() -> Connection {
-        let conn = Connection::open_in_memory().unwrap();
-        persistence_sqlite::runner::run_all(&conn).unwrap();
-        CaseRepo::new(&conn)
-            .create(&CaseMeta {
-                id: CaseId("case-1".to_string()),
-                name: "Graph Test Case".to_string(),
-                number: None,
-                examiner: None,
-                notes: None,
-                created_at: chrono::Utc::now(),
-                updated_at: chrono::Utc::now(),
-            })
-            .unwrap();
-        conn
-    }
-
-    fn make_node(id: &str, case_id: &str, node_type: NodeType, label: &str) -> GraphNode {
-        GraphNode {
-            id: id.to_string(),
-            case_id: case_id.to_string(),
-            node_type,
-            label: label.to_string(),
-            summary: format!("Summary for {id}"),
-            tags: vec!["test".to_string()],
-            created_at: "2026-06-14T00:00:00Z".to_string(),
-        }
-    }
-
-    fn make_edge(
-        id: &str,
-        case_id: &str,
-        source: &str,
-        target: &str,
-        edge_type: EdgeType,
-    ) -> GraphEdge {
-        GraphEdge {
-            id: id.to_string(),
-            case_id: case_id.to_string(),
-            source_id: source.to_string(),
-            target_id: target.to_string(),
-            edge_type,
-            confidence: Some(0.95),
-            provenance: None,
-            created_at: "2026-06-14T00:00:00Z".to_string(),
-        }
-    }
-
-    #[test]
-    fn snapshot_empty_graph() {
-        let conn = setup_case_db();
-        let snapshot = get_graph_snapshot(&conn, "case-1").unwrap();
-        assert_eq!(snapshot.total_nodes, 0);
-        assert_eq!(snapshot.total_edges, 0);
-        assert_eq!(snapshot.density, 0.0);
-        assert_eq!(snapshot.largest_component_size, 0);
-    }
-
-    #[test]
-    fn snapshot_with_nodes_and_edges() {
-        let conn = setup_case_db();
-        let repo = GraphRepo::new(&conn);
-
-        repo.insert_nodes_batch(&[
-            make_node("n1", "case-1", NodeType::File, "a.exe"),
-            make_node("n2", "case-1", NodeType::File, "b.dll"),
-            make_node("n3", "case-1", NodeType::Artifact, "LNK-1"),
-        ])
-        .unwrap();
-        repo.insert_edges_batch(&[
-            make_edge("e1", "case-1", "n1", "n2", EdgeType::References),
-            make_edge("e2", "case-1", "n1", "n3", EdgeType::References),
-        ])
-        .unwrap();
-
-        let snapshot = get_graph_snapshot(&conn, "case-1").unwrap();
-        assert_eq!(snapshot.total_nodes, 3);
-        assert_eq!(snapshot.total_edges, 2);
-        assert!(snapshot.density > 0.0);
-        assert!(
-            snapshot
-                .node_count_by_type
-                .get("file")
-                .copied()
-                .unwrap_or(0)
-                >= 2
-        );
-    }
-
-    #[test]
-    fn query_graph_traversal() {
-        let conn = setup_case_db();
-        let repo = GraphRepo::new(&conn);
-
-        repo.insert_nodes_batch(&[
-            make_node("n1", "case-1", NodeType::File, "a.exe"),
-            make_node("n2", "case-1", NodeType::File, "b.dll"),
-            make_node("n3", "case-1", NodeType::Artifact, "LNK-1"),
-        ])
-        .unwrap();
-        repo.insert_edges_batch(&[
-            make_edge("e1", "case-1", "n1", "n2", EdgeType::References),
-            make_edge("e2", "case-1", "n2", "n3", EdgeType::References),
-        ])
-        .unwrap();
-
-        let result = query_graph(
-            &conn,
-            GraphQueryDto {
-                start_ids: vec!["n1".to_string()],
-                edge_types: vec![],
-                max_depth: 2,
-                confidence_floor: None,
-                limit: 100,
-            },
-        )
-        .unwrap();
-
-        assert_eq!(result.node_count, 3);
-        assert_eq!(result.edge_count, 2);
-        assert!(result.nodes.iter().any(|n| n.id == "n1"));
-        assert!(result.nodes.iter().any(|n| n.id == "n3"));
-    }
-
-    #[test]
-    fn query_graph_respects_confidence_floor() {
-        let conn = setup_case_db();
-        let repo = GraphRepo::new(&conn);
-
-        repo.insert_nodes_batch(&[
-            make_node("n1", "case-1", NodeType::File, "a.exe"),
-            make_node("n2", "case-1", NodeType::File, "b.dll"),
-        ])
-        .unwrap();
-
-        let mut high_confidence = make_edge("e1", "case-1", "n1", "n2", EdgeType::References);
-        high_confidence.confidence = Some(0.9);
-        repo.insert_edges_batch(&[high_confidence]).unwrap();
-
-        let result = query_graph(
-            &conn,
-            GraphQueryDto {
-                start_ids: vec!["n1".to_string()],
-                edge_types: vec![],
-                max_depth: 2,
-                confidence_floor: Some(0.5),
-                limit: 100,
-            },
-        )
-        .unwrap();
-
-        assert_eq!(result.edge_count, 1);
-
-        let result_strict = query_graph(
-            &conn,
-            GraphQueryDto {
-                start_ids: vec!["n1".to_string()],
-                edge_types: vec![],
-                max_depth: 2,
-                confidence_floor: Some(0.99),
-                limit: 100,
-            },
-        )
-        .unwrap();
-
-        assert_eq!(result_strict.edge_count, 0);
-    }
-
-    #[test]
-    fn list_graph_nodes_returns_case_nodes() {
-        let conn = setup_case_db();
-        let repo = GraphRepo::new(&conn);
-
-        repo.insert_nodes_batch(&[
-            make_node("n1", "case-1", NodeType::File, "a.exe"),
-            make_node("n2", "case-1", NodeType::Artifact, "LNK-1"),
-        ])
-        .unwrap();
-
-        let nodes = list_graph_nodes(
-            &conn,
-            "case-1",
-            ListGraphNodesRequest {
-                limit: 10,
-                offset: 0,
-            },
-        )
-        .unwrap();
-
-        assert_eq!(nodes.len(), 2);
-        assert!(nodes.iter().any(|node| node.id == "n1"));
-        assert!(nodes.iter().any(|node| node.id == "n2"));
-    }
-
-    #[test]
-    fn node_neighborhood_returns_connected_subgraph() {
-        let conn = setup_case_db();
-        let repo = GraphRepo::new(&conn);
-
-        repo.insert_nodes_batch(&[
-            make_node("n1", "case-1", NodeType::File, "center.exe"),
-            make_node("n2", "case-1", NodeType::File, "neighbor-a.dll"),
-            make_node("n3", "case-1", NodeType::File, "neighbor-b.dll"),
-            make_node("n4", "case-1", NodeType::File, "far-away.exe"),
-        ])
-        .unwrap();
-        repo.insert_edges_batch(&[
-            make_edge("e1", "case-1", "n1", "n2", EdgeType::References),
-            make_edge("e2", "case-1", "n3", "n1", EdgeType::Contains),
-            make_edge("e3", "case-1", "n2", "n4", EdgeType::References),
-        ])
-        .unwrap();
-
-        let result = get_node_neighborhood(&conn, "n1", 1).unwrap();
-        // depth 1: n1 itself + n2 (outgoing) + n3 (incoming) = 3 nodes
-        assert_eq!(result.node_count, 3);
-        // n4 should NOT be included at depth 1
-        assert!(!result.nodes.iter().any(|n| n.id == "n4"));
-    }
-
-    #[test]
-    fn case_graph_single_node_lookup_rejects_unscoped_ids() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let conn = setup_case_db();
-
-        let err = get_node_neighborhood_for_case(&conn, tmp.path(), "case-1", "n1", 1).unwrap_err();
-
-        assert!(matches!(err, GraphServiceError::InvalidInput(_)));
-        assert!(err.to_string().contains("ds:<dataSourceId>:<localId>"));
-    }
-
-    #[test]
-    fn case_graph_provenance_lookup_rejects_unscoped_ids() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let conn = setup_case_db();
-
-        let err = get_provenance_chain_for_case(&conn, tmp.path(), "case-1", "e1").unwrap_err();
-
-        assert!(matches!(err, GraphServiceError::InvalidInput(_)));
-        assert!(err.to_string().contains("ds:<dataSourceId>:<localId>"));
-    }
-
-    #[test]
-    fn case_graph_query_start_ids_reject_unscoped_ids() {
-        let err = scoped_start_ids(&["n1".to_string()]).unwrap_err();
-
-        assert!(matches!(err, GraphServiceError::InvalidInput(_)));
-        assert!(err.to_string().contains("ds:<dataSourceId>:<localId>"));
-    }
-
-    #[test]
-    fn provenance_chain_without_provenance_metadata() {
-        let conn = setup_case_db();
-        let repo = GraphRepo::new(&conn);
-
-        repo.insert_nodes_batch(&[
-            make_node("n1", "case-1", NodeType::File, "a.exe"),
-            make_node("n2", "case-1", NodeType::File, "b.dll"),
-        ])
-        .unwrap();
-        repo.insert_edges_batch(&[make_edge("e1", "case-1", "n1", "n2", EdgeType::References)])
-            .unwrap();
-
-        let chain = get_provenance_chain(&conn, "e1").unwrap();
-        assert_eq!(chain.len(), 1);
-        assert_eq!(chain[0].edge_id, "e1");
-        assert!(chain[0].source_rule_id.is_none());
-        assert!(chain[0].extraction_timestamp.is_some());
-    }
-
-    #[test]
-    fn provenance_chain_with_correlation_provenance() {
-        let conn = setup_case_db();
-        let repo = GraphRepo::new(&conn);
-
-        repo.insert_nodes_batch(&[
-            make_node("n1", "case-1", NodeType::File, "cmd.exe"),
-            make_node("n2", "case-1", NodeType::Artifact, "LNK Artifact"),
-        ])
-        .unwrap();
-
-        let provenance = serde_json::json!({
-            "kind": "correlation_rule",
-            "lead_id": "lead:rules:file-cmd",
-            "match_signals": ["LNK 目标路径命中文件路径"],
-            "families": ["LNK"]
-        })
-        .to_string();
-
-        let mut edge = make_edge("e1", "case-1", "n2", "n1", EdgeType::CorrelatesWith);
-        edge.provenance = Some(provenance);
-        repo.insert_edges_batch(&[edge]).unwrap();
-
-        let chain = get_provenance_chain(&conn, "e1").unwrap();
-        assert_eq!(chain.len(), 1);
-        assert_eq!(chain[0].edge_id, "e1");
-        assert_eq!(chain[0].source_parser.as_deref(), Some("LNK"));
-    }
-}
+#[path = "../tests/unit/graph_service.rs"]
+mod tests;

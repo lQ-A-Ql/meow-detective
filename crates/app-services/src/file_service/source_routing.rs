@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use domain::{DataSourceId, FileEntryId};
+use domain::{CaseId, DataSourceId, FileEntryId};
 use persistence_sqlite::repositories::{
     datasource_repo::DataSourceRepo, file_repo::FileRepo, partition_repo::PartitionRepo,
 };
@@ -36,18 +36,23 @@ fn source_manager(case_root: &Path) -> SourceConnectionManager {
 fn open_source_for_data_source(
     case_conn: &Connection,
     case_root: &Path,
+    case_id: &CaseId,
     data_source_id: &DataSourceId,
 ) -> Result<Connection, FileServiceError> {
-    Ok(source_manager(case_root).open_registered(case_conn, data_source_id)?)
+    Ok(source_manager(case_root).open_ready(case_conn, case_id, data_source_id)?)
 }
 
 fn open_source_for_file_id(
     case_conn: &Connection,
     case_root: &Path,
+    case_id: &CaseId,
     file_id: &str,
 ) -> Result<(GlobalFileId, Connection), FileServiceError> {
-    Ok(source_manager(case_root)
-        .open_for_global_file_id(case_conn, &FileEntryId(file_id.to_string()))?)
+    Ok(source_manager(case_root).open_ready_for_global_file_id(
+        case_conn,
+        case_id,
+        &FileEntryId(file_id.to_string()),
+    )?)
 }
 
 type SourceScopedContext<'a> = (
@@ -114,8 +119,17 @@ pub fn get_data_sources_for_case(
     let mut summaries = Vec::with_capacity(sources.len());
 
     for source in sources {
-        let storage = DataSourceRepo::new(case_conn).find_storage(&source.id)?;
-        let source_conn = open_source_for_data_source(case_conn, case_root, &source.id).ok();
+        let storage = DataSourceRepo::new(case_conn)
+            .find_storage(&source.id)?
+            .ok_or_else(|| {
+                FileServiceError::other(format!(
+                    "data source {} is missing storage metadata",
+                    source.id.0
+                ))
+            })?;
+        let platform = super::data_sources::required_data_source_platform(&storage)?;
+        let source_conn =
+            open_source_for_data_source(case_conn, case_root, case_id, &source.id).ok();
         let (file_count, partitions) = if let Some(source_conn) = source_conn.as_ref() {
             let file_count = FileRepo::new(source_conn)
                 .count_by_data_source(&source.id)
@@ -151,23 +165,15 @@ pub fn get_data_sources_for_case(
             source_path: source.source_path.display().to_string(),
             imported_at: source.imported_at.to_rfc3339(),
             file_count,
-            storage_model: storage.as_ref().map(|value| value.storage_model.clone()),
-            source_db_rel_path: storage
-                .as_ref()
-                .and_then(|value| value.source_db_rel_path.clone()),
-            index_rel_path: storage
-                .as_ref()
-                .and_then(|value| value.index_rel_path.clone()),
-            staging_rel_path: storage
-                .as_ref()
-                .and_then(|value| value.staging_rel_path.clone()),
-            platform: storage.as_ref().map(|value| value.platform.clone()),
-            profile: storage.as_ref().and_then(|value| value.profile.clone()),
-            import_state: storage.as_ref().map(|value| value.import_state.clone()),
-            schema_version: storage
-                .as_ref()
-                .and_then(|value| value.schema_version.clone()),
-            last_error: storage.as_ref().and_then(|value| value.last_error.clone()),
+            storage_model: Some(storage.storage_model),
+            source_db_rel_path: storage.source_db_rel_path,
+            index_rel_path: storage.index_rel_path,
+            staging_rel_path: storage.staging_rel_path,
+            platform,
+            profile: storage.profile,
+            import_state: Some(storage.import_state),
+            schema_version: storage.schema_version,
+            last_error: storage.last_error,
             source_hash: source.provenance.source_hash_sha256,
             hash_status: Some(data_source_hash_status_label(
                 &source.provenance.hash_status,
@@ -195,10 +201,10 @@ pub fn get_file_tree_for_case(
     case_id: &domain::CaseId,
     show_hidden: bool,
 ) -> Result<Vec<FileTreeNodeDto>, FileServiceError> {
-    let sources = DataSourceRepo::new(case_conn).find_by_case(case_id)?;
     let mut roots = Vec::new();
-    for source in sources {
-        let source_conn = open_source_for_data_source(case_conn, case_root, &source.id)?;
+    for (_, source_conn) in
+        crate::source_db::open_ready_source_connections(case_conn, case_root, case_id)?
+    {
         let mut nodes =
             super::tree_queries::get_file_tree_real_with_visibility(&source_conn, show_hidden)?;
         wrap_tree_nodes(&mut nodes);
@@ -210,12 +216,14 @@ pub fn get_file_tree_for_case(
 pub fn get_file_children_for_case(
     case_conn: &Connection,
     case_root: &Path,
+    case_id: &CaseId,
     parent_id: &str,
     offset: u64,
     limit: u32,
     show_hidden: bool,
 ) -> Result<FileChildrenDto, FileServiceError> {
-    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, parent_id)?;
+    let (global_id, source_conn) =
+        open_source_for_file_id(case_conn, case_root, case_id, parent_id)?;
     let mut children = get_file_children_lazy_with_visibility(
         &source_conn,
         &global_id.local_id.0,
@@ -230,6 +238,7 @@ pub fn get_file_children_for_case(
 pub fn get_file_rows_for_case(
     case_conn: &Connection,
     case_root: &Path,
+    case_id: &CaseId,
     request: &GetFileRowsRequest,
 ) -> Result<FileRowsPageDto, FileServiceError> {
     let Some(parent_id) = request.parent_id.as_deref() else {
@@ -241,7 +250,8 @@ pub fn get_file_rows_for_case(
             truncated: false,
         });
     };
-    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, parent_id)?;
+    let (global_id, source_conn) =
+        open_source_for_file_id(case_conn, case_root, case_id, parent_id)?;
     let mut local_request = request.clone();
     local_request.parent_id = Some(global_id.local_id.0);
     let mut page = get_file_rows_for_request(&source_conn, &local_request)?;
@@ -254,9 +264,11 @@ pub fn get_file_rows_for_case(
 pub fn get_file_jump_context_for_case(
     case_conn: &Connection,
     case_root: &Path,
+    case_id: &CaseId,
     request: &GetFileJumpContextRequest,
 ) -> Result<FileJumpContextDto, FileServiceError> {
-    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, &request.file_id)?;
+    let (global_id, source_conn) =
+        open_source_for_file_id(case_conn, case_root, case_id, &request.file_id)?;
     let mut local_request = request.clone();
     local_request.file_id = global_id.local_id.0.clone();
     let mut context = super::get_file_jump_context(&source_conn, &local_request)?;
@@ -267,12 +279,14 @@ pub fn get_file_jump_context_for_case(
 pub fn open_file_handle_for_case(
     case_conn: &Connection,
     case_root: &Path,
-    case_id: &str,
+    case_id: &CaseId,
     file_id: &str,
 ) -> Result<ViewerHandleDto, FileServiceError> {
-    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, file_id)?;
-    let mut handle =
-        open_file_handle_real(scoped_context(&source_conn, case_id), &global_id.local_id.0)?;
+    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, case_id, file_id)?;
+    let mut handle = open_file_handle_real(
+        scoped_context(&source_conn, &case_id.0),
+        &global_id.local_id.0,
+    )?;
     handle.handle_id = format!(
         "file:{}",
         GlobalFileId::new(global_id.data_source_id, global_id.local_id)
@@ -285,26 +299,26 @@ pub fn open_file_handle_for_case(
 pub fn read_file_range_for_source_case(
     case_conn: &Connection,
     case_root: &Path,
-    case_id: &str,
+    case_id: &CaseId,
     request: &ViewerRangeRequestDto,
 ) -> Result<ViewerRangeResponseDto, FileServiceError> {
     let file_id = file_id_from_handle(&request.handle_id)?;
-    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, file_id)?;
+    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, case_id, file_id)?;
     let mut local_request = request.clone();
     local_request.handle_id = format!("file:{}", global_id.local_id.0);
-    read_file_range_for_case(scoped_context(&source_conn, case_id), &local_request)
+    read_file_range_for_case(scoped_context(&source_conn, &case_id.0), &local_request)
 }
 
 pub fn text_preview_for_source_case(
     case_conn: &Connection,
     case_root: &Path,
-    case_id: &str,
+    case_id: &CaseId,
     file_id: &str,
     max_bytes: Option<usize>,
 ) -> Result<transport::dto::TextPreviewDto, FileServiceError> {
-    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, file_id)?;
+    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, case_id, file_id)?;
     text_preview_for_file(
-        scoped_context(&source_conn, case_id),
+        scoped_context(&source_conn, &case_id.0),
         &global_id.local_id.0,
         max_bytes,
     )
@@ -313,26 +327,29 @@ pub fn text_preview_for_source_case(
 pub fn image_preview_for_source_case(
     case_conn: &Connection,
     case_root: &Path,
-    case_id: &str,
+    case_id: &CaseId,
     file_id: &str,
 ) -> Result<transport::dto::ImagePreviewDto, FileServiceError> {
-    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, file_id)?;
-    image_preview_for_file(scoped_context(&source_conn, case_id), &global_id.local_id.0)
+    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, case_id, file_id)?;
+    image_preview_for_file(
+        scoped_context(&source_conn, &case_id.0),
+        &global_id.local_id.0,
+    )
 }
 
 pub fn media_preview_plan_for_source_case(
     case_conn: &Connection,
     case_root: &Path,
-    case_id: &str,
+    case_id: &CaseId,
     file_id: &str,
 ) -> Result<MediaPreviewPlan, FileServiceError> {
-    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, file_id)?;
+    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, case_id, file_id)?;
     let local_file_id = global_id.local_id.0.clone();
     let global_file_id = GlobalFileId::new(global_id.data_source_id, global_id.local_id)
         .encode()
         .0;
     let mut plan =
-        media_preview_plan_for_file(scoped_context(&source_conn, case_id), &local_file_id)?;
+        media_preview_plan_for_file(scoped_context(&source_conn, &case_id.0), &local_file_id)?;
     if let MediaPreviewPlan::Inline(dto) = &mut plan {
         dto.handle_id = Some(format!("file:{global_file_id}"));
     }
@@ -342,13 +359,13 @@ pub fn media_preview_plan_for_source_case(
 pub fn media_range_for_source_case(
     case_conn: &Connection,
     case_root: &Path,
-    case_id: &str,
+    case_id: &CaseId,
     file_id: &str,
     request: &transport::dto::MediaRangeRequestDto,
 ) -> Result<transport::dto::MediaRangeResponseDto, FileServiceError> {
-    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, file_id)?;
+    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, case_id, file_id)?;
     media_range_for_file(
-        scoped_context(&source_conn, case_id),
+        scoped_context(&source_conn, &case_id.0),
         &global_id.local_id.0,
         request,
     )
@@ -357,14 +374,14 @@ pub fn media_range_for_source_case(
 pub fn read_preview_bytes_for_source_case(
     case_conn: &Connection,
     case_root: &Path,
-    case_id: &str,
+    case_id: &CaseId,
     file_id: &str,
     offset: u64,
     length: u32,
 ) -> Result<Vec<u8>, FileServiceError> {
-    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, file_id)?;
+    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, case_id, file_id)?;
     read_preview_bytes_for_file(
-        scoped_context(&source_conn, case_id),
+        scoped_context(&source_conn, &case_id.0),
         &global_id.local_id.0,
         offset,
         length,
@@ -374,11 +391,12 @@ pub fn read_preview_bytes_for_source_case(
 pub fn extract_file_to_destination_for_case(
     case_conn: &Connection,
     case_root: &Path,
+    case_id: &CaseId,
     file_id: &str,
     destination_path: &Path,
     overwrite: bool,
 ) -> Result<u64, FileServiceError> {
-    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, file_id)?;
+    let (global_id, source_conn) = open_source_for_file_id(case_conn, case_root, case_id, file_id)?;
     super::export::extract_file_to_destination(
         &source_conn,
         &global_id.local_id.0,
@@ -391,7 +409,6 @@ pub fn extract_file_to_destination_for_case(
 mod tests {
     use super::*;
     use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
-
     fn setup_case_conn() -> rusqlite::Connection {
         let conn = persistence_sqlite::connection::open_in_memory().unwrap();
         conn.execute_batch(
@@ -440,6 +457,9 @@ mod tests {
                 &DataSourceStorage::source_db(id, Some("linux"), None),
             )
             .unwrap();
+        DataSourceRepo::new(conn)
+            .update_import_state(&ds.id, "ready", None)
+            .unwrap();
     }
 
     fn seed_source_db(case_root: &Path, data_source_id: &str) {
@@ -463,7 +483,6 @@ mod tests {
         insert_data_source(&case_conn, "ds-b", "Source B");
         seed_source_db(tmp.path(), "ds-a");
         seed_source_db(tmp.path(), "ds-b");
-
         let roots = get_file_tree_for_case(
             &case_conn,
             tmp.path(),
@@ -472,7 +491,6 @@ mod tests {
         )
         .unwrap();
         let ids = roots.into_iter().map(|node| node.id).collect::<Vec<_>>();
-
         assert!(ids.contains(&"ds:ds-a:file-1".to_string()));
         assert!(ids.contains(&"ds:ds-b:file-1".to_string()));
     }

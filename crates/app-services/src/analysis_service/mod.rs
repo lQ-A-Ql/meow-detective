@@ -4,13 +4,16 @@
 
 mod artifact_builders;
 mod candidates;
+mod capability;
 mod classification;
 mod demo;
 mod error;
 mod extraction;
+mod platforms;
 mod provenance;
 mod summary;
 mod system_info;
+mod use_cases;
 
 pub use candidates::{
     collect_file_entries, discover_evidence_candidates, evidence_candidates_for_categories,
@@ -26,8 +29,18 @@ pub use extraction::{
     get_linux_artifact_summary, get_registry_extraction_summary, get_registry_structured_summary,
     run_analysis_extraction, ExtractionOutcome,
 };
+pub use platforms::{
+    resolve_data_source_platform, select_evidence_scan_categories, validate_analysis_categories,
+    validate_data_source_analysis_categories,
+};
 pub use summary::generate_analysis_summary;
 pub use system_info::extract_system_info_for_case;
+pub use use_cases::{
+    classify_source_files, generate_source_analysis_summary, get_source_browser_summary,
+    get_source_email_summary, get_source_evidence_summary, get_source_evtx_summary,
+    get_source_linux_summary, get_source_registry_structured_summary, get_source_registry_summary,
+    get_source_system_info, run_source_analysis_extraction, run_source_evidence_scan,
+};
 
 pub const DEFAULT_SAMPLE_SIZE: u32 = 1000;
 pub const MAX_SAMPLE_SIZE: u32 = 5000;
