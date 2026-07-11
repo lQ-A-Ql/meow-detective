@@ -1,12 +1,7 @@
 path,inlineTestModules,inlineTestModuleLines,testAttributes,modTestsBlocks,testOnlyCfgItems,srcTestFileLines
 apps/desktop/src-tauri/src/cache_invalidation.rs,1,11,1,1,0,0
-apps/desktop/src-tauri/src/commands/batch_commands.rs,1,119,6,1,0,0
-apps/desktop/src-tauri/src/commands/benchmarks.rs,1,348,1,0,0,0
-apps/desktop/src-tauri/src/commands/case_commands.rs,1,203,5,1,0,0
 apps/desktop/src-tauri/src/commands/command_support.rs,1,35,1,1,2,0
-apps/desktop/src-tauri/src/commands/file_commands.rs,1,743,15,1,5,0
 apps/desktop/src-tauri/src/commands/import/pipeline.rs,1,32,1,1,0,0
-apps/desktop/src-tauri/src/commands/mcp_commands.rs,1,45,2,1,0,0
 apps/desktop/src-tauri/src/commands/mod.rs,0,0,0,0,1,0
 apps/desktop/src-tauri/src/commands/settings_commands.rs,1,44,2,1,0,0
 apps/desktop/src-tauri/src/lib.rs,1,105,1,1,0,0
@@ -215,7 +210,6 @@ crates/testing/src/builders/registry.rs,1,18,2,1,0,0
 crates/testing/src/fixtures/mod.rs,1,99,8,1,0,0
 crates/testing/src/real_image_tests.rs,0,0,0,0,0,15
 crates/timeline/src/lib.rs,1,502,15,1,0,0
-crates/transport/src/commands/mod.rs,1,255,22,1,0,0
 crates/transport/src/dto/analysis.rs,1,540,6,1,0,0
 crates/transport/src/dto/analysis_base.rs,1,36,1,1,0,0
 crates/transport/src/dto/analysis_linux.rs,1,196,2,1,0,0

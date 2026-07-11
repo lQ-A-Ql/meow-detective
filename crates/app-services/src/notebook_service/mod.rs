@@ -3,7 +3,9 @@
 //! converts between domain types and transport DTOs.
 
 pub mod error;
+mod request_filters;
 pub use error::NotebookError;
+pub use request_filters::{list_entries_for_request, list_steps_for_request};
 
 use domain::{EntryStatus, EvidenceCitation, NodeType, NotebookEntry, NotebookEntryType};
 use persistence_sqlite::repositories::notebook_repo::{
@@ -15,8 +17,6 @@ use transport::dto::{
     NotebookEntryStatusDto, NotebookEntryTypeDto,
 };
 use uuid::Uuid;
-
-// ── Conversion: domain ↔ DTO ────────────────────────────────────────────
 
 fn entry_type_to_dto(et: &NotebookEntryType) -> NotebookEntryTypeDto {
     match et {

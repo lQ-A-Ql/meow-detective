@@ -41,6 +41,7 @@
 | 大文件浏览优化设计 | `docs/large-file-browsing-optimization-design.md` | 本项目 100MB+ 文件浏览与预览性能优化的目标架构、阶段方案、测试矩阵与验收标准 |
 | Frontend MVP boundary | `docs/frontend-mvp-boundary.md` | Page / Feature / Component / API / Platform / Store 边界、无 runtime mock、公共组件归属与守卫规则 |
 | Backend module architecture | `docs/backend-module-architecture.md` | Stage 0 backend module/test split rules, baselines, guards, and exceptions |
+| Backend Stage 3/4 delivery | `docs/backend-stage3-stage4-design.md` | Transport/command and app-services decomposition, review gates, regression matrix, and performance boundary |
 | CI | `ci.md` | CI 流程与检查步骤 |
 | 测试策略 | `test-plan.md` | 测试分层、fixture、回归与发布 gate |
 | V3 主计划（历史设计记录） **(V3)** | `docs/v3-plan.md` | 保留阶段设计；其中 macOS 范围已被 Stage 1 平台边界取代，不代表当前支持 |

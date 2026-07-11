@@ -44,6 +44,8 @@ jobs:
           ./scripts/check-rust-test-layout.ps1 -SelfTest
           ./scripts/check-rust-test-layout.ps1
           ./scripts/check-stage0-boundary-guard.ps1
+          ./scripts/check-stage2-platform-boundary.ps1
+          ./scripts/check-stage3-command-boundary.ps1
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test

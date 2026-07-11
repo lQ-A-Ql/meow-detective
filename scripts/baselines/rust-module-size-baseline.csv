@@ -1,7 +1,4 @@
 path,lines,limit,kind
-apps/desktop/src-tauri/src/commands/case_commands.rs,817,500,production
-apps/desktop/src-tauri/src/commands/file_commands.rs,1230,500,production
-apps/desktop/src-tauri/src/commands/mcp_commands.rs,686,500,production
 apps/desktop/src-tauri/src/lib.rs,288,200,module-root
 apps/desktop/src-tauri/src/media_protocol.rs,741,500,production
 crates/app-services/src/analysis_service/extraction/browser.rs,522,500,production
@@ -108,7 +105,6 @@ crates/runtime-cache/src/lib.rs,272,200,module-root
 crates/search/src/highlighter/mod.rs,267,200,module-root
 crates/search/src/indexer/tantivy_writer.rs,758,500,production
 crates/timeline/src/lib.rs,585,200,module-root
-crates/transport/src/commands/mod.rs,983,200,module-root
 crates/transport/src/dto/analysis.rs,587,500,production
 crates/transport/src/dto/notebook.rs,859,500,production
 crates/updater/src/lib.rs,543,200,module-root

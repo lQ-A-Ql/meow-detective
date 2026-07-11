@@ -1,4 +1,7 @@
-use super::*;
+use domain::DataSourcePlatform;
+use transport::commands::{ImportDataSourceRequest, ImportSourceKindDto, ImportTargetPlatformDto};
+
+use super::preparation::{import_platform_from_dto, validate_import_request};
 
 #[test]
 fn transport_platforms_map_to_domain_platforms() {

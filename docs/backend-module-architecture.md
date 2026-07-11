@@ -123,6 +123,11 @@ Line budgets:
 - `mod.rs` and `lib.rs` hard ceiling for new debt: 200 lines.
 - Function target: 100 lines; 150-line hard ceiling for new debt.
 
+The executable Stage 3 and Stage 4 split plan is maintained in
+`docs/backend-stage3-stage4-design.md`. It defines transport request domains,
+the thin Tauri command boundary, application-service target modules, review
+scoring, the regression matrix, and performance acceptance criteria.
+
 The module, function, and test-layout limits are automated in this Stage 0
 slice. The function guard uses a compiled lexer so comments, nested block
 comments, ordinary/byte/raw strings, character literals, closures, and nested
@@ -232,6 +237,7 @@ powershell -ExecutionPolicy Bypass -File scripts\check-rust-test-layout.ps1
 powershell -ExecutionPolicy Bypass -File scripts\check-stage0-boundary-guard.ps1
 powershell -ExecutionPolicy Bypass -File scripts\check-stage2-platform-boundary.ps1
 powershell -ExecutionPolicy Bypass -File scripts\check-stage2-real-sample-isolation.ps1
+powershell -ExecutionPolicy Bypass -File scripts\check-stage3-command-boundary.ps1
 ```
 
 The guards are PowerShell 5.1 compatible, read files as strict UTF-8, and report

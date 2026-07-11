@@ -1,5 +1,4 @@
 path,name,signatureHash,occurrence,lines
-apps/desktop/src-tauri/src/commands/import/background_job.rs,run_background_linux_cluster_import_job,5ed529b9f4facf3af2ca217e77b0807d36776ac4e1c2cef1784e402740b1b7a2,1,212
 apps/desktop/src-tauri/src/lib.rs,run,11c34fe24ef0001e442ce7ee202d15934723a4f196fb656ee4a5f54feea09030,1,121
 apps/desktop/src-tauri/src/platform_security.rs,restrict_file_to_current_user,8b1871a993d693741d8d392148429e22a853d9fe1641e58f21290bbe64cac7da,1,107
 crates/app-services/src/analysis_service/extraction/email/eml.rs,extract_eml_candidate,4d5de511d4c7f5e4eff73df6018224e3014f938233d9786e5523d439bddb76a1,1,133

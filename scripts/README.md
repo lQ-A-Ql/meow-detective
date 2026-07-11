@@ -141,6 +141,12 @@ powershell -ExecutionPolicy Bypass -File scripts\check-stage2-platform-boundary.
 # fixtures are present, both serial import orders are exercised by default.
 powershell -ExecutionPolicy Bypass -File scripts\check-stage2-real-sample-isolation.ps1
 
+# Stage 3 command/transport boundary guard. This caps compatibility facades,
+# requires domain-split transport request modules, and prevents desktop command
+# handlers from importing repositories, evidence readers, image readers, or
+# filesystem parsers directly.
+powershell -ExecutionPolicy Bypass -File scripts\check-stage3-command-boundary.ps1
+
 # Backend Rust module-size guard. This discovers every workspace member through
 # cargo metadata, locks pre-existing production file-size debt against
 # scripts/baselines/rust-module-size-baseline.csv, and fails on new or increased

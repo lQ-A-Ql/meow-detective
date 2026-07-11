@@ -5,6 +5,7 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $mcpCommandsPath = Join-Path $repoRoot "apps/desktop/src-tauri/src/commands/mcp_commands.rs"
+$mcpCommandsDir = Join-Path $repoRoot "apps/desktop/src-tauri/src/commands/mcp_commands"
 $mcpDtoPath = Join-Path $repoRoot "crates/transport/src/dto/mcp.rs"
 $stagingDir = Join-Path $repoRoot "crates/app-services/src/staging"
 $importPipelineDir = Join-Path $repoRoot "crates/app-services/src/import_pipeline"
@@ -13,6 +14,7 @@ $importPipelineEmitPath = Join-Path $importPipelineDir "emit.rs"
 $analysisExtractionModPath = Join-Path $repoRoot "crates/app-services/src/analysis_service/extraction/mod.rs"
 $filePreviewPath = Join-Path $repoRoot "crates/app-services/src/file_service/preview.rs"
 $fileCommandsPath = Join-Path $repoRoot "apps/desktop/src-tauri/src/commands/file_commands.rs"
+$fileCommandsDir = Join-Path $repoRoot "apps/desktop/src-tauri/src/commands/file_commands"
 $datasourceFacadePath = Join-Path $repoRoot "crates/app-services/src/datasource_service.rs"
 $linuxIntegrationTestPath = Join-Path $repoRoot "crates/app-services/tests/linux_e01_integration.rs"
 $validationTrustPath = Join-Path $repoRoot "docs/validation-trust-framework.md"
@@ -21,6 +23,7 @@ $linuxStage0RegressionPath = Join-Path $repoRoot "docs/real-sample-regression/20
 
 foreach ($path in @(
     $mcpCommandsPath,
+    $mcpCommandsDir,
     $mcpDtoPath,
     $stagingDir,
     $importPipelineDir,
@@ -29,6 +32,7 @@ foreach ($path in @(
     $analysisExtractionModPath,
     $filePreviewPath,
     $fileCommandsPath,
+    $fileCommandsDir,
     $datasourceFacadePath,
     $linuxIntegrationTestPath,
     $validationTrustPath,
@@ -40,7 +44,25 @@ foreach ($path in @(
   }
 }
 
-$mcpCommands = Get-Content -LiteralPath $mcpCommandsPath -Raw -Encoding UTF8
+function Read-RustCommandTree {
+  param(
+    [Parameter(Mandatory = $true)][string]$FacadePath,
+    [Parameter(Mandatory = $true)][string]$ModuleDirectory
+  )
+
+  $paths = @($FacadePath) + @(
+    Get-ChildItem -LiteralPath $ModuleDirectory -Recurse -Filter '*.rs' -File |
+      Sort-Object -Property FullName |
+      Select-Object -ExpandProperty FullName
+  )
+  return ($paths | ForEach-Object {
+      Get-Content -LiteralPath $_ -Raw -Encoding UTF8
+    }) -join "`n"
+}
+
+$mcpCommands = Read-RustCommandTree `
+  -FacadePath $mcpCommandsPath `
+  -ModuleDirectory $mcpCommandsDir
 $mcpDto = Get-Content -LiteralPath $mcpDtoPath -Raw -Encoding UTF8
 $staging = (Get-ChildItem -LiteralPath $stagingDir -Filter '*.rs' -File | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8 }) -join "`n"
 $importPipelineProduction = (Get-ChildItem -LiteralPath $importPipelineDir -Filter '*.rs' -File |
@@ -50,7 +72,9 @@ $importPipelineMod = Get-Content -LiteralPath $importPipelineModPath -Raw -Encod
 $importPipelineEmit = Get-Content -LiteralPath $importPipelineEmitPath -Raw -Encoding UTF8
 $analysisExtractionMod = Get-Content -LiteralPath $analysisExtractionModPath -Raw -Encoding UTF8
 $filePreview = Get-Content -LiteralPath $filePreviewPath -Raw -Encoding UTF8
-$fileCommands = Get-Content -LiteralPath $fileCommandsPath -Raw -Encoding UTF8
+$fileCommands = Read-RustCommandTree `
+  -FacadePath $fileCommandsPath `
+  -ModuleDirectory $fileCommandsDir
 $datasourceFacade = Get-Content -LiteralPath $datasourceFacadePath -Raw -Encoding UTF8
 $linuxIntegrationTest = Get-Content -LiteralPath $linuxIntegrationTestPath -Raw -Encoding UTF8
 $validationTrust = Get-Content -LiteralPath $validationTrustPath -Raw -Encoding UTF8

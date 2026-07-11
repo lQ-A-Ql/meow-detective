@@ -3,8 +3,7 @@ use transport::{
     dto::{
         AddEvidenceCitationRequest, CreateNotebookEntryRequest, EvidenceCitationDto,
         GetNotebookThreadRequest, InvestigationStepDto, ListInvestigationStepsRequest,
-        ListNotebookEntriesRequest, NotebookEntryDto, NotebookEntryStatusDto, NotebookEntryTypeDto,
-        UpdateNotebookEntryRequest,
+        ListNotebookEntriesRequest, NotebookEntryDto, UpdateNotebookEntryRequest,
     },
     CommandError,
 };
@@ -75,26 +74,7 @@ pub async fn list_notebook_entries(
         let case_id = active.case_id;
         let conn = get_case_connection(&app_state)?;
 
-        let filters = persistence_sqlite::repositories::notebook_repo::NotebookEntryFilters {
-            entry_type: request.entry_type.map(|et| match et {
-                NotebookEntryTypeDto::Observation => domain::NotebookEntryType::Observation,
-                NotebookEntryTypeDto::Hypothesis => domain::NotebookEntryType::Hypothesis,
-                NotebookEntryTypeDto::Finding => domain::NotebookEntryType::Finding,
-                NotebookEntryTypeDto::ActionItem => domain::NotebookEntryType::ActionItem,
-                NotebookEntryTypeDto::Conclusion => domain::NotebookEntryType::Conclusion,
-            }),
-            status: request.status.map(|s| match s {
-                NotebookEntryStatusDto::Draft => domain::EntryStatus::Draft,
-                NotebookEntryStatusDto::Reviewed => domain::EntryStatus::Reviewed,
-                NotebookEntryStatusDto::Final => domain::EntryStatus::Final,
-            }),
-            tags: Some(request.tags),
-            search: request.search,
-            limit: request.limit,
-            offset: request.offset,
-        };
-
-        app_services::notebook_service::list_entries(&conn, &case_id, &filters)
+        app_services::notebook_service::list_entries_for_request(&conn, &case_id, request)
             .map_err(CommandError::from_typed_service_error)
     })
     .await
@@ -155,14 +135,7 @@ pub async fn list_investigation_steps(
         let case_id = active.case_id;
         let conn = get_case_connection(&app_state)?;
 
-        let filters = persistence_sqlite::repositories::notebook_repo::StepFilters {
-            step_kind: request.step_kind,
-            success: request.success,
-            limit: request.limit,
-            offset: request.offset,
-        };
-
-        app_services::notebook_service::list_steps(&conn, &case_id, &filters)
+        app_services::notebook_service::list_steps_for_request(&conn, &case_id, request)
             .map_err(CommandError::from_typed_service_error)
     })
     .await

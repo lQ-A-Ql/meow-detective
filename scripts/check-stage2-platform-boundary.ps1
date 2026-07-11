@@ -52,7 +52,15 @@ foreach ($file in Get-ChildItem -LiteralPath $serviceRoot -Recurse -File -Filter
 
 $analysisCommandPath = Join-Path $repoRoot 'apps/desktop/src-tauri/src/commands/analysis_commands.rs'
 if (Test-Path -LiteralPath $analysisCommandPath -PathType Leaf) {
-  $analysisCommand = Read-StrictUtf8 $analysisCommandPath
+  $analysisCommandParts = New-Object System.Collections.Generic.List[string]
+  $analysisCommandParts.Add((Read-StrictUtf8 $analysisCommandPath))
+  $analysisCommandDirectory = Join-Path $repoRoot 'apps/desktop/src-tauri/src/commands/analysis_commands'
+  if (Test-Path -LiteralPath $analysisCommandDirectory -PathType Container) {
+    foreach ($analysisFile in Get-ChildItem -LiteralPath $analysisCommandDirectory -Recurse -File -Filter '*.rs') {
+      $analysisCommandParts.Add((Read-StrictUtf8 $analysisFile.FullName))
+    }
+  }
+  $analysisCommand = $analysisCommandParts -join "`n"
   foreach ($forbidden in @(
     'DataSourceRepo',
     'analysis_source_platform',
