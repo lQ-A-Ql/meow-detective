@@ -333,32 +333,24 @@ const EVIDENCE_CATEGORY_DEFS: &[EvidenceCategoryDef] = &[
             EvidencePathPattern::Contains("/var/log/mysqld.log."),
         ],
     },
-    EvidenceCategoryDef {
-        category: "MacArtifacts",
-        display_name: "macOS 痕迹",
-        evidence_kind: "macos_artifact",
-        parser: "macos.artifacts",
-        artifact_families: &[
-            "MacFSEvent",
-            "MacLaunchService",
-            "MacQuarantineEvent",
-            "MacRecentItem",
-            "MacSpotlightEntry",
-            "MacUnifiedLogEntry",
-        ],
-        patterns: &[
-            EvidencePathPattern::Contains("/.fseventsd/"),
-            EvidencePathPattern::Contains("com.apple.launchservices"),
-            EvidencePathPattern::Contains("com.apple.recentitems"),
-            EvidencePathPattern::Suffix(".sfl2"),
-            EvidencePathPattern::Contains("/launchservices.quarantineevents"),
-            EvidencePathPattern::Contains("/.spotlight-v100/"),
-            EvidencePathPattern::Suffix(".store.db"),
-            EvidencePathPattern::Contains("/var/db/diagnostics/"),
-            EvidencePathPattern::Suffix(".tracev3"),
-        ],
-    },
 ];
+
+pub(crate) const UNSUPPORTED_MACOS_CATEGORY: &str = "MacArtifacts";
+
+pub(crate) fn ensure_supported_analysis_categories(
+    categories: &[&str],
+) -> Result<(), AnalysisServiceError> {
+    if categories.iter().any(|category| {
+        category
+            .trim()
+            .eq_ignore_ascii_case(UNSUPPORTED_MACOS_CATEGORY)
+    }) {
+        return Err(AnalysisServiceError::Unsupported(
+            UNSUPPORTED_MACOS_CATEGORY.to_string(),
+        ));
+    }
+    Ok(())
+}
 
 #[derive(Debug, Clone)]
 pub struct EvidenceCandidate {
@@ -522,6 +514,7 @@ pub fn evidence_candidates_for_categories(
     conn: &Connection,
     categories: &[&str],
 ) -> Result<Vec<EvidenceCandidate>, AnalysisServiceError> {
+    ensure_supported_analysis_categories(categories)?;
     let discovered = discover_evidence_candidates(conn)?;
     let mut candidates = Vec::new();
     for category in categories {

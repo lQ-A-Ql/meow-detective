@@ -1,6 +1,6 @@
 # Walkthrough: Cross-Platform Email Analysis
 
-This walkthrough demonstrates email forensic analysis using Forensics Workbench V3 with PST and mbox evidence containers. The scenario involves an Outlook PST file from a Windows workstation and a Thunderbird mbox archive from a macOS laptop — both belonging to the same person of interest — loaded into a single case for cross-source correlation.
+This walkthrough demonstrates email forensic analysis using Meow~Detective with PST and mbox evidence containers. The scenario involves an Outlook PST file from a Windows workstation and a Thunderbird mbox archive from a Linux laptop, both belonging to the same person of interest and loaded into one case for cross-source correlation.
 
 ## 0. Prerequisites
 

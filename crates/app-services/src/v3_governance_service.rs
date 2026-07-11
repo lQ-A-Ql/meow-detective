@@ -191,16 +191,6 @@ fn get_platform(family: &str) -> &'static str {
         "AptHistory",
         "DpkgLog",
     ];
-    let macos_families: &[&str] = &[
-        "QuarantineDB",
-        "FSEvents",
-        "SpotlightShortcuts",
-        "TerminalState",
-        "InstallHistory",
-        "LaunchDaemon",
-        "LoginItem",
-    ];
-
     if windows_families
         .iter()
         .any(|f| f.eq_ignore_ascii_case(family))
@@ -216,11 +206,6 @@ fn get_platform(family: &str) -> &'static str {
         .any(|f| f.eq_ignore_ascii_case(family))
     {
         "linux"
-    } else if macos_families
-        .iter()
-        .any(|f| f.eq_ignore_ascii_case(family))
-    {
-        "macos"
     } else {
         // Default to Windows for unknown families (Windows-first product)
         "windows"
@@ -236,14 +221,12 @@ fn build_platform_coverage(conn: &Connection) -> Result<PlatformCoverageDto, V3G
 
     let mut windows_families: Vec<String> = Vec::new();
     let mut linux_families: Vec<String> = Vec::new();
-    let mut macos_families: Vec<String> = Vec::new();
     let mut cross_platform_families: Vec<String> = Vec::new();
 
     for (family, _count) in &family_counts {
         match get_platform(family) {
             "windows" => windows_families.push(family.clone()),
             "linux" => linux_families.push(family.clone()),
-            "macos" => macos_families.push(family.clone()),
             "cross-platform" => cross_platform_families.push(family.clone()),
             _ => windows_families.push(family.clone()),
         }
@@ -252,12 +235,10 @@ fn build_platform_coverage(conn: &Connection) -> Result<PlatformCoverageDto, V3G
     Ok(PlatformCoverageDto {
         windows_artifact_families: windows_families.len() as u32,
         linux_artifact_families: linux_families.len() as u32,
-        macos_artifact_families: macos_families.len() as u32,
         cross_platform_artifact_families: cross_platform_families.len() as u32,
         total_families: family_counts.len() as u32,
         windows_families,
         linux_families,
-        macos_families,
         cross_platform_families,
     })
 }
@@ -273,14 +254,12 @@ fn build_platform_coverage_for_case(
 
     let mut windows_families: Vec<String> = Vec::new();
     let mut linux_families: Vec<String> = Vec::new();
-    let mut macos_families: Vec<String> = Vec::new();
     let mut cross_platform_families: Vec<String> = Vec::new();
 
     for family_count in &family_counts {
         match get_platform(&family_count.family) {
             "windows" => windows_families.push(family_count.family.clone()),
             "linux" => linux_families.push(family_count.family.clone()),
-            "macos" => macos_families.push(family_count.family.clone()),
             "cross-platform" => cross_platform_families.push(family_count.family.clone()),
             _ => windows_families.push(family_count.family.clone()),
         }
@@ -289,12 +268,10 @@ fn build_platform_coverage_for_case(
     Ok(PlatformCoverageDto {
         windows_artifact_families: windows_families.len() as u32,
         linux_artifact_families: linux_families.len() as u32,
-        macos_artifact_families: macos_families.len() as u32,
         cross_platform_artifact_families: cross_platform_families.len() as u32,
         total_families: family_counts.len() as u32,
         windows_families,
         linux_families,
-        macos_families,
         cross_platform_families,
     })
 }
@@ -523,7 +500,6 @@ mod tests {
         assert_eq!(snapshot.platform_coverage.total_families, 0);
         // But the field itself must exist
         assert_eq!(snapshot.platform_coverage.linux_artifact_families, 0);
-        assert_eq!(snapshot.platform_coverage.macos_artifact_families, 0);
     }
 
     #[test]
@@ -602,7 +578,6 @@ mod tests {
         assert_eq!(get_platform("BrowserCookie"), "cross-platform");
         assert_eq!(get_platform("EmailMessage"), "cross-platform");
         assert_eq!(get_platform("BashHistory"), "linux");
-        assert_eq!(get_platform("QuarantineDB"), "macos");
     }
 
     #[test]

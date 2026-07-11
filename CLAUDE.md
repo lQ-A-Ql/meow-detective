@@ -86,12 +86,12 @@ These PowerShell scripts encode important architectural/security boundaries. Run
 - `crates/app-services/` — use-case orchestration for cases, files, imports, jobs, search, timeline, reports, text, analysis, staging, streaming, and performance.
 - `crates/persistence-sqlite/` — SQLite connection/migration/repository layer. Keep SQL here or in lower repository/service layers, not in Tauri command handlers.
 - `crates/transport/` — command DTOs, event DTOs, paging, and error shapes shared across the IPC boundary.
-- `crates/evidence-core/`, `crates/image-raw/`, `crates/image-e01/`, `crates/fs-ntfs/`, `crates/fs-fat/`, `crates/fs-exfat/`, `crates/fs-ext4/`, `crates/fs-xfs/`, `crates/fs-btrfs/`, `crates/fs-apfs/`, `crates/fs-hfsplus/` — read-only evidence/image/filesystem abstractions and implementations.
+- `crates/evidence-core/`, `crates/image-raw/`, `crates/image-e01/`, `crates/fs-ntfs/`, `crates/fs-fat/`, `crates/fs-exfat/`, `crates/fs-ext4/`, `crates/fs-xfs/`, `crates/fs-btrfs/` — read-only evidence/image/filesystem abstractions and implementations.
 - `crates/containers-pst/` — PST/OST/mbox email container parsing (Unicode 32/64, RFC 4155 mbox variants).
 - `crates/artifacts-core/`, `crates/artifacts-windows/` — artifact extraction framework and Windows artifact parsers (Browser, EVTX, Prefetch, LNK, JumpList, Registry, RecycleBin, SRU, Thumbcache).
   - Registry module structure: `registry/lookup/{mod,types,reader,txlog_util,utf16,system,software,ntuser,sam}` covering SYSTEM, SOFTWARE, NTUSER (UserAssist, shell folders, recent files, typed paths, run MRU, mount points), SAM (local users with RID, group membership, login counts), and .LOG1/.LOG2 transaction log parsing with dirty page merging.
 - `crates/artifacts-linux/` — Linux artifact parsers (systemd journal, wtmp, bash history, apt/dpkg, cron, sudo).
-- `crates/artifacts-macos/` — macOS artifact parsers (plist, unified log, Spotlight, Quarantine, Launch Services, FSEvents).
+- Windows and Linux are the only production analysis platforms. macOS requests and legacy macOS cases are typed `Unsupported`; APFS/HFS+ partition recognition is metadata-only and must not instantiate a filesystem reader.
 - `crates/search/`, `crates/timeline/`, `crates/catalog/`, `crates/reports/`, `crates/exchange/` — feature services for indexing/querying (tantivy), event projection, catalog management/projections, report generation (HTML, CSV, JSON, evidence bundle), and STIX 2.1 exchange with Ed25519 signing, chain-of-custody, and UCO case mapping.
 - `crates/ingest/` — ingestion pipeline orchestration: the `IngestPipeline` trait, `IngestConfig`, `IngestSink`, `IngestStats`.
 - `crates/infrastructure/` — cross-cutting utilities: logging, hashing, filesystem utils, text, clock, config.

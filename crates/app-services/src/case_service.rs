@@ -1,7 +1,7 @@
 use chrono::Utc;
 use domain::{CaseId, CaseMeta};
 use persistence_sqlite::{
-    open_existing, open_or_create,
+    open_or_create,
     repositories::{
         artifact_repo::ArtifactRepo,
         audit_repo::{AuditAction, AuditRepo},
@@ -24,7 +24,12 @@ use uuid::Uuid;
 use crate::active_case::ActiveCase;
 
 mod data_source_deletion;
+mod opening;
+mod platform_compatibility;
 pub use data_source_deletion::{delete_data_source, delete_data_source_in};
+pub use opening::open_case;
+use opening::open_case_for_deletion;
+pub use platform_compatibility::ensure_supported_data_source_platforms;
 
 #[derive(Debug, Error)]
 pub enum CaseServiceError {
@@ -40,6 +45,8 @@ pub enum CaseServiceError {
     NotFound(PathBuf),
     #[error("Invalid case directory: {0}")]
     InvalidCaseDir(String),
+    #[error("Unsupported data source platform in case: {0}")]
+    UnsupportedPlatform(String),
     #[error("Data source '{data_source_id}' deletion requires recovery from case tombstone '{tombstone}': {reason}")]
     DataSourceDeleteRecoveryPending {
         data_source_id: String,
@@ -76,6 +83,7 @@ impl transport::ServiceErrorCategory for CaseServiceError {
             Self::AlreadyExists(_) | Self::InvalidCaseDir(_) => {
                 transport::ErrorCategory::Validation
             }
+            Self::UnsupportedPlatform(_) => transport::ErrorCategory::Unsupported,
             Self::NotFound(_) => transport::ErrorCategory::Validation,
         }
     }
@@ -262,61 +270,6 @@ pub fn create_case(root: &Path, name: &str, examiner: Option<&str>) -> Result<Ac
     Ok(ActiveCase::new(case, case_root, conn))
 }
 
-/// Open an existing forensic case from the given root directory.
-///
-/// Reads `case.json` metadata and opens the SQLite database.
-/// Validates that the case exists in the database.
-///
-/// # Errors
-/// Returns `NotFound` if the directory doesn't exist, or `InvalidCaseDir`
-/// if the directory structure is invalid.
-pub fn open_case(root: &Path) -> Result<ActiveCase> {
-    if !root.exists() {
-        return Err(CaseServiceError::NotFound(root.to_path_buf()));
-    }
-    let case_json_path = root.join("case.json");
-    if !case_json_path.exists() {
-        return Err(CaseServiceError::InvalidCaseDir(
-            "case.json not found".to_string(),
-        ));
-    }
-    let case_json = fs::read_to_string(&case_json_path)?;
-    let case_from_json: CaseMeta = serde_json::from_str(&case_json)
-        .map_err(|e| CaseServiceError::InvalidCaseDir(format!("Invalid case.json: {}", e)))?;
-    let db_path = root.join("app.db");
-    let conn = open_existing(&db_path)?;
-    runner::run_all(&conn)?;
-    let stored = CaseRepo::new(&conn)
-        .find_by_id(&case_from_json.id)?
-        .ok_or_else(|| CaseServiceError::InvalidCaseDir("Case not in database".to_string()))?;
-    reject_legacy_single_db_case(&conn)?;
-    let audit = AuditRepo::new(&conn);
-    let _ = audit.log_simple(
-        Some(&stored.id.0),
-        &AuditAction::CaseOpen,
-        Some(&stored.id.0),
-    );
-    Ok(ActiveCase::new(stored, root.to_path_buf(), conn))
-}
-
-fn reject_legacy_single_db_case(conn: &Connection) -> Result<()> {
-    let app_file_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM file_entries", [], |row| row.get(0))
-        .map_err(persistence_sqlite::DbError::from)?;
-    let app_artifact_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM artifacts", [], |row| row.get(0))
-        .map_err(persistence_sqlite::DbError::from)?;
-    let app_timeline_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM timeline_events", [], |row| row.get(0))
-        .map_err(persistence_sqlite::DbError::from)?;
-    if app_file_count > 0 || app_artifact_count > 0 || app_timeline_count > 0 {
-        return Err(CaseServiceError::InvalidCaseDir(
-            "This case uses the legacy single-database storage model; re-import is required for the current development version".to_string(),
-        ));
-    }
-    Ok(())
-}
-
 /// Delete a forensic case directory and all its contents.
 ///
 /// Retries up to 5 times on Windows where SQLite WAL/SHM files
@@ -340,7 +293,7 @@ pub fn delete_case_in(root: &Path) -> Result<()> {
             "case.json not found — not a valid case directory".to_string(),
         ));
     }
-    let active = open_case(root)?;
+    let active = open_case_for_deletion(root)?;
     let delete_details = serde_json::json!({
         "case_id": active.meta.id.0,
         "case_root": root.display().to_string(),

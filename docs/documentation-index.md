@@ -43,17 +43,16 @@
 | Backend module architecture | `docs/backend-module-architecture.md` | Stage 0 backend module/test split rules, baselines, guards, and exceptions |
 | CI | `ci.md` | CI 流程与检查步骤 |
 | 测试策略 | `test-plan.md` | 测试分层、fixture、回归与发布 gate |
-| V3 主计划 **(V3)** | `docs/v3-plan.md` | V3 五支柱：证据图、跨平台覆盖、可复现调查、规则包、离线批处理 |
+| V3 主计划（历史设计记录） **(V3)** | `docs/v3-plan.md` | 保留阶段设计；其中 macOS 范围已被 Stage 1 平台边界取代，不代表当前支持 |
 | 证据图设计 **(V3)** | `docs/evidence-graph-design.md` | 图模式、查询语义、索引策略、节点/边类型定义 |
 | 案例笔记本设计 **(V3)** | `docs/case-notebook-design.md` | 笔记本模型、证据引用、步骤记录与重放 |
 | 规则包规范 **(V3)** | `docs/rule-pack-spec.md` | 声明式规则包 TOML 格式、校验规则、共享约定 |
 | PST 依赖决策 **(V3)** | `docs/pst-dependency-decision.md` | PST 解析库选型决策记录：依赖评估、安全审计、许可兼容 |
 | 批处理设计 **(V3)** | `docs/batch-processing-design.md` | 离线批处理子系统架构、检查点、资源治理 |
 | Linux 制品覆盖 **(V3)** | `docs/linux-artifact-coverage.md` | Linux 解析器路线图、fixture 要求、已知缺口 |
-| macOS 制品覆盖 **(V3)** | `docs/mac-artifact-coverage.md` | macOS 解析器路线图、fixture 要求、已知缺口 |
 | PST/OST/mbox 支持 **(V3)** | `docs/pst-ost-mbox-support.md` | 容器邮件路线图、Outlook/Thunderbird 版本矩阵 |
 | V3 演练 **(V3)** | `docs/v3-walkthrough.md` | 端到端 V3 调查工作流演练：导入、图浏览、关联、笔记本、规则包、批处理 |
-| V4 执行计划 **(V4)** | `docs/v4-plan.md` | V4 阶段边界、测试矩阵、验收标准、评分机制 |
+| V4 执行计划（历史设计记录） **(V4)** | `docs/v4-plan.md` | 保留阶段设计；其中 APFS/HFS+ 范围已被 Stage 1 unsupported 边界取代 |
 
 ## 2. 当前事实快照
 
@@ -61,31 +60,31 @@
 
 | 事实 | 当前值 | 事实源 |
 |---|---:|---|
-| Rust workspace crate | 37 | `crates/` |
+| Rust workspace crate | 34 | `crates/`（Tauri shell 为独立 workspace package） |
 | Tauri commands | 98 | `apps/desktop/src-tauri/src/commands/**/*.rs` 中 `#[tauri::command]` |
 | app-services source modules | 26 | `crates/app-services/src/*.rs`，排除 `lib.rs` |
 | SQLite repositories | 16 | `crates/persistence-sqlite/src/repositories/*_repo.rs` (新增: graph_repo, notebook_repo, batch_repo, datasource_cluster_repo) |
 | SQLite migration scripts | 39 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` (0001-0035 + source_001-source_003 + staging_001) |
 | frontend pages | 10 | `frontend/src/app/pages/*.tsx`，排除测试 |
-| frontend test files | 84 | `frontend/src/**/*.test.ts(x)` |
+| frontend test files | 85 | `frontend/src/**/*.test.ts(x)` |
 | Mermaid 图块 | 15 | `docs/model-architecture-algorithm-diagrams.md` |
-| V3 参考文档 | 9 | `docs/v3-plan.md` 及 8 篇 V3 参考文档 (已实现) |
-| V3 新增 crate | 3 | `crates/containers-pst/`, `crates/artifacts-linux/`, `crates/artifacts-macos/` (已创建) |
+| V3 参考文档 | 8 | 历史 V3 文档清单；当前支持事实以 parser matrix 为准 |
+| V3 保留新增 crate | 2 | `crates/containers-pst/`, `crates/artifacts-linux/` |
 | V4 参考文档 | 1 | `docs/v4-plan.md`（V4 阶段边界、测试矩阵、验收标准、评分机制） |
-| V4 新增 crate | 6 | `crates/fs-ext4/`, `crates/fs-xfs/`, `crates/fs-btrfs/`, `crates/fs-apfs/`, `crates/fs-hfsplus/`, `crates/exchange/` (已创建) |
-| Rust tests | 1,928 | `cargo test --workspace` 汇总 (2026-06 校准) |
+| V4 保留新增 crate | 4 | `crates/fs-ext4/`, `crates/fs-xfs/`, `crates/fs-btrfs/`, `crates/exchange/` |
+| Rust tests | ~2,061 | `cargo test --workspace` 汇总 (2026-06 校准) |
 
 ## 3. 路径级事实校准
 
 | 路径模式 | 数量 | 说明 |
 |---|---:|---|
 | `frontend/src/app/pages/*.tsx` | 10 | 页面入口文件，不含 `*.test.tsx` |
-| `frontend/src/**/*.test.ts(x)` | 84 | Vitest 测试文件总数 |
+| `frontend/src/**/*.test.ts(x)` | 85 | Vitest 测试文件总数 |
 | `apps/desktop/src-tauri/src/commands/**/*.rs` | 98 | Tauri command 定义数 |
 | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | 39 | SQLite migration 脚本 (0001-0035 + source_001-source_003 + staging_001) |
 | `docs/model-architecture-algorithm-diagrams.md` 中 Mermaid | 15 | Mermaid 图块总数 |
 | `docs/v3-*.md` | 1 | V3 阶段文档入口（主计划） |
-| `docs/` 中 V3 参考文档 | 9 | 证据图、笔记本、规则包、PST决策、批处理、Linux/macOS覆盖、PST支持、演练 |
+| `docs/` 中 V3 参考文档 | 8 | 历史设计清单；macOS 覆盖入口已移除，当前支持事实不从历史计划派生 |
 | `docs/v4-*.md` | 1 | V4 阶段文档入口（主计划） |
 | `docs/` 中 V4 参考文档 | 1 | V4 执行计划（待扩展为多份参考文档） |
 
@@ -94,6 +93,9 @@
 ### 4.1 平台与通信
 
 - Windows-primary、desktop-first、single-user
+- Windows 与 Linux 是仅有的生产分析平台；平台判断和 capability 准入由后端负责
+- macOS 数据源请求及旧 `platform='macos'` 案件返回 typed `Unsupported`，不做兼容迁移
+- APFS/HFS+ 只允许保留已知 Apple 分区类型标识符的 metadata 识别，不承诺 filesystem magic/signature 识别，不实例化 reader，也不提供文件树、预览或制品提取
 - Tauri 2 桌面应用
 - 无 HTTP server
 - 前后端通过 Tauri commands 与 events 通信
@@ -139,20 +141,20 @@
 
 ### 4.3a V3 规划与当前状态
 
-- V3 主计划位于 `docs/v3-plan.md`，五支柱为：证据图(Evidence Graph)、容器与跨平台覆盖、可复现调查(Notebook+Step Replay)、规则包系统(Rule Pack)、离线批处理(Batch Processing)
+- V3 主计划位于 `docs/v3-plan.md`，作为历史阶段设计保留；其中 macOS 设计不再构成当前产品范围或支持声明
 - V3 阶段为 V3-1(证据图基础) → V3-2(容器与跨平台覆盖) → V3-3(可复现调查与规则包) → V3-4(离线批处理与发布)
 - V3 目前处于规划阶段，所有 V3 参考文档标记为“规划中”
 - V3 文档入口：`docs/v3-plan.md`（主计划）、`docs/v3-walkthrough.md`（调查工作流演练）
-- V3 参考文档（规划中）：`docs/evidence-graph-design.md`、`docs/case-notebook-design.md`、`docs/rule-pack-spec.md`、`docs/pst-dependency-decision.md`、`docs/batch-processing-design.md`、`docs/linux-artifact-coverage.md`、`docs/mac-artifact-coverage.md`
+- V3 参考文档中的平台覆盖只保留 Windows/Linux 生产语义；当前支持等级必须以 `docs/parser-support-matrix.md` 为准
 - V3 参考文档（已实现）：`docs/pst-ost-mbox-support.md` — PST/OST/mbox 容器邮件解析已落地，含 `public-small` 与 `public-medium` fixture
-- V3 将在 `docs/parser-support-matrix.md` 中新增 Linux/macOS 解析器条目，在 `docs/known-unsupported-formats.md` 中新增 Linux/macOS 文件系统与移动/云制品缺口
+- `docs/known-unsupported-formats.md` 明确记录 macOS 平台、旧案件和 APFS/HFS+ 内容读取均为 unsupported
 - V3 治理工作台将替代 `/v2` 为 `/v3`，引入图统计、平台覆盖、规则包覆盖、批处理状态等信号
 
 ### 4.3b V4 规划与当前状态
 
-- V4 主计划位于 `docs/v4-plan.md`，五支柱为：高级实体解析与跨案关联(Entity Resolution)、多OS原始磁盘镜像支持(Multi-OS Raw Disk)、AI辅助调查(AI-Assisted Investigation)、调查交换与保管链(STIX 2.1/CASE/UCO + 数字签名)、实时流式证据采集(Streaming Acquisition)
+- V4 主计划位于 `docs/v4-plan.md`，作为历史阶段设计保留；其中 APFS/HFS+ 设计不再构成当前产品范围或支持声明
 - V4 阶段为 V4-1(实体规范化与合并引擎) → V4-2(多OS文件系统crate) → V4-3(AI辅助调查) → V4-4(调查交换与保管链) → V4-5(实时流式采集)
-- V4 已进入实施阶段：V4-1 实体规范化与合并引擎已完成；V4-2 已完成 ext4、XFS、Btrfs、APFS、HFS+ 五个文件系统 crate 和 exchange 交换 crate
+- V4 当前保留 ext4、XFS、Btrfs 三个 Linux 文件系统 crate 和 exchange 交换 crate；APFS/HFS+ reader 已退出生产边界
 - V4 文档入口：`docs/v4-plan.md`（主计划）
 - V4 参考文档（待创建）：`docs/v4-entity-resolution.md`、`docs/v4-multi-os-filesystems.md`、`docs/v4-ai-models.md`、`docs/v4-ai-privacy.md`、`docs/v4-release-signing.md`、`docs/v4-release-checklist.md`
 - V4 将在完工后替代 V2 治理工作台为 `/v4`，引入实体解析统计、跨案关联指标、文件系统覆盖、AI使用审计、保管链验证、流式采集状态等信号

@@ -29,6 +29,8 @@ pub enum GptPartitionType {
     MicrosoftBasicData,
     WindowsRecovery,
     LinuxLvm,
+    AppleHfs,
+    AppleApfs,
     Unknown,
 }
 
@@ -115,6 +117,12 @@ const WINDOWS_RECOVERY: [u8; 16] = [
 const LINUX_LVM: [u8; 16] = [
     0x79, 0xD3, 0xD6, 0xE6, 0x07, 0xF5, 0xC2, 0x44, 0xA2, 0x3C, 0x23, 0x8F, 0x2A, 0x3D, 0xF9, 0x28,
 ];
+const APPLE_HFS: [u8; 16] = [
+    0x00, 0x53, 0x46, 0x48, 0x00, 0x00, 0xAA, 0x11, 0xAA, 0x11, 0x00, 0x30, 0x65, 0x43, 0xEC, 0xAC,
+];
+const APPLE_APFS: [u8; 16] = [
+    0xEF, 0x57, 0x34, 0x7C, 0x00, 0x00, 0xAA, 0x11, 0xAA, 0x11, 0x00, 0x30, 0x65, 0x43, 0xEC, 0xAC,
+];
 
 pub fn classify_partition_type(type_guid: &[u8; 16]) -> GptPartitionType {
     match *type_guid {
@@ -123,6 +131,8 @@ pub fn classify_partition_type(type_guid: &[u8; 16]) -> GptPartitionType {
         MS_BASIC_DATA => GptPartitionType::MicrosoftBasicData,
         WINDOWS_RECOVERY => GptPartitionType::WindowsRecovery,
         LINUX_LVM => GptPartitionType::LinuxLvm,
+        APPLE_HFS => GptPartitionType::AppleHfs,
+        APPLE_APFS => GptPartitionType::AppleApfs,
         _ => GptPartitionType::Unknown,
     }
 }
@@ -134,6 +144,8 @@ pub fn partition_type_name(partition_type: GptPartitionType) -> &'static str {
         GptPartitionType::MicrosoftBasicData => "Microsoft basic data",
         GptPartitionType::WindowsRecovery => "Windows recovery",
         GptPartitionType::LinuxLvm => "Linux LVM",
+        GptPartitionType::AppleHfs => "Apple HFS/HFS+",
+        GptPartitionType::AppleApfs => "Apple APFS",
         GptPartitionType::Unknown => "Unknown",
     }
 }

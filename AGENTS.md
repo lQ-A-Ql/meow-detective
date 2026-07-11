@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Meow~Detective** (`Meow_Detective` in source-level identifiers and storage names) is a Windows-first, single-user desktop digital-forensics application built with **Tauri 2**. It is backend-led: a Rust workspace of 37 crates performs evidence processing (disk images, volume detection, file systems, Windows/Linux/macOS artifacts, search indexing, timeline generation, entity resolution, STIX 2.1 exchange), while a **React 18 + TypeScript + Vite + Tailwind 4** frontend provides the investigator UI.
+**Meow~Detective** (`Meow_Detective` in source-level identifiers and storage names) is a Windows-first, single-user desktop digital-forensics application built with **Tauri 2**. It is backend-led: 34 Rust crates perform evidence processing (disk images, volume detection, file systems, Windows/Linux artifacts, search indexing, timeline generation, entity resolution, STIX 2.1 exchange), while a **React 18 + TypeScript + Vite + Tailwind 4** frontend provides the investigator UI.
 
 - **Runtime**: Tauri 2 desktop shell. No HTTP server. All frontend↔backend communication goes through Tauri commands and events.
 - **Primary platform**: `x86_64-pc-windows-msvc` (Windows-primary, desktop-first, single-user).
@@ -10,9 +10,10 @@
 - **Evidence access**: Read-only. Original evidence sources are never modified.
 - **Current status**:
   - V2: ~90% complete, Grade B (81/100), all 7 real E01 regression tests passing.
-  - V3: ~89% complete, 22/22 phases implemented, with new crates for PST/OST/mbox (`containers-pst`), Linux artifacts (`artifacts-linux`), and macOS artifacts (`artifacts-macos`).
-  - V4: Core delivered — 5 new filesystem crates (`fs-ext4`, `fs-xfs`, `fs-btrfs`, `fs-apfs`, `fs-hfsplus`) and the `exchange` crate (entity resolution, STIX 2.1, Ed25519 signing, chain-of-custody).
+  - V3: ~89% complete; the retained production slice includes PST/OST/mbox (`containers-pst`) and Linux artifacts (`artifacts-linux`).
+  - V4: Retained core delivered — 3 Linux filesystem crates (`fs-ext4`, `fs-xfs`, `fs-btrfs`) and the `exchange` crate (entity resolution, STIX 2.1, Ed25519 signing, chain-of-custody).
   - V5: Quality audit complete — architecture compliance 97%, runtime safety 96%, forensic completeness 96%. E01 preview pipeline hardened with partition path prefix, inode-based file resolution, and per-partition chunk-table caching.
+- **Production analysis platforms**: Windows and Linux only. macOS requests and legacy macOS cases return typed `Unsupported`. APFS/HFS+ partition metadata may be recognized, but no filesystem reader or artifact extractor is available.
 
 ## Build and Test Commands
 
@@ -293,12 +294,12 @@ Backend → Frontend via Tauri `emit`. Topics are string constants in `crates/tr
 
 | Count | Location | Notes |
 |-------|----------|-------|
-| 37 crates | `Cargo.toml` workspace members + `apps/desktop/src-tauri` | Includes 36 library crates and the Tauri shell |
+| 34 crates | `crates/*` workspace members | The Tauri shell is a separate workspace package |
 | 98 Tauri commands | `apps/desktop/src-tauri/src/commands/**/*.rs` | Registered in `src/lib.rs` |
 | 16 SQLite repositories | `crates/persistence-sqlite/src/repositories/*_repo.rs` | Includes staging_repo, correlation_repo, entity_repo, datasource_cluster_repo |
 | 39 migration scripts | `crates/persistence-sqlite/src/migrations/scripts/*.sql` | `0001`–`0035`, `source_001`–`source_003`, plus `staging_001.sql` |
 | 10 frontend pages | `frontend/src/app/pages/*.tsx` (excluding `*.test.tsx`) | Includes V2 Workbench, V3 Dashboard, CaseHome, FileBrowser, etc. |
-| 84 frontend test files | `frontend/src/**/*.test.{ts,tsx}` | |
+| 85 frontend test files | `frontend/src/**/*.test.{ts,tsx}` | |
 | ~2,061 Rust tests | `cargo test --workspace` (calibrated 2026-06) | |
 | 19 event topics | `crates/transport/src/events/mod.rs` | File extract progress added in 2026-06 |
 | 33 DTO domain files | `crates/transport/src/dto/*.rs` | Includes analysis_browser.rs added in 2026-06 |
@@ -325,8 +326,8 @@ Key architectural improvements:
 | `transport` | Shared DTOs, commands, events, errors, paging — the IPC contract |
 | `app-services` | Application-layer orchestration per domain entity |
 | `persistence-sqlite` | SQLite repositories and migrations |
-| `evidence-core` | Disk image probing, volume detection, filesystem abstraction, reader |
-| `fs-ntfs` / `fs-fat` / `fs-exfat` / `fs-ext4` / `fs-xfs` / `fs-btrfs` / `fs-apfs` / `fs-hfsplus` | Filesystem-specific parsers |
+| `evidence-core` | Disk image probing, volume detection, filesystem abstraction, reader; APFS/HFS+ type recognition is metadata-only and unsupported |
+| `fs-ntfs` / `fs-fat` / `fs-exfat` / `fs-ext4` / `fs-xfs` / `fs-btrfs` | Filesystem-specific parsers |
 | `fs-lvm` | Linux LVM physical-volume/logical-volume mapping and offset translation |
 | `image-raw` / `image-e01` | Raw and E01 image format readers |
 | `search` | Full-text indexing (tantivy), query parsing, highlighting |
@@ -334,7 +335,6 @@ Key architectural improvements:
 | `artifacts-core` | Artifact extraction framework |
 | `artifacts-windows` | Windows artifact parsers: Browser, EVTX, Prefetch, LNK, JumpList, Registry (SYSTEM/SOFTWARE/NTUSER/SAM/USRCLASS/Amcache/SECURITY/txlog), RecycleBin, SRU, Thumbcache |
 | `artifacts-linux` | Linux artifact parsers: systemd journal, wtmp, bash history, apt/dpkg, cron, sudo |
-| `artifacts-macos` | macOS artifact parsers: plist, unified log, Spotlight, Quarantine, Launch Services, FSEvents |
 | `artifacts-ios` / `artifacts-android` | Mobile artifact parser placeholders |
 | `containers-pst` | PST/OST/mbox email container parsing |
 | `catalog` | File catalog indexing with ExtensionProjection, PathPrefixProjection, CatalogIndex |
@@ -480,3 +480,5 @@ Governance fact sources (embedded at compile time, drive `/v2` governance snapsh
 21. **MCP DTOs use snake_case intentionally**: The 12 DTOs in `crates/transport/src/dto/mcp.rs` intentionally lack `#[serde(rename_all = "camelCase")]`. This is guarded by `check-stage5-regression-guard.ps1`. Frontend uses `*ProtocolDto` interfaces to adapt. Do NOT add camelCase to MCP DTOs without updating the regression guard and frontend normalizer.
 
 22. **Batch execution control is a V3 stub**: `create_batch_plan`, `get_batch_job`, and `list_batch_jobs` are implemented. `start_batch`, `pause_batch`, `resume_batch`, and `cancel_batch` return `BatchServiceError::Unsupported` until V3 scheduling lands.
+
+23. **Platform admission is backend-owned**: Windows and Linux are the only production analysis platforms. Do not reintroduce a macOS DTO variant, extractor category, governance coverage field, or UI tab. Legacy `platform='macos'` cases must fail with typed `Unsupported`; APFS/HFS+ detection must never instantiate a content reader.

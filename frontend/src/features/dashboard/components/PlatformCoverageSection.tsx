@@ -1,4 +1,4 @@
-import { Apple, Globe, Layers, Monitor, Server } from 'lucide-react';
+import { Globe, Layers, Monitor, Server } from 'lucide-react';
 import { StatCard, SectionHeader } from '@/features/dashboard/components/V3ScoreCards';
 import type { PlatformCoverage } from '@/types/models';
 
@@ -8,10 +8,9 @@ export function PlatformCoverageSection({ data }: { data: PlatformCoverage | und
       <SectionHeader icon={Layers} title="平台覆盖" subtitle="痕迹家族按目标平台分布" />
       {data ? (
         <>
-          <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
             <StatCard title="Windows" value={data.windowsArtifactFamilies} subtitle="个家族" icon={Monitor} />
             <StatCard title="Linux" value={data.linuxArtifactFamilies} subtitle="个家族" icon={Server} />
-            <StatCard title="macOS" value={data.macosArtifactFamilies} subtitle="个家族" icon={Apple} />
             <StatCard title="跨平台" value={data.crossPlatformArtifactFamilies} subtitle="个家族" icon={Globe} />
           </div>
           <div className="mt-3 rounded border border-forensics-border bg-white p-4">
@@ -52,20 +51,6 @@ export function PlatformCoverageSection({ data }: { data: PlatformCoverage | und
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {data.linuxFamilies.map((f) => (
-                      <span key={f} className="rounded border border-forensics-border bg-forensics-panel-strong px-2 py-0.5 font-mono text-[10px] text-forensics-text-secondary">
-                        {f}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {data.macosFamilies.length > 0 && (
-                <div>
-                  <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-forensics-text-tertiary">
-                    <Apple size={12} /> macOS
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {data.macosFamilies.map((f) => (
                       <span key={f} className="rounded border border-forensics-border bg-forensics-panel-strong px-2 py-0.5 font-mono text-[10px] text-forensics-text-secondary">
                         {f}
                       </span>

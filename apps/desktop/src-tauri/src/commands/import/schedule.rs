@@ -29,6 +29,8 @@ pub async fn import_data_source(
     let app_clone = app.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
+        import_precheck::ensure_supported_import_platform(request.platform)
+            .map_err(CommandError::from_typed_service_error)?;
         request.validate().map_err(CommandError::invalid_input)?;
         let settings = load_import_settings(&app_state.app_settings_path);
         let guard = app_state

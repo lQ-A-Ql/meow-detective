@@ -1,10 +1,8 @@
 use chrono::Utc;
 use rayon::prelude::*;
 use std::io::Read;
-use thiserror::Error;
 use transport::dto::{ArtifactRowDto, FamilyCountDto};
 
-use crate::file_service::FileServiceError;
 use crate::source_db::{self, encode_source_scoped_id};
 use artifacts_core::{ArtifactContext, ExtractorRegistry, VecSink};
 use domain::{DataSourceId, EdgeType, FileEntryId, GraphEdge, GraphNode, NodeType};
@@ -14,80 +12,8 @@ use persistence_sqlite::repositories::{
 use rusqlite::Connection;
 use std::{collections::BTreeMap, path::Path};
 
-#[derive(Debug, Error)]
-pub enum ArtifactServiceError {
-    #[error("database error: {0}")]
-    Db(#[from] persistence_sqlite::DbError),
-    #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("extractor error: {0}")]
-    Extractor(String),
-    #[error("not found: {0}")]
-    NotFound(String),
-    #[error("invalid input: {0}")]
-    InvalidInput(String),
-    #[error("other error: {0}")]
-    Other(String),
-}
-
-impl transport::ServiceErrorCategory for ArtifactServiceError {
-    fn category(&self) -> transport::ErrorCategory {
-        match self {
-            Self::Db(_) | Self::Io(_) => transport::ErrorCategory::Io,
-            Self::Extractor(_) => transport::ErrorCategory::Parser,
-            Self::NotFound(_) | Self::InvalidInput(_) => transport::ErrorCategory::Validation,
-            Self::Other(_) => transport::ErrorCategory::Internal,
-        }
-    }
-}
-
-impl ArtifactServiceError {
-    pub fn extractor(message: impl Into<String>) -> Self {
-        Self::Extractor(message.into())
-    }
-
-    pub fn not_found(message: impl Into<String>) -> Self {
-        Self::NotFound(message.into())
-    }
-
-    pub fn invalid_input(message: impl Into<String>) -> Self {
-        Self::InvalidInput(message.into())
-    }
-
-    pub fn other(message: impl Into<String>) -> Self {
-        Self::Other(message.into())
-    }
-}
-
-impl From<FileServiceError> for ArtifactServiceError {
-    fn from(err: FileServiceError) -> Self {
-        match err {
-            FileServiceError::Db(e) => Self::Db(e),
-            FileServiceError::Io(e) => Self::Io(e),
-            FileServiceError::NotFound(msg) => Self::NotFound(msg),
-            FileServiceError::InvalidInput(msg) => Self::InvalidInput(msg),
-            FileServiceError::PathTraversal(msg)
-            | FileServiceError::Security(msg)
-            | FileServiceError::Other(msg) => Self::Other(msg),
-        }
-    }
-}
-
-impl From<crate::analysis_service::AnalysisServiceError> for ArtifactServiceError {
-    fn from(err: crate::analysis_service::AnalysisServiceError) -> Self {
-        match err {
-            crate::analysis_service::AnalysisServiceError::Db(e) => Self::Db(e),
-            crate::analysis_service::AnalysisServiceError::Io(e) => Self::Io(e),
-            crate::analysis_service::AnalysisServiceError::Read(msg)
-            | crate::analysis_service::AnalysisServiceError::Extraction(msg)
-            | crate::analysis_service::AnalysisServiceError::NotFound(_, msg)
-            | crate::analysis_service::AnalysisServiceError::Other(msg) => Self::Other(msg),
-            crate::analysis_service::AnalysisServiceError::InvalidInput(msg) => {
-                Self::InvalidInput(msg)
-            }
-        }
-    }
-}
+mod error;
+pub use error::ArtifactServiceError;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ArtifactExtractionStats {

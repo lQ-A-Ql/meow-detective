@@ -212,6 +212,74 @@ fn open_case_reads_metadata() {
 }
 
 #[test]
+fn case_platform_validation_rejects_retired_macos_without_blocking_deletion() {
+    let tmp = TempDir::new().unwrap();
+    let active = case_service::create_case(&tmp.path().join("cases"), "retired-macos", None)
+        .expect("create case");
+    let case_root = active.case_root.clone();
+    let source = test_data_source(
+        "ds-retired-macos",
+        "retired-macos",
+        tmp.path().join("retired-macos.e01"),
+    );
+    active
+        .with_conn(|conn| {
+            seed_isolated_source(conn, &case_root, &active.meta.id, &source, "macos")?;
+            FileRepo::new(conn).insert_batch(&[FileEntry {
+                id: FileEntryId("legacy-app-file".to_string()),
+                parent_id: None,
+                data_source_id: source.id.clone(),
+                path: "legacy.txt".to_string(),
+                name: "legacy.txt".to_string(),
+                entry_type: EntryType::File,
+                size: Some(1),
+                ext: Some("txt".to_string()),
+                deleted: false,
+                hidden: false,
+                system: false,
+                encrypted: false,
+                created_at: None,
+                modified_at: None,
+                accessed_at: None,
+                changed_at: None,
+                hash_sha256: None,
+            }])?;
+            Ok(())
+        })
+        .expect("seed retired platform");
+
+    let error = case_service::ensure_supported_data_source_platforms(&active)
+        .expect_err("retired platform must fail closed");
+    assert!(matches!(
+        error,
+        case_service::CaseServiceError::UnsupportedPlatform(ref platform)
+            if platform == "macos"
+    ));
+
+    drop(active);
+    let open_error = match case_service::open_case(&case_root) {
+        Ok(_) => panic!("retired legacy case unexpectedly opened"),
+        Err(error) => error,
+    };
+    assert!(matches!(
+        open_error,
+        case_service::CaseServiceError::UnsupportedPlatform(ref platform)
+            if platform == "macos"
+    ));
+    let conn = app_services::connection::open_case_db(&case_root.join("app.db"))
+        .expect("open case database for audit assertion");
+    assert_eq!(
+        AuditRepo::new(&conn)
+            .count_by_action("case.open")
+            .expect("count case open audit"),
+        0
+    );
+    drop(conn);
+    case_service::delete_case_in(&case_root).expect("unsupported case must remain deletable");
+    assert!(!case_root.exists());
+}
+
+#[test]
 fn create_duplicate_name_fails() {
     let tmp = TempDir::new().unwrap();
     case_service::create_case(tmp.path(), "dup", None).unwrap();

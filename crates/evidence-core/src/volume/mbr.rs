@@ -82,11 +82,11 @@ pub fn classify_mbr_partition_type(type_code: u8) -> MbrPartitionClass {
             status: MbrPartitionStatus::Unsupported,
         },
         0xA8 => MbrPartitionClass {
-            name: "macOS HFS+",
+            name: "Apple UFS",
             status: MbrPartitionStatus::Unsupported,
         },
         0xAF => MbrPartitionClass {
-            name: "macOS HFS+",
+            name: "Apple HFS/HFS+",
             status: MbrPartitionStatus::Unsupported,
         },
         0xEE => MbrPartitionClass {

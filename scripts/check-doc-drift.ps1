@@ -125,7 +125,19 @@ $validationDoc = Read-Text 'docs/validation-trust-framework.md'
 $knownLimitationsFact = Read-Text 'testdata/governance/v2-known-limitations.json' | ConvertFrom-Json
 $benchmarkBaseline = Read-Text 'testdata/governance/v2-benchmark-baseline.json' | ConvertFrom-Json
 
-$crateCount = (Get-ChildItem -LiteralPath (Join-Path $repoRoot 'crates') -Directory | Measure-Object).Count
+$workspaceManifest = Read-Text 'Cargo.toml'
+$workspaceMembersMatch = [regex]::Match(
+  $workspaceManifest,
+  '(?ms)^\[workspace\]\s*.*?^\s*members\s*=\s*\[(?<members>.*?)^\s*\]'
+)
+if (-not $workspaceMembersMatch.Success) {
+  throw 'Cargo.toml workspace.members could not be parsed'
+}
+$crateCount = ([regex]::Matches(
+    $workspaceMembersMatch.Groups['members'].Value,
+    '"crates/[^"\r\n]+"'
+  ) | Measure-Object).Count
+Assert-Equals $crateCount 34 'Stage 1 workspace crate count drifted'
 $commandFiles = Get-ChildItem -LiteralPath (Join-Path $repoRoot 'apps/desktop/src-tauri/src/commands') -Recurse -File -Filter '*.rs'
 $commandCount = ($commandFiles | Select-String -Pattern '#\[tauri::command\]' | Measure-Object).Count
 $repoCount = (Get-ChildItem -LiteralPath (Join-Path $repoRoot 'crates/persistence-sqlite/src/repositories') -Filter '*_repo.rs' | Measure-Object).Count

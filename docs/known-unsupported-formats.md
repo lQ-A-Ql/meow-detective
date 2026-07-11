@@ -51,9 +51,9 @@ V2 长期计划与能力评级请同时参考：
 | Linux artifacts | SSH 结构化登录/配置语义解析 | 部分支持 | 当前通过 auth/journal/wtmp/sudo 与 `LinuxSystemConfig` 文本记录覆盖 SSH 相关线索；`authorized_keys`、`known_hosts`、`sshd_config` 不生成独立 SSH DTO，也不解析密钥信任图 |
 | Linux artifacts | sudoers policy 语义解析 | 部分支持 | `/etc/sudoers` 与 `/etc/sudoers.d/*` 会生成 `LinuxSystemConfig` 文本记录；不解析 include、alias、Defaults、effective rule |
 | Linux artifacts | systemd/init/profile.d shell 语义解析 | 部分支持 | systemd unit、init.d、rc.local、profile.d 会生成 `LinuxSystemConfig` 文本记录；不解释 shell 脚本、环境变量生效顺序、systemd 依赖图或执行图 |
-| macOS 文件系统 | APFS raw disk | 不支持 | 当前仅支持从已挂载或导入的 macOS 文件树提取制品。APFS 原始磁盘镜像解析规划于 V4 |
-| macOS 文件系统 | HFS+ raw disk | 不支持 | HFS+ 原始磁盘镜像解析规划于 V4 |
-| macOS 文件系统 | 已删除文件恢复 (APFS/HFS+) | 不承诺 | 文件雕刻与已删除恢复规划于 V4 |
+| 平台 | macOS 数据源分析与制品提取 | 不支持 | Windows 与 Linux 是仅有的生产分析平台；macOS 数据源请求和 MacArtifacts 能力返回 typed unsupported，不运行候选发现或提取器 |
+| 文件系统 | APFS/HFS+ 分区内容解析 | 不支持 | 仅识别已知 Apple 分区类型标识符并记录为元数据；当前不识别 APFS/HFS+ 文件系统 magic/signature，不实例化文件系统 reader，也不提供文件树、预览、制品提取或已删除恢复 |
+| 案件兼容 | 旧 macOS 案件 | 不支持 | 含 platform='macos' 的旧案件不做迁移；当前开发版本打开时返回 typed unsupported，需要新建案件，并仅将可归类为 Windows 或 Linux 的证据重新导入 |
 | 移动设备 | iOS 制品 | 不支持 | iOS 备份/镜像解析（Contacts、Messages、Photos、Safari 等）规划于 V4 |
 | 移动设备 | Android 制品 | 不支持 | Android 备份/镜像解析（SMS/MMS、联系人、应用数据、Chrome 历史）规划于 V4 |
 | 云 | AWS CloudTrail | 不支持 | 云审计日志采集与关联规划于 V4 |
@@ -92,8 +92,10 @@ V2 长期计划与能力评级请同时参考：
 - SSH 结构化登录/配置 parser（当前只通过日志、wtmp、sudo 与 `LinuxSystemConfig` 文本记录侧面覆盖）
 - sudoers policy effective rule 解析（当前仅保留文本记录）
 - systemd/init/profile.d shell 语义解析（当前仅保留文本记录）
-- macOS 文件系统 (APFS/HFS+) 原始磁盘镜像解析（V3 仅支持从文件树提取制品）
-- Linux/macOS 文件系统已删除文件恢复
+- macOS 数据源分析、制品提取、治理覆盖字段或前端入口；Windows/Linux 是仅有生产平台
+- APFS/HFS+ 内容解析；已知 Apple 分区类型标识符识别仅是 metadata，不得被表述为 filesystem magic/signature 或 reader 支持
+- 旧 `platform='macos'` 案件迁移；必须返回 typed unsupported，并仅对可归类为 Windows/Linux 的证据重新建案导入
+- Linux 文件系统已删除文件恢复；APFS/HFS+ 当前连内容 reader 都不提供
 - PST 加密消息支持
 - PST 全 MAPI 属性级精度
 - iOS/Android 移动设备制品
@@ -133,4 +135,3 @@ V2 长期计划与能力评级请同时参考：
 - `docs/release-scorecard.md`
 - `docs/v3-plan.md`
 - `docs/linux-artifact-coverage.md`
-- `docs/mac-artifact-coverage.md`

@@ -32,7 +32,6 @@ search.workspace = true
 artifacts-core.workspace = true
 artifacts-windows.workspace = true
 artifacts-linux.workspace = true
-artifacts-macos.workspace = true
 flate2.workspace = true
 timeline.workspace = true
 reports.workspace = true

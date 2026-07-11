@@ -1,5 +1,5 @@
 {
-  "lastVerifiedAt": "2026-06-13T00:00:00Z",
+  "lastVerifiedAt": "2026-07-11T00:00:00Z",
   "documentedLimitCount": 46,
   "items": [
     {
@@ -357,10 +357,21 @@
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
-      "category": "macOS 文件系统",
-      "item": "APFS raw disk",
+      "category": "平台",
+      "item": "macOS 数据源分析与制品提取",
       "status": "unsupported",
-      "summary": "当前仅支持从已挂载或导入的 macOS 文件树提取制品。APFS 原始磁盘镜像解析规划于 V4",
+      "summary": "Windows 与 Linux 是仅有的生产分析平台；macOS 数据源请求和 MacArtifacts 能力返回 typed unsupported，不运行候选发现或提取器",
+      "affectedChains": [
+        "DataSourcePlatform",
+        "MacArtifacts"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
+    {
+      "category": "文件系统",
+      "item": "APFS/HFS+ 分区内容解析",
+      "status": "unsupported",
+      "summary": "仅识别已知 Apple 分区类型标识符并记录为元数据；当前不识别 APFS/HFS+ 文件系统 magic/signature，不实例化文件系统 reader，也不提供文件树、预览、制品提取或已删除恢复",
       "affectedChains": [
         "APFS",
         "HFS+"
@@ -368,24 +379,13 @@
       "sourceDoc": "docs/known-unsupported-formats.md"
     },
     {
-      "category": "macOS 文件系统",
-      "item": "HFS+ raw disk",
+      "category": "案件兼容",
+      "item": "旧 macOS 案件",
       "status": "unsupported",
-      "summary": "HFS+ 原始磁盘镜像解析规划于 V4",
+      "summary": "含 platform='macos' 的旧案件不做迁移；当前开发版本打开时返回 typed unsupported，需要新建案件，并仅将可归类为 Windows 或 Linux 的证据重新导入",
       "affectedChains": [
-        "APFS",
-        "HFS+"
-      ],
-      "sourceDoc": "docs/known-unsupported-formats.md"
-    },
-    {
-      "category": "macOS 文件系统",
-      "item": "已删除文件恢复 (APFS/HFS+)",
-      "status": "notGuaranteed",
-      "summary": "文件雕刻与已删除恢复规划于 V4",
-      "affectedChains": [
-        "APFS",
-        "HFS+"
+        "CaseOpen",
+        "DataSourcePlatform"
       ],
       "sourceDoc": "docs/known-unsupported-formats.md"
     },

@@ -21,7 +21,6 @@ pub mod graph;
 pub mod import;
 pub mod ios;
 pub mod jobs;
-pub mod macos;
 pub mod mcp;
 pub mod notebook;
 pub mod recovery;
@@ -97,10 +96,6 @@ pub use ios::{
     IosSafariEntryDto,
 };
 pub use jobs::{JobSnapshotDto, TraceItemDto, WarningItemDto};
-pub use macos::{
-    FSEventDto, FSEventTypeDto, LaunchServiceDto, MacPlistEntryDto, PlistTypeDto,
-    QuarantineEntryDto, RecentItemDto, RecentItemKindDto, SpotlightEntryDto, UnifiedLogEntryDto,
-};
 pub use mcp::{
     McpCapabilitiesDto, McpConfigDto, McpPromptArgumentDto, McpPromptDto, McpResourceDto,
     McpServerConfigDto, McpServerStatusDto, McpTestConnectionRequestDto,

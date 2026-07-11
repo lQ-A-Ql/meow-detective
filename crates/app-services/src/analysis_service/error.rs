@@ -14,6 +14,8 @@ pub enum AnalysisServiceError {
     NotFound(&'static str, String),
     #[error("invalid input: {0}")]
     InvalidInput(String),
+    #[error("unsupported analysis capability: {0}")]
+    Unsupported(String),
     #[error("{0}")]
     Other(String),
 }
@@ -30,6 +32,7 @@ impl transport::ServiceErrorCategory for AnalysisServiceError {
             Self::Db(_) | Self::Io(_) | Self::Read(_) => transport::ErrorCategory::Io,
             Self::Extraction(_) => transport::ErrorCategory::Parser,
             Self::NotFound(_, _) | Self::InvalidInput(_) => transport::ErrorCategory::Validation,
+            Self::Unsupported(_) => transport::ErrorCategory::Unsupported,
             Self::Other(_) => transport::ErrorCategory::Internal,
         }
     }

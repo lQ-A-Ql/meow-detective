@@ -10,6 +10,8 @@ pub enum DataSourceError {
     Db(#[from] persistence_sqlite::DbError),
     #[error("Evidence error: {0}")]
     Evidence(String),
+    #[error("Unsupported data source platform: {0}")]
+    Unsupported(String),
 }
 
 impl transport::ServiceErrorCategory for DataSourceError {
@@ -17,6 +19,7 @@ impl transport::ServiceErrorCategory for DataSourceError {
         match self {
             Self::Io(_) | Self::Db(_) => transport::ErrorCategory::Io,
             Self::Evidence(_) => transport::ErrorCategory::Validation,
+            Self::Unsupported(_) => transport::ErrorCategory::Unsupported,
         }
     }
 }

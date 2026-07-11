@@ -83,7 +83,6 @@ version = "0.1.0"
 dependencies = [
  "artifacts-core",
  "artifacts-linux",
- "artifacts-macos",
  "artifacts-windows",
  "base64 0.22.1",
  "chrono",
@@ -196,22 +195,6 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "artifacts-macos"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "artifacts-core",
- "chrono",
- "domain",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "tracing",
 ]
 
 [[package]]
@@ -1526,17 +1509,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fs-apfs"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "evidence-core",
- "serde",
- "tempfile",
- "thiserror 2.0.18",
-]
-
-[[package]]
 name = "fs-btrfs"
 version = "0.1.0"
 dependencies = [
@@ -1580,17 +1552,6 @@ dependencies = [
  "evidence-core",
  "serde",
  "serde_json",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "fs-hfsplus"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "evidence-core",
- "serde",
- "tempfile",
  "thiserror 2.0.18",
 ]
 

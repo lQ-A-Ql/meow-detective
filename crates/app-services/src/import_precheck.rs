@@ -3,13 +3,15 @@
 //! Analyzes data sources before import to generate optimal import plans.
 
 use crate::{
-    datasource_service::{self, DataSourceError},
+    datasource_service,
     import_state::{ImportPlan, ImportStrategy},
 };
 use domain::DataSourceKind;
 use std::path::{Path, PathBuf};
-use thiserror::Error;
 use transport::commands::{ImportDataSourceRequest, ImportSourceKindDto, ImportTargetPlatformDto};
+
+mod error;
+pub use error::ImportSourceConfigError;
 
 /// Bounded import configuration prepared before the Tauri job orchestration starts.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,29 +40,6 @@ pub enum ImportSourceMode {
     Image { staging_kind: &'static str },
 }
 
-#[derive(Debug, Error)]
-pub enum ImportSourceConfigError {
-    #[error("{0}")]
-    InvalidRequest(String),
-    #[error("sourcePath must exist and be accessible before import")]
-    MissingOrInaccessibleSource,
-    #[error("sourcePath must point to a directory or regular image file")]
-    UnsupportedSourceType,
-    #[error(transparent)]
-    Classification(#[from] DataSourceError),
-}
-
-impl transport::ServiceErrorCategory for ImportSourceConfigError {
-    fn category(&self) -> transport::ErrorCategory {
-        match self {
-            Self::InvalidRequest(_)
-            | Self::MissingOrInaccessibleSource
-            | Self::UnsupportedSourceType => transport::ErrorCategory::Validation,
-            Self::Classification(e) => e.category(),
-        }
-    }
-}
-
 impl ImportSourceConfig {
     pub fn is_image_backed(&self) -> bool {
         matches!(self.mode, ImportSourceMode::Image { .. })
@@ -74,20 +53,10 @@ impl ImportSourceConfig {
     }
 }
 
-impl ImportSourceConfigError {
-    pub fn is_invalid_input(&self) -> bool {
-        matches!(
-            self,
-            Self::InvalidRequest(_)
-                | Self::MissingOrInaccessibleSource
-                | Self::UnsupportedSourceType
-        )
-    }
-}
-
 pub fn prepare_import_source_config(
     request: &ImportDataSourceRequest,
 ) -> Result<ImportSourceConfig, ImportSourceConfigError> {
+    ensure_supported_import_platform(request.platform)?;
     request
         .validate()
         .map_err(ImportSourceConfigError::InvalidRequest)?;
@@ -100,6 +69,16 @@ pub fn prepare_import_source_config(
     config.platform = request.platform;
     config.profile = request.profile.clone();
     Ok(config)
+}
+
+/// Rejects retired transport platform values before any source-path access.
+pub fn ensure_supported_import_platform(
+    platform: Option<ImportTargetPlatformDto>,
+) -> Result<(), ImportSourceConfigError> {
+    if platform == Some(ImportTargetPlatformDto::Unsupported) {
+        return Err(ImportSourceConfigError::UnsupportedPlatform);
+    }
+    Ok(())
 }
 
 pub fn prepare_import_source_config_from_path(

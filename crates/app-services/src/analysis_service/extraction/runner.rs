@@ -6,12 +6,12 @@ use super::email::extract_email_candidate;
 use super::evtx::extract_evtx_candidate;
 use super::linux::{extract_linux_candidate, linux_candidate_read_limit};
 use super::linux_sections::{linux_artifact_section, LinuxArtifactSection};
-use super::macos::extract_macos_candidate;
 use super::registry::extract_registry_candidate;
 use super::registry_preload::preload_registry_context;
 use super::ExtractionOutcome;
 use crate::analysis_service::candidates::{
-    evidence_candidates_for_categories, normalize_evidence_path,
+    ensure_supported_analysis_categories, evidence_candidates_for_categories,
+    normalize_evidence_path,
 };
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::MAX_ANALYSIS_SOURCE_BYTES;
@@ -86,6 +86,7 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
     categories: &[&str],
     mut file_reader: impl FnMut(&FileEntryId) -> Result<Box<dyn Read>, E>,
 ) -> Result<AnalysisExtractionRunDto, AnalysisServiceError> {
+    ensure_supported_analysis_categories(categories)?;
     let generated_at = Utc::now().to_rfc3339();
     let selected = if categories.is_empty() {
         vec![
@@ -94,7 +95,6 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
             "Email",
             "EventLogs",
             "LinuxArtifacts",
-            "MacArtifacts",
         ]
     } else {
         categories.to_vec()
@@ -140,7 +140,7 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
                 scanned_count += 1;
                 extract_registry_candidate(&candidate, bytes, boot_key, txlog1, txlog2)
             }
-            "BrowserHistory" | "Email" | "EventLogs" | "LinuxArtifacts" | "MacArtifacts" => {
+            "BrowserHistory" | "Email" | "EventLogs" | "LinuxArtifacts" => {
                 let mut reader = match file_reader(&candidate.file_id) {
                     Ok(reader) => reader,
                     Err(err) => {
@@ -175,7 +175,6 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
                     "Email" => extract_email_candidate(&candidate, &bytes),
                     "EventLogs" => extract_evtx_candidate(&candidate, &bytes),
                     "LinuxArtifacts" => extract_linux_candidate(&candidate, &bytes),
-                    "MacArtifacts" => extract_macos_candidate(&candidate, &bytes),
                     _ => ExtractionOutcome::default(),
                 }
             }
@@ -225,7 +224,7 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
 fn is_supported_analysis_category(category: &str) -> bool {
     matches!(
         category,
-        "Registry" | "BrowserHistory" | "Email" | "EventLogs" | "LinuxArtifacts" | "MacArtifacts"
+        "Registry" | "BrowserHistory" | "Email" | "EventLogs" | "LinuxArtifacts"
     )
 }
 
@@ -326,10 +325,6 @@ fn generic_section_for_category(category: &str) -> ExtractionSection {
         "EventLogs" => ExtractionSection {
             key: "EventLogs",
             label: "Windows Event Logs",
-        },
-        "MacArtifacts" => ExtractionSection {
-            key: "MacArtifacts",
-            label: "macOS Artifacts",
         },
         _ => ExtractionSection {
             key: "Unknown",

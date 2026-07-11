@@ -227,12 +227,10 @@ export interface V2GovernanceSnapshot {
 export interface PlatformCoverage {
   windowsArtifactFamilies: number;
   linuxArtifactFamilies: number;
-  macosArtifactFamilies: number;
   crossPlatformArtifactFamilies: number;
   totalFamilies: number;
   windowsFamilies: string[];
   linuxFamilies: string[];
-  macosFamilies: string[];
   crossPlatformFamilies: string[];
 }
 

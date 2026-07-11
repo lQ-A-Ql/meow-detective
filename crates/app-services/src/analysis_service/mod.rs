@@ -21,10 +21,10 @@ pub use classification::{classify_files_by_magic, classify_files_by_metadata};
 pub use demo::seed_analysis_demo_data;
 pub use error::AnalysisServiceError;
 pub use extraction::{
-    extract_evtx_candidate, extract_linux_candidate, extract_macos_candidate,
-    extract_registry_candidate, get_browser_history_summary, get_email_extraction_summary,
-    get_evtx_event_summary, get_linux_artifact_summary, get_registry_extraction_summary,
-    get_registry_structured_summary, run_analysis_extraction, ExtractionOutcome,
+    extract_evtx_candidate, extract_linux_candidate, extract_registry_candidate,
+    get_browser_history_summary, get_email_extraction_summary, get_evtx_event_summary,
+    get_linux_artifact_summary, get_registry_extraction_summary, get_registry_structured_summary,
+    run_analysis_extraction, ExtractionOutcome,
 };
 pub use summary::generate_analysis_summary;
 pub use system_info::extract_system_info_for_case;

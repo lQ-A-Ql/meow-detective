@@ -59,7 +59,7 @@ export interface FileJumpContext {
   requiresShowHidden: boolean;
 }
 
-export type ImportTargetPlatform = 'windows' | 'linux' | 'macos' | 'unknown';
+export type ImportTargetPlatform = 'windows' | 'linux' | 'unknown';
 export type ImportSourceKind = 'auto' | 'linuxCluster';
 
 export interface ImportDataSourceRequest {

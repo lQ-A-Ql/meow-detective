@@ -1,6 +1,6 @@
 # Meow~Detective
 
-A Tauri 2 desktop application for disk image forensic analysis on Windows. 37 Rust crates, 10 frontend pages, 98 Tauri commands, 2,061 Rust tests. MIT licensed.
+A Tauri 2 desktop application for disk-image forensic analysis on Windows. The backend contains 34 Rust crates, 10 frontend pages, 98 Tauri commands, and approximately 2,061 Rust tests. Windows and Linux are the only production analysis platforms. macOS data-source requests and legacy macOS cases are unsupported; APFS/HFS+ may be identified as partition metadata, but no filesystem reader is instantiated. MIT licensed.
 
 **V5 Quality Audit (2026-06):** Architecture compliance 97%, runtime safety 96%, forensic completeness 96%. E01 preview pipeline hardened with partition-indexed path reconstruction, MFT inode-based file resolution, and per-partition chunk-table caching.
 
@@ -41,7 +41,7 @@ cd apps/desktop/src-tauri && cargo tauri build
 
 ```bash
 cargo test --workspace
-cd frontend && pnpm test            # Frontend (84 test files)
+cd frontend && pnpm test            # Frontend (85 test files)
 cd frontend && pnpm test:coverage
 ```
 
@@ -66,7 +66,7 @@ cd frontend && pnpm test
 | `crates/transport/` | Shared DTOs, commands, events, errors |
 | `crates/persistence-sqlite/` | SQLite repos (16) and migration scripts (39) |
 | `crates/evidence-core/` | Disk image probing and volume detection |
-| `crates/fs-ntfs/`, `fs-fat/`, `fs-exfat/` | Filesystem parsers (NTFS/FAT/ExFAT/ext4/XFS/Btrfs/APFS/HFS+) |
+| `crates/fs-ntfs/`, `fs-fat/`, `fs-exfat/`, `fs-ext4/`, `fs-xfs/`, `fs-btrfs/` | Filesystem parsers (NTFS/FAT/ExFAT/ext4/XFS/Btrfs) |
 | `crates/image-e01/`, `image-raw/` | Image readers (E01/RAW) |
 | `crates/containers-pst/` | PST/OST/mbox email container parsers |
 | `crates/exchange/` | Entity resolution and cross-case entity matching |
@@ -75,7 +75,6 @@ cd frontend && pnpm test
 | `crates/catalog/` | Catalog management and projections |
 | `crates/artifacts-windows/` | Windows artifact parsers (Browser/EVTX/Prefetch/LNK/Registry[SYSTEM/SOFTWARE/NTUSER/SAM/txlog]/SRU/Thumbcache/JumpList) |
 | `crates/artifacts-linux/` | Linux artifact parsers (journal/wtmp/bash/apt/cron/sudo) |
-| `crates/artifacts-macos/` | macOS artifact parsers (plist/unified_log/Spotlight/Quarantine/FSEvents) |
 | `crates/search/` | Full-text indexing (tantivy) |
 | `crates/timeline/` | Timeline generation |
 | `crates/mcp-client/` | MCP client (SSE + Stdio) |
@@ -130,15 +129,14 @@ cd frontend && pnpm test
 
 ## V3 Status
 
-**V3 is ~89% complete.** 22/22 phases implemented. 19 new parser families across 3 new crates.
+**V3 retained feature set is ~89% complete.** The current production platform slice retains the PST/OST/mbox and Linux artifact crates. The former macOS artifact slice was retired and is not a supported runtime entry.
 
-### New crates
+### Retained crates
 
 | Crate | Tests | Description |
 |-------|-------|-------------|
 | `crates/containers-pst/` | 63 | PST (Unicode 32/64), OST, mbox (RFC 4155) email parsing |
 | `crates/artifacts-linux/` | 30 | systemd journal, wtmp, bash hist, apt/dpkg, cron, sudo |
-| `crates/artifacts-macos/` | 37 | plist (binary+XML), unified log, Spotlight, Quarantine, FSEvents |
 
 ### New capabilities
 
@@ -151,13 +149,11 @@ cd frontend && pnpm test
 - **MBR full parsing**: EBR chain support for extended/logical partitions
 - **Rayon parallelization**: CPU-bound artifact extraction + correlation matching
 
-### Quality gates (all pass)
-
-cargo fmt ✓ | cargo clippy ✓ | 295 Rust tests ✓ | 228 frontend tests ✓ | cargo-deny ✓ | 6 guard scripts ✓
+Current validation uses the repository quality gates listed above; historical phase test counts are not current workspace facts.
 
 ## V4 Status
 
-**V4 core delivered.** 5 filesystem crates, entity resolution, STIX 2.1 export, Ed25519 signing, chain-of-custody.
+**V4 retained core delivered.** Three Linux filesystem crates, entity resolution, STIX 2.1 export, Ed25519 signing, and chain-of-custody remain in production.
 
 ### New crates
 
@@ -166,21 +162,17 @@ cargo fmt ✓ | cargo clippy ✓ | 295 Rust tests ✓ | 228 frontend tests ✓ |
 | `crates/fs-ext4/` | ext4 filesystem parser |
 | `crates/fs-xfs/` | XFS filesystem parser |
 | `crates/fs-btrfs/` | Btrfs filesystem parser |
-| `crates/fs-apfs/` | APFS filesystem parser |
-| `crates/fs-hfsplus/` | HFS+ filesystem parser |
 | `crates/exchange/` | Entity resolution and cross-case entity matching |
 
 ### New capabilities
 
-- **Filesystem parsers (ext4/XFS/Btrfs/APFS/HFS+)**: read-only evidence readers for Linux and macOS filesystems
+- **Filesystem parsers (ext4/XFS/Btrfs)**: read-only evidence readers for Linux filesystems
 - **Entity resolution**: cross-case entity matching and canonicalization
 - **STIX 2.1 export**: structured threat information sharing with STIX 2.1 JSON format
 - **Ed25519 signing**: Ed25519 digital signature support for evidence integrity
 - **Chain-of-custody**: custody tracking and audit trail for evidence handling
 
-### Quality gates (all pass)
-
-cargo fmt ✓ | cargo clippy ✓ | 1,757 Rust tests ✓ | 228 frontend tests ✓ | 1,985 total ✓ | cargo-deny ✓ | 6 guard scripts ✓
+APFS/HFS+ partition-type recognition is metadata-only and remains `Unsupported`; it does not provide a file tree, preview, artifact extraction, or deleted-file recovery.
 
 ## License
 

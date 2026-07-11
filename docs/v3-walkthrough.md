@@ -16,7 +16,7 @@ This guide walks through a complete V3 investigation flow. It assumes the V3 evi
 2. Once the case is open, navigate to the `/v3` dashboard. This replaces the V2 `/v2` governance page.
 3. The V3 dashboard displays:
    - **Graph Statistics**: total node count, edge count, node-type distribution (File / Artifact / TimelineEvent / Entity / Lead / NotebookEntry), edge-type distribution (Contains / References / CorrelatesWith / Cites / Annotates / Precedes / DerivesFrom), graph density, and largest connected component size.
-   - **Platform Coverage**: artifact family counts per platform (Windows / Linux / macOS / Cross).
+   - **Platform Coverage**: artifact family counts for the production platforms (Windows / Linux / Cross, where Cross means both supported platforms).
    - **Rule Pack Coverage**: loaded packs, rule counts, lead counts per pack, verification status.
    - **Batch Status**: active/completed/failed batch jobs, if any.
    - **Governance Signals**: evidence-graph integrity, platform-coverage minimums, rule-pack-required-loaded, batch-recovery-tested.
@@ -28,10 +28,10 @@ On a fresh case, the graph is empty — node and edge counts are zero. The dashb
 ## 2. Import Evidence and Watch the Graph Populate
 
 1. Go to **Import** and select an evidence source (e.g., a RAW disk image, an E01 file, or a file-tree directory).
-2. Choose import options: artifact families to extract (Windows / Linux / macOS toggles), indexing scope, and whether to run loaded rule packs after import.
+2. Choose import options for the persisted Windows or Linux data-source platform, indexing scope, and whether to run loaded rule packs after import. Platform admission and capability filtering are backend-owned.
 3. Start the import. During import the application:
    - **Catalog phase**: walks the file system tree and creates File nodes. Parent-child relationships become `Contains` edges. The File Browser becomes available incrementally.
-   - **Artifact extraction phase**: runs enabled parsers (EVTX, Prefetch, LNK, Registry, etc. for Windows; browser history for cross-platform; Linux/macOS parsers if applicable). Each extracted artifact becomes an Artifact node, with `References` edges to the source File node.
+   - **Artifact extraction phase**: runs only parsers allowed for the persisted platform (EVTX, Prefetch, LNK, Registry, etc. for Windows; Linux artifact families for Linux; browser/email capabilities shared by the supported platforms where applicable). Each extracted artifact becomes an Artifact node, with `References` edges to the source File node.
    - **Timeline population**: creates TimelineEvent nodes from file timestamps and artifact timestamps, linked via `References` edges.
    - **Entity extraction**: regex- and structure-based extraction of Person (email addresses, usernames), Device (hostname, volume serial), and Account (SID, UID) entities, linked via `DerivesFrom` edges.
    - **Correlation** (if enabled): executes loaded rule packs against the graph, producing `CorrelatesWith` edges with confidence and rule provenance.

@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
 
+mod platform;
+pub use platform::ImportTargetPlatformDto;
+
 const MAX_PAGE_LIMIT: u32 = 500;
 const DEFAULT_PAGE_LIMIT: u32 = 100;
 const APP_CODE_NAME: &str = "Meow_Detective";
@@ -90,15 +93,6 @@ pub enum ImportSourceKindDto {
 
 fn is_default_import_source_kind(value: &ImportSourceKindDto) -> bool {
     *value == ImportSourceKindDto::Auto
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum ImportTargetPlatformDto {
-    Windows,
-    Linux,
-    Macos,
-    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

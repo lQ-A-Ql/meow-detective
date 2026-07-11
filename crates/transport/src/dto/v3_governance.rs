@@ -21,7 +21,7 @@ pub struct V3GovernanceSnapshotDto {
     // ── V3 extensions ──
     /// Graph statistics from the investigative graph snapshot.
     pub graph_statistics: GraphStatsDto,
-    /// Artifact family coverage by platform (Windows / Linux / macOS).
+    /// Artifact family coverage by platform (Windows / Linux).
     pub platform_coverage: PlatformCoverageDto,
     /// Loaded rule packs, rule counts, and execution status.
     pub rule_pack_coverage: RulePackStatusDto,
@@ -61,8 +61,6 @@ pub struct PlatformCoverageDto {
     pub windows_artifact_families: u32,
     /// Number of artifact families targeting Linux.
     pub linux_artifact_families: u32,
-    /// Number of artifact families targeting macOS.
-    pub macos_artifact_families: u32,
     /// Number of artifact families that are cross-platform.
     pub cross_platform_artifact_families: u32,
     /// Total number of distinct artifact families.
@@ -71,8 +69,6 @@ pub struct PlatformCoverageDto {
     pub windows_families: Vec<String>,
     /// List of Linux artifact family names.
     pub linux_families: Vec<String>,
-    /// List of macOS artifact family names.
-    pub macos_families: Vec<String>,
     /// List of cross-platform artifact family names.
     pub cross_platform_families: Vec<String>,
 }
@@ -252,12 +248,10 @@ mod tests {
             platform_coverage: PlatformCoverageDto {
                 windows_artifact_families: 8,
                 linux_artifact_families: 0,
-                macos_artifact_families: 0,
                 cross_platform_artifact_families: 0,
                 total_families: 8,
                 windows_families: vec!["LNK".to_string(), "Prefetch".to_string()],
                 linux_families: vec![],
-                macos_families: vec![],
                 cross_platform_families: vec![],
             },
             rule_pack_coverage: RulePackStatusDto {
@@ -326,12 +320,10 @@ mod tests {
             platform_coverage: PlatformCoverageDto {
                 windows_artifact_families: 0,
                 linux_artifact_families: 0,
-                macos_artifact_families: 0,
                 cross_platform_artifact_families: 0,
                 total_families: 0,
                 windows_families: vec![],
                 linux_families: vec![],
-                macos_families: vec![],
                 cross_platform_families: vec![],
             },
             rule_pack_coverage: RulePackStatusDto {

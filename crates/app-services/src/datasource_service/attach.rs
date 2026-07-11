@@ -1,4 +1,4 @@
-use super::{LvmDiscoverySource, Result};
+use super::{DataSourceError, LvmDiscoverySource, Result};
 use domain::{
     CaseId, DataSource, DataSourceHashStatus, DataSourceId, DataSourceKind, DataSourceProvenance,
     DataSourceProvenanceStatus,
@@ -27,6 +27,7 @@ pub fn attach_data_source_with_storage(
     platform: Option<ImportTargetPlatformDto>,
     profile: Option<String>,
 ) -> Result<DataSource> {
+    let platform = platform.map(platform_label).transpose()?;
     let id = DataSourceId(uuid::Uuid::new_v4().to_string());
     let provenance = build_attach_provenance(source_path, &kind);
     let ds = DataSource {
@@ -38,7 +39,7 @@ pub fn attach_data_source_with_storage(
         provenance,
     };
 
-    let storage = DataSourceStorage::source_db(&ds.id.0, platform.map(platform_label), profile);
+    let storage = DataSourceStorage::source_db(&ds.id.0, platform, profile);
     DataSourceRepo::new(conn).insert_with_storage(case_id, &ds, &storage)?;
     Ok(ds)
 }
@@ -111,12 +112,14 @@ fn build_attach_provenance(source_path: &Path, kind: &DataSourceKind) -> DataSou
     }
 }
 
-fn platform_label(platform: ImportTargetPlatformDto) -> &'static str {
+fn platform_label(platform: ImportTargetPlatformDto) -> Result<&'static str> {
     match platform {
-        ImportTargetPlatformDto::Windows => "windows",
-        ImportTargetPlatformDto::Linux => "linux",
-        ImportTargetPlatformDto::Macos => "macos",
-        ImportTargetPlatformDto::Unknown => "unknown",
+        ImportTargetPlatformDto::Windows => Ok("windows"),
+        ImportTargetPlatformDto::Linux => Ok("linux"),
+        ImportTargetPlatformDto::Unknown => Ok("unknown"),
+        ImportTargetPlatformDto::Unsupported => Err(DataSourceError::Unsupported(
+            "macOS is not supported by this build".to_string(),
+        )),
     }
 }
 

@@ -5,7 +5,6 @@ pub(crate) mod email;
 pub(crate) mod evtx;
 pub(crate) mod linux;
 mod linux_sections;
-pub(crate) mod macos;
 mod observability;
 pub(crate) mod registry;
 mod registry_preload;
@@ -14,7 +13,6 @@ mod summary;
 
 pub use self::evtx::extract_evtx_candidate;
 pub use self::linux::extract_linux_candidate;
-pub use self::macos::extract_macos_candidate;
 pub use self::registry::extract_registry_candidate;
 pub use self::runner::run_analysis_extraction;
 pub use self::summary::{

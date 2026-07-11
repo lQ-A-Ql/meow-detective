@@ -102,13 +102,6 @@ crates/artifacts-linux/src/sudo.rs,1,102,6,1,0,0
 crates/artifacts-linux/src/system.rs,1,39,2,1,0,0
 crates/artifacts-linux/src/web.rs,1,63,3,1,0,0
 crates/artifacts-linux/src/wtmp.rs,1,115,4,1,0,0
-crates/artifacts-macos/src/fsevents.rs,1,92,6,1,0,0
-crates/artifacts-macos/src/launch_services.rs,1,93,4,1,0,0
-crates/artifacts-macos/src/plist.rs,1,162,8,1,0,0
-crates/artifacts-macos/src/quarantine.rs,1,102,5,1,0,0
-crates/artifacts-macos/src/recent_items.rs,1,98,4,1,0,0
-crates/artifacts-macos/src/spotlight.rs,1,84,4,1,0,0
-crates/artifacts-macos/src/unified_log.rs,1,99,6,1,0,0
 crates/artifacts-windows/src/browser/chromium.rs,1,408,17,1,0,0
 crates/artifacts-windows/src/browser/firefox.rs,1,642,34,1,0,0
 crates/artifacts-windows/src/browser/profile_detect.rs,1,169,17,1,0,0
@@ -156,8 +149,6 @@ crates/evidence-core/src/volume/mbr.rs,1,238,5,1,0,0
 crates/exchange/src/custody.rs,1,159,11,1,0,0
 crates/exchange/src/signing.rs,1,77,4,1,0,0
 crates/exchange/src/stix.rs,1,386,13,1,0,0
-crates/fs-apfs/src/checkpoint.rs,1,497,8,1,0,0
-crates/fs-apfs/src/lib.rs,1,579,12,1,11,0
 crates/fs-btrfs/src/lib.rs,1,694,14,1,10,0
 crates/fs-btrfs/src/snapshot.rs,1,503,7,1,0,0
 crates/fs-exfat/src/boot.rs,1,106,7,1,0,0
@@ -168,8 +159,6 @@ crates/fs-ext4/src/block_cache.rs,1,17,1,1,0,0
 crates/fs-ext4/src/journal.rs,1,381,13,1,1,0
 crates/fs-ext4/src/lib.rs,1,668,18,1,0,0
 crates/fs-fat/src/lib.rs,1,215,7,1,0,0
-crates/fs-hfsplus/src/constants.rs,0,0,0,0,12,0
-crates/fs-hfsplus/src/lib.rs,1,705,12,1,0,0
 crates/fs-lvm/src/crc.rs,1,48,4,1,0,0
 crates/fs-lvm/src/label.rs,1,165,8,1,0,0
 crates/fs-lvm/src/lib.rs,1,811,18,1,0,0
@@ -244,7 +233,6 @@ crates/transport/src/dto/files.rs,1,119,3,1,0,0
 crates/transport/src/dto/graph.rs,1,214,8,1,0,0
 crates/transport/src/dto/import.rs,1,280,7,1,0,0
 crates/transport/src/dto/jobs.rs,1,50,2,1,0,0
-crates/transport/src/dto/macos.rs,1,89,6,1,0,0
 crates/transport/src/dto/mcp.rs,1,113,5,1,0,0
 crates/transport/src/dto/notebook.rs,1,584,20,1,0,0
 crates/transport/src/dto/recovery.rs,1,84,3,1,0,0

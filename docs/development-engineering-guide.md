@@ -166,7 +166,9 @@ V2 长期执行主计划见 `docs/v2-longterm-plan.md`。
 | Service Tauri-free | `app-services` 不得依赖 Tauri；事件、窗口、runtime cache、media protocol 等桌面适配停留在 command/state 层 |
 | Command thin wrapper | Tauri command 仅做请求校验、active case/cache/state 适配、service 调用、DTO/error 映射；不得承载业务编排、parser 逻辑或 raw SQL |
 | contracts-pst | 独立 crate，不耦合 artifacts-windows |
-| artifacts-{linux,macos} | 独立 crate，各自管理 parser 族 |
+| artifacts-{windows,linux} | 同层独立 crate，各自管理 parser 族；仅这两个平台拥有生产分析入口 |
+
+平台准入必须由后端领域类型和 service 层统一执行。不得在 transport、service、治理 DTO 或前端重新引入 macOS 生产分支；旧 `platform='macos'` 案件必须返回 typed `Unsupported`。APFS/HFS+ 只允许保留已知 Apple 分区类型标识符的 metadata 识别，不承诺 filesystem magic/signature 识别，并禁止实例化文件系统 reader。
 
 ### 9.2 模块拆分模式
 

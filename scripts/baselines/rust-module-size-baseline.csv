@@ -38,7 +38,6 @@ crates/app-services/src/import_pipeline/execute.rs,759,500,production
 crates/app-services/src/import_pipeline/partition.rs,649,500,production
 crates/app-services/src/import_pipeline/phases.rs,1064,500,production
 crates/app-services/src/import_pipeline/tests.rs,1188,500,production
-crates/app-services/src/import_precheck.rs,515,500,production
 crates/app-services/src/notebook_service/mod.rs,689,200,module-root
 crates/app-services/src/parallel_enum/mod.rs,1025,200,module-root
 crates/app-services/src/parallel_enum/ntfs_mft.rs,1211,500,production
@@ -55,7 +54,6 @@ crates/app-services/src/v3_governance_service.rs,623,500,production
 crates/artifacts-core/src/lib.rs,415,200,module-root
 crates/artifacts-linux/src/journal.rs,1024,500,production
 crates/artifacts-linux/src/web.rs,577,500,production
-crates/artifacts-macos/src/plist.rs,628,500,production
 crates/artifacts-windows/src/browser/chromium.rs,918,500,production
 crates/artifacts-windows/src/browser/firefox.rs,1336,500,production
 crates/artifacts-windows/src/evtx/parser.rs,1505,500,production
@@ -82,8 +80,6 @@ crates/domain/src/file_entry/mod.rs,214,200,module-root
 crates/evidence-core/src/filesystem/mod.rs,423,200,module-root
 crates/evidence-core/src/volume/mbr.rs,517,500,production
 crates/exchange/src/stix.rs,791,500,production
-crates/fs-apfs/src/checkpoint.rs,924,500,production
-crates/fs-apfs/src/lib.rs,1523,200,module-root
 crates/fs-btrfs/src/lib.rs,1839,200,module-root
 crates/fs-btrfs/src/snapshot.rs,829,500,production
 crates/fs-exfat/src/dir.rs,591,500,production
@@ -91,7 +87,6 @@ crates/fs-exfat/src/lib.rs,819,200,module-root
 crates/fs-ext4/src/journal.rs,941,500,production
 crates/fs-ext4/src/lib.rs,1464,200,module-root
 crates/fs-fat/src/lib.rs,882,200,module-root
-crates/fs-hfsplus/src/lib.rs,729,200,module-root
 crates/fs-lvm/src/lib.rs,1402,200,module-root
 crates/fs-lvm/src/metadata.rs,1185,500,production
 crates/fs-lvm/src/metadata/segments.rs,1060,500,production

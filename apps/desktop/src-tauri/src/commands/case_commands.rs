@@ -11,7 +11,6 @@ use transport::{
 };
 
 use crate::{events::event_bridge, state::AppState};
-
 fn init_case_db(state: &AppState) -> Result<(), CommandError> {
     // AppState methods are typed `Result<_, String>` today, so this stays on the
     // substring-matching fallback path.
