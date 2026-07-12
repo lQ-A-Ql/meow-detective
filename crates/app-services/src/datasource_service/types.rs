@@ -12,6 +12,10 @@ pub enum DataSourceError {
     Evidence(String),
     #[error("Unsupported data source platform: {0}")]
     UnsupportedPlatform(String),
+    #[error(
+        "Ceph BlueStore OSD block device detected; RADOS/PG/object reconstruction is not supported"
+    )]
+    UnsupportedCephBlueStore,
 }
 
 impl transport::ServiceErrorCategory for DataSourceError {
@@ -19,7 +23,53 @@ impl transport::ServiceErrorCategory for DataSourceError {
         match self {
             Self::Io(_) | Self::Db(_) => transport::ErrorCategory::Io,
             Self::Evidence(_) => transport::ErrorCategory::Validation,
-            Self::UnsupportedPlatform(_) => transport::ErrorCategory::Unsupported,
+            Self::UnsupportedPlatform(_) | Self::UnsupportedCephBlueStore => {
+                transport::ErrorCategory::Unsupported
+            }
+        }
+    }
+
+    fn code(&self) -> Option<&'static str> {
+        match self {
+            Self::UnsupportedCephBlueStore => Some("CEPH_BLUESTORE_UNSUPPORTED"),
+            _ => None,
+        }
+    }
+
+    fn user_message(&self) -> Option<&'static str> {
+        match self {
+            Self::UnsupportedCephBlueStore => Some(
+                "Ceph BlueStore OSD block device detected; RADOS/PG/object reconstruction is not supported",
+            ),
+            _ => None,
+        }
+    }
+
+    fn recoverable(&self) -> Option<bool> {
+        match self {
+            Self::UnsupportedCephBlueStore => Some(false),
+            _ => None,
+        }
+    }
+
+    fn safe_details(&self) -> Option<serde_json::Value> {
+        match self {
+            Self::UnsupportedCephBlueStore => Some(serde_json::json!({
+                "format": "cephBlueStore",
+                "deviceRole": "osdBlock",
+                "filesystem": false,
+                "missingCapability": "radosPgObjectReconstruction"
+            })),
+            _ => None,
+        }
+    }
+
+    fn suggestion(&self) -> Option<&'static str> {
+        match self {
+            Self::UnsupportedCephBlueStore => Some(
+                "Import the PVE host-system disks separately; BlueStore OSD object reconstruction requires a dedicated Ceph analysis workflow.",
+            ),
+            _ => None,
         }
     }
 }
@@ -43,6 +93,18 @@ pub enum ImageFilesystemSource {
     MbrPartition,
     GptPartition,
     LvmLogicalVolume,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnsupportedImageKind {
+    CephBlueStore,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnsupportedImageVolume {
+    pub kind: UnsupportedImageKind,
+    pub source: ImageFilesystemSource,
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,6 +165,7 @@ pub struct PartitionRecord {
 pub struct ImageFilesystemProbe {
     pub candidates: Vec<ImageFilesystemCandidate>,
     pub partitions: Vec<PartitionRecord>,
+    pub unsupported_volumes: Vec<UnsupportedImageVolume>,
     pub warnings: Vec<String>,
 }
 

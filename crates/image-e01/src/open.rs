@@ -1,7 +1,6 @@
-use std::collections::{HashSet, VecDeque};
+use std::collections::HashSet;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
-use std::sync::Arc;
 
 use evidence_core::ReaderInfo;
 
@@ -20,21 +19,17 @@ impl E01Reader {
         let (total_bytes, chunk_size_sectors) = geometry(&sections, file_len)?;
         let chunk_table =
             select_chunk_table(&sections, &segment_files, total_bytes, chunk_size_sectors)?;
-        Ok(Self {
-            info: ReaderInfo {
+        Ok(Self::from_parts(
+            ReaderInfo {
                 path: path.to_path_buf(),
                 size: total_bytes,
                 kind: "e01".into(),
             },
             total_bytes,
             chunk_size_sectors,
-            chunk_table: Arc::new(chunk_table),
+            chunk_table,
             segment_files,
-            cursor: 0,
-            chunk_cache: VecDeque::new(),
-            chunk_cache_bytes: 0,
-            last_chunk_read: None,
-        })
+        ))
     }
 }
 

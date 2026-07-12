@@ -278,6 +278,55 @@ fn write_ext4_marker(pv: &mut [u8]) {
 }
 
 #[test]
+fn lvm_expansion_classifies_bluestore_logical_volume_without_fs_candidate() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let source_path = tmp.path().join("bluestore-lv.raw");
+    let pv_offset = 1_048_576u64;
+    let mut pv = build_synthetic_lvm_pv(
+        "ceph_vg",
+        "vg-ceph",
+        "osd_block",
+        "lv-osd-block",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        1,
+    );
+    let marker_offset = SYNTHETIC_LV_MARKER_OFFSET;
+    pv[marker_offset..marker_offset + b"bluestore block device".len()]
+        .copy_from_slice(b"bluestore block device");
+    let ext4_marker = marker_offset + 1024 + 0x38;
+    pv[ext4_marker..ext4_marker + 2].fill(0);
+
+    let mut disk = vec![0u8; (pv_offset + SYNTHETIC_PV_SIZE) as usize];
+    disk[pv_offset as usize..pv_offset as usize + pv.len()].copy_from_slice(&pv);
+    std::fs::write(&source_path, disk).unwrap();
+
+    let (candidate, partition) = synthetic_lvm_partition(1, "ceph pv", pv_offset);
+    let mut probe = app_services::datasource_service::ImageFilesystemProbe {
+        candidates: vec![candidate],
+        partitions: vec![partition],
+        unsupported_volumes: Vec::new(),
+        warnings: Vec::new(),
+    };
+
+    expand_lvm_pool_candidates(&mut probe, &source_path, &DataSourceKind::Raw);
+
+    assert!(probe.candidates.is_empty());
+    assert_eq!(probe.unsupported_volumes.len(), 1);
+    assert_eq!(
+        probe.unsupported_volumes[0].kind,
+        app_services::datasource_service::UnsupportedImageKind::CephBlueStore
+    );
+    assert_eq!(
+        probe.unsupported_volumes[0].source,
+        ImageFilesystemSource::LvmLogicalVolume
+    );
+    assert_eq!(
+        probe.unsupported_volumes[0].name.as_deref(),
+        Some("ceph_vg/osd_block")
+    );
+}
+
+#[test]
 fn lvm_expansion_iterates_independent_volume_groups_by_remaining_pv_offsets() {
     let tmp = tempfile::TempDir::new().unwrap();
     let source_path = tmp.path().join("two-vgs.raw");
@@ -309,6 +358,7 @@ fn lvm_expansion_iterates_independent_volume_groups_by_remaining_pv_offsets() {
     let mut probe = app_services::datasource_service::ImageFilesystemProbe {
         candidates: vec![low_candidate, high_candidate],
         partitions: vec![low_partition, high_partition],
+        unsupported_volumes: Vec::new(),
         warnings: Vec::new(),
     };
 
@@ -417,6 +467,7 @@ fn lvm_expansion_skips_incomplete_high_seqno_vg_but_expands_complete_vg() {
     let mut probe = app_services::datasource_service::ImageFilesystemProbe {
         candidates: vec![low_candidate, high_candidate],
         partitions: vec![low_partition, high_partition],
+        unsupported_volumes: Vec::new(),
         warnings: Vec::new(),
     };
 
@@ -536,6 +587,7 @@ fn lvm_expansion_reports_metadata_parse_diagnostics() {
     let mut probe = app_services::datasource_service::ImageFilesystemProbe {
         candidates: vec![candidate],
         partitions: vec![partition],
+        unsupported_volumes: Vec::new(),
         warnings: Vec::new(),
     };
 
@@ -574,6 +626,7 @@ fn lvm_expansion_skips_internal_and_thin_logical_volumes() {
     let mut probe = app_services::datasource_service::ImageFilesystemProbe {
         candidates: vec![candidate],
         partitions: vec![partition],
+        unsupported_volumes: Vec::new(),
         warnings: Vec::new(),
     };
 
@@ -648,6 +701,7 @@ thin_root { id="lv-thin-root" status=["READ","WRITE","VISIBLE"] segment_count=1 
     let mut probe = app_services::datasource_service::ImageFilesystemProbe {
         candidates: vec![candidate],
         partitions: vec![partition],
+        unsupported_volumes: Vec::new(),
         warnings: Vec::new(),
     };
 

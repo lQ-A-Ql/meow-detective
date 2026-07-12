@@ -1,6 +1,7 @@
 use super::*;
 use crate::types::*;
-use std::io::{Read, Seek};
+use evidence_core::{EvidenceReader, FileSystemReader};
+use std::io::{self, Read, Seek, SeekFrom};
 use std::sync::{Arc, Mutex};
 
 type ReadLog = Arc<Mutex<Vec<(u64, usize)>>>;

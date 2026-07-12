@@ -26,6 +26,7 @@ pub(super) fn seed_manifest_if_needed(
         &ctx.import_config.source_path,
         &ctx.import_config.kind,
     );
+    reject_exclusively_unsupported_probe(&probe)?;
     report_probe(ctx, data_source, "probe", &probe, started.elapsed());
     persist_probe(ctx, data_source, &probe, manifest)?;
     *candidates = probe.candidates;
@@ -60,6 +61,7 @@ pub(super) fn load_resume_candidates(
         &ctx.import_config.source_path,
         &ctx.import_config.kind,
     );
+    reject_exclusively_unsupported_probe(&probe)?;
     repair_resumed_partition_metadata(ctx, data_source, &probe)?;
     report_probe(ctx, data_source, "probe-resume", &probe, started.elapsed());
     *candidates = probe.candidates;
@@ -72,12 +74,32 @@ fn probe_image(
     let path = &ctx.import_config.source_path;
     let mut reader: Box<dyn EvidenceReader> =
         if ctx.import_config.kind == domain::DataSourceKind::E01 {
-            Box::new(E01Reader::open(path).map_err(CommandError::from_service_error)?)
+            Box::new(E01Reader::open(path).map_err(CommandError::from_typed_service_error)?)
         } else {
-            Box::new(RawImageReader::open(path).map_err(CommandError::from_service_error)?)
+            Box::new(RawImageReader::open(path).map_err(CommandError::from_typed_service_error)?)
         };
     datasource_service::detect_image_filesystem(&mut reader)
-        .map_err(CommandError::from_service_error)
+        .map_err(CommandError::from_typed_service_error)
+}
+
+fn reject_exclusively_unsupported_probe(
+    probe: &datasource_service::ImageFilesystemProbe,
+) -> Result<(), CommandError> {
+    if probe.candidates.is_empty()
+        && probe
+            .unsupported_volumes
+            .iter()
+            .any(|volume| volume.kind == datasource_service::UnsupportedImageKind::CephBlueStore)
+    {
+        return Err(unsupported_bluestore_error());
+    }
+    Ok(())
+}
+
+fn unsupported_bluestore_error() -> CommandError {
+    CommandError::from_typed_service_error(
+        datasource_service::DataSourceError::UnsupportedCephBlueStore,
+    )
 }
 
 fn report_probe(

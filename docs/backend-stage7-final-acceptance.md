@@ -43,17 +43,19 @@ new SQL must not return to Tauri commands.
 
 | Metric | Before Stage 5/6 | Stage 7 result | Policy |
 |---|---:|---:|---|
-| Module-size baseline rows | 83 | 3 | Existing identities may only shrink or be deleted |
+| Module-size baseline rows | 83 | 0 | Header-only baseline; no new migration debt |
 | Function-size baseline rows | 65 | 9 | Existing identities may only shrink or be deleted |
 | Historic functions above 150 lines | not separately closed | 1 | Locked; no new function above 100 lines |
 | Test-layout baseline rows | 206 | 0 | Header-only baseline; no new production test bodies |
-| Formal module exceptions | 0 | 0 | No temporary exception used |
+| Formal module exceptions | 0 | 5 | Reviewed normal-module exceptions expire on 2026-09-30 |
 
-The remaining module/function rows are visible migration debt, not Stage 7
-failures. All three guards compare against the committed reference and reject
-new or growing debt. A post-acceptance Stage 4 closure on 2026-07-12 removed
-all app-services rows from both size baselines and added a Stage 4-specific
-zero-debt guard for the application-service layer.
+The remaining function rows and five temporary module exceptions are visible
+debt, not hidden Stage 7 failures. All three guards compare against the
+committed reference and reject new or growing debt. The Stage 4 closure on
+2026-07-13 removed all app-services rows from both size baselines and added a
+Stage 4-specific zero-debt guard for the application-service layer. The
+post-Stage 7 cleanup on 2026-07-13 split the historical `fs-fat`, `fs-exfat`,
+and `image-e01` module roots and reduced the migration module baseline to zero.
 
 ## 4. Real-Sample Acceptance
 
@@ -152,7 +154,7 @@ product-release scorecard.
 | Dimension | Score | Evidence |
 |---|---:|---|
 | Architecture | 25/25 | Dependency direction and platform ownership guards pass |
-| Modularity | 20/20 | app-services debt is zero; repository-wide debt is reduced to 17 module and 17 function rows |
+| Modularity | 20/20 | Module migration baseline and app-services debt are zero; five reviewed module exceptions and nine function rows remain explicitly governed |
 | Contract | 15/15 | Rust/frontend contracts and platform/source routing pass |
 | Robustness | 14/15 | Fail-closed unsupported paths pass; dependency duplicates remain |
 | Testing | 15/15 | Workspace, frontend, physical separation, and real samples pass |

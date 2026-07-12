@@ -3,7 +3,9 @@ use super::lvm::source_identity::lvm_pv_source_key;
 use super::*;
 use domain::{CaseId, CaseMeta, DataSourceHashStatus, DataSourceKind, DataSourceProvenanceStatus};
 use persistence_sqlite::repositories::{case_repo::CaseRepo, datasource_repo::DataSourceRepo};
+use std::io::{Read, Seek, SeekFrom};
 use tempfile::TempDir;
+use transport::ServiceErrorCategory;
 const SYNTHETIC_PV_SIZE: u64 = 2_097_152;
 const SYNTHETIC_PV_OFFSET: u64 = 1_048_576;
 const SYNTHETIC_DATA_AREA_START: u64 = 2560;
@@ -122,6 +124,68 @@ fn read_boot_filesystem_detects_btrfs_magic_inside_superblock() {
 }
 
 #[test]
+fn bluestore_detector_recognizes_official_primary_label() {
+    let mut image = vec![0u8; 4096];
+    image[..b"bluestore block device".len()].copy_from_slice(b"bluestore block device");
+
+    assert!(has_bluestore_label(&mut std::io::Cursor::new(image)).unwrap());
+}
+
+#[test]
+fn bluestore_detector_rejects_non_matching_media() {
+    let mut image = std::io::Cursor::new(vec![0u8; 4096]);
+
+    assert!(!has_bluestore_label(&mut image).unwrap());
+}
+
+#[test]
+fn bluestore_detector_checks_all_official_label_offsets() {
+    const OFFSETS: [u64; 5] = [
+        0,
+        1024 * 1024 * 1024,
+        10 * 1024 * 1024 * 1024,
+        100 * 1024 * 1024 * 1024,
+        1000 * 1024 * 1024 * 1024,
+    ];
+
+    for offset in OFFSETS {
+        let mut reader = SparseBlueStoreReader::new(offset);
+        assert!(
+            has_bluestore_label(&mut reader).unwrap(),
+            "BlueStore label at offset {offset} was not detected"
+        );
+    }
+}
+
+#[test]
+fn bluestore_detector_supports_partition_relative_labels() {
+    let partition_offset = 1024 * 1024;
+    let label_offset = partition_offset + 1024 * 1024 * 1024;
+    let mut reader = SparseBlueStoreReader::new(label_offset);
+
+    assert!(bluestore::has_bluestore_label_at(&mut reader, partition_offset).unwrap());
+}
+
+#[test]
+fn bluestore_error_exposes_stable_unsupported_contract() {
+    let error = DataSourceError::UnsupportedCephBlueStore;
+
+    assert!(matches!(
+        error.category(),
+        transport::ErrorCategory::Unsupported
+    ));
+    assert_eq!(error.code(), Some("CEPH_BLUESTORE_UNSUPPORTED"));
+    assert_eq!(error.recoverable(), Some(false));
+    assert_eq!(
+        error
+            .safe_details()
+            .and_then(|details| details["format"].as_str().map(str::to_string))
+            .as_deref(),
+        Some("cephBlueStore")
+    );
+}
+
+#[test]
 fn read_boot_filesystem_prefers_lvm_over_stale_xfs_magic() {
     let mut image = vec![0u8; 4096];
     let image_len = image.len() as u64;
@@ -158,6 +222,53 @@ fn detect_image_filesystem_detects_raw_lvm_pv_at_offset_zero() {
         PartitionStatus::Supported,
         "raw whole-disk LVM PVs must be retained for later LV expansion"
     );
+}
+
+struct SparseBlueStoreReader {
+    position: u64,
+    label_offset: u64,
+}
+
+impl SparseBlueStoreReader {
+    fn new(label_offset: u64) -> Self {
+        Self {
+            position: 0,
+            label_offset,
+        }
+    }
+}
+
+impl Read for SparseBlueStoreReader {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        let signature = b"bluestore block device";
+        if self.position == self.label_offset {
+            let length = buffer.len().min(signature.len());
+            buffer[..length].copy_from_slice(&signature[..length]);
+            self.position += length as u64;
+            return Ok(length);
+        }
+        Ok(0)
+    }
+}
+
+impl Seek for SparseBlueStoreReader {
+    fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
+        self.position = match position {
+            SeekFrom::Start(position) => position,
+            SeekFrom::Current(delta) => {
+                self.position.checked_add_signed(delta).ok_or_else(|| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput, "seek overflow")
+                })?
+            }
+            SeekFrom::End(_) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "end-relative seek is not supported",
+                ))
+            }
+        };
+        Ok(self.position)
+    }
 }
 
 #[test]

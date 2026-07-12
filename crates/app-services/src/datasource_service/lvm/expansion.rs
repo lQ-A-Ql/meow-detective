@@ -15,6 +15,7 @@ use super::source_identity::{
     lvm_source_fingerprint, lvm_source_matches, lvm_sources_for_pv_mappings,
     representative_lvm_candidate,
 };
+use super::unsupported::classify_unsupported_logical_volume;
 use domain::DataSourceKind;
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -316,7 +317,8 @@ fn append_readable_volume_candidates(
             }
         };
 
-        match read_boot_filesystem(&mut *lv_reader, 0) {
+        let filesystem = read_boot_filesystem(&mut *lv_reader, 0);
+        match filesystem {
             Ok(Some(fs_kind)) if !matches!(fs_kind, ImageFilesystemKind::LvmPool) => {
                 state.new_candidates.push(build_logical_volume_candidate(
                     representative,
@@ -327,14 +329,7 @@ fn append_readable_volume_candidates(
                 ));
             }
             Ok(_) => {
-                probe.warnings.push(format!(
-                    "LVM expand: no supported filesystem for logical volume; {}",
-                    lvm_lv_diagnostic_context(vg, &lv_info, &expanded.sources)
-                ));
-                tracing::debug!(
-                    "LVM LV '{}': no supported filesystem detected, skipping",
-                    lv_info.name
-                );
+                classify_unsupported_logical_volume(probe, &mut *lv_reader, vg, &lv_info, expanded);
             }
             Err(error) => {
                 probe.warnings.push(format!(

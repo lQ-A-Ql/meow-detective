@@ -126,7 +126,7 @@ powershell -ExecutionPolicy Bypass -File scripts/check-pve-cluster-import.ps1
   - Production Rust files target <= 500 lines; new non-baselined files above the target fail `check-module-size.ps1`, with 800 as the hard ceiling for new normal modules.
   - `mod.rs` / `lib.rs` files target <= 200 lines and should remain API / re-export surfaces.
   - Existing file-size violations are locked by `scripts/baselines/rust-module-size-baseline.csv` and may not grow.
-  - Current post-cleanup debt is limited to three historical module-root baseline rows plus five reviewed normal-module exceptions expiring on 2026-09-30; new work must not copy these patterns or extend their expiry without architecture review.
+  - Current post-cleanup module baseline is zero. Five reviewed normal-module exceptions remain and expire on 2026-09-30; new work must not copy these patterns or extend their expiry without architecture review.
   - New normal modules from 501 through 800 lines require a valid temporary `path/owner/reason/expires` entry in `scripts/baselines/rust-module-size-exceptions.csv`; migration baseline rows are not formal exceptions.
   - Production functions target <= 100 lines. All existing >100-line debt, including existing >150-line functions, is identity-locked by `scripts/baselines/rust-function-size-baseline.csv` and may only shrink. Any non-baselined function >100 fails; 150 is the new-code hard ceiling.
   - Module/function/test-layout baseline edits are transition-checked against their `RUST_*_BASELINE_REFERENCE` CI base SHA or `-ReferenceRevision`; rows may only decrease or be deleted. Initial baselines require the actual hash, revision/hash-pinned manifest, and PR-external protected `RUST_*_BOOTSTRAP_SHA256` repository variable to agree.
@@ -174,7 +174,7 @@ cargo test --workspace
   - Parser tests: valid / invalid / edge (at least 3 per parser family).
   - Fixture / expected JSON regression tests.
   - Real E01 regression tests are marked `#[ignore]` and run by setting `FORENSICS_E01_FIXTURE` or `FORENSICS_LIUYANG_E01_FIXTURE` environment variables.
-  - The six-member PVE cluster import regression is marked `#[ignore]`; set `FORENSICS_PVE_CLUSTER_ROOT` and run `scripts/check-pve-cluster-import.ps1`. It serially attempts all members, expects three host `disk01` imports and three explicit BlueStore `disk02` failures, and verifies source-database isolation plus key-file preview.
+  - The six-member PVE cluster import regression is marked `#[ignore]`; set `FORENSICS_PVE_CLUSTER_ROOT` and run `scripts/check-pve-cluster-import.ps1`. It serially attempts all members, expects three host `disk01` imports and three `CEPH_BLUESTORE_UNSUPPORTED` `disk02` failures, and verifies source-database isolation, zero BlueStore file rows, plus key-file preview.
 
 ### Frontend
 

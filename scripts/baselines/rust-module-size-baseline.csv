@@ -1,4 +1,1 @@
 path,lines,limit,kind
-crates/fs-exfat/src/lib.rs,491,200,module-root
-crates/fs-fat/src/lib.rs,670,200,module-root
-crates/image-e01/src/lib.rs,442,200,module-root

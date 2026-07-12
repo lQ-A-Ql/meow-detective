@@ -41,6 +41,7 @@ where
     Ok(ImageFilesystemProbe {
         candidates,
         partitions: records,
+        unsupported_volumes: Vec::new(),
         warnings,
     })
 }

@@ -1,5 +1,7 @@
 use super::*;
-use std::io::Write;
+use crate::table::V1_TABLE_HEADER_SIZE;
+use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::path::Path;
 
 impl E01Reader {
     fn cached_chunk_indices_for_test(&self) -> Vec<u64> {
@@ -46,7 +48,7 @@ fn test_section_descriptor_size() {
 
 #[test]
 fn test_v1_table_header_size() {
-    assert_eq!(V1_TABLE_HEADER_SIZE, 24);
+    assert_eq!(crate::table::V1_TABLE_HEADER_SIZE, 24);
 }
 
 #[test]
@@ -90,7 +92,7 @@ fn sequential_reads_populate_bounded_neighbor_cache() {
     assert!(cached.contains(&1));
     assert!(cached.contains(&2));
     assert!(cached.contains(&3));
-    assert!(reader.cache_bytes_for_test() <= SEQUENTIAL_CACHE_MAX_BYTES);
+    assert!(reader.cache_bytes_for_test() <= crate::reader::SEQUENTIAL_CACHE_MAX_BYTES);
 
     let _ = std::fs::remove_dir_all(&dir);
 }

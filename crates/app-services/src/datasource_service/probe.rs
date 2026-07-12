@@ -4,7 +4,8 @@ use self::gpt::detect_gpt_filesystems;
 use super::fs_magic::{kind_label, read_boot_filesystem, SECTOR_SIZE};
 use super::{
     DataSourceError, ImageFilesystemCandidate, ImageFilesystemKind, ImageFilesystemProbe,
-    ImageFilesystemSource, PartitionRecord, PartitionStatus, Result,
+    ImageFilesystemSource, PartitionRecord, PartitionStatus, Result, UnsupportedImageKind,
+    UnsupportedImageVolume,
 };
 use evidence_core::volume::mbr::{MbrPartitionStatus, PartitionEntry};
 use std::io::{Read, Seek};
@@ -94,10 +95,12 @@ where
         return Ok(ImageFilesystemProbe {
             candidates,
             partitions,
+            unsupported_volumes: Vec::new(),
             warnings,
         });
     }
 
+    let unsupported_volumes = detect_direct_unsupported_volumes(reader)?;
     if partitions.is_empty() {
         warnings.push(format!(
             "No supported NTFS/FAT filesystem detected. MBR types: [{}]",
@@ -107,6 +110,7 @@ where
     Ok(ImageFilesystemProbe {
         candidates,
         partitions,
+        unsupported_volumes,
         warnings,
     })
 }
@@ -140,8 +144,23 @@ where
     Ok(Some(ImageFilesystemProbe {
         candidates: vec![candidate],
         partitions: vec![partition],
+        unsupported_volumes: Vec::new(),
         warnings: Vec::new(),
     }))
+}
+
+fn detect_direct_unsupported_volumes<R>(reader: &mut R) -> Result<Vec<UnsupportedImageVolume>>
+where
+    R: Read + Seek,
+{
+    if super::has_bluestore_label(reader)? {
+        return Ok(vec![UnsupportedImageVolume {
+            kind: UnsupportedImageKind::CephBlueStore,
+            source: ImageFilesystemSource::DirectVolume,
+            name: Some("Ceph BlueStore OSD".to_string()),
+        }]);
+    }
+    Ok(Vec::new())
 }
 
 fn detect_mbr_candidates<R>(

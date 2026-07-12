@@ -133,11 +133,10 @@ fn persist_failed_import(
     data_source_id: &domain::DataSourceId,
     error: &CommandError,
 ) {
-    if let Err(update_error) = DataSourceRepo::new(conn).update_import_state(
-        data_source_id,
-        "failed",
-        Some(&error.message),
-    ) {
+    let diagnostic = error.to_string();
+    if let Err(update_error) =
+        DataSourceRepo::new(conn).update_import_state(data_source_id, "failed", Some(&diagnostic))
+    {
         tracing::warn!(
             data_source_id = %data_source_id.0,
             error = %update_error,

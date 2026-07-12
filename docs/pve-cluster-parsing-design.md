@@ -169,7 +169,7 @@ Expected result:
 | PVE host filesystem | LVM `pve/root` -> 64-bit EXT4 verified | Cross-node correlation |
 | PVE config database | `/var/lib/pve-cluster/config.db` import and preview verified | Structured config correlation |
 | LVM thin pool | Initial read-only dm-thin mapping; no repair/checksum claim | Hardening required after Stage 3 |
-| Ceph BlueStore OSD | Marker confirmed; no object-tree parser | RADOS/PG/object reconstruction required |
+| Ceph BlueStore OSD | Read-only label detection; explicit unsupported, no fake filesystem candidate | RADOS/PG/object reconstruction required |
 | LVM RAID/cache/snapshot | Unsupported diagnostic | Future optional |
 | Partial/degraded VG | Unsupported diagnostic | Future optional |
 
@@ -186,6 +186,32 @@ Current milestone:
 - The private six-member PVE gate attempts every member in deterministic order,
   keeps `app.db` free of file-tree rows, verifies unique source DB paths, and
   records the expected host-ready/BlueStore-failed aggregate outcome.
+
+### BlueStore failure boundary
+
+The `disk02` failure is intentionally classified at the media-format boundary:
+
+1. The E01 container opens successfully, so this is not an E01 reader failure.
+2. The outer device is an LVM PV. LVM expansion opens each readable LV and
+   checks Ceph's `bluestore block device` label at LV-relative offsets `0`,
+   `1 GiB`, `10 GiB`, `100 GiB`, and `1000 GiB`.
+3. In the real `disk02` members, the label is at OSD-LV offset `0`; on
+   `server01-disk02` that maps to image offset `1 MiB`.
+4. The former defect was layer placement: only POSIX-filesystem LVs became
+   candidates, while the BlueStore LV was discarded as an unknown filesystem.
+5. BlueStore is a Ceph OSD block device, not a mountable POSIX filesystem.
+6. Meow_Detective currently has no BlueStore label-metadata inventory parser
+   beyond detection and no RADOS placement-group/object reconstruction layer.
+7. Import therefore fails closed with `CEPH_BLUESTORE_UNSUPPORTED`, retains the
+   isolated diagnostic `source.db`, and writes zero file entries.
+
+The signature and offsets follow Ceph's
+`src/ceph-volume/ceph_volume/util/disk.py` and Ceph's BlueStore implementation;
+label structure and inspection behavior are defined by
+`src/os/bluestore/bluestore_types.h` and
+`src/os/bluestore/bluestore_tool.cc`. BlueStore must not be added to
+`ImageFilesystemKind` until a separate object-store analysis architecture
+exists.
 
 Future cluster milestone:
 - cluster evidence sets are explicit and auditable;

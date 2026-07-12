@@ -389,7 +389,16 @@ fn assert_bluestore_source(
         storage.import_state, "failed",
         "BlueStore must not masquerade as a ready POSIX file system"
     );
-    assert!(storage.last_error.is_some());
+    let last_error = storage
+        .last_error
+        .as_deref()
+        .expect("BlueStore failure must preserve the explicit reason");
+    assert!(
+        last_error.contains("CEPH_BLUESTORE_UNSUPPORTED")
+            && last_error.contains("Ceph BlueStore OSD block device detected")
+            && last_error.contains("RADOS/PG/object reconstruction is not supported"),
+        "unexpected BlueStore failure: {last_error}"
+    );
     let source_db_path = source_db::source_db_path(case_root, &source.id);
     assert!(
         source_db_path.exists(),

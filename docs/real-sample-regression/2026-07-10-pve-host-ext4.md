@@ -27,8 +27,27 @@ must preserve partial ready/failed counts.
 
 Observed on 2026-07-13: `ready=3`, `failed=3`; host source DB file counts were
 `62,403`, `62,380`, and `62,405`. Each BlueStore member retained an isolated
-diagnostic `source.db` with zero file entries and the explicit error
-`No supported filesystem partitions were detected`.
+diagnostic `source.db` with zero file entries. That run still reported the
+generic error `No supported filesystem partitions were detected`.
+
+On 2026-07-13 the probe path was hardened and the private six-member gate was
+rerun successfully. The three `disk02` images are whole-disk LVM PVs. Their
+readable OSD logical volumes carry the upstream Ceph signature
+`bluestore block device` at LV-relative offset `0`; for `server01-disk02` this
+maps to image offset `1 MiB`. The previous generic failure occurred because LVM
+expansion only retained LVs whose first bytes matched a supported POSIX
+filesystem and silently discarded the BlueStore LV before import classification.
+
+The detector checks Ceph's official device-relative label positions `0`,
+`1 GiB`, `10 GiB`, `100 GiB`, and `1000 GiB` against the logical block device,
+not the outer E01 or PV address space. A detected OSD now fails with
+`CEPH_BLUESTORE_UNSUPPORTED` and the explicit message
+`Ceph BlueStore OSD block device detected; RADOS/PG/object reconstruction is not supported`.
+It is never added as an `ImageFilesystemKind`, filesystem candidate, or file
+tree root. Synthetic coverage validates all official offsets and
+device-relative detection; the real gate validates all three `disk02` failures,
+zero file rows, retained diagnostic source databases, and continued import of
+all three `disk01` members.
 
 样本路径仅是本地人工环境示例，生产代码和默认 CI 不得硬编码该路径。
 
@@ -45,6 +64,6 @@ diagnostic `source.db` with zero file entries and the explicit error
 
 ## 未保证范围
 
-- `disk02` 已确认是 Ceph BlueStore OSD block device，不是可直接枚举的 POSIX 文件系统；当前不提供 RADOS object/PG/VM disk 文件树。
+- `disk02` 已由生产 LVM LV reader 按 Ceph 官方标签确认是 BlueStore OSD block device。BlueStore 不是可直接枚举的 POSIX 文件系统；当前不提供 label metadata inventory、RADOS object/PG/VM disk 文件树。
 - 不承诺 EXT4 metadata checksum 校验、deleted recovery、journal replay 完整性或全部 incompat feature 组合。
 - 不承诺集群跨节点配置归并和语义关联。

@@ -291,7 +291,9 @@ The PVE gate is opt-in and exercises the actual desktop background cluster
 runner in strict serial mode. It verifies that all six members are attempted,
 the three host `disk01` images produce isolated source databases and previewable
 EXT4 trees, and the three Ceph BlueStore `disk02` images remain explicit failed
-members instead of being exposed as normal POSIX filesystems.
+members instead of being exposed as normal POSIX filesystems. Each failed
+BlueStore source must persist `CEPH_BLUESTORE_UNSUPPORTED`, retain an isolated
+diagnostic `source.db`, and contain zero file entries.
 
 ```powershell
 $env:FORENSICS_PVE_CLUSTER_ROOT = 'E:\pangushi\服务器'

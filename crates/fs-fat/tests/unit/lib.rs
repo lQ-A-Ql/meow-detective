@@ -1,5 +1,8 @@
 use super::*;
-use evidence_core::filesystem::join_child_path;
+use crate::directory::read_sfn_name;
+use crate::types::FatType;
+use evidence_core::filesystem::{join_child_path, FileSystemReader};
+use std::io::{self, Read, Seek, SeekFrom};
 use std::sync::{Arc, Mutex};
 
 type ReadLog = Arc<Mutex<Vec<(u64, usize)>>>;
