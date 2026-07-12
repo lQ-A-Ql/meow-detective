@@ -9,6 +9,7 @@ mod source_analysis;
 mod source_identity;
 
 #[cfg(test)]
+#[path = "../../tests/unit/report/mod.rs"]
 mod tests;
 
 pub use csv::{

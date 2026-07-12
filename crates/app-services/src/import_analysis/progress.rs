@@ -1,12 +1,6 @@
-#[cfg(test)]
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 pub fn current_rss_mb() -> u64 {
-    #[cfg(test)]
-    if let Some(value) = test_rss_override_mb() {
-        return value;
-    }
     current_rss_bytes() / (1024 * 1024)
 }
 
@@ -42,24 +36,11 @@ pub(super) fn scheduling_state(
 }
 
 pub(super) fn memory_hard_limit_exceeded(limit_mb: u64) -> bool {
-    let rss_mb = current_rss_mb();
+    memory_hard_limit_exceeded_for_rss(current_rss_mb(), limit_mb)
+}
+
+pub(super) fn memory_hard_limit_exceeded_for_rss(rss_mb: u64, limit_mb: u64) -> bool {
     rss_mb > 0 && rss_mb >= limit_mb
-}
-
-#[cfg(test)]
-static TEST_RSS_OVERRIDE_MB: AtomicU64 = AtomicU64::new(0);
-
-#[cfg(test)]
-fn test_rss_override_mb() -> Option<u64> {
-    match TEST_RSS_OVERRIDE_MB.load(Ordering::Relaxed) {
-        0 => None,
-        value => Some(value),
-    }
-}
-
-#[cfg(test)]
-pub(super) fn set_test_rss_override_mb(value: Option<u64>) {
-    TEST_RSS_OVERRIDE_MB.store(value.unwrap_or(0), Ordering::Relaxed);
 }
 
 #[cfg(target_os = "windows")]

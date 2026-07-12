@@ -13,6 +13,7 @@ mod pst;
 mod shared;
 
 #[cfg(test)]
+#[path = "../../../../tests/unit/analysis_service/extraction/email/mod.rs"]
 mod tests;
 
 use super::ExtractionOutcome;

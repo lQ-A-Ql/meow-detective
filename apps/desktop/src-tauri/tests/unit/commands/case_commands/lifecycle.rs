@@ -42,7 +42,7 @@ fn command_support_helpers_follow_active_case_lifecycle() {
     ));
     let active = case_service::create_case(&root, "Lifecycle", Some("Codex Test"))
         .expect("create test case");
-    let db_path = active.db_path();
+    let case_root = active.case_root.clone();
     let state = AppState::default();
 
     let no_case = require_active_case(&state).expect_err("active case required");
@@ -51,7 +51,7 @@ fn command_support_helpers_follow_active_case_lifecycle() {
     *state.active_case.lock().expect("active case lock") = Some(active);
     state.init_db_pragmas().expect("initialize pragmas");
     let snapshot = require_active_case(&state).expect("snapshot available");
-    assert_eq!(snapshot.db_path, db_path);
+    assert_eq!(snapshot.case_root, case_root);
     get_case_connection(&state).expect("connection available");
 
     *state.active_case.lock().expect("active case lock") = None;

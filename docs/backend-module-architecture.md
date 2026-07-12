@@ -128,6 +128,11 @@ The executable Stage 3 and Stage 4 split plan is maintained in
 the thin Tauri command boundary, application-service target modules, review
 scoring, the regression matrix, and performance acceptance criteria.
 
+The executable Stage 5 and Stage 6 plan is maintained in
+`docs/backend-stage5-stage6-design.md`. It defines parser/core capability
+families, behavior-preserving facade rules, physical test migration order,
+real-sample regressions, review scoring, and zero-test-debt acceptance.
+
 The module, function, and test-layout limits are automated in this Stage 0
 slice. The function guard uses a compiled lexer so comments, nested block
 comments, ordinary/byte/raw strings, character literals, closures, and nested
@@ -239,6 +244,8 @@ powershell -ExecutionPolicy Bypass -File scripts\check-stage2-platform-boundary.
 powershell -ExecutionPolicy Bypass -File scripts\check-stage2-real-sample-isolation.ps1
 powershell -ExecutionPolicy Bypass -File scripts\check-stage3-command-boundary.ps1
 powershell -ExecutionPolicy Bypass -File scripts\check-stage4-service-boundary.ps1
+powershell -ExecutionPolicy Bypass -File scripts\check-stage5-parser-boundary.ps1
+powershell -ExecutionPolicy Bypass -File scripts\check-stage6-test-separation.ps1
 ```
 
 The guards are PowerShell 5.1 compatible, read files as strict UTF-8, and report

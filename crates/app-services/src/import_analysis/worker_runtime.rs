@@ -378,7 +378,6 @@ fn read_artifact_bytes(
     read_artifact_bytes_impl(header_cache, conn, file_id)
 }
 
-#[cfg(not(test))]
 fn read_artifact_bytes_impl(
     header_cache: &file_service::FileHeaderReadCache,
     conn: &Connection,
@@ -391,16 +390,6 @@ fn read_artifact_bytes_impl(
     )
 }
 
-#[cfg(test)]
-fn read_artifact_bytes_impl(
-    header_cache: &file_service::FileHeaderReadCache,
-    conn: &Connection,
-    file_id: &FileEntryId,
-) -> Result<Vec<u8>, file_service::FileServiceError> {
-    test_hooks::read_artifact_bytes(header_cache, conn, file_id)
-}
-
-#[cfg(not(test))]
 fn read_text_index_bytes_impl(
     header_cache: &file_service::FileHeaderReadCache,
     conn: &Connection,
@@ -411,15 +400,6 @@ fn read_text_index_bytes_impl(
         file_id,
         infrastructure::constants::IMPORT_TEXT_INDEX_FILE_LIMIT_BYTES as usize,
     )
-}
-
-#[cfg(test)]
-fn read_text_index_bytes_impl(
-    header_cache: &file_service::FileHeaderReadCache,
-    conn: &Connection,
-    file_id: &FileEntryId,
-) -> Result<Vec<u8>, file_service::FileServiceError> {
-    test_hooks::read_text_index_bytes(header_cache, conn, file_id)
 }
 
 #[derive(Debug)]
@@ -508,71 +488,4 @@ pub(super) fn reserve_content_budget(
         return false;
     }
     true
-}
-
-#[cfg(test)]
-pub(super) mod test_hooks {
-    use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Mutex;
-
-    static ARTIFACT_BYTES_READS: AtomicUsize = AtomicUsize::new(0);
-    static TEXT_INDEX_BYTES_READS: AtomicUsize = AtomicUsize::new(0);
-    static TRACKED_FILE_ID: Mutex<Option<String>> = Mutex::new(None);
-
-    pub(in crate::import_analysis) fn read_artifact_bytes(
-        header_cache: &file_service::FileHeaderReadCache,
-        conn: &Connection,
-        file_id: &FileEntryId,
-    ) -> Result<Vec<u8>, file_service::FileServiceError> {
-        if should_count_file_id(file_id) {
-            ARTIFACT_BYTES_READS.fetch_add(1, Ordering::Relaxed);
-        }
-        header_cache.read_file_header_by_id(
-            conn,
-            file_id,
-            infrastructure::constants::ARTIFACT_FILE_LIMIT_BYTES as usize,
-        )
-    }
-
-    pub(in crate::import_analysis) fn read_text_index_bytes(
-        header_cache: &file_service::FileHeaderReadCache,
-        conn: &Connection,
-        file_id: &FileEntryId,
-    ) -> Result<Vec<u8>, file_service::FileServiceError> {
-        if should_count_file_id(file_id) {
-            TEXT_INDEX_BYTES_READS.fetch_add(1, Ordering::Relaxed);
-        }
-        header_cache.read_file_header_by_id(
-            conn,
-            file_id,
-            infrastructure::constants::IMPORT_TEXT_INDEX_FILE_LIMIT_BYTES as usize,
-        )
-    }
-
-    fn should_count_file_id(file_id: &FileEntryId) -> bool {
-        TRACKED_FILE_ID
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .as_ref()
-            .is_none_or(|tracked| tracked == &file_id.0)
-    }
-
-    pub(in crate::import_analysis) fn reset() {
-        ARTIFACT_BYTES_READS.store(0, Ordering::Relaxed);
-        TEXT_INDEX_BYTES_READS.store(0, Ordering::Relaxed);
-        *TRACKED_FILE_ID.lock().unwrap_or_else(|e| e.into_inner()) = None;
-    }
-
-    pub(in crate::import_analysis) fn track_file_id(file_id: &str) {
-        *TRACKED_FILE_ID.lock().unwrap_or_else(|e| e.into_inner()) = Some(file_id.to_string());
-    }
-
-    pub(in crate::import_analysis) fn text_index_bytes_reads() -> usize {
-        TEXT_INDEX_BYTES_READS.load(Ordering::Relaxed)
-    }
-
-    pub(in crate::import_analysis) fn artifact_bytes_reads() -> usize {
-        ARTIFACT_BYTES_READS.load(Ordering::Relaxed)
-    }
 }

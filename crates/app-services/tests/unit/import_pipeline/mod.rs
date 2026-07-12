@@ -124,6 +124,7 @@ impl ImportEventSink for RecordingImportEventSink {
     }
 
     fn import_phase_progress(&self, progress: &ImportPhaseProgressDto) {
+        eprintln!("[import-profile] {}% {}", progress.percent, progress.detail);
         self.record(format!("phase:{}:{}", progress.job_id, progress.percent));
     }
 
@@ -958,6 +959,7 @@ fn e01_full_import() {
 
             eprintln!("\n[1/5] Starting import...");
             let t_import = std::time::Instant::now();
+            let profile_sink = RecordingImportEventSink::default();
             let result = execute_import_job(
                 conn,
                 &active.meta.id,
@@ -965,7 +967,7 @@ fn e01_full_import() {
                 import_config_for_path(&e01_path),
                 &job_id,
                 ImportJobOptions {
-                    event_sink: None,
+                    event_sink: Some(&profile_sink),
                     cancel_token: &cancel,
                     max_import_workers: None,
                     max_analysis_workers: None,
@@ -999,15 +1001,20 @@ fn e01_full_import() {
             assert!(file_count > 0, "Expected file entries, got 0");
             let root_system32: i64 = source_conn.query_row(
                 "SELECT COUNT(*) FROM file_entries
-                 WHERE parent_id = 'mft:3:5' AND name = 'System32' COLLATE NOCASE",
+                 WHERE name = 'System32' COLLATE NOCASE
+                   AND parent_id IN (
+                     SELECT id FROM file_entries WHERE parent_id IS NULL
+                   )",
                 [],
                 |row| row.get(0),
             )?;
             let root_windows: i64 = source_conn.query_row(
                 "SELECT COUNT(*) FROM file_entries
-                 WHERE parent_id = 'mft:3:5'
-                   AND entry_type = 'directory' COLLATE NOCASE
-                   AND name = 'Windows' COLLATE NOCASE",
+                 WHERE entry_type = 'directory' COLLATE NOCASE
+                   AND name = 'Windows' COLLATE NOCASE
+                   AND parent_id IN (
+                     SELECT id FROM file_entries WHERE parent_id IS NULL
+                   )",
                 [],
                 |row| row.get(0),
             )?;
@@ -1056,13 +1063,13 @@ fn e01_full_import() {
             assert!(tl_count > 0, "Expected lazy timeline events, got 0");
 
             eprintln!("\n[4/6] Verifying system information analysis...");
+            let header_cache =
+                crate::file_service::FileHeaderReadCache::new(active.meta.id.0.clone());
             let system_info =
                 crate::analysis_service::extract_system_info_for_case(
-                    conn,
+                    &source_conn,
                     |file_id, max_bytes| {
-                        crate::file_service::read_file_header_by_id(
-                            conn, file_id, max_bytes,
-                        )
+                        header_cache.read_file_header_by_id(&source_conn, file_id, max_bytes)
                     },
                 );
             eprintln!(
@@ -1092,7 +1099,7 @@ fn e01_full_import() {
 
             eprintln!("\n[5/7] Verifying evidence semantic classification...");
             let evidence_summary = crate::analysis_service::get_evidence_classification_summary(
-                conn,
+                &source_conn,
                 domain::DataSourcePlatform::Windows,
             )
             .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
@@ -1148,7 +1155,7 @@ fn e01_full_import() {
 
             eprintln!("\n[6/7] Verifying optional post-import content outputs...");
             let artifact_count: i64 =
-                conn.query_row("SELECT COUNT(*) FROM artifacts", [], |row| row.get(0))?;
+                source_conn.query_row("SELECT COUNT(*) FROM artifacts", [], |row| row.get(0))?;
             eprintln!("  Artifacts: {}", artifact_count);
             let index_rows: i64 = staging::analysis_staging_db_path(
                 &active.case_root,

@@ -9,6 +9,3 @@ pub use azure::{parse_azure_activity_log, AzureActivityLogRecord};
 pub use gcp::{parse_gcp_audit_log, GcpAuditLogRecord};
 pub use m365::parse_m365_audit_log;
 pub use normalize::{CloudAuditEntry, CloudAuditSource};
-
-#[cfg(test)]
-mod tests {}

@@ -1,3 +1,6 @@
+use super::provenance::{
+    EVTX_BOOT_SHUTDOWN_PARSER, REGISTRY_SOFTWARE_PARSER, REGISTRY_SYSTEM_PARSER,
+};
 use super::*;
 use chrono::{DateTime, Utc};
 use domain::DataSourcePlatform::{Linux as L, Windows as W};

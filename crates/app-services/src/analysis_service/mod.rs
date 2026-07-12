@@ -50,9 +50,5 @@ pub const MAX_ANALYSIS_SOURCE_BYTES: usize = 128 * 1024 * 1024;
 pub(crate) const ANALYSIS_EXTRACTOR_VERSION: &str = "1.0.0";
 
 #[cfg(test)]
-pub(crate) use provenance::{
-    EVTX_BOOT_SHUTDOWN_PARSER, REGISTRY_SOFTWARE_PARSER, REGISTRY_SYSTEM_PARSER,
-};
-
-#[cfg(test)]
+#[path = "../../tests/unit/analysis_service/mod.rs"]
 mod tests;

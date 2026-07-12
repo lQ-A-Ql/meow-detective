@@ -7,6 +7,7 @@ $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $mcpCommandsPath = Join-Path $repoRoot "apps/desktop/src-tauri/src/commands/mcp_commands.rs"
 $mcpCommandsDir = Join-Path $repoRoot "apps/desktop/src-tauri/src/commands/mcp_commands"
 $mcpDtoPath = Join-Path $repoRoot "crates/transport/src/dto/mcp.rs"
+$mcpDtoTestPath = Join-Path $repoRoot "crates/transport/tests/unit/dto/mcp.rs"
 $stagingDir = Join-Path $repoRoot "crates/app-services/src/staging"
 $importPipelineDir = Join-Path $repoRoot "crates/app-services/src/import_pipeline"
 $importPipelineModPath = Join-Path $importPipelineDir "mod.rs"
@@ -25,6 +26,7 @@ foreach ($path in @(
     $mcpCommandsPath,
     $mcpCommandsDir,
     $mcpDtoPath,
+    $mcpDtoTestPath,
     $stagingDir,
     $importPipelineDir,
     $importPipelineModPath,
@@ -64,6 +66,9 @@ $mcpCommands = Read-RustCommandTree `
   -FacadePath $mcpCommandsPath `
   -ModuleDirectory $mcpCommandsDir
 $mcpDto = Get-Content -LiteralPath $mcpDtoPath -Raw -Encoding UTF8
+$mcpDtoContract = $mcpDto + "`n" + (
+  Get-Content -LiteralPath $mcpDtoTestPath -Raw -Encoding UTF8
+)
 $staging = (Get-ChildItem -LiteralPath $stagingDir -Filter '*.rs' -File | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8 }) -join "`n"
 $importPipelineProduction = (Get-ChildItem -LiteralPath $importPipelineDir -Recurse -Filter '*.rs' -File |
   Where-Object { $_.Name -ne 'tests.rs' } |
@@ -170,7 +175,7 @@ foreach ($pattern in @(
     'tool_name:\s*String'
   )) {
   Assert-Matches `
-    -Content $mcpDto `
+    -Content $mcpDtoContract `
     -Pattern $pattern `
     -Message "MCP transport DTO regression check is missing expected contract marker: $pattern"
 }

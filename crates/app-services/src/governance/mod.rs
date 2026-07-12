@@ -118,4 +118,5 @@ fn build_v2_governance_snapshot_with_runtime(
 }
 
 #[cfg(test)]
+#[path = "../../tests/unit/governance/mod.rs"]
 mod tests;

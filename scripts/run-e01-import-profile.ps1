@@ -74,6 +74,12 @@ function Get-ProfilePhase {
   if ($matches.Count -eq 0) {
     return $null
   }
+  $timedMatches = @($matches | Where-Object {
+      $_.PSObject.Properties.Name -contains "elapsedMs"
+    })
+  if ($timedMatches.Count -gt 0) {
+    return $timedMatches[-1]
+  }
   return $matches[-1]
 }
 
@@ -119,9 +125,11 @@ function Invoke-E01ImportProfileTest {
   $process = New-Object System.Diagnostics.Process
   $process.StartInfo = $psi
   [void]$process.Start()
-  $stdout = $process.StandardOutput.ReadToEnd()
-  $stderr = $process.StandardError.ReadToEnd()
+  $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+  $stderrTask = $process.StandardError.ReadToEndAsync()
   $process.WaitForExit()
+  $stdout = $stdoutTask.GetAwaiter().GetResult()
+  $stderr = $stderrTask.GetAwaiter().GetResult()
 
   $lines = New-Object System.Collections.Generic.List[string]
   if (-not [string]::IsNullOrEmpty($stdout)) {

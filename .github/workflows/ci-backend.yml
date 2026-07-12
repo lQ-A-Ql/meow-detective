@@ -47,6 +47,8 @@ jobs:
           ./scripts/check-stage2-platform-boundary.ps1
           ./scripts/check-stage3-command-boundary.ps1
           ./scripts/check-stage4-service-boundary.ps1
+          ./scripts/check-stage5-parser-boundary.ps1
+          ./scripts/check-stage6-test-separation.ps1
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test

@@ -153,6 +153,16 @@ powershell -ExecutionPolicy Bypass -File scripts\check-stage3-command-boundary.p
 # sourceObjectId correlation, and non-fatal graph population.
 powershell -ExecutionPolicy Bypass -File scripts\check-stage4-service-boundary.ps1
 
+# Stage 5 parser/core boundary guard. This caps parser facades, preserves the
+# established public parser entry points, and prevents Tauri runtime
+# dependencies from entering parser and filesystem crates.
+powershell -ExecutionPolicy Bypass -File scripts\check-stage5-parser-boundary.ps1
+
+# Stage 6 physical test-separation guard. This requires a header-only test
+# layout baseline, rejects test-only files under production src trees, and
+# delegates bridge/body validation to the lexer-aware test-layout guard.
+powershell -ExecutionPolicy Bypass -File scripts\check-stage6-test-separation.ps1
+
 # Backend Rust module-size guard. This discovers every workspace member through
 # cargo metadata, locks pre-existing production file-size debt against
 # scripts/baselines/rust-module-size-baseline.csv, and fails on new or increased
