@@ -238,6 +238,7 @@ powershell -ExecutionPolicy Bypass -File scripts\check-stage0-boundary-guard.ps1
 powershell -ExecutionPolicy Bypass -File scripts\check-stage2-platform-boundary.ps1
 powershell -ExecutionPolicy Bypass -File scripts\check-stage2-real-sample-isolation.ps1
 powershell -ExecutionPolicy Bypass -File scripts\check-stage3-command-boundary.ps1
+powershell -ExecutionPolicy Bypass -File scripts\check-stage4-service-boundary.ps1
 ```
 
 The guards are PowerShell 5.1 compatible, read files as strict UTF-8, and report

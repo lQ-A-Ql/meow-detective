@@ -145,6 +145,12 @@ git diff --check
 
 ## Stage 4: Application Services
 
+Implementation status: completed in the working tree after Stage 3 commit
+`c3ae351`. Timeline, staging, parallel enumeration, import pipeline, file
+service, correlation, artifact, graph, entity, and rule-pack production
+modules now use focused capability files with compatibility facades. Final
+acceptance remains gated by the checks in Phase 4.5.
+
 ### Stage Design
 
 Stage 4 is a behavior-preserving use-case split. It does not move parser

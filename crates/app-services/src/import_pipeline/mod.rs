@@ -4,12 +4,13 @@
 //! and post-import analysis. Tauri-specific command wrappers live in the
 //! `forensics-desktop` crate.
 
+mod context;
 mod emit;
-pub mod execute;
+mod execute;
 pub mod options;
 pub mod partition;
 mod phases;
-mod types;
+mod profile;
 
 pub use emit::{ImportEventSink, NoopImportEventSink};
 pub use execute::{execute_import_job, execute_import_job_with_counts};
@@ -21,4 +22,5 @@ pub use partition::{
 };
 
 #[cfg(test)]
+#[path = "../../tests/unit/import_pipeline/mod.rs"]
 mod tests;

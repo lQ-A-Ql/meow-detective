@@ -11,8 +11,8 @@ $e01PipelineTestPath = Join-Path $repoRoot "crates/app-services/tests/e01_full_p
 # to persistence-sqlite/src/repositories/staging_repo.rs during the
 # engineering refactor (commit c24a989 + 1b1a7e3).
 $stagingPath = Join-Path $repoRoot "crates/persistence-sqlite/src/repositories/staging_repo.rs"
-# Import phase configuration (e.g. timeline projection deferral).
-$pipelinePhasesPath = Join-Path $repoRoot "crates/app-services/src/import_pipeline/phases.rs"
+# Import analysis phase configuration (e.g. timeline projection deferral).
+$pipelinePhasesPath = Join-Path $repoRoot "crates/app-services/src/import_pipeline/phases/analyze.rs"
 # Post-import skip logging lives in the analysis worker pool.
 $workerPoolPath = Join-Path $repoRoot "crates/app-services/src/import_analysis/worker_pool.rs"
 $appStatePath = Join-Path $repoRoot "apps/desktop/src-tauri/src/state/app_state.rs"
@@ -52,7 +52,8 @@ foreach ($forbidden in @('liuyang_pc\.E01', 'E:\\pangushi', '刘洋')) {
     throw "desktop real E01 regression must not hard-code private sample path fragment: $forbidden"
   }
 }
-if ($pipelinePhases -notmatch 'enable_timeline_projection:\s*!image_backed_source') {
+if ($pipelinePhases -notmatch 'let\s+image_backed\s*=\s*ctx\.import_config\.is_image_backed\(\)' -or
+    $pipelinePhases -notmatch 'enable_timeline_projection:\s*!image_backed') {
   throw "E01/RAW imports must keep Timeline projection outside the import critical path"
 }
 if ($workerPool -notmatch 'timeline=deferred content=disabled text=disabled') {

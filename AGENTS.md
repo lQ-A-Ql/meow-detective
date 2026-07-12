@@ -81,7 +81,7 @@ pnpm --dir frontend build
 git diff --check
 cargo deny check advisories bans licenses sources
 
-# Default repository guard scripts (PowerShell) — 17 checks
+# Default repository guard scripts (PowerShell)
 powershell -ExecutionPolicy Bypass -File scripts/check-doc-drift.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-doc-archive.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-command-sql-boundary.ps1
@@ -94,6 +94,8 @@ powershell -ExecutionPolicy Bypass -File scripts/check-rust-test-layout.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-stage0-boundary-guard.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-stage2-platform-boundary.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-stage2-real-sample-isolation.ps1
+powershell -ExecutionPolicy Bypass -File scripts/check-stage3-command-boundary.ps1
+powershell -ExecutionPolicy Bypass -File scripts/check-stage4-service-boundary.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-media-protocol-guard.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-release-guard.ps1
 powershell -ExecutionPolicy Bypass -File scripts/check-stage5-regression-guard.ps1
@@ -196,6 +198,8 @@ PowerShell scripts in `scripts/` encode architectural and security boundaries:
 | `check-stage0-boundary-guard.ps1` | Stage 0 frontend/runtime and backend dependency boundaries |
 | `check-stage2-platform-boundary.ps1` | Domain platform ownership, symmetric analyzers, thin analysis command, and facade limits |
 | `check-stage2-real-sample-isolation.ps1` | Opt-in Windows/Linux dual-E01 isolation in both serial import orders; `-RequireFixtures` makes missing private samples fatal |
+| `check-stage3-command-boundary.ps1` | Thin Tauri command modules, transport ownership, and command facade limits |
+| `check-stage4-service-boundary.ps1` | Application-service capability boundaries and forensic behavior invariants |
 | `check-media-protocol-guard.ps1` | Media preview stays on `evidence-media:` protocol |
 | `check-release-guard.ps1` | No debug strings in release paths |
 | `check-stage5-regression-guard.ps1` | MCP transport validation, nested DTO contracts, staging merge conflicts |

@@ -9,7 +9,7 @@ A Tauri 2 desktop application for disk-image forensic analysis on Windows. The b
 ```text
 React UI (frontend/) -> Tauri commands / events
 Tauri Command Layer (apps/desktop/src-tauri/) -> 98 commands
-Application Services (crates/app-services/) -> 26 source modules
+Application Services (crates/app-services/) -> 25 source modules
 Core crates -> domain / evidence / persistence / search / timeline / artifacts / reports / MCP / graph
 ```
 
@@ -62,7 +62,7 @@ cd frontend && pnpm test
 |---|---|
 | `frontend/` | React 18 + TypeScript + Vite + Tailwind 4 |
 | `apps/desktop/src-tauri/` | Tauri 2 shell (98 commands) |
-| `crates/app-services/` | Application orchestration (26 source modules) |
+| `crates/app-services/` | Application orchestration (25 source modules) |
 | `crates/transport/` | Shared DTOs, commands, events, errors |
 | `crates/persistence-sqlite/` | SQLite repos (16) and migration scripts (41) |
 | `crates/evidence-core/` | Disk image probing and volume detection |

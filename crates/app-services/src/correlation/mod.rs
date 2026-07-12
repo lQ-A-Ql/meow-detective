@@ -3,6 +3,7 @@ mod error;
 pub mod graph;
 pub mod rules;
 #[cfg(test)]
+#[path = "../../tests/unit/correlation/mod.rs"]
 mod tests;
 
 use chrono::Utc;

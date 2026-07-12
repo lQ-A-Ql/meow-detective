@@ -1,11 +1,5 @@
-#[cfg(test)]
-pub(super) const PROGRESS_CHANNEL_CAPACITY: usize = 1;
-#[cfg(not(test))]
 pub(super) const PROGRESS_CHANNEL_CAPACITY: usize = 128;
 
-#[cfg(test)]
-pub(super) const ENUM_PROGRESS_INTERVAL: u64 = 1;
-#[cfg(not(test))]
 pub(super) const ENUM_PROGRESS_INTERVAL: u64 = 5_000;
 
 pub(super) fn heartbeat_percent(done_count: usize, submitted_count: usize, entries: u64) -> u32 {

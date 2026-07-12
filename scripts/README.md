@@ -147,6 +147,12 @@ powershell -ExecutionPolicy Bypass -File scripts\check-stage2-real-sample-isolat
 # filesystem parsers directly.
 powershell -ExecutionPolicy Bypass -File scripts\check-stage3-command-boundary.ps1
 
+# Stage 4 app-services boundary guard. This locks the decomposed service
+# facades, required capability modules, Tauri-free orchestration, serial
+# evidence enumeration, source-scoped file routing, bounded viewer ranges,
+# sourceObjectId correlation, and non-fatal graph population.
+powershell -ExecutionPolicy Bypass -File scripts\check-stage4-service-boundary.ps1
+
 # Backend Rust module-size guard. This discovers every workspace member through
 # cargo metadata, locks pre-existing production file-size debt against
 # scripts/baselines/rust-module-size-baseline.csv, and fails on new or increased

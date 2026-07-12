@@ -4,7 +4,7 @@ use crate::file_service::viewer::{
     descriptor_file_entry, descriptor_for_file_with_cache, safe_relative_path, PreviewReadContext,
     FILE_HANDLE_PREFIX,
 };
-use crate::file_service::{mapping::mime_for_entry, FileServiceError};
+use crate::file_service::{metadata::lookup::mime_for_entry, FileServiceError};
 use domain::{EntryType, FileEntryId};
 use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;

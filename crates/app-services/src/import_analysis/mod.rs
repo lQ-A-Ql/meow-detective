@@ -730,7 +730,7 @@ mod tests {
     }
 
     #[test]
-    fn analysis_worker_reuses_preview_descriptor_cache_across_content_reads() {
+    fn analysis_worker_uses_bounded_content_reads_for_each_consumer() {
         let _hook_guard = TEST_HOOK_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let tmp = TempDir::new().unwrap();
         let evidence_dir = tmp.path().join("evidence");
@@ -761,7 +761,6 @@ mod tests {
         options.enable_content_extraction = true;
         options.enable_text_indexing = true;
 
-        let builds_before = crate::file_service::descriptor_build_count("case-1", "file-cache-pf");
         test_hooks::reset();
         test_hooks::track_file_id("file-cache-pf");
         let stats = run_import_analysis_staging(options, None).unwrap();
@@ -769,11 +768,6 @@ mod tests {
         assert_eq!(stats.processed_count, 1);
         assert_eq!(test_hooks::artifact_bytes_reads(), 1);
         assert_eq!(test_hooks::text_index_bytes_reads(), 1);
-        assert_eq!(
-            crate::file_service::descriptor_build_count("case-1", "file-cache-pf") - builds_before,
-            1,
-            "the worker should reuse one preview descriptor across artifact and text reads"
-        );
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use super::db_paths::staging_dir;
+use super::schema::staging_dir;
 use rusqlite::Connection;
 use std::path::Path;
 

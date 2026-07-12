@@ -12,7 +12,7 @@ $importPipelineDir = Join-Path $repoRoot "crates/app-services/src/import_pipelin
 $importPipelineModPath = Join-Path $importPipelineDir "mod.rs"
 $importPipelineEmitPath = Join-Path $importPipelineDir "emit.rs"
 $analysisExtractionModPath = Join-Path $repoRoot "crates/app-services/src/analysis_service/extraction/mod.rs"
-$filePreviewPath = Join-Path $repoRoot "crates/app-services/src/file_service/preview.rs"
+$filePreviewDir = Join-Path $repoRoot "crates/app-services/src/file_service/viewer"
 $fileCommandsPath = Join-Path $repoRoot "apps/desktop/src-tauri/src/commands/file_commands.rs"
 $fileCommandsDir = Join-Path $repoRoot "apps/desktop/src-tauri/src/commands/file_commands"
 $datasourceFacadePath = Join-Path $repoRoot "crates/app-services/src/datasource_service.rs"
@@ -30,7 +30,7 @@ foreach ($path in @(
     $importPipelineModPath,
     $importPipelineEmitPath,
     $analysisExtractionModPath,
-    $filePreviewPath,
+    $filePreviewDir,
     $fileCommandsPath,
     $fileCommandsDir,
     $datasourceFacadePath,
@@ -65,13 +65,17 @@ $mcpCommands = Read-RustCommandTree `
   -ModuleDirectory $mcpCommandsDir
 $mcpDto = Get-Content -LiteralPath $mcpDtoPath -Raw -Encoding UTF8
 $staging = (Get-ChildItem -LiteralPath $stagingDir -Filter '*.rs' -File | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8 }) -join "`n"
-$importPipelineProduction = (Get-ChildItem -LiteralPath $importPipelineDir -Filter '*.rs' -File |
+$importPipelineProduction = (Get-ChildItem -LiteralPath $importPipelineDir -Recurse -Filter '*.rs' -File |
   Where-Object { $_.Name -ne 'tests.rs' } |
   ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8 }) -join "`n"
 $importPipelineMod = Get-Content -LiteralPath $importPipelineModPath -Raw -Encoding UTF8
 $importPipelineEmit = Get-Content -LiteralPath $importPipelineEmitPath -Raw -Encoding UTF8
 $analysisExtractionMod = Get-Content -LiteralPath $analysisExtractionModPath -Raw -Encoding UTF8
-$filePreview = Get-Content -LiteralPath $filePreviewPath -Raw -Encoding UTF8
+$filePreview = (
+  Get-ChildItem -LiteralPath $filePreviewDir -Recurse -Filter '*.rs' -File |
+    Sort-Object -Property FullName |
+    ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8 }
+) -join "`n"
 $fileCommands = Read-RustCommandTree `
   -FacadePath $fileCommandsPath `
   -ModuleDirectory $fileCommandsDir
@@ -249,11 +253,6 @@ Assert-NotMatches `
 # File preview DTO assembly belongs in app-services. The Tauri command layer
 # should keep only state/cache/media-protocol adaptation and delegate text,
 # image, media, and range reads to file_service.
-Assert-Matches `
-  -Content $filePreview `
-  -Pattern 'Tauri-free preview facade for text, image, and media DTO assembly' `
-  -Message "file_service/preview.rs must document and keep the Tauri-free preview assembly boundary"
-
 foreach ($pattern in @(
     'pub\s+fn\s+text_preview_for_file',
     'pub\s+fn\s+image_preview_for_file',
@@ -264,13 +263,13 @@ foreach ($pattern in @(
   Assert-Matches `
     -Content $filePreview `
     -Pattern $pattern `
-    -Message "file_service/preview.rs is missing expected preview service API: $pattern"
+    -Message "file_service viewer modules are missing expected preview service API: $pattern"
 }
 
 Assert-NotMatchesCaseSensitive `
   -Content $filePreview `
-  -Pattern '\btauri::|AppHandle|Window|Emitter|media_protocol' `
-  -Message "file_service/preview.rs must stay Tauri-free; media protocol adaptation belongs in commands"
+  -Pattern '\btauri::|\bAppHandle\b|\bWindow\b|\bEmitter\b|\bmedia_protocol\b' `
+  -Message "file_service viewer modules must stay Tauri-free; media protocol adaptation belongs in commands"
 
 foreach ($pattern in @(
     'file_service::read_file_range_for_source_case',

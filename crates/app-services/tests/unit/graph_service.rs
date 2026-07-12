@@ -2,6 +2,7 @@ use super::*;
 use domain::{CaseId, CaseMeta, EdgeType, GraphEdge, GraphNode, NodeType};
 use persistence_sqlite::repositories::{case_repo::CaseRepo, graph_repo::GraphRepo};
 use rusqlite::Connection;
+use transport::dto::{GraphQueryDto, ListGraphNodesRequest};
 
 fn setup_case_db() -> Connection {
     let conn = Connection::open_in_memory().unwrap();
@@ -247,7 +248,7 @@ fn case_graph_provenance_lookup_rejects_unscoped_ids() {
 
 #[test]
 fn case_graph_query_start_ids_reject_unscoped_ids() {
-    let err = scoped_start_ids(&["n1".to_string()]).unwrap_err();
+    let err = super::source_aggregation::scoped_start_ids(&["n1".to_string()]).unwrap_err();
 
     assert!(matches!(err, GraphServiceError::InvalidInput(_)));
     assert!(err.to_string().contains("ds:<dataSourceId>:<localId>"));

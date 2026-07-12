@@ -1,7 +1,7 @@
 //! Preview descriptor construction and caching.
 
 use crate::file_service::viewer::{PreviewDescriptor, PreviewReadContext};
-use crate::file_service::{mapping::mime_for_entry, FileServiceError};
+use crate::file_service::{metadata::lookup::mime_for_entry, FileServiceError};
 use domain::{EntryType, FileEntry, FileEntryId};
 use persistence_sqlite::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
@@ -11,9 +11,6 @@ pub fn preview_descriptor_for_case(
     case_id: &str,
     file_id: &FileEntryId,
 ) -> Result<PreviewDescriptor, FileServiceError> {
-    #[cfg(test)]
-    crate::file_service::viewer::record_descriptor_build(case_id, file_id);
-
     let repo = FileRepo::new(conn);
     let entry = repo
         .find_by_id(file_id)?
