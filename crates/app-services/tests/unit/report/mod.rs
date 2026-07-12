@@ -1,5 +1,5 @@
 use super::analysis_rows::system_info_rows;
-use super::json::sanitize_bundle_component;
+use super::json::raw_bundle::sanitize_bundle_component;
 use super::*;
 use domain::{
     Artifact, ArtifactId, CaseId, CaseMeta, DataSource, DataSourceId, DataSourceKind, EntryType,
@@ -392,6 +392,43 @@ fn json_export_scope_can_hide_file_classifications() {
         .unwrap()
         .is_empty());
     assert!(!json["analysis"]["systemInfo"].is_null());
+}
+
+#[test]
+fn json_raw_export_reports_unreadable_files_as_partial() {
+    let (conn, tmp, case, ds_id) = setup_report_case();
+    insert_file(&conn, &ds_id, "missing", "missing/file.bin");
+    std::fs::remove_file(tmp.path().join("missing").join("file.bin")).unwrap();
+    let scope = ExportScopeDto {
+        file_system_metadata: true,
+        registry: true,
+        full_timeline: true,
+        raw_file_extraction: true,
+        overwrite: false,
+    };
+
+    let file_name = generate_json_export(&conn, &case.id.0, tmp.path(), &scope).unwrap();
+    let json: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(tmp.path().join(file_name)).unwrap())
+            .unwrap();
+
+    assert_eq!(json["rawExport"]["exportedCount"], 0);
+    assert!(json["warnings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|warning| warning
+            .as_str()
+            .unwrap()
+            .contains("rawFileExtraction partial")));
+    let manifest_path = tmp
+        .path()
+        .join(json["rawExport"]["bundleDirectory"].as_str().unwrap())
+        .join("manifest.json");
+    let manifest: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(manifest_path).unwrap()).unwrap();
+    assert_eq!(manifest["skippedCount"], 1);
+    assert_eq!(manifest["skippedFiles"][0], "ds-report:missing");
 }
 
 #[test]

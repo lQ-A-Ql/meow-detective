@@ -1,5 +1,5 @@
 use super::fs_magic::{read_boot_filesystem, SECTOR_SIZE};
-use super::lvm::lvm_pv_source_key;
+use super::lvm::source_identity::lvm_pv_source_key;
 use super::*;
 use domain::{CaseId, CaseMeta, DataSourceHashStatus, DataSourceKind, DataSourceProvenanceStatus};
 use persistence_sqlite::repositories::{case_repo::CaseRepo, datasource_repo::DataSourceRepo};

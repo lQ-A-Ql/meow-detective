@@ -21,6 +21,14 @@ pub(crate) fn report_governance_rows(
     }
 
     let snapshot = &governance.snapshot;
+    let mut rows = governance_summary_rows(snapshot);
+    rows.extend(governance_runtime_rows(snapshot));
+    rows.extend(governance_contract_rows(snapshot));
+    rows.extend(governance_limit_rows(snapshot));
+    rows
+}
+
+fn governance_summary_rows(snapshot: &transport::dto::V2GovernanceSnapshotDto) -> Vec<String> {
     let mut rows = vec![
         format!(
             "governance summary generatedAt={} grade={} totalScore={} verification={} correlation={} performance={} security={}",
@@ -48,7 +56,6 @@ pub(crate) fn report_governance_rows(
             snapshot.benchmark.exceeded_required_count
         ),
     ];
-
     rows.extend(snapshot.release_gates.iter().map(|gate| {
         format!(
             "governance gate={} status={} evidence={} detail={}",
@@ -58,6 +65,11 @@ pub(crate) fn report_governance_rows(
             gate.detail
         )
     }));
+    rows
+}
+
+fn governance_runtime_rows(snapshot: &transport::dto::V2GovernanceSnapshotDto) -> Vec<String> {
+    let mut rows = Vec::new();
     rows.extend(snapshot.runtime_results.checks.iter().map(|check| {
         format!(
             "governance runtimeCheck={} status={} checkedAt={} evidence={} detail={}",
@@ -80,6 +92,11 @@ pub(crate) fn report_governance_rows(
             )
         })
     }));
+    rows
+}
+
+fn governance_contract_rows(snapshot: &transport::dto::V2GovernanceSnapshotDto) -> Vec<String> {
+    let mut rows = Vec::new();
     rows.extend(snapshot.verification_chains.iter().map(|chain| {
         format!(
             "governance chain={} displayName={} result={} maturity={} guarantee={} fixtureTier={} expectedJson={} sampleCount={}",
@@ -116,6 +133,11 @@ pub(crate) fn report_governance_rows(
             source.derived_outputs.join(" | ")
         )
     }));
+    rows
+}
+
+fn governance_limit_rows(snapshot: &transport::dto::V2GovernanceSnapshotDto) -> Vec<String> {
+    let mut rows = Vec::new();
     rows.extend(snapshot.known_limitations.iter().map(|item| {
         format!(
             "governance knownLimitation category={} item={} status={} affectedChains={} sourceDoc={} summary={}",

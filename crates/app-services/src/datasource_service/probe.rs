@@ -1,9 +1,13 @@
-use super::fs_magic::{kind_label, read_boot_filesystem, read_sector, SECTOR_SIZE};
+mod gpt;
+
+use self::gpt::detect_gpt_filesystems;
+use super::fs_magic::{kind_label, read_boot_filesystem, SECTOR_SIZE};
 use super::{
     DataSourceError, ImageFilesystemCandidate, ImageFilesystemKind, ImageFilesystemProbe,
     ImageFilesystemSource, PartitionRecord, PartitionStatus, Result,
 };
-use std::io::{Read, Seek, SeekFrom};
+use evidence_core::volume::mbr::{MbrPartitionStatus, PartitionEntry};
+use std::io::{Read, Seek};
 
 /// Build an honest partition display name from on-disk metadata.
 ///
@@ -48,43 +52,8 @@ pub fn detect_image_filesystem<R>(reader: &mut R) -> Result<ImageFilesystemProbe
 where
     R: Read + Seek,
 {
-    let mut warnings = Vec::new();
-    let mut candidates = Vec::new();
-    let mut partitions = Vec::new();
-
-    if let Some(kind) = read_boot_filesystem(reader, 0)? {
-        candidates.push(ImageFilesystemCandidate {
-            partition_index: Some(1),
-            partition_name: Some("Volume".to_string()),
-            kind,
-            offset: 0,
-            source: ImageFilesystemSource::DirectVolume,
-            lvm_identity: None,
-        });
-        return Ok(ImageFilesystemProbe {
-            candidates,
-            partitions: vec![PartitionRecord {
-                index: 1,
-                name: "Volume".to_string(),
-                kind_label: kind_label(kind),
-                type_guid: None,
-                offset: 0,
-                length: 0,
-                status: match kind {
-                    ImageFilesystemKind::Ntfs | ImageFilesystemKind::Fat => {
-                        PartitionStatus::Supported
-                    }
-                    ImageFilesystemKind::BitLocker => PartitionStatus::EncryptedBitLocker,
-                    ImageFilesystemKind::Ext4
-                    | ImageFilesystemKind::Xfs
-                    | ImageFilesystemKind::Btrfs
-                    | ImageFilesystemKind::LvmPool => PartitionStatus::Supported,
-                },
-                filesystem: Some(kind),
-                lvm_identity: None,
-            }],
-            warnings,
-        });
+    if let Some(probe) = detect_direct_volume(reader)? {
+        return Ok(probe);
     }
 
     let mbr_entries = evidence_core::volume::mbr::parse_mbr_full(reader)
@@ -96,103 +65,14 @@ where
         .collect();
 
     let is_gpt_protective = mbr_entries.iter().any(|entry| entry.partition_type == 0xEE);
+    let mut candidates = Vec::new();
+    detect_mbr_candidates(reader, &mbr_entries, &mut candidates)?;
 
-    // Push filesystem candidates from primary + logical partitions.
-    for entry in &mbr_entries {
-        if entry.is_extended() || entry.lba_start == 0 {
-            continue;
-        }
-        let offset = entry.lba_start as u64 * SECTOR_SIZE;
-        let name = if entry.is_logical {
-            Some(format!("Logical Volume {}", entry.partition_number))
-        } else {
-            Some(format!("Partition {}", entry.partition_number))
-        };
-        if let Some(kind) = read_boot_filesystem(reader, offset)? {
-            push_candidate(
-                &mut candidates,
-                Some(entry.partition_number),
-                name,
-                kind,
-                offset,
-                ImageFilesystemSource::MbrPartition,
-            );
-        }
-    }
-
-    // Build PartitionRecord entries for non-empty, non-extended MBR partitions
-    // only when not falling through to GPT, which produces its own records.
-    if !is_gpt_protective {
-        for entry in &mbr_entries {
-            if entry.is_extended() || entry.partition_type == 0 {
-                continue;
-            }
-            let offset = entry.lba_start as u64 * SECTOR_SIZE;
-            let length = entry.sector_count as u64 * SECTOR_SIZE;
-            let class =
-                evidence_core::volume::mbr::classify_mbr_partition_type(entry.partition_type);
-            let fs_kind = read_boot_filesystem(reader, offset)?;
-            let kind_label = fs_kind
-                .map(kind_label)
-                .unwrap_or_else(|| class.name.to_string());
-            let status = if let Some(kind) = fs_kind {
-                match kind {
-                    ImageFilesystemKind::Ntfs | ImageFilesystemKind::Fat => {
-                        PartitionStatus::Supported
-                    }
-                    ImageFilesystemKind::BitLocker => PartitionStatus::EncryptedBitLocker,
-                    ImageFilesystemKind::Ext4
-                    | ImageFilesystemKind::Xfs
-                    | ImageFilesystemKind::Btrfs
-                    | ImageFilesystemKind::LvmPool => PartitionStatus::Supported,
-                }
-            } else {
-                match class.status {
-                    evidence_core::volume::mbr::MbrPartitionStatus::Supported => {
-                        PartitionStatus::Supported
-                    }
-                    evidence_core::volume::mbr::MbrPartitionStatus::EncryptedBitLocker => {
-                        PartitionStatus::EncryptedBitLocker
-                    }
-                    evidence_core::volume::mbr::MbrPartitionStatus::Unsupported => {
-                        PartitionStatus::Unsupported
-                    }
-                }
-            };
-            let display_name =
-                partition_display_name(entry.partition_number, &kind_label, None, Some(class.name));
-
-            if status == PartitionStatus::EncryptedBitLocker {
-                warnings.push(format!(
-                    "Partition {} '{}' is BitLocker-encrypted",
-                    entry.partition_number, display_name,
-                ));
-            } else if status == PartitionStatus::Unsupported {
-                warnings.push(format!(
-                    "Partition {} '{}' is not yet supported (type 0x{:02X})",
-                    entry.partition_number, display_name, entry.partition_type,
-                ));
-            } else if matches!(fs_kind, Some(ImageFilesystemKind::LvmPool)) {
-                // LVM pool detected; discovery/expansion happens in import pipeline.
-                tracing::info!(
-                    "LVM2 physical volume detected at partition {} ({}), LV expansion deferred to import",
-                    entry.partition_number, display_name,
-                );
-            }
-
-            partitions.push(PartitionRecord {
-                index: entry.partition_number,
-                name: display_name,
-                kind_label,
-                type_guid: None,
-                offset,
-                length,
-                status,
-                filesystem: fs_kind,
-                lvm_identity: None,
-            });
-        }
-    }
+    let (mut partitions, mut warnings) = if is_gpt_protective {
+        (Vec::new(), Vec::new())
+    } else {
+        detect_mbr_partitions(reader, &mbr_entries)?
+    };
 
     if is_gpt_protective {
         let gpt_probe = detect_gpt_filesystems(reader)?;
@@ -231,6 +111,177 @@ where
     })
 }
 
+fn detect_direct_volume<R>(reader: &mut R) -> Result<Option<ImageFilesystemProbe>>
+where
+    R: Read + Seek,
+{
+    let Some(kind) = read_boot_filesystem(reader, 0)? else {
+        return Ok(None);
+    };
+    let candidate = ImageFilesystemCandidate {
+        partition_index: Some(1),
+        partition_name: Some("Volume".to_string()),
+        kind,
+        offset: 0,
+        source: ImageFilesystemSource::DirectVolume,
+        lvm_identity: None,
+    };
+    let partition = PartitionRecord {
+        index: 1,
+        name: "Volume".to_string(),
+        kind_label: kind_label(kind),
+        type_guid: None,
+        offset: 0,
+        length: 0,
+        status: partition_status_for_filesystem(kind),
+        filesystem: Some(kind),
+        lvm_identity: None,
+    };
+    Ok(Some(ImageFilesystemProbe {
+        candidates: vec![candidate],
+        partitions: vec![partition],
+        warnings: Vec::new(),
+    }))
+}
+
+fn detect_mbr_candidates<R>(
+    reader: &mut R,
+    entries: &[PartitionEntry],
+    candidates: &mut Vec<ImageFilesystemCandidate>,
+) -> Result<()>
+where
+    R: Read + Seek,
+{
+    for entry in entries {
+        if entry.is_extended() || entry.lba_start == 0 {
+            continue;
+        }
+        let offset = entry.lba_start as u64 * SECTOR_SIZE;
+        let name = if entry.is_logical {
+            Some(format!("Logical Volume {}", entry.partition_number))
+        } else {
+            Some(format!("Partition {}", entry.partition_number))
+        };
+        if let Some(kind) = read_boot_filesystem(reader, offset)? {
+            push_candidate(
+                candidates,
+                Some(entry.partition_number),
+                name,
+                kind,
+                offset,
+                ImageFilesystemSource::MbrPartition,
+            );
+        }
+    }
+    Ok(())
+}
+
+fn detect_mbr_partitions<R>(
+    reader: &mut R,
+    entries: &[PartitionEntry],
+) -> Result<(Vec<PartitionRecord>, Vec<String>)>
+where
+    R: Read + Seek,
+{
+    let mut records = Vec::new();
+    let mut warnings = Vec::new();
+    for entry in entries {
+        if entry.is_extended() || entry.partition_type == 0 {
+            continue;
+        }
+        let (record, warning) = probe_mbr_partition(reader, entry)?;
+        if let Some(warning) = warning {
+            warnings.push(warning);
+        }
+        records.push(record);
+    }
+    Ok((records, warnings))
+}
+
+fn probe_mbr_partition<R>(
+    reader: &mut R,
+    entry: &PartitionEntry,
+) -> Result<(PartitionRecord, Option<String>)>
+where
+    R: Read + Seek,
+{
+    let offset = entry.lba_start as u64 * SECTOR_SIZE;
+    let class = evidence_core::volume::mbr::classify_mbr_partition_type(entry.partition_type);
+    let fs_kind = read_boot_filesystem(reader, offset)?;
+    let kind_label = fs_kind
+        .map(kind_label)
+        .unwrap_or_else(|| class.name.to_string());
+    let status = fs_kind.map_or_else(
+        || partition_status_for_mbr_class(class.status),
+        partition_status_for_filesystem,
+    );
+    let display_name =
+        partition_display_name(entry.partition_number, &kind_label, None, Some(class.name));
+    let warning = mbr_partition_warning(entry, &display_name, status);
+
+    if status == PartitionStatus::Supported && matches!(fs_kind, Some(ImageFilesystemKind::LvmPool))
+    {
+        tracing::info!(
+            "LVM2 physical volume detected at partition {} ({}), LV expansion deferred to import",
+            entry.partition_number,
+            display_name,
+        );
+    }
+
+    Ok((
+        PartitionRecord {
+            index: entry.partition_number,
+            name: display_name,
+            kind_label,
+            type_guid: None,
+            offset,
+            length: entry.sector_count as u64 * SECTOR_SIZE,
+            status,
+            filesystem: fs_kind,
+            lvm_identity: None,
+        },
+        warning,
+    ))
+}
+
+fn mbr_partition_warning(
+    entry: &PartitionEntry,
+    display_name: &str,
+    status: PartitionStatus,
+) -> Option<String> {
+    match status {
+        PartitionStatus::EncryptedBitLocker => Some(format!(
+            "Partition {} '{}' is BitLocker-encrypted",
+            entry.partition_number, display_name,
+        )),
+        PartitionStatus::Unsupported => Some(format!(
+            "Partition {} '{}' is not yet supported (type 0x{:02X})",
+            entry.partition_number, display_name, entry.partition_type,
+        )),
+        PartitionStatus::Supported | PartitionStatus::Expanded => None,
+    }
+}
+
+fn partition_status_for_mbr_class(status: MbrPartitionStatus) -> PartitionStatus {
+    match status {
+        MbrPartitionStatus::Supported => PartitionStatus::Supported,
+        MbrPartitionStatus::EncryptedBitLocker => PartitionStatus::EncryptedBitLocker,
+        MbrPartitionStatus::Unsupported => PartitionStatus::Unsupported,
+    }
+}
+
+pub(super) fn partition_status_for_filesystem(kind: ImageFilesystemKind) -> PartitionStatus {
+    match kind {
+        ImageFilesystemKind::BitLocker => PartitionStatus::EncryptedBitLocker,
+        ImageFilesystemKind::Ntfs
+        | ImageFilesystemKind::Fat
+        | ImageFilesystemKind::Ext4
+        | ImageFilesystemKind::Xfs
+        | ImageFilesystemKind::Btrfs
+        | ImageFilesystemKind::LvmPool => PartitionStatus::Supported,
+    }
+}
+
 fn push_candidate(
     candidates: &mut Vec<ImageFilesystemCandidate>,
     partition_index: Option<usize>,
@@ -254,148 +305,6 @@ fn push_candidate(
         source,
         lvm_identity: None,
     });
-}
-
-fn detect_gpt_filesystems<R>(reader: &mut R) -> Result<ImageFilesystemProbe>
-where
-    R: Read + Seek,
-{
-    let header_sector = read_sector(reader, SECTOR_SIZE)?;
-    let Some(header) = evidence_core::volume::gpt::parse_gpt_header(&header_sector) else {
-        return Ok(ImageFilesystemProbe {
-            candidates: Vec::new(),
-            partitions: Vec::new(),
-            warnings: Vec::new(),
-        });
-    };
-
-    let entry_bytes = header.entry_size.saturating_mul(header.partition_count);
-    if entry_bytes == 0 {
-        return Ok(ImageFilesystemProbe {
-            candidates: Vec::new(),
-            partitions: Vec::new(),
-            warnings: Vec::new(),
-        });
-    }
-
-    reader.seek(SeekFrom::Start(header.partition_entry_lba * SECTOR_SIZE))?;
-    let mut entry_data = vec![0u8; entry_bytes as usize];
-    reader.read_exact(&mut entry_data)?;
-    let partitions = evidence_core::volume::gpt::parse_gpt_entries(
-        &entry_data,
-        header.entry_size,
-        header.partition_count,
-    );
-
-    let mut candidates = Vec::new();
-    let mut records = Vec::new();
-    let mut warnings = Vec::new();
-
-    for partition in partitions
-        .iter()
-        .filter(|partition| partition.start_lba > 0)
-    {
-        let offset = partition.start_lba * SECTOR_SIZE;
-        let length = partition
-            .end_lba
-            .saturating_sub(partition.start_lba)
-            .saturating_add(1)
-            * SECTOR_SIZE;
-        let partition_type =
-            evidence_core::volume::gpt::classify_partition_type(&partition.type_guid);
-        let type_name = evidence_core::volume::gpt::partition_type_name(partition_type);
-        let fs_kind = read_boot_filesystem(reader, offset)?;
-        let kind_label = fs_kind
-            .map(kind_label)
-            .unwrap_or_else(|| type_name.to_string());
-        let mut status = PartitionStatus::Unsupported;
-
-        if let Some(kind) = fs_kind {
-            status = match kind {
-                ImageFilesystemKind::Ntfs | ImageFilesystemKind::Fat => PartitionStatus::Supported,
-                ImageFilesystemKind::BitLocker => PartitionStatus::EncryptedBitLocker,
-                ImageFilesystemKind::Ext4
-                | ImageFilesystemKind::Xfs
-                | ImageFilesystemKind::Btrfs
-                | ImageFilesystemKind::LvmPool => PartitionStatus::Supported,
-            };
-        }
-
-        if let Some(kind) = fs_kind {
-            if matches!(
-                kind,
-                ImageFilesystemKind::Ntfs
-                    | ImageFilesystemKind::Fat
-                    | ImageFilesystemKind::Ext4
-                    | ImageFilesystemKind::Xfs
-                    | ImageFilesystemKind::Btrfs
-                    | ImageFilesystemKind::LvmPool
-            ) {
-                candidates.push(ImageFilesystemCandidate {
-                    partition_index: Some(partition.index),
-                    partition_name: Some(partition.name.clone()),
-                    kind,
-                    offset,
-                    source: ImageFilesystemSource::GptPartition,
-                    lvm_identity: None,
-                });
-            }
-        }
-
-        if status == PartitionStatus::EncryptedBitLocker {
-            let display_name = partition_display_name(
-                partition.index,
-                &kind_label,
-                Some(&partition.name),
-                Some(type_name),
-            );
-            warnings.push(format!(
-                "Partition {} '{}' is BitLocker-encrypted and currently locked",
-                partition.index, display_name
-            ));
-        } else if status == PartitionStatus::Unsupported {
-            let display_name = partition_display_name(
-                partition.index,
-                &kind_label,
-                Some(&partition.name),
-                Some(type_name),
-            );
-            warnings.push(format!(
-                "Partition {} '{}' is not yet supported ({}, GUID {})",
-                partition.index,
-                display_name,
-                type_name,
-                evidence_core::volume::gpt::format_guid(&partition.type_guid)
-            ));
-        }
-
-        let display_name = partition_display_name(
-            partition.index,
-            &kind_label,
-            Some(&partition.name),
-            Some(type_name),
-        );
-
-        records.push(PartitionRecord {
-            index: partition.index,
-            name: display_name,
-            kind_label,
-            type_guid: Some(evidence_core::volume::gpt::format_guid(
-                &partition.type_guid,
-            )),
-            offset,
-            length,
-            status,
-            filesystem: fs_kind,
-            lvm_identity: None,
-        });
-    }
-
-    Ok(ImageFilesystemProbe {
-        candidates,
-        partitions: records,
-        warnings,
-    })
 }
 
 fn meaningful_partition_name<'a>(

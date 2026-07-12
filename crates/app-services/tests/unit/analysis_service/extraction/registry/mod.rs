@@ -1,3 +1,6 @@
+use super::ntuser::user_assist_artifacts;
+use super::sam::sam_user_artifacts;
+use super::system::shutdown_time_artifacts;
 use super::*;
 use chrono::Utc;
 use domain::FileEntryId;
@@ -122,4 +125,81 @@ fn system_shutdown_emits_timeline_event() {
     assert_eq!(outcome.artifacts[0].family, "RegistryShutdownTime");
     assert_eq!(outcome.timeline_events.len(), 1);
     assert_eq!(outcome.timeline_events[0].event_type, "REGISTRY_SHUTDOWN");
+}
+
+#[test]
+fn invalid_hive_warning_is_governed_and_prefix_path_is_redacted() {
+    let outcome = extract_registry_candidate(
+        &candidate("C:\\evidence\\Windows\\System32\\config\\SYSTEM"),
+        b"not-a-hive",
+        None,
+        None,
+        None,
+    );
+
+    assert_eq!(
+        outcome.warnings,
+        vec!["[REG-SYSTEM] SYSTEM: SYSTEM is not a regf registry hive"]
+    );
+}
+
+#[test]
+fn warning_governance_preserves_order_deduplicates_and_caps() {
+    let mut raw = vec![
+        "SYSTEM txlog parse failed: first".to_string(),
+        "SYSTEM txlog parse failed: first".to_string(),
+    ];
+    raw.extend((0..64).map(|index| format!("warning {index:02}")));
+
+    let governed = govern_registry_warnings("Windows/System32/config/SYSTEM", raw);
+
+    assert_eq!(governed.len(), 64);
+    assert_eq!(
+        governed.first().map(String::as_str),
+        Some("[REG-TXLOG] Windows/System32/config/SYSTEM: SYSTEM txlog parse failed: first")
+    );
+    assert_eq!(
+        governed.get(1).map(String::as_str),
+        Some("[REG-WARN] Windows/System32/config/SYSTEM: warning 00")
+    );
+    assert_eq!(
+        governed.last().map(String::as_str),
+        Some("[REG-CAP] Windows/System32/config/SYSTEM: additional registry warnings suppressed")
+    );
+}
+
+#[test]
+fn warning_governance_keeps_exact_capacity_without_false_cap() {
+    let raw = (0..64).map(|index| format!("warning {index:02}")).collect();
+
+    let governed = govern_registry_warnings("Windows/System32/config/SYSTEM", raw);
+
+    assert_eq!(governed.len(), 64);
+    assert_eq!(
+        governed.last().map(String::as_str),
+        Some("[REG-WARN] Windows/System32/config/SYSTEM: warning 63")
+    );
+    assert!(governed
+        .iter()
+        .all(|warning| !warning.starts_with("[REG-CAP]")));
+}
+
+#[test]
+fn valid_magic_with_corrupt_hive_preserves_primary_parse_error() {
+    let outcome = extract_registry_candidate(
+        &candidate("C:\\evidence\\Windows\\System32\\config\\SYSTEM"),
+        b"regf-corrupt",
+        None,
+        None,
+        None,
+    );
+
+    assert!(outcome
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("registry parse failed")));
+    assert!(outcome
+        .warnings
+        .iter()
+        .all(|warning| !warning.contains("C:\\evidence")));
 }

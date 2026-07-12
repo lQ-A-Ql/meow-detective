@@ -145,11 +145,21 @@ git diff --check
 
 ## Stage 4: Application Services
 
-Implementation status: completed in the working tree after Stage 3 commit
-`c3ae351`. Timeline, staging, parallel enumeration, import pipeline, file
-service, correlation, artifact, graph, entity, and rule-pack production
-modules now use focused capability files with compatibility facades. Final
-acceptance remains gated by the checks in Phase 4.5.
+Implementation status: completed. The original Stage 4 delivery after Stage 3
+commit `c3ae351` split timeline, staging, parallel enumeration, import
+pipeline, file service, correlation, artifact, graph, entity, and rule-pack
+services. The 2026-07-12 closure pass removed the remaining app-services
+module/function baseline debt across analysis extraction, LVM probing,
+governance scoring, notebook, report generation, datasource probing,
+enumeration, import-analysis workers, and step replay.
+
+Closure metrics:
+
+- app-services module-size baseline rows: 7 to 0;
+- app-services function-size baseline rows: 20 to 0;
+- repository module-size baseline rows: 24 to 17;
+- repository function-size baseline rows: 37 to 17;
+- historic functions above 150 lines: 9 to 1.
 
 ### Stage Design
 
@@ -325,6 +335,56 @@ Performance acceptance:
 - SQLite remains single-writer per source database.
 - E01 evidence I/O remains bounded and serial unless measurement proves a safe
   alternative.
+
+### Phase 4.6: Residual Debt Closure
+
+The final Stage 4 cleanup applies the same single-responsibility boundary to
+the app-services modules that remained on the Stage 7 migration baseline.
+
+Completed capability splits:
+
+- browser extraction: routing facade, SQLite access, profile/time conversion,
+  Chromium history/downloads, Firefox history, and browser records;
+- registry extraction: hive dispatch, per-hive extractors, transaction-log
+  handling, warning governance, and extraction context;
+- LVM expansion: discovery, expansion, diagnostics, source identity, and
+  internal models;
+- governance scoring: release gates, gate status, fixture/benchmark/security
+  rules, score contributions, and scorecard projection;
+- notebook: DTO conversion, entry, citation, request-filter, and investigation
+  step operations;
+- report: HTML orchestration, snapshots, output persistence, warnings,
+  catalog/history, and raw JSON bundle export;
+- function-level orchestration: email extraction, Windows/Linux summaries,
+  GPT/MBR probing, filesystem enumeration, import-analysis workers, and step
+  replay.
+
+The Stage 4 service guard now rejects any app-services row reintroduced into
+the module-size or function-size baselines. It also validates the complete
+capability-module wiring manifest, checks the Cargo dependency graph for Tauri
+runtime dependencies, masks comments and string literals before behavioral
+token checks, and carries an adversarial `-SelfTest`. CPU-only Rayon work
+remains allowed outside the explicitly serial evidence-I/O modules. This is
+stricter than a monotonic debt rule: Stage 4 application-service debt must
+remain zero.
+
+Closure hardening also locks failure semantics that were exposed during the
+split review:
+
+- browser SQLite evidence copies are removed after successful parsing, parser
+  failure, and database-open failure;
+- registry warning governance preserves primary parser failures, redacts source
+  paths, deduplicates warnings, and emits the cap marker only when more than 64
+  unique warnings exist;
+- raw report bundles disclose unreadable files and use temporary-file plus
+  atomic-rename writes so failed reads cannot leave unmanifested partial files;
+- import-analysis worker statistics and staging ownership are separated from
+  worker runtime/coordinator ownership.
+
+Final validation used both private samples in serial order:
+`D:\獬豸杯\检材2.E01` and `D:\獬豸杯\检材3.E01`. Windows-first and Linux-first
+dual-source imports both passed with independent source databases and platform
+classification.
 
 ## Commit and Review Policy
 

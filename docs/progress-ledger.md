@@ -6,9 +6,10 @@
 
 | 日期 | 类型 | 范围 | 状态 | 结果 | 下一边界 |
 |---|---|---|---|---|---|
-| 2026-07-12 | Backend/Stage 7 | 文档、最终工程审计、全量门禁与真实样本验收 | Completed | 结构守卫、Rust/frontend 全量门禁、检材3 20 项、双顺序隔离和检材2性能门禁通过；工程评分 98/100 | 继续按 baseline 单调清理 24 个模块与 37 个函数债务 |
+| 2026-07-12 | Backend/Stage 7 | 文档、最终工程审计、全量门禁与真实样本验收 | Completed | 结构守卫、Rust/frontend 全量门禁、检材3 20 项、双顺序隔离和检材2性能门禁通过；工程评分 99/100 | 继续按 baseline 单调清理 17 个模块与 17 个函数债务 |
 | 2026-07-12 | Backend/Stage 5-6 | Parser/core 能力拆分与测试物理隔离 | Completed | parser/filesystem 能力族完成；非 vendored `src/` 测试债务降至 0 | Stage 7 最终验收 |
 | 2026-07-11 | Backend/Stage 3-4 | Transport/command 与 app-services 拆分 | Completed | command/service 边界守卫通过，command raw SQL 为 0，service 保持 Tauri-free | Stage 5 parser/core 拆分 |
+| 2026-07-12 | Backend/Stage 4 closure | 清理 app-services 剩余上帝模块与函数债务 | Completed | app-services 模块基线 7→0、函数基线 20→0；全 workspace 门禁、双顺序检材2/检材3隔离、报告/Registry/临时文件失败路径回归通过 | 保持 app-services 零债务并继续清理 parser/core 历史基线 |
 | 2026-07-11 | Backend/Stage 2 | Windows/Linux 平台域与多源读写隔离 | Completed | 双顺序真实 E01 回归通过；ready-source、报告归属、Graph 分页、前端切源均加固 | Stage 3 transport/command 拆分 |
 | 2026-07-10 | Backend/Stage 0 | 模块、函数、测试物理边界基线 | Completed | 三项结构守卫、单调 baseline、进程树/路径 identity 加固、数据源删除两阶段恢复与真实样本冻结完成 | Stage 1 移除 macOS 生产支持 |
 | 2026-07-10 | Linux/PVE | 集群成员导入建模 | Completed | 文件夹发现 6 个 E01 成员，成员保持独立数据源与独立数据库 | 集群级语义关联 |
@@ -51,7 +52,7 @@
 - 代表 PVE 宿主导入结果为 `files=56471`、`dirs=5931`、`totalBytes=5250350224`。
 - `/etc/passwd`、`/etc/os-release`、`/etc/hostname`、`/var/lib/pve-cluster/config.db` 可通过 `FileEntryId` 预览。
 - Ceph BlueStore、VM disk reconstruction 和跨节点语义分析仍不得标记为完成。
-- Stage 7 结构事实：模块 baseline 24 行、函数 baseline 37 行（其中 9 个历史函数超过 150 行）、test-layout baseline 0 行；所有 baseline 只允许减少。
+- Stage 7 结构事实：模块 baseline 17 行、函数 baseline 17 行（其中 1 个历史函数超过 150 行）、test-layout baseline 0 行；`app-services` 模块与函数 baseline 均为 0，所有 baseline 只允许减少。
 - 检材2三次性能回归：total median `13.479s`、enumeration median `8.488s`、RSS `582MB`、每次 `91,737` rows、最低 `9,892 rows/s`。
 
 ## 更新规则

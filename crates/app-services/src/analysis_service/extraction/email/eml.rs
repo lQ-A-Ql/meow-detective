@@ -9,6 +9,7 @@ use crate::analysis_service::candidates::EvidenceCandidate;
 use chrono::{DateTime, Utc};
 use mailparse::{parse_mail, DispositionType, MailAddr, MailHeaderMap, ParsedMail};
 use serde_json::Value;
+use std::collections::BTreeMap;
 use transport::dto::{EmailAttachmentDto, EmailHeaderDto};
 
 const EMAIL_EXTRACTOR_ID: &str = "email.eml_emlx";
@@ -17,16 +18,21 @@ pub(super) fn extract_eml_candidate(
     candidate: &EvidenceCandidate,
     bytes: &[u8],
 ) -> ExtractionOutcome {
-    let mut outcome = ExtractionOutcome::default();
     let parsed = match parse_email_message(bytes) {
         Ok(p) => p,
         Err(err) => {
+            let mut outcome = ExtractionOutcome::default();
             outcome
                 .warnings
                 .push(format!("EML parse error for {}: {}", candidate.path, err));
             return outcome;
         }
     };
+    let attrs = build_eml_attrs(candidate, &parsed);
+    build_eml_outcome(candidate, parsed, attrs)
+}
+
+fn build_eml_attrs(candidate: &EvidenceCandidate, parsed: &ParsedEmail) -> BTreeMap<String, Value> {
     let mut attrs = base_attrs(candidate);
     attrs.insert("from".to_string(), Value::String(parsed.from.clone()));
     attrs.insert("to".to_string(), string_array_value(&parsed.to));
@@ -43,31 +49,9 @@ pub(super) fn extract_eml_candidate(
     );
     attrs.insert(
         "attachmentDetails".to_string(),
-        Value::Array(
-            parsed
-                .attachment_details
-                .iter()
-                .map(|a| {
-                    serde_json::json!({
-                        "fileName": a.file_name,
-                        "size": a.size,
-                        "mimeType": a.mime_type,
-                        "contentId": a.content_id,
-                    })
-                })
-                .collect(),
-        ),
+        attachment_details_value(&parsed.attachment_details),
     );
-    attrs.insert(
-        "headers".to_string(),
-        Value::Array(
-            parsed
-                .headers
-                .iter()
-                .map(|h| serde_json::json!({"name": h.name, "value": h.value}))
-                .collect(),
-        ),
-    );
+    attrs.insert("headers".to_string(), headers_value(&parsed.headers));
     attrs.insert(
         "bodyPreview".to_string(),
         Value::String(parsed.body_preview.clone()),
@@ -78,6 +62,17 @@ pub(super) fn extract_eml_candidate(
     if let Some(body_html) = &parsed.body_html {
         attrs.insert("bodyHtml".to_string(), Value::String(body_html.clone()));
     }
+    insert_eml_metadata(&mut attrs, parsed);
+    attrs.insert(
+        "attachmentCount".to_string(),
+        Value::Number(serde_json::Number::from(parsed.attachments.len())),
+    );
+    // Single EML files carry no deleted-item metadata.
+    attrs.insert("isDeleted".to_string(), Value::Null);
+    attrs
+}
+
+fn insert_eml_metadata(attrs: &mut BTreeMap<String, Value>, parsed: &ParsedEmail) {
     if let Some(sent_at) = parsed.sent_at {
         attrs.insert("sentAt".to_string(), Value::String(sent_at.to_rfc3339()));
     }
@@ -117,13 +112,14 @@ pub(super) fn extract_eml_candidate(
             Value::String(message_class.clone()),
         );
     }
-    attrs.insert(
-        "attachmentCount".to_string(),
-        Value::Number(serde_json::Number::from(parsed.attachments.len())),
-    );
-    // Single EML files carry no deleted-item metadata.
-    attrs.insert("isDeleted".to_string(), Value::Null);
+}
 
+fn build_eml_outcome(
+    candidate: &EvidenceCandidate,
+    parsed: ParsedEmail,
+    attrs: BTreeMap<String, Value>,
+) -> ExtractionOutcome {
+    let mut outcome = ExtractionOutcome::default();
     let event_time = parsed.sent_at.or(parsed.received_at);
     if let Some(event_time) = event_time {
         outcome.timeline_events.push(make_timeline_event(
@@ -145,6 +141,31 @@ pub(super) fn extract_eml_candidate(
         attrs,
     ));
     outcome
+}
+
+fn attachment_details_value(attachments: &[EmailAttachmentDto]) -> Value {
+    Value::Array(
+        attachments
+            .iter()
+            .map(|attachment| {
+                serde_json::json!({
+                    "fileName": attachment.file_name,
+                    "size": attachment.size,
+                    "mimeType": attachment.mime_type,
+                    "contentId": attachment.content_id,
+                })
+            })
+            .collect(),
+    )
+}
+
+fn headers_value(headers: &[EmailHeaderDto]) -> Value {
+    Value::Array(
+        headers
+            .iter()
+            .map(|header| serde_json::json!({"name": header.name, "value": header.value}))
+            .collect(),
+    )
 }
 
 pub(super) struct ParsedEmail {

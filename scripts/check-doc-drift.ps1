@@ -122,6 +122,8 @@ $diagramDoc = Read-Text 'docs/model-architecture-algorithm-diagrams.md'
 $knownUnsupportedDoc = Read-Text 'docs/known-unsupported-formats.md'
 $releaseScorecardDoc = Read-Text 'docs/release-scorecard.md'
 $validationDoc = Read-Text 'docs/validation-trust-framework.md'
+$progressLedger = Read-Text 'docs/progress-ledger.md'
+$stage7Acceptance = Read-Text 'docs/backend-stage7-final-acceptance.md'
 $knownLimitationsFact = Read-Text 'testdata/governance/v2-known-limitations.json' | ConvertFrom-Json
 $benchmarkBaseline = Read-Text 'testdata/governance/v2-benchmark-baseline.json' | ConvertFrom-Json
 
@@ -151,6 +153,19 @@ $frontendTestCount = (
 $serviceModuleCount = (Get-ChildItem -LiteralPath (Join-Path $repoRoot 'crates/app-services/src') -Filter '*.rs' | Where-Object { $_.Name -ne 'lib.rs' } | Measure-Object).Count
 $mermaidCount = ([regex]::Matches($diagramDoc, '```mermaid')).Count
 $knownLimitationRows = Get-KnownLimitationDocRows $knownUnsupportedDoc
+$moduleBaselineRows = @(Import-Csv -LiteralPath (Join-Path $repoRoot 'scripts/baselines/rust-module-size-baseline.csv'))
+$functionBaselineRows = @(Import-Csv -LiteralPath (Join-Path $repoRoot 'scripts/baselines/rust-function-size-baseline.csv'))
+$moduleDebtCount = $moduleBaselineRows.Count
+$functionDebtCount = $functionBaselineRows.Count
+$hardFunctionDebtCount = @(
+  $functionBaselineRows | Where-Object { [int]$_.lines -gt 150 }
+).Count
+$appServicesModuleDebtCount = @(
+  $moduleBaselineRows | Where-Object { $_.path -like 'crates/app-services/*' }
+).Count
+$appServicesFunctionDebtCount = @(
+  $functionBaselineRows | Where-Object { $_.path -like 'crates/app-services/*' }
+).Count
 
 Assert-Contains $readme "$crateCount Rust crates" 'README crate count is stale'
 Assert-Contains $readme "$pageCount frontend pages" 'README frontend page count is stale'
@@ -170,6 +185,12 @@ Assert-Contains $docIndex "SQLite migration scripts | $migrationCount" 'document
 Assert-TableFact $docIndex 'frontend/src/app/pages/*.tsx' $pageCount 'documentation-index frontend page row is stale'
 Assert-TableFact $docIndex 'frontend/src/**/*.test.ts(x)' $frontendTestCount 'documentation-index frontend test row is stale'
 Assert-Matches $docIndex "\|\s*[^|]*Mermaid[^|]*\|\s*$mermaidCount\s*\|" 'documentation-index Mermaid count is stale'
+Assert-Equals $appServicesModuleDebtCount 0 'app-services module baseline debt was reintroduced'
+Assert-Equals $appServicesFunctionDebtCount 0 'app-services function baseline debt was reintroduced'
+Assert-Matches -Content $progressLedger -Pattern "baseline\s+$moduleDebtCount[^\r\n]+baseline\s+$functionDebtCount[^\r\n]+$hardFunctionDebtCount[^\r\n]+150" -Message 'progress-ledger structural debt facts are stale'
+Assert-Contains -Content $stage7Acceptance -Needle "| Module-size baseline rows | 83 | $moduleDebtCount |" -Message 'Stage 7 module baseline result is stale'
+Assert-Contains -Content $stage7Acceptance -Needle "| Function-size baseline rows | 65 | $functionDebtCount |" -Message 'Stage 7 function baseline result is stale'
+Assert-Contains -Content $stage7Acceptance -Needle "| Historic functions above 150 lines | not separately closed | $hardFunctionDebtCount |" -Message 'Stage 7 hard-function debt result is stale'
 
 Assert-Equals $mermaidCount 15 'Mermaid diagram count drifted'
 Assert-Equals $knownLimitationsFact.documentedLimitCount $knownLimitationsFact.items.Count 'known limitations documentedLimitCount drifted'

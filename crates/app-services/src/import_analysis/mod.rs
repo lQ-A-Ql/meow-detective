@@ -9,8 +9,11 @@ pub mod priority_queue;
 mod progress;
 mod task_feed;
 pub mod tier;
+mod worker_coordinator;
+mod worker_model;
 mod worker_pool;
 mod worker_runtime;
+mod worker_staging;
 
 pub use budget::{
     content_budget_for_mode, default_memory_hard_limit_mb, default_memory_soft_limit_mb,

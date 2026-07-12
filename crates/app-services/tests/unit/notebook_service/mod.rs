@@ -1,8 +1,12 @@
 use super::*;
-use domain::{CaseId, CaseMeta};
-use persistence_sqlite::repositories::case_repo::CaseRepo;
+use domain::{CaseId, CaseMeta, EntryStatus, NotebookEntryType};
+use persistence_sqlite::repositories::{
+    case_repo::CaseRepo,
+    notebook_repo::{NotebookEntryFilters, NotebookRepo, StepFilters},
+};
 use persistence_sqlite::runner;
 use rusqlite::Connection;
+use transport::dto::{GraphNodeTypeDto, NotebookEntryStatusDto, NotebookEntryTypeDto};
 
 fn setup() -> Connection {
     let conn = Connection::open_in_memory().unwrap();

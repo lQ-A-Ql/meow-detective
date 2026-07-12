@@ -2,6 +2,7 @@ use crate::analysis_service::artifact_builders::{base_attrs, make_artifact, make
 use crate::analysis_service::candidates::EvidenceCandidate;
 use crate::analysis_service::extraction::ExtractionOutcome;
 use serde_json::Value;
+use std::collections::BTreeMap;
 
 pub(super) fn sam_user_artifacts(
     candidate: &EvidenceCandidate,
@@ -9,31 +10,7 @@ pub(super) fn sam_user_artifacts(
 ) -> ExtractionOutcome {
     let mut outcome = ExtractionOutcome::default();
     for user in &info.users {
-        let rid_hex = format!("{:08x}", user.rid);
-        let mut attrs = base_attrs(candidate);
-        attrs.insert("username".to_string(), Value::String(user.username.clone()));
-        attrs.insert("rid".to_string(), Value::Number(user.rid.into()));
-        attrs.insert("ridHex".to_string(), Value::String(rid_hex.clone()));
-        attrs.insert("sid".to_string(), Value::String(user.sid.clone()));
-        attrs.insert("subjectSid".to_string(), Value::String(user.sid.clone()));
-        attrs.insert(
-            "subjectUsername".to_string(),
-            Value::String(user.username.clone()),
-        );
-        attrs.insert(
-            "groups".to_string(),
-            Value::Array(
-                user.group_memberships
-                    .iter()
-                    .cloned()
-                    .map(Value::String)
-                    .collect(),
-            ),
-        );
-        attrs.insert(
-            "loginCount".to_string(),
-            Value::Number(user.login_count.into()),
-        );
+        let mut attrs = sam_user_attrs(candidate, user);
         if let Some(ts) = user.last_login {
             attrs.insert("lastLogin".to_string(), Value::String(ts.to_rfc3339()));
             outcome.timeline_events.push(make_timeline_event(
@@ -104,4 +81,38 @@ pub(super) fn sam_user_artifacts(
         ));
     }
     outcome
+}
+
+fn sam_user_attrs(
+    candidate: &EvidenceCandidate,
+    user: &artifacts_windows::SamUser,
+) -> BTreeMap<String, Value> {
+    let mut attrs = base_attrs(candidate);
+    attrs.insert("username".to_string(), Value::String(user.username.clone()));
+    attrs.insert("rid".to_string(), Value::Number(user.rid.into()));
+    attrs.insert(
+        "ridHex".to_string(),
+        Value::String(format!("{:08x}", user.rid)),
+    );
+    attrs.insert("sid".to_string(), Value::String(user.sid.clone()));
+    attrs.insert("subjectSid".to_string(), Value::String(user.sid.clone()));
+    attrs.insert(
+        "subjectUsername".to_string(),
+        Value::String(user.username.clone()),
+    );
+    attrs.insert(
+        "groups".to_string(),
+        Value::Array(
+            user.group_memberships
+                .iter()
+                .cloned()
+                .map(Value::String)
+                .collect(),
+        ),
+    );
+    attrs.insert(
+        "loginCount".to_string(),
+        Value::Number(user.login_count.into()),
+    );
+    attrs
 }

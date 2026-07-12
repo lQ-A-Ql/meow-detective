@@ -2,11 +2,13 @@ use super::budget::ContentBudget;
 use super::error::ImportAnalysisError;
 use super::extractor_policy::PlatformExtractorPolicy;
 use super::options::{ImportAnalysisOptions, ImportAnalysisStats};
+use super::worker_model::WorkerStats;
+use super::worker_staging::{flush_worker_rows, persist_worker_stats, IndexDocRow};
 use crate::{file_service, staging};
 use artifacts_core::VecSink;
 use crossbeam_channel::Receiver;
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 use search::extract_text;
 use std::io::Cursor;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -14,17 +16,6 @@ use std::sync::Arc;
 
 const WORKER_INSERT_BATCH: usize = 200;
 const INDEX_DOC_INSERT_BATCH: usize = 25;
-
-#[derive(Debug, Clone, Default)]
-pub(super) struct WorkerStats {
-    pub(super) processed_count: u64,
-    pub(super) artifact_count: u64,
-    pub(super) timeline_count: u64,
-    pub(super) indexed_count: u64,
-    pub(super) warning_count: u32,
-    pub(super) skipped_count: u32,
-    pub(super) failed_count: u32,
-}
 
 #[derive(Debug, Clone)]
 pub(super) struct FileTask {
@@ -99,61 +90,108 @@ pub(super) fn run_analysis_worker(
     task_rx: Receiver<FileTask>,
     shared: Arc<SharedAnalysisState>,
 ) -> Result<WorkerStats, ImportAnalysisError> {
-    let extractor_policy = PlatformExtractorPolicy::for_platform(options.platform)?;
-    let main_conn = persistence_sqlite::open_or_create(&options.db_path)?;
-    let staging_conn =
-        staging::open_analysis_staging(&options.case_root, &options.data_source_id.0, worker_id)?;
-    staging::set_worker_meta(&staging_conn, "status", "running")?;
-
-    let mut stats = WorkerStats::default();
-    let header_cache = file_service::FileHeaderReadCache::new(options.case_id.clone());
-    let mut artifacts = Vec::with_capacity(WORKER_INSERT_BATCH);
-    let mut timeline_events = Vec::with_capacity(WORKER_INSERT_BATCH);
-    let mut index_docs = Vec::with_capacity(INDEX_DOC_INSERT_BATCH);
-
+    let mut runtime = AnalysisWorkerRuntime::open(worker_id, &options)?;
     while let Ok(task) = task_rx.recv() {
         if options.cancel_token.load(Ordering::Relaxed) {
             break;
         }
+        runtime.process_task(task, &options, &shared)?;
+    }
+    runtime.finish(options.cancel_token.load(Ordering::Relaxed))
+}
 
+struct AnalysisWorkerRuntime {
+    extractor_policy: PlatformExtractorPolicy,
+    main_conn: Connection,
+    staging_conn: Connection,
+    stats: WorkerStats,
+    header_cache: file_service::FileHeaderReadCache,
+    artifacts: Vec<domain::Artifact>,
+    timeline_events: Vec<domain::TimelineEvent>,
+    index_docs: Vec<IndexDocRow>,
+}
+
+impl AnalysisWorkerRuntime {
+    fn open(
+        worker_id: usize,
+        options: &ImportAnalysisOptions,
+    ) -> Result<Self, ImportAnalysisError> {
+        let extractor_policy = PlatformExtractorPolicy::for_platform(options.platform)?;
+        let main_conn = persistence_sqlite::open_or_create(&options.db_path)?;
+        let staging_conn = staging::open_analysis_staging(
+            &options.case_root,
+            &options.data_source_id.0,
+            worker_id,
+        )?;
+        staging::set_worker_meta(&staging_conn, "status", "running")?;
+        Ok(Self {
+            extractor_policy,
+            main_conn,
+            staging_conn,
+            stats: WorkerStats::default(),
+            header_cache: file_service::FileHeaderReadCache::new(options.case_id.clone()),
+            artifacts: Vec::with_capacity(WORKER_INSERT_BATCH),
+            timeline_events: Vec::with_capacity(WORKER_INSERT_BATCH),
+            index_docs: Vec::with_capacity(INDEX_DOC_INSERT_BATCH),
+        })
+    }
+
+    fn process_task(
+        &mut self,
+        task: FileTask,
+        options: &ImportAnalysisOptions,
+        shared: &SharedAnalysisState,
+    ) -> Result<(), ImportAnalysisError> {
         let file = task.to_file_entry();
-        stats.processed_count += 1;
+        self.stats.processed_count += 1;
         shared.processed_total.fetch_add(1, Ordering::Relaxed);
-
         if options.enable_timeline_projection {
             let events = timeline::project_file_macb(&file);
-            stats.timeline_count += events.len() as u64;
-            timeline_events.extend(events);
+            self.stats.timeline_count += events.len() as u64;
+            self.timeline_events.extend(events);
         }
+        self.extract_artifacts(&file, options, shared);
+        self.index_text(&file, options, shared);
+        self.flush_if_needed()
+    }
 
+    fn extract_artifacts(
+        &mut self,
+        file: &FileEntry,
+        options: &ImportAnalysisOptions,
+        shared: &SharedAnalysisState,
+    ) {
         if options.analysis_mode.allows_content()
             && options.enable_content_extraction
-            && extractor_policy.should_extract(&file)
-            && reserve_content_budget(&options.content_budget, &file, &shared)
+            && self.extractor_policy.should_extract(file)
+            && reserve_content_budget(&options.content_budget, file, shared)
         {
-            match read_artifact_bytes(&header_cache, &main_conn, &file.id) {
+            match read_artifact_bytes(&self.header_cache, &self.main_conn, &file.id) {
                 Ok(bytes) => {
                     let mut sink = VecSink::new();
-                    match extractor_policy.run_extractors(
+                    match self.extractor_policy.run_extractors(
                         &file.id,
                         &file.path,
                         Box::new(Cursor::new(bytes)),
                         &mut sink,
                     ) {
                         Ok(extract_stats) => {
-                            stats.warning_count = stats
+                            self.stats.warning_count = self
+                                .stats
                                 .warning_count
                                 .saturating_add(extract_stats.warning_count);
-                            stats.skipped_count = stats
+                            self.stats.skipped_count = self
+                                .stats
                                 .skipped_count
                                 .saturating_add(extract_stats.skipped_count);
-                            stats.failed_count = stats
+                            self.stats.failed_count = self
+                                .stats
                                 .failed_count
                                 .saturating_add(extract_stats.failed_count);
                         }
                         Err(error) => {
-                            stats.warning_count = stats.warning_count.saturating_add(1);
-                            stats.skipped_count = stats.skipped_count.saturating_add(1);
+                            self.stats.warning_count = self.stats.warning_count.saturating_add(1);
+                            self.stats.skipped_count = self.stats.skipped_count.saturating_add(1);
                             tracing::warn!(
                                 "Artifact extraction failed for {}: {}",
                                 file.path,
@@ -161,14 +199,14 @@ pub(super) fn run_analysis_worker(
                             );
                         }
                     }
-                    stats.artifact_count += sink.artifacts.len() as u64;
-                    stats.timeline_count += sink.timeline_events.len() as u64;
-                    artifacts.extend(sink.artifacts);
-                    timeline_events.extend(sink.timeline_events);
+                    self.stats.artifact_count += sink.artifacts.len() as u64;
+                    self.stats.timeline_count += sink.timeline_events.len() as u64;
+                    self.artifacts.extend(sink.artifacts);
+                    self.timeline_events.extend(sink.timeline_events);
                 }
                 Err(error) => {
-                    stats.warning_count = stats.warning_count.saturating_add(1);
-                    stats.skipped_count = stats.skipped_count.saturating_add(1);
+                    self.stats.warning_count = self.stats.warning_count.saturating_add(1);
+                    self.stats.skipped_count = self.stats.skipped_count.saturating_add(1);
                     tracing::warn!(
                         "Artifact extraction skipped unreadable file {}: {}",
                         file.path,
@@ -177,22 +215,30 @@ pub(super) fn run_analysis_worker(
                 }
             }
         }
+    }
 
+    fn index_text(
+        &mut self,
+        file: &FileEntry,
+        options: &ImportAnalysisOptions,
+        shared: &SharedAnalysisState,
+    ) {
         if options.enable_text_indexing
-            && should_index_file(&file)
+            && should_index_file(file)
             && options.analysis_mode.allows_content()
-            && reserve_content_budget(&options.content_budget, &file, &shared)
+            && reserve_content_budget(&options.content_budget, file, shared)
             && shared.indexed_total.load(Ordering::Relaxed)
                 < infrastructure::constants::IMPORT_TEXT_INDEX_LIMIT
         {
-            if let Ok(bytes) = read_text_index_bytes(&header_cache, &main_conn, &file.id) {
-                let mime = mime_hint_for_entry(&file);
+            if let Ok(bytes) = read_text_index_bytes(&self.header_cache, &self.main_conn, &file.id)
+            {
+                let mime = mime_hint_for_entry(file);
                 let text = extract_text(Cursor::new(bytes), &file.id.0, mime);
                 if text.extractable && !text.content.is_empty() {
                     let previous = shared.indexed_total.fetch_add(1, Ordering::Relaxed);
                     if previous < infrastructure::constants::IMPORT_TEXT_INDEX_LIMIT {
-                        stats.indexed_count += 1;
-                        index_docs.push(IndexDocRow {
+                        self.stats.indexed_count += 1;
+                        self.index_docs.push(IndexDocRow {
                             file_id: file.id.0.clone(),
                             path: file.path.clone(),
                             text: text.content,
@@ -203,163 +249,43 @@ pub(super) fn run_analysis_worker(
                     }
                 }
             } else {
-                stats.warning_count = stats.warning_count.saturating_add(1);
-                stats.skipped_count = stats.skipped_count.saturating_add(1);
+                self.stats.warning_count = self.stats.warning_count.saturating_add(1);
+                self.stats.skipped_count = self.stats.skipped_count.saturating_add(1);
             }
         }
+    }
 
-        if artifacts.len() >= WORKER_INSERT_BATCH
-            || timeline_events.len() >= WORKER_INSERT_BATCH
-            || index_docs.len() >= INDEX_DOC_INSERT_BATCH
+    fn flush_if_needed(&mut self) -> Result<(), ImportAnalysisError> {
+        if self.artifacts.len() >= WORKER_INSERT_BATCH
+            || self.timeline_events.len() >= WORKER_INSERT_BATCH
+            || self.index_docs.len() >= INDEX_DOC_INSERT_BATCH
         {
             flush_worker_rows(
-                &staging_conn,
-                &mut artifacts,
-                &mut timeline_events,
-                &mut index_docs,
+                &self.staging_conn,
+                &mut self.artifacts,
+                &mut self.timeline_events,
+                &mut self.index_docs,
             )?;
-            persist_worker_stats(&staging_conn, &stats)?;
+            persist_worker_stats(&self.staging_conn, &self.stats)?;
         }
+        Ok(())
     }
 
-    flush_worker_rows(
-        &staging_conn,
-        &mut artifacts,
-        &mut timeline_events,
-        &mut index_docs,
-    )?;
-    persist_worker_stats(&staging_conn, &stats)?;
-
-    let status = if options.cancel_token.load(Ordering::Relaxed) {
-        "cancelled"
-    } else {
-        "done"
-    };
-    staging::set_worker_meta(&staging_conn, "status", status)?;
-    if status == "cancelled" {
-        staging::set_worker_meta(&staging_conn, "error", "cancelled")?;
-    }
-    Ok(stats)
-}
-
-pub(super) fn clear_analysis_worker_rows(conn: &Connection) -> rusqlite::Result<()> {
-    conn.execute_batch(
-        "DELETE FROM artifact_rows;
-         DELETE FROM timeline_rows;
-         DELETE FROM index_docs;",
-    )
-}
-
-fn persist_worker_stats(conn: &Connection, stats: &WorkerStats) -> Result<(), ImportAnalysisError> {
-    staging::set_worker_meta(conn, "processed_count", &stats.processed_count.to_string())?;
-    staging::set_worker_meta(conn, "artifact_count", &stats.artifact_count.to_string())?;
-    staging::set_worker_meta(conn, "timeline_count", &stats.timeline_count.to_string())?;
-    staging::set_worker_meta(conn, "indexed_count", &stats.indexed_count.to_string())?;
-    staging::set_worker_meta(conn, "warning_count", &stats.warning_count.to_string())?;
-    staging::set_worker_meta(conn, "skipped_count", &stats.skipped_count.to_string())?;
-    staging::set_worker_meta(conn, "failed_count", &stats.failed_count.to_string())?;
-    Ok(())
-}
-
-fn flush_worker_rows(
-    conn: &Connection,
-    artifacts: &mut Vec<domain::Artifact>,
-    timeline_events: &mut Vec<domain::TimelineEvent>,
-    index_docs: &mut Vec<IndexDocRow>,
-) -> Result<(), ImportAnalysisError> {
-    if artifacts.is_empty() && timeline_events.is_empty() && index_docs.is_empty() {
-        return Ok(());
-    }
-    let tx = conn
-        .unchecked_transaction()
-        .map_err(|e| ImportAnalysisError::Staging(format!("Begin worker staging tx: {e}")))?;
-    {
-        let mut artifact_stmt = tx
-            .prepare_cached(
-                "INSERT OR IGNORE INTO artifact_rows
-                 (id, file_id, artifact_type, extractor_id, extractor_version, confidence, source_attribution, display_name, summary, data_json, source_path, created_at)
-                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
-            )
-            .map_err(|e| ImportAnalysisError::Staging(format!("Prepare artifact staging insert: {e}")))?;
-        for artifact in artifacts.iter() {
-            artifact_stmt
-                .execute(params![
-                    artifact.id.0,
-                    artifact.source_object_id.as_ref().map(|id| &id.0),
-                    artifact.family,
-                    artifact.extractor_id,
-                    artifact.extractor_version,
-                    artifact.confidence,
-                    artifact.source_attribution,
-                    artifact.title,
-                    artifact.summary,
-                    serde_json::to_string(&artifact.attrs).unwrap_or_else(|_| "{}".to_string()),
-                    "",
-                    artifact.created_at.to_rfc3339(),
-                ])
-                .map_err(|e| {
-                    ImportAnalysisError::Staging(format!("Insert artifact staging row: {e}"))
-                })?;
+    fn finish(mut self, cancelled: bool) -> Result<WorkerStats, ImportAnalysisError> {
+        flush_worker_rows(
+            &self.staging_conn,
+            &mut self.artifacts,
+            &mut self.timeline_events,
+            &mut self.index_docs,
+        )?;
+        persist_worker_stats(&self.staging_conn, &self.stats)?;
+        let status = if cancelled { "cancelled" } else { "done" };
+        staging::set_worker_meta(&self.staging_conn, "status", status)?;
+        if cancelled {
+            staging::set_worker_meta(&self.staging_conn, "error", "cancelled")?;
         }
+        Ok(self.stats)
     }
-    {
-        let mut timeline_stmt = tx
-            .prepare_cached(
-                "INSERT OR IGNORE INTO timeline_rows
-                 (id, file_id, timestamp, event_type, parser_id, parser_version, confidence, source_attribution, title, description, data_json)
-                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-            )
-            .map_err(|e| ImportAnalysisError::Staging(format!("Prepare timeline staging insert: {e}")))?;
-        for event in timeline_events.iter() {
-            timeline_stmt
-                .execute(params![
-                    event.id.0,
-                    event.source_object_id,
-                    event.timestamp.to_rfc3339(),
-                    event.event_type,
-                    event.parser_id,
-                    event.parser_version,
-                    event.confidence,
-                    event.source_attribution,
-                    event.title,
-                    event.description,
-                    serde_json::to_string(&event.attrs).unwrap_or_else(|_| "{}".to_string()),
-                ])
-                .map_err(|e| {
-                    ImportAnalysisError::Staging(format!("Insert timeline staging row: {e}"))
-                })?;
-        }
-    }
-    {
-        let mut index_stmt = tx
-            .prepare_cached(
-                "INSERT OR REPLACE INTO index_docs
-                 (file_id, path, text, language, truncated)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
-            )
-            .map_err(|e| {
-                ImportAnalysisError::Staging(format!("Prepare index staging insert: {e}"))
-            })?;
-        for doc in index_docs.iter() {
-            index_stmt
-                .execute(params![
-                    doc.file_id,
-                    doc.path,
-                    doc.text,
-                    doc.language,
-                    doc.truncated as i32,
-                ])
-                .map_err(|e| {
-                    ImportAnalysisError::Staging(format!("Insert index staging row: {e}"))
-                })?;
-        }
-    }
-    tx.commit()
-        .map_err(|e| ImportAnalysisError::Staging(format!("Commit worker staging tx: {e}")))?;
-    artifacts.clear();
-    timeline_events.clear();
-    index_docs.clear();
-    Ok(())
 }
 
 fn read_text_index_bytes(
@@ -400,15 +326,6 @@ fn read_text_index_bytes_impl(
         file_id,
         infrastructure::constants::IMPORT_TEXT_INDEX_FILE_LIMIT_BYTES as usize,
     )
-}
-
-#[derive(Debug)]
-struct IndexDocRow {
-    file_id: String,
-    path: String,
-    text: String,
-    language: String,
-    truncated: bool,
 }
 
 pub(super) fn add_worker_stats(stats: &mut ImportAnalysisStats, worker: WorkerStats) {

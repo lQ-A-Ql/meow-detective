@@ -1,11 +1,4 @@
 path,lines,limit,kind
-crates/app-services/src/analysis_service/extraction/browser.rs,522,500,production
-crates/app-services/src/analysis_service/extraction/registry/mod.rs,518,200,module-root
-crates/app-services/src/datasource_service/lvm.rs,862,500,production
-crates/app-services/src/governance/scoring.rs,802,500,production
-crates/app-services/src/notebook_service/mod.rs,316,200,module-root
-crates/app-services/src/report/json.rs,526,500,production
-crates/app-services/src/report/mod.rs,523,200,module-root
 crates/artifacts-linux/src/web.rs,517,500,production
 crates/artifacts-windows/src/jumplist/mod.rs,211,200,module-root
 crates/artifacts-windows/src/registry/lookup/reader.rs,664,500,production

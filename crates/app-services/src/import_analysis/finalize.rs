@@ -1,7 +1,7 @@
 use super::error::ImportAnalysisError;
 use super::options::{AnalysisProgressCallback, ImportAnalysisOptions, ImportAnalysisStats};
 use super::progress::{current_rss_mb, rows_per_sec};
-use super::worker_runtime::clear_analysis_worker_rows;
+use super::worker_staging::clear_analysis_worker_rows;
 use crate::staging;
 use persistence_sqlite::DbResult;
 use rusqlite::Connection;

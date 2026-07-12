@@ -1,6 +1,6 @@
 use crate::file_service::visibility::visibility_flags_for_node;
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
-use evidence_core::FileSystemReader;
+use evidence_core::{FileSystemReader, FsNode};
 use infrastructure::constants::FILE_INSERT_BATCH_SIZE;
 use persistence_sqlite::{repositories::file_repo::FileRepo, DbError, DbResult};
 use rusqlite::Connection;
@@ -134,21 +134,8 @@ pub(crate) fn walk_and_insert_children(
     progress_fn: Option<&dyn Fn(u32)>,
     cancel_token: Option<&AtomicBool>,
 ) -> DbResult<EnumerationStats> {
-    let mut queue: VecDeque<(FileEntryId, String)> = VecDeque::new();
-    queue.push_back((root_id, String::new()));
-
-    let mut stats = EnumerationStats {
-        file_count: 0,
-        dir_count: 1,
-        total_size: 0,
-        warnings: Vec::new(),
-    };
-
-    let batch_size = FILE_INSERT_BATCH_SIZE;
-    let mut batch: Vec<FileEntry> = Vec::with_capacity(batch_size);
-    let mut total_processed: u64 = 0;
-
-    while let Some((parent_id, dir_path)) = queue.pop_front() {
+    let mut state = EnumerationState::new(root_id);
+    while let Some((parent_id, dir_path)) = state.queue.pop_front() {
         if cancellation_requested(cancel_token) {
             return Err(enumeration_cancelled_error());
         }
@@ -156,7 +143,8 @@ pub(crate) fn walk_and_insert_children(
         let children = match fs.list_children(&dir_path) {
             Ok(c) => c,
             Err(e) => {
-                stats
+                state
+                    .stats
                     .warnings
                     .push(format!("Cannot read '{}': {}", dir_path, e));
                 continue;
@@ -172,71 +160,120 @@ pub(crate) fn walk_and_insert_children(
                 continue;
             }
 
-            let id = FileEntryId(Uuid::new_v4().to_string());
-            let (hidden, system) = visibility_flags_for_node(&child);
-            let entry = FileEntry {
-                id: id.clone(),
-                parent_id: Some(parent_id.clone()),
-                data_source_id: data_source_id.clone(),
-                path: child.path.clone(),
-                name: child.name.clone(),
-                entry_type: if child.is_dir {
-                    EntryType::Directory
-                } else {
-                    EntryType::File
-                },
-                size: if child.is_dir { None } else { Some(child.size) },
-                ext: child
-                    .name
-                    .rsplit('.')
-                    .next()
-                    .filter(|e| *e != child.name)
-                    .map(|e| e.to_string()),
-                deleted: false,
-                hidden,
-                system,
-                encrypted: child.encrypted,
-                created_at: child.created_at,
-                modified_at: child.modified_at,
-                accessed_at: child.accessed_at,
-                changed_at: None,
-                hash_sha256: None,
-            };
-
-            if child.is_dir {
-                stats.dir_count += 1;
-                queue.push_back((id, child.path));
-            } else {
-                stats.file_count += 1;
-                stats.total_size += child.size;
-            }
-
-            batch.push(entry);
-            total_processed += 1;
-
-            if batch.len() >= batch_size {
-                repo.insert_batch_unchecked(&batch)?;
-                batch.clear();
-            }
-            if total_processed.is_multiple_of(100) {
-                if let Some(ref pf) = progress_fn {
-                    let pct = compute_enumeration_progress(total_processed);
-                    pf(pct as u32);
-                }
-            }
+            state.process_child(repo, data_source_id, &parent_id, child, progress_fn)?;
         }
     }
 
-    if !batch.is_empty() {
-        repo.insert_batch_unchecked(&batch)?;
-    }
-
-    if let Some(ref pf) = progress_fn {
-        pf(100);
-    }
+    state.finish(repo, progress_fn)?;
     if cancellation_requested(cancel_token) {
         return Err(enumeration_cancelled_error());
     }
 
-    Ok(stats)
+    Ok(state.stats)
+}
+
+struct EnumerationState {
+    queue: VecDeque<(FileEntryId, String)>,
+    stats: EnumerationStats,
+    batch: Vec<FileEntry>,
+    total_processed: u64,
+}
+
+impl EnumerationState {
+    fn new(root_id: FileEntryId) -> Self {
+        let mut queue = VecDeque::new();
+        queue.push_back((root_id, String::new()));
+        Self {
+            queue,
+            stats: EnumerationStats {
+                file_count: 0,
+                dir_count: 1,
+                total_size: 0,
+                warnings: Vec::new(),
+            },
+            batch: Vec::with_capacity(FILE_INSERT_BATCH_SIZE),
+            total_processed: 0,
+        }
+    }
+
+    fn process_child(
+        &mut self,
+        repo: &FileRepo<'_>,
+        data_source_id: &DataSourceId,
+        parent_id: &FileEntryId,
+        child: FsNode,
+        progress_fn: Option<&dyn Fn(u32)>,
+    ) -> DbResult<()> {
+        let id = FileEntryId(Uuid::new_v4().to_string());
+        let entry = file_entry_for_child(data_source_id, parent_id, &id, &child);
+
+        if child.is_dir {
+            self.stats.dir_count += 1;
+            self.queue.push_back((id, child.path));
+        } else {
+            self.stats.file_count += 1;
+            self.stats.total_size += child.size;
+        }
+
+        self.batch.push(entry);
+        self.total_processed += 1;
+        if self.batch.len() >= FILE_INSERT_BATCH_SIZE {
+            repo.insert_batch_unchecked(&self.batch)?;
+            self.batch.clear();
+        }
+        if self.total_processed.is_multiple_of(100) {
+            if let Some(ref pf) = progress_fn {
+                let pct = compute_enumeration_progress(self.total_processed);
+                pf(pct as u32);
+            }
+        }
+        Ok(())
+    }
+
+    fn finish(&mut self, repo: &FileRepo<'_>, progress_fn: Option<&dyn Fn(u32)>) -> DbResult<()> {
+        if !self.batch.is_empty() {
+            repo.insert_batch_unchecked(&self.batch)?;
+        }
+        if let Some(ref pf) = progress_fn {
+            pf(100);
+        }
+        Ok(())
+    }
+}
+
+fn file_entry_for_child(
+    data_source_id: &DataSourceId,
+    parent_id: &FileEntryId,
+    id: &FileEntryId,
+    child: &FsNode,
+) -> FileEntry {
+    let (hidden, system) = visibility_flags_for_node(child);
+    FileEntry {
+        id: id.clone(),
+        parent_id: Some(parent_id.clone()),
+        data_source_id: data_source_id.clone(),
+        path: child.path.clone(),
+        name: child.name.clone(),
+        entry_type: if child.is_dir {
+            EntryType::Directory
+        } else {
+            EntryType::File
+        },
+        size: if child.is_dir { None } else { Some(child.size) },
+        ext: child
+            .name
+            .rsplit('.')
+            .next()
+            .filter(|e| *e != child.name)
+            .map(|e| e.to_string()),
+        deleted: false,
+        hidden,
+        system,
+        encrypted: child.encrypted,
+        created_at: child.created_at,
+        modified_at: child.modified_at,
+        accessed_at: child.accessed_at,
+        changed_at: None,
+        hash_sha256: None,
+    }
 }

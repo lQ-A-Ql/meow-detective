@@ -43,15 +43,17 @@ new SQL must not return to Tauri commands.
 
 | Metric | Before Stage 5/6 | Stage 7 result | Policy |
 |---|---:|---:|---|
-| Module-size baseline rows | 83 | 24 | Existing identities may only shrink or be deleted |
-| Function-size baseline rows | 65 | 37 | Existing identities may only shrink or be deleted |
-| Historic functions above 150 lines | not separately closed | 9 | Locked; no new function above 100 lines |
+| Module-size baseline rows | 83 | 17 | Existing identities may only shrink or be deleted |
+| Function-size baseline rows | 65 | 17 | Existing identities may only shrink or be deleted |
+| Historic functions above 150 lines | not separately closed | 1 | Locked; no new function above 100 lines |
 | Test-layout baseline rows | 206 | 0 | Header-only baseline; no new production test bodies |
 | Formal module exceptions | 0 | 0 | No temporary exception used |
 
 The remaining module/function rows are visible migration debt, not Stage 7
 failures. All three guards compare against the committed reference and reject
-new or growing debt.
+new or growing debt. A post-acceptance Stage 4 closure on 2026-07-12 removed
+all app-services rows from both size baselines and added a Stage 4-specific
+zero-debt guard for the application-service layer.
 
 ## 4. Real-Sample Acceptance
 
@@ -150,12 +152,12 @@ product-release scorecard.
 | Dimension | Score | Evidence |
 |---|---:|---|
 | Architecture | 25/25 | Dependency direction and platform ownership guards pass |
-| Modularity | 19/20 | Debt reduced substantially; 24 module and 37 function baseline rows remain |
+| Modularity | 20/20 | app-services debt is zero; repository-wide debt is reduced to 17 module and 17 function rows |
 | Contract | 15/15 | Rust/frontend contracts and platform/source routing pass |
 | Robustness | 14/15 | Fail-closed unsupported paths pass; dependency duplicates remain |
 | Testing | 15/15 | Workspace, frontend, physical separation, and real samples pass |
 | Performance | 10/10 | E01 profile and benchmark gates pass without relaxed time/RSS/throughput |
-| **Total** | **98/100** | **Approved** |
+| **Total** | **99/100** | **Approved** |
 
 No Critical or High finding remains. The score exceeds the 90-point stage
 threshold and no dimension is below 80%.
