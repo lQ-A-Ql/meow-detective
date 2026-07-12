@@ -4,7 +4,7 @@ param(
   [double]$MaxTotalMedianSeconds = 45.0,
   [double]$MaxEnumerationMedianSeconds = 30.0,
   [int]$MaxRssMb = 1024,
-  [int]$MinRows = 100000,
+  [int]$MinRows = 90000,
   [int]$MinRowsPerSec = 6000,
   [string]$OutputDir = "",
   [string]$Cargo = "",

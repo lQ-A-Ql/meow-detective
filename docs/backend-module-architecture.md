@@ -133,6 +133,12 @@ The executable Stage 5 and Stage 6 plan is maintained in
 families, behavior-preserving facade rules, physical test migration order,
 real-sample regressions, review scoring, and zero-test-debt acceptance.
 
+Stages 5 and 6 are complete at commits `4c2bd3a7` and `72493fce`.
+Production parser/core files are organized by capability family, and the
+non-vendored `src/` test-layout baseline is now header-only with zero test
+bodies. Stage 7 final evidence, residual debt, quality scoring, and acceptance
+commands are recorded in `docs/backend-stage7-final-acceptance.md`.
+
 The module, function, and test-layout limits are automated in this Stage 0
 slice. The function guard uses a compiled lexer so comments, nested block
 comments, ordinary/byte/raw strings, character literals, closures, and nested

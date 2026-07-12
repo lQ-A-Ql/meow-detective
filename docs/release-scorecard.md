@@ -269,7 +269,7 @@
 - 当前关联分析快照没有 lead，需复核规则覆盖或样本充分性。
 - 当前高质量关联规则家族覆盖仍不足（Browser / Email / Registry 等链路仍需补齐）。
 - FAT/exFAT、JumpList、SRU、Thumbcache 缺少 committed fixture 与 expected.json。
-- Browser / Email 模块在 artifacts-windows 中尚无任何实现代码。
+- Browser 已有 Chromium/Firefox 生产提取链路，Email 已有 EML/EMLX/PST/OST/mbox 链路；两者仍缺足够的公开版本覆盖与完整 expected JSON。
 
 ### 9.7 发布建议
 
@@ -279,3 +279,20 @@
 2. 引入 `cargo-deny` 入 CI pipeline
 3. 补齐 benchmark medium/large 缺失场景
 4. 完成以上三项后重新评估，目标分数 >= 80（等级 B）方可进入候选发布
+
+## 10. Backend refactor Stage 7 score（2026-07-12）
+
+该评分只评价后端平台域/单一职责重构交付，不替代本文的 V2 产品发布评分。
+
+| 维度 | 得分 |
+|---|---:|
+| Architecture | 25/25 |
+| Modularity | 19/20 |
+| Contract | 15/15 |
+| Robustness | 14/15 |
+| Testing | 15/15 |
+| Performance | 10/10 |
+| **总分** | **98/100，Approved** |
+
+完整证据、残余债务和真实样本结果见
+`docs/backend-stage7-final-acceptance.md`。

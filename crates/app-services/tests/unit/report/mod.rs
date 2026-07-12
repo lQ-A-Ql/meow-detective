@@ -478,7 +478,7 @@ fn report_exports_include_correlation_section() {
         .as_array()
         .unwrap()
         .iter()
-        .any(|item| item["category"] == "Browser" && item["status"] == "unsupported"));
+        .any(|item| item["category"] == "Browser" && item["status"] == "partial"));
     assert!(json["governance"]["runtimeResults"]["checks"]
         .as_array()
         .unwrap()

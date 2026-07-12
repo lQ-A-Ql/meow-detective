@@ -21,7 +21,7 @@ V2 长期计划与能力评级请同时参考：
 | NTFS | 全量损坏恢复 | 不承诺 | 极端损坏、复杂修复场景仍缺样本与回归 |
 | FAT / exFAT | 已删除文件恢复 | 不承诺 | 本轮 deleted 重点仅覆盖 NTFS MFT |
 | FAT / exFAT | committed fixture | 缺失 | 无 fixture 文件。expected.json 待建 |
-| Registry | transaction log 完整重放 | 不承诺 | 当前以 hive 直接解析为主。txlog 集成仍为未完成项 |
+| Registry | transaction log 完整重放 | 部分支持 | `.LOG1/.LOG2` dirty-page bitmap、page recovery 与 hive 合并已实现并有测试；不承诺全部损坏组合、已删除 cell 恢复或任意历史版本的完整重放 |
 | Registry | private-real 回归 E01 | 部分完成 | liuyang_pc.E01 已验证 SYSTEM/SOFTWARE/NTUSER/SAM 提取；E01 镜像本身未提交至仓库 |
 | Registry | 已删除 cell 恢复 | 不承诺 | 当前不解析 hive bin 中未分配 cell。恢复已删除键值需要 cell 分配图与 txlog 交叉引用 |
 | Registry | 完整 registry browser | 不承诺 | 当前为定向字段提取，不提供交互式 key path 枚举与全 hive 浏览 |
@@ -35,7 +35,7 @@ V2 长期计划与能力评级请同时参考：
 | JumpList | committed fixture | 缺失 | 有实现 (2 测试)，无 fixture，无 expected.json |
 | SRU | committed fixture | 缺失 | 有实现 (4 测试)，无 fixture，无 expected.json |
 | Thumbcache | committed fixture | 缺失 | 有实现 (3 测试)，无 fixture，无 expected.json |
-| Browser | 全部 | 未实现 | artifacts-windows 中无浏览器模块。Chrome/Edge/Firefox 均无代码、无 fixture、无 expected.json |
+| Browser | Chrome/Edge/Firefox 全版本完整兼容 | 部分支持 | Chromium/Firefox history、download、cookie、session 与 password metadata 解析链路已实现；缺公开完整 fixture/expected JSON、加密凭据解密和全部历史版本覆盖 |
 | Email | MSG (Outlook .msg) | 不支持 | OLE2 复合文档，超出当前范围，规划于 V4 或后续评估 |
 | Email | TNEF / winmail.dat | 不支持 | MS-OXTNEF 格式，规划于 V4 或后续评估 |
 | Email | 加密或密码保护 PST/OST | 不支持 | 不尝试破解密码；检测并记录 warning |
@@ -44,7 +44,7 @@ V2 长期计划与能力评级请同时参考：
 | Linux 文件系统 | XFS raw disk 完整支持 | 部分支持 | Stage 0 baseline 仅覆盖单源单盘、LVM direct LV 上的 XFS root tree、预览与 Linux artifact extraction |
 | Linux 文件系统 | Btrfs raw disk 完整支持 | 不承诺 | reader 能力与探测链路需以公开 fixture / expected JSON 补齐；检材3 baseline 不覆盖 Btrfs |
 | Linux 文件系统 | 已删除文件恢复 (ext4/XFS/Btrfs) | 不承诺 | 文件雕刻与已删除恢复规划于 V4 |
-| Linux LVM/PVE | PVE cluster 语义解析执行 | 部分支持 | 集群建模、成员串行导入和各节点宿主 `pve/root` EXT4 文件树已验证；Ceph BlueStore 对象树、VM disk reconstruction 与跨节点关联仍不支持 |
+| Linux LVM/PVE | PVE cluster 语义解析执行 | 部分支持 | 仅集群建模、成员串行导入和各节点宿主 `pve/root` EXT4 文件树已验证；集群级语义分析暂缓，Ceph BlueStore 对象树、VM disk reconstruction 与跨节点关联仍不支持 |
 | Linux LVM/PVE | 非集群导入跨镜像 multi-PV VG 聚合 | 不支持 | 普通导入与恢复导入仅允许当前数据源参与 LVM 展开，不扫描案件内其他 E01/RAW；缺失 PV 时保留明确诊断并 fail closed。显式多源组合 API 仅供未来经原子成员注册的集群编排使用 |
 | Linux LVM/PVE | LVM thin/cache/RAID/snapshot/VDO/writecache | 部分支持 | direct linear/striped 与基础 dm-thin 只读映射已实现；thin metadata checksum/repair、cache、RAID、snapshot、VDO、writecache 仍不支持且必须 fail closed |
 | Linux LVM/PVE | partial/degraded VG 激活 | 不支持 | 缺失 PV 或不一致 metadata 必须 fail closed，不猜测块映射 |
@@ -52,6 +52,8 @@ V2 长期计划与能力评级请同时参考：
 | Linux artifacts | SSH 结构化登录/配置语义解析 | 部分支持 | 当前通过 auth/journal/wtmp/sudo 与 `LinuxSystemConfig` 文本记录覆盖 SSH 相关线索；`authorized_keys`、`known_hosts`、`sshd_config` 不生成独立 SSH DTO，也不解析密钥信任图 |
 | Linux artifacts | sudoers policy 语义解析 | 部分支持 | `/etc/sudoers` 与 `/etc/sudoers.d/*` 会生成 `LinuxSystemConfig` 文本记录；不解析 include、alias、Defaults、effective rule |
 | Linux artifacts | systemd/init/profile.d shell 语义解析 | 部分支持 | systemd unit、init.d、rc.local、profile.d 会生成 `LinuxSystemConfig` 文本记录；不解释 shell 脚本、环境变量生效顺序、systemd 依赖图或执行图 |
+| Linux artifacts | nginx/Apache 站点完整语义解析 | 部分支持 | 当前提取站点配置、access/error log 与 Web root script finding；不展开全部 include/module/继承语义，不把 IIS 混入 Linux section |
+| Linux artifacts | MySQL/MariaDB 数据内容恢复 | 不支持 | 当前只提取配置、服务日志与风险 finding；不读取表空间、不恢复 InnoDB page、不解析业务表数据或账户有效权限 |
 | 平台 | macOS 数据源分析与制品提取 | 不支持 | Windows 与 Linux 是仅有的生产分析平台；macOS 数据源请求和 MacArtifacts 能力返回 typed unsupported，不运行候选发现或提取器 |
 | 文件系统 | APFS/HFS+ 分区内容解析 | 不支持 | 仅识别已知 Apple 分区类型标识符并记录为元数据；当前不识别 APFS/HFS+ 文件系统 magic/signature，不实例化文件系统 reader，也不提供文件树、预览、制品提取或已删除恢复 |
 | 案件兼容 | 旧 macOS 案件 | 不支持 | 含 platform='macos' 的旧案件不做迁移；当前开发版本打开时返回 typed unsupported，需要新建案件，并仅将可归类为 Windows 或 Linux 的证据重新导入 |
@@ -76,7 +78,7 @@ V2 长期计划与能力评级请同时参考：
 - Prefetch 全版本压缩变体
 - LNK 全量复杂 shell item
 - JumpList / SRU / Thumbcache 全格式覆盖（当前无 fixture，无 expected.json）
-- Browser 全浏览器全版本兼容（当前无任何实现代码）
+- Browser 全浏览器全版本兼容（已有 Chromium/Firefox 主链路，但缺公开完整 fixture、expected JSON 与历史版本覆盖）
 - Email MSG (Outlook .msg) / TNEF (winmail.dat) 格式
 - Email 加密或密码保护 PST/OST
 - Email 全 MAPI 属性级精度与超大 PST 流式解析
@@ -87,7 +89,7 @@ V2 长期计划与能力评级请同时参考：
 
 - Linux 文件系统 (ext4/XFS/Btrfs) 原始磁盘镜像“完整支持”；检材3只证明 LVM direct LV -> XFS，PVE 私有样本只证明 LVM direct LV -> 64-bit EXT4
 - Linux 检材3私有 baseline 作为公开 GA 证明（必须补 public fixture + expected JSON 后才能升级公开承诺）
-- PVE cluster 语义解析、多源 E01 聚合分析、跨节点关联
+- PVE 集群级语义分析、Ceph BlueStore、VM disk reconstruction、跨节点关联；当前只承诺显式集群导入下的成员发现、成员隔离和宿主文件系统 baseline
 - 普通数据源导入自动借用案件内其他镜像补齐 multi-PV VG；必须先有原子集群成员注册与一致性校验
 - LVM thin 的全部变体与 cache/RAID/snapshot/VDO/writecache、partial/degraded VG 激活；当前仅实现受限的只读 dm-thin 映射
 - systemd journal 压缩/轮转/损坏样本完整覆盖（当前为 bestEffort）

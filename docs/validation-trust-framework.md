@@ -215,7 +215,7 @@ Linux 检材3是当前 Stage 0 Linux 单盘链路的真实样本 baseline，样�
   - XFS root LV 文件树枚举
   - 通过 `FileEntryId` 预览 `/etc/passwd`、`/etc/os-release`、`/etc/fstab`、`/root/.bash_history`、`/var/log/wtmp`
   - Linux artifacts 候选发现与提取（system config、journal、wtmp、shell history、package logs、cron、sudo/auth log）
-  - Linux extraction run 返回 7 个独立板块进度：`LinuxJournal`、`LinuxLogin`、`LinuxCommands`、`LinuxPackages`、`LinuxCron`、`LinuxSudo`、`LinuxSystemConfig`
+  - Linux extraction run 返回 9 个独立板块进度：`LinuxJournal`、`LinuxLogin`、`LinuxCommands`、`LinuxPackages`、`LinuxCron`、`LinuxSudo`、`LinuxSystemConfig`、`LinuxWebServices`、`LinuxMysqlServices`
 - 基准：
   - `crates/app-services/tests/linux_e01_integration.rs` 中被 `#[ignore]` 标记的真实样本回归
   - `docs/pve-cluster-parsing-design.md` 的 Stage 0 单盘验收口径
@@ -231,7 +231,7 @@ Linux 检材3是当前 Stage 0 Linux 单盘链路的真实样本 baseline，样�
   - `/etc/passwd`、`/etc/os-release`、`/etc/fstab`、`/root/.bash_history`、`/var/log/wtmp` 必须可通过 `FileEntryId` 预览读取。
   - 大文件预览必须覆盖 head / middle / tail range，不允许只验证首段。
   - Linux artifact extraction 必须来自真实枚举文件，不允许 synthetic insert；至少覆盖 `LinuxJournal`、`LinuxWtmp`、`LinuxBashCommand`、`LinuxCronJob`、`LinuxSudoEvent`、`LinuxSystemConfig`。
-  - Linux extraction section progress 必须包含全部 7 个板块；journal、login、commands、cron、sudo、system config 在检材3上必须有真实扫描与 artifact 产出；packages 若样本存在 yum/dnf/rpm/apt/dpkg 日志则必须产出 `LinuxAptEvent` 包事件。
+  - Linux extraction section progress 必须包含全部 9 个板块；journal、login、commands、cron、sudo、system config 在检材3上必须有真实扫描与 artifact 产出；packages 若样本存在 yum/dnf/rpm/apt/dpkg 日志则必须产出 `LinuxAptEvent` 包事件；Web/MySQL section 必须按真实候选存在性运行，缺少候选时返回独立的零结果进度，不得伪造 artifact。
 - 当前不保证：
   - PVE cluster 语义解析、多 E01 聚合分析或跨节点关联
   - LVM thin-pool、cache、RAID、snapshot、VDO、writecache、partial/degraded VG 激活
@@ -260,7 +260,19 @@ PVE 私有集群样本通过 `FORENSICS_PVE_CLUSTER_ROOT` opt-in，默认 CI 不
   - `pve_cluster_representative_host_imports_tree_and_previews_by_file_id`：代表成员走生产导入链路并按 `FileEntryId` 重新预览。
 - 2026-07-10 代表基线：`files=56471`、`dirs=5931`、`totalBytes=5250350224`；测试体耗时约 `4.59s`（本机 debug build，不作为跨机器性能 SLA）。
 - 必须可读：`/etc/passwd`、`/etc/os-release`、`/etc/hostname`、`/var/lib/pve-cluster/config.db`。
-- 当前不保证：Ceph BlueStore RADOS object/PG 解析、VM disk reconstruction、跨节点语义关联、EXT4 deleted recovery 与全部 incompat feature 组合。
+- 当前不保证：PVE 集群级语义分析、Ceph BlueStore RADOS object/PG 解析、VM disk reconstruction、跨节点语义关联、EXT4 deleted recovery 与全部 incompat feature 组合。当前 baseline 只证明成员发现、成员独立导入和宿主文件系统读取。
+
+### 4.10 Backend Stage 7 final run
+
+2026-07-12 最终验收使用同一私有样本边界复跑，不把本机路径写入生产逻辑：
+
+- 检材3：`linux_e01_integration` ignored suite，20 tests passed，耗时 180.00s；9 个 Linux section 均返回独立进度。
+- Linux artifact 实测：`scanned=749`、`artifacts=50991`、`timelineEvents=446`、`coverage=0.552737`；partial/unsupported source 保留 warning，不伪造结果。
+- 双源隔离：Windows -> Linux 344.55s，Linux -> Windows 330.34s，两种顺序均通过。
+- 检材2 E01 三次 profile：total median `13.479s`、enumeration median `8.488s`、RSS max `582MB`、每次 `91,737` rows、最低 `9,892 rows/s`。
+- E01 完整性门禁按该稳定样本校准为 `minRows=90,000`；总耗时、枚举耗时、RSS 和吞吐阈值未放宽。
+
+完整 Stage 7 证据见 `docs/backend-stage7-final-acceptance.md`。
 
 ## 5. 浏览器与邮件链路
 

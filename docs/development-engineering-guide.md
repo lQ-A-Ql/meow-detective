@@ -165,6 +165,8 @@ V2 长期执行主计划见 `docs/v2-longterm-plan.md`。
 | 禁止反向 | parser / repo / core crate 不得依赖 Tauri 或前端 |
 | Service Tauri-free | `app-services` 不得依赖 Tauri；事件、窗口、runtime cache、media protocol 等桌面适配停留在 command/state 层 |
 | Command thin wrapper | Tauri command 仅做请求校验、active case/cache/state 适配、service 调用、DTO/error 映射；不得承载业务编排、parser 逻辑或 raw SQL |
+| Frontend no demo fallback | 生产前端不得创建 demo/mock 案件或伪造后端结果；无 Tauri runtime 时必须显示真实不可用状态，不得回退到演示数据 |
+| Tests outside production | Rust 测试正文统一位于物理 `tests/`；`src/` 只允许经过 guard 校验、指向 `tests/unit/` 的私有桥接声明 |
 | contracts-pst | 独立 crate，不耦合 artifacts-windows |
 | artifacts-{windows,linux} | 同层独立 crate，各自管理 parser 族；仅这两个平台拥有生产分析入口 |
 

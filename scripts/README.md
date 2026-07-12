@@ -279,6 +279,11 @@ $env:FORENSICS_E01_FIXTURE = 'E:\path\to\sample.E01'
 powershell -ExecutionPolicy Bypass -File scripts\check-e01-import-performance.ps1 -Runs 3
 ```
 
+The default private `检材2.E01` gate expects at least 90,000 imported rows
+against the stable 91,737-row baseline. Time, RSS, and throughput thresholds
+remain independent hard gates; use `-MinRows` only when a different reviewed
+fixture has a documented row baseline.
+
 ## Troubleshooting
 
 ### Frontend not loading
