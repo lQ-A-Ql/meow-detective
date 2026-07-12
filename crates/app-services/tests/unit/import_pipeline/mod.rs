@@ -681,6 +681,58 @@ fn cancellation_after_attach_marks_job_cancelling_without_failure() {
 }
 
 #[test]
+fn image_import_without_supported_filesystem_fails_closed() {
+    let tmp = TempDir::new().unwrap();
+    let image_path = tmp.path().join("unsupported.img");
+    std::fs::write(&image_path, vec![0u8; 1024 * 1024]).unwrap();
+    let active = case_service::create_case(
+        &tmp.path().join("cases"),
+        "unsupported-image",
+        Some("tester"),
+    )
+    .unwrap();
+    let cancel = Arc::new(AtomicBool::new(false));
+
+    active
+        .with_conn(|conn| {
+            let job_id = JobRepo::new(conn)
+                .create(&active.meta.id.0, "Unsupported image import")
+                .unwrap();
+            let result = execute_import_job(
+                conn,
+                &active.meta.id,
+                &active.case_root,
+                import_config_for_path(&image_path),
+                &job_id,
+                ImportJobOptions {
+                    event_sink: None,
+                    cancel_token: &cancel,
+                    max_import_workers: Some(1),
+                    max_analysis_workers: Some(1),
+                    analysis_mode: import_analysis::ImportAnalysisMode::MetadataOnly,
+                },
+            );
+
+            assert!(matches!(
+                result,
+                Err(ref error)
+                    if error
+                        .message
+                        .contains("No supported filesystem partitions were detected")
+            ));
+            let data_source_id = single_imported_data_source_id(conn, &active.meta.id)?;
+            let storage =
+                persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn)
+                    .find_storage(&data_source_id)?
+                    .expect("failed source storage");
+            assert_eq!(storage.import_state, "failed");
+            assert!(storage.last_error.is_some());
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
 fn logical_import_post_pipeline_indexes_marker_and_extracts_artifact() {
     let tmp = TempDir::new().unwrap();
     let evidence_dir = tmp.path().join("evidence");

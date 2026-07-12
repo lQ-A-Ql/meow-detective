@@ -253,6 +253,15 @@ Stage 2 使用两个不入库的私有 E01 样本验证独立 `source.db` 与平
 
 PVE 私有集群样本通过 `FORENSICS_PVE_CLUSTER_ROOT` opt-in，默认 CI 不运行。当前只把每个节点宿主 OS 作为独立成员验证，不把 Ceph OSD 或 VM 磁盘伪装成普通文件系统。
 
+PVE 集群导入链路另有桌面层串行真实样本门禁：
+
+```powershell
+$env:FORENSICS_PVE_CLUSTER_ROOT='E:\pangushi\服务器'
+powershell -ExecutionPolicy Bypass -File scripts/check-pve-cluster-import.ps1 -RequireFixture
+```
+
+该门禁使用实际后台集群 runner，固定 `max_import_workers=1`、`max_analysis_workers=1` 和 metadata-only 分析模式。验收六个首段 E01 均被尝试和登记、source DB 路径互异、`app.db` 不承载文件树、三个 `disk01` 宿主文件树及关键文件可预览、三个 `disk02` BlueStore 成员明确失败且不伪装为 POSIX 文件系统，并要求 cluster/job 最终保存 partial failure 计数。
+
 - 样本目录参考：`E:\pangushi\服务器`（仅本地人工示例，不得硬编码到生产代码）。
 - 宿主链路：E01 `disk01` -> GPT -> LVM `pve/root` -> 64-bit EXT4（64-byte group descriptor）。
 - 真实样本测试：

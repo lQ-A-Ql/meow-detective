@@ -12,10 +12,15 @@ use super::{
         events::TauriImportEventSink,
         pipeline::{execute_import_job, ImportJobOptions},
     },
-    status::{cancel_job, fail_job},
+    status::cancel_job,
     types::{BackgroundLinuxClusterImportJob, ClusterImportSummary},
 };
 use crate::events::event_bridge;
+
+enum MemberFailureAction {
+    Continue,
+    StopCancelled,
+}
 
 pub(super) fn import_cluster_members(
     connection: &rusqlite::Connection,
@@ -60,7 +65,10 @@ pub(super) fn import_cluster_members(
         ) {
             Ok(message) => record_member_success(connection, job, &mut summary, message)?,
             Err(error) => {
-                if handle_member_failure(connection, job_repo, job, app, &mut summary, error)? {
+                if matches!(
+                    handle_member_failure(connection, job_repo, job, app, &mut summary, error),
+                    MemberFailureAction::StopCancelled
+                ) {
                     return Ok(None);
                 }
             }
@@ -119,22 +127,29 @@ fn handle_member_failure(
     app: Option<&AppHandle>,
     summary: &mut ClusterImportSummary,
     error: CommandError,
-) -> Result<bool, CommandError> {
+) -> MemberFailureAction {
     summary.failed_count = summary.failed_count.saturating_add(1);
+    summary.member_messages.push(error.message.clone());
     let _ = cluster_service::update_linux_cluster_import_state(
         connection,
         &job.plan.cluster_id,
-        "failed",
+        "importing",
         summary.ready_count,
         summary.failed_count,
         Some(&error.message),
     );
     if is_import_cancelled_message(&error.message) {
         cancel_job(job_repo, &job.job_id, app, &error.message);
-        Ok(true)
+        MemberFailureAction::StopCancelled
     } else {
-        fail_job(job_repo, &job.job_id, app, error)?;
-        Ok(false)
+        tracing::warn!(
+            cluster_id = %job.plan.cluster_id,
+            ready_count = summary.ready_count,
+            failed_count = summary.failed_count,
+            error = %error.message,
+            "Linux cluster member import failed; continuing with remaining members"
+        );
+        MemberFailureAction::Continue
     }
 }
 

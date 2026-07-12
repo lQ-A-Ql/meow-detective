@@ -71,7 +71,9 @@ fn enumerate_image_data_source_with_staging(
     let mut candidates = Vec::new();
     probe::seed_manifest_if_needed(ctx, data_source, &mut manifest, &mut candidates)?;
     if manifest.partitions.is_empty() {
-        return Ok(empty_enumeration_stats());
+        return Err(CommandError::internal(
+            "No supported filesystem partitions were detected",
+        ));
     }
     probe::refresh_partition_statuses(ctx.case_root, &data_source.id.0, &mut manifest)?;
     crate::import_pipeline::emit::emit_job_progress(
@@ -447,15 +449,6 @@ fn persist_outcome_counts(ctx: &ImportJobContext<'_>) -> Result<(), CommandError
             ctx.counts.is_partial(),
         )
         .map_err(CommandError::from_service_error)
-}
-
-fn empty_enumeration_stats() -> file_service::EnumerationStats {
-    file_service::EnumerationStats {
-        file_count: 0,
-        dir_count: 0,
-        total_size: 0,
-        warnings: Vec::new(),
-    }
 }
 
 fn manifest_stats(manifest: &staging::StagingManifest) -> file_service::EnumerationStats {

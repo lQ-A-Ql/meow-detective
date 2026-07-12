@@ -1,5 +1,5 @@
 use super::*;
-use artifacts_core::VecSink;
+use artifacts_core::{ArtifactContext, ArtifactExtractor, VecSink};
 
 #[test]
 fn thumbcache_supports_path() {

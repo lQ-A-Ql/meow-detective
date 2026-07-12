@@ -13,7 +13,22 @@
 $env:FORENSICS_PVE_CLUSTER_ROOT='E:\pangushi\服务器'
 cargo test -p app-services --test linux_e01_integration pve_cluster_host_root_filesystems_enumerate_and_preview -- --ignored --nocapture
 cargo test -p app-services --test linux_e01_integration pve_cluster_representative_host_imports_tree_and_previews_by_file_id -- --ignored --nocapture
+powershell -ExecutionPolicy Bypass -File scripts/check-pve-cluster-import.ps1 -RequireFixture
 ```
+
+## Six-member import lifecycle gate
+
+The desktop real-sample gate uses the production background cluster runner to
+attempt all six E01 members serially. The three `disk01` members must become
+ready and preview key files from independent `source.db` files. The three
+`disk02` BlueStore members must remain explicit failures. A member failure must
+not prevent later members from registering, and the final cluster/job state
+must preserve partial ready/failed counts.
+
+Observed on 2026-07-13: `ready=3`, `failed=3`; host source DB file counts were
+`62,403`, `62,380`, and `62,405`. Each BlueStore member retained an isolated
+diagnostic `source.db` with zero file entries and the explicit error
+`No supported filesystem partitions were detected`.
 
 样本路径仅是本地人工环境示例，生产代码和默认 CI 不得硬编码该路径。
 

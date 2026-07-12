@@ -8,9 +8,11 @@ partition table -> LVM direct linear/striped LV -> XFS -> file tree, preview,
 and Linux artifact extraction.
 
 Cluster import modeling is now enabled as a Stage 1 capability. The UI can
-submit a Linux cluster folder, the backend scans first-level image members,
+submit a Linux cluster folder, the backend scans nested image members,
 registers a case-level cluster record, writes a manifest, and serially imports
-each member image into its own source database. Cluster-level parsing,
+each member image into its own source database. A failed member is recorded
+without aborting later members; the final cluster and job remain failed with
+partial counts when any member fails. Cluster-level parsing,
 PVE thin-pool reconstruction, VM disk reconstruction, and cross-node analysis
 remain non-executing future stages.
 
@@ -181,6 +183,9 @@ Current milestone:
 - `cluster_service::parse_cluster` returns `Unsupported` for semantic cluster
   reconstruction.
 - Linux cluster import modeling can register and serially import member images.
+- The private six-member PVE gate attempts every member in deterministic order,
+  keeps `app.db` free of file-tree rows, verifies unique source DB paths, and
+  records the expected host-ready/BlueStore-failed aggregate outcome.
 
 Future cluster milestone:
 - cluster evidence sets are explicit and auditable;
@@ -197,6 +202,9 @@ Current milestone evaluation:
 - run `cargo test -p fs-lvm`;
 - run `cargo test -p fs-xfs`;
 - run app-services compile checks.
+- set `FORENSICS_PVE_CLUSTER_ROOT` and run
+  `scripts/check-pve-cluster-import.ps1 -RequireFixture` for the complete
+  desktop cluster lifecycle.
 
 Future cluster evaluation:
 - synthetic multi-PV fixtures;

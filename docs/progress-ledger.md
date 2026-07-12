@@ -1,12 +1,23 @@
 # Meow~Detective 项目进度台账
 
+> 2026-07-13：新增 PVE 六成员串行导入门禁
+> `scripts/check-pve-cluster-import.ps1`。生产后台 runner 在单成员失败后继续尝试
+> 后续成员，并在最终 cluster/job 中保存 ready/failed partial 计数。真实样本通过
+> `FORENSICS_PVE_CLUSTER_ROOT` opt-in；Ceph BlueStore、VM disk reconstruction
+> 和跨节点语义分析仍保持 unsupported。
+>
+> 同轮结构债务从 17 个模块基线降至 3 个历史 module-root 基线；另有 5 个
+> 501-800 行普通生产模块按 `owner/reason/expires=2026-09-30` 登记正式临时例外。
+> 函数债务从 17 降至 9。例外只用于本轮无法安全拆分的 parser/repository 边界，
+> 到期前必须完成后续能力族拆分。
+
 本文档记录当前可执行进度和下一开发边界。它只登记已经由代码、提交和验证结果证明的状态；详细能力承诺仍以 `docs/parser-support-matrix.md`、`docs/known-unsupported-formats.md` 和真实样本回归记录为准。
 
 ## 当前焦点
 
 | 日期 | 类型 | 范围 | 状态 | 结果 | 下一边界 |
 |---|---|---|---|---|---|
-| 2026-07-12 | Backend/Stage 7 | 文档、最终工程审计、全量门禁与真实样本验收 | Completed | 结构守卫、Rust/frontend 全量门禁、检材3 20 项、双顺序隔离和检材2性能门禁通过；工程评分 99/100 | 继续按 baseline 单调清理 17 个模块与 17 个函数债务 |
+| 2026-07-12 | Backend/Stage 7 | 文档、最终工程审计、全量门禁与真实样本验收 | Completed | 结构守卫、Rust/frontend 全量门禁、检材3 20 项、双顺序隔离和检材2性能门禁通过；工程评分 99/100 | 继续按 baseline 单调清理剩余 3 个历史模块根、5 个正式临时例外与 9 个函数债务 |
 | 2026-07-12 | Backend/Stage 5-6 | Parser/core 能力拆分与测试物理隔离 | Completed | parser/filesystem 能力族完成；非 vendored `src/` 测试债务降至 0 | Stage 7 最终验收 |
 | 2026-07-11 | Backend/Stage 3-4 | Transport/command 与 app-services 拆分 | Completed | command/service 边界守卫通过，command raw SQL 为 0，service 保持 Tauri-free | Stage 5 parser/core 拆分 |
 | 2026-07-12 | Backend/Stage 4 closure | 清理 app-services 剩余上帝模块与函数债务 | Completed | app-services 模块基线 7→0、函数基线 20→0；全 workspace 门禁、双顺序检材2/检材3隔离、报告/Registry/临时文件失败路径回归通过 | 保持 app-services 零债务并继续清理 parser/core 历史基线 |
@@ -52,7 +63,7 @@
 - 代表 PVE 宿主导入结果为 `files=56471`、`dirs=5931`、`totalBytes=5250350224`。
 - `/etc/passwd`、`/etc/os-release`、`/etc/hostname`、`/var/lib/pve-cluster/config.db` 可通过 `FileEntryId` 预览。
 - Ceph BlueStore、VM disk reconstruction 和跨节点语义分析仍不得标记为完成。
-- Stage 7 结构事实：模块 baseline 17 行、函数 baseline 17 行（其中 1 个历史函数超过 150 行）、test-layout baseline 0 行；`app-services` 模块与函数 baseline 均为 0，所有 baseline 只允许减少。
+- Stage 7 后续清理事实：模块 baseline 3 行、正式临时例外 5 行、函数 baseline 9 行（其中 1 个历史函数超过 150 行）、test-layout baseline 0 行；`app-services` 模块与函数 baseline 均为 0，所有 baseline 只允许减少，临时例外不得无审查延期。
 - 检材2三次性能回归：total median `13.479s`、enumeration median `8.488s`、RSS `582MB`、每次 `91,737` rows、最低 `9,892 rows/s`。
 
 ## 更新规则

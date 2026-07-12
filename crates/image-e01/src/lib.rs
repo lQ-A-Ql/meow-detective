@@ -4,6 +4,8 @@ use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+mod open;
+
 const SECTION_DESCRIPTOR_SIZE: u64 = 76;
 const V1_TABLE_HEADER_SIZE: usize = 24;
 const SEQUENTIAL_PREFETCH_CHUNKS: u64 = 3;
@@ -84,150 +86,6 @@ impl E01Reader {
 }
 
 impl E01Reader {
-    pub fn open(path: &Path) -> io::Result<Self> {
-        let base = path.with_extension("");
-        let _stem = base.file_stem().unwrap_or_default().to_string_lossy();
-
-        let mut segment_files: Vec<std::fs::File> = Vec::new();
-        // Open .E01, .E02, ... until file not found
-        for seg_num in 1u32.. {
-            let seg_path = build_segment_path(path, seg_num);
-            match std::fs::File::open(&seg_path) {
-                Ok(f) => segment_files.push(f),
-                Err(e) if e.kind() == io::ErrorKind::NotFound => break,
-                Err(e) => return Err(e),
-            }
-        }
-
-        let mut file = &segment_files[0];
-        let file_len = file.seek(SeekFrom::End(0))?;
-        file.seek(SeekFrom::Start(0))?;
-
-        // File header: 13 bytes
-        let mut fhdr = [0u8; 13];
-        file.read_exact(&mut fhdr)?;
-        if &fhdr[0..3] != b"EVF" {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "not EWF"));
-        }
-
-        // Walk section descriptor linked list
-        // Track visited offsets to detect cycles in malformed E01 files
-        let mut visited_offsets = std::collections::HashSet::<u64>::new();
-        let mut next_off = 13u64;
-        let mut sections: Vec<(String, u64, u64, Vec<u8>)> = Vec::new();
-
-        while next_off > 0 && next_off < file_len {
-            if !visited_offsets.insert(next_off) {
-                tracing::warn!(
-                    "E01: cycle detected in section chain at offset 0x{:X}, stopping",
-                    next_off
-                );
-                break;
-            }
-            file.seek(SeekFrom::Start(next_off))?;
-            let mut desc = [0u8; 76];
-            if file.read_exact(&mut desc).is_err() {
-                break;
-            }
-
-            let stype = String::from_utf8_lossy(&desc[0..16])
-                .trim_end_matches('\0')
-                .to_string();
-
-            let next = u64::from_le_bytes(desc[16..24].try_into().unwrap_or([0; 8]));
-            let section_size = u64::from_le_bytes(desc[24..32].try_into().unwrap_or([0; 8]));
-
-            let data_start = next_off.saturating_add(SECTION_DESCRIPTOR_SIZE);
-            let read_size = if should_read_section_content(&stype) {
-                let size_from_section = section_size.saturating_sub(SECTION_DESCRIPTOR_SIZE);
-                let size_from_next = if next > data_start && next <= file_len {
-                    next - data_start
-                } else {
-                    0
-                };
-                if size_from_section > 0 && size_from_next > 0 {
-                    size_from_section.min(size_from_next)
-                } else {
-                    size_from_section.max(size_from_next)
-                }
-                .min(10_000_000)
-                .min(file_len.saturating_sub(data_start))
-            } else {
-                0
-            };
-            let mut content = vec![0u8; read_size as usize];
-            if read_size > 0 {
-                file.seek(SeekFrom::Start(data_start))?;
-                file.read_exact(&mut content)?;
-            }
-
-            sections.push((stype.clone(), next_off, next, content));
-
-            if stype == "done" {
-                break;
-            }
-            next_off = if next > 0 && next < file_len { next } else { 0 };
-        }
-
-        let section_views: Vec<(String, Vec<u8>)> = sections
-            .iter()
-            .map(|(stype, _start, _next, content)| (stype.clone(), content.clone()))
-            .collect();
-        let (sectors_count, chunk_size_sectors) = find_geometry(&section_views, file_len)?;
-        // Free cloned section content (potentially hundreds of MB) before building chunk table.
-        drop(section_views);
-        let total_bytes = sectors_count * 512;
-        let cks = if chunk_size_sectors > 0 {
-            chunk_size_sectors
-        } else {
-            64
-        };
-        let chunk_bytes = cks as u64 * 512;
-        let expected_chunks = if chunk_bytes > 0 {
-            total_bytes.div_ceil(chunk_bytes)
-        } else {
-            0
-        };
-
-        // Pre-fetch segment sizes
-        let segment_sizes: Vec<u64> = segment_files
-            .iter()
-            .map(|f| f.metadata().map(|m| m.len()).unwrap_or(0))
-            .collect();
-
-        // Prefer the main `table` sections. `table2` carries the same chunk group metadata
-        // and should only be used as a fallback when the primary table is unusable.
-        let mut chunk_table = build_chunk_table(&sections, &segment_sizes, "table");
-        if expected_chunks > 0 && chunk_table.len() as u64 != expected_chunks {
-            let fallback = build_chunk_table(&sections, &segment_sizes, "table2");
-            if fallback.len() as u64 == expected_chunks {
-                chunk_table = fallback;
-            }
-        }
-        if chunk_table.is_empty() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "no usable chunk table found",
-            ));
-        }
-
-        Ok(Self {
-            info: ReaderInfo {
-                path: path.to_path_buf(),
-                size: total_bytes,
-                kind: "e01".into(),
-            },
-            total_bytes,
-            chunk_size_sectors: cks,
-            chunk_table: Arc::new(chunk_table),
-            segment_files,
-            cursor: 0,
-            chunk_cache: VecDeque::new(),
-            chunk_cache_bytes: 0,
-            last_chunk_read: None,
-        })
-    }
-
     fn read_chunk_uncached(&mut self, idx: u64) -> io::Result<Vec<u8>> {
         let (seg_idx, offset, compressed, stored_size) = chunk_entry(&self.chunk_table, idx)?;
         let chunk_bytes = self.chunk_size_sectors as usize * 512;
@@ -546,7 +404,7 @@ fn geometry_section_has_valid_sector_size(stype: &str, content: &[u8]) -> bool {
 }
 
 /// Build the path for segment N of an E01 image.
-/// E.g., "image.E01" → segment 1, "image.E02" → segment 2, etc.
+/// E.g., `image.E01` is segment 1 and `image.E02` is segment 2.
 fn build_segment_path(first_segment: &Path, seg_num: u32) -> PathBuf {
     let ext = first_segment
         .extension()
@@ -557,7 +415,7 @@ fn build_segment_path(first_segment: &Path, seg_num: u32) -> PathBuf {
         .unwrap_or_default()
         .to_string_lossy();
 
-    // E01 → E02, e01 → e02, E01 → E02 etc.
+    // Preserve the image basename while advancing the numbered EWF extension.
     // Handle extensions like ".E01", ".e01", ".E01.001"
     let _base_ext = if ext.len() == 3 && ext.starts_with(['E', 'e']) {
         ext.to_uppercase()
@@ -569,7 +427,7 @@ fn build_segment_path(first_segment: &Path, seg_num: u32) -> PathBuf {
         return first_segment.to_path_buf();
     }
 
-    // Determine the extension format: E01 → EXX
+    // Determine the extension format: E01 -> EXX.
     let parent = first_segment.parent().unwrap_or_else(|| Path::new("."));
     let base_name = stem_with_ext.trim_end_matches(&ext.to_string());
     // Remove trailing dot

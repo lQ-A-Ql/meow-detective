@@ -9,7 +9,7 @@ use transport::CommandError;
 use super::{
     cluster_members::import_cluster_members,
     gate::acquire_import_slot,
-    status::{cancel_job, fail_linux_cluster_job},
+    status::{cancel_job, fail_job, fail_linux_cluster_job},
     types::{BackgroundLinuxClusterImportJob, ClusterImportSummary},
 };
 use crate::events::event_bridge;
@@ -98,6 +98,16 @@ fn complete_cluster_import(
     summary: ClusterImportSummary,
 ) -> Result<(), CommandError> {
     let total_members = job.plan.members.len() as u32;
+    if summary.failed_count > 0 {
+        return complete_cluster_import_with_failures(
+            connection,
+            job_repo,
+            job,
+            app,
+            summary,
+            total_members,
+        );
+    }
     cluster_service::update_linux_cluster_import_state(
         connection,
         &job.plan.cluster_id,
@@ -125,4 +135,39 @@ fn complete_cluster_import(
         "Linux cluster import completed"
     );
     Ok(())
+}
+
+fn complete_cluster_import_with_failures(
+    connection: &rusqlite::Connection,
+    job_repo: &JobRepo<'_>,
+    job: &BackgroundLinuxClusterImportJob,
+    app: Option<&AppHandle>,
+    summary: ClusterImportSummary,
+    total_members: u32,
+) -> Result<(), CommandError> {
+    let message = format!(
+        "Linux cluster import finished with failures: {}/{} image(s) ready, {} failed",
+        summary.ready_count, total_members, summary.failed_count
+    );
+    cluster_service::update_linux_cluster_import_state(
+        connection,
+        &job.plan.cluster_id,
+        "failed",
+        summary.ready_count,
+        summary.failed_count,
+        Some(&message),
+    )
+    .map_err(CommandError::from_typed_service_error)?;
+    job_repo
+        .update_outcome_counts(&job.job_id, 0, 0, summary.failed_count, true)
+        .map_err(CommandError::from_typed_service_error)?;
+    tracing::warn!(
+        cluster_id = %job.plan.cluster_id,
+        members = total_members,
+        imported = summary.ready_count,
+        failed = summary.failed_count,
+        summaries = ?summary.member_messages,
+        "Linux cluster import completed with member failures"
+    );
+    fail_job(job_repo, &job.job_id, app, CommandError::internal(message))
 }

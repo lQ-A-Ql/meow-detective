@@ -285,6 +285,22 @@ against the stable 91,737-row baseline. Time, RSS, and throughput thresholds
 remain independent hard gates; use `-MinRows` only when a different reviewed
 fixture has a documented row baseline.
 
+## Real PVE Cluster Import Gate
+
+The PVE gate is opt-in and exercises the actual desktop background cluster
+runner in strict serial mode. It verifies that all six members are attempted,
+the three host `disk01` images produce isolated source databases and previewable
+EXT4 trees, and the three Ceph BlueStore `disk02` images remain explicit failed
+members instead of being exposed as normal POSIX filesystems.
+
+```powershell
+$env:FORENSICS_PVE_CLUSTER_ROOT = 'E:\pangushi\服务器'
+powershell -ExecutionPolicy Bypass -File scripts\check-pve-cluster-import.ps1 -RequireFixture
+```
+
+Without `-RequireFixture`, an unavailable private fixture is reported as an
+explicit skip.
+
 ## Troubleshooting
 
 ### Frontend not loading

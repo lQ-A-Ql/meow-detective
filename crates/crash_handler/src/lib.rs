@@ -4,14 +4,17 @@
 //! that no case data or user-identifiable absolute paths leak, and writes a
 //! `CrashReport` JSON file to a local `crash_reports/` directory.
 
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
+mod backtrace;
+mod report_io;
+
+use backtrace::{capture_sanitized_backtrace, sanitize_path};
+use report_io::write_crash_report;
 /// Root directory where crash reports are stored.
 static CRASH_REPORT_DIR: OnceLock<PathBuf> = OnceLock::new();
 
@@ -79,9 +82,9 @@ impl CrashReport {
         // Best-effort total memory. Not available via stable std; return 0.
         let total_memory_bytes = 0u64;
 
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or(Duration::ZERO)
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or(std::time::Duration::ZERO)
             .as_secs()
             .to_string();
 
@@ -139,93 +142,6 @@ pub fn set_panic_hook(app_version: &'static str) {
         // Invoke the previous hook so default behavior (e.g. stderr dump) happens.
         previous_hook(panic_info);
     }));
-}
-
-/// Write a crash report as JSON to the crash_reports directory.
-fn write_crash_report(report: &CrashReport) {
-    let dir = crash_report_dir();
-    if let Err(e) = std::fs::create_dir_all(&dir) {
-        error!(target = "crash_handler", dir = %dir.display(), error = %e, "failed to create crash report directory");
-        return;
-    }
-
-    let filename = format!("crash-{}.json", report.timestamp);
-    let filepath = dir.join(&filename);
-
-    let json = match serde_json::to_string_pretty(report) {
-        Ok(j) => j,
-        Err(e) => {
-            error!(target = "crash_handler", error = %e, "failed to serialize crash report");
-            return;
-        }
-    };
-
-    match std::fs::File::create(&filepath) {
-        Ok(mut f) => {
-            let _ = f.write_all(json.as_bytes());
-            error!(target = "crash_handler", path = %filepath.display(), "crash report saved");
-        }
-        Err(e) => {
-            error!(target = "crash_handler", path = %filepath.display(), error = %e, "failed to write crash report file");
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Backtrace capture and sanitization
-// ---------------------------------------------------------------------------
-
-/// Capture a backtrace and return sanitized lines.
-///
-/// Uses `std::backtrace::Backtrace` when available (nightly), otherwise falls
-/// back to a `RUST_BACKTRACE` environment variable hint.
-fn capture_sanitized_backtrace() -> Vec<String> {
-    // `std::backtrace::Backtrace::capture()` is stable as of Rust 1.65.
-    let bt = std::backtrace::Backtrace::capture();
-    let status = bt.status();
-
-    if status == std::backtrace::BacktraceStatus::Captured {
-        let raw = format!("{:#?}", bt);
-        return raw
-            .lines()
-            .filter(|line| {
-                // Only keep frames that look like they originate from our
-                // application code (not std / third-party crates).
-                line.contains("forensic") || line.contains("evidence")
-            })
-            .map(sanitize_path)
-            .collect();
-    }
-
-    vec![format!(
-        "backtrace unavailable (status = {:?}). Set RUST_BACKTRACE=1 for a full trace.",
-        status
-    )]
-}
-
-/// Strip user-specific home directory and long paths to a short form.
-///
-/// Replaces the user's home directory prefix with `~`, and trims absolute
-/// paths to just the last two components.
-fn sanitize_path(raw: &str) -> String {
-    // Replace known user home directory prefixes.
-    let home = std::env::var("USERPROFILE")
-        .or_else(|_| std::env::var("HOME"))
-        .unwrap_or_default();
-
-    let sanitized = if !home.is_empty() {
-        raw.replace(&home, "~")
-    } else {
-        raw.to_string()
-    };
-
-    // Further shorten long absolute paths: keep only the last two components
-    // after the drive letter or root.
-    if sanitized.starts_with("\\\\?\\") {
-        return "<long-path>".to_string();
-    }
-
-    sanitized
 }
 
 #[cfg(test)]

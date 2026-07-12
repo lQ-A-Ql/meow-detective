@@ -15,103 +15,99 @@ pub fn extract_network_adapters_from_system_hive(
     let mut seen_guids = std::collections::HashSet::new();
 
     for control_set in control_sets {
-        let interfaces_path = [
-            control_set.as_str(),
-            "Services",
-            "Tcpip",
-            "Parameters",
-            "Interfaces",
-        ];
-        let Ok(Some(interfaces_nk)) = hive.navigate_to(&interfaces_path) else {
-            continue;
-        };
-        let guids = hive
-            .read_subkey_names_from_nk(&interfaces_nk)
-            .unwrap_or_default();
-
-        for guid in guids {
-            if !seen_guids.insert(guid.clone()) {
-                continue;
-            }
-            let mut adapter = NetworkAdapterInfo {
-                guid: guid.clone(),
-                ..Default::default()
-            };
-
-            let interface_path = [
-                control_set.as_str(),
-                "Services",
-                "Tcpip",
-                "Parameters",
-                "Interfaces",
-                &guid,
-            ];
-            let Ok(Some(nk)) = hive.navigate_to(&interface_path) else {
-                adapters.push(adapter);
-                continue;
-            };
-
-            let values = hive.read_all_values_from_nk(&nk).unwrap_or_default();
-            for (name, value) in values {
-                match (name.as_str(), value) {
-                    ("DhcpIPAddress", RegistryValue::String(v)) if !v.is_empty() => {
-                        adapter.ip_address = Some(v);
-                    }
-                    ("DhcpDefaultGateway", RegistryValue::String(v)) if !v.is_empty() => {
-                        adapter.gateway = Some(v);
-                    }
-                    ("DhcpServer", RegistryValue::String(v)) if !v.is_empty() => {
-                        adapter.dhcp_server = Some(v);
-                    }
-                    ("DhcpSubnetMask", RegistryValue::String(v)) if !v.is_empty() => {
-                        adapter.subnet_mask = Some(v);
-                    }
-                    ("EnableDHCP", RegistryValue::Dword(v)) => {
-                        adapter.dhcp_enabled = Some(v != 0);
-                    }
-                    ("NameServer", RegistryValue::String(v)) if !v.is_empty() => {
-                        adapter.dns_servers = v
-                            .split(',')
-                            .map(str::trim)
-                            .filter(|s| !s.is_empty())
-                            .map(str::to_string)
-                            .collect();
-                    }
-                    ("IPAddress", RegistryValue::MultiString(v))
-                        if adapter.ip_address.is_none() =>
-                    {
-                        adapter.ip_address = v.into_iter().find(|s| !s.is_empty());
-                    }
-                    ("DefaultGateway", RegistryValue::MultiString(v))
-                        if adapter.gateway.is_none() =>
-                    {
-                        adapter.gateway = v.into_iter().find(|s| !s.is_empty());
-                    }
-                    _ => {}
-                }
-            }
-
-            // Try to resolve a friendly name and MAC address from the
-            // network class or connection description keys.
-            if let Some((name, mac)) =
-                resolve_adapter_friendly_name_and_mac(&hive, &control_set, &guid)
-            {
-                adapter.name = name.or(adapter.name);
-                adapter.mac_address = mac.or(adapter.mac_address);
-            }
-
-            adapters.push(adapter);
-        }
+        adapters.extend(extract_control_set_adapters(
+            &hive,
+            &control_set,
+            &mut seen_guids,
+        ));
     }
 
     Ok(adapters)
+}
+
+fn extract_control_set_adapters(
+    hive: &RegistryHiveReader<'_>,
+    control_set: &str,
+    seen_guids: &mut std::collections::HashSet<String>,
+) -> Vec<NetworkAdapterInfo> {
+    let interfaces_path = [control_set, "Services", "Tcpip", "Parameters", "Interfaces"];
+    let Ok(Some(interfaces)) = hive.navigate_to(&interfaces_path) else {
+        return Vec::new();
+    };
+    hive.read_subkey_names_from_nk(&interfaces)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|guid| seen_guids.insert(guid.clone()))
+        .map(|guid| extract_adapter(hive, control_set, guid))
+        .collect()
+}
+
+fn extract_adapter(
+    hive: &RegistryHiveReader<'_>,
+    control_set: &str,
+    guid: String,
+) -> NetworkAdapterInfo {
+    let mut adapter = NetworkAdapterInfo {
+        guid: guid.clone(),
+        ..Default::default()
+    };
+    let path = [
+        control_set,
+        "Services",
+        "Tcpip",
+        "Parameters",
+        "Interfaces",
+        &guid,
+    ];
+    if let Ok(Some(key)) = hive.navigate_to(&path) {
+        for (name, value) in hive.read_all_values_from_nk(&key).unwrap_or_default() {
+            apply_interface_value(&mut adapter, &name, value);
+        }
+    }
+    let (name, mac) = resolve_adapter_friendly_name_and_mac(hive, control_set, &guid);
+    adapter.name = name.or(adapter.name);
+    adapter.mac_address = mac.or(adapter.mac_address);
+    adapter
+}
+
+fn apply_interface_value(adapter: &mut NetworkAdapterInfo, name: &str, value: RegistryValue) {
+    match (name, value) {
+        ("DhcpIPAddress", RegistryValue::String(value)) if !value.is_empty() => {
+            adapter.ip_address = Some(value)
+        }
+        ("DhcpDefaultGateway", RegistryValue::String(value)) if !value.is_empty() => {
+            adapter.gateway = Some(value)
+        }
+        ("DhcpServer", RegistryValue::String(value)) if !value.is_empty() => {
+            adapter.dhcp_server = Some(value)
+        }
+        ("DhcpSubnetMask", RegistryValue::String(value)) if !value.is_empty() => {
+            adapter.subnet_mask = Some(value)
+        }
+        ("EnableDHCP", RegistryValue::Dword(value)) => adapter.dhcp_enabled = Some(value != 0),
+        ("NameServer", RegistryValue::String(value)) if !value.is_empty() => {
+            adapter.dns_servers = value
+                .split(',')
+                .map(str::trim)
+                .filter(|server| !server.is_empty())
+                .map(str::to_string)
+                .collect()
+        }
+        ("IPAddress", RegistryValue::MultiString(values)) if adapter.ip_address.is_none() => {
+            adapter.ip_address = values.into_iter().find(|value| !value.is_empty())
+        }
+        ("DefaultGateway", RegistryValue::MultiString(values)) if adapter.gateway.is_none() => {
+            adapter.gateway = values.into_iter().find(|value| !value.is_empty())
+        }
+        _ => {}
+    }
 }
 
 fn resolve_adapter_friendly_name_and_mac(
     hive: &RegistryHiveReader<'_>,
     control_set: &str,
     guid: &str,
-) -> Option<(Option<String>, Option<String>)> {
+) -> (Option<String>, Option<String>) {
     // Connection name under Control\Network\{NetworkClass}\{GUID}\Connection.
     let network_path = [
         control_set,
@@ -189,7 +185,7 @@ fn resolve_adapter_friendly_name_and_mac(
         }
     }
 
-    Some((name, mac))
+    (name, mac)
 }
 
 fn format_mac_address(raw: &str) -> String {
