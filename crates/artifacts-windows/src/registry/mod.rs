@@ -7,6 +7,10 @@ pub mod sam_structs;
 pub mod txlog;
 pub mod util;
 
+#[cfg(test)]
+#[path = "../../tests/unit/registry/mod.rs"]
+mod tests;
+
 pub use error::RegistryError;
 pub use recovery::{
     scan_deleted_registry_cells, scan_free_cells, FreeCell, HiveBin, RecoverResult, RecoveredKey,

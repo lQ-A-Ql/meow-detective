@@ -1,6 +1,9 @@
-use containers_pst::pst::{build_synthetic_pst_with_messages, PstReader};
+use containers_pst::pst::PstReader;
 use std::fs;
 use std::path::PathBuf;
+
+#[path = "../tests/unit/support/synthetic.rs"]
+mod synthetic;
 
 fn main() {
     let out_dir = PathBuf::from("testdata/fixtures/public-medium/email/medium-pst");
@@ -9,10 +12,10 @@ fn main() {
     let pst_path = out_dir.join("medium.pst");
     let ost_path = out_dir.join("medium.ost");
 
-    let pst_data = build_synthetic_pst_with_messages(10);
+    let pst_data = synthetic::build_synthetic_pst_with_messages(10);
     fs::write(&pst_path, &pst_data).unwrap();
 
-    let ost_data = build_synthetic_pst_with_messages(10);
+    let ost_data = synthetic::build_synthetic_pst_with_messages(10);
     fs::write(&ost_path, &ost_data).unwrap();
 
     // Sanity-check that the reader can enumerate all messages.

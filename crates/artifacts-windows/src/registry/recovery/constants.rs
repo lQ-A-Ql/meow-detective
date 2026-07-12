@@ -1,0 +1,11 @@
+pub(crate) const BASE_BLOCK_SIZE: usize = 0x1000;
+pub(crate) const HBIN_MAGIC: &[u8; 4] = b"hbin";
+pub(super) const NK_SIGNATURE: &[u8; 2] = b"nk";
+pub(super) const VK_SIGNATURE: &[u8; 2] = b"vk";
+pub(crate) const HBIN_HEADER_SIZE: usize = 32;
+pub(super) const MAX_NAME_BYTES: usize = 512;
+pub(crate) const INVALID_OFFSET: u32 = 0xffff_ffff;
+pub(super) const MIN_NK_BODY: usize = 0x4c;
+pub(super) const MIN_VK_BODY: usize = 0x14;
+pub(super) const MIN_FILETIME: u64 = 125_911_584_000_000_000;
+pub(super) const MAX_FILETIME: u64 = 479_666_880_000_000_000;

@@ -13,6 +13,7 @@ mod shell_folders;
 mod user_assist;
 
 #[cfg(test)]
+#[path = "../../../../tests/unit/registry/lookup/ntuser.rs"]
 mod tests;
 
 pub use appcompat::extract_appcompat_layers_from_ntuser_hive;

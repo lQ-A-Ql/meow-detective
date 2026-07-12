@@ -10,6 +10,7 @@ mod shutdown;
 mod usb;
 
 #[cfg(test)]
+#[path = "../../../../tests/unit/registry/lookup/system.rs"]
 mod tests;
 
 pub use drivers::extract_shimcache_from_system_hive;

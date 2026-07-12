@@ -31,9 +31,6 @@ pub(crate) const BTREE_LEAF: u8 = 0x01;
 /// BTree page signature (wSig field) for block BTree pages.
 pub(crate) const BTREE_BB: u8 = 0x80;
 
-/// NID for the message store.
-pub(crate) const NID_MESSAGE_STORE: u32 = 0x21;
-
 /// NID for the root folder.
 pub(crate) const NID_ROOT_FOLDER: u32 = 0x122;
 
@@ -211,12 +208,4 @@ pub(crate) fn parse_header(data: &[u8]) -> Result<PstHeader, PstError> {
         root_nbt,
         root_bbt,
     })
-}
-
-/// Write the low bytes of `bid` into `buf` and return the number of bytes written.
-pub(crate) fn bid_to_bytes(bid: u64, buf: &mut [u8]) -> usize {
-    let b = bid.to_le_bytes();
-    let len = b.len().min(buf.len());
-    buf[..len].copy_from_slice(&b[..len]);
-    len
 }

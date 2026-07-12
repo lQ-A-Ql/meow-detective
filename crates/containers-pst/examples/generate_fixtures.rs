@@ -1,6 +1,9 @@
 use std::fs;
 use std::path::PathBuf;
 
+#[path = "../tests/unit/support/synthetic.rs"]
+mod synthetic;
+
 fn main() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let fixture_dir = manifest_dir
@@ -8,7 +11,7 @@ fn main() {
         .canonicalize()
         .expect("fixture dir exists");
 
-    let pst = containers_pst::pst::build_synthetic_pst();
+    let pst = synthetic::build_synthetic_pst_with_messages(1);
     fs::write(fixture_dir.join("synthetic.pst"), &pst).expect("write synthetic.pst");
 
     // OST uses the same binary layout in the current synthetic builder.

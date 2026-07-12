@@ -8,6 +8,9 @@
 use containers_pst::{mbox, pst::PstReader};
 use std::time::Instant;
 
+#[path = "unit/support/synthetic.rs"]
+mod synthetic;
+
 /// V2 acceptance: a 1 MiB mbox must parse in under 1 second on dev hardware.
 #[test]
 fn mbox_1mb_parses_under_one_second() {
@@ -42,7 +45,7 @@ fn mbox_1mb_parses_under_one_second() {
 #[test]
 fn synthetic_pst_10_messages_parses_under_100ms() {
     let tmp = tempfile::NamedTempFile::with_suffix(".pst").unwrap();
-    let data = containers_pst::pst::build_synthetic_pst_with_messages(10);
+    let data = synthetic::build_synthetic_pst_with_messages(10);
     std::fs::write(tmp.path(), &data).unwrap();
 
     let start = Instant::now();

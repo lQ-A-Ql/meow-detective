@@ -7,8 +7,6 @@ pub(crate) const NK_SIGNATURE: &[u8; 2] = b"nk";
 pub(crate) const VK_SIGNATURE: &[u8; 2] = b"vk";
 pub(crate) const REG_SZ: u32 = 1;
 pub(crate) const REG_EXPAND_SZ: u32 = 2;
-#[cfg(test)]
-pub(crate) const REG_BINARY: u32 = 3;
 pub(crate) const REG_DWORD: u32 = 4;
 pub(crate) const REG_MULTI_SZ: u32 = 7;
 pub(crate) const REG_QWORD: u32 = 11;
