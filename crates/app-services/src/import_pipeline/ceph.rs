@@ -2,8 +2,12 @@ use std::collections::BTreeMap;
 use std::io::SeekFrom;
 
 use ceph_wire::{
-    decode_bdev_label_block, select_bdev_label, BdevLabel, BDEV_LABEL_BLOCK_SIZE,
-    BDEV_LABEL_POSITIONS,
+    decode_bdev_label_block, decode_bluefs_super_block, select_bdev_label, BdevLabel, BluefsSuper,
+    BDEV_LABEL_BLOCK_SIZE, BDEV_LABEL_POSITIONS, BLUEFS_SUPER_BLOCK_SIZE, BLUEFS_SUPER_OFFSET,
+};
+use persistence_sqlite::repositories::audit_repo::{AuditAction, AuditRepo};
+use persistence_sqlite::repositories::ceph_bluefs_repo::{
+    CephBluefsLogExtentRecord, CephBluefsSuperblockRecord,
 };
 use persistence_sqlite::repositories::ceph_osd_repo::{
     CephOsdInventoryRecord, CephOsdLabelReplicaRecord, CephOsdRepo,
@@ -16,6 +20,9 @@ use crate::datasource_service::{
 };
 
 use super::context::ImportJobContext;
+
+const BLUEFS_RESERVED_BYTES: u64 = BLUEFS_SUPER_OFFSET + BLUEFS_SUPER_BLOCK_SIZE as u64;
+const BLUEFS_SINGLE_SHARED_BDEV: u32 = 1;
 
 pub(crate) fn persist_bluestore_probe(
     ctx: &ImportJobContext<'_>,
@@ -72,13 +79,33 @@ pub(crate) fn persist_bluestore_probe(
         selection.label.osd_uuid,
         &selection.valid_positions,
     );
+    let bluefs = inventory
+        .bluefs_enabled
+        .is_some_and(|enabled| enabled)
+        .then(|| {
+            read_bluefs_inventory(
+                &mut *reader,
+                data_source,
+                &inventory_id,
+                selection.label.osd_uuid,
+                selection.label.size,
+            )
+        })
+        .transpose()?;
+    let bluefs_records = bluefs
+        .as_ref()
+        .map(|records| (&records.superblock, records.extents.as_slice()));
     CephOsdRepo::new(ctx.source_connection()?)
-        .replace_for_data_source(
+        .replace_for_data_source_with_bluefs(
             &data_source.id.0,
             std::slice::from_ref(&inventory),
             &replica_records,
+            bluefs_records,
         )
         .map_err(CommandError::from_service_error)?;
+    if let Some(records) = &bluefs {
+        audit_bluefs_inventory(ctx, data_source, records);
+    }
     Ok(())
 }
 
@@ -146,6 +173,173 @@ fn read_label_replicas(
     Ok(replicas)
 }
 
+struct BluefsInventoryRecords {
+    superblock: CephBluefsSuperblockRecord,
+    extents: Vec<CephBluefsLogExtentRecord>,
+}
+
+fn read_bluefs_inventory(
+    reader: &mut dyn evidence_core::EvidenceReader,
+    data_source: &domain::DataSource,
+    inventory_id: &str,
+    expected_osd_uuid: uuid::Uuid,
+    device_size: u64,
+) -> Result<BluefsInventoryRecords, CommandError> {
+    let block_end = BLUEFS_SUPER_OFFSET
+        .checked_add(BLUEFS_SUPER_BLOCK_SIZE as u64)
+        .ok_or_else(|| CommandError::internal("BlueFS superblock offset overflow"))?;
+    if block_end > device_size {
+        return Err(CommandError::from_service_error(
+            "BlueFS superblock lies outside the selected BlueStore device",
+        ));
+    }
+    reader
+        .seek(SeekFrom::Start(BLUEFS_SUPER_OFFSET))
+        .map_err(CommandError::from_service_error)?;
+    let mut block = vec![0; BLUEFS_SUPER_BLOCK_SIZE];
+    reader
+        .read_exact(&mut block)
+        .map_err(CommandError::from_service_error)?;
+    let superblock = decode_bluefs_super_block(&block)
+        .map_err(|error| CommandError::from_service_error(error.to_string()))?;
+    if superblock.osd_uuid != expected_osd_uuid {
+        return Err(CommandError::from_service_error(format!(
+            "BlueFS OSD UUID {} does not match BlueStore label UUID {}",
+            superblock.osd_uuid, expected_osd_uuid
+        )));
+    }
+    validate_bluefs_extents(&superblock, device_size)?;
+    Ok(bluefs_inventory_records(
+        data_source,
+        inventory_id,
+        superblock,
+    ))
+}
+
+fn validate_bluefs_extents(superblock: &BluefsSuper, device_size: u64) -> Result<(), CommandError> {
+    let layout = superblock.memorized_layout.as_ref().ok_or_else(|| {
+        CommandError::from_service_error(
+            "BlueFS superblock has no memorized device layout; extent ownership is ambiguous",
+        )
+    })?;
+    if layout.dedicated_db || layout.dedicated_wal {
+        return Err(CommandError::from_service_error(
+            "BlueFS dedicated DB/WAL devices are outside the Stage 2 single-device boundary",
+        ));
+    }
+    if layout.shared_bdev != BLUEFS_SINGLE_SHARED_BDEV {
+        return Err(CommandError::from_service_error(format!(
+            "BlueFS single-device layout references unsupported shared device {}",
+            layout.shared_bdev
+        )));
+    }
+    for extent in &superblock.log_fnode.extents {
+        if u32::from(extent.bdev) != layout.shared_bdev {
+            return Err(CommandError::from_service_error(format!(
+                "BlueFS log extent references unbound device {} instead of shared device {}",
+                extent.bdev, layout.shared_bdev
+            )));
+        }
+        let end = extent
+            .offset
+            .checked_add(u64::from(extent.length))
+            .ok_or_else(|| CommandError::from_service_error("BlueFS log extent end overflow"))?;
+        if extent.offset < BLUEFS_RESERVED_BYTES {
+            return Err(CommandError::from_service_error(format!(
+                "BlueFS log extent starts inside the reserved label/superblock region at {}",
+                extent.offset
+            )));
+        }
+        if end > device_size {
+            return Err(CommandError::from_service_error(format!(
+                "BlueFS log extent end {end} exceeds device size {device_size}"
+            )));
+        }
+        if extent.offset % u64::from(superblock.block_size) != 0
+            || extent.length % superblock.block_size != 0
+        {
+            return Err(CommandError::from_service_error(
+                "BlueFS log extent is not aligned to the superblock block size",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn bluefs_inventory_records(
+    data_source: &domain::DataSource,
+    inventory_id: &str,
+    superblock: BluefsSuper,
+) -> BluefsInventoryRecords {
+    let layout = superblock.memorized_layout.as_ref();
+    let extents = superblock
+        .log_fnode
+        .extents
+        .iter()
+        .enumerate()
+        .map(|(ordinal, extent)| CephBluefsLogExtentRecord {
+            inventory_id: inventory_id.to_string(),
+            ordinal: ordinal as u32,
+            device_id: extent.bdev,
+            offset: extent.offset,
+            length: extent.length,
+        })
+        .collect();
+    let record = CephBluefsSuperblockRecord {
+        inventory_id: inventory_id.to_string(),
+        data_source_id: data_source.id.0.clone(),
+        bluefs_uuid: superblock.uuid.to_string(),
+        osd_uuid: superblock.osd_uuid.to_string(),
+        sequence: superblock.seq,
+        block_size: superblock.block_size,
+        crc32c: superblock.crc32c,
+        struct_version: superblock.struct_version,
+        struct_compat_version: superblock.struct_compat_version,
+        log_inode: superblock.log_fnode.ino,
+        log_size: superblock.log_fnode.size,
+        log_mtime_seconds: i64::from(superblock.log_fnode.mtime.seconds),
+        log_mtime_nanoseconds: superblock.log_fnode.mtime.nanoseconds,
+        log_encoding: superblock.log_fnode.encoding,
+        log_content_size: superblock.log_fnode.content_size,
+        shared_bdev: layout.map(|value| value.shared_bdev),
+        dedicated_db: layout.map(|value| value.dedicated_db),
+        dedicated_wal: layout.map(|value| value.dedicated_wal),
+    };
+    BluefsInventoryRecords {
+        superblock: record,
+        extents,
+    }
+}
+
+fn audit_bluefs_inventory(
+    ctx: &ImportJobContext<'_>,
+    data_source: &domain::DataSource,
+    records: &BluefsInventoryRecords,
+) {
+    let details = serde_json::json!({
+        "inventoryId": records.superblock.inventory_id,
+        "osdUuid": records.superblock.osd_uuid,
+        "bluefsUuid": records.superblock.bluefs_uuid,
+        "sequence": records.superblock.sequence,
+        "extentCount": records.extents.len(),
+        "layout": "singleSharedDevice",
+    })
+    .to_string();
+    if let Err(error) = AuditRepo::new(ctx.conn).log(
+        Some(&ctx.case_id.0),
+        "system",
+        &AuditAction::DataSourceImport,
+        Some(&data_source.id.0),
+        &details,
+    ) {
+        tracing::warn!(
+            data_source_id = %data_source.id.0,
+            error = %error,
+            "Failed to record BlueFS inventory audit entry"
+        );
+    }
+}
+
 fn inventory_record(
     data_source: &domain::DataSource,
     volume: &UnsupportedImageVolume,
@@ -178,7 +372,7 @@ fn inventory_record(
         label_health: build.label_health.clone(),
         osd_key_present: build.osd_key_present,
         kv_backend: build.metadata.get("kv_backend").cloned(),
-        bluefs_enabled: parse_bool(build.metadata.get("bluefs")),
+        bluefs_enabled: parse_bool(build.metadata.get("bluefs"))?,
         ceph_version_when_created: build.metadata.get("ceph_version_when_created").cloned(),
         require_osd_release: parse_optional(build.metadata, "require_osd_release")?,
         sanitized_metadata_json: serde_json::to_string(build.metadata)
@@ -286,6 +480,14 @@ where
         .transpose()
 }
 
-fn parse_bool(value: Option<&String>) -> Option<bool> {
-    value.map(|value| matches!(value.as_str(), "1" | "true" | "yes"))
+fn parse_bool(value: Option<&String>) -> Result<Option<bool>, CommandError> {
+    value
+        .map(|value| match value.as_str() {
+            "1" | "true" | "yes" => Ok(true),
+            "0" | "false" | "no" => Ok(false),
+            _ => Err(CommandError::from_service_error(format!(
+                "invalid BlueStore boolean metadata value: {value}"
+            ))),
+        })
+        .transpose()
 }

@@ -48,6 +48,12 @@ The post-fix production run completed all six members: the three filesystem
 members became `ready`, the three BlueStore members became `ready_metadata`,
 and the host source DB file counts were `62,403`, `62,380`, and `62,405`.
 
+The 2026-07-13 Stage 2 rerun additionally decoded the fixed 4 KiB BlueFS
+superblock at LV offset `4096`. All three records passed independent CRC32C and
+OSD UUID binding, reported sequence `50` and block size `4096`, and persisted
+one bounded shared-device log extent. BlueFS and OSD inventory are committed
+atomically in each source database.
+
 样本路径仅是本地人工环境示例，生产代码和默认 CI 不得硬编码该路径。
 
 ## 结果
@@ -60,10 +66,11 @@ and the host source DB file counts were `62,403`, `62,380`, and `62,405`.
 - 代表成员测试体耗时约 `4.59s`（debug build，仅作本机回归参考）。
 - 原始缺陷是 EXT4 reader 固定按 32-byte group descriptor 寻址；样本使用 64-bit EXT4 的 64-byte descriptor，导致高 inode 被映射到错误 inode table。
 - 修复后 group descriptor 宽度、inode table 高位和 block group 数量均来自 superblock；有界 inode-block cache 在回填真实文件大小时避免 E01 随机读退化。
+- 三个 `disk02` 的 BlueFS UUID 分别为 `394d12df-4023-44dc-b4c5-10b5e5dd48f4`、`e1b8a63e-3c93-4743-8232-b236b82fec83`、`d8f0162e-aefe-4397-ad64-16b28af988a1`；均与对应 OSD UUID 一对一绑定。
 
 ## 未保证范围
 
-- `disk02` 已由生产 LVM LV reader 按 Ceph 官方标签确认是 BlueStore OSD block device，并保存脱敏 label metadata inventory。BlueStore 不是可直接枚举的 POSIX 文件系统；当前不提供 BlueFS/RocksDB、RADOS object/PG/VM disk 文件树。
+- `disk02` 已由生产 LVM LV reader 按 Ceph 官方标签确认是 BlueStore OSD block device，并保存脱敏 label metadata 与 BlueFS superblock/layout inventory。BlueStore 不是可直接枚举的 POSIX 文件系统；当前不提供 BlueFS transaction-log replay、RocksDB、RADOS object/PG/VM disk 文件树。
 - 当前 metadata-only 路径只承诺“无普通文件系统 candidate 且可唯一选择一个 BlueStore LV”的数据源；混合 filesystem + BlueStore 单源和多 BlueStore LV 尚未支持。
 - 不承诺 EXT4 metadata checksum 校验、deleted recovery、journal replay 完整性或全部 incompat feature 组合。
 - 不承诺集群跨节点配置归并和语义关联。

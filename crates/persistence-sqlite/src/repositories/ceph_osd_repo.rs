@@ -3,6 +3,8 @@ use std::collections::HashSet;
 use crate::connection::{DbError, DbResult};
 use rusqlite::{params, Connection};
 
+use super::ceph_bluefs_repo::{self, CephBluefsLogExtentRecord, CephBluefsSuperblockRecord};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CephOsdInventoryRecord {
     pub id: String,
@@ -62,83 +64,26 @@ impl<'a> CephOsdRepo<'a> {
         inventory: &[CephOsdInventoryRecord],
         replicas: &[CephOsdLabelReplicaRecord],
     ) -> DbResult<()> {
+        self.replace_for_data_source_with_bluefs(data_source_id, inventory, replicas, None)
+    }
+
+    pub fn replace_for_data_source_with_bluefs(
+        &self,
+        data_source_id: &str,
+        inventory: &[CephOsdInventoryRecord],
+        replicas: &[CephOsdLabelReplicaRecord],
+        bluefs: Option<(&CephBluefsSuperblockRecord, &[CephBluefsLogExtentRecord])>,
+    ) -> DbResult<()> {
         validate_replacement(data_source_id, inventory, replicas)?;
+        if let Some((superblock, extents)) = bluefs {
+            validate_bluefs_binding(data_source_id, inventory, superblock)?;
+            ceph_bluefs_repo::validate_replacement(superblock, extents)?;
+        }
         let tx = self.conn.unchecked_transaction()?;
-        tx.execute(
-            "DELETE FROM ceph_osd_inventory WHERE data_source_id = ?1",
-            params![data_source_id],
-        )?;
-
-        {
-            let mut statement = tx.prepare_cached(
-                "INSERT INTO ceph_osd_inventory (
-                    id, data_source_id, partition_index, lvm_vg_uuid, lvm_vg_name,
-                    lvm_lv_uuid, lvm_lv_name, osd_uuid, ceph_fsid, whoami, device_role,
-                    device_size, birth_time_seconds, birth_time_nanoseconds, description,
-                    is_multi, selected_epoch, valid_label_count, label_health, osd_key_present,
-                    kv_backend, bluefs_enabled, ceph_version_when_created, require_osd_release,
-                    sanitized_metadata_json
-                 ) VALUES (
-                    ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
-                    ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25
-                 )",
-            )?;
-            for record in inventory {
-                statement.execute(params![
-                    record.id,
-                    record.data_source_id,
-                    record.partition_index,
-                    record.lvm_vg_uuid,
-                    record.lvm_vg_name,
-                    record.lvm_lv_uuid,
-                    record.lvm_lv_name,
-                    record.osd_uuid,
-                    record.ceph_fsid,
-                    record.whoami,
-                    record.device_role,
-                    record.device_size,
-                    record.birth_time_seconds,
-                    record.birth_time_nanoseconds,
-                    record.description,
-                    record.is_multi,
-                    record.selected_epoch,
-                    record.valid_label_count,
-                    record.label_health,
-                    record.osd_key_present,
-                    record.kv_backend,
-                    record.bluefs_enabled,
-                    record.ceph_version_when_created,
-                    record.require_osd_release,
-                    record.sanitized_metadata_json,
-                ])?;
-            }
+        replace_for_data_source_on(&tx, data_source_id, inventory, replicas)?;
+        if let Some((superblock, extents)) = bluefs {
+            ceph_bluefs_repo::replace_for_inventory_on(&tx, superblock, extents)?;
         }
-
-        {
-            let mut statement = tx.prepare_cached(
-                "INSERT INTO ceph_osd_label_replicas (
-                    inventory_id, position, device_size, birth_time_seconds,
-                    birth_time_nanoseconds, description, is_multi, epoch, is_selected,
-                    struct_version, struct_compat_version
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-            )?;
-            for record in replicas {
-                statement.execute(params![
-                    record.inventory_id,
-                    record.position,
-                    record.device_size,
-                    record.birth_time_seconds,
-                    record.birth_time_nanoseconds,
-                    record.description,
-                    record.is_multi,
-                    record.epoch,
-                    record.is_selected,
-                    record.struct_version,
-                    record.struct_compat_version,
-                ])?;
-            }
-        }
-
         tx.commit()?;
         Ok(())
     }
@@ -177,6 +122,113 @@ impl<'a> CephOsdRepo<'a> {
         let rows = statement.query_map(params![inventory_id], map_replica)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
+}
+
+fn replace_for_data_source_on(
+    conn: &Connection,
+    data_source_id: &str,
+    inventory: &[CephOsdInventoryRecord],
+    replicas: &[CephOsdLabelReplicaRecord],
+) -> DbResult<()> {
+    conn.execute(
+        "DELETE FROM ceph_osd_inventory WHERE data_source_id = ?1",
+        params![data_source_id],
+    )?;
+
+    let mut inventory_statement = conn.prepare_cached(
+        "INSERT INTO ceph_osd_inventory (
+            id, data_source_id, partition_index, lvm_vg_uuid, lvm_vg_name,
+            lvm_lv_uuid, lvm_lv_name, osd_uuid, ceph_fsid, whoami, device_role,
+            device_size, birth_time_seconds, birth_time_nanoseconds, description,
+            is_multi, selected_epoch, valid_label_count, label_health, osd_key_present,
+            kv_backend, bluefs_enabled, ceph_version_when_created, require_osd_release,
+            sanitized_metadata_json
+         ) VALUES (
+            ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
+            ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25
+         )",
+    )?;
+    for record in inventory {
+        inventory_statement.execute(params![
+            record.id,
+            record.data_source_id,
+            record.partition_index,
+            record.lvm_vg_uuid,
+            record.lvm_vg_name,
+            record.lvm_lv_uuid,
+            record.lvm_lv_name,
+            record.osd_uuid,
+            record.ceph_fsid,
+            record.whoami,
+            record.device_role,
+            record.device_size,
+            record.birth_time_seconds,
+            record.birth_time_nanoseconds,
+            record.description,
+            record.is_multi,
+            record.selected_epoch,
+            record.valid_label_count,
+            record.label_health,
+            record.osd_key_present,
+            record.kv_backend,
+            record.bluefs_enabled,
+            record.ceph_version_when_created,
+            record.require_osd_release,
+            record.sanitized_metadata_json,
+        ])?;
+    }
+    drop(inventory_statement);
+
+    let mut replica_statement = conn.prepare_cached(
+        "INSERT INTO ceph_osd_label_replicas (
+            inventory_id, position, device_size, birth_time_seconds,
+            birth_time_nanoseconds, description, is_multi, epoch, is_selected,
+            struct_version, struct_compat_version
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+    )?;
+    for record in replicas {
+        replica_statement.execute(params![
+            record.inventory_id,
+            record.position,
+            record.device_size,
+            record.birth_time_seconds,
+            record.birth_time_nanoseconds,
+            record.description,
+            record.is_multi,
+            record.epoch,
+            record.is_selected,
+            record.struct_version,
+            record.struct_compat_version,
+        ])?;
+    }
+    Ok(())
+}
+
+fn validate_bluefs_binding(
+    data_source_id: &str,
+    inventory: &[CephOsdInventoryRecord],
+    superblock: &CephBluefsSuperblockRecord,
+) -> DbResult<()> {
+    if superblock.data_source_id != data_source_id {
+        return Err(DbError::System(
+            "BlueFS superblock belongs to a different data source".to_string(),
+        ));
+    }
+    let osd = inventory
+        .iter()
+        .find(|record| record.id == superblock.inventory_id)
+        .ok_or_else(|| {
+            DbError::System(format!(
+                "BlueFS superblock references unknown OSD inventory: {}",
+                superblock.inventory_id
+            ))
+        })?;
+    if osd.osd_uuid != superblock.osd_uuid {
+        return Err(DbError::System(
+            "BlueFS superblock OSD UUID does not match its inventory".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 fn validate_replacement(

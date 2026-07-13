@@ -139,6 +139,10 @@ const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         "source_005_ceph_osd_inventory",
         include_str!("scripts/source_005_ceph_osd_inventory.sql"),
     ),
+    (
+        "source_006_ceph_bluefs_inventory",
+        include_str!("scripts/source_006_ceph_bluefs_inventory.sql"),
+    ),
 ];
 
 pub fn latest_version() -> &'static str {

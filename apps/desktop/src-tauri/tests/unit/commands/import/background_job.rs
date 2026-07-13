@@ -8,7 +8,7 @@ use app_services::import_analysis::ImportAnalysisMode;
 use app_services::source_db::{self, GlobalFileId};
 use domain::{CaseId, CaseMeta, DataSource, DataSourceId, FileEntryId};
 use persistence_sqlite::repositories::{
-    case_repo::CaseRepo, datasource_cluster_repo::DataSourceClusterRepo,
+    audit_repo::AuditRepo, case_repo::CaseRepo, datasource_cluster_repo::DataSourceClusterRepo,
     datasource_repo::DataSourceRepo, file_repo::FileRepo, job_repo::JobRepo,
 };
 use tempfile::TempDir;
@@ -25,6 +25,31 @@ const PVE_OS_FILES: &[&str] = &[
     "/etc/hostname",
     "/var/lib/pve-cluster/config.db",
 ];
+
+struct BluestoreSourceSummary {
+    osd_uuid: String,
+    osd_id: Option<u32>,
+    ceph_fsid: Option<String>,
+    bluefs_uuid: String,
+}
+
+struct BluestoreOracle {
+    osd_uuid: &'static str,
+    bluefs_uuid: &'static str,
+    crc32c: u32,
+    extent_offset: u64,
+}
+
+struct BluefsInventoryRow {
+    bluefs_uuid: String,
+    osd_uuid: String,
+    sequence: u64,
+    block_size: u32,
+    crc32c: u32,
+    shared_bdev: Option<u32>,
+    dedicated_db: Option<bool>,
+    dedicated_wal: Option<bool>,
+}
 
 #[test]
 #[ignore = "requires the private six-member PVE E01 cluster fixture"]
@@ -209,6 +234,7 @@ fn assert_member_storage_and_content(
     let mut metadata_count = 0;
     let mut osd_ids = HashSet::new();
     let mut osd_uuids = HashSet::new();
+    let mut bluefs_uuids = HashSet::new();
     let mut cluster_fsids = HashSet::new();
     for member in &plan.members {
         let source = source_for_member(&sources, &member.source_path);
@@ -237,16 +263,24 @@ fn assert_member_storage_and_content(
                 storage.last_error
             );
             let inventory = assert_bluestore_source(case_conn, case_root, source);
-            osd_uuids.insert(inventory.0);
-            osd_ids.insert(inventory.1.expect("BlueStore OSD id"));
-            cluster_fsids.insert(inventory.2.expect("BlueStore cluster FSID"));
+            osd_uuids.insert(inventory.osd_uuid);
+            osd_ids.insert(inventory.osd_id.expect("BlueStore OSD id"));
+            cluster_fsids.insert(inventory.ceph_fsid.expect("BlueStore cluster FSID"));
+            bluefs_uuids.insert(inventory.bluefs_uuid);
         }
     }
     assert_eq!(ready_count, PVE_HOST_COUNT);
     assert_eq!(metadata_count, PVE_MEMBER_COUNT - PVE_HOST_COUNT);
     assert_eq!(osd_ids, HashSet::from([0, 1, 2]));
     assert_eq!(osd_uuids.len(), 3);
+    assert_eq!(bluefs_uuids.len(), 3);
     assert_eq!(cluster_fsids.len(), 1);
+    assert_eq!(
+        AuditRepo::new(case_conn)
+            .count_by_action("datasource.import")
+            .expect("count BlueFS import audit entries"),
+        3
+    );
     assert_eq!(cluster.member_count as usize, PVE_MEMBER_COUNT);
     assert_eq!(cluster.ready_count as usize, PVE_MEMBER_COUNT);
     assert_eq!(cluster.failed_count, 0);
@@ -390,7 +424,7 @@ fn assert_bluestore_source(
     case_conn: &rusqlite::Connection,
     case_root: &Path,
     source: &DataSource,
-) -> (String, Option<u32>, Option<String>, u32, bool) {
+) -> BluestoreSourceSummary {
     let storage = DataSourceRepo::new(case_conn)
         .find_storage(&source.id)
         .expect("query BlueStore storage")
@@ -413,9 +447,10 @@ fn assert_bluestore_source(
             .expect("count BlueStore files"),
         0
     );
-    let inventory: (String, Option<u32>, Option<String>, u32, bool) = source_conn
+    let inventory: (String, Option<u32>, Option<String>, u32, bool, u64) = source_conn
         .query_row(
-            "SELECT osd_uuid, whoami, ceph_fsid, valid_label_count, osd_key_present
+            "SELECT osd_uuid, whoami, ceph_fsid, valid_label_count, osd_key_present,
+                    device_size
              FROM ceph_osd_inventory WHERE data_source_id = ?1",
             [&source.id.0],
             |row| {
@@ -425,6 +460,7 @@ fn assert_bluestore_source(
                     row.get(2)?,
                     row.get(3)?,
                     row.get(4)?,
+                    row.get(5)?,
                 ))
             },
         )
@@ -434,7 +470,111 @@ fn assert_bluestore_source(
     assert!(inventory.2.is_some());
     assert!(inventory.3 >= 1);
     assert!(inventory.4);
-    inventory
+    let bluefs: BluefsInventoryRow = source_conn
+        .query_row(
+            "SELECT bluefs_uuid, osd_uuid, sequence, block_size, crc32c,
+                        shared_bdev, dedicated_db, dedicated_wal
+                 FROM ceph_bluefs_superblocks WHERE data_source_id = ?1",
+            [&source.id.0],
+            |row| {
+                Ok(BluefsInventoryRow {
+                    bluefs_uuid: row.get(0)?,
+                    osd_uuid: row.get(1)?,
+                    sequence: row.get(2)?,
+                    block_size: row.get(3)?,
+                    crc32c: row.get(4)?,
+                    shared_bdev: row.get(5)?,
+                    dedicated_db: row.get(6)?,
+                    dedicated_wal: row.get(7)?,
+                })
+            },
+        )
+        .expect("query BlueFS superblock inventory");
+    let oracle = bluestore_oracle(source);
+    assert!(!bluefs.bluefs_uuid.is_empty());
+    assert_eq!(bluefs.osd_uuid, inventory.0);
+    assert_eq!(bluefs.bluefs_uuid, oracle.bluefs_uuid);
+    assert_eq!(bluefs.osd_uuid, oracle.osd_uuid);
+    assert_eq!(bluefs.sequence, 50);
+    assert_eq!(bluefs.block_size, 4096);
+    assert_eq!(bluefs.crc32c, oracle.crc32c);
+    assert_eq!(bluefs.shared_bdev, Some(1));
+    assert_eq!(bluefs.dedicated_db, Some(false));
+    assert_eq!(bluefs.dedicated_wal, Some(false));
+
+    let mut statement = source_conn
+        .prepare(
+            "SELECT device_id, offset, length
+             FROM ceph_bluefs_log_extents
+             WHERE inventory_id = (SELECT inventory_id FROM ceph_bluefs_superblocks
+                                   WHERE data_source_id = ?1)
+             ORDER BY ordinal",
+        )
+        .expect("prepare BlueFS extent query");
+    let extents = statement
+        .query_map([&source.id.0], |row| {
+            Ok((
+                row.get::<_, u8>(0)?,
+                row.get::<_, u64>(1)?,
+                row.get::<_, u32>(2)?,
+            ))
+        })
+        .expect("query BlueFS extents")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("load BlueFS extents");
+    assert!(!extents.is_empty());
+    assert_eq!(extents, vec![(1, oracle.extent_offset, 65_536)]);
+    let (device_id, offset, length) = extents[0];
+    assert_eq!(
+        u32::from(device_id),
+        bluefs.shared_bdev.expect("shared BlueFS bdev")
+    );
+    assert!(
+        offset
+            .checked_add(u64::from(length))
+            .is_some_and(|end| end <= inventory.5),
+        "BlueFS extent must remain inside the labeled device"
+    );
+
+    BluestoreSourceSummary {
+        osd_uuid: inventory.0,
+        osd_id: inventory.1,
+        ceph_fsid: inventory.2,
+        bluefs_uuid: bluefs.bluefs_uuid,
+    }
+}
+
+fn bluestore_oracle(source: &DataSource) -> BluestoreOracle {
+    let file_name = source
+        .source_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    match file_name.as_str() {
+        "server01-disk02.e01" => BluestoreOracle {
+            osd_uuid: "9630c2a5-650a-4395-a47a-ec496515bd61",
+            bluefs_uuid: "394d12df-4023-44dc-b4c5-10b5e5dd48f4",
+            crc32c: 0x1b31_b14c,
+            extent_offset: 353_427_456,
+        },
+        "server02-disk02.e01" => BluestoreOracle {
+            osd_uuid: "de8554de-f932-448d-be2c-0474df6c16c5",
+            bluefs_uuid: "e1b8a63e-3c93-4743-8232-b236b82fec83",
+            crc32c: 0x17d5_c472,
+            extent_offset: 352_542_720,
+        },
+        "server03-disk02.e01" => BluestoreOracle {
+            osd_uuid: "cd6f9b5c-37d5-4dc0-8588-9669d156b02c",
+            bluefs_uuid: "d8f0162e-aefe-4397-ad64-16b28af988a1",
+            crc32c: 0x7838_a645,
+            extent_offset: 156_147_712,
+        },
+        _ => panic!(
+            "missing exact BlueStore oracle for {}",
+            source.source_path.display()
+        ),
+    }
 }
 
 fn is_host_disk(path: &Path) -> bool {

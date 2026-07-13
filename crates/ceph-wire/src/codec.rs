@@ -87,10 +87,8 @@ macro_rules! impl_le_integer {
     ($type:ty, $length:expr) => {
         impl CephDecode for $type {
             fn decode(cursor: &mut CephCursor<'_>) -> Result<Self> {
-                let bytes: [u8; $length] = cursor
-                    .read_exact($length)?
-                    .try_into()
-                    .expect("fixed-size cursor read");
+                let mut bytes = [0u8; $length];
+                bytes.copy_from_slice(cursor.read_exact($length)?);
                 Ok(<$type>::from_le_bytes(bytes))
             }
         }
@@ -110,10 +108,8 @@ impl_le_integer!(i64, 8);
 
 impl CephDecode for Uuid {
     fn decode(cursor: &mut CephCursor<'_>) -> Result<Self> {
-        let bytes: [u8; 16] = cursor
-            .read_exact(16)?
-            .try_into()
-            .expect("fixed-size cursor read");
+        let mut bytes = [0u8; 16];
+        bytes.copy_from_slice(cursor.read_exact(16)?);
         Ok(Uuid::from_bytes(bytes))
     }
 }
@@ -209,6 +205,61 @@ pub fn decode_string_map(
         map.insert(key, value);
     }
     Ok(map)
+}
+
+pub fn decode_varint_u64(cursor: &mut CephCursor<'_>, context: &'static str) -> Result<u64> {
+    let mut value = 0u64;
+    for index in 0..10 {
+        let byte = u8::decode(cursor)?;
+        let payload = u64::from(byte & 0x7f);
+        if index == 9 && payload > 1 {
+            return Err(CephWireError::IntegerOverflow { context });
+        }
+        value |= payload << (index * 7);
+        if byte & 0x80 == 0 {
+            return Ok(value);
+        }
+    }
+    Err(CephWireError::VarintTooLong { context, limit: 10 })
+}
+
+pub fn decode_varint_lowz_u64(cursor: &mut CephCursor<'_>, context: &'static str) -> Result<u64> {
+    let encoded = decode_varint_u64(cursor, context)?;
+    let low_zero_nibbles = (encoded & 3) as u32;
+    let value = encoded >> 2;
+    let shift = low_zero_nibbles * 4;
+    if value > (u64::MAX >> shift) {
+        return Err(CephWireError::IntegerOverflow { context });
+    }
+    Ok(value << shift)
+}
+
+pub fn decode_lba_u64(cursor: &mut CephCursor<'_>, context: &'static str) -> Result<u64> {
+    let word = u32::decode(cursor)?;
+    let selector = word & 7;
+    let (mut value, mut shift) = if selector & 1 == 0 {
+        (u64::from(word & 0x7fff_fffe) << 11, 42u32)
+    } else if selector == 1 || selector == 5 {
+        (u64::from(word & 0x7fff_fffc) << 14, 45u32)
+    } else if selector == 3 {
+        (u64::from(word & 0x7fff_fff8) << 17, 48u32)
+    } else {
+        (u64::from(word & 0x7fff_fff8) >> 3, 28u32)
+    };
+
+    let mut byte = (word >> 24) as u8;
+    while byte & 0x80 != 0 {
+        byte = u8::decode(cursor)?;
+        let payload = u64::from(byte & 0x7f);
+        if shift >= u64::BITS || payload > (u64::MAX >> shift) {
+            return Err(CephWireError::IntegerOverflow { context });
+        }
+        value |= payload << shift;
+        shift = shift
+            .checked_add(7)
+            .ok_or(CephWireError::IntegerOverflow { context })?;
+    }
+    Ok(value)
 }
 
 pub fn encode_string(value: &str, output: &mut Vec<u8>) {

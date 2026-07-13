@@ -294,6 +294,9 @@ EXT4 trees, and the three Ceph BlueStore `disk02` images become metadata-only
 sources rather than normal POSIX filesystems. Each BlueStore source retains an
 isolated `source.db`, contains zero file entries, and persists a sanitized OSD
 inventory with OSD IDs `0,1,2`, one shared cluster FSID, and unique OSD UUIDs.
+It also requires one CRC-valid BlueFS superblock per OSD, unique BlueFS UUIDs,
+sequence `50`, block size `4096`, shared-device layout, and bounded log extents.
+The gate does not replay the BlueFS log or reconstruct RocksDB/RADOS objects.
 
 ```powershell
 $env:FORENSICS_PVE_CLUSTER_ROOT = 'E:\pangushi\服务器'

@@ -20,6 +20,12 @@ pub enum CephWireError {
     #[error("length arithmetic overflow while decoding {context}")]
     LengthOverflow { context: &'static str },
 
+    #[error("integer overflow while decoding {context}")]
+    IntegerOverflow { context: &'static str },
+
+    #[error("varint for {context} exceeds the {limit}-byte limit")]
+    VarintTooLong { context: &'static str, limit: usize },
+
     #[error("invalid UTF-8 in {context}: {message}")]
     InvalidUtf8 {
         context: &'static str,
@@ -40,6 +46,26 @@ pub enum CephWireError {
 
     #[error("BlueStore label CRC32C mismatch: expected {expected:#010x}, computed {actual:#010x}")]
     CrcMismatch { expected: u32, actual: u32 },
+
+    #[error("invalid BlueFS superblock size: expected {expected} bytes, got {actual}")]
+    InvalidBluefsSuperblockSize { expected: usize, actual: usize },
+
+    #[error(
+        "BlueFS superblock CRC32C mismatch: expected {expected:#010x}, computed {actual:#010x}"
+    )]
+    BluefsCrcMismatch { expected: u32, actual: u32 },
+
+    #[error("BlueFS fnode encoding {encoding} is invalid")]
+    InvalidBluefsFnodeEncoding { encoding: u64 },
+
+    #[error("BlueFS extent length {length} is invalid")]
+    InvalidBluefsExtentLength { length: u64 },
+
+    #[error("BlueFS {context} boolean has invalid wire value {value}")]
+    InvalidBluefsBoolean { context: &'static str, value: u8 },
+
+    #[error("BlueFS block size {block_size} is invalid")]
+    InvalidBluefsBlockSize { block_size: u32 },
 
     #[error("BlueStore label metadata epoch is invalid: {value}")]
     InvalidEpoch { value: String },

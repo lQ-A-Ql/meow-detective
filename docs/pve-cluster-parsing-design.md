@@ -169,7 +169,7 @@ Expected result:
 | PVE host filesystem | LVM `pve/root` -> 64-bit EXT4 verified | Cross-node correlation |
 | PVE config database | `/var/lib/pve-cluster/config.db` import and preview verified | Structured config correlation |
 | LVM thin pool | Initial read-only dm-thin mapping; no repair/checksum claim | Hardening required after Stage 3 |
-| Ceph BlueStore OSD | Read-only label detection; explicit unsupported, no fake filesystem candidate | RADOS/PG/object reconstruction required |
+| Ceph BlueStore OSD | Label + BlueFS superblock/layout inventory; no fake filesystem candidate | BlueFS replay、RocksDB、RADOS/PG/object reconstruction required |
 | LVM RAID/cache/snapshot | Unsupported diagnostic | Future optional |
 | Partial/degraded VG | Unsupported diagnostic | Future optional |
 
@@ -189,7 +189,8 @@ Current milestone:
 
 ### BlueStore metadata boundary
 
-The `disk02` failure is intentionally classified at the media-format boundary:
+The `disk02` metadata-only result is intentionally classified at the
+media-format boundary:
 
 1. The E01 container opens successfully, so this is not an E01 reader failure.
 2. The outer device is an LVM PV. LVM expansion opens each readable LV and
@@ -200,12 +201,16 @@ The `disk02` failure is intentionally classified at the media-format boundary:
 4. The former defect was layer placement: only POSIX-filesystem LVs became
    candidates, while the BlueStore LV was discarded as an unknown filesystem.
 5. BlueStore is a Ceph OSD block device, not a mountable POSIX filesystem.
-6. Meow_Detective now natively decodes the complete bdev label envelope,
-   CRC32C, UUID, utime, metadata map, multi-label epoch, and replica positions.
-7. Import persists a sanitized OSD inventory as `ready_metadata`, writes zero
-   file entries, and does not run ordinary Linux artifact analysis.
-8. BlueFS/RocksDB, RADOS placement groups, objects, and VM disk reconstruction
-   remain unsupported.
+6. Meow_Detective natively decodes the complete bdev label envelope, CRC32C,
+   UUID, utime, metadata map, multi-label epoch, and replica positions.
+7. For `bluefs=true`, import reads exactly 4 KiB at LV offset `4096`, validates
+   the BlueFS envelope and independent CRC32C, binds the BlueFS OSD UUID to the
+   selected label, and validates every log extent against the shared device.
+8. The sanitized OSD inventory and BlueFS superblock/layout/log extents commit
+   in one source-database transaction. Import remains `ready_metadata`, writes
+   zero file entries, and does not run ordinary Linux artifact analysis.
+9. BlueFS transaction-log replay, RocksDB, RADOS placement groups, objects, and
+   VM disk reconstruction remain unsupported.
 
 The signature and offsets follow Ceph's
 `src/ceph-volume/ceph_volume/util/disk.py` and Ceph's BlueStore implementation;
@@ -237,6 +242,24 @@ All three labels report cluster FSID
 19.2.3 Squid creation metadata. `osd_key` is never persisted or logged; only
 the boolean `osd_key_present` is retained.
 - no guessed block mapping is accepted.
+
+### Stage 2 verified BlueFS inventory
+
+The same six-member fixture was rerun through the production desktop cluster
+runner on 2026-07-13. All three OSDs expose CRC-valid version-2 BlueFS
+superblocks with sequence `50`, block size `4096`, one shared-device log extent,
+and no dedicated DB/WAL device:
+
+| Member | BlueFS UUID | OSD UUID | Sequence | Shared bdev |
+|---|---|---|---:|---:|
+| `server01-disk02` | `394d12df-4023-44dc-b4c5-10b5e5dd48f4` | `9630c2a5-650a-4395-a47a-ec496515bd61` | 50 | 1 |
+| `server02-disk02` | `e1b8a63e-3c93-4743-8232-b236b82fec83` | `de8554de-f932-448d-be2c-0474df6c16c5` | 50 | 1 |
+| `server03-disk02` | `d8f0162e-aefe-4397-ad64-16b28af988a1` | `cd6f9b5c-37d5-4dc0-8588-9669d156b02c` | 50 | 1 |
+
+The installed Ceph Reef `ceph-bluestore-tool` does not expose
+`bluefs-super-dump`; the read-only WSL oracle therefore exports only the second
+4 KiB device block and the native decoder validates it. This is a tool-version
+limitation, not evidence of a missing superblock.
 
 ## Evaluation
 

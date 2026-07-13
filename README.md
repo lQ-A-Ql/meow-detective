@@ -64,7 +64,7 @@ cd frontend && pnpm test
 | `apps/desktop/src-tauri/` | Tauri 2 shell (98 commands) |
 | `crates/app-services/` | Application orchestration (25 source modules) |
 | `crates/transport/` | Shared DTOs, commands, events, errors |
-| `crates/persistence-sqlite/` | SQLite repos (17) and migration scripts (42) |
+| `crates/persistence-sqlite/` | SQLite repos (18) and migration scripts (43) |
 | `crates/evidence-core/` | Disk image probing and volume detection |
 | `crates/fs-ntfs/`, `fs-fat/`, `fs-exfat/`, `fs-ext4/`, `fs-xfs/`, `fs-btrfs/` | Filesystem parsers (NTFS/FAT/ExFAT/ext4/XFS/Btrfs) |
 | `crates/image-e01/`, `image-raw/` | Image readers (E01/RAW) |

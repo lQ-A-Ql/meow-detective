@@ -1,5 +1,5 @@
 {
-  "lastVerifiedAt": "2026-07-12T00:00:00Z",
+  "lastVerifiedAt": "2026-07-13T00:00:00Z",
   "documentedLimitCount": 49,
   "items": [
     {
@@ -285,7 +285,7 @@
       "category": "Linux LVM/PVE",
       "item": "PVE cluster 语义解析执行",
       "status": "partial",
-      "summary": "集群建模、成员串行导入、宿主 `pve/root` EXT4 文件树和 BlueStore OSD label metadata inventory 已验证；RADOS/PG/object tree、VM disk reconstruction 与跨节点关联仍不支持",
+      "summary": "集群建模、成员串行导入、宿主 `pve/root` EXT4 文件树、BlueStore OSD label 和 BlueFS superblock/layout inventory 已验证；BlueFS transaction-log replay、RocksDB、RADOS/PG/object tree、VM disk reconstruction 与跨节点关联仍不支持",
       "affectedChains": [
         "LVM",
         "PVE"

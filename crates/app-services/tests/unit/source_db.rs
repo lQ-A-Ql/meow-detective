@@ -166,6 +166,9 @@ fn open_registered_source_db_migrates_schema_version_mismatch() {
     assert!(connection
         .prepare("SELECT 1 FROM ceph_osd_inventory LIMIT 1")
         .is_ok());
+    assert!(connection
+        .prepare("SELECT 1 FROM ceph_bluefs_superblocks LIMIT 1")
+        .is_ok());
     let updated = DataSourceRepo::new(&case_conn)
         .find_storage(&ds.id)
         .unwrap()
