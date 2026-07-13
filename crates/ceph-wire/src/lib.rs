@@ -1,6 +1,7 @@
 //! Read-only primitives for Ceph's little-endian wire encoding.
 
 pub mod bluefs;
+pub mod bluefs_transaction;
 pub mod bluestore;
 pub mod codec;
 pub mod crc32c;
@@ -10,6 +11,10 @@ pub mod error;
 pub use bluefs::{
     decode_bluefs_super_block, BluefsExtent, BluefsFnode, BluefsLayout, BluefsSuper,
     BLUEFS_MAX_EXTENTS, BLUEFS_SUPER_BLOCK_SIZE, BLUEFS_SUPER_OFFSET,
+};
+pub use bluefs_transaction::{
+    decode_bluefs_transaction, inspect_bluefs_transaction, BluefsFnodeDelta, BluefsOperation,
+    BluefsTransaction, BluefsTransactionPrefix, BLUEFS_MAX_OPERATIONS, BLUEFS_MAX_OPERATION_BYTES,
 };
 pub use bluestore::{
     decode_bdev_label_block, select_bdev_label, select_bdev_labels, BdevLabel, BdevLabelCandidate,

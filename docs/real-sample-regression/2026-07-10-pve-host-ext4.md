@@ -70,7 +70,7 @@ atomically in each source database.
 
 ## 未保证范围
 
-- `disk02` 已由生产 LVM LV reader 按 Ceph 官方标签确认是 BlueStore OSD block device，并保存脱敏 label metadata 与 BlueFS superblock/layout inventory。BlueStore 不是可直接枚举的 POSIX 文件系统；当前不提供 BlueFS transaction-log replay、RocksDB、RADOS object/PG/VM disk 文件树。
+- `disk02` 已由生产 LVM LV reader 按 Ceph 官方标签确认是 BlueStore OSD block device，并保存脱敏 label metadata 与 BlueFS superblock/layout inventory。本文记录的是 2026-07-10 Stage 2 边界；后续 BlueFS metadata-log replay 结果见 `docs/real-sample-regression/2026-07-13-pve-bluefs-stage3.md`。BlueStore 仍不是可直接枚举的 POSIX 文件系统，RocksDB 内容、RADOS object/PG/VM disk 文件树不在当前支持范围。
 - 当前 metadata-only 路径只承诺“无普通文件系统 candidate 且可唯一选择一个 BlueStore LV”的数据源；混合 filesystem + BlueStore 单源和多 BlueStore LV 尚未支持。
 - 不承诺 EXT4 metadata checksum 校验、deleted recovery、journal replay 完整性或全部 incompat feature 组合。
 - 不承诺集群跨节点配置归并和语义关联。

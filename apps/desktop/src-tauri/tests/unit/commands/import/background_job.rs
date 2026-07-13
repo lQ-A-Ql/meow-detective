@@ -38,6 +38,10 @@ struct BluestoreOracle {
     bluefs_uuid: &'static str,
     crc32c: u32,
     extent_offset: u64,
+    final_sequence: u64,
+    file_count: usize,
+    manifest_path: &'static str,
+    wal_path: &'static str,
 }
 
 struct BluefsInventoryRow {
@@ -535,6 +539,7 @@ fn assert_bluestore_source(
             .is_some_and(|end| end <= inventory.5),
         "BlueFS extent must remain inside the labeled device"
     );
+    assert_bluefs_replay(&source_conn, &inventory.0, oracle);
 
     BluestoreSourceSummary {
         osd_uuid: inventory.0,
@@ -542,6 +547,91 @@ fn assert_bluestore_source(
         ceph_fsid: inventory.2,
         bluefs_uuid: bluefs.bluefs_uuid,
     }
+}
+
+fn assert_bluefs_replay(
+    source_conn: &rusqlite::Connection,
+    osd_uuid: &str,
+    oracle: BluestoreOracle,
+) {
+    let replay: (String, u32, u64, u64, u64, String) = source_conn
+        .query_row(
+            "SELECT r.inventory_id, r.transaction_count, r.first_sequence,
+                    r.final_sequence, r.logical_bytes, r.stop_reason
+             FROM ceph_bluefs_replays r
+             JOIN ceph_bluefs_superblocks s ON s.inventory_id = r.inventory_id
+             WHERE s.osd_uuid = ?1",
+            [osd_uuid],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            },
+        )
+        .expect("query BlueFS replay summary");
+    assert_eq!(replay.1, 4);
+    assert_eq!(replay.2, 1);
+    assert_eq!(replay.3, oracle.final_sequence);
+    assert_eq!(replay.4, 0x22_000);
+    assert_eq!(replay.5, "invalidTail");
+    let directories = load_bluefs_paths(source_conn, "ceph_bluefs_directories", "path", &replay.0);
+    assert_eq!(
+        directories,
+        vec![
+            "ALLOCATOR_NCB_DIR".to_string(),
+            "db".to_string(),
+            "db.slow".to_string(),
+            "db.wal".to_string(),
+            "sharding".to_string(),
+        ]
+    );
+    let files = load_bluefs_paths(source_conn, "ceph_bluefs_files", "path", &replay.0);
+    assert_eq!(files.len(), oracle.file_count);
+    assert!(files.iter().any(|path| path == "db/CURRENT"));
+    assert!(files.iter().any(|path| path == oracle.manifest_path));
+    assert!(files.iter().any(|path| path == oracle.wal_path));
+    let sst_path = files
+        .iter()
+        .find(|path| path.ends_with(".sst"))
+        .expect("BlueFS replay must contain an SST file");
+    for path in [
+        "db/CURRENT",
+        oracle.manifest_path,
+        oracle.wal_path,
+        sst_path,
+    ] {
+        let extent_count: u64 = source_conn
+            .query_row(
+                "SELECT COUNT(*) FROM ceph_bluefs_file_extents
+                 WHERE inventory_id = ?1 AND file_path = ?2",
+                rusqlite::params![&replay.0, path],
+                |row| row.get(0),
+            )
+            .expect("count representative BlueFS file extents");
+        assert!(extent_count > 0, "BlueFS file {path} must retain extents");
+    }
+}
+
+fn load_bluefs_paths(
+    source_conn: &rusqlite::Connection,
+    table: &str,
+    column: &str,
+    inventory_id: &str,
+) -> Vec<String> {
+    let sql = format!("SELECT {column} FROM {table} WHERE inventory_id = ?1 ORDER BY {column}");
+    let mut statement = source_conn
+        .prepare(&sql)
+        .expect("prepare BlueFS path query");
+    statement
+        .query_map([inventory_id], |row| row.get(0))
+        .expect("query BlueFS paths")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("load BlueFS paths")
 }
 
 fn bluestore_oracle(source: &DataSource) -> BluestoreOracle {
@@ -557,18 +647,30 @@ fn bluestore_oracle(source: &DataSource) -> BluestoreOracle {
             bluefs_uuid: "394d12df-4023-44dc-b4c5-10b5e5dd48f4",
             crc32c: 0x1b31_b14c,
             extent_offset: 353_427_456,
+            final_sequence: 186_890,
+            file_count: 44,
+            manifest_path: "db/MANIFEST-000143",
+            wal_path: "db.wal/000142.log",
         },
         "server02-disk02.e01" => BluestoreOracle {
             osd_uuid: "de8554de-f932-448d-be2c-0474df6c16c5",
             bluefs_uuid: "e1b8a63e-3c93-4743-8232-b236b82fec83",
             crc32c: 0x17d5_c472,
             extent_offset: 352_542_720,
+            final_sequence: 185_969,
+            file_count: 49,
+            manifest_path: "db/MANIFEST-000121",
+            wal_path: "db.wal/000120.log",
         },
         "server03-disk02.e01" => BluestoreOracle {
             osd_uuid: "cd6f9b5c-37d5-4dc0-8588-9669d156b02c",
             bluefs_uuid: "d8f0162e-aefe-4397-ad64-16b28af988a1",
             crc32c: 0x7838_a645,
             extent_offset: 156_147_712,
+            final_sequence: 185_678,
+            file_count: 42,
+            manifest_path: "db/MANIFEST-000128",
+            wal_path: "db.wal/000127.log",
         },
         _ => panic!(
             "missing exact BlueStore oracle for {}",

@@ -169,7 +169,7 @@ Expected result:
 | PVE host filesystem | LVM `pve/root` -> 64-bit EXT4 verified | Cross-node correlation |
 | PVE config database | `/var/lib/pve-cluster/config.db` import and preview verified | Structured config correlation |
 | LVM thin pool | Initial read-only dm-thin mapping; no repair/checksum claim | Hardening required after Stage 3 |
-| Ceph BlueStore OSD | Label + BlueFS superblock/layout inventory; no fake filesystem candidate | BlueFS replay、RocksDB、RADOS/PG/object reconstruction required |
+| Ceph BlueStore OSD | Label + BlueFS superblock/layout + bounded metadata replay; no fake filesystem candidate | RocksDB content、RADOS/PG/object reconstruction required |
 | LVM RAID/cache/snapshot | Unsupported diagnostic | Future optional |
 | Partial/degraded VG | Unsupported diagnostic | Future optional |
 
@@ -206,11 +206,13 @@ media-format boundary:
 7. For `bluefs=true`, import reads exactly 4 KiB at LV offset `4096`, validates
    the BlueFS envelope and independent CRC32C, binds the BlueFS OSD UUID to the
    selected label, and validates every log extent against the shared device.
-8. The sanitized OSD inventory and BlueFS superblock/layout/log extents commit
-   in one source-database transaction. Import remains `ready_metadata`, writes
-   zero file entries, and does not run ordinary Linux artifact analysis.
-9. BlueFS transaction-log replay, RocksDB, RADOS placement groups, objects, and
-   VM disk reconstruction remain unsupported.
+8. The sanitized OSD inventory, BlueFS superblock/layout/log extents, and
+   bounded replay snapshot commit in one source-database transaction. Import
+   remains `ready_metadata`, writes zero ordinary file entries, and does not
+   run ordinary Linux artifact analysis.
+9. RocksDB content parsing, RADOS placement groups, objects, and VM disk
+   reconstruction remain unsupported. BlueFS metadata replay is specified in
+   `docs/ceph-bluestore-stage3-design.md`.
 
 The signature and offsets follow Ceph's
 `src/ceph-volume/ceph_volume/util/disk.py` and Ceph's BlueStore implementation;

@@ -6,9 +6,7 @@ use ceph_wire::{
     BDEV_LABEL_BLOCK_SIZE, BDEV_LABEL_POSITIONS, BLUEFS_SUPER_BLOCK_SIZE, BLUEFS_SUPER_OFFSET,
 };
 use persistence_sqlite::repositories::audit_repo::{AuditAction, AuditRepo};
-use persistence_sqlite::repositories::ceph_bluefs_repo::{
-    CephBluefsLogExtentRecord, CephBluefsSuperblockRecord,
-};
+use persistence_sqlite::repositories::ceph_bluefs_repo::CephBluefsAggregate;
 use persistence_sqlite::repositories::ceph_osd_repo::{
     CephOsdInventoryRecord, CephOsdLabelReplicaRecord, CephOsdRepo,
 };
@@ -92,15 +90,12 @@ pub(crate) fn persist_bluestore_probe(
             )
         })
         .transpose()?;
-    let bluefs_records = bluefs
-        .as_ref()
-        .map(|records| (&records.superblock, records.extents.as_slice()));
     CephOsdRepo::new(ctx.source_connection()?)
         .replace_for_data_source_with_bluefs(
             &data_source.id.0,
             std::slice::from_ref(&inventory),
             &replica_records,
-            bluefs_records,
+            bluefs.as_ref(),
         )
         .map_err(CommandError::from_service_error)?;
     if let Some(records) = &bluefs {
@@ -173,18 +168,13 @@ fn read_label_replicas(
     Ok(replicas)
 }
 
-struct BluefsInventoryRecords {
-    superblock: CephBluefsSuperblockRecord,
-    extents: Vec<CephBluefsLogExtentRecord>,
-}
-
 fn read_bluefs_inventory(
     reader: &mut dyn evidence_core::EvidenceReader,
     data_source: &domain::DataSource,
     inventory_id: &str,
     expected_osd_uuid: uuid::Uuid,
     device_size: u64,
-) -> Result<BluefsInventoryRecords, CommandError> {
+) -> Result<CephBluefsAggregate, CommandError> {
     let block_end = BLUEFS_SUPER_OFFSET
         .checked_add(BLUEFS_SUPER_BLOCK_SIZE as u64)
         .ok_or_else(|| CommandError::internal("BlueFS superblock offset overflow"))?;
@@ -209,10 +199,12 @@ fn read_bluefs_inventory(
         )));
     }
     validate_bluefs_extents(&superblock, device_size)?;
-    Ok(bluefs_inventory_records(
-        data_source,
+    let replay = super::ceph_bluefs_replay::replay_bluefs_log(reader, &superblock)?;
+    Ok(super::ceph_bluefs_records::build_bluefs_aggregate(
+        &data_source.id.0,
         inventory_id,
         superblock,
+        replay,
     ))
 }
 
@@ -266,62 +258,21 @@ fn validate_bluefs_extents(superblock: &BluefsSuper, device_size: u64) -> Result
     Ok(())
 }
 
-fn bluefs_inventory_records(
-    data_source: &domain::DataSource,
-    inventory_id: &str,
-    superblock: BluefsSuper,
-) -> BluefsInventoryRecords {
-    let layout = superblock.memorized_layout.as_ref();
-    let extents = superblock
-        .log_fnode
-        .extents
-        .iter()
-        .enumerate()
-        .map(|(ordinal, extent)| CephBluefsLogExtentRecord {
-            inventory_id: inventory_id.to_string(),
-            ordinal: ordinal as u32,
-            device_id: extent.bdev,
-            offset: extent.offset,
-            length: extent.length,
-        })
-        .collect();
-    let record = CephBluefsSuperblockRecord {
-        inventory_id: inventory_id.to_string(),
-        data_source_id: data_source.id.0.clone(),
-        bluefs_uuid: superblock.uuid.to_string(),
-        osd_uuid: superblock.osd_uuid.to_string(),
-        sequence: superblock.seq,
-        block_size: superblock.block_size,
-        crc32c: superblock.crc32c,
-        struct_version: superblock.struct_version,
-        struct_compat_version: superblock.struct_compat_version,
-        log_inode: superblock.log_fnode.ino,
-        log_size: superblock.log_fnode.size,
-        log_mtime_seconds: i64::from(superblock.log_fnode.mtime.seconds),
-        log_mtime_nanoseconds: superblock.log_fnode.mtime.nanoseconds,
-        log_encoding: superblock.log_fnode.encoding,
-        log_content_size: superblock.log_fnode.content_size,
-        shared_bdev: layout.map(|value| value.shared_bdev),
-        dedicated_db: layout.map(|value| value.dedicated_db),
-        dedicated_wal: layout.map(|value| value.dedicated_wal),
-    };
-    BluefsInventoryRecords {
-        superblock: record,
-        extents,
-    }
-}
-
 fn audit_bluefs_inventory(
     ctx: &ImportJobContext<'_>,
     data_source: &domain::DataSource,
-    records: &BluefsInventoryRecords,
+    records: &CephBluefsAggregate,
 ) {
     let details = serde_json::json!({
         "inventoryId": records.superblock.inventory_id,
         "osdUuid": records.superblock.osd_uuid,
         "bluefsUuid": records.superblock.bluefs_uuid,
         "sequence": records.superblock.sequence,
-        "extentCount": records.extents.len(),
+        "extentCount": records.log_extents.len(),
+        "transactionCount": records.replay.replay.transaction_count,
+        "fileCount": records.replay.files.len(),
+        "directoryCount": records.replay.directories.len(),
+        "finalSequence": records.replay.replay.final_sequence,
         "layout": "singleSharedDevice",
     })
     .to_string();

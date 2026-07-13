@@ -2,6 +2,7 @@ pub mod artifact_repo;
 pub mod audit_repo;
 pub mod batch_repo;
 pub mod case_repo;
+pub mod ceph_bluefs_replay_repo;
 pub mod ceph_bluefs_repo;
 pub mod ceph_osd_repo;
 pub mod correlation_repo;

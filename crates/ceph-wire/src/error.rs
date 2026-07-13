@@ -67,6 +67,23 @@ pub enum CephWireError {
     #[error("BlueFS block size {block_size} is invalid")]
     InvalidBluefsBlockSize { block_size: u32 },
 
+    #[error("BlueFS transaction payload length {length} exceeds limit {limit}")]
+    BluefsTransactionLengthLimit { length: usize, limit: usize },
+
+    #[error(
+        "BlueFS transaction payload length {payload_length} is shorter than the declared minimum {minimum_length}"
+    )]
+    BluefsTransactionPayloadLengthMismatch {
+        payload_length: usize,
+        minimum_length: usize,
+    },
+
+    #[error("BlueFS transaction operation CRC32C mismatch: expected {expected:#010x}, computed {actual:#010x}")]
+    BluefsTransactionCrcMismatch { expected: u32, actual: u32 },
+
+    #[error("unknown BlueFS transaction operation {opcode}")]
+    UnknownBluefsOperation { opcode: u8 },
+
     #[error("BlueStore label metadata epoch is invalid: {value}")]
     InvalidEpoch { value: String },
 

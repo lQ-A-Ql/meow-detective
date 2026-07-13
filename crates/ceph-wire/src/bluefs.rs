@@ -113,7 +113,7 @@ pub fn decode_bluefs_super_block(block: &[u8]) -> Result<BluefsSuper> {
     })
 }
 
-fn decode_fnode(cursor: &mut CephCursor<'_>) -> Result<BluefsFnode> {
+pub(crate) fn decode_fnode(cursor: &mut CephCursor<'_>) -> Result<BluefsFnode> {
     let (envelope, mut payload) = CephStructEnvelope::decode_payload(cursor, BLUEFS_FNODE_VERSION)?;
     let ino = decode_varint_u64(&mut payload, "BlueFS fnode ino")?;
     let size = decode_varint_u64(&mut payload, "BlueFS fnode size")?;
@@ -160,7 +160,7 @@ fn decode_fnode(cursor: &mut CephCursor<'_>) -> Result<BluefsFnode> {
     })
 }
 
-fn decode_extent(cursor: &mut CephCursor<'_>) -> Result<BluefsExtent> {
+pub(crate) fn decode_extent(cursor: &mut CephCursor<'_>) -> Result<BluefsExtent> {
     let (envelope, mut payload) =
         CephStructEnvelope::decode_payload(cursor, BLUEFS_EXTENT_VERSION)?;
     let offset = decode_lba_u64(&mut payload, "BlueFS extent offset")?;

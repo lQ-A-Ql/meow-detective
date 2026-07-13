@@ -1,7 +1,14 @@
 use persistence_sqlite::{
     open_in_memory,
     repositories::{
-        ceph_bluefs_repo::{CephBluefsLogExtentRecord, CephBluefsRepo, CephBluefsSuperblockRecord},
+        ceph_bluefs_replay_repo::{
+            CephBluefsDirectoryRecord, CephBluefsFileExtentRecord, CephBluefsFileRecord,
+            CephBluefsReplayAggregate, CephBluefsReplayRecord, CephBluefsReplayRepo,
+        },
+        ceph_bluefs_repo::{
+            CephBluefsAggregate, CephBluefsLogExtentRecord, CephBluefsRepo,
+            CephBluefsSuperblockRecord,
+        },
         ceph_osd_repo::{CephOsdInventoryRecord, CephOsdRepo},
     },
     runner,
@@ -102,6 +109,52 @@ fn extent(inventory_id: &str, ordinal: u32, offset: u64) -> CephBluefsLogExtentR
     }
 }
 
+fn replay(inventory_id: &str, final_sequence: u64) -> CephBluefsReplayAggregate {
+    CephBluefsReplayAggregate {
+        replay: CephBluefsReplayRecord {
+            inventory_id: inventory_id.to_string(),
+            transaction_count: 4,
+            first_sequence: 1,
+            final_sequence,
+            logical_bytes: 0x22_000,
+            stop_reason: "invalidTail".to_string(),
+        },
+        directories: vec![CephBluefsDirectoryRecord {
+            inventory_id: inventory_id.to_string(),
+            path: "db".to_string(),
+        }],
+        files: vec![CephBluefsFileRecord {
+            inventory_id: inventory_id.to_string(),
+            path: "db/CURRENT".to_string(),
+            inode: 2,
+            size: 16,
+            mtime_seconds: 1_700_000_000,
+            mtime_nanoseconds: 123,
+            encoding: 0,
+            content_size: 16,
+        }],
+        file_extents: vec![CephBluefsFileExtentRecord {
+            inventory_id: inventory_id.to_string(),
+            file_path: "db/CURRENT".to_string(),
+            ordinal: 0,
+            device_id: 1,
+            offset: 512 * 1024,
+            length: 4096,
+        }],
+    }
+}
+
+fn aggregate(
+    superblock: &CephBluefsSuperblockRecord,
+    extents: &[CephBluefsLogExtentRecord],
+) -> CephBluefsAggregate {
+    CephBluefsAggregate {
+        superblock: superblock.clone(),
+        log_extents: extents.to_vec(),
+        replay: replay(&superblock.inventory_id, superblock.sequence),
+    }
+}
+
 fn persist_bluefs(
     conn: &rusqlite::Connection,
     superblock: &CephBluefsSuperblockRecord,
@@ -109,11 +162,12 @@ fn persist_bluefs(
 ) -> persistence_sqlite::connection::DbResult<()> {
     let osd_repo = CephOsdRepo::new(conn);
     let inventory = osd_repo.find_by_data_source(&superblock.data_source_id)?;
+    let records = aggregate(superblock, extents);
     osd_repo.replace_for_data_source_with_bluefs(
         &superblock.data_source_id,
         &inventory,
         &[],
-        Some((superblock, extents)),
+        Some(&records),
     )
 }
 
@@ -123,9 +177,16 @@ fn source_migration_installs_bluefs_inventory_schema() {
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_006_ceph_bluefs_inventory"
+        "source_007_ceph_bluefs_replay"
     );
-    for table in ["ceph_bluefs_superblocks", "ceph_bluefs_log_extents"] {
+    for table in [
+        "ceph_bluefs_superblocks",
+        "ceph_bluefs_log_extents",
+        "ceph_bluefs_replays",
+        "ceph_bluefs_directories",
+        "ceph_bluefs_files",
+        "ceph_bluefs_file_extents",
+    ] {
         let exists: bool = conn
             .query_row(
                 "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = ?1",
@@ -157,6 +218,26 @@ fn superblock_and_log_extents_round_trip_in_stable_order() {
     assert_eq!(
         repo.find_log_extents("inventory-1").expect("load extents"),
         expected_extents
+    );
+    let replay_repo = CephBluefsReplayRepo::new(&conn);
+    let expected_replay = replay("inventory-1", 50);
+    assert_eq!(
+        replay_repo.find_replay("inventory-1").unwrap(),
+        Some(expected_replay.replay)
+    );
+    assert_eq!(
+        replay_repo.find_directories("inventory-1").unwrap(),
+        expected_replay.directories
+    );
+    assert_eq!(
+        replay_repo.find_files("inventory-1").unwrap(),
+        expected_replay.files
+    );
+    assert_eq!(
+        replay_repo
+            .find_file_extents("inventory-1", "db/CURRENT")
+            .unwrap(),
+        expected_replay.file_extents
     );
 }
 
@@ -247,22 +328,24 @@ fn osd_and_bluefs_inventory_commit_atomically() {
     replacement.description = "replacement".to_string();
     let existing_bluefs = superblock("inventory-1", "source-1", 1);
     let existing_extents = vec![extent("inventory-1", 0, 8192)];
+    let existing_records = aggregate(&existing_bluefs, &existing_extents);
     osd_repo
         .replace_for_data_source_with_bluefs(
             "source-1",
             std::slice::from_ref(&existing),
             &[],
-            Some((&existing_bluefs, &existing_extents)),
+            Some(&existing_records),
         )
         .expect("persist existing OSD and BlueFS inventory");
     let mut invalid_bluefs = superblock("inventory-1", "source-1", u64::MAX);
     invalid_bluefs.osd_uuid = replacement.osd_uuid.clone();
+    let invalid_records = aggregate(&invalid_bluefs, &[extent("inventory-1", 0, 4096)]);
 
     let result = osd_repo.replace_for_data_source_with_bluefs(
         "source-1",
         &[replacement],
         &[],
-        Some((&invalid_bluefs, &[extent("inventory-1", 0, 4096)])),
+        Some(&invalid_records),
     );
 
     assert!(result.is_err());
@@ -284,5 +367,11 @@ fn osd_and_bluefs_inventory_commit_atomically() {
             .find_log_extents("inventory-1")
             .expect("load BlueFS extents"),
         existing_extents
+    );
+    assert_eq!(
+        CephBluefsReplayRepo::new(&conn)
+            .find_replay("inventory-1")
+            .expect("load BlueFS replay"),
+        Some(existing_records.replay.replay)
     );
 }

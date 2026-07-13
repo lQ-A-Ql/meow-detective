@@ -5,6 +5,8 @@
 //! `forensics-desktop` crate.
 
 mod ceph;
+mod ceph_bluefs_records;
+mod ceph_bluefs_replay;
 mod context;
 mod emit;
 mod execute;

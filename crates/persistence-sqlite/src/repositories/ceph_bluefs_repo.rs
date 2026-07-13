@@ -4,6 +4,8 @@ use rusqlite::{params, Connection};
 
 use crate::connection::{DbError, DbResult};
 
+use super::ceph_bluefs_replay_repo::{self, CephBluefsReplayAggregate};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CephBluefsSuperblockRecord {
     pub inventory_id: String,
@@ -33,6 +35,13 @@ pub struct CephBluefsLogExtentRecord {
     pub device_id: u8,
     pub offset: u64,
     pub length: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CephBluefsAggregate {
+    pub superblock: CephBluefsSuperblockRecord,
+    pub log_extents: Vec<CephBluefsLogExtentRecord>,
+    pub replay: CephBluefsReplayAggregate,
 }
 
 pub struct CephBluefsRepo<'a> {
@@ -75,13 +84,13 @@ impl<'a> CephBluefsRepo<'a> {
 
 pub(super) fn replace_for_inventory_on(
     conn: &Connection,
-    superblock: &CephBluefsSuperblockRecord,
-    extents: &[CephBluefsLogExtentRecord],
+    records: &CephBluefsAggregate,
 ) -> DbResult<()> {
     conn.execute(
         "DELETE FROM ceph_bluefs_superblocks WHERE inventory_id = ?1",
-        params![superblock.inventory_id],
+        params![records.superblock.inventory_id],
     )?;
+    let superblock = &records.superblock;
     conn.execute(
         "INSERT INTO ceph_bluefs_superblocks (
                 inventory_id, data_source_id, bluefs_uuid, osd_uuid, sequence,
@@ -118,7 +127,7 @@ pub(super) fn replace_for_inventory_on(
             inventory_id, ordinal, device_id, offset, length
          ) VALUES (?1, ?2, ?3, ?4, ?5)",
     )?;
-    for extent in extents {
+    for extent in &records.log_extents {
         statement.execute(params![
             extent.inventory_id,
             extent.ordinal,
@@ -127,13 +136,12 @@ pub(super) fn replace_for_inventory_on(
             extent.length,
         ])?;
     }
-    Ok(())
+    drop(statement);
+    ceph_bluefs_replay_repo::replace_for_inventory_on(conn, &records.replay)
 }
 
-pub(super) fn validate_replacement(
-    superblock: &CephBluefsSuperblockRecord,
-    extents: &[CephBluefsLogExtentRecord],
-) -> DbResult<()> {
+pub(super) fn validate_replacement(records: &CephBluefsAggregate) -> DbResult<()> {
+    let superblock = &records.superblock;
     if superblock.block_size == 0 {
         return Err(DbError::System(
             "BlueFS superblock block size must be non-zero".to_string(),
@@ -145,7 +153,7 @@ pub(super) fn validate_replacement(
         ));
     }
     let mut ordinals = HashSet::new();
-    for extent in extents {
+    for extent in &records.log_extents {
         if extent.inventory_id != superblock.inventory_id {
             return Err(DbError::System(format!(
                 "BlueFS log extent references another inventory: {}",
@@ -164,6 +172,12 @@ pub(super) fn validate_replacement(
             )));
         }
     }
+    if records.replay.replay.inventory_id != superblock.inventory_id {
+        return Err(DbError::System(
+            "BlueFS replay belongs to another superblock inventory".to_string(),
+        ));
+    }
+    ceph_bluefs_replay_repo::validate_replacement(&records.replay)?;
     Ok(())
 }
 

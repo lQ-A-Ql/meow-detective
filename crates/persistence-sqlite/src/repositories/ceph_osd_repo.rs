@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use crate::connection::{DbError, DbResult};
 use rusqlite::{params, Connection};
 
-use super::ceph_bluefs_repo::{self, CephBluefsLogExtentRecord, CephBluefsSuperblockRecord};
+use super::ceph_bluefs_repo::{self, CephBluefsAggregate, CephBluefsSuperblockRecord};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CephOsdInventoryRecord {
@@ -72,17 +72,17 @@ impl<'a> CephOsdRepo<'a> {
         data_source_id: &str,
         inventory: &[CephOsdInventoryRecord],
         replicas: &[CephOsdLabelReplicaRecord],
-        bluefs: Option<(&CephBluefsSuperblockRecord, &[CephBluefsLogExtentRecord])>,
+        bluefs: Option<&CephBluefsAggregate>,
     ) -> DbResult<()> {
         validate_replacement(data_source_id, inventory, replicas)?;
-        if let Some((superblock, extents)) = bluefs {
-            validate_bluefs_binding(data_source_id, inventory, superblock)?;
-            ceph_bluefs_repo::validate_replacement(superblock, extents)?;
+        if let Some(records) = bluefs {
+            validate_bluefs_binding(data_source_id, inventory, &records.superblock)?;
+            ceph_bluefs_repo::validate_replacement(records)?;
         }
         let tx = self.conn.unchecked_transaction()?;
         replace_for_data_source_on(&tx, data_source_id, inventory, replicas)?;
-        if let Some((superblock, extents)) = bluefs {
-            ceph_bluefs_repo::replace_for_inventory_on(&tx, superblock, extents)?;
+        if let Some(records) = bluefs {
+            ceph_bluefs_repo::replace_for_inventory_on(&tx, records)?;
         }
         tx.commit()?;
         Ok(())
