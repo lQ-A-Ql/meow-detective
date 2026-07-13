@@ -93,8 +93,15 @@ fn replay_records_truncated_multiblock_tail_after_valid_transaction() {
     bytes[4096..4096 + tail.len()].copy_from_slice(&tail);
     let mut reader = VecEvidenceReader::new(bytes);
     let superblock = superblock(uuid, 8192);
+    let mut extent_reader =
+        crate::import_pipeline::ceph_bluefs_file_reader::BluefsExtentReader::new(
+            &mut reader,
+            1,
+            8192,
+            0,
+        );
 
-    let replay = super::replay_bluefs_log(&mut reader, &superblock).unwrap();
+    let replay = super::replay_bluefs_log(&mut extent_reader, &superblock).unwrap();
 
     assert_eq!(replay.transaction_count, 1);
     assert_eq!(replay.final_sequence, 1);
@@ -114,8 +121,15 @@ fn replay_records_corrupt_tail_after_valid_transaction() {
     bytes[4096..4096 + tail.len()].copy_from_slice(&tail);
     let mut reader = VecEvidenceReader::new(bytes);
     let superblock = superblock(uuid, 8192);
+    let mut extent_reader =
+        crate::import_pipeline::ceph_bluefs_file_reader::BluefsExtentReader::new(
+            &mut reader,
+            1,
+            8192,
+            0,
+        );
 
-    let replay = super::replay_bluefs_log(&mut reader, &superblock).unwrap();
+    let replay = super::replay_bluefs_log(&mut extent_reader, &superblock).unwrap();
 
     assert_eq!(replay.transaction_count, 1);
     assert_eq!(replay.final_sequence, 1);

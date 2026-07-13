@@ -29,6 +29,7 @@ fs-xfs.workspace = true
 fs-btrfs.workspace = true
 fs-lvm.workspace = true
 ceph-wire.workspace = true
+rocksdb-wire.workspace = true
 search.workspace = true
 artifacts-core.workspace = true
 artifacts-windows.workspace = true

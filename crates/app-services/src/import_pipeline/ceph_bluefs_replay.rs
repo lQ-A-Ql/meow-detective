@@ -1,11 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::SeekFrom;
 
 use ceph_wire::{
-    decode_bluefs_transaction, inspect_bluefs_transaction, BluefsExtent, BluefsFnode,
-    BluefsOperation, BluefsSuper,
+    decode_bluefs_transaction, inspect_bluefs_transaction, BluefsFnode, BluefsOperation,
+    BluefsSuper,
 };
 use transport::CommandError;
+
+use super::ceph_bluefs_file_reader::{allocated_bytes, BluefsExtentReader};
 
 const BLUEFS_MAX_REPLAY_BYTES: u64 = 64 * 1024 * 1024;
 const BLUEFS_MAX_REPLAY_BLOCK_SIZE: u32 = 1024 * 1024;
@@ -30,7 +31,7 @@ pub(crate) struct BluefsReplayFile {
 }
 
 pub(crate) fn replay_bluefs_log(
-    reader: &mut dyn evidence_core::EvidenceReader,
+    reader: &mut BluefsExtentReader<'_>,
     superblock: &BluefsSuper,
 ) -> Result<BluefsReplaySnapshot, CommandError> {
     validate_replay_superblock(superblock)?;
@@ -47,8 +48,7 @@ pub(crate) fn replay_bluefs_log(
         if logical_offset >= BLUEFS_MAX_REPLAY_BYTES {
             return Err(replay_error("BlueFS replay byte limit exceeded"));
         }
-        let first_block = match read_logical_range(
-            reader,
+        let first_block = match reader.read_allocated_range(
             &state.log_fnode,
             logical_offset,
             u64::from(superblock.block_size),
@@ -93,7 +93,8 @@ pub(crate) fn replay_bluefs_log(
         {
             return Err(replay_error("BlueFS transaction exceeds replay byte limit"));
         }
-        let encoded = read_logical_range(reader, &state.log_fnode, logical_offset, aligned_length)?
+        let encoded = reader
+            .read_allocated_range(&state.log_fnode, logical_offset, aligned_length)?
             .ok_or_else(|| replay_error("BlueFS transaction is truncated across log extents"))?;
         if encoded.len() < prefix.encoded_length {
             if transaction_count > 0 {
@@ -388,64 +389,6 @@ fn validate_jump_sequence(
     }
     *jump_sequence_floor = next_sequence - 1;
     Ok(next_sequence)
-}
-
-fn read_logical_range(
-    reader: &mut dyn evidence_core::EvidenceReader,
-    fnode: &BluefsFnode,
-    logical_offset: u64,
-    length: u64,
-) -> Result<Option<Vec<u8>>, CommandError> {
-    let logical_end = logical_offset
-        .checked_add(length)
-        .ok_or_else(|| replay_error("BlueFS logical read end overflow"))?;
-    let allocated = allocated_bytes(&fnode.extents)?;
-    if logical_offset >= allocated {
-        return Ok(None);
-    }
-    let requested_end = logical_end.min(allocated);
-    let mut output = Vec::with_capacity(
-        usize::try_from(requested_end - logical_offset)
-            .map_err(|_| replay_error("BlueFS read length exceeds usize"))?,
-    );
-    let mut logical_base = 0u64;
-    for extent in &fnode.extents {
-        let extent_end = logical_base
-            .checked_add(u64::from(extent.length))
-            .ok_or_else(|| replay_error("BlueFS extent logical end overflow"))?;
-        let overlap_start = logical_offset.max(logical_base);
-        let overlap_end = requested_end.min(extent_end);
-        if overlap_start < overlap_end {
-            let within_extent = overlap_start - logical_base;
-            let physical_offset = extent
-                .offset
-                .checked_add(within_extent)
-                .ok_or_else(|| replay_error("BlueFS physical read offset overflow"))?;
-            let read_length = usize::try_from(overlap_end - overlap_start)
-                .map_err(|_| replay_error("BlueFS extent read length exceeds usize"))?;
-            reader
-                .seek(SeekFrom::Start(physical_offset))
-                .map_err(CommandError::from_service_error)?;
-            let start = output.len();
-            output.resize(start + read_length, 0);
-            reader
-                .read_exact(&mut output[start..])
-                .map_err(CommandError::from_service_error)?;
-        }
-        logical_base = extent_end;
-        if logical_base >= requested_end {
-            break;
-        }
-    }
-    Ok((output.len() as u64 == requested_end - logical_offset).then_some(output))
-}
-
-fn allocated_bytes(extents: &[BluefsExtent]) -> Result<u64, CommandError> {
-    extents.iter().try_fold(0u64, |total, extent| {
-        total
-            .checked_add(u64::from(extent.length))
-            .ok_or_else(|| replay_error("BlueFS allocated length overflow"))
-    })
 }
 
 fn align_up(value: u64, alignment: u64) -> Result<u64, CommandError> {

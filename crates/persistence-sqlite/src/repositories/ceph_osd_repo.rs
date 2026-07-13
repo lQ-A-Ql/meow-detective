@@ -4,6 +4,7 @@ use crate::connection::{DbError, DbResult};
 use rusqlite::{params, Connection};
 
 use super::ceph_bluefs_repo::{self, CephBluefsAggregate, CephBluefsSuperblockRecord};
+use super::ceph_rocksdb_repo::{self, CephRocksdbAggregate};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CephOsdInventoryRecord {
@@ -74,15 +75,39 @@ impl<'a> CephOsdRepo<'a> {
         replicas: &[CephOsdLabelReplicaRecord],
         bluefs: Option<&CephBluefsAggregate>,
     ) -> DbResult<()> {
+        self.replace_for_data_source_with_metadata(
+            data_source_id,
+            inventory,
+            replicas,
+            bluefs,
+            None,
+        )
+    }
+
+    pub fn replace_for_data_source_with_metadata(
+        &self,
+        data_source_id: &str,
+        inventory: &[CephOsdInventoryRecord],
+        replicas: &[CephOsdLabelReplicaRecord],
+        bluefs: Option<&CephBluefsAggregate>,
+        rocksdb: Option<&CephRocksdbAggregate>,
+    ) -> DbResult<()> {
         validate_replacement(data_source_id, inventory, replicas)?;
         if let Some(records) = bluefs {
             validate_bluefs_binding(data_source_id, inventory, &records.superblock)?;
             ceph_bluefs_repo::validate_replacement(records)?;
         }
+        if let Some(records) = rocksdb {
+            validate_rocksdb_binding(data_source_id, inventory, bluefs, records)?;
+            ceph_rocksdb_repo::validate_replacement(records)?;
+        }
         let tx = self.conn.unchecked_transaction()?;
         replace_for_data_source_on(&tx, data_source_id, inventory, replicas)?;
         if let Some(records) = bluefs {
             ceph_bluefs_repo::replace_for_inventory_on(&tx, records)?;
+        }
+        if let Some(records) = rocksdb {
+            ceph_rocksdb_repo::replace_for_inventory_on(&tx, records)?;
         }
         tx.commit()?;
         Ok(())
@@ -226,6 +251,40 @@ fn validate_bluefs_binding(
     if osd.osd_uuid != superblock.osd_uuid {
         return Err(DbError::System(
             "BlueFS superblock OSD UUID does not match its inventory".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_rocksdb_binding(
+    data_source_id: &str,
+    inventory: &[CephOsdInventoryRecord],
+    bluefs: Option<&CephBluefsAggregate>,
+    rocksdb: &CephRocksdbAggregate,
+) -> DbResult<()> {
+    let manifest = &rocksdb.manifest;
+    if manifest.data_source_id != data_source_id {
+        return Err(DbError::System(
+            "RocksDB manifest belongs to a different data source".to_string(),
+        ));
+    }
+    if !inventory
+        .iter()
+        .any(|record| record.id == manifest.inventory_id)
+    {
+        return Err(DbError::System(format!(
+            "RocksDB manifest references unknown OSD inventory: {}",
+            manifest.inventory_id
+        )));
+    }
+    let bluefs = bluefs.ok_or_else(|| {
+        DbError::System("RocksDB inventory requires a BlueFS replay snapshot".to_string())
+    })?;
+    if bluefs.superblock.inventory_id != manifest.inventory_id
+        || bluefs.replay.replay.inventory_id != manifest.inventory_id
+    {
+        return Err(DbError::System(
+            "RocksDB inventory belongs to another BlueFS snapshot".to_string(),
         ));
     }
     Ok(())

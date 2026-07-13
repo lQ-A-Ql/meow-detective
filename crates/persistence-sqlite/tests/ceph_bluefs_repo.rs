@@ -177,7 +177,7 @@ fn source_migration_installs_bluefs_inventory_schema() {
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_007_ceph_bluefs_replay"
+        "source_008_ceph_rocksdb_inventory"
     );
     for table in [
         "ceph_bluefs_superblocks",

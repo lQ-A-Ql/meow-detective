@@ -37,6 +37,7 @@ members = [
   "crates/updater",
   "crates/crash_handler",
   "crates/ceph-wire",
+  "crates/rocksdb-wire",
 ]
 
 [workspace.package]
@@ -99,6 +100,7 @@ gql = { path = "crates/gql" }
 updater = { path = "crates/updater" }
 crash_handler = { path = "crates/crash_handler" }
 ceph-wire = { path = "crates/ceph-wire" }
+rocksdb-wire = { path = "crates/rocksdb-wire" }
 rusqlite = { version = "0.31", features = ["bundled"] }
 r2d2 = "0.8"
 r2d2_sqlite = "0.24"

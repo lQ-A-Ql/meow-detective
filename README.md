@@ -1,6 +1,6 @@
 # Meow~Detective
 
-A Tauri 2 desktop application for disk-image forensic analysis on Windows. The backend contains 35 Rust crates, 10 frontend pages, 98 Tauri commands, and approximately 2,061 Rust tests. Windows and Linux are the only production analysis platforms. macOS data-source requests and legacy macOS cases are unsupported; APFS/HFS+ may be identified as partition metadata, but no filesystem reader is instantiated. MIT licensed.
+A Tauri 2 desktop application for disk-image forensic analysis on Windows. The backend contains 36 Rust crates, 10 frontend pages, 98 Tauri commands, and approximately 2,061 Rust tests. Windows and Linux are the only production analysis platforms. macOS data-source requests and legacy macOS cases are unsupported; APFS/HFS+ may be identified as partition metadata, but no filesystem reader is instantiated. MIT licensed.
 
 **V5 Quality Audit (2026-06):** Architecture compliance 97%, runtime safety 96%, forensic completeness 96%. E01 preview pipeline hardened with partition-indexed path reconstruction, MFT inode-based file resolution, and per-partition chunk-table caching.
 
@@ -64,13 +64,14 @@ cd frontend && pnpm test
 | `apps/desktop/src-tauri/` | Tauri 2 shell (98 commands) |
 | `crates/app-services/` | Application orchestration (25 source modules) |
 | `crates/transport/` | Shared DTOs, commands, events, errors |
-| `crates/persistence-sqlite/` | SQLite repos (19) and migration scripts (44) |
+| `crates/persistence-sqlite/` | SQLite repos (20) and migration scripts (45) |
 | `crates/evidence-core/` | Disk image probing and volume detection |
 | `crates/fs-ntfs/`, `fs-fat/`, `fs-exfat/`, `fs-ext4/`, `fs-xfs/`, `fs-btrfs/` | Filesystem parsers (NTFS/FAT/ExFAT/ext4/XFS/Btrfs) |
 | `crates/image-e01/`, `image-raw/` | Image readers (E01/RAW) |
 | `crates/containers-pst/` | PST/OST/mbox email container parsers |
 | `crates/exchange/` | Entity resolution and cross-case entity matching |
 | `crates/fs-lvm/` | Linux LVM volume mapping and PV/LV offset translation |
+| `crates/ceph-wire/`, `rocksdb-wire/` | Read-only Ceph BlueFS and RocksDB MANIFEST wire decoding |
 | `crates/ingest/` | Ingestion pipeline orchestration |
 | `crates/catalog/` | Catalog management and projections |
 | `crates/artifacts-windows/` | Windows artifact parsers (Browser/EVTX/Prefetch/LNK/Registry[SYSTEM/SOFTWARE/NTUSER/SAM/txlog]/SRU/Thumbcache/JumpList) |

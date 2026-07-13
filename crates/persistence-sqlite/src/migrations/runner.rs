@@ -147,6 +147,10 @@ const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         "source_007_ceph_bluefs_replay",
         include_str!("scripts/source_007_ceph_bluefs_replay.sql"),
     ),
+    (
+        "source_008_ceph_rocksdb_inventory",
+        include_str!("scripts/source_008_ceph_rocksdb_inventory.sql"),
+    ),
 ];
 
 pub fn latest_version() -> &'static str {

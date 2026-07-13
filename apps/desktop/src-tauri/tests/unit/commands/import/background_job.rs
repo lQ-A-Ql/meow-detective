@@ -42,6 +42,13 @@ struct BluestoreOracle {
     file_count: usize,
     manifest_path: &'static str,
     wal_path: &'static str,
+    rocksdb_identity: &'static str,
+    manifest_file_number: u64,
+    manifest_file_size: u64,
+    rocksdb_live_sst_count: usize,
+    rocksdb_next_file_number: u64,
+    rocksdb_last_sequence: u64,
+    rocksdb_log_number: u64,
 }
 
 struct BluefsInventoryRow {
@@ -53,6 +60,21 @@ struct BluefsInventoryRow {
     shared_bdev: Option<u32>,
     dedicated_db: Option<bool>,
     dedicated_wal: Option<bool>,
+}
+
+struct RocksDbManifestRow {
+    active_manifest_path: String,
+    identity_uuid: String,
+    manifest_file_number: u64,
+    manifest_file_size: u64,
+    logical_edit_count: u32,
+    comparator_name: String,
+    last_sequence: u64,
+    next_file_number: u64,
+    log_number: u64,
+    prev_log_number: u64,
+    max_column_family_id: u32,
+    min_log_number_to_keep: Option<u64>,
 }
 
 #[test]
@@ -539,7 +561,8 @@ fn assert_bluestore_source(
             .is_some_and(|end| end <= inventory.5),
         "BlueFS extent must remain inside the labeled device"
     );
-    assert_bluefs_replay(&source_conn, &inventory.0, oracle);
+    assert_bluefs_replay(&source_conn, &inventory.0, &oracle);
+    assert_rocksdb_inventory(&source_conn, &source.id.0, &oracle);
 
     BluestoreSourceSummary {
         osd_uuid: inventory.0,
@@ -549,10 +572,145 @@ fn assert_bluestore_source(
     }
 }
 
+fn assert_rocksdb_inventory(
+    source_conn: &rusqlite::Connection,
+    data_source_id: &str,
+    oracle: &BluestoreOracle,
+) {
+    let manifest = source_conn
+        .query_row(
+            "SELECT active_manifest_path, identity_uuid, manifest_file_number,
+                    manifest_file_size, logical_edit_count, comparator_name,
+                    last_sequence, next_file_number, log_number, prev_log_number,
+                    max_column_family_id, min_log_number_to_keep
+             FROM ceph_rocksdb_manifests
+             WHERE data_source_id = ?1",
+            [data_source_id],
+            |row| {
+                Ok(RocksDbManifestRow {
+                    active_manifest_path: row.get(0)?,
+                    identity_uuid: row.get(1)?,
+                    manifest_file_number: row.get(2)?,
+                    manifest_file_size: row.get(3)?,
+                    logical_edit_count: row.get(4)?,
+                    comparator_name: row.get(5)?,
+                    last_sequence: row.get(6)?,
+                    next_file_number: row.get(7)?,
+                    log_number: row.get(8)?,
+                    prev_log_number: row.get(9)?,
+                    max_column_family_id: row.get(10)?,
+                    min_log_number_to_keep: row.get(11)?,
+                })
+            },
+        )
+        .expect("query RocksDB manifest inventory");
+    assert_eq!(manifest.active_manifest_path, oracle.manifest_path);
+    assert_eq!(manifest.identity_uuid, oracle.rocksdb_identity);
+    assert_eq!(manifest.manifest_file_number, oracle.manifest_file_number);
+    assert_eq!(manifest.manifest_file_size, oracle.manifest_file_size);
+    assert_eq!(manifest.logical_edit_count, 39);
+    assert_eq!(manifest.comparator_name, "leveldb.BytewiseComparator");
+    assert_eq!(manifest.last_sequence, oracle.rocksdb_last_sequence);
+    assert_eq!(manifest.next_file_number, oracle.rocksdb_next_file_number);
+    assert_eq!(manifest.log_number, oracle.rocksdb_log_number);
+    assert_eq!(manifest.prev_log_number, 0);
+    assert_eq!(manifest.max_column_family_id, 11);
+    assert_eq!(
+        manifest.min_log_number_to_keep,
+        Some(oracle.rocksdb_log_number)
+    );
+
+    let column_families = load_rocksdb_column_families(source_conn, data_source_id);
+    assert_eq!(
+        column_families,
+        vec![
+            (0, "default".to_string()),
+            (1, "m-0".to_string()),
+            (2, "m-1".to_string()),
+            (3, "m-2".to_string()),
+            (4, "p-0".to_string()),
+            (5, "p-1".to_string()),
+            (6, "p-2".to_string()),
+            (7, "O-0".to_string()),
+            (8, "O-1".to_string()),
+            (9, "O-2".to_string()),
+            (10, "L".to_string()),
+            (11, "P".to_string()),
+        ]
+    );
+    let (live_count, missing_bluefs_files, invalid_metadata): (u64, u64, u64) = source_conn
+        .query_row(
+            "SELECT
+                COUNT(*),
+                SUM(CASE WHEN f.path IS NULL THEN 1 ELSE 0 END),
+                SUM(CASE
+                    WHEN l.path_id NOT BETWEEN 0 AND 3
+                      OR l.format != 'newFile4'
+                      OR l.smallest_sequence IS NULL
+                      OR l.largest_sequence IS NULL
+                      OR l.smallest_internal_key_length < 8
+                      OR l.largest_internal_key_length < 8
+                    THEN 1 ELSE 0 END)
+             FROM ceph_rocksdb_live_files l
+             JOIN ceph_rocksdb_manifests m ON m.inventory_id = l.inventory_id
+             LEFT JOIN ceph_bluefs_files f
+               ON f.inventory_id = l.inventory_id
+              AND f.path = printf('db/%06d.sst', l.file_number)
+             WHERE m.data_source_id = ?1",
+            [data_source_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("query RocksDB live SST inventory");
+    assert_eq!(live_count as usize, oracle.rocksdb_live_sst_count);
+    assert_eq!(missing_bluefs_files, 0);
+    assert_eq!(invalid_metadata, 0);
+
+    let (bluefs_sst_count, missing_manifest_records): (u64, u64) = source_conn
+        .query_row(
+            "SELECT
+                COUNT(*),
+                SUM(CASE WHEN l.file_number IS NULL THEN 1 ELSE 0 END)
+             FROM ceph_bluefs_files f
+             JOIN ceph_rocksdb_manifests m ON m.inventory_id = f.inventory_id
+             LEFT JOIN ceph_rocksdb_live_files l
+               ON l.inventory_id = f.inventory_id
+              AND f.path = printf('db/%06d.sst', l.file_number)
+             WHERE m.data_source_id = ?1
+               AND f.path GLOB 'db/[0-9][0-9][0-9][0-9][0-9][0-9].sst'",
+            [data_source_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("compare BlueFS SST files with the RocksDB live set");
+    assert_eq!(bluefs_sst_count as usize, oracle.rocksdb_live_sst_count);
+    assert_eq!(missing_manifest_records, 0);
+}
+
+fn load_rocksdb_column_families(
+    source_conn: &rusqlite::Connection,
+    data_source_id: &str,
+) -> Vec<(u32, String)> {
+    let mut statement = source_conn
+        .prepare(
+            "SELECT c.column_family_id, c.name
+             FROM ceph_rocksdb_column_families c
+             JOIN ceph_rocksdb_manifests m ON m.inventory_id = c.inventory_id
+             WHERE m.data_source_id = ?1
+               AND c.dropped = 0
+               AND c.comparator_name = 'leveldb.BytewiseComparator'
+             ORDER BY c.column_family_id",
+        )
+        .expect("prepare RocksDB column family query");
+    statement
+        .query_map([data_source_id], |row| Ok((row.get(0)?, row.get(1)?)))
+        .expect("query RocksDB column families")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("load RocksDB column families")
+}
+
 fn assert_bluefs_replay(
     source_conn: &rusqlite::Connection,
     osd_uuid: &str,
-    oracle: BluestoreOracle,
+    oracle: &BluestoreOracle,
 ) {
     let replay: (String, u32, u64, u64, u64, String) = source_conn
         .query_row(
@@ -651,6 +809,13 @@ fn bluestore_oracle(source: &DataSource) -> BluestoreOracle {
             file_count: 44,
             manifest_path: "db/MANIFEST-000143",
             wal_path: "db.wal/000142.log",
+            rocksdb_identity: "318c61d3-7d8b-497a-b02a-d3683123595d",
+            manifest_file_number: 143,
+            manifest_file_size: 7280,
+            rocksdb_live_sst_count: 35,
+            rocksdb_next_file_number: 148,
+            rocksdb_last_sequence: 1_077_117,
+            rocksdb_log_number: 127,
         },
         "server02-disk02.e01" => BluestoreOracle {
             osd_uuid: "de8554de-f932-448d-be2c-0474df6c16c5",
@@ -661,6 +826,13 @@ fn bluestore_oracle(source: &DataSource) -> BluestoreOracle {
             file_count: 49,
             manifest_path: "db/MANIFEST-000121",
             wal_path: "db.wal/000120.log",
+            rocksdb_identity: "15f9cf98-cb4f-4d78-9d94-ae6235eb075b",
+            manifest_file_number: 121,
+            manifest_file_size: 8321,
+            rocksdb_live_sst_count: 40,
+            rocksdb_next_file_number: 126,
+            rocksdb_last_sequence: 1_052_658,
+            rocksdb_log_number: 105,
         },
         "server03-disk02.e01" => BluestoreOracle {
             osd_uuid: "cd6f9b5c-37d5-4dc0-8588-9669d156b02c",
@@ -671,6 +843,13 @@ fn bluestore_oracle(source: &DataSource) -> BluestoreOracle {
             file_count: 42,
             manifest_path: "db/MANIFEST-000128",
             wal_path: "db.wal/000127.log",
+            rocksdb_identity: "8024bc80-69cc-4adc-9f00-364b295f5312",
+            manifest_file_number: 128,
+            manifest_file_size: 6662,
+            rocksdb_live_sst_count: 33,
+            rocksdb_next_file_number: 132,
+            rocksdb_last_sequence: 1_061_239,
+            rocksdb_log_number: 110,
         },
         _ => panic!(
             "missing exact BlueStore oracle for {}",

@@ -5,8 +5,12 @@
 //! `forensics-desktop` crate.
 
 mod ceph;
+mod ceph_bluefs_file_reader;
 mod ceph_bluefs_records;
 mod ceph_bluefs_replay;
+mod ceph_rocksdb_control_files;
+mod ceph_rocksdb_inventory;
+mod ceph_rocksdb_records;
 mod context;
 mod emit;
 mod execute;

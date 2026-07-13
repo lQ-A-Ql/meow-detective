@@ -10,6 +10,7 @@ use persistence_sqlite::repositories::ceph_bluefs_repo::CephBluefsAggregate;
 use persistence_sqlite::repositories::ceph_osd_repo::{
     CephOsdInventoryRecord, CephOsdLabelReplicaRecord, CephOsdRepo,
 };
+use persistence_sqlite::repositories::ceph_rocksdb_repo::CephRocksdbAggregate;
 use transport::CommandError;
 
 use crate::datasource_service::{
@@ -17,6 +18,7 @@ use crate::datasource_service::{
     UnsupportedImageVolume,
 };
 
+use super::ceph_bluefs_file_reader::BluefsExtentReader;
 use super::context::ImportJobContext;
 
 const BLUEFS_RESERVED_BYTES: u64 = BLUEFS_SUPER_OFFSET + BLUEFS_SUPER_BLOCK_SIZE as u64;
@@ -77,7 +79,7 @@ pub(crate) fn persist_bluestore_probe(
         selection.label.osd_uuid,
         &selection.valid_positions,
     );
-    let bluefs = inventory
+    let metadata = inventory
         .bluefs_enabled
         .is_some_and(|enabled| enabled)
         .then(|| {
@@ -91,14 +93,15 @@ pub(crate) fn persist_bluestore_probe(
         })
         .transpose()?;
     CephOsdRepo::new(ctx.source_connection()?)
-        .replace_for_data_source_with_bluefs(
+        .replace_for_data_source_with_metadata(
             &data_source.id.0,
             std::slice::from_ref(&inventory),
             &replica_records,
-            bluefs.as_ref(),
+            metadata.as_ref().map(|records| &records.bluefs),
+            metadata.as_ref().map(|records| &records.rocksdb),
         )
         .map_err(CommandError::from_service_error)?;
-    if let Some(records) = &bluefs {
+    if let Some(records) = &metadata {
         audit_bluefs_inventory(ctx, data_source, records);
     }
     Ok(())
@@ -174,7 +177,7 @@ fn read_bluefs_inventory(
     inventory_id: &str,
     expected_osd_uuid: uuid::Uuid,
     device_size: u64,
-) -> Result<CephBluefsAggregate, CommandError> {
+) -> Result<CephMetadataAggregate, CommandError> {
     let block_end = BLUEFS_SUPER_OFFSET
         .checked_add(BLUEFS_SUPER_BLOCK_SIZE as u64)
         .ok_or_else(|| CommandError::internal("BlueFS superblock offset overflow"))?;
@@ -199,13 +202,26 @@ fn read_bluefs_inventory(
         )));
     }
     validate_bluefs_extents(&superblock, device_size)?;
-    let replay = super::ceph_bluefs_replay::replay_bluefs_log(reader, &superblock)?;
-    Ok(super::ceph_bluefs_records::build_bluefs_aggregate(
+    let mut extent_reader = BluefsExtentReader::new(
+        reader,
+        BLUEFS_SINGLE_SHARED_BDEV as u8,
+        device_size,
+        BLUEFS_RESERVED_BYTES,
+    );
+    let replay = super::ceph_bluefs_replay::replay_bluefs_log(&mut extent_reader, &superblock)?;
+    let rocksdb = super::ceph_rocksdb_inventory::inventory_rocksdb_manifest(
+        &mut extent_reader,
+        &replay,
+        &data_source.id.0,
+        inventory_id,
+    )?;
+    let bluefs = super::ceph_bluefs_records::build_bluefs_aggregate(
         &data_source.id.0,
         inventory_id,
         superblock,
         replay,
-    ))
+    );
+    Ok(CephMetadataAggregate { bluefs, rocksdb })
 }
 
 fn validate_bluefs_extents(superblock: &BluefsSuper, device_size: u64) -> Result<(), CommandError> {
@@ -261,18 +277,24 @@ fn validate_bluefs_extents(superblock: &BluefsSuper, device_size: u64) -> Result
 fn audit_bluefs_inventory(
     ctx: &ImportJobContext<'_>,
     data_source: &domain::DataSource,
-    records: &CephBluefsAggregate,
+    records: &CephMetadataAggregate,
 ) {
     let details = serde_json::json!({
-        "inventoryId": records.superblock.inventory_id,
-        "osdUuid": records.superblock.osd_uuid,
-        "bluefsUuid": records.superblock.bluefs_uuid,
-        "sequence": records.superblock.sequence,
-        "extentCount": records.log_extents.len(),
-        "transactionCount": records.replay.replay.transaction_count,
-        "fileCount": records.replay.files.len(),
-        "directoryCount": records.replay.directories.len(),
-        "finalSequence": records.replay.replay.final_sequence,
+        "inventoryId": records.bluefs.superblock.inventory_id,
+        "osdUuid": records.bluefs.superblock.osd_uuid,
+        "bluefsUuid": records.bluefs.superblock.bluefs_uuid,
+        "sequence": records.bluefs.superblock.sequence,
+        "extentCount": records.bluefs.log_extents.len(),
+        "transactionCount": records.bluefs.replay.replay.transaction_count,
+        "fileCount": records.bluefs.replay.files.len(),
+        "directoryCount": records.bluefs.replay.directories.len(),
+        "finalSequence": records.bluefs.replay.replay.final_sequence,
+        "rocksdbManifest": records.rocksdb.manifest.active_manifest_path,
+        "rocksdbIdentityPresent": records.rocksdb.manifest.identity_uuid.is_some(),
+        "rocksdbLogicalEditCount": records.rocksdb.manifest.logical_edit_count,
+        "rocksdbColumnFamilyCount": records.rocksdb.column_families.len(),
+        "rocksdbLiveSstCount": records.rocksdb.live_ssts.len(),
+        "rocksdbLastSequence": records.rocksdb.manifest.last_sequence,
         "layout": "singleSharedDevice",
     })
     .to_string();
@@ -289,6 +311,11 @@ fn audit_bluefs_inventory(
             "Failed to record BlueFS inventory audit entry"
         );
     }
+}
+
+struct CephMetadataAggregate {
+    bluefs: CephBluefsAggregate,
+    rocksdb: CephRocksdbAggregate,
 }
 
 fn inventory_record(

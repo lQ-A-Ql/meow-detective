@@ -295,8 +295,10 @@ sources rather than normal POSIX filesystems. Each BlueStore source retains an
 isolated `source.db`, contains zero file entries, and persists a sanitized OSD
 inventory with OSD IDs `0,1,2`, one shared cluster FSID, and unique OSD UUIDs.
 It also requires one CRC-valid BlueFS superblock per OSD, unique BlueFS UUIDs,
-sequence `50`, block size `4096`, shared-device layout, and bounded log extents.
-The gate does not replay the BlueFS log or reconstruct RocksDB/RADOS objects.
+sequence `50`, block size `4096`, shared-device layout, bounded transaction-log
+replay, and exact RocksDB CURRENT/IDENTITY/active-MANIFEST control-plane
+inventory. The live SST oracles are `35/40/33`; SST/WAL content and RADOS
+objects are not reconstructed.
 
 ```powershell
 $env:FORENSICS_PVE_CLUSTER_ROOT = 'E:\pangushi\服务器'
@@ -305,6 +307,19 @@ powershell -ExecutionPolicy Bypass -File scripts\check-pve-cluster-import.ps1 -R
 
 Without `-RequireFixture`, an unavailable private fixture is reported as an
 explicit skip.
+
+For independent read-only RocksDB oracle inspection under WSL:
+
+```bash
+sudo bash scripts/dev/inspect-pve-rocksdb-manifest.sh \
+  '/mnt/e/pangushi/服务器/server01/server01-disk02.E01'
+```
+
+The script exports BlueFS to a temporary directory, verifies the active
+MANIFEST through `CURRENT`, prints `manifest_dump` control fields, and uses
+`list_live_files_metadata` for the final live SST count. The
+`manifestDumpSstRows` value is diagnostic only and must not be used as the live
+set oracle.
 
 ## Troubleshooting
 

@@ -111,6 +111,7 @@ dependencies = [
  "rayon",
  "regex",
  "reports",
+ "rocksdb-wire",
  "rusqlite",
  "search",
  "serde",
@@ -4149,6 +4150,13 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.118",
+]
+
+[[package]]
+name = "rocksdb-wire"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.18",
 ]
 
 [[package]]

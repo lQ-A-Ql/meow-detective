@@ -260,7 +260,7 @@ $env:FORENSICS_PVE_CLUSTER_ROOT='E:\pangushi\服务器'
 powershell -ExecutionPolicy Bypass -File scripts/check-pve-cluster-import.ps1 -RequireFixture
 ```
 
-该门禁使用实际后台集群 runner，固定 `max_import_workers=1`、`max_analysis_workers=1` 和 metadata-only 分析模式。验收六个首段 E01 均被尝试和登记、source DB 路径互异、`app.db` 不承载文件树、三个 `disk01` 宿主文件树及关键文件可预览、三个 `disk02` 成员只读解析 BlueStore label、BlueFS superblock 和 bounded transaction log，并保存脱敏 OSD inventory、replay summary、目录、文件及 fnode/extent metadata，保持零普通文件行且不伪装为 POSIX 文件系统。
+该门禁使用实际后台集群 runner，固定 `max_import_workers=1`、`max_analysis_workers=1` 和 metadata-only 分析模式。验收六个首段 E01 均被尝试和登记、source DB 路径互异、`app.db` 不承载文件树、三个 `disk01` 宿主文件树及关键文件可预览、三个 `disk02` 成员只读解析 BlueStore label、BlueFS superblock/bounded transaction log、RocksDB CURRENT/IDENTITY 与活动 MANIFEST，并保存脱敏 OSD、BlueFS replay 和 RocksDB control-plane inventory，保持零普通文件行且不伪装为 POSIX 文件系统。
 
 - 样本目录参考：`E:\pangushi\服务器`（仅本地人工示例，不得硬编码到生产代码）。
 - 宿主链路：E01 `disk01` -> GPT -> LVM `pve/root` -> 64-bit EXT4（64-byte group descriptor）。
@@ -269,8 +269,8 @@ powershell -ExecutionPolicy Bypass -File scripts/check-pve-cluster-import.ps1 -R
   - `pve_cluster_representative_host_imports_tree_and_previews_by_file_id`：代表成员走生产导入链路并按 `FileEntryId` 重新预览。
 - 2026-07-10 代表基线：`files=56471`、`dirs=5931`、`totalBytes=5250350224`；测试体耗时约 `4.59s`（本机 debug build，不作为跨机器性能 SLA）。
 - 必须可读：`/etc/passwd`、`/etc/os-release`、`/etc/hostname`、`/var/lib/pve-cluster/config.db`。
-- 当前不保证：PVE 集群级语义分析、RocksDB 内容解析、Ceph BlueStore RADOS object/PG 解析、VM disk reconstruction、跨节点语义关联、EXT4 deleted recovery 与全部 incompat feature 组合。当前 baseline 证明成员发现、成员独立导入、宿主文件系统读取和单个共享设备布局 BlueStore LV 的 label/superblock + metadata-log replay；混合 filesystem + BlueStore 单源及多 BlueStore LV 尚未支持。
-- BlueStore 边界分层：E01 容器和 LVM PV/LV 映射成功；OSD LV 在逻辑偏移 `0` 命中 `bluestore block device`。生产链路解析 Ceph bdev label、CRC32C、多副本 epoch，在 LV 偏移 `4096` 读取固定 4 KiB BlueFS superblock，并只沿 superblock/replay 声明的 extents 执行有界读取。真实六成员门禁于 2026-07-13 验证三个 `disk02` 均为 4 个事务、5 个目录、`logicalBytes=0x22000`，final sequence 分别为 `186890/185969/185678`，文件数分别为 `44/49/42`；`CURRENT`、精确 MANIFEST/WAL 和 SST metadata 均存在且保留 extent。OSD/superblock/replay inventory 同事务写入独立 `ready_metadata` source DB，普通 `file_entries` 保持为零。
+- 当前不保证：PVE 集群级语义分析、RocksDB SST/WAL 内容解析、Ceph BlueStore RADOS object/PG 解析、VM disk reconstruction、跨节点语义关联、EXT4 deleted recovery 与全部 incompat feature 组合。当前 baseline 证明成员发现、成员独立导入、宿主文件系统读取、单个共享设备布局 BlueStore LV 的 label/superblock + metadata-log replay，以及 CURRENT 指向的活动 MANIFEST control-plane replay；混合 filesystem + BlueStore 单源及多 BlueStore LV 尚未支持。
+- BlueStore 边界分层：E01 容器和 LVM PV/LV 映射成功；OSD LV 在逻辑偏移 `0` 命中 `bluestore block device`。生产链路解析 Ceph bdev label、CRC32C、多副本 epoch，在 LV 偏移 `4096` 读取固定 4 KiB BlueFS superblock，并只沿 superblock/replay 声明的 extents 执行有界读取。真实六成员门禁于 2026-07-13 验证三个 `disk02` 均为 4 个事务、5 个目录、`logicalBytes=0x22000`，final sequence 分别为 `186890/185969/185678`，BlueFS 文件数分别为 `44/49/42`；每个活动 MANIFEST 均包含 39 个 VersionEdit 和 12 个 column family，最终 live SST 数分别为 `35/40/33`，last sequence 为 `1077117/1052658/1061239`。OSD、BlueFS replay 与 RocksDB control-plane inventory 同事务写入独立 `ready_metadata` source DB，普通 `file_entries` 保持为零。
 
 ### 4.10 Backend Stage 7 final run
 
