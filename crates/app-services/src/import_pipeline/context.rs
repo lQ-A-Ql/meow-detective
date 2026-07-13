@@ -19,6 +19,13 @@ pub(crate) struct ImportJobContext<'a> {
     pub ds: Option<&'a domain::DataSource>,
     pub job_repo: JobRepo<'a>,
     pub counts: &'a mut JobOutcomeCounts,
+    pub content_kind: ImportContentKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ImportContentKind {
+    Filesystem,
+    CephBlueStoreMetadata,
 }
 
 impl<'a> ImportJobContext<'a> {

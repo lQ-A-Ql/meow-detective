@@ -185,9 +185,9 @@ Current milestone:
 - Linux cluster import modeling can register and serially import member images.
 - The private six-member PVE gate attempts every member in deterministic order,
   keeps `app.db` free of file-tree rows, verifies unique source DB paths, and
-  records the expected host-ready/BlueStore-failed aggregate outcome.
+  records the expected host-ready/BlueStore-metadata aggregate outcome.
 
-### BlueStore failure boundary
+### BlueStore metadata boundary
 
 The `disk02` failure is intentionally classified at the media-format boundary:
 
@@ -200,10 +200,12 @@ The `disk02` failure is intentionally classified at the media-format boundary:
 4. The former defect was layer placement: only POSIX-filesystem LVs became
    candidates, while the BlueStore LV was discarded as an unknown filesystem.
 5. BlueStore is a Ceph OSD block device, not a mountable POSIX filesystem.
-6. Meow_Detective currently has no BlueStore label-metadata inventory parser
-   beyond detection and no RADOS placement-group/object reconstruction layer.
-7. Import therefore fails closed with `CEPH_BLUESTORE_UNSUPPORTED`, retains the
-   isolated diagnostic `source.db`, and writes zero file entries.
+6. Meow_Detective now natively decodes the complete bdev label envelope,
+   CRC32C, UUID, utime, metadata map, multi-label epoch, and replica positions.
+7. Import persists a sanitized OSD inventory as `ready_metadata`, writes zero
+   file entries, and does not run ordinary Linux artifact analysis.
+8. BlueFS/RocksDB, RADOS placement groups, objects, and VM disk reconstruction
+   remain unsupported.
 
 The signature and offsets follow Ceph's
 `src/ceph-volume/ceph_volume/util/disk.py` and Ceph's BlueStore implementation;
@@ -218,6 +220,22 @@ Future cluster milestone:
 - every source has provenance;
 - missing nodes/PVs are reported before execution;
 - thin pool reconstruction is covered by synthetic and real fixtures;
+
+### Stage 1 verified OSD inventory
+
+The private six-member fixture was revalidated on 2026-07-13 through both the
+native decoder and WSL Ceph Reef `ceph-bluestore-tool show-label`:
+
+| Member | OSD | OSD UUID | Selected epoch |
+|---|---:|---|---:|
+| `server01-disk02` | 0 | `9630c2a5-650a-4395-a47a-ec496515bd61` | 23 |
+| `server02-disk02` | 1 | `de8554de-f932-448d-be2c-0474df6c16c5` | 21 |
+| `server03-disk02` | 2 | `cd6f9b5c-37d5-4dc0-8588-9669d156b02c` | 22 |
+
+All three labels report cluster FSID
+`3f28d8bb-e754-475b-b471-b9c97161bbf7`, RocksDB, BlueFS enabled, and Ceph
+19.2.3 Squid creation metadata. `osd_key` is never persisted or logged; only
+the boolean `osd_key_present` is retained.
 - no guessed block mapping is accepted.
 
 ## Evaluation

@@ -14,9 +14,10 @@ pub(crate) fn run_finalize_phase(
     pipeline_message: &str,
     import_started: Instant,
 ) -> Result<String, CommandError> {
-    emit_projection_ready_events(ctx, stats);
+    if ctx.content_kind == crate::import_pipeline::context::ImportContentKind::Filesystem {
+        emit_projection_ready_events(ctx, stats);
+    }
     ctx.report_job_progress(95, "Finalizing...")?;
-    emit_data_source_ready(ctx, data_source)?;
     emit_phase_profile(
         ctx.event_sink(),
         ctx.job_id,
@@ -32,11 +33,15 @@ pub(crate) fn run_finalize_phase(
     );
     checkpoint_source_database(ctx, data_source);
     record_import_step(ctx, stats, import_started);
-    Ok(build_summary_message(
-        &ctx.import_config.source_name,
-        stats,
-        pipeline_message,
-    ))
+    Ok(match ctx.content_kind {
+        crate::import_pipeline::context::ImportContentKind::Filesystem => {
+            build_summary_message(&ctx.import_config.source_name, stats, pipeline_message)
+        }
+        crate::import_pipeline::context::ImportContentKind::CephBlueStoreMetadata => format!(
+            "Imported {} as Ceph BlueStore metadata-only source. {}",
+            ctx.import_config.source_name, pipeline_message
+        ),
+    })
 }
 
 fn emit_projection_ready_events(
@@ -54,7 +59,7 @@ fn emit_projection_ready_events(
     );
 }
 
-fn emit_data_source_ready(
+pub(crate) fn emit_data_source_ready(
     ctx: &ImportJobContext<'_>,
     data_source: &domain::DataSource,
 ) -> Result<(), CommandError> {
@@ -100,6 +105,12 @@ fn record_import_step(
         "sourcePath": ctx.source_path,
         "sourceName": ctx.import_config.source_name,
         "kind": format!("{:?}", ctx.import_config.kind),
+        "contentKind": match ctx.content_kind {
+            crate::import_pipeline::context::ImportContentKind::Filesystem => "filesystem",
+            crate::import_pipeline::context::ImportContentKind::CephBlueStoreMetadata => {
+                "cephBlueStoreMetadata"
+            }
+        },
         "filesEnumerated": stats.file_count,
         "dirsEnumerated": stats.dir_count,
     })

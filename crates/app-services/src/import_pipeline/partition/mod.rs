@@ -9,3 +9,4 @@ pub use status::{
 pub use work::build_partition_work;
 
 pub(crate) use status::partition_status_label;
+pub(crate) use work::open_candidate_reader;

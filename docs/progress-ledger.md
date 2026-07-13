@@ -3,8 +3,9 @@
 > 2026-07-13：新增 PVE 六成员串行导入门禁
 > `scripts/check-pve-cluster-import.ps1`。生产后台 runner 在单成员失败后继续尝试
 > 后续成员，并在最终 cluster/job 中保存 ready/failed partial 计数。真实样本通过
-> `FORENSICS_PVE_CLUSTER_ROOT` opt-in；Ceph BlueStore、VM disk reconstruction
-> 和跨节点语义分析仍保持 unsupported。
+> `FORENSICS_PVE_CLUSTER_ROOT` opt-in；BlueStore label metadata inventory 已完成，
+> BlueFS/RocksDB、RADOS/PG/object reconstruction、VM disk reconstruction 和
+> 跨节点语义分析仍保持 unsupported。
 >
 > 同轮结构债务从 17 个模块基线降至 0；另有 5 个
 > 501-800 行普通生产模块按 `owner/reason/expires=2026-09-30` 登记正式临时例外。
@@ -18,7 +19,7 @@
 | 日期 | 类型 | 范围 | 状态 | 结果 | 下一边界 |
 |---|---|---|---|---|---|
 | 2026-07-12 | Backend/Stage 7 | 文档、最终工程审计、全量门禁与真实样本验收 | Completed | 结构守卫、Rust/frontend 全量门禁、检材3 20 项、双顺序隔离和检材2性能门禁通过；工程评分 99/100 | 继续按 baseline 单调清理剩余结构债务 |
-| 2026-07-13 | Backend/Post-Stage 7 cleanup | 历史 module-root 清理与 PVE BlueStore 失败分类 | Completed | `fs-fat`、`fs-exfat`、`image-e01` facade 均降至 200 行内，module baseline 清零；六成员真实门禁按 LVM LV 标签返回 `CEPH_BLUESTORE_UNSUPPORTED` | 清理 5 个临时 module exception 与 9 个函数债务 |
+| 2026-07-13 | Backend/Post-Stage 7 cleanup | 历史 module-root 清理与 PVE BlueStore 边界分类 | Completed | `fs-fat`、`fs-exfat`、`image-e01` facade 均降至 200 行内，module baseline 清零；随后 BlueStore 从 typed unsupported 升级为 metadata-only inventory | 清理 5 个临时 module exception 与 9 个函数债务 |
 | 2026-07-12 | Backend/Stage 5-6 | Parser/core 能力拆分与测试物理隔离 | Completed | parser/filesystem 能力族完成；非 vendored `src/` 测试债务降至 0 | Stage 7 最终验收 |
 | 2026-07-11 | Backend/Stage 3-4 | Transport/command 与 app-services 拆分 | Completed | command/service 边界守卫通过，command raw SQL 为 0，service 保持 Tauri-free | Stage 5 parser/core 拆分 |
 | 2026-07-13 | Backend/Stage 4 closure | 清理 app-services 剩余上帝模块与函数债务 | Completed | app-services 模块基线 7→0、函数基线 20→0；全 workspace 门禁、双顺序检材2/检材3隔离、报告/Registry/临时文件失败路径回归通过 | 保持 app-services 零债务并继续清理 parser/core 历史基线 |
@@ -27,7 +28,7 @@
 | 2026-07-10 | Linux/PVE | 集群成员导入建模 | Completed | 文件夹发现 6 个 E01 成员，成员保持独立数据源与独立数据库 | 集群级语义关联 |
 | 2026-07-10 | Linux/LVM | direct LV 与 dm-thin 只读映射 | Partial | direct root LV 与基础 thin metadata/block mapping 已实现并 fail closed | metadata checksum、更多 thin 变体 |
 | 2026-07-10 | Linux/EXT4 | PVE 宿主文件系统 | Completed for private baseline | 三个 `disk01` 的 `pve/root` 均可枚举和预览；代表成员导入 56,471 文件、5,931 目录 | 公开 fixture、更多 incompat feature |
-| 2026-07-13 | Linux/Ceph | BlueStore OSD | Detection completed / reconstruction unsupported | 在 LVM LV 层按 Ceph 官方签名和五个设备相对偏移只读检测；三个真实 `disk02` 均返回 `CEPH_BLUESTORE_UNSUPPORTED`，不创建伪文件系统候选 | 后续为 label metadata inventory、RADOS/PG/对象研究 |
+| 2026-07-13 | Linux/Ceph | BlueStore OSD | Metadata inventory completed / reconstruction unsupported | 原生解码 Ceph bdev label、CRC32C、多副本 epoch；三个真实 `disk02` 作为 `ready_metadata` source 持久化脱敏 OSD inventory，保持零文件且不创建伪文件系统候选 | 后续为 BlueFS/RocksDB、RADOS/PG/object reconstruction |
 
 ## 代码里程碑
 
@@ -63,7 +64,7 @@
 - `fs-ext4` 32 项单元/文档测试通过，`fs-lvm` 75 项测试通过。
 - 代表 PVE 宿主导入结果为 `files=56471`、`dirs=5931`、`totalBytes=5250350224`。
 - `/etc/passwd`、`/etc/os-release`、`/etc/hostname`、`/var/lib/pve-cluster/config.db` 可通过 `FileEntryId` 预览。
-- Ceph BlueStore、VM disk reconstruction 和跨节点语义分析仍不得标记为完成。
+- BlueStore label metadata inventory 已完成；BlueFS/RocksDB、RADOS/PG/object reconstruction、VM disk reconstruction 和跨节点语义分析仍不得标记为完成。
 - Stage 7 后续清理事实：模块 baseline 0 行、正式临时例外 5 行、函数 baseline 9 行（其中 1 个历史函数超过 150 行）、test-layout baseline 0 行；`app-services` 模块与函数 baseline 均为 0，所有 baseline 只允许减少，临时例外不得无审查延期。
 - 检材2三次性能回归：total median `13.479s`、enumeration median `8.488s`、RSS `582MB`、每次 `91,737` rows、最低 `9,892 rows/s`。
 

@@ -260,7 +260,7 @@ $env:FORENSICS_PVE_CLUSTER_ROOT='E:\pangushi\服务器'
 powershell -ExecutionPolicy Bypass -File scripts/check-pve-cluster-import.ps1 -RequireFixture
 ```
 
-该门禁使用实际后台集群 runner，固定 `max_import_workers=1`、`max_analysis_workers=1` 和 metadata-only 分析模式。验收六个首段 E01 均被尝试和登记、source DB 路径互异、`app.db` 不承载文件树、三个 `disk01` 宿主文件树及关键文件可预览、三个 `disk02` 成员按 Ceph 官方 BlueStore 标签显式返回 `CEPH_BLUESTORE_UNSUPPORTED`、保持零文件且不伪装为 POSIX 文件系统，并要求 cluster/job 最终保存 partial failure 计数。
+该门禁使用实际后台集群 runner，固定 `max_import_workers=1`、`max_analysis_workers=1` 和 metadata-only 分析模式。验收六个首段 E01 均被尝试和登记、source DB 路径互异、`app.db` 不承载文件树、三个 `disk01` 宿主文件树及关键文件可预览、三个 `disk02` 成员只读解析 BlueStore label 并保存脱敏 OSD inventory、保持零文件且不伪装为 POSIX 文件系统。
 
 - 样本目录参考：`E:\pangushi\服务器`（仅本地人工示例，不得硬编码到生产代码）。
 - 宿主链路：E01 `disk01` -> GPT -> LVM `pve/root` -> 64-bit EXT4（64-byte group descriptor）。
@@ -269,8 +269,8 @@ powershell -ExecutionPolicy Bypass -File scripts/check-pve-cluster-import.ps1 -R
   - `pve_cluster_representative_host_imports_tree_and_previews_by_file_id`：代表成员走生产导入链路并按 `FileEntryId` 重新预览。
 - 2026-07-10 代表基线：`files=56471`、`dirs=5931`、`totalBytes=5250350224`；测试体耗时约 `4.59s`（本机 debug build，不作为跨机器性能 SLA）。
 - 必须可读：`/etc/passwd`、`/etc/os-release`、`/etc/hostname`、`/var/lib/pve-cluster/config.db`。
-- 当前不保证：PVE 集群级语义分析、Ceph BlueStore RADOS object/PG 解析、VM disk reconstruction、跨节点语义关联、EXT4 deleted recovery 与全部 incompat feature 组合。当前 baseline 只证明成员发现、成员独立导入和宿主文件系统读取。
-- BlueStore 失败原因分层：E01 容器和 LVM PV/LV 映射成功；OSD LV 在逻辑偏移 `0` 命中 `bluestore block device`，失败来自缺少 RADOS/PG/object reconstruction，而不是 E01、source DB、cluster scheduler 或普通文件系统损坏。标签检测单元测试覆盖 `0/1/10/100/1000 GiB` 设备相对偏移，真实六成员门禁已于 2026-07-13 验证三个 `disk02` 的 typed unsupported、零文件和独立诊断库。
+- 当前不保证：PVE 集群级语义分析、BlueFS/RocksDB、Ceph BlueStore RADOS object/PG 解析、VM disk reconstruction、跨节点语义关联、EXT4 deleted recovery 与全部 incompat feature 组合。当前 baseline 证明成员发现、成员独立导入、宿主文件系统读取和单个可识别 BlueStore LV 的脱敏 label metadata inventory；混合 filesystem + BlueStore 单源及多 BlueStore LV 尚未支持。
+- BlueStore 边界分层：E01 容器和 LVM PV/LV 映射成功；OSD LV 在逻辑偏移 `0` 命中 `bluestore block device`。当前生产链路解析 Ceph bdev label、CRC32C 和多副本 epoch，删除 `osd_key` 后写入 `ready_metadata` source；缺少的是 BlueFS/RocksDB 与 RADOS/PG/object reconstruction，而不是 E01、source DB、cluster scheduler 或普通文件系统读取。标签检测单元测试覆盖 `0/1/10/100/1000 GiB` 设备相对偏移，真实六成员门禁已于 2026-07-13 验证三个 `disk02` 的 OSD IDs、共享 cluster FSID、唯一 OSD UUID、零文件和独立 source DB。
 
 ### 4.10 Backend Stage 7 final run
 

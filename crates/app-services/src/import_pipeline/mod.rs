@@ -4,6 +4,7 @@
 //! and post-import analysis. Tauri-specific command wrappers live in the
 //! `forensics-desktop` crate.
 
+mod ceph;
 mod context;
 mod emit;
 mod execute;

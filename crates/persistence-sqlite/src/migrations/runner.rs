@@ -135,6 +135,10 @@ const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         "source_004_graph_node_order_index",
         include_str!("scripts/source_004_graph_node_order_index.sql"),
     ),
+    (
+        "source_005_ceph_osd_inventory",
+        include_str!("scripts/source_005_ceph_osd_inventory.sql"),
+    ),
 ];
 
 pub fn latest_version() -> &'static str {

@@ -156,7 +156,8 @@ fn assert_job_outcome(
         .into_iter()
         .find(|job| job.id.0 == job_id.0)
         .expect("cluster import job");
-    assert_eq!(job.status, cluster.import_state);
+    assert_eq!(job.status, "completed");
+    assert_eq!(cluster.import_state, "ready");
     assert_eq!(job.failed_count, cluster.failed_count);
     assert_eq!(job.partial, cluster.failed_count > 0);
 }
@@ -205,7 +206,10 @@ fn assert_member_storage_and_content(
     assert_unique_source_storage(case_conn, &sources);
 
     let mut ready_count = 0;
-    let mut failed_count = 0;
+    let mut metadata_count = 0;
+    let mut osd_ids = HashSet::new();
+    let mut osd_uuids = HashSet::new();
+    let mut cluster_fsids = HashSet::new();
     for member in &plan.members {
         let source = source_for_member(&sources, &member.source_path);
         assert_member_metadata(case_conn, source, plan, member.member_index);
@@ -215,7 +219,7 @@ fn assert_member_storage_and_content(
             .expect("member storage");
         match storage.import_state.as_str() {
             "ready" => ready_count += 1,
-            "failed" => failed_count += 1,
+            "ready_metadata" => metadata_count += 1,
             state => panic!("member {} ended in unexpected state {state}", source.name),
         }
         if storage.import_state == "ready" {
@@ -232,16 +236,22 @@ fn assert_member_storage_and_content(
                 member.source_path.display(),
                 storage.last_error
             );
-            assert_bluestore_source(case_conn, case_root, source);
+            let inventory = assert_bluestore_source(case_conn, case_root, source);
+            osd_uuids.insert(inventory.0);
+            osd_ids.insert(inventory.1.expect("BlueStore OSD id"));
+            cluster_fsids.insert(inventory.2.expect("BlueStore cluster FSID"));
         }
     }
     assert_eq!(ready_count, PVE_HOST_COUNT);
-    assert_eq!(failed_count, PVE_MEMBER_COUNT - PVE_HOST_COUNT);
+    assert_eq!(metadata_count, PVE_MEMBER_COUNT - PVE_HOST_COUNT);
+    assert_eq!(osd_ids, HashSet::from([0, 1, 2]));
+    assert_eq!(osd_uuids.len(), 3);
+    assert_eq!(cluster_fsids.len(), 1);
     assert_eq!(cluster.member_count as usize, PVE_MEMBER_COUNT);
-    assert_eq!(cluster.ready_count as usize, ready_count);
-    assert_eq!(cluster.failed_count as usize, failed_count);
-    assert_eq!(cluster.import_state, "failed");
-    assert!(cluster.last_error.is_some());
+    assert_eq!(cluster.ready_count as usize, PVE_MEMBER_COUNT);
+    assert_eq!(cluster.failed_count, 0);
+    assert_eq!(cluster.import_state, "ready");
+    assert!(cluster.last_error.is_none());
 }
 
 fn assert_unique_source_storage(case_conn: &rusqlite::Connection, sources: &[DataSource]) {
@@ -380,25 +390,16 @@ fn assert_bluestore_source(
     case_conn: &rusqlite::Connection,
     case_root: &Path,
     source: &DataSource,
-) {
+) -> (String, Option<u32>, Option<String>, u32, bool) {
     let storage = DataSourceRepo::new(case_conn)
         .find_storage(&source.id)
         .expect("query BlueStore storage")
         .expect("BlueStore storage");
     assert_eq!(
-        storage.import_state, "failed",
-        "BlueStore must not masquerade as a ready POSIX file system"
+        storage.import_state, "ready_metadata",
+        "BlueStore must be classified as metadata-only, not a POSIX filesystem"
     );
-    let last_error = storage
-        .last_error
-        .as_deref()
-        .expect("BlueStore failure must preserve the explicit reason");
-    assert!(
-        last_error.contains("CEPH_BLUESTORE_UNSUPPORTED")
-            && last_error.contains("Ceph BlueStore OSD block device detected")
-            && last_error.contains("RADOS/PG/object reconstruction is not supported"),
-        "unexpected BlueStore failure: {last_error}"
-    );
+    assert!(storage.last_error.is_none());
     let source_db_path = source_db::source_db_path(case_root, &source.id);
     assert!(
         source_db_path.exists(),
@@ -412,6 +413,28 @@ fn assert_bluestore_source(
             .expect("count BlueStore files"),
         0
     );
+    let inventory: (String, Option<u32>, Option<String>, u32, bool) = source_conn
+        .query_row(
+            "SELECT osd_uuid, whoami, ceph_fsid, valid_label_count, osd_key_present
+             FROM ceph_osd_inventory WHERE data_source_id = ?1",
+            [&source.id.0],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .expect("query BlueStore inventory");
+    assert!(!inventory.0.is_empty());
+    assert!(inventory.1.is_some());
+    assert!(inventory.2.is_some());
+    assert!(inventory.3 >= 1);
+    assert!(inventory.4);
+    inventory
 }
 
 fn is_host_disk(path: &Path) -> bool {

@@ -53,6 +53,7 @@ pub fn execute_import_job_with_counts(
         ds: None,
         job_repo,
         counts: &mut counts,
+        content_kind: crate::import_pipeline::context::ImportContentKind::Filesystem,
     };
 
     let ds = phases::run_attach_phase(&mut ctx)?;
@@ -75,7 +76,15 @@ pub fn execute_import_job_with_counts(
         phases::run_finalize_phase(&mut ctx, &ds, &stats, &pipeline_msg, import_started)
     })();
 
-    persist_import_outcome(conn, &ds.id, result).map(|message| (message, counts))
+    let ready_state = match ctx.content_kind {
+        crate::import_pipeline::context::ImportContentKind::Filesystem => "ready",
+        crate::import_pipeline::context::ImportContentKind::CephBlueStoreMetadata => {
+            "ready_metadata"
+        }
+    };
+    let message = persist_import_outcome(conn, &ds.id, ready_state, result)?;
+    phases::emit_data_source_ready(&ctx, &ds)?;
+    Ok((message, counts))
 }
 
 fn reject_cancelled_after_register(
@@ -112,12 +121,13 @@ fn reject_cancelled_after_register(
 fn persist_import_outcome(
     conn: &rusqlite::Connection,
     data_source_id: &domain::DataSourceId,
+    ready_state: &str,
     result: Result<String, CommandError>,
 ) -> Result<String, CommandError> {
     match result {
         Ok(message) => {
             DataSourceRepo::new(conn)
-                .update_import_state(data_source_id, "ready", None)
+                .update_import_state(data_source_id, ready_state, None)
                 .map_err(CommandError::from_service_error)?;
             Ok(message)
         }

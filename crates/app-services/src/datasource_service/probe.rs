@@ -158,6 +158,8 @@ where
             kind: UnsupportedImageKind::CephBlueStore,
             source: ImageFilesystemSource::DirectVolume,
             name: Some("Ceph BlueStore OSD".to_string()),
+            size_bytes: None,
+            lvm_identity: None,
         }]);
     }
     Ok(Vec::new())

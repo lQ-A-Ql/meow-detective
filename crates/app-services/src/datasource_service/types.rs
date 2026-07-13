@@ -12,10 +12,10 @@ pub enum DataSourceError {
     Evidence(String),
     #[error("Unsupported data source platform: {0}")]
     UnsupportedPlatform(String),
-    #[error(
-        "Ceph BlueStore OSD block device detected; RADOS/PG/object reconstruction is not supported"
-    )]
+    #[error("Ceph BlueStore OSD block device requires the metadata-only import workflow")]
     UnsupportedCephBlueStore,
+    #[error("Ceph BlueStore metadata import requires exactly one OSD logical volume; found {volume_count}")]
+    UnsupportedCephBlueStoreLayout { volume_count: usize },
 }
 
 impl transport::ServiceErrorCategory for DataSourceError {
@@ -23,31 +23,39 @@ impl transport::ServiceErrorCategory for DataSourceError {
         match self {
             Self::Io(_) | Self::Db(_) => transport::ErrorCategory::Io,
             Self::Evidence(_) => transport::ErrorCategory::Validation,
-            Self::UnsupportedPlatform(_) | Self::UnsupportedCephBlueStore => {
-                transport::ErrorCategory::Unsupported
-            }
+            Self::UnsupportedPlatform(_)
+            | Self::UnsupportedCephBlueStore
+            | Self::UnsupportedCephBlueStoreLayout { .. } => transport::ErrorCategory::Unsupported,
         }
     }
 
     fn code(&self) -> Option<&'static str> {
         match self {
             Self::UnsupportedCephBlueStore => Some("CEPH_BLUESTORE_UNSUPPORTED"),
+            Self::UnsupportedCephBlueStoreLayout { .. } => {
+                Some("CEPH_BLUESTORE_LAYOUT_UNSUPPORTED")
+            }
             _ => None,
         }
     }
 
     fn user_message(&self) -> Option<&'static str> {
         match self {
-            Self::UnsupportedCephBlueStore => Some(
-                "Ceph BlueStore OSD block device detected; RADOS/PG/object reconstruction is not supported",
-            ),
+            Self::UnsupportedCephBlueStore => {
+                Some("Ceph BlueStore OSD block device requires the metadata-only import workflow")
+            }
+            Self::UnsupportedCephBlueStoreLayout { .. } => {
+                Some("This BlueStore device layout is not supported by the metadata-only import workflow")
+            }
             _ => None,
         }
     }
 
     fn recoverable(&self) -> Option<bool> {
         match self {
-            Self::UnsupportedCephBlueStore => Some(false),
+            Self::UnsupportedCephBlueStore | Self::UnsupportedCephBlueStoreLayout { .. } => {
+                Some(false)
+            }
             _ => None,
         }
     }
@@ -60,6 +68,13 @@ impl transport::ServiceErrorCategory for DataSourceError {
                 "filesystem": false,
                 "missingCapability": "radosPgObjectReconstruction"
             })),
+            Self::UnsupportedCephBlueStoreLayout { volume_count } => Some(serde_json::json!({
+                "format": "cephBlueStore",
+                "filesystem": false,
+                "volumeCount": volume_count,
+                "supportedVolumeCount": 1,
+                "missingCapability": "multiBlueStoreVolumeInventory"
+            })),
             _ => None,
         }
     }
@@ -67,7 +82,10 @@ impl transport::ServiceErrorCategory for DataSourceError {
     fn suggestion(&self) -> Option<&'static str> {
         match self {
             Self::UnsupportedCephBlueStore => Some(
-                "Import the PVE host-system disks separately; BlueStore OSD object reconstruction requires a dedicated Ceph analysis workflow.",
+                "Import this source through the Ceph metadata workflow; BlueFS/RocksDB and RADOS object reconstruction remain unavailable.",
+            ),
+            Self::UnsupportedCephBlueStoreLayout { .. } => Some(
+                "Import each BlueStore OSD device as a separate source; multi-volume inventory is not available yet.",
             ),
             _ => None,
         }
@@ -105,6 +123,8 @@ pub struct UnsupportedImageVolume {
     pub kind: UnsupportedImageKind,
     pub source: ImageFilesystemSource,
     pub name: Option<String>,
+    pub size_bytes: Option<u64>,
+    pub lvm_identity: Option<LvmLogicalVolumeIdentity>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

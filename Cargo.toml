@@ -36,6 +36,7 @@ members = [
   "crates/gql",
   "crates/updater",
   "crates/crash_handler",
+  "crates/ceph-wire",
 ]
 
 [workspace.package]
@@ -97,6 +98,7 @@ cloud-audit = { path = "crates/cloud-audit" }
 gql = { path = "crates/gql" }
 updater = { path = "crates/updater" }
 crash_handler = { path = "crates/crash_handler" }
+ceph-wire = { path = "crates/ceph-wire" }
 rusqlite = { version = "0.31", features = ["bundled"] }
 r2d2 = "0.8"
 r2d2_sqlite = "0.24"

@@ -224,6 +224,18 @@ impl<'a> DataSourceRepo<'a> {
         Ok(())
     }
 
+    pub fn update_schema_version(
+        &self,
+        data_source_id: &DataSourceId,
+        schema_version: &str,
+    ) -> DbResult<()> {
+        self.conn.execute(
+            "UPDATE data_sources SET schema_version = ?1 WHERE id = ?2",
+            params![schema_version, data_source_id.0],
+        )?;
+        Ok(())
+    }
+
     pub fn update_cluster_membership(
         &self,
         data_source_id: &DataSourceId,

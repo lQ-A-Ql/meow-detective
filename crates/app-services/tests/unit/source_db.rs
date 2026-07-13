@@ -115,7 +115,7 @@ fn open_registered_source_db_rejects_missing_source_db() {
 }
 
 #[test]
-fn open_registered_source_db_rejects_schema_version_mismatch() {
+fn open_registered_source_db_migrates_schema_version_mismatch() {
     let tmp = tempfile::TempDir::new().unwrap();
     let case_conn = persistence_sqlite::connection::open_in_memory().unwrap();
     case_conn
@@ -159,9 +159,19 @@ fn open_registered_source_db_rejects_schema_version_mismatch() {
     DataSourceRepo::new(&case_conn)
         .insert_with_storage(&domain::CaseId("case-1".to_string()), &ds, &storage)
         .unwrap();
+    crate::source_db::open_source_db(tmp.path(), &ds.id).unwrap();
 
-    let err = open_registered_source_db(&case_conn, tmp.path(), &ds.id).unwrap_err();
+    let connection = open_registered_source_db(&case_conn, tmp.path(), &ds.id).unwrap();
 
-    assert!(err.to_string().contains("schema version"));
-    assert!(err.to_string().contains("re-import is required"));
+    assert!(connection
+        .prepare("SELECT 1 FROM ceph_osd_inventory LIMIT 1")
+        .is_ok());
+    let updated = DataSourceRepo::new(&case_conn)
+        .find_storage(&ds.id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        updated.schema_version.as_deref(),
+        Some(persistence_sqlite::runner::latest_source_version())
+    );
 }

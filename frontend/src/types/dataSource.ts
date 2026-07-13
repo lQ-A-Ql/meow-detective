@@ -11,7 +11,7 @@ export interface DataSourceSummary {
   stagingRelPath?: string;
   platform: 'windows' | 'linux';
   profile?: string;
-  importState?: 'pending' | 'importing' | 'ready' | 'failed' | string;
+  importState?: 'pending' | 'importing' | 'ready' | 'ready_metadata' | 'failed' | string;
   schemaVersion?: string;
   lastError?: string;
   sourceHash?: string;

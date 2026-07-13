@@ -18,6 +18,14 @@ pub(crate) fn run_analyze_phase(
     ctx: &mut ImportJobContext<'_>,
     data_source: &domain::DataSource,
 ) -> Result<String, CommandError> {
+    if ctx.content_kind == crate::import_pipeline::context::ImportContentKind::CephBlueStoreMetadata
+    {
+        ctx.report_job_progress(94, "Ceph BlueStore metadata inventory completed")?;
+        return Ok(
+            "Ceph BlueStore label metadata inventoried; RADOS/PG/object reconstruction remains unsupported"
+                .to_string(),
+        );
+    }
     ctx.report_job_progress(70, "Running post-import pipeline...")?;
     let started = Instant::now();
     let analysis_mode = effective_analysis_mode(ctx);

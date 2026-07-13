@@ -21,13 +21,11 @@ powershell -ExecutionPolicy Bypass -File scripts/check-pve-cluster-import.ps1 -R
 The desktop real-sample gate uses the production background cluster runner to
 attempt all six E01 members serially. The three `disk01` members must become
 ready and preview key files from independent `source.db` files. The three
-`disk02` BlueStore members must remain explicit failures. A member failure must
-not prevent later members from registering, and the final cluster/job state
-must preserve partial ready/failed counts.
+`disk02` BlueStore members must become metadata-only sources. They must not
+prevent later members from registering or masquerade as POSIX filesystems.
 
-Observed on 2026-07-13: `ready=3`, `failed=3`; host source DB file counts were
-`62,403`, `62,380`, and `62,405`. Each BlueStore member retained an isolated
-diagnostic `source.db` with zero file entries. That run still reported the
+The pre-fix run observed `ready=3`, `failed=3`; each BlueStore member retained
+an isolated diagnostic `source.db` with zero file entries and reported the
 generic error `No supported filesystem partitions were detected`.
 
 On 2026-07-13 the probe path was hardened and the private six-member gate was
@@ -40,14 +38,15 @@ filesystem and silently discarded the BlueStore LV before import classification.
 
 The detector checks Ceph's official device-relative label positions `0`,
 `1 GiB`, `10 GiB`, `100 GiB`, and `1000 GiB` against the logical block device,
-not the outer E01 or PV address space. A detected OSD now fails with
-`CEPH_BLUESTORE_UNSUPPORTED` and the explicit message
-`Ceph BlueStore OSD block device detected; RADOS/PG/object reconstruction is not supported`.
-It is never added as an `ImageFilesystemKind`, filesystem candidate, or file
-tree root. Synthetic coverage validates all official offsets and
-device-relative detection; the real gate validates all three `disk02` failures,
-zero file rows, retained diagnostic source databases, and continued import of
-all three `disk01` members.
+not the outer E01 or PV address space. The native decoder validates the Ceph
+struct envelope and CRC32C, selects the highest consistent multi-label epoch,
+removes `osd_key`, and persists only sanitized inventory metadata. BlueStore is
+never added as an `ImageFilesystemKind`, filesystem candidate, or file-tree
+root. The real gate requires OSD IDs `0,1,2`, one shared cluster FSID, unique
+OSD UUIDs, zero file rows, and continued import of all three `disk01` members.
+The post-fix production run completed all six members: the three filesystem
+members became `ready`, the three BlueStore members became `ready_metadata`,
+and the host source DB file counts were `62,403`, `62,380`, and `62,405`.
 
 样本路径仅是本地人工环境示例，生产代码和默认 CI 不得硬编码该路径。
 
@@ -64,6 +63,7 @@ all three `disk01` members.
 
 ## 未保证范围
 
-- `disk02` 已由生产 LVM LV reader 按 Ceph 官方标签确认是 BlueStore OSD block device。BlueStore 不是可直接枚举的 POSIX 文件系统；当前不提供 label metadata inventory、RADOS object/PG/VM disk 文件树。
+- `disk02` 已由生产 LVM LV reader 按 Ceph 官方标签确认是 BlueStore OSD block device，并保存脱敏 label metadata inventory。BlueStore 不是可直接枚举的 POSIX 文件系统；当前不提供 BlueFS/RocksDB、RADOS object/PG/VM disk 文件树。
+- 当前 metadata-only 路径只承诺“无普通文件系统 candidate 且可唯一选择一个 BlueStore LV”的数据源；混合 filesystem + BlueStore 单源和多 BlueStore LV 尚未支持。
 - 不承诺 EXT4 metadata checksum 校验、deleted recovery、journal replay 完整性或全部 incompat feature 组合。
 - 不承诺集群跨节点配置归并和语义关联。

@@ -115,20 +115,11 @@ pub fn open_registered_source_db(
     }
     let expected_schema_version =
         persistence_sqlite::migrations::runner::latest_source_version().to_string();
-    match storage.schema_version.as_deref() {
-        Some(actual) if actual == expected_schema_version => {}
-        Some(actual) => {
-            return Err(DbError::System(format!(
-                "Data source '{}' source DB schema version '{}' is unsupported; expected '{}'; re-import is required",
-                data_source_id.0, actual, expected_schema_version
-            )));
-        }
-        None => {
-            return Err(DbError::System(format!(
-                "Data source '{}' is missing source DB schema version; re-import is required",
-                data_source_id.0
-            )));
-        }
+    if storage.schema_version.is_none() {
+        return Err(DbError::System(format!(
+            "Data source '{}' is missing source DB schema version; re-import is required",
+            data_source_id.0
+        )));
     }
     let rel_path = storage.source_db_rel_path.ok_or_else(|| {
         DbError::System(format!(
@@ -145,7 +136,12 @@ pub fn open_registered_source_db(
         )));
     }
     let db_path = safe_existing_case_path(case_root, &db_path)?;
-    persistence_sqlite::open_existing_source(&db_path)
+    let connection = persistence_sqlite::open_existing_source(&db_path)?;
+    if storage.schema_version.as_deref() != Some(expected_schema_version.as_str()) {
+        DataSourceRepo::new(case_conn)
+            .update_schema_version(data_source_id, &expected_schema_version)?;
+    }
+    Ok(connection)
 }
 
 /// Open only fully imported source databases for case-wide aggregation.

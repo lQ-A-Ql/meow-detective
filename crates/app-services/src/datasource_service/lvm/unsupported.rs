@@ -33,6 +33,15 @@ fn record_bluestore_volume(
         kind: UnsupportedImageKind::CephBlueStore,
         source: ImageFilesystemSource::LvmLogicalVolume,
         name: Some(volume_name.clone()),
+        size_bytes: Some(logical_volume.size_bytes),
+        lvm_identity: Some(super::super::LvmLogicalVolumeIdentity {
+            vg_uuid: volume_group.id.clone(),
+            vg_name: volume_group.name.clone(),
+            lv_uuid: logical_volume.uuid.clone(),
+            lv_name: logical_volume.name.clone(),
+            pv_offsets: expanded.offsets.clone(),
+            pv_sources: expanded.sources.clone(),
+        }),
     });
     probe.warnings.push(format!(
         "LVM expand: Ceph BlueStore OSD logical volume detected and left unsupported; {}",

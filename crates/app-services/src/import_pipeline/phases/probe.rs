@@ -15,9 +15,9 @@ pub(super) fn seed_manifest_if_needed(
     data_source: &domain::DataSource,
     manifest: &mut staging::StagingManifest,
     candidates: &mut Vec<datasource_service::ImageFilesystemCandidate>,
-) -> Result<(), CommandError> {
+) -> Result<ProbeSeedOutcome, CommandError> {
     if !manifest.partitions.is_empty() {
-        return Ok(());
+        return Ok(ProbeSeedOutcome::Filesystem);
     }
     let started = std::time::Instant::now();
     let mut probe = probe_image(ctx)?;
@@ -26,11 +26,21 @@ pub(super) fn seed_manifest_if_needed(
         &ctx.import_config.source_path,
         &ctx.import_config.kind,
     );
-    reject_exclusively_unsupported_probe(&probe)?;
     report_probe(ctx, data_source, "probe", &probe, started.elapsed());
+    if is_exclusively_bluestore_probe(&probe) {
+        reject_multiple_bluestore_volumes(&probe)?;
+        crate::import_pipeline::ceph::persist_bluestore_probe(ctx, data_source, &probe)?;
+        return Ok(ProbeSeedOutcome::CephBlueStoreMetadata);
+    }
     persist_probe(ctx, data_source, &probe, manifest)?;
     *candidates = probe.candidates;
-    Ok(())
+    Ok(ProbeSeedOutcome::Filesystem)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ProbeSeedOutcome {
+    Filesystem,
+    CephBlueStoreMetadata,
 }
 
 pub(super) fn refresh_partition_statuses(
@@ -61,7 +71,11 @@ pub(super) fn load_resume_candidates(
         &ctx.import_config.source_path,
         &ctx.import_config.kind,
     );
-    reject_exclusively_unsupported_probe(&probe)?;
+    if is_exclusively_bluestore_probe(&probe) {
+        return Err(CommandError::internal(
+            "Ceph BlueStore metadata import was already completed and has no filesystem resume work",
+        ));
+    }
     repair_resumed_partition_metadata(ctx, data_source, &probe)?;
     report_probe(ctx, data_source, "probe-resume", &probe, started.elapsed());
     *candidates = probe.candidates;
@@ -82,24 +96,30 @@ fn probe_image(
         .map_err(CommandError::from_typed_service_error)
 }
 
-fn reject_exclusively_unsupported_probe(
+pub(crate) fn is_exclusively_bluestore_probe(
     probe: &datasource_service::ImageFilesystemProbe,
-) -> Result<(), CommandError> {
-    if probe.candidates.is_empty()
+) -> bool {
+    probe.candidates.is_empty()
         && probe
             .unsupported_volumes
             .iter()
             .any(|volume| volume.kind == datasource_service::UnsupportedImageKind::CephBlueStore)
-    {
-        return Err(unsupported_bluestore_error());
-    }
-    Ok(())
 }
 
-fn unsupported_bluestore_error() -> CommandError {
-    CommandError::from_typed_service_error(
-        datasource_service::DataSourceError::UnsupportedCephBlueStore,
-    )
+fn reject_multiple_bluestore_volumes(
+    probe: &datasource_service::ImageFilesystemProbe,
+) -> Result<(), CommandError> {
+    let volume_count = probe
+        .unsupported_volumes
+        .iter()
+        .filter(|volume| volume.kind == datasource_service::UnsupportedImageKind::CephBlueStore)
+        .count();
+    if volume_count <= 1 {
+        return Ok(());
+    }
+    Err(CommandError::from_typed_service_error(
+        datasource_service::DataSourceError::UnsupportedCephBlueStoreLayout { volume_count },
+    ))
 }
 
 fn report_probe(
@@ -135,6 +155,10 @@ fn report_probe(
         ctx.cancel_requested(),
     );
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/import_pipeline/phases/probe.rs"]
+mod tests;
 
 fn persist_probe(
     ctx: &ImportJobContext<'_>,

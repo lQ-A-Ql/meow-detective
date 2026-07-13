@@ -64,7 +64,7 @@ pub(super) fn open_candidate_filesystem(
     Ok(Some(fs))
 }
 
-fn open_candidate_reader(
+pub(crate) fn open_candidate_reader(
     source_path: &std::path::Path,
     source_kind: &domain::DataSourceKind,
     candidate: &datasource_service::ImageFilesystemCandidate,
@@ -99,7 +99,8 @@ fn open_lvm_candidate_reader(
         .ok_or_else(|| "failed to open LVM physical volume readers".to_string())?;
     let pool = fs_lvm::LvmPool::discover(readers, identity.pv_offsets.clone())
         .map_err(|e| e.to_string())?;
-    let volume_index = find_lvm_volume_index(&pool, identity)
+    let volumes = pool.list_volumes();
+    let volume_index = find_lvm_volume_index(&volumes, identity)
         .ok_or_else(|| "LVM logical volume identity not found in pool".to_string())?;
     let reader = pool
         .open_volume_reader(volume_index)
@@ -197,19 +198,19 @@ fn validate_lvm_pv_source(
 }
 
 fn find_lvm_volume_index(
-    pool: &fs_lvm::LvmPool,
+    volumes: &[fs_lvm::LvInfo],
     identity: &LvmLogicalVolumeIdentity,
 ) -> Option<usize> {
-    let volumes = pool.list_volumes();
     if !identity.lv_uuid.is_empty() {
-        if let Some(index) = volumes
+        return volumes
             .iter()
-            .position(|volume| volume.uuid == identity.lv_uuid)
-        {
-            return Some(index);
-        }
+            .position(|volume| volume.uuid == identity.lv_uuid);
     }
     volumes
         .iter()
         .position(|volume| volume.name == identity.lv_name)
 }
+
+#[cfg(test)]
+#[path = "../../../tests/unit/import_pipeline/partition/work.rs"]
+mod tests;

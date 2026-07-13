@@ -69,7 +69,22 @@ fn enumerate_image_data_source_with_staging(
             )
         });
     let mut candidates = Vec::new();
-    probe::seed_manifest_if_needed(ctx, data_source, &mut manifest, &mut candidates)?;
+    let seed_outcome =
+        probe::seed_manifest_if_needed(ctx, data_source, &mut manifest, &mut candidates)?;
+    if seed_outcome == probe::ProbeSeedOutcome::CephBlueStoreMetadata {
+        ctx.content_kind =
+            crate::import_pipeline::context::ImportContentKind::CephBlueStoreMetadata;
+        staging::cleanup_staging(ctx.case_root, &data_source.id.0);
+        return Ok(file_service::EnumerationStats {
+            file_count: 0,
+            dir_count: 0,
+            total_size: 0,
+            warnings: vec![
+                "Ceph BlueStore metadata was inventoried; filesystem enumeration is not applicable"
+                    .to_string(),
+            ],
+        });
+    }
     if manifest.partitions.is_empty() {
         return Err(CommandError::internal(
             "No supported filesystem partitions were detected",
