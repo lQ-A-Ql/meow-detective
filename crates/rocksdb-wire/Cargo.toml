@@ -6,4 +6,6 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+lz4_flex = { workspace = true }
 thiserror = { workspace = true }
+xxhash-rust = { workspace = true }

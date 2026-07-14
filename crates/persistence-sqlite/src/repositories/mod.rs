@@ -6,6 +6,7 @@ pub mod ceph_bluefs_replay_repo;
 pub mod ceph_bluefs_repo;
 pub mod ceph_osd_repo;
 pub mod ceph_rocksdb_repo;
+pub mod ceph_rocksdb_sst_repo;
 pub mod correlation_repo;
 pub mod datasource_cluster_repo;
 pub mod datasource_repo;

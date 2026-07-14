@@ -31,6 +31,46 @@ fn allocated_range_supports_zero_size_metadata_logs() {
 }
 
 #[test]
+fn file_range_is_exact_and_never_reads_allocated_padding() {
+    let mut bytes = vec![0u8; 128];
+    bytes[16..20].copy_from_slice(b"abcd");
+    bytes[40..44].copy_from_slice(b"efgh");
+    let mut evidence = VecEvidenceReader::new(bytes);
+    let mut reader = super::BluefsExtentReader::new(&mut evidence, 1, 128, 8);
+    let mut fnode = fnode(vec![extent(16, 4, 1), extent(40, 4, 1)]);
+    fnode.size = 6;
+
+    let prepared = reader.prepare_file(&fnode).unwrap();
+    assert_eq!(
+        reader.read_prepared_file_range(&prepared, 2, 4).unwrap(),
+        b"cdef"
+    );
+    assert!(reader.read_prepared_file_range(&prepared, 4, 4).is_err());
+}
+
+#[test]
+fn prepared_file_range_reads_fragmented_extents_and_rejects_overlap() {
+    let mut bytes = vec![0u8; 256];
+    bytes[16..20].copy_from_slice(b"abcd");
+    bytes[80..84].copy_from_slice(b"efgh");
+    bytes[160..164].copy_from_slice(b"ijkl");
+    let mut evidence = VecEvidenceReader::new(bytes);
+    let mut reader = super::BluefsExtentReader::new(&mut evidence, 1, 256, 8);
+    let file = fnode(vec![extent(16, 4, 1), extent(80, 4, 1), extent(160, 4, 1)]);
+    let prepared = reader.prepare_file(&file).expect("prepare fragmented file");
+
+    assert_eq!(
+        reader
+            .read_prepared_file_range(&prepared, 3, 7)
+            .expect("read prepared range"),
+        b"defghij"
+    );
+
+    let overlapping = fnode(vec![extent(16, 8, 1), extent(20, 8, 1)]);
+    assert!(reader.prepare_file(&overlapping).is_err());
+}
+
+#[test]
 fn rejects_cross_device_and_reserved_extents() {
     let mut evidence = VecEvidenceReader::new(vec![0u8; 128]);
     let mut reader = super::BluefsExtentReader::new(&mut evidence, 1, 128, 8);

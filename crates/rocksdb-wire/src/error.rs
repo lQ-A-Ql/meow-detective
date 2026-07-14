@@ -225,6 +225,126 @@ pub enum RocksDbWireError {
         previous: u64,
         current: u64,
     },
+
+    #[error("SST range read failed at offset {offset} for {length} bytes")]
+    SstRangeRead { offset: u64, length: usize },
+
+    #[error("SST evidence source read failed at offset {offset} for {length} bytes")]
+    SstSourceRead { offset: u64, length: usize },
+
+    #[error("SST inspection was cancelled")]
+    SstInspectionCancelled,
+
+    #[error("SST file size {file_size} is smaller than the {minimum} byte minimum")]
+    SstFileTooShort { file_size: u64, minimum: u64 },
+
+    #[error("unsupported RocksDB SST table magic {magic:#018x}")]
+    UnsupportedSstMagic { magic: u64 },
+
+    #[error("unsupported RocksDB SST format version {version}")]
+    UnsupportedSstFormatVersion { version: u32 },
+
+    #[error("unsupported RocksDB SST checksum type {checksum_type:#04x}")]
+    UnsupportedSstChecksum { checksum_type: u8 },
+
+    #[error("invalid RocksDB SST footer padding at byte {offset}")]
+    NonZeroSstFooterPadding { offset: usize },
+
+    #[error("invalid {context} block handle: {reason}")]
+    InvalidBlockHandle {
+        context: &'static str,
+        reason: &'static str,
+    },
+
+    #[error("SST block range {offset}..{end} is outside the {boundary} byte structural boundary")]
+    SstBlockOutOfRange {
+        offset: u64,
+        end: u64,
+        boundary: u64,
+    },
+
+    #[error("SST stored block size {size} exceeds limit {limit}")]
+    SstStoredBlockLimit { size: u64, limit: usize },
+
+    #[error("SST decompressed block size {size} exceeds limit {limit}")]
+    SstDecompressedBlockLimit { size: usize, limit: usize },
+
+    #[error("SST auxiliary metadata size {total} exceeds cumulative limit {limit}")]
+    SstAuxiliaryMetadataLimit { total: u64, limit: usize },
+
+    #[error("SST block checksum mismatch at offset {offset}: expected {expected:#010x}, computed {actual:#010x}")]
+    SstChecksumMismatch {
+        offset: u64,
+        expected: u32,
+        actual: u32,
+    },
+
+    #[error("unsupported SST block compression type {compression_type:#04x} at offset {offset}")]
+    UnsupportedSstCompression { offset: u64, compression_type: u8 },
+
+    #[error("SST LZ4 block at offset {offset} is malformed: {reason}")]
+    InvalidSstCompression { offset: u64, reason: &'static str },
+
+    #[error("SST restart block is malformed: {reason}")]
+    InvalidRestartBlock { reason: &'static str },
+
+    #[error("SST restart block entry count exceeds limit {limit}")]
+    SstEntryLimit { limit: usize },
+
+    #[error("SST key-space census entry count exceeds limit {limit}")]
+    SstCensusEntryLimit { limit: u64 },
+
+    #[error("SST key-space census decompressed bytes exceed limit {limit}")]
+    SstCensusDecompressedLimit { limit: u64 },
+
+    #[error("SST block key length {length} exceeds limit {limit}")]
+    SstKeyLengthLimit { length: usize, limit: usize },
+
+    #[error("SST block value length {length} exceeds limit {limit}")]
+    SstValueLengthLimit { length: usize, limit: usize },
+
+    #[error("duplicate SST metaindex entry")]
+    DuplicateMetaBlock,
+
+    #[error("invalid SST metaindex entry: {reason}")]
+    InvalidMetaIndex { reason: &'static str },
+
+    #[error("SST is missing required properties block")]
+    MissingPropertiesBlock,
+
+    #[error("duplicate SST property")]
+    DuplicateSstProperty,
+
+    #[error("missing required SST property {name}")]
+    MissingSstProperty { name: &'static str },
+
+    #[error("invalid {context}: {reason}")]
+    InvalidSstProperty {
+        context: &'static str,
+        reason: &'static str,
+    },
+
+    #[error("unsupported SST table feature {feature}: {value}")]
+    UnsupportedSstFeature { feature: &'static str, value: u64 },
+
+    #[error("unsupported SST internal entry type {value_type:#04x}")]
+    UnsupportedSstEntryType { value_type: u8 },
+
+    #[error("SST index is invalid: {reason}")]
+    InvalidSstIndex { reason: &'static str },
+
+    #[error("SST data counts do not match properties for {field}: parsed {parsed}, properties {properties}")]
+    SstCountMismatch {
+        field: &'static str,
+        parsed: u64,
+        properties: u64,
+    },
+
+    #[error("invalid sanitized SST census context: {reason}")]
+    InvalidSstCensusContext { reason: &'static str },
+
+    #[error("SST column family does not match the supplied census context")]
+    SstCensusColumnFamilyMismatch,
 }
 
 pub type Result<T> = std::result::Result<T, RocksDbWireError>;

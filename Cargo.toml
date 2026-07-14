@@ -116,6 +116,7 @@ unicode-normalization = "0.1"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_Compression"] }
 dirs = "6"
 lz4_flex = "~0.13"
+xxhash-rust = { version = "~0.8", features = ["xxh3"] }
 toml = "~0.8"
 ed25519-dalek = "~2"
 sha2 = "~0.10"

@@ -1,0 +1,85 @@
+use persistence_sqlite::repositories::audit_repo::{AuditAction, AuditRepo};
+use persistence_sqlite::repositories::ceph_bluefs_repo::CephBluefsAggregate;
+use persistence_sqlite::repositories::ceph_rocksdb_repo::CephRocksdbAggregate;
+use persistence_sqlite::repositories::ceph_rocksdb_sst_repo::CephRocksdbSstRecord;
+
+use super::context::ImportJobContext;
+
+pub(super) struct CephMetadataAggregate {
+    pub(super) bluefs: CephBluefsAggregate,
+    pub(super) rocksdb: CephRocksdbAggregate,
+    pub(super) ssts: Vec<CephRocksdbSstRecord>,
+}
+
+pub(super) fn audit_bluefs_inventory(
+    ctx: &ImportJobContext<'_>,
+    data_source: &domain::DataSource,
+    records: &CephMetadataAggregate,
+) {
+    let Some(data_block_count) = checked_sst_sum(&records.ssts, |record| record.data_block_count)
+    else {
+        audit_sum_overflow(data_source, "data block count");
+        return;
+    };
+    let Some(entry_count) = checked_sst_sum(&records.ssts, |record| record.entry_count) else {
+        audit_sum_overflow(data_source, "entry count");
+        return;
+    };
+    let Some(data_bytes) = checked_sst_sum(&records.ssts, |record| record.data_size) else {
+        audit_sum_overflow(data_source, "data bytes");
+        return;
+    };
+    let details = serde_json::json!({
+        "inventoryId": records.bluefs.superblock.inventory_id,
+        "osdUuid": records.bluefs.superblock.osd_uuid,
+        "bluefsUuid": records.bluefs.superblock.bluefs_uuid,
+        "sequence": records.bluefs.superblock.sequence,
+        "extentCount": records.bluefs.log_extents.len(),
+        "transactionCount": records.bluefs.replay.replay.transaction_count,
+        "fileCount": records.bluefs.replay.files.len(),
+        "directoryCount": records.bluefs.replay.directories.len(),
+        "finalSequence": records.bluefs.replay.replay.final_sequence,
+        "rocksdbManifest": records.rocksdb.manifest.active_manifest_path,
+        "rocksdbIdentityPresent": records.rocksdb.manifest.identity_uuid.is_some(),
+        "rocksdbLogicalEditCount": records.rocksdb.manifest.logical_edit_count,
+        "rocksdbColumnFamilyCount": records.rocksdb.column_families.len(),
+        "rocksdbLiveSstCount": records.rocksdb.live_ssts.len(),
+        "rocksdbValidatedSstCount": records.ssts.len(),
+        "rocksdbSstDataBlockCount": data_block_count,
+        "rocksdbSstEntryCount": entry_count,
+        "rocksdbSstDataBytes": data_bytes,
+        "rocksdbLastSequence": records.rocksdb.manifest.last_sequence,
+        "layout": "singleSharedDevice",
+    })
+    .to_string();
+    if let Err(error) = AuditRepo::new(ctx.conn).log(
+        Some(&ctx.case_id.0),
+        "system",
+        &AuditAction::DataSourceImport,
+        Some(&data_source.id.0),
+        &details,
+    ) {
+        tracing::warn!(
+            data_source_id = %data_source.id.0,
+            error = %error,
+            "Failed to record BlueFS inventory audit entry"
+        );
+    }
+}
+
+fn checked_sst_sum(
+    records: &[CephRocksdbSstRecord],
+    value: impl Fn(&CephRocksdbSstRecord) -> u64,
+) -> Option<u64> {
+    records
+        .iter()
+        .try_fold(0u64, |total, record| total.checked_add(value(record)))
+}
+
+fn audit_sum_overflow(data_source: &domain::DataSource, field: &str) {
+    tracing::warn!(
+        data_source_id = %data_source.id.0,
+        field,
+        "Skipped BlueFS inventory audit entry because an SST aggregate overflowed"
+    );
+}

@@ -4,6 +4,7 @@ mod error;
 mod limits;
 mod log;
 mod replay;
+mod sst;
 mod version_edit;
 
 pub use crc32c::{crc32c, extend_crc32c, mask_crc32c, unmask_crc32c};
@@ -14,6 +15,12 @@ pub use log::{
     ROCKSDB_LOG_HEADER_SIZE, ROCKSDB_RECYCLABLE_LOG_HEADER_SIZE,
 };
 pub use replay::{replay_version_edits, ColumnFamilyState, LiveFile, ManifestSnapshot};
+pub use sst::{
+    inspect_sst, BlockCompression, BlockHandle, ChecksumType, DataBlockStats, EntryTypeCounts,
+    Footer, IndexKeyKind, IndexKeyMetadata, KeySpaceBucket, KeySpaceCensus, KeySpaceCensusContext,
+    KeySpacePrefixRule, RangeReader, SstInspection, SstReadOptions, TableProperties,
+    BLOCK_BASED_TABLE_MAGIC, BLOCK_TRAILER_LENGTH, FOOTER_LENGTH, KEY_SPACE_SUMMARY_VERSION,
+};
 pub use version_edit::{
     parse_version_edit, ColumnFamilyAction, CompactCursor, DeletedFile, IgnoredField,
     InternalKeyMetadata, NewFile, NewFileFormat, NewFileMetadata, VersionEdit,

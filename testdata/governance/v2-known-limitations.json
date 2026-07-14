@@ -285,7 +285,7 @@
       "category": "Linux LVM/PVE",
       "item": "PVE cluster 语义解析执行",
       "status": "partial",
-      "summary": "集群建模、成员串行导入、宿主 `pve/root` EXT4 文件树、BlueStore OSD label、BlueFS metadata replay 和 RocksDB CURRENT/IDENTITY/活动 MANIFEST control-plane inventory 已验证；SST/WAL 内容、RADOS/PG/object tree、VM disk reconstruction 与跨节点关联仍不支持",
+      "summary": "集群建模、成员串行导入、宿主 `pve/root` EXT4 文件树、BlueStore OSD label、BlueFS metadata replay、RocksDB CURRENT/IDENTITY/活动 MANIFEST control-plane replay 和 live-SST 物理结构库存已验证；WAL/latest-state、onode/blob/value、RADOS/PG/object tree、VM disk reconstruction 与跨节点关联仍不支持",
       "affectedChains": [
         "LVM",
         "PVE"

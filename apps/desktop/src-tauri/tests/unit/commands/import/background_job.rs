@@ -49,6 +49,21 @@ struct BluestoreOracle {
     rocksdb_next_file_number: u64,
     rocksdb_last_sequence: u64,
     rocksdb_log_number: u64,
+    rocksdb_sst_data_block_count: u64,
+    rocksdb_sst_entry_count: u64,
+    representative_sst: Option<RepresentativeSstOracle>,
+}
+
+struct RepresentativeSstOracle {
+    file_number: u64,
+    data_block_count: u64,
+    entry_count: u64,
+    deletion_count: u64,
+    raw_key_size: u64,
+    raw_value_size: u64,
+    data_size: u64,
+    index_size: u64,
+    filter_size: u64,
 }
 
 struct BluefsInventoryRow {
@@ -676,13 +691,112 @@ fn assert_rocksdb_inventory(
                ON l.inventory_id = f.inventory_id
               AND f.path = printf('db/%06d.sst', l.file_number)
              WHERE m.data_source_id = ?1
-               AND f.path GLOB 'db/[0-9][0-9][0-9][0-9][0-9][0-9].sst'",
+               AND f.path GLOB 'db/[0-9][0-9][0-9][0-9][0-9][0-9]*.sst'
+               AND substr(f.path, 4, length(f.path) - 7) NOT GLOB '*[^0-9]*'",
             [data_source_id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .expect("compare BlueFS SST files with the RocksDB live set");
     assert_eq!(bluefs_sst_count as usize, oracle.rocksdb_live_sst_count);
     assert_eq!(missing_manifest_records, 0);
+    assert_sst_structure_inventory(source_conn, data_source_id, oracle);
+}
+
+fn assert_sst_structure_inventory(
+    source_conn: &rusqlite::Connection,
+    data_source_id: &str,
+    oracle: &BluestoreOracle,
+) {
+    let (count, incomplete, invalid): (u64, u64, u64) = source_conn
+        .query_row(
+            "SELECT
+                COUNT(*),
+                SUM(CASE WHEN s.scan_complete = 0 THEN 1 ELSE 0 END),
+                SUM(CASE
+                    WHEN s.table_magic_hex != '88e241b785f4cff7'
+                      OR s.format_version != 5
+                      OR s.checksum_type != 'xxh3'
+                      OR s.file_size != l.file_size
+                      OR s.column_family_id != l.column_family_id
+                      OR s.level != l.level
+                      OR s.original_file_number != l.file_number
+                      OR s.data_block_count = 0
+                      OR s.entry_count = 0
+                      OR s.key_space_summary_version != 1
+                      OR json_extract(s.key_space_summary_json, '$.version') != 1
+                      OR json_extract(s.key_space_summary_json, '$.complete') != 1
+                    THEN 1 ELSE 0 END)
+             FROM ceph_rocksdb_sst_inventory s
+             JOIN ceph_rocksdb_live_files l
+               ON l.inventory_id = s.inventory_id
+              AND l.file_number = s.file_number
+             JOIN ceph_rocksdb_manifests m ON m.inventory_id = s.inventory_id
+             WHERE m.data_source_id = ?1",
+            [data_source_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("query complete RocksDB SST structure inventory");
+    assert_eq!(count as usize, oracle.rocksdb_live_sst_count);
+    assert_eq!(incomplete, 0);
+    assert_eq!(invalid, 0);
+    let aggregate: (u64, u64) = source_conn
+        .query_row(
+            "SELECT COALESCE(SUM(s.data_block_count), 0),
+                    COALESCE(SUM(s.entry_count), 0)
+             FROM ceph_rocksdb_sst_inventory s
+             JOIN ceph_rocksdb_manifests m ON m.inventory_id = s.inventory_id
+             WHERE m.data_source_id = ?1",
+            [data_source_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("query aggregate RocksDB SST structure inventory");
+    assert_eq!(
+        aggregate,
+        (
+            oracle.rocksdb_sst_data_block_count,
+            oracle.rocksdb_sst_entry_count,
+        ),
+        "aggregate SST structure inventory differs for OSD {}",
+        oracle.osd_uuid
+    );
+    if let Some(expected) = &oracle.representative_sst {
+        let actual: (u64, u64, u64, u64, u64, u64, u64, u64) = source_conn
+            .query_row(
+                "SELECT data_block_count, entry_count, deletion_count,
+                        raw_key_size, raw_value_size, data_size,
+                        properties_index_size, filter_size
+                 FROM ceph_rocksdb_sst_inventory s
+                 JOIN ceph_rocksdb_manifests m ON m.inventory_id = s.inventory_id
+                 WHERE m.data_source_id = ?1 AND s.file_number = ?2",
+                rusqlite::params![data_source_id, expected.file_number],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                        row.get(6)?,
+                        row.get(7)?,
+                    ))
+                },
+            )
+            .expect("query representative SST structure inventory");
+        assert_eq!(
+            actual,
+            (
+                expected.data_block_count,
+                expected.entry_count,
+                expected.deletion_count,
+                expected.raw_key_size,
+                expected.raw_value_size,
+                expected.data_size,
+                expected.index_size,
+                expected.filter_size,
+            )
+        );
+    }
 }
 
 fn load_rocksdb_column_families(
@@ -816,6 +930,19 @@ fn bluestore_oracle(source: &DataSource) -> BluestoreOracle {
             rocksdb_next_file_number: 148,
             rocksdb_last_sequence: 1_077_117,
             rocksdb_log_number: 127,
+            rocksdb_sst_data_block_count: 9_994,
+            rocksdb_sst_entry_count: 159_439,
+            representative_sst: Some(RepresentativeSstOracle {
+                file_number: 146,
+                data_block_count: 148,
+                entry_count: 23_364,
+                deletion_count: 0,
+                raw_key_size: 420_609,
+                raw_value_size: 298_145,
+                data_size: 245_834,
+                index_size: 3_106,
+                filter_size: 58_437,
+            }),
         },
         "server02-disk02.e01" => BluestoreOracle {
             osd_uuid: "de8554de-f932-448d-be2c-0474df6c16c5",
@@ -833,6 +960,9 @@ fn bluestore_oracle(source: &DataSource) -> BluestoreOracle {
             rocksdb_next_file_number: 126,
             rocksdb_last_sequence: 1_052_658,
             rocksdb_log_number: 105,
+            rocksdb_sst_data_block_count: 10_152,
+            rocksdb_sst_entry_count: 160_791,
+            representative_sst: None,
         },
         "server03-disk02.e01" => BluestoreOracle {
             osd_uuid: "cd6f9b5c-37d5-4dc0-8588-9669d156b02c",
@@ -850,6 +980,9 @@ fn bluestore_oracle(source: &DataSource) -> BluestoreOracle {
             rocksdb_next_file_number: 132,
             rocksdb_last_sequence: 1_061_239,
             rocksdb_log_number: 110,
+            rocksdb_sst_data_block_count: 9_954,
+            rocksdb_sst_entry_count: 158_744,
+            representative_sst: None,
         },
         _ => panic!(
             "missing exact BlueStore oracle for {}",

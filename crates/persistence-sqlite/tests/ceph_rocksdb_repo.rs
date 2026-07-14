@@ -11,6 +11,7 @@ use persistence_sqlite::{
             CephRocksdbAggregate, CephRocksdbColumnFamilyRecord, CephRocksdbLiveSstRecord,
             CephRocksdbManifestRecord, CephRocksdbRepo,
         },
+        ceph_rocksdb_sst_repo::CephRocksdbSstRecord,
     },
     runner,
 };
@@ -196,13 +197,76 @@ fn persist(
     bluefs: &CephBluefsAggregate,
     rocksdb: Option<&CephRocksdbAggregate>,
 ) -> persistence_sqlite::DbResult<()> {
-    CephOsdRepo::new(conn).replace_for_data_source_with_metadata(
-        &osd.data_source_id,
-        std::slice::from_ref(osd),
-        &[],
-        Some(bluefs),
-        rocksdb,
-    )
+    let repo = CephOsdRepo::new(conn);
+    match rocksdb {
+        Some(rocksdb) => {
+            let ssts = sst_records(rocksdb);
+            repo.replace_for_data_source_with_rocksdb_metadata(
+                &osd.data_source_id,
+                std::slice::from_ref(osd),
+                &[],
+                bluefs,
+                rocksdb,
+                &ssts,
+            )
+        }
+        None => repo.replace_for_data_source_with_bluefs(
+            &osd.data_source_id,
+            std::slice::from_ref(osd),
+            &[],
+            Some(bluefs),
+        ),
+    }
+}
+
+fn sst_records(rocksdb: &CephRocksdbAggregate) -> Vec<CephRocksdbSstRecord> {
+    rocksdb
+        .live_ssts
+        .iter()
+        .map(|live| {
+            let column_family = rocksdb
+                .column_families
+                .iter()
+                .find(|column_family| column_family.column_family_id == live.column_family_id)
+                .expect("test live file column family");
+            CephRocksdbSstRecord {
+                inventory_id: live.inventory_id.clone(),
+                file_number: live.file_number,
+                column_family_id: live.column_family_id,
+                level: live.level,
+                bluefs_path: format!("db/{:06}.sst", live.file_number),
+                file_size: live.file_size,
+                table_magic_hex: "88e241b785f4cff7".to_string(),
+                format_version: 5,
+                checksum_type: "xxh3".to_string(),
+                metaindex_offset: 7000,
+                metaindex_size: 100,
+                index_offset: 6000,
+                index_size: 100,
+                data_block_count: 1,
+                entry_count: 1,
+                deletion_count: 0,
+                merge_operand_count: 0,
+                range_deletion_count: 0,
+                raw_key_size: 1,
+                raw_value_size: 1,
+                data_size: 5000,
+                properties_index_size: 105,
+                filter_size: 0,
+                compression_name: "LZ4".to_string(),
+                comparator_name: column_family.comparator_name.clone(),
+                column_family_name: column_family.name.clone(),
+                original_file_number: live.file_number,
+                db_identity: rocksdb.manifest.identity_uuid.clone(),
+                db_session_identity: Some("session-1".to_string()),
+                key_space_summary_version: 1,
+                key_space_summary_json:
+                    r#"{"version":1,"complete":true,"scannedEntries":1,"scannedDecompressedBytes":1,"buckets":[{"name":"unknown","count":1,"minKeyLength":1,"maxKeyLength":1}]}"#
+                        .to_string(),
+                scan_complete: true,
+            }
+        })
+        .collect()
 }
 
 #[test]
@@ -211,7 +275,7 @@ fn source_migration_installs_control_plane_schema_without_plaintext_internal_key
 
     assert_eq!(
         runner::latest_source_version(),
-        "source_008_ceph_rocksdb_inventory"
+        "source_009_ceph_sst_inventory"
     );
     for table in [
         "ceph_rocksdb_manifests",

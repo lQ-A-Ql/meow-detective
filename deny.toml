@@ -52,6 +52,9 @@ allow = [
     "Apache-2.0 WITH LLVM-exception",
     "BSD-2-Clause",
     "BSD-3-Clause",
+    # BSL-1.0 is used by xxhash-rust for the validated RocksDB XXH3 block checksum.
+    # Owner: Ceph BlueStore Stage 5; reviewed: 2026-07-14; OSI-approved permissive license.
+    "BSL-1.0",
     "CC0-1.0",
     # CDLA-Permissive-2.0 is used by webpki-root-certs / webpki-roots (transitive via rustls/Tauri).
     # Owner: Registry Quality Maintenance; reviewed: 2026-06-21; acceptable for root-CA data bundles.
